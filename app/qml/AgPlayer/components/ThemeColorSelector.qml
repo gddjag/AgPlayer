@@ -75,13 +75,36 @@ ColumnLayout {
                 verticalAlignment: Text.AlignVCenter
             }
             background: Rectangle {
-                implicitWidth: 52
+                implicitWidth: 64
                 implicitHeight: 30
                 radius: Theme.radiusSm
                 color: defaultButton.checked ? Theme.accent : Theme.background
                 border.width: defaultButton.activeFocus || defaultButton.checked ? 2 : 1
                 border.color: defaultButton.activeFocus ? Theme.focus
                               : defaultButton.checked ? Theme.accent : Theme.border
+
+                Rectangle {
+                    id: defaultSelectionCue
+                    objectName: root.objectNamePrefix + "DefaultSelectionCue"
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.margins: 3
+                    width: 16
+                    height: 16
+                    radius: width / 2
+                    visible: defaultButton.checked
+                    color: Theme.background
+                    border.width: 1
+                    border.color: Theme.primaryText
+
+                    ThemedIcon {
+                        anchors.centerIn: parent
+                        source: Theme.icon("check-line")
+                        tint: Theme.primaryText
+                        sourceSize.width: 10
+                        sourceSize.height: 10
+                    }
+                }
             }
         }
 
@@ -135,13 +158,25 @@ ColumnLayout {
                         GradientStop { position: 1.0; color: swatch.modelData.end }
                     }
 
-                    ThemedIcon {
+                    Rectangle {
+                        id: presetSelectionCue
+                        objectName: swatch.objectName + "SelectionCue"
                         anchors.centerIn: parent
                         visible: swatch.checked
-                        source: Theme.icon("check-line")
-                        tint: Theme.onBrandGradientText
-                        sourceSize.width: 14
-                        sourceSize.height: 14
+                        width: 18
+                        height: 18
+                        radius: width / 2
+                        color: Theme.background
+                        border.width: 1
+                        border.color: Theme.primaryText
+
+                        ThemedIcon {
+                            anchors.centerIn: parent
+                            source: Theme.icon("check-line")
+                            tint: Theme.primaryText
+                            sourceSize.width: 12
+                            sourceSize.height: 12
+                        }
                     }
 
                     Rectangle {
@@ -207,7 +242,7 @@ ColumnLayout {
         Item { Layout.fillWidth: true }
     }
 
-    RowLayout {
+    ColumnLayout {
         id: customEditor
         objectName: root.objectNamePrefix + "CustomEditor"
         property bool expanded: root.selectedMode === 2
@@ -273,105 +308,114 @@ ColumnLayout {
                     event.accepted = true
                 }
             }
-        }
 
-        ColumnLayout {
-            spacing: 2
-            Label {
-                text: qsTr("Start")
-                color: Theme.secondaryText
-                font.pixelSize: 11
-            }
-            ColorField {
-                id: customStart
-                objectName: "skinCustomStart"
-                colorValue: root.customColor
-                editingLabel: qsTr("Start")
-                onColorEdited: function(value) {
-                    root.requestCustom(
-                                root.customKind, value,
-                                root.customColorMiddle, root.customColorEnd)
+            Item { Layout.fillWidth: true }
+
+            ColumnLayout {
+                spacing: 2
+                Label {
+                    text: qsTr("Preview")
+                    color: Theme.secondaryText
+                    font.pixelSize: 11
                 }
-            }
-        }
-
-        ColumnLayout {
-            visible: root.customKind === 1
-            spacing: 2
-            Label {
-                text: qsTr("Middle")
-                color: Theme.secondaryText
-                font.pixelSize: 11
-            }
-            ColorField {
-                id: customMiddle
-                objectName: "skinCustomMiddle"
-                colorValue: root.customColorMiddle
-                editingLabel: qsTr("Middle")
-                onColorEdited: function(value) {
-                    root.requestCustom(1, root.customColor, value,
-                                       root.customColorEnd)
-                }
-            }
-        }
-
-        ColumnLayout {
-            visible: root.customKind === 1
-            spacing: 2
-            Label {
-                text: qsTr("End")
-                color: Theme.secondaryText
-                font.pixelSize: 11
-            }
-            ColorField {
-                id: customEnd
-                objectName: "skinCustomEnd"
-                colorValue: root.customColorEnd
-                editingLabel: qsTr("End")
-                onColorEdited: function(value) {
-                    root.requestCustom(1, root.customColor,
-                                       root.customColorMiddle, value)
-                }
-            }
-        }
-
-        ColumnLayout {
-            spacing: 2
-            Label {
-                text: qsTr("Preview")
-                color: Theme.secondaryText
-                font.pixelSize: 11
-            }
-            Rectangle {
-                id: customPreview
-                objectName: "skinCustomPreview"
-                Layout.preferredWidth: 90
-                Layout.preferredHeight: 32
-                radius: Theme.radiusSm
-                border.width: 1
-                border.color: Theme.border
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop {
-                        position: 0.0
-                        color: root.customKind === 0
-                               ? ThemeManager.backdropStart : root.customColor
-                    }
-                    GradientStop {
-                        position: 0.5
-                        color: root.customKind === 0
-                               ? ThemeManager.backdropMiddle
-                               : root.customColorMiddle
-                    }
-                    GradientStop {
-                        position: 1.0
-                        color: root.customKind === 0
-                               ? ThemeManager.backdropEnd : root.customColorEnd
+                Rectangle {
+                    id: customPreview
+                    objectName: "skinCustomPreview"
+                    Layout.preferredWidth: 90
+                    Layout.preferredHeight: 32
+                    radius: Theme.radiusSm
+                    border.width: 1
+                    border.color: Theme.border
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop {
+                            position: 0.0
+                            color: root.customKind === 0
+                                   ? ThemeManager.backdropStart
+                                   : root.customColor
+                        }
+                        GradientStop {
+                            position: 0.5
+                            color: root.customKind === 0
+                                   ? ThemeManager.backdropMiddle
+                                   : root.customColorMiddle
+                        }
+                        GradientStop {
+                            position: 1.0
+                            color: root.customKind === 0
+                                   ? ThemeManager.backdropEnd
+                                   : root.customColorEnd
+                        }
                     }
                 }
             }
         }
 
-        Item { Layout.fillWidth: true }
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Theme.spacingSm
+
+            ColumnLayout {
+                spacing: 2
+                Label {
+                    text: qsTr("Start")
+                    color: Theme.secondaryText
+                    font.pixelSize: 11
+                }
+                ColorField {
+                    id: customStart
+                    objectName: "skinCustomStart"
+                    colorValue: root.customColor
+                    editingLabel: qsTr("Start")
+                    onColorEdited: function(value) {
+                        root.requestCustom(
+                                    root.customKind, value,
+                                    root.customColorMiddle, root.customColorEnd)
+                    }
+                }
+            }
+
+            ColumnLayout {
+                visible: root.customKind === 1
+                spacing: 2
+                Label {
+                    text: qsTr("Middle")
+                    color: Theme.secondaryText
+                    font.pixelSize: 11
+                }
+                ColorField {
+                    id: customMiddle
+                    objectName: "skinCustomMiddle"
+                    colorValue: root.customColorMiddle
+                    editingLabel: qsTr("Middle")
+                    onColorEdited: function(value) {
+                        root.requestCustom(1, root.customColor, value,
+                                           root.customColorEnd)
+                    }
+                }
+            }
+
+            ColumnLayout {
+                visible: root.customKind === 1
+                spacing: 2
+                Label {
+                    text: qsTr("End")
+                    color: Theme.secondaryText
+                    font.pixelSize: 11
+                }
+                ColorField {
+                    id: customEnd
+                    objectName: "skinCustomEnd"
+                    colorValue: root.customColorEnd
+                    editingLabel: qsTr("End")
+                    onColorEdited: function(value) {
+                        root.requestCustom(1, root.customColor,
+                                           root.customColorMiddle, value)
+                    }
+                }
+            }
+
+            Item { Layout.fillWidth: true }
+        }
     }
 }

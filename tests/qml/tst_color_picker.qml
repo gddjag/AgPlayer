@@ -36,29 +36,42 @@ TestCase {
             targetProperty: "waveformSolidBaseColor"
         }
 
-        ThemeColorSelector {
-            id: skinSelector
+        Column {
+            id: skinFixture
             parent: testCase.Window.window
                     ? testCase.Window.window.contentItem : null
             x: 18
             y: 350
-            width: parent ? parent.width - 36 : 0
-            height: implicitHeight
-            objectNamePrefix: "skinSelector"
-            title: "Theme skin color"
-            selectedMode: SettingsController.skinColorMode
-            selectedPreset: SettingsController.skinPreset
-            customKind: SettingsController.skinCustomKind
-            customColor: SettingsController.skinCustomColor
-            customColorMiddle: SettingsController.skinCustomColorMiddle
-            customColorEnd: SettingsController.skinCustomColorEnd
-            onDefaultRequested: SettingsController.selectDefaultSkin()
-            onPresetRequested: function(id) {
-                SettingsController.selectSkinPreset(id)
+            width: 429
+            spacing: 6
+
+            ThemeColorSelector {
+                id: skinSelector
+                width: parent.width
+                height: implicitHeight
+                objectNamePrefix: "skinSelector"
+                title: "Theme skin color"
+                selectedMode: SettingsController.skinColorMode
+                selectedPreset: SettingsController.skinPreset
+                customKind: SettingsController.skinCustomKind
+                customColor: SettingsController.skinCustomColor
+                customColorMiddle: SettingsController.skinCustomColorMiddle
+                customColorEnd: SettingsController.skinCustomColorEnd
+                onDefaultRequested: SettingsController.selectDefaultSkin()
+                onPresetRequested: function(id) {
+                    SettingsController.selectSkinPreset(id)
+                }
+                onCustomConfigurationRequested: function(kind, start, middle, end) {
+                    SettingsController.setSkinCustomConfiguration(
+                                kind, start, middle, end)
+                }
             }
-            onCustomConfigurationRequested: function(kind, start, middle, end) {
-                SettingsController.setSkinCustomConfiguration(
-                            kind, start, middle, end)
+
+            Item {
+                id: nextSettingFixture
+                objectName: "skinSelectorNextSetting"
+                width: parent.width
+                height: 36
             }
         }
 
@@ -560,12 +573,22 @@ TestCase {
         skinConfigurationChangedSpy.clear()
 
         var defaultButton = findChild(skinSelector, "skinSelectorDefault")
+        var defaultCue = findChild(
+                    skinSelector, "skinSelectorDefaultSelectionCue")
         var sunset = findChild(skinSelector, "skinSelectorPreset-sunset")
+        var sunsetCue = findChild(
+                    skinSelector, "skinSelectorPreset-sunsetSelectionCue")
         var morningGlow = findChild(
                     skinSelector, "skinSelectorPreset-morningGlow")
-        verify(defaultButton && sunset && morningGlow)
+        verify(defaultButton && defaultCue && sunset && sunsetCue
+               && morningGlow)
         verify(defaultButton.checked)
+        verify(defaultCue.visible)
+        compare(defaultCue.color.toString(), Theme.background.toString())
+        compare(defaultCue.border.color.toString(),
+                Theme.primaryText.toString())
         verify(!sunset.selectionCueVisible)
+        verify(!sunsetCue.visible)
         sunset.forceActiveFocus()
         tryVerify(function() { return sunset.focusCueVisible })
         keyClick(Qt.Key_Space)
@@ -575,6 +598,10 @@ TestCase {
         compare(paletteChangedSpy.count, 1)
         verify(sunset.checked)
         verify(sunset.selectionCueVisible)
+        verify(sunsetCue.visible)
+        compare(sunsetCue.color.toString(), Theme.background.toString())
+        compare(sunsetCue.border.color.toString(),
+                Theme.primaryText.toString())
         verify(sunset.focusCueVisible)
 
         skinConfigurationChangedSpy.clear()
@@ -643,6 +670,11 @@ TestCase {
         verify(skinSelector.visible)
         tryCompare(editor, "visible", true)
         verify(skinSelector.implicitHeight > collapsedHeight)
+        compare(skinSelector.width, 429)
+        tryVerify(function() {
+            return nextSettingFixture.y
+                    >= skinSelector.y + skinSelector.height
+        })
         compare(skinConfigurationChangedSpy.count, 1)
         compare(paletteChangedSpy.count, 1)
         verify(custom.checked)
@@ -674,6 +706,50 @@ TestCase {
         tryCompare(SettingsController, "skinCustomKind", 1)
         verify(gradient.checked)
         verify(start.visible && middle.visible && end.visible)
+        var controls = [solid, gradient, start, middle, end, preview]
+        var minimumWidths = [58, 72, start.implicitWidth,
+                             middle.implicitWidth, end.implicitWidth, 90]
+        tryVerify(function() {
+            var readySolid = solid.mapToItem(skinSelector, 0, 0)
+            var readyGradient = gradient.mapToItem(skinSelector, 0, 0)
+            var readyStart = start.mapToItem(skinSelector, 0, 0)
+            var readyMiddle = middle.mapToItem(skinSelector, 0, 0)
+            var readyEnd = end.mapToItem(skinSelector, 0, 0)
+            var readyPreview = preview.mapToItem(skinSelector, 0, 0)
+            return start.width >= start.implicitWidth
+                    && middle.width >= middle.implicitWidth
+                    && end.width >= end.implicitWidth
+                    && readyGradient.x >= readySolid.x + solid.width
+                    && readyPreview.x >= readyGradient.x + gradient.width
+                    && readyStart.y >= readySolid.y + solid.height
+                    && readyMiddle.x >= readyStart.x + start.width
+                    && readyEnd.x >= readyMiddle.x + middle.width
+        })
+        for (var controlIndex = 0;
+             controlIndex < controls.length; ++controlIndex) {
+            verify(controls[controlIndex].width
+                   >= minimumWidths[controlIndex])
+            verifyMappedInside(controls[controlIndex], skinSelector, 0)
+        }
+        var solidPosition = solid.mapToItem(skinSelector, 0, 0)
+        var gradientPosition = gradient.mapToItem(skinSelector, 0, 0)
+        var startPosition = start.mapToItem(skinSelector, 0, 0)
+        var middlePosition = middle.mapToItem(skinSelector, 0, 0)
+        var endPosition = end.mapToItem(skinSelector, 0, 0)
+        var previewPosition = preview.mapToItem(skinSelector, 0, 0)
+        verify(gradientPosition.x >= solidPosition.x + solid.width)
+        verify(previewPosition.x >= gradientPosition.x + gradient.width)
+        verify(startPosition.y >= solidPosition.y + solid.height)
+        verify(middlePosition.x >= startPosition.x + start.width,
+               "start=" + startPosition.x + "+" + start.width
+               + " middle=" + middlePosition.x)
+        verify(endPosition.x >= middlePosition.x + middle.width,
+               "middle=" + middlePosition.x + "+" + middle.width
+               + " end=" + endPosition.x)
+        verify(editor.y + editor.height <= skinSelector.height)
+        tryVerify(function() {
+            return nextSettingFixture.y >= skinSelector.height
+        })
         compare(SettingsController.skinCustomColorMiddle, "#A98BFF")
         compare(SettingsController.skinCustomColorEnd, "#F0A8D8")
         compare(skinConfigurationChangedSpy.count, 1)
