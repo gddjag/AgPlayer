@@ -519,14 +519,21 @@ void SettingsController::applySkinCustomConfiguration(
     const QString normalizedStart = normalizedOpaqueThemeColor(start);
     const QString normalizedMiddle = normalizedOpaqueThemeColor(middle);
     const QString normalizedEnd = normalizedOpaqueThemeColor(end);
-    const bool valid = !normalizedStart.isEmpty()
-        && (normalizedKind == 0
-            || (!normalizedMiddle.isEmpty() && !normalizedEnd.isEmpty()));
     const QString fallback = defaultThemeCustomColor();
+    const bool validGradient = !normalizedStart.isEmpty()
+        && !normalizedMiddle.isEmpty() && !normalizedEnd.isEmpty();
     applySkinFields(colorMode, skinPreset_, normalizedKind,
-                    valid ? normalizedStart : fallback,
-                    valid && normalizedKind == 1 ? normalizedMiddle : fallback,
-                    valid && normalizedKind == 1 ? normalizedEnd : fallback);
+                    normalizedKind == 1
+                        ? (validGradient ? normalizedStart : fallback)
+                        : (normalizedStart.isEmpty() ? fallback
+                                                     : normalizedStart),
+                    normalizedKind == 1
+                        ? (validGradient ? normalizedMiddle : fallback)
+                        : (normalizedMiddle.isEmpty() ? fallback
+                                                      : normalizedMiddle),
+                    normalizedKind == 1
+                        ? (validGradient ? normalizedEnd : fallback)
+                        : (normalizedEnd.isEmpty() ? fallback : normalizedEnd));
 }
 
 void SettingsController::applySkinFields(
@@ -1668,21 +1675,28 @@ void SettingsController::load()
         normalizedOpaqueThemeColor(skinCustomColorMiddle_);
     const QString normalizedSkinCustomColorEnd =
         normalizedOpaqueThemeColor(skinCustomColorEnd_);
-    const bool validSkinCustomConfiguration = hasSkinCustomColor
+    const bool validSkinGradientConfiguration = hasSkinCustomColor
+        && hasSkinCustomColorMiddle && hasSkinCustomColorEnd
         && !normalizedSkinCustomColor.isEmpty()
-        && (skinCustomKind_ == 0
-            || (hasSkinCustomColorMiddle && hasSkinCustomColorEnd
-                && !normalizedSkinCustomColorMiddle.isEmpty()
-                && !normalizedSkinCustomColorEnd.isEmpty()));
+        && !normalizedSkinCustomColorMiddle.isEmpty()
+        && !normalizedSkinCustomColorEnd.isEmpty();
     const QString skinFallback = defaultThemeCustomColor();
-    skinCustomColor_ = validSkinCustomConfiguration
-        ? normalizedSkinCustomColor : skinFallback;
-    skinCustomColorMiddle_ = validSkinCustomConfiguration
-            && skinCustomKind_ == 1
-        ? normalizedSkinCustomColorMiddle : skinFallback;
-    skinCustomColorEnd_ = validSkinCustomConfiguration
-            && skinCustomKind_ == 1
-        ? normalizedSkinCustomColorEnd : skinFallback;
+    skinCustomColor_ = skinCustomKind_ == 1
+        ? (validSkinGradientConfiguration ? normalizedSkinCustomColor
+                                          : skinFallback)
+        : (hasSkinCustomColor && !normalizedSkinCustomColor.isEmpty()
+               ? normalizedSkinCustomColor : skinFallback);
+    skinCustomColorMiddle_ = skinCustomKind_ == 1
+        ? (validSkinGradientConfiguration ? normalizedSkinCustomColorMiddle
+                                          : skinFallback)
+        : (hasSkinCustomColorMiddle
+                   && !normalizedSkinCustomColorMiddle.isEmpty()
+               ? normalizedSkinCustomColorMiddle : skinFallback);
+    skinCustomColorEnd_ = skinCustomKind_ == 1
+        ? (validSkinGradientConfiguration ? normalizedSkinCustomColorEnd
+                                          : skinFallback)
+        : (hasSkinCustomColorEnd && !normalizedSkinCustomColorEnd.isEmpty()
+               ? normalizedSkinCustomColorEnd : skinFallback);
     if (skinColorMode_ == 1) {
         if (const auto legacy = ThemeManager::legacyPresetSeed(skinPreset_)) {
             skinColorMode_ = 2;

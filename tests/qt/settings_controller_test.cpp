@@ -37,6 +37,7 @@ private slots:
     void glassFeatureIsAbsentFromSettingsContract();
     void skinSettingsDefaultToSystemAppearanceAndDefaultSkin();
     void skinSettingsPersistAndNormalize();
+    void solidSkinPreservesValidAuxiliaryStopsAcrossCommitAndReload();
     void migratesLegacySkinPresetToCustomSolidWithoutDeletingKey();
     void invalidCustomGradientFallsBackAsACompleteGroup();
     void skinConfigurationSignalIsAtomicAndOnlyEmitsForRealChanges();
@@ -118,6 +119,51 @@ void SettingsControllerTest::skinSettingsPersistAndNormalize()
     QCOMPARE(persisted.value(
                  QStringLiteral("appearance/skinCustomColorEnd")).toString(),
              QStringLiteral("#F0A8D8"));
+}
+
+void SettingsControllerTest::solidSkinPreservesValidAuxiliaryStopsAcrossCommitAndReload()
+{
+    QSettings persisted;
+    persisted.clear();
+    {
+        SettingsController settings;
+        settings.beginEdit();
+        settings.setSkinCustomConfiguration(
+            1, QStringLiteral("#73a6ff"), QStringLiteral("#a98bff"),
+            QStringLiteral("#f0a8d8"));
+        settings.setSkinCustomConfiguration(
+            0, QStringLiteral("#123456"), QStringLiteral("#a98bff"),
+            QStringLiteral("#f0a8d8"));
+
+        QCOMPARE(settings.skinCustomKind(), 0);
+        QCOMPARE(settings.skinCustomColor(), QStringLiteral("#123456"));
+        QCOMPARE(settings.skinCustomColorMiddle(), QStringLiteral("#A98BFF"));
+        QCOMPARE(settings.skinCustomColorEnd(), QStringLiteral("#F0A8D8"));
+        settings.commitEdit();
+    }
+
+    SettingsController reloaded;
+    QCOMPARE(reloaded.skinColorMode(), 2);
+    QCOMPARE(reloaded.skinCustomKind(), 0);
+    QCOMPARE(reloaded.skinCustomColor(), QStringLiteral("#123456"));
+    QCOMPARE(reloaded.skinCustomColorMiddle(), QStringLiteral("#A98BFF"));
+    QCOMPARE(reloaded.skinCustomColorEnd(), QStringLiteral("#F0A8D8"));
+    QCOMPARE(persisted.value(
+                 QStringLiteral("appearance/skinCustomColorMiddle")).toString(),
+             QStringLiteral("#A98BFF"));
+    QCOMPARE(persisted.value(
+                 QStringLiteral("appearance/skinCustomColorEnd")).toString(),
+             QStringLiteral("#F0A8D8"));
+
+    reloaded.setSkinCustomConfiguration(
+        0, QStringLiteral("#abcdef"), QStringLiteral("invalid"), QString());
+    QCOMPARE(reloaded.skinCustomColor(), QStringLiteral("#ABCDEF"));
+    QCOMPARE(reloaded.skinCustomColorMiddle(), QStringLiteral("#D27722"));
+    QCOMPARE(reloaded.skinCustomColorEnd(), QStringLiteral("#D27722"));
+    SettingsController sanitized;
+    QCOMPARE(sanitized.skinCustomColor(), QStringLiteral("#ABCDEF"));
+    QCOMPARE(sanitized.skinCustomColorMiddle(), QStringLiteral("#D27722"));
+    QCOMPARE(sanitized.skinCustomColorEnd(), QStringLiteral("#D27722"));
 }
 
 void SettingsControllerTest::migratesLegacySkinPresetToCustomSolidWithoutDeletingKey()
