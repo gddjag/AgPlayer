@@ -33,12 +33,18 @@ class TerrainReactorItem : public QQuickRhiItem {
                    WRITE setUseSyntheticFeatures NOTIFY useSyntheticFeaturesChanged)
     Q_PROPERTY(quint32 deterministicSeed READ deterministicSeed
                    WRITE setDeterministicSeed NOTIFY deterministicSeedChanged)
+    Q_PROPERTY(QString trackIdentity READ trackIdentity WRITE setTrackIdentity
+                   NOTIFY trackIdentityChanged)
+    Q_PROPERTY(quint32 trackPaletteSeed READ trackPaletteSeed
+                   NOTIFY trackIdentityChanged)
     Q_PROPERTY(Quality quality READ quality WRITE setQuality NOTIFY qualityChanged)
     Q_PROPERTY(qreal cameraYaw READ cameraYaw NOTIFY cameraChanged)
     Q_PROPERTY(qreal cameraPitch READ cameraPitch NOTIFY cameraChanged)
     Q_PROPERTY(qreal cameraDistance READ cameraDistance NOTIFY cameraChanged)
     Q_PROPERTY(qreal cameraPunch READ cameraPunch NOTIFY cameraChanged)
     Q_PROPERTY(quint64 punchRevision READ punchRevision NOTIFY cameraChanged)
+    Q_PROPERTY(qreal impactStrength READ impactStrength NOTIFY impactChanged)
+    Q_PROPERTY(quint64 impactRevision READ impactRevision NOTIFY impactChanged)
     Q_PROPERTY(quint64 featureRevision READ featureRevision
                    NOTIFY featureRevisionChanged)
     Q_PROPERTY(quint64 styleRevision READ styleRevision
@@ -87,6 +93,9 @@ public:
     void setUseSyntheticFeatures(bool enabled);
     quint32 deterministicSeed() const noexcept;
     void setDeterministicSeed(quint32 seed);
+    QString trackIdentity() const;
+    void setTrackIdentity(const QString& identity);
+    quint32 trackPaletteSeed() const noexcept;
     Quality quality() const noexcept;
     void setQuality(Quality quality);
 
@@ -104,6 +113,8 @@ public:
     qreal cameraDistance() const noexcept;
     qreal cameraPunch() const noexcept;
     quint64 punchRevision() const noexcept;
+    qreal impactStrength() const noexcept;
+    quint64 impactRevision() const noexcept;
 
     quint64 frameCount() const noexcept;
     quint64 animationCount() const noexcept;
@@ -129,10 +140,12 @@ signals:
     void styleSourceChanged();
     void useSyntheticFeaturesChanged();
     void deterministicSeedChanged();
+    void trackIdentityChanged();
     void qualityChanged();
     void featureRevisionChanged();
     void styleRevisionChanged();
     void cameraChanged();
+    void impactChanged();
     void countersChanged();
     void renderStatusChanged();
 
@@ -140,6 +153,9 @@ protected:
     QQuickRhiItemRenderer* createRenderer() override;
     bool eventFilter(QObject* watched, QEvent* event) override;
     void applyInternalScale(float scale);
+
+private slots:
+    void copyFeatureSource();
 
 private:
     struct Telemetry {
@@ -154,9 +170,13 @@ private:
         agplayer::terrain::RenderStyleSnapshot style;
         agplayer::terrain::CameraSnapshot camera;
         agplayer::terrain::PunchEvent punchEvent;
+        agplayer::terrain::ImpactEvent impactEvent;
         double cameraManualUntilSeconds = 0.0;
         quint64 cameraRevision = 0;
         quint32 seed = 0x5eedU;
+        agplayer::terrain::TrackPalette trackPalette;
+        quint64 paletteRevision = 0;
+        bool trackPaletteActive = false;
         Quality quality = Quality::Eco;
         bool running = false;
         float timeSeconds = 0.0F;
@@ -165,7 +185,6 @@ private:
     };
 
     RenderSnapshot snapshotForRenderer() const;
-    void copyFeatureSource();
     void copyStyleSource();
     void applyCurrentFeatures(const agplayer::terrain::AudioFeatures& features);
     void scheduleIfRunnable();
@@ -179,10 +198,14 @@ private:
     bool windowExposed_ = true;
     bool useSyntheticFeatures_ = false;
     quint32 deterministicSeed_ = 0x5eedU;
+    QString trackIdentity_;
+    quint32 trackPaletteSeed_ = 0U;
+    quint64 paletteRevision_ = 0;
     Quality quality_ = Quality::Eco;
-    QPointer<AudioVisualFeatureController> featureSource_;
+    QPointer<QObject> featureSource_;
     QPointer<PlayerExperienceController> styleSource_;
     QMetaObject::Connection featureConnection_;
+    QMetaObject::Connection impactConnection_;
     QMetaObject::Connection sourceDestroyedConnection_;
     QVector<QMetaObject::Connection> styleConnections_;
     QMetaObject::Connection windowVisibilityConnection_;
@@ -193,6 +216,8 @@ private:
     quint64 styleRevision_ = 0;
     quint64 cameraRevision_ = 0;
     agplayer::terrain::PunchEvent pendingPunch_;
+    agplayer::terrain::ImpactEvent pendingImpact_;
+    bool featureSourceProvidesImpact_ = false;
     float internalScale_ = 1.0F;
     agplayer::terrain::CameraMotion camera_;
     QElapsedTimer clock_;

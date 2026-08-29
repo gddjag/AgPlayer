@@ -19,6 +19,9 @@ layout(std140, binding = 0) uniform buf {
     vec4 styleDynamics;
     vec4 styleToggles;
     vec4 styleExtra;
+    vec4 styleAudio;
+    vec4 stylePresentation;
+    vec4 impact;
 } ubuf;
 
 layout(location = 0) out vec3 color;
@@ -26,6 +29,7 @@ layout(location = 1) out float light;
 layout(location = 2) out float fog;
 layout(location = 3) out float opacity;
 layout(location = 4) out float glow;
+layout(location = 5) out float focus;
 
 float hash(vec2 p)
 {
@@ -45,10 +49,15 @@ void main()
     vec4 bandsHigh = ubuf.bandsHigh * ubuf.equalizerHigh;
     float amplitude = mix(0.25, 1.75, ubuf.styleParameters.x);
     float motion = mix(0.2, 1.8, ubuf.styleParameters.y);
+    float responseRadius = max(36.0, ubuf.styleAudio.z);
+    float impactStrength = ubuf.impact.x;
+    float impactAge = ubuf.impact.y;
+    float impactWave = 0.0;
+    float coreGlow = 0.0;
     opacity = 1.0;
 
     if (type < 0.5) {
-        float center = clamp(1.0 - distanceFromCore / 72.0, 0.0, 1.0);
+        float center = clamp(1.0 - distanceFromCore / responseRadius, 0.0, 1.0);
         float core = pow(center, 1.42);
         float bass = bandsLow.x * core * 7.0
                    + bandsLow.y * center * (2.1 + randomValue * 2.9);
@@ -66,9 +75,20 @@ void main()
                                - rippleSpacing * 0.5);
         float ripple = ubuf.parameters.z * ubuf.styleToggles.x
                      * exp(-(ringDistance * ringDistance) / 25.0) * 4.1;
+        float travelingRadius = impactAge * responseRadius * 0.92;
+        float firstRing = exp(-pow(distanceFromCore - travelingRadius, 2.0) / 12.0);
+        float secondRing = exp(-pow(distanceFromCore - max(0.0, travelingRadius - 9.0), 2.0) / 18.0);
+        float thirdRing = exp(-pow(distanceFromCore - max(0.0, travelingRadius - 18.0), 2.0) / 25.0);
+        impactWave = impactStrength * (firstRing + secondRing * 0.72 + thirdRing * 0.48)
+                   * (4.0 + ubuf.stylePresentation.x * 5.5);
+        float domeRadius = max(12.0, responseRadius * 0.42);
+        float dome = exp(-(distanceFromCore * distanceFromCore)
+                       / (domeRadius * domeRadius));
+        coreGlow = impactStrength * dome * ubuf.styleAudio.w;
         idle *= ubuf.styleToggles.w;
-        float height = clamp(idle + (bass + mids + highSpike + ripple) * amplitude,
-                             0.035, 18.0);
+        float height = clamp(idle + (bass + mids + highSpike + ripple) * amplitude
+                           + impactWave + coreGlow * 11.0,
+                             0.035, 24.0);
         scale.y = height;
         position.y += height * 0.5;
     } else if (type < 1.5) {
@@ -76,13 +96,19 @@ void main()
                     + bandsLow.x * 2.2;
         scale *= 1.0 + ubuf.parameters.z * 0.28;
     } else if (type < 2.5) {
+        float group = floor(instanceData.w + 0.001);
         float cycle = 4.5 + randomValue * 2.0;
         float age = mod(t * motion + randomValue * cycle, cycle) / cycle;
+        if (group < 0.5 && ubuf.impact.z > 0.5) {
+            age = clamp(impactAge / 0.78, 0.0, 1.0);
+        }
         float fall = clamp(age / 0.72, 0.0, 1.0);
         float visibleFactor = 1.0 - step(0.72, age);
         position.y *= 1.0 - fall;
-        position.x += fall * 6.0;
-        scale.y *= (1.0 + ubuf.effects.y * 1.7) * visibleFactor;
+        position.xz = mix(position.xz, vec2(0.0), fall * (group < 0.5 ? 0.86 : 0.0));
+        position.x += fall * 6.0 * step(0.5, group);
+        scale.y *= (1.0 + ubuf.effects.y * 1.7 + impactStrength * 3.0)
+                 * visibleFactor;
         scale.xz *= visibleFactor;
         opacity = visibleFactor;
     } else if (type < 3.5) {
@@ -91,30 +117,37 @@ void main()
                      * mod(t * 3.0 + randomValue * 9.0, 8.0) * burst;
         position.y += abs(sin(t * 2.0 + randomValue * 12.0)) * 6.0 * burst;
     } else {
+        float group = floor(instanceData.w + 0.001);
+        float localValue = fract(instanceData.w);
         float cycle = 4.5 + randomValue * 2.0;
         float age = mod(t * motion + randomValue * cycle, cycle) / cycle;
+        if (group < 0.5 && ubuf.impact.z > 0.5) {
+            age = clamp(impactAge / 0.78, 0.0, 1.0);
+        }
         float collision = step(0.72, age);
         float collisionProgress = clamp((age - 0.72) / 0.28, 0.0, 1.0);
-        float angle = instanceData.w * 6.2831853;
+        float angle = localValue * 6.2831853;
         if (type < 4.5) {
-            float delayedFall = clamp(age / 0.72 - instanceData.w * 0.12,
+            float delayedFall = clamp(age / 0.72 - localValue * 0.12,
                                       0.0, 1.0);
             float visibleFactor = 1.0 - step(0.72, age);
             position.y *= 1.0 - delayedFall;
-            position.x += delayedFall * 6.0;
-            scale.y *= visibleFactor * (1.0 + instanceData.w * 2.2);
+            position.xz = mix(position.xz, vec2(0.0), delayedFall
+                            * (group < 0.5 ? 0.86 : 0.0));
+            position.x += delayedFall * 6.0 * step(0.5, group);
+            scale.y *= visibleFactor * (1.0 + localValue * 2.2);
             scale.xz *= visibleFactor;
-            opacity = visibleFactor * (1.0 - instanceData.w * 0.22);
+            opacity = visibleFactor * (1.0 - localValue * 0.22);
         } else if (type < 5.5) {
             vec2 direction = vec2(cos(angle), sin(angle));
-            position.x += 6.0;
+            position.xz = group < 0.5 ? vec2(0.0) : position.xz + vec2(6.0, 0.0);
             position.xz += direction * collisionProgress * 12.0;
             scale.x *= 1.0 + collisionProgress * 2.0;
             scale *= collision * sin(collisionProgress * 3.1415926);
             opacity = collision * (1.0 - collisionProgress);
         } else {
             vec2 direction = vec2(cos(angle), sin(angle));
-            position.x += 6.0;
+            position.xz = group < 0.5 ? vec2(0.0) : position.xz + vec2(6.0, 0.0);
             position.xz += direction * collisionProgress * 8.0;
             position.y += sin(collisionProgress * 3.1415926) * 7.0;
             scale *= collision * (1.0 - collisionProgress);
@@ -145,6 +178,10 @@ void main()
     if (distanceFromCore < 13.0 && type < 0.5) {
         color = mix(color, peak, clamp(1.0 - distanceFromCore / 13.0, 0.0, 1.0));
     }
+    if (type < 0.5 && impactStrength > 0.001) {
+        color = mix(color, accent, clamp(impactWave * 0.14, 0.0, 0.72));
+        color = mix(color, peak, clamp(coreGlow * 0.88, 0.0, 0.92));
+    }
     if (type > 1.5) color = mix(color, vec3(1.0), 0.62);
     if (type > 4.5 && type < 5.5) color = vec3(1.0);
 
@@ -152,6 +189,12 @@ void main()
     gl_Position = ubuf.mvp * vec4(worldPosition, 1.0);
     light = 0.34 + 0.66 * max(dot(normalize(vertexNormal),
                                   normalize(vec3(-0.35, 0.82, 0.42))), 0.0);
+    light *= clamp(0.66 + ubuf.stylePresentation.z * 0.34, 0.72, 1.18);
     fog = clamp(1.0 - distanceFromCore / 118.0, 0.0, 1.0);
-    glow = ubuf.styleParameters.z * (0.35 + max(max(color.r, color.g), color.b));
+    float focusBand = exp(-pow(distanceFromCore - responseRadius * 0.34, 2.0)
+                        / max(80.0, responseRadius * responseRadius * 0.18));
+    focus = mix(1.0, 0.42 + focusBand * 0.58,
+                clamp(ubuf.stylePresentation.y / 1.5, 0.0, 1.0));
+    glow = ubuf.styleParameters.z * (0.35 + max(max(color.r, color.g), color.b))
+         + coreGlow * 2.4 + impactWave * 0.12;
 }

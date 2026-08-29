@@ -13,6 +13,45 @@
 
 using namespace agplayer::terrain;
 
+class FeatureSourceProbe final : public QObject {
+    Q_OBJECT
+    Q_PROPERTY(QVariantList bands READ bands NOTIFY featuresChanged)
+    Q_PROPERTY(double energy READ energy NOTIFY featuresChanged)
+    Q_PROPERTY(double spectralFlux READ spectralFlux NOTIFY featuresChanged)
+    Q_PROPERTY(bool kickPulse READ kickPulse NOTIFY featuresChanged)
+    Q_PROPERTY(bool snarePulse READ snarePulse NOTIFY featuresChanged)
+    Q_PROPERTY(quint64 impactRevision READ impactRevision NOTIFY featuresChanged)
+    Q_PROPERTY(double impactStrength READ impactStrength NOTIFY featuresChanged)
+
+public:
+    QVariantList bands() const { return bands_; }
+    double energy() const noexcept { return energy_; }
+    double spectralFlux() const noexcept { return spectralFlux_; }
+    bool kickPulse() const noexcept { return kick_; }
+    bool snarePulse() const noexcept { return snare_; }
+    quint64 impactRevision() const noexcept { return impactRevision_; }
+    double impactStrength() const noexcept { return impactStrength_; }
+
+    void publishImpact(quint64 revision, double strength)
+    {
+        impactRevision_ = revision;
+        impactStrength_ = strength;
+        emit featuresChanged();
+    }
+
+signals:
+    void featuresChanged();
+
+private:
+    QVariantList bands_{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    double energy_ = 0.0;
+    double spectralFlux_ = 0.0;
+    bool kick_ = false;
+    bool snare_ = false;
+    quint64 impactRevision_ = 0;
+    double impactStrength_ = 0.0;
+};
+
 class TerrainReactorItemTest final : public QObject {
     Q_OBJECT
 
@@ -24,6 +63,9 @@ private slots:
     void windowEventsGateShowMinimizeAndRestore();
     void softwareBackendFailsClosedWithoutSchedulingWork();
     void taskOneStyleIsCopiedIntoImmutableSnapshot();
+    void v46DynamicsAreCopiedAndRemainBounded();
+    void featureSourceImpactRevisionIsConsumedWithoutAnotherDecoder();
+    void trackIdentitySelectsStablePaletteWithoutThemeCycling();
     void highDpiInternalScaleUsesPhysicalPixels();
     void duplicateRendererIsRejectedBySharedLifecycle();
     void cameraPropertiesSupportTaskFourInput();
@@ -45,6 +87,27 @@ void TerrainReactorItemTest::defaultsDoNotScheduleRendering()
     QCOMPARE(item.frameCount(), quint64{0});
     QCOMPARE(item.animationCount(), quint64{0});
     QCOMPARE(item.uploadCount(), quint64{0});
+}
+
+void TerrainReactorItemTest::trackIdentitySelectsStablePaletteWithoutThemeCycling()
+{
+    TerrainReactorItem item;
+    QSignalSpy changed(&item, &TerrainReactorItem::trackIdentityChanged);
+    QCOMPARE(item.trackIdentity(), QString{});
+    QCOMPARE(item.trackPaletteSeed(), quint32{0});
+
+    item.setTrackIdentity(QStringLiteral("album/track-a.flac"));
+    const quint32 firstSeed = item.trackPaletteSeed();
+    QVERIFY(firstSeed != 0U);
+    QCOMPARE(changed.count(), 1);
+    QVERIFY(!item.renderStyleSnapshot().themeCycleEnabled);
+
+    item.setTrackIdentity(QStringLiteral("album/track-a.flac"));
+    QCOMPARE(changed.count(), 1);
+    QCOMPARE(item.trackPaletteSeed(), firstSeed);
+    item.setTrackIdentity(QStringLiteral("album/track-b.flac"));
+    QCOMPARE(changed.count(), 2);
+    QVERIFY(item.trackPaletteSeed() != firstSeed);
 }
 
 void TerrainReactorItemTest::consumesTaskOneFeaturesWithoutSpectrumAnalysis()
@@ -174,6 +237,70 @@ void TerrainReactorItemTest::taskOneStyleIsCopiedIntoImmutableSnapshot()
     style.setRipplesEnabled(false);
     QCOMPARE(item.styleRevision(), quint64{2});
     QVERIFY(!item.renderStyleSnapshot().ripplesEnabled);
+}
+
+void TerrainReactorItemTest::v46DynamicsAreCopiedAndRemainBounded()
+{
+    PlayerExperienceController style;
+    style.setInputCompression(150);
+    style.setAudioResponse(200);
+    style.setResponseRange(220);
+    style.setCenterHighlight(100);
+    style.setRhythmStrength(140);
+    style.setDepthOfField(150);
+    style.setSubjectClarity(140);
+    style.setAutoRotateSpeed(100);
+    style.setRhythmSensitivity(100);
+
+    TerrainReactorItem item;
+    item.setStyleSource(&style);
+    const RenderStyleSnapshot snapshot = item.renderStyleSnapshot();
+    QCOMPARE(snapshot.inputCompression, 1.5F);
+    QCOMPARE(snapshot.audioResponse, 2.0F);
+    QCOMPARE(snapshot.responseRange, 2.2F);
+    QCOMPARE(snapshot.centerHighlight, 1.0F);
+    QCOMPARE(snapshot.rhythmStrength, 1.4F);
+    QCOMPARE(snapshot.depthOfField, 1.5F);
+    QCOMPARE(snapshot.subjectClarity, 1.4F);
+    QCOMPARE(snapshot.autoRotateSpeed, 1.0F);
+    QCOMPARE(snapshot.rhythmSensitivity, 1.0F);
+
+    const quint64 revision = item.styleRevision();
+    style.setRhythmStrength(-100);
+    QCOMPARE(item.styleRevision(), revision + 1);
+    QCOMPARE(item.renderStyleSnapshot().rhythmStrength, 0.0F);
+}
+
+void TerrainReactorItemTest::featureSourceImpactRevisionIsConsumedWithoutAnotherDecoder()
+{
+    FeatureSourceProbe features;
+    features.publishImpact(41, 0.73);
+
+    TerrainReactorItem item;
+    item.setFeatureSource(&features);
+    QCOMPARE(item.impactRevision(), quint64{41});
+    QVERIFY(std::abs(item.impactStrength() - 0.73) < 0.00001);
+
+    const quint64 explicitRevision = item.impactRevision();
+    emit features.featuresChanged();
+    QCOMPARE(item.impactRevision(), explicitRevision);
+
+    features.publishImpact(42, 5.0);
+    QCOMPARE(item.impactRevision(), quint64{42});
+    QCOMPARE(item.impactStrength(), 1.0);
+
+    AudioVisualFeatureController fallback;
+    fallback.setActive(true);
+    TerrainReactorItem fallbackItem;
+    fallbackItem.setFeatureSource(&fallback);
+    const quint64 fallbackBefore = fallbackItem.impactRevision();
+    QVariantList spectrum(128, 0.0);
+    for (int index = 0; index < 32; ++index) spectrum[index] = 1.0;
+    fallback.processSpectrum(spectrum);
+    QVERIFY(fallbackItem.featureKick());
+    QVERIFY(fallbackItem.punchRevision() > 0);
+    QCOMPARE(fallbackItem.impactRevision(), fallbackBefore + 1);
+    QVERIFY(fallbackItem.impactStrength() > 0.0);
 }
 
 void TerrainReactorItemTest::highDpiInternalScaleUsesPhysicalPixels()

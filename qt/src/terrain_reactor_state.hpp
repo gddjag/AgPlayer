@@ -3,6 +3,7 @@
 #include <QVector>
 #include <QVector3D>
 #include <QVector4D>
+#include <QStringView>
 
 #include <array>
 #include <atomic>
@@ -68,8 +69,16 @@ MeteorPhase meteorPhase(float random, float timeSeconds) noexcept;
 
 enum class RenderColorMode : quint8 { MultiRegion, Custom, RgbSweep };
 
+using TrackPalette = std::array<QVector4D, 5>;
+
+quint32 stableTrackPaletteSeed(QStringView trackIdentity) noexcept;
+TrackPalette trackPalette(quint32 seed) noexcept;
+TrackPalette blendTrackPalettes(const TrackPalette& from,
+                                const TrackPalette& to,
+                                float progress) noexcept;
+
 struct RenderStyleSnapshot {
-    std::array<QVector4D, 5> colors{
+    TrackPalette colors{
         QVector4D(0.031F, 0.024F, 0.086F, 1.0F),
         QVector4D(0.31F, 0.435F, 1.0F, 1.0F),
         QVector4D(1.0F, 0.278F, 0.471F, 1.0F),
@@ -86,6 +95,15 @@ struct RenderStyleSnapshot {
     float cinemaShake = 0.4F;
     float autoRotate = 0.54F;
     float peakBoost = 0.58F;
+    float inputCompression = 0.82F;
+    float audioResponse = 1.28F;
+    float responseRange = 1.0F;
+    float centerHighlight = 0.58F;
+    float rhythmStrength = 0.30F;
+    float depthOfField = 0.86F;
+    float subjectClarity = 1.10F;
+    float autoRotateSpeed = 0.42F;
+    float rhythmSensitivity = 0.78F;
     bool ripplesEnabled = true;
     bool floatingCubesEnabled = true;
     bool meteorsEnabled = true;
@@ -109,14 +127,31 @@ struct VisualParameters {
     float particleActivity = 0.0F;
     float meteorActivity = 0.0F;
     float cameraPunch = 0.0F;
+    float impactStrength = 0.0F;
+    float impactAge = 0.0F;
     float timeSeconds = 0.0F;
 };
 
+struct RenderDynamics {
+    float inputCompression = 0.82F;
+    float audioResponse = 1.28F;
+    float responseRadius = 72.0F;
+    float centerHighlight = 0.58F;
+    float rhythmStrength = 0.30F;
+    float depthOfField = 0.86F;
+    float subjectClarity = 1.10F;
+    float autoRotateSpeed = 0.0F;
+    float rhythmSensitivity = 0.78F;
+};
+
+RenderDynamics mapRenderDynamics(const RenderStyleSnapshot& style) noexcept;
 VisualParameters mapVisualParameters(const AudioFeatures& features,
-                                     float timeSeconds) noexcept;
+                                     float timeSeconds,
+                                     const RenderStyleSnapshot& style = {}) noexcept;
 float terrainHeight(const SceneInstance& instance,
                     const VisualParameters& parameters,
-                    float timeSeconds) noexcept;
+                    float timeSeconds,
+                    const RenderStyleSnapshot& style = {}) noexcept;
 
 enum class DegradationStage : quint8 {
     Full,
@@ -196,12 +231,14 @@ public:
     int liveRendererCount() const noexcept;
     quint64 generation() const noexcept;
     bool claimPunchRevision(quint64 revision) noexcept;
+    bool claimImpactRevision(quint64 revision) noexcept;
 
 private:
     static std::atomic<quint64> globalGeneration_;
     std::atomic<quint64> rendererId_{0};
     std::atomic<quint64> generation_{0};
     std::atomic<quint64> consumedPunchRevision_{0};
+    std::atomic<quint64> consumedImpactRevision_{0};
     std::atomic_bool resourcesReady_{false};
 };
 
@@ -256,6 +293,31 @@ public:
 
 private:
     RendererResourceState& lifecycle_;
+};
+
+struct ImpactEvent {
+    float strength = 0.0F;
+    quint64 revision = 0;
+};
+
+struct ImpactPulseSnapshot {
+    float strength = 0.0F;
+    float age = 0.0F;
+    bool active = false;
+};
+
+class ImpactEventConsumer final {
+public:
+    explicit ImpactEventConsumer(RendererResourceState& lifecycle) noexcept;
+    bool consume(const ImpactEvent& event, float nowSeconds) noexcept;
+    ImpactPulseSnapshot snapshot(float nowSeconds) const noexcept;
+
+private:
+    static constexpr float durationSeconds_ = 1.2F;
+    RendererResourceState& lifecycle_;
+    float startSeconds_ = 0.0F;
+    float baseStrength_ = 0.0F;
+    bool active_ = false;
 };
 
 } // namespace agplayer::terrain

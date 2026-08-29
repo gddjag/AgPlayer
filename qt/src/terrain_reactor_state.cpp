@@ -66,7 +66,73 @@ int stageIndex(DegradationStage stage) noexcept
     return static_cast<int>(stage);
 }
 
+float mapAudioValue(float value, const RenderDynamics& dynamics) noexcept
+{
+    const float bounded = clampUnit(value);
+    const float exponent = 0.55F + dynamics.inputCompression * 1.1F;
+    const float compressed = 1.0F - std::pow(1.0F - bounded, exponent);
+    return clampUnit(compressed * dynamics.audioResponse);
+}
+
+QVector4D hsv(float hue, float saturation, float value) noexcept
+{
+    hue -= std::floor(hue);
+    const float sector = hue * 6.0F;
+    const int index = int(std::floor(sector)) % 6;
+    const float fraction = sector - std::floor(sector);
+    const float p = value * (1.0F - saturation);
+    const float q = value * (1.0F - saturation * fraction);
+    const float t = value * (1.0F - saturation * (1.0F - fraction));
+    switch (index) {
+    case 0: return {value, t, p, 1.0F};
+    case 1: return {q, value, p, 1.0F};
+    case 2: return {p, value, t, 1.0F};
+    case 3: return {p, q, value, 1.0F};
+    case 4: return {t, p, value, 1.0F};
+    default: return {value, p, q, 1.0F};
+    }
+}
+
 } // namespace
+
+quint32 stableTrackPaletteSeed(QStringView trackIdentity) noexcept
+{
+    if (trackIdentity.isEmpty()) return 0U;
+    quint32 hash = 2166136261U;
+    for (const QChar character : trackIdentity) {
+        const ushort value = character.unicode();
+        hash = (hash ^ quint32(value & 0xffU)) * 16777619U;
+        hash = (hash ^ quint32(value >> 8U)) * 16777619U;
+    }
+    return hash == 0U ? 1U : hash;
+}
+
+TrackPalette trackPalette(quint32 seed) noexcept
+{
+    DeterministicRandom random(seed == 0U ? 1U : seed);
+    const float hue = random.unit();
+    const float split = 0.31F + random.unit() * 0.18F;
+    const float accentOffset = 0.58F + random.unit() * 0.16F;
+    const QVector4D cool = hsv(hue, 0.64F, 0.94F);
+    const QVector4D warm = hsv(hue + split, 0.66F, 0.98F);
+    const QVector4D accent = hsv(hue + accentOffset, 0.52F, 1.0F);
+    const QVector4D peak = hsv(hue + split * 0.45F, 0.18F, 1.0F);
+    const QVector4D dark = hsv(hue + 0.06F, 0.72F, 0.085F);
+    return {dark, cool, warm, accent, peak};
+}
+
+TrackPalette blendTrackPalettes(const TrackPalette& from,
+                                const TrackPalette& to,
+                                float progress) noexcept
+{
+    const float amount = clampUnit(progress);
+    TrackPalette result;
+    for (std::size_t index = 0; index < result.size(); ++index) {
+        result[index] = from[index] * (1.0F - amount) + to[index] * amount;
+        result[index].setW(1.0F);
+    }
+    return result;
+}
 
 SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
                             int meteorCount, int particleCount)
@@ -78,8 +144,8 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
     result.floating.reserve(std::max(0, floatingCount));
     result.meteors.reserve(std::max(0, meteorCount));
     result.meteorTrails.reserve(std::max(0, meteorCount) * 3);
-    result.collisionRipples.reserve(std::max(0, meteorCount) * 8);
-    result.collisionParticles.reserve(std::max(0, meteorCount) * 8);
+    result.collisionRipples.reserve(std::max(0, meteorCount) * 16);
+    result.collisionParticles.reserve(std::max(0, meteorCount) * 12);
     result.particles.reserve(std::max(0, particleCount));
 
     DeterministicRandom random(seed);
@@ -112,22 +178,26 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
         SceneInstance meteor = makeExtra(random, 18.0F, 74.0F,
                                          32.0F, 46.0F, ColorZone::Peak);
         meteor.scale = QVector3D(0.34F, 1.85F, 0.34F);
+        meteor.aux = float(index);
         result.meteors.append(meteor);
         for (int segment = 0; segment < 3; ++segment) {
             SceneInstance trail = meteor;
-            trail.aux = float(segment + 1) / 4.0F;
+            trail.aux = float(index) + float(segment + 1) / 4.0F;
             trail.scale = QVector3D(0.22F, 1.35F, 0.22F);
             result.meteorTrails.append(trail);
         }
-        for (int segment = 0; segment < 8; ++segment) {
+        for (int segment = 0; segment < 16; ++segment) {
             SceneInstance ripple = meteor;
             ripple.position.setY(0.08F);
             ripple.scale = QVector3D(0.8F, 0.08F, 0.22F);
-            ripple.aux = float(segment) / 8.0F;
+            ripple.aux = float(index) + float(segment) / 16.0F;
             result.collisionRipples.append(ripple);
-
-            SceneInstance burst = ripple;
+        }
+        for (int segment = 0; segment < 12; ++segment) {
+            SceneInstance burst = meteor;
+            burst.position.setY(0.08F);
             burst.scale = QVector3D(0.15F, 0.15F, 0.15F);
+            burst.aux = float(index) + float(segment) / 12.0F;
             result.collisionParticles.append(burst);
         }
     }
@@ -159,36 +229,61 @@ MeteorPhase meteorPhase(float random, float timeSeconds) noexcept
     return result;
 }
 
-VisualParameters mapVisualParameters(const AudioFeatures& features,
-                                     float timeSeconds) noexcept
+RenderDynamics mapRenderDynamics(const RenderStyleSnapshot& style) noexcept
 {
+    RenderDynamics result;
+    result.inputCompression = std::clamp(style.inputCompression, 0.2F, 1.5F);
+    result.audioResponse = std::clamp(style.audioResponse, 0.2F, 2.0F);
+    result.responseRadius = 72.0F * std::clamp(style.responseRange, 0.5F, 2.2F);
+    result.centerHighlight = clampUnit(style.centerHighlight);
+    result.rhythmStrength = std::clamp(style.rhythmStrength, 0.0F, 1.4F);
+    result.depthOfField = std::clamp(style.depthOfField, 0.0F, 1.5F);
+    result.subjectClarity = std::clamp(style.subjectClarity, 0.2F, 1.4F);
+    result.autoRotateSpeed = clampUnit(style.autoRotate)
+        * clampUnit(style.autoRotateSpeed) * 2.0F;
+    result.rhythmSensitivity = clampUnit(style.rhythmSensitivity);
+    return result;
+}
+
+VisualParameters mapVisualParameters(const AudioFeatures& features,
+                                     float timeSeconds,
+                                     const RenderStyleSnapshot& style) noexcept
+{
+    const RenderDynamics dynamics = mapRenderDynamics(style);
     VisualParameters result;
     for (std::size_t index = 0; index < result.bands.size(); ++index) {
-        result.bands[index] = clampUnit(features.bands[index]);
+        result.bands[index] = mapAudioValue(features.bands[index], dynamics);
     }
-    result.energy = clampUnit(features.energy);
-    result.spectralFlux = clampUnit(features.spectralFlux);
-    const float kick = clampUnit(features.kick);
-    const float snare = clampUnit(features.snare);
-    result.rippleStrength = clampUnit(kick * 0.9F + snare * 0.45F);
+    result.energy = mapAudioValue(features.energy, dynamics);
+    result.spectralFlux = mapAudioValue(features.spectralFlux, dynamics);
+    const float rhythmSensitivity = dynamics.rhythmSensitivity;
+    const float rhythmStrength = dynamics.rhythmStrength;
+    const float kick = clampUnit(features.kick) * rhythmSensitivity;
+    const float snare = clampUnit(features.snare) * rhythmSensitivity;
+    result.rippleStrength = clampUnit((kick * 0.9F + snare * 0.45F)
+                                      * rhythmStrength);
     result.particleActivity = clampUnit(result.bands[7] * 0.45F
                                         + result.spectralFlux * 0.45F
-                                        + snare * 0.25F);
+                                        + snare * 0.25F * rhythmStrength);
     result.meteorActivity = clampUnit(result.bands[6] * 0.35F
                                       + result.bands[7] * 0.25F
-                                      + result.spectralFlux * 0.55F);
-    result.cameraPunch = clampUnit(kick * 0.78F + snare * 0.32F);
+                                      + result.spectralFlux * 0.55F
+                                          * rhythmStrength);
+    result.cameraPunch = clampUnit((kick * 0.78F + snare * 0.32F)
+                                   * rhythmStrength);
     result.timeSeconds = std::max(0.0F, timeSeconds);
     return result;
 }
 
 float terrainHeight(const SceneInstance& instance,
                     const VisualParameters& parameters,
-                    float timeSeconds) noexcept
+                    float timeSeconds,
+                    const RenderStyleSnapshot& style) noexcept
 {
+    const RenderDynamics dynamics = mapRenderDynamics(style);
     const float distance = std::hypot(instance.position.x(),
                                       instance.position.z());
-    const float center = clampUnit(1.0F - distance / 72.0F);
+    const float center = clampUnit(1.0F - distance / dynamics.responseRadius);
     const float core = std::pow(center, 1.42F);
     const float bass = parameters.bands[0] * core * 7.0F
         + parameters.bands[1] * center * (2.1F + instance.random * 2.9F);
@@ -204,8 +299,19 @@ float terrainHeight(const SceneInstance& instance,
     const float ringDistance = std::abs(distance - rippleRadius);
     const float ripple = parameters.rippleStrength
         * std::exp(-(ringDistance * ringDistance) / 25.0F) * 4.1F;
-    return std::clamp(idle + bass + mids + peak + ripple,
-                      0.035F, 18.0F);
+    const float impactAge = clampUnit(parameters.impactAge);
+    const float impact = clampUnit(parameters.impactStrength);
+    const float centerPulse = impact * dynamics.centerHighlight
+        * (1.0F - impactAge) * std::exp(-(distance * distance) / 1150.0F)
+        * 8.0F;
+    const float impactRadius = impactAge * dynamics.responseRadius * 1.15F;
+    const float impactDistance = std::abs(distance - impactRadius);
+    const float impactRing = impact * dynamics.rhythmStrength
+        * std::exp(-(impactDistance * impactDistance) / 18.0F) * 7.0F;
+    const float maximumHeight = impact > 0.0F ? 24.0F : 18.0F;
+    return std::clamp(idle + bass + mids + peak + ripple
+                          + centerPulse + impactRing,
+                      0.035F, maximumHeight);
 }
 
 void AutomaticQualityController::observeWorkSample(
@@ -374,6 +480,20 @@ bool RendererResourceState::claimPunchRevision(quint64 revision) noexcept
     return false;
 }
 
+bool RendererResourceState::claimImpactRevision(quint64 revision) noexcept
+{
+    if (revision == 0) return false;
+    quint64 consumed = consumedImpactRevision_.load(std::memory_order_acquire);
+    while (revision > consumed) {
+        if (consumedImpactRevision_.compare_exchange_weak(
+                consumed, revision, std::memory_order_acq_rel,
+                std::memory_order_acquire)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool FramePacer::shouldRender(double nowSeconds,
                               double targetFramesPerSecond) noexcept
 {
@@ -459,6 +579,35 @@ bool PunchEventConsumer::consume(const PunchEvent& event,
     }
     camera.applyBeatPunch(event.strength);
     return true;
+}
+
+ImpactEventConsumer::ImpactEventConsumer(
+    RendererResourceState& lifecycle) noexcept
+    : lifecycle_(lifecycle)
+{
+}
+
+bool ImpactEventConsumer::consume(const ImpactEvent& event,
+                                  float nowSeconds) noexcept
+{
+    if (!lifecycle_.claimImpactRevision(event.revision)) return false;
+    startSeconds_ = std::max(0.0F, nowSeconds);
+    baseStrength_ = clampUnit(event.strength);
+    active_ = baseStrength_ > 0.0F;
+    return true;
+}
+
+ImpactPulseSnapshot ImpactEventConsumer::snapshot(float nowSeconds) const noexcept
+{
+    ImpactPulseSnapshot result;
+    if (!active_) return result;
+    const float elapsed = std::max(0.0F, nowSeconds - startSeconds_);
+    const float age = std::clamp(elapsed / durationSeconds_, 0.0F, 1.0F);
+    if (age >= 1.0F) return result;
+    result.active = true;
+    result.age = age;
+    result.strength = clampUnit(baseStrength_ * (1.0F - age * 0.55F));
+    return result;
 }
 
 } // namespace agplayer::terrain

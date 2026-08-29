@@ -14,6 +14,7 @@ class TerrainReactorStateTest final : public QObject {
 private slots:
     void fixedSeedProducesStableLayoutAndColorZones();
     void meteorsHaveFiniteTrailsAndCollisionEffects();
+    void meteorGroupsKeepOneDeterministicPrimaryImpact();
     void audioFeaturesDriveBoundedVisualParameters();
     void automaticQualityUsesHysteresisCooldownAndEffectFirstOrder();
     void qualityFeedbackSeparatesPacerDelayFromWorkCost();
@@ -23,6 +24,10 @@ private slots:
     void manualCameraDeltaPreservesRendererMotion();
     void punchEventsAreConsumedOnceByRevision();
     void punchRevisionClaimSurvivesRendererRebuild();
+    void immersiveStyleControlsMapToBoundedDistinctDynamics();
+    void impactEventsProduceOneBoundedPulsePerRevision();
+    void explicitImpactRaisesCenterAndTravelingRing();
+    void trackIdentityProducesStableBoundedDistinctPalette();
     void ecoFramePacerLimitsWorkToThirtyFrames();
 };
 
@@ -55,12 +60,49 @@ void TerrainReactorStateTest::fixedSeedProducesStableLayoutAndColorZones()
     QCOMPARE(first.terrain.at(40).zone, ColorZone::Peak);
 }
 
+void TerrainReactorStateTest::trackIdentityProducesStableBoundedDistinctPalette()
+{
+    const quint32 firstSeed = stableTrackPaletteSeed(
+        QStringView(u"album/track-a.flac"));
+    QCOMPARE(firstSeed, stableTrackPaletteSeed(
+        QStringView(u"album/track-a.flac")));
+    QVERIFY(firstSeed != stableTrackPaletteSeed(
+        QStringView(u"album/track-b.flac")));
+
+    const TrackPalette first = trackPalette(firstSeed);
+    QCOMPARE(first, trackPalette(firstSeed));
+    const TrackPalette second = trackPalette(stableTrackPaletteSeed(
+        QStringView(u"album/track-b.flac")));
+    QVERIFY(first != second);
+    for (const QVector4D& color : first) {
+        QVERIFY(color.x() >= 0.0F && color.x() <= 1.0F);
+        QVERIFY(color.y() >= 0.0F && color.y() <= 1.0F);
+        QVERIFY(color.z() >= 0.0F && color.z() <= 1.0F);
+        QCOMPARE(color.w(), 1.0F);
+    }
+    QCOMPARE(blendTrackPalettes(first, first, -1.0F), first);
+    QCOMPARE(blendTrackPalettes(first, first, 2.0F), first);
+    const TrackPalette midpoint = blendTrackPalettes(first, second, 0.5F);
+    QVERIFY(midpoint != first);
+    QVERIFY(midpoint != second);
+    for (std::size_t index = 0; index < midpoint.size(); ++index) {
+        for (int channel = 0; channel < 3; ++channel) {
+            const float minimum = std::min(first[index][channel],
+                                           second[index][channel]);
+            const float maximum = std::max(first[index][channel],
+                                           second[index][channel]);
+            QVERIFY(midpoint[index][channel] >= minimum);
+            QVERIFY(midpoint[index][channel] <= maximum);
+        }
+    }
+}
+
 void TerrainReactorStateTest::meteorsHaveFiniteTrailsAndCollisionEffects()
 {
     const SceneLayout layout = makeSceneLayout(0x5eedU, 9, 3, 4, 8);
     QCOMPARE(layout.meteorTrails.size(), 12);
-    QCOMPARE(layout.collisionRipples.size(), 32);
-    QCOMPARE(layout.collisionParticles.size(), 32);
+    QCOMPARE(layout.collisionRipples.size(), 64);
+    QCOMPARE(layout.collisionParticles.size(), 48);
 
     const MeteorPhase flight = meteorPhase(0.25F, 0.5F);
     const MeteorPhase repeated = meteorPhase(0.25F, 0.5F);
@@ -78,6 +120,16 @@ void TerrainReactorStateTest::meteorsHaveFiniteTrailsAndCollisionEffects()
             && later.collisionProgress <= 1.0F);
 }
 
+void TerrainReactorStateTest::meteorGroupsKeepOneDeterministicPrimaryImpact()
+{
+    const SceneLayout layout = makeSceneLayout(0x5eedU, 9, 0, 4, 0);
+    QCOMPARE(layout.meteors.at(0).aux, 0.0F);
+    QCOMPARE(layout.meteors.at(1).aux, 1.0F);
+    QCOMPARE(int(std::floor(layout.meteorTrails.at(6).aux)), 2);
+    QCOMPARE(int(std::floor(layout.collisionRipples.at(16).aux)), 1);
+    QCOMPARE(int(std::floor(layout.collisionParticles.at(24).aux)), 2);
+}
+
 void TerrainReactorStateTest::audioFeaturesDriveBoundedVisualParameters()
 {
     AudioFeatures features;
@@ -92,10 +144,10 @@ void TerrainReactorStateTest::audioFeaturesDriveBoundedVisualParameters()
     QCOMPARE(visual.bands.front(), 0.0F);
     QCOMPARE(visual.bands.back(), 1.0F);
     QCOMPARE(visual.energy, 1.0F);
-    QVERIFY(visual.rippleStrength >= 0.9F && visual.rippleStrength <= 1.0F);
+    QVERIFY(visual.rippleStrength >= 0.2F && visual.rippleStrength <= 0.4F);
     QVERIFY(visual.particleActivity > 0.6F && visual.particleActivity <= 1.0F);
     QVERIFY(visual.meteorActivity > 0.6F && visual.meteorActivity <= 1.0F);
-    QVERIFY(visual.cameraPunch > 0.7F && visual.cameraPunch <= 1.0F);
+    QVERIFY(visual.cameraPunch > 0.2F && visual.cameraPunch <= 0.4F);
 
     SceneInstance center;
     center.position = QVector3D(0.0F, 0.0F, 0.0F);
@@ -109,6 +161,122 @@ void TerrainReactorStateTest::audioFeaturesDriveBoundedVisualParameters()
     QVERIFY(centerHeight > edgeHeight);
     QVERIFY(centerHeight <= 18.0F);
     QVERIFY(edgeHeight >= 0.035F);
+}
+
+void TerrainReactorStateTest::immersiveStyleControlsMapToBoundedDistinctDynamics()
+{
+    RenderStyleSnapshot restrained;
+    restrained.inputCompression = -2.0F;
+    restrained.audioResponse = -1.0F;
+    restrained.responseRange = 0.0F;
+    restrained.centerHighlight = -1.0F;
+    restrained.rhythmStrength = -1.0F;
+    restrained.depthOfField = -1.0F;
+    restrained.subjectClarity = -1.0F;
+    restrained.autoRotateSpeed = -1.0F;
+    restrained.rhythmSensitivity = -1.0F;
+    const RenderDynamics low = mapRenderDynamics(restrained);
+
+    RenderStyleSnapshot vivid;
+    vivid.inputCompression = 4.0F;
+    vivid.audioResponse = 4.0F;
+    vivid.responseRange = 4.0F;
+    vivid.centerHighlight = 4.0F;
+    vivid.rhythmStrength = 4.0F;
+    vivid.depthOfField = 4.0F;
+    vivid.subjectClarity = 4.0F;
+    vivid.autoRotate = 1.0F;
+    vivid.autoRotateSpeed = 4.0F;
+    vivid.rhythmSensitivity = 4.0F;
+    const RenderDynamics high = mapRenderDynamics(vivid);
+
+    QCOMPARE(low.inputCompression, 0.2F);
+    QCOMPARE(high.inputCompression, 1.5F);
+    QCOMPARE(low.audioResponse, 0.2F);
+    QCOMPARE(high.audioResponse, 2.0F);
+    QCOMPARE(low.responseRadius, 36.0F);
+    QCOMPARE(high.responseRadius, 158.4F);
+    QCOMPARE(low.centerHighlight, 0.0F);
+    QCOMPARE(high.centerHighlight, 1.0F);
+    QCOMPARE(low.rhythmStrength, 0.0F);
+    QCOMPARE(high.rhythmStrength, 1.4F);
+    QCOMPARE(low.depthOfField, 0.0F);
+    QCOMPARE(high.depthOfField, 1.5F);
+    QCOMPARE(low.subjectClarity, 0.2F);
+    QCOMPARE(high.subjectClarity, 1.4F);
+    QCOMPARE(low.autoRotateSpeed, 0.0F);
+    QCOMPARE(high.autoRotateSpeed, 2.0F);
+    QCOMPARE(low.rhythmSensitivity, 0.0F);
+    QCOMPARE(high.rhythmSensitivity, 1.0F);
+
+    AudioFeatures features;
+    features.bands.fill(0.25F);
+    features.energy = 0.25F;
+    features.spectralFlux = 0.25F;
+    features.kick = 0.5F;
+    const VisualParameters quiet = mapVisualParameters(features, 1.0F, restrained);
+    const VisualParameters reactive = mapVisualParameters(features, 1.0F, vivid);
+    QVERIFY(reactive.energy > quiet.energy);
+    QVERIFY(reactive.bands.front() > quiet.bands.front());
+    QVERIFY(reactive.rippleStrength > quiet.rippleStrength);
+    QVERIFY(reactive.cameraPunch > quiet.cameraPunch);
+    QVERIFY(reactive.energy <= 1.0F);
+    QVERIFY(reactive.rippleStrength <= 1.0F);
+}
+
+void TerrainReactorStateTest::impactEventsProduceOneBoundedPulsePerRevision()
+{
+    RendererResourceState lifecycle;
+    ImpactEventConsumer consumer(lifecycle);
+    const ImpactEvent first{0.8F, 7};
+    QVERIFY(consumer.consume(first, 10.0F));
+    QVERIFY(!consumer.consume(first, 10.1F));
+
+    const ImpactPulseSnapshot start = consumer.snapshot(10.0F);
+    QVERIFY(start.active);
+    QCOMPARE(start.strength, 0.8F);
+    QCOMPARE(start.age, 0.0F);
+    const ImpactPulseSnapshot moving = consumer.snapshot(10.3F);
+    QVERIFY(moving.active);
+    QVERIFY(moving.age > 0.0F && moving.age < 1.0F);
+    QVERIFY(moving.strength < start.strength);
+    QVERIFY(!consumer.snapshot(11.3F).active);
+
+    const ImpactEvent clipped{9.0F, 8};
+    QVERIFY(consumer.consume(clipped, 12.0F));
+    QCOMPARE(consumer.snapshot(12.0F).strength, 1.0F);
+
+    ImpactEventConsumer rebuilt(lifecycle);
+    QVERIFY(!rebuilt.consume(clipped, 12.0F));
+    QVERIFY(!rebuilt.snapshot(12.0F).active);
+}
+
+void TerrainReactorStateTest::explicitImpactRaisesCenterAndTravelingRing()
+{
+    AudioFeatures features;
+    features.bands.fill(0.3F);
+    features.energy = 0.3F;
+    RenderStyleSnapshot style;
+    style.responseRange = 1.0F;
+    style.centerHighlight = 0.8F;
+    style.rhythmStrength = 1.0F;
+    VisualParameters baseline = mapVisualParameters(features, 2.0F, style);
+    VisualParameters impacted = baseline;
+    impacted.impactStrength = 0.9F;
+    impacted.impactAge = 0.22F;
+
+    SceneInstance center;
+    center.position = QVector3D(0.0F, 0.0F, 0.0F);
+    center.random = 0.5F;
+    center.zone = ColorZone::Peak;
+    SceneInstance ring = center;
+    ring.position = QVector3D(28.0F, 0.0F, 0.0F);
+
+    QVERIFY(terrainHeight(center, impacted, 2.0F, style)
+            > terrainHeight(center, baseline, 2.0F, style));
+    QVERIFY(terrainHeight(ring, impacted, 2.0F, style)
+            > terrainHeight(ring, baseline, 2.0F, style));
+    QVERIFY(terrainHeight(center, impacted, 2.0F, style) <= 24.0F);
 }
 
 void TerrainReactorStateTest::automaticQualityUsesHysteresisCooldownAndEffectFirstOrder()
