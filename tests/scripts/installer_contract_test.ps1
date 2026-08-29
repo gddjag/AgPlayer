@@ -42,8 +42,15 @@ $stager = Join-Path $repo 'tools\stage_release.ps1'
 if (-not (Test-Path -LiteralPath $stager)) {
     throw "Missing release staging script"
 }
-if ((Get-Content -Raw -Encoding UTF8 -LiteralPath $stager) -notmatch 'platforms\\qwindows\.dll') {
+$stagerSource = Get-Content -Raw -Encoding UTF8 -LiteralPath $stager
+if ($stagerSource -notmatch 'platforms\\qwindows\.dll') {
     throw "Release staging must verify the Windows platform plugin"
+}
+if ($stagerSource -notmatch "'AgSeparationWorker\.exe'") {
+    throw "Release staging must include and verify the on-demand separation Worker"
+}
+if ($stagerSource -match '\[string\]\$BuildDirectory\s*=\s*\(Join-Path\s+\$PSScriptRoot') {
+    throw "Release staging defaults must not evaluate PSScriptRoot inside the parameter block"
 }
 $packageScriptPath = Join-Path $repo 'scripts\package-windows.ps1'
 $packageScript = Get-Content -Raw -Encoding UTF8 -LiteralPath $packageScriptPath
