@@ -9,6 +9,38 @@ QtObject {
     property real durationMs: 0
     property real generation: 0
     property int libraryRevision: 0
+    readonly property string trackId:
+        String(PlaybackController.currentTrackId || "")
+    readonly property var trackPalette: paletteForTrack(trackId)
+    readonly property double trackColorHash: Number(trackPalette.hash)
+    readonly property color paletteCoolColor: trackPalette.cool
+    readonly property color paletteWarmColor: trackPalette.warm
+    readonly property color paletteHighlightColor: trackPalette.highlight
+    readonly property color paletteAmbientColor: trackPalette.ambient
+
+    function paletteForTrack(candidateTrackId) {
+        var text = String(candidateTrackId || "AgPlayer")
+        var hash = 2166136261
+        for (var index = 0; index < text.length; ++index)
+            hash = Math.imul(hash ^ text.charCodeAt(index), 16777619)
+        hash = hash >>> 0
+        var jitter = ((hash % 61) - 30) / 360.0
+        return {
+            hash: hash,
+            cool: Qt.hsla((0.52 + jitter + 1.0) % 1.0, 0.78, 0.66, 1.0),
+            warm: Qt.hsla((0.96 + jitter * 0.55 + 1.0) % 1.0, 0.82, 0.65, 1.0),
+            highlight: Qt.hsla((0.11 + jitter * 0.25 + 1.0) % 1.0, 0.76, 0.78, 1.0),
+            ambient: Qt.hsla((0.60 + jitter * 0.80 + 1.0) % 1.0, 0.62, 0.48, 1.0)
+        }
+    }
+
+    function publishVisualTiming() {
+        AudioVisualFeatureController.setWaveformTiming(
+                    trackId,
+                    Number(layers._bpm) || 0,
+                    Math.max(0, Number(layers._durationMs) || durationMs || 0),
+                    layers.mix || [])
+    }
 
     function currentRow() {
         return LibraryModel.indexForTrackId(PlaybackController.currentTrackId)
@@ -34,6 +66,7 @@ QtObject {
                                LibraryModel.PathRole))
         layers = ({})
         durationMs = 0
+        publishVisualTiming()
         if (!path || path.length === 0)
             return
         generation = WaveformProvider.loadForTrack(
@@ -67,6 +100,7 @@ QtObject {
                 root.layers = resultLayers
                 root.durationMs = Math.max(
                             0, Number(resultLayers._durationMs) || 0)
+                root.publishVisualTiming()
             }
         }
     }

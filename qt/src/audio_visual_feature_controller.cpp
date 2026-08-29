@@ -3,6 +3,7 @@
 #include "playback_controller.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 AudioVisualFeatureController::AudioVisualFeatureController(
     PlaybackController* playback, QObject* parent)
@@ -16,6 +17,18 @@ double AudioVisualFeatureController::energy() const noexcept { return energy_; }
 double AudioVisualFeatureController::spectralFlux() const noexcept { return spectralFlux_; }
 bool AudioVisualFeatureController::kickPulse() const noexcept { return kickPulse_; }
 bool AudioVisualFeatureController::snarePulse() const noexcept { return snarePulse_; }
+quint64 AudioVisualFeatureController::impactRevision() const noexcept
+{
+    return impactRevision_;
+}
+double AudioVisualFeatureController::impactStrength() const noexcept
+{
+    return impactStrength_;
+}
+bool AudioVisualFeatureController::beatReliable() const noexcept
+{
+    return beatReliable_;
+}
 quint64 AudioVisualFeatureController::derivedUpdateCount() const noexcept
 {
     return derivedUpdateCount_;
@@ -24,9 +37,10 @@ quint64 AudioVisualFeatureController::derivedUpdateCount() const noexcept
 void AudioVisualFeatureController::setPlaybackController(PlaybackController* playback)
 {
     if (playback_ == playback) return;
-    disconnectSpectrum();
+    disconnectPlaybackSignals();
     playback_ = playback;
-    if (active_) connectSpectrum();
+    resetBeatPosition();
+    if (active_) connectPlaybackSignals();
 }
 
 void AudioVisualFeatureController::setActive(bool active)
@@ -35,11 +49,71 @@ void AudioVisualFeatureController::setActive(bool active)
     active_ = active;
     if (active_) {
         previousSpectrum_.clear();
-        connectSpectrum();
+        connectPlaybackSignals();
     } else {
-        disconnectSpectrum();
+        disconnectPlaybackSignals();
     }
     emit activeChanged();
+}
+
+void AudioVisualFeatureController::setWaveformTiming(
+    const QString& trackId, double bpm, qint64 durationMs,
+    const QVariantList& mixPeaks)
+{
+    bool hasValidPeak = false;
+    for (const QVariant& peak : mixPeaks) {
+        bool ok = false;
+        const double value = peak.toDouble(&ok);
+        if (ok && std::isfinite(value)) {
+            hasValidPeak = true;
+            break;
+        }
+    }
+    const bool matchesPlayback = playback_ == nullptr
+        || playback_->currentTrackId().isEmpty()
+        || playback_->currentTrackId() == trackId;
+    const bool reliable = !trackId.isEmpty() && std::isfinite(bpm)
+        && bpm >= 40.0 && bpm <= 300.0 && durationMs > 0
+        && hasValidPeak && matchesPlayback;
+    const bool reliabilityChanged = beatReliable_ != reliable;
+    timingTrackId_ = trackId;
+    bpm_ = reliable ? bpm : 0.0;
+    durationMs_ = reliable ? durationMs : 0;
+    beatReliable_ = reliable;
+    fallbackDebounce_.invalidate();
+    resetBeatPosition();
+    if (reliabilityChanged) emit beatReliableChanged();
+}
+
+void AudioVisualFeatureController::processPlaybackPosition(qint64 positionMs)
+{
+    if (!active_ || !beatReliable_ || positionMs < 0
+        || positionMs > durationMs_) {
+        return;
+    }
+
+    const double beatMs = 60000.0 / bpm_;
+    const double groupMs = beatMs * 8.0;
+    const qint64 group = static_cast<qint64>(std::floor(positionMs / groupMs));
+    if (lastPositionMs_ < 0) {
+        lastPositionMs_ = positionMs;
+        lastImpactGroup_ = group;
+        return;
+    }
+
+    const qint64 delta = positionMs - lastPositionMs_;
+    constexpr qint64 SeekThresholdMs = 750;
+    if (delta < 0 || delta > SeekThresholdMs) {
+        lastPositionMs_ = positionMs;
+        lastImpactGroup_ = group;
+        return;
+    }
+
+    if (group > 0 && group > lastImpactGroup_) {
+        triggerImpact(std::clamp(0.68 + energy_ * 0.32, 0.0, 1.0));
+    }
+    lastPositionMs_ = positionMs;
+    lastImpactGroup_ = group;
 }
 
 void AudioVisualFeatureController::processSpectrum(const QVariantList& spectrum)
@@ -78,27 +152,79 @@ void AudioVisualFeatureController::processSpectrum(const QVariantList& spectrum)
         && bands_.at(4).toDouble() + bands_.at(5).toDouble() >= 0.20;
     previousSpectrum_ = spectrum;
     ++derivedUpdateCount_;
+    constexpr qint64 FallbackDebounceMs = 180;
+    if (!beatReliable_ && (kickPulse_ || snarePulse_)
+        && (!fallbackDebounce_.isValid()
+            || fallbackDebounce_.elapsed() >= FallbackDebounceMs)) {
+        triggerImpact(std::clamp(0.55 + energy_ * 0.45
+                                     + (kickPulse_ ? 0.12 : 0.0),
+                                 0.0, 1.0),
+                      false);
+        fallbackDebounce_.restart();
+    }
     emit featuresChanged();
     emit derivedUpdateCountChanged();
 }
 
-void AudioVisualFeatureController::connectSpectrum()
+void AudioVisualFeatureController::connectPlaybackSignals()
 {
-    if (playback_ == nullptr || spectrumConnection_) return;
-    spectrumConnection_ = connect(playback_, &PlaybackController::spectrumChanged,
-                                  this, [this] {
-                                      if (playback_ != nullptr) {
-                                          processSpectrum(playback_->spectrum());
-                                      }
-                                  });
+    if (playback_ == nullptr) return;
+    if (!spectrumConnection_) {
+        spectrumConnection_ = connect(
+            playback_, &PlaybackController::spectrumChanged, this, [this] {
+                if (playback_ != nullptr) processSpectrum(playback_->spectrum());
+            });
+    }
+    if (!positionConnection_) {
+        positionConnection_ = connect(
+            playback_, &PlaybackController::positionMsChanged, this, [this] {
+                if (playback_ != nullptr) {
+                    processPlaybackPosition(playback_->positionMs());
+                }
+            });
+    }
+    if (!trackConnection_) {
+        trackConnection_ = connect(
+            playback_, &PlaybackController::currentTrackIdChanged, this, [this] {
+                resetBeatPosition();
+                if (playback_ != nullptr
+                    && playback_->currentTrackId() != timingTrackId_
+                    && beatReliable_) {
+                    beatReliable_ = false;
+                    emit beatReliableChanged();
+                }
+            });
+    }
+    processPlaybackPosition(playback_->positionMs());
 }
 
-void AudioVisualFeatureController::disconnectSpectrum()
+void AudioVisualFeatureController::disconnectPlaybackSignals()
 {
     if (spectrumConnection_) {
         disconnect(spectrumConnection_);
         spectrumConnection_ = {};
     }
+    if (positionConnection_) {
+        disconnect(positionConnection_);
+        positionConnection_ = {};
+    }
+    if (trackConnection_) {
+        disconnect(trackConnection_);
+        trackConnection_ = {};
+    }
+}
+
+void AudioVisualFeatureController::resetBeatPosition() noexcept
+{
+    lastPositionMs_ = -1;
+    lastImpactGroup_ = -1;
+}
+
+void AudioVisualFeatureController::triggerImpact(double strength, bool notify)
+{
+    impactStrength_ = std::clamp(strength, 0.0, 1.0);
+    ++impactRevision_;
+    if (notify) emit featuresChanged();
 }
 
 double AudioVisualFeatureController::normalizedValue(const QVariant& value) noexcept

@@ -1,8 +1,10 @@
 #pragma once
 
 #include <QObject>
+#include <QElapsedTimer>
 #include <QMetaObject>
 #include <QPointer>
+#include <QString>
 #include <QVariantList>
 
 class PlaybackController;
@@ -16,6 +18,9 @@ class AudioVisualFeatureController final : public QObject {
     Q_PROPERTY(double spectralFlux READ spectralFlux NOTIFY featuresChanged)
     Q_PROPERTY(bool kickPulse READ kickPulse NOTIFY featuresChanged)
     Q_PROPERTY(bool snarePulse READ snarePulse NOTIFY featuresChanged)
+    Q_PROPERTY(quint64 impactRevision READ impactRevision NOTIFY featuresChanged)
+    Q_PROPERTY(double impactStrength READ impactStrength NOTIFY featuresChanged)
+    Q_PROPERTY(bool beatReliable READ beatReliable NOTIFY beatReliableChanged)
     Q_PROPERTY(quint64 derivedUpdateCount READ derivedUpdateCount
                    NOTIFY derivedUpdateCountChanged)
 
@@ -29,24 +34,36 @@ public:
     double spectralFlux() const noexcept;
     bool kickPulse() const noexcept;
     bool snarePulse() const noexcept;
+    quint64 impactRevision() const noexcept;
+    double impactStrength() const noexcept;
+    bool beatReliable() const noexcept;
     quint64 derivedUpdateCount() const noexcept;
 
     void setPlaybackController(PlaybackController* playback);
     Q_INVOKABLE void setActive(bool active);
+    Q_INVOKABLE void setWaveformTiming(const QString& trackId, double bpm,
+                                       qint64 durationMs,
+                                       const QVariantList& mixPeaks);
+    Q_INVOKABLE void processPlaybackPosition(qint64 positionMs);
     void processSpectrum(const QVariantList& spectrum);
 
 signals:
     void activeChanged();
     void featuresChanged();
+    void beatReliableChanged();
     void derivedUpdateCountChanged();
 
 private:
-    void connectSpectrum();
-    void disconnectSpectrum();
+    void connectPlaybackSignals();
+    void disconnectPlaybackSignals();
+    void resetBeatPosition() noexcept;
+    void triggerImpact(double strength, bool notify = true);
     static double normalizedValue(const QVariant& value) noexcept;
 
     QPointer<PlaybackController> playback_;
     QMetaObject::Connection spectrumConnection_;
+    QMetaObject::Connection positionConnection_;
+    QMetaObject::Connection trackConnection_;
     bool active_ = false;
     QVariantList bands_{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     QVariantList previousSpectrum_;
@@ -54,5 +71,14 @@ private:
     double spectralFlux_ = 0.0;
     bool kickPulse_ = false;
     bool snarePulse_ = false;
+    QString timingTrackId_;
+    double bpm_ = 0.0;
+    qint64 durationMs_ = 0;
+    bool beatReliable_ = false;
+    qint64 lastPositionMs_ = -1;
+    qint64 lastImpactGroup_ = -1;
+    QElapsedTimer fallbackDebounce_;
+    quint64 impactRevision_ = 0;
+    double impactStrength_ = 0.0;
     quint64 derivedUpdateCount_ = 0;
 };

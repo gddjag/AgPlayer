@@ -657,6 +657,7 @@ foreach(qt_test IN ITEMS
     replay_gain_scanner_test
     translation_manager_test
     audio_preview_controller_test
+    audio_visual_feature_controller_test
     player_experience_controller_test
     terrain_reactor_state_test
     terrain_reactor_item_test
@@ -894,6 +895,15 @@ target_compile_definitions(qml_waveform_test PRIVATE
 agplayer_enable_warnings(qml_waveform_test)
 add_test(NAME qml_waveform_test COMMAND qml_waveform_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_waveform.qml)
 set_tests_properties(qml_waveform_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+add_test(NAME qml_audio_visual_impact_test
+    COMMAND qml_waveform_test
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_audio_visual_impact.qml)
+set_tests_properties(qml_audio_visual_impact_test PROPERTIES
     TIMEOUT 10
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     ENVIRONMENT_MODIFICATION
