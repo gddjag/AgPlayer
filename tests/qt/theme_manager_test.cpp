@@ -341,6 +341,7 @@ void ThemeManagerTest::generatedGlassPalettesMeetContract()
         QVERIFY(worstContrast(palette.textPrimary, composites) >= 7.0);
         QVERIFY(worstContrast(palette.textSecondary, composites) >= 4.5);
         QVERIFY(worstContrast(palette.textTertiary, composites) >= 3.0);
+        QVERIFY(worstContrast(palette.borderStrong, composites) >= 3.0);
         QVERIFY(worstContrast(palette.accent, composites) >= 4.5);
         QVERIFY(worstContrast(palette.focus, composites) >= 3.0);
         QVERIFY(contrastRatio(palette.accentText, palette.accent) >= 4.5);
