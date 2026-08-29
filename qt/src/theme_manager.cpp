@@ -156,46 +156,41 @@ QColor visibleTone(const QColor& seed, const QColor& background,
                         lightBackground ? -1 : 1, {background}, target);
 }
 
-std::pair<ThemeManager::SkinKind, ThemeManager::SkinStops> resolveColorChoice(
-    const int mode, const QString& presetId, const QString& customColor)
-{
-    if (mode == 0) {
-        const QColor seed = ThemeManager::defaultSeed();
-        return {ThemeManager::SkinKind::Solid, {seed, seed, seed}};
-    }
-    if (mode == 1) {
-        const QList<ThemeManager::Preset> presets = ThemeManager::presets();
-        for (const ThemeManager::Preset& preset : presets) {
-            if (preset.id == presetId) {
-                return {ThemeManager::SkinKind::Gradient, preset.stops};
-            }
-        }
-        if (const auto legacy = ThemeManager::legacyPresetSeed(presetId)) {
-            return {ThemeManager::SkinKind::Solid,
-                    {*legacy, *legacy, *legacy}};
-        }
-        const QColor seed = ThemeManager::defaultSeed();
-        return {ThemeManager::SkinKind::Solid, {seed, seed, seed}};
-    }
-
-    const QColor requested(customColor);
-    const QColor seed = requested.isValid() ? requested
-                                             : ThemeManager::defaultSeed();
-    return {ThemeManager::SkinKind::Solid, {seed, seed, seed}};
-}
-
 ThemeManager::Preferences preferencesFromSettings(
     const SettingsController& settings)
 {
     const int mode = settings.skinColorMode();
-    const auto choice = resolveColorChoice(
-        mode, settings.skinPreset(), settings.skinCustomColor());
-    return {
-        static_cast<ThemeManager::AppearanceMode>(settings.themeMode()),
-        mode == 0 ? ThemeManager::SkinMode::Default
-                  : ThemeManager::SkinMode::Generated,
-        choice.first,
-        choice.second};
+    const auto appearance =
+        static_cast<ThemeManager::AppearanceMode>(settings.themeMode());
+    const QColor fallback = ThemeManager::defaultSeed();
+    const ThemeManager::SkinStops defaultStops{fallback, fallback, fallback};
+    if (mode == 1) {
+        const QList<ThemeManager::Preset> presets = ThemeManager::presets();
+        const auto preset = std::find_if(
+            presets.cbegin(), presets.cend(),
+            [&settings](const ThemeManager::Preset& value) {
+                return value.id == settings.skinPreset();
+            });
+        if (preset != presets.cend()) {
+            return {appearance, ThemeManager::SkinMode::Generated,
+                    ThemeManager::SkinKind::Gradient, preset->stops};
+        }
+        return {appearance, ThemeManager::SkinMode::Default,
+                ThemeManager::SkinKind::Solid, defaultStops};
+    }
+    if (mode == 2) {
+        const QColor start(settings.skinCustomColor());
+        if (settings.skinCustomKind() == 1) {
+            return {appearance, ThemeManager::SkinMode::Generated,
+                    ThemeManager::SkinKind::Gradient,
+                    {start, QColor(settings.skinCustomColorMiddle()),
+                     QColor(settings.skinCustomColorEnd())}};
+        }
+        return {appearance, ThemeManager::SkinMode::Generated,
+                ThemeManager::SkinKind::Solid, {start, start, start}};
+    }
+    return {appearance, ThemeManager::SkinMode::Default,
+            ThemeManager::SkinKind::Solid, defaultStops};
 }
 
 QColor stateTone(const QColor& base, const QColor& foreground, const int amount)
@@ -637,11 +632,7 @@ ThemeSettingsSynchronizer::ThemeSettingsSynchronizer(
     const auto apply = [this]() { applyFromCompleteSettings(); };
     QObject::connect(&settings_, &SettingsController::themeModeChanged,
                      this, apply);
-    QObject::connect(&settings_, &SettingsController::skinColorModeChanged,
-                     this, apply);
-    QObject::connect(&settings_, &SettingsController::skinPresetChanged,
-                     this, apply);
-    QObject::connect(&settings_, &SettingsController::skinCustomColorChanged,
+    QObject::connect(&settings_, &SettingsController::skinConfigurationChanged,
                      this, apply);
     applyFromCompleteSettings();
 }

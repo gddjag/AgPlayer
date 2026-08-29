@@ -700,18 +700,21 @@ void ThemeManagerTest::synchronizerAppliesSkinSettingsAtStartupAndDuringTransact
              (ThemeManager::SkinStops{QColor(QStringLiteral("#73A6FF")),
                                       QColor(QStringLiteral("#A98BFF")),
                                       QColor(QStringLiteral("#F0A8D8"))}));
+    const ThemePalette startupPalette = manager.palette();
 
     settings.beginEdit();
     settings.setThemeMode(1);
-    settings.setSkinColorMode(2);
-    settings.setSkinCustomColor(QStringLiteral("#123456"));
+    settings.setSkinCustomConfiguration(
+        1, QStringLiteral("#123456"), QStringLiteral("#456789"),
+        QStringLiteral("#89ABCD"));
     QCOMPARE(manager.preferences().appearanceMode, ThemeManager::AppearanceMode::Light);
     QCOMPARE(manager.preferences().skinMode, ThemeManager::SkinMode::Generated);
-    QCOMPARE(manager.preferences().skinKind, ThemeManager::SkinKind::Solid);
+    QCOMPARE(manager.preferences().skinKind, ThemeManager::SkinKind::Gradient);
     QCOMPARE(manager.preferences().skinStops,
              (ThemeManager::SkinStops{QColor(QStringLiteral("#123456")),
-                                      QColor(QStringLiteral("#123456")),
-                                      QColor(QStringLiteral("#123456"))}));
+                                      QColor(QStringLiteral("#456789")),
+                                      QColor(QStringLiteral("#89ABCD"))}));
+    QVERIFY(manager.palette() != startupPalette);
     settings.resetToDefaults();
     QCOMPARE(manager.preferences().appearanceMode,
              ThemeManager::AppearanceMode::System);
@@ -724,16 +727,22 @@ void ThemeManagerTest::synchronizerAppliesSkinSettingsAtStartupAndDuringTransact
              (ThemeManager::SkinStops{QColor(QStringLiteral("#73A6FF")),
                                       QColor(QStringLiteral("#A98BFF")),
                                       QColor(QStringLiteral("#F0A8D8"))}));
+    QCOMPARE(manager.palette(), startupPalette);
 
     settings.beginEdit();
-    settings.setSkinColorMode(2);
-    settings.setSkinCustomColor(QStringLiteral("#123456"));
+    settings.setSkinCustomConfiguration(
+        0, QStringLiteral("#123456"), QStringLiteral("#456789"),
+        QStringLiteral("#89ABCD"));
     settings.commitEdit();
     QCOMPARE(manager.preferences().skinMode, ThemeManager::SkinMode::Generated);
+    QCOMPARE(manager.preferences().skinKind, ThemeManager::SkinKind::Solid);
     QCOMPARE(manager.preferences().skinStops,
              (ThemeManager::SkinStops{QColor(QStringLiteral("#123456")),
                                       QColor(QStringLiteral("#123456")),
                                       QColor(QStringLiteral("#123456"))}));
+
+    settings.selectSkinPreset(QStringLiteral("unknown-new-preset"));
+    QCOMPARE(manager.preferences().skinMode, ThemeManager::SkinMode::Default);
 }
 
 void ThemeManagerTest::ownsNoTimers()
