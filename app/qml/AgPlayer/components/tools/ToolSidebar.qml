@@ -7,11 +7,12 @@ Rectangle {
     id: navigation
     objectName: "audioToolsTopNav"
     property bool referenceWorkbench: false
+    property bool separationWorkbench: false
     color: referenceWorkbench ? "#071925" : Theme.panel
     border.color: referenceWorkbench ? "#142b3a" : Theme.border
     border.width: 1
-    radius: referenceWorkbench ? 0 : Theme.radiusMd
-    implicitHeight: referenceWorkbench ? 52 : 55
+    radius: separationWorkbench ? 7 : referenceWorkbench ? 0 : Theme.radiusMd
+    implicitHeight: separationWorkbench ? 44 : referenceWorkbench ? 52 : 55
 
     property int currentTool: 0
     property Window window
@@ -27,8 +28,10 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: referenceWorkbench ? 20 : Theme.spacingLg
-        anchors.rightMargin: referenceWorkbench ? 20 : Theme.spacingLg
+        anchors.leftMargin: separationWorkbench ? 0
+                                                : referenceWorkbench ? 20 : Theme.spacingLg
+        anchors.rightMargin: separationWorkbench ? 0
+                                                 : referenceWorkbench ? 20 : Theme.spacingLg
         spacing: referenceWorkbench ? 0 : Theme.spacingSm
 
         Item { Layout.fillWidth: !navigation.referenceWorkbench }
@@ -39,9 +42,13 @@ Rectangle {
             Button {
                 id: navButton
                 objectName: "audioToolNavButton"
-                Layout.preferredWidth: navigation.referenceWorkbench ? 164 : 154
-                Layout.preferredHeight: navigation.referenceWorkbench ? 52 : 53
-                Layout.maximumHeight: navigation.referenceWorkbench ? 52 : 53
+                Layout.fillWidth: navigation.separationWorkbench
+                Layout.preferredWidth: navigation.separationWorkbench ? 1
+                                                                      : navigation.referenceWorkbench ? 164 : 154
+                Layout.preferredHeight: navigation.separationWorkbench ? 44
+                                                                       : navigation.referenceWorkbench ? 52 : 53
+                Layout.maximumHeight: navigation.separationWorkbench ? 44
+                                                                     : navigation.referenceWorkbench ? 52 : 53
                 flat: true
                 checked: navigation.currentTool === modelData.toolId
                 focusPolicy: Qt.StrongFocus
@@ -80,7 +87,8 @@ Rectangle {
                                                Theme.accent.b, 0.14)
                                      : (navButton.hovered ? Theme.hoverSurface : "transparent")
                     border.width: 0
-                    radius: navigation.referenceWorkbench ? 0 : Theme.radiusMd
+                    radius: navigation.separationWorkbench ? 6
+                                                           : navigation.referenceWorkbench ? 0 : Theme.radiusMd
                     Rectangle {
                         visible: navigation.referenceWorkbench && navButton.checked
                         anchors.left: parent.left
@@ -95,6 +103,6 @@ Rectangle {
             }
         }
 
-        Item { Layout.fillWidth: true }
+        Item { Layout.fillWidth: !navigation.separationWorkbench }
     }
 }

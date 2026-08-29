@@ -330,9 +330,20 @@ bool VocalSeparationController::selectInput(const QUrl& url)
     ++inputWaveformGeneration_;
     inputWaveformTrackId_ = QStringLiteral("separation-input-%1")
                                 .arg(inputWaveformGeneration_);
+    QUrl coverUrl;
+    if (library_ != nullptr) {
+        const int row = library_->indexForLocalFile(path);
+        if (row >= 0)
+            coverUrl = library_->data(library_->index(row),
+                                      LibraryModel::CoverUrlRole).toUrl();
+    }
     inputInfo_ = {{QStringLiteral("path"), path},
                   {QStringLiteral("name"), file.fileName()},
                   {QStringLiteral("bytes"), file.size()},
+                  {QStringLiteral("coverUrl"), coverUrl},
+                  {QStringLiteral("coverFallbackUrl"),
+                   QUrl(QStringLiteral(
+                       "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"))},
                   {QStringLiteral("waveform"), QVariantList{}},
                   {QStringLiteral("durationMs"), qlonglong(0)}};
     invalidateRetry();

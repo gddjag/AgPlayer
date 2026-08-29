@@ -217,6 +217,12 @@ exposesOutputChoicesAndPublishesTheSelectedInputWaveform()
     QCOMPARE(outputFormatChanged.count(), 1);
 
     QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
+    QCOMPARE(controller.inputInfo().value(QStringLiteral("coverUrl")).toUrl(),
+             QUrl{});
+    QCOMPARE(controller.inputInfo()
+                 .value(QStringLiteral("coverFallbackUrl")).toUrl(),
+             QUrl(QStringLiteral(
+                 "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png")));
     QTRY_VERIFY_WITH_TIMEOUT(
         !controller.inputInfo().value(QStringLiteral("waveform")).toList().isEmpty(),
         5'000);

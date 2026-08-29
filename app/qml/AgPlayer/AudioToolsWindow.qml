@@ -16,6 +16,8 @@ Window {
     color: "transparent"
     title: "AgPlayer · " + qsTr("音频工具")
     readonly property bool metadataWorkbench: AudioToolsController.currentTool === 2
+    readonly property bool separationWorkbench: AudioToolsController.currentTool === 4
+    readonly property bool referenceWorkbench: metadataWorkbench || separationWorkbench
     function pageIndexForTool(toolId) {
         if (toolId === 4) return 1
         if (toolId === 1) return 2
@@ -68,8 +70,8 @@ Window {
 
     Rectangle {
         anchors.fill: parent
-        color: window.metadataWorkbench ? "#06141e" : Theme.background
-        border.color: window.metadataWorkbench ? "#173040" : Theme.border
+        color: window.referenceWorkbench ? "#06141e" : Theme.background
+        border.color: window.referenceWorkbench ? "#173040" : Theme.border
         border.width: 1
         radius: window.visibility === Window.Maximized ? 0 : Theme.windowRadius
 
@@ -82,7 +84,7 @@ Window {
                 objectName: "audioToolsTitleBar"
                 Layout.fillWidth: true
                 Layout.preferredHeight: window.metadataWorkbench ? 54 : 48
-                color: window.metadataWorkbench ? "#06131d" : "transparent"
+                color: window.referenceWorkbench ? "#06131d" : "transparent"
 
                 RowLayout {
                     z: 1
@@ -179,10 +181,14 @@ Window {
 
             ToolSidebar {
                 Layout.fillWidth: true
-                Layout.preferredHeight: window.metadataWorkbench ? 52 : 55
+                Layout.preferredHeight: window.separationWorkbench ? 44
+                                                                    : window.metadataWorkbench ? 52 : 55
+                Layout.leftMargin: window.separationWorkbench ? 14 : 0
+                Layout.rightMargin: window.separationWorkbench ? 14 : 0
                 window: window
                 currentTool: AudioToolsController.currentTool
-                referenceWorkbench: window.metadataWorkbench
+                referenceWorkbench: window.referenceWorkbench
+                separationWorkbench: window.separationWorkbench
                 onToolSelected: function(toolId) {
                     AudioToolsController.selectTool(toolId)
                 }
@@ -194,7 +200,7 @@ Window {
                 Layout.leftMargin: 2
                 Layout.rightMargin: 2
                 Layout.bottomMargin: 3
-                color: window.metadataWorkbench ? "#06141e" : Theme.background
+                color: window.referenceWorkbench ? "#06141e" : Theme.background
                 border.color: "transparent"
                 border.width: 0
                 radius: 0

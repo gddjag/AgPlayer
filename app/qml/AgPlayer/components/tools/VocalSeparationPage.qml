@@ -345,7 +345,9 @@ Rectangle {
                                 spacing: 12
                                 Image {
                                     Layout.preferredWidth: 82; Layout.preferredHeight: 82
-                                    source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
+                                    source: VocalSeparationController.inputInfo.coverUrl
+                                            || VocalSeparationController.inputInfo.coverFallbackUrl
+                                            || ""
                                     fillMode: Image.PreserveAspectFit
                                     visible: page.hasInput
                                 }
@@ -400,13 +402,18 @@ Rectangle {
                                         Layout.fillWidth: true
                                         Layout.fillHeight: true
                                         property var peaks: VocalSeparationController.inputInfo.waveform || []
+                                        readonly property int barCount: Math.min(peaks.length, 220)
                                         Repeater {
-                                            model: Math.min(inputWaveform.peaks.length, 220)
+                                            model: inputWaveform.barCount
                                             Rectangle {
-                                                readonly property int peakIndex: Math.floor(index * inputWaveform.peaks.length / Math.max(1, model))
-                                                width: Math.max(1, inputWaveform.width / Math.max(1, model) - 1)
+                                                readonly property int peakIndex: Math.floor(
+                                                    index * inputWaveform.peaks.length
+                                                    / Math.max(1, inputWaveform.barCount))
+                                                width: Math.max(1, inputWaveform.width
+                                                                   / Math.max(1, inputWaveform.barCount) - 1)
                                                 height: Math.max(2, inputWaveform.height * Math.min(1, Number(inputWaveform.peaks[peakIndex] || 0)))
-                                                x: index * (inputWaveform.width / Math.max(1, model))
+                                                x: index * (inputWaveform.width
+                                                            / Math.max(1, inputWaveform.barCount))
                                                 anchors.verticalCenter: parent.verticalCenter
                                                 color: page.cyan
                                                 opacity: 0.85
@@ -607,23 +614,31 @@ Rectangle {
                                         Item {
                                             id: waveformTrack
                                             readonly property var waveformData: modelData.waveform || []
+                                            readonly property int barCount: Math.min(waveformData.length, 160)
                                             Layout.fillWidth: true; Layout.fillHeight: true
                                             visible: modelData.supported
                                             Repeater {
-                                                model: Math.min(waveformTrack.waveformData.length, 160)
+                                                model: waveformTrack.barCount
                                                 Rectangle {
-                                                    readonly property int peakIndex: Math.floor(index * waveformTrack.waveformData.length / Math.max(1, model))
-                                                    width: Math.max(1, parent.width / Math.max(1, model) - 1)
-                                                    height: Math.max(1, parent.height * Math.min(1, Number(waveformTrack.waveformData[peakIndex] || 0)))
-                                                    x: index * (parent.width / Math.max(1, model)); anchors.verticalCenter: parent.verticalCenter
+                                                    readonly property int peakIndex: Math.floor(
+                                                        index * waveformTrack.waveformData.length
+                                                        / Math.max(1, waveformTrack.barCount))
+                                                    width: Math.max(1, waveformTrack.width
+                                                                       / Math.max(1, waveformTrack.barCount) - 1)
+                                                    height: Math.max(1, waveformTrack.height
+                                                                        * Math.min(1, Number(waveformTrack.waveformData[peakIndex] || 0)))
+                                                    x: index * (waveformTrack.width
+                                                                / Math.max(1, waveformTrack.barCount))
+                                                    anchors.verticalCenter: parent.verticalCenter
                                                     color: page.cyan
                                                 }
                                             }
                                         }
                                         Label { visible: !modelData.supported; Layout.fillWidth: true; text: qsTr("当前模型不支持"); color: page.muted; font.pixelSize: 11 }
                                         Slider {
+                                            id: stemVolume
                                             objectName: "stemPreviewVolume-" + modelData.kind
-                                            Layout.preferredWidth: 64
+                                            Layout.preferredWidth: 58
                                             Layout.preferredHeight: 22
                                             implicitHeight: 22
                                             from: 0; to: 1; stepSize: 0.05
@@ -635,7 +650,39 @@ Rectangle {
                                             Accessible.role: Accessible.Slider
                                             ToolTip.visible: hovered
                                             ToolTip.text: page.contextLocked ? page.contextLockReason
-                                                                              : qsTr("调整此音轨的试听音量")
+                                                                                  : qsTr("调整此音轨的试听音量")
+                                            background: Rectangle {
+                                                x: stemVolume.leftPadding
+                                                y: stemVolume.topPadding
+                                                   + stemVolume.availableHeight / 2 - height / 2
+                                                implicitWidth: 58
+                                                implicitHeight: 4
+                                                width: stemVolume.availableWidth
+                                                height: implicitHeight
+                                                radius: 2
+                                                color: "#0B2A3B"
+                                                Rectangle {
+                                                    width: stemVolume.visualPosition * parent.width
+                                                    height: parent.height
+                                                    radius: parent.radius
+                                                    color: stemVolume.enabled ? page.cyan : page.muted
+                                                    opacity: stemVolume.enabled ? 0.9 : 0.45
+                                                }
+                                            }
+                                            handle: Rectangle {
+                                                x: stemVolume.leftPadding
+                                                   + stemVolume.visualPosition
+                                                     * (stemVolume.availableWidth - width)
+                                                y: stemVolume.topPadding
+                                                   + stemVolume.availableHeight / 2 - height / 2
+                                                implicitWidth: 10
+                                                implicitHeight: 10
+                                                radius: 5
+                                                color: stemVolume.enabled ? page.cyan : page.muted
+                                                border.color: stemVolume.activeFocus
+                                                              ? page.textPrimary : "transparent"
+                                                border.width: stemVolume.activeFocus ? 2 : 0
+                                            }
                                             onMoved: VocalSeparationController.setStemPreviewVolume(
                                                          modelData.kind, value)
                                         }
@@ -781,10 +828,13 @@ Rectangle {
             objectName: "separationBottomBar"
             Layout.fillWidth: true
             Layout.preferredHeight: page.compact ? 96 : 66
+            Layout.leftMargin: 14
+            Layout.rightMargin: 14
+            Layout.bottomMargin: 10
             color: page.surface; border.color: page.border
             GridLayout {
                 anchors.fill: parent; anchors.margins: 10; rowSpacing: 8; columnSpacing: 8
-                columns: page.compact ? 4 : 10
+                columns: page.compact ? 4 : 12
                 WorkbenchButton {
                     text: page.previewActionText(VocalSeparationController.inputInfo.path || "")
                     enabled: page.hasInput
