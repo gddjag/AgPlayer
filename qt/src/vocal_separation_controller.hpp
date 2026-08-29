@@ -53,6 +53,9 @@ class VocalSeparationController final : public QObject {
     Q_PROPERTY(QString outputFormat READ outputFormat NOTIFY outputFormatChanged)
     Q_PROPERTY(QString outputDirectory READ outputDirectory
                    NOTIFY outputDirectoryChanged)
+    Q_PROPERTY(bool canStart READ canStart NOTIFY startEligibilityChanged)
+    Q_PROPERTY(QString startDisabledReason READ startDisabledReason
+                   NOTIFY startEligibilityChanged)
     Q_PROPERTY(QVariantList stems READ stems NOTIFY stemsChanged)
     Q_PROPERTY(QVariantList history READ history NOTIFY historyChanged)
 
@@ -63,7 +66,7 @@ public:
         Paused,
         Verifying,
         Installed,
-        Failed,
+        ModelFailed,
     };
     Q_ENUM(ModelState)
 
@@ -74,7 +77,7 @@ public:
         Cancelling,
         Completed,
         Cancelled,
-        Failed,
+        JobFailed,
     };
     Q_ENUM(JobState)
 
@@ -112,6 +115,8 @@ public:
     QString error() const;
     QString outputFormat() const;
     QString outputDirectory() const;
+    bool canStart() const;
+    QString startDisabledReason() const;
     QVariantList stems() const;
     QVariantList history() const;
 
@@ -153,6 +158,7 @@ signals:
     void errorChanged();
     void outputFormatChanged();
     void outputDirectoryChanged();
+    void startEligibilityChanged();
     void stemsChanged();
     void historyChanged();
     void playlistOperationFinished(bool success, const QString& diagnostic);
@@ -206,6 +212,7 @@ private:
     bool modelInstalled(const VocalModelCard& model) const;
     bool modelFilesPresent(const VocalModelCard& model) const;
     bool runtimeReady() const;
+    bool deviceAvailable(DeviceMode mode) const;
     bool beginVerification(VerificationPurpose purpose,
                            const VocalModelCard* model = nullptr);
     void finishVerification(quint64 generation,
@@ -228,6 +235,9 @@ private:
     void handleWaveformFailure(const QString& path, const QString& trackId,
                                qulonglong generation, int errorCode);
     void clearPublishedResult();
+    void resetInputSession();
+    void stopPreviewForCurrentInputOrResult();
+    bool togglePreviewPath(const QString& path, const QString& root = {});
     bool requestInFlight() const noexcept;
     QString pathForStem(StemKind kind) const;
     QStringList selectedStemNames() const;

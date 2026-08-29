@@ -72,7 +72,9 @@ QList<VocalModelCard> VocalSeparationCatalog::models()
                     QStringLiteral("e3167c87333a48548413e972a286bf40bf5694001d2853861eb1435953f02d63"))},
          {QStringLiteral("vocals"), QStringLiteral("instrumental")},
          QStringLiteral("UVR public model repository"),
-         QStringLiteral("Recommended for karaoke-style vocal removal; requires about 30 MB disk space.")},
+         QStringLiteral("Recommended for karaoke-style vocal removal; requires about 30 MB disk space."),
+         QStringLiteral("MDX KARA"),
+         QStringLiteral("人声移除与卡拉 OK 伴奏")},
         {QStringLiteral("uvr-mdx-net-inst-hq3"), VocalModelFamily::Mdx,
          {modelFile(QStringLiteral("UVR-MDX-NET-Inst_HQ_3.onnx"),
                     QStringLiteral("https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/UVR-MDX-NET-Inst_HQ_3.onnx"),
@@ -80,7 +82,9 @@ QList<VocalModelCard> VocalSeparationCatalog::models()
                     QStringLiteral("317554b07fe1ea5279a77f2b1520a41ea4b93432560c4ffd08792c30fddf9adc"))},
          {QStringLiteral("vocals"), QStringLiteral("instrumental")},
          QStringLiteral("UVR public model repository"),
-         QStringLiteral("Higher-quality MDX option; requires about 67 MB disk space.")},
+         QStringLiteral("Higher-quality MDX option; requires about 67 MB disk space."),
+         QStringLiteral("MDX Inst HQ 3"),
+         QStringLiteral("高质量人声与伴奏二轨分离")},
         {QStringLiteral("htdemucs-ft-fp16"), VocalModelFamily::Demucs,
          {modelFile(QStringLiteral("htdemucs_ft_bass_fp16weights.onnx"),
                     QStringLiteral("https://huggingface.co/StemSplitio/htdemucs-ft-onnx/resolve/main/htdemucs_ft_bass_fp16weights.onnx"),
@@ -101,7 +105,9 @@ QList<VocalModelCard> VocalSeparationCatalog::models()
          {QStringLiteral("vocals"), QStringLiteral("instrumental"),
           QStringLiteral("drums"), QStringLiteral("bass"), QStringLiteral("other")},
          QStringLiteral("Original model Meta Demucs; ONNX conversion StemSplit"),
-         QStringLiteral("Five-stem model; requires about 663 MB disk space and substantially more RAM.")},
+         QStringLiteral("Five-stem model; requires about 663 MB disk space and substantially more RAM."),
+         QStringLiteral("HTDemucs FT FP16"),
+         QStringLiteral("鼓组、贝斯、其他、人声与派生伴奏五轨分离")},
     };
 }
 

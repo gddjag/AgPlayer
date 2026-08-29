@@ -13,6 +13,10 @@ Rectangle {
     readonly property bool fullDesktop: width >= 1440
     readonly property bool desktop: width >= 1100
     readonly property bool compact: !desktop
+    readonly property int sidePanelWidth: desktop
+                                         ? Math.max(336, Math.min(560,
+                                                                  Math.round((width - 28) * 0.29)))
+                                         : Math.max(0, width - 28)
     readonly property color surface: "#001122"
     readonly property color raised: "#001426"
     readonly property color input: "#001020"
@@ -27,6 +31,37 @@ Rectangle {
                                   && VocalSeparationController.inputInfo.name.length > 0
     property int compactTab: 0
     property string playlistDiagnostic: ""
+
+    component WorkbenchButton: Button {
+        id: control
+        property bool primaryAction: false
+        implicitHeight: 30
+        leftPadding: 10
+        rightPadding: 10
+        topPadding: 5
+        bottomPadding: 5
+        font.pixelSize: 12
+        focusPolicy: Qt.StrongFocus
+        background: Rectangle {
+            radius: 5
+            color: control.primaryAction
+                   ? (control.enabled ? page.primary : page.divider)
+                   : control.down ? "#123A59"
+                                  : control.checked ? "#0A3451"
+                                                    : (control.enabled ? "#06253B" : "#041725")
+            border.color: control.activeFocus ? page.cyan
+                                              : (control.primaryAction ? page.primary : page.border)
+            border.width: control.activeFocus ? 2 : 1
+            opacity: control.enabled ? 1.0 : 0.62
+        }
+        contentItem: Text {
+            text: control.text
+            color: control.enabled ? page.textPrimary : page.muted
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+        }
+    }
 
     function modelSupports(modelId, stem) {
         const expected = stem === "vocals" ? VocalSeparationController.Vocals
@@ -52,6 +87,23 @@ Rectangle {
                     waveform: [], path: "", derived: false })
     }
 
+    function allSelectedStemsAvailable(stems) {
+        let selectedCount = 0
+        for (let index = 0; index < stems.length; ++index) {
+            const stem = stems[index]
+            if (!stem.selected)
+                continue
+            ++selectedCount
+            if (!stem.available)
+                return false
+        }
+        return selectedCount > 0
+    }
+
+    function hasAvailableSelectedStems() {
+        return page.allSelectedStemsAvailable(VocalSeparationController.stems)
+    }
+
     function formatBytes(bytes) {
         if (!bytes || bytes <= 0) return ""
         if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + " MB"
@@ -65,7 +117,7 @@ Rectangle {
         case VocalSeparationController.Paused: return qsTr("已暂停")
         case VocalSeparationController.Verifying: return qsTr("校验中")
         case VocalSeparationController.Installed: return qsTr("已安装")
-        case VocalSeparationController.Failed: return qsTr("下载失败")
+        case VocalSeparationController.ModelFailed: return qsTr("下载失败")
         }
         return qsTr("未知状态")
     }
@@ -77,7 +129,7 @@ Rectangle {
         case VocalSeparationController.Cancelling: return qsTr("正在取消")
         case VocalSeparationController.Completed: return qsTr("分离完成")
         case VocalSeparationController.Cancelled: return qsTr("已取消")
-        case VocalSeparationController.Failed: return qsTr("分离失败")
+        case VocalSeparationController.JobFailed: return qsTr("分离失败")
         }
         return qsTr("等待输入")
     }
@@ -145,7 +197,7 @@ Rectangle {
                     id: workspace
                     Layout.fillWidth: true
                     Layout.preferredWidth: page.desktop
-                                           ? workbench.width - (page.fullDesktop ? 474 : 336) - 8
+                                           ? workbench.width - page.sidePanelWidth - 8
                                            : workbench.width
                     visible: !page.compact || page.compactTab === 0
                     spacing: 8
@@ -167,9 +219,9 @@ Rectangle {
                                 color: page.textPrimary
                                 elide: Text.ElideRight
                             }
-                            Button {
+                            WorkbenchButton {
                                 text: qsTr("重试")
-                                enabled: VocalSeparationController.jobState === VocalSeparationController.Failed
+                                enabled: VocalSeparationController.jobState === VocalSeparationController.JobFailed
                                 Accessible.name: text
                                 Accessible.role: Accessible.Button
                                 ToolTip.visible: hovered && !enabled
@@ -228,7 +280,7 @@ Rectangle {
                                     color: page.muted
                                     font.pixelSize: 12
                                 }
-                                Button {
+                                WorkbenchButton {
                                     text: qsTr("选择文件")
                                     Layout.alignment: Qt.AlignHCenter
                                     focusPolicy: Qt.StrongFocus
@@ -273,13 +325,22 @@ Rectangle {
                                             elide: Text.ElideRight
                                             font.pixelSize: 18
                                         }
-                                        Button {
+                                        WorkbenchButton {
                                             visible: page.hasInput
                                             flat: true
                                             text: qsTr("清除")
                                             Accessible.name: text
                                             Accessible.role: Accessible.Button
                                             onClicked: VocalSeparationController.clearInput()
+                                        }
+                                        WorkbenchButton {
+                                            visible: page.hasInput
+                                            text: qsTr("输入试听")
+                                            Accessible.name: qsTr("输入预览：") + text
+                                            Accessible.role: Accessible.Button
+                                            ToolTip.visible: hovered
+                                            ToolTip.text: qsTr("播放或暂停当前输入预览")
+                                            onClicked: VocalSeparationController.previewInput()
                                         }
                                     }
                                     Label {
@@ -343,25 +404,38 @@ Rectangle {
                                 ColumnLayout {
                                     anchors.fill: parent; anchors.margins: 12
                                     spacing: 5
-                                    Label { text: modelData.id; color: page.textPrimary; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
+                                    Label { text: modelData.name; color: page.textPrimary; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
                                     Label { text: modelData.family.toUpperCase() + " · " + page.formatBytes(modelData.bytes); color: page.muted; font.pixelSize: 12; Layout.fillWidth: true }
-                                    Label { text: modelData.provenance; color: page.muted; font.pixelSize: 12; wrapMode: Text.Wrap; Layout.fillWidth: true; Layout.fillHeight: true }
+                                    Label { text: modelData.useCase; color: page.textPrimary; font.pixelSize: 12; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                                    Label { text: modelData.provenance; color: page.muted; font.pixelSize: 11; wrapMode: Text.Wrap; Layout.fillWidth: true; Layout.fillHeight: true }
                                     Label { text: page.modelStateText(modelData.state); color: modelData.state === VocalSeparationController.Installed ? page.success : page.cyan; font.pixelSize: 12 }
+                                    ProgressBar { visible: modelData.state === VocalSeparationController.Downloading; from: 0; to: 1; value: modelData.downloadProgress; Layout.fillWidth: true }
                                     RowLayout {
                                         Layout.fillWidth: true
-                                        Button {
+                                        WorkbenchButton {
                                             text: VocalSeparationController.selectedModelId === modelData.id ? qsTr("当前模型") : qsTr("选择")
                                             enabled: VocalSeparationController.selectedModelId !== modelData.id
                                             Accessible.name: text; Accessible.role: Accessible.Button
                                             onClicked: VocalSeparationController.selectModel(modelData.id)
                                         }
-                                        Button {
+                                        WorkbenchButton {
                                             visible: modelData.state !== VocalSeparationController.Installed
-                                            text: modelData.state === VocalSeparationController.Paused ? qsTr("继续") : qsTr("下载")
+                                            text: modelData.state === VocalSeparationController.Downloading ? qsTr("暂停")
+                                                : modelData.state === VocalSeparationController.Paused ? qsTr("继续")
+                                                : modelData.state === VocalSeparationController.ModelFailed ? qsTr("重试下载")
+                                                : qsTr("下载")
                                             Accessible.name: text; Accessible.role: Accessible.Button
-                                            onClicked: modelData.state === VocalSeparationController.Paused
-                                                       ? VocalSeparationController.resumeDownload()
-                                                       : VocalSeparationController.downloadModel(modelData.id)
+                                            enabled: modelData.state !== VocalSeparationController.Verifying
+                                            ToolTip.visible: hovered && !enabled
+                                            ToolTip.text: qsTr("模型正在校验")
+                                            onClicked: {
+                                                if (modelData.state === VocalSeparationController.Downloading)
+                                                    VocalSeparationController.pauseDownload()
+                                                else if (modelData.state === VocalSeparationController.Paused)
+                                                    VocalSeparationController.resumeDownload()
+                                                else
+                                                    VocalSeparationController.downloadModel(modelData.id)
+                                            }
                                         }
                                     }
                                 }
@@ -372,9 +446,9 @@ Rectangle {
                             color: page.raised; border.color: page.border; radius: 7
                             ColumnLayout {
                                 anchors.fill: parent; anchors.margins: 12
-                                Label { text: qsTr("自定义模型"); color: page.cyan; font.bold: true }
-                                Label { Layout.fillWidth: true; Layout.fillHeight: true; wrapMode: Text.Wrap; color: page.muted; font.pixelSize: 12; text: qsTr("仅接受已签名或白名单的 MDX / Demucs ONNX 清单。此版本不会导入未验证的文件。") }
-                                Button { text: qsTr("打开模型目录"); Accessible.name: text; Accessible.role: Accessible.Button; onClicked: VocalSeparationController.openModelDirectory() }
+                                Label { text: qsTr("安全清单入口"); color: page.cyan; font.bold: true }
+                                Label { Layout.fillWidth: true; Layout.fillHeight: true; wrapMode: Text.Wrap; color: page.muted; font.pixelSize: 12; text: qsTr("自定义模型选择尚未启用。仅已签名或白名单的 MDX / Demucs 清单可由后续版本处理；此页不会导入本地文件。") }
+                                WorkbenchButton { text: qsTr("打开共享模型目录"); Accessible.name: text; Accessible.role: Accessible.Button; onClicked: VocalSeparationController.openModelDirectory() }
                             }
                         }
                     }
@@ -396,7 +470,7 @@ Rectangle {
                                     { kind: VocalSeparationController.Bass, text: qsTr("贝斯"), color: "#FF9400" },
                                     { kind: VocalSeparationController.Other, text: qsTr("其他"), color: "#A960FF" }
                                 ]
-                                Button {
+                                WorkbenchButton {
                                     readonly property var info: page.stemInfo(modelData.kind)
                                     text: modelData.text + (info.derived ? qsTr("（派生）") : "")
                                     checkable: true; checked: info.selected; enabled: info.supported
@@ -422,7 +496,12 @@ Rectangle {
                                 Layout.fillWidth: true
                                 Label { text: page.jobStateText(); color: VocalSeparationController.jobState === VocalSeparationController.Completed ? page.success : page.textPrimary; font.bold: true }
                                 Item { Layout.fillWidth: true }
-                                Label { text: Math.round(VocalSeparationController.progress * 100) + "%"; color: page.muted }
+                                Label {
+                                    visible: VocalSeparationController.jobState === VocalSeparationController.Running
+                                             || VocalSeparationController.jobState === VocalSeparationController.Cancelling
+                                    text: Math.round(VocalSeparationController.progress * 100) + "%"
+                                    color: page.muted
+                                }
                             }
                             Slider {
                                 Layout.fillWidth: true
@@ -454,8 +533,8 @@ Rectangle {
                                                 }
                                             }
                                         }
-                                        Button { text: qsTr("试听"); enabled: modelData.available; Accessible.name: modelData.name + text; Accessible.role: Accessible.Button; onClicked: VocalSeparationController.previewStem(modelData.kind) }
-                                        Button { text: qsTr("导出"); enabled: modelData.available; Accessible.name: modelData.name + text; Accessible.role: Accessible.Button; onClicked: { exportDialog.kind = modelData.kind; exportDialog.open() } }
+                                        WorkbenchButton { text: qsTr("试听"); enabled: modelData.available; Accessible.name: modelData.name + text; Accessible.role: Accessible.Button; ToolTip.visible: hovered && !enabled; ToolTip.text: qsTr("输出尚不可用"); onClicked: VocalSeparationController.previewStem(modelData.kind) }
+                                        WorkbenchButton { text: qsTr("导出"); enabled: modelData.available; Accessible.name: modelData.name + text; Accessible.role: Accessible.Button; ToolTip.visible: hovered && !enabled; ToolTip.text: qsTr("输出尚不可用"); onClicked: { exportDialog.kind = modelData.kind; exportDialog.open() } }
                                     }
                                 }
                             }
@@ -465,8 +544,8 @@ Rectangle {
 
                 ColumnLayout {
                     id: sideColumn
-                    Layout.preferredWidth: page.compact ? workbench.width
-                                                       : page.fullDesktop ? 474 : 336
+                    objectName: "separationSideColumn"
+                    Layout.preferredWidth: page.compact ? workbench.width : page.sidePanelWidth
                     Layout.fillHeight: true
                     visible: page.desktop || page.compactTab !== 0
                     spacing: 8
@@ -493,14 +572,14 @@ Rectangle {
                                 Layout.fillWidth: true
                                 Label { text: qsTr("目录"); color: page.muted; Layout.preferredWidth: 64 }
                                 Label { Layout.fillWidth: true; text: VocalSeparationController.outputDirectory; color: page.textPrimary; elide: Text.ElideMiddle }
-                                Button { text: qsTr("选择"); Accessible.name: qsTr("选择输出目录"); Accessible.role: Accessible.Button; onClicked: outputDialog.open() }
+                                WorkbenchButton { text: qsTr("选择"); Accessible.name: qsTr("选择输出目录"); Accessible.role: Accessible.Button; onClicked: outputDialog.open() }
                             }
                             RowLayout {
                                 Layout.fillWidth: true
                                 Label { text: qsTr("设备"); color: page.muted; Layout.preferredWidth: 64 }
                                 Repeater {
                                     model: VocalSeparationController.availableDevices
-                                    Button {
+                                    WorkbenchButton {
                                         required property var modelData
                                         text: modelData.name; checkable: true
                                         checked: VocalSeparationController.deviceMode === modelData.mode
@@ -509,6 +588,18 @@ Rectangle {
                                         ToolTip.visible: hovered && !enabled; ToolTip.text: modelData.reason
                                         onClicked: VocalSeparationController.selectDevice(modelData.mode)
                                     }
+                                }
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Item { Layout.fillWidth: true }
+                                WorkbenchButton {
+                                    text: qsTr("探测设备")
+                                    enabled: VocalSeparationController.jobState !== VocalSeparationController.Probing
+                                    Accessible.name: text; Accessible.role: Accessible.Button
+                                    ToolTip.visible: hovered && !enabled
+                                    ToolTip.text: qsTr("设备探测正在进行")
+                                    onClicked: VocalSeparationController.probeDevices()
                                 }
                             }
                         }
@@ -525,7 +616,7 @@ Rectangle {
                                 Layout.fillWidth: true
                                 Label { text: qsTr("分离记录"); color: page.textPrimary; font.bold: true }
                                 Item { Layout.fillWidth: true }
-                                Button {
+                                WorkbenchButton {
                                     text: qsTr("打开输出目录")
                                     Accessible.name: text
                                     Accessible.role: Accessible.Button
@@ -536,8 +627,13 @@ Rectangle {
                                 Layout.fillWidth: true; Layout.fillHeight: true; clip: true
                                 model: VocalSeparationController.history
                                 delegate: RowLayout {
-                                    width: ListView.view.width; height: 44
-                                    Label { Layout.fillWidth: true; text: modelData.inputName || modelData.name || modelData.path || qsTr("已完成的分离"); color: page.textPrimary; elide: Text.ElideRight }
+                                    width: ListView.view.width; height: 54
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        Label { Layout.fillWidth: true; text: modelData.inputName || modelData.inputPath || ""; color: page.textPrimary; elide: Text.ElideRight }
+                                        Label { Layout.fillWidth: true; text: (modelData.createdAt || "") + " · " + (modelData.status || ""); color: page.muted; font.pixelSize: 10; elide: Text.ElideRight }
+                                        Label { Layout.fillWidth: true; text: modelData.outputPath || ""; color: page.muted; font.pixelSize: 10; elide: Text.ElideMiddle }
+                                    }
                                     Label { text: modelData.modelId || ""; color: page.muted; font.pixelSize: 11 }
                                 }
                                 Label { anchors.centerIn: parent; visible: parent.count === 0; text: qsTr("暂无真实分离记录"); color: page.muted }
@@ -556,43 +652,65 @@ Rectangle {
             color: page.surface; border.color: page.border
             GridLayout {
                 anchors.fill: parent; anchors.margins: 10; rowSpacing: 8; columnSpacing: 8
-                columns: page.compact ? 4 : 8
-                Button { text: AudioPreviewController.playing ? qsTr("暂停预览") : qsTr("预览输入"); enabled: page.hasInput; Accessible.name: text; Accessible.role: Accessible.Button; onClicked: VocalSeparationController.previewInput() }
-                Button { text: qsTr("重新分离"); enabled: VocalSeparationController.jobState === VocalSeparationController.Completed; Accessible.name: text; Accessible.role: Accessible.Button; onClicked: VocalSeparationController.retry() }
-                Button { text: qsTr("导出伴奏"); enabled: page.stemInfo(VocalSeparationController.Accompaniment).available; Accessible.name: text; Accessible.role: Accessible.Button; onClicked: { exportDialog.kind = VocalSeparationController.Accompaniment; exportDialog.open() } }
-                Button { text: qsTr("导出人声"); enabled: page.stemInfo(VocalSeparationController.Vocals).available; Accessible.name: text; Accessible.role: Accessible.Button; onClicked: { exportDialog.kind = VocalSeparationController.Vocals; exportDialog.open() } }
+                columns: page.compact ? 4 : 10
+                WorkbenchButton {
+                    text: qsTr("预览输入")
+                    enabled: page.hasInput
+                    Accessible.name: text; Accessible.role: Accessible.Button
+                    ToolTip.visible: hovered && !enabled; ToolTip.text: qsTr("请先选择输入文件")
+                    onClicked: VocalSeparationController.previewInput()
+                }
+                WorkbenchButton {
+                    text: qsTr("重新分离"); enabled: VocalSeparationController.jobState === VocalSeparationController.Completed
+                    Accessible.name: text; Accessible.role: Accessible.Button
+                    ToolTip.visible: hovered && !enabled; ToolTip.text: qsTr("分离完成后可重新开始")
+                    onClicked: VocalSeparationController.start()
+                }
+                WorkbenchButton {
+                    text: qsTr("导出伴奏"); enabled: page.stemInfo(VocalSeparationController.Accompaniment).available
+                    Accessible.name: text; Accessible.role: Accessible.Button
+                    ToolTip.visible: hovered && !enabled; ToolTip.text: qsTr("伴奏输出尚不可用")
+                    onClicked: { exportDialog.kind = VocalSeparationController.Accompaniment; exportDialog.open() }
+                }
+                WorkbenchButton {
+                    text: qsTr("导出人声"); enabled: page.stemInfo(VocalSeparationController.Vocals).available
+                    Accessible.name: text; Accessible.role: Accessible.Button
+                    ToolTip.visible: hovered && !enabled; ToolTip.text: qsTr("人声输出尚不可用")
+                    onClicked: { exportDialog.kind = VocalSeparationController.Vocals; exportDialog.open() }
+                }
                 ComboBox {
-                    id: playlistBox; Layout.preferredWidth: 130; visible: PlaylistModel.count > 0
+                    id: playlistBox; Layout.preferredWidth: 130; Layout.columnSpan: 1; visible: PlaylistModel.count > 0
                     model: PlaylistModel; textRole: "name"; valueRole: "playlistId"
                     Accessible.name: qsTr("目标播放列表")
                 }
-                Button {
-                    text: qsTr("加入播放列表"); enabled: PlaylistModel.count > 0 && VocalSeparationController.stems.length > 0
+                WorkbenchButton {
+                    objectName: "separationPlaylistAction"
+                    text: qsTr("加入播放列表"); Layout.columnSpan: 1
+                    enabled: PlaylistModel.count > 0 && page.hasAvailableSelectedStems()
                     Accessible.name: text; Accessible.role: Accessible.Button
-                    ToolTip.visible: hovered && !enabled; ToolTip.text: qsTr("请先创建播放列表并完成分离")
+                    ToolTip.visible: hovered && !enabled; ToolTip.text: qsTr("请选择播放列表并完成至少一条已选输出")
                     onClicked: VocalSeparationController.addSelectedToPlaylist(playlistBox.currentValue)
                 }
                 Item { Layout.fillWidth: true; visible: !page.compact }
-                Button {
+                WorkbenchButton {
                     id: primaryAction
                     objectName: "separationPrimaryAction"
-                    Layout.columnSpan: page.compact ? 3 : 1
+                    Layout.columnSpan: page.compact ? 2 : 3
+                    Layout.preferredWidth: page.compact ? -1 : bottomBar.width * 0.30
                     text: VocalSeparationController.jobState === VocalSeparationController.Running
                           || VocalSeparationController.jobState === VocalSeparationController.Cancelling
                           ? qsTr("取消分离") : qsTr("开始分离")
                     enabled: (VocalSeparationController.jobState === VocalSeparationController.Running
                               || VocalSeparationController.jobState === VocalSeparationController.Cancelling)
-                             || (page.hasInput
-                                 && VocalSeparationController.selectedModelId.length > 0)
+                             || VocalSeparationController.canStart
                     focusPolicy: Qt.StrongFocus
                     Accessible.name: text; Accessible.role: Accessible.Button
                     ToolTip.visible: hovered && !enabled
-                    ToolTip.text: qsTr("请选择输入文件和模型")
+                    ToolTip.text: VocalSeparationController.startDisabledReason
                     onClicked: VocalSeparationController.jobState === VocalSeparationController.Running
                                || VocalSeparationController.jobState === VocalSeparationController.Cancelling
                                ? VocalSeparationController.cancel() : VocalSeparationController.start()
-                    background: Rectangle { color: parent.enabled ? page.primary : page.divider; border.color: parent.activeFocus ? page.cyan : page.primary; radius: 6 }
-                    contentItem: Text { text: parent.text; color: page.textPrimary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    primaryAction: true
                 }
             }
             Label { anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 2; visible: page.playlistDiagnostic.length > 0; text: page.playlistDiagnostic; color: page.muted; font.pixelSize: 11 }

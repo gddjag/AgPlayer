@@ -76,8 +76,16 @@ foreach ($control in @(
 }
 if ($separationPage -match 'Emoji|Segoe UI Symbol' -or
     $separationPage -notmatch 'VocalSeparationController\.inputInfo' -or
-    $separationPage -notmatch 'VocalSeparationController\.history') {
+    $separationPage -notmatch 'VocalSeparationController\.history' -or
+    $separationPage -notmatch 'VocalSeparationController\.canStart' -or
+    $separationPage -notmatch 'VocalSeparationController\.ModelFailed' -or
+    $separationPage -notmatch 'VocalSeparationController\.JobFailed' -or
+    $separationPage -notmatch 'downloadProgress') {
     throw 'The separation workbench must bind real controller data and use shipped icons only.'
+}
+if ($separationPage -notmatch 'component\s+WorkbenchButton\s*:\s*Button' -or
+    $separationPage -match '(?m)^\s{16,}Button\s*\{') {
+    throw 'The separation workbench must use its local dark button treatment instead of default gray controls.'
 }
 if ($settingsPage -notmatch 'designRole:\s*"settingsCategoryRail"' -or
     $settingsPage -notmatch 'designRole:\s*"settingsContentSurface"' -or

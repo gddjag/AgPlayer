@@ -28,7 +28,8 @@ TestCase {
     function test_navigationUsesStableVisibleToolIds() {
         const navigation = createTemporaryObject(navigationComponent, testCase)
         verify(navigation)
-        compare(navigation.visibleToolOrder, [0, 4, 1, 2, 3])
+        compare(navigation.visibleTools.map(function(tool) { return tool.toolId }),
+                [0, 4, 1, 2, 3])
         navigation.currentTool = 4
         compare(navigation.currentTool, 4)
     }
@@ -43,10 +44,12 @@ TestCase {
         const history = findChild(page, "separationHistoryPanel")
         const bottom = findChild(page, "separationBottomBar")
         const primary = findChild(page, "separationPrimaryAction")
+        const playlistAction = findChild(page, "separationPlaylistAction")
         verify(input && waveform && models && settings && stems && timeline
-               && history && bottom && primary)
+               && history && bottom && primary && playlistAction)
         compare(VocalSeparationController.inputInfo.name, undefined)
         verify(!primary.enabled)
+        verify(!playlistAction.enabled)
         verify(primary.Accessible.name.length > 0)
     }
 
@@ -56,6 +59,18 @@ TestCase {
         verify(!page.modelSupports("uvr-mdxnet-kara", "drums"))
         verify(page.modelSupports("htdemucs-ft-fp16", "drums"))
         verify(page.modelSupports("htdemucs-ft-fp16", "other"))
+    }
+
+    function test_playlistGateRequiresEverySelectedStemToBeAvailable() {
+        verify(page.allSelectedStemsAvailable([
+            { selected: true, available: true },
+            { selected: false, available: false }
+        ]))
+        verify(!page.allSelectedStemsAvailable([
+            { selected: true, available: true },
+            { selected: true, available: false }
+        ]))
+        verify(!page.allSelectedStemsAvailable([]))
     }
 
     function test_nativeDropRoutesToTheRealSeparationController() {
@@ -79,12 +94,34 @@ TestCase {
             wait(0)
             const primary = findChild(instance, "separationPrimaryAction")
             const bottom = findChild(instance, "separationBottomBar")
-            verify(primary && bottom)
+            const models = findChild(instance, "separationModelDeck")
+            verify(primary && bottom && models)
             const bottomPoint = bottom.mapToItem(instance, 0, 0)
             const actionPoint = primary.mapToItem(instance, 0, 0)
             verify(bottomPoint.y >= 0)
             verify(actionPoint.y + primary.height <= instance.height,
                    "primary CTA is clipped at " + viewports[index])
+            if (viewports[index][0] >= 1100)
+                verify(primary.width >= bottom.width * 0.25,
+                       "desktop CTA stays prominent at " + viewports[index])
+            if (viewports[index][0] < 1100)
+                verify(bottom.height >= 96 && actionPoint.y >= bottomPoint.y + bottom.height / 2,
+                       "compact actions use two rows at " + viewports[index])
+        }
+    }
+
+    function test_desktopSideColumnKeepsTheReferenceThirtyPercentRatio() {
+        const widths = [1440, 1672, 1920]
+        for (let index = 0; index < widths.length; ++index) {
+            const instance = createTemporaryObject(viewportPage, testCase,
+                                                   { width: widths[index], height: 941 })
+            verify(instance)
+            wait(0)
+            const side = findChild(instance, "separationSideColumn")
+            verify(side)
+            verify(side.width / instance.width >= 0.28
+                   && side.width / instance.width <= 0.31,
+                   "side column stays near 30% at " + widths[index])
         }
     }
 }

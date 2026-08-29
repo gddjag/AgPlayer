@@ -25,6 +25,8 @@ struct VocalModelCard {
     QStringList stems;
     QString provenance;
     QString resourceGuidance;
+    QString displayName;
+    QString useCase;
 };
 
 struct VocalRuntimePackage {

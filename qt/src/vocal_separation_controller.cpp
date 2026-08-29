@@ -120,6 +120,10 @@ VocalSeparationController::VocalSeparationController(
 {
     history_ = historyStore_.load();
     availableDevices_ = {
+        QVariantMap{{QStringLiteral("mode"), int(DeviceMode::Auto)},
+                    {QStringLiteral("name"), QStringLiteral("Auto")},
+                    {QStringLiteral("available"), true},
+                    {QStringLiteral("reason"), tr("自动选择已验证的可用设备")}},
         QVariantMap{{QStringLiteral("mode"), int(DeviceMode::CPU)},
                     {QStringLiteral("name"), QStringLiteral("CPU")},
                     {QStringLiteral("available"), true},
@@ -149,7 +153,7 @@ VocalSeparationController::VocalSeparationController(
         if (activeRequest_.has_value()) failedRequest_ = activeRequest_;
         activeRequest_.reset();
         setError(message);
-        setJobState(JobState::Failed, QStringLiteral("error"));
+        setJobState(JobState::JobFailed, QStringLiteral("error"));
     });
     connect(&process_, &SeparationProcessClient::cancelled, this, [this] {
         activeRequest_.reset();
@@ -248,6 +252,36 @@ double VocalSeparationController::progress() const noexcept { return progress_; 
 QString VocalSeparationController::error() const { return error_; }
 QString VocalSeparationController::outputFormat() const { return outputFormat_; }
 QString VocalSeparationController::outputDirectory() const { return outputDirectory_; }
+bool VocalSeparationController::canStart() const
+{
+    return startDisabledReason().isEmpty();
+}
+
+QString VocalSeparationController::startDisabledReason() const
+{
+    if (requestInFlight()) return tr("当前任务尚未结束");
+    if (!safeExistingFile(inputInfo_.value(QStringLiteral("path")).toString()))
+        return tr("请选择有效输入音频");
+    const VocalModelCard* model = selectedModel();
+    if (model == nullptr) return tr("请选择模型");
+    if (!modelInstalled(*model)
+        && (verifiedOrRejectedModelIds_.contains(model->id)
+            || !modelFilesPresent(*model))) {
+        return tr("所选模型尚未安装或未通过校验");
+    }
+    if (selectedStemNames().isEmpty()) return tr("至少选择一个输出音轨");
+    if (!QFileInfo(options_.runtimeLibraryPath).isFile())
+        return tr("ONNX Runtime 尚未安装");
+    if (!deviceAvailable(deviceMode_)) {
+        for (const QVariant& value : availableDevices_) {
+            const QVariantMap device = value.toMap();
+            if (device.value(QStringLiteral("mode")).toInt() == int(deviceMode_))
+                return device.value(QStringLiteral("reason")).toString();
+        }
+        return tr("所选设备不可用");
+    }
+    return {};
+}
 QVariantList VocalSeparationController::stems() const { return stems_; }
 QVariantList VocalSeparationController::history() const { return history_; }
 
@@ -260,6 +294,7 @@ bool VocalSeparationController::selectInput(const QUrl& url)
         setError(tr("输入音频不存在"));
         return false;
     }
+    resetInputSession();
     ++inputWaveformGeneration_;
     inputWaveformTrackId_ = QStringLiteral("separation-input-%1")
                                 .arg(inputWaveformGeneration_);
@@ -271,6 +306,7 @@ bool VocalSeparationController::selectInput(const QUrl& url)
     invalidateRetry();
     setError({});
     emit inputInfoChanged();
+    emit startEligibilityChanged();
     if (waveformProvider_ != nullptr) {
         const QString trackId = inputWaveformTrackId_;
         const quint64 generation = inputWaveformGeneration_;
@@ -295,6 +331,7 @@ bool VocalSeparationController::clearInput()
 {
     if (requestInFlight() || inputInfo_.isEmpty()) return false;
     const QString path = inputInfo_.value(QStringLiteral("path")).toString();
+    resetInputSession();
     ++inputWaveformGeneration_;
     inputWaveformTrackId_.clear();
     inputInfo_.clear();
@@ -303,6 +340,7 @@ bool VocalSeparationController::clearInput()
     if (waveformProvider_ != nullptr && !path.isEmpty())
         waveformProvider_->cancelForTrack(path);
     emit inputInfoChanged();
+    emit startEligibilityChanged();
     return true;
 }
 
@@ -377,6 +415,7 @@ bool VocalSeparationController::setStemSelected(StemKind kind, bool selected)
         value = stem;
         invalidateRetry();
         emit stemsChanged();
+        emit startEligibilityChanged();
         return true;
     }
     return false;
@@ -385,10 +424,12 @@ bool VocalSeparationController::setStemSelected(StemKind kind, bool selected)
 bool VocalSeparationController::selectDevice(DeviceMode mode)
 {
     if (requestInFlight()) return false;
+    if (!deviceAvailable(mode)) return false;
     if (deviceMode_ == mode) return true;
     deviceMode_ = mode;
     invalidateRetry();
     emit deviceModeChanged();
+    emit startEligibilityChanged();
     return true;
 }
 
@@ -396,8 +437,8 @@ bool VocalSeparationController::selectOutputFormat(const QString& format)
 {
     if (requestInFlight()) return false;
     const QString normalized = format.trimmed().toLower();
-    if (!QStringList{QStringLiteral("wav"), QStringLiteral("flac"),
-                     QStringLiteral("mp3")}.contains(normalized)) return false;
+    if (!QStringList{QStringLiteral("wav"), QStringLiteral("flac")}
+             .contains(normalized)) return false;
     outputFormat_ = normalized;
     invalidateRetry();
     emit outputFormatChanged();
@@ -438,7 +479,7 @@ bool VocalSeparationController::start()
         clearPublishedResult();
         setError(tr("请选择有效输入音频和至少一个输出音轨"));
         failedRequest_.reset();
-        setJobState(JobState::Failed, QStringLiteral("validation"));
+        setJobState(JobState::JobFailed, QStringLiteral("validation"));
         return false;
     }
     ActiveRequestContext context;
@@ -496,7 +537,7 @@ void VocalSeparationController::failRequest(
     activeRequest_.reset();
     failedRequest_ = context;
     setError(error);
-    setJobState(JobState::Failed, stage);
+    setJobState(JobState::JobFailed, stage);
 }
 
 void VocalSeparationController::invalidateRetry()
@@ -529,7 +570,7 @@ void VocalSeparationController::cancel()
 
 bool VocalSeparationController::retry()
 {
-    if (jobState_ != JobState::Failed || !failedRequest_.has_value()) return false;
+    if (jobState_ != JobState::JobFailed || !failedRequest_.has_value()) return false;
     const ActiveRequestContext context = *failedRequest_;
     if (context.kind == RequestKind::Separation)
         return beginSeparationRequest(context);
@@ -546,16 +587,13 @@ bool VocalSeparationController::retry()
 bool VocalSeparationController::previewInput()
 {
     const QString path = inputInfo_.value(QStringLiteral("path")).toString();
-    return preview_ != nullptr && safeExistingFile(path)
-        && preview_->switchSourcePreservingPosition(QUrl::fromLocalFile(path));
+    return togglePreviewPath(path);
 }
 
 bool VocalSeparationController::previewStem(StemKind kind)
 {
     const QString path = pathForStem(kind);
-    return preview_ != nullptr
-        && safeExistingFileWithin(path, publishedOutputRoot_)
-        && preview_->switchSourcePreservingPosition(QUrl::fromLocalFile(path));
+    return togglePreviewPath(path, publishedOutputRoot_);
 }
 
 bool VocalSeparationController::exportStem(StemKind kind,
@@ -652,8 +690,8 @@ bool VocalSeparationController::openOutputDirectory()
 
 bool VocalSeparationController::openModelDirectory()
 {
-    const QString path = modelDirectory(selectedModelId_);
-    return QDir(path).exists()
+    const QString path = QDir(options_.dataRoot).filePath(QStringLiteral("models"));
+    return QDir().mkpath(path)
         && QDesktopServices::openUrl(QUrl::fromLocalFile(path));
 }
 
@@ -703,6 +741,16 @@ bool VocalSeparationController::runtimeReady() const
 {
     if (!QFileInfo(options_.runtimeLibraryPath).isFile()) return false;
     return !options_.verifyRuntimeIntegrity || runtimeVerified_;
+}
+
+bool VocalSeparationController::deviceAvailable(DeviceMode mode) const
+{
+    for (const QVariant& value : availableDevices_) {
+        const QVariantMap device = value.toMap();
+        if (device.value(QStringLiteral("mode")).toInt() == int(mode))
+            return device.value(QStringLiteral("available")).toBool();
+    }
+    return false;
 }
 
 bool VocalSeparationController::beginVerification(
@@ -895,7 +943,7 @@ void VocalSeparationController::refreshModels()
             case VocalDownloadState::Downloading: state = ModelState::Downloading; break;
             case VocalDownloadState::Paused: state = ModelState::Paused; break;
             case VocalDownloadState::Verifying: state = ModelState::Verifying; break;
-            case VocalDownloadState::Failed: state = ModelState::Failed; break;
+            case VocalDownloadState::Failed: state = ModelState::ModelFailed; break;
             default: break;
             }
         }
@@ -912,9 +960,14 @@ void VocalSeparationController::refreshModels()
             {QStringLiteral("bytes"), totalBytes},
             {QStringLiteral("provenance"), model.provenance},
             {QStringLiteral("resourceGuidance"), model.resourceGuidance},
+            {QStringLiteral("name"), model.displayName.isEmpty() ? model.id : model.displayName},
+            {QStringLiteral("useCase"), model.useCase},
+            {QStringLiteral("downloadProgress"),
+             model.id == downloadingModelId_ ? progress_ : 0.0},
         });
     }
     emit modelsChanged();
+    emit startEligibilityChanged();
 }
 
 void VocalSeparationController::rebuildStems()
@@ -939,6 +992,7 @@ void VocalSeparationController::rebuildStems()
         }
     }
     emit stemsChanged();
+    emit startEligibilityChanged();
 }
 
 void VocalSeparationController::setJobState(JobState state, const QString& stage)
@@ -947,6 +1001,7 @@ void VocalSeparationController::setJobState(JobState state, const QString& stage
     jobState_ = state;
     stage_ = stage;
     if (changed) emit jobStateChanged();
+    emit startEligibilityChanged();
 }
 
 void VocalSeparationController::setError(const QString& error)
@@ -984,19 +1039,30 @@ void VocalSeparationController::startNextDownload()
 void VocalSeparationController::handleProbe(const QJsonObject& payload)
 {
     const QString reason = payload.value(QStringLiteral("gpuReason")).toString();
+    const bool cpuAvailable = payload.value(QStringLiteral("cpu")).toBool();
+    const bool gpuAvailable = payload.value(QStringLiteral("gpu")).toBool();
     availableDevices_[0] = QVariantMap{
-        {QStringLiteral("mode"), int(DeviceMode::CPU)},
-        {QStringLiteral("name"), QStringLiteral("CPU")},
-        {QStringLiteral("available"), payload.value(QStringLiteral("cpu")).toBool()},
-        {QStringLiteral("reason"), QString()},
+        {QStringLiteral("mode"), int(DeviceMode::Auto)},
+        {QStringLiteral("name"), QStringLiteral("Auto")},
+        {QStringLiteral("available"), cpuAvailable || gpuAvailable},
+        {QStringLiteral("reason"), cpuAvailable || gpuAvailable
+             ? tr("自动选择已验证的可用设备")
+             : tr("CPU 和 GPU 均未通过设备探测")},
     };
     availableDevices_[1] = QVariantMap{
+        {QStringLiteral("mode"), int(DeviceMode::CPU)},
+        {QStringLiteral("name"), QStringLiteral("CPU")},
+        {QStringLiteral("available"), cpuAvailable},
+        {QStringLiteral("reason"), QString()},
+    };
+    availableDevices_[2] = QVariantMap{
         {QStringLiteral("mode"), int(DeviceMode::GPU)},
         {QStringLiteral("name"), QStringLiteral("DirectML")},
-        {QStringLiteral("available"), payload.value(QStringLiteral("gpu")).toBool()},
+        {QStringLiteral("available"), gpuAvailable},
         {QStringLiteral("reason"), reason},
     };
     emit availableDevicesChanged();
+    emit startEligibilityChanged();
     activeRequest_.reset();
     failedRequest_.reset();
     setJobState(JobState::Idle, QStringLiteral("ready"));
@@ -1007,7 +1073,7 @@ void VocalSeparationController::handleResult(const QJsonObject& payload)
     if (!activeRequest_.has_value()
         || activeRequest_->kind != RequestKind::Separation) {
         setError(tr("Worker 结果没有匹配的活动请求"));
-        setJobState(JobState::Failed, QStringLiteral("verification"));
+        setJobState(JobState::JobFailed, QStringLiteral("verification"));
         return;
     }
     const ActiveRequestContext context = *activeRequest_;
@@ -1049,7 +1115,10 @@ void VocalSeparationController::handleResult(const QJsonObject& payload)
         {QStringLiteral("id"), QUuid::createUuid().toString(QUuid::WithoutBraces)},
         {QStringLiteral("createdAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
         {QStringLiteral("inputPath"), context.inputPath},
+        {QStringLiteral("inputName"), QFileInfo(context.inputPath).fileName()},
         {QStringLiteral("modelId"), context.modelId},
+        {QStringLiteral("status"), QStringLiteral("completed")},
+        {QStringLiteral("outputPath"), context.outputRoot},
         {QStringLiteral("provider"), payload.value(QStringLiteral("provider"))},
         {QStringLiteral("fallbackReason"), fallbackReason},
         {QStringLiteral("stems"), historyStems},
@@ -1084,11 +1153,12 @@ void VocalSeparationController::handleResult(const QJsonObject& payload)
     emit stemsChanged();
     publishedOutputRoot_ = context.outputRoot;
     if (!fallbackReason.isEmpty()) {
-        QVariantMap gpu = availableDevices_.at(1).toMap();
+        QVariantMap gpu = availableDevices_.at(2).toMap();
         gpu.insert(QStringLiteral("available"), false);
         gpu.insert(QStringLiteral("reason"), fallbackReason);
-        availableDevices_[1] = gpu;
+        availableDevices_[2] = gpu;
         emit availableDevicesChanged();
+        emit startEligibilityChanged();
     }
     progress_ = 1.0;
     emit progressChanged();
@@ -1159,8 +1229,10 @@ void VocalSeparationController::handleWaveformFailure(
 
 void VocalSeparationController::clearPublishedResult()
 {
-    if (waveformProvider_ != nullptr && !waveformQueue_.isEmpty())
-        waveformProvider_->cancelForTrack(waveformQueue_.first().path);
+    if (waveformProvider_ != nullptr) {
+        for (const WaveformWork& work : waveformQueue_)
+            waveformProvider_->cancelForTrack(work.path);
+    }
     waveformQueue_.clear();
     publishedOutputRoot_.clear();
     for (QVariant& value : stems_) {
@@ -1171,6 +1243,54 @@ void VocalSeparationController::clearPublishedResult()
         value = stem;
     }
     emit stemsChanged();
+}
+
+void VocalSeparationController::resetInputSession()
+{
+    stopPreviewForCurrentInputOrResult();
+    const QString inputPath = inputInfo_.value(QStringLiteral("path")).toString();
+    if (waveformProvider_ != nullptr && !inputPath.isEmpty())
+        waveformProvider_->cancelForTrack(inputPath);
+    ++resultGeneration_;
+    clearPublishedResult();
+    failedRequest_.reset();
+    if (progress_ != 0.0) {
+        progress_ = 0.0;
+        emit progressChanged();
+    }
+    setJobState(JobState::Idle, {});
+}
+
+void VocalSeparationController::stopPreviewForCurrentInputOrResult()
+{
+    if (preview_ == nullptr || !preview_->hasSource()) return;
+    const QString inputPath = inputInfo_.value(QStringLiteral("path")).toString();
+    if (!inputPath.isEmpty()
+        && preview_->isCurrentSource(QUrl::fromLocalFile(inputPath))) {
+        preview_->stop();
+        return;
+    }
+    for (const QVariant& value : stems_) {
+        const QString path = value.toMap().value(QStringLiteral("path")).toString();
+        if (!path.isEmpty()
+            && preview_->isCurrentSource(QUrl::fromLocalFile(path))) {
+            preview_->stop();
+            return;
+        }
+    }
+}
+
+bool VocalSeparationController::togglePreviewPath(const QString& path,
+                                                  const QString& root)
+{
+    if (preview_ == nullptr
+        || (root.isEmpty() ? !safeExistingFile(path)
+                           : !safeExistingFileWithin(path, root))) {
+        return false;
+    }
+    const QUrl source = QUrl::fromLocalFile(path);
+    preview_->toggle(source);
+    return preview_->isCurrentSource(source);
 }
 
 bool VocalSeparationController::requestInFlight() const noexcept
