@@ -45,6 +45,13 @@ if (-not (Test-Path -LiteralPath $stager)) {
 if ((Get-Content -Raw -Encoding UTF8 -LiteralPath $stager) -notmatch 'platforms\\qwindows\.dll') {
     throw "Release staging must verify the Windows platform plugin"
 }
+$packageScriptPath = Join-Path $repo 'scripts\package-windows.ps1'
+$packageScript = Get-Content -Raw -Encoding UTF8 -LiteralPath $packageScriptPath
+if ($packageScript -notmatch '\$worker\s*=\s*Join-Path\s+\$appDir\s+"AgSeparationWorker\.exe"' -or
+    $packageScript -notmatch 'Copy-Item\s+-LiteralPath\s+\$worker\s+-Destination\s+\$stage' -or
+    $packageScript -notmatch '"AgSeparationWorker\.exe"') {
+    throw "Windows package must stage and validate the on-demand separation Worker"
+}
 $mainSource = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $repo 'app\main.cpp')
 if ($mainSource -notmatch 'setWindowIcon') {
     throw "QApplication must publish the branded window icon"
