@@ -6,6 +6,7 @@
 #include <QMetaType>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <optional>
 
@@ -91,6 +92,62 @@ QString storedColor(const QVariant& value, const QString& fallback)
         ? value.toString() : fallback;
 }
 
+struct StylePreset {
+    int colorMode;
+    const char* coolColor;
+    const char* warmColor;
+    const char* accentColor;
+    const char* peakColor;
+    const char* baseColor;
+    int terrainAmplitude;
+    int motionResponse;
+    int gradientLayers;
+    int glowIntensity;
+    double cinemaShake;
+    int autoRotate;
+    int peakBoost;
+    bool ripplesEnabled;
+    bool floatingCubesEnabled;
+    bool meteorsEnabled;
+    bool idleBreathingEnabled;
+    bool themeCycleEnabled;
+    QVariantList visualEqGains;
+    int inputCompression;
+    int audioResponse;
+    int responseRange;
+    int centerHighlight;
+    int rhythmStrength;
+    int depthOfField;
+    int subjectClarity;
+    int autoRotateSpeed;
+    int rhythmSensitivity;
+};
+
+const std::array<StylePreset, 6>& visualPresets()
+{
+    static const std::array<StylePreset, 6> presets = {{
+        {0, "#2F6BFF", "#FF3D81", "#50F6E8", "#F3FF75", "#060A1A",
+         74, 82, 88, 66, 0.65, 70, 86, true, true, false, true, true,
+         {100, 94, 68, 52, 50, 56, 76, 92}, 104, 152, 140, 72, 96, 92, 118, 68, 92},
+        {2, "#00D9FF", "#FF2C9C", "#7CFF6B", "#FFE45C", "#080316",
+         68, 94, 96, 82, 0.82, 82, 92, true, true, true, false, true,
+         {92, 84, 58, 48, 54, 72, 96, 100}, 126, 176, 166, 84, 116, 112, 126, 86, 100},
+        {1, "#7B8B93", "#2E363C", "#C9D1CA", "#EEF0E8", "#F3F1E7",
+         42, 34, 30, 18, 0.12, 18, 24, false, false, false, true, false,
+         {62, 58, 54, 50, 48, 44, 42, 40}, 56, 64, 76, 34, 18, 72, 92, 16, 42},
+        {1, "#4C79B8", "#F2A65A", "#FFFFFF", "#FFF2A6", "#111827",
+         36, 48, 46, 30, 0.20, 24, 38, false, false, false, false, false,
+         {70, 68, 62, 58, 58, 62, 68, 72}, 72, 88, 92, 62, 32, 84, 120, 30, 58},
+        {0, "#5E7180", "#71806B", "#A8B6A0", "#D8D6BE", "#141A1C",
+         20, 18, 22, 12, 0.0, 0, 16, false, false, false, true, false,
+         {48, 46, 44, 42, 42, 40, 38, 36}, 38, 42, 58, 22, 0, 48, 78, 0, 28},
+        {2, "#536DFF", "#B15CFF", "#52E5FF", "#FFF28A", "#03051A",
+         88, 76, 92, 78, 0.56, 90, 80, true, true, true, true, true,
+         {96, 88, 66, 54, 58, 76, 94, 100}, 118, 162, 154, 80, 104, 104, 124, 80, 96},
+    }};
+    return presets;
+}
+
 } // namespace
 
 PlayerExperienceController::PlayerExperienceController(SettingsController* settings,
@@ -137,6 +194,25 @@ bool PlayerExperienceController::themeCycleEnabled() const noexcept
     return themeCycleEnabled_;
 }
 QVariantList PlayerExperienceController::visualEqGains() const { return visualEqGains_; }
+int PlayerExperienceController::lyricClarity() const noexcept { return lyricClarity_; }
+int PlayerExperienceController::lyricDepth() const noexcept { return lyricDepth_; }
+int PlayerExperienceController::lyricSize() const noexcept { return lyricSize_; }
+int PlayerExperienceController::lyricOpacity() const noexcept { return lyricOpacity_; }
+int PlayerExperienceController::lyricPosition() const noexcept { return lyricPosition_; }
+int PlayerExperienceController::lyricPositionX() const noexcept { return lyricPositionX_; }
+int PlayerExperienceController::lyricPositionY() const noexcept { return lyricPositionY_; }
+int PlayerExperienceController::inputCompression() const noexcept { return inputCompression_; }
+int PlayerExperienceController::audioResponse() const noexcept { return audioResponse_; }
+int PlayerExperienceController::responseRange() const noexcept { return responseRange_; }
+int PlayerExperienceController::centerHighlight() const noexcept { return centerHighlight_; }
+int PlayerExperienceController::rhythmStrength() const noexcept { return rhythmStrength_; }
+int PlayerExperienceController::depthOfField() const noexcept { return depthOfField_; }
+int PlayerExperienceController::subjectClarity() const noexcept { return subjectClarity_; }
+int PlayerExperienceController::autoRotateSpeed() const noexcept { return autoRotateSpeed_; }
+int PlayerExperienceController::rhythmSensitivity() const noexcept
+{
+    return rhythmSensitivity_;
+}
 
 void PlayerExperienceController::setImmersiveMode(int value)
 {
@@ -355,6 +431,185 @@ void PlayerExperienceController::setVisualEqGains(const QVariantList& values)
     emit visualEqGainsChanged();
 }
 
+void PlayerExperienceController::setLyricClarity(int value)
+{
+    value = clampPercent(value);
+    if (lyricClarity_ == value) return;
+    lyricClarity_ = value;
+    persist(QStringLiteral("lyricClarity"), value);
+    emit lyricClarityChanged();
+}
+
+void PlayerExperienceController::setLyricDepth(int value)
+{
+    value = clampPercent(value);
+    if (lyricDepth_ == value) return;
+    lyricDepth_ = value;
+    persist(QStringLiteral("lyricDepth"), value);
+    emit lyricDepthChanged();
+}
+
+void PlayerExperienceController::setLyricSize(int value)
+{
+    value = clampRange(value, 60, 140);
+    if (lyricSize_ == value) return;
+    lyricSize_ = value;
+    persist(QStringLiteral("lyricSize"), value);
+    emit lyricSizeChanged();
+}
+
+void PlayerExperienceController::setLyricOpacity(int value)
+{
+    value = clampRange(value, 10, 100);
+    if (lyricOpacity_ == value) return;
+    lyricOpacity_ = value;
+    persist(QStringLiteral("lyricOpacity"), value);
+    emit lyricOpacityChanged();
+}
+
+void PlayerExperienceController::setLyricPosition(int value)
+{
+    value = enumOrDefault(value, Left, Right, Center);
+    if (lyricPosition_ == value) return;
+    lyricPosition_ = value;
+    persist(QStringLiteral("lyricPosition"), value);
+    emit lyricPositionChanged();
+}
+
+void PlayerExperienceController::setLyricPositionX(int value)
+{
+    value = clampPercent(value);
+    if (lyricPositionX_ == value) return;
+    lyricPositionX_ = value;
+    persist(QStringLiteral("lyricPositionX"), value);
+    emit lyricPositionXChanged();
+}
+
+void PlayerExperienceController::setLyricPositionY(int value)
+{
+    value = clampPercent(value);
+    if (lyricPositionY_ == value) return;
+    lyricPositionY_ = value;
+    persist(QStringLiteral("lyricPositionY"), value);
+    emit lyricPositionYChanged();
+}
+
+void PlayerExperienceController::setInputCompression(int value)
+{
+    value = clampRange(value, 20, 150);
+    if (inputCompression_ == value) return;
+    inputCompression_ = value;
+    persist(QStringLiteral("inputCompression"), value);
+    emit inputCompressionChanged();
+}
+
+void PlayerExperienceController::setAudioResponse(int value)
+{
+    value = clampRange(value, 20, 200);
+    if (audioResponse_ == value) return;
+    audioResponse_ = value;
+    persist(QStringLiteral("audioResponse"), value);
+    emit audioResponseChanged();
+}
+
+void PlayerExperienceController::setResponseRange(int value)
+{
+    value = clampRange(value, 50, 220);
+    if (responseRange_ == value) return;
+    responseRange_ = value;
+    persist(QStringLiteral("responseRange"), value);
+    emit responseRangeChanged();
+}
+
+void PlayerExperienceController::setCenterHighlight(int value)
+{
+    value = clampPercent(value);
+    if (centerHighlight_ == value) return;
+    centerHighlight_ = value;
+    persist(QStringLiteral("centerHighlight"), value);
+    emit centerHighlightChanged();
+}
+
+void PlayerExperienceController::setRhythmStrength(int value)
+{
+    value = clampRange(value, 0, 140);
+    if (rhythmStrength_ == value) return;
+    rhythmStrength_ = value;
+    persist(QStringLiteral("rhythmStrength"), value);
+    emit rhythmStrengthChanged();
+}
+
+void PlayerExperienceController::setDepthOfField(int value)
+{
+    value = clampRange(value, 0, 150);
+    if (depthOfField_ == value) return;
+    depthOfField_ = value;
+    persist(QStringLiteral("depthOfField"), value);
+    emit depthOfFieldChanged();
+}
+
+void PlayerExperienceController::setSubjectClarity(int value)
+{
+    value = clampRange(value, 20, 140);
+    if (subjectClarity_ == value) return;
+    subjectClarity_ = value;
+    persist(QStringLiteral("subjectClarity"), value);
+    emit subjectClarityChanged();
+}
+
+void PlayerExperienceController::setAutoRotateSpeed(int value)
+{
+    value = clampPercent(value);
+    if (autoRotateSpeed_ == value) return;
+    autoRotateSpeed_ = value;
+    persist(QStringLiteral("autoRotateSpeed"), value);
+    emit autoRotateSpeedChanged();
+}
+
+void PlayerExperienceController::setRhythmSensitivity(int value)
+{
+    value = clampPercent(value);
+    if (rhythmSensitivity_ == value) return;
+    rhythmSensitivity_ = value;
+    persist(QStringLiteral("rhythmSensitivity"), value);
+    emit rhythmSensitivityChanged();
+}
+
+bool PlayerExperienceController::applyPreset(int preset)
+{
+    if (preset < AudioRangeEcho || preset > Galaxy) return false;
+    const StylePreset& values = visualPresets().at(static_cast<size_t>(preset));
+    setColorMode(values.colorMode);
+    setCoolColor(QLatin1String(values.coolColor));
+    setWarmColor(QLatin1String(values.warmColor));
+    setAccentColor(QLatin1String(values.accentColor));
+    setPeakColor(QLatin1String(values.peakColor));
+    setBaseColor(QLatin1String(values.baseColor));
+    setTerrainAmplitude(values.terrainAmplitude);
+    setMotionResponse(values.motionResponse);
+    setGradientLayers(values.gradientLayers);
+    setGlowIntensity(values.glowIntensity);
+    setCinemaShake(values.cinemaShake);
+    setAutoRotate(values.autoRotate);
+    setPeakBoost(values.peakBoost);
+    setRipplesEnabled(values.ripplesEnabled);
+    setFloatingCubesEnabled(values.floatingCubesEnabled);
+    setMeteorsEnabled(values.meteorsEnabled);
+    setIdleBreathingEnabled(values.idleBreathingEnabled);
+    setThemeCycleEnabled(values.themeCycleEnabled);
+    setVisualEqGains(values.visualEqGains);
+    setInputCompression(values.inputCompression);
+    setAudioResponse(values.audioResponse);
+    setResponseRange(values.responseRange);
+    setCenterHighlight(values.centerHighlight);
+    setRhythmStrength(values.rhythmStrength);
+    setDepthOfField(values.depthOfField);
+    setSubjectClarity(values.subjectClarity);
+    setAutoRotateSpeed(values.autoRotateSpeed);
+    setRhythmSensitivity(values.rhythmSensitivity);
+    return true;
+}
+
 void PlayerExperienceController::toggleImmersiveMode()
 {
     setImmersiveMode(immersiveMode_ == Off ? TerrainReactor : Off);
@@ -435,6 +690,23 @@ void PlayerExperienceController::load()
     visualEqGains_ = (persistedGainsType == QMetaType::QVariantList
                        || persistedGainsType == QMetaType::QStringList)
         ? normalizedVisualEqGains(persistedGains.toList()) : defaultVisualEqGains();
+    lyricClarity_ = clampPercent(integer(QStringLiteral("lyricClarity"), 78));
+    lyricDepth_ = clampPercent(integer(QStringLiteral("lyricDepth"), 62));
+    lyricSize_ = clampRange(integer(QStringLiteral("lyricSize"), 100), 60, 140);
+    lyricOpacity_ = clampRange(integer(QStringLiteral("lyricOpacity"), 88), 10, 100);
+    lyricPosition_ = enumOrDefault(integer(QStringLiteral("lyricPosition"), Center),
+                                   Left, Right, Center);
+    lyricPositionX_ = clampPercent(integer(QStringLiteral("lyricPositionX"), 50));
+    lyricPositionY_ = clampPercent(integer(QStringLiteral("lyricPositionY"), 42));
+    inputCompression_ = clampRange(integer(QStringLiteral("inputCompression"), 82), 20, 150);
+    audioResponse_ = clampRange(integer(QStringLiteral("audioResponse"), 128), 20, 200);
+    responseRange_ = clampRange(integer(QStringLiteral("responseRange"), 100), 50, 220);
+    centerHighlight_ = clampPercent(integer(QStringLiteral("centerHighlight"), 58));
+    rhythmStrength_ = clampRange(integer(QStringLiteral("rhythmStrength"), 30), 0, 140);
+    depthOfField_ = clampRange(integer(QStringLiteral("depthOfField"), 86), 0, 150);
+    subjectClarity_ = clampRange(integer(QStringLiteral("subjectClarity"), 110), 20, 140);
+    autoRotateSpeed_ = clampPercent(integer(QStringLiteral("autoRotateSpeed"), 42));
+    rhythmSensitivity_ = clampPercent(integer(QStringLiteral("rhythmSensitivity"), 78));
 
     settings_.setValue(QStringLiteral("mode"), immersiveMode_);
     settings_.setValue(QStringLiteral("hostMode"), hostMode_);
@@ -461,6 +733,22 @@ void PlayerExperienceController::load()
     settings_.setValue(QStringLiteral("idleBreathingEnabled"), idleBreathingEnabled_);
     settings_.setValue(QStringLiteral("themeCycleEnabled"), themeCycleEnabled_);
     settings_.setValue(QStringLiteral("visualEqGains"), visualEqGains_);
+    settings_.setValue(QStringLiteral("lyricClarity"), lyricClarity_);
+    settings_.setValue(QStringLiteral("lyricDepth"), lyricDepth_);
+    settings_.setValue(QStringLiteral("lyricSize"), lyricSize_);
+    settings_.setValue(QStringLiteral("lyricOpacity"), lyricOpacity_);
+    settings_.setValue(QStringLiteral("lyricPosition"), lyricPosition_);
+    settings_.setValue(QStringLiteral("lyricPositionX"), lyricPositionX_);
+    settings_.setValue(QStringLiteral("lyricPositionY"), lyricPositionY_);
+    settings_.setValue(QStringLiteral("inputCompression"), inputCompression_);
+    settings_.setValue(QStringLiteral("audioResponse"), audioResponse_);
+    settings_.setValue(QStringLiteral("responseRange"), responseRange_);
+    settings_.setValue(QStringLiteral("centerHighlight"), centerHighlight_);
+    settings_.setValue(QStringLiteral("rhythmStrength"), rhythmStrength_);
+    settings_.setValue(QStringLiteral("depthOfField"), depthOfField_);
+    settings_.setValue(QStringLiteral("subjectClarity"), subjectClarity_);
+    settings_.setValue(QStringLiteral("autoRotateSpeed"), autoRotateSpeed_);
+    settings_.setValue(QStringLiteral("rhythmSensitivity"), rhythmSensitivity_);
     settings_.endGroup();
 }
 
@@ -471,7 +759,12 @@ void PlayerExperienceController::persist(const QString& key, const QVariant& val
 
 int PlayerExperienceController::clampPercent(int value) noexcept
 {
-    return std::clamp(value, 0, 100);
+    return clampRange(value, 0, 100);
+}
+
+int PlayerExperienceController::clampRange(int value, int minimum, int maximum) noexcept
+{
+    return std::clamp(value, minimum, maximum);
 }
 
 QString PlayerExperienceController::normalizedColor(const QString& value,

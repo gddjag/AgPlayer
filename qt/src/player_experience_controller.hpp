@@ -58,6 +58,38 @@ class PlayerExperienceController final : public QObject {
                    WRITE setThemeCycleEnabled NOTIFY themeCycleEnabledChanged)
     Q_PROPERTY(QVariantList visualEqGains READ visualEqGains WRITE setVisualEqGains
                    NOTIFY visualEqGainsChanged)
+    Q_PROPERTY(int lyricClarity READ lyricClarity WRITE setLyricClarity
+                   NOTIFY lyricClarityChanged)
+    Q_PROPERTY(int lyricDepth READ lyricDepth WRITE setLyricDepth
+                   NOTIFY lyricDepthChanged)
+    Q_PROPERTY(int lyricSize READ lyricSize WRITE setLyricSize
+                   NOTIFY lyricSizeChanged)
+    Q_PROPERTY(int lyricOpacity READ lyricOpacity WRITE setLyricOpacity
+                   NOTIFY lyricOpacityChanged)
+    Q_PROPERTY(int lyricPosition READ lyricPosition WRITE setLyricPosition
+                   NOTIFY lyricPositionChanged)
+    Q_PROPERTY(int lyricPositionX READ lyricPositionX WRITE setLyricPositionX
+                   NOTIFY lyricPositionXChanged)
+    Q_PROPERTY(int lyricPositionY READ lyricPositionY WRITE setLyricPositionY
+                   NOTIFY lyricPositionYChanged)
+    Q_PROPERTY(int inputCompression READ inputCompression WRITE setInputCompression
+                   NOTIFY inputCompressionChanged)
+    Q_PROPERTY(int audioResponse READ audioResponse WRITE setAudioResponse
+                   NOTIFY audioResponseChanged)
+    Q_PROPERTY(int responseRange READ responseRange WRITE setResponseRange
+                   NOTIFY responseRangeChanged)
+    Q_PROPERTY(int centerHighlight READ centerHighlight WRITE setCenterHighlight
+                   NOTIFY centerHighlightChanged)
+    Q_PROPERTY(int rhythmStrength READ rhythmStrength WRITE setRhythmStrength
+                   NOTIFY rhythmStrengthChanged)
+    Q_PROPERTY(int depthOfField READ depthOfField WRITE setDepthOfField
+                   NOTIFY depthOfFieldChanged)
+    Q_PROPERTY(int subjectClarity READ subjectClarity WRITE setSubjectClarity
+                   NOTIFY subjectClarityChanged)
+    Q_PROPERTY(int autoRotateSpeed READ autoRotateSpeed WRITE setAutoRotateSpeed
+                   NOTIFY autoRotateSpeedChanged)
+    Q_PROPERTY(int rhythmSensitivity READ rhythmSensitivity WRITE setRhythmSensitivity
+                   NOTIFY rhythmSensitivityChanged)
 
 public:
     enum ImmersiveMode { Off = 0, TerrainReactor = 1 };
@@ -68,6 +100,17 @@ public:
     Q_ENUM(QualityPreset)
     enum ColorMode { MultiRegion = 0, Custom = 1, RgbSweep = 2 };
     Q_ENUM(ColorMode)
+    enum VisualPreset {
+        AudioRangeEcho = 0,
+        NeonRainNight = 1,
+        InkWash = 2,
+        PureStage = 3,
+        Quiet = 4,
+        Galaxy = 5,
+    };
+    Q_ENUM(VisualPreset)
+    enum LyricPosition { Left = 0, Center = 1, Right = 2 };
+    Q_ENUM(LyricPosition)
 
     explicit PlayerExperienceController(SettingsController* settings = nullptr,
                                         QObject* parent = nullptr);
@@ -97,6 +140,22 @@ public:
     bool idleBreathingEnabled() const noexcept;
     bool themeCycleEnabled() const noexcept;
     QVariantList visualEqGains() const;
+    int lyricClarity() const noexcept;
+    int lyricDepth() const noexcept;
+    int lyricSize() const noexcept;
+    int lyricOpacity() const noexcept;
+    int lyricPosition() const noexcept;
+    int lyricPositionX() const noexcept;
+    int lyricPositionY() const noexcept;
+    int inputCompression() const noexcept;
+    int audioResponse() const noexcept;
+    int responseRange() const noexcept;
+    int centerHighlight() const noexcept;
+    int rhythmStrength() const noexcept;
+    int depthOfField() const noexcept;
+    int subjectClarity() const noexcept;
+    int autoRotateSpeed() const noexcept;
+    int rhythmSensitivity() const noexcept;
 
     void setImmersiveMode(int value);
     void setHostMode(int value);
@@ -123,7 +182,24 @@ public:
     void setIdleBreathingEnabled(bool value);
     void setThemeCycleEnabled(bool value);
     void setVisualEqGains(const QVariantList& values);
+    void setLyricClarity(int value);
+    void setLyricDepth(int value);
+    void setLyricSize(int value);
+    void setLyricOpacity(int value);
+    void setLyricPosition(int value);
+    void setLyricPositionX(int value);
+    void setLyricPositionY(int value);
+    void setInputCompression(int value);
+    void setAudioResponse(int value);
+    void setResponseRange(int value);
+    void setCenterHighlight(int value);
+    void setRhythmStrength(int value);
+    void setDepthOfField(int value);
+    void setSubjectClarity(int value);
+    void setAutoRotateSpeed(int value);
+    void setRhythmSensitivity(int value);
 
+    Q_INVOKABLE bool applyPreset(int preset);
     Q_INVOKABLE void toggleImmersiveMode();
     Q_INVOKABLE void toggleLyricsVisible();
     Q_INVOKABLE void togglePanelVisible();
@@ -155,11 +231,28 @@ signals:
     void idleBreathingEnabledChanged();
     void themeCycleEnabledChanged();
     void visualEqGainsChanged();
+    void lyricClarityChanged();
+    void lyricDepthChanged();
+    void lyricSizeChanged();
+    void lyricOpacityChanged();
+    void lyricPositionChanged();
+    void lyricPositionXChanged();
+    void lyricPositionYChanged();
+    void inputCompressionChanged();
+    void audioResponseChanged();
+    void responseRangeChanged();
+    void centerHighlightChanged();
+    void rhythmStrengthChanged();
+    void depthOfFieldChanged();
+    void subjectClarityChanged();
+    void autoRotateSpeedChanged();
+    void rhythmSensitivityChanged();
 
 private:
     void load();
     void persist(const QString& key, const QVariant& value);
     static int clampPercent(int value) noexcept;
+    static int clampRange(int value, int minimum, int maximum) noexcept;
     static QString normalizedColor(const QString& value, const QString& fallback);
     static QVariantList defaultVisualEqGains();
     static QVariantList normalizedVisualEqGains(const QVariantList& values);
@@ -191,4 +284,20 @@ private:
     bool idleBreathingEnabled_ = true;
     bool themeCycleEnabled_ = false;
     QVariantList visualEqGains_ = defaultVisualEqGains();
+    int lyricClarity_ = 78;
+    int lyricDepth_ = 62;
+    int lyricSize_ = 100;
+    int lyricOpacity_ = 88;
+    int lyricPosition_ = Center;
+    int lyricPositionX_ = 50;
+    int lyricPositionY_ = 42;
+    int inputCompression_ = 82;
+    int audioResponse_ = 128;
+    int responseRange_ = 100;
+    int centerHighlight_ = 58;
+    int rhythmStrength_ = 30;
+    int depthOfField_ = 86;
+    int subjectClarity_ = 110;
+    int autoRotateSpeed_ = 42;
+    int rhythmSensitivity_ = 78;
 };
