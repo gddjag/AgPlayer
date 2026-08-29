@@ -33,17 +33,29 @@ void TimePitchSession::setOriginalBpm(const double bpm) noexcept
     if (!valid_bpm(bpm)) {
         original_bpm_ = 0.0;
         target_bpm_ = 0.0;
+        speed_percent_ = 100.0;
         return;
     }
     original_bpm_ = bpm;
-    target_bpm_ = bpm * speed_percent_ / 100.0;
+    target_bpm_ = bpm;
+    speed_percent_ = 100.0;
 }
 
 bool TimePitchSession::setTargetBpm(const double bpm) noexcept
 {
-    if (!valid_bpm(bpm) || original_bpm_ <= 0.0) return false;
+    if (!valid_bpm(bpm)) return false;
+    if (original_bpm_ <= 0.0) {
+        original_bpm_ = bpm;
+        target_bpm_ = bpm;
+        speed_percent_ = 100.0;
+        return true;
+    }
     const double speed = bpm / original_bpm_ * 100.0;
     if (speed < 50.0 || speed > 200.0) return false;
+    if (std::abs(target_bpm_ - bpm) < 0.000001
+        && std::abs(speed_percent_ - speed) < 0.000001) {
+        return false;
+    }
     target_bpm_ = bpm;
     speed_percent_ = speed;
     return true;
@@ -54,6 +66,7 @@ bool TimePitchSession::setSpeedPercent(const double percent) noexcept
     if (!std::isfinite(percent) || percent < 50.0 || percent > 200.0) {
         return false;
     }
+    if (std::abs(speed_percent_ - percent) < 0.000001) return false;
     speed_percent_ = percent;
     target_bpm_ = original_bpm_ > 0.0
         ? original_bpm_ * percent / 100.0 : 0.0;
@@ -67,6 +80,7 @@ bool TimePitchSession::setPitch(const int semitones, const int cents) noexcept
         || total < -1'200 || total > 1'200) {
         return false;
     }
+    if (pitch_cents_ == total) return false;
     pitch_cents_ = total;
     return true;
 }

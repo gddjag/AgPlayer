@@ -36,6 +36,13 @@ ag_result CoreContext::load_stream(
                   "editor stream load failed");
 }
 
+ag_result CoreContext::replace_stream(
+    std::shared_ptr<IAudioStreamSource> stream) noexcept
+{
+    return record(audio_engine_.replace_stream(std::move(stream)),
+                  "editor stream replacement failed");
+}
+
 ag_result CoreContext::set_queue(std::vector<std::string> utf8_paths,
                                  const std::size_t start_index) noexcept
 {

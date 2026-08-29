@@ -90,6 +90,7 @@ public:
             / metadata_value.sample_rate / parameters.speed_ratio));
         configureProcessor();
         resetRaw(0);
+        resetAutomationCursor(0);
     }
 
     void configureProcessor()
@@ -257,22 +258,33 @@ public:
         if (formant_preserver) formant_preserver->process(samples.data(), frames);
     }
 
+    void resetAutomationCursor(const SampleFrame outputFrame)
+    {
+        const SampleFrame timelineFrame = automation_time.map(outputFrame);
+        const auto event = std::lower_bound(
+            snapshot.events.cbegin(), snapshot.events.cend(), timelineFrame,
+            [](const AudioEvent& value, const SampleFrame frame) {
+                return value.timelineStart + audibleFrames(value) <= frame;
+            });
+        automation_event_index = static_cast<std::size_t>(
+            std::distance(snapshot.events.cbegin(), event));
+    }
+
     void applyAutomation(std::vector<float>& samples, const std::size_t frames)
     {
-        std::size_t automationEvent = 0;
         for (std::size_t frame = 0; frame < frames; ++frame) {
             const SampleFrame outputFrame = emitted_frames
                 + static_cast<SampleFrame>(frame);
             const SampleFrame timelineFrame = automation_time.map(outputFrame);
-            while (automationEvent < snapshot.events.size()
-                   && snapshot.events[automationEvent].timelineStart
-                        + audibleFrames(snapshot.events[automationEvent])
+            while (automation_event_index < snapshot.events.size()
+                   && snapshot.events[automation_event_index].timelineStart
+                        + audibleFrames(snapshot.events[automation_event_index])
                         <= timelineFrame) {
-                ++automationEvent;
+                ++automation_event_index;
             }
             float gain = 1.0F;
-            if (automationEvent < snapshot.events.size()) {
-                const AudioEvent& event = snapshot.events[automationEvent];
+            if (automation_event_index < snapshot.events.size()) {
+                const AudioEvent& event = snapshot.events[automation_event_index];
                 if (timelineFrame >= event.timelineStart
                     && timelineFrame < event.timelineStart
                         + audibleFrames(event)) {
@@ -348,9 +360,14 @@ public:
         try {
             const long double originalFrames = static_cast<long double>(positionMs)
                 * metadata_value.sample_rate * parameters.speed_ratio / 1'000.0L;
-            resetRaw(static_cast<SampleFrame>(std::ceil(originalFrames)));
-            emitted_frames = static_cast<SampleFrame>(positionMs)
-                * metadata_value.sample_rate / 1'000;
+            const SampleFrame rawFrame = static_cast<SampleFrame>(
+                std::ceil(originalFrames));
+            resetRaw(rawFrame);
+            const long double outputFrames = static_cast<long double>(positionMs)
+                * metadata_value.sample_rate / 1'000.0L;
+            emitted_frames = static_cast<SampleFrame>(std::ceil(outputFrames));
+            automation_time.resetAnchor(emitted_frames, rawFrame);
+            resetAutomationCursor(emitted_frames);
             if (processor) {
                 processor->reset();
                 configureProcessor();
@@ -372,6 +389,7 @@ public:
     std::size_t decoded_offset{};
     SampleFrame decoded_discard{};
     std::size_t event_index{};
+    std::size_t automation_event_index{};
     SampleFrame cursor{};
     SampleFrame emitted_frames{};
     bool decoder_ready{};

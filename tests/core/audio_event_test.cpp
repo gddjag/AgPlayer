@@ -3,6 +3,7 @@
 #include <QtTest>
 
 #include <memory>
+#include <cmath>
 #include <type_traits>
 
 using namespace agplayer::editor;
@@ -92,6 +93,43 @@ private slots:
 
         QVERIFY(isValid(candidate));
         QCOMPARE(audibleFrames(candidate), two_hours_at_384khz);
+    }
+
+    void appliesSelectedFadeCurvesWithSymmetricFadeOut()
+    {
+        auto candidate = event();
+        candidate.fadeIn = 5;
+        candidate.fadeInCurve = FadeCurve::Linear;
+        QVERIFY(std::abs(fadeGainAt(candidate, 1) - 0.25F) < 0.0001F);
+
+        candidate.fadeInCurve = FadeCurve::Smooth;
+        QVERIFY(std::abs(fadeGainAt(candidate, 1) - 0.15625F) < 0.0001F);
+
+        candidate.fadeInCurve = FadeCurve::Exponential;
+        const float exponential = fadeGainAt(candidate, 1);
+        QVERIFY(std::abs(exponential - 0.01689363F) < 0.0001F);
+
+        candidate.fadeIn = 0;
+        candidate.fadeOut = 5;
+        candidate.fadeOutCurve = FadeCurve::Exponential;
+        QVERIFY(std::abs(fadeGainAt(candidate, 798) - exponential) < 0.0001F);
+    }
+
+    void clampsCurveProgressToTheAudibleRange()
+    {
+        QCOMPARE(fadeCurveGainAt(FadeCurve::Linear, -0.25), 0.0F);
+        QCOMPARE(fadeCurveGainAt(FadeCurve::Exponential, 1.25), 1.0F);
+    }
+
+    void compositeAmplitudeGainNeverExceedsTheEditorLineRange()
+    {
+        auto candidate = event();
+        candidate.gain = 2.0F;
+        candidate.envelope = {{100, 2.0F}, {799, 2.0F}};
+
+        QCOMPARE(eventAmplitudeGainAt(candidate, 100), 2.0F);
+        candidate.mute = true;
+        QCOMPARE(eventAmplitudeGainAt(candidate, 100), 0.0F);
     }
 };
 

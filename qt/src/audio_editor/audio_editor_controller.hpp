@@ -17,6 +17,7 @@
 
 #include <QObject>
 #include <QFutureWatcher>
+#include <QList>
 #include <QPointer>
 #include <QTimer>
 #include <QUrl>
@@ -72,13 +73,16 @@ class AudioEditorController final : public QObject {
                    NOTIFY documentChanged)
     Q_PROPERTY(QString activeTool READ activeTool NOTIFY toolChanged)
     Q_PROPERTY(bool formantPreservationSupported
-                   READ formantPreservationSupported CONSTANT)
+                   READ formantPreservationSupported NOTIFY documentChanged)
     Q_PROPERTY(bool formantPreservation READ formantPreservation
                    WRITE setFormantPreservation NOTIFY timePitchChanged)
-    Q_PROPERTY(bool bpmDetectionSupported READ bpmDetectionSupported CONSTANT)
-    Q_PROPERTY(bool timePitchSupported READ timePitchSupported CONSTANT)
-    Q_PROPERTY(bool playbackSupported READ playbackSupported CONSTANT)
-    Q_PROPERTY(bool exportSupported READ exportSupported CONSTANT)
+    Q_PROPERTY(bool bpmDetectionSupported READ bpmDetectionSupported
+                   NOTIFY documentChanged)
+    Q_PROPERTY(bool timePitchSupported READ timePitchSupported
+                   NOTIFY documentChanged)
+    Q_PROPERTY(bool playbackSupported READ playbackSupported
+                   NOTIFY documentChanged)
+    Q_PROPERTY(bool exportSupported READ exportSupported NOTIFY documentChanged)
     Q_PROPERTY(bool playing READ playing NOTIFY playbackChanged)
     Q_PROPERTY(qint64 positionMs READ positionMs NOTIFY playbackChanged)
     Q_PROPERTY(qint64 durationMs READ durationMs NOTIFY documentChanged)
@@ -148,18 +152,23 @@ public:
     { return viewport_channel_peaks_; }
     [[nodiscard]] QVariantList timelineEventViews() const;
     [[nodiscard]] QString activeTool() const { return active_tool_; }
-    [[nodiscard]] constexpr bool formantPreservationSupported() const noexcept
-    { return true; }
+    [[nodiscard]] bool formantPreservationSupported() const noexcept
+    { return (!has_document_ || document_.totalFrames() > 0)
+        && channels_ >= 0 && channels_ <= 2; }
     [[nodiscard]] bool formantPreservation() const noexcept
     { return time_pitch_.formantPreservation(); }
-    [[nodiscard]] constexpr bool bpmDetectionSupported() const noexcept
-    { return true; }
-    [[nodiscard]] constexpr bool timePitchSupported() const noexcept
-    { return true; }
-    [[nodiscard]] constexpr bool playbackSupported() const noexcept
-    { return player_ != nullptr; }
-    [[nodiscard]] constexpr bool exportSupported() const noexcept
-    { return true; }
+    [[nodiscard]] bool bpmDetectionSupported() const noexcept
+    { return (!has_document_ || document_.totalFrames() > 0)
+        && channels_ >= 0 && channels_ <= 2; }
+    [[nodiscard]] bool timePitchSupported() const noexcept
+    { return (!has_document_ || document_.totalFrames() > 0)
+        && channels_ >= 0 && channels_ <= 2; }
+    [[nodiscard]] bool playbackSupported() const noexcept
+    { return player_ != nullptr
+        && (!has_document_ || document_.totalFrames() > 0)
+        && channels_ >= 0 && channels_ <= 2; }
+    [[nodiscard]] bool exportSupported() const noexcept
+    { return has_document_ && document_.totalFrames() > 0; }
     [[nodiscard]] bool playing() const noexcept { return playing_; }
     [[nodiscard]] qint64 positionMs() const noexcept { return position_ms_; }
     [[nodiscard]] qint64 durationMs() const noexcept;
@@ -219,6 +228,9 @@ public:
     void setDocumentLoadTaskObserverForTesting(
         std::function<void(bool)> observer)
     { document_load_task_observer_ = std::move(observer); }
+    void setBpmTaskObserverForTesting(std::function<void(bool)> observer)
+    { bpm_task_observer_ = std::move(observer); }
+    void cancelAndWaitForBpmTaskForTesting();
     [[nodiscard]] EditorAction* action(const QString& id) noexcept
     {
         return actions_.action(id);
@@ -227,6 +239,7 @@ public:
         quint32 sampleRate, quint32 channels, qint64 frames);
     Q_INVOKABLE bool clearDocument();
     Q_INVOKABLE bool openFile(const QUrl& source);
+    Q_INVOKABLE bool openDroppedUrls(const QList<QUrl>& urls);
     bool openFileWhenReady(const QUrl& source, QObject* context,
                            std::function<void()> onLoaded);
     Q_INVOKABLE bool confirmDiscardAndOpen();
@@ -275,7 +288,10 @@ public:
                                         const QString& rightId,
                                         qint64 sourceBoundary);
     Q_INVOKABLE bool splitEvent(const QString& id, qint64 frame);
+    Q_INVOKABLE bool setEventFadeIn(const QString& id, qint64 frames);
     Q_INVOKABLE bool setEventFadeOut(const QString& id, qint64 frames);
+    Q_INVOKABLE bool setEventFadeCurve(const QString& id, bool fadeIn,
+                                       const QString& curveName);
     Q_INVOKABLE bool setEventGain(const QString& id, double gain);
     Q_INVOKABLE bool addEnvelopePoint(const QString& id, qint64 offset,
                                       double gain);
@@ -290,6 +306,7 @@ public:
     Q_INVOKABLE bool beginEnvelopePointGesture(const QString& id,
                                                qint64 offset);
     Q_INVOKABLE bool updateEnvelopePointGesture(qint64 offset, double gain);
+    Q_INVOKABLE bool commitEnvelopePointGesture(qint64 offset, double gain);
     Q_INVOKABLE bool endEnvelopePointGesture();
     Q_INVOKABLE bool cancelEnvelopePointGesture();
     Q_INVOKABLE bool beginEventGesture(const QString& id,
@@ -317,6 +334,7 @@ public:
     Q_INVOKABLE void setOriginalBpm(double value);
     Q_INVOKABLE bool setTargetBpm(double value);
     Q_INVOKABLE bool setSpeedPercent(double value);
+    Q_INVOKABLE bool resetTimePitch();
     Q_INVOKABLE void setKeepPitch(bool value);
     Q_INVOKABLE void setFormantPreservation(bool value);
     Q_INVOKABLE bool setPitch(int semitones, int cents);
@@ -391,6 +409,11 @@ private:
         std::shared_ptr<agplayer::editor::AudioDocument> relinkDocument;
         std::vector<agplayer::editor::ProjectSourceRecord> relinkSources;
     };
+    struct BpmJob final {
+        quint64 generation{};
+        std::shared_ptr<std::atomic_bool> cancelToken;
+        agplayer::editor::TimelineSnapshot snapshot;
+    };
     void refreshActions();
     void requestViewportWaveform();
     void startViewportWaveformJob(ViewportWaveformJob job);
@@ -402,11 +425,16 @@ private:
     void startDocumentLoadJob(DocumentLoadJob job);
     void cancelDocumentLoad();
     void applyDocumentLoadOutcome(DocumentLoadOutcome outcome);
+    void startBpmJob(BpmJob job);
+    void cancelBpmDetection(bool publishCancelled);
+    void adoptBpm(double bpm);
     void setDocumentLoading(bool loading);
     [[nodiscard]] double effectivePlaybackVolume() const noexcept;
     void updatePlaybackMix() noexcept;
     void applyTrackMix(agplayer::editor::TimelineSnapshot& snapshot) const noexcept;
     bool preparePlayback();
+    [[nodiscard]] qint64 currentPlaybackTimelineFrame() const noexcept;
+    void finishTimePitchChange(bool wasPlaying, qint64 timelineFrame);
     void ensureSelectionHandoffServices();
     void pollPlayback();
     void setState(EditorSessionState value);
@@ -414,6 +442,7 @@ private:
     void setProgress(double value);
     void markProjectClean() noexcept;
     void markProjectDirty() noexcept;
+    void markEditorSettingsDirty();
     [[nodiscard]] bool updatePersistedPlayhead(qint64 frame,
                                                 qint64 positionMs) noexcept;
     [[nodiscard]] bool syncModifiedFromHistory() noexcept;
@@ -501,6 +530,10 @@ private:
     QFutureWatcher<agplayer::editor::WriteResult>* write_watcher_{};
     QFutureWatcher<agplayer::editor::TimePitchResult>* time_pitch_watcher_{};
     QFutureWatcher<BpmAnalyzeResult>* bpm_watcher_{};
+    quint64 bpm_generation_{};
+    std::shared_ptr<std::atomic_bool> bpm_cancel_token_;
+    std::optional<BpmJob> pending_bpm_job_;
+    std::function<void(bool)> bpm_task_observer_;
     bool bpm_busy_{};
     double bpm_result_{};
     QString bpm_error_;

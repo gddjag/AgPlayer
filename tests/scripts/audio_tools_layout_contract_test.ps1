@@ -319,8 +319,15 @@ if (($audioEditor + "`n" + $commandBar) -match 'Phase\s*[0-9]' -or
     $audioEditor -notmatch $shortcutEnvelope) {
     throw 'The editor still contains phased placeholder copy or is missing reference instructions.'
 }
-if ($audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,160}visible:\s*false') {
-    throw 'The visually absent reference status bar does not match the source image.'
+$statusOverlay = 'objectName:\s*"editorStatusBar"[\s\S]{0,240}' +
+    'visible:\s*AudioEditorController\.busy\s*\|\|\s*' +
+    'AudioEditorController\.errorMessage\.length\s*>\s*0\s*\|\|\s*' +
+    'statusSuccessTimer\.running'
+if ($audioEditor -notmatch $statusOverlay -or
+    $audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,360}y:\s*mainSurface\.height\s*-\s*25' -or
+    $audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,420}width:\s*mainSurface\.width' -or
+    $audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,460}height:\s*25') {
+    throw 'Status feedback must be a 25 px bottom overlay shown only for processing, errors, or export success.'
 }
 foreach ($accessibleObject in @('audioToolsMinimizeButton',
     'audioToolsMaximizeButton', 'audioToolsCloseButton',

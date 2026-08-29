@@ -49,6 +49,22 @@ int main(const int argc, char** argv)
     using namespace agplayer::editor;
 
     TimePitchSession parameters;
+    require(parameters.setTargetBpm(130.0),
+            "first target BPM did not establish a baseline");
+    require(std::abs(parameters.originalBpm() - 130.0) < 0.001,
+            "first target BPM baseline mismatch");
+    require(std::abs(parameters.speedPercent() - 100.0) < 0.001,
+            "first target BPM did not retain normal speed");
+    TimePitchSession invalidBaseline;
+    invalidBaseline.setOriginalBpm(100.0);
+    require(invalidBaseline.setSpeedPercent(125.0),
+            "invalid-baseline setup speed rejected");
+    invalidBaseline.setOriginalBpm(0.0);
+    require(invalidBaseline.originalBpm() == 0.0
+                && invalidBaseline.targetBpm() == 0.0,
+            "invalid original BPM did not clear BPM state");
+    require(std::abs(invalidBaseline.speedPercent() - 100.0) < 0.001,
+            "invalid original BPM did not restore normal speed");
     parameters.setOriginalBpm(100.0);
     require(parameters.setTargetBpm(125.0), "target BPM rejected");
     require(std::abs(parameters.speedPercent() - 125.0) < 0.001,
@@ -58,6 +74,12 @@ int main(const int argc, char** argv)
             "speed did not update target BPM");
     require(parameters.setPitch(3, 25), "pitch rejected");
     require(parameters.pitchCents() == 325, "pitch conversion mismatch");
+    require(!parameters.setPitch(3, 25),
+            "unchanged pitch was reported as a processing change");
+    require(!parameters.setSpeedPercent(80.0),
+            "unchanged speed was reported as a processing change");
+    require(!parameters.setTargetBpm(80.0),
+            "unchanged target BPM was reported as a processing change");
     parameters.setFormantPreservation(true);
     require(parameters.formantPreservation(),
             "formant preservation state was not retained");

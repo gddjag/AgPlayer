@@ -93,6 +93,10 @@
 </context>
 <context>
     <name>AudioEditorPage</name>
+    <message><source>检测中…</source><translation>Đang phát hiện…</translation></message>
+    <message><source>原始 %1 BPM</source><translation>BPM gốc %1</translation></message>
+    <message><source>— / 不适用</source><translation>— / Không áp dụng</translation></message>
+    <message><source>%1 声道</source><translation>%1 kênh</translation></message>
     <message><source>（单声道）</source><translation>(Đơn âm)</translation></message>
     <message><source>（立体声）</source><translation>(Âm thanh nổi)</translation></message>
     <message><source>当前时间</source><translation>Thời gian hiện tại</translation></message>
@@ -673,6 +677,8 @@
 </context>
 <context>
     <name>EditorStatusBar</name>
+    <message><source>导出完成：%1</source><translation>Xuất xong: %1</translation></message>
+    <message><source>正在处理… %1%</source><translation>Đang xử lý… %1%</translation></message>
     <message><source>空格：播放 / 暂停 · S：在播放头处分割 · Delete：删除片段</source><translation>Space: Phát / Tạm dừng · S: Tách tại đầu phát · Delete: Xóa đoạn</translation></message>
     <message>
         <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="18"/>
@@ -707,6 +713,9 @@
 </context>
 <context>
     <name>EditorWaveformCanvas</name>
+    <message><source>线性</source><translation>Tuyến tính</translation></message>
+    <message><source>平滑</source><translation>Mượt</translation></message>
+    <message><source>指数</source><translation>Hàm mũ</translation></message>
     <message><source>拖出片段</source><translation>Kéo đoạn ra</translation></message>
     <message><source>淡出控制点</source><translation>Điểm điều khiển mờ dần</translation></message>
     <message>

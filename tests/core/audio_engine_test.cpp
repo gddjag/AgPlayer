@@ -5,15 +5,70 @@
 
 #include <agplayer/c_api.h>
 
+#include "../../core/src/audio_editor/editor_player_bridge.hpp"
+
+#include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
+#include <memory>
 #include <thread>
+#include <vector>
 
 #ifdef _WIN32
 #include <crtdbg.h>
 #endif
+
+namespace {
+
+class SilentEditorStream final : public agplayer::IAudioStreamSource {
+public:
+    explicit SilentEditorStream(const std::int64_t durationMs)
+    {
+        metadata_.sample_rate = 48'000;
+        metadata_.channels = 2;
+        metadata_.duration_ms = durationMs;
+        total_frames_ = durationMs * metadata_.sample_rate / 1'000;
+    }
+
+    const agplayer::MediaMetadata& metadata() const noexcept override
+    {
+        return metadata_;
+    }
+
+    ag_result read(agplayer::DecodedAudioBlock& block) noexcept override
+    {
+        const std::int64_t remaining = total_frames_ - position_frames_;
+        const std::size_t frames = static_cast<std::size_t>(
+            std::max<std::int64_t>(0, std::min<std::int64_t>(1'024, remaining)));
+        block = {};
+        block.frames = frames;
+        block.timestamp_frame = position_frames_;
+        block.timestamp_ms = position_frames_ * 1'000 / metadata_.sample_rate;
+        block.samples.assign(frames * static_cast<std::size_t>(metadata_.channels),
+                             0.0F);
+        position_frames_ += static_cast<std::int64_t>(frames);
+        block.end_of_stream = position_frames_ >= total_frames_;
+        return AG_OK;
+    }
+
+    ag_result seek(const std::int64_t positionMs) noexcept override
+    {
+        if (positionMs < 0 || positionMs > metadata_.duration_ms) {
+            return AG_INVALID_ARGUMENT;
+        }
+        position_frames_ = positionMs * metadata_.sample_rate / 1'000;
+        return AG_OK;
+    }
+
+private:
+    agplayer::MediaMetadata metadata_;
+    std::int64_t total_frames_{};
+    std::int64_t position_frames_{};
+};
+
+} // namespace
 
 int main(const int argc, char** argv)
 {
@@ -152,6 +207,22 @@ int main(const int argc, char** argv)
     assert(ag_player_snapshot(player, &snapshot) == AG_OK);
     assert(snapshot.state == AG_PLAYING);
     assert(snapshot.position_ms > 500);
+
+    assert(agplayer::editor::load_editor_playback_stream(
+               player, std::make_shared<SilentEditorStream>(2'000)) == AG_OK);
+    assert(ag_player_play(player) == AG_OK);
+    std::this_thread::sleep_for(std::chrono::milliseconds(40));
+    assert(agplayer::editor::replace_editor_playback_stream(
+               player, std::make_shared<SilentEditorStream>(3'000)) == AG_OK);
+    assert(ag_player_snapshot(player, &snapshot) == AG_OK);
+    assert(snapshot.state == AG_STOPPED);
+    assert(snapshot.duration_ms == 3'000);
+    assert(ag_player_seek(player, 500) == AG_OK);
+    assert(ag_player_play(player) == AG_OK);
+    std::this_thread::sleep_for(std::chrono::milliseconds(40));
+    assert(ag_player_snapshot(player, &snapshot) == AG_OK);
+    assert(snapshot.state == AG_PLAYING);
+    assert(snapshot.position_ms >= 500);
 
     ag_player_destroy(player);
 }

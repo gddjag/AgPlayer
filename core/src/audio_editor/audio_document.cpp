@@ -382,7 +382,8 @@ bool AudioDocument::splitAt(std::vector<AudioEvent>& events, const EventId id,
     const auto found = std::find_if(events.begin(), events.end(),
         [id](const AudioEvent& event) { return event.id == id; });
     if (found == events.end() || frame <= found->timelineStart
-        || frame >= found->timelineStart + audibleFrames(*found) || rightId == id) {
+        || frame >= found->timelineStart + audibleFrames(*found) || rightId == id
+        || rightId == std::numeric_limits<EventId>::max()) {
         return false;
     }
     const AudioEvent original = *found;
@@ -407,6 +408,7 @@ bool AudioDocument::splitAtFrame(std::vector<AudioEvent>& events,
         const SampleFrame end = event.timelineStart + audibleFrames(event);
         if (frame == event.timelineStart || frame == end) return true;
         if (frame > event.timelineStart && frame < end) {
+            if (nextId == std::numeric_limits<EventId>::max()) return false;
             if (!splitAt(events, event.id, frame, nextId)) return false;
             ++nextId;
             return true;
@@ -417,6 +419,7 @@ bool AudioDocument::splitAtFrame(std::vector<AudioEvent>& events,
 
 bool AudioDocument::splitEventAt(const EventId id, const SampleFrame frame)
 {
+    if (next_event_id_ == std::numeric_limits<EventId>::max()) return false;
     std::vector<AudioEvent> candidate = timeline_.snapshot().events;
     if (!splitAt(candidate, id, frame, next_event_id_)
         || !applyCandidate(std::move(candidate))) return false;
@@ -574,10 +577,25 @@ bool AudioDocument::setEventFadeIn(const EventId id,
     return isValid(*event) && applyCandidate(std::move(candidate));
 }
 
+bool AudioDocument::setEventFadeCurve(const EventId id, const bool fadeIn,
+                                      const FadeCurve curve)
+{
+    if (!isSupportedFadeCurve(curve)) return false;
+    std::vector<AudioEvent> candidate = timeline_.snapshot().events;
+    const auto event = std::find_if(candidate.begin(), candidate.end(),
+        [id](const AudioEvent& item) { return item.id == id; });
+    if (event == candidate.end()) return false;
+    FadeCurve& current = fadeIn ? event->fadeInCurve : event->fadeOutCurve;
+    if (current == curve) return false;
+    current = curve;
+    return isValid(*event) && applyCandidate(std::move(candidate));
+}
+
 bool AudioDocument::addEnvelopePoint(const EventId id,
                                      const SampleFrame offset,
                                      const float gain)
 {
+    if (!std::isfinite(gain)) return false;
     std::vector<AudioEvent> candidate = timeline_.snapshot().events;
     const auto event = std::find_if(candidate.begin(), candidate.end(),
         [id](const AudioEvent& item) { return item.id == id; });
@@ -588,7 +606,8 @@ bool AudioDocument::addEnvelopePoint(const EventId id,
             return item.offset < value;
         });
     if (point != event->envelope.end() && point->offset == offset) return false;
-    event->envelope.insert(point, EnvelopePoint{offset, gain});
+    event->envelope.insert(
+        point, EnvelopePoint{offset, std::clamp(gain, 0.0F, 2.0F)});
     return isValid(*event) && applyCandidate(std::move(candidate));
 }
 
@@ -690,6 +709,11 @@ bool AudioDocument::pasteAt(const SampleFrame playhead)
     const SampleFrame origin = clipboard_.front().timelineStart;
     std::vector<AudioEvent> candidate = timeline_.snapshot().events;
     EventId candidateId = next_event_id_;
+    constexpr EventId reserved = std::numeric_limits<EventId>::max();
+    if (candidateId == reserved
+        || clipboard_.size() > static_cast<std::size_t>(reserved - candidateId)) {
+        return false;
+    }
     for (const AudioEvent& original : clipboard_) {
         const SampleFrame offset = original.timelineStart - origin;
         if (offset < 0 || playhead > std::numeric_limits<SampleFrame>::max() - offset) {
@@ -736,6 +760,8 @@ bool AudioDocument::sameParameters(const AudioEvent& left,
                       });
     return left.source == right.source && left.gain == right.gain
         && left.fadeIn == right.fadeIn && left.fadeOut == right.fadeOut
+        && left.fadeInCurve == right.fadeInCurve
+        && left.fadeOutCurve == right.fadeOutCurve
         && left.speedRatio == right.speedRatio
         && left.pitchSemitone == right.pitchSemitone && left.mute == right.mute
         && sameEnvelope;

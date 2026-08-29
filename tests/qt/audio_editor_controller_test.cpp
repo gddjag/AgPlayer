@@ -15,15 +15,18 @@
 #include <QScopeGuard>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QtEnvironmentVariables>
 #include <QtTest>
 
 #include <atomic>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -242,14 +245,25 @@ private slots:
         AudioEditorController controller;
         const auto settings = controller.projectExportSettings();
 
-        QCOMPARE(settings.codecName, QStringLiteral("MP3"));
+        QCOMPARE(settings.codecName, QStringLiteral("WAV"));
         QCOMPARE(settings.sampleRate, 44'100);
         QCOMPARE(settings.bitDepth, 24);
         QCOMPARE(settings.channels, 2);
-        QCOMPARE(settings.bitRate, qint64{320'000});
+        QCOMPARE(settings.bitRate, qint64{0});
         QCOMPARE(QDir::cleanPath(settings.outputDirectory),
                  QDir::cleanPath(QStandardPaths::writableLocation(
                      QStandardPaths::DesktopLocation)));
+        QVERIFY(agplayer::editor::isValidProjectExportSettings(settings));
+    }
+
+    void multichannelDocumentPreservesSourceChannelsInDefaultExportSettings()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(48'000, 4, 1'000));
+        const auto settings = controller.projectExportSettings();
+
+        QCOMPARE(settings.codecName, QStringLiteral("WAV"));
+        QCOMPARE(settings.channels, 4);
         QVERIFY(agplayer::editor::isValidProjectExportSettings(settings));
     }
 
@@ -289,6 +303,25 @@ private slots:
         ag_player_destroy(sharedPlayer);
     }
 
+    void multiChannelDocumentReportsUnsupportedRealtimeCapabilities()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("four-channel.wav"));
+        QVERIFY(agplayer::test::writeClickTrackWav(source, 120, 2, 4));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
+        QCOMPARE(controller.channels(), 4);
+        QVERIFY(!controller.playbackSupported());
+        QVERIFY(!controller.timePitchSupported());
+        QVERIFY(!controller.formantPreservationSupported());
+        QVERIFY(!controller.bpmDetectionSupported());
+        QVERIFY(!controller.bpmBusy());
+        QVERIFY(!controller.playPause());
+        QVERIFY(!controller.errorMessage().isEmpty());
+    }
+
     void emptyDocumentDisablesEditActions()
     {
         AudioEditorController controller;
@@ -306,19 +339,66 @@ private slots:
         QVERIFY(agplayer::test::writeClickTrackWav(source, 120, 8));
 
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QSemaphore analysisStarted;
+        QSemaphore releaseAnalysis;
+        const auto unblock = qScopeGuard([&] { releaseAnalysis.release(); });
+        controller.setBpmTaskObserverForTesting([&](const bool starting) {
+            if (starting) {
+                analysisStarted.release();
+                releaseAnalysis.acquire();
+            }
+        });
         QVERIFY(controller.bpmDetectionSupported());
         QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
-        QVERIFY(controller.detectBpm());
-        QCOMPARE(controller.state(), EditorSessionState::Processing);
+        QVERIFY(analysisStarted.tryAcquire(1, 5'000));
+        QCOMPARE(controller.state(), EditorSessionState::Ready);
+        QVERIFY(!controller.busy());
         QVERIFY(controller.bpmBusy());
-        QTRY_COMPARE_WITH_TIMEOUT(controller.state(), EditorSessionState::Ready,
-                                  15'000);
-        QVERIFY(!controller.bpmBusy());
+        QVERIFY2(controller.playPause(), qPrintable(controller.errorMessage()));
+        QVERIFY(controller.playing());
+        QVERIFY(controller.playPause());
+        releaseAnalysis.release();
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.bpmBusy(), 15'000);
+        QCOMPARE(controller.state(), EditorSessionState::Ready);
         QVERIFY2(std::abs(controller.originalBpm() - 120.0) < 1.0,
                  qPrintable(QString::number(controller.originalBpm())));
         QVERIFY2(std::abs(controller.bpmResult() - 120.0) < 1.0,
                  qPrintable(QString::number(controller.bpmResult())));
         QVERIFY(controller.bpmError().isEmpty());
+    }
+
+    void speedChangeDuringAutomaticBpmPreservesTheJobAndUserTempo()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("click-120.wav"));
+        QVERIFY(agplayer::test::writeClickTrackWav(source, 120, 8));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QSemaphore analysisStarted;
+        QSemaphore releaseAnalysis;
+        const auto unblock = qScopeGuard([&] { releaseAnalysis.release(); });
+        controller.setBpmTaskObserverForTesting([&](const bool starting) {
+            if (starting) {
+                analysisStarted.release();
+                releaseAnalysis.acquire();
+            }
+        });
+
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
+        QVERIFY(analysisStarted.tryAcquire(1, 5'000));
+        QVERIFY(controller.bpmBusy());
+        QVERIFY(controller.setSpeedPercent(125.0));
+        QVERIFY(controller.bpmBusy());
+        QCOMPARE(controller.speedPercent(), 125.0);
+
+        releaseAnalysis.release();
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.bpmBusy(), 15'000);
+        QVERIFY2(std::abs(controller.originalBpm() - 120.0) < 1.0,
+                 qPrintable(QString::number(controller.originalBpm())));
+        QVERIFY2(std::abs(controller.targetBpm() - 150.0) < 1.5,
+                 qPrintable(QString::number(controller.targetBpm())));
+        QCOMPARE(controller.speedPercent(), 125.0);
     }
 
     void bpmDetectionCancellationPublishesCancelledState()
@@ -329,13 +409,132 @@ private slots:
         QVERIFY(agplayer::test::writeClickTrackWav(source, 120, 30));
 
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QSemaphore analysisStarted;
+        QSemaphore releaseAnalysis;
+        const auto unblock = qScopeGuard([&] { releaseAnalysis.release(); });
+        controller.setBpmTaskObserverForTesting([&](const bool starting) {
+            if (starting) {
+                analysisStarted.release();
+                releaseAnalysis.acquire();
+            }
+        });
         QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
-        QVERIFY(controller.detectBpm());
+        QVERIFY(analysisStarted.tryAcquire(1, 5'000));
         controller.cancelOperation();
+        releaseAnalysis.release();
         QTRY_VERIFY_WITH_TIMEOUT(!controller.bpmBusy(), 10'000);
         QCOMPARE(controller.state(), EditorSessionState::Ready);
         QCOMPARE(controller.bpmResult(), 0.0);
         QVERIFY(!controller.bpmError().isEmpty());
+    }
+
+    void newestAutomaticBpmDetectionWinsAcrossDocumentReplacement()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString obsolete = temporary.filePath(QStringLiteral("click-120.wav"));
+        const QString newest = temporary.filePath(QStringLiteral("click-90.wav"));
+        QVERIFY(agplayer::test::writeClickTrackWav(obsolete, 120, 8));
+        QVERIFY(agplayer::test::writeClickTrackWav(newest, 90, 8));
+
+        QSemaphore firstStarted;
+        QSemaphore releaseFirst;
+        std::atomic_int starts{0};
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        const auto unblock = qScopeGuard([&] { releaseFirst.release(); });
+        controller.setBpmTaskObserverForTesting([&](const bool starting) {
+            if (starting && ++starts == 1) {
+                firstStarted.release();
+                releaseFirst.acquire();
+            }
+        });
+
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(obsolete)));
+        QVERIFY(firstStarted.tryAcquire(1, 5'000));
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(newest)));
+        QCOMPARE(controller.filePath(), newest);
+        releaseFirst.release();
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.bpmBusy(), 20'000);
+        QCOMPARE(starts.load(), 2);
+        QVERIFY2(std::abs(controller.originalBpm() - 90.0) < 1.0,
+                 qPrintable(QString::number(controller.originalBpm())));
+        QVERIFY2(std::abs(controller.targetBpm() - 90.0) < 1.0,
+                 qPrintable(QString::number(controller.targetBpm())));
+    }
+
+    void timelineMutationRestartsPendingAutomaticBpmDetection()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("click-120.wav"));
+        QVERIFY(agplayer::test::writeClickTrackWav(source, 120, 8));
+
+        QSemaphore firstStarted;
+        QSemaphore releaseFirst;
+        std::atomic_int starts{0};
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        const auto unblock = qScopeGuard([&] { releaseFirst.release(); });
+        controller.setBpmTaskObserverForTesting([&](const bool starting) {
+            if (starting && ++starts == 1) {
+                firstStarted.release();
+                releaseFirst.acquire();
+            }
+        });
+
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
+        QVERIFY(firstStarted.tryAcquire(1, 5'000));
+        QVERIFY(controller.splitEvent(1, controller.totalFrames() / 2));
+        releaseFirst.release();
+
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.bpmBusy(), 20'000);
+        QCOMPARE(starts.load(), 2);
+        QVERIFY2(std::abs(controller.originalBpm() - 120.0) < 1.0,
+                 qPrintable(QString::number(controller.originalBpm())));
+    }
+
+    void validEmbeddedBpmSkipsAutomaticAnalysis()
+    {
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString tagged = temporary.filePath(QStringLiteral("tagged-bpm.mp3"));
+        QCOMPARE(ag_transcode(fixture.toUtf8().constData(), tagged.toUtf8().constData(),
+                             "libmp3lame", 192'000, 0, 0,
+                             nullptr, nullptr, nullptr), AG_OK);
+        QCOMPARE(ag_metadata_write_extended(
+                     tagged.toUtf8().constData(), nullptr, nullptr, nullptr,
+                     nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                     nullptr, "127.50", nullptr, nullptr, nullptr,
+                     nullptr, 0U, nullptr), AG_OK);
+
+        std::atomic_int starts{0};
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        controller.setBpmTaskObserverForTesting([&](const bool starting) {
+            if (starting) ++starts;
+        });
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(tagged)));
+        QCOMPARE(starts.load(), 0);
+        QVERIFY(!controller.bpmBusy());
+        QCOMPARE(controller.originalBpm(), 127.5);
+        QCOMPARE(controller.targetBpm(), 127.5);
+        QCOMPARE(controller.speedPercent(), 100.0);
+
+        const double detected = controller.bpmResult();
+        QVERIFY(controller.setSpeedPercent(125.0));
+        QCOMPARE(controller.bpmResult(), detected);
+        QCOMPARE(controller.originalBpm(), 127.5);
+        QCOMPARE(controller.targetBpm(), 159.375);
+
+        controller.cancelOperation();
+        QCOMPARE(controller.bpmResult(), detected);
+        QVERIFY(controller.bpmError().isEmpty());
+
+        QSignalSpy bpmChanged(&controller, &AudioEditorController::bpmChanged);
+        QVERIFY(!controller.clearDocument());
+        QVERIFY(confirmDiscardAndWait(controller));
+        QCOMPARE(controller.bpmResult(), 0.0);
+        QVERIFY(bpmChanged.count() >= 1);
     }
 
     void timePitchAndFormantControlsDriveProcessingParameters()
@@ -357,9 +556,74 @@ private slots:
         QVERIFY(controller.formantPreservation());
     }
 
+    void firstTargetBpmEstablishesBaselineAndResetRestoresOriginalTempo()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.setTargetBpm(130.0));
+        QCOMPARE(controller.originalBpm(), 130.0);
+        QCOMPARE(controller.targetBpm(), 130.0);
+        QCOMPARE(controller.speedPercent(), 100.0);
+
+        QVERIFY(controller.setTargetBpm(156.0));
+        QCOMPARE(controller.speedPercent(), 120.0);
+        QVERIFY(controller.setSpeedPercent(80.0));
+        QCOMPARE(controller.targetBpm(), 104.0);
+        QVERIFY(controller.resetTimePitch());
+        QCOMPARE(controller.originalBpm(), 130.0);
+        QCOMPARE(controller.targetBpm(), 130.0);
+        QCOMPARE(controller.speedPercent(), 100.0);
+    }
+
+    void timePitchChangesResumePlayingAtCurrentTimelineFrame()
+    {
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(fixture)));
+        QVERIFY(controller.seekFrame(std::min<qint64>(
+            controller.totalFrames() / 4, controller.sampleRate())));
+        QVERIFY(controller.playPause());
+        QTRY_VERIFY_WITH_TIMEOUT(controller.playing(), 2'000);
+        const qint64 frameBefore = controller.playheadFrame();
+
+        QVERIFY(controller.setSpeedPercent(125.0));
+        QVERIFY(controller.playing());
+        QCOMPARE(controller.state(), EditorSessionState::Playing);
+        QVERIFY(controller.playheadFrame() >= frameBefore);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.playheadFrame() > frameBefore, 2'000);
+
+        QVERIFY(controller.playPause());
+        const qint64 pausedFrame = controller.playheadFrame();
+        QVERIFY(controller.setPitch(2, 0));
+        QVERIFY(!controller.playing());
+        QCOMPARE(controller.state(), EditorSessionState::Ready);
+        QCOMPARE(controller.playheadFrame(), pausedFrame);
+        QVERIFY(controller.playPause());
+        QVERIFY(controller.playing());
+        QVERIFY(controller.timePitchPreviewActive());
+    }
+
+    void droppedUrlsRequireExactlyOneLocalAudioSource()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("drop.wav"));
+        QVERIFY(writeMonoFloatWav(source, std::vector<float>(4'096, 0.25F)));
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+
+        QVERIFY(!controller.openDroppedUrls({}));
+        QVERIFY(!controller.errorMessage().isEmpty());
+        QVERIFY(!controller.openDroppedUrls({QUrl::fromLocalFile(source),
+                                             QUrl::fromLocalFile(source)}));
+        QVERIFY(!controller.errorMessage().isEmpty());
+        QVERIFY(controller.openDroppedUrls({QUrl::fromLocalFile(source)}));
+        QVERIFY(waitForDocumentLoad(controller));
+        QCOMPARE(controller.filePath(), source);
+    }
+
     void viewportWidthBeforeFirstOpenDoesNotCreateDiscardPrompt()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
         QSignalSpy discardRequested(
@@ -398,7 +662,7 @@ private slots:
 
     void qmlEventViewsKeepLargeIdsAsStringsAndGesturesCoalesce()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -512,8 +776,11 @@ private slots:
         const auto historyAfterSplit = controller.historyStateIdForTesting();
         QVERIFY(controller.beginSharedBoundaryGesture(
             QStringLiteral("1"), QStringLiteral("2")));
+        QSignalSpy previewChanged(&controller,
+                                  &AudioEditorController::documentChanged);
         QVERIFY(controller.trimSharedBoundary(QStringLiteral("1"),
                                               QStringLiteral("2"), 250));
+        QCOMPARE(previewChanged.count(), 1);
         const QVariantList preview = controller.timelineEventViews();
         const auto previewLeft = preview[0].toMap();
         const qint64 previewLength = previewLeft.value(
@@ -535,10 +802,24 @@ private slots:
         QCOMPARE(views[1].toMap().value(QStringLiteral("sourceStart")).toLongLong(),
                  qint64{640});
 
+        controller.setOriginalBpm(120.0);
+        QCOMPARE(controller.originalBpm(), 120.0);
         QVERIFY(controller.clearTimeline());
         QCOMPARE(controller.totalFrames(), qint64{0});
+        QVERIFY(!controller.playbackSupported());
+        QVERIFY(!controller.bpmDetectionSupported());
+        QVERIFY(!controller.timePitchSupported());
+        QVERIFY(!controller.formantPreservationSupported());
+        QVERIFY(!controller.exportSupported());
+        QVERIFY(!controller.actionEnabled(QStringLiteral("editor.export")));
+        QCOMPARE(controller.originalBpm(), 0.0);
+        QCOMPARE(controller.targetBpm(), 0.0);
+        QCOMPARE(controller.bpmResult(), 0.0);
         QVERIFY(controller.undo());
         QCOMPARE(controller.timelineEventViews().size(), 2);
+        QVERIFY(controller.playbackSupported());
+        QVERIFY(controller.bpmDetectionSupported());
+        QVERIFY(controller.exportSupported());
     }
 
     void selectionPlaybackPollSeeksBackToSelectionStart()
@@ -570,6 +851,30 @@ private slots:
         QVERIFY(controller.seekFrame(8'000));
         QVERIFY(observedSelectionEnd);
         QTRY_VERIFY_WITH_TIMEOUT(loopedToSelectionStart, 2'000);
+        QVERIFY(controller.playing());
+    }
+
+    void selectionEndingAtDocumentEofKeepsLoopPlaybackAlive()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("loop-eof.wav"));
+        QVERIFY(writeMonoFloatWav(source, std::vector<float>(16'000, 0.25F)));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
+        QVERIFY(controller.setSelection(8'000, 16'000));
+        QVERIFY(controller.seekFrame(8'000));
+        QVERIFY2(controller.playPause(), qPrintable(controller.errorMessage()));
+
+        bool looped = false;
+        const qint64 start = controller.selectionStart();
+        QObject::connect(&controller, &AudioEditorController::playbackChanged,
+                         &controller, [&] {
+            looped = looped || (controller.playing()
+                && controller.playheadFrame() <= start + 1'000);
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(looped, 3'000);
         QVERIFY(controller.playing());
     }
 
@@ -605,6 +910,61 @@ private slots:
         QVERIFY(controller.undo());
         QCOMPARE(controller.timelineEventViews().front().toMap()
                      .value(QStringLiteral("fadeOut")).toLongLong(), qint64{0});
+    }
+
+    void fadeInControllerEditIsUndoableAndRejectsInvalidBounds()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(48'000, 2, 1'000));
+        const QString id = controller.timelineEventViews().front().toMap()
+            .value(QStringLiteral("id")).toString();
+        const auto historyBefore = controller.historyStateIdForTesting();
+
+        QVERIFY(!controller.setEventFadeIn(id, -1));
+        QVERIFY(!controller.setEventFadeIn(id, 1'001));
+        QCOMPARE(controller.historyStateIdForTesting(), historyBefore);
+        QVERIFY(controller.setEventFadeIn(id, 250));
+        QCOMPARE(controller.timelineEventViews().front().toMap()
+                     .value(QStringLiteral("fadeIn")).toLongLong(), qint64{250});
+        QCOMPARE(controller.historyStateIdForTesting(), historyBefore + 1);
+
+        QVERIFY(controller.undo());
+        QCOMPARE(controller.timelineEventViews().front().toMap()
+                     .value(QStringLiteral("fadeIn")).toLongLong(), qint64{0});
+    }
+
+    void fadeCurveNamesRoundTripThroughOneUndoableControllerEdit()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(48'000, 2, 1'000));
+        const QVariantMap initial = controller.timelineEventViews().front().toMap();
+        const QString id = initial.value(QStringLiteral("id")).toString();
+        QCOMPARE(initial.value(QStringLiteral("fadeInCurve")).toString(),
+                 QStringLiteral("smooth"));
+        QCOMPARE(initial.value(QStringLiteral("fadeOutCurve")).toString(),
+                 QStringLiteral("smooth"));
+        const auto historyBefore = controller.historyStateIdForTesting();
+        const quint64 waveformBefore = controller.viewportWaveformGeneration();
+        QSignalSpy documentChanges(
+            &controller, &AudioEditorController::documentChanged);
+
+        QVERIFY(!controller.setEventFadeCurve(
+            id, true, QStringLiteral("bezier")));
+        QCOMPARE(controller.historyStateIdForTesting(), historyBefore);
+        QCOMPARE(documentChanges.count(), 0);
+        QVERIFY(controller.setEventFadeCurve(
+            id, true, QStringLiteral("linear")));
+
+        QCOMPARE(controller.historyStateIdForTesting(), historyBefore + 1);
+        QCOMPARE(documentChanges.count(), 1);
+        QVERIFY(controller.viewportWaveformGeneration() > waveformBefore);
+        QCOMPARE(controller.timelineEventViews().front().toMap()
+                     .value(QStringLiteral("fadeInCurve")).toString(),
+                 QStringLiteral("linear"));
+        QVERIFY(controller.undo());
+        QCOMPARE(controller.timelineEventViews().front().toMap()
+                     .value(QStringLiteral("fadeInCurve")).toString(),
+                 QStringLiteral("smooth"));
     }
 
     void gainAndEnvelopePointGesturesPreviewCommitOnceAndCancelCleanly()
@@ -659,6 +1019,66 @@ private slots:
         QVERIFY(controller.removeEnvelopePoint(id, 500));
         QVERIFY(controller.timelineEventViews().front().toMap()
                     .value(QStringLiteral("envelope")).toList().isEmpty());
+    }
+
+    void collidingEnvelopeCommitCancelsGestureAndReportsReason()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(48'000, 2, 1'000));
+        const QString id = controller.timelineEventViews().front().toMap()
+            .value(QStringLiteral("id")).toString();
+        QVERIFY(controller.addEnvelopePoint(id, 300, 0.5));
+        QVERIFY(controller.addEnvelopePoint(id, 500, 1.5));
+        const auto history = controller.historyStateIdForTesting();
+
+        QVERIFY(controller.beginEnvelopePointGesture(id, 300));
+        QVERIFY(!controller.commitEnvelopePointGesture(500, 0.75));
+
+        QCOMPARE(controller.historyStateIdForTesting(), history);
+        QVERIFY(!controller.errorMessage().isEmpty());
+        QVERIFY(controller.beginEnvelopePointGesture(id, 300));
+        QVERIFY(controller.cancelEnvelopePointGesture());
+    }
+
+    void atomicEnvelopeGestureCommitPublishesOneDocumentChangeAndOneUndoStep()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(48'000, 2, 1'000));
+        const QString id = controller.timelineEventViews().front().toMap()
+            .value(QStringLiteral("id")).toString();
+        QVERIFY(controller.addEnvelopePoint(id, 300, 0.4));
+        const auto historyBefore = controller.historyStateIdForTesting();
+        QVERIFY(controller.beginEnvelopePointGesture(id, 300));
+        QSignalSpy documentChanges(
+            &controller, &AudioEditorController::documentChanged);
+
+        QVERIFY(controller.commitEnvelopePointGesture(500, 0.9));
+
+        QCOMPARE(documentChanges.count(), 1);
+        QCOMPARE(controller.historyStateIdForTesting(), historyBefore + 1);
+        const QVariantList envelope = controller.timelineEventViews().front().toMap()
+            .value(QStringLiteral("envelope")).toList();
+        QCOMPARE(envelope.front().toMap().value(QStringLiteral("offset")).toLongLong(),
+                 qint64{500});
+        QVERIFY(std::abs(envelope.front().toMap()
+            .value(QStringLiteral("gain")).toDouble() - 0.9) < 0.0001);
+    }
+
+    void importedSourceDefaultsExportToWavAtSourceFormat()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("source-88200.wav"));
+        QVERIFY(writeMonoFloatWav(source, std::vector<float>(8'820, 0.25F),
+                                 88'200));
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
+
+        const auto settings = controller.projectExportSettings();
+        QCOMPARE(settings.codecName, QStringLiteral("WAV"));
+        QCOMPARE(settings.bitDepth, 24);
+        QCOMPARE(settings.sampleRate, 88'200);
+        QCOMPARE(settings.channels, 1);
     }
 
     void gainGestureWaveformPreviewsLiveAndCoalescesPendingJobs()
@@ -747,7 +1167,7 @@ private slots:
 
     void successfulDocumentReplacementClearsEventGestureAfterPreparation()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -797,7 +1217,7 @@ private slots:
 
     void failedDocumentOpenPreservesEventGesture()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -868,12 +1288,38 @@ private slots:
         QCOMPARE(controller.historyStateIdForTesting(), history);
         QVERIFY(controller.trimEvent(QStringLiteral("1"), 0, 500,
                                      maximum - 500));
-        QCOMPARE(documentChanges.count(), 1);
+        // Trim geometry is previewed locally by QML so its active pointer
+        // grab is not destroyed by a delegate rebuild mid-gesture.
+        QCOMPARE(documentChanges.count(), 0);
         QCOMPARE(controller.timelineEventViews().first().toMap()
                      .value(QStringLiteral("timelineEnd")).toLongLong(), maximum);
         QCOMPARE(controller.timelineRevisionForTesting(), revision);
         QCOMPARE(controller.historyStateIdForTesting(), history);
         QVERIFY(controller.cancelEventGesture());
+    }
+
+    void projectReloadRestoresSelectionLoopByDefault()
+    {
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("loop-source.wav"));
+        const QString project = temporary.filePath(QStringLiteral("loop.agproj"));
+        QVERIFY(QFile::copy(fixture, source));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
+        const qint64 end = std::min<qint64>(controller.totalFrames(), 2'000);
+        QVERIFY(controller.setSelection(100, end));
+        QVERIFY(controller.loopEnabled());
+        QVERIFY(controller.saveProjectAs(QUrl::fromLocalFile(project)));
+
+        AudioEditorController restored(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openProjectAndWait(restored, QUrl::fromLocalFile(project)));
+        QVERIFY(restored.loopEnabled());
+        QCOMPARE(restored.selectionStart(), qint64{100});
+        QCOMPARE(restored.selectionEnd(), end);
     }
 
     void selectionAndViewportUseOneExactFramePixelMapping()
@@ -986,7 +1432,7 @@ private slots:
     void tailRemovalClampsViewportAndProjectSave()
     {
         QFETCH(QString, actionId);
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -1025,7 +1471,7 @@ private slots:
 
     void undoThatShrinksTimelineClampsPlayheadAndViewportBeforeSave()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -1054,7 +1500,7 @@ private slots:
 
     void clearingTimelinePublishesZeroViewport()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -1107,7 +1553,7 @@ private slots:
 
     void undoToSavedTimelineStaysDirtyWhenPersistedViewWasClamped()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -1138,7 +1584,7 @@ private slots:
 
     void saveAndOpenProjectRoundTripsControllerStateWithoutRendering()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -1151,6 +1597,15 @@ private slots:
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
         QVERIFY2(openFileAndWait(controller, QUrl::fromLocalFile(source)),
                  qPrintable(controller.errorMessage()));
+        controller.cancelAndWaitForBpmTaskForTesting();
+        controller.setOriginalBpm(120.0);
+        QVERIFY(controller.setTargetBpm(150.0));
+        controller.setKeepPitch(false);
+        controller.setFormantPreservation(true);
+        QVERIFY(controller.setPitch(2, 50));
+        controller.setTrackSolo(true);
+        controller.setTrackGainDb(-3.5);
+        QVERIFY(controller.modified());
         controller.viewport()->setViewportWidth(512.0);
         const qint64 visibleEnd = qMin<qint64>(controller.totalFrames(), 10'000);
         QVERIFY(controller.viewport()->setVisibleRange(100, visibleEnd));
@@ -1175,6 +1630,15 @@ private slots:
         QCOMPARE(loaded.viewport()->visibleStartFrame(), qint64{100});
         QCOMPARE(loaded.viewport()->visibleEndFrame(), visibleEnd);
         QCOMPARE(loaded.totalFrames(), controller.totalFrames());
+        QCOMPARE(loaded.originalBpm(), 120.0);
+        QCOMPARE(loaded.targetBpm(), 150.0);
+        QCOMPARE(loaded.speedPercent(), 125.0);
+        QVERIFY(!loaded.keepPitch());
+        QVERIFY(loaded.formantPreservation());
+        QCOMPARE(loaded.pitchCents(), 250);
+        QVERIFY(loaded.trackSolo());
+        QVERIFY(!loaded.trackMuted());
+        QCOMPARE(loaded.trackGainDb(), -3.5);
         QVERIFY(loaded.projectIssues().isEmpty());
         QVERIFY(!loaded.modified());
         QVERIFY(!loaded.actionEnabled(QStringLiteral("editor.undo")));
@@ -1182,7 +1646,7 @@ private slots:
 
     void saveActionRequestsProjectPathAndThenUsesIt()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -1210,7 +1674,7 @@ private slots:
         QVERIFY(projectFile.open(QIODevice::ReadOnly));
         const QJsonObject root = QJsonDocument::fromJson(projectFile.readAll()).object();
         projectFile.close();
-        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 1);
+        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 2);
         QVERIFY(controller.trimEvent(1, 10, 900, 0));
         QVERIFY2(controller.triggerAction(QStringLiteral("editor.save")),
                  qPrintable(controller.errorMessage()));
@@ -1219,7 +1683,7 @@ private slots:
 
     void openProjectReportsOfflineSourceAndRelinksIt()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -1230,6 +1694,7 @@ private slots:
         AudioEditorController original(AG_AUDIO_BACKEND_NULL);
         QVERIFY(openFileAndWait(original, QUrl::fromLocalFile(source)));
         QVERIFY(original.saveProjectAs(QUrl::fromLocalFile(project)));
+        original.cancelAndWaitForBpmTaskForTesting();
         QVERIFY(QFile::remove(source));
 
         AudioEditorController loaded(AG_AUDIO_BACKEND_NULL);
@@ -1263,7 +1728,7 @@ private slots:
     {
         QFETCH(bool, removeSource);
         QFETCH(QString, issueKind);
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -1279,6 +1744,7 @@ private slots:
         const int expectedSampleRate = original.sampleRate();
         const int expectedChannels = original.channels();
         QVERIFY(original.saveProjectAs(QUrl::fromLocalFile(project)));
+        original.cancelAndWaitForBpmTaskForTesting();
         if (removeSource) {
             QVERIFY(QFile::remove(source));
         } else {
@@ -1349,7 +1815,7 @@ private slots:
 
     void explicitInvalidProjectSaveAsNeverFallsBackToCurrentProject()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -1374,7 +1840,7 @@ private slots:
 
     void legacyAudioSaveAsStillWritesAudioNotProjectJson()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -1394,7 +1860,7 @@ private slots:
     void configuredDirectoryExportCreatesANonOverwritingAudioFile()
     {
         using agplayer::editor::ProjectExportSettings;
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -1426,7 +1892,7 @@ private slots:
     {
         using agplayer::editor::AudioFileAnalyzer;
         using agplayer::editor::ProjectExportSettings;
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -1482,7 +1948,7 @@ private slots:
     {
         using agplayer::editor::AudioFileAnalyzer;
         using agplayer::editor::ProjectExportSettings;
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -1540,7 +2006,7 @@ private slots:
         using agplayer::editor::AudioFileAnalyzer;
         using agplayer::editor::ProjectExportSettings;
         QFETCH(int, bitDepth);
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -1565,7 +2031,7 @@ private slots:
 
     void formalExportAppliesSpeedPitchKeepPitchAndFormantProcessing()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -1632,7 +2098,7 @@ private slots:
 
     void modifiedProjectOpenUsesDiscardConfirmationBeforeReplacement()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -1688,7 +2154,7 @@ private slots:
 
     void persistedEditorStateTracksDirtyAgainstTheSavepoint()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -1736,7 +2202,7 @@ private slots:
 
     void playbackProgressAndStopUsePersistedPlayheadDirtyTracking()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -1762,7 +2228,7 @@ private slots:
 
     void playbackTransportTransitionsImmediatelyWithoutRenderingPreview()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
 
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
@@ -1779,7 +2245,7 @@ private slots:
 
     void selectionPlayheadJumpTracksDirtyBeforeAsyncPreviewFailure()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -1792,6 +2258,7 @@ private slots:
         QVERIFY(controller.setSelection(100, 200));
         QVERIFY(controller.saveProjectAs(QUrl::fromLocalFile(project)));
         QVERIFY(!controller.modified());
+        controller.cancelAndWaitForBpmTaskForTesting();
         QVERIFY(QFile::remove(source));
 
         QSignalSpy documentChanges(&controller, &AudioEditorController::documentChanged);
@@ -1805,7 +2272,7 @@ private slots:
 
     void failedStopAndSeekKeepPublishedTransportState()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -1815,6 +2282,7 @@ private slots:
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
         QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
         QVERIFY(controller.seekFrame(123));
+        controller.cancelAndWaitForBpmTaskForTesting();
         QVERIFY(QFile::remove(source));
         QVERIFY(controller.playPause());
         QTRY_COMPARE_WITH_TIMEOUT(controller.state(), EditorSessionState::Error,
@@ -1836,7 +2304,7 @@ private slots:
 
     void unavailableProjectSourceRelinkClearsIssue()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -1896,7 +2364,7 @@ private slots:
 
     void offlineGateTracksOnlySourcesReferencedByTheCurrentTimeline()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -1964,7 +2432,7 @@ private slots:
 
     void obsoleteProjectSourcesAreDiscardedAfterTheirUndoHistoryExpires()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -2018,7 +2486,7 @@ private slots:
 
     void clipboardKeepsOfflineSourceIdentityAfterCutHistoryExpires()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -2089,7 +2557,7 @@ private slots:
 
     void redoBackToSavedHistoryPointClearsDirtyState()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -2111,7 +2579,7 @@ private slots:
     void nonDefaultExportSettingsRoundTripAndDriveDefaultExportArguments()
     {
         using agplayer::editor::ProjectExportSettings;
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -2167,7 +2635,7 @@ private slots:
 
     void opensRealAudioAndPublishesSummary()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
         QVERIFY2(openFileAndWait(controller, QUrl::fromLocalFile(fixture)),
@@ -2177,9 +2645,30 @@ private slots:
         QCOMPARE(controller.fileName(), QFileInfo(fixture).fileName());
     }
 
+    void opensUnicodeAudioPathThroughProductionEntryPoint()
+    {
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString mediaDirectory = temporary.filePath(
+            QStringLiteral("媒体/共享源"));
+        QVERIFY(QDir().mkpath(mediaDirectory));
+        const QString source = QDir(mediaDirectory).filePath(
+            QStringLiteral("鼓点 音频.wav"));
+        QVERIFY2(QFile::copy(fixture, source), qPrintable(source));
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY2(openFileAndWait(controller, QUrl::fromLocalFile(source)),
+                 qPrintable(controller.errorMessage()));
+        QVERIFY(controller.hasDocument());
+        QVERIFY(controller.totalFrames() > 0);
+        QCOMPARE(controller.fileName(), QFileInfo(source).fileName());
+    }
+
     void timelineMutationRetainsLastGoodWaveformUntilNewestGenerationPublishes()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
         QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(fixture)));
@@ -2216,6 +2705,7 @@ private slots:
         // Remove all already-built source views before deleting the file so
         // every following edit exercises the real unavailable decoder path.
         controller.clearViewportSourcePeaksForTesting();
+        controller.cancelAndWaitForBpmTaskForTesting();
         QVERIFY(QFile::remove(source));
         std::atomic_int starts{0};
         std::atomic_int finishes{0};
@@ -2228,8 +2718,8 @@ private slots:
                 }
             });
         const auto verifyLastGood = [&] {
-            QVERIFY2(starts.load() > 0,
-                     "the unavailable viewport job was not scheduled");
+            QTRY_VERIFY2_WITH_TIMEOUT(starts.load() > 0,
+                "the unavailable viewport job was not scheduled", 5'000);
             QTRY_COMPARE_WITH_TIMEOUT(finishes.load(), starts.load(), 5'000);
             QCOMPARE(controller.viewportChannelPeaks(), lastGood);
         };
@@ -2294,13 +2784,16 @@ private slots:
         const QString id = controller.timelineEventViews().front().toMap()
             .value(QStringLiteral("id")).toString();
         QVERIFY(controller.setEventGain(id, 0.5));
-        QVERIFY(controller.setEventFadeOut(id, 4));
+        QVERIFY(controller.setEventFadeOut(id, 257));
+        QVERIFY(controller.setEventFadeCurve(
+            id, false, QStringLiteral("exponential")));
         QVERIFY(controller.addEnvelopePoint(id, 0, 0.5));
         QVERIFY(controller.addEnvelopePoint(id, frames - 1, 1.5));
 
         // Force the wide view to use the already-built peak pyramid.  A
         // renderer that silently falls back to decoding the whole automated
         // slice will blank here instead of publishing cached peaks.
+        controller.cancelAndWaitForBpmTaskForTesting();
         QVERIFY(QFile::remove(source));
         controller.viewport()->setViewportWidth(32.0);
         QVERIFY(controller.viewport()->setVisibleRange(0, frames));
@@ -2315,8 +2808,8 @@ private slots:
         QVERIFY(peakValue(cached, 0, false) < -0.12);
         QVERIFY(peakValue(cached, 0, true) < 0.14);
         QVERIFY(peakValue(cached, 32, true) > 0.20);
-        QVERIFY(peakValue(cached, 63, false) < -0.30);
-        QVERIFY(peakValue(cached, 63, true) > 0.30);
+        QVERIFY(std::abs(peakValue(cached, 63, false)) < 0.01);
+        QVERIFY(std::abs(peakValue(cached, 63, true)) < 0.01);
 
         QVERIFY(writeMonoFloatWav(source,
             std::vector<float>(static_cast<std::size_t>(frames), 0.5F)));
@@ -2403,6 +2896,7 @@ private slots:
         QVERIFY(controller.addEnvelopePoint(id, narrow, 2.0));
         QVERIFY(controller.addEnvelopePoint(id, narrow + 1, 1.0));
 
+        controller.cancelAndWaitForBpmTaskForTesting();
         QVERIFY(QFile::remove(source));
         QElapsedTimer elapsed;
         elapsed.start();
@@ -2656,6 +3150,44 @@ private slots:
             QTRY_COMPARE_WITH_TIMEOUT(finishes.load(), 1, 10'000);
             QVERIFY(!controller.hasDocument());
         }
+    }
+
+    void createUntitledDocumentCancelsSourceAnalysis()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString project = saveConstantProject(
+            temporary.path(), QStringLiteral("cancel-untitled"),
+            {0.3F, 0.7F});
+        QVERIFY(!project.isEmpty());
+
+        QSemaphore started;
+        QSemaphore release;
+        std::atomic_int finishes{0};
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        const auto unblock = qScopeGuard([&] { release.release(); });
+        controller.setSourcePeakCacheTaskObserverForTesting(
+            [&](const bool starting) {
+                if (starting) {
+                    started.release();
+                    release.acquire();
+                } else {
+                    ++finishes;
+                }
+            });
+        QVERIFY(openProjectAndWait(controller, QUrl::fromLocalFile(project)));
+        QVERIFY(started.tryAcquire(1, 5'000));
+        const quint64 oldGeneration =
+            controller.sourcePeakCacheGenerationForTesting();
+
+        QVERIFY(controller.createUntitledDocument(48'000, 2, 4'800));
+        QVERIFY(!controller.sourcePeakCacheActiveForTesting());
+        QVERIFY(controller.sourcePeakCacheGenerationForTesting()
+                > oldGeneration);
+        release.release();
+        QTRY_COMPARE_WITH_TIMEOUT(finishes.load(), 1, 10'000);
+        QVERIFY(controller.filePath().isEmpty());
+        QCOMPARE(controller.totalFrames(), qint64{4'800});
     }
 
     void openFileCompletionWaitsForSuccessAndRunsOnlyOnce()
@@ -3173,6 +3705,46 @@ private slots:
         }
     }
 
+    void mediumZoomDecodesEnoughDistinctBucketsToAvoidSparseStretching()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("medium-zoom.wav"));
+        constexpr qint64 frames = 4'800'000;
+        std::vector<float> samples(static_cast<std::size_t>(frames));
+        for (qint64 frame = 0; frame < frames; ++frame) {
+            samples[static_cast<std::size_t>(frame)] = static_cast<float>(
+                (frame / 400) % 1'000) / 1'000.0F;
+        }
+        QVERIFY(writeMonoFloatWav(source, samples));
+        samples.clear();
+        samples.shrink_to_fit();
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
+        controller.cancelAndWaitForBpmTaskForTesting();
+        controller.viewport()->setViewportWidth(600.0);
+        QVERIFY(controller.viewport()->setVisibleRange(0, 480'000));
+        QTRY_VERIFY_WITH_TIMEOUT(
+            controller.viewportChannelPeaks().size() == 1
+                && controller.viewportChannelPeaks().front().toList().size()
+                    == 2'400,
+            15'000);
+
+        const QVariantList values = controller.viewportChannelPeaks()
+            .front().toList();
+        int distinctAdjacentBuckets = 0;
+        for (qsizetype bucket = 1; bucket < values.size() / 2; ++bucket) {
+            if (std::abs(peakValue(values, bucket, true)
+                         - peakValue(values, bucket - 1, true)) > 0.0001) {
+                ++distinctAdjacentBuckets;
+            }
+        }
+        QVERIFY2(distinctAdjacentBuckets > 600,
+                 qPrintable(QStringLiteral("only %1 distinct bucket edges")
+                                .arg(distinctAdjacentBuckets)));
+    }
+
     void deepZoomStartsAtExactNonMillisecondSourceFrame()
     {
         for (const std::uint32_t sampleRate : {44'100U, 48'000U}) {
@@ -3217,7 +3789,7 @@ private slots:
 
     void metadataEditKeepsFixturePeaksAndDefersViewportDecode()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         const QDir fixtureDirectory = QFileInfo(fixture).dir();
         const QStringList filesBefore = fixtureDirectory.entryList(
@@ -3250,7 +3822,7 @@ private slots:
 
     void visibleTimelineWaveformKeepsGapsBlankAndLatestRequestWins()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
         QVERIFY2(openFileAndWait(controller, QUrl::fromLocalFile(fixture)),
@@ -3301,7 +3873,7 @@ private slots:
 
     void viewportDecodeIsSingleFlightAndPublishesOnlyLatestPendingRequest()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QSemaphore firstStarted;
         QSemaphore releaseFirst;
@@ -3356,7 +3928,7 @@ private slots:
 
     void invalidViewportRequestCancelsActiveAndDropsPendingDecode()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QSemaphore firstStarted;
         QSemaphore releaseFirst;
@@ -3392,9 +3964,52 @@ private slots:
         QVERIFY(controller.viewportChannelPeaks().isEmpty());
     }
 
+    void destructionWaitsForActiveViewportWaveformTask()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("source.wav"));
+        QVERIFY(writeMonoFloatWav(
+            source, std::vector<float>(48'000, 0.25F)));
+
+        QSemaphore started;
+        QSemaphore release;
+        std::atomic_int finishes{0};
+        auto* controller = new AudioEditorController(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(*controller, QUrl::fromLocalFile(source)));
+        controller->cancelAndWaitForBpmTaskForTesting();
+        controller->setViewportWaveformTaskObserverForTesting(
+            [&](const bool starting) {
+                if (starting) {
+                    started.release();
+                    release.acquire();
+                } else {
+                    ++finishes;
+                }
+            });
+        controller->viewport()->setViewportWidth(120.0);
+        QVERIFY(started.tryAcquire(1, 5'000));
+
+        std::thread delayedRelease([&] {
+            std::this_thread::sleep_for(std::chrono::milliseconds(150));
+            release.release();
+        });
+        QElapsedTimer elapsed;
+        elapsed.start();
+        delete controller;
+        const bool finishedBeforeDestructionReturned = finishes.load() == 1;
+        const qint64 destructionMilliseconds = elapsed.elapsed();
+        delayedRelease.join();
+        QTRY_COMPARE_WITH_TIMEOUT(finishes.load(), 1, 5'000);
+
+        QVERIFY2(finishedBeforeDestructionReturned,
+                 "controller destruction returned while viewport work ran");
+        QVERIFY(destructionMilliseconds >= 100);
+    }
+
     void noiseReductionCommitsOneUndoablePersistentReplacement()
     {
-        const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_EDITOR_FIXTURE"));
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());

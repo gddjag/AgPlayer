@@ -23,6 +23,18 @@ struct ProjectExportSettings final {
     QString outputDirectory;
 };
 
+struct ProjectEditorSettings final {
+    double originalBpm{};
+    double targetBpm{};
+    double speedPercent{100.0};
+    bool keepPitch{true};
+    bool formantPreservation{};
+    int pitchCents{};
+    bool trackMuted{};
+    bool trackSolo{};
+    double trackGainDb{};
+};
+
 [[nodiscard]] bool isValidProjectExportSettings(
     const ProjectExportSettings& settings) noexcept;
 
@@ -48,6 +60,7 @@ struct ProjectSaveRequest final {
     SampleFrame visibleStartFrame{};
     SampleFrame visibleEndFrame{};
     ProjectExportSettings exportSettings;
+    ProjectEditorSettings editorSettings;
     const std::vector<ProjectSourceRecord>* sourceRecords{};
 };
 
@@ -66,6 +79,7 @@ struct ProjectLoadResult final {
     SampleFrame visibleStartFrame{};
     SampleFrame visibleEndFrame{};
     ProjectExportSettings exportSettings;
+    ProjectEditorSettings editorSettings;
     QString message;
     [[nodiscard]] bool ok() const noexcept { return document != nullptr; }
 };
@@ -78,7 +92,7 @@ struct ProjectRelinkResult final {
 
 class ProjectDocument final {
 public:
-    [[nodiscard]] static constexpr int schemaVersion() noexcept { return 1; }
+    [[nodiscard]] static constexpr int schemaVersion() noexcept { return 2; }
     [[nodiscard]] static ProjectSaveResult save(
         const QString& path, const ProjectSaveRequest& request);
     [[nodiscard]] static ProjectLoadResult load(

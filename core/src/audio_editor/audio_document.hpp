@@ -60,6 +60,7 @@ public:
     bool fadeOut();
     bool setEventFadeIn(EventId id, SampleFrame frames);
     bool setEventFadeOut(EventId id, SampleFrame frames);
+    bool setEventFadeCurve(EventId id, bool fadeIn, FadeCurve curve);
     bool setEventGain(EventId id, float gain);
     bool addEnvelopePoint(EventId id, SampleFrame offset, float gain);
     bool moveEnvelopePoint(EventId id, SampleFrame originalOffset,

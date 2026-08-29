@@ -265,6 +265,27 @@ private slots:
             QCOMPARE(value.timelineSnapshot().events.size(), before.events.size());
         }
     }
+
+    void exhaustedEventIdsRejectSplitAndPasteWithoutMutation()
+    {
+        const auto sharedSource = std::make_shared<const AudioSource>(
+            AudioSource{"fixture.wav", 48'000, 2, 1'000});
+        constexpr EventId lastUsable = std::numeric_limits<EventId>::max() - 1;
+        AudioEvent event{lastUsable, sharedSource, 0, 1'000, 0};
+        auto value = AudioDocument::fromEvents({event});
+        const TimelineSnapshot before = value.timelineSnapshot();
+
+        QVERIFY(!value.splitEventAt(lastUsable, 500));
+        QCOMPARE(value.timelineSnapshot().revision, before.revision);
+        QCOMPARE(value.timelineSnapshot().events.size(), before.events.size());
+
+        QVERIFY(value.setSelection({0, 1'000}));
+        QVERIFY(value.copySelection());
+        QVERIFY(!value.pasteAt(2'000));
+        QCOMPARE(value.timelineSnapshot().revision, before.revision);
+        QCOMPARE(value.timelineSnapshot().events.size(), before.events.size());
+        QCOMPARE(value.timelineSnapshot().events.front().id, lastUsable);
+    }
 };
 
 QTEST_APPLESS_MAIN(EventEditTest)

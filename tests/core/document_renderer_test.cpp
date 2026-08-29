@@ -280,12 +280,18 @@ private slots:
         QVERIFY2(analysis.success, analysis.message.c_str());
         auto event = AudioDocument::fromSource(analysis.source)
             .timelineSnapshot().events.front();
+        event.fadeIn = 257;
+        event.fadeInCurve = FadeCurve::Exponential;
+        event.fadeOut = 513;
+        event.fadeOutCurve = FadeCurve::Smooth;
         for (SampleFrame frame = 0; frame < frames; frame += 257) {
             event.envelope.push_back({frame,
                 (frame / 257) % 2 == 0 ? 0.2F : 1.8F});
         }
         const TimelineSnapshot snapshot{{event}, frames, 10};
         AudioEvent neutralEvent = event;
+        neutralEvent.fadeIn = 0;
+        neutralEvent.fadeOut = 0;
         neutralEvent.envelope.clear();
         const TimelineSnapshot neutral{{neutralEvent}, frames, 11};
         const auto renderOffline = [&](const TimelineSnapshot& value,

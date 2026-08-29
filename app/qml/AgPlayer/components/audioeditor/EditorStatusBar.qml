@@ -4,6 +4,7 @@ import AgPlayer
 
 Rectangle {
     property bool showShortcutHint: false
+    property bool showSuccess: false
 
     color: Theme.panel
     border.color: Theme.border
@@ -15,9 +16,13 @@ Rectangle {
         Text {
             text: AudioEditorController.errorMessage.length > 0
                   ? AudioEditorController.errorMessage
+                  : showSuccess ? qsTr("导出完成：%1")
+                      .arg(AudioEditorController.lastExportPath)
+                  : AudioEditorController.busy ? qsTr("正在处理… %1%")
+                      .arg(Math.round(AudioEditorController.progress * 100))
                   : AudioEditorController.hasDocument ? qsTr("就绪") : qsTr("未打开音频")
             color: AudioEditorController.errorMessage.length > 0
-                   ? Theme.waveformRed : Theme.secondaryText
+                   ? Theme.waveformRed : showSuccess ? Theme.success : Theme.secondaryText
             font.pixelSize: 11
         }
         Item { Layout.fillWidth: true }

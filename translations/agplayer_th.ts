@@ -93,6 +93,10 @@
 </context>
 <context>
     <name>AudioEditorPage</name>
+    <message><source>检测中…</source><translation>กำลังตรวจจับ…</translation></message>
+    <message><source>原始 %1 BPM</source><translation>BPM เดิม %1</translation></message>
+    <message><source>— / 不适用</source><translation>— / ไม่เกี่ยวข้อง</translation></message>
+    <message><source>%1 声道</source><translation>%1 ช่องสัญญาณ</translation></message>
     <message><source>（单声道）</source><translation>(โมโน)</translation></message>
     <message><source>（立体声）</source><translation>(สเตอริโอ)</translation></message>
     <message><source>当前时间</source><translation>เวลาปัจจุบัน</translation></message>
@@ -673,6 +677,8 @@
 </context>
 <context>
     <name>EditorStatusBar</name>
+    <message><source>导出完成：%1</source><translation>ส่งออกเสร็จสิ้น: %1</translation></message>
+    <message><source>正在处理… %1%</source><translation>กำลังประมวลผล… %1%</translation></message>
     <message><source>空格：播放 / 暂停 · S：在播放头处分割 · Delete：删除片段</source><translation>Space: เล่น / หยุดชั่วคราว · S: แยกที่หัวเล่น · Delete: ลบคลิป</translation></message>
     <message>
         <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="18"/>
@@ -707,6 +713,9 @@
 </context>
 <context>
     <name>EditorWaveformCanvas</name>
+    <message><source>线性</source><translation>เชิงเส้น</translation></message>
+    <message><source>平滑</source><translation>ราบรื่น</translation></message>
+    <message><source>指数</source><translation>เอ็กซ์โพเนนเชียล</translation></message>
     <message><source>拖出片段</source><translation>ลากคลิปออก</translation></message>
     <message><source>淡出控制点</source><translation>จุดควบคุมเฟดออก</translation></message>
     <message>

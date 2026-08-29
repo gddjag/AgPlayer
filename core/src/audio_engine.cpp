@@ -267,6 +267,35 @@ public:
         }
     }
 
+    ag_result replace_stream(std::shared_ptr<IAudioStreamSource> stream) noexcept
+    {
+        if (!stream) return AG_INVALID_ARGUMENT;
+        const std::lock_guard<std::recursive_mutex> controlLock(control_mutex_);
+        const MediaMetadata& metadata = stream->metadata();
+        if (!loaded_ || !editor_stream_
+            || metadata.sample_rate != sample_rate_.load(std::memory_order_acquire)
+            || metadata.channels != channels_) {
+            return load_stream(std::move(stream));
+        }
+        try {
+            state_.store(EngineState::Stopped, std::memory_order_release);
+            if (stop_output() != AG_OK) return enter_error(AG_DEVICE_ERROR);
+            stop_decode_thread();
+            const ag_result decodeResult = decoder_.open(std::move(stream));
+            if (decodeResult != AG_OK) return enter_error(decodeResult);
+            duration_ms_.store(decoder_.metadata().duration_ms,
+                               std::memory_order_release);
+            ring_buffer_->clear();
+            reset_timeline(0);
+            terminal_error_.store(AG_OK, std::memory_order_release);
+            state_.store(EngineState::Stopped, std::memory_order_release);
+            const ag_result threadResult = start_decode_thread();
+            return threadResult == AG_OK ? AG_OK : enter_error(threadResult);
+        } catch (...) {
+            return enter_error(AG_INTERNAL_ERROR);
+        }
+    }
+
     ag_result set_queue(std::vector<std::string> paths,
                         const std::size_t start_index) noexcept
     {
@@ -1999,6 +2028,12 @@ ag_result AudioEngine::load_stream(
     std::shared_ptr<IAudioStreamSource> stream) noexcept
 {
     return impl_->load_stream(std::move(stream));
+}
+
+ag_result AudioEngine::replace_stream(
+    std::shared_ptr<IAudioStreamSource> stream) noexcept
+{
+    return impl_->replace_stream(std::move(stream));
 }
 
 ag_result AudioEngine::set_queue(std::vector<std::string> utf8_paths,

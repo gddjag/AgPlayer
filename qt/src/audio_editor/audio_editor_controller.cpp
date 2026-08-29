@@ -34,6 +34,7 @@ using agplayer::editor::AudioSource;
 using agplayer::editor::DocumentRenderPipeline;
 using agplayer::editor::NoiseReducer;
 using agplayer::editor::ProjectDocument;
+using agplayer::editor::ProjectEditorSettings;
 using agplayer::editor::ProjectExportSettings;
 using agplayer::editor::ProjectLoadResult;
 using agplayer::editor::ProjectSourceIssue;
@@ -41,6 +42,7 @@ using agplayer::editor::ProjectSourceIssueKind;
 using agplayer::editor::ProjectSourceRecord;
 using agplayer::editor::ProjectSaveRequest;
 using agplayer::editor::Selection;
+using agplayer::editor::TimePitchSession;
 using agplayer::editor::WriteRequest;
 
 namespace {
@@ -197,45 +199,6 @@ std::pair<float, float> eventGainExtrema(
     const AudioEvent& event, const qint64 localStart, const qint64 localEnd)
 {
     if (event.mute) return {0.0F, 0.0F};
-    const auto envelopeGain = [&event](const qint64 offset) {
-        if (event.envelope.empty()) return 1.0;
-        agplayer::editor::EnvelopePoint previous{0, 1.0F};
-        for (const auto& point : event.envelope) {
-            if (offset <= point.offset) {
-                if (point.offset == previous.offset) {
-                    return static_cast<double>(point.gain);
-                }
-                const double fraction = static_cast<double>(
-                    offset - previous.offset)
-                    / static_cast<double>(point.offset - previous.offset);
-                return static_cast<double>(previous.gain)
-                    + (static_cast<double>(point.gain) - previous.gain)
-                        * fraction;
-            }
-            previous = point;
-        }
-        return static_cast<double>(previous.gain);
-    };
-    const auto fadeGain = [&event](const qint64 offset) {
-        const qint64 frames = agplayer::editor::audibleFrames(event);
-        double gain = 1.0;
-        if (event.fadeIn > 0 && offset < event.fadeIn) {
-            gain *= event.fadeIn == 1 ? 0.0
-                : static_cast<double>(offset)
-                    / static_cast<double>(event.fadeIn - 1);
-        }
-        const qint64 fadeOutStart = frames - event.fadeOut;
-        if (event.fadeOut > 0 && offset >= fadeOutStart) {
-            gain *= event.fadeOut == 1 ? 0.0
-                : static_cast<double>(frames - 1 - offset)
-                    / static_cast<double>(event.fadeOut - 1);
-        }
-        return gain;
-    };
-    const auto amplitudeGain = [&](const qint64 offset) {
-        return static_cast<double>(event.gain)
-            * envelopeGain(offset) * fadeGain(offset);
-    };
     std::vector<qint64> boundaries{localStart, localEnd};
     const auto includeBoundary = [&](const qint64 value) {
         if (value >= localStart && value <= localEnd) {
@@ -257,30 +220,24 @@ std::pair<float, float> eventGainExtrema(
     float minimum = std::numeric_limits<float>::infinity();
     float maximum = -std::numeric_limits<float>::infinity();
     const auto include = [&](const qint64 offset) {
-        const float gain = static_cast<float>(amplitudeGain(offset));
+        const float gain = agplayer::editor::eventAmplitudeGainAt(
+            event, offset);
         minimum = std::min(minimum, gain);
         maximum = std::max(maximum, gain);
     };
     for (const qint64 boundary : boundaries) include(boundary);
+    constexpr qint64 kMaximumInteriorSamples = 128;
     for (std::size_t index = 1; index < boundaries.size(); ++index) {
         const qint64 begin = boundaries[index - 1];
         const qint64 end = boundaries[index];
         if (end - begin < 2) continue;
-        const double span = static_cast<double>(end - begin);
-        const double envelopeStart = envelopeGain(begin);
-        const double envelopeSlope = (envelopeGain(end) - envelopeStart) / span;
-        const double fadeStart = fadeGain(begin);
-        const double fadeSlope = (fadeGain(end) - fadeStart) / span;
-        const double quadratic = envelopeSlope * fadeSlope;
-        if (std::abs(quadratic) <= std::numeric_limits<double>::epsilon()) {
-            continue;
-        }
-        const double linear = envelopeStart * fadeSlope
-            + fadeStart * envelopeSlope;
-        const double vertex = -linear / (2.0 * quadratic);
-        for (const qint64 candidate : {
-                 begin + static_cast<qint64>(std::floor(vertex)),
-                 begin + static_cast<qint64>(std::ceil(vertex))}) {
+        const qint64 span = end - begin;
+        const qint64 samples = std::min(
+            span - 1, kMaximumInteriorSamples);
+        for (qint64 sample = 1; sample <= samples; ++sample) {
+            const qint64 candidate = begin
+                + static_cast<qint64>(static_cast<long double>(span)
+                    * sample / (samples + 1));
             if (candidate > begin && candidate < end) include(candidate);
         }
     }
@@ -504,7 +461,11 @@ AudioEditorController::ViewportWaveformResult composeVisibleTimelinePeaks(
     if (visibleFrames <= 0 || targetPoints <= 0 || channels <= 0) {
         return composition;
     }
-    const bool preciseSlice = visibleFrames <= targetPoints * 2;
+    // Decode a bounded visible PCM window through medium zoom levels.  The
+    // fixed-size overview pyramid remains appropriate for the full document,
+    // but stretching a few dozen overview buckets across the viewport makes
+    // edited waveforms visibly sparse.
+    const bool preciseSlice = visibleFrames <= targetPoints * 1'024;
 
     for (const AudioEvent& event : snapshot.events) {
         if (cancelToken->load(std::memory_order_acquire)) return {};
@@ -675,6 +636,46 @@ QString local_path(const QUrl& url)
     return url.isLocalFile() ? url.toLocalFile() : QString{};
 }
 
+double embedded_bpm(const QString& path)
+{
+    ag_metadata* metadata = nullptr;
+    const QByteArray utf8 = path.toUtf8();
+    if (path.isEmpty()
+        || ag_metadata_open(utf8.constData(), &metadata) != AG_OK
+        || metadata == nullptr) {
+        return 0.0;
+    }
+    const QString text = QString::fromUtf8(
+        ag_metadata_bpm_tag(metadata)).trimmed();
+    ag_metadata_destroy(metadata);
+    bool ok = false;
+    const double value = text.toDouble(&ok);
+    return ok && std::isfinite(value) && value >= 20.0 && value <= 400.0
+        ? value : 0.0;
+}
+
+QString fade_curve_name(const agplayer::editor::FadeCurve curve)
+{
+    using agplayer::editor::FadeCurve;
+    switch (curve) {
+    case FadeCurve::Linear: return QStringLiteral("linear");
+    case FadeCurve::Smooth: return QStringLiteral("smooth");
+    case FadeCurve::Exponential: return QStringLiteral("exponential");
+    }
+    return {};
+}
+
+std::optional<agplayer::editor::FadeCurve> fade_curve(
+    const QString& name)
+{
+    using agplayer::editor::FadeCurve;
+    const QString key = name.trimmed().toLower();
+    if (key == QStringLiteral("linear")) return FadeCurve::Linear;
+    if (key == QStringLiteral("smooth")) return FadeCurve::Smooth;
+    if (key == QStringLiteral("exponential")) return FadeCurve::Exponential;
+    return std::nullopt;
+}
+
 std::optional<quint64> nextAvailableSourceId(const std::vector<ProjectSourceRecord>& records)
 {
     std::unordered_set<quint64> ids;
@@ -717,12 +718,11 @@ ProjectExportSettings defaultProjectExportSettings(
     const int sourceSampleRate = 44'100, const int sourceChannels = 2)
 {
     ProjectExportSettings settings;
-    settings.codecName = QStringLiteral("MP3");
-    settings.sampleRate = sourceSampleRate == 48'000 || sourceSampleRate == 96'000
-        ? sourceSampleRate : 44'100;
+    settings.codecName = QStringLiteral("WAV");
+    settings.sampleRate = std::clamp(sourceSampleRate, 8'000, 384'000);
     settings.bitDepth = 24;
-    settings.channels = std::clamp(sourceChannels, 1, 2);
-    settings.bitRate = 320'000;
+    settings.channels = std::clamp(sourceChannels, 1, 8);
+    settings.bitRate = 0;
     settings.keepMetadata = true;
     settings.variableBitRate = false;
     settings.quality = 100;
@@ -828,6 +828,23 @@ AudioEditorController::AudioEditorController(
     refreshActions();
 }
 
+ProjectEditorSettings project_editor_settings(
+    const TimePitchSession& timePitch, const bool trackMuted,
+    const bool trackSolo, const double trackGainDb)
+{
+    ProjectEditorSettings settings;
+    settings.originalBpm = timePitch.originalBpm();
+    settings.targetBpm = timePitch.targetBpm();
+    settings.speedPercent = timePitch.speedPercent();
+    settings.keepPitch = timePitch.keepPitch();
+    settings.formantPreservation = timePitch.formantPreservation();
+    settings.pitchCents = timePitch.pitchCents();
+    settings.trackMuted = trackMuted;
+    settings.trackSolo = trackSolo;
+    settings.trackGainDb = trackGainDb;
+    return settings;
+}
+
 AudioEditorController::~AudioEditorController()
 {
     cancelOperation();
@@ -840,10 +857,14 @@ AudioEditorController::~AudioEditorController()
     if (viewport_waveform_watcher_) {
         viewport_waveform_watcher_->disconnect(this);
         viewport_waveform_watcher_->cancel();
+        viewport_waveform_watcher_->waitForFinished();
     }
     if (write_watcher_) write_watcher_->future().waitForFinished();
     if (time_pitch_watcher_) time_pitch_watcher_->future().waitForFinished();
     if (bpm_watcher_) bpm_watcher_->future().waitForFinished();
+    if (source_peak_cache_watcher_) {
+        source_peak_cache_watcher_->future().waitForFinished();
+    }
     if (noise_reduction_watcher_) {
         noise_reduction_watcher_->future().waitForFinished();
     }
@@ -905,6 +926,8 @@ QVariantList AudioEditorController::timelineEventViews() const
                 visible.sourceEnd)},
             {QStringLiteral("fadeIn"), QVariant::fromValue<qint64>(visible.fadeIn)},
             {QStringLiteral("fadeOut"), QVariant::fromValue<qint64>(visible.fadeOut)},
+            {QStringLiteral("fadeInCurve"), fade_curve_name(visible.fadeInCurve)},
+            {QStringLiteral("fadeOutCurve"), fade_curve_name(visible.fadeOutCurve)},
             {QStringLiteral("gain"), visible.gain},
             {QStringLiteral("envelope"), envelope}});
     }
@@ -1074,6 +1097,14 @@ void AudioEditorController::markProjectDirty() noexcept
     modified_ = true;
 }
 
+void AudioEditorController::markEditorSettingsDirty()
+{
+    if (!has_document_) return;
+    markProjectDirty();
+    refreshActions();
+    emit projectChanged();
+}
+
 bool AudioEditorController::updatePersistedPlayhead(const qint64 frame,
                                                      const qint64 positionMs) noexcept
 {
@@ -1115,6 +1146,8 @@ bool AudioEditorController::createUntitledDocument(
         return false;
     }
     cancelDocumentLoad();
+    cancelSourcePeakCacheJob();
+    cancelBpmDetection(false);
     stopPlayback();
     clearViewportWaveformState();
     event_gesture_ = {};
@@ -1124,6 +1157,11 @@ bool AudioEditorController::createUntitledDocument(
     project_sources_.clear();
     project_issues_.clear();
     known_project_issues_.clear();
+    time_pitch_ = {};
+    time_pitch_preview_active_ = false;
+    track_muted_ = false;
+    track_solo_ = false;
+    track_gain_db_ = 0.0;
     project_export_settings_ = defaultProjectExportSettings(
         static_cast<int>(sampleRate), static_cast<int>(channels));
     format_name_ = QStringLiteral("WAV");
@@ -1160,6 +1198,8 @@ bool AudioEditorController::createUntitledDocument(
     emit waveformChanged();
     emit documentChanged();
     emit projectChanged();
+    emit trackMixChanged();
+    emit timePitchChanged();
     return true;
 }
 
@@ -1182,6 +1222,16 @@ bool AudioEditorController::openFile(const QUrl& source)
     job.kind = DocumentLoadKind::OpenFile;
     job.path = path;
     return enqueueDocumentLoad(std::move(job));
+}
+
+bool AudioEditorController::openDroppedUrls(const QList<QUrl>& urls)
+{
+    if (urls.size() != 1) {
+        setError(urls.isEmpty() ? tr("未检测到可导入的音频文件")
+                                : tr("音频编辑器一次只能打开一个文件"));
+        return false;
+    }
+    return openFile(urls.front());
 }
 
 bool AudioEditorController::confirmDiscardAndOpen()
@@ -1231,6 +1281,8 @@ bool AudioEditorController::saveProject(const QUrl& target)
     request.visibleStartFrame = viewport_.visibleStartFrame();
     request.visibleEndFrame = viewport_.visibleEndFrame();
     request.exportSettings = project_export_settings_;
+    request.editorSettings = project_editor_settings(
+        time_pitch_, track_muted_, track_solo_, track_gain_db_);
     request.sourceRecords = &project_sources_;
     const auto result = ProjectDocument::save(path, request);
     if (!result.ok()) {
@@ -1545,6 +1597,9 @@ bool AudioEditorController::clearSelection()
 bool AudioEditorController::clearTimeline()
 {
     if (!has_document_ || busy() || !document_.clearTimeline()) return false;
+    cancelBpmDetection(false);
+    time_pitch_ = agplayer::editor::TimePitchSession{};
+    emit timePitchChanged();
     setLoopEnabled(false);
     finishTimelineMutation();
     return true;
@@ -1553,6 +1608,7 @@ bool AudioEditorController::clearTimeline()
 void AudioEditorController::cancelOperation()
 {
     operation_cancelled_.store(true, std::memory_order_release);
+    if (bpm_busy_) cancelBpmDetection(true);
     cancelDocumentLoad();
 }
 
@@ -1857,7 +1913,6 @@ bool AudioEditorController::trimEvent(const QString& id,
         event_gesture_.sourceEnd = sourceEnd;
         event_gesture_.timelineStart = timelineStart;
         event_gesture_.pending = true;
-        emit documentChanged();
         return true;
     }
     return trimEvent(static_cast<quint64>(*eventId), sourceStart, sourceEnd,
@@ -1989,7 +2044,6 @@ bool AudioEditorController::endEventGesture()
         || gesture.kind == EventGestureKind::EnvelopePoint;
     event_gesture_ = {};
     if (!gesture.pending) {
-        emit documentChanged();
         return true;
     }
 
@@ -2062,6 +2116,16 @@ bool AudioEditorController::setEventFadeOut(const QString& id,
         return true;
     }
     if (!document_.setEventFadeOut(*eventId, frames)) return false;
+    finishTimelineMutation();
+    return true;
+}
+
+bool AudioEditorController::setEventFadeIn(const QString& id,
+                                           const qint64 frames)
+{
+    if (!has_document_ || busy()) return false;
+    const auto eventId = parseEventId(id);
+    if (!eventId || !document_.setEventFadeIn(*eventId, frames)) return false;
     finishTimelineMutation();
     return true;
 }
@@ -2226,6 +2290,59 @@ bool AudioEditorController::updateEnvelopePointGesture(
     return true;
 }
 
+bool AudioEditorController::setEventFadeCurve(
+    const QString& id, const bool fadeIn, const QString& curveName)
+{
+    if (!has_document_ || busy()) return false;
+    const auto eventId = parseEventId(id);
+    const auto curve = fade_curve(curveName);
+    if (!eventId || !curve
+        || !document_.setEventFadeCurve(*eventId, fadeIn, *curve)) {
+        return false;
+    }
+    finishTimelineMutation();
+    return true;
+}
+
+bool AudioEditorController::commitEnvelopePointGesture(
+    const qint64 offset, const double gain)
+{
+    if (event_gesture_.kind != EventGestureKind::EnvelopePoint
+        || !std::isfinite(gain)) {
+        return false;
+    }
+    const auto snapshot = document_.timelineSnapshot();
+    const auto event = std::find_if(snapshot.events.cbegin(), snapshot.events.cend(),
+        [this](const AudioEvent& value) {
+            return value.id == event_gesture_.id;
+        });
+    if (event == snapshot.events.cend()) {
+        (void)cancelEventGesture();
+        setError(tr("音量控制点已不存在"));
+        return false;
+    }
+    const qint64 boundedOffset = std::clamp<qint64>(
+        offset, 0, agplayer::editor::audibleFrames(*event) - 1);
+    const bool collision = std::any_of(
+        event->envelope.cbegin(), event->envelope.cend(),
+        [this, boundedOffset](const agplayer::editor::EnvelopePoint& point) {
+            return point.offset != event_gesture_.originalEnvelopeOffset
+                && point.offset == boundedOffset;
+        });
+    if (collision) {
+        (void)cancelEventGesture();
+        setError(tr("音量控制点不能与现有控制点重合"));
+        return false;
+    }
+    event_gesture_.envelopeOffset = boundedOffset;
+    event_gesture_.envelopeGain = std::clamp(gain, 0.0, 2.0);
+    event_gesture_.pending = boundedOffset
+            != event_gesture_.originalEnvelopeOffset
+        || event_gesture_.envelopeGain
+            != event_gesture_.originalEnvelopeGain;
+    return endEventGesture();
+}
+
 bool AudioEditorController::endEnvelopePointGesture()
 {
     return event_gesture_.kind == EventGestureKind::EnvelopePoint
@@ -2278,72 +2395,160 @@ bool AudioEditorController::mergeEvents(const quint64 left, const quint64 right)
 bool AudioEditorController::detectBpm()
 {
     if (!requireOnlineProjectSources()) return false;
-    if (!has_document_ || busy() || bpm_watcher_) {
+    if (!has_document_) return false;
+    if (!bpmDetectionSupported()) {
+        bpm_busy_ = false;
+        bpm_result_ = 0.0;
+        bpm_error_ = tr("BPM 检测仅支持单声道或立体声");
+        emit bpmChanged();
         return false;
     }
-    const auto snapshot = document_.timelineSnapshot();
-    operation_cancelled_.store(false, std::memory_order_release);
+
+    const quint64 generation = ++bpm_generation_;
+    if (bpm_cancel_token_) {
+        bpm_cancel_token_->store(true, std::memory_order_release);
+    }
+    auto cancelToken = std::make_shared<std::atomic_bool>(false);
+    bpm_cancel_token_ = cancelToken;
+    pending_bpm_job_.reset();
     bpm_busy_ = true;
     bpm_result_ = 0.0;
     bpm_error_.clear();
     emit bpmChanged();
-    setState(EditorSessionState::Processing);
-    setError({});
+
+    BpmJob job{generation, std::move(cancelToken),
+               document_.timelineSnapshot()};
+    if (bpm_watcher_) {
+        pending_bpm_job_ = std::move(job);
+    } else {
+        startBpmJob(std::move(job));
+    }
+    return true;
+}
+
+void AudioEditorController::startBpmJob(BpmJob job)
+{
+    const quint64 generation = job.generation;
+    const auto cancelToken = job.cancelToken;
+    const auto observer = bpm_task_observer_;
     auto* watcher = new QFutureWatcher<BpmAnalyzeResult>(this);
     bpm_watcher_ = watcher;
     connect(watcher, &QFutureWatcher<BpmAnalyzeResult>::finished,
-            this, [this, watcher] {
-        bpm_watcher_ = nullptr;
+            this, [this, watcher, generation, cancelToken] {
+        if (bpm_watcher_ == watcher) bpm_watcher_ = nullptr;
         const BpmAnalyzeResult result = watcher->result();
         watcher->deleteLater();
-        bpm_busy_ = false;
-        setState(EditorSessionState::Ready);
-        if (result.status == AG_CANCELLED) {
-            bpm_error_ = tr("操作已取消");
-            setError(bpm_error_);
-            emit bpmChanged();
-            return;
+        const bool publish = generation == bpm_generation_
+            && !cancelToken->load(std::memory_order_acquire);
+        if (publish) {
+            bpm_busy_ = false;
+            if (bpm_cancel_token_ == cancelToken) {
+                bpm_cancel_token_.reset();
+            }
+            if (result.status == AG_CANCELLED) {
+                bpm_result_ = 0.0;
+                bpm_error_ = tr("操作已取消");
+                emit bpmChanged();
+            } else if (result.status != AG_OK || result.bpm <= 0.0) {
+                bpm_result_ = 0.0;
+                bpm_error_ = result.error.isEmpty() ? tr("BPM 检测失败")
+                                                    : result.error;
+                emit bpmChanged();
+            } else {
+                adoptBpm(result.bpm);
+            }
         }
-        if (result.status != AG_OK || result.bpm <= 0.0) {
-            bpm_error_ = result.error.isEmpty() ? tr("BPM 检测失败")
-                                                : result.error;
-            setError(bpm_error_);
-            emit bpmChanged();
-            return;
+        if (!bpm_watcher_ && pending_bpm_job_) {
+            BpmJob next = std::move(*pending_bpm_job_);
+            pending_bpm_job_.reset();
+            if (next.generation == bpm_generation_
+                && !next.cancelToken->load(std::memory_order_acquire)) {
+                startBpmJob(std::move(next));
+            }
         }
-        bpm_result_ = result.bpm;
-        bpm_error_.clear();
-        time_pitch_.setOriginalBpm(result.bpm);
-        setError({});
-        emit bpmChanged();
-        emit timePitchChanged();
     });
-    watcher->setFuture(QtConcurrent::run([this, snapshot] {
+    watcher->setFuture(QtConcurrent::run(
+        [snapshot = std::move(job.snapshot), cancelToken, observer] {
+        if (observer) observer(true);
         QThread* const thread = QThread::currentThread();
         const QThread::Priority previous = thread->priority();
         thread->setPriority(QThread::LowPriority);
-        BpmAnalyzeResult result = analyze_bpm(snapshot, &operation_cancelled_);
+        BpmAnalyzeResult result = analyze_bpm(
+            std::move(snapshot), cancelToken.get());
         thread->setPriority(previous == QThread::InheritPriority
                                 ? QThread::NormalPriority : previous);
+        if (observer) observer(false);
         return result;
     }));
-    return true;
+}
+
+void AudioEditorController::cancelBpmDetection(const bool publishCancelled)
+{
+    ++bpm_generation_;
+    pending_bpm_job_.reset();
+    if (bpm_cancel_token_) {
+        bpm_cancel_token_->store(true, std::memory_order_release);
+        bpm_cancel_token_.reset();
+    }
+    const bool changed = bpm_busy_ || bpm_result_ != 0.0 || !bpm_error_.isEmpty();
+    bpm_busy_ = false;
+    bpm_result_ = 0.0;
+    if (publishCancelled) bpm_error_ = tr("操作已取消");
+    else bpm_error_.clear();
+    if (changed) emit bpmChanged();
+}
+
+void AudioEditorController::cancelAndWaitForBpmTaskForTesting()
+{
+    if (bpm_busy_) cancelBpmDetection(false);
+    if (bpm_watcher_) bpm_watcher_->future().waitForFinished();
+}
+
+void AudioEditorController::adoptBpm(const double bpm)
+{
+    const double requestedSpeed = time_pitch_.speedPercent();
+    bpm_busy_ = false;
+    bpm_result_ = bpm;
+    bpm_error_.clear();
+    time_pitch_.setOriginalBpm(bpm);
+    if (requestedSpeed != 100.0) {
+        (void)time_pitch_.setSpeedPercent(requestedSpeed);
+    }
+    emit bpmChanged();
+    emit timePitchChanged();
 }
 
 void AudioEditorController::setOriginalBpm(const double value)
 {
     if (!bpmDetectionSupported()) return;
+    const bool wasPlaying = playing_;
+    const qint64 timelineFrame = currentPlaybackTimelineFrame();
+    const double previousOriginal = time_pitch_.originalBpm();
+    const double previousTarget = time_pitch_.targetBpm();
+    const double previousSpeed = time_pitch_.speedPercent();
     time_pitch_.setOriginalBpm(value);
+    if (previousOriginal == time_pitch_.originalBpm()
+        && previousTarget == time_pitch_.targetBpm()
+        && previousSpeed == time_pitch_.speedPercent()) {
+        return;
+    }
+    if (bpm_busy_) cancelBpmDetection(false);
+    markEditorSettingsDirty();
+    finishTimePitchChange(wasPlaying, timelineFrame);
     emit timePitchChanged();
 }
 
 bool AudioEditorController::setTargetBpm(const double value)
 {
     if (!timePitchSupported()) return false;
+    if (std::abs(time_pitch_.targetBpm() - value) < 0.000001) return true;
+    const bool wasPlaying = playing_;
+    const qint64 timelineFrame = currentPlaybackTimelineFrame();
     const bool changed = time_pitch_.setTargetBpm(value);
     if (changed) {
-        stopPlayback();
-        time_pitch_preview_active_ = false;
+        if (bpm_busy_) cancelBpmDetection(false);
+        markEditorSettingsDirty();
+        finishTimePitchChange(wasPlaying, timelineFrame);
         emit timePitchChanged();
     }
     return changed;
@@ -2352,41 +2557,74 @@ bool AudioEditorController::setTargetBpm(const double value)
 bool AudioEditorController::setSpeedPercent(const double value)
 {
     if (!timePitchSupported()) return false;
+    if (std::abs(time_pitch_.speedPercent() - value) < 0.000001) return true;
+    const bool wasPlaying = playing_;
+    const qint64 timelineFrame = currentPlaybackTimelineFrame();
     const bool changed = time_pitch_.setSpeedPercent(value);
     if (changed) {
-        stopPlayback();
-        time_pitch_preview_active_ = false;
+        markEditorSettingsDirty();
+        finishTimePitchChange(wasPlaying, timelineFrame);
         emit timePitchChanged();
     }
     return changed;
+}
+
+bool AudioEditorController::resetTimePitch()
+{
+    const double original = time_pitch_.originalBpm();
+    if (original <= 0.0) return false;
+    if (std::abs(time_pitch_.speedPercent() - 100.0) < 0.000001
+        && time_pitch_.keepPitch()
+        && !time_pitch_.formantPreservation()
+        && time_pitch_.pitchCents() == 0) {
+        return true;
+    }
+    if (bpm_busy_) cancelBpmDetection(false);
+    const bool wasPlaying = playing_;
+    const qint64 timelineFrame = currentPlaybackTimelineFrame();
+    agplayer::editor::TimePitchSession reset;
+    reset.setOriginalBpm(original);
+    time_pitch_ = reset;
+    markEditorSettingsDirty();
+    finishTimePitchChange(wasPlaying, timelineFrame);
+    emit timePitchChanged();
+    return true;
 }
 
 void AudioEditorController::setKeepPitch(const bool value)
 {
     if (!timePitchSupported()) return;
     if (time_pitch_.keepPitch() == value) return;
+    const bool wasPlaying = playing_;
+    const qint64 timelineFrame = currentPlaybackTimelineFrame();
     time_pitch_.setKeepPitch(value);
-    stopPlayback();
-    time_pitch_preview_active_ = false;
+    markEditorSettingsDirty();
+    finishTimePitchChange(wasPlaying, timelineFrame);
     emit timePitchChanged();
 }
 
 void AudioEditorController::setFormantPreservation(const bool value)
 {
+    if (!formantPreservationSupported()) return;
     if (time_pitch_.formantPreservation() == value) return;
+    const bool wasPlaying = playing_;
+    const qint64 timelineFrame = currentPlaybackTimelineFrame();
     time_pitch_.setFormantPreservation(value);
-    stopPlayback();
-    time_pitch_preview_active_ = false;
+    markEditorSettingsDirty();
+    finishTimePitchChange(wasPlaying, timelineFrame);
     emit timePitchChanged();
 }
 
 bool AudioEditorController::setPitch(const int semitones, const int cents)
 {
     if (!timePitchSupported()) return false;
+    if (time_pitch_.pitchCents() == semitones * 100 + cents) return true;
+    const bool wasPlaying = playing_;
+    const qint64 timelineFrame = currentPlaybackTimelineFrame();
     const bool changed = time_pitch_.setPitch(semitones, cents);
     if (changed) {
-        stopPlayback();
-        time_pitch_preview_active_ = false;
+        markEditorSettingsDirty();
+        finishTimePitchChange(wasPlaying, timelineFrame);
         emit timePitchChanged();
     }
     return changed;
@@ -2444,6 +2682,7 @@ bool AudioEditorController::clearDocument()
     allow_document_replace_ = false;
     pending_clear_document_ = false;
     cancelDocumentLoad();
+    cancelBpmDetection(false);
     cancelSourcePeakCacheJob();
     stopPlayback();
     event_gesture_ = {};
@@ -2453,6 +2692,11 @@ bool AudioEditorController::clearDocument()
     project_sources_.clear();
     project_issues_.clear();
     known_project_issues_.clear();
+    time_pitch_ = {};
+    time_pitch_preview_active_ = false;
+    track_muted_ = false;
+    track_solo_ = false;
+    track_gain_db_ = 0.0;
     project_export_settings_ = defaultProjectExportSettings();
     format_name_.clear();
     sample_rate_ = 0;
@@ -2473,6 +2717,8 @@ bool AudioEditorController::clearDocument()
     emit playbackChanged();
     emit documentChanged();
     emit projectChanged();
+    emit trackMixChanged();
+    emit timePitchChanged();
     return true;
 }
 
@@ -2536,8 +2782,11 @@ bool AudioEditorController::triggerAction(const QString& id)
 
 bool AudioEditorController::playPause()
 {
-    if (!has_document_ || !playback_adapter_ || !playback_adapter_->available()) {
-        setError(tr("播放核心不可用"));
+    if (!has_document_ || !playbackSupported()
+        || !playback_adapter_ || !playback_adapter_->available()) {
+        setError(has_document_ && channels_ > 2
+            ? tr("编辑预览仅支持单声道或立体声")
+            : tr("播放核心不可用"));
         return false;
     }
     if (playing_) {
@@ -2582,6 +2831,7 @@ bool AudioEditorController::stopPlayback()
 {
     if (!playback_adapter_ || !playback_adapter_->available()) return false;
     const bool wasActive = playing_ || position_ms_ != 0;
+    const bool playheadChanged = playhead_frame_ != 0 || position_ms_ != 0;
     if (playback_prepared_ && playback_adapter_->stop() != AG_OK) {
         setError(tr("无法停止编辑预览"));
         return false;
@@ -2593,7 +2843,7 @@ bool AudioEditorController::stopPlayback()
         setState(EditorSessionState::Ready);
     }
     if (wasActive) emit playbackChanged();
-    if (modifiedChanged) emit documentChanged();
+    if (modifiedChanged && playheadChanged) emit documentChanged();
     return true;
 }
 
@@ -2685,6 +2935,7 @@ void AudioEditorController::setTrackMuted(const bool value)
     if (track_muted_ == value && track_solo_ == solo) return;
     track_muted_ = value;
     track_solo_ = solo;
+    markEditorSettingsDirty();
     updatePlaybackMix();
     emit trackMixChanged();
 }
@@ -2695,6 +2946,7 @@ void AudioEditorController::setTrackSolo(const bool value)
     if (track_solo_ == value && track_muted_ == muted) return;
     track_solo_ = value;
     track_muted_ = muted;
+    markEditorSettingsDirty();
     updatePlaybackMix();
     emit trackMixChanged();
 }
@@ -2705,6 +2957,7 @@ void AudioEditorController::setTrackGainDb(const double value)
     const double bounded = std::clamp(value, -60.0, 12.0);
     if (qFuzzyCompare(track_gain_db_, bounded)) return;
     track_gain_db_ = bounded;
+    markEditorSettingsDirty();
     updatePlaybackMix();
     emit trackMixChanged();
 }
@@ -2716,6 +2969,51 @@ void AudioEditorController::setLoopEnabled(const bool enabled)
     emit playbackChanged();
 }
 
+qint64 AudioEditorController::currentPlaybackTimelineFrame() const noexcept
+{
+    qint64 frame = playhead_frame_;
+    if (!playing_ || !playback_prepared_ || !playback_adapter_
+        || sample_rate_ <= 0) {
+        return frame;
+    }
+    ag_playback_snapshot snapshot{};
+    if (playback_adapter_->snapshot(snapshot) != AG_OK) return frame;
+    const qint64 timelinePosition = time_pitch_preview_active_
+        ? static_cast<qint64>(std::llround(
+            static_cast<double>(snapshot.position_ms)
+            * time_pitch_.speedPercent() / 100.0))
+        : snapshot.position_ms;
+    frame = timelinePosition * sample_rate_ / 1'000;
+    return std::clamp<qint64>(frame, 0, document_.totalFrames());
+}
+
+void AudioEditorController::finishTimePitchChange(
+    const bool wasPlaying, const qint64 timelineFrame)
+{
+    playback_prepared_ = false;
+    time_pitch_preview_active_ = false;
+    if (!wasPlaying) return;
+
+    const qint64 frame = std::clamp<qint64>(
+        timelineFrame, 0, document_.totalFrames());
+    const qint64 position = sample_rate_ > 0
+        ? frame * 1'000 / sample_rate_ : 0;
+    const bool modifiedChanged = updatePersistedPlayhead(frame, position);
+    if (!preparePlayback()
+        || playback_adapter_->play() != AG_OK) {
+        playing_ = false;
+        playback_timer_.stop();
+        setState(EditorSessionState::Error);
+        if (error_message_.isEmpty()) setError(tr("无法继续编辑预览"));
+    } else {
+        playing_ = true;
+        playback_timer_.start();
+        setState(EditorSessionState::Playing);
+    }
+    emit playbackChanged();
+    if (modifiedChanged) emit documentChanged();
+}
+
 bool AudioEditorController::preparePlayback()
 {
     if (!has_document_ || !playback_adapter_
@@ -2723,7 +3021,6 @@ bool AudioEditorController::preparePlayback()
         return false;
     }
     auto snapshot = document_.timelineSnapshot();
-    applyTrackMix(snapshot);
     agplayer::editor::EditorPlaybackParameters parameters;
     parameters.speed_ratio = time_pitch_.speedPercent() / 100.0;
     parameters.keep_pitch = time_pitch_.keepPitch();
@@ -2798,6 +3095,17 @@ void AudioEditorController::pollPlayback()
                     if (modifiedChanged) emit documentChanged();
                     return;
                 }
+                if (snapshot.state != AG_PLAYING
+                    && playback_adapter_->play() != AG_OK) {
+                    playing_ = false;
+                    playback_timer_.stop();
+                    setState(EditorSessionState::Error);
+                    setError(tr("无法恢复循环编辑预览"));
+                    emit playbackChanged();
+                    if (modifiedChanged) emit documentChanged();
+                    return;
+                }
+                snapshot.state = AG_PLAYING;
                 modifiedChanged = updatePersistedPlayhead(selection->start,
                                                           start)
                     || modifiedChanged;
@@ -3005,6 +3313,15 @@ void AudioEditorController::applyDocumentLoadOutcome(
     DocumentLoadOutcome outcome)
 {
     stopPlayback();
+    const bool replaceDocument = outcome.kind != DocumentLoadKind::Relink;
+    if (replaceDocument) {
+        cancelBpmDetection(false);
+        time_pitch_ = {};
+        time_pitch_preview_active_ = false;
+        track_muted_ = false;
+        track_solo_ = false;
+        track_gain_db_ = 0.0;
+    }
     cancelSourcePeakCacheJob();
     event_gesture_ = {};
     if (outcome.kind == DocumentLoadKind::OpenFile) {
@@ -3059,6 +3376,22 @@ void AudioEditorController::applyDocumentLoadOutcome(
         known_project_issues_ = to_project_issues(loaded.issues);
         syncProjectSourcesAndIssues();
         project_export_settings_ = loaded.exportSettings;
+        const ProjectEditorSettings& editor = loaded.editorSettings;
+        if (editor.originalBpm > 0.0) {
+            time_pitch_.setOriginalBpm(editor.originalBpm);
+            if (std::abs(editor.speedPercent - 100.0) > 0.000001) {
+                (void)time_pitch_.setSpeedPercent(editor.speedPercent);
+            }
+        }
+        time_pitch_.setKeepPitch(editor.keepPitch);
+        time_pitch_.setFormantPreservation(editor.formantPreservation);
+        (void)time_pitch_.setPitch(editor.pitchCents / 100,
+                                  editor.pitchCents % 100);
+        track_muted_ = editor.trackMuted;
+        track_solo_ = editor.trackSolo;
+        track_gain_db_ = editor.trackGainDb;
+        bpm_result_ = editor.originalBpm;
+        bpm_error_.clear();
         project_path_ = QFileInfo(outcome.path).absoluteFilePath();
         syncPrimarySourceSummary();
         channel_peaks_.clear();
@@ -3098,6 +3431,7 @@ void AudioEditorController::applyDocumentLoadOutcome(
         refreshSourcePeakCachesAsync();
         setViewportDocumentFrames(document_.totalFrames());
     }
+    setLoopEnabled(document_.selection().has_value());
     setState(EditorSessionState::Ready);
     setProgress(1.0);
     setError({});
@@ -3106,6 +3440,15 @@ void AudioEditorController::applyDocumentLoadOutcome(
     emit playbackChanged();
     emit documentChanged();
     emit projectChanged();
+    if (replaceDocument) {
+        emit timePitchChanged();
+        emit trackMixChanged();
+    }
+    if (outcome.kind == DocumentLoadKind::OpenFile) {
+        const double taggedBpm = embedded_bpm(source_path_);
+        if (taggedBpm > 0.0) adoptBpm(taggedBpm);
+        else (void)detectBpm();
+    }
 }
 
 void AudioEditorController::setDocumentLoading(const bool loading)
@@ -3140,6 +3483,16 @@ void AudioEditorController::setViewportWaveformDevicePixelRatio(
 
 void AudioEditorController::clearViewportSourcePeaksForTesting()
 {
+    cancelSourcePeakCacheJob();
+    if (source_peak_cache_watcher_) {
+        auto* const watcher = source_peak_cache_watcher_;
+        watcher->future().waitForFinished();
+        if (source_peak_cache_watcher_ == watcher) {
+            watcher->disconnect(this);
+            source_peak_cache_watcher_ = nullptr;
+            delete watcher;
+        }
+    }
     channel_peaks_.clear();
     primary_peak_pyramid_.reset();
     source_peak_pyramids_.clear();
@@ -3367,7 +3720,7 @@ void AudioEditorController::refreshActions()
     actions_.setEnabled(QStringLiteral("editor.open"), idle);
     actions_.setEnabled(QStringLiteral("editor.save"), has_document_ && idle);
     actions_.setEnabled(QStringLiteral("editor.export"), exportSupported()
-                        && has_document_ && idle && projectSourcesOnline());
+                        && idle && projectSourcesOnline());
     actions_.setEnabled(QStringLiteral("editor.undo"), has_document_ && idle
                         && document_.canUndo());
     actions_.setEnabled(QStringLiteral("editor.redo"), has_document_ && idle
@@ -3487,6 +3840,8 @@ std::optional<quint64> AudioEditorController::nextProjectSourceId() const
 
 void AudioEditorController::finishTimelineMutation()
 {
+    const bool restartPendingBpm = bpm_busy_;
+    if (restartPendingBpm) cancelBpmDetection(false);
     const qint64 requestedPlayhead = playhead_frame_;
     stopPlayback();
     if (!document_.selection()) setLoopEnabled(false);
@@ -3504,6 +3859,7 @@ void AudioEditorController::finishTimelineMutation()
     emit playbackChanged();
     emit documentChanged();
     emit projectChanged();
+    if (restartPendingBpm && frames > 0) (void)detectBpm();
 }
 
 void AudioEditorController::syncPrimarySourceSummary()

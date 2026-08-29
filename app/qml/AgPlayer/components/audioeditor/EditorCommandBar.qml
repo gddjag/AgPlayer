@@ -188,6 +188,7 @@ Rectangle {
             iconName: "sound-module-line"
             referenceWidth: 73
             commandEnabled: AudioEditorController.hasDocument
+                && AudioEditorController.totalFrames > 0
                 && !AudioEditorController.busy
             onClicked: AudioEditorController.reduceNoise()
         }
@@ -197,6 +198,7 @@ Rectangle {
             iconName: "brush-line"
             referenceWidth: 82
             commandEnabled: AudioEditorController.hasDocument
+                && AudioEditorController.totalFrames > 0
                 && !AudioEditorController.busy
             onClicked: AudioEditorController.clearTimeline()
         }

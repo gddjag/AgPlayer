@@ -52,6 +52,8 @@ QString cacheKey(const HandoffRequest& request)
                             std::numeric_limits<float>::max_digits10));
         add(QString::number(event.fadeIn));
         add(QString::number(event.fadeOut));
+        add(QString::number(static_cast<int>(event.fadeInCurve)));
+        add(QString::number(static_cast<int>(event.fadeOutCurve)));
         add(QString::number(event.speedRatio, 'g',
                             std::numeric_limits<double>::max_digits10));
         add(QString::number(event.pitchSemitone));
@@ -84,11 +86,22 @@ QString cacheKey(const HandoffRequest& request)
 
 HandoffAssetResult verifiedAsset(const QString& path)
 {
-    const QFileInfo info(path);
     QFile file(path);
-    if (!info.isFile() || info.size() < 44
-        || !file.open(QIODevice::ReadOnly)
-        || file.read(4) != QByteArray("RIFF", 4)) {
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {false, {}, {},
+                QStringLiteral("拖出音频文件验证失败：无法打开")};
+    }
+    const qint64 size = file.size();
+    const QByteArray header = file.read(4);
+    if (size < 44 || header != QByteArray("RIFF", 4)) {
+        return {false, {}, {},
+                QStringLiteral("拖出音频文件验证失败：size=%1 header=%2")
+                    .arg(size)
+                    .arg(QString::fromLatin1(header.toHex()))};
+    }
+    file.close();
+    const QFileInfo info(path);
+    if (!info.isFile()) {
         return {false, {}, {}, QStringLiteral("拖出音频文件验证失败")};
     }
     const QUrl url = QUrl::fromLocalFile(info.absoluteFilePath());
@@ -138,12 +151,15 @@ HandoffAssetResult HandoffAssetManager::prepare(
     write.keep_metadata = false;
     write.range = request.selection;
     agplayer::editor::TimePitchSession timePitch;
-    if (!timePitch.setSpeedPercent(request.renderState.speedPercent)) {
+    if (!timePitch.setSpeedPercent(request.renderState.speedPercent)
+        && std::abs(timePitch.speedPercent()
+                    - request.renderState.speedPercent) > 0.001) {
         return {false, {}, {}, QStringLiteral("拖出音频变速参数无效")};
     }
     const int semitones = request.renderState.pitchCents / 100;
     const int cents = request.renderState.pitchCents - semitones * 100;
-    if (!timePitch.setPitch(semitones, cents)) {
+    if (!timePitch.setPitch(semitones, cents)
+        && timePitch.pitchCents() != request.renderState.pitchCents) {
         return {false, {}, {}, QStringLiteral("拖出音频变调参数无效")};
     }
     timePitch.setKeepPitch(request.renderState.keepPitch);

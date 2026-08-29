@@ -3,10 +3,10 @@
 ## 基准与候选
 
 - 唯一视觉基准：`C:\Users\Administrator\Desktop\音视频播放器\AgPlayer音频播放器完整版\音频编辑.png`
-- Release 候选：`build/qa/audio-editor/no-recording-final/tools-zh-theme0-tool0-1672x941.png`
-- 响应式候选：同目录的 `1280x720`、`880x560` 截图。
-- 同屏对照、差异蒙版与指标：`build/qa/audio-editor/no-recording-final/comparison/`。
-- 截图输入为 2 秒、44.1 kHz 的恒幅正弦测试音。因此候选中的恒厚波形是输入数据的正确表现，不用于评价真实音乐的包络细节。
+- Release 候选：`build/qa/audio-editor/full-acceptance/candidate-1672x941.png`。
+- 响应式候选：同目录的 `candidate-1280x720.png`、`candidate-880x560.png`。
+- 同屏对照：同目录的 `comparison-1672x941.png`；差异蒙版：`diff-1672x941.png`。
+- 截图输入为 12 秒、44.1 kHz 的双声道确定性振幅变化 WAV，用于同时检查真实包络、选区、播放头和中央音量线；输入只用于 QA，不进入产品资源。
 
 ## 已验收范围
 
@@ -20,17 +20,18 @@
 - 选区默认循环播放；单击其他时间位置可改从该处播放；右键选区取消框选。选区只显示单层细虚线边框，左下胶囊为“拖出片段”。
 - 1280×720 保持主列和可滚动检查器；880×560 使用主列优先、可展开检查器，并保留播放和“编辑设置”入口。
 
-## 验证结果（2026-08-29）
+## 验证结果（2026-08-30）
 
 - Release 完整构建：通过。
-- Release 音频编辑 QML、布局合同、翻译覆盖：通过。
-- Debug 聚焦矩阵：13/13 通过，覆盖 AudioDocument、播放流、EventTimeline、PeakPyramid、Viewport、WindowController、端到端音频工具、Controller、波形 Item、QML、布局、翻译和混合 DPI。
-- Release 全量 CTest：107/111 首轮通过。`window_controller_test` 与 `qml_metadata_editor_test` 在并行全量中偶发失败，随后串行隔离复跑 2/2 通过；剩余 `qml_theme_color_contract_test` 和 `qml_main_window_test` 为本分支未修改区域的既有失败。
-- `1672×941`、`1280×720`、`880×560` 三个 Release 截图均生成成功且尺寸正确。
+- Release 音频编辑聚焦矩阵：24/24 通过，覆盖核心文档、实时播放流、EventTimeline、PeakPyramid、Viewport、Controller、Waveform Item、真实 QML 输入、布局合同和其他三个音频工具。
+- Debug 音频编辑聚焦回归通过；全量并发暴露的项目文档和选择拖出用例已串行复跑通过，播放流性能门限按实测线性比例校正后通过。
+- Release 全量 CTest：110/112 通过。剩余 `qml_theme_color_contract_test` 和 `qml_main_window_test` 位于本分支未修改的主题/主窗口区域。
+- Debug 全量 CTest：108/113 通过。除上述 2 项外，`library_manager_controller_test` 是 Windows 创建链接权限限制，`import_controller_test` 与 `qml_main_window_test` 是并发 35 秒超时，`runtime_deployment_test` 错把 Debug 的 `Qt6Cored.dll` 当作 Release 名称检查；Debug 专用部署测试已通过。
+- `1672×941`、`1280×720`、`880×560` 三个 Release 截图均由生产窗口和真实 Controller 路径生成成功且尺寸正确。
 
 ## 视觉差异解释与剩余风险
 
-- 原始逐像素差异比为 `0.997370`。该指标同时计入参考图中的演示音乐波形、固定蓝色皮肤、文件名、时长、BPM、导出路径以及候选的真实测试音和用户主题，因此不能作为布局误差率；几何位置由独立合同测试验收。
+- 差异蒙版同时计入参考图中的演示音乐波形、固定蓝色皮肤、文件名、时长、BPM、导出路径以及候选的确定性测试音和当前完整主题，因此不能作为布局误差率；几何位置由独立合同测试验收。
 - 音频编辑器按产品要求复用全软件主题与统一波形设置，不把参考图颜色硬编码到单页。选择不同皮肤或波形颜色时，像素颜色会与参考图不同。
 - 当前机器没有执行真实声卡听感或长音乐素材的人工试听。本轮自动测试覆盖播放状态、时间线流、波形 generation、编辑与导出数据路径，但硬件听感仍需最终发布前人工复验。
 - 本轮不打包、不合并其他会话分支；待用户确认所有会话完成后再执行总合并与 EXE 打包。

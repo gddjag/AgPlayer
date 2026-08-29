@@ -31,6 +31,7 @@ private slots:
     void queuesSelectedTrackNextWithoutRestartingPlayback();
     void restoresSavedQueueOrderAndFiltersUnavailableTracks();
     void startsPlaybackFromVisibleListScope();
+    void freshCoreCanBeAcquiredForEditorOutput();
     void editorOutputRestoresExactScopedPlaybackSession();
     void exactWaveformDurationAlignsPlaybackTimeline();
     void loadsRowWithoutStartingPlayback();
@@ -587,6 +588,22 @@ void PlaybackControllerTest::editorOutputRestoresExactScopedPlaybackSession()
         QTRY_COMPARE(controller.state(), PlaybackController::Paused);
         QTRY_VERIFY(qAbs(controller.positionMs() - 750) <= 2);
         QCOMPARE(controller.trackCount(), qint64{5});
+    }
+    ag_player_destroy(core);
+}
+
+void PlaybackControllerTest::freshCoreCanBeAcquiredForEditorOutput()
+{
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core);
+        QVERIFY(controller.acquireEditorOutput());
+        QVERIFY(controller.acquireEditorOutput());
+        controller.releaseEditorOutput();
+        QVERIFY(controller.acquireEditorOutput());
+        controller.releaseEditorOutput();
     }
     ag_player_destroy(core);
 }

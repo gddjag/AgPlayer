@@ -4,6 +4,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+function ConvertFrom-Utf8Base64([string]$Value) {
+    [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Value))
+}
 $phase6Qml = @(
     'app/qml/AgPlayer/AudioToolsWindow.qml',
     'app/qml/AgPlayer/components/tools/AudioEditorPage.qml',
@@ -14,7 +17,6 @@ $phase6Qml = @(
     'app/qml/AgPlayer/components/tools/ToolSidebar.qml'
 )
 $expected = @{}
-$extractedSourceCount = 0
 foreach ($relativePath in $phase6Qml) {
     $path = Join-Path $SourceRoot $relativePath
     $context = [IO.Path]::GetFileNameWithoutExtension($path)
@@ -27,10 +29,29 @@ foreach ($relativePath in $phase6Qml) {
         throw "No qsTr sources extracted from $relativePath."
     }
     $expected[$context] = $sources
-    $extractedSourceCount += $sources.Count
 }
-if ($extractedSourceCount -ne 115) {
-    throw "Expected exactly 115 context-scoped Phase 6 sources, got $extractedSourceCount."
+$requiredSources = @{
+    AudioEditorPage = @(
+        '5qOA5rWL5Lit4oCm', '5Y6f5aeLICUxIEJQTQ==',
+        '4oCUIC8g5LiN6YCC55So', 'JTEg5aOw6YGT'
+    ) | ForEach-Object { ConvertFrom-Utf8Base64 $_ }
+    EditorWaveformCanvas = @(
+        '57q/5oCn', '5bmz5ruR', '5oyH5pWw'
+    ) | ForEach-Object { ConvertFrom-Utf8Base64 $_ }
+    EditorStatusBar = @(
+        '5a+85Ye65a6M5oiQ77yaJTE=', '5q2j5Zyo5aSE55CG4oCmICUxJQ=='
+    ) | ForEach-Object { ConvertFrom-Utf8Base64 $_ }
+}
+foreach ($context in $requiredSources.Keys) {
+    foreach ($source in $requiredSources[$context]) {
+        if ($expected[$context] -notcontains $source) {
+            throw "Phase 6 source manifest misses intended [$context] $source"
+        }
+    }
+}
+$obsoleteFadeSource = ConvertFrom-Utf8Base64 '5reh5Ye65o6n5Yi254K5'
+if ($expected['EditorWaveformCanvas'] -contains $obsoleteFadeSource) {
+    throw 'The obsolete top fade handle translation source remains in the waveform canvas.'
 }
 
 foreach ($locale in @('zh', 'en', 'th', 'vi')) {

@@ -390,6 +390,47 @@ private slots:
         QVERIFY(!value.canUndo());
     }
 
+    void setEventFadeCurveIsUndoableAndRejectsNoOpsOrInvalidCurves()
+    {
+        auto value = document();
+        const auto initialState = value.historyStateId();
+
+        QVERIFY(value.setEventFadeCurve(1, true, FadeCurve::Exponential));
+        QCOMPARE(value.timelineSnapshot().events.front().fadeInCurve,
+                 FadeCurve::Exponential);
+        QCOMPARE(value.historyStateId(), initialState + 1);
+
+        const auto changed = value.timelineSnapshot();
+        const auto changedState = value.historyStateId();
+        QVERIFY(!value.setEventFadeCurve(1, true, FadeCurve::Exponential));
+        QVERIFY(!value.setEventFadeCurve(99, true, FadeCurve::Linear));
+        QVERIFY(!value.setEventFadeCurve(1, false,
+            static_cast<FadeCurve>(99)));
+        QCOMPARE(value.timelineSnapshot().revision, changed.revision);
+        QCOMPARE(value.historyStateId(), changedState);
+
+        QVERIFY(value.undo());
+        QCOMPARE(value.timelineSnapshot().events.front().fadeInCurve,
+                 FadeCurve::Smooth);
+        QVERIFY(value.redo());
+        QCOMPARE(value.timelineSnapshot().events.front().fadeInCurve,
+                 FadeCurve::Exponential);
+    }
+
+    void mergeRejectsEventsWithDifferentFadeCurves()
+    {
+        const auto source = std::make_shared<const AudioSource>(AudioSource{
+            "fixture.wav", 48'000, 2, 1'000});
+        AudioEvent left{1, source, 0, 500, 0};
+        AudioEvent right{2, source, 500, 1'000, 500};
+        right.fadeInCurve = FadeCurve::Linear;
+        auto value = AudioDocument::fromEvents({left, right});
+
+        QVERIFY(!value.mergeEvents(1, 2));
+        QCOMPARE(value.timelineSnapshot().events.size(), std::size_t{2});
+        QVERIFY(!value.canUndo());
+    }
+
     void addEnvelopePointKeepsOrderingAndEachPointIsOneUndoStep()
     {
         auto value = document();
@@ -417,6 +458,19 @@ private slots:
         const auto afterUndo = value.timelineSnapshot().events.front().envelope;
         QCOMPARE(afterUndo.size(), std::size_t{1});
         QCOMPARE(afterUndo.front().offset, SampleFrame{700});
+    }
+
+    void addEnvelopePointBoundsGainToTheEditorRange()
+    {
+        auto value = document();
+
+        QVERIFY(value.addEnvelopePoint(1, 100, -1.0F));
+        QVERIFY(value.addEnvelopePoint(1, 200, 3.0F));
+
+        const auto points = value.timelineSnapshot().events.front().envelope;
+        QCOMPARE(points.size(), std::size_t{2});
+        QCOMPARE(points[0].gain, 0.0F);
+        QCOMPARE(points[1].gain, 2.0F);
     }
 
     void eventGainIsBoundedTransactionalAndUndoable()
