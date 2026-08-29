@@ -7,6 +7,7 @@ AbstractButton {
     id: root
     objectName: "colorFieldButton"
     property color colorValue: "#000000"
+    property string editingLabel: ""
     property string targetProperty: ""
     signal colorEdited(string value)
     onColorEdited: function(value) {
@@ -55,7 +56,7 @@ AbstractButton {
         radius: Theme.radiusSm
     }
 
-    onClicked: picker.openForColor(root.colorValue)
+    onClicked: picker.openForColor(root.colorValue, root.editingLabel)
     Keys.onSpacePressed: function(event) {
         root.clicked()
         event.accepted = true
@@ -72,7 +73,7 @@ AbstractButton {
     AgColorPicker {
         id: picker
         objectName: "colorFieldPicker"
-        onColorAccepted: color => root.colorEdited(root.normalized(color))
+        onApplied: color => root.colorEdited(root.normalized(color))
         onClosed: root.forceActiveFocus()
     }
 }

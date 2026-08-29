@@ -8,8 +8,8 @@ TestCase {
     id: testCase
     name: "AgColorPicker"
     when: windowShown
-    width: 720
-    height: 640
+    width: 860
+    height: 900
 
     property int savedThemeMode: 0
     property string savedWaveformSolidBaseColor: ""
@@ -93,9 +93,15 @@ TestCase {
     }
 
     SignalSpy {
-        id: acceptedSpy
+        id: appliedSpy
         target: picker
-        signalName: "colorAccepted"
+        signalName: "applied"
+    }
+
+    SignalSpy {
+        id: cancelledSpy
+        target: picker
+        signalName: "cancelled"
     }
 
     SignalSpy {
@@ -116,7 +122,8 @@ TestCase {
 
     function init() {
         picker.close()
-        acceptedSpy.clear()
+        appliedSpy.clear()
+        cancelledSpy.clear()
         integratedEditedSpy.clear()
         paletteChangedSpy.clear()
         savedWaveformSolidBaseColor = SettingsController.waveformSolidBaseColor
@@ -138,7 +145,8 @@ TestCase {
         SettingsController.skinColorMode = savedThemeChoices.mode
         SettingsController.skinPreset = savedThemeChoices.preset
         SettingsController.skinCustomColor = savedThemeChoices.customColor
-        acceptedSpy.clear()
+        appliedSpy.clear()
+        cancelledSpy.clear()
         integratedEditedSpy.clear()
         paletteChangedSpy.clear()
         SettingsController.themeMode = savedThemeMode
@@ -202,158 +210,51 @@ TestCase {
         compare(actual.join(","), expected.join(","))
     }
 
-    function test_open_initializes_both_states_and_candidates() {
-        var expected = [
-            "#F8EBFA", "#E9D2EC", "#D6B9DB", "#C09CC6", "#A76BB0",
-            "#63316B", "#512C57", "#432248", "#341938", "#251028"
-        ]
-
-        picker.openForColor("#123456")
+    function test_picker_compact_size_hex_rgb_apply_cancel_and_escape() {
+        picker.openForColor("#22C55E", qsTr("Start color"))
         tryCompare(picker, "visible", true)
-        picker.close()
-        openReferenceColor()
+        verify(picker.width <= 292)
+        verify(picker.height <= 248)
+        verify(!findChild(picker, "colorPickerSystemDialog"))
 
-        compare(normalizedColor(picker.baseColor), "#63316B")
-        compare(normalizedColor(picker.selectedColor), "#63316B")
-        compare(picker.candidateColors.join(","), expected.join(","))
-        compare(acceptedSpy.count, 0)
+        var hex = findChild(picker, "colorPickerHex")
+        var apply = findChild(picker, "colorPickerApply")
+        verify(hex && apply)
+        hex.text = "#73A6FF"
+        hex.forceActiveFocus()
+        keyClick(Qt.Key_Enter)
+        compare(appliedSpy.count, 0)
+        compare(normalizedColor(picker.workingColor), "#73A6FF")
+        mouseClick(apply, apply.width / 2, apply.height / 2)
+        compare(appliedSpy.count, 1)
+        compare(appliedSpy.signalArguments[0][0].toString().toUpperCase(), "#73A6FF")
+
+        picker.openForColor("#A98BFF", qsTr("Middle color"))
+        keyClick(Qt.Key_Escape)
+        compare(cancelledSpy.count, 1)
+        compare(appliedSpy.count, 1)
     }
 
-    function test_hex_edit_changes_base_and_candidates_only() {
+    function test_rgb_fields_apply_without_intermediate_signal() {
         openReferenceColor()
-        var originalCandidates = picker.candidateColors.join(",")
-        var hexInput = findChild(picker, "colorPickerHex")
-        verify(hexInput)
+        var red = findChild(picker, "colorPickerR")
+        var green = findChild(picker, "colorPickerG")
+        var blue = findChild(picker, "colorPickerB")
+        var hex = findChild(picker, "colorPickerHex")
+        verify(red && green && blue && hex)
 
-        replaceText(hexInput, "#123456")
+        replaceText(red, "18")
+        replaceText(green, "52")
+        replaceText(blue, "86")
 
-        compare(normalizedColor(picker.baseColor), "#123456")
-        compare(hexInput.text, "#123456")
-        verify(picker.candidateColors.join(",") !== originalCandidates)
-        compare(normalizedColor(picker.selectedColor), "#63316B")
-        compare(acceptedSpy.count, 0)
-    }
-
-    function test_rgb_fields_synchronize_hex_and_sliders() {
-        openReferenceColor()
-        var redInput = findChild(picker, "colorPickerR")
-        var greenInput = findChild(picker, "colorPickerG")
-        var blueInput = findChild(picker, "colorPickerB")
-        var redSlider = findChild(picker, "colorPickerRSlider")
-        var greenSlider = findChild(picker, "colorPickerGSlider")
-        var blueSlider = findChild(picker, "colorPickerBSlider")
-        var hexInput = findChild(picker, "colorPickerHex")
-        verify(redInput && greenInput && blueInput)
-        verify(redSlider && greenSlider && blueSlider && hexInput)
-
-        replaceText(redInput, "18")
-        replaceText(greenInput, "52")
-        replaceText(blueInput, "86")
-
-        compare(normalizedColor(picker.baseColor), "#123456")
-        compare(hexInput.text, "#123456")
-        compare(redInput.text, "18")
-        compare(greenInput.text, "52")
-        compare(blueInput.text, "86")
-        compare(Math.round(redSlider.value), 18)
-        compare(Math.round(greenSlider.value), 52)
-        compare(Math.round(blueSlider.value), 86)
-        compare(normalizedColor(picker.selectedColor), "#63316B")
-        compare(acceptedSpy.count, 0)
-    }
-
-    function test_each_slider_synchronizes_rgb_fields_and_hex() {
-        picker.openForColor("#123456")
-        tryCompare(picker, "visible", true)
-        var redSlider = findChild(picker, "colorPickerRSlider")
-        var greenSlider = findChild(picker, "colorPickerGSlider")
-        var blueSlider = findChild(picker, "colorPickerBSlider")
-        var redInput = findChild(picker, "colorPickerR")
-        var greenInput = findChild(picker, "colorPickerG")
-        var blueInput = findChild(picker, "colorPickerB")
-        var hexInput = findChild(picker, "colorPickerHex")
-
-        mouseClick(redSlider, redSlider.width - 1, redSlider.height / 2)
-        compare(normalizedColor(picker.baseColor), "#FF3456")
-        compare(redInput.text, "255")
-        compare(hexInput.text, "#FF3456")
-
-        mouseClick(greenSlider, 1, greenSlider.height / 2)
-        compare(normalizedColor(picker.baseColor), "#FF0056")
-        compare(greenInput.text, "0")
-        compare(hexInput.text, "#FF0056")
-
-        mouseClick(blueSlider, blueSlider.width - 1, blueSlider.height / 2)
-        compare(normalizedColor(picker.baseColor), "#FF00FF")
-        compare(blueInput.text, "255")
-        compare(hexInput.text, "#FF00FF")
-        compare(normalizedColor(picker.selectedColor), "#123456")
-        compare(acceptedSpy.count, 0)
-    }
-
-    function test_invalid_hex_restores_last_valid_value() {
-        openReferenceColor()
-        var hexInput = findChild(picker, "colorPickerHex")
-
-        replaceText(hexInput, "invalid")
-
-        compare(hexInput.text, "#63316B")
-        compare(normalizedColor(picker.baseColor), "#63316B")
-        compare(normalizedColor(picker.selectedColor), "#63316B")
-        compare(acceptedSpy.count, 0)
-    }
-
-    function test_invalid_rgb_restores_on_enter_and_focus_loss() {
-        openReferenceColor()
-        var redInput = findChild(picker, "colorPickerR")
-        var greenInput = findChild(picker, "colorPickerG")
-        var hexInput = findChild(picker, "colorPickerHex")
-
-        typeText(redInput, "999")
-        compare(redInput.text, "999")
-        verify(!redInput.acceptableInput)
-        keyClick(Qt.Key_Return)
-        wait(0)
-        compare(redInput.text, "99")
-
-        typeText(greenInput, "999")
-        compare(greenInput.text, "999")
-        verify(!greenInput.acceptableInput)
-        mouseClick(hexInput)
-        tryCompare(greenInput, "activeFocus", false)
-        compare(greenInput.text, "49")
-
-        compare(normalizedColor(picker.baseColor), "#63316B")
-        compare(normalizedColor(picker.selectedColor), "#63316B")
-        compare(acceptedSpy.count, 0)
-    }
-
-    function test_candidate_accepts_once_and_closes_immediately() {
-        openReferenceColor()
-        tryVerify(function() {
-            return findChild(picker.contentItem, "colorCandidate-0") !== null
-        })
-        var candidate = findChild(picker.contentItem, "colorCandidate-0")
-        verify(candidate)
-
-        mouseClick(candidate)
-
-        compare(acceptedSpy.count, 1)
-        compare(normalizedColor(acceptedSpy.signalArguments[0][0]), "#F8EBFA")
-        compare(normalizedColor(picker.selectedColor), "#F8EBFA")
-        compare(picker.visible, false)
-    }
-
-    function test_close_button_cancels_without_acceptance() {
-        openReferenceColor()
-        var closeButton = findChild(picker, "colorPickerClose")
-        verify(closeButton)
-
-        mouseClick(closeButton)
-
-        compare(picker.visible, false)
-        compare(acceptedSpy.count, 0)
-        compare(normalizedColor(picker.selectedColor), "#63316B")
+        compare(red.text, "18")
+        compare(green.text, "52")
+        compare(blue.text, "86")
+        compare(appliedSpy.count, 0)
+        compare(picker.visible, true)
+        mouseClick(findChild(picker, "colorPickerApply"))
+        compare(appliedSpy.count, 1)
+        compare(normalizedColor(appliedSpy.signalArguments[0][0]), "#123456")
     }
 
     function test_bottom_right_field_popup_stays_inside_overlay() {
@@ -371,87 +272,52 @@ TestCase {
 
         verifyMappedInside(integratedPicker.background, overlay, 10)
         verifyMappedInside(integratedPicker.contentItem, overlay, 10)
+        verify(integratedPicker.width <= 292)
+        verify(integratedPicker.height <= 248)
         compare(integratedEditedSpy.count, 0)
     }
 
-    function test_candidate_accessibility_reports_scale_and_selection() {
+    function test_cancel_button_and_outside_press_each_cancel_once() {
         openReferenceColor()
-        var candidate0 = findChild(picker.contentItem, "colorCandidate-0")
-        var candidate5 = findChild(picker.contentItem, "colorCandidate-5")
-        verify(candidate0 && candidate5)
+        var cancel = findChild(picker, "colorPickerCancel")
+        verify(cancel)
+        mouseClick(cancel, cancel.width / 2, cancel.height / 2)
+        tryCompare(picker, "visible", false)
+        compare(cancelledSpy.count, 1)
+        compare(appliedSpy.count, 0)
 
-        compare(candidate0.Accessible.role, Accessible.Button)
-        verify(candidate0.Accessible.name.indexOf("#F8EBFA") >= 0)
-        verify(candidate0.Accessible.name.indexOf("10") >= 0)
-        compare(candidate0.Accessible.selected, false)
-        compare(candidate0.activeFocusOnTab, true)
-        verify(candidate5.Accessible.name.indexOf("#63316B") >= 0)
-        verify(candidate5.Accessible.name.indexOf("100") >= 0)
-        compare(candidate5.Accessible.selected, true)
+        openReferenceColor()
+        mouseClick(testHost, 4, 4)
+        tryCompare(picker, "visible", false)
+        compare(cancelledSpy.count, 2)
+        compare(appliedSpy.count, 0)
     }
 
-    function test_picker_focus_chain_and_keyboard_activation() {
-        testCase.Window.window.requestActivate()
-        tryCompare(testCase.Window.window, "active", true)
+    function test_picker_controls_have_names_roles_and_apply_keyboard_activation() {
         openReferenceColor()
-        var hexInput = findChild(picker, "colorPickerHex")
-        var closeButton = findChild(picker, "colorPickerClose")
-        compare(hexInput.nextItemInFocusChain(true).objectName,
-                closeButton.objectName)
-        closeButton.forceActiveFocus(Qt.TabFocusReason)
-        verify(closeButton.activeFocus)
-        keyClick(Qt.Key_Return)
-        tryCompare(picker, "visible", false)
-        compare(acceptedSpy.count, 0)
+        var plane = findChild(picker, "colorPickerSvPlane")
+        var hue = findChild(picker, "colorPickerHueRail")
+        var hex = findChild(picker, "colorPickerHex")
+        var red = findChild(picker, "colorPickerR")
+        var green = findChild(picker, "colorPickerG")
+        var blue = findChild(picker, "colorPickerB")
+        var apply = findChild(picker, "colorPickerApply")
+        var cancel = findChild(picker, "colorPickerCancel")
+        verify(plane && hue && hex && red && green && blue && apply && cancel)
+        verify(plane.Accessible.name.length > 0)
+        verify(hue.Accessible.name.length > 0)
+        compare(hex.Accessible.role, Accessible.EditableText)
+        verify(red.Accessible.name.length > 0)
+        compare(apply.Accessible.role, Accessible.Button)
+        compare(cancel.Accessible.role, Accessible.Button)
 
-        openReferenceColor()
-        var blueSlider = findChild(picker, "colorPickerBSlider")
-        var candidate0 = findChild(picker.contentItem, "colorCandidate-0")
-        compare(blueSlider.nextItemInFocusChain(true).objectName,
-                candidate0.objectName)
-        candidate0.forceActiveFocus(Qt.TabFocusReason)
-        verify(candidate0.activeFocus)
+        apply.forceActiveFocus(Qt.TabFocusReason)
         keyClick(Qt.Key_Space)
         tryCompare(picker, "visible", false)
-        compare(acceptedSpy.count, 1)
-        compare(normalizedColor(acceptedSpy.signalArguments[0][0]), "#F8EBFA")
-
-        acceptedSpy.clear()
-        openReferenceColor()
-        candidate0 = findChild(picker.contentItem, "colorCandidate-0")
-        var candidate1 = findChild(picker.contentItem, "colorCandidate-1")
-        compare(candidate0.nextItemInFocusChain(true).objectName,
-                candidate1.objectName)
-        candidate1.forceActiveFocus(Qt.TabFocusReason)
-        verify(candidate1.activeFocus)
-        keyClick(Qt.Key_Return)
-        tryCompare(picker, "visible", false)
-        compare(acceptedSpy.count, 1)
-        compare(normalizedColor(acceptedSpy.signalArguments[0][0]), "#E9D2EC")
+        compare(appliedSpy.count, 1)
     }
 
-    function test_escape_cancels_without_acceptance() {
-        openReferenceColor()
-        findChild(picker, "colorPickerHex").forceActiveFocus()
-
-        keyClick(Qt.Key_Escape)
-
-        tryCompare(picker, "visible", false)
-        compare(acceptedSpy.count, 0)
-        compare(normalizedColor(picker.selectedColor), "#63316B")
-    }
-
-    function test_outside_press_cancels_without_acceptance() {
-        openReferenceColor()
-
-        mouseClick(testHost, 4, 4)
-
-        tryCompare(picker, "visible", false)
-        compare(acceptedSpy.count, 0)
-        compare(normalizedColor(picker.selectedColor), "#63316B")
-    }
-
-    function test_color_field_commits_candidate_and_cancellation_preserves_setting() {
+    function test_color_field_applies_only_after_explicit_apply() {
         SettingsController.waveformSolidBaseColor = "#63316B"
         tryVerify(function() {
             return normalizedColor(integratedField.colorValue) === "#63316B"
@@ -465,13 +331,15 @@ TestCase {
         var integratedPicker = findChild(integratedField, "colorFieldPicker")
         verify(integratedPicker)
         tryCompare(integratedPicker, "visible", true)
-        compare(normalizedColor(integratedPicker.baseColor), "#63316B")
-
-        tryVerify(function() {
-            return findChild(integratedPicker.contentItem,
-                             "colorCandidate-0") !== null
-        })
-        mouseClick(findChild(integratedPicker.contentItem, "colorCandidate-0"))
+        compare(normalizedColor(integratedPicker.workingColor), "#63316B")
+        var hex = findChild(integratedPicker, "colorPickerHex")
+        var apply = findChild(integratedPicker, "colorPickerApply")
+        verify(hex && apply)
+        hex.text = "#F8EBFA"
+        hex.forceActiveFocus()
+        keyClick(Qt.Key_Enter)
+        compare(integratedEditedSpy.count, 0)
+        mouseClick(apply, apply.width / 2, apply.height / 2)
 
         tryVerify(function() {
             return normalizedColor(SettingsController.waveformSolidBaseColor)
@@ -484,7 +352,7 @@ TestCase {
         mouseClick(integratedField, integratedField.width / 2,
                    integratedField.height / 2)
         tryCompare(integratedPicker, "visible", true)
-        mouseClick(findChild(integratedPicker, "colorPickerClose"))
+        mouseClick(findChild(integratedPicker, "colorPickerCancel"))
 
         compare(integratedPicker.visible, false)
         compare(normalizedColor(SettingsController.waveformSolidBaseColor),
@@ -521,52 +389,9 @@ TestCase {
                 "#63316B")
     }
 
-    function test_system_swatch_is_accessible_and_opens_with_mouse_and_keyboard() {
-        openReferenceColor()
-        var swatch = findChild(picker, "colorPickerSystemSwatch")
-        var dialog = findChild(picker, "colorPickerSystemDialog")
-        verify(swatch && dialog)
-        compare(swatch.focusPolicy, Qt.StrongFocus)
-        compare(swatch.Accessible.role, Accessible.Button)
-        verify(swatch.Accessible.name.length > 0)
-
-        mouseClick(swatch)
-        tryCompare(dialog, "visible", true)
-        dialog.close()
-
-        swatch.forceActiveFocus()
-        keyClick(Qt.Key_Space)
-        tryCompare(dialog, "visible", true)
-        dialog.close()
-        swatch.forceActiveFocus()
-        keyClick(Qt.Key_Return)
-        tryCompare(dialog, "visible", true)
-        dialog.close()
-    }
-
-    function test_system_dialog_accept_updates_working_color_but_cancel_does_not_commit() {
-        openReferenceColor()
-        var swatch = findChild(picker, "colorPickerSystemSwatch")
-        var dialog = findChild(picker, "colorPickerSystemDialog")
-        mouseClick(swatch)
-        tryCompare(dialog, "visible", true)
-        dialog.selectedColor = "#123456"
-        dialog.accepted()
-        tryCompare(picker, "baseColor", "#123456")
-        compare(acceptedSpy.count, 0)
-
-        mouseClick(swatch)
-        tryCompare(dialog, "visible", true)
-        dialog.selectedColor = "#abcdef"
-        dialog.rejected()
-        compare(normalizedColor(picker.baseColor), "#123456")
-        compare(acceptedSpy.count, 0)
-    }
-
-    function test_theme_switch_updates_chrome_not_candidates() {
+    function test_theme_switch_updates_picker_chrome() {
         SettingsController.themeMode = 0
         openReferenceColor()
-        var candidatesBefore = picker.candidateColors.slice(0)
         var darkChrome = picker.background.color.toString()
         compare(darkChrome, Theme.elevated.toString())
 
@@ -575,28 +400,8 @@ TestCase {
 
         compare(picker.background.color.toString(), Theme.elevated.toString())
         verify(picker.background.color.toString() !== darkChrome)
-        compare(picker.candidateColors.join(","), candidatesBefore.join(","))
-        compare(normalizedColor(picker.baseColor), "#63316B")
-        compare(normalizedColor(picker.selectedColor), "#63316B")
-        compare(acceptedSpy.count, 0)
-    }
-
-    function test_picker_controls_have_names_and_roles() {
-        SettingsController.themeMode = 0
-        openReferenceColor()
-        var hex = findChild(picker, "colorPickerHex")
-        var close = findChild(picker, "colorPickerClose")
-        var redSlider = findChild(picker, "colorPickerRSlider")
-        var candidate = findChild(picker.contentItem, "colorCandidate-0")
-        verify(hex && close && redSlider && candidate)
-        compare(hex.Accessible.role, Accessible.EditableText)
-        verify(hex.Accessible.name.length > 0)
-        compare(close.Accessible.role, Accessible.Button)
-        verify(close.Accessible.name.length > 0)
-        compare(redSlider.Accessible.role, Accessible.Slider)
-        verify(redSlider.Accessible.name.length > 0)
-        compare(candidate.Accessible.role, Accessible.Button)
-        verify(candidate.Accessible.name.indexOf("#") >= 0)
+        compare(normalizedColor(picker.workingColor), "#63316B")
+        compare(appliedSpy.count, 0)
     }
 
     function test_settings_drive_runtime_theme_and_cancel_restores_tokens() {
@@ -698,7 +503,7 @@ TestCase {
         representativeRangeSlider.enabled = true
     }
 
-    function test_theme_selector_custom_candidate_previews_and_transactions_cancel_or_commit() {
+    function test_theme_selector_custom_apply_and_transactions_cancel_or_commit() {
         SettingsController.beginEdit()
         SettingsController.skinColorMode = 0
         var custom = findChild(skinSelector, "skinSelectorCustomField")
@@ -706,10 +511,13 @@ TestCase {
         custom.clicked()
         var customPicker = findChild(custom, "colorFieldPicker")
         tryCompare(customPicker, "visible", true)
-        tryVerify(function() {
-            return findChild(customPicker.contentItem, "colorCandidate-0") !== null
-        })
-        mouseClick(findChild(customPicker.contentItem, "colorCandidate-0"))
+        var hex = findChild(customPicker, "colorPickerHex")
+        var apply = findChild(customPicker, "colorPickerApply")
+        verify(hex && apply)
+        hex.text = "#FFF5EC"
+        hex.forceActiveFocus()
+        keyClick(Qt.Key_Enter)
+        mouseClick(apply, apply.width / 2, apply.height / 2)
         tryCompare(SettingsController, "skinColorMode", 2)
         tryCompare(SettingsController, "skinCustomColor", "#FFF5EC")
         verify(custom.selectionCueVisible)
