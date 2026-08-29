@@ -925,6 +925,15 @@ add_test(NAME integrated_shell_contract_test
         -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/integrated_shell_contract_test.ps1
         -SourceRoot ${CMAKE_SOURCE_DIR})
 set_tests_properties(integrated_shell_contract_test PROPERTIES TIMEOUT 10)
+add_test(NAME qml_integrated_theme_test
+    COMMAND qml_main_window_test
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_integrated_theme.qml)
+set_tests_properties(qml_integrated_theme_test PROPERTIES
+    TIMEOUT 25
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
 add_test(NAME qml_color_picker_test
     COMMAND qml_main_window_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_color_picker.qml)
 set_tests_properties(qml_color_picker_test PROPERTIES
@@ -1102,6 +1111,7 @@ set_tests_properties(window_controller_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
 set_tests_properties(playback_controller_test qml_main_window_test
+    qml_integrated_theme_test
     qml_color_picker_test qml_waveform_test
     PROPERTIES
     # Qt/FFmpeg global process state and the shared generated fixtures make

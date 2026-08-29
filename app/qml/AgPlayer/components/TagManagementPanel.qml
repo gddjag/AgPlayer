@@ -15,6 +15,7 @@ Item {
     property bool compact: false
     property bool collapsible: false
     property bool expanded: true
+    property bool showHeader: true
     property string panelTitle: qsTr("标签管理")
     readonly property int visibleTagCount: tagRepeater.count
     readonly property int pillHorizontalPadding: 4
@@ -255,7 +256,7 @@ Item {
         spacing: root.compact ? 8 : 12
 
         RowLayout {
-            visible: root.compact || root.collapsible
+            visible: root.showHeader && (root.compact || root.collapsible)
             Layout.fillWidth: true
             Layout.preferredHeight: visible ? 26 : 0
             Layout.maximumHeight: visible ? 26 : 0
@@ -449,7 +450,7 @@ Item {
                             clip: true
                             color: Qt.rgba(resolvedSurface.r, // theme-color-allow: user tag color
                                            resolvedSurface.g,
-                                           resolvedSurface.b, 0.78)
+                                           resolvedSurface.b, 0.68)
                             border.color: dropVisual || selectedVisual
                                           || focusedVisual
                                           ? Theme.tagPillHighlightBorder
@@ -476,10 +477,7 @@ Item {
                                 font.pixelSize: 11
                             }
                             Row {
-                                anchors.left: parent.left
-                                anchors.leftMargin: root.pillHorizontalPadding
-                                anchors.right: parent.right
-                                anchors.rightMargin: root.pillHorizontalPadding
+                                anchors.horizontalCenter: parent.horizontalCenter
                                 anchors.verticalCenter: parent.verticalCenter
                                 spacing: root.pillContentSpacing
                                 Text {

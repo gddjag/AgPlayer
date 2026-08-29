@@ -129,6 +129,7 @@ public:
     Q_INVOKABLE qint64 timeForX(qreal x) const;
     Q_INVOKABLE qreal pixelForTime(qint64 positionMs) const;
     Q_INVOKABLE void zoomAt(qreal x, qreal factor);
+    Q_INVOKABLE void setVisibleRange(qint64 startMs, qint64 endMs);
     Q_INVOKABLE void setHoverPositionForInteraction(qint64 position);
 
     static constexpr int unplayedAlpha() noexcept { return 89; }
@@ -188,7 +189,6 @@ private:
     };
 
     void setHoverPosition(qint64 position);
-    void setVisibleRange(qint64 startMs, qint64 endMs);
     void normalizeLayerInput(QVariantList& normalized,
                              const QVariantList& input,
                              std::shared_ptr<LayerSnapshot>& snapshot);

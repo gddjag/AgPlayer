@@ -35,6 +35,19 @@ QtObject {
     readonly property color highlightSoft: ThemeManager.highlightSoft
     readonly property color highlightText: ThemeManager.highlightText
     readonly property color highlightBorder: ThemeManager.highlight
+    readonly property color selectionGlassFill: Qt.rgba(
+                                                      highlight.r,
+                                                      highlight.g,
+                                                      highlight.b, 0.68)
+    readonly property color selectionGlassHover: Qt.rgba(
+                                                       highlightHover.r,
+                                                       highlightHover.g,
+                                                       highlightHover.b, 0.68)
+    readonly property color selectionGlassPressed: Qt.rgba(
+                                                         highlightPressed.r,
+                                                         highlightPressed.g,
+                                                         highlightPressed.b, 0.68)
+    readonly property color selectionGlassBorder: Qt.rgba(1, 1, 1, 0.28)
     readonly property color success: ThemeManager.success
     readonly property color warning: ThemeManager.warning
     readonly property color error: ThemeManager.error

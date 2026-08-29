@@ -46,3 +46,33 @@
 - DPI 截图为 Qt 缩放环境模拟；真实 100/125/150/200% 多显示器切换仍需人工检查。
 
 本阶段未制作安装包。
+
+## 2026-08-29 调整验收补充
+
+### 自动验证
+
+- Release 构建、`all_qmllint`、波形、Integrated 9 项、主窗口 107 项、主题契约和 Integrated 生命周期：通过。
+- Release 顺序全量 CTest：111/114 通过；本轮相关测试全部通过。未通过项为：
+  - `audio_editor_controller_test`：当前主机无可用录音采集后端，3 个录音能力断言失败；
+  - `qml_format_converter_visual_fixture_test`：独立复跑 3 次为 2 次通过、1 次进程崩溃，属于与本轮文件无交集的既有退出不稳定；
+  - `windows_shell_runtime_test`：Codex 桌面会话不允许 `SetForegroundWindow` 将已有播放器置前。
+- Debug 构建、`waveform_item_test`、Integrated 9 项、Shell 契约和 Integrated 启停 smoke：通过。
+- Debug 完整主窗口 QML 套件超过 CTest 的 35 秒固定上限，单独运行仍以非零状态退出；不能用 Release 通过掩盖，记录为未解决的 Debug 退出/超时风险。
+- `git diff --check` 在提交前复核；QML lint 仅保留 `Theme.qml` 和 `WaveformSession.qml` 的两个 info 级 unused-import 提示。
+
+### 最终视觉证据
+
+- 当前实现：`build/evidence/integrated-theme-adjustments/integrated-1672x941-v4.png`
+- 参考/实现合成：`build/evidence/integrated-theme-adjustments/comparison-source-left-impl-right-v4.png`
+- 右栏局部：`build/evidence/integrated-theme-adjustments/comparison-right-panel-v4.png`
+- 波形与底栏局部：`build/evidence/integrated-theme-adjustments/comparison-wave-footer-v4.png`
+- 响应式：`integrated-1280x720-100.png`、`integrated-1440x900-100.png`
+- DPI：`integrated-1280x720-125dpi.png`、`integrated-1280x720-150dpi.png`、`integrated-1280x720-200dpi.png`
+
+首次截图发现并关闭了右侧页签漂移 P1；最终 v4 视觉审查为 P0/P1/P2 均 0。详细记录见项目根目录 `design-qa.md`。
+
+### 体积复核
+
+相对原基线 `5148160`：Release EXE + QML 源模块 + 两个用户提供 SVG 的合计增量为 451,799 B（441.21 KiB），低于 1 MiB 门槛。部署 DLL 与第三方包没有新增。
+
+外部拖放到 Windows 桌面/文件夹、Premiere Pro、DaVinci Resolve、剪映以及真实声卡爆音/长时内存测试仍为 blocked/unverified；本轮没有制作安装包。

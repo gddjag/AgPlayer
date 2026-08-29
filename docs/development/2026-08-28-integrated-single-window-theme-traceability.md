@@ -43,3 +43,17 @@
 - 未制作安装包。
 - 未引入第二播放器、第二标签模型、第二波形缓存、常驻导出器或新转码管线。
 - Windows 外部应用拖放兼容性需要在装有目标应用的交互式桌面上继续人工验收。
+
+## 2026-08-29 单窗口调整追踪
+
+| 调整要求 | 最小复用实现 | 验证 |
+|---|---|---|
+| 框选后默认循环；任意位置点击播放；右键清除；细 Handle | 复用 `PlaybackController` 选区 API；`WaveSelectionOverlay` 仅增加鼠标语义，2px 可视条保留 14px 命中区 | `qml_integrated_theme_test`、`playback_controller_test` |
+| 选区时长与拖出胶囊为半透明毛玻璃白字 | 在既有 `Theme` 中增加四个选区玻璃 token，不引入图形依赖 | QML 主题契约、1672×941 合成对比 |
+| 右栏标签/歌词页签和末端收起按钮 | 保持同一个 `TagManagementPanel`；Integrated Shell 只切换内容视图，页签状态由 `Main.qml` 持久持有 | `qml_integrated_theme_test`、Shell 契约、截图 |
+| 标签胶囊毛玻璃且文字居中 | 扩展共享标签组件的紧凑样式参数 | 标签布局契约、截图 |
+| 波形悬停时间、缩小间距、底部位置导航条 | 复用 `WaveformItem.timeForX()`；公开已有 `setVisibleRange()` 给导航条拖动 | `waveform_item_test`、`qml_integrated_theme_test` |
+| 皮肤图标同步两套主题、播放栏按参考布局 | 两套 Shell 共用 `PlayerControls` 和上传的 `player-shell-mode.svg`；上传的 `side-panel-toggle.svg` 用于 Integrated 右栏 | `qml_main_window_test`、生命周期 smoke、截图 |
+| 修复 Integrated 波形模式切换后消失 | 根因修复：`WaveformItem.setLayers()` 与 `setPeaks()` 会互相清空，Shell 现在按模式只写入一种数据源 | `qml_integrated_theme_test` 波形/频谱往返测试 |
+
+本轮仍未增加播放器、模型、缓存、线程、DLL 或第三方包；所有新增行为留在现有共享控制器和 QML Shell 边界内。

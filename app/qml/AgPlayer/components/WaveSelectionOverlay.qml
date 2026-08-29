@@ -15,6 +15,7 @@ Item {
     property int selectionStartMs: 0
     property int selectionEndMs: 0
     property bool selectionActive: false
+    property int hoverPositionMs: -1
     property var dragAdapter: null
     property string currentTrackId: ""
     readonly property int selectionDurationMs: selectionActive
@@ -31,6 +32,7 @@ Item {
     signal selectionCommitted(int startMs, int endMs)
     signal selectionAdjusted(int startMs, int endMs)
     signal selectionLoopRequested(int startMs, int endMs)
+    signal selectionClearRequested()
     signal seekRequested(int positionMs)
     signal zoomRequested(real x, real factor)
     // The host owns actual extraction and native QDrag.  This UI signal is
@@ -144,13 +146,16 @@ Item {
             height: 22
             width: durationLabel.implicitWidth + 12
             radius: 5
-            color: Theme.highlight
+            color: Theme.selectionGlassFill
+            border.color: Theme.selectionGlassBorder
+            border.width: 1
 
             Text {
                 id: durationLabel
+                objectName: "waveSelectionDurationLabel"
                 anchors.centerIn: parent
                 text: root.selectionDurationText
-                color: Theme.highlightText
+                color: Theme.onBrandGradientText
                 font.family: Theme.fontPrimary
                 font.pixelSize: 11
                 font.weight: Font.DemiBold
@@ -166,17 +171,18 @@ Item {
             anchors.bottomMargin: 6
             height: 26
             width: dragClipLabel.implicitWidth + 16
-            color: dragClipPointer.pressed ? Theme.highlightPressed
-                                           : Theme.highlightHover
-            border.color: Theme.highlightBorder
+            color: dragClipPointer.pressed
+                   ? Theme.selectionGlassPressed : Theme.selectionGlassHover
+            border.color: Theme.selectionGlassBorder
             border.width: 1
             radius: 5
 
             Text {
                 id: dragClipLabel
+                objectName: "waveSelectionDragClipLabel"
                 anchors.centerIn: parent
                 text: qsTr("拖出片段")
-                color: Theme.highlightText
+                color: Theme.onBrandGradientText
                 font.family: Theme.fontPrimary
                 font.pixelSize: 11
             }
@@ -209,18 +215,44 @@ Item {
                 onCanceled: if (root.dragAdapter) root.dragAdapter.cancel()
             }
         }
+
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.RightButton
+            hoverEnabled: true
+            onPositionChanged: function(mouse) {
+                root.hoverPositionMs = root.timeForX(
+                            selectionRect.x + mouse.x)
+            }
+            onEntered: root.hoverPositionMs = root.timeForX(
+                           selectionRect.x + mouseX)
+            onExited: root.hoverPositionMs = -1
+            onClicked: function(mouse) {
+                if (mouse.button !== Qt.RightButton)
+                    return
+                root.clearSelection()
+                root.selectionClearRequested()
+            }
+        }
     }
 
-    Rectangle {
+    Item {
         id: leftHandle
         objectName: "waveSelectionLeftHandle"
         visible: root.selectionActive
         x: root.selectionX - width / 2
-        width: 10
+        width: 14
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        color: Theme.highlight
-        radius: 4
+
+        Rectangle {
+            objectName: "waveSelectionLeftHandleVisual"
+            anchors.centerIn: parent
+            width: 2
+            height: parent.height
+            color: Theme.highlight
+            radius: 2
+        }
 
         MouseArea {
             id: leftHandlePointer
@@ -238,16 +270,23 @@ Item {
         }
     }
 
-    Rectangle {
+    Item {
         id: rightHandle
         objectName: "waveSelectionRightHandle"
         visible: root.selectionActive
         x: root.selectionX + root.selectionWidth - width / 2
-        width: 10
+        width: 14
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        color: Theme.highlight
-        radius: 4
+
+        Rectangle {
+            objectName: "waveSelectionRightHandleVisual"
+            anchors.centerIn: parent
+            width: 2
+            height: parent.height
+            color: Theme.highlight
+            radius: 2
+        }
 
         MouseArea {
             id: rightHandlePointer
@@ -276,11 +315,13 @@ Item {
             root.forwardZoom(wheel, selectionPointer)
         }
         onPressed: function(mouse) {
+            root.hoverPositionMs = root.timeForX(mouse.x)
             root._pressTimeMs = root.timeForX(mouse.x)
             root._selecting = true
             root._moved = false
         }
         onPositionChanged: function(mouse) {
+            root.hoverPositionMs = root.timeForX(mouse.x)
             if (!root._selecting)
                 return
             root._moved = root._moved || Math.abs(mouse.x
@@ -298,5 +339,7 @@ Item {
             root._selecting = false
         }
         onCanceled: root._selecting = false
+        onEntered: root.hoverPositionMs = root.timeForX(mouseX)
+        onExited: root.hoverPositionMs = -1
     }
 }

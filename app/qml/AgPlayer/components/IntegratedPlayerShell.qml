@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 import AgPlayer
 
@@ -23,11 +24,14 @@ Item {
     property Component bottomBarComponent: null
     property alias tagSearchText: tagPanel.searchText
     property var hostWindow: null
+    property int sidePanelPage: 0
+    property bool sidePanelExpanded: true
 
     property int topBarHeight: 52
     property int leftColumnWidth: 248
     property int rightColumnWidth: 312
     property int waveformHeight: 120
+    property int waveformNavigatorHeight: 10
     property int bottomBarHeight: 83
     property int contentSpacing: 8
     readonly property real effectiveDurationMs: waveformDurationMs > 0
@@ -94,6 +98,20 @@ Item {
         return result
     }
 
+    function applyWaveformMode() {
+        if (!waveform || !playedWaveform)
+            return
+        if (SettingsController.waveformMode === 2) {
+            var spectrum = root.displayedSpectrumPeaks
+            waveform.peaks = spectrum
+            playedWaveform.peaks = spectrum
+        } else {
+            var layers = root.displayedWaveformLayers
+            waveform.layers = layers
+            playedWaveform.layers = layers
+        }
+    }
+
     function syncSelection() {
         if (!playbackController
                 || playbackController.selectionEndMs
@@ -108,6 +126,17 @@ Item {
     Component.onCompleted: {
         syncFilterControls()
         syncSelection()
+        applyWaveformMode()
+    }
+
+    onDisplayedWaveformLayersChanged: {
+        if (SettingsController.waveformMode !== 2)
+            applyWaveformMode()
+    }
+
+    onDisplayedSpectrumPeaksChanged: {
+        if (SettingsController.waveformMode === 2)
+            applyWaveformMode()
     }
 
     Connections {
@@ -122,6 +151,15 @@ Item {
         target: root.playbackController
         function onSelectionStartMsChanged() { root.syncSelection() }
         function onSelectionEndMsChanged() { root.syncSelection() }
+        function onSpectrumChanged() {
+            if (SettingsController.waveformMode === 2)
+                root.applyWaveformMode()
+        }
+    }
+
+    Connections {
+        target: SettingsController
+        function onWaveformModeChanged() { root.applyWaveformMode() }
     }
 
     Rectangle {
@@ -254,8 +292,9 @@ Item {
                 }
 
                 Rectangle {
+                    id: sidePanelColumn
                     objectName: "integratedTagColumn"
-                    Layout.preferredWidth: tagPanel.expanded
+                    Layout.preferredWidth: root.sidePanelExpanded
                                            ? root.rightColumnWidth : 42
                     Layout.minimumWidth: Layout.preferredWidth
                     Layout.maximumWidth: Layout.preferredWidth
@@ -265,15 +304,187 @@ Item {
                     border.width: 1
                     radius: Theme.radiusSm
 
-                    TagManagementPanel {
-                        id: tagPanel
-                        objectName: "integratedTagManagementPanel"
+                    Item {
                         anchors.fill: parent
-                        tagModel: root.tagModel
-                        filterModel: root.filterModel
-                        compact: true
-                        collapsible: true
-                        expanded: true
+                        anchors.margins: root.sidePanelExpanded ? 10 : 7
+
+                        RowLayout {
+                            id: sidePanelHeader
+                            objectName: "integratedSidePanelHeader"
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            height: 30
+                            spacing: 4
+
+                            Button {
+                                id: tagTabButton
+                                objectName: "integratedTagTabButton"
+                                visible: root.sidePanelExpanded
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                flat: true
+                                text: qsTr("标签管理") + " (" + (root.tagModel
+                                      ? root.tagModel.rowCount() : 0) + ")"
+                                Accessible.name: qsTr("标签管理")
+                                onClicked: root.sidePanelPage = 0
+                                contentItem: Text {
+                                    text: tagTabButton.text
+                                    color: root.sidePanelPage === 0
+                                           ? Theme.primaryText
+                                           : Theme.secondaryText
+                                    font.family: Theme.fontPrimary
+                                    font.pixelSize: 15
+                                    font.weight: root.sidePanelPage === 0
+                                                 ? Font.DemiBold : Font.Normal
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
+                                }
+                                background: Rectangle {
+                                    color: tagTabButton.hovered
+                                           ? Theme.hoverSurface : "transparent"
+                                    radius: Theme.radiusSm
+                                    Rectangle {
+                                        visible: root.sidePanelPage === 0
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.bottom: parent.bottom
+                                        height: 2
+                                        color: Theme.accent
+                                    }
+                                }
+                            }
+
+                            Button {
+                                id: lyricsTabButton
+                                objectName: "integratedLyricsTabButton"
+                                visible: root.sidePanelExpanded
+                                Layout.preferredWidth: 72
+                                Layout.fillHeight: true
+                                flat: true
+                                text: qsTr("歌词")
+                                Accessible.name: text
+                                onClicked: root.sidePanelPage = 1
+                                contentItem: Text {
+                                    text: lyricsTabButton.text
+                                    color: root.sidePanelPage === 1
+                                           ? Theme.primaryText
+                                           : Theme.secondaryText
+                                    font.family: Theme.fontPrimary
+                                    font.pixelSize: 15
+                                    font.weight: root.sidePanelPage === 1
+                                                 ? Font.DemiBold : Font.Normal
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                background: Rectangle {
+                                    color: lyricsTabButton.hovered
+                                           ? Theme.hoverSurface : "transparent"
+                                    radius: Theme.radiusSm
+                                    Rectangle {
+                                        visible: root.sidePanelPage === 1
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.bottom: parent.bottom
+                                        height: 2
+                                        color: Theme.accent
+                                    }
+                                }
+                            }
+
+                            Item { Layout.fillWidth: !root.sidePanelExpanded }
+
+                            ToolButton {
+                                id: sidePanelToggleButton
+                                objectName: "integratedSidePanelToggleButton"
+                                Layout.preferredWidth: 28
+                                Layout.preferredHeight: 28
+                                flat: true
+                                Accessible.name: root.sidePanelExpanded
+                                                 ? qsTr("隐藏标签和歌词侧栏")
+                                                 : qsTr("显示标签和歌词侧栏")
+                                onClicked: root.sidePanelExpanded =
+                                           !root.sidePanelExpanded
+                                ToolTip.text: Accessible.name
+                                ToolTip.visible: hovered
+                                background: Rectangle {
+                                    color: sidePanelToggleButton.hovered
+                                           ? Theme.hoverSurface : "transparent"
+                                    radius: Theme.radiusSm
+                                }
+                                contentItem: ThemedIcon {
+                                    source: Theme.icon("side-panel-toggle")
+                                    tint: Theme.iconPrimary
+                                    sourceSize.width: 20
+                                    sourceSize.height: 20
+                                    mirror: !root.sidePanelExpanded
+                                }
+                            }
+                        }
+
+                        Item {
+                            objectName: "integratedSidePanelContent"
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: sidePanelHeader.bottom
+                            anchors.topMargin: 8
+                            anchors.bottom: parent.bottom
+                            visible: root.sidePanelExpanded
+
+                            Item {
+                                id: tagContent
+                                objectName: "integratedTagContent"
+                                anchors.fill: parent
+                                visible: root.sidePanelPage === 0
+
+                                TagManagementPanel {
+                                    id: tagPanel
+                                    objectName: "integratedTagManagementPanel"
+                                    anchors.fill: parent
+                                    tagModel: root.tagModel
+                                    filterModel: root.filterModel
+                                    compact: true
+                                    collapsible: false
+                                    expanded: true
+                                    showHeader: false
+                                }
+                            }
+
+                            ScrollView {
+                                id: lyricsContent
+                                objectName: "integratedLyricsContent"
+                                anchors.fill: parent
+                                visible: root.sidePanelPage === 1
+                                clip: true
+
+                                TextArea {
+                                    id: lyricsText
+                                    objectName: "integratedLyricsText"
+                                    width: lyricsContent.availableWidth
+                                    readOnly: true
+                                    selectByMouse: true
+                                    wrapMode: TextEdit.Wrap
+                                    padding: 8
+                                    text: root.playbackController
+                                          && root.playbackController.lyrics
+                                          && root.playbackController.lyrics.trim().length > 0
+                                          ? root.playbackController.lyrics
+                                          : qsTr("当前歌曲暂无内嵌歌词")
+                                    color: root.playbackController
+                                           && root.playbackController.lyrics
+                                           && root.playbackController.lyrics.trim().length > 0
+                                           ? Theme.primaryText
+                                           : Theme.secondaryText
+                                    font.family: Theme.fontPrimary
+                                    font.pixelSize: 13
+                                    horizontalAlignment: text === qsTr("当前歌曲暂无内嵌歌词")
+                                                         ? Text.AlignHCenter
+                                                         : Text.AlignLeft
+                                    background: null
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -284,7 +495,8 @@ Item {
             objectName: "integratedWaveformFrame"
             Layout.fillWidth: true
             Layout.preferredHeight: root.waveformHeight
-            Layout.topMargin: 24
+                                    + root.waveformNavigatorHeight
+            Layout.topMargin: 4
             Layout.bottomMargin: 12
             Layout.leftMargin: root.contentSpacing
             Layout.rightMargin: root.contentSpacing
@@ -297,11 +509,12 @@ Item {
             WaveformItem {
                 id: waveform
                 objectName: "integratedWaveform"
-                anchors.fill: parent
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.bottom: waveformNavigator.top
                 anchors.topMargin: 20
                 pointerInteractionEnabled: false
-                layers: root.displayedWaveformLayers
-                peaks: root.displayedSpectrumPeaks
                 duration: root.effectiveDurationMs
                 cursorPosition: root.playbackPositionMs
                 analysisProgress: root.waveformProvider
@@ -364,11 +577,11 @@ Item {
                 clip: true
                 enabled: false
                 WaveformItem {
+                    id: playedWaveform
+                    objectName: "integratedPlayedWaveform"
                     width: waveformFrame.width
                     height: waveform.height
                     enabled: false
-                    layers: root.displayedWaveformLayers
-                    peaks: root.displayedSpectrumPeaks
                     duration: root.effectiveDurationMs
                     visibleStartMs: waveform.visibleStartMs
                     visibleEndMs: waveform.visibleEndMs
@@ -390,7 +603,10 @@ Item {
             WaveSelectionOverlay {
                 id: selectionOverlay
                 objectName: "integratedWaveSelectionOverlay"
-                anchors.fill: parent
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: waveform.top
+                anchors.bottom: waveform.bottom
                 z: 4
                 durationMs: root.effectiveDurationMs
                 visibleStartMs: waveform.visibleStartMs
@@ -409,8 +625,12 @@ Item {
                                         positionMs)
                         else
                             root.playbackController.seek(positionMs)
+                        root.playbackController.play()
                     }
                     root.seekRequested(positionMs)
+                }
+                onHoverPositionMsChanged: {
+                    waveform.setHoverPositionForInteraction(hoverPositionMs)
                 }
                 dragAdapter: PlaybackClipDragAdapter
                 currentTrackId: root.playbackController
@@ -423,11 +643,131 @@ Item {
                     if (root.playbackController)
                         root.playbackController.adjustSelection(startMs, endMs)
                 }
+                onSelectionClearRequested: {
+                    if (root.playbackController)
+                        root.playbackController.clearSelection()
+                }
                 onSelectionLoopRequested: function(startMs, endMs) {
                     root.selectionLoopRequested(startMs, endMs)
                 }
                 onDragClipRequested: function(startMs, endMs) {
                     root.dragClipRequested(startMs, endMs)
+                }
+            }
+
+            Rectangle {
+                objectName: "integratedWaveformHoverGuide"
+                visible: SettingsController.waveformHoverTimePreview
+                         && selectionOverlay.hoverPositionMs >= 0
+                x: Math.max(0, Math.min(parent.width - width,
+                                        waveform.pixelForTime(
+                                            selectionOverlay.hoverPositionMs)))
+                y: waveform.y
+                width: 1
+                height: waveform.height
+                color: "#54ff84" // theme-color-allow: shared waveform hover guide
+                opacity: 0.96
+                z: 7
+            }
+
+            Rectangle {
+                objectName: "integratedWaveformHoverTime"
+                visible: SettingsController.waveformHoverTimePreview
+                         && selectionOverlay.hoverPositionMs >= 0
+                x: Math.max(0, Math.min(
+                                waveformFrame.width - width,
+                                waveform.pixelForTime(
+                                    selectionOverlay.hoverPositionMs)
+                                - width / 2))
+                y: waveform.y + 2
+                width: integratedHoverTime.implicitWidth + 12
+                height: integratedHoverTime.implicitHeight + 6
+                radius: height / 2
+                color: Theme.panel
+                border.color: "#54ff84" // theme-color-allow: shared waveform hover guide
+                z: 8
+
+                Text {
+                    id: integratedHoverTime
+                    anchors.centerIn: parent
+                    text: root.formatScaleTime(selectionOverlay.hoverPositionMs)
+                    color: Theme.primaryText
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: 11
+                }
+            }
+
+            Item {
+                id: waveformNavigator
+                objectName: "integratedWaveformNavigator"
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                height: root.waveformNavigatorHeight
+                z: 9
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.leftMargin: 8
+                    anchors.rightMargin: 8
+                    height: 3
+                    radius: 1.5
+                    color: Theme.border
+                    opacity: 0.72
+                }
+
+                Rectangle {
+                    id: navigatorThumb
+                    objectName: "integratedWaveformNavigatorThumb"
+                    readonly property real rangeFraction:
+                        root.effectiveDurationMs > 0
+                        ? (waveform.visibleEndMs - waveform.visibleStartMs)
+                          / root.effectiveDurationMs : 1
+                    x: root.effectiveDurationMs > 0
+                       ? waveform.visibleStartMs / root.effectiveDurationMs
+                         * waveformNavigator.width : 0
+                    width: Math.max(18, Math.min(waveformNavigator.width,
+                                                 waveformNavigator.width
+                                                 * rangeFraction))
+                    height: 6
+                    anchors.verticalCenter: parent.verticalCenter
+                    radius: 3
+                    color: Theme.accent
+                    opacity: rangeFraction < 0.999 ? 0.9 : 0.52
+
+                    MouseArea {
+                        id: navigatorPointer
+                        anchors.fill: parent
+                        enabled: navigatorThumb.rangeFraction < 0.999
+                        cursorShape: enabled ? Qt.SizeHorCursor : Qt.ArrowCursor
+                        property real pressOffset: 0
+                        onPressed: function(mouse) {
+                            pressOffset = mouse.x
+                        }
+                        onPositionChanged: function(mouse) {
+                            if (!pressed || root.effectiveDurationMs <= 0)
+                                return
+                            var point = mapToItem(waveformNavigator,
+                                                  mouse.x, mouse.y)
+                            var travel = Math.max(0, waveformNavigator.width
+                                                    - navigatorThumb.width)
+                            if (travel <= 0)
+                                return
+                            var desiredX = Math.max(
+                                        0, Math.min(travel,
+                                                    point.x - pressOffset))
+                            var span = waveform.visibleEndMs
+                                     - waveform.visibleStartMs
+                            var maxStart = Math.max(
+                                        0, root.effectiveDurationMs - span)
+                            var nextStart = Math.round(
+                                        desiredX / travel * maxStart)
+                            waveform.setVisibleRange(nextStart,
+                                                     nextStart + span)
+                        }
+                    }
                 }
             }
         }

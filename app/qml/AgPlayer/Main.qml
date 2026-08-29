@@ -38,6 +38,8 @@ ApplicationWindow {
     property int positionMs: playback ? playback.positionMs : 0
     property bool playFirstDroppedTrack: false
     property string tagSearchText: ""
+    property int integratedSidePanelPage: 0
+    property bool integratedSidePanelExpanded: true
     readonly property bool integratedShell:
         SettingsController.playerShellMode === 1
 
@@ -230,8 +232,16 @@ ApplicationWindow {
             hostWindow: mainWindow
             waveformLayers: sharedWaveformSession.layers
             waveformDurationMs: sharedWaveformSession.durationMs
+            sidePanelPage: mainWindow.integratedSidePanelPage
+            sidePanelExpanded: mainWindow.integratedSidePanelExpanded
             bottomBarComponent: integratedBottomBarComponent
             onOpenSettingsRequested: mainWindow.openSettingsPage()
+            onSidePanelPageChanged: {
+                mainWindow.integratedSidePanelPage = sidePanelPage
+            }
+            onSidePanelExpandedChanged: {
+                mainWindow.integratedSidePanelExpanded = sidePanelExpanded
+            }
         }
     }
 

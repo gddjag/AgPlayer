@@ -63,6 +63,7 @@ private slots:
     void resizeLoopStaysWithinInteractiveBudget();
     void zoomKeepsAnchorStableAndUsesVisibleRange();
     void zoomClampsToEightTimesAndResizeDoesNotResetViewport();
+    void visibleRangeCanBePannedWithoutChangingItsSpan();
 };
 
 namespace {
@@ -877,6 +878,24 @@ void WaveformItemTest::resizeLoopStaysWithinInteractiveBudget()
                             .arg(elapsedMs)));
     QCOMPARE(item.peaks(), values);
     delete node;
+}
+
+void WaveformItemTest::visibleRangeCanBePannedWithoutChangingItsSpan()
+{
+    WaveformItem item;
+    item.setWidth(1000);
+    item.setDuration(100000);
+    item.zoomAt(500.0, 2.0);
+    QCOMPARE(item.visibleEndMs() - item.visibleStartMs(), qint64{50000});
+
+    const bool invoked = QMetaObject::invokeMethod(
+        &item, "setVisibleRange", Qt::DirectConnection,
+        Q_ARG(qint64, 40000), Q_ARG(qint64, 90000));
+
+    QVERIFY2(invoked, "WaveformItem must expose one atomic visible-range update");
+    QCOMPARE(item.visibleStartMs(), qint64{40000});
+    QCOMPARE(item.visibleEndMs(), qint64{90000});
+    QCOMPARE(item.timeForX(500.0), qint64{65000});
 }
 
 void WaveformItemTest::zoomKeepsAnchorStableAndUsesVisibleRange()

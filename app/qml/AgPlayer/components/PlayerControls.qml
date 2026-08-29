@@ -72,20 +72,6 @@ Rectangle {
         spacing: root.emptyMode ? 28 : 16
 
         ToolButton {
-            objectName: "audioToolsButton"
-            flat: true
-            icon.source: Theme.icon("briefcase-4-line")
-            icon.color: Theme.iconPrimary
-            icon.width: 20
-            icon.height: 20
-            Accessible.name: qsTr("Open audio tools")
-            onClicked: WindowController.showAudioTools()
-            ToolTip.text: Accessible.name
-            ToolTip.visible: hovered
-            background: null
-        }
-
-        ToolButton {
             objectName: "equalizerButton"
             flat: true
             icon.source: Theme.icon("equalizer-line")
@@ -206,24 +192,6 @@ Rectangle {
             background: null
         }
 
-        ToolButton {
-            objectName: "playerShellModeButton"
-            flat: true
-            icon.source: Theme.icon(SettingsController.playerShellMode === 0
-                                    ? "merge-cells-horizontal"
-                                    : "split-cells-horizontal")
-            icon.color: Theme.iconPrimary
-            icon.width: 20
-            icon.height: 20
-            Accessible.name: SettingsController.playerShellMode === 0
-                             ? qsTr("Switch to integrated player layout")
-                             : qsTr("Switch to classic player layout")
-            onClicked: SettingsController.playerShellMode =
-                       SettingsController.playerShellMode === 0 ? 1 : 0
-            ToolTip.text: Accessible.name
-            ToolTip.visible: hovered
-            background: null
-        }
     }
 
     Item {
@@ -368,22 +336,59 @@ Rectangle {
             }
         }
 
-    ToolButton {
-        objectName: "miniPlayerButton"
+    RowLayout {
+        id: secondaryActions
+        objectName: "playerSecondaryActions"
         anchors.right: parent.right
         anchors.rightMargin: 24
         anchors.verticalCenter: parent.verticalCenter
-        anchors.verticalCenterOffset: -8
-        visible: !root.emptyMode
-        flat: true
-        icon.source: Theme.icon("picture-in-picture-2-line")
-        icon.color: Theme.iconPrimary
-        icon.width: 20
-        icon.height: 20
-        Accessible.name: qsTr("Switch to mini player")
-        onClicked: WindowController.showMini()
-        ToolTip.text: Accessible.name
-        ToolTip.visible: hovered
-        background: null
+        anchors.verticalCenterOffset: root.emptyMode ? -4 : -8
+        spacing: 14
+
+        ToolButton {
+            objectName: "audioToolsButton"
+            flat: true
+            icon.source: Theme.icon("briefcase-4-line")
+            icon.color: Theme.iconPrimary
+            icon.width: 20
+            icon.height: 20
+            Accessible.name: qsTr("Open audio tools")
+            onClicked: WindowController.showAudioTools()
+            ToolTip.text: Accessible.name
+            ToolTip.visible: hovered
+            background: null
+        }
+
+        ToolButton {
+            objectName: "playerShellModeButton"
+            flat: true
+            icon.source: Theme.icon("player-shell-mode")
+            icon.color: Theme.iconPrimary
+            icon.width: 20
+            icon.height: 20
+            Accessible.name: SettingsController.playerShellMode === 0
+                             ? qsTr("Switch to integrated player layout")
+                             : qsTr("Switch to classic player layout")
+            onClicked: SettingsController.playerShellMode =
+                       SettingsController.playerShellMode === 0 ? 1 : 0
+            ToolTip.text: Accessible.name
+            ToolTip.visible: hovered
+            background: null
+        }
+
+        ToolButton {
+            objectName: "miniPlayerButton"
+            visible: !root.emptyMode
+            flat: true
+            icon.source: Theme.icon("picture-in-picture-2-line")
+            icon.color: Theme.iconPrimary
+            icon.width: 20
+            icon.height: 20
+            Accessible.name: qsTr("Switch to mini player")
+            onClicked: WindowController.showMini()
+            ToolTip.text: Accessible.name
+            ToolTip.visible: hovered
+            background: null
+        }
     }
 }
