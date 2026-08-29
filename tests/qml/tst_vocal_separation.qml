@@ -97,6 +97,193 @@ TestCase {
         VocalSeparationController.clearInput()
     }
 
+    function descendants(root) {
+        const found = []
+        if (!root || !root.children)
+            return found
+        for (let index = 0; index < root.children.length; ++index)
+            found.push(root.children[index])
+        for (let index = 0; index < found.length; ++index) {
+            const child = found[index]
+            if (!child.children)
+                continue
+            for (let childIndex = 0; childIndex < child.children.length; ++childIndex)
+                found.push(child.children[childIndex])
+        }
+        return found
+    }
+
+    function controlWithText(root, expectedText) {
+        const all = descendants(root)
+        for (let index = 0; index < all.length; ++index) {
+            if (all[index].text === expectedText && all[index].enabled !== undefined)
+                return all[index]
+        }
+        return null
+    }
+
+    function controlWithAccessibleName(root, expectedName) {
+        const all = descendants(root)
+        for (let index = 0; index < all.length; ++index) {
+            if (all[index].Accessible && all[index].Accessible.name === expectedName)
+                return all[index]
+        }
+        return null
+    }
+
+    function hasActiveFocus(root) {
+        if (root && root.activeFocus)
+            return true
+        const all = descendants(root)
+        for (let index = 0; index < all.length; ++index) {
+            if (all[index].activeFocus)
+                return true
+        }
+        return false
+    }
+
+    function test_downloadStateBindingsKeepJobProgressIndependent() {
+        separationTestDriver.reset()
+        separationTestDriver.setDownloadState("uvr-mdxnet-kara",
+                                              VocalSeparationController.Downloading,
+                                              0.42, "")
+        compare(VocalSeparationController.downloadingModelId, "uvr-mdxnet-kara")
+        compare(VocalSeparationController.downloadBusy, true)
+        compare(VocalSeparationController.downloadProgress, 0.42)
+        compare(VocalSeparationController.progress, 0)
+        const active = VocalSeparationController.models.filter(function(model) {
+            return model.id === "uvr-mdxnet-kara"
+        })[0]
+        compare(active.state, VocalSeparationController.Downloading)
+
+        separationTestDriver.setDownloadState("uvr-mdxnet-kara",
+                                              VocalSeparationController.Paused,
+                                              0.42, "")
+        compare(VocalSeparationController.models.filter(function(model) {
+            return model.id === "uvr-mdxnet-kara"
+        })[0].state, VocalSeparationController.Paused)
+
+        separationTestDriver.setDownloadState("uvr-mdxnet-kara",
+                                              VocalSeparationController.ModelFailed,
+                                              0.42, "SHA-256 校验失败")
+        compare(VocalSeparationController.error, "SHA-256 校验失败")
+        compare(VocalSeparationController.models.filter(function(model) {
+            return model.id === "uvr-mdxnet-kara"
+        })[0].state, VocalSeparationController.ModelFailed)
+        separationTestDriver.reset()
+    }
+
+    function test_runtimeMissingAndProviderFallbackExposeTruthfulReasons() {
+        separationTestDriver.reset()
+        separationTestDriver.setInput(testAudioUrl)
+        separationTestDriver.markSelectedModelInstalled()
+        separationTestDriver.setRuntimeMissing()
+        verify(!VocalSeparationController.canStart)
+        compare(VocalSeparationController.startDisabledReason, "ONNX Runtime 尚未安装")
+
+        separationTestDriver.setDevices("fallback")
+        compare(VocalSeparationController.availableDevices[0].available, true)
+        compare(VocalSeparationController.availableDevices[2].available, false)
+        compare(VocalSeparationController.availableDevices[2].reason,
+                "DirectML 提供程序不可用，已回退 CPU")
+        separationTestDriver.setDevices("none")
+        compare(VocalSeparationController.availableDevices[0].available, false)
+        compare(VocalSeparationController.availableDevices[0].reason,
+                "CPU 和 GPU 均未通过设备探测")
+        separationTestDriver.reset()
+    }
+
+    function test_probeRunningCancellingAndCompletedLockTheRealControls() {
+        separationTestDriver.reset()
+        const chooseFile = controlWithText(page, "选择文件")
+        const outputFormat = controlWithAccessibleName(page, "输出格式")
+        const primary = findChild(page, "separationPrimaryAction")
+        verify(chooseFile && outputFormat && primary)
+
+        separationTestDriver.setJobState(VocalSeparationController.Probing, "probe")
+        verify(!chooseFile.enabled)
+        verify(!outputFormat.enabled)
+        compare(page.contextLockReason, "正在探测设备，请稍候")
+
+        separationTestDriver.setJobState(VocalSeparationController.Running, "separating")
+        verify(!chooseFile.enabled)
+        verify(!outputFormat.enabled)
+        compare(primary.text, "取消分离")
+        verify(primary.enabled)
+        compare(page.contextLockReason, "分离任务进行中，暂不能更改输入或设置")
+
+        separationTestDriver.setJobState(VocalSeparationController.Cancelling, "cancelling")
+        compare(primary.text, "正在取消")
+        verify(!primary.enabled)
+
+        separationTestDriver.setCompleted()
+        compare(VocalSeparationController.jobState, VocalSeparationController.Completed)
+        verify(page.hasAvailableSelectedStems())
+        compare(primary.text, "开始分离")
+        separationTestDriver.reset()
+    }
+
+    function test_failureRetryAndModelFamiliesAreVisible() {
+        separationTestDriver.reset()
+        separationTestDriver.setJobFailure("Worker 意外退出")
+        const errorPanel = findChild(page, "separationErrorPanel")
+        const retry = controlWithText(errorPanel, "重试")
+        verify(errorPanel.visible)
+        verify(retry && retry.enabled)
+        compare(VocalSeparationController.jobState, VocalSeparationController.JobFailed)
+
+        separationTestDriver.selectModel("uvr-mdxnet-kara")
+        compare(VocalSeparationController.stems.filter(function(stem) {
+            return stem.supported
+        }).length, 2)
+        separationTestDriver.selectModel("htdemucs-ft-fp16")
+        compare(VocalSeparationController.stems.filter(function(stem) {
+            return stem.supported
+        }).length, 5)
+        separationTestDriver.reset()
+    }
+
+    function test_previewLabelsFollowTheActualSharedPreviewSource() {
+        separationTestDriver.reset()
+        separationTestDriver.setInput(testAudioUrl)
+        const source = VocalSeparationController.inputInfo.path
+        AudioPreviewController.play(testAudioUrl)
+        tryVerify(function() { return AudioPreviewController.sourcePath === source }, 2000)
+        compare(page.previewActionText(source),
+                AudioPreviewController.playing ? "暂停" : "继续")
+        compare(page.previewActionText(source + ".other"), "试听")
+        AudioPreviewController.stop()
+        separationTestDriver.reset()
+    }
+
+    function test_keyboardFocusIsVisibleAndControlsAreAccessible() {
+        verify(separationTestDriver.setReady(testAudioUrl))
+        const primary = findChild(page, "separationPrimaryAction")
+        const preview = controlWithAccessibleName(page, "输入预览：试听")
+        verify(primary)
+        verify(preview)
+        verify(primary.enabled)
+        verify(primary.Accessible.name.length > 0)
+        compare(primary.Accessible.role, Accessible.Button)
+        primary.forceActiveFocus()
+        verify(primary.activeFocus)
+        keyClick(Qt.Key_Tab)
+        verify(hasActiveFocus(page))
+
+        preview.forceActiveFocus()
+        keyClick(Qt.Key_Space)
+        tryVerify(function() {
+            return AudioPreviewController.sourcePath
+                   === VocalSeparationController.inputInfo.path
+        }, 2000)
+        keyClick(Qt.Key_Space)
+        verify(AudioPreviewController.sourcePath
+               === VocalSeparationController.inputInfo.path)
+        verify(!AudioPreviewController.playing)
+        AudioPreviewController.stop()
+        separationTestDriver.reset()
+    }
+
     function test_responsiveViewportsKeepThePrimaryActionReachable() {
         const viewports = [[1672, 941], [1280, 720], [880, 560], [1920, 1080]]
         for (let index = 0; index < viewports.length; ++index) {

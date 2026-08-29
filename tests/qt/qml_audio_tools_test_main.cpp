@@ -18,6 +18,7 @@
 #include <agplayer/c_api.h>
 
 #include <QCoreApplication>
+#include <QDir>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QFile>
@@ -161,6 +162,217 @@ private:
     bool delivered_ = false;
 };
 
+// This driver exists only in the QML test executable.  It emits the production
+// controller's real notify signals after arranging deterministic state so the
+// page is exercised without adding a production-only mock mode.
+class VocalSeparationControllerTestDriver final : public QObject {
+    Q_OBJECT
+
+public:
+    void bind(VocalSeparationController* controller)
+    {
+        controller_ = controller;
+        if (controller_ != nullptr)
+            runtimeLibraryPath_ = controller_->options_.runtimeLibraryPath;
+    }
+
+    Q_INVOKABLE void reset()
+    {
+        if (controller_ == nullptr) return;
+        controller_->activeRequest_.reset();
+        controller_->failedRequest_.reset();
+        controller_->setJobState(VocalSeparationController::JobState::Idle);
+        controller_->clearInput();
+        controller_->downloadQueue_.clear();
+        controller_->downloadingModelId_.clear();
+        controller_->failedDownloadModelId_.clear();
+        controller_->downloadProgress_ = 0.0;
+        controller_->verifiedModelIds_.clear();
+        controller_->verifiedOrRejectedModelIds_.clear();
+        controller_->runtimeVerified_ = false;
+        controller_->options_.runtimeLibraryPath = runtimeLibraryPath_;
+        controller_->inputInfo_.clear();
+        controller_->error_.clear();
+        controller_->progress_ = 0.0;
+        controller_->deviceMode_ = VocalSeparationController::DeviceMode::Auto;
+        controller_->availableDevices_ = standardDevices();
+        controller_->selectedModelId_ = controller_->options_.catalog.isEmpty()
+            ? QString{} : controller_->options_.catalog.constFirst().id;
+        controller_->refreshModels();
+        controller_->rebuildStems();
+        emit controller_->inputInfoChanged();
+        emit controller_->errorChanged();
+        emit controller_->progressChanged();
+        emit controller_->downloadProgressChanged();
+        emit controller_->downloadStateChanged();
+        emit controller_->availableDevicesChanged();
+        emit controller_->selectedModelIdChanged();
+    }
+
+    Q_INVOKABLE bool setInput(const QUrl& input)
+    {
+        return controller_ != nullptr && controller_->selectInput(input);
+    }
+
+    Q_INVOKABLE void markSelectedModelInstalled()
+    {
+        if (controller_ == nullptr) return;
+        controller_->verifiedModelIds_.insert(controller_->selectedModelId_);
+        controller_->verifiedOrRejectedModelIds_.insert(
+            controller_->selectedModelId_);
+        controller_->refreshModels();
+    }
+
+    Q_INVOKABLE void setRuntimeMissing()
+    {
+        if (controller_ == nullptr) return;
+        controller_->options_.runtimeLibraryPath = QDir(
+            QStandardPaths::writableLocation(QStandardPaths::TempLocation))
+            .filePath(QStringLiteral("agplayer-test-missing-onnxruntime.dll"));
+        emit controller_->startEligibilityChanged();
+    }
+
+    Q_INVOKABLE bool setReady(const QUrl& input)
+    {
+        if (controller_ == nullptr) return false;
+        reset();
+        const QString runtimePath = QDir(
+            QStandardPaths::writableLocation(QStandardPaths::TempLocation))
+            .filePath(QStringLiteral("agplayer-test-onnxruntime.dll"));
+        QFile runtime(runtimePath);
+        if (!runtime.open(QIODevice::WriteOnly | QIODevice::Truncate)) return false;
+        runtime.write("test-runtime");
+        runtime.close();
+        controller_->options_.runtimeLibraryPath = runtimePath;
+        if (!controller_->selectInput(input)) return false;
+        markSelectedModelInstalled();
+        controller_->availableDevices_ = standardDevices();
+        emit controller_->availableDevicesChanged();
+        emit controller_->startEligibilityChanged();
+        return controller_->canStart();
+    }
+
+    Q_INVOKABLE void setDevices(const QString& scenario)
+    {
+        if (controller_ == nullptr) return;
+        if (scenario == QStringLiteral("fallback")) {
+            controller_->availableDevices_ = {
+                device(VocalSeparationController::DeviceMode::Auto, "Auto", true,
+                       "自动选择已验证的可用设备"),
+                device(VocalSeparationController::DeviceMode::CPU, "CPU", true, ""),
+                device(VocalSeparationController::DeviceMode::GPU, "DirectML", false,
+                       "DirectML 提供程序不可用，已回退 CPU"),
+            };
+        } else if (scenario == QStringLiteral("none")) {
+            controller_->availableDevices_ = {
+                device(VocalSeparationController::DeviceMode::Auto, "Auto", false,
+                       "CPU 和 GPU 均未通过设备探测"),
+                device(VocalSeparationController::DeviceMode::CPU, "CPU", false,
+                       "CPU 提供程序不可用"),
+                device(VocalSeparationController::DeviceMode::GPU, "DirectML", false,
+                       "DirectML 提供程序不可用"),
+            };
+        } else {
+            controller_->availableDevices_ = standardDevices();
+        }
+        emit controller_->availableDevicesChanged();
+        emit controller_->startEligibilityChanged();
+    }
+
+    Q_INVOKABLE void setDownloadState(const QString& modelId, int state,
+                                      double progress, const QString& error)
+    {
+        if (controller_ == nullptr) return;
+        const auto modelState = static_cast<VocalSeparationController::ModelState>(state);
+        controller_->downloadProgress_ = progress;
+        controller_->failedDownloadModelId_.clear();
+        if (modelState == VocalSeparationController::ModelState::ModelFailed) {
+            controller_->failedDownloadModelId_ = modelId;
+            controller_->downloadingModelId_.clear();
+        } else {
+            controller_->downloadingModelId_ = modelId;
+        }
+        for (int index = 0; index < controller_->models_.size(); ++index) {
+            QVariantMap model = controller_->models_.at(index).toMap();
+            if (model.value(QStringLiteral("id")).toString() == modelId) {
+                model.insert(QStringLiteral("state"), state);
+                controller_->models_[index] = model;
+                break;
+            }
+        }
+        controller_->setError(error);
+        emit controller_->modelsChanged();
+        emit controller_->downloadProgressChanged();
+        emit controller_->downloadStateChanged();
+    }
+
+    Q_INVOKABLE void setJobState(int state, const QString& stage)
+    {
+        if (controller_ == nullptr) return;
+        controller_->setJobState(
+            static_cast<VocalSeparationController::JobState>(state), stage);
+    }
+
+    Q_INVOKABLE void setCompleted()
+    {
+        if (controller_ == nullptr) return;
+        for (int index = 0; index < controller_->stems_.size(); ++index) {
+            QVariantMap stem = controller_->stems_.at(index).toMap();
+            if (stem.value(QStringLiteral("supported")).toBool()) {
+                stem.insert(QStringLiteral("selected"), true);
+                stem.insert(QStringLiteral("available"), true);
+                stem.insert(QStringLiteral("path"), QStringLiteral("C:/test/%1.wav")
+                    .arg(stem.value(QStringLiteral("name")).toString()));
+                stem.insert(QStringLiteral("waveform"), QVariantList{0.2, 0.8, 0.4});
+            }
+            controller_->stems_[index] = stem;
+        }
+        emit controller_->stemsChanged();
+        controller_->setJobState(VocalSeparationController::JobState::Completed,
+                                 QStringLiteral("completed"));
+    }
+
+    Q_INVOKABLE void setJobFailure(const QString& error)
+    {
+        if (controller_ == nullptr) return;
+        controller_->failedRequest_ =
+            VocalSeparationController::ActiveRequestContext{};
+        controller_->setError(error);
+        controller_->setJobState(VocalSeparationController::JobState::JobFailed,
+                                 QStringLiteral("failed"));
+    }
+
+    Q_INVOKABLE bool selectModel(const QString& modelId)
+    {
+        return controller_ != nullptr && controller_->selectModel(modelId);
+    }
+
+private:
+    static QVariantMap device(VocalSeparationController::DeviceMode mode,
+                              const QString& name, bool available,
+                              const QString& reason)
+    {
+        return {{QStringLiteral("mode"), int(mode)},
+                {QStringLiteral("name"), name},
+                {QStringLiteral("available"), available},
+                {QStringLiteral("reason"), reason}};
+    }
+
+    static QVariantList standardDevices()
+    {
+        return {
+            device(VocalSeparationController::DeviceMode::Auto, "Auto", true,
+                   "自动选择已验证的可用设备"),
+            device(VocalSeparationController::DeviceMode::CPU, "CPU", true, ""),
+            device(VocalSeparationController::DeviceMode::GPU, "DirectML", false,
+                   "尚未探测"),
+        };
+    }
+
+    VocalSeparationController* controller_ = nullptr;
+    QString runtimeLibraryPath_;
+};
+
 class QmlAudioToolsSetup final : public QObject {
     Q_OBJECT
 
@@ -210,6 +422,7 @@ public slots:
         nativeDropHelper_.bind(audioTools_.get(), formatConverter_.get(),
                                audioEditor_.get(), metadataEditor_.get(),
                                filenameProcessor_.get(), vocalSeparation_.get());
+        separationTestDriver_.bind(vocalSeparation_.get());
 
         register_agplayer_qml_types(library_.get(), playback_.get(),
                                     importer_.get(), windows_.get(),
@@ -225,6 +438,8 @@ public slots:
         engine->addImportPath("qrc:/");
         engine->rootContext()->setContextProperty("nativeDropHelper",
                                                   &nativeDropHelper_);
+        engine->rootContext()->setContextProperty("separationTestDriver",
+                                                  &separationTestDriver_);
         engine->rootContext()->setContextProperty(
             "testAudioUrl",
             QUrl::fromLocalFile(QString::fromLocal8Bit(
@@ -248,6 +463,7 @@ private:
     std::unique_ptr<AudioPreviewController> audioPreview_;
     std::unique_ptr<VocalSeparationController> vocalSeparation_;
     NativeDropHelper nativeDropHelper_;
+    VocalSeparationControllerTestDriver separationTestDriver_;
 };
 
 QUICK_TEST_MAIN_WITH_SETUP(qml_audio_tools, QmlAudioToolsSetup)

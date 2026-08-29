@@ -24,6 +24,7 @@ class ImportController;
 class LibraryModel;
 class PlaylistModel;
 class VocalSeparationDownloader;
+class VocalSeparationControllerTestDriver;
 class WaveformProvider;
 
 struct VocalSeparationControllerOptions {
@@ -173,6 +174,8 @@ signals:
     void playlistOperationFinished(bool success, const QString& diagnostic);
 
 private:
+    friend class VocalSeparationControllerTestDriver;
+
     enum class RequestKind { Probe, Separation };
 
     struct ActiveRequestContext {
