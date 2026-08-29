@@ -27,7 +27,8 @@ struct DecodedTrack {
     float peak = 0.0F;
 };
 
-DecodedTrack decodeTrack(const QString& path, QString* error)
+DecodedTrack decodeTrack(const QString& path, const bool retainSamples,
+                         QString* error)
 {
     DecodedTrack track;
     agplayer::MediaMetadata metadata;
@@ -60,15 +61,18 @@ DecodedTrack decodeTrack(const QString& path, QString* error)
             track.peak = std::max(track.peak, std::abs(sample));
             squaredSum += static_cast<double>(sample) * sample;
         }
-        track.samples.insert(track.samples.end(), block.samples.begin(),
-                             block.samples.end());
+        if (retainSamples) {
+            track.samples.insert(track.samples.end(), block.samples.begin(),
+                                 block.samples.end());
+        }
     } while (!block.end_of_stream);
-    if (track.samples.size() != static_cast<std::size_t>(track.frames * 2)) {
+    if (retainSamples
+        && track.samples.size() != static_cast<std::size_t>(track.frames * 2)) {
         *error = QStringLiteral("decoded channel count mismatch: ") + path;
         return track;
     }
-    track.rms = track.samples.empty()
-        ? 0.0 : std::sqrt(squaredSum / static_cast<double>(track.samples.size()));
+    const double sampleCount = static_cast<double>(track.frames) * 2.0;
+    track.rms = sampleCount > 0.0 ? std::sqrt(squaredSum / sampleCount) : 0.0;
     track.ok = true;
     return track;
 }
@@ -103,6 +107,8 @@ approvedCatalogModelRunsOnRequestedDeviceWhenExplicitlyEnabled()
         "AGPLAYER_SEPARATION_REAL_MODEL_FILTER").trimmed().toLower();
     QString requestedDevice = qEnvironmentVariable(
         "AGPLAYER_SEPARATION_REAL_DEVICE").trimmed().toLower();
+    const bool durationSmoke = qEnvironmentVariableIntValue(
+        "AGPLAYER_SEPARATION_REAL_DURATION_SMOKE") != 0;
     if (requestedDevice.isEmpty()) requestedDevice = QStringLiteral("cpu");
     QVERIFY2(requestedDevice == QStringLiteral("cpu")
                  || requestedDevice == QStringLiteral("gpu"),
@@ -114,7 +120,7 @@ approvedCatalogModelRunsOnRequestedDeviceWhenExplicitlyEnabled()
 
     const QDir catalog(catalogRoot);
     QString decodeError;
-    const DecodedTrack inputTrack = decodeTrack(input, &decodeError);
+    const DecodedTrack inputTrack = decodeTrack(input, !durationSmoke, &decodeError);
     QVERIFY2(inputTrack.ok, qPrintable(decodeError));
     QCOMPARE(inputTrack.sampleRate, 44100);
     QCOMPARE(inputTrack.channels, 2);
@@ -180,7 +186,7 @@ approvedCatalogModelRunsOnRequestedDeviceWhenExplicitlyEnabled()
             QVERIFY2(!stem.isEmpty(), qPrintable(QStringLiteral("Unknown output: ") + path));
             QVERIFY2(!decoded.contains(stem), qPrintable(QStringLiteral("Duplicate stem: ") + stem));
             decodeError.clear();
-            const DecodedTrack track = decodeTrack(path, &decodeError);
+            const DecodedTrack track = decodeTrack(path, !durationSmoke, &decodeError);
             QVERIFY2(track.ok, qPrintable(decodeError));
             QCOMPARE(track.sampleRate, 44100);
             QCOMPARE(track.channels, 2);
@@ -194,8 +200,13 @@ approvedCatalogModelRunsOnRequestedDeviceWhenExplicitlyEnabled()
         }
         QCOMPARE(decoded.size(), stems.size());
 
-        const DecodedTrack& vocals = decoded.value(QStringLiteral("vocals"));
-        const DecodedTrack& instrumental = decoded.value(QStringLiteral("instrumental"));
+        if (durationSmoke) continue;
+        const auto vocalsIt = decoded.constFind(QStringLiteral("vocals"));
+        const auto instrumentalIt = decoded.constFind(QStringLiteral("instrumental"));
+        QVERIFY(vocalsIt != decoded.cend());
+        QVERIFY(instrumentalIt != decoded.cend());
+        const DecodedTrack& vocals = vocalsIt.value();
+        const DecodedTrack& instrumental = instrumentalIt.value();
         double squaredError = 0.0;
         for (std::size_t index = 0; index < inputTrack.samples.size(); ++index) {
             const double difference = static_cast<double>(inputTrack.samples.at(index))
