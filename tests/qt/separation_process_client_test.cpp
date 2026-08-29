@@ -28,7 +28,10 @@ namespace {
 
 SeparationProcessClient::Deadlines shortDeadlines()
 {
-    return {150, 500, 150};
+    // Windows process creation can take seconds under antivirus or I/O load.
+    // Keep the tests bounded without turning normal startup jitter into a
+    // protocol failure.
+    return {5000, 5000, 1000};
 }
 
 } // namespace
@@ -50,7 +53,7 @@ void SeparationProcessClientTest::helloTimeoutAndCrashAreRetryableErrors()
                                     QStringLiteral("crash")}) {
         SeparationProcessClient client(
             QString::fromUtf8(AG_SEPARATION_CONTROLLER_TEST_WORKER_PATH),
-            {scenario}, shortDeadlines());
+            {scenario}, {300, 5000, 1000});
         QSignalSpy failed(&client, &SeparationProcessClient::failed);
         QVERIFY(client.startProbe({{QStringLiteral("runtimePath"), QStringLiteral("unused")}}));
         QTRY_COMPARE_WITH_TIMEOUT(failed.count(), 1, 1500);
@@ -86,7 +89,11 @@ void SeparationProcessClientTest::cancellationIsIdempotentAndBounded()
     QSignalSpy cancelled(&client, &SeparationProcessClient::cancelled);
     QSignalSpy failed(&client, &SeparationProcessClient::failed);
     QVERIFY(client.startJob({{QStringLiteral("inputPath"), QStringLiteral("unused")}}));
-    QTRY_COMPARE_WITH_TIMEOUT(progress.count(), 1, 1500);
+    QTRY_VERIFY_WITH_TIMEOUT(progress.count() == 1 || failed.count() == 1, 1500);
+    QVERIFY2(progress.count() == 1,
+             failed.isEmpty()
+                 ? "Worker produced neither progress nor an error"
+                 : qPrintable(failed.first().at(0).toString()));
     client.cancel();
     client.cancel();
     QTRY_COMPARE_WITH_TIMEOUT(cancelled.count(), 1, 1500);
@@ -164,7 +171,7 @@ void SeparationProcessClientTest::heartbeatTimeoutCancelsThenFailsRetryably()
 {
     SeparationProcessClient client(
         QString::fromUtf8(AG_SEPARATION_CONTROLLER_TEST_WORKER_PATH),
-        {QStringLiteral("cancel")}, shortDeadlines());
+        {QStringLiteral("cancel")}, {5000, 500, 1000});
     QSignalSpy failed(&client, &SeparationProcessClient::failed);
     QVERIFY(client.startJob({}));
     QTRY_COMPARE_WITH_TIMEOUT(failed.count(), 1, 1500);

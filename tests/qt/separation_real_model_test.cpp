@@ -1,6 +1,7 @@
 #include "native_worker_backend.hpp"
 
 #include <QDir>
+#include <QFile>
 #include <QJsonArray>
 #include <QTemporaryDir>
 #include <QTest>
@@ -21,6 +22,8 @@ void SeparationRealModelTest::approvedCatalogModelRunsOnCpuWhenExplicitlyEnabled
     const QString runtime = qEnvironmentVariable("AGPLAYER_SEPARATION_ORT_DLL");
     const QString input = qEnvironmentVariable("AGPLAYER_SEPARATION_REAL_AUDIO");
     const QString catalogRoot = qEnvironmentVariable("AGPLAYER_SEPARATION_CATALOG_ROOT");
+    const QString modelFilter = qEnvironmentVariable(
+        "AGPLAYER_SEPARATION_REAL_MODEL_FILTER").trimmed().toLower();
     if (runtime.isEmpty() || input.isEmpty() || catalogRoot.isEmpty()) {
         QSKIP("Opt-in real-model test requires AGPLAYER_SEPARATION_ORT_DLL, "
               "AGPLAYER_SEPARATION_REAL_AUDIO, and AGPLAYER_SEPARATION_CATALOG_ROOT");
@@ -38,12 +41,19 @@ void SeparationRealModelTest::approvedCatalogModelRunsOnCpuWhenExplicitlyEnabled
           catalog.filePath(QStringLiteral("htdemucs_ft_other_fp16weights.onnx")),
           catalog.filePath(QStringLiteral("htdemucs_ft_vocals_fp16weights.onnx"))}},
     };
+    int exercisedModels = 0;
     for (const auto& entry : approved) {
+        if (!modelFilter.isEmpty() && entry.first != modelFilter) continue;
+        ++exercisedModels;
         QJsonArray modelFiles;
         for (const QString& model : entry.second) {
             QVERIFY2(QFileInfo::exists(model), qPrintable(model));
             modelFiles.push_back(model);
         }
+        QFile inspectedModel(entry.second.first());
+        QVERIFY(inspectedModel.open(QIODevice::ReadOnly));
+        const int actualOpset = readOnnxDefaultOpset(inspectedModel.readAll());
+        qInfo().noquote() << entry.first << "actual default opset" << actualOpset;
         QTemporaryDir output;
         QVERIFY(output.isValid());
         NativeWorkerBackend backend;
@@ -65,6 +75,9 @@ void SeparationRealModelTest::approvedCatalogModelRunsOnCpuWhenExplicitlyEnabled
         QCOMPARE(outputs.size(), 1);
         QVERIFY(QFileInfo::exists(outputs.first().toString()));
     }
+    QVERIFY2(exercisedModels > 0,
+             qPrintable(QStringLiteral("Unknown real-model filter: ")
+                        + modelFilter));
 }
 
 QTEST_GUILESS_MAIN(SeparationRealModelTest)

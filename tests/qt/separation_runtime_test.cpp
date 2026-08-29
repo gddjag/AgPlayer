@@ -124,9 +124,15 @@ void SeparationRuntimeTest::trustedProfilesBindHashesToExactTensorSemantics()
         QStringLiteral("e3167c87333a48548413e972a286bf40bf5694001d2853861eb1435953f02d63")});
     QVERIFY(kara.has_value());
     QCOMPARE(kara->id, QStringLiteral("uvr-mdxnet-kara"));
+    QCOMPARE(kara->minimumOpset, 13);
     QCOMPARE(kara->inputs.front().name, QStringLiteral("input"));
     QCOMPARE(kara->inputs.front().shape, (QVector<qint64>{-1, 4, 2048, 256}));
     QCOMPARE(kara->outputs.front().shape, (QVector<qint64>{-1, 4, 2048, 256}));
+
+    const auto hq3 = trustedProfileForHashes({
+        QStringLiteral("317554b07fe1ea5279a77f2b1520a41ea4b93432560c4ffd08792c30fddf9adc")});
+    QVERIFY(hq3.has_value());
+    QCOMPARE(hq3->minimumOpset, 13);
 
     const auto demucs = trustedProfileForHashes({
         QStringLiteral("b533037176b14b2df31c92a5d5b3d5660d0811b9b360d3db761964768b079961"),
