@@ -1673,11 +1673,29 @@ int main(int argc, char* argv[])
                                  attempts, pollFunc,
                                  captureWindow]() {
                         if (!importer.busy() && library.count() > 0) {
-                            if (qaShowTrackDetails && listWindow != nullptr) {
-                                if (QObject* trackList = listWindow->findChild<QObject*>(
-                                        QStringLiteral("detachedTrackList"))) {
-                                    QMetaObject::invokeMethod(trackList,
-                                                             "openFirstDetailsForQa");
+                            if (qaShowTrackDetails) {
+                                QObject* const trackList = listWindow == nullptr
+                                    ? nullptr
+                                    : listWindow->findChild<QObject*>(
+                                        QStringLiteral("sharedTrackList"));
+                                QVariant detailsOpened;
+                                const bool invoked = trackList != nullptr
+                                    && QMetaObject::invokeMethod(
+                                        trackList, "openFirstDetailsForQa",
+                                        Q_RETURN_ARG(QVariant, detailsOpened));
+                                QCoreApplication::processEvents(
+                                    QEventLoop::AllEvents, 500);
+                                QObject* const detailsPanel = trackList == nullptr
+                                    ? nullptr
+                                    : trackList->findChild<QObject*>(
+                                        QStringLiteral("trackDetailsPanel"));
+                                if (!invoked || !detailsOpened.toBool()
+                                    || detailsPanel == nullptr
+                                    || !detailsPanel->property("visible").toBool()) {
+                                    qWarning(
+                                        "QA track details panel could not be opened");
+                                    QCoreApplication::exit(6);
+                                    return;
                                 }
                             }
                             QTimer::singleShot(1500, captureWindow);

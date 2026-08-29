@@ -221,6 +221,39 @@ function Measure-ThemeDifference {
     }
 }
 
+function Measure-CaptureDifferencePercent {
+    param(
+        [string]$FirstPath,
+        [string]$SecondPath
+    )
+
+    $first = [System.Drawing.Bitmap]::new($FirstPath)
+    $second = [System.Drawing.Bitmap]::new($SecondPath)
+    try {
+        if ($first.Width -ne $second.Width -or
+            $first.Height -ne $second.Height) {
+            throw "Compared screenshots have different dimensions"
+        }
+
+        $changedSamples = 0
+        $samples = 0
+        for ($y = 0; $y -lt $first.Height; $y += 4) {
+            for ($x = 0; $x -lt $first.Width; $x += 4) {
+                $samples++
+                if ($first.GetPixel($x, $y).ToArgb() -ne
+                    $second.GetPixel($x, $y).ToArgb()) {
+                    $changedSamples++
+                }
+            }
+        }
+        return [Math]::Round(100.0 * $changedSamples / $samples, 2)
+    }
+    finally {
+        $first.Dispose()
+        $second.Dispose()
+    }
+}
+
 function New-QALibraryPath {
     param(
         [string]$StateRoot,
@@ -391,6 +424,21 @@ try {
                     "--qa-show-track-details",
                     "--qa-screenshot-list"
                 )
+                if ($Surfaces -contains "list") {
+                    $listPath = Join-Path $outputPath (
+                        (Get-CaptureStem -Language $language -Theme $theme `
+                            -Surface "list") + ".png")
+                    $detailsPath = Join-Path $outputPath (
+                        (Get-CaptureStem -Language $language -Theme $theme `
+                            -Surface "details") + ".png")
+                    $detailsDifference = Measure-CaptureDifferencePercent `
+                        -FirstPath $listPath -SecondPath $detailsPath
+                    if ($detailsDifference -lt 1) {
+                        throw (("{0}-{1} list/details differ at only {2}%; " +
+                                "the real details panel was not captured") -f
+                                $language, $theme, $detailsDifference)
+                    }
+                }
             }
             foreach ($tool in 0..3) {
                 $toolSurface = "tool-{0}" -f $tool

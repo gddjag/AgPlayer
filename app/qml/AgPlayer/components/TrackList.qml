@@ -259,10 +259,13 @@ ListView {
     }
     function openFirstDetailsForQa() {
         var trackId = trackIdAt(0)
-        if (!trackId) return
+        if (!trackId) return false
         trackMenu.targetTrackId = trackId
         trackMenu.targetTrackIds = [trackId]
         openDetails()
+        return detailsPanel.visible
+                && String(detailsPanel.details.fileName || "").length > 0
+                && String(detailsPanel.details.format || "").length > 0
     }
     function applyTagsToTracks(trackIds, values) {
         return LibraryModel.setTagsForTracks(trackIds, values)
@@ -1020,6 +1023,7 @@ ListView {
 
     Popup {
         id: detailsPanel
+        objectName: "trackDetailsPanel"
         property var details: ({})
         width: 300; height: Math.min(root.height - 24, 470)
         x: root.width - width - 12; y: root.contentY + 12

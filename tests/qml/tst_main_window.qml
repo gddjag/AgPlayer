@@ -1011,6 +1011,36 @@ TestCase {
         SettingsController.listWaveformThumbnailEnabled = previousEnabled
     }
 
+    function test_qa_track_details_capture_opens_real_details_panel() {
+        var trackIds = nativeDropHelper.ensureSortableTracks()
+        compare(trackIds.length, 3)
+        var filterModel = findChild(mainWindow, "filterModel")
+        filterModel.category = "all"
+        filterModel.tagKey = ""
+        filterModel.resourceFolder = ""
+        filterModel.searchText = ""
+        var listWindow = createTemporaryObject(defaultListWindowComponent,
+                                               testCase,
+                                               { "filterModel": filterModel })
+        verify(listWindow)
+        var trackList = findChild(listWindow, "sharedTrackList")
+        verify(trackList)
+        tryVerify(function() { return trackList.count > 0 }, 500)
+
+        trackList.openFirstDetailsForQa()
+
+        var detailsPanel = findChild(trackList, "trackDetailsPanel")
+        verify(detailsPanel,
+               "QA capture must expose the real track-details popup")
+        tryVerify(function() { return detailsPanel.visible }, 500)
+        verify(String(detailsPanel.details.fileName || "").length > 0,
+               "the opened popup must contain a real track filename")
+        verify(String(detailsPanel.details.format || "").length > 0,
+               "the opened popup must contain a real track format")
+        detailsPanel.close()
+        listWindow.destroy()
+    }
+
     function test_sidebar_exposes_required_top_level_nodes_and_linear_icons() {
         var side = sideNavigationComponent.createObject(mainWindow.contentItem)
         verify(side)
