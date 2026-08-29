@@ -15,6 +15,7 @@
 
 class QTimer;
 class SettingsController;
+struct WaveformProviderTestAccess;
 
 class WaveformProvider : public QObject {
     Q_OBJECT
@@ -45,19 +46,28 @@ signals:
     void activeGenerationChanged();
 
 private:
+    friend struct WaveformProviderTestAccess;
+
     void onAnalysisFinished();
     void setAnalysisProgress(double progress);
     QVariantMap waveformToVariantMap(const ag_waveform* waveform) const;
+
+    struct AnalysisResources {
+        ag_cancel_token* cancelToken = nullptr;
+        ag_waveform* waveform = nullptr;
+
+        ~AnalysisResources();
+        void cancel() const;
+    };
 
     struct Job {
         QString path;
         QString trackId;
         quint64 generation = 0;
-        ag_waveform* waveform = nullptr;
         ag_result result = AG_OK;
         ag_waveform_aggregation aggregation =
             AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE;
-        ag_cancel_token* cancelToken = nullptr;
+        std::shared_ptr<AnalysisResources> resources;
         std::shared_ptr<std::atomic<double>> progress;
     };
 
@@ -65,7 +75,7 @@ private:
     QFutureWatcher<Job>* watcher_ = nullptr;
     QTimer* progressTimer_ = nullptr;
     std::shared_ptr<std::atomic<double>> activeProgress_;
-    ag_cancel_token* activeCancelToken_ = nullptr;
+    std::shared_ptr<AnalysisResources> activeResources_;
     QString currentPath_;
     QString currentTrackId_;
     QVariantMap currentLayers_;

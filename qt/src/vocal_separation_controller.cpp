@@ -1168,58 +1168,59 @@ bool VocalSeparationController::addPathsToPlaylist(
         if (!safeExistingFileWithin(path, publishedOutputRoot_)) return false;
     }
     playlistOperation_ = PlaylistOperation{playlistId, paths, {}};
-    QStringList unresolved;
-    for (const QString& path : paths) {
-        const int row = library_->indexForLocalFile(path);
-        if (row >= 0) {
-            const QString trackId = library_->data(
-                library_->index(row), LibraryModel::TrackIdRole).toString();
-            if (!playlists_->containsTrack(playlistId, trackId)) {
-                if (!playlists_->addTrack(playlistId, trackId)) {
-                    finishPlaylistOperation(false,
-                        tr("无法将分离结果加入播放列表"));
-                    return false;
-                }
-                playlistOperation_->addedTrackIds.push_back(trackId);
-            }
-        } else {
-            unresolved.push_back(path);
-        }
-    }
-    if (unresolved.isEmpty()) {
-        finishPlaylistOperation(true, {});
-        return true;
-    }
-    connect(importer_, &ImportController::finished, this,
-            [this, unresolved] {
+    const auto commitOperation = [this] {
         if (!playlistOperation_.has_value() || library_ == nullptr
-            || playlists_ == nullptr) return;
-        const QString playlistId = playlistOperation_->playlistId;
-        for (const QString& path : unresolved) {
+            || playlists_ == nullptr
+            || !playlistExists(playlistOperation_->playlistId)) {
+            finishPlaylistOperation(false,
+                tr("播放列表在导入完成前已不可用"));
+            return false;
+        }
+        const QString targetPlaylistId = playlistOperation_->playlistId;
+        QStringList trackIdsToAdd;
+        for (const QString& path : playlistOperation_->paths) {
             if (!safeExistingFileWithin(path, publishedOutputRoot_)) {
                 finishPlaylistOperation(false,
                     tr("导入期间分离结果已变得不可用"));
-                return;
+                return false;
             }
             const int row = library_->indexForLocalFile(path);
             if (row < 0) {
                 finishPlaylistOperation(false,
                     tr("音轨导入失败，播放列表没有保留部分结果"));
-                return;
+                return false;
             }
             const QString trackId = library_->data(
                 library_->index(row), LibraryModel::TrackIdRole).toString();
-            if (!playlists_->containsTrack(playlistId, trackId)) {
-                if (!playlists_->addTrack(playlistId, trackId)) {
-                    finishPlaylistOperation(false,
-                        tr("无法将全部分离结果加入播放列表"));
-                    return;
-                }
-                playlistOperation_->addedTrackIds.push_back(trackId);
+            if (trackId.isEmpty()) {
+                finishPlaylistOperation(false,
+                    tr("导入的音轨缺少有效标识"));
+                return false;
+            }
+            if (!playlists_->containsTrack(targetPlaylistId, trackId)
+                && !trackIdsToAdd.contains(trackId)) {
+                trackIdsToAdd.push_back(trackId);
             }
         }
+        for (const QString& trackId : trackIdsToAdd) {
+            if (!playlists_->addTrack(targetPlaylistId, trackId)) {
+                finishPlaylistOperation(false,
+                    tr("无法将全部分离结果加入播放列表"));
+                return false;
+            }
+            playlistOperation_->addedTrackIds.push_back(trackId);
+        }
         finishPlaylistOperation(true, {});
-    }, Qt::SingleShotConnection);
+        return true;
+    };
+    QStringList unresolved;
+    for (const QString& path : paths) {
+        if (library_->indexForLocalFile(path) < 0) unresolved.push_back(path);
+    }
+    if (unresolved.isEmpty()) return commitOperation();
+    connect(importer_, &ImportController::finished, this,
+            [commitOperation] { commitOperation(); },
+            Qt::SingleShotConnection);
     importer_->importPaths(unresolved);
     return true;
 }

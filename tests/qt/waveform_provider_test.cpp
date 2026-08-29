@@ -1,5 +1,6 @@
 #include "settings_controller.hpp"
 #include "waveform_provider.hpp"
+#include "waveform_provider_test_access.hpp"
 #include "bpm_fixture.hpp"
 
 #include <QFile>
@@ -31,6 +32,9 @@ private slots:
     void resultCarriesTrackIdentityAndGeneration();
     void prefetchTracksWarmsCacheWithoutChangingCurrentTrack();
     void failedAnalysisEmitsATerminalSignalWithIdentity();
+    void cancellingAnalysisReleasesNativeResourcesWithoutTerminal();
+    void replacingAnalysisReleasesSupersededResourcesWithoutStaleTerminal();
+    void destroyingProviderReleasesInFlightNativeResources();
 
 private:
     QString fixturePath_;
@@ -414,6 +418,77 @@ void WaveformProviderTest::failedAnalysisEmitsATerminalSignalWithIdentity()
     QCOMPARE(failed.first().at(0).toString(), invalid);
     QCOMPARE(failed.first().at(1).toString(), QStringLiteral("result-generation-7"));
     QCOMPARE(failed.first().at(2).toULongLong(), generation);
+}
+
+void WaveformProviderTest::cancellingAnalysisReleasesNativeResourcesWithoutTerminal()
+{
+    if (fixturePath_.isEmpty()) QSKIP("AGPLAYER_TEST_WAV not set");
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString source = temporary.filePath(QStringLiteral("cancel.wav"));
+    QVERIFY(QFile::copy(fixturePath_, source));
+    WaveformProvider provider;
+    QSignalSpy ready(&provider, &WaveformProvider::waveformReady);
+    QSignalSpy failed(&provider, &WaveformProvider::waveformFailed);
+
+    provider.loadForTrack(QStringLiteral("cancel-track"), source);
+    const std::weak_ptr<void> resources =
+        WaveformProviderTestAccess::activeResources(provider);
+    QVERIFY(!resources.expired());
+    provider.cancelForTrack(source);
+    WaveformProviderTestAccess::waitForAnalysis(provider);
+
+    QTRY_VERIFY_WITH_TIMEOUT(resources.expired(), 2'000);
+    QCOMPARE(ready.count(), 0);
+    QCOMPARE(failed.count(), 0);
+}
+
+void WaveformProviderTest::
+replacingAnalysisReleasesSupersededResourcesWithoutStaleTerminal()
+{
+    if (fixturePath_.isEmpty()) QSKIP("AGPLAYER_TEST_WAV not set");
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString first = temporary.filePath(QStringLiteral("first.wav"));
+    const QString second = temporary.filePath(QStringLiteral("second.wav"));
+    QVERIFY(QFile::copy(fixturePath_, first));
+    QVERIFY(QFile::copy(fixturePath_, second));
+    WaveformProvider provider;
+    QSignalSpy ready(&provider, &WaveformProvider::waveformReady);
+    QSignalSpy failed(&provider, &WaveformProvider::waveformFailed);
+
+    provider.loadForTrack(QStringLiteral("first-track"), first);
+    const std::weak_ptr<void> firstResources =
+        WaveformProviderTestAccess::activeResources(provider);
+    QVERIFY(!firstResources.expired());
+    provider.loadForTrack(QStringLiteral("second-track"), second);
+    const std::weak_ptr<void> secondResources =
+        WaveformProviderTestAccess::activeResources(provider);
+    QVERIFY(!secondResources.expired());
+    WaveformProviderTestAccess::waitForAnalysis(provider);
+
+    QTRY_VERIFY_WITH_TIMEOUT(firstResources.expired(), 2'000);
+    QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 1, 2'000);
+    QCOMPARE(ready.first().at(0).toString(), second);
+    QCOMPARE(failed.count(), 0);
+    QTRY_VERIFY_WITH_TIMEOUT(secondResources.expired(), 2'000);
+}
+
+void WaveformProviderTest::destroyingProviderReleasesInFlightNativeResources()
+{
+    if (fixturePath_.isEmpty()) QSKIP("AGPLAYER_TEST_WAV not set");
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString source = temporary.filePath(QStringLiteral("destroy.wav"));
+    QVERIFY(QFile::copy(fixturePath_, source));
+    std::weak_ptr<void> resources;
+    {
+        auto provider = std::make_unique<WaveformProvider>();
+        provider->loadForTrack(QStringLiteral("destroy-track"), source);
+        resources = WaveformProviderTestAccess::activeResources(*provider);
+        QVERIFY(!resources.expired());
+    }
+    QVERIFY(resources.expired());
 }
 
 QTEST_MAIN(WaveformProviderTest)

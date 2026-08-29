@@ -179,12 +179,21 @@ WaveformProvider::WaveformProvider(SettingsController* settings, QObject* parent
     });
 }
 
+WaveformProvider::AnalysisResources::~AnalysisResources()
+{
+    if (waveform != nullptr) ag_waveform_destroy(waveform);
+    if (cancelToken != nullptr) ag_cancel_token_destroy(cancelToken);
+}
+
+void WaveformProvider::AnalysisResources::cancel() const
+{
+    if (cancelToken != nullptr) ag_cancel_token_cancel(cancelToken);
+}
+
 WaveformProvider::~WaveformProvider()
 {
-    if (activeCancelToken_ != nullptr) {
-        ag_cancel_token_cancel(activeCancelToken_);
-        activeCancelToken_ = nullptr;
-    }
+    if (activeResources_ != nullptr) activeResources_->cancel();
+    activeResources_.reset();
     if (watcher_ != nullptr) {
         watcher_->disconnect(this);
         delete watcher_;
@@ -241,10 +250,8 @@ qulonglong WaveformProvider::loadForTrack(const QString& trackId,
     // own copy of the cancel token, so we only cancel here and let it destroy
     // the token when it finishes.
     if (watcher_ != nullptr) {
-        if (activeCancelToken_ != nullptr) {
-            ag_cancel_token_cancel(activeCancelToken_);
-            activeCancelToken_ = nullptr;
-        }
+        if (activeResources_ != nullptr) activeResources_->cancel();
+        activeResources_.reset();
         watcher_->disconnect(this);
         delete watcher_;
         watcher_ = nullptr;
@@ -300,8 +307,9 @@ qulonglong WaveformProvider::loadForTrack(const QString& trackId,
     // Start background analysis.
     const auto progress = std::make_shared<std::atomic<double>>(0.0);
     activeProgress_ = progress;
-    ag_cancel_token* cancelToken = ag_cancel_token_create();
-    activeCancelToken_ = cancelToken;
+    const auto resources = std::make_shared<AnalysisResources>();
+    resources->cancelToken = ag_cancel_token_create();
+    activeResources_ = resources;
 
     const std::string source = path.toUtf8().toStdString();
     const QString sourceTrackId = currentTrackId_;
@@ -313,20 +321,20 @@ qulonglong WaveformProvider::loadForTrack(const QString& trackId,
             this, &WaveformProvider::onAnalysisFinished);
     QFuture<Job> future = QtConcurrent::run(
         &currentAnalysisPool_,
-        [source, sourceTrackId, sourceGeneration, targetPoints, cancelToken, progress,
+        [source, sourceTrackId, sourceGeneration, targetPoints, resources, progress,
          aggregation = currentAggregation_]() mutable {
             Job job;
             job.path = QString::fromStdString(source);
             job.trackId = sourceTrackId;
             job.generation = sourceGeneration;
             job.aggregation = aggregation;
-            job.cancelToken = cancelToken;
+            job.resources = resources;
             job.progress = progress;
             job.result = ag_track_analysis_with_aggregation(
                 source.c_str(),
                 targetPoints,
                 aggregation,
-                cancelToken,
+                resources->cancelToken,
                 [](float p, void* userData) {
                     auto* atomicProgress =
                         static_cast<std::atomic<double>*>(userData);
@@ -334,7 +342,7 @@ qulonglong WaveformProvider::loadForTrack(const QString& trackId,
                                           std::memory_order_relaxed);
                 },
                 progress.get(),
-                &job.waveform,
+                &resources->waveform,
                 nullptr);
             return job;
         });
@@ -405,10 +413,8 @@ void WaveformProvider::cancelForTrack(const QString& path)
     if (path != currentPath_) {
         return;
     }
-    if (activeCancelToken_ != nullptr) {
-        ag_cancel_token_cancel(activeCancelToken_);
-        activeCancelToken_ = nullptr;
-    }
+    if (activeResources_ != nullptr) activeResources_->cancel();
+    activeResources_.reset();
     if (watcher_ != nullptr) {
         watcher_->disconnect(this);
         delete watcher_;
@@ -432,24 +438,18 @@ void WaveformProvider::onAnalysisFinished()
     activeProgress_.reset();
     progressTimer_->stop();
 
-    if (job.cancelToken != nullptr) {
-        if (job.cancelToken == activeCancelToken_) {
-            activeCancelToken_ = nullptr;
-        }
-        ag_cancel_token_destroy(job.cancelToken);
-    }
+    if (job.resources == activeResources_) activeResources_.reset();
 
     delete watcher_;
     watcher_ = nullptr;
 
-    if (job.result != AG_OK || job.waveform == nullptr
+    ag_waveform* const waveform = job.resources == nullptr
+        ? nullptr : job.resources->waveform;
+    if (job.result != AG_OK || waveform == nullptr
         || job.path != currentPath_
         || job.trackId != currentTrackId_
         || job.generation != activeGeneration_
         || job.aggregation != currentAggregation_) {
-        if (job.waveform != nullptr) {
-            ag_waveform_destroy(job.waveform);
-        }
         if (job.path == currentPath_ && job.trackId == currentTrackId_
             && job.generation == activeGeneration_) {
             setAnalysisProgress(0.0);
@@ -462,23 +462,22 @@ void WaveformProvider::onAnalysisFinished()
     const QString cachePath =
         cacheFilePathFor(settings_, currentPath_, job.aggregation);
     if (!cachePath.isEmpty()) {
-        saveWaveformCache(cachePath, currentPath_, job.waveform);
+        saveWaveformCache(cachePath, currentPath_, waveform);
         if (settings_ != nullptr) {
             settings_->onWaveformCacheSaved();
         }
     }
 
     setAnalysisProgress(1.0);
-    QVariantMap result = waveformToVariantMap(job.waveform);
+    QVariantMap result = waveformToVariantMap(waveform);
     result[QStringLiteral("_trackId")] = currentTrackId_;
     result[QStringLiteral("_generation")] = activeGeneration_;
     addTimelineMetadata(result,
-                        ag_waveform_total_samples(job.waveform),
-                        ag_waveform_sample_rate(job.waveform));
+                        ag_waveform_total_samples(waveform),
+                        ag_waveform_sample_rate(waveform));
     result[QStringLiteral("_cacheVersion")] = 2;
     currentLayers_ = result;
     emit waveformReady(currentPath_, result);
-    ag_waveform_destroy(job.waveform);
 }
 
 QVariantMap WaveformProvider::waveformToVariantMap(

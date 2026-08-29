@@ -4,6 +4,7 @@
 #include "playlist_model.hpp"
 #include "vocal_separation_controller.hpp"
 #include "waveform_provider.hpp"
+#include "waveform_provider_test_access.hpp"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -53,6 +54,7 @@ private slots:
     void batchExportPublishesOneCompleteDirectoryOrNothing();
     void selectedPlaylistActionRejectsAnUnsafeSubset();
     void unresolvedImportFailureEmitsCompletionAndRollsBackThisOperation();
+    void destructionBeforeImportCompletionLeavesPlaylistUnchanged();
     void unicodeLongPathsWorkThroughHistoryAndExport();
 };
 
@@ -417,6 +419,8 @@ startingANewResultGenerationClearsPreviouslyPublishedStems()
     QVERIFY(writeBytes(options.runtimeLibraryPath, QByteArrayLiteral("runtime")));
     AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
     WaveformProvider waveforms;
+    QSignalSpy waveformReady(&waveforms, &WaveformProvider::waveformReady);
+    QSignalSpy waveformFailed(&waveforms, &WaveformProvider::waveformFailed);
     VocalSeparationController controller(
         &preview, &waveforms, nullptr, nullptr, nullptr, options);
     QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
@@ -425,6 +429,11 @@ startingANewResultGenerationClearsPreviouslyPublishedStems()
                               VocalSeparationController::JobState::Completed, 5'000);
     QVERIFY(stemFor(controller.stems(), VocalSeparationController::StemKind::Vocals)
                 .value(QStringLiteral("available")).toBool());
+    const std::weak_ptr<void> previousWaveformResources =
+        WaveformProviderTestAccess::activeResources(waveforms);
+    QVERIFY(!previousWaveformResources.expired());
+    const int terminalCountBeforeClear = waveformReady.count()
+        + waveformFailed.count();
 
     const QString invalidNextInput = temporary.filePath(
         QStringLiteral("下一次输入.wav"));
@@ -435,6 +444,10 @@ startingANewResultGenerationClearsPreviouslyPublishedStems()
     QVERIFY(!stemFor(controller.stems(), VocalSeparationController::StemKind::Vocals)
                  .value(QStringLiteral("available")).toBool());
     QVERIFY(!controller.previewStem(VocalSeparationController::StemKind::Vocals));
+    WaveformProviderTestAccess::waitForAnalysis(waveforms);
+    QTRY_VERIFY_WITH_TIMEOUT(previousWaveformResources.expired(), 2'000);
+    QCOMPARE(waveformReady.count() + waveformFailed.count(),
+             terminalCountBeforeClear);
 
     QVERIFY(QFile::copy(audioFixture(), invalidNextInput));
     QVERIFY(controller.selectInput(QUrl::fromLocalFile(invalidNextInput)));
@@ -960,6 +973,47 @@ unresolvedImportFailureEmitsCompletionAndRollsBackThisOperation()
     QTRY_COMPARE_WITH_TIMEOUT(operation.count(), 1, 5'000);
     QVERIFY(!operation.first().at(0).toBool());
     QVERIFY(!playlists.containsTrack(playlistId, vocalsId));
+}
+
+void VocalSeparationControllerTest::
+destructionBeforeImportCompletionLeavesPlaylistUnchanged()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray modelBytes("trusted-test-model");
+    auto options = optionsFor(temporary, QStringLiteral("success"), modelBytes);
+    installTestModel(options, QStringLiteral("two-stem"), modelBytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, QByteArrayLiteral("runtime")));
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    LibraryModel library;
+    ImportController importer(&library);
+    PlaylistModel playlists(temporary.filePath(QStringLiteral("playlists.json")));
+    auto controller = std::make_unique<VocalSeparationController>(
+        &preview, &waveforms, &library, &importer, &playlists, options);
+    QVERIFY(controller->selectInput(QUrl::fromLocalFile(audioFixture())));
+    QVERIFY(controller->start());
+    QTRY_COMPARE_WITH_TIMEOUT(controller->jobState(),
+                              VocalSeparationController::JobState::Completed, 5'000);
+    const QString vocals = stemFor(
+        controller->stems(), VocalSeparationController::StemKind::Vocals)
+                                 .value(QStringLiteral("path")).toString();
+    importer.importPaths({vocals});
+    QTRY_VERIFY_WITH_TIMEOUT(!importer.busy(), 5'000);
+    const int vocalsRow = library.indexForLocalFile(vocals);
+    QVERIFY(vocalsRow >= 0);
+    const QString vocalsId = library.data(
+        library.index(vocalsRow), LibraryModel::TrackIdRole).toString();
+    const QString playlistId = playlists.createPlaylist(
+        QStringLiteral("destroy-before-import-finished"));
+
+    QVERIFY(controller->addSelectedToPlaylist(playlistId));
+    QVERIFY(importer.busy());
+    controller.reset();
+
+    QVERIFY(!playlists.containsTrack(playlistId, vocalsId));
+    QCOMPARE(playlists.trackIdsForPlaylist(playlistId), QStringList{});
+    QTRY_VERIFY_WITH_TIMEOUT(!importer.busy(), 5'000);
 }
 
 void VocalSeparationControllerTest::unicodeLongPathsWorkThroughHistoryAndExport()
