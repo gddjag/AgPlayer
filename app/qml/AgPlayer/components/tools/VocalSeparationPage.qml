@@ -597,14 +597,16 @@ Rectangle {
                                         anchors.fill: parent; anchors.margins: 4
                                         Label { Layout.preferredWidth: 64; text: page.stemLabel(modelData.kind); color: modelData.supported ? page.textPrimary : page.muted }
                                         Item {
+                                            id: waveformTrack
+                                            readonly property var waveformData: modelData.waveform || []
                                             Layout.fillWidth: true; Layout.fillHeight: true
                                             visible: modelData.supported
                                             Repeater {
-                                                model: Math.min(modelData.waveform.length, 160)
+                                                model: Math.min(waveformTrack.waveformData.length, 160)
                                                 Rectangle {
-                                                    readonly property int peakIndex: Math.floor(index * modelData.waveform.length / Math.max(1, model))
+                                                    readonly property int peakIndex: Math.floor(index * waveformTrack.waveformData.length / Math.max(1, model))
                                                     width: Math.max(1, parent.width / Math.max(1, model) - 1)
-                                                    height: Math.max(1, parent.height * Math.min(1, Number(modelData.waveform[peakIndex] || 0)))
+                                                    height: Math.max(1, parent.height * Math.min(1, Number(waveformTrack.waveformData[peakIndex] || 0)))
                                                     x: index * (parent.width / Math.max(1, model)); anchors.verticalCenter: parent.verticalCenter
                                                     color: page.cyan
                                                 }

@@ -1010,6 +1010,7 @@ void VocalSeparationControllerTest::crashCanRetryTheSameRequest()
     QVERIFY(controller.start());
     QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(),
                               VocalSeparationController::JobState::JobFailed, 5000);
+    QVERIFY(controller.canRetry());
     const QString originalInput = controller.inputInfo()
                                       .value(QStringLiteral("path")).toString();
     const QString originalOutput = options.outputDirectory;
@@ -1050,6 +1051,7 @@ localFailureForNewRequestCannotRetryThePreviousWorkerRequest()
     const QString nextInput = temporary.filePath(QStringLiteral("输入-B.wav"));
     QVERIFY(QFile::copy(audioFixture(), nextInput));
     QVERIFY(controller.selectInput(QUrl::fromLocalFile(nextInput)));
+    QVERIFY(!controller.canRetry());
     QVERIFY(QFile::remove(nextInput));
     QVERIFY(!controller.start());
     QCOMPARE(controller.jobState(), VocalSeparationController::JobState::JobFailed);

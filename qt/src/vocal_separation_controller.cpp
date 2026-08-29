@@ -265,6 +265,10 @@ bool VocalSeparationController::downloadBusy() const noexcept
 {
     return !downloadingModelId_.isEmpty();
 }
+bool VocalSeparationController::canRetry() const noexcept
+{
+    return jobState_ == JobState::JobFailed && failedRequest_.has_value();
+}
 QString VocalSeparationController::error() const { return error_; }
 QString VocalSeparationController::outputFormat() const { return outputFormat_; }
 QString VocalSeparationController::outputDirectory() const { return outputDirectory_; }
@@ -569,7 +573,10 @@ void VocalSeparationController::failRequest(
 
 void VocalSeparationController::invalidateRetry()
 {
-    if (!requestInFlight()) failedRequest_.reset();
+    if (!requestInFlight() && failedRequest_.has_value()) {
+        failedRequest_.reset();
+        emit jobStateChanged();
+    }
 }
 
 void VocalSeparationController::cancel()

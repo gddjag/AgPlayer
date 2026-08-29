@@ -60,6 +60,7 @@ class VocalSeparationController final : public QObject {
     Q_PROPERTY(bool canStart READ canStart NOTIFY startEligibilityChanged)
     Q_PROPERTY(QString startDisabledReason READ startDisabledReason
                    NOTIFY startEligibilityChanged)
+    Q_PROPERTY(bool canRetry READ canRetry NOTIFY jobStateChanged)
     Q_PROPERTY(QVariantList stems READ stems NOTIFY stemsChanged)
     Q_PROPERTY(QVariantList history READ history NOTIFY historyChanged)
 
@@ -125,6 +126,7 @@ public:
     QString outputDirectory() const;
     bool canStart() const;
     QString startDisabledReason() const;
+    bool canRetry() const noexcept;
     QVariantList stems() const;
     QVariantList history() const;
 
