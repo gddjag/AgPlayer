@@ -774,7 +774,7 @@ set_tests_properties(import_controller_test PROPERTIES
     # The 10K indexing contract itself permits up to 30 seconds.  The CTest
     # watchdog includes process startup and Windows real-time scanning, so keep
     # a separate margin without weakening the test's internal 30-second limit.
-    TIMEOUT 90
+    TIMEOUT 180
 )
 set_tests_properties(audio_tools_end_to_end_test PROPERTIES
     TIMEOUT 120
