@@ -54,8 +54,8 @@ $recordingTranslationSources = @(
     '6K+36YCJ5oup5b2V6Z+z5L+d5a2Y5L2N572u',
     '5peg5rOV5ZCv5Yqo5b2V6Z+z6K6+5aSH77yM6K+35qOA5p+l6K6+5aSH5LiO5p2D6ZmQ',
     '5b2V6Z+z5a6M5oiQ77yM5L2G5peg5rOV5o+S5YWl5b2T5YmN5paH5qGj',
-    '5b2V6Z+z5bey5Y+W5raI', '5b2V6Z+z', '77yI5Y2V5aOw6YGT77yJ',
-    '77yI56uL5L2T5aOw77yJ', '6YCJ5oup5b2V6Z+z6K6+5aSH77yIQWx0K1LvvIk=',
+    '5b2V6Z+z5bey5Y+W5raI', '5b2V6Z+z',
+    '6YCJ5oup5b2V6Z+z6K6+5aSH77yIQWx0K1LvvIk=',
     '5pqC5YGcIC8g57un57ut5b2V6Z+z77yIU2hpZnQrUu+8iQ==',
     '5byA5aeLIC8g57un57ut5b2V6Z+z77yIUu+8iQ==',
     '5YGc5q2i5bm25L+d5a2Y5b2V6Z+z77yIQ3RybCtS77yJ',
@@ -129,8 +129,8 @@ foreach ($control in @(
 
 if ($toolsWindow -notmatch 'width:\s*1672' -or
     $toolsWindow -notmatch 'height:\s*941' -or
-    $toolsWindow -notmatch 'Layout\.preferredHeight:\s*49' -or
-    $toolsWindow -notmatch 'Layout\.preferredHeight:\s*43' -or
+    $toolsWindow -notmatch 'Layout\.preferredHeight:\s*60' -or
+    $toolsWindow -notmatch 'Layout\.preferredHeight:\s*59' -or
     $toolsWindow -notmatch 'title:\s*qsTr\("AgPlayer') {
     throw 'The tools shell must match the 1672x941 title/nav geometry and title.'
 }
@@ -158,7 +158,7 @@ if ($toolsWindow -notmatch 'window\.startSystemMove\(\)' -or
     throw 'The audio tools title bar must use native movement without manual coordinates.'
 }
 if ($toolsWindow -match 'Layout\.(left|right|bottom)Margin:\s*[1-9]') {
-    throw 'The tools content stack must occupy the complete 0,92,1672,849 area.'
+    throw 'The tools content stack must occupy the complete 0,119,1672,822 area.'
 }
 if ($qaMatrix -notmatch '"1672x941"' -or $qaMatrix -match '"1672x942"') {
     throw 'The audio-tools QA matrix must capture the exact 1672x941 reference size.'
@@ -169,7 +169,7 @@ if ($qaFinalMatrix -match 'Width\s*=\s*1672;\s*Height\s*=\s*942') {
 if (-not (Test-Path -LiteralPath $qaComparisonPath)) {
     throw 'The Phase 6 source/candidate comparison and difference-mask script is missing.'
 }
-if ($toolsNavigation -notmatch 'anchors\.leftMargin:\s*49' -or
+if ($toolsNavigation -notmatch 'anchors\.leftMargin:\s*32' -or
     $toolsNavigation -notmatch 'height:\s*3' -or
     $toolsNavigation -match 'radius:\s*Theme\.radiusMd' -or
     $toolsNavigation -match 'ThemedIcon') {
@@ -205,9 +205,9 @@ foreach ($laterPhaseAction in @('cropToSelection', 'fadeIn', 'fadeOut', 'silence
         throw "The later-phase command must retain its honest disabled state: $laterPhaseAction"
     }
 }
-if ($commandBar -notmatch 'clearTransientState\(\)' -or
+if ($commandBar -notmatch 'clearTimeline\(\)' -or
     $commandBar -match 'clearDocument\(') {
-    throw 'Clear must only clear selection and transient tool state.'
+    throw 'Clear must remove all timeline events without closing the document.'
 }
 foreach ($obsolete in @(
     'insertSilence', 'clearDocument', 'exportMenu',
@@ -313,11 +313,9 @@ foreach ($field in @('editorExportCodec', 'editorExportSampleRate',
     }
 }
 $shortcutPlay = [regex]::Escape((ConvertFrom-Utf8Base64 '56m65qC8ID0g5pKt5pS+IC8g5pqC5YGc'))
-$shortcutFade = [regex]::Escape((ConvertFrom-Utf8Base64 '5ouW5ou95Y+z5LiK6KeSID0g6LCD5pW05reh5Ye6'))
 $shortcutEnvelope = [regex]::Escape((ConvertFrom-Utf8Base64 '5Y+M5Ye76Z+z6YeP57q/ID0g5re75Yqg5o6n5Yi254K5'))
 if (($audioEditor + "`n" + $commandBar) -match 'Phase\s*[0-9]' -or
     $audioEditor -notmatch $shortcutPlay -or
-    $audioEditor -notmatch $shortcutFade -or
     $audioEditor -notmatch $shortcutEnvelope) {
     throw 'The editor still contains phased placeholder copy or is missing reference instructions.'
 }

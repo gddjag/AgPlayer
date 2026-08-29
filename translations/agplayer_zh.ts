@@ -93,6 +93,19 @@
 </context>
 <context>
     <name>AudioEditorPage</name>
+    <message><source>（单声道）</source><translation>（单声道）</translation></message>
+    <message><source>（立体声）</source><translation>（立体声）</translation></message>
+    <message><source>当前时间</source><translation>当前时间</translation></message>
+    <message><source>总时长  </source><translation>总时长  </translation></message>
+    <message><source>上一段（Home）</source><translation>上一段（Home）</translation></message>
+    <message><source>上一段</source><translation>上一段</translation></message>
+    <message><source>后退</source><translation>后退</translation></message>
+    <message><source>前进</source><translation>前进</translation></message>
+    <message><source>下一段</source><translation>下一段</translation></message>
+    <message><source>A. 速度 / BPM</source><translation>A. 速度 / BPM</translation></message>
+    <message><source>B. 升调降调</source><translation>B. 升调降调</translation></message>
+    <message><source>C. 保持音调</source><translation>C. 保持音调</translation></message>
+    <message><source>D. 导出设置</source><translation>D. 导出设置</translation></message>
     <message><source>处理</source><translation>处理</translation></message>
     <message><source>导出</source><translation>导出</translation></message>
     <message><source>选择音频导出目录</source><translation>选择音频导出目录</translation></message>
@@ -1006,6 +1019,7 @@
 </context>
 <context>
     <name>FileSummaryBar</name>
+    <message><source>总时长：</source><translation>总时长：</translation></message>
     <message><source>时长：</source><translation>时长：</translation></message>
     <message><source>采样率：</source><translation>采样率：</translation></message>
     <message><source>位深度：</source><translation>位深度：</translation></message>

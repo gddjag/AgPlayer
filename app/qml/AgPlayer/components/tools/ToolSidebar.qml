@@ -8,7 +8,7 @@ Rectangle {
     color: Theme.panel
     border.color: Theme.border
     border.width: 1
-    implicitHeight: 43
+    implicitHeight: 59
 
     property int currentTool: 0
     property Window window
@@ -17,7 +17,7 @@ Rectangle {
 
     Row {
         anchors.left: parent.left
-        anchors.leftMargin: 49
+        anchors.leftMargin: 32
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         spacing: 31
@@ -30,7 +30,7 @@ Rectangle {
                 required property string modelData
                 objectName: "audioToolNav_" + index
                 width: 126
-                height: 42
+                height: 58
                 flat: true
                 text: modelData
                 checked: navigation.currentTool === index

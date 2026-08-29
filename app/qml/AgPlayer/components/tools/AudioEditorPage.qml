@@ -22,7 +22,7 @@ Rectangle {
         : Math.max(height, 660)
     readonly property real roomyLayoutFactor: narrowLayout ? 0
         : Math.max(0, Math.min(1,
-            (responsiveContentHeight - 660) / 189))
+            (responsiveContentHeight - 660) / 162))
     property bool inspectorExpanded: false
     property string pendingRelinkSourceId: ""
     readonly property var firstProjectIssue:
@@ -264,7 +264,7 @@ Rectangle {
                 x: 12
                 y: page.interpolateLayout(8, 13)
                 width: mainSurface.width - 22
-                height: page.interpolateLayout(56, 61)
+                height: page.interpolateLayout(56, 64)
                 onImportRequested: openDialog.open()
                 onSaveProjectRequested: AudioEditorController.save()
             }
@@ -274,7 +274,7 @@ Rectangle {
                 x: 12
                 y: page.interpolateLayout(72, 88)
                 width: mainSurface.width - 22
-                height: page.interpolateLayout(44, 48)
+                height: page.interpolateLayout(44, 52)
             }
 
             Rectangle {
@@ -282,7 +282,7 @@ Rectangle {
                 x: 12
                 y: page.interpolateLayout(72, 88)
                 width: mainSurface.width - 22
-                height: page.interpolateLayout(44, 48)
+                height: page.interpolateLayout(44, 52)
                 visible: page.firstProjectIssue !== null
                 color: Theme.surfacePressed
                 border.color: Theme.warning
@@ -324,7 +324,7 @@ Rectangle {
                 y: page.interpolateLayout(124, 152)
                     + page.narrowActionBandHeight
                 width: mainSurface.width - 24
-                height: page.interpolateLayout(276, 364)
+                height: page.interpolateLayout(276, 451)
                 color: Theme.editorCanvas
                 border.color: Theme.divider
                 border.width: 1
@@ -335,10 +335,10 @@ Rectangle {
                 id: trackHeader
                 objectName: "editorTrackHeader"
                 x: 12
-                y: page.interpolateLayout(168, 202)
+                y: page.interpolateLayout(168, 188)
                     + page.narrowActionBandHeight
                 width: page.interpolateLayout(84, 96)
-                height: page.interpolateLayout(204, 284)
+                height: page.interpolateLayout(204, 387)
                 color: Theme.surfaceElevated
                 border.color: Theme.divider
                 border.width: 1
@@ -411,11 +411,11 @@ Rectangle {
             Rectangle {
                 id: ruler
                 objectName: "editorTimeRuler"
-                x: trackHeader.x + trackHeader.width + 10
+                x: trackHeader.x + trackHeader.width + 12
                 y: page.interpolateLayout(124, 152)
                     + page.narrowActionBandHeight
-                width: mainSurface.width - x - 15
-                height: page.interpolateLayout(44, 50)
+                width: mainSurface.width - x - 10
+                height: page.interpolateLayout(44, 52)
                 color: Theme.surface
                 border.color: Theme.divider
                 Repeater {
@@ -516,17 +516,17 @@ Rectangle {
                 id: waveformCanvas
                 objectName: "editorWaveformCanvas"
                 x: ruler.x
-                y: page.interpolateLayout(168, 202)
+                y: page.interpolateLayout(168, 188)
                     + page.narrowActionBandHeight
                 width: ruler.width
-                height: page.interpolateLayout(204, 284)
+                height: page.interpolateLayout(204, 387)
             }
 
             EditorSlider {
                 id: timelineScrollbar
                 objectName: "editorTimelineScrollbar"
                 x: ruler.x
-                y: page.interpolateLayout(378, 500)
+                y: page.interpolateLayout(378, 589)
                     + page.narrowActionBandHeight
                 width: ruler.width
                 height: 16
@@ -547,10 +547,10 @@ Rectangle {
                 id: playbackTransport
                 objectName: "editorPlaybackTransport"
                 x: 12
-                y: page.interpolateLayout(410, 527)
+                y: page.interpolateLayout(410, 618)
                     + page.narrowActionBandHeight
                 width: mainSurface.width - 24
-                height: page.interpolateLayout(110, 130)
+                height: page.interpolateLayout(110, 112)
                 color: Theme.surfaceElevated
                 border.color: Theme.divider
                 border.width: 1
@@ -844,38 +844,37 @@ Rectangle {
                 id: shortcutCard
                 objectName: "editorShortcutCard"
                 x: 12
-                y: page.interpolateLayout(532, 667)
+                y: page.interpolateLayout(532, 746)
                     + page.narrowActionBandHeight
                 width: mainSurface.width - 24
-                height: page.interpolateLayout(103, 157)
+                height: page.interpolateLayout(103, 67)
                 color: Theme.surfaceElevated
                 border.color: Theme.divider
                 border.width: 1
                 radius: 6
                 ThemedIcon {
                     objectName: "editorShortcutKeyboardIcon"
-                    x: 20; y: 13
-                    width: 24; height: 24
+                    x: 20; y: 8
+                    width: 22; height: 22
                     source: Theme.icon("keyboard-box-line")
                     tint: Theme.textPrimary
                 }
                 Label {
-                    x: 52; y: 14
+                    x: 50; y: 9
                     text: qsTr("快捷键与鼠标操作")
                     color: Theme.textPrimary
                     font.pixelSize: 14
                     font.bold: true
                 }
-                Rectangle { x: 16; y: 48; width: parent.width - 32; height: 1; color: Theme.borderStrong }
+                Rectangle { x: 16; y: 38; width: parent.width - 32; height: 1; color: Theme.borderStrong }
                 RowLayout {
                     id: shortcutFirstRow
                     objectName: "editorShortcutFirstRow"
-                    property int groupCount: 5
-                    property int dividerCount: 4
-                    readonly property var columnWeights: [0.16, 0.19, 0.17, 0.31, 0.17]
-                    x: 22; y: 62
-                    width: parent.width - 44
-                    height: 18
+                    property int groupCount: 9
+                    property int dividerCount: 8
+                    x: 18; y: 44
+                    width: parent.width - 36
+                    height: 16
                     spacing: 0
                     Repeater {
                         model: [
@@ -883,16 +882,17 @@ Rectangle {
                             qsTr("S = 在播放头处分割"),
                             qsTr("Delete = 删除片段"),
                             qsTr("Ctrl+C / X / V = 复制 / 剪切 / 粘贴"),
-                            qsTr("Ctrl+Z / Y = 撤销 / 重做")
+                            qsTr("Ctrl+Z / Y = 撤销 / 重做"),
+                            qsTr("Ctrl+鼠标滚轮 = 放大 / 缩小时间线"),
+                            qsTr("Shift+鼠标滚轮 = 横向滚动"),
+                            qsTr("拖拽片段边缘 = 修剪"),
+                            qsTr("双击音量线 = 添加控制点")
                         ]
                         delegate: Item {
                             required property int index
                             required property string modelData
                             Layout.fillWidth: true
                             Layout.minimumWidth: firstGroupText.implicitWidth + 2
-                            Layout.preferredWidth: Math.max(Layout.minimumWidth,
-                                shortcutFirstRow.width
-                                * shortcutFirstRow.columnWeights[index])
                             Layout.fillHeight: true
                             Text {
                                 id: firstGroupText
@@ -900,7 +900,7 @@ Rectangle {
                                 anchors.centerIn: parent
                                 text: modelData
                                 color: Theme.textSecondary
-                                font.pixelSize: 11
+                                font.pixelSize: 9
                             }
                             Rectangle {
                                 objectName: index === 0
@@ -908,56 +908,7 @@ Rectangle {
                                     : "editorShortcutFirstDivider_" + index
                                 visible: index < shortcutFirstRow.groupCount - 1
                                 x: parent.width - width
-                                y: 0; width: 1; height: 18
-                                color: Theme.borderStrong
-                            }
-                        }
-                    }
-                }
-                RowLayout {
-                    id: shortcutSecondRow
-                    objectName: "editorShortcutSecondRow"
-                    visible: page.roomyLayoutFactor >= 0.75
-                    property int groupCount: 6
-                    property int dividerCount: 5
-                    readonly property var columnWeights: [0.16, 0.22, 0.18, 0.16, 0.15, 0.17]
-                    x: 22; y: 105
-                    width: parent.width - 44
-                    height: 18
-                    spacing: 0
-                    Repeater {
-                        model: [
-                            qsTr("Ctrl+拖动 = 快速复制片段"),
-                            qsTr("Ctrl+鼠标滚轮 = 放大 / 缩小时间线"),
-                            qsTr("Shift+鼠标滚轮 = 横向滚动"),
-                            qsTr("拖拽片段边缘 = 修剪"),
-                            qsTr("拖拽右上角 = 调整淡出"),
-                            qsTr("双击音量线 = 添加控制点")
-                        ]
-                        delegate: Item {
-                            required property int index
-                            required property string modelData
-                            Layout.fillWidth: true
-                            Layout.minimumWidth: secondGroupText.implicitWidth + 2
-                            Layout.preferredWidth: Math.max(Layout.minimumWidth,
-                                shortcutSecondRow.width
-                                * shortcutSecondRow.columnWeights[index])
-                            Layout.fillHeight: true
-                            Text {
-                                id: secondGroupText
-                                objectName: "editorShortcutSecondGroup_" + index
-                                anchors.centerIn: parent
-                                text: modelData
-                                color: Theme.textTertiary
-                                font.pixelSize: 11
-                            }
-                            Rectangle {
-                                objectName: index === 0
-                                    ? "editorShortcutSecondDivider"
-                                    : "editorShortcutSecondRowDivider_" + index
-                                visible: index < shortcutSecondRow.groupCount - 1
-                                x: parent.width - width
-                                y: 0; width: 1; height: 18
+                                y: 0; width: 1; height: 16
                                 color: Theme.borderStrong
                             }
                         }
@@ -980,9 +931,9 @@ Rectangle {
         id: inspector
         objectName: "editorInspector"
         x: page.narrowLayout ? page.width - width : page.mainWidth
-        y: 0
+        y: page.narrowLayout ? 0 : 7
         width: page.inspectorWidth
-        height: page.height
+        height: page.narrowLayout ? page.height : page.height - 14
         visible: !page.narrowLayout || page.inspectorExpanded
         z: page.narrowLayout ? 30 : 2
         color: Theme.background
@@ -1002,14 +953,14 @@ Rectangle {
             Column {
                 id: inspectorGroups
                 width: inspectorScroller.width
-                spacing: 6
+                spacing: 8
 
                 Rectangle {
                     id: tempoGroup
                     objectName: "inspectorTempoGroup"
                     width: parent.width
                     property bool collapsed: false
-                    height: collapsed ? 38 : 129
+                    height: collapsed ? 38 : 153
                     clip: true
                     color: Theme.surfaceElevated
                     border.color: Theme.borderStrong
@@ -1112,7 +1063,7 @@ Rectangle {
                     objectName: "inspectorPitchGroup"
                     width: parent.width
                     property bool collapsed: false
-                    height: collapsed ? 38 : 107
+                    height: collapsed ? 38 : 114
                     clip: true
                     color: Theme.surfaceElevated
                     border.color: Theme.borderStrong
@@ -1214,7 +1165,7 @@ Rectangle {
                     objectName: "inspectorPreservePitchGroup"
                     width: parent.width
                     property bool collapsed: false
-                    height: collapsed ? 38 : 104
+                    height: collapsed ? 38 : 143
                     clip: true
                     color: Theme.surfaceElevated
                     border.color: Theme.borderStrong
@@ -1291,7 +1242,7 @@ Rectangle {
                     objectName: "inspectorExportGroup"
                     width: parent.width
                     property bool collapsed: false
-                    height: collapsed ? 38 : 276
+                    height: collapsed ? 38 : 336
                     clip: true
                     color: Theme.surfaceElevated
                     border.color: Theme.borderStrong

@@ -29,8 +29,8 @@ foreach ($relativePath in $phase6Qml) {
     $expected[$context] = $sources
     $extractedSourceCount += $sources.Count
 }
-if ($extractedSourceCount -ne 134) {
-    throw "Expected exactly 134 context-scoped Phase 6 sources, got $extractedSourceCount."
+if ($extractedSourceCount -ne 115) {
+    throw "Expected exactly 115 context-scoped Phase 6 sources, got $extractedSourceCount."
 }
 
 foreach ($locale in @('zh', 'en', 'th', 'vi')) {

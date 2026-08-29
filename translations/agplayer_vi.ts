@@ -93,6 +93,19 @@
 </context>
 <context>
     <name>AudioEditorPage</name>
+    <message><source>（单声道）</source><translation>(Đơn âm)</translation></message>
+    <message><source>（立体声）</source><translation>(Âm thanh nổi)</translation></message>
+    <message><source>当前时间</source><translation>Thời gian hiện tại</translation></message>
+    <message><source>总时长  </source><translation>Tổng thời lượng  </translation></message>
+    <message><source>上一段（Home）</source><translation>Đoạn trước (Home)</translation></message>
+    <message><source>上一段</source><translation>Đoạn trước</translation></message>
+    <message><source>后退</source><translation>Lùi</translation></message>
+    <message><source>前进</source><translation>Tiến</translation></message>
+    <message><source>下一段</source><translation>Đoạn tiếp theo</translation></message>
+    <message><source>A. 速度 / BPM</source><translation>A. Tốc độ / BPM</translation></message>
+    <message><source>B. 升调降调</source><translation>B. Dịch cao độ</translation></message>
+    <message><source>C. 保持音调</source><translation>C. Giữ cao độ</translation></message>
+    <message><source>D. 导出设置</source><translation>D. Cài đặt xuất</translation></message>
     <message><source>处理</source><translation>Xử lý</translation></message>
     <message><source>导出</source><translation>Xuất</translation></message>
     <message><source>选择音频导出目录</source><translation>Chọn thư mục xuất âm thanh</translation></message>
@@ -1006,6 +1019,7 @@
 </context>
 <context>
     <name>FileSummaryBar</name>
+    <message><source>总时长：</source><translation>Tổng thời lượng:</translation></message>
     <message><source>时长：</source><translation>Thời lượng:</translation></message>
     <message><source>采样率：</source><translation>Tần số lấy mẫu:</translation></message>
     <message><source>位深度：</source><translation>Độ sâu bit:</translation></message>

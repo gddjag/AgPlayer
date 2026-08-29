@@ -93,6 +93,19 @@
 </context>
 <context>
     <name>AudioEditorPage</name>
+    <message><source>（单声道）</source><translation>(Mono)</translation></message>
+    <message><source>（立体声）</source><translation>(Stereo)</translation></message>
+    <message><source>当前时间</source><translation>Current time</translation></message>
+    <message><source>总时长  </source><translation>Total duration  </translation></message>
+    <message><source>上一段（Home）</source><translation>Previous segment (Home)</translation></message>
+    <message><source>上一段</source><translation>Previous segment</translation></message>
+    <message><source>后退</source><translation>Back</translation></message>
+    <message><source>前进</source><translation>Forward</translation></message>
+    <message><source>下一段</source><translation>Next segment</translation></message>
+    <message><source>A. 速度 / BPM</source><translation>A. Speed / BPM</translation></message>
+    <message><source>B. 升调降调</source><translation>B. Pitch shift</translation></message>
+    <message><source>C. 保持音调</source><translation>C. Preserve pitch</translation></message>
+    <message><source>D. 导出设置</source><translation>D. Export settings</translation></message>
     <message><source>处理</source><translation>Processing</translation></message>
     <message><source>导出</source><translation>Export</translation></message>
     <message><source>选择音频导出目录</source><translation>Choose audio export folder</translation></message>
@@ -1006,6 +1019,7 @@
 </context>
 <context>
     <name>FileSummaryBar</name>
+    <message><source>总时长：</source><translation>Total duration:</translation></message>
     <message><source>时长：</source><translation>Duration:</translation></message>
     <message><source>采样率：</source><translation>Sample rate:</translation></message>
     <message><source>位深度：</source><translation>Bit depth:</translation></message>

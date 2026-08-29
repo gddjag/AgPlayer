@@ -9,7 +9,7 @@ TestCase {
     when: windowShown
     visible: true
     width: 1672
-    height: 849
+    height: 822
 
     Component {
         id: pageComponent
@@ -88,21 +88,21 @@ TestCase {
 
     function test_referenceGeometryAt1672x941ShellContent() {
         host.width = 1672
-        host.height = 849
+        host.height = 822
         wait(0)
-        verifyGeometry("editorMainColumn", 0, 0, 1328, 849)
-        verifyGeometry("editorInspector", 1328, 0, 344, 849)
-        verifyGeometry("editorCommandBar", 12, 13, 1306, 61)
-        verifyGeometry("fileSummaryBar", 12, 88, 1306, 48)
+        verifyGeometry("editorMainColumn", 0, 0, 1328, 822)
+        verifyGeometry("editorInspector", 1328, 7, 344, 808)
+        verifyGeometry("editorCommandBar", 12, 13, 1306, 64)
+        verifyGeometry("fileSummaryBar", 12, 88, 1306, 52)
         verify(findChild(page, "fileSummaryIcon"))
-        verifyGeometry("editorTimelineWorkspace", 12, 152, 1304, 364)
-        verifyGeometry("editorTrackHeader", 12, 202, 96, 284)
-        verifyGeometry("editorTimeRuler", 118, 152, 1195, 50)
-        verifyGeometry("editorWaveformCanvas", 118, 202, 1195, 284)
-        verifyGeometry("editorTimelineScrollbar", 118, 500, 1195, 16)
-        verifyGeometry("editorPlaybackTransport", 12, 527, 1304, 130)
-        verifyGeometry("editorShortcutCard", 12, 667, 1304, 157)
-        verifyGeometry("editorStatusBar", 0, 824, 1328, 25)
+        verifyGeometry("editorTimelineWorkspace", 12, 152, 1304, 451)
+        verifyGeometry("editorTrackHeader", 12, 188, 96, 387)
+        verifyGeometry("editorTimeRuler", 120, 152, 1198, 52)
+        verifyGeometry("editorWaveformCanvas", 120, 188, 1198, 387)
+        verifyGeometry("editorTimelineScrollbar", 120, 589, 1198, 16)
+        verifyGeometry("editorPlaybackTransport", 12, 618, 1304, 112)
+        verifyGeometry("editorShortcutCard", 12, 746, 1304, 67)
+        verifyGeometry("editorStatusBar", 0, 797, 1328, 25)
 
         compare(findChild(page, "inspectorTempoTitle").text,
                 "A. 速度 / BPM")
@@ -126,7 +126,7 @@ TestCase {
 
     function test_continuousMainAndInspectorWidths(data) {
         host.width = data.width
-        host.height = data.width === 880 ? 468 : 849
+        host.height = data.width === 880 ? 441 : 822
         wait(0)
         const main = findChild(page, "editorMainColumn")
         const inspector = findChild(page, "editorInspector")
@@ -270,7 +270,7 @@ TestCase {
 
     function test_toolbarReferenceButtonWidthsAt1672() {
         host.width = 1672
-        host.height = 849
+        host.height = 822
         wait(0)
         const expectedWidths = [132, 140, 80, 80, 86, 83, 81,
                                 91, 77, 75, 95, 73, 82]
@@ -347,8 +347,8 @@ TestCase {
         const arrows = ["inspectorTempoCollapse",
                         "inspectorPitchCollapse", "inspectorPreservePitchCollapse",
                         "inspectorExportCollapse"]
-        const heights = [129, 107, 104, 276]
-        const positions = [0, 135, 248, 358]
+        const heights = [153, 114, 143, 336]
+        const positions = [0, 161, 283, 434]
         for (let index = 0; index < names.length; ++index) {
             const group = findChild(page, names[index])
             const arrow = findChild(page, arrows[index])
@@ -364,7 +364,7 @@ TestCase {
         const pitch = findChild(page, names[1])
         mouseClick(findChild(page, arrows[0]))
         compare(tempo.height, 38)
-        tryCompare(pitch, "y", tempo.y + 44)
+        tryCompare(pitch, "y", tempo.y + 46)
         mouseClick(findChild(page, arrows[0]))
         compare(tempo.height, heights[0])
     }
@@ -420,82 +420,65 @@ TestCase {
     function test_referenceTransportShortcutAndStatusCopy() {
         const playBackground = findChild(page, "editorPrimaryPlayBackground")
         const shortcutFirst = findChild(page, "editorShortcutFirstGroup_0")
-        const shortcutFade = findChild(page, "editorShortcutSecondGroup_4")
-        const shortcutEnvelope = findChild(page, "editorShortcutSecondGroup_5")
-        verify(playBackground && shortcutFirst && shortcutFade && shortcutEnvelope)
+        const shortcutEnvelope = findChild(page, "editorShortcutFirstGroup_8")
+        verify(playBackground && shortcutFirst && shortcutEnvelope)
         verify(shortcutFirst.text.indexOf("空格 = 播放 / 暂停") >= 0)
         compare(shortcutFirst.text.indexOf("R = 开始录音"), -1)
         compare(shortcutFirst.text.indexOf("Shift+R"), -1)
         compare(shortcutFirst.text.indexOf("Ctrl+R = 停止并保存"), -1)
-        compare(shortcutFade.text, "拖拽右上角 = 调整淡出")
         compare(shortcutEnvelope.text, "双击音量线 = 添加控制点")
         compare(shortcutFirst.text.indexOf("Phase"), -1)
-        compare(shortcutFade.text.indexOf("Phase"), -1)
         compare(findChild(page, "editorStatusBar").visible, false)
     }
 
     function test_shortcutCardUsesKeyboardIconAndRealDividers() {
         const keyboard = findChild(page, "editorShortcutKeyboardIcon")
         const divider = findChild(page, "editorShortcutDivider")
-        const secondDivider = findChild(page, "editorShortcutSecondDivider")
-        verify(keyboard && divider && secondDivider)
+        const laterDivider = findChild(page, "editorShortcutFirstDivider_7")
+        verify(keyboard, "shortcut keyboard icon is missing")
+        verify(divider, "first shortcut divider is missing")
+        verify(laterDivider, "last shortcut divider is missing")
         verify(keyboard.source.toString().indexOf("keyboard-box-line.svg") >= 0)
         compare(divider.width, 1)
-        compare(secondDivider.width, 1)
-        verify(divider.height >= 18)
-        verify(secondDivider.height >= 18)
+        compare(laterDivider.width, 1)
+        verify(divider.height >= 16)
+        verify(laterDivider.height >= 16)
     }
 
     function test_shortcutCardUsesStructuredReferenceGroups() {
         const firstRow = findChild(page, "editorShortcutFirstRow")
-        const secondRow = findChild(page, "editorShortcutSecondRow")
-        verify(firstRow && secondRow)
-        compare(firstRow.groupCount, 5)
-        compare(firstRow.dividerCount, 4)
-        compare(secondRow.groupCount, 6)
-        compare(secondRow.dividerCount, 5)
+        verify(firstRow)
+        compare(firstRow.groupCount, 9)
+        compare(firstRow.dividerCount, 8)
         compare(findChild(page, "editorShortcutFirstGroup_0").text,
                 "空格 = 播放 / 暂停")
         compare(findChild(page, "editorShortcutFirstGroup_4").text,
                 "Ctrl+Z / Y = 撤销 / 重做")
-        compare(findChild(page, "editorShortcutSecondGroup_5").text,
+        compare(findChild(page, "editorShortcutFirstGroup_8").text,
                 "双击音量线 = 添加控制点")
     }
 
     function test_shortcutReferenceRowsFillTheCardWithoutClippingLabels() {
         host.width = 1672
-        host.height = 849
+        host.height = 822
         wait(0)
         const card = findChild(page, "editorShortcutCard")
         const firstRow = findChild(page, "editorShortcutFirstRow")
-        const secondRow = findChild(page, "editorShortcutSecondRow")
-        verify(card && firstRow && secondRow)
+        verify(card && firstRow)
+        compare(firstRow.x, 18)
+        compare(firstRow.width, card.width - 36)
+        compare(firstRow.x + firstRow.width, card.width - 18)
 
-        for (const row of [firstRow, secondRow]) {
-            compare(row.x, 22)
-            compare(row.width, card.width - 44)
-            compare(row.x + row.width, card.width - 22)
-        }
-
-        const lastFirstDivider = findChild(page, "editorShortcutFirstDivider_3")
-        const lastSecondDivider = findChild(page, "editorShortcutSecondRowDivider_4")
-        verify(lastFirstDivider && lastSecondDivider)
+        const lastFirstDivider = findChild(page, "editorShortcutFirstDivider_7")
+        verify(lastFirstDivider)
         const firstDividerPosition = lastFirstDivider.mapToItem(firstRow, 0, 0)
-        const secondDividerPosition = lastSecondDivider.mapToItem(secondRow, 0, 0)
         verify(firstDividerPosition.x > firstRow.width * 0.70)
-        verify(secondDividerPosition.x > secondRow.width * 0.70)
 
         for (let index = 0; index < firstRow.groupCount; ++index) {
             const label = findChild(page, "editorShortcutFirstGroup_" + index)
             verify(label)
             verify(label.width >= label.implicitWidth,
                    "first row label " + index + " is clipped")
-        }
-        for (let index = 0; index < secondRow.groupCount; ++index) {
-            const label = findChild(page, "editorShortcutSecondGroup_" + index)
-            verify(label)
-            verify(label.width >= label.implicitWidth,
-                   "second row label " + index + " is clipped")
         }
     }
 
@@ -919,9 +902,9 @@ TestCase {
 
     function test_responsivePlaybackAndInspectorAccess_data() {
         return [
-            { tag: "reference", w: 1672, h: 849, access: "editorInspectorScroller" },
+            { tag: "reference", w: 1672, h: 822, access: "editorInspectorScroller" },
             { tag: "desktop", w: 1280, h: 628, access: "editorInspectorScroller" },
-            { tag: "narrow", w: 880, h: 468, access: "editorInspectorAccess" }
+            { tag: "narrow", w: 880, h: 441, access: "editorInspectorAccess" }
         ]
     }
 

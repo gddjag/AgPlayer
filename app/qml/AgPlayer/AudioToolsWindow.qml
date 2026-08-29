@@ -111,15 +111,15 @@ Window {
                 id: titleBar
                 objectName: "audioToolsTitleBar"
                 Layout.fillWidth: true
-                Layout.preferredHeight: 49
+                Layout.preferredHeight: 60
                 color: Theme.background
 
                 RowLayout {
                     z: 1
                     anchors.fill: parent
-                    anchors.leftMargin: 16
+                    anchors.leftMargin: 24
                     anchors.rightMargin: 8
-                    spacing: 10
+                    spacing: 14
 
                     Item {
                         objectName: "audioToolsLogo"
@@ -137,7 +137,7 @@ Window {
                         text: qsTr("AgPlayer · 音频工具")
                         color: Theme.primaryText
                         font.family: Theme.fontFallback
-                        font.pixelSize: 18
+                        font.pixelSize: 20
                         font.weight: Font.Medium
                     }
 
@@ -216,7 +216,7 @@ Window {
 
             ToolSidebar {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 43
+                Layout.preferredHeight: 59
                 window: window
                 currentTool: AudioToolsController.currentTool
                 onToolSelected: function(index) {

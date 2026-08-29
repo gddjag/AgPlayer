@@ -93,6 +93,19 @@
 </context>
 <context>
     <name>AudioEditorPage</name>
+    <message><source>（单声道）</source><translation>(โมโน)</translation></message>
+    <message><source>（立体声）</source><translation>(สเตอริโอ)</translation></message>
+    <message><source>当前时间</source><translation>เวลาปัจจุบัน</translation></message>
+    <message><source>总时长  </source><translation>ระยะเวลารวม  </translation></message>
+    <message><source>上一段（Home）</source><translation>ช่วงก่อนหน้า (Home)</translation></message>
+    <message><source>上一段</source><translation>ช่วงก่อนหน้า</translation></message>
+    <message><source>后退</source><translation>ย้อนกลับ</translation></message>
+    <message><source>前进</source><translation>เดินหน้า</translation></message>
+    <message><source>下一段</source><translation>ช่วงถัดไป</translation></message>
+    <message><source>A. 速度 / BPM</source><translation>A. ความเร็ว / BPM</translation></message>
+    <message><source>B. 升调降调</source><translation>B. ปรับระดับเสียง</translation></message>
+    <message><source>C. 保持音调</source><translation>C. รักษาระดับเสียง</translation></message>
+    <message><source>D. 导出设置</source><translation>D. การตั้งค่าการส่งออก</translation></message>
     <message><source>处理</source><translation>ประมวลผล</translation></message>
     <message><source>导出</source><translation>ส่งออก</translation></message>
     <message><source>选择音频导出目录</source><translation>เลือกโฟลเดอร์ส่งออกเสียง</translation></message>
@@ -1006,6 +1019,7 @@
 </context>
 <context>
     <name>FileSummaryBar</name>
+    <message><source>总时长：</source><translation>ระยะเวลารวม:</translation></message>
     <message><source>时长：</source><translation>ระยะเวลา:</translation></message>
     <message><source>采样率：</source><translation>อัตราตัวอย่าง:</translation></message>
     <message><source>位深度：</source><translation>ความลึกบิต:</translation></message>
