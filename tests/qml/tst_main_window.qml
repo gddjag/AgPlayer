@@ -2046,6 +2046,55 @@ TestCase {
         compare(typeof SettingsController.playButtonRgbGlow, "undefined")
     }
 
+    function test_generated_skin_routes_shared_backdrop_and_play_ring() {
+        var savedMode = SettingsController.skinColorMode
+        var savedPreset = SettingsController.skinPreset
+        var savedKind = SettingsController.skinCustomKind
+        var savedStart = SettingsController.skinCustomColor
+        var savedMiddle = SettingsController.skinCustomColorMiddle
+        var savedEnd = SettingsController.skinCustomColorEnd
+
+        try {
+            SettingsController.selectDefaultSkin()
+            wait(0)
+            compare(Theme.backdropStart.toString(),
+                    Theme.backdropMiddle.toString())
+            compare(Theme.backdropMiddle.toString(),
+                    Theme.backdropEnd.toString())
+            compare(Theme.playRingPlaying.toString(), "#00e676")
+            compare(Theme.playRingPaused.toString(), "#ffb020")
+
+            var backdrop = findChild(mainWindow, "skinBackdrop")
+            verify(backdrop, "main window must render one shared SkinBackdrop")
+            var gradientPaint = findChild(backdrop, "skinBackdropGradient")
+            verify(gradientPaint, "SkinBackdrop must expose its rendered gradient")
+            compare(gradientPaint.gradient.stops[0].color.toString(),
+                    Theme.backdropStart.toString())
+            compare(gradientPaint.gradient.stops[1].color.toString(),
+                    Theme.backdropMiddle.toString())
+            compare(gradientPaint.gradient.stops[2].color.toString(),
+                    Theme.backdropEnd.toString())
+
+            SettingsController.selectSkinPreset("aurora")
+            wait(0)
+            verify(Theme.backdropStart.toString()
+                   !== Theme.backdropMiddle.toString())
+            verify(Theme.backdropMiddle.toString()
+                   !== Theme.backdropEnd.toString())
+            compare(Theme.playRingPlaying.toString(), Theme.accent.toString())
+            compare(Theme.playRingPaused.toString(), Theme.accent.toString())
+            compare(findChild(mainWindow, "playButtonBody").border.color.toString(),
+                    Theme.accent.toString())
+        } finally {
+            SettingsController.setSkinCustomConfiguration(
+                        savedKind, savedStart, savedMiddle, savedEnd)
+            if (savedMode === 0)
+                SettingsController.selectDefaultSkin()
+            else if (savedMode === 1)
+                SettingsController.selectSkinPreset(savedPreset)
+        }
+    }
+
     function test_volume_control_uses_compact_white_handle_and_percentage() {
         var mute = findChild(mainWindow, "muteButton")
         var slider = findChild(mainWindow, "volumeSlider")

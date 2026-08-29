@@ -147,6 +147,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/ImportStatusPanel.qml
         qml/AgPlayer/components/FileDropArea.qml
         qml/AgPlayer/components/DockedWindowFrame.qml
+        qml/AgPlayer/components/SkinBackdrop.qml
         qml/AgPlayer/components/WindowResizeHandles.qml
         qml/AgPlayer/components/MiniPlayerControls.qml
         qml/AgPlayer/components/SideNavigation.qml

@@ -18,9 +18,9 @@ Window {
     property int gainRevision: 0
     palette.window: Theme.background
     palette.windowText: Theme.primaryText
-    palette.base: Theme.elevated
+    palette.base: Theme.surfaceElevated
     palette.text: Theme.primaryText
-    palette.button: Theme.elevated
+    palette.button: Theme.surfaceElevated
     palette.buttonText: Theme.primaryText
     palette.highlight: Theme.highlight
     palette.highlightedText: Theme.highlightText
@@ -41,10 +41,15 @@ Window {
         function onBandGainChanged() { ++window.gainRevision }
     }
 
+    SkinBackdrop {
+        anchors.fill: parent
+        radius: window.visibility === Window.Maximized ? 0 : Theme.windowRadius
+    }
+
     Rectangle {
         anchors.fill: parent
         radius: window.visibility === Window.Maximized ? 0 : Theme.windowRadius
-        color: Theme.background
+        color: "transparent"
         border.color: Theme.border
         border.width: 1
     }

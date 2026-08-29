@@ -35,6 +35,15 @@ Rectangle {
     bottomRightRadius: maximized || contactEdge === "bottom"
                        || contactEdge === "right" ? 0 : windowRadius
 
+    Loader {
+        anchors.fill: parent
+        anchors.margins: root.showBorders ? root.border.width : 0
+        active: root.showFill
+        sourceComponent: SkinBackdrop {
+            radius: root.windowRadius
+        }
+    }
+
     // Rectangle's own border follows its rounded outline.  Cover only the
     // shared edge after docking; straight child borders would repaint the
     // otherwise transparent corner pixels.

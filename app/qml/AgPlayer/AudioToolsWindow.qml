@@ -30,14 +30,14 @@ Window {
     }
     palette.window: Theme.background
     palette.windowText: Theme.primaryText
-    palette.base: Theme.elevated
-    palette.alternateBase: Theme.panel
+    palette.base: Theme.surfaceElevated
+    palette.alternateBase: Theme.surface
     palette.text: Theme.primaryText
-    palette.button: Theme.elevated
+    palette.button: Theme.surfaceElevated
     palette.buttonText: Theme.primaryText
     palette.highlight: Theme.highlight
     palette.highlightedText: Theme.highlightText
-    palette.mid: Theme.border
+    palette.mid: Theme.opaqueBorder
 
     Dialog {
         id: unsavedCloseDialog
@@ -62,6 +62,12 @@ Window {
         border.color: Theme.border
         border.width: 1
         radius: window.visibility === Window.Maximized ? 0 : Theme.windowRadius
+
+        SkinBackdrop {
+            anchors.fill: parent
+            anchors.margins: parent.border.width
+            radius: Math.max(0, parent.radius - parent.border.width)
+        }
 
         ColumnLayout {
             anchors.fill: parent
@@ -197,7 +203,7 @@ Window {
                 objectName: "audioToolsContentStack"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                color: Theme.background
+                color: Theme.panel
                 border.color: "transparent"
                 border.width: 0
                 radius: 0

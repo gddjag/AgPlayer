@@ -16,14 +16,14 @@ Window {
     title: qsTr("AgPlayer · 设置")
     palette.window: Theme.background
     palette.windowText: Theme.primaryText
-    palette.base: Theme.elevated
-    palette.alternateBase: Theme.panel
+    palette.base: Theme.surfaceElevated
+    palette.alternateBase: Theme.surface
     palette.text: Theme.primaryText
-    palette.button: Theme.elevated
+    palette.button: Theme.surfaceElevated
     palette.buttonText: Theme.primaryText
     palette.highlight: Theme.highlight
     palette.highlightedText: Theme.highlightText
-    palette.mid: Theme.border
+    palette.mid: Theme.opaqueBorder
 
     Component.onCompleted: WindowController.registerSettingsWindow(settingsWindow)
 
@@ -44,9 +44,15 @@ Window {
         settingsPage.cancelAndClose()
     }
 
+    SkinBackdrop {
+        anchors.fill: parent
+        radius: settingsWindow.visibility === Window.Maximized
+                ? 0 : Theme.windowRadius
+    }
+
     Rectangle {
         anchors.fill: parent
-        color: Theme.background
+        color: "transparent"
         radius: settingsWindow.visibility === Window.Maximized
                 ? 0 : Theme.windowRadius
         border.color: Theme.border

@@ -104,6 +104,39 @@ TestCase {
         compare(findChild(miniPlayer, "miniPlayButtonBody").border.width, 3)
     }
 
+    function test_generated_skin_reaches_mini_backdrop_and_ring() {
+        var savedMode = SettingsController.skinColorMode
+        var savedPreset = SettingsController.skinPreset
+        var savedKind = SettingsController.skinCustomKind
+        var savedStart = SettingsController.skinCustomColor
+        var savedMiddle = SettingsController.skinCustomColorMiddle
+        var savedEnd = SettingsController.skinCustomColorEnd
+
+        try {
+            SettingsController.selectSkinPreset("aurora")
+            wait(0)
+            var backdrop = findChild(miniPlayer, "skinBackdrop")
+            verify(backdrop, "mini player must render its root SkinBackdrop")
+            var gradientPaint = findChild(backdrop, "skinBackdropGradient")
+            verify(gradientPaint, "mini SkinBackdrop must render Theme stops")
+            compare(gradientPaint.gradient.stops[0].color.toString(),
+                    Theme.backdropStart.toString())
+            compare(gradientPaint.gradient.stops[1].color.toString(),
+                    Theme.backdropMiddle.toString())
+            compare(gradientPaint.gradient.stops[2].color.toString(),
+                    Theme.backdropEnd.toString())
+            compare(findChild(miniPlayer, "miniPlayButtonBody")
+                    .border.color.toString(), Theme.accent.toString())
+        } finally {
+            SettingsController.setSkinCustomConfiguration(
+                        savedKind, savedStart, savedMiddle, savedEnd)
+            if (savedMode === 0)
+                SettingsController.selectDefaultSkin()
+            else if (savedMode === 1)
+                SettingsController.selectSkinPreset(savedPreset)
+        }
+    }
+
     function test_windows_keep_a_safe_position_when_playback_is_released() {
         miniPlayer.playback = null
         mainPlayer.playback = null

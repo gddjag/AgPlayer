@@ -27,14 +27,14 @@ Window {
     title: qsTr("AgPlayer 音乐列表")
     palette.window: Theme.background
     palette.windowText: Theme.primaryText
-    palette.base: Theme.elevated
-    palette.alternateBase: Theme.panel
+    palette.base: Theme.surfaceElevated
+    palette.alternateBase: Theme.surface
     palette.text: Theme.primaryText
-    palette.button: Theme.elevated
+    palette.button: Theme.surfaceElevated
     palette.buttonText: Theme.primaryText
     palette.highlight: Theme.highlight
     palette.highlightedText: Theme.highlightText
-    palette.mid: Theme.border
+    palette.mid: Theme.opaqueBorder
 
     property var windows: WindowController
     property var filterModel: null

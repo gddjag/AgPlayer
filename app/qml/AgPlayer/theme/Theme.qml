@@ -18,9 +18,9 @@ QtObject {
     readonly property color textSecondary: ThemeManager.textSecondary
     readonly property color textTertiary: ThemeManager.textTertiary
     readonly property color textDisabled: ThemeManager.textDisabled
-    readonly property color border: ThemeManager.border
+    readonly property color opaqueBorder: ThemeManager.border
     readonly property color borderStrong: ThemeManager.borderStrong
-    readonly property color divider: ThemeManager.divider
+    readonly property color opaqueDivider: ThemeManager.divider
     readonly property color disabled: ThemeManager.disabled
     readonly property color accent: ThemeManager.accent
     readonly property color accentHover: ThemeManager.accentHover
@@ -41,6 +41,16 @@ QtObject {
     readonly property color danger: ThemeManager.danger
     readonly property color recording: ThemeManager.recording
     readonly property color critical: ThemeManager.critical
+    readonly property color backdropStart: ThemeManager.backdropStart
+    readonly property color backdropMiddle: ThemeManager.backdropMiddle
+    readonly property color backdropEnd: ThemeManager.backdropEnd
+    readonly property color glassSurface: ThemeManager.glassSurface
+    readonly property color glassSurfaceElevated: ThemeManager.glassSurfaceElevated
+    readonly property color glassSurfaceHover: ThemeManager.glassSurfaceHover
+    readonly property color glassSurfacePressed: ThemeManager.glassSurfacePressed
+    readonly property color glassBorder: ThemeManager.glassBorder
+    readonly property color glassDivider: ThemeManager.glassDivider
+    readonly property color glassInnerHighlight: ThemeManager.glassInnerHighlight
 
     // Compatibility aliases for existing QML pages.
     readonly property int mode: SettingsController.themeMode
@@ -48,9 +58,13 @@ QtObject {
     readonly property bool followsSystem: mode === 2
     readonly property bool systemIsLight: ThemeManager.isLight
     readonly property int effectiveMode: isLight ? 1 : 0
-    readonly property color panel: surface
-    readonly property color elevated: surfaceElevated
-    readonly property color hoverSurface: surfaceHover
+    readonly property bool generatedSkin: SettingsController.skinColorMode !== 0
+    readonly property color panel: glassSurface
+    readonly property color elevated: glassSurfaceElevated
+    readonly property color hoverSurface: glassSurfaceHover
+    readonly property color pressedSurface: glassSurfacePressed
+    readonly property color border: glassBorder
+    readonly property color divider: glassDivider
     readonly property color primaryText: textPrimary
     readonly property color secondaryText: textSecondary
     readonly property color cyan: accent
@@ -87,8 +101,8 @@ QtObject {
     readonly property color editorOverviewWaveform: isLight ? "#2B9692" : "#297E7B"
     readonly property color editorSelection: isLight ? "#26169B97" : "#2639C7C0"
     readonly property color editorOverviewSelection: isLight ? "#122B9692" : "#12297E7B"
-    readonly property color playRingPlaying: waveformGreen
-    readonly property color playRingPaused: "#FFB020"
+    readonly property color playRingPlaying: generatedSkin ? accent : waveformGreen
+    readonly property color playRingPaused: generatedSkin ? accent : "#FFB020"
 
     readonly property color favoriteRed: "#FF334D"
     readonly property color ratingGold: "#FF9800"

@@ -17,14 +17,14 @@ Window {
     title: "AgPlayer Mini"
     palette.window: Theme.background
     palette.windowText: Theme.primaryText
-    palette.base: Theme.elevated
-    palette.alternateBase: Theme.panel
+    palette.base: Theme.surfaceElevated
+    palette.alternateBase: Theme.surface
     palette.text: Theme.primaryText
-    palette.button: Theme.elevated
+    palette.button: Theme.surfaceElevated
     palette.buttonText: Theme.primaryText
     palette.highlight: Theme.highlight
     palette.highlightedText: Theme.highlightText
-    palette.mid: Theme.border
+    palette.mid: Theme.opaqueBorder
 
     property var playback: PlaybackController
     property var windows: WindowController
@@ -51,6 +51,12 @@ Window {
         border.color: Theme.border
         border.width: 1
         clip: true
+
+        SkinBackdrop {
+            anchors.fill: parent
+            anchors.margins: surface.border.width
+            radius: Math.max(0, surface.radius - surface.border.width)
+        }
 
         ColumnLayout {
             anchors.fill: parent
