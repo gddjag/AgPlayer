@@ -104,7 +104,7 @@ TestCase {
         compare(shortcutText.indexOf("Phase"), -1)
     }
 
-    function test_composedToolsShellUsesReadableLightThemeColors() {
+    function test_composedToolsShellUsesLightPaletteAndGeneratedBackdrop() {
         const previousMode = SettingsController.themeMode
         const previousSkinMode = SettingsController.skinColorMode
         const previousSkinPreset = SettingsController.skinPreset
@@ -112,6 +112,8 @@ TestCase {
         const previousSkinStart = SettingsController.skinCustomColor
         const previousSkinMiddle = SettingsController.skinCustomColorMiddle
         const previousSkinEnd = SettingsController.skinCustomColorEnd
+        const generatedPreset = previousSkinPreset === "aurora"
+                                ? "sunset" : "aurora"
         var shell = null
 
         try {
@@ -146,7 +148,7 @@ TestCase {
             verify(topNav.activeLabelColor.toString()
                    !== titleBar.color.toString())
 
-            SettingsController.selectSkinPreset("aurora")
+            SettingsController.selectSkinPreset(generatedPreset)
             wait(0)
             compare(contentStack.color.toString(), Theme.panel.toString())
             verify(Theme.panel.a < 1.0,
@@ -170,12 +172,18 @@ TestCase {
             SettingsController.setSkinCustomConfiguration(
                         previousSkinKind, previousSkinStart,
                         previousSkinMiddle, previousSkinEnd)
-            if (previousSkinMode === 0)
-                SettingsController.selectDefaultSkin()
-            else if (previousSkinMode === 1)
-                SettingsController.selectSkinPreset(previousSkinPreset)
+            SettingsController.skinPreset = previousSkinPreset
+            SettingsController.skinColorMode = previousSkinMode
             SettingsController.themeMode = previousMode
             wait(0)
+            compare(SettingsController.skinPreset, previousSkinPreset)
+            compare(SettingsController.skinColorMode, previousSkinMode)
+            compare(SettingsController.skinCustomKind, previousSkinKind)
+            compare(SettingsController.skinCustomColor, previousSkinStart)
+            compare(SettingsController.skinCustomColorMiddle,
+                    previousSkinMiddle)
+            compare(SettingsController.skinCustomColorEnd, previousSkinEnd)
+            compare(SettingsController.themeMode, previousMode)
         }
     }
 
