@@ -2929,6 +2929,7 @@
         <source>评分</source>
         <translation>Xếp hạng</translation>
     </message>
+    <message><source>歌曲 · 艺术家 · 专辑 · 标签</source><translation>Bài hát · Nghệ sĩ · Album · Thẻ</translation></message>
 </context>
 <context>
     <name>SettingsPage</name>
@@ -3653,6 +3654,8 @@
     <message><source>主题皮肤颜色</source><translation>Màu giao diện chủ đề</translation></message>
     <message><source>歌曲列表</source><translation>Danh sách bài hát</translation></message>
     <message><source>显示歌曲列表波形缩略图</source><translation>Hiện hình thu nhỏ dạng sóng trong danh sách</translation></message>
+    <message><source>缩略波形颜色</source><translation>Màu dạng sóng thu nhỏ</translation></message>
+    <message><source>36 色</source><translation>36 màu</translation></message>
     <message><source>波形与频谱颜色</source><translation>Màu dạng sóng và phổ</translation></message>
     <message><source>自定义波形</source><translation>Dạng sóng tùy chỉnh</translation></message>
     <message><source>底色 / RGB 渐变</source><translation>Màu nền / chuyển sắc RGB</translation></message>
@@ -3670,6 +3673,11 @@
 </context>
 <context>
     <name>SideNavigation</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/SideNavigation.qml" line="357"/>
+        <source>资源文件夹</source>
+        <translation>Thư mục tài nguyên</translation>
+    </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/SideNavigation.qml" line="114"/>
         <source>展开歌单列表</source>
@@ -4054,5 +4062,12 @@
     <message><source>取消</source><translation>Hủy</translation></message>
     <message><source>应用颜色</source><translation>Áp dụng màu</translation></message>
     <message><source>应用</source><translation>Áp dụng</translation></message>
+</context>
+<context>
+    <name>LibraryNavigationModel</name>
+    <message><source>我的音乐库</source><translation>Thư viện nhạc của tôi</translation></message>
+    <message><source>我的收藏</source><translation>Mục yêu thích</translation></message>
+    <message><source>标签管理</source><translation>Quản lý thẻ</translation></message>
+    <message><source>资源文件夹</source><translation>Thư mục tài nguyên</translation></message>
 </context>
 </TS>

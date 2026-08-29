@@ -649,6 +649,9 @@ Item {
 
     component SettingRow: Item {
         property alias label: labelText.text
+        property string labelObjectName: ""
+        property real labelWidth: 176
+        property bool fitLabelToContent: false
         default property alias content: contentContainer.children
 
         Layout.fillWidth: true
@@ -656,12 +659,16 @@ Item {
 
         Text {
             id: labelText
+            objectName: parent.labelObjectName
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             color: Theme.secondaryText
             font.family: Theme.fontPrimary
             font.pixelSize: 14
-            width: 176
+            width: parent.fitLabelToContent
+                   ? Math.min(parent.width - 190,
+                              Math.max(parent.labelWidth, contentWidth))
+                   : parent.labelWidth
         }
 
         Item {
@@ -1641,6 +1648,8 @@ Item {
 
                 SettingRow {
                     visible: SettingsController.waveformMode !== 2
+                    labelObjectName: "waveformDensityRowLabel"
+                    fitLabelToContent: true
                     label: qsTr("波形采样密度")
                     SettingStepper {
                         objectName: "waveformDensityStepper"
@@ -1674,6 +1683,8 @@ Item {
 
                 SettingRow {
                     visible: SettingsController.waveformMode !== 2
+                    labelObjectName: "waveformAggregationRowLabel"
+                    fitLabelToContent: true
                     label: qsTr("波形峰值算法")
                     SettingCombo {
                         objectName: "waveformAggregationCombo"

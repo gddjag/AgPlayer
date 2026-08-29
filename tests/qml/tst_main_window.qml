@@ -1037,6 +1037,44 @@ TestCase {
                "the opened popup must contain a real track filename")
         verify(String(detailsPanel.details.format || "").length > 0,
                "the opened popup must contain a real track format")
+
+        var sampleRateLabel = findChild(detailsPanel.contentItem,
+                                        "trackDetailsLabel-sampleRate")
+        var sampleRateValue = findChild(detailsPanel.contentItem,
+                                        "trackDetailsValue-sampleRate")
+        var directoryLabel = findChild(detailsPanel.contentItem,
+                                       "trackDetailsLabel-directory")
+        var directoryValue = findChild(detailsPanel.contentItem,
+                                       "trackDetailsValue-directory")
+        var pathLabel = findChild(detailsPanel.contentItem,
+                                  "trackDetailsLabel-path")
+        var pathValue = findChild(detailsPanel.contentItem,
+                                  "trackDetailsValue-path")
+        verify(sampleRateLabel && sampleRateValue)
+        verify(directoryLabel && directoryValue)
+        verify(pathLabel && pathValue)
+
+        sampleRateLabel.text = "อัตราสุ่มตัวอย่าง"
+        directoryLabel.text = "Thư mục"
+        pathLabel.text = "Đường dẫn đầy đủ"
+        wait(0)
+        verify(sampleRateLabel.contentWidth <= sampleRateLabel.width,
+               "sample rate content=" + sampleRateLabel.contentWidth
+               + " width=" + sampleRateLabel.width)
+        verify(pathLabel.contentWidth <= pathLabel.width,
+               "path content=" + pathLabel.contentWidth
+               + " width=" + pathLabel.width)
+
+        var labels = [sampleRateLabel, directoryLabel, pathLabel]
+        var values = [sampleRateValue, directoryValue, pathValue]
+        for (var detailIndex = 0; detailIndex < labels.length; ++detailIndex) {
+            var labelPosition = labels[detailIndex].mapToItem(
+                        detailsPanel.contentItem, 0, 0)
+            var valuePosition = values[detailIndex].mapToItem(
+                        detailsPanel.contentItem, 0, 0)
+            verify(labelPosition.x + labels[detailIndex].contentWidth
+                   <= valuePosition.x - 4)
+        }
         detailsPanel.close()
         listWindow.destroy()
     }

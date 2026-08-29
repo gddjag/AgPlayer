@@ -14,6 +14,7 @@ TestCase {
     property int savedThemeMode: 0
     property string savedWaveformSolidBaseColor: ""
     property var savedThemeChoices: ({})
+    property var transientObject: null
 
     Item {
         id: testHost
@@ -184,6 +185,10 @@ TestCase {
 
     function cleanup() {
         picker.close()
+        if (transientObject) {
+            transientObject.destroy()
+            transientObject = null
+        }
         var integratedPicker = findChild(integratedField, "colorFieldPicker")
         if (integratedPicker)
             integratedPicker.close()
@@ -859,6 +864,7 @@ TestCase {
 
     function test_localized_default_label_reserves_selection_cue_and_row_fits() {
         var selector = localizedSelectorComponent.createObject(testHost)
+        transientObject = selector
         verify(selector)
         wait(0)
 
@@ -888,6 +894,7 @@ TestCase {
         }
 
         selector.destroy()
+        transientObject = null
     }
 
     function test_settings_sidebar_elides_and_only_tooltips_truncated_labels() {
@@ -896,6 +903,7 @@ TestCase {
             visible: true,
             z: 100
         })
+        transientObject = page
         verify(page)
         page.visible = true
         wait(0)
@@ -931,5 +939,48 @@ TestCase {
         verify(!label.ToolTip.visible)
 
         page.destroy()
+        transientObject = null
+    }
+
+    function test_waveform_rows_fit_long_thai_and_vietnamese_labels() {
+        var page = settingsPageComponent.createObject(
+                    testCase.Window.window.contentItem, {
+            visible: true,
+            z: 100
+        })
+        transientObject = page
+        verify(page)
+        wait(0)
+
+        var densityLabel = findChild(page, "waveformDensityRowLabel")
+        var densityControl = findChild(page, "waveformDensityStepper")
+        var aggregationLabel = findChild(page, "waveformAggregationRowLabel")
+        var aggregationControl = findChild(page, "waveformAggregationCombo")
+        verify(densityLabel && densityControl)
+        verify(aggregationLabel && aggregationControl)
+
+        densityLabel.text = "ความหนาแน่นการสุ่มตัวอย่างรูปคลื่น"
+        aggregationLabel.text = "Phương pháp tổng hợp dạng sóng"
+        wait(0)
+
+        verify(densityLabel.contentWidth <= densityLabel.width,
+               "density content=" + densityLabel.contentWidth
+               + " width=" + densityLabel.width)
+        verify(aggregationLabel.contentWidth <= aggregationLabel.width,
+               "aggregation content=" + aggregationLabel.contentWidth
+               + " width=" + aggregationLabel.width)
+
+        var densityLabelPosition = densityLabel.mapToItem(page, 0, 0)
+        var densityControlPosition = densityControl.mapToItem(page, 0, 0)
+        verify(densityLabelPosition.x + densityLabel.contentWidth
+               <= densityControlPosition.x - 6)
+
+        var aggregationLabelPosition = aggregationLabel.mapToItem(page, 0, 0)
+        var aggregationControlPosition = aggregationControl.mapToItem(page, 0, 0)
+        verify(aggregationLabelPosition.x + aggregationLabel.contentWidth
+               <= aggregationControlPosition.x - 6)
+
+        page.destroy()
+        transientObject = null
     }
 }

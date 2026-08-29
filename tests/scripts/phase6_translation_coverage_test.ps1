@@ -31,6 +31,8 @@ foreach ($relativePath in $phase6Qml) {
 $settingsSources = @(
     '5q2M5puy5YiX6KGo',
     '5pi+56S65q2M5puy5YiX6KGo5rOi5b2i57yp55Wl5Zu+',
+    '57yp55Wl5rOi5b2i6aKc6Imy',
+    'MzYg6Imy',
     '5rOi5b2i5LiO6aKR6LCx6aKc6Imy',
     '6Ieq5a6a5LmJ5rOi5b2i',
     '5bqV6ImyIC8gUkdCIOa4kOWPmA==',
@@ -48,6 +50,25 @@ foreach ($source in $settingsSources) {
     }
 }
 $expected['SettingsPage'] = $settingsSources
+
+$expected['LibraryNavigationModel'] = @(
+    '5oiR55qE6Z+z5LmQ5bqT',
+    '5oiR55qE5pS26JeP',
+    '5qCH562+566h55CG',
+    '6LWE5rqQ5paH5Lu25aS5'
+) | ForEach-Object {
+    [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_))
+}
+$expected['SideNavigation'] = @(
+    '6LWE5rqQ5paH5Lu25aS5'
+) | ForEach-Object {
+    [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_))
+}
+$expected['SearchFilter'] = @(
+    '5q2M5puyIMK3IOiJuuacr+WutiDCtyDkuJPovpEgwrcg5qCH562+'
+) | ForEach-Object {
+    [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_))
+}
 
 foreach ($locale in @('zh', 'en', 'th', 'vi')) {
     $catalogPath = Join-Path $SourceRoot "translations/agplayer_$locale.ts"

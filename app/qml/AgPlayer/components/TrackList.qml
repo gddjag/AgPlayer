@@ -1025,7 +1025,7 @@ ListView {
         id: detailsPanel
         objectName: "trackDetailsPanel"
         property var details: ({})
-        width: 300; height: Math.min(root.height - 24, 470)
+        width: 340; height: Math.min(root.height - 24, 470)
         x: root.width - width - 12; y: root.contentY + 12
         modal: false; focus: true; closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         background: Rectangle { color: Theme.elevated; border.color: Theme.border; radius: Theme.radiusMd }
@@ -1048,17 +1048,36 @@ ListView {
             }
             Repeater {
                 model: [
-                    [qsTr("文件名"), detailsPanel.details.fileName], [qsTr("格式"), detailsPanel.details.format],
-                    [qsTr("采样率"), detailsPanel.details.sampleRate], [qsTr("比特率"), detailsPanel.details.bitRate],
-                    [qsTr("时长"), root.formatTime(detailsPanel.details.durationMs || 0)], ["BPM", detailsPanel.details.bpm],
-                    [qsTr("目录"), detailsPanel.details.directory], [qsTr("完整路径"), detailsPanel.details.path],
-                    [qsTr("标签"), (detailsPanel.details.tags || []).join(", ")]
+                    ["fileName", qsTr("文件名"), detailsPanel.details.fileName],
+                    ["format", qsTr("格式"), detailsPanel.details.format],
+                    ["sampleRate", qsTr("采样率"), detailsPanel.details.sampleRate],
+                    ["bitRate", qsTr("比特率"), detailsPanel.details.bitRate],
+                    ["duration", qsTr("时长"), root.formatTime(detailsPanel.details.durationMs || 0)],
+                    ["bpm", "BPM", detailsPanel.details.bpm],
+                    ["directory", qsTr("目录"), detailsPanel.details.directory],
+                    ["path", qsTr("完整路径"), detailsPanel.details.path],
+                    ["tags", qsTr("标签"), (detailsPanel.details.tags || []).join(", ")]
                 ]
                 delegate: RowLayout {
                     required property var modelData
+                    id: detailRow
+                    objectName: "trackDetailsRow-" + modelData[0]
                     Layout.fillWidth: true
-                    Text { text: modelData[0]; color: Theme.secondaryText; Layout.preferredWidth: 62; font.pixelSize: 11 }
-                    Text { text: modelData[1] || "—"; color: Theme.primaryText; elide: Text.ElideMiddle; Layout.fillWidth: true; font.pixelSize: 11 }
+                    Text {
+                        objectName: "trackDetailsLabel-" + detailRow.modelData[0]
+                        text: modelData[1]
+                        color: Theme.secondaryText
+                        Layout.preferredWidth: 176
+                        font.pixelSize: 11
+                    }
+                    Text {
+                        objectName: "trackDetailsValue-" + detailRow.modelData[0]
+                        text: modelData[2] || "—"
+                        color: Theme.primaryText
+                        elide: Text.ElideMiddle
+                        Layout.fillWidth: true
+                        font.pixelSize: 11
+                    }
                 }
             }
             Image {

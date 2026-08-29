@@ -2986,6 +2986,7 @@ Clear: Remove all known aliases for this field.</translation>
         <source>评分</source>
         <translation>Rating</translation>
     </message>
+    <message><source>歌曲 · 艺术家 · 专辑 · 标签</source><translation>Song · Artist · Album · Tag</translation></message>
 </context>
 <context>
     <name>SettingsPage</name>
@@ -3710,6 +3711,8 @@ Clear: Remove all known aliases for this field.</translation>
     <message><source>主题皮肤颜色</source><translation>Theme skin color</translation></message>
     <message><source>歌曲列表</source><translation>Song list</translation></message>
     <message><source>显示歌曲列表波形缩略图</source><translation>Show waveform thumbnails in the song list</translation></message>
+    <message><source>缩略波形颜色</source><translation>Thumbnail waveform color</translation></message>
+    <message><source>36 色</source><translation>36 colors</translation></message>
     <message><source>波形与频谱颜色</source><translation>Waveform and spectrum colors</translation></message>
     <message><source>自定义波形</source><translation>Custom waveform</translation></message>
     <message><source>底色 / RGB 渐变</source><translation>Base color / RGB gradient</translation></message>
@@ -3727,6 +3730,11 @@ Clear: Remove all known aliases for this field.</translation>
 </context>
 <context>
     <name>SideNavigation</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/SideNavigation.qml" line="357"/>
+        <source>资源文件夹</source>
+        <translation>Resource Folders</translation>
+    </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/SideNavigation.qml" line="114"/>
         <source>展开歌单列表</source>
@@ -4111,5 +4119,12 @@ Clear: Remove all known aliases for this field.</translation>
     <message><source>取消</source><translation>Cancel</translation></message>
     <message><source>应用颜色</source><translation>Apply color</translation></message>
     <message><source>应用</source><translation>Apply</translation></message>
+</context>
+<context>
+    <name>LibraryNavigationModel</name>
+    <message><source>我的音乐库</source><translation>My Music Library</translation></message>
+    <message><source>我的收藏</source><translation>My Favorites</translation></message>
+    <message><source>标签管理</source><translation>Tag Management</translation></message>
+    <message><source>资源文件夹</source><translation>Resource Folders</translation></message>
 </context>
 </TS>
