@@ -9,47 +9,48 @@ ColumnLayout {
     property string objectNamePrefix: "themeColor"
     property string title: ""
     property int selectedMode: 0
-    property string selectedPreset: "systemBlue"
+    property string selectedPreset: "aurora"
+    property int customKind: 0
     property color customColor: "#D27722"
+    property color customColorMiddle: "#D27722"
+    property color customColorEnd: "#D27722"
+
     signal defaultRequested()
     signal presetRequested(string preset)
-    signal customRequested(color color)
+    signal customConfigurationRequested(
+        int kind, string start, string middle, string end)
 
-    function presetName(presetId) {
-        switch (presetId) {
-        case "systemBlue": return qsTr("系统蓝")
-        case "indigo": return qsTr("靛蓝")
-        case "purple": return qsTr("紫色")
-        case "pink": return qsTr("粉色")
-        case "red": return qsTr("红色")
-        case "orange": return qsTr("橙色")
-        case "gold": return qsTr("金色")
-        case "green": return qsTr("绿色")
-        case "teal": return qsTr("蓝绿色")
-        case "cyan": return qsTr("青色")
-        default: return presetId
+    function colorText(value) {
+        return String(value || "").toUpperCase()
+    }
+
+    function presetName(id) {
+        switch (id) {
+        case "aurora": return qsTr("Aurora")
+        case "seaGlass": return qsTr("Sea Glass")
+        case "sunset": return qsTr("Sunset")
+        case "lavenderMist": return qsTr("Lavender Mist")
+        case "morningGlow": return qsTr("Morning Glow")
+        default: return id
         }
     }
 
-    readonly property var presets: [
-        { id: "systemBlue", color: "#007AFF" },
-        { id: "indigo", color: "#5856D6" },
-        { id: "purple", color: "#AF52DE" },
-        { id: "pink", color: "#FF2D55" },
-        { id: "red", color: "#FF3B30" },
-        { id: "orange", color: "#FF9500" },
-        { id: "gold", color: "#FFCC00" },
-        { id: "green", color: "#34C759" },
-        { id: "teal", color: "#30B0C7" },
-        { id: "cyan", color: "#32ADE6" }
-    ]
+    function requestCustom(kind, start, middle, end) {
+        root.customConfigurationRequested(
+                    kind, root.colorText(start), root.colorText(middle),
+                    root.colorText(end))
+    }
 
     Layout.fillWidth: true
     spacing: Theme.spacingXs
+    implicitHeight: choiceRow.implicitHeight
+                    + (customEditor.expanded
+                       ? spacing + customEditor.implicitHeight : 0)
     Accessible.role: Accessible.Grouping
     Accessible.name: root.title
 
     RowLayout {
+        id: choiceRow
         Layout.fillWidth: true
         spacing: Math.max(2, Theme.spacingXs / 2)
 
@@ -59,6 +60,8 @@ ColumnLayout {
             checkable: true
             checked: root.selectedMode === 0
             text: qsTr("默认")
+            focusPolicy: Qt.StrongFocus
+            Layout.preferredHeight: 30
             Accessible.role: Accessible.Button
             Accessible.name: text + (checked ? qsTr("，已选择") : "")
             onClicked: root.defaultRequested()
@@ -73,33 +76,39 @@ ColumnLayout {
             }
             background: Rectangle {
                 implicitWidth: 52
-                implicitHeight: 28
+                implicitHeight: 30
                 radius: Theme.radiusSm
                 color: defaultButton.checked ? Theme.accent : Theme.background
-                border.width: defaultButton.checked ? 2 : 1
-                border.color: defaultButton.activeFocus || defaultButton.checked
-                              ? Theme.accent : Theme.border
+                border.width: defaultButton.activeFocus || defaultButton.checked ? 2 : 1
+                border.color: defaultButton.activeFocus ? Theme.focus
+                              : defaultButton.checked ? Theme.accent : Theme.border
             }
         }
 
         Repeater {
-            model: root.presets
+            model: ThemeManager.recommendedPresets
 
             delegate: AbstractButton {
                 id: swatch
                 required property var modelData
+
                 objectName: root.objectNamePrefix + "Preset-" + modelData.id
                 checkable: true
-                property bool selectionCueVisible: swatch.checked
-                property bool focusCueVisible: swatch.activeFocus
                 checked: root.selectedMode === 1
                          && root.selectedPreset === modelData.id
-                focusPolicy: Qt.StrongFocus
-                implicitWidth: 24
-                implicitHeight: 24
+                property bool selectionCueVisible: checked
+                property bool focusCueVisible: activeFocus
+                implicitWidth: 46
+                implicitHeight: 30
+                Layout.preferredWidth: 46
+                Layout.preferredHeight: 30
                 padding: 0
+                focusPolicy: Qt.StrongFocus
                 Accessible.role: Accessible.Button
-                Accessible.name: root.title + " " + root.presetName(modelData.id)
+                Accessible.name: root.presetName(modelData.id) + " "
+                                 + root.colorText(modelData.start) + " "
+                                 + root.colorText(modelData.middle) + " "
+                                 + root.colorText(modelData.end)
                                  + (checked ? qsTr("，已选择") : "")
                 onClicked: root.presetRequested(modelData.id)
                 Keys.onSpacePressed: function(event) {
@@ -115,46 +124,30 @@ ColumnLayout {
                     event.accepted = true
                 }
 
-                background: Item {
-                    Rectangle {
-                        id: swatchCircle
+                background: Rectangle {
+                    radius: Theme.radiusSm
+                    border.width: swatch.checked ? 2 : 1
+                    border.color: swatch.checked ? Theme.accent : Theme.border
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0.0; color: swatch.modelData.start }
+                        GradientStop { position: 0.5; color: swatch.modelData.middle }
+                        GradientStop { position: 1.0; color: swatch.modelData.end }
+                    }
+
+                    ThemedIcon {
                         anchors.centerIn: parent
-                        width: swatch.checked ? 24 : 20
-                        height: width
-                        radius: width / 2
-                        color: swatch.modelData.color
-                        border.width: swatch.checked ? 2 : 1
-                        border.color: swatch.checked
-                                      ? (swatch.modelData.id === "gold"
-                                         ? "#1B1B1B" : "#FFFFFF")
-                                      : Theme.border
-
-                        Rectangle {
-                            anchors.fill: parent
-                            anchors.margins: swatch.checked ? 3 : 0
-                            radius: width / 2
-                            color: "transparent"
-                            border.width: swatch.checked ? 1 : 0
-                            border.color: swatch.checked
-                                          ? (swatch.modelData.id === "gold"
-                                             ? "#FFFFFF" : "#1B1B1B")
-                                          : "transparent"
-                        }
-
-                        ThemedIcon {
-                            anchors.centerIn: parent
-                            visible: swatch.checked
-                            source: Theme.icon("check-line")
-                            tint: swatch.modelData.id === "gold" ? "#1B1B1B" : "#FFFFFF"
-                            sourceSize.width: 12
-                            sourceSize.height: 12
-                        }
+                        visible: swatch.checked
+                        source: Theme.icon("check-line")
+                        tint: Theme.onBrandGradientText
+                        sourceSize.width: 14
+                        sourceSize.height: 14
                     }
 
                     Rectangle {
-                        anchors.fill: swatchCircle
+                        anchors.fill: parent
                         anchors.margins: -2
-                        radius: width / 2
+                        radius: Theme.radiusSm + 2
                         color: "transparent"
                         border.width: swatch.focusCueVisible ? 2 : 0
                         border.color: Theme.focus
@@ -164,53 +157,221 @@ ColumnLayout {
             }
         }
 
-        Item {
-            implicitWidth: 92
-            implicitHeight: customField.implicitHeight
+        Button {
+            id: customButton
+            objectName: root.objectNamePrefix + "Custom"
+            checkable: true
+            checked: root.selectedMode === 2
+            property bool selectionCueVisible: checked
+            property bool focusCueVisible: activeFocus
+            text: qsTr("自定义")
+            focusPolicy: Qt.StrongFocus
+            Layout.preferredHeight: 30
+            Accessible.role: Accessible.Button
+            Accessible.name: text + (checked ? qsTr("，已选择") : "")
+            onClicked: root.requestCustom(
+                           root.customKind, root.customColor,
+                           root.customColorMiddle, root.customColorEnd)
 
-            ColorField {
-                id: customField
-                anchors.fill: parent
-                objectName: root.objectNamePrefix + "CustomField"
-                property bool selectionCueVisible: root.selectedMode === 2
-                colorValue: root.customColor
-                enabled: root.enabled
-                Accessible.name: qsTr("自定义颜色 %1").arg(root.customColor)
-                onColorEdited: function(value) {
-                    root.customRequested(value)
+            contentItem: RowLayout {
+                spacing: 4
+                Text {
+                    Layout.fillWidth: true
+                    text: customButton.text
+                    color: customButton.checked ? Theme.accentText
+                                                : Theme.primaryText
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: 12
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                ThemedIcon {
+                    visible: customButton.checked
+                    source: Theme.icon("check-line")
+                    tint: Theme.accentText
+                    sourceSize.width: 12
+                    sourceSize.height: 12
+                }
+            }
+            background: Rectangle {
+                implicitWidth: 72
+                implicitHeight: 30
+                radius: Theme.radiusSm
+                color: customButton.checked ? Theme.accent : Theme.background
+                border.width: customButton.activeFocus || customButton.checked ? 2 : 1
+                border.color: customButton.activeFocus ? Theme.focus
+                              : customButton.checked ? Theme.accent : Theme.border
+            }
+        }
+
+        Item { Layout.fillWidth: true }
+    }
+
+    RowLayout {
+        id: customEditor
+        objectName: root.objectNamePrefix + "CustomEditor"
+        property bool expanded: root.selectedMode === 2
+        visible: expanded
+        Layout.fillWidth: true
+        spacing: Theme.spacingSm
+
+        RowLayout {
+            spacing: 0
+
+            Button {
+                id: solidButton
+                objectName: root.objectNamePrefix + "CustomSolid"
+                text: qsTr("Solid")
+                checkable: true
+                checked: root.customKind === 0
+                focusPolicy: Qt.StrongFocus
+                Layout.preferredWidth: 58
+                Layout.preferredHeight: 32
+                Accessible.role: Accessible.Button
+                Accessible.name: text + (checked ? qsTr("，已选择") : "")
+                onClicked: root.requestCustom(
+                               0, root.customColor,
+                               root.customColorMiddle, root.customColorEnd)
+                Keys.onSpacePressed: function(event) {
+                    solidButton.clicked()
+                    event.accepted = true
+                }
+                Keys.onReturnPressed: function(event) {
+                    solidButton.clicked()
+                    event.accepted = true
+                }
+                Keys.onEnterPressed: function(event) {
+                    solidButton.clicked()
+                    event.accepted = true
                 }
             }
 
+            Button {
+                id: gradientButton
+                objectName: root.objectNamePrefix + "CustomGradient"
+                text: qsTr("Gradient")
+                checkable: true
+                checked: root.customKind === 1
+                focusPolicy: Qt.StrongFocus
+                Layout.preferredWidth: 72
+                Layout.preferredHeight: 32
+                Accessible.role: Accessible.Button
+                Accessible.name: text + (checked ? qsTr("，已选择") : "")
+                onClicked: root.requestCustom(
+                               1, root.customColor,
+                               root.customColorMiddle, root.customColorEnd)
+                Keys.onSpacePressed: function(event) {
+                    gradientButton.clicked()
+                    event.accepted = true
+                }
+                Keys.onReturnPressed: function(event) {
+                    gradientButton.clicked()
+                    event.accepted = true
+                }
+                Keys.onEnterPressed: function(event) {
+                    gradientButton.clicked()
+                    event.accepted = true
+                }
+            }
+        }
+
+        ColumnLayout {
+            spacing: 2
+            Label {
+                text: qsTr("Start")
+                color: Theme.secondaryText
+                font.pixelSize: 11
+            }
+            ColorField {
+                id: customStart
+                objectName: "skinCustomStart"
+                colorValue: root.customColor
+                editingLabel: qsTr("Start")
+                onColorEdited: function(value) {
+                    root.requestCustom(
+                                root.customKind, value,
+                                root.customColorMiddle, root.customColorEnd)
+                }
+            }
+        }
+
+        ColumnLayout {
+            visible: root.customKind === 1
+            spacing: 2
+            Label {
+                text: qsTr("Middle")
+                color: Theme.secondaryText
+                font.pixelSize: 11
+            }
+            ColorField {
+                id: customMiddle
+                objectName: "skinCustomMiddle"
+                colorValue: root.customColorMiddle
+                editingLabel: qsTr("Middle")
+                onColorEdited: function(value) {
+                    root.requestCustom(1, root.customColor, value,
+                                       root.customColorEnd)
+                }
+            }
+        }
+
+        ColumnLayout {
+            visible: root.customKind === 1
+            spacing: 2
+            Label {
+                text: qsTr("End")
+                color: Theme.secondaryText
+                font.pixelSize: 11
+            }
+            ColorField {
+                id: customEnd
+                objectName: "skinCustomEnd"
+                colorValue: root.customColorEnd
+                editingLabel: qsTr("End")
+                onColorEdited: function(value) {
+                    root.requestCustom(1, root.customColor,
+                                       root.customColorMiddle, value)
+                }
+            }
+        }
+
+        ColumnLayout {
+            spacing: 2
+            Label {
+                text: qsTr("Preview")
+                color: Theme.secondaryText
+                font.pixelSize: 11
+            }
             Rectangle {
-                anchors.fill: parent
-                anchors.margins: -2
-                radius: Theme.radiusSm + 2
-                color: "transparent"
-                border.width: root.selectedMode === 2 ? 2 : 0
-                border.color: Theme.accent
-                visible: root.selectedMode === 2
-                z: 1
-            }
-
-            ThemedIcon {
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.margins: -4
-                visible: root.selectedMode === 2
-                source: Theme.icon("check-line")
-                tint: Theme.primaryText
-                sourceSize.width: 12
-                sourceSize.height: 12
-                z: 2
+                id: customPreview
+                objectName: "skinCustomPreview"
+                Layout.preferredWidth: 90
+                Layout.preferredHeight: 32
+                radius: Theme.radiusSm
+                border.width: 1
+                border.color: Theme.border
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop {
+                        position: 0.0
+                        color: root.customKind === 0
+                               ? ThemeManager.backdropStart : root.customColor
+                    }
+                    GradientStop {
+                        position: 0.5
+                        color: root.customKind === 0
+                               ? ThemeManager.backdropMiddle
+                               : root.customColorMiddle
+                    }
+                    GradientStop {
+                        position: 1.0
+                        color: root.customKind === 0
+                               ? ThemeManager.backdropEnd : root.customColorEnd
+                    }
+                }
             }
         }
 
-        Label {
-            text: qsTr("自定义")
-            color: root.selectedMode === 2 && root.enabled
-                   ? Theme.primaryText : Theme.secondaryText
-            font.family: Theme.fontPrimary
-            font.pixelSize: 12
-        }
+        Item { Layout.fillWidth: true }
     }
 }

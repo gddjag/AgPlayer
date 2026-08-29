@@ -1511,23 +1511,26 @@ Item {
 
                 SettingRow {
                     label: qsTr("主题皮肤颜色")
-                    Layout.preferredHeight: 70
+                    Layout.preferredHeight: skinSelector.implicitHeight
 
                     ThemeColorSelector {
+                        id: skinSelector
                         objectName: "themeSkinColorSelector"
                         anchors.fill: parent
                         title: qsTr("主题皮肤颜色")
                         selectedMode: SettingsController.skinColorMode
                         selectedPreset: SettingsController.skinPreset
+                        customKind: SettingsController.skinCustomKind
                         customColor: SettingsController.skinCustomColor
-                        onDefaultRequested: SettingsController.skinColorMode = 0
-                        onPresetRequested: function(preset) {
-                            SettingsController.skinPreset = preset
-                            SettingsController.skinColorMode = 1
+                        customColorMiddle: SettingsController.skinCustomColorMiddle
+                        customColorEnd: SettingsController.skinCustomColorEnd
+                        onDefaultRequested: SettingsController.selectDefaultSkin()
+                        onPresetRequested: function(id) {
+                            SettingsController.selectSkinPreset(id)
                         }
-                        onCustomRequested: function(color) {
-                            SettingsController.skinCustomColor = color
-                            SettingsController.skinColorMode = 2
+                        onCustomConfigurationRequested: function(kind, start, middle, end) {
+                            SettingsController.setSkinCustomConfiguration(
+                                        kind, start, middle, end)
                         }
                     }
                 }

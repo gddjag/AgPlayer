@@ -38,22 +38,27 @@ TestCase {
 
         ThemeColorSelector {
             id: skinSelector
-            parent: testHost
+            parent: testCase.Window.window
+                    ? testCase.Window.window.contentItem : null
             x: 18
             y: 350
+            width: parent ? parent.width - 36 : 0
+            height: implicitHeight
             objectNamePrefix: "skinSelector"
             title: "Theme skin color"
             selectedMode: SettingsController.skinColorMode
             selectedPreset: SettingsController.skinPreset
+            customKind: SettingsController.skinCustomKind
             customColor: SettingsController.skinCustomColor
-            onDefaultRequested: SettingsController.skinColorMode = 0
-            onPresetRequested: function(preset) {
-                SettingsController.skinPreset = preset
-                SettingsController.skinColorMode = 1
+            customColorMiddle: SettingsController.skinCustomColorMiddle
+            customColorEnd: SettingsController.skinCustomColorEnd
+            onDefaultRequested: SettingsController.selectDefaultSkin()
+            onPresetRequested: function(id) {
+                SettingsController.selectSkinPreset(id)
             }
-            onCustomRequested: function(color) {
-                SettingsController.skinCustomColor = color
-                SettingsController.skinColorMode = 2
+            onCustomConfigurationRequested: function(kind, start, middle, end) {
+                SettingsController.setSkinCustomConfiguration(
+                            kind, start, middle, end)
             }
         }
 
@@ -116,6 +121,12 @@ TestCase {
         signalName: "paletteChanged"
     }
 
+    SignalSpy {
+        id: skinConfigurationChangedSpy
+        target: SettingsController
+        signalName: "skinConfigurationChanged"
+    }
+
     function initTestCase() {
         savedThemeMode = SettingsController.themeMode
     }
@@ -126,11 +137,15 @@ TestCase {
         cancelledSpy.clear()
         integratedEditedSpy.clear()
         paletteChangedSpy.clear()
+        skinConfigurationChangedSpy.clear()
         savedWaveformSolidBaseColor = SettingsController.waveformSolidBaseColor
         savedThemeChoices = {
             mode: SettingsController.skinColorMode,
             preset: SettingsController.skinPreset,
-            customColor: SettingsController.skinCustomColor
+            customKind: SettingsController.skinCustomKind,
+            customColor: SettingsController.skinCustomColor,
+            customMiddle: SettingsController.skinCustomColorMiddle,
+            customEnd: SettingsController.skinCustomColorEnd
         }
         SettingsController.themeMode = 0
         wait(0)
@@ -142,13 +157,20 @@ TestCase {
         if (integratedPicker)
             integratedPicker.close()
         SettingsController.waveformSolidBaseColor = savedWaveformSolidBaseColor
-        SettingsController.skinColorMode = savedThemeChoices.mode
-        SettingsController.skinPreset = savedThemeChoices.preset
-        SettingsController.skinCustomColor = savedThemeChoices.customColor
+        SettingsController.setSkinCustomConfiguration(
+                    savedThemeChoices.customKind,
+                    savedThemeChoices.customColor,
+                    savedThemeChoices.customMiddle,
+                    savedThemeChoices.customEnd)
+        if (savedThemeChoices.mode === 0)
+            SettingsController.selectDefaultSkin()
+        else if (savedThemeChoices.mode === 1)
+            SettingsController.selectSkinPreset(savedThemeChoices.preset)
         appliedSpy.clear()
         cancelledSpy.clear()
         integratedEditedSpy.clear()
         paletteChangedSpy.clear()
+        skinConfigurationChangedSpy.clear()
         SettingsController.themeMode = savedThemeMode
         wait(0)
     }
@@ -492,36 +514,81 @@ TestCase {
         })
     }
 
-    function test_theme_selectors_apply_presets_and_keyboard_activation() {
-        SettingsController.skinColorMode = 0
-        SettingsController.skinPreset = "systemBlue"
+    function test_theme_selector_renders_exact_recommended_gradient_cards() {
+        SettingsController.selectDefaultSkin()
+        wait(0)
+
+        var ids = ["aurora", "seaGlass", "sunset", "lavenderMist",
+                   "morningGlow"]
+        var labels = ["Aurora", "Sea Glass", "Sunset", "Lavender Mist",
+                      "Morning Glow"]
+        var colors = [
+            ["#73A6FF", "#A98BFF", "#F0A8D8"],
+            ["#71D9D0", "#82C9F4", "#A7B7FF"],
+            ["#F49BC2", "#FF9B86", "#FFC97A"],
+            ["#8295F2", "#B89BE8", "#E8B7D5"],
+            ["#8EDFCB", "#D4E9C2", "#FFD995"]
+        ]
+        var previousX = -1
+        for (var i = 0; i < ids.length; ++i) {
+            var card = findChild(skinSelector,
+                                 "skinSelectorPreset-" + ids[i])
+            verify(card)
+            compare(card.width, 46)
+            compare(card.height, 30)
+            verify(card.x > previousX)
+            previousX = card.x
+            compare(card.Accessible.role, Accessible.Button)
+            verify(card.Accessible.name.indexOf(labels[i]) >= 0)
+            for (var stop = 0; stop < colors[i].length; ++stop)
+                verify(card.Accessible.name.indexOf(colors[i][stop]) >= 0)
+            compare(card.background.gradient.stops.length, 3)
+            compare(normalizedColor(card.background.gradient.stops[0].color),
+                    colors[i][0])
+            compare(normalizedColor(card.background.gradient.stops[1].color),
+                    colors[i][1])
+            compare(normalizedColor(card.background.gradient.stops[2].color),
+                    colors[i][2])
+        }
+        verify(!findChild(skinSelector, "skinSelectorPreset-purple"))
+    }
+
+    function test_theme_selector_keyboard_selection_is_atomic() {
+        SettingsController.selectDefaultSkin()
         wait(0)
         paletteChangedSpy.clear()
+        skinConfigurationChangedSpy.clear()
+
         var defaultButton = findChild(skinSelector, "skinSelectorDefault")
-        var purple = findChild(skinSelector, "skinSelectorPreset-purple")
-        verify(defaultButton && purple)
+        var sunset = findChild(skinSelector, "skinSelectorPreset-sunset")
+        var morningGlow = findChild(
+                    skinSelector, "skinSelectorPreset-morningGlow")
+        verify(defaultButton && sunset && morningGlow)
         verify(defaultButton.checked)
-        compare(purple.Accessible.role, Accessible.Button)
-        verify(purple.width >= 24)
-        verify(purple.height >= 24)
-        verify(purple.Accessible.name.indexOf("purple") < 0)
-        verify(purple.Accessible.name.indexOf("紫色") >= 0)
-        verify(!purple.selectionCueVisible)
-        purple.forceActiveFocus()
-        tryVerify(function() { return purple.focusCueVisible })
+        verify(!sunset.selectionCueVisible)
+        sunset.forceActiveFocus()
+        tryVerify(function() { return sunset.focusCueVisible })
         keyClick(Qt.Key_Space)
         tryCompare(SettingsController, "skinColorMode", 1)
-        tryCompare(SettingsController, "skinPreset", "purple")
+        tryCompare(SettingsController, "skinPreset", "sunset")
+        compare(skinConfigurationChangedSpy.count, 1)
         compare(paletteChangedSpy.count, 1)
-        verify(purple.checked)
-        verify(purple.selectionCueVisible)
-        verify(purple.focusCueVisible)
+        verify(sunset.checked)
+        verify(sunset.selectionCueVisible)
+        verify(sunset.focusCueVisible)
+
+        skinConfigurationChangedSpy.clear()
+        paletteChangedSpy.clear()
+        morningGlow.forceActiveFocus()
+        keyClick(Qt.Key_Return)
+        tryCompare(SettingsController, "skinPreset", "morningGlow")
+        compare(skinConfigurationChangedSpy.count, 1)
+        compare(paletteChangedSpy.count, 1)
     }
 
     function test_representative_controls_use_accent_highlight_focus_and_disabled_tokens() {
         SettingsController.themeMode = 1
-        SettingsController.skinColorMode = 1
-        SettingsController.skinPreset = "purple"
+        SettingsController.selectSkinPreset("aurora")
         wait(0)
 
         compare(representativeSwitch.indicator.color.toString(),
@@ -554,32 +621,122 @@ TestCase {
         representativeRangeSlider.enabled = true
     }
 
-    function test_theme_selector_custom_apply_and_transactions_cancel_or_commit() {
+    function test_theme_selector_custom_expands_solid_and_gradient_editor() {
+        SettingsController.setSkinCustomConfiguration(
+                    1, "#73A6FF", "#A98BFF", "#F0A8D8")
+        SettingsController.selectDefaultSkin()
+        wait(0)
+        paletteChangedSpy.clear()
+        skinConfigurationChangedSpy.clear()
+
+        var custom = findChild(skinSelector, "skinSelectorCustom")
+        var editor = findChild(skinSelector, "skinSelectorCustomEditor")
+        verify(custom && editor)
+        verify(!editor.visible)
+        var collapsedHeight = skinSelector.implicitHeight
+
+        custom.forceActiveFocus()
+        keyClick(Qt.Key_Space)
+        tryCompare(SettingsController, "skinColorMode", 2)
+        tryCompare(skinSelector, "selectedMode", 2)
+        compare(editor.expanded, true)
+        verify(skinSelector.visible)
+        tryCompare(editor, "visible", true)
+        verify(skinSelector.implicitHeight > collapsedHeight)
+        compare(skinConfigurationChangedSpy.count, 1)
+        compare(paletteChangedSpy.count, 1)
+        verify(custom.checked)
+        verify(custom.selectionCueVisible)
+
+        var solid = findChild(skinSelector, "skinSelectorCustomSolid")
+        var gradient = findChild(skinSelector, "skinSelectorCustomGradient")
+        var start = findChild(skinSelector, "skinCustomStart")
+        var middle = findChild(skinSelector, "skinCustomMiddle")
+        var end = findChild(skinSelector, "skinCustomEnd")
+        var preview = findChild(skinSelector, "skinCustomPreview")
+        verify(solid && gradient && start && middle && end && preview)
+        verify(solid.checked)
+        verify(start.visible)
+        verify(!middle.visible && !end.visible)
+        compare(start.editingLabel, "Start")
+        compare(middle.editingLabel, "Middle")
+        compare(end.editingLabel, "End")
+        compare(preview.gradient.stops.length, 3)
+        compare(normalizedColor(preview.gradient.stops[0].color),
+                normalizedColor(ThemeManager.backdropStart))
+        compare(normalizedColor(preview.gradient.stops[1].color),
+                normalizedColor(ThemeManager.backdropMiddle))
+        compare(normalizedColor(preview.gradient.stops[2].color),
+                normalizedColor(ThemeManager.backdropEnd))
+
+        skinConfigurationChangedSpy.clear()
+        gradient.clicked()
+        tryCompare(SettingsController, "skinCustomKind", 1)
+        verify(gradient.checked)
+        verify(start.visible && middle.visible && end.visible)
+        compare(SettingsController.skinCustomColorMiddle, "#A98BFF")
+        compare(SettingsController.skinCustomColorEnd, "#F0A8D8")
+        compare(skinConfigurationChangedSpy.count, 1)
+        compare(normalizedColor(preview.gradient.stops[0].color), "#73A6FF")
+        compare(normalizedColor(preview.gradient.stops[1].color), "#A98BFF")
+        compare(normalizedColor(preview.gradient.stops[2].color), "#F0A8D8")
+
+        skinConfigurationChangedSpy.clear()
+        solid.forceActiveFocus()
+        keyClick(Qt.Key_Return)
+        tryCompare(SettingsController, "skinCustomKind", 0)
+        compare(SettingsController.skinCustomColorMiddle, "#A98BFF")
+        compare(SettingsController.skinCustomColorEnd, "#F0A8D8")
+        compare(skinConfigurationChangedSpy.count, 1)
+
+        SettingsController.setSkinCustomConfiguration(
+                    0, "#73A6FF", "#112233", "#445566")
+        compare(SettingsController.skinCustomColorMiddle, "#112233")
+        compare(SettingsController.skinCustomColorEnd, "#445566")
+        skinConfigurationChangedSpy.clear()
+        gradient.forceActiveFocus()
+        keyClick(Qt.Key_Space)
+        tryCompare(SettingsController, "skinCustomKind", 1)
+        compare(SettingsController.skinCustomColorMiddle, "#112233")
+        compare(SettingsController.skinCustomColorEnd, "#445566")
+        compare(skinConfigurationChangedSpy.count, 1)
+    }
+
+    function test_theme_selector_custom_edit_is_one_complete_configuration() {
+        SettingsController.setSkinCustomConfiguration(
+                    1, "#73A6FF", "#A98BFF", "#F0A8D8")
         SettingsController.beginEdit()
-        SettingsController.skinColorMode = 0
-        var custom = findChild(skinSelector, "skinSelectorCustomField")
-        verify(custom)
-        custom.clicked()
-        var customPicker = findChild(custom, "colorFieldPicker")
+        wait(0)
+        skinConfigurationChangedSpy.clear()
+        paletteChangedSpy.clear()
+
+        var middle = findChild(skinSelector, "skinCustomMiddle")
+        verify(middle)
+        middle.clicked()
+        var customPicker = findChild(middle, "colorFieldPicker")
         tryCompare(customPicker, "visible", true)
+        compare(customPicker.editingLabel, "Middle")
         var hex = findChild(customPicker, "colorPickerHex")
         var apply = findChild(customPicker, "colorPickerApply")
         verify(hex && apply)
-        hex.text = "#FFF5EC"
+        hex.text = "#B4A2ED"
         hex.forceActiveFocus()
         keyClick(Qt.Key_Enter)
         mouseClick(apply, apply.width / 2, apply.height / 2)
         tryCompare(SettingsController, "skinColorMode", 2)
-        tryCompare(SettingsController, "skinCustomColor", "#FFF5EC")
-        verify(custom.selectionCueVisible)
+        compare(SettingsController.skinCustomKind, 1)
+        compare(SettingsController.skinCustomColor, "#73A6FF")
+        compare(SettingsController.skinCustomColorMiddle, "#B4A2ED")
+        compare(SettingsController.skinCustomColorEnd, "#F0A8D8")
+        compare(skinConfigurationChangedSpy.count, 1)
+        compare(paletteChangedSpy.count, 1)
         SettingsController.cancelEdit()
-        tryCompare(SettingsController, "skinColorMode", 0)
+        tryCompare(SettingsController, "skinCustomColorMiddle", "#A98BFF")
 
         SettingsController.beginEdit()
-        SettingsController.skinColorMode = 1
-        SettingsController.skinPreset = "purple"
+        SettingsController.selectSkinPreset("aurora")
         SettingsController.commitEdit()
         compare(SettingsController.skinColorMode, 1)
-        compare(SettingsController.skinPreset, "purple")
+        compare(SettingsController.skinPreset, "aurora")
     }
 }
