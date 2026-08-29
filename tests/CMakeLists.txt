@@ -807,6 +807,101 @@ add_test(
 )
 set_tests_properties(qml_theme_color_contract_test PROPERTIES TIMEOUT 10)
 
+function(prepare_theme_contract_fixture fixture_name output_variable)
+    set(fixture_root
+        "${CMAKE_CURRENT_BINARY_DIR}/theme_contract/${fixture_name}")
+    file(REMOVE_RECURSE "${fixture_root}")
+    file(MAKE_DIRECTORY
+        "${fixture_root}/app/qml"
+        "${fixture_root}/app"
+        "${fixture_root}/scripts")
+    file(COPY "${CMAKE_SOURCE_DIR}/app/qml/AgPlayer"
+        DESTINATION "${fixture_root}/app/qml")
+    file(COPY
+        "${CMAKE_SOURCE_DIR}/app/CMakeLists.txt"
+        "${CMAKE_SOURCE_DIR}/app/main.cpp"
+        DESTINATION "${fixture_root}/app")
+    file(COPY "${CMAKE_SOURCE_DIR}/translations"
+        DESTINATION "${fixture_root}")
+    file(COPY "${CMAKE_SOURCE_DIR}/scripts/qa-final-ui-matrix.ps1"
+        DESTINATION "${fixture_root}/scripts")
+    set(${output_variable} "${fixture_root}" PARENT_SCOPE)
+endfunction()
+
+foreach(forbidden_picker_function IN ITEMS lighter darker hsla)
+    prepare_theme_contract_fixture(
+        "picker-${forbidden_picker_function}"
+        picker_fixture_root)
+    file(APPEND
+        "${picker_fixture_root}/app/qml/AgPlayer/components/AgColorPicker.qml"
+        "\nItem { property color derived: Qt.${forbidden_picker_function}(baseColor) } // theme-color-allow: negative fixture\n")
+    add_test(
+        NAME "qml_theme_picker_${forbidden_picker_function}_rejected_test"
+        COMMAND "${CMAKE_COMMAND}"
+            "-DROOT=${picker_fixture_root}"
+            -P "${CMAKE_SOURCE_DIR}/cmake/CheckQmlThemeColors.cmake"
+    )
+    set_tests_properties(
+        "qml_theme_picker_${forbidden_picker_function}_rejected_test"
+        PROPERTIES TIMEOUT 10 WILL_FAIL TRUE)
+endforeach()
+
+prepare_theme_contract_fixture("ordinary-hsva" ordinary_hsva_fixture_root)
+file(WRITE
+    "${ordinary_hsva_fixture_root}/app/qml/AgPlayer/HsvaAllowFixture.qml"
+    "Item { property color derived: Qt.hsva(0.1, 0.2, 0.3, 1.0) } // theme-color-allow: negative fixture\n")
+add_test(
+    NAME qml_theme_ordinary_hsva_rejected_test
+    COMMAND "${CMAKE_COMMAND}"
+        "-DROOT=${ordinary_hsva_fixture_root}"
+        -P "${CMAKE_SOURCE_DIR}/cmake/CheckQmlThemeColors.cmake"
+)
+set_tests_properties(qml_theme_ordinary_hsva_rejected_test PROPERTIES
+    TIMEOUT 10 WILL_FAIL TRUE)
+
+prepare_theme_contract_fixture(
+    "translation-wrong-context" translation_context_fixture_root)
+set(translation_context_catalog
+    "${translation_context_fixture_root}/translations/agplayer_zh.ts")
+file(READ "${translation_context_catalog}" translation_context_source
+    ENCODING UTF-8)
+set(aurora_message
+    "<message><source>Aurora</source><translation>极光</translation></message>")
+string(REPLACE "${aurora_message}" ""
+    translation_context_source "${translation_context_source}")
+string(REPLACE "</TS>"
+    "<context><name>WrongContext</name>${aurora_message}</context>\n</TS>"
+    translation_context_source "${translation_context_source}")
+file(WRITE "${translation_context_catalog}" "${translation_context_source}")
+add_test(
+    NAME translation_theme_selector_context_required_test
+    COMMAND "${CMAKE_COMMAND}"
+        "-DROOT=${translation_context_fixture_root}"
+        -P "${CMAKE_SOURCE_DIR}/cmake/CheckQmlThemeColors.cmake"
+)
+set_tests_properties(translation_theme_selector_context_required_test PROPERTIES
+    TIMEOUT 10 WILL_FAIL TRUE)
+
+prepare_theme_contract_fixture(
+    "translation-obsolete" translation_obsolete_fixture_root)
+set(translation_obsolete_catalog
+    "${translation_obsolete_fixture_root}/translations/agplayer_zh.ts")
+file(READ "${translation_obsolete_catalog}" translation_obsolete_source
+    ENCODING UTF-8)
+string(REPLACE
+    "<message><source>Solid</source><translation>单色</translation></message>"
+    "<message><source>Solid</source><translation type=\"obsolete\">单色</translation></message>"
+    translation_obsolete_source "${translation_obsolete_source}")
+file(WRITE "${translation_obsolete_catalog}" "${translation_obsolete_source}")
+add_test(
+    NAME translation_required_entry_obsolete_test
+    COMMAND "${CMAKE_COMMAND}"
+        "-DROOT=${translation_obsolete_fixture_root}"
+        -P "${CMAKE_SOURCE_DIR}/cmake/CheckQmlThemeColors.cmake"
+)
+set_tests_properties(translation_required_entry_obsolete_test PROPERTIES
+    TIMEOUT 10 WILL_FAIL TRUE)
+
 add_test(
     NAME qa_skin_incomplete_gradient_rejected_test
     COMMAND powershell -NoProfile -Command
