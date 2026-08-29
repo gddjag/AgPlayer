@@ -61,6 +61,19 @@ TestCase {
         verify(page.modelSupports("htdemucs-ft-fp16", "other"))
     }
 
+    function test_twoStemTimelineKeepsUnsupportedStemsVisibleAndLocalized() {
+        compare(VocalSeparationController.stems.length, 5)
+        const drums = page.stemInfo(VocalSeparationController.Drums)
+        verify(!drums.supported && !drums.selected && !drums.available)
+        compare(drums.path, "")
+        compare(drums.waveform.length, 0)
+        compare(page.stemLabel(VocalSeparationController.Vocals), "人声")
+        compare(page.stemLabel(VocalSeparationController.Accompaniment), "伴奏")
+        compare(page.stemLabel(VocalSeparationController.Drums), "鼓组")
+        verify(findChild(page, "separationTimelineStem-" + VocalSeparationController.Drums))
+        verify(findChild(page, "separationTimelineStem-" + VocalSeparationController.Other))
+    }
+
     function test_playlistGateRequiresEverySelectedStemToBeAvailable() {
         verify(page.allSelectedStemsAvailable([
             { selected: true, available: true },

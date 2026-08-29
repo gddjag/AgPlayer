@@ -87,6 +87,17 @@ Rectangle {
                     waveform: [], path: "", derived: false })
     }
 
+    function stemLabel(kind) {
+        switch (kind) {
+        case VocalSeparationController.Vocals: return qsTr("人声")
+        case VocalSeparationController.Accompaniment: return qsTr("伴奏")
+        case VocalSeparationController.Drums: return qsTr("鼓组")
+        case VocalSeparationController.Bass: return qsTr("贝斯")
+        case VocalSeparationController.Other: return qsTr("其他")
+        }
+        return qsTr("音轨")
+    }
+
     function allSelectedStemsAvailable(stems) {
         let selectedCount = 0
         for (let index = 0; index < stems.length; ++index) {
@@ -488,7 +499,7 @@ Rectangle {
                         id: timeline
                         objectName: "separationTimeline"
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 211
+                        Layout.preferredHeight: 250
                         color: page.input; border.color: page.border; radius: 7
                         ColumnLayout {
                             anchors.fill: parent; anchors.margins: 10; spacing: 5
@@ -515,13 +526,15 @@ Rectangle {
                                 model: VocalSeparationController.stems
                                 Rectangle {
                                     required property var modelData
+                                    objectName: "separationTimelineStem-" + modelData.kind
                                     Layout.fillWidth: true; Layout.fillHeight: true
                                     color: "transparent"; border.color: page.divider; radius: 3
                                     RowLayout {
                                         anchors.fill: parent; anchors.margins: 4
-                                        Label { Layout.preferredWidth: 64; text: modelData.name; color: page.textPrimary }
+                                        Label { Layout.preferredWidth: 64; text: page.stemLabel(modelData.kind); color: modelData.supported ? page.textPrimary : page.muted }
                                         Item {
                                             Layout.fillWidth: true; Layout.fillHeight: true
+                                            visible: modelData.supported
                                             Repeater {
                                                 model: Math.min(modelData.waveform.length, 160)
                                                 Rectangle {
@@ -533,6 +546,7 @@ Rectangle {
                                                 }
                                             }
                                         }
+                                        Label { visible: !modelData.supported; Layout.fillWidth: true; text: qsTr("当前模型不支持"); color: page.muted; font.pixelSize: 11 }
                                         WorkbenchButton { text: qsTr("试听"); enabled: modelData.available; Accessible.name: modelData.name + text; Accessible.role: Accessible.Button; ToolTip.visible: hovered && !enabled; ToolTip.text: qsTr("输出尚不可用"); onClicked: VocalSeparationController.previewStem(modelData.kind) }
                                         WorkbenchButton { text: qsTr("导出"); enabled: modelData.available; Accessible.name: modelData.name + text; Accessible.role: Accessible.Button; ToolTip.visible: hovered && !enabled; ToolTip.text: qsTr("输出尚不可用"); onClicked: { exportDialog.kind = modelData.kind; exportDialog.open() } }
                                     }

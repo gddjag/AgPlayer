@@ -974,22 +974,25 @@ void VocalSeparationController::rebuildStems()
 {
     stems_.clear();
     const VocalModelCard* model = selectedModel();
-    if (model != nullptr) {
-        for (const QString& name : model->stems) {
-            const StemKind kind = stemKind(name);
-            stems_.push_back(QVariantMap{
-                {QStringLiteral("kind"), int(kind)},
-                {QStringLiteral("name"), name},
-                {QStringLiteral("supported"), true},
-                {QStringLiteral("selected"), kind == StemKind::Vocals
-                     || kind == StemKind::Accompaniment},
-                {QStringLiteral("derived"), kind == StemKind::Accompaniment
-                     && model->family == VocalModelFamily::Demucs},
-                {QStringLiteral("available"), false},
-                {QStringLiteral("path"), QString()},
-                {QStringLiteral("waveform"), QVariantList{}},
-            });
-        }
+    const QList<StemKind> fixedKinds{
+        StemKind::Vocals, StemKind::Accompaniment, StemKind::Drums,
+        StemKind::Bass, StemKind::Other};
+    for (const StemKind kind : fixedKinds) {
+        const bool supported = model != nullptr
+            && model->stems.contains(stemName(kind));
+        stems_.push_back(QVariantMap{
+            {QStringLiteral("kind"), int(kind)},
+            {QStringLiteral("name"), stemName(kind)},
+            {QStringLiteral("supported"), supported},
+            {QStringLiteral("selected"), supported
+                 && (kind == StemKind::Vocals || kind == StemKind::Accompaniment)},
+            {QStringLiteral("derived"), supported
+                 && kind == StemKind::Accompaniment
+                 && model->family == VocalModelFamily::Demucs},
+            {QStringLiteral("available"), false},
+            {QStringLiteral("path"), QString()},
+            {QStringLiteral("waveform"), QVariantList{}},
+        });
     }
     emit stemsChanged();
     emit startEligibilityChanged();

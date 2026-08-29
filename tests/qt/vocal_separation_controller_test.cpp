@@ -433,7 +433,18 @@ exposesTypedCatalogAndStemAvailabilityFromTheInstalledCatalog()
     QTRY_COMPARE_WITH_TIMEOUT(
         controller.models().first().toMap().value(QStringLiteral("state")).toInt(),
         int(VocalSeparationController::ModelState::Installed), 5000);
-    QCOMPARE(controller.stems().size(), 2);
+    QCOMPARE(controller.stems().size(), 5);
+    for (const VocalSeparationController::StemKind kind : {
+             VocalSeparationController::StemKind::Drums,
+             VocalSeparationController::StemKind::Bass,
+             VocalSeparationController::StemKind::Other}) {
+        const QVariantMap stem = stemFor(controller.stems(), kind);
+        QVERIFY(!stem.value(QStringLiteral("supported")).toBool());
+        QVERIFY(!stem.value(QStringLiteral("selected")).toBool());
+        QVERIFY(!stem.value(QStringLiteral("available")).toBool());
+        QVERIFY(stem.value(QStringLiteral("path")).toString().isEmpty());
+        QVERIFY(stem.value(QStringLiteral("waveform")).toList().isEmpty());
+    }
 
     QVERIFY(controller.selectModel(QStringLiteral("five-stem")));
     QCOMPARE(controller.stems().size(), 5);
@@ -845,6 +856,8 @@ publishedStemReplacementWithJunctionIsRejectedByEveryAction()
     const QVariantList stems = controller.stems();
     QVERIFY(QDir(jobDirectory).removeRecursively());
     for (const QVariant& value : stems) {
+        if (!value.toMap().value(QStringLiteral("available")).toBool())
+            continue;
         const QString name = QFileInfo(
             value.toMap().value(QStringLiteral("path")).toString()).fileName();
         QVERIFY(QFile::copy(audioFixture(), external.filePath(name)));
