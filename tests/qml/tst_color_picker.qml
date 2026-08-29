@@ -815,4 +815,27 @@ TestCase {
         compare(SettingsController.skinColorMode, 1)
         compare(SettingsController.skinPreset, "aurora")
     }
+
+    function test_qa_picker_routes_open_each_named_custom_stop() {
+        SettingsController.setSkinCustomConfiguration(
+                    1, "#73A6FF", "#A98BFF", "#F0A8D8")
+
+        var routes = [
+            { objectName: "skinCustomStart", label: "Start" },
+            { objectName: "skinCustomMiddle", label: "Middle" },
+            { objectName: "skinCustomEnd", label: "End" }
+        ]
+        for (var routeIndex = 0; routeIndex < routes.length; ++routeIndex) {
+            var route = routes[routeIndex]
+            var field = findChild(skinSelector, route.objectName)
+            verify(field)
+            field.clicked()
+            var picker = findChild(field, "colorFieldPicker")
+            verify(picker)
+            tryCompare(picker, "visible", true)
+            compare(picker.editingLabel, route.label)
+            picker.cancelPicker()
+            tryCompare(picker, "visible", false)
+        }
+    }
 }

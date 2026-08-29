@@ -4073,6 +4073,17 @@ Clear: Remove all known aliases for this field.</translation>
     <message><source>绿色</source><translation>Green</translation></message>
     <message><source>蓝绿色</source><translation>Teal</translation></message>
     <message><source>青色</source><translation>Cyan</translation></message>
+    <message><source>Aurora</source><translation>Aurora</translation></message>
+    <message><source>Sea Glass</source><translation>Sea Glass</translation></message>
+    <message><source>Sunset</source><translation>Sunset</translation></message>
+    <message><source>Lavender Mist</source><translation>Lavender Mist</translation></message>
+    <message><source>Morning Glow</source><translation>Morning Glow</translation></message>
+    <message><source>Solid</source><translation>Solid</translation></message>
+    <message><source>Gradient</source><translation>3-color gradient</translation></message>
+    <message><source>Preview</source><translation>Preview</translation></message>
+    <message><source>Start</source><translation>Start color</translation></message>
+    <message><source>Middle</source><translation>Middle color</translation></message>
+    <message><source>End</source><translation>End color</translation></message>
 </context>
 <context>
     <name>AgColorPicker</name>
@@ -4085,5 +4096,12 @@ Clear: Remove all known aliases for this field.</translation>
     <message><source>绿色通道滑块</source><translation>Green channel slider</translation></message>
     <message><source>蓝色通道滑块</source><translation>Blue channel slider</translation></message>
     <message><source>候选颜色 %1</source><translation>Candidate color %1</translation></message>
+    <message><source>色相饱和度和明度</source><translation>Hue, saturation, and brightness</translation></message>
+    <message><source>色相</source><translation>Hue</translation></message>
+    <message><source>当前颜色 %1</source><translation>Current color %1</translation></message>
+    <message><source>取消颜色更改</source><translation>Cancel color changes</translation></message>
+    <message><source>取消</source><translation>Cancel</translation></message>
+    <message><source>应用颜色</source><translation>Apply color</translation></message>
+    <message><source>应用</source><translation>Apply</translation></message>
 </context>
 </TS>

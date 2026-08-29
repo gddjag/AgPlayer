@@ -807,6 +807,25 @@ add_test(
 )
 set_tests_properties(qml_theme_color_contract_test PROPERTIES TIMEOUT 10)
 
+add_test(
+    NAME qa_skin_incomplete_gradient_rejected_test
+    COMMAND powershell -NoProfile -Command
+        "$process = Start-Process -FilePath '$<TARGET_FILE:AgPlayer>' -ArgumentList '--qa-test-mode','--qa-skin-kind','gradient','--qa-skin-start','#73A6FF' -Wait -PassThru; if ($process.ExitCode -ne 6) { Write-Error ('Expected exit 6, got ' + $process.ExitCode); exit 1 }"
+)
+add_test(
+    NAME qa_skin_invalid_gradient_rejected_test
+    COMMAND powershell -NoProfile -Command
+        "$process = Start-Process -FilePath '$<TARGET_FILE:AgPlayer>' -ArgumentList '--qa-test-mode','--qa-skin-kind','gradient','--qa-skin-start','#73A6FF','--qa-skin-middle','not-a-color','--qa-skin-end','#F0A8D8' -Wait -PassThru; if ($process.ExitCode -ne 6) { Write-Error ('Expected exit 6, got ' + $process.ExitCode); exit 1 }"
+)
+set_tests_properties(
+    qa_skin_incomplete_gradient_rejected_test
+    qa_skin_invalid_gradient_rejected_test
+    PROPERTIES
+        TIMEOUT 10
+        ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
 set_tests_properties(import_controller_test PROPERTIES
     # The 10K indexing contract itself permits up to 30 seconds.  The CTest
     # watchdog must not terminate that performance test at the old 10-second

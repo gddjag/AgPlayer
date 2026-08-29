@@ -4016,6 +4016,17 @@
     <message><source>绿色</source><translation>Xanh lá</translation></message>
     <message><source>蓝绿色</source><translation>Xanh mòng két</translation></message>
     <message><source>青色</source><translation>Xanh lơ</translation></message>
+    <message><source>Aurora</source><translation>Cực quang</translation></message>
+    <message><source>Sea Glass</source><translation>Thủy tinh biển</translation></message>
+    <message><source>Sunset</source><translation>Hoàng hôn</translation></message>
+    <message><source>Lavender Mist</source><translation>Sương oải hương</translation></message>
+    <message><source>Morning Glow</source><translation>Ánh ban mai</translation></message>
+    <message><source>Solid</source><translation>Một màu</translation></message>
+    <message><source>Gradient</source><translation>Chuyển sắc 3 màu</translation></message>
+    <message><source>Preview</source><translation>Xem trước</translation></message>
+    <message><source>Start</source><translation>Màu bắt đầu</translation></message>
+    <message><source>Middle</source><translation>Màu giữa</translation></message>
+    <message><source>End</source><translation>Màu kết thúc</translation></message>
 </context>
 <context>
     <name>AgColorPicker</name>
@@ -4028,5 +4039,12 @@
     <message><source>绿色通道滑块</source><translation>Thanh trượt kênh lục</translation></message>
     <message><source>蓝色通道滑块</source><translation>Thanh trượt kênh lam</translation></message>
     <message><source>候选颜色 %1</source><translation>Màu ứng viên %1</translation></message>
+    <message><source>色相饱和度和明度</source><translation>Sắc độ, độ bão hòa và độ sáng</translation></message>
+    <message><source>色相</source><translation>Sắc độ</translation></message>
+    <message><source>当前颜色 %1</source><translation>Màu hiện tại %1</translation></message>
+    <message><source>取消颜色更改</source><translation>Hủy thay đổi màu</translation></message>
+    <message><source>取消</source><translation>Hủy</translation></message>
+    <message><source>应用颜色</source><translation>Áp dụng màu</translation></message>
+    <message><source>应用</source><translation>Áp dụng</translation></message>
 </context>
 </TS>

@@ -4073,6 +4073,17 @@
     <message><source>绿色</source><translation>绿色</translation></message>
     <message><source>蓝绿色</source><translation>蓝绿色</translation></message>
     <message><source>青色</source><translation>青色</translation></message>
+    <message><source>Aurora</source><translation>极光</translation></message>
+    <message><source>Sea Glass</source><translation>海盐</translation></message>
+    <message><source>Sunset</source><translation>日落</translation></message>
+    <message><source>Lavender Mist</source><translation>薰衣草</translation></message>
+    <message><source>Morning Glow</source><translation>晨光</translation></message>
+    <message><source>Solid</source><translation>单色</translation></message>
+    <message><source>Gradient</source><translation>三色渐变</translation></message>
+    <message><source>Preview</source><translation>预览</translation></message>
+    <message><source>Start</source><translation>起点颜色</translation></message>
+    <message><source>Middle</source><translation>中点颜色</translation></message>
+    <message><source>End</source><translation>终点颜色</translation></message>
 </context>
 <context>
     <name>AgColorPicker</name>
@@ -4085,5 +4096,12 @@
     <message><source>绿色通道滑块</source><translation>绿色通道滑块</translation></message>
     <message><source>蓝色通道滑块</source><translation>蓝色通道滑块</translation></message>
     <message><source>候选颜色 %1</source><translation>候选颜色 %1</translation></message>
+    <message><source>色相饱和度和明度</source><translation>色相饱和度和明度</translation></message>
+    <message><source>色相</source><translation>色相</translation></message>
+    <message><source>当前颜色 %1</source><translation>当前颜色 %1</translation></message>
+    <message><source>取消颜色更改</source><translation>取消颜色更改</translation></message>
+    <message><source>取消</source><translation>取消</translation></message>
+    <message><source>应用颜色</source><translation>应用颜色</translation></message>
+    <message><source>应用</source><translation>应用</translation></message>
 </context>
 </TS>

@@ -4016,6 +4016,17 @@
     <message><source>绿色</source><translation>เขียว</translation></message>
     <message><source>蓝绿色</source><translation>เขียวอมฟ้า</translation></message>
     <message><source>青色</source><translation>ฟ้า</translation></message>
+    <message><source>Aurora</source><translation>แสงออโรรา</translation></message>
+    <message><source>Sea Glass</source><translation>แก้วทะเล</translation></message>
+    <message><source>Sunset</source><translation>ยามอาทิตย์อัสดง</translation></message>
+    <message><source>Lavender Mist</source><translation>หมอกลาเวนเดอร์</translation></message>
+    <message><source>Morning Glow</source><translation>แสงรุ่งอรุณ</translation></message>
+    <message><source>Solid</source><translation>สีเดียว</translation></message>
+    <message><source>Gradient</source><translation>การไล่สี 3 สี</translation></message>
+    <message><source>Preview</source><translation>ตัวอย่าง</translation></message>
+    <message><source>Start</source><translation>สีเริ่มต้น</translation></message>
+    <message><source>Middle</source><translation>สีกลาง</translation></message>
+    <message><source>End</source><translation>สีสิ้นสุด</translation></message>
 </context>
 <context>
     <name>AgColorPicker</name>
@@ -4028,5 +4039,12 @@
     <message><source>绿色通道滑块</source><translation>แถบเลื่อนช่องสีเขียว</translation></message>
     <message><source>蓝色通道滑块</source><translation>แถบเลื่อนช่องสีน้ำเงิน</translation></message>
     <message><source>候选颜色 %1</source><translation>สีตัวเลือก %1</translation></message>
+    <message><source>色相饱和度和明度</source><translation>เฉดสี ความอิ่มตัว และความสว่าง</translation></message>
+    <message><source>色相</source><translation>เฉดสี</translation></message>
+    <message><source>当前颜色 %1</source><translation>สีปัจจุบัน %1</translation></message>
+    <message><source>取消颜色更改</source><translation>ยกเลิกการเปลี่ยนสี</translation></message>
+    <message><source>取消</source><translation>ยกเลิก</translation></message>
+    <message><source>应用颜色</source><translation>ใช้สีนี้</translation></message>
+    <message><source>应用</source><translation>นำไปใช้</translation></message>
 </context>
 </TS>

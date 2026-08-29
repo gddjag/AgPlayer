@@ -1,5 +1,6 @@
 #include <QAction>
 #include <QApplication>
+#include <QColor>
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
@@ -271,7 +272,10 @@ int main(int argc, char* argv[])
     //   --qa-screenshot-main <png>  grab the main window after playback starts
     //   --qa-screenshot-mini <png>  grab the mini player window likewise
     //   --qa-tool <0..5>             choose the audio-tool screenshot page
-    //   --qa-skin <default|id|#RRGGBB> set the complete theme skin seed
+    //   --qa-skin <default|id|#RRGGBB> set a legacy/default/preset skin
+    //   --qa-skin-kind <solid|gradient> set an explicit custom skin kind
+    //   --qa-skin-start/middle/end <#RRGGBB> set explicit custom stops
+    //   --qa-open-skin-picker <start|middle|end> open one picker for capture
     //   --qa-settings-section <0..6> capture one settings section
     //   --qa-tag <name>              seed a tag in --qa-test-mode only
     //   --qa-selected-tag <name>     select a seeded tag in --qa-test-mode only
@@ -290,6 +294,12 @@ int main(int argc, char* argv[])
     bool qaShowTrackDetails = false;
     QString qaTheme;
     QString qaSkin;
+    QString qaSkinKind;
+    QString qaSkinStart;
+    QString qaSkinMiddle;
+    QString qaSkinEnd;
+    QString qaOpenSkinPicker;
+    bool qaSkinArgumentsMalformed = false;
     QString qaLanguage;
     bool qaOpenSettings = false;
     int qaSettingsSection = -1;
@@ -353,9 +363,42 @@ int main(int argc, char* argv[])
             } else if (arg == QStringLiteral("--qa-theme")
                        && i + 1 < cliArgs.size()) {
                 qaTheme = cliArgs.at(++i).toLower();
-            } else if (arg == QStringLiteral("--qa-skin")
-                       && i + 1 < cliArgs.size()) {
-                qaSkin = cliArgs.at(++i);
+            } else if (arg == QStringLiteral("--qa-skin")) {
+                if (i + 1 < cliArgs.size()) {
+                    qaSkin = cliArgs.at(++i);
+                } else {
+                    qaSkinArgumentsMalformed = true;
+                }
+            } else if (arg == QStringLiteral("--qa-skin-kind")) {
+                if (i + 1 < cliArgs.size()) {
+                    qaSkinKind = cliArgs.at(++i).toLower();
+                } else {
+                    qaSkinArgumentsMalformed = true;
+                }
+            } else if (arg == QStringLiteral("--qa-skin-start")) {
+                if (i + 1 < cliArgs.size()) {
+                    qaSkinStart = cliArgs.at(++i);
+                } else {
+                    qaSkinArgumentsMalformed = true;
+                }
+            } else if (arg == QStringLiteral("--qa-skin-middle")) {
+                if (i + 1 < cliArgs.size()) {
+                    qaSkinMiddle = cliArgs.at(++i);
+                } else {
+                    qaSkinArgumentsMalformed = true;
+                }
+            } else if (arg == QStringLiteral("--qa-skin-end")) {
+                if (i + 1 < cliArgs.size()) {
+                    qaSkinEnd = cliArgs.at(++i);
+                } else {
+                    qaSkinArgumentsMalformed = true;
+                }
+            } else if (arg == QStringLiteral("--qa-open-skin-picker")) {
+                if (i + 1 < cliArgs.size()) {
+                    qaOpenSkinPicker = cliArgs.at(++i).toLower();
+                } else {
+                    qaSkinArgumentsMalformed = true;
+                }
             } else if (arg == QStringLiteral("--qa-language")
                        && i + 1 < cliArgs.size()) {
                 qaLanguage = cliArgs.at(++i).toLower();
@@ -413,6 +456,86 @@ int main(int argc, char* argv[])
     // Install logging before the single-instance handshake as it is the
     // earliest cross-process boundary and otherwise invisible on GUI builds.
     RuntimeLog::install(qaLogPath);
+    if (qaTestMode) {
+        const auto normalizedQaHex = [](const QString& requested) {
+            const QString value = requested.trimmed().toUpper();
+            const QColor color(value);
+            return value.size() == 7 && value.startsWith(QLatin1Char('#'))
+                    && color.isValid() && color.alpha() == 255
+                    && color.name(QColor::HexRgb).toUpper() == value
+                ? value : QString();
+        };
+        QString qaSkinError;
+        const bool hasExplicitStops = !qaSkinKind.isEmpty()
+            || !qaSkinStart.isEmpty() || !qaSkinMiddle.isEmpty()
+            || !qaSkinEnd.isEmpty();
+        if (qaSkinArgumentsMalformed) {
+            qaSkinError = QStringLiteral("a QA skin option is missing its value");
+        } else if (hasExplicitStops && !qaSkin.isEmpty()) {
+            qaSkinError = QStringLiteral(
+                "--qa-skin cannot be combined with explicit skin stops");
+        } else if (hasExplicitStops && qaSkinKind == QStringLiteral("solid")) {
+            qaSkinStart = normalizedQaHex(qaSkinStart);
+            if (qaSkinStart.isEmpty() || !qaSkinMiddle.isEmpty()
+                || !qaSkinEnd.isEmpty()) {
+                qaSkinError = QStringLiteral(
+                    "solid QA skin requires only one valid --qa-skin-start");
+            }
+        } else if (hasExplicitStops
+                   && qaSkinKind == QStringLiteral("gradient")) {
+            qaSkinStart = normalizedQaHex(qaSkinStart);
+            qaSkinMiddle = normalizedQaHex(qaSkinMiddle);
+            qaSkinEnd = normalizedQaHex(qaSkinEnd);
+            if (qaSkinStart.isEmpty() || qaSkinMiddle.isEmpty()
+                || qaSkinEnd.isEmpty()) {
+                qaSkinError = QStringLiteral(
+                    "gradient QA skin requires three valid color stops");
+            }
+        } else if (hasExplicitStops) {
+            qaSkinError = QStringLiteral(
+                "explicit QA skin requires --qa-skin-kind solid or gradient");
+        }
+
+        if (qaSkinError.isEmpty() && !qaSkin.isEmpty()
+            && qaSkin.compare(QStringLiteral("default"),
+                              Qt::CaseInsensitive) != 0) {
+            const QString normalized = normalizedQaHex(qaSkin);
+            if (!normalized.isEmpty()) {
+                qaSkin = normalized;
+            } else if (!ThemeManager::legacyPresetSeed(qaSkin).has_value()) {
+                const auto presets = ThemeManager::presets();
+                const auto preset = std::find_if(
+                    presets.cbegin(), presets.cend(),
+                    [&qaSkin](const ThemeManager::Preset& candidate) {
+                        return candidate.id.compare(
+                            qaSkin, Qt::CaseInsensitive) == 0;
+                    });
+                if (preset == presets.cend()) {
+                    qaSkinError = QStringLiteral("unknown --qa-skin value");
+                } else {
+                    qaSkin = preset->id;
+                }
+            }
+        }
+
+        if (qaSkinError.isEmpty() && !qaOpenSkinPicker.isEmpty()
+            && qaOpenSkinPicker != QStringLiteral("start")
+            && qaOpenSkinPicker != QStringLiteral("middle")
+            && qaOpenSkinPicker != QStringLiteral("end")) {
+            qaSkinError = QStringLiteral(
+                "--qa-open-skin-picker must be start, middle, or end");
+        }
+        if (!qaSkinError.isEmpty()) {
+            qWarning().noquote() << "Invalid QA skin configuration:"
+                                 << qaSkinError;
+            RuntimeLog::uninstall();
+            return 6;
+        }
+        if (!qaOpenSkinPicker.isEmpty()) {
+            qaOpenSettings = true;
+            qaSettingsSection = 2;
+        }
+    }
     // Recover only once per process after QStandardPaths and the QA identity
     // are finalized. Individual processor instances may be created by tests
     // and auxiliary windows and must not rescan the persistent journal store.
@@ -701,33 +824,46 @@ int main(int argc, char* argv[])
             settings.setThemeMode(2);
         }
         if (qaTestMode) {
-            const auto applyQaColor = [](const QString& requested,
-                                         const auto& setMode,
-                                         const auto& setPreset,
-                                         const auto& setCustom) {
-                if (requested.isEmpty()) {
-                    return;
-                }
-                if (requested.compare(QStringLiteral("default"),
+            if (qaSkinKind == QStringLiteral("solid")) {
+                settings.setSkinCustomConfiguration(
+                    0, qaSkinStart, qaSkinStart, qaSkinStart);
+            } else if (qaSkinKind == QStringLiteral("gradient")) {
+                settings.setSkinCustomConfiguration(
+                    1, qaSkinStart, qaSkinMiddle, qaSkinEnd);
+            } else if (qaSkin.compare(QStringLiteral("default"),
                                       Qt::CaseInsensitive) == 0) {
-                    setMode(0);
-                } else if (requested.startsWith(QLatin1Char('#'))) {
-                    setCustom(requested);
-                    setMode(2);
+                settings.selectDefaultSkin();
+            } else if (qaSkin.startsWith(QLatin1Char('#'))) {
+                settings.setSkinCustomConfiguration(
+                    0, qaSkin, qaSkin, qaSkin);
+            } else if (!qaSkin.isEmpty()) {
+                const auto legacySeed = ThemeManager::legacyPresetSeed(qaSkin);
+                if (legacySeed.has_value()) {
+                    const QString color = legacySeed->name(QColor::HexRgb)
+                                              .toUpper();
+                    settings.setSkinCustomConfiguration(
+                        0, color, color, color);
                 } else {
-                    setPreset(requested);
-                    setMode(1);
+                    settings.selectSkinPreset(qaSkin);
                 }
-            };
-            applyQaColor(
-                qaSkin,
-                [&settings](int mode) { settings.setSkinColorMode(mode); },
-                [&settings](const QString& preset) {
-                    settings.setSkinPreset(preset);
-                },
-                [&settings](const QString& color) {
-                    settings.setSkinCustomColor(color);
-                });
+            }
+
+            if (!qaOpenSkinPicker.isEmpty()
+                && settings.skinColorMode() != 2) {
+                const int kind = qaOpenSkinPicker == QStringLiteral("start")
+                    ? 0 : 1;
+                settings.setSkinCustomConfiguration(
+                    kind, settings.skinCustomColor(),
+                    settings.skinCustomColorMiddle(),
+                    settings.skinCustomColorEnd());
+            } else if ((qaOpenSkinPicker == QStringLiteral("middle")
+                        || qaOpenSkinPicker == QStringLiteral("end"))
+                       && settings.skinCustomKind() != 1) {
+                settings.setSkinCustomConfiguration(
+                    1, settings.skinCustomColor(),
+                    settings.skinCustomColorMiddle(),
+                    settings.skinCustomColorEnd());
+            }
         }
         if (!qaLanguage.isEmpty()) {
             settings.setLanguage(qaLanguage);
@@ -1273,6 +1409,30 @@ int main(int argc, char* argv[])
                             QStringLiteral("settingsPage"))) {
                         settingsPage->setProperty("selectedSection",
                                                   qaSettingsSection);
+                    }
+                }
+                if (!qaOpenSkinPicker.isEmpty()
+                    && settingsWindow != nullptr) {
+                    QCoreApplication::processEvents(
+                        QEventLoop::AllEvents, 500);
+                    const QString fieldName =
+                        qaOpenSkinPicker == QStringLiteral("middle")
+                            ? QStringLiteral("skinCustomMiddle")
+                            : qaOpenSkinPicker == QStringLiteral("end")
+                                ? QStringLiteral("skinCustomEnd")
+                                : QStringLiteral("skinCustomStart");
+                    QObject* const field = settingsWindow->findChild<QObject*>(
+                        fieldName);
+                    if (field == nullptr
+                        || !QMetaObject::invokeMethod(field, "clicked")) {
+                        qWarning().noquote()
+                            << "QA skin picker target could not be opened:"
+                            << fieldName;
+                        QTimer::singleShot(
+                            0, [] { QCoreApplication::exit(6); });
+                    } else {
+                        QCoreApplication::processEvents(
+                            QEventLoop::AllEvents, 500);
                     }
                 }
             }
