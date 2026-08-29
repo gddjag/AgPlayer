@@ -57,3 +57,22 @@
 | 修复 Integrated 波形模式切换后消失 | 根因修复：`WaveformItem.setLayers()` 与 `setPeaks()` 会互相清空，Shell 现在按模式只写入一种数据源 | `qml_integrated_theme_test` 波形/频谱往返测试 |
 
 本轮仍未增加播放器、模型、缓存、线程、DLL 或第三方包；所有新增行为留在现有共享控制器和 QML Shell 边界内。
+
+## 2026-08-29 第二轮视觉修复
+
+| 修复要求 | 最小实现 | 验证 |
+|---|---|---|
+| 标签管理/歌词扣边描边、当前项高亮 | 复用 `Theme` token，分别提供弱玻璃、悬停、活动与描边色；活动态在深浅主题下都比未选中态更明显 | `qml_integrated_theme_test`、1674×906 同画布对比 |
+| 搜索/添加框更淡、侧栏开关更大 | 共享 `TagManagementPanel` 使用弱玻璃 token；Integrated 的既有开关资源扩大按钮与图标显示区 | `qml_integrated_theme_test` |
+| 波形缩放/平移条更浅 | 仅替换导航轨道和窗口块的现有主题 token，无新绘制层或缓存 | `qml_integrated_theme_test`、运行截图 |
+| 底栏三段内容垂直居中、封面放大、元数据显示 | Integrated 左侧摘要改为 66px 封面并直接读取当前 `trackForId()` 的真实元数据；共享 `PlayerControls` 中间与右侧组取消旧偏移 | `qml_integrated_theme_test`、1674×906 截图 |
+| 皮肤按钮弹出三项菜单 | 共享 `PlayerControls` 增加真实菜单；Classic/Integrated 直接写入既有 `playerShellMode`；沉浸模式在独立实现尚未合入本分支时明确显示“待集成”且禁用 | `qml_integrated_theme_test` 双向 Shell 切换；未声称沉浸模式已可用 |
+
+证据：`docs/qa/evidence/integrated-theme/reference-vs-current-1674x906.png`。本轮继续保持零新增 DLL、零第三方包，新增内容仅为 QML 和测试。
+
+### 本轮验证记录
+
+- Release 构建与 `all_qmllint`：通过；仅保留两个既有 unused-import 信息。
+- Release 聚焦回归：`qml_main_window_test`、`qml_integrated_theme_test`、`tag_management_layout_contract_test`、`integrated_shell_lifecycle_smoke_test` 共 4/4 通过。
+- Debug 聚焦回归：`qml_integrated_theme_test` 通过。
+- Release 全量 CTest：114 个测试程序中 113 个通过；`audio_editor_controller_test` 内 91 项通过、4 项失败（三项为当前环境报告录音后端不支持，一项为离线源 identity-mismatch 波形预期）。本轮没有修改音频编辑器或录音模块，不能据此宣称全量通过。

@@ -309,9 +309,11 @@ Item {
                 font.family: Theme.fontPrimary
                 font.pixelSize: 12
                 background: Rectangle {
-                    color: "transparent"
+                    objectName: "tagSearchGlassBackground"
+                    color: tagSearchField.activeFocus
+                           ? Theme.subtleGlassHover : Theme.subtleGlassFill
                     border.color: tagSearchField.activeFocus
-                                  ? Theme.accent : Theme.listWorkspaceBorder
+                                  ? Theme.accent : Theme.subtleGlassBorder
                     border.width: 1
                     radius: Theme.radiusSm
                     ThemedIcon {
@@ -353,9 +355,11 @@ Item {
                     }
                 }
                 background: Rectangle {
-                    color: addTagButton.down ? Theme.listSelectedSurface
-                                             : Theme.tagAddSurface
-                    border.color: Theme.listWorkspaceBorder
+                    objectName: "tagAddGlassBackground"
+                    color: addTagButton.down ? Theme.subtleGlassActive
+                          : addTagButton.hovered ? Theme.subtleGlassHover
+                                                 : Theme.subtleGlassFill
+                    border.color: Theme.subtleGlassBorder
                     border.width: 1
                     radius: Theme.radiusSm
                 }

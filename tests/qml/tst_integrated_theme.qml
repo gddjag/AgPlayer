@@ -262,6 +262,91 @@ TestCase {
                    "/player-shell-mode.svg"))
     }
 
+    function test_right_panel_uses_outlined_glass_controls() {
+        var shell = enterIntegratedShell()
+        var tagOutline = findChild(shell, "integratedTagTabOutline")
+        var lyricsOutline = findChild(shell, "integratedLyricsTabOutline")
+        var searchGlass = findChild(shell, "tagSearchGlassBackground")
+        var addGlass = findChild(shell, "tagAddGlassBackground")
+        var toggleIcon = findChild(shell, "integratedSidePanelToggleIcon")
+        var tagTab = findChild(shell, "integratedTagTabButton")
+        verify(tagOutline && lyricsOutline && searchGlass
+               && addGlass && toggleIcon && tagTab)
+        mouseClick(tagTab)
+        compare(tagOutline.border.width, 1)
+        compare(lyricsOutline.border.width, 1)
+        verify(tagOutline.color.a > lyricsOutline.color.a,
+               "the active tab needs a subtle filled highlight")
+        verify(searchGlass.color.a > 0 && searchGlass.color.a < 0.35)
+        verify(addGlass.color.a > 0 && addGlass.color.a < 0.35)
+        verify(toggleIcon.width >= 24 && toggleIcon.height >= 24)
+    }
+
+    function test_wave_navigator_uses_light_glass_material() {
+        var shell = enterIntegratedShell()
+        var track = findChild(shell, "integratedWaveformNavigatorTrack")
+        var thumb = findChild(shell, "integratedWaveformNavigatorThumb")
+        verify(track && thumb)
+        verify(track.color.a > 0 && track.color.a < 0.4)
+        verify(thumb.color.a > track.color.a && thumb.color.a < 0.75)
+    }
+
+    function test_bottom_bar_centers_track_controls_and_actions() {
+        var shell = enterIntegratedShell()
+        var bottom = findChild(shell, "integratedBottomBar")
+        var summary = findChild(shell, "integratedTrackSummary")
+        var cover = findChild(shell, "integratedTrackCover")
+        var metadata = findChild(shell, "integratedTrackMetadata")
+        var center = findChild(shell, "centerPlaybackControls")
+        var actions = findChild(shell, "playerSecondaryActions")
+        verify(bottom && summary && cover && metadata && center && actions)
+        verify(cover.width >= 64 && cover.height >= 64)
+        verify(metadata.visible)
+        fuzzyCompare(summary.mapToItem(bottom, 0, 0).y
+                     + summary.height / 2, bottom.height / 2, 1.0)
+        fuzzyCompare(center.y + center.height / 2,
+                     center.parent.height / 2, 1.0)
+        fuzzyCompare(actions.y + actions.height / 2,
+                     actions.parent.height / 2, 1.0)
+    }
+
+    function test_shell_button_opens_real_mode_menu() {
+        var shell = enterIntegratedShell()
+        var button = findChild(shell, "playerShellModeButton")
+        var menu = findChild(shell, "playerExperienceModeMenu")
+        var classic = findChild(shell, "classicShellModeMenuItem")
+        var integrated = findChild(shell, "integratedShellModeMenuItem")
+        var immersive = findChild(shell, "immersiveVisualModeMenuItem")
+        verify(button && menu && classic && integrated && immersive)
+
+        button.clicked()
+        tryCompare(menu, "opened", true)
+        compare(immersive.enabled, false)
+        verify(immersive.text.indexOf("待集成") >= 0)
+
+        integrated.clicked()
+        compare(SettingsController.playerShellMode, 1)
+
+        button.clicked()
+        tryCompare(menu, "opened", true)
+        classic.clicked()
+        tryCompare(SettingsController, "playerShellMode", 0)
+
+        var classicShell = null
+        tryVerify(function() {
+            classicShell = findChild(mainWindow, "classicPlayerShell")
+            return classicShell !== null
+        }, 1500)
+        var classicButton = findChild(classicShell, "playerShellModeButton")
+        var classicMenu = findChild(classicShell,
+                                    "playerExperienceModeMenu")
+        var switchToIntegrated = findChild(
+                    classicShell, "integratedShellModeMenuItem")
+        verify(classicButton && classicMenu && switchToIntegrated)
+        compare(switchToIntegrated.text, "单窗口模式")
+        SettingsController.playerShellMode = 1
+    }
+
     function test_zoom_navigator_tracks_and_moves_visible_window() {
         var shell = enterIntegratedShell()
         shell.waveformDurationMs = 100000

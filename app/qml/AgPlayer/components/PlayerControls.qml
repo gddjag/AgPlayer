@@ -46,7 +46,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.leftMargin: 24
         anchors.verticalCenter: parent.verticalCenter
-        anchors.verticalCenterOffset: root.emptyMode ? -4 : -8
+        anchors.verticalCenterOffset: 0
         flat: true
         icon.source: Theme.icon("list-unordered")
         icon.color: WindowController.listWindowVisible
@@ -68,7 +68,7 @@ Rectangle {
         objectName: "centerPlaybackControls"
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.verticalCenter: parent.verticalCenter
-        anchors.verticalCenterOffset: root.emptyMode ? -4 : -8
+        anchors.verticalCenterOffset: 0
         spacing: root.emptyMode ? 28 : 16
 
         ToolButton {
@@ -342,7 +342,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.rightMargin: 24
         anchors.verticalCenter: parent.verticalCenter
-        anchors.verticalCenterOffset: root.emptyMode ? -4 : -8
+        anchors.verticalCenterOffset: 0
         spacing: 14
 
         ToolButton {
@@ -360,17 +360,15 @@ Rectangle {
         }
 
         ToolButton {
+            id: playerShellModeButton
             objectName: "playerShellModeButton"
             flat: true
             icon.source: Theme.icon("player-shell-mode")
             icon.color: Theme.iconPrimary
             icon.width: 20
             icon.height: 20
-            Accessible.name: SettingsController.playerShellMode === 0
-                             ? qsTr("Switch to integrated player layout")
-                             : qsTr("Switch to classic player layout")
-            onClicked: SettingsController.playerShellMode =
-                       SettingsController.playerShellMode === 0 ? 1 : 0
+            Accessible.name: qsTr("选择播放器皮肤模式")
+            onClicked: playerExperienceModeMenu.open()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
             background: null
@@ -389,6 +387,43 @@ Rectangle {
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
             background: null
+        }
+    }
+
+    Menu {
+        id: playerExperienceModeMenu
+        objectName: "playerExperienceModeMenu"
+        parent: root
+        x: Math.max(8, root.width - implicitWidth - 56)
+        y: -implicitHeight - 6
+        width: 188
+
+        MenuItem {
+            objectName: "classicShellModeMenuItem"
+            text: qsTr("双窗口模式")
+            checkable: true
+            checked: SettingsController.playerShellMode === 0
+            onClicked: SettingsController.playerShellMode = 0
+        }
+        MenuItem {
+            objectName: "integratedShellModeMenuItem"
+            text: qsTr("单窗口模式")
+            checkable: true
+            checked: SettingsController.playerShellMode === 1
+            onClicked: SettingsController.playerShellMode = 1
+        }
+        MenuSeparator {}
+        MenuItem {
+            objectName: "immersiveVisualModeMenuItem"
+            text: qsTr("沉浸视觉模式（待集成）")
+            enabled: false
+        }
+
+        background: Rectangle {
+            color: Theme.elevated
+            border.color: Theme.subtleGlassBorder
+            border.width: 1
+            radius: Theme.radiusSm
         }
     }
 }

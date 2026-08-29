@@ -342,17 +342,17 @@ Item {
                                     elide: Text.ElideRight
                                 }
                                 background: Rectangle {
-                                    color: tagTabButton.hovered
-                                           ? Theme.hoverSurface : "transparent"
+                                    objectName: "integratedTagTabOutline"
+                                    color: root.sidePanelPage === 0
+                                           ? Theme.subtleGlassActive
+                                           : tagTabButton.hovered
+                                             ? Theme.subtleGlassHover
+                                             : Theme.subtleGlassFill
+                                    border.color: root.sidePanelPage === 0
+                                                  ? Theme.accent
+                                                  : Theme.subtleGlassBorder
+                                    border.width: 1
                                     radius: Theme.radiusSm
-                                    Rectangle {
-                                        visible: root.sidePanelPage === 0
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        anchors.bottom: parent.bottom
-                                        height: 2
-                                        color: Theme.accent
-                                    }
                                 }
                             }
 
@@ -379,17 +379,17 @@ Item {
                                     verticalAlignment: Text.AlignVCenter
                                 }
                                 background: Rectangle {
-                                    color: lyricsTabButton.hovered
-                                           ? Theme.hoverSurface : "transparent"
+                                    objectName: "integratedLyricsTabOutline"
+                                    color: root.sidePanelPage === 1
+                                           ? Theme.subtleGlassActive
+                                           : lyricsTabButton.hovered
+                                             ? Theme.subtleGlassHover
+                                             : Theme.subtleGlassFill
+                                    border.color: root.sidePanelPage === 1
+                                                  ? Theme.accent
+                                                  : Theme.subtleGlassBorder
+                                    border.width: 1
                                     radius: Theme.radiusSm
-                                    Rectangle {
-                                        visible: root.sidePanelPage === 1
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        anchors.bottom: parent.bottom
-                                        height: 2
-                                        color: Theme.accent
-                                    }
                                 }
                             }
 
@@ -398,8 +398,9 @@ Item {
                             ToolButton {
                                 id: sidePanelToggleButton
                                 objectName: "integratedSidePanelToggleButton"
-                                Layout.preferredWidth: 28
-                                Layout.preferredHeight: 28
+                                Layout.preferredWidth: 34
+                                Layout.preferredHeight: 30
+                                padding: 2
                                 flat: true
                                 Accessible.name: root.sidePanelExpanded
                                                  ? qsTr("隐藏标签和歌词侧栏")
@@ -414,10 +415,11 @@ Item {
                                     radius: Theme.radiusSm
                                 }
                                 contentItem: ThemedIcon {
+                                    objectName: "integratedSidePanelToggleIcon"
                                     source: Theme.icon("side-panel-toggle")
                                     tint: Theme.iconPrimary
-                                    sourceSize.width: 20
-                                    sourceSize.height: 20
+                                    sourceSize.width: 26
+                                    sourceSize.height: 26
                                     mirror: !root.sidePanelExpanded
                                 }
                             }
@@ -707,6 +709,7 @@ Item {
                 z: 9
 
                 Rectangle {
+                    objectName: "integratedWaveformNavigatorTrack"
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
@@ -714,8 +717,7 @@ Item {
                     anchors.rightMargin: 8
                     height: 3
                     radius: 1.5
-                    color: Theme.border
-                    opacity: 0.72
+                    color: Theme.navigatorGlassTrack
                 }
 
                 Rectangle {
@@ -734,8 +736,10 @@ Item {
                     height: 6
                     anchors.verticalCenter: parent.verticalCenter
                     radius: 3
-                    color: Theme.accent
-                    opacity: rangeFraction < 0.999 ? 0.9 : 0.52
+                    color: Theme.navigatorGlassThumb
+                    border.color: Theme.subtleGlassBorder
+                    border.width: 1
+                    opacity: rangeFraction < 0.999 ? 1 : 0.72
 
                     MouseArea {
                         id: navigatorPointer
@@ -791,30 +795,48 @@ Item {
 
                 RowLayout {
                     id: trackSummary
+                    objectName: "integratedTrackSummary"
                     z: 2
                     anchors.left: parent.left
-                    anchors.top: parent.top
-                    anchors.bottom: parent.bottom
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: 66
                     width: Math.min(450, parent.width * 0.32)
-                    spacing: 10
+                    spacing: 12
                     readonly property var track: {
                         var count = root.libraryModel ? root.libraryModel.count : 0
                         return count > 0 && root.playbackController
                             ? root.libraryModel.trackForId(
                                   root.playbackController.currentTrackId) : null
                     }
-                    Image {
-                        Layout.preferredWidth: 58
-                        Layout.preferredHeight: 58
-                        source: trackSummary.track
-                                && trackSummary.track.coverUrl
-                                ? trackSummary.track.coverUrl
-                                : "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
-                        fillMode: Image.PreserveAspectCrop
+                    Rectangle {
+                        objectName: "integratedTrackCover"
+                        Layout.preferredWidth: 66
+                        Layout.preferredHeight: 66
+                        color: Theme.panel
+                        border.color: Theme.subtleGlassBorder
+                        border.width: 1
+                        radius: Theme.radiusSm
+                        clip: true
+
+                        Image {
+                            anchors.fill: parent
+                            source: trackSummary.track
+                                    && trackSummary.track.coverUrl
+                                    ? trackSummary.track.coverUrl
+                                    : "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
+                            fillMode: trackSummary.track
+                                      && trackSummary.track.coverUrl
+                                      ? Image.PreserveAspectCrop
+                                      : Image.PreserveAspectFit
+                            anchors.margins: trackSummary.track
+                                             && trackSummary.track.coverUrl
+                                             ? 0 : 8
+                        }
                     }
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 3
+                        Layout.alignment: Qt.AlignVCenter
+                        spacing: 2
                         Text {
                             Layout.fillWidth: true
                             text: trackSummary.track
@@ -835,6 +857,61 @@ Item {
                             font.family: Theme.fontPrimary
                             font.pixelSize: 12
                             elide: Text.ElideRight
+                        }
+                        RowLayout {
+                            id: integratedTrackMetadata
+                            objectName: "integratedTrackMetadata"
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 18
+                            spacing: 4
+                            clip: true
+
+                            Repeater {
+                                model: {
+                                    var track = trackSummary.track
+                                    if (!track)
+                                        return []
+                                    var badges = []
+                                    if (track.format)
+                                        badges.push(track.format.toUpperCase())
+                                    if (track.bitDepth > 0)
+                                        badges.push(track.bitDepth + "-bit")
+                                    if (track.sampleRate > 0)
+                                        badges.push((track.sampleRate / 1000)
+                                                    + " kHz")
+                                    if (track.bitRate > 0)
+                                        badges.push(Math.round(track.bitRate
+                                                               / 1000)
+                                                    + " kbps")
+                                    if (track.bpm > 0)
+                                        badges.push((Math.round(track.bpm * 10)
+                                                     / 10) + " BPM")
+                                    if (track.fileSize > 0)
+                                        badges.push((track.fileSize / 1048576)
+                                                    .toFixed(1) + " MB")
+                                    return badges
+                                }
+
+                                Rectangle {
+                                    implicitWidth: integratedBadgeText.implicitWidth
+                                                   + 10
+                                    implicitHeight: 18
+                                    color: Theme.subtleGlassFill
+                                    border.color: Theme.subtleGlassBorder
+                                    border.width: 1
+                                    radius: 4
+
+                                    Text {
+                                        id: integratedBadgeText
+                                        anchors.centerIn: parent
+                                        text: modelData
+                                        color: Theme.secondaryText
+                                        font.family: Theme.fontPrimary
+                                        font.pixelSize: 10
+                                    }
+                                }
+                            }
+                            Item { Layout.fillWidth: true }
                         }
                     }
                 }
