@@ -101,8 +101,11 @@ int main(int argc, char* argv[])
                     std::this_thread::sleep_for(std::chrono::seconds(2));
                     continue;
                 }
-                if (scenario == QStringLiteral("delayed-result")) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                if (scenario == QStringLiteral("delayed-result")
+                    || scenario == QStringLiteral("long-delayed-result")) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(
+                        scenario == QStringLiteral("long-delayed-result")
+                            ? 1000 : 200));
                 }
                 if (scenario != QStringLiteral("cancel")
                     && scenario != QStringLiteral("late-after-cancel")) {

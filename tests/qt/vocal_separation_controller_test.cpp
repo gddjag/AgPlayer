@@ -32,6 +32,7 @@ private slots:
     void exposesOutputChoicesAndPublishesTheSelectedInputWaveform();
     void clearsTheSelectedInputWithoutLeavingStaleWaveformData();
     void downloadsMultipleArtifactsSequentiallyThroughTheController();
+    void downloadProgressNeverMutatesAnActiveSeparationJob();
     void installedMappingUsesCheapDiscoveryThenExplicitAsyncHashing();
     void cancellingVerificationImmediatelyRestoresCheapModelStates();
     void deletingDuringRefreshVerificationCannotResurrectTheModel();
@@ -347,8 +348,8 @@ downloadsMultipleArtifactsSequentiallyThroughTheController()
     QSignalSpy modelsChanged(&controller,
                              &VocalSeparationController::modelsChanged);
     QVector<double> visibleProgress;
-    connect(&controller, &VocalSeparationController::progressChanged,
-            this, [&] { visibleProgress.push_back(controller.progress()); });
+    connect(&controller, &VocalSeparationController::downloadProgressChanged,
+            this, [&] { visibleProgress.push_back(controller.downloadProgress()); });
     QVERIFY(controller.downloadModel(QStringLiteral("multi-artifact")));
     QTRY_COMPARE_WITH_TIMEOUT(
         modelStateFor(controller.models(), QStringLiteral("multi-artifact")),
@@ -372,6 +373,61 @@ downloadsMultipleArtifactsSequentiallyThroughTheController()
 }
 
 void VocalSeparationControllerTest::
+downloadProgressNeverMutatesAnActiveSeparationJob()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray installedBytes("installed-test-model");
+    const QByteArray downloadBytes(2 * 1024 * 1024, 'd');
+    const QString downloadSource = temporary.filePath(
+        QStringLiteral("download-source.onnx"));
+    QVERIFY(writeBytes(downloadSource, downloadBytes));
+
+    auto options = optionsFor(
+        temporary, QStringLiteral("long-delayed-result"), installedBytes);
+    options.catalog = {
+        {QStringLiteral("two-stem"), VocalModelFamily::Mdx,
+         {{QStringLiteral("test.onnx"), {}, installedBytes.size(),
+           sha256(installedBytes)}},
+         {QStringLiteral("vocals"), QStringLiteral("instrumental")},
+         QStringLiteral("test"), QStringLiteral("test")},
+        {QStringLiteral("download-model"), VocalModelFamily::Mdx,
+         {{QStringLiteral("download.onnx"), QUrl::fromLocalFile(downloadSource),
+           downloadBytes.size(), sha256(downloadBytes)}},
+         {QStringLiteral("vocals"), QStringLiteral("instrumental")},
+         QStringLiteral("test"), QStringLiteral("test")},
+    };
+    installTestModel(options, QStringLiteral("two-stem"), installedBytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, QByteArrayLiteral("runtime")));
+
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
+    QVERIFY(controller.start());
+    QTRY_COMPARE_WITH_TIMEOUT(controller.stage(), QStringLiteral("inference"), 2000);
+    QCOMPARE(controller.jobState(), VocalSeparationController::JobState::Running);
+    QCOMPARE(controller.progress(), 0.5);
+
+    QSignalSpy jobProgressChanged(
+        &controller, &VocalSeparationController::progressChanged);
+    QVERIFY(controller.downloadModel(QStringLiteral("download-model")));
+    QTRY_VERIFY_WITH_TIMEOUT(controller.downloadBusy(), 2000);
+    QTRY_COMPARE_WITH_TIMEOUT(
+        modelStateFor(controller.models(), QStringLiteral("download-model")),
+        int(VocalSeparationController::ModelState::Installed), 5000);
+
+    QCOMPARE(controller.jobState(), VocalSeparationController::JobState::Running);
+    QCOMPARE(controller.progress(), 0.5);
+    QCOMPARE(jobProgressChanged.count(), 0);
+    QCOMPARE(controller.downloadProgress(), 1.0);
+    QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(),
+                              VocalSeparationController::JobState::Completed,
+                              5000);
+}
+
+void VocalSeparationControllerTest::
 installedMappingUsesCheapDiscoveryThenExplicitAsyncHashing()
 {
     QTemporaryDir temporary;
@@ -386,7 +442,7 @@ installedMappingUsesCheapDiscoveryThenExplicitAsyncHashing()
     VocalSeparationController controller(
         &preview, &waveforms, nullptr, nullptr, nullptr, options);
     QCOMPARE(modelStateFor(controller.models(), QStringLiteral("two-stem")),
-             int(VocalSeparationController::ModelState::Verifying));
+             int(VocalSeparationController::ModelState::PendingVerification));
     QVERIFY(controller.verifyInstalledModels());
     QTRY_COMPARE_WITH_TIMEOUT(
         modelStateFor(controller.models(), QStringLiteral("two-stem")),
@@ -428,7 +484,7 @@ exposesTypedCatalogAndStemAvailabilityFromTheInstalledCatalog()
     QVERIFY(twoStemCard.value(QStringLiteral("bytes")).toLongLong() > 0);
     QVERIFY(!twoStemCard.value(QStringLiteral("stems")).toList().isEmpty());
     QCOMPARE(controller.models().first().toMap().value(QStringLiteral("state")).toInt(),
-             int(VocalSeparationController::ModelState::Verifying));
+             int(VocalSeparationController::ModelState::PendingVerification));
     QVERIFY(controller.verifyInstalledModels());
     QTRY_COMPARE_WITH_TIMEOUT(
         controller.models().first().toMap().value(QStringLiteral("state")).toInt(),
@@ -928,9 +984,13 @@ void VocalSeparationControllerTest::failedDownloadCanBeDeletedAndReset()
     QTRY_COMPARE_WITH_TIMEOUT(
         modelStateFor(controller.models(), QStringLiteral("two-stem")),
         int(VocalSeparationController::ModelState::ModelFailed), 5000);
+    QVERIFY(!controller.downloadBusy());
+    QVERIFY(controller.downloadingModelId().isEmpty());
     QVERIFY(controller.deleteModel(QStringLiteral("two-stem")));
     QCOMPARE(modelStateFor(controller.models(), QStringLiteral("two-stem")),
              int(VocalSeparationController::ModelState::NotInstalled));
+    QVERIFY(controller.downloadModel(QStringLiteral("two-stem")));
+    QTRY_VERIFY_WITH_TIMEOUT(controller.downloadBusy(), 5000);
 }
 
 void VocalSeparationControllerTest::crashCanRetryTheSameRequest()

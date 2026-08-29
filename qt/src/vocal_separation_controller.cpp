@@ -166,13 +166,18 @@ VocalSeparationController::VocalSeparationController(
     });
     connect(downloader_.get(), &VocalSeparationDownloader::progressChanged,
             this, [this](qint64 received, qint64 total) {
-        progress_ = total > 0 ? static_cast<double>(received) / total : 0.0;
-        emit progressChanged();
+        downloadProgress_ = total > 0 ? static_cast<double>(received) / total : 0.0;
+        emit downloadProgressChanged();
     });
     connect(downloader_.get(), &VocalSeparationDownloader::finished,
             this, [this](const VocalInstallResult& result) {
         if (!result.ok) {
             downloadQueue_.clear();
+            failedDownloadModelId_ = downloadingModelId_;
+            downloadingModelId_.clear();
+            downloadProgress_ = 0.0;
+            emit downloadProgressChanged();
+            emit downloadStateChanged();
             setError(result.error);
             refreshModels();
             return;
@@ -194,6 +199,11 @@ VocalSeparationController::VocalSeparationController(
                     runtimeInstallCancellation_.reset();
                 if (!installed.ok) {
                     downloadQueue_.clear();
+                    failedDownloadModelId_ = downloadingModelId_;
+                    downloadingModelId_.clear();
+                    downloadProgress_ = 0.0;
+                    emit downloadProgressChanged();
+                    emit downloadStateChanged();
                     setError(installed.error);
                     refreshModels();
                     return;
@@ -249,6 +259,12 @@ QVariantList VocalSeparationController::availableDevices() const { return availa
 VocalSeparationController::JobState VocalSeparationController::jobState() const noexcept { return jobState_; }
 QString VocalSeparationController::stage() const { return stage_; }
 double VocalSeparationController::progress() const noexcept { return progress_; }
+double VocalSeparationController::downloadProgress() const noexcept { return downloadProgress_; }
+QString VocalSeparationController::downloadingModelId() const { return downloadingModelId_; }
+bool VocalSeparationController::downloadBusy() const noexcept
+{
+    return !downloadingModelId_.isEmpty();
+}
 QString VocalSeparationController::error() const { return error_; }
 QString VocalSeparationController::outputFormat() const { return outputFormat_; }
 QString VocalSeparationController::outputDirectory() const { return outputDirectory_; }
@@ -355,6 +371,10 @@ bool VocalSeparationController::downloadModel(const QString& modelId)
         return false;
     }
     downloadingModelId_ = modelId;
+    failedDownloadModelId_.clear();
+    downloadProgress_ = 0.0;
+    emit downloadProgressChanged();
+    emit downloadStateChanged();
     setError({});
     return beginVerification(VerificationPurpose::Download, model);
 }
@@ -387,7 +407,13 @@ bool VocalSeparationController::deleteModel(const QString& modelId)
         setError(removed.error);
         return false;
     }
-    if (downloadingModelId_ == modelId) downloadingModelId_.clear();
+    if (downloadingModelId_ == modelId) {
+        downloadingModelId_.clear();
+        downloadProgress_ = 0.0;
+        emit downloadProgressChanged();
+        emit downloadStateChanged();
+    }
+    if (failedDownloadModelId_ == modelId) failedDownloadModelId_.clear();
     verifiedModelIds_.remove(modelId);
     verifiedOrRejectedModelIds_.remove(modelId);
     refreshModels();
@@ -411,6 +437,7 @@ bool VocalSeparationController::setStemSelected(StemKind kind, bool selected)
     for (QVariant& value : stems_) {
         QVariantMap stem = value.toMap();
         if (stem.value(QStringLiteral("kind")).toInt() != int(kind)) continue;
+        if (!stem.value(QStringLiteral("supported")).toBool()) return false;
         stem.insert(QStringLiteral("selected"), selected);
         value = stem;
         invalidateRetry();
@@ -836,7 +863,11 @@ void VocalSeparationController::finishVerification(
     if (purpose == VerificationPurpose::Download) {
         const VocalModelCard* model = modelForId(verifiedModelId);
         if (model == nullptr) {
+            failedDownloadModelId_ = downloadingModelId_;
             downloadingModelId_.clear();
+            downloadProgress_ = 0.0;
+            emit downloadProgressChanged();
+            emit downloadStateChanged();
             refreshModels();
             return;
         }
@@ -931,7 +962,7 @@ void VocalSeparationController::refreshModels()
         ModelState state = modelInstalled(model) ? ModelState::Installed
             : modelFilesPresent(model)
                 && !verifiedOrRejectedModelIds_.contains(model.id)
-                ? ModelState::Verifying : ModelState::NotInstalled;
+                ? ModelState::PendingVerification : ModelState::NotInstalled;
         if (verificationWatcher_ != nullptr
             && verificationPurpose_ != VerificationPurpose::None
             && (verifyingModelId_.isEmpty()
@@ -947,6 +978,8 @@ void VocalSeparationController::refreshModels()
             default: break;
             }
         }
+        if (model.id == failedDownloadModelId_)
+            state = ModelState::ModelFailed;
         QVariantList kinds;
         for (const QString& name : model.stems) kinds.push_back(int(stemKind(name)));
         qint64 totalBytes = 0;
@@ -962,8 +995,6 @@ void VocalSeparationController::refreshModels()
             {QStringLiteral("resourceGuidance"), model.resourceGuidance},
             {QStringLiteral("name"), model.displayName.isEmpty() ? model.id : model.displayName},
             {QStringLiteral("useCase"), model.useCase},
-            {QStringLiteral("downloadProgress"),
-             model.id == downloadingModelId_ ? progress_ : 0.0},
         });
     }
     emit modelsChanged();
@@ -1022,16 +1053,22 @@ void VocalSeparationController::startNextDownload()
         if (!downloadingModelId_.isEmpty())
             verifiedOrRejectedModelIds_.insert(downloadingModelId_);
         downloadingModelId_.clear();
-        progress_ = 1.0;
-        emit progressChanged();
+        downloadProgress_ = 1.0;
+        emit downloadProgressChanged();
+        emit downloadStateChanged();
         refreshModels();
         return;
     }
     const DownloadItem& item = downloadQueue_.first();
-    progress_ = 0.0;
-    emit progressChanged();
+    downloadProgress_ = 0.0;
+    emit downloadProgressChanged();
     if (!QDir().mkpath(QFileInfo(item.destination).absolutePath())) {
         downloadQueue_.clear();
+        failedDownloadModelId_ = downloadingModelId_;
+        downloadingModelId_.clear();
+        downloadProgress_ = 0.0;
+        emit downloadProgressChanged();
+        emit downloadStateChanged();
         setError(tr("无法创建模型下载目录"));
         refreshModels();
         return;
@@ -1317,7 +1354,8 @@ QStringList VocalSeparationController::selectedStemNames() const
     QStringList result;
     for (const QVariant& value : stems_) {
         const QVariantMap stem = value.toMap();
-        if (stem.value(QStringLiteral("selected")).toBool())
+        if (stem.value(QStringLiteral("supported")).toBool()
+            && stem.value(QStringLiteral("selected")).toBool())
             result.push_back(stem.value(QStringLiteral("name")).toString());
     }
     return result;
@@ -1329,7 +1367,8 @@ VocalSeparationController::selectedStemKinds() const
     QList<StemKind> result;
     for (const QVariant& value : stems_) {
         const QVariantMap stem = value.toMap();
-        if (stem.value(QStringLiteral("selected")).toBool())
+        if (stem.value(QStringLiteral("supported")).toBool()
+            && stem.value(QStringLiteral("selected")).toBool())
             result.push_back(static_cast<StemKind>(
                 stem.value(QStringLiteral("kind")).toInt()));
     }

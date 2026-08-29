@@ -49,6 +49,9 @@ class VocalSeparationController final : public QObject {
     Q_PROPERTY(JobState jobState READ jobState NOTIFY jobStateChanged)
     Q_PROPERTY(QString stage READ stage NOTIFY jobStateChanged)
     Q_PROPERTY(double progress READ progress NOTIFY progressChanged)
+    Q_PROPERTY(double downloadProgress READ downloadProgress NOTIFY downloadProgressChanged)
+    Q_PROPERTY(QString downloadingModelId READ downloadingModelId NOTIFY downloadStateChanged)
+    Q_PROPERTY(bool downloadBusy READ downloadBusy NOTIFY downloadStateChanged)
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
     Q_PROPERTY(QString outputFormat READ outputFormat NOTIFY outputFormatChanged)
     Q_PROPERTY(QString outputDirectory READ outputDirectory
@@ -62,6 +65,7 @@ class VocalSeparationController final : public QObject {
 public:
     enum class ModelState {
         NotInstalled,
+        PendingVerification,
         Downloading,
         Paused,
         Verifying,
@@ -112,6 +116,9 @@ public:
     JobState jobState() const noexcept;
     QString stage() const;
     double progress() const noexcept;
+    double downloadProgress() const noexcept;
+    QString downloadingModelId() const;
+    bool downloadBusy() const noexcept;
     QString error() const;
     QString outputFormat() const;
     QString outputDirectory() const;
@@ -155,6 +162,8 @@ signals:
     void availableDevicesChanged();
     void jobStateChanged();
     void progressChanged();
+    void downloadProgressChanged();
+    void downloadStateChanged();
     void errorChanged();
     void outputFormatChanged();
     void outputDirectoryChanged();
@@ -272,6 +281,8 @@ private:
     bool runtimeVerified_ = false;
     QList<DownloadItem> downloadQueue_;
     QString downloadingModelId_;
+    QString failedDownloadModelId_;
+    double downloadProgress_ = 0.0;
     QVariantMap inputInfo_;
     QVariantList models_;
     QVariantList availableDevices_;
