@@ -474,8 +474,22 @@ TestCase {
         var waveformBottom = waveformFrame.mapToItem(
                     shell, 0, waveformFrame.height).y
         var bottomTop = bottomBar.mapToItem(shell, 0, 0).y
-        verify(bottomTop - waveformBottom <= shell.contentSpacing + 1,
-               "waveform and transport gap should match the standard spacing")
+        verify(bottomTop - waveformBottom <= 5,
+               "waveform and transport gap should match the 4px upper gap")
+        verify(bottomBar.height >= 91,
+               "transport canvas should gain height while closing the gap")
+    }
+
+    function test_integrated_waveform_progress_uses_one_canvas_without_clip_edge() {
+        var shell = enterIntegratedShell()
+        shell.playbackController = fakePlayback
+        shell.waveformDurationMs = 100000
+        fakePlayback.positionMs = 25000
+        var waveform = findChild(shell, "integratedWaveform")
+        verify(waveform)
+        tryCompare(waveform, "position", 25000)
+        compare(findChild(shell, "integratedPlayedWaveform"), null,
+                "a clipped duplicate waveform creates a visible vertical edge")
     }
 
     function test_shell_button_opens_real_mode_menu() {

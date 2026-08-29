@@ -32,7 +32,7 @@ Item {
     property int rightColumnWidth: 312
     property int waveformHeight: 120
     property int waveformNavigatorHeight: 10
-    property int bottomBarHeight: 83
+    property int bottomBarHeight: 91
     property int contentSpacing: 8
     property bool _waveformViewportResetPending: false
     readonly property real effectiveDurationMs: waveformDurationMs > 0
@@ -100,16 +100,14 @@ Item {
     }
 
     function applyWaveformMode() {
-        if (!waveform || !playedWaveform)
+        if (!waveform)
             return
         if (SettingsController.waveformMode === 2) {
             var spectrum = root.displayedSpectrumPeaks
             waveform.peaks = spectrum
-            playedWaveform.peaks = spectrum
         } else {
             var layers = root.displayedWaveformLayers
             waveform.layers = layers
-            playedWaveform.layers = layers
         }
     }
 
@@ -523,7 +521,7 @@ Item {
             Layout.preferredHeight: root.waveformHeight
                                     + root.waveformNavigatorHeight
             Layout.topMargin: 4
-            Layout.bottomMargin: root.contentSpacing
+            Layout.bottomMargin: 4
             Layout.leftMargin: root.contentSpacing
             Layout.rightMargin: root.contentSpacing
             color: Theme.panel
@@ -542,6 +540,7 @@ Item {
                 anchors.topMargin: 20
                 pointerInteractionEnabled: false
                 duration: root.effectiveDurationMs
+                position: root.playbackPositionMs
                 cursorPosition: root.playbackPositionMs
                 analysisProgress: root.waveformProvider
                                   ? root.waveformProvider.analysisProgress : 0
@@ -593,36 +592,6 @@ Item {
                             font.pixelSize: 10
                         }
                     }
-                }
-            }
-
-            Item {
-                width: waveform.waveformCursorX
-                y: waveform.y
-                height: waveform.height
-                clip: true
-                enabled: false
-                WaveformItem {
-                    id: playedWaveform
-                    objectName: "integratedPlayedWaveform"
-                    width: waveformFrame.width
-                    height: waveform.height
-                    enabled: false
-                    duration: root.effectiveDurationMs
-                    visibleStartMs: waveform.visibleStartMs
-                    visibleEndMs: waveform.visibleEndMs
-                    position: root.effectiveDurationMs
-                    analysisProgress: waveform.analysisProgress
-                    visualMode: waveform.visualMode
-                    baseColor: waveform.baseColor
-                    progressColor: waveform.progressColor
-                    gradientStartColor: waveform.gradientStartColor
-                    gradientMiddleColor: waveform.gradientMiddleColor
-                    gradientEndColor: waveform.gradientEndColor
-                    rgbProgress: waveform.rgbProgress
-                    amplitudeScale: waveform.amplitudeScale
-                    density: waveform.density
-                    lineWidth: waveform.lineWidth
                 }
             }
 

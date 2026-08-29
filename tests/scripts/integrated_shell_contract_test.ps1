@@ -28,7 +28,7 @@ Assert-Match $shell 'property int topBarHeight:\s*52' 'Integrated top bar must b
 Assert-Match $shell 'property int leftColumnWidth:\s*248' 'Integrated left column must be 248px.'
 Assert-Match $shell 'property int rightColumnWidth:\s*312' 'Integrated right column must be 312px.'
 Assert-Match $shell 'property int waveformHeight:\s*120' 'Integrated waveform must be 120px.'
-Assert-Match $shell 'property int bottomBarHeight:\s*83' 'Integrated bottom bar must be 83px.'
+Assert-Match $shell 'property int bottomBarHeight:\s*91' 'Integrated bottom bar must be 91px.'
 Assert-Match $shell 'SideNavigation\s*\{[\s\S]*showTagManagementEntry:\s*false' 'Integrated navigation must hide the tag-management entry.'
 Assert-Match $shell 'TagManagementPanel\s*\{[\s\S]*compact:\s*true[\s\S]*collapsible:\s*false[\s\S]*showHeader:\s*false' 'Integrated must reuse the shared compact tag panel inside its tab container.'
 Assert-Match $shell 'objectName:\s*"integratedTagTabButton"[\s\S]*objectName:\s*"integratedLyricsTabButton"[\s\S]*objectName:\s*"integratedSidePanelToggleButton"' 'Integrated must expose tag and lyrics tabs plus the side-panel toggle.'

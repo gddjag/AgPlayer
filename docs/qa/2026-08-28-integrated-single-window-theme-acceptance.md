@@ -94,3 +94,10 @@
 - 绿灯：Release/Debug `qml_integrated_theme_test` 均通过；换歌后等待新波形时长就绪并恢复完整范围。
 - 视觉证据：`evidence/integrated-theme/integrated-1672x941-title-spacing-v3.png`；同尺寸合成为 `evidence/integrated-theme/reference-vs-current-1672x941-title-spacing-v3.png`。
 - Runtime 日志仅含 INFO；中央播放控件仍为 x=668、width=300，520px 当前歌曲摘要没有发生重叠。
+
+## 2026-08-29 第五轮修复补充
+
+- TDD 红灯：主波形 `position` 仍为 0、`integratedPlayedWaveform` 裁切叠图仍存在、波形和播放栏实际间距大于 4px，断言按预期失败。
+- 绿灯：主波形直接绑定真实播放位置，裁切叠图被移除；波形上下间距均为 4px，播放栏高度为 91px。
+- 视觉证据：`evidence/integrated-theme/integrated-1672x941-single-waveform-v4.png`；同尺寸合成为 `evidence/integrated-theme/reference-vs-current-1672x941-single-waveform-v4.png`。
+- Runtime 截图进程退出码为 0，日志仅含 INFO；本轮未增加依赖、图片资源、缓存或线程。
