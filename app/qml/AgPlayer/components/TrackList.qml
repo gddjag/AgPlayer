@@ -422,7 +422,7 @@ ListView {
     }
 
     header: Rectangle {
-        width: root.width; height: 56; color: Theme.listHeaderSurface; z: 20
+        width: root.width; height: 46; color: Theme.listHeaderSurface; z: 20
         RowLayout {
             anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 0
             HeaderText { objectName: "trackHeaderIndex"; text: "#"; Layout.minimumWidth: root.sequenceWidth; Layout.preferredWidth: root.sequenceWidth; Layout.maximumWidth: root.sequenceWidth }
@@ -1100,7 +1100,7 @@ ListView {
             Qt.callLater(root.ensureCurrentTrackVisible)
         }
     }
-    component HeaderText: Text { color: Theme.secondaryText; font.family: Theme.fontPrimary; font.pixelSize: 12; font.weight: Font.Medium; elide: Text.ElideRight }
+    component HeaderText: Text { color: Theme.secondaryText; font.family: Theme.fontPrimary; font.pixelSize: 12; font.weight: Font.DemiBold; elide: Text.ElideRight }
     component BodyText: Text { property bool trackAvailable: true; property bool highlighted: false; property color highlightText: Theme.activeSelectionText; color: highlighted ? highlightText : trackAvailable ? Theme.secondaryText : Theme.error; font.family: Theme.fontPrimary; font.pixelSize: 13; elide: Text.ElideRight; wrapMode: Text.NoWrap; maximumLineCount: 1; clip: true }
     component MarqueeBodyText: Item {
         id: marqueeRoot

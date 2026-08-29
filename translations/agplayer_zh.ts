@@ -3531,6 +3531,16 @@
         <translation>主题样式</translation>
     </message>
     <message>
+        <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="1470"/>
+        <source>窗口主题</source>
+        <translation>窗口主题</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="1475"/>
+        <source>双窗口主题</source>
+        <translation>双窗口主题</translation>
+    </message>
+    <message>
         <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="1853"/>
         <source>导出路径与转码参数</source>
         <translation>导出路径与转码参数</translation>

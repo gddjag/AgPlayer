@@ -1,8 +1,8 @@
 if(NOT DEFINED CATALOGS OR CATALOGS STREQUAL "")
-    message(FATAL_ERROR "CATALOGS must contain the four AgPlayer TS files")
+    message(FATAL_ERROR "CATALOGS must contain the AgPlayer TS files")
 endif()
 
-set(expected_languages en_US th_TH vi_VN zh_CN)
+set(expected_languages en_US zh_CN)
 set(actual_languages)
 
 foreach(catalog IN LISTS CATALOGS)

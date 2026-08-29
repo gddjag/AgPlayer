@@ -959,8 +959,12 @@ int main(int argc, char* argv[])
                                 return;
                             }
                             const QByteArray message = socket->readAll().trimmed();
+                            if (message.isEmpty()
+                                && socket->state() != QLocalSocket::UnconnectedState) {
+                                return;
+                            }
+                            *received = true;
                             if (!message.isEmpty()) {
-                                *received = true;
                                 const QString path =
                                     QUrl::fromEncoded(message).toLocalFile();
                                 if (!path.isEmpty() && QFileInfo::exists(path)) {
@@ -968,8 +972,10 @@ int main(int argc, char* argv[])
                                         QFileInfo(path).absoluteFilePath();
                                     playFileIfPending();
                                 }
+                                windows.showMain();
+                            } else {
+                                windows.toggleMainWindowGroup();
                             }
-                            windows.showMain();
                         };
                         QObject::connect(socket, &QLocalSocket::readyRead,
                                          &app, receive);

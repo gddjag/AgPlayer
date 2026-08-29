@@ -20,6 +20,9 @@ QtObject {
     readonly property color textDisabled: ThemeManager.textDisabled
     readonly property color border: ThemeManager.border
     readonly property color borderStrong: ThemeManager.borderStrong
+    readonly property color controlSubtleBorder: Qt.rgba(
+        border.r, border.g, border.b,
+        Math.min(1, border.a * (isLight ? 0.55 : 0.65)))
     readonly property color divider: ThemeManager.divider
     readonly property color disabled: ThemeManager.disabled
     readonly property color accent: ThemeManager.accent

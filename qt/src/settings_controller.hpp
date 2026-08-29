@@ -52,6 +52,8 @@ class SettingsController final : public QObject {
 
     // Appearance & Visualizer
     Q_PROPERTY(int themeMode READ themeMode WRITE setThemeMode NOTIFY themeModeChanged)
+    Q_PROPERTY(QString windowLayoutTheme READ windowLayoutTheme
+                   WRITE setWindowLayoutTheme NOTIFY windowLayoutThemeChanged)
     Q_PROPERTY(int skinColorMode READ skinColorMode WRITE setSkinColorMode
                    NOTIFY skinColorModeChanged)
     Q_PROPERTY(QString skinPreset READ skinPreset WRITE setSkinPreset
@@ -195,6 +197,7 @@ public:
 
     // Appearance & Visualizer getters
     int themeMode() const noexcept;
+    QString windowLayoutTheme() const;
     int skinColorMode() const noexcept;
     QString skinPreset() const;
     QString skinCustomColor() const;
@@ -281,6 +284,7 @@ public:
 
     // Appearance & Visualizer setters
     void setThemeMode(int value);
+    void setWindowLayoutTheme(const QString& value);
     void setSkinColorMode(int value);
     void setSkinPreset(const QString& value);
     void setSkinCustomColor(const QString& value);
@@ -377,6 +381,7 @@ signals:
     void autoReadRatingChanged();
 
     void themeModeChanged();
+    void windowLayoutThemeChanged();
     void skinColorModeChanged();
     void skinPresetChanged();
     void skinCustomColorChanged();
@@ -484,6 +489,7 @@ private:
 
     // Appearance & Visualizer
     int themeMode_ = 2;
+    QString windowLayoutTheme_ = QStringLiteral("dual-window");
     int skinColorMode_ = 0;
     QString skinPreset_ = QStringLiteral("systemBlue");
     QString skinCustomColor_ = QStringLiteral("#D27722");

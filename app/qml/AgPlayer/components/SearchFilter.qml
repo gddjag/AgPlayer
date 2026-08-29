@@ -7,7 +7,7 @@ Rectangle {
     id: root
     color: "transparent"
     border.width: 0
-    implicitHeight: 54
+    implicitHeight: 48
 
     property string searchText: ""
     property int exactRating: 0
@@ -16,7 +16,7 @@ Rectangle {
     property double pendingMinBpm: minBpm
     property double pendingMaxBpm: maxBpm
     readonly property color moduleColor: Theme.isLight ? Theme.panel : Theme.elevated
-    readonly property color moduleBorder: Theme.border
+    readonly property color moduleBorder: Theme.controlSubtleBorder
 
     Timer {
         id: bpmDebounce
@@ -53,7 +53,7 @@ Rectangle {
     RowLayout {
         anchors.fill: parent
         anchors.margins: Theme.spacingSm
-        spacing: 14
+        spacing: 10
 
         Rectangle {
             objectName: "keywordModule"
@@ -199,19 +199,20 @@ Rectangle {
             }
         }
 
-        Item { Layout.fillWidth: true }
-
         Button {
+            objectName: "clearFilterButton"
             text: qsTr("清空")
             onClicked: root.clearFilters()
             palette.buttonText: Theme.primaryText
             background: Rectangle {
                 color: parent.pressed ? Theme.surfacePressed
                       : parent.hovered ? Theme.surfaceHover : Theme.panel
-                border.color: Theme.border
+                border.color: Theme.controlSubtleBorder
                 border.width: 1
                 radius: Theme.radiusSm
             }
         }
+
+        Item { Layout.fillWidth: true }
     }
 }

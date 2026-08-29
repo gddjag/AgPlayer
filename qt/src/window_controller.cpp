@@ -1212,6 +1212,26 @@ void WindowController::flushWindowState()
     settings_.sync();
 }
 
+void WindowController::toggleMainWindowGroup()
+{
+    if (mainWindow_ == nullptr || isMinimized(mainWindow_)
+        || !mainWindow_->isVisible()) {
+        showMain();
+        return;
+    }
+
+    const bool groupIsActive = mainWindow_->isActive()
+        || (!listWindowDetached_ && listWindow_ != nullptr
+            && listWindow_->isActive());
+    if (!groupIsActive) {
+        showMain();
+        return;
+    }
+
+    mainWindow_->setWindowState(Qt::WindowMinimized);
+    applyListWindowVisible(false);
+}
+
 QString WindowController::edgeForPreference(int edge)
 {
     switch (edge) {

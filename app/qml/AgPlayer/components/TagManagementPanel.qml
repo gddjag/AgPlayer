@@ -250,9 +250,9 @@ Item {
 
         RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 38
-            Layout.maximumHeight: 38
-            spacing: 10
+            Layout.preferredHeight: 34
+            Layout.maximumHeight: 34
+            spacing: 8
 
             TextField {
                 id: tagSearchField
@@ -269,7 +269,7 @@ Item {
                 background: Rectangle {
                     color: "transparent"
                     border.color: tagSearchField.activeFocus
-                                  ? Theme.accent : Theme.listWorkspaceBorder
+                                  ? Theme.accent : Theme.controlSubtleBorder
                     border.width: 1
                     radius: Theme.radiusSm
                     ThemedIcon {
@@ -313,7 +313,7 @@ Item {
                 background: Rectangle {
                     color: addTagButton.down ? Theme.listSelectedSurface
                                              : Theme.tagAddSurface
-                    border.color: Theme.listWorkspaceBorder
+                    border.color: Theme.controlSubtleBorder
                     border.width: 1
                     radius: Theme.radiusSm
                 }

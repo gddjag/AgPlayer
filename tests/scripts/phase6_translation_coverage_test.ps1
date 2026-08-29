@@ -33,7 +33,7 @@ if ($extractedSourceCount -ne 134) {
     throw "Expected exactly 134 context-scoped Phase 6 sources, got $extractedSourceCount."
 }
 
-foreach ($locale in @('zh', 'en', 'th', 'vi')) {
+foreach ($locale in @('zh', 'en')) {
     $catalogPath = Join-Path $SourceRoot "translations/agplayer_$locale.ts"
     [xml]$catalog = Get-Content -Raw -Encoding UTF8 -LiteralPath $catalogPath
     foreach ($context in $expected.Keys) {

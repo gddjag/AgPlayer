@@ -60,6 +60,7 @@ private slots:
     void dockedWindowsKeepNativeSizeAcrossScreens();
     void nativeTaskbarGroupUsesMainAsOnlyAppWindow();
     void taskbarCommandsToggleDockedGroupWithoutResizing();
+    void taskbarToggleEntryPointMinimizesAndRestoresWindowGroup();
     void taskbarActivationDoesNotCancelMinimize();
 #endif
     void mainMinimizeRestoresOnlyRequestedList();
@@ -1021,6 +1022,35 @@ void WindowControllerTest::taskbarCommandsToggleDockedGroupWithoutResizing()
         return false;
     };
     QTRY_VERIFY(isAbove(listHandle, mainHandle));
+}
+
+void WindowControllerTest::taskbarToggleEntryPointMinimizesAndRestoresWindowGroup()
+{
+    WindowController windows;
+    QWindow mainWindow;
+    mainWindow.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    mainWindow.setGeometry(180, 120, 720, 280);
+    QWindow listWindow;
+    listWindow.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    listWindow.setGeometry(180, 398, 720, 420);
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setListWindow(&listWindow);
+    windows.showListWindow();
+    windows.snapListWindow(QStringLiteral("bottom"));
+    QVERIFY(QTest::qWaitForWindowExposed(&mainWindow));
+    QVERIFY(QTest::qWaitForWindowExposed(&listWindow));
+    mainWindow.requestActivate();
+    QTRY_VERIFY(mainWindow.isActive());
+
+    QVERIFY(QMetaObject::invokeMethod(&windows, "toggleMainWindowGroup",
+                                      Qt::DirectConnection));
+    QTRY_VERIFY(mainWindow.windowState() == Qt::WindowMinimized);
+    QTRY_VERIFY(!listWindow.isVisible());
+
+    QVERIFY(QMetaObject::invokeMethod(&windows, "toggleMainWindowGroup",
+                                      Qt::DirectConnection));
+    QTRY_VERIFY(mainWindow.windowState() != Qt::WindowMinimized);
+    QTRY_VERIFY(listWindow.isVisible());
 }
 
 void WindowControllerTest::taskbarActivationDoesNotCancelMinimize()

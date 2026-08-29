@@ -170,6 +170,7 @@ bool SettingsController::autoReadRating() const noexcept { return autoReadRating
 
 // Appearance & Visualizer getters
 int SettingsController::themeMode() const noexcept { return themeMode_; }
+QString SettingsController::windowLayoutTheme() const { return windowLayoutTheme_; }
 int SettingsController::skinColorMode() const noexcept { return skinColorMode_; }
 QString SettingsController::skinPreset() const { return skinPreset_; }
 QString SettingsController::skinCustomColor() const { return skinCustomColor_; }
@@ -471,6 +472,19 @@ void SettingsController::setSkinCustomColor(const QString& value)
     skinCustomColor_ = resolved;
     persistValue(QStringLiteral("appearance/skinCustomColor"), resolved);
     emit skinCustomColorChanged();
+}
+
+void SettingsController::setWindowLayoutTheme(const QString& value)
+{
+    Q_UNUSED(value);
+    const QString normalized = QStringLiteral("dual-window");
+    if (windowLayoutTheme_ == normalized) {
+        persistValue(QStringLiteral("appearance/windowLayoutTheme"), normalized);
+        return;
+    }
+    windowLayoutTheme_ = normalized;
+    persistValue(QStringLiteral("appearance/windowLayoutTheme"), normalized);
+    emit windowLayoutThemeChanged();
 }
 
 void SettingsController::setAppearanceSelection(int value)
@@ -1055,6 +1069,7 @@ void SettingsController::emitAllChanged(const bool includeMediaSettings)
     emit autoReadRatingChanged();
 
     emit themeModeChanged();
+    emit windowLayoutThemeChanged();
     emit skinColorModeChanged();
     emit skinPresetChanged();
     emit skinCustomColorChanged();
@@ -1305,6 +1320,14 @@ void SettingsController::load()
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("appearance"));
+    windowLayoutTheme_ = QStringLiteral("dual-window");
+    const QString storedWindowLayoutTheme = settings_.value(
+        QStringLiteral("windowLayoutTheme"), windowLayoutTheme_).toString();
+    if (storedWindowLayoutTheme != windowLayoutTheme_) {
+        settings_.setValue(QStringLiteral("windowLayoutTheme"), windowLayoutTheme_);
+    } else if (!settings_.contains(QStringLiteral("windowLayoutTheme"))) {
+        settings_.setValue(QStringLiteral("windowLayoutTheme"), windowLayoutTheme_);
+    }
     if (settings_.contains(QStringLiteral("themeMode"))) {
         const std::optional<int> storedThemeMode =
             storedInteger(settings_.value(QStringLiteral("themeMode")));
@@ -1681,6 +1704,7 @@ void SettingsController::saveAll(const bool includeMediaSettings)
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("appearance"));
+    persistValue(QStringLiteral("windowLayoutTheme"), windowLayoutTheme_);
     persistValue(QStringLiteral("themeMode"), themeMode_);
     persistValue(QStringLiteral("skinColorMode"), skinColorMode_);
     persistValue(QStringLiteral("skinPreset"), skinPreset_);
@@ -1774,6 +1798,7 @@ void SettingsController::restoreDefaults(const bool includeMediaSettings)
     autoReadRating_ = true;
 
     themeMode_ = 2;
+    windowLayoutTheme_ = QStringLiteral("dual-window");
     skinColorMode_ = kDefaultColorChoiceMode;
     skinPreset_ = defaultThemePresetId();
     skinCustomColor_ = defaultThemeCustomColor();
@@ -1905,8 +1930,7 @@ QString SettingsController::defaultExportDir()
 
 QString SettingsController::validatedLanguage(const QString& value)
 {
-    static const QStringList supported = {QStringLiteral("zh"), QStringLiteral("en"),
-        QStringLiteral("th"), QStringLiteral("vi")};
+    static const QStringList supported = {QStringLiteral("zh"), QStringLiteral("en")};
     const QString lower = value.toLower();
     if (supported.contains(lower)) {
         return lower;

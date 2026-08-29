@@ -44,7 +44,8 @@ private slots:
     void skinDefaultResetDoesNotTouchMediaSettingsOutsideEdit();
     void retiresLegacySmartPlaylists();
     void autoCleanCacheRemovesOldestFilesWhenOverLimit();
-    void supportsOnlyFourLanguages();
+    void supportsOnlyChineseAndEnglish();
+    void windowLayoutThemeDefaultsAndNormalizesToDualWindow();
     void editSessionCanCommitOrCancel();
     void rebindFileAssociationsEnablesRegistrationDuringEdit();
     void testModeDoesNotTouchStartupRegistry();
@@ -893,15 +894,13 @@ void SettingsControllerTest::autoCleanCacheRemovesOldestFilesWhenOverLimit()
     QDir(cacheDir).removeRecursively();
 }
 
-void SettingsControllerTest::supportsOnlyFourLanguages()
+void SettingsControllerTest::supportsOnlyChineseAndEnglish()
 {
     SettingsController settings;
 
     const QStringList supported = {
         QStringLiteral("zh"),
         QStringLiteral("en"),
-        QStringLiteral("th"),
-        QStringLiteral("vi"),
     };
     for (const QString& language : supported) {
         settings.setLanguage(language);
@@ -910,6 +909,8 @@ void SettingsControllerTest::supportsOnlyFourLanguages()
 
     const QStringList unsupported = {
         QStringLiteral("ko"),
+        QStringLiteral("th"),
+        QStringLiteral("vi"),
         QStringLiteral("my"),
         QStringLiteral("lo"),
         QStringLiteral("fr"),
@@ -918,6 +919,22 @@ void SettingsControllerTest::supportsOnlyFourLanguages()
         settings.setLanguage(language);
         QCOMPARE(settings.language(), QStringLiteral("zh"));
     }
+}
+
+void SettingsControllerTest::windowLayoutThemeDefaultsAndNormalizesToDualWindow()
+{
+    QSettings persisted;
+    persisted.clear();
+
+    SettingsController settings;
+    QCOMPARE(settings.property("windowLayoutTheme").toString(),
+             QStringLiteral("dual-window"));
+    QVERIFY(settings.setProperty("windowLayoutTheme", QStringLiteral("unknown")));
+    QCOMPARE(settings.property("windowLayoutTheme").toString(),
+             QStringLiteral("dual-window"));
+    QCOMPARE(persisted.value(QStringLiteral("appearance/windowLayoutTheme"))
+                 .toString(),
+             QStringLiteral("dual-window"));
 }
 
 void SettingsControllerTest::editSessionCanCommitOrCancel()
@@ -932,7 +949,7 @@ void SettingsControllerTest::editSessionCanCommitOrCancel()
 
     settings.beginEdit();
     settings.setThemeMode(2);
-    settings.setLanguage(QStringLiteral("th"));
+    settings.setLanguage(QStringLiteral("zh"));
     persisted.sync();
     QCOMPARE(persisted.value(QStringLiteral("appearance/themeMode")).toInt(), 1);
     QCOMPARE(persisted.value(QStringLiteral("general/language")).toString(),
@@ -958,7 +975,7 @@ void SettingsControllerTest::editSessionCanCommitOrCancel()
 
     settings.beginEdit();
     settings.setThemeMode(2);
-    settings.setLanguage(QStringLiteral("vi"));
+    settings.setLanguage(QStringLiteral("zh"));
     persisted.sync();
     QCOMPARE(persisted.value(QStringLiteral("appearance/themeMode")).toInt(), 1);
     QCOMPARE(persisted.value(QStringLiteral("general/language")).toString(),
@@ -967,7 +984,7 @@ void SettingsControllerTest::editSessionCanCommitOrCancel()
 
     SettingsController committed;
     QCOMPARE(committed.themeMode(), 2);
-    QCOMPARE(committed.language(), QStringLiteral("vi"));
+    QCOMPARE(committed.language(), QStringLiteral("zh"));
 }
 
 void SettingsControllerTest::testModeDoesNotTouchStartupRegistry()

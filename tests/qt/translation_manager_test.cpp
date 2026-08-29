@@ -14,8 +14,7 @@ private slots:
 void TranslationManagerTest::exposesOnlyRequestedLanguages()
 {
     QCOMPARE(TranslationManager::supportedLanguages(),
-             QStringList({QStringLiteral("zh"), QStringLiteral("en"),
-                          QStringLiteral("th"), QStringLiteral("vi")}));
+             QStringList({QStringLiteral("zh"), QStringLiteral("en")}));
 }
 
 void TranslationManagerTest::normalizesUnsupportedLanguageToChinese()
@@ -23,6 +22,10 @@ void TranslationManagerTest::normalizesUnsupportedLanguageToChinese()
     QCOMPARE(TranslationManager::normalizedLanguage(QStringLiteral("EN")),
              QStringLiteral("en"));
     QCOMPARE(TranslationManager::normalizedLanguage(QStringLiteral("ko")),
+             QStringLiteral("zh"));
+    QCOMPARE(TranslationManager::normalizedLanguage(QStringLiteral("th")),
+             QStringLiteral("zh"));
+    QCOMPARE(TranslationManager::normalizedLanguage(QStringLiteral("vi")),
              QStringLiteral("zh"));
     QCOMPARE(TranslationManager::normalizedLanguage(QString()),
              QStringLiteral("zh"));
@@ -59,22 +62,6 @@ void TranslationManagerTest::switchesInstalledQtTranslation()
     QCOMPARE(audioEditLabel(), QStringLiteral("Audio Editor"));
     QCOMPARE(metadataLabel(), QStringLiteral("Metadata Editor"));
     QCOMPARE(filenameLabel(), QStringLiteral("Filename Processing"));
-
-    QVERIFY(translations.setLanguage(QStringLiteral("th")));
-    QCOMPARE(startupTitle(), QStringLiteral("เริ่มเล่นเพลงของคุณ"));
-    QCOMPARE(emptyLibraryTitle(), QStringLiteral("ห้องสมุดของคุณว่างเปล่า"));
-    QCOMPARE(musicListTitle(), QStringLiteral("คลังเพลง AgPlayer"));
-    QCOMPARE(audioEditLabel(), QStringLiteral("ตัวแก้ไขเสียง"));
-    QCOMPARE(metadataLabel(), QStringLiteral("แก้ไขเมตาดาตา"));
-    QCOMPARE(filenameLabel(), QStringLiteral("จัดการชื่อไฟล์"));
-
-    QVERIFY(translations.setLanguage(QStringLiteral("vi")));
-    QCOMPARE(startupTitle(), QStringLiteral("Bắt đầu phát nhạc của bạn"));
-    QCOMPARE(emptyLibraryTitle(), QStringLiteral("Thư viện của bạn trống"));
-    QCOMPARE(musicListTitle(), QStringLiteral("Thư viện nhạc AgPlayer"));
-    QCOMPARE(audioEditLabel(), QStringLiteral("Trình chỉnh sửa âm thanh"));
-    QCOMPARE(metadataLabel(), QStringLiteral("Sửa siêu dữ liệu"));
-    QCOMPARE(filenameLabel(), QStringLiteral("Xử lý tên tệp"));
 
     QVERIFY(translations.setLanguage(QStringLiteral("zh")));
     QCOMPARE(startupTitle(), QStringLiteral("开始播放你的音乐"));

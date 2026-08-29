@@ -2020,6 +2020,25 @@ TestCase {
                "the C++ waveform item must own hover and seek input")
     }
 
+    function test_main_waveform_masks_the_clipped_first_peak_at_the_left_edge() {
+        var waveform = findChild(mainWindow, "mainWaveform")
+        var playedClip = findChild(mainWindow, "waveformPlayedClip")
+        var playedWaveform = findChild(mainWindow, "playedWaveform")
+        var mask = findChild(mainWindow, "waveformLeftEdgeMask")
+        verify(waveform && playedClip && playedWaveform && mask)
+        compare(mask.x, 0)
+        compare(mask.width, 1)
+        compare(mask.height, waveform.height)
+        compare(mask.color.toString(), Theme.background.toString())
+        compare(playedWaveform.progressColor.toString(),
+                waveform.progressColor.toString(),
+                "the edge fix must preserve the configured played-progress colour")
+        compare(playedWaveform.position, playedWaveform.duration,
+                "the played overlay must remain a fully coloured waveform pass")
+        compare(playedClip.x, 0,
+                "the played overlay must still start at the waveform origin")
+    }
+
     function test_waveform_hover_surface_covers_played_and_unplayed_regions() {
         var previousPreview = SettingsController.waveformHoverTimePreview
         SettingsController.waveformHoverTimePreview = true
@@ -2184,14 +2203,26 @@ TestCase {
     function test_search_filter_uses_editable_bpm_bounds_and_compact_modules() {
         var filter = searchFilterComponent.createObject(mainWindow.contentItem)
         verify(filter)
+        compare(filter.implicitHeight, 48)
         compare(findChild(filter, "keywordModule").width, 184)
         compare(findChild(filter, "librarySearchField").placeholderText,
                 "歌曲 · 艺术家 · 专辑 · 标签")
         verify(findChild(filter, "librarySearchIcon"))
         compare(findChild(filter, "bpmModule").width, 216)
+        verify(findChild(filter, "keywordModule").border.color.a
+               < Theme.border.a,
+               "shared filter modules must use a quieter theme border")
         var bpmRange = findChild(filter, "bpmRange")
-        compare(bpmRange.first.handle.width, 14)
-        compare(bpmRange.second.handle.width, 14)
+        compare(bpmRange.background.height, 3)
+        compare(bpmRange.first.handle.width, 12)
+        compare(bpmRange.second.handle.width, 12)
+        var clearButton = findChild(filter, "clearFilterButton")
+        var bpmModule = findChild(filter, "bpmModule")
+        verify(clearButton && bpmModule)
+        verify(clearButton.x > bpmModule.x + bpmModule.width,
+               "clear must follow BPM")
+        verify(clearButton.x < bpmModule.x + bpmModule.width + 30,
+               "clear must remain beside BPM instead of at the far edge")
         bpmRange.first.value = 72
         bpmRange.second.value = 155
         tryVerify(function() {
@@ -2214,6 +2245,18 @@ TestCase {
         compare(filter.pendingMinBpm, 72)
         compare(filter.pendingMaxBpm, 155)
         filter.destroy()
+    }
+
+    function test_track_header_is_compact_and_emphasized() {
+        var list = trackListComponent.createObject(mainWindow.contentItem, {
+            "width": 960,
+            "height": 360
+        })
+        verify(list)
+        compare(list.headerItem.height, 46)
+        compare(findChild(list, "trackHeaderTitle").font.weight,
+                Font.DemiBold)
+        list.destroy()
     }
 
     function test_fractional_bpm_is_not_rounded_away_in_visible_surfaces() {
@@ -2454,6 +2497,8 @@ TestCase {
         verify(panel)
         window.requestActivate()
         tryVerify(function() { return window.active }, 1000)
+        tryCompare(findChild(panel, "tagSearchField"), "height", 34)
+        tryCompare(findChild(panel, "addTagButton"), "height", 34)
 
         var names = ["好", "中文", "好听", "音乐", "摇滚", "流行",
                      "民谣", "电子", "古典", "爵士", "轻音乐", "现场",
@@ -4490,14 +4535,12 @@ TestCase {
         wait(150)
         var combo = findChild(page, "languageCombo")
         verify(combo)
-        compare(combo.valueModel.length, 4)
+        compare(combo.valueModel.length, 2)
         compare(combo.valueModel[0].text, "🇨🇳 中文")
         compare(combo.valueModel[1].text, "🇺🇸 English")
-        compare(combo.valueModel[2].text, "🇹🇭 ภาษาไทย")
-        compare(combo.valueModel[3].text, "🇻🇳 Tiếng Việt")
-        SettingsController.language = "vi"
-        tryCompare(combo, "currentIndex", 3)
-        tryVerify(function() { return combo.contentItem.text === "🇻🇳 Tiếng Việt" })
+        SettingsController.language = "en"
+        tryCompare(combo, "currentIndex", 1)
+        tryVerify(function() { return combo.contentItem.text === "🇺🇸 English" })
         SettingsController.language = "zh"
         if (ownsPage) {
             page.saveAndClose()
@@ -4664,6 +4707,29 @@ TestCase {
         tryCompare(SettingsController, "listWaveformThumbnailEnabled", true)
         tryCompare(SettingsController, "listWaveformThumbnailMode", "Color36")
         page.close()
+    }
+
+    function test_settings_exposes_dual_window_as_the_default_layout_skin() {
+        var page = findChild(mainWindow, "settingsPage")
+        var ownsPage = false
+        if (!page) {
+            page = settingsPageComponent.createObject(mainWindow.contentItem)
+            ownsPage = true
+        }
+        verify(page)
+        page.open()
+        page.selectedSection = 2
+        wait(150)
+        var selector = findChild(page, "windowLayoutThemeCombo")
+        verify(selector)
+        compare(selector.currentValue, "dual-window")
+        compare(SettingsController.windowLayoutTheme, "dual-window")
+        if (ownsPage) {
+            page.saveAndClose()
+            page.destroy()
+        } else {
+            page.close()
+        }
     }
 
     function test_settings_theme_buttons_apply_only_the_final_palette_once() {

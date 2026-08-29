@@ -825,7 +825,7 @@ set_tests_properties(native_drop_router_test PROPERTIES
 add_test(
     NAME translation_catalog_test
     COMMAND "${CMAKE_COMMAND}"
-        "-DCATALOGS=${CMAKE_SOURCE_DIR}/translations/agplayer_zh.ts;${CMAKE_SOURCE_DIR}/translations/agplayer_en.ts;${CMAKE_SOURCE_DIR}/translations/agplayer_th.ts;${CMAKE_SOURCE_DIR}/translations/agplayer_vi.ts"
+        "-DCATALOGS=${CMAKE_SOURCE_DIR}/translations/agplayer_zh.ts;${CMAKE_SOURCE_DIR}/translations/agplayer_en.ts"
         -P "${CMAKE_SOURCE_DIR}/cmake/CheckTranslationCatalogs.cmake"
 )
 set_tests_properties(translation_catalog_test PROPERTIES TIMEOUT 10)

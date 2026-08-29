@@ -1124,12 +1124,10 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         valueModel: [
                             { text: "🇨🇳 中文", value: "zh" },
-                            { text: "🇺🇸 English", value: "en" },
-                            { text: "🇹🇭 \u0E20\u0E32\u0E29\u0E32\u0E44\u0E17\u0E22", value: "th" },
-                            { text: "🇻🇳 Ti\u1EBFng Vi\u1EC7t", value: "vi" }
+                            { text: "🇺🇸 English", value: "en" }
                         ]
                         currentIndex: {
-                            const values = ["zh", "en", "th", "vi"]
+                            const values = ["zh", "en"]
                             return values.indexOf(SettingsController.language)
                         }
                         onActivated: SettingsController.language = currentValue
@@ -1467,6 +1465,19 @@ Item {
 
             SettingCard {
                 title: qsTr("主题样式")
+
+                SettingRow {
+                    label: qsTr("窗口主题")
+                    SettingCombo {
+                        objectName: "windowLayoutThemeCombo"
+                        anchors.verticalCenter: parent.verticalCenter
+                        valueModel: [
+                            { text: qsTr("双窗口主题"), value: "dual-window" }
+                        ]
+                        currentIndex: 0
+                        onActivated: SettingsController.windowLayoutTheme = currentValue
+                    }
+                }
 
                 SettingRow {
                     label: qsTr("主题模式")

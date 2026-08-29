@@ -91,6 +91,7 @@ public:
 
     Q_INVOKABLE void showMini();
     Q_INVOKABLE void showMain();
+    Q_INVOKABLE void toggleMainWindowGroup();
     Q_INVOKABLE void showAudioTools();
     Q_INVOKABLE void hideAudioTools();
     Q_INVOKABLE void requestClose();

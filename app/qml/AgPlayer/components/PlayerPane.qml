@@ -545,6 +545,22 @@ Rectangle {
                 }
             }
 
+            // The renderer samples the first bucket exactly on x=0.  A loud
+            // first bucket is clipped against the container edge and reads as
+            // a solid border instead of waveform content.  Mask only that
+            // clipped pixel; time/pixel mapping and the analysed peaks remain
+            // unchanged.
+            Rectangle {
+                id: waveformLeftEdgeMask
+                objectName: "waveformLeftEdgeMask"
+                x: 0
+                width: 1
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                color: Theme.background
+                z: 4
+            }
+
             MouseArea {
                 id: waveformInteractionSurface
                 objectName: "waveformInteractionSurface"
