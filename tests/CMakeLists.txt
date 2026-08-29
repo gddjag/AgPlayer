@@ -748,9 +748,10 @@ set_tests_properties(audio_editor_waveform_item_test PROPERTIES
 )
 
 # WaveformItem owns a QQuickWindow.  Explicitly select offscreen for this
-# visual-unit test without changing the native-drop test's qwindows contract.
+# visual-unit test and the software scene graph so it remains independent of
+# the host GPU state without changing the native-drop test's qwindows contract.
 set_tests_properties(waveform_item_test PROPERTIES
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
 )
 
 add_test(
