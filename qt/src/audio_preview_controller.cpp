@@ -203,6 +203,9 @@ bool AudioPreviewController::switchSourcePreservingPosition(const QUrl& source)
     }
     seek(savedPosition);
     if (wasPlaying) resume();
+    if (!hasNeutralDspParameters()) {
+        scheduleDspPreview();
+    }
     return isCurrentSource(source);
 }
 

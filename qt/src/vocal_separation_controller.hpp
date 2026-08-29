@@ -3,8 +3,10 @@
 #include "separation_process_client.hpp"
 #include "vocal_separation_catalog.hpp"
 #include "vocal_separation_history.hpp"
+#include "vocal_separation_installer.hpp"
 
 #include <QHash>
+#include <QFutureWatcher>
 #include <QList>
 #include <QNetworkAccessManager>
 #include <QObject>
@@ -15,6 +17,7 @@
 #include <QVariantMap>
 
 #include <memory>
+#include <optional>
 
 class AudioPreviewController;
 class ImportController;
@@ -108,6 +111,7 @@ public:
     QVariantList history() const;
 
     Q_INVOKABLE bool selectInput(const QUrl& url);
+    Q_INVOKABLE bool verifyInstalledModels();
     Q_INVOKABLE bool dropInput(const QList<QUrl>& urls);
     Q_INVOKABLE bool downloadModel(const QString& modelId);
     Q_INVOKABLE void pauseDownload();
@@ -145,10 +149,31 @@ signals:
     void historyChanged();
 
 private:
+    enum class RequestKind { Probe, Separation };
+
+    struct ActiveRequestContext {
+        RequestKind kind = RequestKind::Probe;
+        QString inputPath;
+        QString modelId;
+        QString outputRoot;
+        QString outputFormat;
+        DeviceMode device = DeviceMode::Auto;
+        QList<StemKind> stemKinds;
+        QStringList stemNames;
+    };
+
     struct DownloadItem {
         VocalDownloadFile file;
         QString destination;
         bool runtimeArchive = false;
+    };
+
+    enum class VerificationPurpose { None, Refresh, Download, Start, Probe };
+
+    struct VerificationResult {
+        QSet<QString> verifiedModels;
+        QSet<QString> verifiedFiles;
+        bool runtimeVerified = false;
     };
 
     const VocalModelCard* selectedModel() const;
@@ -156,7 +181,14 @@ private:
     QString modelDirectory(const QString& modelId) const;
     QString runtimeDirectory() const;
     bool modelInstalled(const VocalModelCard& model) const;
+    bool modelFilesPresent(const VocalModelCard& model) const;
     bool runtimeReady() const;
+    bool beginVerification(VerificationPurpose purpose,
+                           const VocalModelCard* model = nullptr);
+    void finishVerification(quint64 generation,
+                            const VerificationResult& result);
+    bool launchProbe();
+    bool launchSeparation(const ActiveRequestContext& context);
     void refreshModels();
     void rebuildStems();
     void setJobState(JobState state, const QString& stage = {});
@@ -166,6 +198,7 @@ private:
     void handleResult(const QJsonObject& payload);
     void analyzeNextWaveform();
     void handleWaveform(const QString& path, const QVariantMap& layers);
+    bool requestInFlight() const noexcept;
     QString pathForStem(StemKind kind) const;
     QStringList selectedStemNames() const;
     QList<StemKind> selectedStemKinds() const;
@@ -185,6 +218,14 @@ private:
     SeparationProcessClient process_;
     QNetworkAccessManager network_;
     std::unique_ptr<VocalSeparationDownloader> downloader_;
+    QFutureWatcher<VerificationResult>* verificationWatcher_ = nullptr;
+    QFutureWatcher<VocalInstallResult>* runtimeInstallerWatcher_ = nullptr;
+    VerificationPurpose verificationPurpose_ = VerificationPurpose::None;
+    quint64 verificationGeneration_ = 0;
+    QString verifyingModelId_;
+    QSet<QString> verifiedModelIds_;
+    QSet<QString> verifiedOrRejectedModelIds_;
+    bool runtimeVerified_ = false;
     QList<DownloadItem> downloadQueue_;
     QString downloadingModelId_;
     QVariantMap inputInfo_;
@@ -200,8 +241,8 @@ private:
     QString stage_;
     double progress_ = 0.0;
     QString error_;
-    bool lastRequestWasProbe_ = false;
-    QList<StemKind> activeStemKinds_;
+    std::optional<ActiveRequestContext> activeRequest_;
+    QString publishedOutputRoot_;
     QStringList waveformQueue_;
     QHash<QString, StemKind> waveformKinds_;
 };

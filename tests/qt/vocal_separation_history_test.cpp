@@ -16,6 +16,7 @@ private slots:
     void retainsOnlyTheNewestFiveHundredRecords();
     void marksMissingUnicodeOutputsUnavailable();
     void appendAtomicallyReplacesValidJson();
+    void rejectsOversizedOrNonFileHistoryInput();
 };
 
 namespace {
@@ -121,6 +122,24 @@ void VocalSeparationHistoryTest::appendAtomicallyReplacesValidJson()
     QCOMPARE(QDir(temporary.path()).entryList(
                  {QStringLiteral("history.json.*")}, QDir::Files),
              QStringList{});
+}
+
+void VocalSeparationHistoryTest::rejectsOversizedOrNonFileHistoryInput()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString oversized = temporary.filePath(QStringLiteral("oversized.json"));
+    QByteArray oversizedJson("[");
+    while (oversizedJson.size() < 2 * 1024 * 1024) {
+        oversizedJson += QByteArrayLiteral("{\"id\":\"record\"},");
+    }
+    oversizedJson += QByteArrayLiteral("{}]");
+    QVERIFY(writeBytes(oversized, oversizedJson));
+    QCOMPARE(VocalSeparationHistoryStore(oversized).load().size(), 0);
+
+    const QString directory = temporary.filePath(QStringLiteral("history-directory"));
+    QVERIFY(QDir().mkpath(directory));
+    QCOMPARE(VocalSeparationHistoryStore(directory).load().size(), 0);
 }
 
 QTEST_GUILESS_MAIN(VocalSeparationHistoryTest)

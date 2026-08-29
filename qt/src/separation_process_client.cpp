@@ -30,6 +30,12 @@ SeparationProcessClient::SeparationProcessClient(
         if (process_.state() != QProcess::NotRunning) process_.kill();
     });
     connect(&process_, &QProcess::started, this, [this] {
+        if (userCancellation_) {
+            shutdownSent_ = true;
+            send(ProtocolType::Shutdown, activeRequestId_);
+            exitTimer_.start(std::max(1, deadlines_.cancelGraceMs));
+            return;
+        }
         helloRequestId_ = QStringLiteral("hello-")
             + QUuid::createUuid().toString(QUuid::WithoutBraces);
         send(ProtocolType::Hello, helloRequestId_);
@@ -37,6 +43,9 @@ SeparationProcessClient::SeparationProcessClient(
     });
     connect(&process_, &QProcess::readyReadStandardOutput,
             this, &SeparationProcessClient::readStandardOutput);
+    connect(&process_, &QProcess::readyReadStandardError, this, [this] {
+        process_.readAllStandardError();
+    });
     connect(&process_, &QProcess::errorOccurred, this,
             [this](QProcess::ProcessError error) {
         if (error == QProcess::FailedToStart && !completing_) {
@@ -134,11 +143,21 @@ bool SeparationProcessClient::begin(ProtocolType type,
 
 void SeparationProcessClient::cancel()
 {
-    if (state_ != Busy) return;
+    if (state_ == Cancelling || (state_ != Starting && state_ != Ready
+                                 && state_ != Busy)) return;
+    const State previous = state_;
     userCancellation_ = true;
     setState(Cancelling);
+    helloTimer_.stop();
     heartbeatTimer_.stop();
-    send(ProtocolType::Cancel, activeRequestId_);
+    if (process_.state() == QProcess::Running) {
+        if (previous == Busy) {
+            send(ProtocolType::Cancel, activeRequestId_);
+        } else {
+            shutdownSent_ = true;
+            send(ProtocolType::Shutdown, activeRequestId_);
+        }
+    }
     exitTimer_.start(std::max(1, deadlines_.cancelGraceMs));
 }
 
@@ -176,6 +195,9 @@ void SeparationProcessClient::readStandardOutput()
         handleLine(line);
         if (state_ == Error) return;
     }
+    if (buffer_.size() > kMaximumProtocolLineBytes) {
+        finishFailure(tr("分离 Worker 消息超过大小限制"));
+    }
 }
 
 void SeparationProcessClient::handleLine(const QByteArray& line)
@@ -206,6 +228,12 @@ void SeparationProcessClient::handleLine(const QByteArray& line)
     }
     if (message.requestId != activeRequestId_) {
         emit staleMessageIgnored(message.requestId);
+        return;
+    }
+    if (state_ == Cancelling
+        && (message.type == ProtocolType::Progress
+            || message.type == ProtocolType::Result
+            || message.type == ProtocolType::Error)) {
         return;
     }
     if (message.type == ProtocolType::Progress && state_ == Busy

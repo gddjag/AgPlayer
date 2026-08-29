@@ -14,6 +14,7 @@
 namespace {
 
 constexpr qsizetype kMaximumHistoryRecords = 500;
+constexpr qint64 kMaximumHistoryBytes = 1024 * 1024;
 
 QVariantMap withAvailability(QVariantMap record)
 {
@@ -37,6 +38,8 @@ VocalSeparationHistoryStore::VocalSeparationHistoryStore(QString filePath)
 
 QVariantList VocalSeparationHistoryStore::load() const
 {
+    const QFileInfo info(filePath_);
+    if (!info.isFile() || info.size() > kMaximumHistoryBytes) return {};
     QFile file(filePath_);
     if (!file.open(QIODevice::ReadOnly)) return {};
     QJsonParseError error;

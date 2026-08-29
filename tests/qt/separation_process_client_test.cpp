@@ -16,9 +16,12 @@ private slots:
     void helloTimeoutAndCrashAreRetryableErrors();
     void ignoresStaleMessagesAndAcceptsCurrentResult();
     void cancellationIsIdempotentAndBounded();
+    void cancellationBeforeHelloNeverDispatchesPendingRequest();
+    void lateMessagesAfterCancellationAreIgnored();
     void retryAfterCrashReusesTheSameRequest();
     void heartbeatTimeoutCancelsThenFailsRetryably();
     void rejectsWrongDirectionAndProtocolVersion();
+    void rejectsAnOversizedRemainingProtocolTailImmediately();
 };
 
 namespace {
@@ -91,6 +94,50 @@ void SeparationProcessClientTest::cancellationIsIdempotentAndBounded()
     QVERIFY(!client.isProcessRunning());
 }
 
+void SeparationProcessClientTest::
+cancellationBeforeHelloNeverDispatchesPendingRequest()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString marker = temporary.filePath(QStringLiteral("start.marker"));
+    SeparationProcessClient client(
+        QString::fromUtf8(AG_SEPARATION_CONTROLLER_TEST_WORKER_PATH),
+        {QStringLiteral("delayed-hello"), marker}, {500, 500, 150});
+    QSignalSpy result(&client, &SeparationProcessClient::resultReceived);
+    QSignalSpy cancelled(&client, &SeparationProcessClient::cancelled);
+    QSignalSpy failed(&client, &SeparationProcessClient::failed);
+    QVERIFY(client.startJob({}));
+    QTRY_VERIFY_WITH_TIMEOUT(client.isProcessRunning(), 500);
+    QCOMPARE(client.state(), SeparationProcessClient::Starting);
+    client.cancel();
+    client.cancel();
+    QTRY_COMPARE_WITH_TIMEOUT(cancelled.count(), 1, 1500);
+    QCOMPARE(client.state(), SeparationProcessClient::Stopped);
+    QCOMPARE(result.count(), 0);
+    QCOMPARE(failed.count(), 0);
+    QVERIFY(!QFileInfo::exists(marker));
+}
+
+void SeparationProcessClientTest::lateMessagesAfterCancellationAreIgnored()
+{
+    SeparationProcessClient client(
+        QString::fromUtf8(AG_SEPARATION_CONTROLLER_TEST_WORKER_PATH),
+        {QStringLiteral("late-after-cancel")}, shortDeadlines());
+    QSignalSpy progress(&client, &SeparationProcessClient::progressReceived);
+    QSignalSpy result(&client, &SeparationProcessClient::resultReceived);
+    QSignalSpy cancelled(&client, &SeparationProcessClient::cancelled);
+    QSignalSpy failed(&client, &SeparationProcessClient::failed);
+    QVERIFY(client.startJob({}));
+    QTRY_COMPARE_WITH_TIMEOUT(progress.count(), 1, 1500);
+    client.cancel();
+    client.cancel();
+    QTRY_COMPARE_WITH_TIMEOUT(cancelled.count(), 1, 1500);
+    QCOMPARE(progress.count(), 1);
+    QCOMPARE(result.count(), 0);
+    QCOMPARE(failed.count(), 0);
+    QCOMPARE(client.state(), SeparationProcessClient::Stopped);
+}
+
 void SeparationProcessClientTest::retryAfterCrashReusesTheSameRequest()
 {
     QTemporaryDir temporary;
@@ -138,6 +185,18 @@ void SeparationProcessClientTest::rejectsWrongDirectionAndProtocolVersion()
                 QStringLiteral("方向")));
         }
     }
+}
+
+void SeparationProcessClientTest::
+rejectsAnOversizedRemainingProtocolTailImmediately()
+{
+    SeparationProcessClient client(
+        QString::fromUtf8(AG_SEPARATION_CONTROLLER_TEST_WORKER_PATH),
+        {QStringLiteral("tail-after-line")}, {150, 2'000, 150});
+    QSignalSpy failed(&client, &SeparationProcessClient::failed);
+    QVERIFY(client.startJob({}));
+    QTRY_COMPARE_WITH_TIMEOUT(failed.count(), 1, 500);
+    QVERIFY(failed.first().at(0).toString().contains(QStringLiteral("大小")));
 }
 
 QTEST_GUILESS_MAIN(SeparationProcessClientTest)

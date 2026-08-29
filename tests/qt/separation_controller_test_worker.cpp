@@ -8,6 +8,7 @@
 #include <QTimer>
 
 #include <cstdio>
+#include <chrono>
 #include <iostream>
 #include <thread>
 
@@ -39,6 +40,9 @@ int main(int argc, char* argv[])
             const ProtocolMessage message = parsed.message;
             if (message.type == ProtocolType::Hello) {
                 if (scenario == QStringLiteral("hello-timeout")) continue;
+                if (scenario == QStringLiteral("delayed-hello")) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                }
                 send(ProtocolType::Hello, message.requestId,
                      {{QStringLiteral("protocol"), 1},
                       {QStringLiteral("worker"), QStringLiteral("test")}});
@@ -57,6 +61,11 @@ int main(int argc, char* argv[])
                       {QStringLiteral("gpu"), false},
                       {QStringLiteral("gpuReason"), QStringLiteral("No tested GPU")}});
             } else if (message.type == ProtocolType::Start) {
+                if (scenario == QStringLiteral("delayed-hello")
+                    && !markerPath.isEmpty()) {
+                    QFile marker(markerPath);
+                    if (marker.open(QIODevice::WriteOnly)) marker.write("started");
+                }
                 if (scenario == QStringLiteral("wrong-direction")) {
                     send(ProtocolType::Start, message.requestId);
                     continue;
@@ -82,9 +91,21 @@ int main(int argc, char* argv[])
                           {QStringLiteral("message"), QStringLiteral("stale")}});
                 }
                 send(ProtocolType::Progress, message.requestId,
-                     {{QStringLiteral("fraction"), 0.5},
-                      {QStringLiteral("stage"), QStringLiteral("inference")}});
-                if (scenario != QStringLiteral("cancel")) {
+                      {{QStringLiteral("fraction"), 0.5},
+                       {QStringLiteral("stage"), QStringLiteral("inference")}});
+                if (scenario == QStringLiteral("tail-after-line")) {
+                    const QByteArray tail(2 * 1024 * 1024, 'x');
+                    std::fwrite(tail.constData(), 1,
+                                static_cast<size_t>(tail.size()), stdout);
+                    std::fflush(stdout);
+                    std::this_thread::sleep_for(std::chrono::seconds(2));
+                    continue;
+                }
+                if (scenario == QStringLiteral("delayed-result")) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                }
+                if (scenario != QStringLiteral("cancel")
+                    && scenario != QStringLiteral("late-after-cancel")) {
                     QJsonArray outputs;
                     const QString outputRoot = message.payload.value(
                         QStringLiteral("outputDirectory")).toString();
@@ -116,6 +137,14 @@ int main(int argc, char* argv[])
                           {QStringLiteral("fallbackReason"), QStringLiteral("No tested GPU")}});
                 }
             } else if (message.type == ProtocolType::Cancel) {
+                if (scenario == QStringLiteral("late-after-cancel")) {
+                    send(ProtocolType::Progress, message.requestId,
+                         {{QStringLiteral("fraction"), 0.9},
+                          {QStringLiteral("stage"), QStringLiteral("late")}});
+                    send(ProtocolType::Result, message.requestId,
+                         {{QStringLiteral("outputs"), QJsonArray{}},
+                          {QStringLiteral("provider"), QStringLiteral("cpu")}});
+                }
                 send(ProtocolType::Cancel, message.requestId,
                      {{QStringLiteral("accepted"), true}});
             } else if (message.type == ProtocolType::Shutdown) {

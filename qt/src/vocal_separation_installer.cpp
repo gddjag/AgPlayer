@@ -11,6 +11,7 @@
 #include <QProcessEnvironment>
 #include <QStorageInfo>
 #include <QTimer>
+#include <QtConcurrent/QtConcurrentRun>
 
 namespace {
 
@@ -71,6 +72,19 @@ const QList<VocalDownloadFile>& runtimeFiles()
 
 } // namespace
 
+QString VocalSeparationInstaller::runtimeVersionDirectory(
+    const QString& runtimeRoot)
+{
+    return QDir(runtimeRoot).filePath(
+        VocalSeparationCatalog::directMlRuntime().id);
+}
+
+QString VocalSeparationInstaller::runtimeLibraryPath(const QString& runtimeRoot)
+{
+    return QDir(runtimeVersionDirectory(runtimeRoot))
+        .filePath(QStringLiteral("onnxruntime.dll"));
+}
+
 VocalDownloadState VocalDownloadStateMachine::state() const
 {
     return m_state;
@@ -79,7 +93,8 @@ VocalDownloadState VocalDownloadStateMachine::state() const
 bool VocalDownloadStateMachine::start()
 {
     if (m_state != VocalDownloadState::Idle && m_state != VocalDownloadState::Failed
-        && m_state != VocalDownloadState::Cancelled) {
+        && m_state != VocalDownloadState::Cancelled
+        && m_state != VocalDownloadState::Complete) {
         return false;
     }
     m_state = VocalDownloadState::Downloading;
@@ -188,7 +203,7 @@ VocalInstallResult VocalSeparationInstaller::installDirectMlRuntime(
         return fail(QStringLiteral("DirectML runtime package did not match its pinned SHA-256 or size"));
     }
 
-    const QString versionedRoot = QDir(runtimeRoot).filePath(package.id);
+    const QString versionedRoot = runtimeVersionDirectory(runtimeRoot);
     const QString stagingRoot = versionedRoot + QStringLiteral(".staging");
     if (QFileInfo::exists(versionedRoot)) {
         if (!runtimeDirectoryIsVerified(versionedRoot, package.sha256)) {
@@ -352,6 +367,7 @@ void VocalSeparationDownloader::cancel()
         m_reply->abort();
         m_reply = nullptr;
     }
+    m_verificationWatcher = nullptr;
     setState(VocalDownloadState::Cancelled);
 }
 
@@ -367,19 +383,7 @@ void VocalSeparationDownloader::issueRequest(quint64 operation)
         m_resumeOffset = 0;
     }
     if (m_resumeOffset == m_file.bytes) {
-        m_state.verify();
-        setState(VocalDownloadState::Verifying);
-        const VocalInstallResult result = VocalSeparationInstaller::activateVerifiedPart(
-            m_file, m_destination);
-        if (result.ok) {
-            m_state.complete();
-            setState(VocalDownloadState::Complete);
-        } else {
-            QFile::remove(VocalSeparationInstaller::partPath(m_destination));
-            m_state.fail();
-            setState(VocalDownloadState::Failed);
-        }
-        emit finished(result);
+        verifyAndActivate(operation);
         return;
     }
     if (!VocalSeparationInstaller::hasDiskSpace(m_destination,
@@ -469,10 +473,45 @@ void VocalSeparationDownloader::issueRequest(quint64 operation)
             finishFailure(QStringLiteral("Download failed after retries"));
             return;
         }
-        m_state.verify();
-        setState(VocalDownloadState::Verifying);
-        const VocalInstallResult result = VocalSeparationInstaller::activateVerifiedPart(
-            m_file, m_destination);
+        verifyAndActivate(operation);
+    });
+}
+
+void VocalSeparationDownloader::verifyAndActivate(quint64 operation)
+{
+    if (operation != m_operation || m_verificationWatcher != nullptr) return;
+    m_state.verify();
+    setState(VocalDownloadState::Verifying);
+    const VocalDownloadFile file = m_file;
+    const QString destination = m_destination;
+    const QString part = VocalSeparationInstaller::partPath(destination);
+    auto* const watcher = new QFutureWatcher<bool>(this);
+    m_verificationWatcher = watcher;
+    connect(watcher, &QFutureWatcher<bool>::finished,
+            this, [this, watcher, operation, file, destination] {
+        const bool verified = watcher->result();
+        watcher->deleteLater();
+        if (m_verificationWatcher == watcher)
+            m_verificationWatcher = nullptr;
+        if (operation != m_operation
+            || m_state.state() != VocalDownloadState::Verifying) return;
+        VocalInstallResult result;
+        const QString part = VocalSeparationInstaller::partPath(destination);
+        if (!verified) {
+            QFile::remove(part);
+            result = {false,
+                QStringLiteral("Downloaded file did not match its expected SHA-256 or size")};
+        } else if (QFileInfo::exists(destination)) {
+            result = {false,
+                QStringLiteral("Refusing to replace an existing file")};
+        } else if (QFileInfo(part).size() != file.bytes
+                   || !QDir().mkpath(QFileInfo(destination).absolutePath())
+                   || !QFile::rename(part, destination)) {
+            result = {false,
+                QStringLiteral("Cannot atomically activate verified download")};
+        } else {
+            result = {true, {}};
+        }
         if (result.ok) {
             m_state.complete();
             setState(VocalDownloadState::Complete);
@@ -482,6 +521,10 @@ void VocalSeparationDownloader::issueRequest(quint64 operation)
         }
         emit finished(result);
     });
+    m_verificationWatcher->setFuture(QtConcurrent::run(
+        [file, part] {
+            return VocalSeparationInstaller::isVerifiedFile(file, part);
+        }));
 }
 
 void VocalSeparationDownloader::setState(VocalDownloadState state)

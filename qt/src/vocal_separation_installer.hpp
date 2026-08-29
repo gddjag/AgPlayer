@@ -3,6 +3,7 @@
 #include "vocal_separation_catalog.hpp"
 
 #include <QObject>
+#include <QFutureWatcher>
 #include <QTimer>
 
 class QNetworkAccessManager;
@@ -40,6 +41,8 @@ struct VocalInstallResult {
 
 class VocalSeparationInstaller {
 public:
+    static QString runtimeVersionDirectory(const QString& runtimeRoot);
+    static QString runtimeLibraryPath(const QString& runtimeRoot);
     static QString partPath(const QString& destination);
     static qint64 resumeOffset(const QString& destination);
     static bool hasDiskSpace(const QString& destination, qint64 bytesRequired);
@@ -73,6 +76,7 @@ signals:
     void finished(const VocalInstallResult& result);
 
 private:
+    void verifyAndActivate(quint64 operation);
     void issueRequest(quint64 operation);
     void setState(VocalDownloadState state);
     void finishFailure(const QString& error);
@@ -86,6 +90,7 @@ private:
     bool m_acceptResponseBody = false;
     int m_attempt = 0;
     quint64 m_operation = 0;
+    QFutureWatcher<bool>* m_verificationWatcher = nullptr;
     QTimer m_retryTimer;
     VocalDownloadStateMachine m_state;
 };

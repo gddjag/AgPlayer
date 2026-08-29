@@ -20,6 +20,7 @@ private slots:
     void clearsOldStateWhenNewSourceCannotLoad();
     void stopsCurrentPreviewWhenNewSourceIsMissing();
     void switchesSourceAtTheSameAbsolutePositionAndPlaybackState();
+    void preservesActiveDspWhenSwitchingSources();
 };
 
 void AudioPreviewControllerTest::
@@ -200,6 +201,30 @@ switchesSourceAtTheSameAbsolutePositionAndPlaybackState()
     QVERIFY(preview.switchSourcePreservingPosition(QUrl::fromLocalFile(fixture)));
     QVERIFY(preview.playing());
     QVERIFY(qAbs(preview.positionMs() - playingBefore) <= 100);
+}
+
+void AudioPreviewControllerTest::preservesActiveDspWhenSwitchingSources()
+{
+    const QString fixture = QCoreApplication::applicationDirPath()
+        + QStringLiteral("/fixtures/sine-440hz.wav");
+    QVERIFY2(QFileInfo::exists(fixture), qPrintable(fixture));
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString stem = temporary.filePath(QStringLiteral("stem.wav"));
+    QVERIFY(QFile::copy(fixture, stem));
+
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    preview.play(QUrl::fromLocalFile(fixture));
+    QTRY_VERIFY_WITH_TIMEOUT(preview.playing(), 2'000);
+    const qint64 originalDuration = preview.durationMs();
+    preview.setDspParameters(1.5, 0, true, false, false, true);
+    QTRY_VERIFY_WITH_TIMEOUT(!preview.processing(), 10'000);
+    QTRY_VERIFY_WITH_TIMEOUT(preview.durationMs() < originalDuration, 10'000);
+
+    QVERIFY(preview.switchSourcePreservingPosition(QUrl::fromLocalFile(stem)));
+    QTRY_VERIFY_WITH_TIMEOUT(!preview.processing(), 10'000);
+    QVERIFY(preview.isCurrentSource(QUrl::fromLocalFile(stem)));
+    QVERIFY(preview.durationMs() < originalDuration);
 }
 
 QTEST_MAIN(AudioPreviewControllerTest)

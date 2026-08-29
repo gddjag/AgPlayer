@@ -21,9 +21,11 @@ class VocalSeparationInstallTest final : public QObject {
 private slots:
     void exposesPinnedApprovedCatalog();
     void exposesDownloadStateTransitions();
+    void installerOwnsCanonicalRuntimePaths();
     void rejectsUnsafeCustomManifests();
     void resumesAndActivatesOnlyVerifiedFiles();
     void downloaderSignalsInitialState();
+    void completePartVerificationIsAsynchronous();
     void overlappingStartPreservesActiveTransfer();
     void cancelledRetryDoesNotReconnect();
     void runtimeVerificationRejectsChangedNativeFile();
@@ -162,6 +164,16 @@ void VocalSeparationInstallTest::exposesDownloadStateTransitions()
     QVERIFY(!state.resume());
 }
 
+void VocalSeparationInstallTest::installerOwnsCanonicalRuntimePaths()
+{
+    const QString root = QDir::cleanPath(QStringLiteral("C:/portable/runtime"));
+    const QString version = VocalSeparationInstaller::runtimeVersionDirectory(root);
+    QCOMPARE(version, QDir(root).filePath(
+        VocalSeparationCatalog::directMlRuntime().id));
+    QCOMPARE(VocalSeparationInstaller::runtimeLibraryPath(root),
+             QDir(version).filePath(QStringLiteral("onnxruntime.dll")));
+}
+
 void VocalSeparationInstallTest::rejectsUnsafeCustomManifests()
 {
     const CustomManifestValidationResult valid = validateCustomModelManifest(validMdxManifest());
@@ -282,6 +294,29 @@ void VocalSeparationInstallTest::downloaderSignalsInitialState()
     QVERIFY(states.count() >= 3);
     QCOMPARE(states.at(0).at(0).value<VocalDownloadState>(),
              VocalDownloadState::Downloading);
+}
+
+void VocalSeparationInstallTest::completePartVerificationIsAsynchronous()
+{
+    const QByteArray payload(4 * 1024 * 1024, 'v');
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString destination = temporary.filePath(QStringLiteral("model.onnx"));
+    QVERIFY(writeFile(VocalSeparationInstaller::partPath(destination), payload));
+
+    disableProxyForLocalTests();
+    QNetworkAccessManager network;
+    network.setProxy(QNetworkProxy(QNetworkProxy::NoProxy));
+    VocalSeparationDownloader downloader(&network);
+    QSignalSpy finished(&downloader, &VocalSeparationDownloader::finished);
+    downloader.start(downloadFileFor(payload, QUrl::fromLocalFile(destination)),
+                     destination);
+
+    QCOMPARE(downloader.state(), VocalDownloadState::Verifying);
+    QCOMPARE(finished.count(), 0);
+    QVERIFY(finished.wait(5'000));
+    QCOMPARE(downloader.state(), VocalDownloadState::Complete);
+    QVERIFY(QFileInfo::exists(destination));
 }
 
 void VocalSeparationInstallTest::overlappingStartPreservesActiveTransfer()

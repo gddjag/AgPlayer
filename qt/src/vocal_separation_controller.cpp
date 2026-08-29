@@ -17,10 +17,18 @@
 #include <QStandardPaths>
 #include <QTemporaryFile>
 #include <QUuid>
+#include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
 #include <cmath>
 #include <utility>
+
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 namespace {
 
@@ -59,8 +67,88 @@ QString deviceName(VocalSeparationController::DeviceMode mode)
     return QStringLiteral("auto");
 }
 
-bool isWithinDirectory(const QString& path, const QString& directory)
+enum class SafePathKind { Missing, RegularFile, Directory, Unsafe };
+
+QString absoluteCleanPath(const QString& path)
 {
+    return QDir::cleanPath(QFileInfo(path).absoluteFilePath());
+}
+
+#ifdef Q_OS_WIN
+QString extendedNativePath(const QString& path)
+{
+    QString native = QDir::toNativeSeparators(absoluteCleanPath(path));
+    if (native.startsWith(QStringLiteral("\\\\?\\"))) return native;
+    if (native.startsWith(QStringLiteral("\\\\")))
+        return QStringLiteral("\\\\?\\UNC\\") + native.mid(2);
+    return QStringLiteral("\\\\?\\") + native;
+}
+
+SafePathKind safePathKind(const QString& path)
+{
+    const QString native = extendedNativePath(path);
+    const DWORD attributes = GetFileAttributesW(
+        reinterpret_cast<LPCWSTR>(native.utf16()));
+    if (attributes == INVALID_FILE_ATTRIBUTES) {
+        const DWORD error = GetLastError();
+        return error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND
+            ? SafePathKind::Missing : SafePathKind::Unsafe;
+    }
+    if ((attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+        return SafePathKind::Unsafe;
+    return (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0
+        ? SafePathKind::Directory : SafePathKind::RegularFile;
+}
+#else
+SafePathKind safePathKind(const QString& path)
+{
+    const QFileInfo info(path);
+    if (info.isSymbolicLink()) return SafePathKind::Unsafe;
+    if (!info.exists()) return SafePathKind::Missing;
+    if (info.isFile()) return SafePathKind::RegularFile;
+    if (info.isDir()) return SafePathKind::Directory;
+    return SafePathKind::Unsafe;
+}
+#endif
+
+bool samePath(const QString& left, const QString& right)
+{
+#ifdef Q_OS_WIN
+    return absoluteCleanPath(left).compare(absoluteCleanPath(right),
+                                           Qt::CaseInsensitive) == 0;
+#else
+    return absoluteCleanPath(left) == absoluteCleanPath(right);
+#endif
+}
+
+bool lexicallyWithin(const QString& path, const QString& directory)
+{
+    QString root = QDir::fromNativeSeparators(absoluteCleanPath(directory));
+    const QString candidate = QDir::fromNativeSeparators(absoluteCleanPath(path));
+    if (!root.endsWith(QLatin1Char('/'))) root += QLatin1Char('/');
+#ifdef Q_OS_WIN
+    return candidate.startsWith(root, Qt::CaseInsensitive);
+#else
+    return candidate.startsWith(root, Qt::CaseSensitive);
+#endif
+}
+
+bool safeExistingPathWithin(const QString& path, const QString& directory,
+                            SafePathKind finalKind)
+{
+    if (safePathKind(directory) != SafePathKind::Directory
+        || !lexicallyWithin(path, directory)) return false;
+    const QString relative = QDir(directory).relativeFilePath(path);
+    const QStringList parts = QDir::fromNativeSeparators(relative).split(
+        QLatin1Char('/'), Qt::SkipEmptyParts);
+    if (parts.isEmpty() || parts.contains(QStringLiteral(".."))) return false;
+    QString current = absoluteCleanPath(directory);
+    for (qsizetype index = 0; index < parts.size(); ++index) {
+        current = QDir(current).filePath(parts.at(index));
+        const SafePathKind expected = index + 1 == parts.size()
+            ? finalKind : SafePathKind::Directory;
+        if (safePathKind(current) != expected) return false;
+    }
     QString root = QDir(directory).canonicalPath();
     QString candidate = QFileInfo(path).canonicalFilePath();
     if (root.isEmpty() || candidate.isEmpty()) return false;
@@ -72,6 +160,16 @@ bool isWithinDirectory(const QString& path, const QString& directory)
 #else
     return candidate.startsWith(root, Qt::CaseSensitive);
 #endif
+}
+
+bool safeExistingFileWithin(const QString& path, const QString& directory)
+{
+    return safeExistingPathWithin(path, directory, SafePathKind::RegularFile);
+}
+
+bool safeExistingFile(const QString& path)
+{
+    return safePathKind(path) == SafePathKind::RegularFile;
 }
 
 VocalSeparationControllerOptions normalizeOptions(
@@ -91,9 +189,8 @@ VocalSeparationControllerOptions normalizeOptions(
             .filePath(QStringLiteral("AgSeparationWorker.exe"));
     }
     if (options.runtimeLibraryPath.isEmpty()) {
-        options.runtimeLibraryPath = QDir(options.dataRoot).filePath(
-            QStringLiteral("runtime/%1/onnxruntime.dll")
-                .arg(VocalSeparationCatalog::directMlRuntime().id));
+        options.runtimeLibraryPath = VocalSeparationInstaller::runtimeLibraryPath(
+            QDir(options.dataRoot).filePath(QStringLiteral("runtime")));
     }
     return options;
 }
@@ -170,15 +267,29 @@ VocalSeparationController::VocalSeparationController(
         }
         const DownloadItem completed = downloadQueue_.takeFirst();
         if (completed.runtimeArchive) {
-            const VocalInstallResult installed =
-                VocalSeparationInstaller::installDirectMlRuntime(
-                    completed.destination, runtimeDirectory());
-            if (!installed.ok) {
-                downloadQueue_.clear();
-                setError(installed.error);
-                refreshModels();
-                return;
-            }
+            runtimeInstallerWatcher_ = new QFutureWatcher<VocalInstallResult>(this);
+            connect(runtimeInstallerWatcher_,
+                    &QFutureWatcher<VocalInstallResult>::finished, this, [this] {
+                const VocalInstallResult installed = runtimeInstallerWatcher_->result();
+                runtimeInstallerWatcher_->deleteLater();
+                runtimeInstallerWatcher_ = nullptr;
+                if (!installed.ok) {
+                    downloadQueue_.clear();
+                    setError(installed.error);
+                    refreshModels();
+                    return;
+                }
+                runtimeVerified_ = true;
+                startNextDownload();
+            });
+            const QString archive = completed.destination;
+            const QString root = runtimeDirectory();
+            runtimeInstallerWatcher_->setFuture(QtConcurrent::run(
+                [archive, root] {
+                    return VocalSeparationInstaller::installDirectMlRuntime(
+                        archive, root);
+                }));
+            return;
         }
         startNextDownload();
     });
@@ -204,7 +315,7 @@ QVariantList VocalSeparationController::history() const { return history_; }
 
 bool VocalSeparationController::selectInput(const QUrl& url)
 {
-    if (jobState_ == JobState::Running || jobState_ == JobState::Cancelling) return false;
+    if (requestInFlight()) return false;
     const QString path = QFileInfo(url.toLocalFile()).absoluteFilePath();
     const QFileInfo file(path);
     if (!file.isFile()) {
@@ -228,31 +339,20 @@ bool VocalSeparationController::downloadModel(const QString& modelId)
 {
     const VocalModelCard* model = modelForId(modelId);
     if (model == nullptr || !downloadQueue_.isEmpty()
+        || verificationWatcher_ != nullptr || runtimeInstallerWatcher_ != nullptr
         || downloader_->state() == VocalDownloadState::Downloading
-        || downloader_->state() == VocalDownloadState::Paused) {
+        || downloader_->state() == VocalDownloadState::Paused
+        || downloader_->state() == VocalDownloadState::Verifying) {
         return false;
     }
     downloadingModelId_ = modelId;
-    for (const VocalDownloadFile& file : model->files) {
-        const QString destination = QDir(modelDirectory(modelId)).filePath(file.fileName);
-        if (!VocalSeparationInstaller::isVerifiedFile(file, destination)) {
-            downloadQueue_.push_back({file, destination, false});
-        }
-    }
-    if (!runtimeReady()) {
-        const VocalRuntimePackage package = VocalSeparationCatalog::directMlRuntime();
-        const VocalDownloadFile archive{QStringLiteral("runtime.nupkg"), package.url,
-                                        package.bytes, package.sha256};
-        downloadQueue_.push_back(
-            {archive, QDir(options_.dataRoot).filePath(QStringLiteral("downloads/runtime.nupkg")), true});
-    }
-    if (downloadQueue_.isEmpty()) {
-        refreshModels();
-        return true;
-    }
     setError({});
-    startNextDownload();
-    return true;
+    return beginVerification(VerificationPurpose::Download, model);
+}
+
+bool VocalSeparationController::verifyInstalledModels()
+{
+    return beginVerification(VerificationPurpose::Refresh);
 }
 
 void VocalSeparationController::pauseDownload() { downloader_->pause(); }
@@ -266,9 +366,16 @@ bool VocalSeparationController::deleteModel(const QString& modelId)
         && (downloadState == VocalDownloadState::Downloading
             || downloadState == VocalDownloadState::Paused
             || downloadState == VocalDownloadState::Verifying);
-    if (model == nullptr || jobState_ == JobState::Running || downloadActive)
+    if (model == nullptr || requestInFlight() || downloadActive
+        || runtimeInstallerWatcher_ != nullptr
+        || (verificationWatcher_ != nullptr && verifyingModelId_ == modelId))
         return false;
     const QString directory = modelDirectory(modelId);
+    const QString modelsRoot = QDir(options_.dataRoot).filePath(
+        QStringLiteral("models"));
+    if (QFileInfo::exists(directory)
+        && !safeExistingPathWithin(directory, modelsRoot,
+                                   SafePathKind::Directory)) return false;
     for (const VocalDownloadFile& file : model->files) {
         const QString path = QDir(directory).filePath(file.fileName);
         if (QFileInfo::exists(path) && !QFile::remove(path)) return false;
@@ -276,13 +383,15 @@ bool VocalSeparationController::deleteModel(const QString& modelId)
     }
     QDir().rmdir(directory);
     if (downloadingModelId_ == modelId) downloadingModelId_.clear();
+    verifiedModelIds_.remove(modelId);
+    verifiedOrRejectedModelIds_.remove(modelId);
     refreshModels();
     return true;
 }
 
 bool VocalSeparationController::selectModel(const QString& modelId)
 {
-    if (modelForId(modelId) == nullptr || jobState_ == JobState::Running) return false;
+    if (modelForId(modelId) == nullptr || requestInFlight()) return false;
     if (selectedModelId_ == modelId) return true;
     selectedModelId_ = modelId;
     emit selectedModelIdChanged();
@@ -292,6 +401,7 @@ bool VocalSeparationController::selectModel(const QString& modelId)
 
 bool VocalSeparationController::setStemSelected(StemKind kind, bool selected)
 {
+    if (requestInFlight()) return false;
     for (QVariant& value : stems_) {
         QVariantMap stem = value.toMap();
         if (stem.value(QStringLiteral("kind")).toInt() != int(kind)) continue;
@@ -305,7 +415,7 @@ bool VocalSeparationController::setStemSelected(StemKind kind, bool selected)
 
 bool VocalSeparationController::selectDevice(DeviceMode mode)
 {
-    if (jobState_ == JobState::Running || jobState_ == JobState::Cancelling) return false;
+    if (requestInFlight()) return false;
     if (deviceMode_ == mode) return true;
     deviceMode_ = mode;
     emit deviceModeChanged();
@@ -314,6 +424,7 @@ bool VocalSeparationController::selectDevice(DeviceMode mode)
 
 bool VocalSeparationController::selectOutputFormat(const QString& format)
 {
+    if (requestInFlight()) return false;
     const QString normalized = format.trimmed().toLower();
     if (!QStringList{QStringLiteral("wav"), QStringLiteral("flac"),
                      QStringLiteral("mp3")}.contains(normalized)) return false;
@@ -323,6 +434,7 @@ bool VocalSeparationController::selectOutputFormat(const QString& format)
 
 bool VocalSeparationController::selectOutputDirectory(const QUrl& directory)
 {
+    if (requestInFlight()) return false;
     const QString path = QFileInfo(directory.toLocalFile()).absoluteFilePath();
     if (path.isEmpty() || (!QDir(path).exists() && !QDir().mkpath(path))) return false;
     outputDirectory_ = path;
@@ -331,32 +443,23 @@ bool VocalSeparationController::selectOutputDirectory(const QUrl& directory)
 
 bool VocalSeparationController::probeDevices()
 {
-    if (!runtimeReady()) {
-        setError(tr("ONNX Runtime 尚未安装"));
-        return false;
-    }
-    if (!process_.startProbe(
-            {{QStringLiteral("runtimePath"), options_.runtimeLibraryPath}})) return false;
-    lastRequestWasProbe_ = true;
+    if (requestInFlight() || verificationWatcher_ != nullptr) return false;
+    activeRequest_ = ActiveRequestContext{RequestKind::Probe};
     setError({});
-    setJobState(JobState::Probing, QStringLiteral("provider_probe"));
-    return true;
+    setJobState(JobState::Probing, QStringLiteral("runtime_verification"));
+    if (beginVerification(VerificationPurpose::Probe)) return true;
+    activeRequest_.reset();
+    setJobState(JobState::Idle, {});
+    return false;
 }
 
 bool VocalSeparationController::start()
 {
+    if (requestInFlight()) return false;
     const VocalModelCard* model = selectedModel();
     const QString inputPath = inputInfo_.value(QStringLiteral("path")).toString();
     const QStringList stemNames = selectedStemNames();
-    if (model == nullptr || !modelInstalled(*model)) {
-        setError(tr("所选分离模型尚未完成校验安装"));
-        return false;
-    }
-    if (!runtimeReady()) {
-        setError(tr("ONNX Runtime 尚未安装"));
-        return false;
-    }
-    if (!QFileInfo(inputPath).isFile() || stemNames.isEmpty()) {
+    if (model == nullptr || !QFileInfo(inputPath).isFile() || stemNames.isEmpty()) {
         setError(tr("请选择有效输入音频和至少一个输出音轨"));
         return false;
     }
@@ -364,36 +467,39 @@ bool VocalSeparationController::start()
         setError(tr("无法创建分离输出目录"));
         return false;
     }
-    QJsonArray modelFiles;
-    for (const VocalDownloadFile& file : model->files) {
-        modelFiles.push_back(QDir(modelDirectory(model->id)).filePath(file.fileName));
-    }
-    QJsonArray requestedStems;
-    for (const QString& name : stemNames) requestedStems.push_back(name);
-    const QJsonObject payload{
-        {QStringLiteral("runtimePath"), options_.runtimeLibraryPath},
-        {QStringLiteral("inputPath"), inputPath},
-        {QStringLiteral("modelFiles"), modelFiles},
-        {QStringLiteral("outputDirectory"), outputDirectory_},
-        {QStringLiteral("baseName"), QFileInfo(inputPath).completeBaseName()
-                                         + QLatin1Char('-') + model->id},
-        {QStringLiteral("extension"), outputFormat_},
-        {QStringLiteral("stems"), requestedStems},
-        {QStringLiteral("device"), deviceName(deviceMode_)},
-    };
-    if (!process_.startJob(payload)) return false;
-    lastRequestWasProbe_ = false;
-    activeStemKinds_ = selectedStemKinds();
+    ActiveRequestContext context;
+    context.kind = RequestKind::Separation;
+    context.inputPath = inputPath;
+    context.modelId = model->id;
+    context.outputRoot = outputDirectory_;
+    context.outputFormat = outputFormat_;
+    context.device = deviceMode_;
+    context.stemKinds = selectedStemKinds();
+    context.stemNames = stemNames;
+    activeRequest_ = std::move(context);
     progress_ = 0.0;
     emit progressChanged();
     setError({});
-    setJobState(JobState::Running, QStringLiteral("starting"));
-    return true;
+    setJobState(JobState::Running, QStringLiteral("model_verification"));
+    if (beginVerification(VerificationPurpose::Start, model)) return true;
+    activeRequest_.reset();
+    setJobState(JobState::Idle, {});
+    return false;
 }
 
 void VocalSeparationController::cancel()
 {
-    if (jobState_ != JobState::Running) return;
+    if (jobState_ != JobState::Running && jobState_ != JobState::Probing) return;
+    if (verificationWatcher_ != nullptr
+        && (verificationPurpose_ == VerificationPurpose::Start
+            || verificationPurpose_ == VerificationPurpose::Probe)) {
+        ++verificationGeneration_;
+        verificationPurpose_ = VerificationPurpose::None;
+        verifyingModelId_.clear();
+        setJobState(JobState::Cancelled, QStringLiteral("cancelled"));
+        refreshModels();
+        return;
+    }
     setJobState(JobState::Cancelling, QStringLiteral("cancelling"));
     process_.cancel();
 }
@@ -404,23 +510,26 @@ bool VocalSeparationController::retry()
     progress_ = 0.0;
     emit progressChanged();
     setError({});
-    setJobState(lastRequestWasProbe_ ? JobState::Probing : JobState::Running,
-                lastRequestWasProbe_ ? QStringLiteral("provider_probe")
-                                     : QStringLiteral("starting"));
+    const bool probe = activeRequest_.has_value()
+        && activeRequest_->kind == RequestKind::Probe;
+    setJobState(probe ? JobState::Probing : JobState::Running,
+                probe ? QStringLiteral("provider_probe")
+                      : QStringLiteral("starting"));
     return true;
 }
 
 bool VocalSeparationController::previewInput()
 {
-    return preview_ != nullptr
-        && preview_->switchSourcePreservingPosition(QUrl::fromLocalFile(
-            inputInfo_.value(QStringLiteral("path")).toString()));
+    const QString path = inputInfo_.value(QStringLiteral("path")).toString();
+    return preview_ != nullptr && safeExistingFile(path)
+        && preview_->switchSourcePreservingPosition(QUrl::fromLocalFile(path));
 }
 
 bool VocalSeparationController::previewStem(StemKind kind)
 {
     const QString path = pathForStem(kind);
-    return preview_ != nullptr && QFileInfo(path).isFile()
+    return preview_ != nullptr
+        && safeExistingFileWithin(path, publishedOutputRoot_)
         && preview_->switchSourcePreservingPosition(QUrl::fromLocalFile(path));
 }
 
@@ -428,7 +537,7 @@ bool VocalSeparationController::exportStem(StemKind kind,
                                            const QUrl& destination)
 {
     const QString source = pathForStem(kind);
-    if (!QFileInfo(source).isFile()) return false;
+    if (!safeExistingFileWithin(source, publishedOutputRoot_)) return false;
     QString target = destination.toLocalFile();
     if (QFileInfo(target).isDir()) target = QDir(target).filePath(QFileInfo(source).fileName());
     return atomicCopyNoOverwrite(source, target);
@@ -441,7 +550,7 @@ bool VocalSeparationController::exportSelected(const QUrl& destinationDirectory)
     bool exported = false;
     for (const StemKind kind : selectedStemKinds()) {
         const QString source = pathForStem(kind);
-        if (!QFileInfo(source).isFile()
+        if (!safeExistingFileWithin(source, publishedOutputRoot_)
             || !atomicCopyNoOverwrite(source,
                 QDir(destination).filePath(QFileInfo(source).fileName()))) return false;
         exported = true;
@@ -453,7 +562,8 @@ bool VocalSeparationController::addStemToPlaylist(
     StemKind kind, const QString& playlistId)
 {
     const QString path = pathForStem(kind);
-    return QFileInfo(path).isFile() && addPathsToPlaylist({path}, playlistId);
+    return safeExistingFileWithin(path, publishedOutputRoot_)
+        && addPathsToPlaylist({path}, playlistId);
 }
 
 bool VocalSeparationController::addSelectedToPlaylist(const QString& playlistId)
@@ -461,7 +571,7 @@ bool VocalSeparationController::addSelectedToPlaylist(const QString& playlistId)
     QStringList paths;
     for (const StemKind kind : selectedStemKinds()) {
         const QString path = pathForStem(kind);
-        if (QFileInfo(path).isFile()) paths.push_back(path);
+        if (safeExistingFileWithin(path, publishedOutputRoot_)) paths.push_back(path);
     }
     return !paths.isEmpty() && addPathsToPlaylist(paths, playlistId);
 }
@@ -506,20 +616,186 @@ QString VocalSeparationController::runtimeDirectory() const
 
 bool VocalSeparationController::modelInstalled(const VocalModelCard& model) const
 {
+    return verifiedModelIds_.contains(model.id);
+}
+
+bool VocalSeparationController::modelFilesPresent(
+    const VocalModelCard& model) const
+{
+    if (model.files.isEmpty()) return false;
     for (const VocalDownloadFile& file : model.files) {
-        if (!VocalSeparationInstaller::isVerifiedFile(
-                file, QDir(modelDirectory(model.id)).filePath(file.fileName))) return false;
+        const QFileInfo candidate(
+            QDir(modelDirectory(model.id)).filePath(file.fileName));
+        if (!candidate.isFile() || candidate.size() != file.bytes) return false;
     }
-    return !model.files.isEmpty();
+    return true;
 }
 
 bool VocalSeparationController::runtimeReady() const
 {
     if (!QFileInfo(options_.runtimeLibraryPath).isFile()) return false;
-    return !options_.verifyRuntimeIntegrity
-        || VocalSeparationInstaller::runtimeDirectoryIsVerified(
-            QFileInfo(options_.runtimeLibraryPath).absolutePath(),
-            VocalSeparationCatalog::directMlRuntime().sha256);
+    return !options_.verifyRuntimeIntegrity || runtimeVerified_;
+}
+
+bool VocalSeparationController::beginVerification(
+    VerificationPurpose purpose, const VocalModelCard* model)
+{
+    if (verificationWatcher_ != nullptr || purpose == VerificationPurpose::None)
+        return false;
+    const QList<VocalModelCard> catalog = model == nullptr
+        ? options_.catalog : QList<VocalModelCard>{*model};
+    const QString dataRoot = options_.dataRoot;
+    const QString runtimePath = options_.runtimeLibraryPath;
+    const bool verifyRuntime = options_.verifyRuntimeIntegrity;
+    const QString runtimeHash = VocalSeparationCatalog::directMlRuntime().sha256;
+    verificationPurpose_ = purpose;
+    verifyingModelId_ = model == nullptr ? QString() : model->id;
+    const quint64 generation = ++verificationGeneration_;
+    verificationWatcher_ = new QFutureWatcher<VerificationResult>(this);
+    connect(verificationWatcher_, &QFutureWatcher<VerificationResult>::finished,
+            this, [this, generation] {
+        const VerificationResult result = verificationWatcher_->result();
+        verificationWatcher_->deleteLater();
+        verificationWatcher_ = nullptr;
+        finishVerification(generation, result);
+    });
+    refreshModels();
+    verificationWatcher_->setFuture(QtConcurrent::run(
+        [catalog, dataRoot, runtimePath, verifyRuntime, runtimeHash] {
+            VerificationResult result;
+            for (const VocalModelCard& candidate : catalog) {
+                bool verified = !candidate.files.isEmpty();
+                for (const VocalDownloadFile& file : candidate.files) {
+                    const QString path = QDir(dataRoot).filePath(
+                        QStringLiteral("models/%1/%2")
+                            .arg(candidate.id, file.fileName));
+                    if (VocalSeparationInstaller::isVerifiedFile(file, path)) {
+                        result.verifiedFiles.insert(QFileInfo(path).absoluteFilePath());
+                    } else {
+                        verified = false;
+                    }
+                }
+                if (verified) result.verifiedModels.insert(candidate.id);
+            }
+            result.runtimeVerified = QFileInfo(runtimePath).isFile()
+                && (!verifyRuntime
+                    || VocalSeparationInstaller::runtimeDirectoryIsVerified(
+                        QFileInfo(runtimePath).absolutePath(), runtimeHash));
+            return result;
+        }));
+    return true;
+}
+
+void VocalSeparationController::finishVerification(
+    quint64 generation, const VerificationResult& result)
+{
+    if (generation != verificationGeneration_) return;
+    const VerificationPurpose purpose = verificationPurpose_;
+    const QString verifiedModelId = verifyingModelId_;
+    verificationPurpose_ = VerificationPurpose::None;
+    verifyingModelId_.clear();
+    runtimeVerified_ = result.runtimeVerified;
+
+    if (verifiedModelId.isEmpty()) {
+        verifiedModelIds_ = result.verifiedModels;
+        for (const VocalModelCard& model : options_.catalog)
+            verifiedOrRejectedModelIds_.insert(model.id);
+    } else if (result.verifiedModels.contains(verifiedModelId)) {
+        verifiedModelIds_.insert(verifiedModelId);
+        verifiedOrRejectedModelIds_.insert(verifiedModelId);
+    } else {
+        verifiedModelIds_.remove(verifiedModelId);
+        verifiedOrRejectedModelIds_.insert(verifiedModelId);
+    }
+
+    if (purpose == VerificationPurpose::Refresh) {
+        refreshModels();
+        return;
+    }
+    if (purpose == VerificationPurpose::Download) {
+        const VocalModelCard* model = modelForId(verifiedModelId);
+        if (model == nullptr) {
+            downloadingModelId_.clear();
+            refreshModels();
+            return;
+        }
+        for (const VocalDownloadFile& file : model->files) {
+            const QString destination = QDir(modelDirectory(model->id))
+                .filePath(file.fileName);
+            if (!result.verifiedFiles.contains(
+                    QFileInfo(destination).absoluteFilePath())) {
+                downloadQueue_.push_back({file, destination, false});
+            }
+        }
+        if (!result.runtimeVerified) {
+            const VocalRuntimePackage package =
+                VocalSeparationCatalog::directMlRuntime();
+            const VocalDownloadFile archive{
+                QStringLiteral("runtime.nupkg"), package.url,
+                package.bytes, package.sha256};
+            downloadQueue_.push_back({
+                archive,
+                QDir(options_.dataRoot).filePath(
+                    QStringLiteral("downloads/runtime.nupkg")),
+                true});
+        }
+        startNextDownload();
+        return;
+    }
+    if (purpose == VerificationPurpose::Probe) {
+        if (!result.runtimeVerified || !launchProbe()) {
+            setError(tr("ONNX Runtime 尚未安装或校验失败"));
+            setJobState(JobState::Failed, QStringLiteral("runtime_verification"));
+        }
+        return;
+    }
+    if (purpose == VerificationPurpose::Start) {
+        if (!activeRequest_.has_value()
+            || !result.verifiedModels.contains(activeRequest_->modelId)
+            || !result.runtimeVerified
+            || !launchSeparation(*activeRequest_)) {
+            setError(tr("所选模型或 ONNX Runtime 尚未完成校验安装"));
+            setJobState(JobState::Failed, QStringLiteral("model_verification"));
+        }
+    }
+}
+
+bool VocalSeparationController::launchProbe()
+{
+    if (!process_.startProbe(
+            {{QStringLiteral("runtimePath"), options_.runtimeLibraryPath}}))
+        return false;
+    setJobState(JobState::Probing, QStringLiteral("provider_probe"));
+    return true;
+}
+
+bool VocalSeparationController::launchSeparation(
+    const ActiveRequestContext& context)
+{
+    const VocalModelCard* model = modelForId(context.modelId);
+    if (model == nullptr) return false;
+    QJsonArray modelFiles;
+    for (const VocalDownloadFile& file : model->files) {
+        modelFiles.push_back(
+            QDir(modelDirectory(model->id)).filePath(file.fileName));
+    }
+    QJsonArray requestedStems;
+    for (const QString& name : context.stemNames) requestedStems.push_back(name);
+    const QJsonObject payload{
+        {QStringLiteral("runtimePath"), options_.runtimeLibraryPath},
+        {QStringLiteral("inputPath"), context.inputPath},
+        {QStringLiteral("modelFiles"), modelFiles},
+        {QStringLiteral("outputDirectory"), context.outputRoot},
+        {QStringLiteral("baseName"),
+         QFileInfo(context.inputPath).completeBaseName()
+             + QLatin1Char('-') + context.modelId},
+        {QStringLiteral("extension"), context.outputFormat},
+        {QStringLiteral("stems"), requestedStems},
+        {QStringLiteral("device"), deviceName(context.device)},
+    };
+    if (!process_.startJob(payload)) return false;
+    setJobState(JobState::Running, QStringLiteral("starting"));
+    return true;
 }
 
 void VocalSeparationController::refreshModels()
@@ -527,7 +803,14 @@ void VocalSeparationController::refreshModels()
     models_.clear();
     for (const VocalModelCard& model : options_.catalog) {
         ModelState state = modelInstalled(model) ? ModelState::Installed
-                                                 : ModelState::NotInstalled;
+            : modelFilesPresent(model)
+                && !verifiedOrRejectedModelIds_.contains(model.id)
+                ? ModelState::Verifying : ModelState::NotInstalled;
+        if (verificationWatcher_ != nullptr
+            && (verifyingModelId_.isEmpty()
+                || verifyingModelId_ == model.id)) {
+            state = ModelState::Verifying;
+        }
         if (model.id == downloadingModelId_) {
             switch (downloader_ ? downloader_->state() : VocalDownloadState::Idle) {
             case VocalDownloadState::Downloading: state = ModelState::Downloading; break;
@@ -597,6 +880,10 @@ void VocalSeparationController::setError(const QString& error)
 void VocalSeparationController::startNextDownload()
 {
     if (downloadQueue_.isEmpty()) {
+        if (!downloadingModelId_.isEmpty())
+            verifiedModelIds_.insert(downloadingModelId_);
+        if (!downloadingModelId_.isEmpty())
+            verifiedOrRejectedModelIds_.insert(downloadingModelId_);
         downloadingModelId_.clear();
         progress_ = 1.0;
         emit progressChanged();
@@ -604,6 +891,12 @@ void VocalSeparationController::startNextDownload()
         return;
     }
     const DownloadItem& item = downloadQueue_.first();
+    if (!QDir().mkpath(QFileInfo(item.destination).absolutePath())) {
+        downloadQueue_.clear();
+        setError(tr("无法创建模型下载目录"));
+        refreshModels();
+        return;
+    }
     downloader_->start(item.file, item.destination);
 }
 
@@ -628,8 +921,15 @@ void VocalSeparationController::handleProbe(const QJsonObject& payload)
 
 void VocalSeparationController::handleResult(const QJsonObject& payload)
 {
+    if (!activeRequest_.has_value()
+        || activeRequest_->kind != RequestKind::Separation) {
+        setError(tr("Worker 结果没有匹配的活动请求"));
+        setJobState(JobState::Failed, QStringLiteral("verification"));
+        return;
+    }
+    const ActiveRequestContext context = *activeRequest_;
     const QJsonArray outputs = payload.value(QStringLiteral("outputs")).toArray();
-    if (outputs.size() != activeStemKinds_.size()) {
+    if (outputs.size() != context.stemKinds.size()) {
         setError(tr("Worker 返回的输出数量无效"));
         setJobState(JobState::Failed, QStringLiteral("verification"));
         return;
@@ -640,7 +940,7 @@ void VocalSeparationController::handleResult(const QJsonObject& payload)
         const QString path = QFileInfo(outputs.at(index).toString()).absoluteFilePath();
         const QFileInfo file(path);
         if (!file.isFile() || file.size() <= 0
-            || !isWithinDirectory(path, outputDirectory_)) {
+            || !safeExistingFileWithin(path, context.outputRoot)) {
             setError(tr("Worker 输出不存在、为空或超出输出目录"));
             setJobState(JobState::Failed, QStringLiteral("verification"));
             return;
@@ -648,14 +948,34 @@ void VocalSeparationController::handleResult(const QJsonObject& payload)
         verifiedPaths.push_back(path);
     }
     QVariantList historyStems;
+    for (qsizetype index = 0; index < verifiedPaths.size(); ++index) {
+        historyStems.push_back(QVariantMap{
+            {QStringLiteral("kind"), int(context.stemKinds.at(index))},
+            {QStringLiteral("path"), verifiedPaths.at(index)},
+            {QStringLiteral("available"), true}});
+    }
+    const QString fallbackReason = payload.value(QStringLiteral("fallbackReason")).toString();
+    const QVariantMap record{
+        {QStringLiteral("id"), QUuid::createUuid().toString(QUuid::WithoutBraces)},
+        {QStringLiteral("createdAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
+        {QStringLiteral("inputPath"), context.inputPath},
+        {QStringLiteral("modelId"), context.modelId},
+        {QStringLiteral("provider"), payload.value(QStringLiteral("provider"))},
+        {QStringLiteral("fallbackReason"), fallbackReason},
+        {QStringLiteral("stems"), historyStems},
+    };
+    if (!historyStore_.append(record)) {
+        setError(tr("无法保存分离历史记录"));
+        setJobState(JobState::Failed, QStringLiteral("history"));
+        return;
+    }
+    history_ = historyStore_.load();
+    emit historyChanged();
     waveformQueue_.clear();
     waveformKinds_.clear();
     for (qsizetype index = 0; index < verifiedPaths.size(); ++index) {
         const QString& path = verifiedPaths.at(index);
-        const StemKind kind = activeStemKinds_.at(index);
-        historyStems.push_back(QVariantMap{{QStringLiteral("kind"), int(kind)},
-                                           {QStringLiteral("path"), path},
-                                           {QStringLiteral("available"), true}});
+        const StemKind kind = context.stemKinds.at(index);
         for (QVariant& value : stems_) {
             QVariantMap stem = value.toMap();
             if (stem.value(QStringLiteral("kind")).toInt() != int(kind)) continue;
@@ -669,26 +989,13 @@ void VocalSeparationController::handleResult(const QJsonObject& payload)
         waveformKinds_.insert(path, kind);
     }
     emit stemsChanged();
-    const QString fallbackReason = payload.value(QStringLiteral("fallbackReason")).toString();
+    publishedOutputRoot_ = context.outputRoot;
     if (!fallbackReason.isEmpty()) {
         QVariantMap gpu = availableDevices_.at(1).toMap();
         gpu.insert(QStringLiteral("available"), false);
         gpu.insert(QStringLiteral("reason"), fallbackReason);
         availableDevices_[1] = gpu;
         emit availableDevicesChanged();
-    }
-    const QVariantMap record{
-        {QStringLiteral("id"), QUuid::createUuid().toString(QUuid::WithoutBraces)},
-        {QStringLiteral("createdAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
-        {QStringLiteral("inputPath"), inputInfo_.value(QStringLiteral("path"))},
-        {QStringLiteral("modelId"), selectedModelId_},
-        {QStringLiteral("provider"), payload.value(QStringLiteral("provider"))},
-        {QStringLiteral("fallbackReason"), fallbackReason},
-        {QStringLiteral("stems"), historyStems},
-    };
-    if (historyStore_.append(record)) {
-        history_ = historyStore_.load();
-        emit historyChanged();
     }
     progress_ = 1.0;
     emit progressChanged();
@@ -719,6 +1026,12 @@ void VocalSeparationController::handleWaveform(
     waveformQueue_.removeAll(path);
     emit stemsChanged();
     analyzeNextWaveform();
+}
+
+bool VocalSeparationController::requestInFlight() const noexcept
+{
+    return jobState_ == JobState::Probing || jobState_ == JobState::Running
+        || jobState_ == JobState::Cancelling;
 }
 
 QString VocalSeparationController::pathForStem(StemKind kind) const
@@ -761,25 +1074,32 @@ bool VocalSeparationController::addPathsToPlaylist(
     if (library_ == nullptr || importer_ == nullptr || playlists_ == nullptr
         || playlistId.isEmpty() || importer_->busy()) return false;
     QStringList unresolved;
+    bool added = false;
     for (const QString& path : paths) {
         const int row = library_->indexForLocalFile(path);
         if (row >= 0) {
-            playlists_->addTrack(
+            if (!playlists_->addTrack(
                 playlistId,
-                library_->data(library_->index(row), LibraryModel::TrackIdRole).toString());
+                library_->data(library_->index(row), LibraryModel::TrackIdRole).toString())) {
+                return false;
+            }
+            added = true;
         } else {
             unresolved.push_back(path);
         }
     }
-    if (unresolved.isEmpty()) return true;
+    if (unresolved.isEmpty()) return added;
     connect(importer_, &ImportController::finished, this,
             [this, unresolved, playlistId] {
         if (library_ == nullptr || playlists_ == nullptr) return;
         for (const QString& path : unresolved) {
             const int row = library_->indexForLocalFile(path);
-            if (row >= 0) playlists_->addTrack(
-                playlistId,
-                library_->data(library_->index(row), LibraryModel::TrackIdRole).toString());
+            if (row < 0 || !playlists_->addTrack(
+                    playlistId,
+                    library_->data(library_->index(row), LibraryModel::TrackIdRole)
+                        .toString())) {
+                setError(tr("无法将分离结果加入播放列表"));
+            }
         }
     }, Qt::SingleShotConnection);
     importer_->importPaths(unresolved);
