@@ -34,6 +34,7 @@ Item {
     property int waveformNavigatorHeight: 10
     property int bottomBarHeight: 83
     property int contentSpacing: 8
+    property bool _waveformViewportResetPending: false
     readonly property real effectiveDurationMs: waveformDurationMs > 0
                                                 ? waveformDurationMs
                                                 : (playbackController
@@ -112,6 +113,11 @@ Item {
         }
     }
 
+    function resetWaveformViewport() {
+        if (waveform)
+            waveform.setVisibleRange(0, Math.max(0, root.effectiveDurationMs))
+    }
+
     function syncSelection() {
         if (!playbackController
                 || playbackController.selectionEndMs
@@ -139,6 +145,16 @@ Item {
             applyWaveformMode()
     }
 
+    onWaveformDurationMsChanged: {
+        if (_waveformViewportResetPending && waveformDurationMs > 0)
+            Qt.callLater(function() {
+                if (!root._waveformViewportResetPending)
+                    return
+                root.resetWaveformViewport()
+                root._waveformViewportResetPending = false
+            })
+    }
+
     Connections {
         target: root.filterModel
         function onSearchTextChanged() { root.syncFilterControls() }
@@ -151,6 +167,14 @@ Item {
         target: root.playbackController
         function onSelectionStartMsChanged() { root.syncSelection() }
         function onSelectionEndMsChanged() { root.syncSelection() }
+        function onCurrentTrackIdChanged() {
+            root._waveformViewportResetPending = true
+            root.resetWaveformViewport()
+        }
+        function onDurationMsChanged() {
+            if (root._waveformViewportResetPending)
+                root.resetWaveformViewport()
+        }
         function onSpectrumChanged() {
             if (SettingsController.waveformMode === 2)
                 root.applyWaveformMode()
@@ -499,7 +523,7 @@ Item {
             Layout.preferredHeight: root.waveformHeight
                                     + root.waveformNavigatorHeight
             Layout.topMargin: 4
-            Layout.bottomMargin: 12
+            Layout.bottomMargin: root.contentSpacing
             Layout.leftMargin: root.contentSpacing
             Layout.rightMargin: root.contentSpacing
             color: Theme.panel
@@ -812,7 +836,7 @@ Item {
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
                     height: 66
-                    width: Math.min(450, parent.width * 0.32)
+                    width: Math.min(520, parent.width * 0.36)
                     spacing: 12
                     readonly property var track: {
                         var count = root.libraryModel ? root.libraryModel.count : 0

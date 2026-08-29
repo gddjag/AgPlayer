@@ -220,6 +220,24 @@ TestCase {
                "switching away from spectrum must restore the analysed waveform")
     }
 
+    function test_track_change_restores_full_waveform_viewport() {
+        var shell = enterIntegratedShell()
+        shell.playbackController = fakePlayback
+        fakePlayback.currentTrackId = "viewport-track-a"
+        shell.waveformDurationMs = 100000
+        var waveform = findChild(shell, "integratedWaveform")
+        verify(waveform)
+        waveform.setVisibleRange(25000, 75000)
+        compare(waveform.visibleStartMs, 25000)
+        compare(waveform.visibleEndMs, 75000)
+
+        fakePlayback.currentTrackId = "viewport-track-b"
+        shell.waveformDurationMs = 120000
+
+        tryCompare(waveform, "visibleStartMs", 0)
+        tryCompare(waveform, "visibleEndMs", 120000)
+    }
+
     function test_right_panel_tabs_collapse_and_persist() {
         var shell = enterIntegratedShell()
         var tagTab = findChild(shell, "integratedTagTabButton")
@@ -435,6 +453,29 @@ TestCase {
                      center.parent.height / 2, 1.0)
         fuzzyCompare(actions.y + actions.height / 2,
                      actions.parent.height / 2, 1.0)
+    }
+
+
+    function test_bottom_track_title_has_more_room() {
+        var shell = enterIntegratedShell()
+        var previousWidth = mainWindow.width
+        mainWindow.width = 1672
+        var summary = findChild(shell, "integratedTrackSummary")
+        verify(summary)
+        tryVerify(function() { return summary.width >= 500 }, 1000)
+        mainWindow.width = previousWidth
+    }
+
+    function test_waveform_and_bottom_bar_use_standard_spacing() {
+        var shell = enterIntegratedShell()
+        var waveformFrame = findChild(shell, "integratedWaveformFrame")
+        var bottomBar = findChild(shell, "integratedBottomBar")
+        verify(waveformFrame && bottomBar)
+        var waveformBottom = waveformFrame.mapToItem(
+                    shell, 0, waveformFrame.height).y
+        var bottomTop = bottomBar.mapToItem(shell, 0, 0).y
+        verify(bottomTop - waveformBottom <= shell.contentSpacing + 1,
+               "waveform and transport gap should match the standard spacing")
     }
 
     function test_shell_button_opens_real_mode_menu() {

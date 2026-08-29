@@ -87,3 +87,10 @@
 - 视觉复核：表头、筛选/BPM/清空、标签输入、折叠图标、五个主容器软描边及波形导航玻璃条均满足最新反馈；这些本轮修复项的 P0/P1/P2 为 0。参考与实现使用不同歌曲、选区和标签数据，因此不把合成图作为完整内容状态的像素一致性证明。
 
 本轮未增加部署 DLL、第三方包、图片、字体或渲染 Shader；未制作安装包。
+
+## 2026-08-29 第四轮修复补充
+
+- TDD 红灯：歌名区域不足 500px、换歌后仍保留 25,000–75,000ms 可见范围、波形与播放栏间距大于 8px，三个断言均按预期失败。
+- 绿灯：Release/Debug `qml_integrated_theme_test` 均通过；换歌后等待新波形时长就绪并恢复完整范围。
+- 视觉证据：`evidence/integrated-theme/integrated-1672x941-title-spacing-v3.png`；同尺寸合成为 `evidence/integrated-theme/reference-vs-current-1672x941-title-spacing-v3.png`。
+- Runtime 日志仅含 INFO；中央播放控件仍为 x=668、width=300，520px 当前歌曲摘要没有发生重叠。

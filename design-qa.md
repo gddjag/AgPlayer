@@ -3,9 +3,9 @@
 ## 最终比对输入
 
 - 视觉真值：`C:/Users/Administrator/Desktop/音视频播放器/AgPlayer音频播放器完整版/AG单窗口主题.png`
-- 当前实现：`docs/qa/evidence/integrated-theme/integrated-1672x941-soft-outlines-v2.png`
-- 同画布合成：`docs/qa/evidence/integrated-theme/reference-vs-current-1672x941-soft-outlines-v2.png`（左参考、右实现）
-- 运行日志：`docs/qa/evidence/integrated-theme/integrated-1672x941-soft-outlines-v2-runtime.log`
+- 当前实现：`docs/qa/evidence/integrated-theme/integrated-1672x941-title-spacing-v3.png`
+- 同画布合成：`docs/qa/evidence/integrated-theme/reference-vs-current-1672x941-title-spacing-v3.png`（左参考、右实现）
+- 运行日志：`docs/qa/evidence/integrated-theme/integrated-1672x941-title-spacing-v3-runtime.log`
 - 视口与密度：两侧均为 1672×941 逻辑像素、100% DPI；实现状态为深色主题、右栏展开、标签页激活、真实测试 WAV 元数据和有效波形。
 
 ## 比对历史
@@ -15,6 +15,7 @@
 3. 将左右选择 Handle 的可视条收窄为 2px，保留 14px 命中区；重建后以 `integrated-1672x941-v4.png` 完成最终复核。
 4. 按 1674×906 新参考复核右侧页签、搜索/添加玻璃表面、导航条和底栏；修复浅色主题下活动页签透明度反转，并将侧栏开关的可用图标区域扩大至 30×26px。
 5. 按最新反馈将 Integrated 表头收至 48px 并加粗；搜索、BPM、清空形成连续紧凑组；标签输入收至 34px；侧栏图标缩为 22px 并在 42px 折叠栏内居中；五个主容器和波形导航条统一降为 7%–10% 软描边/玻璃轨道。最终同尺寸合成针对本轮表头、筛选、侧栏、软描边和导航条反馈未发现 P0/P1/P2；不同曲目、选区和标签数据不纳入本轮像素一致性结论。
+6. 当前歌曲摘要从最多 450px 加宽到 520px，波形与播放栏间距从 12px 收敛为统一的 8px；1672×941 实机截图确认未侵占中央播放控件和右侧操作区。
 
 ## 五个主要表面
 

@@ -88,3 +88,13 @@
 | 波形导航条更浅的流体玻璃 | 现有轨道/滑块降透明度并增加 1px 主题高光；不使用 Blur、Shader、缓存或新依赖 | QML 材质断言、截图 |
 
 本轮仍是现有 QML 与 Theme token 的最小修改：零新增图片、DLL、线程、缓存和第三方包。
+
+## 2026-08-29 第四轮播放栏与波形视口修复
+
+| 修复要求 | 最小实现 | 验证 |
+|---|---|---|
+| 底部歌名显示更长 | Integrated 当前歌曲摘要上限由 450px 调整为 520px，宽屏比例由 32% 调整为 36% | 1672px 宽度断言、实机截图 |
+| 换歌恢复完整波形 | 监听共享 `PlaybackController.currentTrackId`，在播放时长和新波形时长就绪后调用现有 `WaveformItem.setVisibleRange(0, duration)` | 先缩放至 25%–75%，换歌后断言恢复 0–100% |
+| 波形和播放栏距离均衡 | 波形底部外边距由 12px 改为共享 `contentSpacing` 8px | QML 实际坐标断言、1672×941 截图 |
+
+只修改 `IntegratedPlayerShell.qml`；没有改动 Classic、播放器核心、波形分析、缓存或依赖。
