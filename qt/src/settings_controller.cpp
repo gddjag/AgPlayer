@@ -67,7 +67,7 @@ QString normalizedThemePreset(const QString& value)
                                     [&value](const ThemeManager::Preset& preset) {
                                         return preset.id == value;
                                     });
-    return match == presets.cend() ? defaultThemePresetId() : match->id;
+    return match == presets.cend() ? QString() : match->id;
 }
 
 QString defaultThemeCustomColor()
@@ -448,7 +448,12 @@ void SettingsController::setSkinColorMode(int value)
 
 void SettingsController::setSkinPreset(const QString& value)
 {
-    applySkinFields(skinColorMode_, normalizedThemePreset(value),
+    const QString normalized = normalizedThemePreset(value);
+    if (normalized.isEmpty()) {
+        selectDefaultSkin();
+        return;
+    }
+    applySkinFields(skinColorMode_, normalized,
                     skinCustomKind_, skinCustomColor_,
                     skinCustomColorMiddle_, skinCustomColorEnd_);
 }

@@ -743,6 +743,12 @@ void ThemeManagerTest::synchronizerAppliesSkinSettingsAtStartupAndDuringTransact
 
     settings.selectSkinPreset(QStringLiteral("unknown-new-preset"));
     QCOMPARE(manager.preferences().skinMode, ThemeManager::SkinMode::Default);
+
+    settings.selectSkinPreset(QStringLiteral("aurora"));
+    QCOMPARE(manager.preferences().skinMode, ThemeManager::SkinMode::Generated);
+    settings.setSkinPreset(QStringLiteral("unknown-new-preset"));
+    QCOMPARE(settings.skinColorMode(), 0);
+    QCOMPARE(manager.preferences().skinMode, ThemeManager::SkinMode::Default);
 }
 
 void ThemeManagerTest::ownsNoTimers()
