@@ -3651,6 +3651,14 @@
         <translation>Mở công cụ âm thanh</translation>
     </message>
     <message><source>主题皮肤颜色</source><translation>Màu giao diện chủ đề</translation></message>
+    <message><source>歌曲列表</source><translation>Danh sách bài hát</translation></message>
+    <message><source>显示歌曲列表波形缩略图</source><translation>Hiện hình thu nhỏ dạng sóng trong danh sách</translation></message>
+    <message><source>波形与频谱颜色</source><translation>Màu dạng sóng và phổ</translation></message>
+    <message><source>自定义波形</source><translation>Dạng sóng tùy chỉnh</translation></message>
+    <message><source>底色 / RGB 渐变</source><translation>Màu nền / chuyển sắc RGB</translation></message>
+    <message><source>RGB 显示区域</source><translation>Vùng hiển thị RGB</translation></message>
+    <message><source>已播放区域为 RGB</source><translation>Vùng đã phát dùng RGB</translation></message>
+    <message><source>未播放区域为 RGB</source><translation>Vùng chưa phát dùng RGB</translation></message>
 </context>
 <context>
     <name>SettingsWindow</name>

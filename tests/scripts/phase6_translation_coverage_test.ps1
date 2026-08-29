@@ -28,6 +28,27 @@ foreach ($relativePath in $phase6Qml) {
     $expected[$context] = $sources
 }
 
+$settingsSources = @(
+    '5q2M5puy5YiX6KGo',
+    '5pi+56S65q2M5puy5YiX6KGo5rOi5b2i57yp55Wl5Zu+',
+    '5rOi5b2i5LiO6aKR6LCx6aKc6Imy',
+    '6Ieq5a6a5LmJ5rOi5b2i',
+    '5bqV6ImyIC8gUkdCIOa4kOWPmA==',
+    'UkdCIOaYvuekuuWMuuWfnw==',
+    '5bey5pKt5pS+5Yy65Z+f5Li6IFJHQg==',
+    '5pyq5pKt5pS+5Yy65Z+f5Li6IFJHQg=='
+) | ForEach-Object {
+    [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_))
+}
+$settingsText = Get-Content -Raw -Encoding UTF8 -LiteralPath (
+    Join-Path $SourceRoot 'app/qml/AgPlayer/SettingsPage.qml')
+foreach ($source in $settingsSources) {
+    if ($settingsText -notmatch [regex]::Escape("qsTr(`"$source`")")) {
+        throw "SettingsPage no longer exposes the required translated source: $source"
+    }
+}
+$expected['SettingsPage'] = $settingsSources
+
 foreach ($locale in @('zh', 'en', 'th', 'vi')) {
     $catalogPath = Join-Path $SourceRoot "translations/agplayer_$locale.ts"
     [xml]$catalog = Get-Content -Raw -Encoding UTF8 -LiteralPath $catalogPath

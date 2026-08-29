@@ -110,6 +110,24 @@ TestCase {
         }
     }
 
+    Component {
+        id: localizedSelectorComponent
+
+        ThemeColorSelector {
+            width: 429
+            selectedMode: 0
+        }
+    }
+
+    Component {
+        id: settingsPageComponent
+
+        SettingsPage {
+            width: 860
+            height: 720
+        }
+    }
+
     SignalSpy {
         id: appliedSpy
         target: picker
@@ -837,5 +855,81 @@ TestCase {
             picker.cancelPicker()
             tryCompare(picker, "visible", false)
         }
+    }
+
+    function test_localized_default_label_reserves_selection_cue_and_row_fits() {
+        var selector = localizedSelectorComponent.createObject(testHost)
+        verify(selector)
+        wait(0)
+
+        var defaultButton = findChild(selector, "themeColorDefault")
+        var selectionCue = findChild(
+                    selector, "themeColorDefaultSelectionCue")
+        var customButton = findChild(selector, "themeColorCustom")
+        verify(defaultButton && selectionCue && customButton)
+
+        var labels = ["默认", "Default", "ค่าเริ่มต้น", "Mặc định"]
+        for (var labelIndex = 0; labelIndex < labels.length; ++labelIndex) {
+            defaultButton.text = labels[labelIndex]
+            wait(0)
+
+            var textItem = defaultButton.contentItem
+            var textPosition = textItem.mapToItem(defaultButton, 0, 0)
+            var cuePosition = selectionCue.mapToItem(defaultButton, 0, 0)
+            var paintedRight = textPosition.x
+                    + (textItem.width + textItem.contentWidth) / 2
+            verify(paintedRight <= cuePosition.x - 2,
+                   labels[labelIndex] + ": text=" + paintedRight
+                   + " cue=" + cuePosition.x)
+
+            var customPosition = customButton.mapToItem(selector, 0, 0)
+            verify(customPosition.x + customButton.width <= selector.width)
+            verify(defaultButton.parent.implicitWidth <= selector.width)
+        }
+
+        selector.destroy()
+    }
+
+    function test_settings_sidebar_elides_and_only_tooltips_truncated_labels() {
+        var page = settingsPageComponent.createObject(
+                    testCase.Window.window.contentItem, {
+            visible: true,
+            z: 100
+        })
+        verify(page)
+        page.visible = true
+        wait(0)
+        verify(page.visible)
+
+        var sidebar = findChild(page, "settingsSidebar")
+        var label = findChild(page, "settingsSectionLabel-3")
+        var hoverArea = findChild(page, "settingsSectionHoverArea-3")
+        verify(sidebar && label && hoverArea)
+        compare(sidebar.width, 184)
+        compare(label.elide, Text.ElideRight)
+        verify(label.clip)
+
+        label.text = "Audio tool presets with an intentionally long label"
+        tryVerify(function() { return label.truncated })
+        compare(label.ToolTip.text, label.text)
+        verify(!label.ToolTip.visible)
+        testCase.Window.window.requestActivate()
+        tryCompare(testCase.Window.window, "active", true)
+        mouseMove(page, page.width - 2, page.height - 2)
+        wait(20)
+        verify(hoverArea.visible && hoverArea.width > 0 && hoverArea.height > 0)
+        var hoverPosition = hoverArea.mapToItem(
+                    testCase.Window.window.contentItem,
+                    hoverArea.width / 2, hoverArea.height / 2)
+        mouseMove(testCase.Window.window.contentItem,
+                  hoverPosition.x, hoverPosition.y)
+        tryVerify(function() { return hoverArea.containsMouse }, 1000)
+        tryVerify(function() { return label.ToolTip.visible })
+
+        label.text = "About"
+        tryVerify(function() { return !label.truncated })
+        verify(!label.ToolTip.visible)
+
+        page.destroy()
     }
 }

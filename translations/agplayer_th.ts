@@ -3651,6 +3651,14 @@
         <translation>เปิดเครื่องมือเสียง</translation>
     </message>
     <message><source>主题皮肤颜色</source><translation>สีสกินธีม</translation></message>
+    <message><source>歌曲列表</source><translation>รายการเพลง</translation></message>
+    <message><source>显示歌曲列表波形缩略图</source><translation>แสดงภาพย่อรูปคลื่นในรายการเพลง</translation></message>
+    <message><source>波形与频谱颜色</source><translation>สีรูปคลื่นและสเปกตรัม</translation></message>
+    <message><source>自定义波形</source><translation>รูปคลื่นกำหนดเอง</translation></message>
+    <message><source>底色 / RGB 渐变</source><translation>สีพื้น / ไล่สี RGB</translation></message>
+    <message><source>RGB 显示区域</source><translation>พื้นที่แสดง RGB</translation></message>
+    <message><source>已播放区域为 RGB</source><translation>พื้นที่ที่เล่นแล้วใช้ RGB</translation></message>
+    <message><source>未播放区域为 RGB</source><translation>พื้นที่ที่ยังไม่เล่นใช้ RGB</translation></message>
 </context>
 <context>
     <name>SettingsWindow</name>

@@ -3708,6 +3708,14 @@ Clear: Remove all known aliases for this field.</translation>
         <translation>Open audio tools</translation>
     </message>
     <message><source>主题皮肤颜色</source><translation>Theme skin color</translation></message>
+    <message><source>歌曲列表</source><translation>Song list</translation></message>
+    <message><source>显示歌曲列表波形缩略图</source><translation>Show waveform thumbnails in the song list</translation></message>
+    <message><source>波形与频谱颜色</source><translation>Waveform and spectrum colors</translation></message>
+    <message><source>自定义波形</source><translation>Custom waveform</translation></message>
+    <message><source>底色 / RGB 渐变</source><translation>Base color / RGB gradient</translation></message>
+    <message><source>RGB 显示区域</source><translation>RGB display region</translation></message>
+    <message><source>已播放区域为 RGB</source><translation>Use RGB for the played region</translation></message>
+    <message><source>未播放区域为 RGB</source><translation>Use RGB for the unplayed region</translation></message>
 </context>
 <context>
     <name>SettingsWindow</name>

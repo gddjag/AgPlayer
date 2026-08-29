@@ -61,6 +61,8 @@ ColumnLayout {
             checked: root.selectedMode === 0
             text: qsTr("默认")
             focusPolicy: Qt.StrongFocus
+            leftPadding: 6
+            rightPadding: checked ? 22 : 6
             Layout.preferredHeight: 30
             Accessible.role: Accessible.Button
             Accessible.name: text + (checked ? qsTr("，已选择") : "")

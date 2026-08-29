@@ -3708,6 +3708,14 @@
         <translation>打开音频工具</translation>
     </message>
     <message><source>主题皮肤颜色</source><translation>主题皮肤颜色</translation></message>
+    <message><source>歌曲列表</source><translation>歌曲列表</translation></message>
+    <message><source>显示歌曲列表波形缩略图</source><translation>显示歌曲列表波形缩略图</translation></message>
+    <message><source>波形与频谱颜色</source><translation>波形与频谱颜色</translation></message>
+    <message><source>自定义波形</source><translation>自定义波形</translation></message>
+    <message><source>底色 / RGB 渐变</source><translation>底色 / RGB 渐变</translation></message>
+    <message><source>RGB 显示区域</source><translation>RGB 显示区域</translation></message>
+    <message><source>已播放区域为 RGB</source><translation>已播放区域为 RGB</translation></message>
+    <message><source>未播放区域为 RGB</source><translation>未播放区域为 RGB</translation></message>
 </context>
 <context>
     <name>SettingsWindow</name>

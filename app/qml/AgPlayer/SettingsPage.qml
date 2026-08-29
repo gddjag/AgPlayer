@@ -401,6 +401,7 @@ Item {
                             }
 
                             Text {
+                                objectName: "settingsSectionLabel-" + modelData.index
                                 text: modelData.text
                                 color: root.selectedSection === modelData.index
                                        ? Theme.highlightText
@@ -408,11 +409,16 @@ Item {
                                 font.family: Theme.fontPrimary
                                 font.pixelSize: 14
                                 Layout.fillWidth: true
+                                elide: Text.ElideRight
+                                clip: true
+                                ToolTip.text: text
+                                ToolTip.visible: truncated && mouseArea.containsMouse
                             }
                         }
 
                         MouseArea {
                             id: mouseArea
+                            objectName: "settingsSectionHoverArea-" + modelData.index
                             anchors.fill: parent
                             hoverEnabled: true
                             onClicked: root.selectSection(modelData.index)
