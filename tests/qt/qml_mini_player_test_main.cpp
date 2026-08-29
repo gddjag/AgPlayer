@@ -81,7 +81,6 @@ public slots:
         if (audioFeatures_) {
             audioFeatures_->setActive(false);
         }
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 250);
 
         delete miniWindow_.data();
         miniWindow_ = nullptr;

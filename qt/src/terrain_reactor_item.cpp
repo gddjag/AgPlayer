@@ -284,7 +284,7 @@ protected:
                 std::exchange(pendingStaticUploads_, nullptr));
         }
 
-        commandBuffer->beginPass(renderTarget(), QColor(4, 6, 11, 255),
+        commandBuffer->beginPass(renderTarget(), QColor(4, 6, 11, 0),
                                  {1.0F, 0}, updates);
         commandBuffer->setGraphicsPipeline(pipeline_.get());
         commandBuffer->setShaderResources(bindings_.get());
@@ -473,7 +473,7 @@ private:
         const float pitch = camera.pitch;
         const float radius = camera.distance - camera.punch * 0.6F;
         const RenderDynamics dynamics = mapRenderDynamics(snapshot_.style);
-        const float lowAngleLift = 0.42F + dynamics.depthOfField * 0.11F;
+        const float lowAngleLift = 0.52F + dynamics.depthOfField * 0.12F;
         QVector3D eye(radius * std::cos(pitch) * std::sin(yaw),
                       9.0F + radius * std::sin(pitch) * lowAngleLift,
                       radius * std::cos(pitch) * std::cos(yaw));
@@ -483,7 +483,7 @@ private:
                         std::cos(visual.timeSeconds * 17.0F) * shake * 0.55F,
                         std::sin(visual.timeSeconds * 13.0F) * shake * 0.7F);
         QMatrix4x4 view;
-        view.lookAt(eye, QVector3D(0.0F, 2.2F, 0.0F),
+        view.lookAt(eye, QVector3D(0.0F, -5.0F, 0.0F),
                     QVector3D(0.0F, 1.0F, 0.0F));
         const QMatrix4x4 mvp = rhi()->clipSpaceCorrMatrix() * projection * view;
 
@@ -629,7 +629,7 @@ TerrainReactorItem::TerrainReactorItem(QQuickItem* parent)
       resourceState_(std::make_shared<RendererResourceState>())
 {
     setSampleCount(1);
-    setAlphaBlending(false);
+    setAlphaBlending(true);
     clock_.start();
     connect(this, &QQuickItem::visibleChanged, this, [this] {
         emit renderingRequestedChanged();

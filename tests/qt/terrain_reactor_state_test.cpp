@@ -28,6 +28,9 @@ private slots:
     void impactEventsProduceOneBoundedPulsePerRevision();
     void explicitImpactRaisesCenterAndTravelingRing();
     void steadyMusicKeepsCenterVisiblyFocused();
+    void nearbyRandomnessKeepsTerrainSoftWithoutThresholdSpikes();
+    void idleTerrainKeepsFineVisibleReliefWithoutMusic();
+    void idleTerrainFadesOutsideResponseField();
     void trackIdentityProducesStableBoundedDistinctPalette();
     void ecoFramePacerLimitsWorkToThirtyFrames();
 };
@@ -160,7 +163,7 @@ void TerrainReactorStateTest::audioFeaturesDriveBoundedVisualParameters()
     const float centerHeight = terrainHeight(center, visual, 2.0F);
     const float edgeHeight = terrainHeight(edge, visual, 2.0F);
     QVERIFY(centerHeight > edgeHeight);
-    QVERIFY(centerHeight <= 18.0F);
+    QVERIFY(centerHeight <= 30.0F);
     QVERIFY(edgeHeight >= 0.035F);
 }
 
@@ -277,7 +280,7 @@ void TerrainReactorStateTest::explicitImpactRaisesCenterAndTravelingRing()
             > terrainHeight(center, baseline, 2.0F, style));
     QVERIFY(terrainHeight(ring, impacted, 2.0F, style)
             > terrainHeight(ring, baseline, 2.0F, style));
-    QVERIFY(terrainHeight(center, impacted, 2.0F, style) <= 24.0F);
+    QVERIFY(terrainHeight(center, impacted, 2.0F, style) <= 36.0F);
 }
 
 void TerrainReactorStateTest::steadyMusicKeepsCenterVisiblyFocused()
@@ -303,6 +306,62 @@ void TerrainReactorStateTest::steadyMusicKeepsCenterVisiblyFocused()
             > terrainHeight(center, dim, 2.0F, dimStyle) + 1.0F);
 }
 
+void TerrainReactorStateTest::nearbyRandomnessKeepsTerrainSoftWithoutThresholdSpikes()
+{
+    AudioFeatures features;
+    features.bands.fill(0.42F);
+    features.energy = 0.62F;
+    RenderStyleSnapshot style;
+    style.centerHighlight = 0.72F;
+    const VisualParameters visual = mapVisualParameters(features, 2.0F, style);
+
+    SceneInstance lower;
+    lower.position = QVector3D(8.0F, 0.0F, 8.0F);
+    lower.random = 0.779F;
+    lower.zone = ColorZone::Peak;
+    SceneInstance upper = lower;
+    upper.random = 0.781F;
+
+    const float lowerHeight = terrainHeight(lower, visual, 2.0F, style);
+    const float upperHeight = terrainHeight(upper, visual, 2.0F, style);
+    QVERIFY2(std::abs(upperHeight - lowerHeight) < 0.35F,
+             "Near-identical neighbouring seeds must not create a hard spike");
+}
+
+void TerrainReactorStateTest::idleTerrainKeepsFineVisibleReliefWithoutMusic()
+{
+    const VisualParameters silent;
+    const RenderStyleSnapshot style;
+    SceneInstance sample;
+    sample.position = QVector3D(12.0F, 0.0F, -7.0F);
+    sample.random = 0.52F;
+
+    const float first = terrainHeight(sample, silent, 0.0F, style);
+    const float second = terrainHeight(sample, silent, 1.5F, style);
+    QVERIFY2(first > 0.65F && second > 0.65F,
+             "Idle terrain must remain visibly textured instead of collapsing flat");
+    QVERIFY(first < 3.0F && second < 3.0F);
+    QVERIFY(std::abs(first - second) < 0.35F);
+}
+
+void TerrainReactorStateTest::idleTerrainFadesOutsideResponseField()
+{
+    const VisualParameters silent;
+    const RenderStyleSnapshot style;
+    SceneInstance inner;
+    inner.position = QVector3D(12.0F, 0.0F, -7.0F);
+    inner.random = 0.46F;
+    inner.zone = ColorZone::Cool;
+    SceneInstance outer = inner;
+    outer.position = QVector3D(88.0F, 0.0F, 0.0F);
+
+    const float innerHeight = terrainHeight(inner, silent, 0.75F, style);
+    const float outerHeight = terrainHeight(outer, silent, 0.75F, style);
+    QVERIFY(innerHeight > 0.65F);
+    QVERIFY2(outerHeight < 0.16F,
+             "Idle relief must fade to a fine dark floor outside the reactor field");
+}
+
 void TerrainReactorStateTest::automaticQualityUsesHysteresisCooldownAndEffectFirstOrder()
 {
     AutomaticQualityController quality;
@@ -318,9 +377,9 @@ void TerrainReactorStateTest::automaticQualityUsesHysteresisCooldownAndEffectFir
     observe(40.0, 0.01);
     QCOMPARE(quality.stage(), DegradationStage::ReducedParticles);
     const QualityConfiguration particlesReduced = quality.configuration();
-    QVERIFY(particlesReduced.particleCount < 180);
-    QCOMPARE(particlesReduced.floatingCount, 120);
-    QCOMPARE(particlesReduced.meteorCount, 28);
+    QVERIFY(particlesReduced.particleCount < 140);
+    QCOMPARE(particlesReduced.floatingCount, 80);
+    QCOMPARE(particlesReduced.meteorCount, 20);
     QCOMPARE(particlesReduced.rippleCount, 10);
     QCOMPARE(particlesReduced.gridSize, 160);
 

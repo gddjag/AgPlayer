@@ -144,7 +144,11 @@ TestCase {
         compare(button.icon.height, 16)
         var previousMode = SettingsController.waveformMode
         mouseClick(button)
-        compare(SettingsController.waveformMode, (previousMode + 1) % 3)
+        var expectedMode = previousMode === 0 ? 3
+                         : previousMode === 3 ? 1
+                         : previousMode === 1 ? 2 : 0
+        compare(SettingsController.waveformMode,
+                expectedMode)
         SettingsController.waveformMode = previousMode
     }
 

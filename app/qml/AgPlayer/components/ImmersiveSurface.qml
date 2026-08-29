@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Effects
 import AgPlayer
 
 Item {
@@ -60,7 +61,34 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: "#000105"
+        color: "#03040a"
+        gradient: Gradient {
+            GradientStop { position: 0.0; color: "#090b13" }
+            GradientStop { position: 0.58; color: "#04050a" }
+            GradientStop { position: 1.0; color: "#010204" }
+        }
+    }
+
+    Item {
+        id: ambientColorField
+        anchors.fill: parent
+        opacity: 0.72
+
+        Repeater {
+            model: 7
+            Rectangle {
+                required property int index
+                anchors.centerIn: parent
+                anchors.verticalCenterOffset: parent.height * 0.16
+                width: parent.width * (0.42 + index * 0.105)
+                height: parent.height * (0.30 + index * 0.075)
+                radius: Math.min(width, height) / 2
+                color: index % 3 === 0 ? PlayerExperienceController.warmColor
+                     : index % 3 === 1 ? PlayerExperienceController.coolColor
+                                       : PlayerExperienceController.accentColor
+                opacity: 0.010 - index * 0.0008
+            }
+        }
     }
 
     Loader {
@@ -69,6 +97,47 @@ Item {
         sourceComponent: root.renderingEnabled
                          ? nativeTerrainComponent : inertTerrainComponent
         onItemChanged: root.synchronizeAudioFeatures()
+    }
+
+    MultiEffect {
+        objectName: "immersiveReactorBloom"
+        anchors.fill: terrainLoader
+        source: terrainLoader
+        visible: root.active && root.hostExposed
+                 && root.hostMode !== PlayerExperienceController.Desktop
+                 && PlayerExperienceController.glowIntensity > 4
+        blurEnabled: true
+        blur: 0.42 + PlayerExperienceController.glowIntensity / 100 * 0.28
+        blurMax: 24
+        blurMultiplier: 0.64
+        brightness: 0.32 + (root.terrainItem
+                            ? Math.min(1, root.terrainItem.featureEnergy) * 0.24 : 0)
+        saturation: 0.20
+        opacity: 0.32 + PlayerExperienceController.glowIntensity / 100 * 0.38
+    }
+
+    Item {
+        id: reactorSoftBloom
+        anchors.fill: parent
+        visible: root.active && root.hostExposed
+        opacity: 0.42 + (root.terrainItem
+                         ? Math.min(1, root.terrainItem.featureEnergy) * 0.58 : 0)
+
+        Repeater {
+            model: 6
+            Rectangle {
+                required property int index
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: parent.height * 0.08
+                width: parent.width * (0.58 - index * 0.065)
+                height: parent.height * (0.43 - index * 0.045)
+                radius: Math.min(width, height) / 2
+                color: index % 2 === 0 ? PlayerExperienceController.peakColor
+                                       : PlayerExperienceController.warmColor
+                opacity: 0.014
+            }
+        }
     }
 
     Component {
@@ -103,6 +172,7 @@ Item {
             property int liveRendererCount: 0
             property int renderStatus: TerrainReactorItem.Inactive
             property string diagnostic: ""
+            property real featureEnergy: 0
             function orbitBy(yawDelta, pitchDelta, nowSeconds) {}
             function zoomBy(wheelDelta, nowSeconds) {}
         }
@@ -345,7 +415,6 @@ Item {
         anchors.bottomMargin: 10
         height: 52
         waveformSession: root.waveformSession
-        trackColorized: true
         opacityScale: root.panelIdle ? 0.55 : 1.0
         z: 9
     }

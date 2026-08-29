@@ -81,6 +81,15 @@ class SettingsController final : public QObject {
                    WRITE setWaveformRgbMiddleColor NOTIFY waveformRgbMiddleColorChanged)
     Q_PROPERTY(QString waveformRgbEndColor READ waveformRgbEndColor
                    WRITE setWaveformRgbEndColor NOTIFY waveformRgbEndColorChanged)
+    Q_PROPERTY(QString waveformFrequencyLowColor READ waveformFrequencyLowColor
+                   WRITE setWaveformFrequencyLowColor
+                   NOTIFY waveformFrequencyLowColorChanged)
+    Q_PROPERTY(QString waveformFrequencyMidColor READ waveformFrequencyMidColor
+                   WRITE setWaveformFrequencyMidColor
+                   NOTIFY waveformFrequencyMidColorChanged)
+    Q_PROPERTY(QString waveformFrequencyHighColor READ waveformFrequencyHighColor
+                   WRITE setWaveformFrequencyHighColor
+                   NOTIFY waveformFrequencyHighColorChanged)
     Q_PROPERTY(bool waveformRgbProgress READ waveformRgbProgress
                    WRITE setWaveformRgbProgress NOTIFY waveformRgbProgressChanged)
     Q_PROPERTY(bool waveformHoverTimePreview READ waveformHoverTimePreview
@@ -212,6 +221,9 @@ public:
     QString waveformRgbStartColor() const;
     QString waveformRgbMiddleColor() const;
     QString waveformRgbEndColor() const;
+    QString waveformFrequencyLowColor() const;
+    QString waveformFrequencyMidColor() const;
+    QString waveformFrequencyHighColor() const;
     bool waveformRgbProgress() const noexcept;
     bool waveformHoverTimePreview() const noexcept;
     bool waveformPlaybackGuide() const noexcept;
@@ -300,6 +312,9 @@ public:
     void setWaveformRgbStartColor(const QString& value);
     void setWaveformRgbMiddleColor(const QString& value);
     void setWaveformRgbEndColor(const QString& value);
+    void setWaveformFrequencyLowColor(const QString& value);
+    void setWaveformFrequencyMidColor(const QString& value);
+    void setWaveformFrequencyHighColor(const QString& value);
     void setWaveformRgbProgress(bool value);
     void setWaveformHoverTimePreview(bool value);
     void setWaveformPlaybackGuide(bool value);
@@ -347,6 +362,8 @@ public:
 
     Q_INVOKABLE void resetToDefaults();
     Q_INVOKABLE void resetWaveformDefaults();
+    Q_INVOKABLE void resetWaveformFrequencyColors();
+    Q_INVOKABLE void cycleWaveformMode();
     Q_INVOKABLE void beginEdit();
     Q_INVOKABLE void commitEdit();
     Q_INVOKABLE void cancelEdit();
@@ -396,6 +413,9 @@ signals:
     void waveformRgbStartColorChanged();
     void waveformRgbMiddleColorChanged();
     void waveformRgbEndColorChanged();
+    void waveformFrequencyLowColorChanged();
+    void waveformFrequencyMidColorChanged();
+    void waveformFrequencyHighColorChanged();
     void waveformRgbProgressChanged();
     void waveformHoverTimePreviewChanged();
     void waveformPlaybackGuideChanged();
@@ -504,6 +524,9 @@ private:
     QString waveformRgbStartColor_ = QStringLiteral("#00d4ff");
     QString waveformRgbMiddleColor_ = QStringLiteral("#7b2ff7");
     QString waveformRgbEndColor_ = QStringLiteral("#e62e9b");
+    QString waveformFrequencyLowColor_ = QStringLiteral("#ff647c");
+    QString waveformFrequencyMidColor_ = QStringLiteral("#3ed6ae");
+    QString waveformFrequencyHighColor_ = QStringLiteral("#8a7cff");
     bool waveformRgbProgress_ = false;
     bool waveformHoverTimePreview_ = true;
     bool waveformPlaybackGuide_ = false;

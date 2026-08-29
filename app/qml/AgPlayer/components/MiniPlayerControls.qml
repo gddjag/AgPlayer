@@ -84,14 +84,8 @@ Rectangle {
             waveform.peaks = root.shapeSpectrum(playback ? playback.spectrum : [])
             playedWaveform.peaks = waveform.peaks
         } else {
-            var source = rawWaveformLayers || {}
-            waveform.layers = {
-                mix: source.mix || [],
-                _sampleRate: Number(source._sampleRate) || 0,
-                _totalSamples: Number(source._totalSamples) || 0,
-                _peakCount: Number(source._peakCount) || 0
-            }
-            playedWaveform.layers = waveform.layers
+            waveform.layers = rawWaveformLayers || ({})
+            playedWaveform.layers = rawWaveformLayers || ({})
         }
     }
     function loadWaveform() {
@@ -262,6 +256,9 @@ Rectangle {
                                          ? SettingsController.spectrumSolidColor
                                          : SettingsController.spectrumRgbEndColor)
                                       : SettingsController.waveformRgbEndColor
+                    frequencyLowColor: SettingsController.waveformFrequencyLowColor
+                    frequencyMidColor: SettingsController.waveformFrequencyMidColor
+                    frequencyHighColor: SettingsController.waveformFrequencyHighColor
                     rgbProgress: SettingsController.waveformMode === 1
                                  && SettingsController.waveformRgbProgress
                     amplitudeScale: SettingsController.waveformMode === 2
@@ -291,6 +288,9 @@ Rectangle {
                         gradientStartColor: waveform.gradientStartColor
                         gradientMiddleColor: waveform.gradientMiddleColor
                         gradientEndColor: waveform.gradientEndColor
+                        frequencyLowColor: waveform.frequencyLowColor
+                        frequencyMidColor: waveform.frequencyMidColor
+                        frequencyHighColor: waveform.frequencyHighColor
                         rgbProgress: waveform.rgbProgress
                         amplitudeScale: waveform.amplitudeScale
                         density: waveform.density
@@ -338,8 +338,7 @@ Rectangle {
                     Accessible.name: qsTr("切换波形样式")
                     ToolTip.text: Accessible.name
                     ToolTip.visible: hovered
-                    onClicked: SettingsController.waveformMode =
-                               (SettingsController.waveformMode + 1) % 3
+                    onClicked: SettingsController.cycleWaveformMode()
                     background: null
                 }
                 ToolButton {
@@ -513,7 +512,10 @@ Rectangle {
         function onLayersChanged() { root.loadWaveform() }
         function onDurationMsChanged() { root.loadWaveform() }
     }
-    Connections { target: SettingsController; function onWaveformModeChanged() { root.applyWaveformMode() } }
+    Connections {
+        target: SettingsController
+        function onWaveformModeChanged() { root.applyWaveformMode() }
+    }
     onWaveformSessionChanged: root.loadWaveform()
     Component.onCompleted: root.loadWaveform()
 }

@@ -108,8 +108,7 @@ Rectangle {
             icon.width: 20
             icon.height: 20
             Accessible.name: qsTr("Change waveform mode")
-            onClicked: SettingsController.waveformMode =
-                       (SettingsController.waveformMode + 1) % 3
+            onClicked: SettingsController.cycleWaveformMode()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
             background: null

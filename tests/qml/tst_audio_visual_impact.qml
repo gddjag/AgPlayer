@@ -13,7 +13,14 @@ TestCase {
 
     QtObject {
         id: waveformSession
-        property var layers: ({ mix: [0.2, 0.6, 0.4], _durationMs: 120000, _bpm: 120 })
+        property var layers: ({
+            mix: [0.2, 0.6, 0.4],
+            bass: [0.8, 0.2, 0.1],
+            mid: [0.1, 0.8, 0.2],
+            high: [0.1, 0.2, 0.8],
+            _durationMs: 120000,
+            _bpm: 120
+        })
         property real durationMs: 120000
         property string trackId: "track-a"
     }
@@ -85,30 +92,33 @@ TestCase {
         compare(AudioVisualFeatureController.impactRevision, revision)
     }
 
-    function test_shared_view_uses_one_waveform_and_stable_track_colors() {
-        compare(sharedWaveform.trackColorized, true)
+    function test_shared_view_uses_one_frequency_color_waveform() {
         compare(waveformItemCount(sharedWaveform), 1)
-        var first = sharedWaveform.colorForTrack("track-a", 0)
-        compare(first, sharedWaveform.colorForTrack("track-a", 0))
-        verify(first !== sharedWaveform.colorForTrack("track-b", 0))
 
         var item = findChild(sharedWaveform, "immersiveWaveform")
         verify(item)
         compare(item.layers, waveformSession.layers)
         compare(item.duration, waveformSession.durationMs)
-        verify(item.baseColor !== undefined)
+        compare(item.visualMode, 3)
+        compare(String(item.frequencyLowColor),
+                SettingsController.waveformFrequencyLowColor)
+        compare(String(item.frequencyMidColor),
+                SettingsController.waveformFrequencyMidColor)
+        compare(String(item.frequencyHighColor),
+                SettingsController.waveformFrequencyHighColor)
     }
 
-    function test_track_change_smoothly_transitions_waveform_color() {
+    function test_track_change_does_not_randomize_frequency_colors() {
         var item = findChild(sharedWaveform, "immersiveWaveform")
         verify(item)
+        var low = String(item.frequencyLowColor)
+        var mid = String(item.frequencyMidColor)
+        var high = String(item.frequencyHighColor)
         waveformSession.trackId = "track-a"
-        wait(550)
-        var target = sharedWaveform.colorForTrack("track-b", 0)
         waveformSession.trackId = "track-b"
-        verify(String(item.baseColor) !== String(target))
-        wait(550)
-        compare(String(item.baseColor), String(target))
+        compare(String(item.frequencyLowColor), low)
+        compare(String(item.frequencyMidColor), mid)
+        compare(String(item.frequencyHighColor), high)
     }
 
     function test_waveform_session_exposes_reusable_stable_track_palette() {

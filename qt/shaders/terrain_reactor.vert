@@ -47,7 +47,7 @@ void main()
     float distanceFromCore = length(position.xz);
     vec4 bandsLow = ubuf.bandsLow * ubuf.equalizerLow;
     vec4 bandsHigh = ubuf.bandsHigh * ubuf.equalizerHigh;
-    float amplitude = mix(0.25, 1.75, ubuf.styleParameters.x);
+    float amplitude = mix(0.20, 1.45, ubuf.styleParameters.x);
     float motion = mix(0.2, 1.8, ubuf.styleParameters.y);
     float responseRadius = max(36.0, ubuf.styleAudio.z);
     float impactStrength = ubuf.impact.x;
@@ -56,19 +56,48 @@ void main()
     float coreGlow = 0.0;
     float steadyCoreGlow = 0.0;
     float rippleWave = 0.0;
+    float terrainSpike = 0.0;
     opacity = 1.0;
 
     if (type < 0.5) {
         float center = clamp(1.0 - distanceFromCore / responseRadius, 0.0, 1.0);
         float core = pow(center, 1.42);
-        float bass = bandsLow.x * core * 7.0
-                   + bandsLow.y * center * (2.1 + randomValue * 2.9);
-        float mids = bandsLow.z * randomValue * 2.2
-                   + bandsLow.w * (0.7 + 0.3 * sin(position.x * 0.08 + t * 0.8 * motion)) * 2.0;
+        float terrainField = smoothstep(responseRadius * 1.15,
+                                        responseRadius * 0.45,
+                                        distanceFromCore);
+        float bassField = 0.75 + 0.25
+            * sin(position.x * 0.045 - position.z * 0.035 + t * 0.24);
+        float midField = 0.55 + 0.45
+            * sin(position.z * 0.060 + position.x * 0.035 + t * 0.35);
+        float bass = bandsLow.x * core * 4.3
+                   + bandsLow.y * center * (1.9 + bassField * 1.5);
+        float mids = bandsLow.z * midField * 1.65
+                   + bandsLow.w * (0.72 + 0.28
+                       * sin(position.x * 0.055 + position.z * 0.025
+                             + t * 0.62 * motion)) * 1.75;
+        float clusterA = 0.5 + 0.5 * sin(position.x * 0.17
+            + sin(position.z * 0.08) * 1.4);
+        float clusterB = 0.5 + 0.5 * cos(position.z * 0.15
+            - cos(position.x * 0.07) * 1.3);
+        float clusteredSpire = pow(clamp(clusterA * 0.52 + clusterB * 0.48,
+                                         0.0, 1.0), 6.0);
+        float randomSpire = pow(clamp(randomValue, 0.0, 1.0), 6.0);
+        float spikeField = clamp(randomSpire * 0.74
+                                 + clusteredSpire * 0.55, 0.0, 1.0);
+        terrainSpike = spikeField * center;
         float highSpike = bandsHigh.x
-                        * (randomValue > 0.81 ? 3.4 : 0.35)
+                        * mix(0.10, 14.00, spikeField)
                         * center * mix(0.5, 1.8, ubuf.styleDynamics.y);
-        float idle = 0.08 + 0.16 * sin(distanceFromCore * 0.07 - t * 0.4 + randomValue * 3.0);
+        float idlePhase = sin(position.x * 0.032 + position.z * 0.041) * 0.72;
+        float reliefA = 0.5 + 0.5 * sin(position.x * 0.055
+            + position.z * 0.032 + t * 0.18);
+        float reliefB = 0.5 + 0.5 * cos(position.z * 0.070
+            - position.x * 0.018 - t * 0.14);
+        float baseRelief = (0.24 + 0.48
+            * (reliefA * 0.55 + reliefB * 0.45)) * terrainField
+            + core * 1.08;
+        float idle = baseRelief + 0.06 + 0.10
+            * sin(distanceFromCore * 0.067 - t * 0.36 + idlePhase);
         float rippleCount = max(1.0, ubuf.effects.w);
         float rippleSpacing = 96.0 / rippleCount;
         float rippleRadius = mod(t * 13.5, rippleSpacing);
@@ -79,9 +108,9 @@ void main()
                      * exp(-(ringDistance * ringDistance) / 25.0) * 4.1;
         float ringPhase = 0.5 + 0.5 * cos(distanceFromCore * 0.29
                                        - t * 1.15 * motion);
-        float structuralRing = pow(ringPhase, 9.0)
-                             * (0.45 + ubuf.parameters.x * 0.95)
-                             * 1.6 * ubuf.styleToggles.x;
+        float structuralRing = pow(ringPhase, 6.0)
+                             * (0.24 + ubuf.parameters.x * 1.12)
+                             * 1.72 * ubuf.styleToggles.x * terrainField;
         ripple += structuralRing;
         rippleWave = ripple;
         float travelingRadius = impactAge * responseRadius * 0.92;
@@ -94,17 +123,20 @@ void main()
         float dome = exp(-(distanceFromCore * distanceFromCore)
                        / (domeRadius * domeRadius));
         coreGlow = impactStrength * dome * ubuf.styleAudio.w;
-        steadyCoreGlow = pow(center, 2.25)
+        steadyCoreGlow = pow(center, 2.05)
                        * (0.16 + ubuf.parameters.x * 0.92
                           + bandsLow.x * 0.72)
                        * ubuf.styleAudio.w;
         float centerSpikes = ubuf.parameters.x * ubuf.styleAudio.w * core
-                           * mix(1.4, 8.5, step(0.78, randomValue));
+                           * mix(0.20, 26.00, spikeField);
         idle *= ubuf.styleToggles.w;
-        float height = clamp(idle + (bass + mids + highSpike + ripple) * amplitude
-                           + steadyCoreGlow * 4.8 + centerSpikes
-                           + impactWave + coreGlow * 11.0,
-                             0.035, 24.0);
+        float rawHeight = max(0.0,
+            idle + ((bass + mids + highSpike) * terrainField + ripple) * amplitude
+            + steadyCoreGlow * 2.80 + centerSpikes
+            + impactWave + coreGlow * 9.2);
+        float softCap = mix(30.0, 36.0, step(0.001, impactStrength));
+        float height = max(0.035,
+            softCap * (1.0 - exp(-rawHeight / softCap)));
         scale.y = height;
         position.y += height * 0.5;
     } else if (type < 1.5) {
@@ -119,7 +151,9 @@ void main()
             age = clamp(impactAge / 0.78, 0.0, 1.0);
         }
         float fall = clamp(age / 0.72, 0.0, 1.0);
-        float visibleFactor = 1.0 - step(0.72, age);
+        float visibleFactor = group < 0.5
+            ? 1.0 - step(0.72, age)
+            : 1.0 - step(0.18, age);
         position.y *= 1.0 - fall;
         position.xz = mix(position.xz, vec2(0.0), fall * (group < 0.5 ? 0.86 : 0.0));
         position.x += fall * 6.0 * step(0.5, group);
@@ -146,7 +180,9 @@ void main()
         if (type < 4.5) {
             float delayedFall = clamp(age / 0.72 - localValue * 0.12,
                                       0.0, 1.0);
-            float visibleFactor = 1.0 - step(0.72, age);
+            float visibleFactor = group < 0.5
+                ? 1.0 - step(0.72, age)
+                : 1.0 - step(0.18, age);
             position.y *= 1.0 - delayedFall;
             position.xz = mix(position.xz, vec2(0.0), delayedFall
                             * (group < 0.5 ? 0.86 : 0.0));
@@ -176,7 +212,22 @@ void main()
     vec3 warm = ubuf.colors[2].rgb;
     vec3 accent = ubuf.colors[3].rgb;
     vec3 peak = ubuf.colors[4].rgb;
-    if (zone < 0.5) color = base;
+    if (type < 0.5) {
+        float warmField = 0.5 + 0.5
+            * sin(position.x * 0.026 + position.z * 0.018 + t * 0.025);
+        float radialField = 0.5 + 0.5
+            * sin(distanceFromCore * 0.115 - t * 0.055
+                  + position.x * 0.010);
+        float accentField = 0.5 + 0.5
+            * cos(position.x * 0.019 - position.z * 0.031 - t * 0.018);
+        float colorBand = warmField * 0.35 + radialField * 0.65;
+        color = mix(cool, warm, smoothstep(0.14, 0.86, colorBand));
+        color = mix(color, accent,
+                    smoothstep(0.68, 0.98, accentField) * 0.68);
+        float edge = smoothstep(0.34, 0.94,
+                                clamp(distanceFromCore / 118.0, 0.0, 1.0));
+        color = mix(color, base, edge * 0.52);
+    } else if (zone < 0.5) color = base;
     else if (zone < 1.5) color = cool;
     else if (zone < 2.5) color = warm;
     else if (zone < 3.5) color = accent;
@@ -195,14 +246,15 @@ void main()
         color = mix(color, peak, clamp(1.0 - distanceFromCore / 13.0, 0.0, 1.0));
     }
     if (type < 0.5 && rippleWave > 0.001) {
-        vec3 ringTint = mix(cool, accent,
+        vec3 ringTint = mix(cool, warm,
                             0.5 + 0.5 * sin(t * 0.9 + distanceFromCore * 0.16));
-        color = mix(color, ringTint, clamp(rippleWave * 0.38, 0.0, 0.88));
+        ringTint = mix(ringTint, accent, 0.24);
+        color = mix(color, ringTint, clamp(rippleWave * 0.78, 0.0, 0.96));
     }
     if (type < 0.5 && steadyCoreGlow > 0.001) {
-        color = mix(color, peak, clamp(steadyCoreGlow * 0.34, 0.0, 0.72));
+        color = mix(color, peak, clamp(steadyCoreGlow * 0.18, 0.0, 0.42));
         color = mix(color, vec3(1.0, 0.985, 0.965),
-                    clamp(steadyCoreGlow * 0.22, 0.0, 0.66));
+                    clamp(terrainSpike * 0.19, 0.0, 0.24));
     }
     if (type < 0.5 && impactStrength > 0.001) {
         color = mix(color, accent, clamp(impactWave * 0.14, 0.0, 0.72));
@@ -213,14 +265,15 @@ void main()
 
     vec3 worldPosition = position + vertexPosition * scale;
     gl_Position = ubuf.mvp * vec4(worldPosition, 1.0);
-    light = 0.34 + 0.66 * max(dot(normalize(vertexNormal),
+    light = 0.46 + 0.54 * max(dot(normalize(vertexNormal),
                                   normalize(vec3(-0.35, 0.82, 0.42))), 0.0);
     light *= clamp(0.66 + ubuf.stylePresentation.z * 0.34, 0.72, 1.18);
-    fog = clamp(1.0 - distanceFromCore / 118.0, 0.0, 1.0);
+    fog = clamp(1.0 - distanceFromCore / 132.0, 0.0, 1.0);
     float focusBand = exp(-pow(distanceFromCore - responseRadius * 0.34, 2.0)
                         / max(80.0, responseRadius * responseRadius * 0.18));
     focus = mix(1.0, 0.62 + focusBand * 0.38,
                 clamp(ubuf.stylePresentation.y / 1.5, 0.0, 1.0));
     glow = ubuf.styleParameters.z * (0.35 + max(max(color.r, color.g), color.b))
-         + steadyCoreGlow * 2.1 + coreGlow * 2.4 + impactWave * 0.12;
+         + steadyCoreGlow * 1.45 + terrainSpike * 2.8 + coreGlow * 7.2
+         + rippleWave * 0.30 + impactWave * 0.24;
 }

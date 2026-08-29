@@ -7,20 +7,6 @@ Item {
     property var waveformSession: null
     property var playback: PlaybackController
     property real opacityScale: 1.0
-    property bool trackColorized: true
-    readonly property string effectiveTrackId:
-        waveformSession && waveformSession.trackId
-        ? String(waveformSession.trackId)
-        : playback ? String(playback.currentTrackId || "") : ""
-    readonly property color trackBaseColor:
-        waveformSession && waveformSession.trackPalette
-        ? waveformSession.trackPalette.cool : colorForTrack(effectiveTrackId, 0)
-    readonly property color trackProgressColor:
-        waveformSession && waveformSession.trackPalette
-        ? waveformSession.trackPalette.warm : colorForTrack(effectiveTrackId, 1)
-    readonly property color trackMiddleColor:
-        waveformSession && waveformSession.trackPalette
-        ? waveformSession.trackPalette.highlight : colorForTrack(effectiveTrackId, 2)
     readonly property real effectiveDurationMs:
         waveformSession && Number(waveformSession.durationMs) > 0
         ? Number(waveformSession.durationMs)
@@ -29,15 +15,6 @@ Item {
     function formatTime(ms) {
         var total = Math.max(0, Math.floor(Number(ms || 0) / 1000))
         return Math.floor(total / 60) + ":" + String(total % 60).padStart(2, "0")
-    }
-
-    function colorForTrack(trackId, salt) {
-        var text = String(trackId || "AgPlayer")
-        var hash = 2166136261
-        for (var index = 0; index < text.length; ++index)
-            hash = Math.imul(hash ^ text.charCodeAt(index), 16777619)
-        hash = (hash + Math.imul(Number(salt || 0), -1640531527)) >>> 0
-        return Qt.hsla((hash % 360) / 360, 0.76, 0.68, 1.0)
     }
 
     Text {
@@ -62,30 +39,21 @@ Item {
         layers: root.waveformSession ? root.waveformSession.layers : ({})
         cursorPosition: root.playback ? root.playback.positionMs : 0
         duration: root.effectiveDurationMs
-        visualMode: SettingsController.waveformMode
-        baseColor: root.trackColorized ? root.trackBaseColor
-                                      : SettingsController.waveformMode === 0
-                                        ? SettingsController.waveformSolidBaseColor
-                                        : SettingsController.waveformRgbBaseColor
-        progressColor: root.trackColorized ? root.trackProgressColor
-                                          : SettingsController.waveformSolidProgressColor
-        gradientStartColor: root.trackColorized ? root.trackBaseColor
-                                               : SettingsController.waveformRgbStartColor
-        gradientMiddleColor: root.trackColorized ? root.trackMiddleColor
-                                                : SettingsController.waveformRgbMiddleColor
-        gradientEndColor: root.trackColorized ? root.trackProgressColor
-                                             : SettingsController.waveformRgbEndColor
-        rgbProgress: SettingsController.waveformMode === 1
-                     && SettingsController.waveformRgbProgress
+        // Immersive mode intentionally owns one waveform presentation. It
+        // still consumes the shared cached mix/bass/mid/high layers, but its
+        // colours always carry frequency meaning regardless of the normal
+        // player waveform preference.
+        visualMode: 3
+        frequencyLowColor: SettingsController.waveformFrequencyLowColor
+        frequencyMidColor: SettingsController.waveformFrequencyMidColor
+        frequencyHighColor: SettingsController.waveformFrequencyHighColor
         amplitudeScale: SettingsController.waveformHeight
         density: SettingsController.waveformDensity
         lineWidth: SettingsController.waveformThickness
         opacity: 0.58 * root.opacityScale
-        Behavior on baseColor { ColorAnimation { duration: 520 } }
-        Behavior on progressColor { ColorAnimation { duration: 520 } }
-        Behavior on gradientStartColor { ColorAnimation { duration: 520 } }
-        Behavior on gradientMiddleColor { ColorAnimation { duration: 520 } }
-        Behavior on gradientEndColor { ColorAnimation { duration: 520 } }
+        Behavior on frequencyLowColor { ColorAnimation { duration: 220 } }
+        Behavior on frequencyMidColor { ColorAnimation { duration: 220 } }
+        Behavior on frequencyHighColor { ColorAnimation { duration: 220 } }
         onSeekRequested: function(positionMs) {
             if (root.playback)
                 root.playback.seek(positionMs)

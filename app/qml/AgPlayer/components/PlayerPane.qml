@@ -158,15 +158,8 @@ Rectangle {
             playedWaveform.peaks = root.spectrumVisual
             return
         }
-        var source = root.rawWaveformLayers || {}
-        var snapshot = {
-            mix: source.mix || [],
-            _sampleRate: Number(source._sampleRate) || 0,
-            _totalSamples: Number(source._totalSamples) || 0,
-            _peakCount: Number(source._peakCount) || 0
-        }
-        waveform.layers = snapshot
-        playedWaveform.layers = snapshot
+        waveform.layers = root.rawWaveformLayers || ({})
+        playedWaveform.layers = root.rawWaveformLayers || ({})
     }
 
     function loadWaveform() {
@@ -511,6 +504,9 @@ Rectangle {
                                      ? SettingsController.spectrumSolidColor
                                      : SettingsController.spectrumRgbEndColor)
                                   : SettingsController.waveformRgbEndColor
+                frequencyLowColor: SettingsController.waveformFrequencyLowColor
+                frequencyMidColor: SettingsController.waveformFrequencyMidColor
+                frequencyHighColor: SettingsController.waveformFrequencyHighColor
                 rgbProgress: SettingsController.waveformMode === 1
                              && SettingsController.waveformRgbProgress
                 amplitudeScale: SettingsController.waveformMode === 2
@@ -545,6 +541,9 @@ Rectangle {
                     gradientStartColor: waveform.gradientStartColor
                     gradientMiddleColor: waveform.gradientMiddleColor
                     gradientEndColor: waveform.gradientEndColor
+                    frequencyLowColor: waveform.frequencyLowColor
+                    frequencyMidColor: waveform.frequencyMidColor
+                    frequencyHighColor: waveform.frequencyHighColor
                     rgbProgress: waveform.rgbProgress
                     amplitudeScale: waveform.amplitudeScale
                     density: waveform.density

@@ -1958,7 +1958,7 @@ TestCase {
         var previousMode = SettingsController.waveformMode
         SettingsController.waveformMode = 0
         button.clicked()
-        tryCompare(SettingsController, "waveformMode", 1)
+        tryCompare(SettingsController, "waveformMode", 3)
         SettingsController.waveformMode = previousMode
     }
 
@@ -2235,6 +2235,21 @@ TestCase {
                 SettingsController.waveformSolidBaseColor)
         compare(waveform.progressColor.toString(),
                 SettingsController.waveformSolidProgressColor)
+
+        SettingsController.waveformMode = 3
+        tryVerify(function() {
+            return waveform.layers.mix.length > 0
+                    && waveform.layers.bass.length > 0
+                    && waveform.layers.mid.length > 0
+                    && waveform.layers.high.length > 0
+        })
+        compare(waveform.visualMode, 3)
+        compare(waveform.frequencyLowColor.toString(),
+                SettingsController.waveformFrequencyLowColor)
+        compare(waveform.frequencyMidColor.toString(),
+                SettingsController.waveformFrequencyMidColor)
+        compare(waveform.frequencyHighColor.toString(),
+                SettingsController.waveformFrequencyHighColor)
 
         SettingsController.waveformMode = 1
         tryVerify(function() {
@@ -4601,6 +4616,14 @@ TestCase {
         var thicknessStepper = findChild(page, "waveformThicknessStepper")
         var aggregationCombo = findChild(page, "waveformAggregationCombo")
         var resetButton = findChild(page, "waveformResetButton")
+        var frequencyResetButton = findChild(
+                    page, "waveformFrequencyResetButton")
+        var frequencyLowField = findChild(
+                    page, "waveformFrequencyLowColorField")
+        var frequencyMidField = findChild(
+                    page, "waveformFrequencyMidColorField")
+        var frequencyHighField = findChild(
+                    page, "waveformFrequencyHighColorField")
         var listThumbnailSwitch = findChild(
                     page, "listWaveformThumbnailEnabledControl")
         var listThumbnailMode = findChild(
@@ -4610,6 +4633,10 @@ TestCase {
         verify(thicknessStepper)
         verify(aggregationCombo)
         verify(resetButton)
+        verify(frequencyResetButton)
+        verify(frequencyLowField)
+        verify(frequencyMidField)
+        verify(frequencyHighField)
         verify(listThumbnailSwitch)
         verify(listThumbnailMode)
 
@@ -4629,6 +4656,16 @@ TestCase {
 
         SettingsController.waveformHeight = 1.2
         SettingsController.waveformDensity = 3.5
+        var previousWaveformMode = SettingsController.waveformMode
+        SettingsController.waveformMode = 3
+        SettingsController.waveformFrequencyLowColor = "#112233"
+        SettingsController.waveformFrequencyMidColor = "#445566"
+        SettingsController.waveformFrequencyHighColor = "#778899"
+        frequencyResetButton.clicked()
+        compare(SettingsController.waveformFrequencyLowColor, "#ff647c")
+        compare(SettingsController.waveformFrequencyMidColor, "#3ed6ae")
+        compare(SettingsController.waveformFrequencyHighColor, "#8a7cff")
+        SettingsController.waveformMode = previousWaveformMode
         SettingsController.waveformThickness = 2.2
         SettingsController.waveformPeakAlgorithm = 1
         tryCompare(heightStepper, "value", 1.2)

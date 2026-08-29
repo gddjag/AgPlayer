@@ -164,9 +164,9 @@ enum class DegradationStage : quint8 {
 
 struct QualityConfiguration {
     int gridSize = 160;
-    int floatingCount = 120;
-    int particleCount = 180;
-    int meteorCount = 28;
+    int floatingCount = 80;
+    int particleCount = 140;
+    int meteorCount = 20;
     int rippleCount = 10;
     float internalScale = 1.0F;
 };

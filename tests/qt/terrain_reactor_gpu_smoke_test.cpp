@@ -178,6 +178,8 @@ void TerrainReactorGpuSmokeTest::explicitImpactBrightensAStableTerrainFrame()
     const bool centerBrightened = impactedLight > baselineLight * 105 / 100;
     const bool broadPulseVisible = brighterPixels
         > center.width() * center.height() / 30;
+    qInfo() << "Terrain Reactor impact luminance:" << baselineLight
+            << "->" << impactedLight << "brighter pixels:" << brighterPixels;
     item.setActive(false);
     QTest::qWait(100);
     QVERIFY(centerBrightened);

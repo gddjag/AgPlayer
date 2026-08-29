@@ -635,8 +635,7 @@ ApplicationWindow {
     Shortcut {
         sequence: SettingsController.hkWaveformMode
         context: Qt.ApplicationShortcut
-        onActivated: SettingsController.waveformMode =
-                         (SettingsController.waveformMode + 1) % 3
+        onActivated: SettingsController.cycleWaveformMode()
     }
 
     Shortcut {

@@ -185,6 +185,9 @@ QString SettingsController::waveformRgbBaseColor() const { return waveformRgbBas
 QString SettingsController::waveformRgbStartColor() const { return waveformRgbStartColor_; }
 QString SettingsController::waveformRgbMiddleColor() const { return waveformRgbMiddleColor_; }
 QString SettingsController::waveformRgbEndColor() const { return waveformRgbEndColor_; }
+QString SettingsController::waveformFrequencyLowColor() const { return waveformFrequencyLowColor_; }
+QString SettingsController::waveformFrequencyMidColor() const { return waveformFrequencyMidColor_; }
+QString SettingsController::waveformFrequencyHighColor() const { return waveformFrequencyHighColor_; }
 bool SettingsController::waveformRgbProgress() const noexcept { return waveformRgbProgress_; }
 bool SettingsController::waveformHoverTimePreview() const noexcept { return waveformHoverTimePreview_; }
 bool SettingsController::waveformPlaybackGuide() const noexcept { return waveformPlaybackGuide_; }
@@ -512,13 +515,23 @@ void SettingsController::setAppearanceSelection(int value)
 
 void SettingsController::setWaveformMode(int value)
 {
-    value = clampValue(value, 0, 2);
+    value = clampValue(value, 0, 3);
     if (waveformMode_ == value) {
         return;
     }
     waveformMode_ = value;
     persistValue(QStringLiteral("appearance/waveformMode"), value);
     emit waveformModeChanged();
+}
+
+void SettingsController::cycleWaveformMode()
+{
+    switch (waveformMode_) {
+    case 0: setWaveformMode(3); break;
+    case 3: setWaveformMode(1); break;
+    case 1: setWaveformMode(2); break;
+    default: setWaveformMode(0); break;
+    }
 }
 
 void SettingsController::setWaveformHeight(double value)
@@ -587,6 +600,12 @@ AGPLAYER_COLOR_SETTER(setWaveformRgbMiddleColor, waveformRgbMiddleColor_,
                       "appearance/waveformRgbMiddleColor", waveformRgbMiddleColorChanged)
 AGPLAYER_COLOR_SETTER(setWaveformRgbEndColor, waveformRgbEndColor_,
                       "appearance/waveformRgbEndColor", waveformRgbEndColorChanged)
+AGPLAYER_COLOR_SETTER(setWaveformFrequencyLowColor, waveformFrequencyLowColor_,
+                      "appearance/waveformFrequencyLowColor", waveformFrequencyLowColorChanged)
+AGPLAYER_COLOR_SETTER(setWaveformFrequencyMidColor, waveformFrequencyMidColor_,
+                      "appearance/waveformFrequencyMidColor", waveformFrequencyMidColorChanged)
+AGPLAYER_COLOR_SETTER(setWaveformFrequencyHighColor, waveformFrequencyHighColor_,
+                      "appearance/waveformFrequencyHighColor", waveformFrequencyHighColorChanged)
 
 void SettingsController::setWaveformRgbProgress(bool value)
 {
@@ -969,6 +988,7 @@ void SettingsController::resetWaveformDefaults()
     setWaveformRgbStartColor(QStringLiteral("#00d4ff"));
     setWaveformRgbMiddleColor(QStringLiteral("#7b2ff7"));
     setWaveformRgbEndColor(QStringLiteral("#e62e9b"));
+    resetWaveformFrequencyColors();
     setWaveformRgbProgress(false);
     setWaveformPlaybackGuide(false);
     setWaveformCanvasHeight(78);
@@ -980,6 +1000,13 @@ void SettingsController::resetWaveformDefaults()
     setSpectrumRgbEndColor(QStringLiteral("#e62e9b"));
     setListWaveformThumbnailEnabled(true);
     setListWaveformThumbnailMode(QStringLiteral("Color36"));
+}
+
+void SettingsController::resetWaveformFrequencyColors()
+{
+    setWaveformFrequencyLowColor(QStringLiteral("#ff647c"));
+    setWaveformFrequencyMidColor(QStringLiteral("#3ed6ae"));
+    setWaveformFrequencyHighColor(QStringLiteral("#8a7cff"));
 }
 
 void SettingsController::beginEdit()
@@ -1083,6 +1110,9 @@ void SettingsController::emitAllChanged(const bool includeMediaSettings)
         emit waveformRgbStartColorChanged();
         emit waveformRgbMiddleColorChanged();
         emit waveformRgbEndColorChanged();
+        emit waveformFrequencyLowColorChanged();
+        emit waveformFrequencyMidColorChanged();
+        emit waveformFrequencyHighColorChanged();
         emit waveformRgbProgressChanged();
         emit waveformHoverTimePreviewChanged();
         emit waveformPlaybackGuideChanged();
@@ -1399,6 +1429,15 @@ void SettingsController::load()
         QStringLiteral("waveformRgbMiddleColor"), waveformRgbMiddleColor_).toString();
     waveformRgbEndColor_ = settings_.value(
         QStringLiteral("waveformRgbEndColor"), waveformRgbEndColor_).toString();
+    waveformFrequencyLowColor_ = settings_.value(
+        QStringLiteral("waveformFrequencyLowColor"),
+        waveformFrequencyLowColor_).toString();
+    waveformFrequencyMidColor_ = settings_.value(
+        QStringLiteral("waveformFrequencyMidColor"),
+        waveformFrequencyMidColor_).toString();
+    waveformFrequencyHighColor_ = settings_.value(
+        QStringLiteral("waveformFrequencyHighColor"),
+        waveformFrequencyHighColor_).toString();
     waveformRgbProgress_ = settings_.value(
         QStringLiteral("waveformRgbProgress"), waveformRgbProgress_).toBool();
     spectrumSolidColor_ = restoredColor(
@@ -1621,7 +1660,7 @@ void SettingsController::load()
         normalizedOpaqueThemeColor(skinCustomColor_);
     skinCustomColor_ = normalizedSkinCustomColor.isEmpty()
         ? defaultThemeCustomColor() : normalizedSkinCustomColor;
-    waveformMode_ = clampValue(waveformMode_, 0, 2);
+    waveformMode_ = clampValue(waveformMode_, 0, 3);
     waveformHeight_ = quantize(waveformHeight_, 0.3, 1.5, 0.1);
     waveformDensity_ = quantize(waveformDensity_, 0.5, 5.0, 0.5);
     waveformThickness_ = quantize(waveformThickness_, 0.3, 3.0, 0.1);
@@ -1639,6 +1678,12 @@ void SettingsController::load()
     waveformRgbStartColor_ = validOr(waveformRgbStartColor_, QStringLiteral("#00d4ff"));
     waveformRgbMiddleColor_ = validOr(waveformRgbMiddleColor_, QStringLiteral("#7b2ff7"));
     waveformRgbEndColor_ = validOr(waveformRgbEndColor_, QStringLiteral("#e62e9b"));
+    waveformFrequencyLowColor_ = validOr(
+        waveformFrequencyLowColor_, QStringLiteral("#ff647c"));
+    waveformFrequencyMidColor_ = validOr(
+        waveformFrequencyMidColor_, QStringLiteral("#3ed6ae"));
+    waveformFrequencyHighColor_ = validOr(
+        waveformFrequencyHighColor_, QStringLiteral("#8a7cff"));
     spectrumSolidColor_ = validOr(spectrumSolidColor_, QStringLiteral("#8b5cf6"));
     spectrumRgbStartColor_ = validOr(spectrumRgbStartColor_, QStringLiteral("#00d4ff"));
     spectrumRgbMiddleColor_ = validOr(spectrumRgbMiddleColor_, QStringLiteral("#7b2ff7"));
@@ -1724,6 +1769,12 @@ void SettingsController::saveAll(const bool includeMediaSettings)
         persistValue(QStringLiteral("waveformRgbStartColor"), waveformRgbStartColor_);
         persistValue(QStringLiteral("waveformRgbMiddleColor"), waveformRgbMiddleColor_);
         persistValue(QStringLiteral("waveformRgbEndColor"), waveformRgbEndColor_);
+        persistValue(QStringLiteral("waveformFrequencyLowColor"),
+                     waveformFrequencyLowColor_);
+        persistValue(QStringLiteral("waveformFrequencyMidColor"),
+                     waveformFrequencyMidColor_);
+        persistValue(QStringLiteral("waveformFrequencyHighColor"),
+                     waveformFrequencyHighColor_);
         persistValue(QStringLiteral("waveformRgbProgress"), waveformRgbProgress_);
         persistValue(QStringLiteral("waveformHoverTimePreview"), waveformHoverTimePreview_);
         persistValue(QStringLiteral("waveformPlaybackGuide"), waveformPlaybackGuide_);
@@ -1817,6 +1868,9 @@ void SettingsController::restoreDefaults(const bool includeMediaSettings)
         waveformRgbStartColor_ = QStringLiteral("#00d4ff");
         waveformRgbMiddleColor_ = QStringLiteral("#7b2ff7");
         waveformRgbEndColor_ = QStringLiteral("#e62e9b");
+        waveformFrequencyLowColor_ = QStringLiteral("#ff647c");
+        waveformFrequencyMidColor_ = QStringLiteral("#3ed6ae");
+        waveformFrequencyHighColor_ = QStringLiteral("#8a7cff");
         waveformRgbProgress_ = false;
         waveformHoverTimePreview_ = true;
         waveformPlaybackGuide_ = false;

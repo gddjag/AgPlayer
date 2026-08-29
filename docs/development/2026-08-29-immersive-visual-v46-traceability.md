@@ -20,11 +20,13 @@
 | 响应范围默认 1.00、律动强度默认 0.30 | `PlayerExperienceController` 默认值、动态页滑杆 | Debug/Release 默认值测试通过；参数写入 `TerrainReactorState` 并改变地形半径/节奏增益 |
 | 中心随节拍发亮、彩色冲击波 | `AudioVisualFeatureController`、`TerrainReactorState`、原生 QRhi Shader | 固定频谱/BPM C++ 测试通过；真实视频音乐 Release 运行 31.14 秒稳定；最终视觉截图完成 |
 | 每 8 拍流星，缺失可靠节拍时瞬态兜底 | `AudioVisualFeatureController`、`TerrainReactorState::updateImpact` | Debug/Release 节拍与冲击集成测试通过；轨道 BPM/播放位置优先，瞬态回退受冷却限制 |
-| 高密度体素地形、分区颜色、同心波纹、漂浮体、环境层次 | `TerrainReactorItem`、`terrain_reactor.vert/.frag` | QRhi GPU smoke、状态测试通过；2169×1131 同视口对比完成。结构与感知接近，参考视频/HTML 的多通道强 Bloom 仍更浓 |
+| 高密度体素地形、分区颜色、同心波纹、漂浮体、环境层次 | `TerrainReactorItem`、`terrain_reactor.vert/.frag`、`ImmersiveSurface.qml` | QRhi GPU smoke、状态测试通过；外围静态颗粒按响应场衰减，中央使用连续簇状峰场与稳定随机峰混合；窗口/全屏增加 Qt 自带 `MultiEffect` 轻量柔光，桌面 Eco 主动关闭该层 |
 | 自动旋转、拖动、滚轮、4 秒恢复自动镜头 | `ImmersiveSurface.qml`、`TerrainReactorItem` | Debug/Release QML 集成与相机状态测试通过；鼠标拖动/滚轮写入真实相机参数 |
 | 歌词显示开关、左/中/右 3D 布局、位置/大小调节 | `LyricsPanel.qml`、`ImmersiveControlPanel.qml`、`PlayerExperienceController` | Debug/Release QML 集成及控制器持久化测试通过；歌词开关和空间参数独立于主题/沉浸开关 |
 | 普通窗口透明三行歌词 | `Main.qml` 的共享 `LyricsPanel` | QML 集成测试通过；未做 LRCLIB 线上服务实网验收 |
-| 原播放器透明无边框波形 | `SharedWaveformView.qml`、共享 `WaveformSession`/`WaveformItem` | Debug/Release QML 波形测试通过；未新增样式、Shader、解码、缓存或数据模型；真实音频运行截图确认显示 |
+| 沉浸底部“频彩波形” | `SharedWaveformView.qml`、共享 `WaveformSession`/`WaveformItem` | 固定使用低频珊瑚红、中频青绿、高频蓝紫的语义混色；透明无边框，仅保留歌名/时间/波形；直接消费原有 mix/bass/mid/high 峰值，不新增解码、FFT、缓存或模型 |
+| 全局四种波形与顺序 | `SettingsController`、`SettingsPage.qml`、双窗口/单窗口/迷你播放器共享控制 | 保留数值兼容：0 纯色、1 RGB、2 柱状频谱，新增 3 频彩；循环顺序固定 0→3→1→2→0；纯色仍为新安装默认 |
+| 频彩低/中/高颜色自定义 | `SettingsController`、`SettingsPage.qml`、`WaveformItem` | 默认 `#FF647C` / `#3ED6AE` / `#8A7CFF`；设置页可独立修改并一键恢复，持久化/回滚/非法值修复测试覆盖 |
 | 稳定逐曲配色、切歌平滑过渡、波形同步换色 | 共享波形调色板、`PlayerExperienceController`、地形调色板绑定 | Debug/Release 同曲稳定与轨道切换测试通过；520 ms 平滑过渡；手动配色会关闭歌曲自适应模式并真实写入渲染参数 |
 | 三宿主共享单渲染器 | `Main.qml` immersive coordinator | Debug/Release QML 集成及 GPU smoke 通过；未执行 50 次宿主切换泄漏循环 |
 | 渲染关闭/失败时停止无效工作 | `TerrainReactorItem::renderingRequested`、`Main.qml` | Debug/Release fail-closed 测试通过；软件/资源后端失败会停止音频视觉派生并显示非模态降级信息 |
@@ -34,14 +36,14 @@
 
 ## 已执行验证
 
-- Debug 构建：应用、10 个聚焦测试目标、QML lint 均通过。
-- Release 构建：应用、10 个聚焦测试目标、QML lint 均通过。
-- Debug 聚焦测试：10/10 通过，15.34 秒。
-- Release 聚焦测试：10/10 通过，15.97 秒。
-- 测试覆盖：歌词服务、音频视觉特征、体验控制器、反应堆状态、RHI item、GPU smoke、共享波形、音频冲击 QML、迷你播放器、沉浸集成。
+- Debug：从干净构建目录完成应用全量构建；功能聚焦目标在最终 Diff 后再次验证。
+- Release：应用全量构建、11 个功能聚焦测试与 QML lint 在最终 Diff 后再次验证。
+- Release 全量 `ctest`：118/121 通过。失败项为音频编辑控制器、既有沉浸 QML 主题色分类审计，以及只在整套顺序运行中失败的主窗口 QML；主窗口 QML 在同一最终构建的 11 项隔离聚焦运行中通过。
+- 测试覆盖：设置持久化、频彩波形几何与颜色语义、音频视觉特征、体验控制器、反应堆状态、RHI item、GPU smoke、共享波形、音频冲击 QML、迷你播放器和沉浸集成。
+- GPU 冲击高光在 Debug/Release 均通过；迷你播放器测试夹具按“先销毁窗口、再派发延迟事件”的顺序清理，Release 连续三次及最终聚焦回归均通过。
 - QML lint 只有 `Theme.qml`、`WaveformSession.qml`、`SharedWaveformView.qml` 的未使用 import 信息提示，无错误。
 - Release 使用用户参考视频的真实音频连续运行 31.14 秒，无崩溃；进程在证据采集后主动结束。日志仅有一次剪贴板重试警告。
-- 2169×1131 固定视口下完成原生截图和“参考图 + 实现图”同一输入对比。
+- 2169×1131 固定视口和固定合成频谱下完成原生截图，并把最终 HTML 截图与原生实现放入同一对比输入检查。
 - 独立 Diff Review 最初发现两项 P1：失败后端未停止派生、色块只读。两项均已修复并由测试覆盖；当前 Review 无未解决 P0/P1。
 - `git diff --check` 和受限来源标识符扫描在最终文档更新后再次执行，结果记录于本任务最终交付。
 
@@ -51,14 +53,15 @@
 - 未执行 macOS/Linux 真实运行；跨平台结论仅限同一 Qt/QRhi 核心代码路径可编译设计，不标记平台验收通过。
 - 未执行 50 次三宿主开关、设备丢失/恢复和 30 分钟沉浸 soak；31.14 秒运行不能替代长期稳定性结论。
 - 未执行 LRCLIB 线上实网查询；本地歌词服务自动测试通过，不扩大为网络服务可用性结论。
-- 未测量相对最终单窗口安装包的增量体积；本轮不制作安装包，因此不声称满足安装包增量不超过 5 MB。
-- 视觉达到高密度体素地形、节拍中心亮光、彩色冲击波、低机位自动旋转及环境层次的结构与感知目标，但参考原型/视频的强多通道 Bloom 与雾化泛光仍更强。当前版本选择单通道原生轻量实现，不宣称逐像素一致。
+- 未制作安装包。新增柔光只使用项目 Qt 6.7 自带 `QtQuick.Effects`，没有第三方运行时；安装包增量目标需在后续正式打包时测量，当前不声称已完成包体验收。
+- 视觉已经降低外围颗粒噪声、增加中央簇状高峰与节奏亮度、强化彩色环带并加入受质量策略控制的柔光层。参考原型/视频的多通道后期和空气雾化仍更强，不宣称逐像素一致。
 
 ## 证据路径
 
-- 原生最终截图：`build/qa/native-visual/immersive-v46-accepted-2169x1131.png`
-- 同视口对比：`build/qa/native-visual/reference-vs-native-accepted-2169x1131.png`
+- 原生最终固定频谱截图：`build/qa/native-visual/immersive-frequency-soft-final-v8-2169x1131.png`
+- 同视口对比：`build/qa/native-visual/reference-vs-frequency-soft-final-v8-2169x1131.png`
 - 真实音频波形截图：`build/qa/native-visual/immersive-v46-video-audio-2169x1131.png`
+- 设置页四波形截图：`build/qa/native-visual/settings-frequency-color-waveform.png`
 - Release 真实音频运行日志：`build/qa/native-visual/release-real-video-30s-pass.log`
 - 视觉 QA：`docs/qa/2026-08-29-immersive-visual-design-qa.md`
 - 第三方来源审计：`docs/qa/2026-08-29-immersive-visual-license-audit.md`

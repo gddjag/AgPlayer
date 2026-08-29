@@ -35,6 +35,12 @@ class WaveformItem : public QQuickItem {
                    WRITE setGradientMiddleColor NOTIFY gradientMiddleColorChanged)
     Q_PROPERTY(QColor gradientEndColor READ gradientEndColor
                    WRITE setGradientEndColor NOTIFY gradientEndColorChanged)
+    Q_PROPERTY(QColor frequencyLowColor READ frequencyLowColor
+                   WRITE setFrequencyLowColor NOTIFY frequencyLowColorChanged)
+    Q_PROPERTY(QColor frequencyMidColor READ frequencyMidColor
+                   WRITE setFrequencyMidColor NOTIFY frequencyMidColorChanged)
+    Q_PROPERTY(QColor frequencyHighColor READ frequencyHighColor
+                   WRITE setFrequencyHighColor NOTIFY frequencyHighColorChanged)
     Q_PROPERTY(bool rgbProgress READ rgbProgress WRITE setRgbProgress
                    NOTIFY rgbProgressChanged)
     Q_PROPERTY(qreal amplitudeScale READ amplitudeScale WRITE setAmplitudeScale
@@ -95,6 +101,12 @@ public:
     void setGradientMiddleColor(const QColor& color);
     QColor gradientEndColor() const;
     void setGradientEndColor(const QColor& color);
+    QColor frequencyLowColor() const;
+    void setFrequencyLowColor(const QColor& color);
+    QColor frequencyMidColor() const;
+    void setFrequencyMidColor(const QColor& color);
+    QColor frequencyHighColor() const;
+    void setFrequencyHighColor(const QColor& color);
     bool rgbProgress() const noexcept;
     void setRgbProgress(bool value);
     qreal amplitudeScale() const noexcept;
@@ -148,6 +160,9 @@ signals:
     void gradientStartColorChanged();
     void gradientMiddleColorChanged();
     void gradientEndColorChanged();
+    void frequencyLowColorChanged();
+    void frequencyMidColorChanged();
+    void frequencyHighColorChanged();
     void rgbProgressChanged();
     void amplitudeScaleChanged();
     void hoverPositionChanged();
@@ -209,6 +224,9 @@ private:
     QColor gradientStartColor_ = QColor(QStringLiteral("#00d4ff"));
     QColor gradientMiddleColor_ = QColor(QStringLiteral("#7b2ff7"));
     QColor gradientEndColor_ = QColor(QStringLiteral("#e62e9b"));
+    QColor frequencyLowColor_ = QColor(QStringLiteral("#ff647c"));
+    QColor frequencyMidColor_ = QColor(QStringLiteral("#3ed6ae"));
+    QColor frequencyHighColor_ = QColor(QStringLiteral("#8a7cff"));
     bool rgbProgress_ = true;
     qreal amplitudeScale_ = 1.0;
     qint64 hoverPosition_ = -1;

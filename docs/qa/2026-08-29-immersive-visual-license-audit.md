@@ -19,7 +19,7 @@ V4.6 HTML 声明其中央反应堆是对第三方浏览器实现的适配。因�
 - 最终生产代码扫描未出现 `sonic-topography`、`Mineradio`、`THREE`、`UnrealBloom`、第三方提交号或 HTML 的 `SONIC_*` 标识符。
 - 原生 Shader 使用 AgPlayer 自有 uniform、实例数据、生命周期和音频特征结构；没有把 HTML 中的 GLSL 文本纳入构建。
 - HTML 的本地文件选择、WebAudio analyser、整曲波形解码和 Demo 音乐未进入正式实现。
-- 本分支新增依赖数为零；沉浸模式使用 Qt/QRhi 和项目已有依赖。
+- 本分支未增加第三方依赖；柔光层使用项目固定 Qt 6.7 自带的 `QtQuick.Effects`，桌面 Eco 主动停用以控制资源。
 - 人工 Diff Review 未发现参考实现的源码片段、命名结构或运行时资源进入生产代码。
 
 ## 限定说明
