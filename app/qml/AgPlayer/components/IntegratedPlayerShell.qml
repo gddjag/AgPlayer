@@ -540,10 +540,9 @@ Item {
                 anchors.topMargin: 20
                 pointerInteractionEnabled: false
                 duration: root.effectiveDurationMs
-                // The overview is a single full waveform. Playback is shown by
-                // the cursor; splitting played/unplayed colours creates a
-                // full-height crop edge on dense waveforms.
-                position: 0
+                // Progress colour and cursor share this single waveform canvas;
+                // no clipped duplicate WaveformItem is created.
+                position: root.playbackPositionMs
                 cursorPosition: root.playbackPositionMs
                 analysisProgress: root.waveformProvider
                                   ? root.waveformProvider.analysisProgress : 0

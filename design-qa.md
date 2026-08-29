@@ -3,9 +3,9 @@
 ## 最终比对输入
 
 - 视觉真值：`C:/Users/Administrator/Desktop/音视频播放器/AgPlayer音频播放器完整版/AG单窗口主题.png`
-- 当前实现：`docs/qa/evidence/integrated-theme/integrated-1672x941-no-progress-edge-v6.png`
-- 同画布合成：`docs/qa/evidence/integrated-theme/reference-vs-current-1672x941-no-progress-edge-v6.png`（左参考、右实现）
-- 运行日志：`docs/qa/evidence/integrated-theme/integrated-1672x941-no-progress-edge-v6-runtime.log`
+- 当前实现：`docs/qa/evidence/integrated-theme/integrated-1672x941-progress-restored-v7.png`
+- 同画布合成：`docs/qa/evidence/integrated-theme/reference-vs-current-1672x941-progress-restored-v7.png`（左参考、右实现）
+- 运行日志：`docs/qa/evidence/integrated-theme/integrated-1672x941-progress-restored-v7-runtime.log`
 - 视口与密度：两侧均为 1672×941 逻辑像素、100% DPI；实现状态为深色主题、右栏展开、标签页激活、真实测试 WAV 元数据和有效波形。
 
 ## 比对历史
@@ -18,13 +18,14 @@
 6. 当前歌曲摘要从最多 450px 加宽到 520px，波形与播放栏间距从 12px 收敛为统一的 8px；1672×941 实机截图确认未侵占中央播放控件和右侧操作区。
 7. 移除 Integrated 已播放波形的矩形裁切叠图，波形与播放栏间距进一步统一为上下各 4px，底栏增高到 91px。首次修复仍让主画布按播放位置分段着色，稠密波形上仍形成整高色界，未真正关闭问题。
 8. 最终将 Integrated 概览波形固定为一份完整画布，播放位置仅由独立光标表示；同时让共享渲染器的多像素描边缩进半个描边宽度，避免首列描边钳制叠加。`v6` 截图中左侧播放色块和竖直裁切界均已消失。
+9. 用户确认已播放进度色属于必须保留的功能；撤销 `v6` 中错误的进度色移除，只恢复主画布的播放位置绑定。`v7` 同时保留单一 `WaveformItem` 和首列描边缩进，因此进度色恢复且没有重新引入裁切副本。
 
 ## 五个主要表面
 
 - 顶栏：品牌、设置和窗口按钮完整，52px 高度与参考层级一致。
 - 左栏与歌曲列表：Integrated 左栏按文字需求隐藏“标签管理”；48px 粗体表头与软边界稳定，歌曲列表和筛选栏没有裁切。
 - 右侧面板：标签管理/歌词页签保留当前项高亮；34px 搜索/添加框使用更淡玻璃表面，22px 开关折叠后在窄栏居中且可恢复。
-- 波形：列表与波形仅保留 4px 间距；单画布连续绘制完整波形，播放位置仅由光标表示，不再生成已播放裁切层或分段色界；悬停时间、毛玻璃时长/拖出胶囊、2px Handle 和 7%–28% 透明度的底部可拖导航条均完整。
+- 波形：列表与波形仅保留 4px 间距；同一个 `WaveformItem` 根据播放位置绘制已播放进度色和光标，不再生成裁切副本；首列多描边保持在画布边界内。悬停时间、毛玻璃时长/拖出胶囊、2px Handle 和 7%–28% 透明度的底部可拖导航条均完整。
 - 底部播放栏：91px 画布与波形保持 4px 间距；66px 封面、歌名和真实格式/位深/采样率/码率/BPM/文件大小元数据在左侧整体垂直居中；共享播放控件与右侧三个按钮均垂直居中。
 
 ## 交互与响应式复核

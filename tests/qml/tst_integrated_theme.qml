@@ -480,18 +480,17 @@ TestCase {
                "transport canvas should gain height while closing the gap")
     }
 
-    function test_integrated_waveform_uses_one_full_canvas_without_progress_clip() {
+    function test_integrated_waveform_keeps_progress_color_on_one_canvas() {
         var shell = enterIntegratedShell()
         shell.playbackController = fakePlayback
         shell.waveformDurationMs = 100000
         fakePlayback.positionMs = 25000
         var waveform = findChild(shell, "integratedWaveform")
         verify(waveform)
-        compare(waveform.position, 0,
-                "the integrated overview must not create a played/unplayed crop edge")
+        tryCompare(waveform, "position", 25000)
         tryCompare(waveform, "cursorPosition", 25000)
         compare(findChild(shell, "integratedPlayedWaveform"), null,
-                "a clipped duplicate waveform creates a visible vertical edge")
+                "progress colour must come from the main canvas, not a clipped duplicate")
     }
 
     function test_shell_button_opens_real_mode_menu() {

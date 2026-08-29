@@ -109,3 +109,11 @@
 - 绿灯：主波形始终连续绘制完整波形，`cursorPosition` 仍跟随 25,000ms；共享渲染器的 4px 首列描边也不再钳制重叠。Release/Debug 的 `qml_integrated_theme_test` 与 `waveform_item_test` 均通过。
 - 视觉证据：`evidence/integrated-theme/integrated-1672x941-no-progress-edge-v6.png`；同尺寸合成为 `evidence/integrated-theme/reference-vs-current-1672x941-no-progress-edge-v6.png`。截图进程退出码 0，运行日志仅含 INFO。
 - 未新增运行时图层、依赖、缓存或线程；播放、点击定位、框选循环和缩放导航逻辑未改动。
+
+## 2026-08-29 第七轮修复补充
+
+- 用户确认已播放进度色必须保留；第六轮把主波形 `position` 固定为 0 属于错误扩大修复范围。
+- TDD 红灯：播放位置为 25,000ms 时，主波形 `position` 实际为 0，恢复功能的断言按预期失败。
+- 绿灯：`position` 与 `cursorPosition` 均跟随 25,000ms，且 `integratedPlayedWaveform` 仍不存在；进度色来自唯一主画布，没有恢复裁切副本。
+- Release/Debug 的 `qml_integrated_theme_test` 与 `waveform_item_test` 均通过；首列多描边边界测试继续通过。
+- 视觉证据：`evidence/integrated-theme/integrated-1672x941-progress-restored-v7.png`；同尺寸合成为 `evidence/integrated-theme/reference-vs-current-1672x941-progress-restored-v7.png`。截图进程退出码 0，运行日志仅含 INFO。
