@@ -1,7 +1,9 @@
 # AgPlayer 原生人声伴奏分离验收记录
 
-日期：2026-08-30  
-分支：`codex/vocal-separation-native`  
+日期：2026-08-30
+
+分支：`codex/vocal-separation-native`
+
 平台：Windows x64、Qt 6.7、VS2022 Release、ONNX Runtime DirectML 1.24.4
 
 ## 结论
