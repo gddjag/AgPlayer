@@ -57,7 +57,7 @@ if ($toolsWindow -notmatch 'width:\s*1672' -or $toolsWindow -notmatch 'height:\s
 }
 if ($toolsNavigation -notmatch 'objectName:\s*"audioToolsTopNav"' -or
     $toolsNavigation -notmatch 'RowLayout' -or
-    $toolsNavigation -notmatch 'radius:\s*referenceWorkbench\s*\?\s*0\s*:\s*Theme\.radiusMd' -or
+    $toolsNavigation -notmatch 'radius:\s*separationWorkbench\s*\?\s*7\s*:\s*referenceWorkbench\s*\?\s*0\s*:\s*Theme\.radiusMd' -or
     $toolsNavigation -notmatch 'visible:\s*navigation\.referenceWorkbench\s*&&\s*navButton\.checked') {
     throw 'The five audio tools must remain in the top navigation, with the metadata reference workbench using its active underline.'
 }
