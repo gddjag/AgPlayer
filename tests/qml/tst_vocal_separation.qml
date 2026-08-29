@@ -59,6 +59,10 @@ TestCase {
         verify(!page.modelSupports("uvr-mdxnet-kara", "drums"))
         verify(page.modelSupports("htdemucs-ft-fp16", "drums"))
         verify(page.modelSupports("htdemucs-ft-fp16", "other"))
+        verify(findChild(page, "modelStemSummary-uvr-mdxnet-kara").text
+               .indexOf("人声 / 伴奏") >= 0)
+        verify(findChild(page, "modelStemSummary-htdemucs-ft-fp16").text
+               .indexOf("鼓组") >= 0)
     }
 
     function test_twoStemTimelineKeepsUnsupportedStemsVisibleAndLocalized() {
@@ -72,6 +76,13 @@ TestCase {
         compare(page.stemLabel(VocalSeparationController.Drums), "鼓组")
         verify(findChild(page, "separationTimelineStem-" + VocalSeparationController.Drums))
         verify(findChild(page, "separationTimelineStem-" + VocalSeparationController.Other))
+        const vocalsVolume = findChild(
+            page, "stemPreviewVolume-" + VocalSeparationController.Vocals)
+        const drumsVolume = findChild(
+            page, "stemPreviewVolume-" + VocalSeparationController.Drums)
+        verify(vocalsVolume && vocalsVolume.enabled)
+        compare(vocalsVolume.Accessible.name, "人声预览音量")
+        verify(drumsVolume && !drumsVolume.enabled)
     }
 
     function test_playlistGateRequiresEverySelectedStemToBeAvailable() {

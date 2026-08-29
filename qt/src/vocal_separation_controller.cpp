@@ -166,7 +166,14 @@ VocalSeparationController::VocalSeparationController(
     });
     connect(downloader_.get(), &VocalSeparationDownloader::progressChanged,
             this, [this](qint64 received, qint64 total) {
-        downloadProgress_ = total > 0 ? static_cast<double>(received) / total : 0.0;
+        const qint64 expected = downloadQueue_.isEmpty()
+            ? total : downloadQueue_.constFirst().file.bytes;
+        const qint64 current = qBound<qint64>(0, received,
+                                              qMax<qint64>(0, expected));
+        downloadProgress_ = totalDownloadBytes_ > 0
+            ? static_cast<double>(completedDownloadBytes_ + current)
+                  / static_cast<double>(totalDownloadBytes_)
+            : 0.0;
         emit downloadProgressChanged();
     });
     connect(downloader_.get(), &VocalSeparationDownloader::finished,
@@ -176,6 +183,8 @@ VocalSeparationController::VocalSeparationController(
             failedDownloadModelId_ = downloadingModelId_;
             downloadingModelId_.clear();
             downloadProgress_ = 0.0;
+            completedDownloadBytes_ = 0;
+            totalDownloadBytes_ = 0;
             emit downloadProgressChanged();
             emit downloadStateChanged();
             setError(result.error);
@@ -183,6 +192,7 @@ VocalSeparationController::VocalSeparationController(
             return;
         }
         const DownloadItem completed = downloadQueue_.takeFirst();
+        completedDownloadBytes_ += completed.file.bytes;
         if (completed.runtimeArchive) {
             auto* const watcher = new QFutureWatcher<VocalInstallResult>(this);
             const auto cancellation = std::make_shared<std::atomic_bool>(false);
@@ -202,6 +212,8 @@ VocalSeparationController::VocalSeparationController(
                     failedDownloadModelId_ = downloadingModelId_;
                     downloadingModelId_.clear();
                     downloadProgress_ = 0.0;
+                    completedDownloadBytes_ = 0;
+                    totalDownloadBytes_ = 0;
                     emit downloadProgressChanged();
                     emit downloadStateChanged();
                     setError(installed.error);
@@ -377,6 +389,8 @@ bool VocalSeparationController::downloadModel(const QString& modelId)
     downloadingModelId_ = modelId;
     failedDownloadModelId_.clear();
     downloadProgress_ = 0.0;
+    completedDownloadBytes_ = 0;
+    totalDownloadBytes_ = 0;
     emit downloadProgressChanged();
     emit downloadStateChanged();
     setError({});
@@ -414,6 +428,8 @@ bool VocalSeparationController::deleteModel(const QString& modelId)
     if (downloadingModelId_ == modelId) {
         downloadingModelId_.clear();
         downloadProgress_ = 0.0;
+        completedDownloadBytes_ = 0;
+        totalDownloadBytes_ = 0;
         emit downloadProgressChanged();
         emit downloadStateChanged();
     }
@@ -627,7 +643,32 @@ bool VocalSeparationController::previewInput()
 bool VocalSeparationController::previewStem(StemKind kind)
 {
     const QString path = pathForStem(kind);
+    if (preview_ != nullptr) {
+        preview_->setVolume(stemPreviewVolumes_.value(int(kind), 0.8));
+    }
     return togglePreviewPath(path, publishedOutputRoot_);
+}
+
+bool VocalSeparationController::setStemPreviewVolume(StemKind kind,
+                                                      double volume)
+{
+    const double bounded = qBound(0.0, volume, 1.0);
+    for (QVariant& value : stems_) {
+        QVariantMap stem = value.toMap();
+        if (stem.value(QStringLiteral("kind")).toInt() != int(kind)) continue;
+        if (!stem.value(QStringLiteral("supported")).toBool()) return false;
+        stemPreviewVolumes_.insert(int(kind), bounded);
+        stem.insert(QStringLiteral("previewVolume"), bounded);
+        value = stem;
+        const QString path = stem.value(QStringLiteral("path")).toString();
+        if (preview_ != nullptr && !path.isEmpty()
+            && preview_->isCurrentSource(QUrl::fromLocalFile(path))) {
+            preview_->setVolume(bounded);
+        }
+        emit stemsChanged();
+        return true;
+    }
+    return false;
 }
 
 bool VocalSeparationController::exportStem(StemKind kind,
@@ -873,6 +914,8 @@ void VocalSeparationController::finishVerification(
             failedDownloadModelId_ = downloadingModelId_;
             downloadingModelId_.clear();
             downloadProgress_ = 0.0;
+            completedDownloadBytes_ = 0;
+            totalDownloadBytes_ = 0;
             emit downloadProgressChanged();
             emit downloadStateChanged();
             refreshModels();
@@ -898,6 +941,10 @@ void VocalSeparationController::finishVerification(
                     QStringLiteral("downloads/runtime.nupkg")),
                 true});
         }
+        completedDownloadBytes_ = 0;
+        totalDownloadBytes_ = 0;
+        for (const DownloadItem& item : std::as_const(downloadQueue_))
+            totalDownloadBytes_ += item.file.bytes;
         startNextDownload();
         return;
     }
@@ -1030,6 +1077,8 @@ void VocalSeparationController::rebuildStems()
             {QStringLiteral("available"), false},
             {QStringLiteral("path"), QString()},
             {QStringLiteral("waveform"), QVariantList{}},
+            {QStringLiteral("previewVolume"),
+             stemPreviewVolumes_.value(int(kind), 0.8)},
         });
     }
     emit stemsChanged();
@@ -1061,19 +1110,20 @@ void VocalSeparationController::startNextDownload()
             verifiedOrRejectedModelIds_.insert(downloadingModelId_);
         downloadingModelId_.clear();
         downloadProgress_ = 1.0;
+        completedDownloadBytes_ = totalDownloadBytes_;
         emit downloadProgressChanged();
         emit downloadStateChanged();
         refreshModels();
         return;
     }
     const DownloadItem& item = downloadQueue_.first();
-    downloadProgress_ = 0.0;
-    emit downloadProgressChanged();
     if (!QDir().mkpath(QFileInfo(item.destination).absolutePath())) {
         downloadQueue_.clear();
         failedDownloadModelId_ = downloadingModelId_;
         downloadingModelId_.clear();
         downloadProgress_ = 0.0;
+        completedDownloadBytes_ = 0;
+        totalDownloadBytes_ = 0;
         emit downloadProgressChanged();
         emit downloadStateChanged();
         setError(tr("无法创建模型下载目录"));

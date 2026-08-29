@@ -149,6 +149,7 @@ public:
     Q_INVOKABLE bool retry();
     Q_INVOKABLE bool previewInput();
     Q_INVOKABLE bool previewStem(StemKind kind);
+    Q_INVOKABLE bool setStemPreviewVolume(StemKind kind, double volume);
     Q_INVOKABLE bool exportStem(StemKind kind, const QUrl& destination);
     Q_INVOKABLE bool exportSelected(const QUrl& destinationDirectory);
     Q_INVOKABLE bool addStemToPlaylist(StemKind kind,
@@ -288,6 +289,9 @@ private:
     QString downloadingModelId_;
     QString failedDownloadModelId_;
     double downloadProgress_ = 0.0;
+    qint64 completedDownloadBytes_ = 0;
+    qint64 totalDownloadBytes_ = 0;
+    QHash<int, double> stemPreviewVolumes_;
     QVariantMap inputInfo_;
     QVariantList models_;
     QVariantList availableDevices_;

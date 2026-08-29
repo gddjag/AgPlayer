@@ -104,6 +104,13 @@ Rectangle {
         return qsTr("音轨")
     }
 
+    function stemSummary(kinds) {
+        const labels = []
+        for (let index = 0; index < kinds.length; ++index)
+            labels.push(stemLabel(kinds[index]))
+        return labels.join(" / ")
+    }
+
     function previewActionText(path) {
         if (path.length > 0 && AudioPreviewController.sourcePath === path)
             return AudioPreviewController.playing ? qsTr("暂停") : qsTr("继续")
@@ -274,8 +281,8 @@ Rectangle {
                                 anchors.fill: parent
                                 anchors.margins: 8
                                 enabled: !page.contextLocked
-                                Accessible.name: qsTr("音频文件拖放区域")
-                                Accessible.role: Accessible.Button
+                                Accessible.name: qsTr("音频文件拖放区域；键盘用户请使用选择文件按钮")
+                                Accessible.role: Accessible.Pane
                                 ToolTip.visible: !enabled
                                 ToolTip.text: page.contextLockReason
                                 onUrlsDropped: function(urls) {
@@ -440,6 +447,7 @@ Rectangle {
                                     spacing: 5
                                     Label { text: modelData.name; color: page.textPrimary; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
                                     Label { text: modelData.family.toUpperCase() + " · " + page.formatBytes(modelData.bytes); color: page.muted; font.pixelSize: 12; Layout.fillWidth: true }
+                                    Label { objectName: "modelStemSummary-" + modelData.id; text: qsTr("输出：") + page.stemSummary(modelData.stems); color: page.muted; font.pixelSize: 11; elide: Text.ElideRight; Layout.fillWidth: true }
                                     Label { text: modelData.useCase; color: page.textPrimary; font.pixelSize: 12; wrapMode: Text.Wrap; Layout.fillWidth: true }
                                     Label { text: modelData.provenance; color: page.muted; font.pixelSize: 11; wrapMode: Text.Wrap; Layout.fillWidth: true; Layout.fillHeight: true }
                                     Label { text: page.modelStateText(modelData.state); color: modelData.state === VocalSeparationController.Installed ? page.success : page.cyan; font.pixelSize: 12 }
@@ -613,6 +621,24 @@ Rectangle {
                                             }
                                         }
                                         Label { visible: !modelData.supported; Layout.fillWidth: true; text: qsTr("当前模型不支持"); color: page.muted; font.pixelSize: 11 }
+                                        Slider {
+                                            objectName: "stemPreviewVolume-" + modelData.kind
+                                            Layout.preferredWidth: 64
+                                            Layout.preferredHeight: 22
+                                            implicitHeight: 22
+                                            from: 0; to: 1; stepSize: 0.05
+                                            value: Number(modelData.previewVolume === undefined
+                                                          ? 0.8 : modelData.previewVolume)
+                                            enabled: modelData.supported && !page.contextLocked
+                                            focusPolicy: Qt.StrongFocus
+                                            Accessible.name: page.stemLabel(modelData.kind) + qsTr("预览音量")
+                                            Accessible.role: Accessible.Slider
+                                            ToolTip.visible: hovered
+                                            ToolTip.text: page.contextLocked ? page.contextLockReason
+                                                                              : qsTr("调整此音轨的试听音量")
+                                            onMoved: VocalSeparationController.setStemPreviewVolume(
+                                                         modelData.kind, value)
+                                        }
                                         WorkbenchButton {
                                             text: page.previewActionText(modelData.path || "")
                                             enabled: modelData.available

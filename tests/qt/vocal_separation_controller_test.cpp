@@ -40,6 +40,7 @@ private slots:
     void exposesTypedCatalogAndStemAvailabilityFromTheInstalledCatalog();
     void exposesStartEligibilityAndAnAlwaysSelectableAutoDevice();
     void successfulWorkerResultPublishesExistingOutputsWaveformsAndFallbackReason();
+    void stemPreviewVolumesRemainIndependentAndDriveTheSharedPreview();
     void startingANewResultGenerationClearsPreviouslyPublishedStems();
     void selectingANewInputImmediatelyClearsCompletedResultAndItsPreview();
     void waveformFailuresAdvanceAcrossEveryResultStem();
@@ -361,15 +362,13 @@ downloadsMultipleArtifactsSequentiallyThroughTheController()
     QCOMPARE(QFileInfo(QDir(installedRoot).filePath(QStringLiteral("second.onnx"))).size(),
              qint64(secondBytes.size()));
     QVERIFY(modelsChanged.count() >= 4);
-    bool resetBetweenArtifacts = false;
+    bool monotonic = true;
     for (qsizetype index = 1; index < visibleProgress.size(); ++index) {
-        if (visibleProgress.at(index - 1) > 0.99
-            && visibleProgress.at(index) == 0.0) {
-            resetBetweenArtifacts = true;
-            break;
-        }
+        if (visibleProgress.at(index) < visibleProgress.at(index - 1))
+            monotonic = false;
     }
-    QVERIFY(resetBetweenArtifacts);
+    QVERIFY(monotonic);
+    QCOMPARE(controller.downloadProgress(), 1.0);
 }
 
 void VocalSeparationControllerTest::
@@ -589,6 +588,49 @@ successfulWorkerResultPublishesExistingOutputsWaveformsAndFallbackReason()
     const QVariantList devices = controller.availableDevices();
     QCOMPARE(devices.at(2).toMap().value(QStringLiteral("reason")).toString(),
              QStringLiteral("No tested GPU"));
+}
+
+void VocalSeparationControllerTest::
+stemPreviewVolumesRemainIndependentAndDriveTheSharedPreview()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray modelBytes("trusted-test-model");
+    auto options = optionsFor(temporary, QStringLiteral("success"), modelBytes);
+    installTestModel(options, QStringLiteral("two-stem"), modelBytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, QByteArrayLiteral("runtime")));
+
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
+    QVERIFY(controller.start());
+    QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(),
+                              VocalSeparationController::JobState::Completed,
+                              5000);
+
+    QVERIFY(controller.setStemPreviewVolume(
+        VocalSeparationController::StemKind::Vocals, 0.25));
+    QVERIFY(controller.setStemPreviewVolume(
+        VocalSeparationController::StemKind::Accompaniment, 0.75));
+    QVERIFY(!controller.setStemPreviewVolume(
+        VocalSeparationController::StemKind::Drums, 0.5));
+    QCOMPARE(stemFor(controller.stems(),
+                     VocalSeparationController::StemKind::Vocals)
+                 .value(QStringLiteral("previewVolume")).toDouble(),
+             0.25);
+    QCOMPARE(stemFor(controller.stems(),
+                     VocalSeparationController::StemKind::Accompaniment)
+                 .value(QStringLiteral("previewVolume")).toDouble(),
+             0.75);
+
+    QVERIFY(controller.previewStem(
+        VocalSeparationController::StemKind::Vocals));
+    QCOMPARE(preview.volume(), 0.25);
+    QVERIFY(controller.previewStem(
+        VocalSeparationController::StemKind::Accompaniment));
+    QCOMPARE(preview.volume(), 0.75);
 }
 
 void VocalSeparationControllerTest::
