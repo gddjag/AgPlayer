@@ -59,3 +59,11 @@
 - Measure main EXE, portable package, worker, runtime, and models; prove no worker, ORT module, model memory, GPU usage, or polling before the feature is used.
 - Capture the implementation at the required sizes and Windows DPI values, compare it with the reference in one visual input, and iterate until `design-qa.md` says exactly `final result: passed` or honestly records a blocker.
 - Write requirements traceability and acceptance evidence in `docs/development/`. Do not build or claim a formal installer before real audio, visual interaction, and hardware acceptance pass.
+
+## 2026-08-30 实施状态
+
+- Task 1–4 的生产实现与自动测试已完成。
+- 三档批准模型的真实 CPU 黄金推理通过；KARA 的真实 DirectML 短音频、5 分钟和 10 分钟完整输出通过；3 分钟 CPU 完整输出通过。
+- 同环境重建基线后的便携包功能增量为 906,240 字节，低于 1MB 目标；包内不含 ORT DLL 或模型。
+- VS2022 x64 Release 全量 CTest 最终通过 88/88。
+- 正式发布门禁仍关闭：需要已安装模型/完成结果的同状态视觉对照，以及真实声卡和人工点击全流程验收。详细证据见 `docs/development/2026-08-30-vocal-separation-native-acceptance.md`。
