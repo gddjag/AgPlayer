@@ -15,8 +15,11 @@ Rectangle {
     property double maxBpm: 160
     property double pendingMinBpm: minBpm
     property double pendingMaxBpm: maxBpm
+    property bool integratedStyle: false
     readonly property color moduleColor: Theme.isLight ? Theme.panel : Theme.elevated
-    readonly property color moduleBorder: Theme.border
+    readonly property color moduleBorder: integratedStyle
+                                                   ? Theme.integratedSoftOutline
+                                                   : Theme.border
 
     Timer {
         id: bpmDebounce
@@ -169,6 +172,7 @@ Rectangle {
                 ThemedRangeSlider {
                     id: bpmRange
                     objectName: "bpmRange"
+                    glassStyle: root.integratedStyle
                     Layout.preferredWidth: 104
                     Layout.minimumWidth: 104
                     Layout.maximumWidth: 104
@@ -199,19 +203,28 @@ Rectangle {
             }
         }
 
-        Item { Layout.fillWidth: true }
+        Item {
+            visible: !root.integratedStyle
+            Layout.fillWidth: visible
+        }
 
         Button {
+            objectName: "clearFiltersButton"
             text: qsTr("清空")
             onClicked: root.clearFilters()
             palette.buttonText: Theme.primaryText
             background: Rectangle {
                 color: parent.pressed ? Theme.surfacePressed
                       : parent.hovered ? Theme.surfaceHover : Theme.panel
-                border.color: Theme.border
+                border.color: root.moduleBorder
                 border.width: 1
                 radius: Theme.radiusSm
             }
+        }
+
+        Item {
+            visible: root.integratedStyle
+            Layout.fillWidth: visible
         }
     }
 }

@@ -62,13 +62,20 @@ QtObject {
     readonly property color subtleGlassBorder: isLight
                                                ? Qt.rgba(0, 0, 0, 0.16)
                                                : Qt.rgba(1, 1, 1, 0.20)
+    readonly property color integratedSoftOutline: isLight
+                                                    ? Qt.rgba(0, 0, 0, 0.10)
+                                                    : Qt.rgba(1, 1, 1, 0.10)
+    readonly property color integratedSliderHandle: isLight
+                                                     ? Qt.rgba(1, 1, 1, 0.92)
+                                                     : Qt.rgba(1, 1, 1, 0.78)
+    readonly property color integratedGlassHighlight: Qt.rgba(1, 1, 1, 0.16)
     readonly property color navigatorGlassTrack: isLight
-                                                 ? Qt.rgba(0, 0, 0, 0.14)
-                                                 : Qt.rgba(1, 1, 1, 0.15)
+                                                 ? Qt.rgba(0, 0, 0, 0.07)
+                                                 : Qt.rgba(1, 1, 1, 0.08)
     readonly property color navigatorGlassThumb: Qt.rgba(
                                                      highlight.r,
                                                      highlight.g,
-                                                     highlight.b, 0.54)
+                                                     highlight.b, 0.28)
     readonly property color success: ThemeManager.success
     readonly property color warning: ThemeManager.warning
     readonly property color error: ThemeManager.error

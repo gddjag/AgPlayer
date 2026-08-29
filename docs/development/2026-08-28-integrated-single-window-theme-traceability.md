@@ -76,3 +76,15 @@
 - Release 聚焦回归：`qml_main_window_test`、`qml_integrated_theme_test`、`tag_management_layout_contract_test`、`integrated_shell_lifecycle_smoke_test` 共 4/4 通过。
 - Debug 聚焦回归：`qml_integrated_theme_test` 通过。
 - Release 全量 CTest：114 个测试程序中 113 个通过；`audio_editor_controller_test` 内 91 项通过、4 项失败（三项为当前环境报告录音后端不支持，一项为离线源 identity-mismatch 波形预期）。本轮没有修改音频编辑器或录音模块，不能据此宣称全量通过。
+
+## 2026-08-29 第三轮轻量视觉收敛
+
+| 修复要求 | Integrated 专属实现 | 验证 |
+|---|---|---|
+| 表头降低并加粗 | 复用 `TrackList.integratedCompact`，仅 Integrated 使用 48px / DemiBold；Classic 保持 56px / Medium | `qml_integrated_theme_test`、Classic 主窗口筛选/网格用例 |
+| 搜索描边淡化、苹果式 BPM 滑头、清空靠近 BPM | `SearchFilter.integratedStyle` 只切换软边框、玻璃滑头与布局 Spacer；共享组件默认值不变 | Debug/Release Integrated QML 测试、1672×941 截图 |
+| 标签输入降低、侧栏图标缩小并折叠居中 | 共享标签面板仅在 `compact` 时采用 34px 和软边框；Integrated 开关为 30px 按钮/22px 图标 | QML 尺寸与中心轴断言 |
+| 歌单/歌曲/标签/波形/播放栏描边淡化 | 新增一个 `Theme.integratedSoftOutline`，仅 Integrated 五个主表面和内部元数据使用 | QML 主题颜色契约、同画布对比 |
+| 波形导航条更浅的流体玻璃 | 现有轨道/滑块降透明度并增加 1px 主题高光；不使用 Blur、Shader、缓存或新依赖 | QML 材质断言、截图 |
+
+本轮仍是现有 QML 与 Theme token 的最小修改：零新增图片、DLL、线程、缓存和第三方包。

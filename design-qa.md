@@ -2,11 +2,11 @@
 
 ## 最终比对输入
 
-- 视觉真值：`E:/Administrator/下载/微信图片_20260829190238_112_10.png`
-- 当前实现：`docs/qa/evidence/integrated-theme/integrated-1674x906-theme-adjustments.png`
-- 同画布合成：`docs/qa/evidence/integrated-theme/reference-vs-current-1674x906.png`（左参考、右实现）
-- 运行日志：`docs/qa/evidence/integrated-theme/integrated-1674x906-theme-adjustments-runtime.log`
-- 视口与密度：两侧均为 1674×906 逻辑像素、100% DPI；实现状态为深色主题、右栏展开、标签页激活、真实 WAV 元数据、有效波形和 400–1400ms 循环选区。
+- 视觉真值：`C:/Users/Administrator/Desktop/音视频播放器/AgPlayer音频播放器完整版/AG单窗口主题.png`
+- 当前实现：`docs/qa/evidence/integrated-theme/integrated-1672x941-soft-outlines-v2.png`
+- 同画布合成：`docs/qa/evidence/integrated-theme/reference-vs-current-1672x941-soft-outlines-v2.png`（左参考、右实现）
+- 运行日志：`docs/qa/evidence/integrated-theme/integrated-1672x941-soft-outlines-v2-runtime.log`
+- 视口与密度：两侧均为 1672×941 逻辑像素、100% DPI；实现状态为深色主题、右栏展开、标签页激活、真实测试 WAV 元数据和有效波形。
 
 ## 比对历史
 
@@ -14,14 +14,15 @@
 2. 将右栏表头与内容改为明确的上下锚定区域后，`integrated-1672x941-v3.png` 关闭该 P1。
 3. 将左右选择 Handle 的可视条收窄为 2px，保留 14px 命中区；重建后以 `integrated-1672x941-v4.png` 完成最终复核。
 4. 按 1674×906 新参考复核右侧页签、搜索/添加玻璃表面、导航条和底栏；修复浅色主题下活动页签透明度反转，并将侧栏开关的可用图标区域扩大至 30×26px。
+5. 按最新反馈将 Integrated 表头收至 48px 并加粗；搜索、BPM、清空形成连续紧凑组；标签输入收至 34px；侧栏图标缩为 22px 并在 42px 折叠栏内居中；五个主容器和波形导航条统一降为 7%–10% 软描边/玻璃轨道。最终同尺寸合成针对本轮表头、筛选、侧栏、软描边和导航条反馈未发现 P0/P1/P2；不同曲目、选区和标签数据不纳入本轮像素一致性结论。
 
 ## 五个主要表面
 
 - 顶栏：品牌、设置和窗口按钮完整，52px 高度与参考层级一致。
-- 左栏与歌曲列表：边界稳定；Integrated 左栏按文字需求隐藏“标签管理”，歌曲列表和筛选栏没有裁切。
-- 右侧面板：标签管理/歌词均为扣边描边页签，当前项有填充与强调色描边；搜索/添加框使用更淡的玻璃表面，末端收起按钮放大且折叠后可恢复。
-- 波形：列表与波形仅保留 4px 间距；悬停时间、毛玻璃时长/拖出胶囊、2px Handle 和底部可拖导航条均完整。
-- 底部播放栏：66px 封面、歌名和真实格式/位深/采样率/码率/BPM/文件大小元数据在左侧整体垂直居中；共享播放控件居中，右侧三个按钮保持原位并垂直居中。
+- 左栏与歌曲列表：Integrated 左栏按文字需求隐藏“标签管理”；48px 粗体表头与软边界稳定，歌曲列表和筛选栏没有裁切。
+- 右侧面板：标签管理/歌词页签保留当前项高亮；34px 搜索/添加框使用更淡玻璃表面，22px 开关折叠后在窄栏居中且可恢复。
+- 波形：列表与波形仅保留 4px 间距；悬停时间、毛玻璃时长/拖出胶囊、2px Handle 和 7%–28% 透明度的底部可拖导航条均完整。
+- 底部播放栏：66px 封面、歌名和真实格式/位深/采样率/码率/BPM/文件大小元数据在左侧整体垂直居中；主容器使用 10% 软描边，共享播放控件与右侧三个按钮均垂直居中。
 
 ## 交互与响应式复核
 

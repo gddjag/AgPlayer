@@ -1,0 +1,5 @@
+[2026-08-29T12:59:18.049Z] [INFO] [Qt] Integrated waveform QA state: durationMs= 2000 peakCount= 2000 visualMode= 1
+[2026-08-29T12:59:18.049Z] [INFO] [Qt] Integrated controls QA geometry: x= 0 width= 1636
+[2026-08-29T12:59:18.050Z] [INFO] [Qt] Integrated center controls QA geometry: x= 668 width= 300
+[2026-08-29T12:59:18.050Z] [INFO] [Qt] Playback selection QA state: startMs= 0 endMs= 0 loop= false
+[2026-08-29T12:59:18.108Z] [INFO] [Qt] QA screenshot saved: D:\ai\AgPlayer\.worktrees\integrated-single-window-theme\docs\qa\evidence\integrated-theme\integrated-1672x941-soft-outlines-v2.png QSize(1672, 941)

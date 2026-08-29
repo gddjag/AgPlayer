@@ -74,6 +74,33 @@ TestCase {
         visibleEndMs: 100000
     }
 
+    Component {
+        id: classicTrackListComponent
+        TrackList {
+            width: 720
+            height: 180
+            integratedCompact: false
+        }
+    }
+
+    Component {
+        id: classicSearchFilterComponent
+        SearchFilter {
+            width: 720
+            height: 54
+            integratedStyle: false
+        }
+    }
+
+    Component {
+        id: classicTagPanelComponent
+        TagManagementPanel {
+            width: 300
+            height: 220
+            compact: false
+        }
+    }
+
     function integratedShell() {
         return findChild(mainWindow, "integratedPlayerShell")
     }
@@ -233,10 +260,10 @@ TestCase {
         var header = findChild(shell, "integratedSidePanelHeader")
         var content = findChild(shell, "integratedSidePanelContent")
         verify(column && header && content)
-        verify(header.mapToItem(column, 0, 0).y <= 12,
-               "side-panel tabs must stay at the top edge")
-        verify(content.height > column.height * 0.75,
-               "tag or lyrics content must fill the panel below the tabs")
+        tryVerify(function() {
+            return header.mapToItem(column, 0, 0).y <= 12
+                    && content.height > column.height * 0.75
+        }, 1000)
     }
 
     function test_bottom_actions_share_uploaded_theme_icon() {
@@ -279,16 +306,116 @@ TestCase {
                "the active tab needs a subtle filled highlight")
         verify(searchGlass.color.a > 0 && searchGlass.color.a < 0.35)
         verify(addGlass.color.a > 0 && addGlass.color.a < 0.35)
-        verify(toggleIcon.width >= 24 && toggleIcon.height >= 24)
+        compare(toggleIcon.width, 22)
+        compare(toggleIcon.height, 22)
+    }
+
+    function test_right_panel_uses_compact_tag_controls() {
+        var shell = enterIntegratedShell()
+        compare(findChild(shell, "tagSearchField").height, 34)
+        compare(findChild(shell, "addTagButton").height, 34)
+    }
+
+    function test_collapsed_right_panel_centers_toggle() {
+        var shell = enterIntegratedShell()
+        var column = findChild(shell, "integratedTagColumn")
+        var toggle = findChild(shell, "integratedSidePanelToggleButton")
+        mouseClick(toggle)
+        tryCompare(column, "width", 42)
+        fuzzyCompare(toggle.mapToItem(column, 0, 0).x + toggle.width / 2,
+                     column.width / 2, 1.0)
     }
 
     function test_wave_navigator_uses_light_glass_material() {
         var shell = enterIntegratedShell()
         var track = findChild(shell, "integratedWaveformNavigatorTrack")
         var thumb = findChild(shell, "integratedWaveformNavigatorThumb")
-        verify(track && thumb)
-        verify(track.color.a > 0 && track.color.a < 0.4)
-        verify(thumb.color.a > track.color.a && thumb.color.a < 0.75)
+        var highlight = findChild(shell,
+                                  "integratedWaveformNavigatorHighlight")
+        verify(track && thumb && highlight)
+        verify(track.color.a > 0 && track.color.a <= 0.09)
+        verify(thumb.color.a > track.color.a && thumb.color.a <= 0.32)
+        verify(thumb.border.color.a <= 0.12)
+        verify(highlight.color.a > 0 && highlight.color.a <= 0.18)
+    }
+
+    function test_integrated_track_header_is_compact_and_bold() {
+        var shell = enterIntegratedShell()
+        var list = findChild(shell, "integratedTrackList")
+        var title = findChild(shell, "trackHeaderTitle")
+        verify(list && list.headerItem && title)
+        compare(list.headerItem.height, 48)
+        compare(title.font.weight, Font.DemiBold)
+    }
+
+    function test_integrated_filter_is_soft_and_uses_apple_handle() {
+        var shell = enterIntegratedShell()
+        var filter = findChild(shell, "integratedSearchFilter")
+        var keyword = findChild(filter, "keywordModule")
+        var bpm = findChild(filter, "bpmModule")
+        var range = findChild(filter, "bpmRange")
+        var firstHandle = findChild(range, "rangeSliderFirstHandle")
+        var sliderTrack = findChild(range, "rangeSliderTrack")
+        var clear = findChild(filter, "clearFiltersButton")
+        verify(filter && keyword && bpm && range && firstHandle
+               && sliderTrack && clear)
+        verify(keyword.border.color.a <= 0.12)
+        verify(bpm.border.color.a <= 0.12)
+        compare(sliderTrack.height, 3)
+        compare(firstHandle.width, 14)
+        compare(firstHandle.height, 14)
+        verify(firstHandle.color.a > 0.70)
+
+    }
+
+    function test_integrated_filter_keeps_clear_near_bpm() {
+        var shell = enterIntegratedShell()
+        var filter = findChild(shell, "integratedSearchFilter")
+        var bpm = findChild(filter, "bpmModule")
+        var clear = findChild(filter, "clearFiltersButton")
+        verify(filter && bpm && clear)
+        tryVerify(function() {
+            var bpmRight = bpm.mapToItem(filter, bpm.width, 0).x
+            var clearLeft = clear.mapToItem(filter, 0, 0).x
+            return clearLeft >= bpmRight && clearLeft - bpmRight <= 18
+        }, 1000)
+    }
+
+    function test_integrated_major_outlines_use_soft_border() {
+        var shell = enterIntegratedShell()
+        var names = ["integratedLibraryColumn", "integratedTrackColumn",
+                     "integratedTagColumn", "integratedWaveformFrame",
+                     "integratedBottomBar"]
+        for (var index = 0; index < names.length; ++index) {
+            var surface = findChild(shell, names[index])
+            verify(surface, names[index] + " missing")
+            verify(surface.border.color.a <= 0.12,
+                   names[index] + " border is too strong")
+        }
+    }
+
+    function test_classic_shared_components_keep_default_visual_contract() {
+        var list = classicTrackListComponent.createObject(testCase)
+        var filter = classicSearchFilterComponent.createObject(testCase)
+        var tags = classicTagPanelComponent.createObject(testCase)
+        verify(list && filter && tags)
+
+        compare(list.headerHeight, 56)
+        compare(list.headerFontWeight, Font.Medium)
+        compare(filter.moduleBorder.toString(), Theme.border.toString())
+        var range = findChild(filter, "bpmRange")
+        var sliderTrack = findChild(range, "rangeSliderTrack")
+        verify(range && sliderTrack)
+        verify(!range.glassStyle)
+        compare(sliderTrack.height, 4)
+        compare(tags.controlBorder.toString(),
+                Theme.subtleGlassBorder.toString())
+        tryCompare(findChild(tags, "tagSearchField"), "height", 38)
+        tryCompare(findChild(tags, "addTagButton"), "height", 38)
+
+        list.destroy()
+        filter.destroy()
+        tags.destroy()
     }
 
     function test_bottom_bar_centers_track_controls_and_actions() {

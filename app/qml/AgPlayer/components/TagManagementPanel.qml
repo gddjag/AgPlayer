@@ -21,6 +21,9 @@ Item {
     readonly property int pillHorizontalPadding: 4
     readonly property int pillContentSpacing: 2
     readonly property int pillMinimumWidth: 48
+    readonly property color controlBorder: compact
+                                                   ? Theme.integratedSoftOutline
+                                                   : Theme.subtleGlassBorder
     property string contextTagKey: ""
     property string contextTagName: ""
     property color contextTagColor: "transparent"
@@ -292,8 +295,8 @@ Item {
         RowLayout {
             visible: root.expanded
             Layout.fillWidth: true
-            Layout.preferredHeight: visible ? 38 : 0
-            Layout.maximumHeight: visible ? 38 : 0
+            Layout.preferredHeight: visible ? (root.compact ? 34 : 38) : 0
+            Layout.maximumHeight: visible ? (root.compact ? 34 : 38) : 0
             spacing: root.compact ? 6 : 10
 
             TextField {
@@ -313,7 +316,7 @@ Item {
                     color: tagSearchField.activeFocus
                            ? Theme.subtleGlassHover : Theme.subtleGlassFill
                     border.color: tagSearchField.activeFocus
-                                  ? Theme.accent : Theme.subtleGlassBorder
+                                  ? Theme.accent : root.controlBorder
                     border.width: 1
                     radius: Theme.radiusSm
                     ThemedIcon {
@@ -359,7 +362,7 @@ Item {
                     color: addTagButton.down ? Theme.subtleGlassActive
                           : addTagButton.hovered ? Theme.subtleGlassHover
                                                  : Theme.subtleGlassFill
-                    border.color: Theme.subtleGlassBorder
+                    border.color: root.controlBorder
                     border.width: 1
                     radius: Theme.radiusSm
                 }

@@ -166,7 +166,7 @@ Item {
         anchors.fill: parent
         color: Theme.background
         radius: Theme.radiusMd
-        border.color: Theme.border
+        border.color: Theme.integratedSoftOutline
         border.width: 1
     }
 
@@ -201,7 +201,7 @@ Item {
                     Layout.maximumWidth: root.leftColumnWidth
                     Layout.fillHeight: true
                     color: Theme.panel
-                    border.color: Theme.border
+                    border.color: Theme.integratedSoftOutline
                     border.width: 1
                     radius: Theme.radiusSm
 
@@ -238,7 +238,7 @@ Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     color: Theme.panel
-                    border.color: Theme.border
+                    border.color: Theme.integratedSoftOutline
                     border.width: 1
                     radius: Theme.radiusSm
 
@@ -267,6 +267,7 @@ Item {
                             objectName: "integratedSearchFilter"
                             Layout.fillWidth: true
                             Layout.preferredHeight: 46
+                            integratedStyle: true
                             onSearchTextChanged: {
                                 if (root.filterModel
                                         && root.filterModel.searchText !== searchText)
@@ -300,13 +301,13 @@ Item {
                     Layout.maximumWidth: Layout.preferredWidth
                     Layout.fillHeight: true
                     color: Theme.panel
-                    border.color: Theme.border
+                    border.color: Theme.integratedSoftOutline
                     border.width: 1
                     radius: Theme.radiusSm
 
                     Item {
                         anchors.fill: parent
-                        anchors.margins: root.sidePanelExpanded ? 10 : 7
+                        anchors.margins: root.sidePanelExpanded ? 10 : 6
 
                         RowLayout {
                             id: sidePanelHeader
@@ -393,14 +394,13 @@ Item {
                                 }
                             }
 
-                            Item { Layout.fillWidth: !root.sidePanelExpanded }
-
                             ToolButton {
                                 id: sidePanelToggleButton
                                 objectName: "integratedSidePanelToggleButton"
-                                Layout.preferredWidth: 34
+                                Layout.preferredWidth: 30
                                 Layout.preferredHeight: 30
-                                padding: 2
+                                Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
+                                padding: 4
                                 flat: true
                                 Accessible.name: root.sidePanelExpanded
                                                  ? qsTr("隐藏标签和歌词侧栏")
@@ -418,8 +418,8 @@ Item {
                                     objectName: "integratedSidePanelToggleIcon"
                                     source: Theme.icon("side-panel-toggle")
                                     tint: Theme.iconPrimary
-                                    sourceSize.width: 26
-                                    sourceSize.height: 26
+                                    sourceSize.width: 22
+                                    sourceSize.height: 22
                                     mirror: !root.sidePanelExpanded
                                 }
                             }
@@ -503,7 +503,7 @@ Item {
             Layout.leftMargin: root.contentSpacing
             Layout.rightMargin: root.contentSpacing
             color: Theme.panel
-            border.color: Theme.border
+            border.color: Theme.integratedSoftOutline
             border.width: 1
             radius: Theme.radiusSm
             clip: true
@@ -737,9 +737,21 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     radius: 3
                     color: Theme.navigatorGlassThumb
-                    border.color: Theme.subtleGlassBorder
+                    border.color: Theme.integratedSoftOutline
                     border.width: 1
                     opacity: rangeFraction < 0.999 ? 1 : 0.72
+
+                    Rectangle {
+                        objectName: "integratedWaveformNavigatorHighlight"
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.leftMargin: 4
+                        anchors.rightMargin: 4
+                        height: 1
+                        radius: 0.5
+                        color: Theme.integratedGlassHighlight
+                    }
 
                     MouseArea {
                         id: navigatorPointer
@@ -784,7 +796,7 @@ Item {
             Layout.rightMargin: root.contentSpacing
             Layout.bottomMargin: root.contentSpacing
             color: Theme.elevated
-            border.color: Theme.border
+            border.color: Theme.integratedSoftOutline
             border.width: 1
             radius: Theme.radiusSm
 
@@ -813,7 +825,7 @@ Item {
                         Layout.preferredWidth: 66
                         Layout.preferredHeight: 66
                         color: Theme.panel
-                        border.color: Theme.subtleGlassBorder
+                        border.color: Theme.integratedSoftOutline
                         border.width: 1
                         radius: Theme.radiusSm
                         clip: true
@@ -897,7 +909,7 @@ Item {
                                                    + 10
                                     implicitHeight: 18
                                     color: Theme.subtleGlassFill
-                                    border.color: Theme.subtleGlassBorder
+                                    border.color: Theme.integratedSoftOutline
                                     border.width: 1
                                     radius: 4
 

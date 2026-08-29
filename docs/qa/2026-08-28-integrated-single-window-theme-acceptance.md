@@ -76,3 +76,14 @@
 相对原基线 `5148160`：Release EXE + QML 源模块 + 两个用户提供 SVG 的合计增量为 451,799 B（441.21 KiB），低于 1 MiB 门槛。部署 DLL 与第三方包没有新增。
 
 外部拖放到 Windows 桌面/文件夹、Premiere Pro、DaVinci Resolve、剪映以及真实声卡爆音/长时内存测试仍为 blocked/unverified；本轮没有制作安装包。
+
+## 2026-08-29 第三轮视觉修复补充
+
+- Debug：`qml_integrated_theme_test` 通过；受本次共享 `SearchFilter` 影响的 Classic 两个主窗口筛选/稳定网格用例单独通过。完整 `qml_main_window_test` 仍超过既有 35 秒 CTest 上限，未用 Release 结果掩盖。
+- Release：应用与 QML lint 构建通过；主窗口、Integrated、波形、标签、列表、Shell 契约和生命周期聚焦回归通过。
+- 主题颜色契约通过；所有新增运行时颜色均由 `Theme` token 管理。
+- 最终 1672×941 程序截图：`evidence/integrated-theme/integrated-1672x941-soft-outlines-v2.png`。
+- 同尺寸参考/实现合成：`evidence/integrated-theme/reference-vs-current-1672x941-soft-outlines-v2.png`。
+- 视觉复核：表头、筛选/BPM/清空、标签输入、折叠图标、五个主容器软描边及波形导航玻璃条均满足最新反馈；这些本轮修复项的 P0/P1/P2 为 0。参考与实现使用不同歌曲、选区和标签数据，因此不把合成图作为完整内容状态的像素一致性证明。
+
+本轮未增加部署 DLL、第三方包、图片、字体或渲染 Shader；未制作安装包。

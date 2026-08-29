@@ -43,6 +43,9 @@ ListView {
     readonly property int titleMinimumWidth: compactColumns ? 150 : 180
     readonly property bool showBpmColumn: !tagFilterActive
     readonly property bool showDurationColumn: !tagFilterActive
+    readonly property int headerHeight: integratedCompact ? 48 : 56
+    readonly property int headerFontWeight: integratedCompact
+                                                 ? Font.DemiBold : Font.Medium
     readonly property int rowHeight: SettingsController.listWaveformThumbnailEnabled
                                      ? 50 : 42
     property int thumbnailItemCount: 0
@@ -423,7 +426,7 @@ ListView {
     }
 
     header: Rectangle {
-        width: root.width; height: 56; color: Theme.listHeaderSurface; z: 20
+        width: root.width; height: root.headerHeight; color: Theme.listHeaderSurface; z: 20
         RowLayout {
             anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 0
             HeaderText { objectName: "trackHeaderIndex"; text: "#"; Layout.minimumWidth: root.sequenceWidth; Layout.preferredWidth: root.sequenceWidth; Layout.maximumWidth: root.sequenceWidth }
@@ -1101,7 +1104,7 @@ ListView {
             Qt.callLater(root.ensureCurrentTrackVisible)
         }
     }
-    component HeaderText: Text { color: Theme.secondaryText; font.family: Theme.fontPrimary; font.pixelSize: 12; font.weight: Font.Medium; elide: Text.ElideRight }
+    component HeaderText: Text { color: Theme.secondaryText; font.family: Theme.fontPrimary; font.pixelSize: 12; font.weight: root.headerFontWeight; elide: Text.ElideRight }
     component BodyText: Text { property bool trackAvailable: true; property bool highlighted: false; property color highlightText: Theme.activeSelectionText; color: highlighted ? highlightText : trackAvailable ? Theme.secondaryText : Theme.error; font.family: Theme.fontPrimary; font.pixelSize: 13; elide: Text.ElideRight; wrapMode: Text.NoWrap; maximumLineCount: 1; clip: true }
     component MarqueeBodyText: Item {
         id: marqueeRoot
