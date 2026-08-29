@@ -38,8 +38,14 @@ ApplicationWindow {
     property int positionMs: playback ? playback.positionMs : 0
     property bool playFirstDroppedTrack: false
     property string tagSearchText: ""
+    property bool immersiveRenderingEnabled: true
+    property alias waveformSession: sharedWaveformSession
     readonly property bool integratedShell:
         SettingsController.playerShellMode === 1
+    readonly property bool qaImmersive:
+        Qt.application.arguments.indexOf("--qa-immersive") >= 0
+    readonly property bool qaImmersiveSynthetic:
+        Qt.application.arguments.indexOf("--qa-immersive-synthetic") >= 0
 
     DockedWindowFrame {
         anchors.fill: parent
@@ -78,6 +84,22 @@ ApplicationWindow {
 
     WaveformSession {
         id: sharedWaveformSession
+    }
+
+    Binding {
+        target: LyricsService
+        property: "enabled"
+        value: PlayerExperienceController.lyricsVisible
+    }
+
+    Component.onCompleted: {
+        if (qaImmersive) {
+            PlayerExperienceController.hostMode =
+                    PlayerExperienceController.Windowed
+            PlayerExperienceController.panelVisible = true
+            PlayerExperienceController.immersiveMode =
+                    PlayerExperienceController.TerrainReactor
+        }
     }
 
     function openImportDialog() {
@@ -152,6 +174,8 @@ ApplicationWindow {
         id: shellLoader
         objectName: "playerShellLoader"
         anchors.fill: parent
+        visible: PlayerExperienceController.immersiveMode
+                 === PlayerExperienceController.Off
         sourceComponent: mainWindow.integratedShell
                          ? integratedShellComponent : classicShellComponent
         onLoaded: {
@@ -233,6 +257,318 @@ ApplicationWindow {
             bottomBarComponent: integratedBottomBarComponent
             onOpenSettingsRequested: mainWindow.openSettingsPage()
         }
+    }
+
+    LyricsPanel {
+        id: normalLyricsPanel
+        objectName: "normalLyricsPanel"
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: Math.max(42, parent.height - height - 66)
+        width: Math.min(640, parent.width - 40)
+        height: 104
+        visible: PlayerExperienceController.lyricsVisible
+                 && PlayerExperienceController.immersiveMode
+                    === PlayerExperienceController.Off
+        spatialMode: false
+        z: 70
+    }
+
+    Item {
+        id: windowedImmersiveHost
+        objectName: "windowedImmersiveHost"
+        anchors.fill: parent
+        visible: PlayerExperienceController.immersiveMode
+                 !== PlayerExperienceController.Off
+                 && immersiveCoordinator.attachedHostMode
+                    === PlayerExperienceController.Windowed
+        z: 80
+    }
+
+    Component {
+        id: immersiveSurfaceComponent
+        ImmersiveSurface {
+            visible: false
+            waveformSession: sharedWaveformSession
+            renderingEnabled: mainWindow.immersiveRenderingEnabled
+            qaSyntheticFeatures: mainWindow.qaImmersiveSynthetic
+            z: 80
+        }
+    }
+
+    Component {
+        id: fullscreenWindowComponent
+        Window {
+            objectName: "immersiveFullscreenWindow"
+            visible: false
+            flags: Qt.Window | Qt.FramelessWindowHint
+            color: "black"
+            title: qsTr("AgPlayer 全屏沉浸")
+            onClosing: function(close) {
+                close.accepted = false
+                PlayerExperienceController.hostMode =
+                        PlayerExperienceController.Windowed
+            }
+            Shortcut {
+                sequence: "Escape"
+                onActivated: PlayerExperienceController.hostMode =
+                             PlayerExperienceController.Windowed
+            }
+        }
+    }
+
+    Component {
+        id: desktopWindowComponent
+        Window {
+            objectName: "immersiveDesktopWindow"
+            visible: false
+            x: Screen.virtualX
+            y: Screen.virtualY
+            width: Screen.width
+            height: Screen.height
+            flags: Qt.FramelessWindowHint
+                   | Qt.WindowStaysOnBottomHint
+                   | (PlayerExperienceController.desktopMousePassthrough
+                      ? Qt.WindowTransparentForInput : 0)
+            color: "transparent"
+            title: qsTr("AgPlayer 桌面沉浸")
+            onClosing: function(close) {
+                close.accepted = false
+                PlayerExperienceController.immersiveMode =
+                        PlayerExperienceController.Off
+            }
+        }
+    }
+
+    Item {
+        id: immersiveCoordinator
+        objectName: "immersiveCoordinator"
+        visible: false
+        width: 0
+        height: 0
+        property int handoffPhase: 0 // 0 stable, 1 detaching, 2 attaching
+        property int attachedHostMode: -1
+        property int requestedHostMode: PlayerExperienceController.hostMode
+        property var fullscreenWindow: null
+        property var desktopWindow: null
+        property var surface: null
+        property int releasePolls: 0
+        readonly property int releasePollLimit: 300
+        property bool handoffTimedOut: false
+
+        function ensureSurface() {
+            if (!surface)
+                surface = immersiveSurfaceComponent.createObject(
+                            windowedImmersiveHost)
+            return surface
+        }
+
+        function ensureWindow(mode) {
+            if (mode === PlayerExperienceController.Fullscreen
+                    && !fullscreenWindow) {
+                fullscreenWindow = fullscreenWindowComponent.createObject(mainWindow)
+                fullscreenWindow.visible = false
+            }
+            if (mode === PlayerExperienceController.Desktop
+                    && !desktopWindow) {
+                desktopWindow = desktopWindowComponent.createObject(mainWindow)
+                desktopWindow.visible = false
+            }
+        }
+
+        function targetItem(mode) {
+            if (mode === PlayerExperienceController.Windowed)
+                return windowedImmersiveHost
+            ensureWindow(mode)
+            if (mode === PlayerExperienceController.Fullscreen)
+                return fullscreenWindow ? fullscreenWindow.contentItem : null
+            return desktopWindow ? desktopWindow.contentItem : null
+        }
+
+        function currentWindow(mode) {
+            if (mode === PlayerExperienceController.Windowed)
+                return mainWindow
+            if (mode === PlayerExperienceController.Fullscreen)
+                return fullscreenWindow
+            return desktopWindow
+        }
+
+        function refreshExposure() {
+            if (!surface)
+                return
+            var window = currentWindow(attachedHostMode)
+            surface.hostExposed = !!window && window.visible
+                    && window.visibility !== Window.Minimized
+                    && window.visibility !== Window.Hidden
+        }
+
+        function hideDetachedWindows() {
+            if (attachedHostMode !== PlayerExperienceController.Fullscreen
+                    && fullscreenWindow)
+                fullscreenWindow.visible = false
+            if (attachedHostMode !== PlayerExperienceController.Desktop
+                    && desktopWindow)
+                desktopWindow.visible = false
+        }
+
+        function detach() {
+            if (!surface) {
+                attachedHostMode = -1
+                return
+            }
+            var oldWindow = currentWindow(attachedHostMode)
+            surface.attached = false
+            surface.hostExposed = false
+            surface.visible = false
+            surface.parent = null
+            surface.x = 0
+            surface.y = 0
+            surface.width = 0
+            surface.height = 0
+            attachedHostMode = -1
+            if (oldWindow && oldWindow !== mainWindow)
+                oldWindow.visible = false
+        }
+
+        function beginHandoff() {
+            requestedHostMode = PlayerExperienceController.hostMode
+            if (handoffPhase !== 0)
+                return
+            handoffPhase = 1
+            releasePolls = 0
+            handoffTimedOut = false
+            detach()
+            releaseTimer.interval = 16
+            releaseTimer.start()
+        }
+
+        function attachRequestedHost() {
+            if (!ensureSurface())
+                return false
+            var target = targetItem(requestedHostMode)
+            if (!target)
+                return false
+            handoffPhase = 2
+            surface.parent = target
+            surface.x = 0
+            surface.y = 0
+            surface.width = Qt.binding(function() {
+                return surface.parent ? surface.parent.width : 0
+            })
+            surface.height = Qt.binding(function() {
+                return surface.parent ? surface.parent.height : 0
+            })
+            surface.hostMode = requestedHostMode
+            var targetWindow = currentWindow(requestedHostMode)
+            if (targetWindow && targetWindow !== mainWindow) {
+                targetWindow.visible = true
+                if (requestedHostMode === PlayerExperienceController.Fullscreen)
+                    targetWindow.showFullScreen()
+            }
+            surface.visible = true
+            surface.attached = true
+            attachedHostMode = requestedHostMode
+            refreshExposure()
+            handoffPhase = 0
+            hideDetachedWindows()
+            return true
+        }
+
+        function synchronize() {
+            requestedHostMode = PlayerExperienceController.hostMode
+            if (PlayerExperienceController.immersiveMode
+                    === PlayerExperienceController.Off) {
+                if (!surface) {
+                    handoffPhase = 0
+                    attachedHostMode = -1
+                    hideDetachedWindows()
+                    return
+                }
+                if (handoffPhase === 0)
+                    beginHandoff()
+                return
+            }
+            if (!ensureSurface())
+                return
+            if (attachedHostMode < 0) {
+                if (!attachRequestedHost())
+                    handoffPhase = 0
+                return
+            }
+            if (attachedHostMode !== requestedHostMode)
+                beginHandoff()
+            else
+                refreshExposure()
+        }
+
+        Timer {
+            id: releaseTimer
+            interval: 16
+            repeat: true
+            onTriggered: {
+                ++immersiveCoordinator.releasePolls
+                var terrain = null
+                if (immersiveCoordinator.surface)
+                    terrain = immersiveCoordinator.surface.terrainItem
+                if (terrain && terrain.liveRendererCount > 0) {
+                    if (immersiveCoordinator.releasePolls
+                            >= immersiveCoordinator.releasePollLimit) {
+                        immersiveCoordinator.handoffTimedOut = true
+                        interval = 250
+                        if (PlayerExperienceController.immersiveMode
+                                !== PlayerExperienceController.Off)
+                            PlayerExperienceController.immersiveMode =
+                                    PlayerExperienceController.Off
+                    }
+                    return
+                }
+                stop()
+                interval = 16
+                if (PlayerExperienceController.immersiveMode
+                        === PlayerExperienceController.Off) {
+                    immersiveCoordinator.handoffPhase = 0
+                    immersiveCoordinator.hideDetachedWindows()
+                    if (immersiveCoordinator.surface) {
+                        var doomedSurface = immersiveCoordinator.surface
+                        immersiveCoordinator.surface = null
+                        doomedSurface.destroy()
+                    }
+                    return
+                }
+                immersiveCoordinator.requestedHostMode =
+                        PlayerExperienceController.hostMode
+                if (!immersiveCoordinator.attachRequestedHost()) {
+                    immersiveCoordinator.handoffPhase = 0
+                    return
+                }
+                if (immersiveCoordinator.attachedHostMode
+                        !== PlayerExperienceController.hostMode)
+                    immersiveCoordinator.beginHandoff()
+            }
+        }
+
+        Connections {
+            target: PlayerExperienceController
+            function onImmersiveModeChanged() { immersiveCoordinator.synchronize() }
+            function onHostModeChanged() { immersiveCoordinator.synchronize() }
+        }
+        Connections {
+            target: mainWindow
+            function onVisibilityChanged() { immersiveCoordinator.refreshExposure() }
+        }
+        Connections {
+            target: immersiveCoordinator.fullscreenWindow
+            ignoreUnknownSignals: true
+            function onVisibilityChanged() { immersiveCoordinator.refreshExposure() }
+        }
+        Connections {
+            target: immersiveCoordinator.desktopWindow
+            ignoreUnknownSignals: true
+            function onVisibilityChanged() { immersiveCoordinator.refreshExposure() }
+        }
+        // Reparenting a QQuickRhiItem while Main is still constructing can
+        // invalidate its scene-graph bindings. Queue the first handoff after
+        // QQmlComponent::create() has returned to the event loop.
+        Component.onCompleted: Qt.callLater(synchronize)
     }
 
     FileDropArea {

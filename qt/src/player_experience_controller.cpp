@@ -193,6 +193,12 @@ bool PlayerExperienceController::themeCycleEnabled() const noexcept
 {
     return themeCycleEnabled_;
 }
+
+bool PlayerExperienceController::songAdaptiveColorEnabled() const noexcept
+{
+    return songAdaptiveColorEnabled_;
+}
+
 QVariantList PlayerExperienceController::visualEqGains() const { return visualEqGains_; }
 int PlayerExperienceController::lyricClarity() const noexcept { return lyricClarity_; }
 int PlayerExperienceController::lyricDepth() const noexcept { return lyricDepth_; }
@@ -420,6 +426,14 @@ void PlayerExperienceController::setThemeCycleEnabled(bool value)
     themeCycleEnabled_ = value;
     persist(QStringLiteral("themeCycleEnabled"), value);
     emit themeCycleEnabledChanged();
+}
+
+void PlayerExperienceController::setSongAdaptiveColorEnabled(bool value)
+{
+    if (songAdaptiveColorEnabled_ == value) return;
+    songAdaptiveColorEnabled_ = value;
+    persist(QStringLiteral("songAdaptiveColorEnabled"), value);
+    emit songAdaptiveColorEnabledChanged();
 }
 
 void PlayerExperienceController::setVisualEqGains(const QVariantList& values)
@@ -685,6 +699,8 @@ void PlayerExperienceController::load()
     meteorsEnabled_ = boolean(QStringLiteral("meteorsEnabled"), true);
     idleBreathingEnabled_ = boolean(QStringLiteral("idleBreathingEnabled"), true);
     themeCycleEnabled_ = boolean(QStringLiteral("themeCycleEnabled"), false);
+    songAdaptiveColorEnabled_ = boolean(
+        QStringLiteral("songAdaptiveColorEnabled"), true);
     const QVariant persistedGains = settings_.value(QStringLiteral("visualEqGains"));
     const int persistedGainsType = persistedGains.metaType().id();
     visualEqGains_ = (persistedGainsType == QMetaType::QVariantList
@@ -732,6 +748,8 @@ void PlayerExperienceController::load()
     settings_.setValue(QStringLiteral("meteorsEnabled"), meteorsEnabled_);
     settings_.setValue(QStringLiteral("idleBreathingEnabled"), idleBreathingEnabled_);
     settings_.setValue(QStringLiteral("themeCycleEnabled"), themeCycleEnabled_);
+    settings_.setValue(QStringLiteral("songAdaptiveColorEnabled"),
+                       songAdaptiveColorEnabled_);
     settings_.setValue(QStringLiteral("visualEqGains"), visualEqGains_);
     settings_.setValue(QStringLiteral("lyricClarity"), lyricClarity_);
     settings_.setValue(QStringLiteral("lyricDepth"), lyricDepth_);

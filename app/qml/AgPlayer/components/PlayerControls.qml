@@ -206,23 +206,9 @@ Rectangle {
             background: null
         }
 
-        ToolButton {
-            objectName: "playerShellModeButton"
-            flat: true
-            icon.source: Theme.icon(SettingsController.playerShellMode === 0
-                                    ? "merge-cells-horizontal"
-                                    : "split-cells-horizontal")
-            icon.color: Theme.iconPrimary
-            icon.width: 20
-            icon.height: 20
-            Accessible.name: SettingsController.playerShellMode === 0
-                             ? qsTr("Switch to integrated player layout")
-                             : qsTr("Switch to classic player layout")
-            onClicked: SettingsController.playerShellMode =
-                       SettingsController.playerShellMode === 0 ? 1 : 0
-            ToolTip.text: Accessible.name
-            ToolTip.visible: hovered
-            background: null
+        ExperienceActions {
+            objectName: "experienceActions"
+            compact: false
         }
     }
 

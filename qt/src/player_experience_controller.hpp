@@ -56,6 +56,9 @@ class PlayerExperienceController final : public QObject {
                    WRITE setIdleBreathingEnabled NOTIFY idleBreathingEnabledChanged)
     Q_PROPERTY(bool themeCycleEnabled READ themeCycleEnabled
                    WRITE setThemeCycleEnabled NOTIFY themeCycleEnabledChanged)
+    Q_PROPERTY(bool songAdaptiveColorEnabled READ songAdaptiveColorEnabled
+                   WRITE setSongAdaptiveColorEnabled
+                   NOTIFY songAdaptiveColorEnabledChanged)
     Q_PROPERTY(QVariantList visualEqGains READ visualEqGains WRITE setVisualEqGains
                    NOTIFY visualEqGainsChanged)
     Q_PROPERTY(int lyricClarity READ lyricClarity WRITE setLyricClarity
@@ -139,6 +142,7 @@ public:
     bool meteorsEnabled() const noexcept;
     bool idleBreathingEnabled() const noexcept;
     bool themeCycleEnabled() const noexcept;
+    bool songAdaptiveColorEnabled() const noexcept;
     QVariantList visualEqGains() const;
     int lyricClarity() const noexcept;
     int lyricDepth() const noexcept;
@@ -181,6 +185,7 @@ public:
     void setMeteorsEnabled(bool value);
     void setIdleBreathingEnabled(bool value);
     void setThemeCycleEnabled(bool value);
+    void setSongAdaptiveColorEnabled(bool value);
     void setVisualEqGains(const QVariantList& values);
     void setLyricClarity(int value);
     void setLyricDepth(int value);
@@ -230,6 +235,7 @@ signals:
     void meteorsEnabledChanged();
     void idleBreathingEnabledChanged();
     void themeCycleEnabledChanged();
+    void songAdaptiveColorEnabledChanged();
     void visualEqGainsChanged();
     void lyricClarityChanged();
     void lyricDepthChanged();
@@ -283,6 +289,7 @@ private:
     bool meteorsEnabled_ = true;
     bool idleBreathingEnabled_ = true;
     bool themeCycleEnabled_ = false;
+    bool songAdaptiveColorEnabled_ = true;
     QVariantList visualEqGains_ = defaultVisualEqGains();
     int lyricClarity_ = 78;
     int lyricDepth_ = 62;

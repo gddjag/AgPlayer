@@ -10,6 +10,7 @@ Rectangle {
 
     property var playback: PlaybackController
     property var windows: WindowController
+    property var waveformSession: null
     property var rawWaveformLayers: ({})
     property real waveformDurationMs: 0
     property int libraryRevision: 0
@@ -94,11 +95,10 @@ Rectangle {
         }
     }
     function loadWaveform() {
-        var path = currentTrackValue(LibraryModel.PathRole)
-        rawWaveformLayers = ({}); waveformDurationMs = 0
-        waveform.layers = ({}); waveform.peaks = []
-        playedWaveform.layers = ({}); playedWaveform.peaks = []
-        if (path && playback) WaveformProvider.loadForTrack(playback.currentTrackId, path)
+        rawWaveformLayers = waveformSession ? waveformSession.layers : ({})
+        waveformDurationMs = waveformSession
+                ? Number(waveformSession.durationMs || 0) : 0
+        applyWaveformMode()
     }
     function modeName(): string {
         switch (playback ? playback.mode : PlaybackController.Sequential) {
@@ -375,6 +375,10 @@ Rectangle {
                     icon.source: Theme.icon("skip-forward-fill"); icon.color: Theme.primaryText
                     icon.width: 19; icon.height: 19; onClicked: if (playback) playback.next(); background: null
                 }
+                ExperienceActions {
+                    objectName: "miniExperienceActions"
+                    compact: true
+                }
                 Item {
                     id: volumeControl
                     objectName: "miniVolumeControl"
@@ -504,16 +508,12 @@ Rectangle {
         function onSpectrumChanged() { if (SettingsController.waveformMode === 2) root.applyWaveformMode() }
     }
     Connections {
-        target: WaveformProvider
-        function onWaveformReady(path, layers) {
-            if (path === root.currentTrackValue(LibraryModel.PathRole)) {
-                root.rawWaveformLayers = layers
-                root.waveformDurationMs = Math.max(
-                    0, Number(layers._durationMs) || 0)
-                root.applyWaveformMode()
-            }
-        }
+        target: root.waveformSession
+        ignoreUnknownSignals: true
+        function onLayersChanged() { root.loadWaveform() }
+        function onDurationMsChanged() { root.loadWaveform() }
     }
     Connections { target: SettingsController; function onWaveformModeChanged() { root.applyWaveformMode() } }
+    onWaveformSessionChanged: root.loadWaveform()
     Component.onCompleted: root.loadWaveform()
 }

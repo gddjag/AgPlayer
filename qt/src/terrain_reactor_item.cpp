@@ -133,12 +133,14 @@ class TerrainReactorRenderer final : public QQuickRhiItemRenderer {
 public:
     TerrainReactorRenderer(
         std::shared_ptr<TerrainReactorItem::Telemetry> telemetry,
-        std::shared_ptr<RendererResourceState> resourceState)
+        std::shared_ptr<RendererResourceState> resourceState,
+        bool softwareBackend)
         : telemetry_(std::move(telemetry)),
           resourceState_(std::move(resourceState)),
           rendererId_(++nextRendererId_),
           punchEvents_(*resourceState_),
-          impactEvents_(*resourceState_)
+          impactEvents_(*resourceState_),
+          softwareBackend_(softwareBackend)
     {
         claimed_ = resourceState_->acquireRenderer(rendererId_);
         frameTimer_.start();
@@ -158,7 +160,7 @@ protected:
     void initialize(QRhiCommandBuffer*) override
     {
         if (!claimed_) return;
-        if (rhi() == nullptr || rhi()->backend() == QRhi::Null) {
+        if (softwareBackend_ || rhi() == nullptr || rhi()->backend() == QRhi::Null) {
             fail(TerrainReactorItem::RenderStatus::SoftwareBackend,
                  QStringLiteral("Terrain Reactor requires an accelerated QRhi backend"));
             return;
@@ -282,7 +284,7 @@ protected:
                 std::exchange(pendingStaticUploads_, nullptr));
         }
 
-        commandBuffer->beginPass(renderTarget(), QColor(0, 0, 0, 255),
+        commandBuffer->beginPass(renderTarget(), QColor(4, 6, 11, 255),
                                  {1.0F, 0}, updates);
         commandBuffer->setGraphicsPipeline(pipeline_.get());
         commandBuffer->setShaderResources(bindings_.get());
@@ -607,6 +609,7 @@ private:
     int currentRippleCount_ = 10;
     float currentInternalScale_ = 1.0F;
     bool failed_ = false;
+    const bool softwareBackend_ = false;
     TerrainReactorItem::RenderStatus status_ = TerrainReactorItem::RenderStatus::Inactive;
     QString diagnostic_;
     QRhiRenderTarget* lastRenderTarget_ = nullptr;
@@ -749,7 +752,10 @@ void TerrainReactorItem::setHostExposed(bool exposed)
 }
 bool TerrainReactorItem::renderingRequested() const noexcept
 {
-    return active_ && isVisible() && hostExposed_ && windowExposed_;
+    const bool backendUnavailable = renderStatus_ == RenderStatus::SoftwareBackend
+        || renderStatus_ == RenderStatus::ResourceError;
+    return active_ && isVisible() && hostExposed_ && windowExposed_
+        && !backendUnavailable;
 }
 
 QObject* TerrainReactorItem::featureSource() const noexcept { return featureSource_; }
@@ -965,7 +971,11 @@ void TerrainReactorItem::triggerCameraPunch(qreal strength)
 
 QQuickRhiItemRenderer* TerrainReactorItem::createRenderer()
 {
-    auto* renderer = new TerrainReactorRenderer(telemetry_, resourceState_);
+    const bool softwareBackend = window() != nullptr
+        && window()->rendererInterface()->graphicsApi()
+            == QSGRendererInterface::Software;
+    auto* renderer = new TerrainReactorRenderer(
+        telemetry_, resourceState_, softwareBackend);
     const bool claimed = renderer->claimed();
     QMetaObject::invokeMethod(this, [this, claimed] {
         if (!claimed) {
@@ -1180,8 +1190,16 @@ void TerrainReactorItem::refreshWindowExposure()
 void TerrainReactorItem::reportRenderStatus(RenderStatus status,
                                              const QString& diagnostic)
 {
+    if (renderStatus_ == RenderStatus::SoftwareBackend
+        && status == RenderStatus::Ready) {
+        return;
+    }
     if (renderStatus_ == status && diagnostic_ == diagnostic) return;
+    const bool wasRequested = renderingRequested();
     renderStatus_ = status;
     diagnostic_ = diagnostic;
     emit renderStatusChanged();
+    if (wasRequested != renderingRequested()) {
+        emit renderingRequestedChanged();
+    }
 }

@@ -58,11 +58,11 @@ Implement `TerrainReactorItem : QQuickRhiItem` and its render-thread-owned rende
 Build the user-facing experience around the completed controllers and renderer.
 
 - Add one shared three-action component for layout theme, immersive visual, and lyrics; reuse it from shared player controls and mini player controls without duplicating state logic.
-- Windowed mode renders inside the active shell; fullscreen uses the same item and hides the panel after 2.6 seconds idle; desktop uses a separate transparent frameless window and transfers the sole renderer host. Windows/macOS use supported transparency/layering; unsupported Wayland safely falls back with a visible status message. Mouse passthrough is explicit and defaults off.
+- Windowed mode renders inside the active shell; fullscreen uses the same item and hides the panel after 3 seconds idle (updated by the final V4.6 HTML); desktop uses a separate transparent frameless window and transfers the sole renderer host. Windows/macOS use supported transparency/layering; unsupported Wayland safely falls back with a visible status message. Mouse passthrough is explicit and defaults off.
 - Match the screenshot's compact dark translucent left control panel. Include quality, palette/custom colors, visual parameters, effect toggles, and eight EQ controls. Do not include file selection or demo music.
 - Add the right queue drawer: 20px trigger, 140ms hover delay, two-second hide, drag/orbit guard, virtualized ListView from `queueTrackIds`, metadata via `trackForId`, full-row double click via `playTrackIds(currentQueue, trackId)`, and transform-only neighbor scaling.
 - Reuse the existing `WaveformSession` and `WaveformItem` at the bottom. Do not add waveform decoding, cache, provider, model, shader, or alternate waveform styling. Ensure only the visible host owns the visual item while sharing the session.
-- Add a transparent three-line normal-window lyrics panel using `LyricsService`; fullscreen keeps state but has no lyrics stage. Manual scrolling pauses follow for five seconds.
+- Add a transparent three-line normal-window lyrics panel using `LyricsService`; the later video requirement supersedes the original fullscreen exclusion and adds a spatial lyrics stage with display switch, left/center/right placement, position and size controls. Manual scrolling pauses follow for five seconds.
 - Add QML contract/integration tests for shared actions, independent state, one host, lifecycle, drawer timers and queue scope, lyrics states, and exact reuse of the existing waveform types.
 - Update `docs/development/` traceability and `docs/qa/` acceptance records.
 

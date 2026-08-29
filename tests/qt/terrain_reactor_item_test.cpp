@@ -173,6 +173,12 @@ void TerrainReactorItemTest::windowEventsGateShowMinimizeAndRestore()
     TerrainReactorItem item(window.contentItem());
     item.setActive(true);
     window.show();
+    QTRY_VERIFY(item.renderStatus()
+                != TerrainReactorItem::RenderStatus::Inactive);
+    if (item.renderStatus() != TerrainReactorItem::RenderStatus::Ready) {
+        QVERIFY(!item.renderingRequested());
+        return;
+    }
     QTRY_VERIFY(item.renderingRequested());
     window.hide();
     QTRY_VERIFY(!item.renderingRequested());
@@ -195,6 +201,7 @@ void TerrainReactorItemTest::softwareBackendFailsClosedWithoutSchedulingWork()
 
     QTRY_COMPARE(item.renderStatus(),
                  TerrainReactorItem::RenderStatus::SoftwareBackend);
+    QVERIFY(!item.renderingRequested());
     const quint64 frames = item.frameCount();
     const quint64 uploads = item.uploadCount();
     QTest::qWait(40);
@@ -343,7 +350,7 @@ void TerrainReactorItemTest::cameraPropertiesSupportTaskFourInput()
     QCOMPARE(item.punchRevision(), originalPunchRevision + 1);
     const quint64 firstPunchRevision = item.punchRevision();
     item.orbitBy(0.25, -0.1, 1.0);
-    item.zoomBy(-1000.0, 1.0);
+    item.zoomBy(-10000.0, 1.0);
     QCOMPARE(item.punchRevision(), firstPunchRevision);
     item.triggerCameraPunch(0.7);
     QCOMPARE(item.punchRevision(), firstPunchRevision + 1);

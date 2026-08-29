@@ -1178,6 +1178,10 @@ int main(int argc, char* argv[])
                 qWarning().noquote()
                     << "Mini player QML failed:"
                     << miniComponent.errorString();
+            } else {
+                miniWindow->setProperty(
+                    "waveformSession",
+                    mainWindow->property("waveformSession"));
             }
 
             // The audio-tools window is loaded on first use.  Keeping only the

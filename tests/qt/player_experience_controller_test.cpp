@@ -48,6 +48,7 @@ void PlayerExperienceControllerTest::defaultsAreIndependent()
     QVERIFY(!experience.lyricsVisible());
     QVERIFY(experience.panelVisible());
     QVERIFY(!experience.desktopMousePassthrough());
+    QVERIFY(experience.songAdaptiveColorEnabled());
     QCOMPARE(experience.qualityPreset(), 0);
     QCOMPARE(experience.coolColor(), QStringLiteral("#4F6FFF"));
     QCOMPARE(experience.warmColor(), QStringLiteral("#FF4778"));
@@ -71,6 +72,7 @@ void PlayerExperienceControllerTest::persistsAndNormalizesValues()
         experience.setLyricsVisible(true);
         experience.setPanelVisible(false);
         experience.setDesktopMousePassthrough(true);
+        experience.setSongAdaptiveColorEnabled(false);
         experience.setQualityPreset(3);
         experience.setCoolColor(QStringLiteral("#123456"));
         experience.setTerrainAmplitude(72);
@@ -83,6 +85,7 @@ void PlayerExperienceControllerTest::persistsAndNormalizesValues()
     QVERIFY(reloaded.lyricsVisible());
     QVERIFY(!reloaded.panelVisible());
     QVERIFY(reloaded.desktopMousePassthrough());
+    QVERIFY(!reloaded.songAdaptiveColorEnabled());
     QCOMPARE(reloaded.qualityPreset(), 3);
     QCOMPARE(reloaded.coolColor(), QStringLiteral("#123456"));
     QCOMPARE(reloaded.terrainAmplitude(), 72);

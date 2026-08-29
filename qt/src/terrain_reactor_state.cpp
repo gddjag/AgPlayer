@@ -171,19 +171,21 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
     for (int index = 0; index < floatingCount; ++index) {
         const ColorZone zone = index % 3 == 0 ? ColorZone::Cool
             : index % 3 == 1 ? ColorZone::Warm : ColorZone::Accent;
-        result.floating.append(makeExtra(random, 12.0F, 78.0F,
-                                         6.0F, 25.0F, zone));
+        SceneInstance floating = makeExtra(random, 12.0F, 78.0F,
+                                           6.0F, 25.0F, zone);
+        floating.scale *= 1.22F;
+        result.floating.append(floating);
     }
     for (int index = 0; index < meteorCount; ++index) {
         SceneInstance meteor = makeExtra(random, 18.0F, 74.0F,
                                          32.0F, 46.0F, ColorZone::Peak);
-        meteor.scale = QVector3D(0.34F, 1.85F, 0.34F);
+        meteor.scale = QVector3D(0.46F, 1.05F, 0.46F);
         meteor.aux = float(index);
         result.meteors.append(meteor);
         for (int segment = 0; segment < 3; ++segment) {
             SceneInstance trail = meteor;
             trail.aux = float(index) + float(segment + 1) / 4.0F;
-            trail.scale = QVector3D(0.22F, 1.35F, 0.22F);
+            trail.scale = QVector3D(0.30F, 0.72F, 0.30F);
             result.meteorTrails.append(trail);
         }
         for (int segment = 0; segment < 16; ++segment) {
@@ -299,17 +301,26 @@ float terrainHeight(const SceneInstance& instance,
     const float ringDistance = std::abs(distance - rippleRadius);
     const float ripple = parameters.rippleStrength
         * std::exp(-(ringDistance * ringDistance) / 25.0F) * 4.1F;
+    const float ringPhase = 0.5F + 0.5F * std::cos(
+        distance * 0.29F - timeSeconds * 1.15F);
+    const float structuralRing = std::pow(ringPhase, 9.0F)
+        * (0.45F + parameters.energy * 0.95F) * 1.6F;
     const float impactAge = clampUnit(parameters.impactAge);
     const float impact = clampUnit(parameters.impactStrength);
     const float centerPulse = impact * dynamics.centerHighlight
         * (1.0F - impactAge) * std::exp(-(distance * distance) / 1150.0F)
         * 8.0F;
+    const float steadyCenter = parameters.energy * dynamics.centerHighlight
+        * std::pow(center, 2.25F) * 4.8F;
+    const float centerSpikes = parameters.energy * dynamics.centerHighlight
+        * core * (instance.random > 0.78F ? 8.5F : 1.4F);
     const float impactRadius = impactAge * dynamics.responseRadius * 1.15F;
     const float impactDistance = std::abs(distance - impactRadius);
     const float impactRing = impact * dynamics.rhythmStrength
         * std::exp(-(impactDistance * impactDistance) / 18.0F) * 7.0F;
     const float maximumHeight = impact > 0.0F ? 24.0F : 18.0F;
-    return std::clamp(idle + bass + mids + peak + ripple
+    return std::clamp(idle + bass + mids + peak + ripple + structuralRing
+                          + steadyCenter + centerSpikes
                           + centerPulse + impactRing,
                       0.035F, maximumHeight);
 }

@@ -14,11 +14,14 @@ void main()
     float luminance = dot(lit, vec3(0.2126, 0.7152, 0.0722));
     lit = mix(vec3(luminance), lit, focus);
     lit *= 0.62 + focus * 0.38;
-    vec3 deepSpace = vec3(0.001, 0.002, 0.007) + color * 0.006;
+    vec3 deepSpace = vec3(0.006, 0.009, 0.017) + color * 0.012;
     float atmosphericVisibility = pow(fog, 1.35) * (0.48 + focus * 0.52);
     vec3 finalColor = mix(deepSpace, lit, atmosphericVisibility);
     float centralGlow = max(max(finalColor.r, finalColor.g), finalColor.b);
-    finalColor += color * centralGlow * (0.14 + glow * 0.50);
+    finalColor += color * centralGlow * (0.18 + glow * 0.56);
+    float luminousHaze = clamp(glow * 0.22 + centralGlow * 0.10, 0.0, 0.82);
+    finalColor = mix(finalColor, vec3(1.0, 0.985, 0.975),
+                     luminousHaze * focus);
     fragColor = vec4(finalColor,
                      opacity * clamp(0.18 + fog * 0.82, 0.0, 1.0));
 }

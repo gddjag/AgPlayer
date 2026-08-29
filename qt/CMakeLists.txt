@@ -153,6 +153,16 @@ target_link_libraries(agplayer_qt
         Qt6::Network
 )
 
+# Ninja cannot infer MSVC /showIncludes dependencies when the compiler emits
+# localized Chinese prefixes. These explicit edges keep QML type allocation in
+# qml_registration.cpp in lockstep with TerrainReactorItem's class layout.
+set_property(SOURCE src/qml_registration.cpp APPEND PROPERTY OBJECT_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/terrain_reactor_item.hpp;${CMAKE_CURRENT_SOURCE_DIR}/src/terrain_reactor_state.hpp"
+)
+set_property(SOURCE src/terrain_reactor_item.cpp APPEND PROPERTY OBJECT_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/terrain_reactor_item.hpp;${CMAKE_CURRENT_SOURCE_DIR}/src/terrain_reactor_state.hpp"
+)
+
 qt_add_shaders(agplayer_qt agplayer_terrain_reactor_shaders
     PREFIX "/terrain"
     FILES

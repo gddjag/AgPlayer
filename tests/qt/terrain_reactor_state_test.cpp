@@ -27,6 +27,7 @@ private slots:
     void immersiveStyleControlsMapToBoundedDistinctDynamics();
     void impactEventsProduceOneBoundedPulsePerRevision();
     void explicitImpactRaisesCenterAndTravelingRing();
+    void steadyMusicKeepsCenterVisiblyFocused();
     void trackIdentityProducesStableBoundedDistinctPalette();
     void ecoFramePacerLimitsWorkToThirtyFrames();
 };
@@ -279,6 +280,29 @@ void TerrainReactorStateTest::explicitImpactRaisesCenterAndTravelingRing()
     QVERIFY(terrainHeight(center, impacted, 2.0F, style) <= 24.0F);
 }
 
+void TerrainReactorStateTest::steadyMusicKeepsCenterVisiblyFocused()
+{
+    AudioFeatures features;
+    features.bands.fill(0.36F);
+    features.energy = 0.62F;
+
+    RenderStyleSnapshot dimStyle;
+    dimStyle.centerHighlight = 0.0F;
+    RenderStyleSnapshot focusedStyle = dimStyle;
+    focusedStyle.centerHighlight = 1.0F;
+
+    const VisualParameters dim = mapVisualParameters(features, 2.0F, dimStyle);
+    const VisualParameters focused = mapVisualParameters(
+        features, 2.0F, focusedStyle);
+    SceneInstance center;
+    center.position = QVector3D(0.0F, 0.0F, 0.0F);
+    center.random = 0.5F;
+    center.zone = ColorZone::Peak;
+
+    QVERIFY(terrainHeight(center, focused, 2.0F, focusedStyle)
+            > terrainHeight(center, dim, 2.0F, dimStyle) + 1.0F);
+}
+
 void TerrainReactorStateTest::automaticQualityUsesHysteresisCooldownAndEffectFirstOrder()
 {
     AutomaticQualityController quality;
@@ -518,7 +542,7 @@ void TerrainReactorStateTest::manualCameraControlRecoversAfterFourSeconds()
     CameraMotion camera;
     const CameraSnapshot initial = camera.snapshot();
     camera.orbitBy(0.4F, -0.2F, 1.0);
-    camera.zoomBy(-1000.0F, 1.0);
+    camera.zoomBy(-10000.0F, 1.0);
     camera.applyBeatPunch(0.8F);
     const CameraSnapshot manual = camera.snapshot();
     QVERIFY(manual.yaw != initial.yaw);

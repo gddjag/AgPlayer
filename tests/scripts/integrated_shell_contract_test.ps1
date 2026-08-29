@@ -40,6 +40,6 @@ if ($zoomForwardCount -lt 4) {
 }
 Assert-Match $shell 'onZoomRequested:\s*function\(x, factor\)[\s\S]*waveform\.zoomAt\(x, factor\)' 'Integrated must apply zoom forwarded by the selection overlay.'
 Assert-Match $main 'showListWindowButton:\s*false' 'Integrated controls must not expose the Classic list-window button.'
-Assert-Match $controls 'objectName:\s*"modeButton"[\s\S]*objectName:\s*"playerShellModeButton"' 'Shell switch must follow the playback-mode button.'
+Assert-Match $controls 'objectName:\s*"modeButton"[\s\S]*ExperienceActions\s*\{' 'Shared experience actions must follow the playback-mode button.'
 
 Write-Host 'Integrated shell source contract passed.'

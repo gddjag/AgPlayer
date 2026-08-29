@@ -1,0 +1,427 @@
+import QtQuick
+import QtQuick.Controls
+import AgPlayer
+
+Item {
+    id: root
+    objectName: "immersiveSurface"
+    property int hostMode: PlayerExperienceController.Windowed
+    property bool attached: false
+    property bool hostExposed: false
+    property bool renderingEnabled: true
+    property var waveformSession: null
+    property bool panelIdle: false
+    property bool panelAutoHidden: false
+    property bool manualCameraActive: false
+    property bool qaSyntheticFeatures: false
+    readonly property var terrainItem: terrainLoader.item
+    property string platformPlugin: String(Qt.platform.pluginName || "")
+    readonly property bool waylandFallback:
+        hostMode === PlayerExperienceController.Desktop
+        && platformPlugin.toLowerCase().indexOf("wayland") >= 0
+    readonly property bool active:
+        attached && PlayerExperienceController.immersiveMode
+        !== PlayerExperienceController.Off
+
+    function notePointerActivity() {
+        panelAutoHidden = false
+        if (PlayerExperienceController.panelVisible)
+            panelAutoHideTimer.restart()
+        if (hostMode !== PlayerExperienceController.Fullscreen) {
+            panelIdle = false
+            panelIdleTimer.stop()
+            return
+        }
+        panelIdle = false
+        panelIdleTimer.restart()
+    }
+
+    function noteManualCameraActivity() {
+        manualCameraActive = true
+        cameraResumeTimer.restart()
+        notePointerActivity()
+    }
+
+    function qualityForHost() {
+        if (hostMode === PlayerExperienceController.Desktop)
+            return TerrainReactorItem.Eco
+        switch (PlayerExperienceController.qualityPreset) {
+        case PlayerExperienceController.Eco: return TerrainReactorItem.Eco
+        case PlayerExperienceController.High:
+        case PlayerExperienceController.Ultra: return TerrainReactorItem.High
+        default: return TerrainReactorItem.Balanced
+        }
+    }
+
+    function currentTitle() {
+        var track = LibraryModel.trackForId(PlaybackController.currentTrackId)
+        return track && track.title ? track.title : ""
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        color: "#000105"
+    }
+
+    Loader {
+        id: terrainLoader
+        anchors.fill: parent
+        sourceComponent: root.renderingEnabled
+                         ? nativeTerrainComponent : inertTerrainComponent
+        onItemChanged: root.synchronizeAudioFeatures()
+    }
+
+    Component {
+        id: nativeTerrainComponent
+        TerrainReactorItem {
+            objectName: "terrainReactor"
+            active: root.active && root.hostExposed
+            hostExposed: root.hostExposed
+            featureSource: AudioVisualFeatureController
+            styleSource: PlayerExperienceController
+            trackIdentity: PlayerExperienceController.songAdaptiveColorEnabled
+                           && root.waveformSession
+                           ? root.waveformSession.trackId : ""
+            quality: root.qualityForHost()
+            deterministicSeed: 0x5eed
+            useSyntheticFeatures: root.qaSyntheticFeatures
+            Component.onCompleted: {
+                if (root.qaSyntheticFeatures) {
+                    setSyntheticFeatures([0.92, 0.88, 0.45, 0.42,
+                                          0.62, 0.70, 0.56, 0.38],
+                                         0.72, 0.64, true, true)
+                }
+            }
+        }
+    }
+
+    Component {
+        id: inertTerrainComponent
+        Item {
+            objectName: "terrainReactor"
+            property bool renderingRequested: false
+            property int liveRendererCount: 0
+            property int renderStatus: TerrainReactorItem.Inactive
+            property string diagnostic: ""
+            function orbitBy(yawDelta, pitchDelta, nowSeconds) {}
+            function zoomBy(wheelDelta, nowSeconds) {}
+        }
+    }
+
+    function synchronizeAudioFeatures() {
+        AudioVisualFeatureController.setActive(
+                    root.terrainItem
+                    ? root.terrainItem.renderingRequested : false)
+    }
+
+    Connections {
+        target: root.terrainItem
+        function onRenderingRequestedChanged() {
+            root.synchronizeAudioFeatures()
+        }
+    }
+
+    Rectangle {
+        id: renderFallbackMessage
+        objectName: "immersiveRenderFallbackMessage"
+        anchors.centerIn: parent
+        width: Math.min(520, parent.width - 48)
+        height: renderBackendFallbackText.implicitHeight + 30
+        radius: 12
+        color: Qt.rgba(0.035, 0.04, 0.06, 0.92)
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.16)
+        visible: root.terrainItem
+                 && (root.terrainItem.renderStatus
+                     === TerrainReactorItem.SoftwareBackend
+                     || root.terrainItem.renderStatus
+                     === TerrainReactorItem.ResourceError)
+
+        Text {
+            id: renderBackendFallbackText
+            anchors.fill: parent
+            anchors.margins: 15
+            text: root.terrainItem && root.terrainItem.diagnostic
+                  ? root.terrainItem.diagnostic
+                  : qsTr("当前图形后端无法运行沉浸视觉，播放不受影响。")
+            color: Qt.rgba(1, 1, 1, 0.84)
+            font.pixelSize: 12
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            wrapMode: Text.Wrap
+        }
+    }
+
+    MouseArea {
+        id: orbitArea
+        objectName: "immersiveOrbitArea"
+        anchors.fill: parent
+        hoverEnabled: true
+        acceptedButtons: Qt.LeftButton
+        property real lastX: 0
+        property real lastY: 0
+        onEntered: root.notePointerActivity()
+        onPositionChanged: function(mouse) {
+            root.notePointerActivity()
+            if (!pressed)
+                return
+            root.terrainItem.orbitBy(-(mouse.x - lastX) * 0.004,
+                                     (mouse.y - lastY) * 0.003,
+                                     Date.now() / 1000.0)
+            lastX = mouse.x
+            lastY = mouse.y
+            root.noteManualCameraActivity()
+        }
+        onPressed: function(mouse) {
+            lastX = mouse.x
+            lastY = mouse.y
+            root.noteManualCameraActivity()
+        }
+        onReleased: root.notePointerActivity()
+        onDoubleClicked: PlayerExperienceController.togglePanelVisible()
+        onWheel: function(wheel) {
+            root.terrainItem.zoomBy(wheel.angleDelta.y, Date.now() / 1000.0)
+            root.noteManualCameraActivity()
+            wheel.accepted = true
+        }
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        color: "transparent"
+        border.width: 0
+        gradient: Gradient {
+            GradientStop { position: 0.00; color: Qt.rgba(0, 0, 0, 0.10) }
+            GradientStop { position: 0.62; color: Qt.rgba(0, 0, 0, 0.00) }
+            GradientStop { position: 1.00; color: Qt.rgba(0, 0, 0, 0.48) }
+        }
+    }
+
+    Row {
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.leftMargin: 16
+        anchors.topMargin: 14
+        spacing: 9
+        z: 20
+
+        Rectangle {
+            width: 28
+            height: 28
+            radius: 8
+            color: Qt.rgba(1, 1, 1, 0.08)
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.12)
+            Text {
+                anchors.centerIn: parent
+                text: "A"
+                color: "#f5f7fb"
+                font.pixelSize: 13
+                font.bold: true
+            }
+        }
+
+        Column {
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 1
+            Text {
+                objectName: "immersiveBrandTitle"
+                text: qsTr("AgPlayer · 沉浸视觉")
+                color: "#f4f6fa"
+                font.pixelSize: 13
+                font.bold: true
+            }
+            Text {
+                text: qsTr("声音地形反应堆")
+                color: Qt.rgba(0.72, 0.84, 0.83, 0.62)
+                font.pixelSize: 8
+                font.letterSpacing: 1.2
+            }
+        }
+    }
+
+    Row {
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.rightMargin: 16
+        anchors.topMargin: 14
+        spacing: 8
+        z: 20
+
+        Button {
+            objectName: "immersivePanelToggleButton"
+            implicitWidth: 70
+            implicitHeight: 28
+            text: PlayerExperienceController.panelVisible
+                  ? qsTr("隐藏控制") : qsTr("显示控制")
+            onClicked: PlayerExperienceController.togglePanelVisible()
+            background: Rectangle {
+                radius: 9
+                color: parent.hovered ? Qt.rgba(1, 1, 1, 0.105)
+                                      : Qt.rgba(0.04, 0.035, 0.05, 0.72)
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.10)
+            }
+            contentItem: Text {
+                text: parent.text
+                color: "#ece8ef"
+                font.pixelSize: 9
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
+
+        Button {
+            objectName: "immersiveFullscreenButton"
+            implicitWidth: 62
+            implicitHeight: 28
+            text: root.hostMode === PlayerExperienceController.Fullscreen
+                  ? qsTr("退出全屏") : qsTr("全屏")
+            onClicked: PlayerExperienceController.hostMode =
+                       root.hostMode === PlayerExperienceController.Fullscreen
+                       ? PlayerExperienceController.Windowed
+                       : PlayerExperienceController.Fullscreen
+            background: Rectangle {
+                radius: 9
+                color: parent.hovered ? Qt.rgba(1, 1, 1, 0.105)
+                                      : Qt.rgba(0.04, 0.035, 0.05, 0.72)
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.10)
+            }
+            contentItem: Text {
+                text: parent.text
+                color: "#ece8ef"
+                font.pixelSize: 9
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
+    }
+
+    ImmersiveControlPanel {
+        id: controlPanel
+        objectName: "immersiveControlPanelHost"
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.leftMargin: 14
+        anchors.topMargin: 58
+        visible: opacity > 0
+        enabled: opacity > 0.05
+        opacity: PlayerExperienceController.panelVisible && !root.panelIdle
+                 && !root.panelAutoHidden ? 1 : 0
+        z: 10
+        onPointerActivity: root.notePointerActivity()
+        Behavior on opacity { NumberAnimation { duration: 220 } }
+    }
+
+    ImmersiveQueueDrawer {
+        id: queueDrawer
+        anchors.fill: parent
+        dragSuppressed: orbitArea.pressed
+        z: 12
+    }
+
+    Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: waveform.top
+        anchors.bottomMargin: 2
+        text: root.currentTitle()
+        color: Qt.rgba(0.88, 0.92, 0.97, root.panelIdle ? 0.42 : 0.72)
+        font.pixelSize: 11
+        elide: Text.ElideRight
+        width: Math.min(parent.width * 0.68, implicitWidth)
+        horizontalAlignment: Text.AlignHCenter
+        z: 8
+    }
+
+    SharedWaveformView {
+        id: waveform
+        objectName: "immersiveWaveformHost"
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.leftMargin: Math.max(18, parent.width * 0.045)
+        anchors.rightMargin: Math.max(18, parent.width * 0.045)
+        anchors.bottomMargin: 10
+        height: 52
+        waveformSession: root.waveformSession
+        trackColorized: true
+        opacityScale: root.panelIdle ? 0.55 : 1.0
+        z: 9
+    }
+
+    LyricsPanel {
+        id: lyricsPanel
+        objectName: "immersiveLyricsPanel"
+        spatialMode: true
+        fullscreen: root.hostMode === PlayerExperienceController.Fullscreen
+        placement: PlayerExperienceController.lyricPosition
+        width: Math.min(placement === PlayerExperienceController.Center ? 700 : 560,
+                        parent.width * (placement === PlayerExperienceController.Center
+                                        ? 0.62 : 0.42))
+        height: 128 * (PlayerExperienceController.lyricSize / 100.0)
+        x: {
+            var travel = Math.max(0, parent.width - width)
+            var fine = (PlayerExperienceController.lyricPositionX - 50)
+                       / 100.0 * Math.min(parent.width * 0.24, 320)
+            if (placement === PlayerExperienceController.Left)
+                return Math.max(28, parent.width * 0.055 + fine)
+            if (placement === PlayerExperienceController.Right)
+                return Math.min(travel - 28,
+                                parent.width - width - parent.width * 0.055 + fine)
+            return travel / 2 + fine
+        }
+        y: Math.max(72, Math.min(waveform.y - height - 20,
+                    (parent.height - height - waveform.height - 42)
+                    * PlayerExperienceController.lyricPositionY / 100.0))
+        z: 10
+    }
+
+    Rectangle {
+        visible: root.waylandFallback
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: 18
+        width: fallbackText.implicitWidth + 28
+        height: 36
+        radius: 12
+        color: Qt.rgba(0.08, 0.09, 0.12, 0.88)
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.12)
+        z: 20
+        Text {
+            id: fallbackText
+            anchors.centerIn: parent
+            text: qsTr("Wayland 不支持桌面层级，已使用普通无边框透明窗口")
+            color: Theme.primaryText
+            font.pixelSize: 11
+        }
+    }
+
+    Timer {
+        id: panelIdleTimer
+        objectName: "immersivePanelIdleTimer"
+        interval: 3000
+        onTriggered: if (root.hostMode === PlayerExperienceController.Fullscreen)
+                         root.panelIdle = true
+    }
+
+    Timer {
+        id: panelAutoHideTimer
+        objectName: "immersivePanelAutoHideTimer"
+        interval: 5000
+        onTriggered: root.panelAutoHidden = true
+    }
+
+    Timer {
+        id: cameraResumeTimer
+        objectName: "immersiveCameraResumeTimer"
+        interval: 4000
+        onTriggered: root.manualCameraActive = false
+    }
+
+    onHostModeChanged: notePointerActivity()
+    onAttachedChanged: if (attached) notePointerActivity()
+    Component.onCompleted: synchronizeAudioFeatures()
+    Component.onDestruction: AudioVisualFeatureController.setActive(false)
+}
