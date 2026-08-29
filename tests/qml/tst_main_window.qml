@@ -357,6 +357,17 @@ TestCase {
         }
     }
 
+    Component {
+        id: nonFillMainFrameSiblingComponent
+        DockedWindowFrame {
+            width: 8
+            height: 8
+            windowRole: "main"
+            showBorders: false
+            showFill: false
+        }
+    }
+
     function initTestCase() {
         verify(typeof testMainWindow !== "undefined", "testMainWindow context property should exist")
         mainWindow = testMainWindow
@@ -422,7 +433,9 @@ TestCase {
             if (typeof child.windowRole !== "undefined"
                     && child.windowRole === "main"
                     && typeof child.showBorders !== "undefined"
-                    && !child.showBorders)
+                    && !child.showBorders
+                    && typeof child.showFill !== "undefined"
+                    && child.showFill === true)
                 return child
         }
         return null
@@ -2152,6 +2165,30 @@ TestCase {
         } finally {
             if (decoy)
                 decoy.destroy()
+            frame.showFill = true
+            wait(0)
+        }
+    }
+
+    function test_main_skin_lookup_requires_fill_frame() {
+        var frame = mainBackdropFrame()
+        verify(frame, "main fill DockedWindowFrame must exist")
+        var sibling = null
+
+        try {
+            frame.showFill = false
+            wait(0)
+            sibling = nonFillMainFrameSiblingComponent.createObject(
+                        mainWindow.contentItem)
+            verify(sibling, "non-fill Main frame sibling must be created")
+            compare(sibling.windowRole, "main")
+            compare(sibling.showBorders, false)
+            compare(sibling.showFill, false)
+            compare(mainBackdropFrame(), null,
+                    "selector must reject every non-fill Main frame")
+        } finally {
+            if (sibling)
+                sibling.destroy()
             frame.showFill = true
             wait(0)
         }
