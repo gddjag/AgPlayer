@@ -959,6 +959,10 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         const std::size_t strokeCopies = visualMode_ == 2
             ? static_cast<std::size_t>(spectrumBarWidth())
             : static_cast<std::size_t>(std::max(1.0, std::ceil(lineWidth_)));
+        const double waveformStrokeInset = std::min(
+            width() * 0.5, static_cast<double>(strokeCopies) * 0.5);
+        const double waveformSpan = std::max(
+            0.0, width() - waveformStrokeInset * 2.0);
         const std::size_t activeLayers = visualMode_ == 2
             ? (hasMix ? 1U : 0U)
             : (hasMix ? 1U : 0U) + (hasBass ? 1U : 0U)
@@ -1070,7 +1074,7 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                     const double logicalX = visualMode_ == 2
                         ? spectrumStart + spectrumBarWidth() * 0.5
                             + static_cast<double>(index) * spectrumStride
-                        : normalizedX * width();
+                        : waveformStrokeInset + normalizedX * waveformSpan;
                     const float x = static_cast<float>(std::clamp(
                         logicalX + offset, 0.0, width()));
                     const double spectrumEnvelope = visualMode_ == 2

@@ -107,3 +107,12 @@
 | 波形与播放栏间距一致 | 波形底部外边距 8px 改为与上方一致的 4px；底栏高度 83px 增至 91px | QML 实际坐标与高度断言、运行截图 |
 
 仍只修改 Integrated QML；Classic 和共享 `WaveformItem` C++ 实现保持不变，并减少一个运行时波形场景图实例。
+
+## 2026-08-29 第六轮波形裁切色界根因修复
+
+| 修复要求 | 根因与最小实现 | 验证 |
+|---|---|---|
+| 重复波形裁切层彻底消失 | 前一轮虽删除第二个 `WaveformItem`，但主画布仍按播放位置分成已播放/未播放颜色，稠密波形上视觉仍等同整高裁切边；Integrated 概览改为 `position: 0`，播放位置继续由既有 `cursorPosition` 表示 | `qml_integrated_theme_test` 断言画布 position 恒为 0、cursor 跟随 25,000ms，且不存在 `integratedPlayedWaveform`；1672×941 v6 播放截图 |
+| 容器左边首列不叠成竖线 | 共享渲染器多像素描边原先把负偏移钳制到 x=0，首列多份线重叠；按描边宽度把波形采样范围缩进画布半像素边界 | `waveform_item_test::waveformStrokesStayInsideContainerEdges` 覆盖 4px 描边，逐份断言首末列在边界内且不重叠 |
+
+未新增 QML 图层、缓存、线程、图片、DLL 或第三方依赖；点击定位、框选、循环、缩放与导航条仍复用原有接口。

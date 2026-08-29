@@ -540,7 +540,10 @@ Item {
                 anchors.topMargin: 20
                 pointerInteractionEnabled: false
                 duration: root.effectiveDurationMs
-                position: root.playbackPositionMs
+                // The overview is a single full waveform. Playback is shown by
+                // the cursor; splitting played/unplayed colours creates a
+                // full-height crop edge on dense waveforms.
+                position: 0
                 cursorPosition: root.playbackPositionMs
                 analysisProgress: root.waveformProvider
                                   ? root.waveformProvider.analysisProgress : 0

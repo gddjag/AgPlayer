@@ -101,3 +101,11 @@
 - 绿灯：主波形直接绑定真实播放位置，裁切叠图被移除；波形上下间距均为 4px，播放栏高度为 91px。
 - 视觉证据：`evidence/integrated-theme/integrated-1672x941-single-waveform-v4.png`；同尺寸合成为 `evidence/integrated-theme/reference-vs-current-1672x941-single-waveform-v4.png`。
 - Runtime 截图进程退出码为 0，日志仅含 INFO；本轮未增加依赖、图片资源、缓存或线程。
+
+## 2026-08-29 第六轮修复补充
+
+- 前一轮只删除重复 `WaveformItem`，仍保留主画布的已播放/未播放分段着色，因此稠密波形左侧仍能看到类似裁切层的色块和整高竖界；本轮按实机截图重新定位并修正该结论。
+- TDD 红灯：播放位置为 25,000ms 时，Integrated 主波形 `position` 实际仍为 25,000，而要求为 0；断言按预期失败。
+- 绿灯：主波形始终连续绘制完整波形，`cursorPosition` 仍跟随 25,000ms；共享渲染器的 4px 首列描边也不再钳制重叠。Release/Debug 的 `qml_integrated_theme_test` 与 `waveform_item_test` 均通过。
+- 视觉证据：`evidence/integrated-theme/integrated-1672x941-no-progress-edge-v6.png`；同尺寸合成为 `evidence/integrated-theme/reference-vs-current-1672x941-no-progress-edge-v6.png`。截图进程退出码 0，运行日志仅含 INFO。
+- 未新增运行时图层、依赖、缓存或线程；播放、点击定位、框选循环和缩放导航逻辑未改动。
