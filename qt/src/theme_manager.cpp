@@ -9,6 +9,7 @@
 #include <QVariantMap>
 #include <QtMath>
 
+#include <algorithm>
 #include <tuple>
 #include <utility>
 
@@ -54,6 +55,57 @@ QColor normalizedSeed(const QColor& requested)
                                       : ThemeManager::defaultSeed();
     seed.setAlpha(255);
     return seed;
+}
+
+ThemeManager::SkinStops normalizedSkinStops(
+    const ThemeManager::SkinStops& requested)
+{
+    for (const QColor& stop : requested) {
+        if (!stop.isValid() || stop.alpha() != 255) {
+            const QColor seed = ThemeManager::defaultSeed();
+            return {seed, seed, seed};
+        }
+    }
+    return {normalizedSeed(requested[0]), normalizedSeed(requested[1]),
+            normalizedSeed(requested[2])};
+}
+
+QColor withSoftTone(const QColor& input, const bool dark,
+                    const double lightness)
+{
+    const QColor hsl = normalizedSeed(input).toHsl();
+    const bool achromatic = hsl.hslSaturationF() < 0.01
+        || hsl.hslHueF() < 0.0;
+    const double sourceSaturation = achromatic ? 0.0 : hsl.hslSaturationF();
+    const double saturation = achromatic ? 0.0
+        : std::clamp(sourceSaturation * 0.48,
+                     dark ? 0.28 : 0.16,
+                     dark ? 0.50 : 0.36);
+    return QColor::fromHslF(achromatic ? 0.0 : hsl.hslHueF(), saturation,
+                            std::clamp(lightness, 0.0, 1.0));
+}
+
+ThemeManager::SkinStops expandedSolidStops(const QColor& seed, const bool dark)
+{
+    return dark
+        ? ThemeManager::SkinStops{withSoftTone(seed, true, 0.09),
+                                  withSoftTone(seed, true, 0.15),
+                                  withSoftTone(seed, true, 0.11)}
+        : ThemeManager::SkinStops{withSoftTone(seed, false, 0.94),
+                                  withSoftTone(seed, false, 0.88),
+                                  withSoftTone(seed, false, 0.96)};
+}
+
+ThemeManager::SkinStops softenedGradientStops(
+    const ThemeManager::SkinStops& stops, const bool dark)
+{
+    return dark
+        ? ThemeManager::SkinStops{withSoftTone(stops[0], true, 0.09),
+                                  withSoftTone(stops[1], true, 0.15),
+                                  withSoftTone(stops[2], true, 0.11)}
+        : ThemeManager::SkinStops{withSoftTone(stops[0], false, 0.94),
+                                  withSoftTone(stops[1], false, 0.88),
+                                  withSoftTone(stops[2], false, 0.96)};
 }
 
 QColor tone(const QColor& seed, const int lightness,
@@ -167,11 +219,39 @@ QColor stateTone(const QColor& base, const QColor& foreground, const int amount)
                         {foreground}, kButtonContrast);
 }
 
-QColor softTone(const QColor& color, const qreal alpha)
+QColor alphaColor(const QColor& color, const qreal alpha)
 {
     QColor result = color;
     result.setAlphaF(alpha);
     return result;
+}
+
+QColor softTone(const QColor& color, const qreal alpha)
+{
+    return alphaColor(color, alpha);
+}
+
+QColor compositeColor(const QColor& over, const QColor& under)
+{
+    const qreal alpha = over.alphaF();
+    return QColor::fromRgbF(
+        over.redF() * alpha + under.redF() * (1.0 - alpha),
+        over.greenF() * alpha + under.greenF() * (1.0 - alpha),
+        over.blueF() * alpha + under.blueF() * (1.0 - alpha));
+}
+
+QList<QColor> compositeSurfaces(const ThemePalette& palette)
+{
+    QList<QColor> surfaces;
+    for (const QColor& backdrop : {palette.backdropStart,
+                                   palette.backdropMiddle,
+                                   palette.backdropEnd}) {
+        surfaces << compositeColor(palette.glassSurface, backdrop)
+                 << compositeColor(palette.glassSurfaceElevated, backdrop)
+                 << compositeColor(palette.glassSurfaceHover, backdrop)
+                 << compositeColor(palette.glassSurfacePressed, backdrop);
+    }
+    return surfaces;
 }
 
 ThemePalette calculatePalette(const ThemeManager::Preferences& preferences,
@@ -195,49 +275,88 @@ ThemePalette calculatePalette(const ThemeManager::Preferences& preferences,
         palette.critical = QColor(QStringLiteral("#C93632"));
     }
 
-    const QColor seed = normalizedSeed(preferences.skinStops.front());
+    const ThemeManager::SkinStops normalizedStops =
+        normalizedSkinStops(preferences.skinStops);
     if (preferences.skinMode == ThemeManager::SkinMode::Generated) {
+        const ThemeManager::SkinStops backdrop =
+            preferences.skinKind == ThemeManager::SkinKind::Solid
+            ? expandedSolidStops(normalizedStops.front(), dark)
+            : softenedGradientStops(normalizedStops, dark);
+        palette.backdropStart = backdrop[0];
+        palette.backdropMiddle = backdrop[1];
+        palette.backdropEnd = backdrop[2];
+
+        const QColor representative = normalizedStops[1];
+        QColor backgroundFamily;
+        QColor surfaceFamily;
+        QColor elevatedFamily;
+        QColor hoverFamily;
+        QColor pressedFamily;
         if (dark) {
-            palette.background = tone(seed, 16, 0.22);
-            palette.surface = tone(seed, 24, 0.22);
-            palette.surfaceElevated = tone(seed, 34, 0.22);
-            palette.surfaceHover = tone(seed, 46, 0.22);
-            palette.surfacePressed = tone(seed, 60, 0.22);
-            const QList<QColor> surfaces = {palette.background, palette.surface};
-            palette.textPrimary = contrastTone(seed, 0.14, 215, 1, surfaces, 7.0);
-            palette.textSecondary = contrastTone(seed, 0.18, 170, 1, surfaces, 4.5);
-            palette.textTertiary = contrastTone(seed, 0.22, 130, 1, surfaces, 3.0);
-            palette.textDisabled = tone(seed, 110, 0.20);
-            palette.divider = tone(seed, 50, 0.22);
-            palette.border = tone(seed, 64, 0.22);
-            palette.borderStrong = contrastTone(
-                seed, 0.25, 100, 1, {palette.surface}, 3.0);
-            palette.disabled = tone(seed, 68, 0.18);
+            backgroundFamily = tone(representative, 16, 0.22);
+            surfaceFamily = tone(representative, 24, 0.22);
+            elevatedFamily = tone(representative, 34, 0.22);
+            hoverFamily = tone(representative, 46, 0.22);
+            pressedFamily = tone(representative, 60, 0.22);
+            palette.textDisabled = tone(representative, 110, 0.20);
+            palette.divider = tone(representative, 50, 0.22);
+            palette.border = tone(representative, 64, 0.22);
+            palette.disabled = tone(representative, 68, 0.18);
         } else {
-            palette.surface = tone(seed, 250, 0.22);
-            palette.background = tone(seed, 246, 0.22);
-            palette.surfaceElevated = tone(seed, 238, 0.22);
-            palette.surfaceHover = tone(seed, 226, 0.22);
-            palette.surfacePressed = tone(seed, 212, 0.22);
-            const QList<QColor> surfaces = {palette.background, palette.surface};
-            palette.textPrimary = contrastTone(seed, 0.14, 40, -1, surfaces, 7.0);
-            palette.textSecondary = contrastTone(seed, 0.18, 90, -1, surfaces, 4.5);
-            palette.textTertiary = contrastTone(seed, 0.22, 120, -1, surfaces, 3.0);
-            palette.textDisabled = tone(seed, 145, 0.20);
-            palette.divider = tone(seed, 220, 0.22);
-            palette.border = tone(seed, 205, 0.22);
-            palette.borderStrong = contrastTone(
-                seed, 0.25, 155, -1, {palette.surface}, 3.0);
-            palette.disabled = tone(seed, 218, 0.18);
+            backgroundFamily = tone(representative, 246, 0.22);
+            surfaceFamily = tone(representative, 250, 0.22);
+            elevatedFamily = tone(representative, 238, 0.22);
+            hoverFamily = tone(representative, 226, 0.22);
+            pressedFamily = tone(representative, 212, 0.22);
+            palette.textDisabled = tone(representative, 145, 0.20);
+            palette.divider = tone(representative, 220, 0.22);
+            palette.border = tone(representative, 205, 0.22);
+            palette.disabled = tone(representative, 218, 0.18);
         }
-        const QList<QColor> actionSurfaces = {
-            palette.background, palette.surface};
+
+        palette.glassSurface = alphaColor(surfaceFamily, dark ? 0.72 : 0.68);
+        palette.glassSurfaceElevated = alphaColor(
+            elevatedFamily, dark ? 0.78 : 0.74);
+        palette.glassSurfaceHover = alphaColor(
+            hoverFamily, dark ? 0.82 : 0.78);
+        palette.glassSurfacePressed = alphaColor(
+            pressedFamily, dark ? 0.86 : 0.82);
+        palette.background = compositeColor(
+            alphaColor(backgroundFamily, dark ? 0.72 : 0.68),
+            palette.backdropMiddle);
+        palette.surface = compositeColor(
+            palette.glassSurface, palette.backdropMiddle);
+        palette.surfaceElevated = compositeColor(
+            palette.glassSurfaceElevated, palette.backdropMiddle);
+        palette.surfaceHover = compositeColor(
+            palette.glassSurfaceHover, palette.backdropMiddle);
+        palette.surfacePressed = compositeColor(
+            palette.glassSurfacePressed, palette.backdropMiddle);
+
+        const QList<QColor> readableSurfaces = compositeSurfaces(palette);
+        palette.textPrimary = contrastTone(
+            representative, 0.12, dark ? 245 : 20, dark ? 1 : -1,
+            readableSurfaces, 7.0);
+        palette.textSecondary = contrastTone(
+            representative, 0.16, dark ? 210 : 55, dark ? 1 : -1,
+            readableSurfaces, 4.5);
+        palette.textTertiary = contrastTone(
+            representative, 0.18, dark ? 175 : 90, dark ? 1 : -1,
+            readableSurfaces, 3.0);
+        palette.borderStrong = contrastTone(
+            representative, 0.25, dark ? 100 : 155, dark ? 1 : -1,
+            readableSurfaces, 3.0);
+        palette.glassBorder = alphaColor(
+            palette.borderStrong, dark ? 0.52 : 0.42);
+        palette.glassDivider = alphaColor(
+            palette.border, dark ? 0.42 : 0.34);
+        palette.glassInnerHighlight = QColor(255, 255, 255, dark ? 18 : 82);
         palette.accent = contrastTone(
-            seed, 0.90, seed.toHsl().lightness(), dark ? 1 : -1,
-            actionSurfaces, kButtonContrast);
+            representative, 0.72, representative.toHsl().lightness(),
+            dark ? 1 : -1, readableSurfaces, kButtonContrast);
         palette.highlight = palette.accent;
         palette.focus = palette.accent;
-        palette.currentTrackSurface = softTone(palette.focus, 0.28);
+        palette.currentTrackSurface = softTone(palette.accent, 0.28);
     } else {
         if (dark) {
             palette.background = QColor(QStringLiteral("#101114"));
@@ -409,9 +528,7 @@ void ThemeManager::applyPreferences(const Preferences& preferences)
     if (preferences_.skinKind != SkinKind::Gradient) {
         preferences_.skinKind = SkinKind::Solid;
     }
-    for (QColor& stop : preferences_.skinStops) {
-        stop = normalizedSeed(stop);
-    }
+    preferences_.skinStops = normalizedSkinStops(preferences_.skinStops);
     refreshPalette();
 }
 

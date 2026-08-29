@@ -44,6 +44,53 @@ double contrastRatio(const QColor& first, const QColor& second)
     return (qMax(a, b) + 0.05) / (qMin(a, b) + 0.05);
 }
 
+QColor composite(const QColor& over, const QColor& under)
+{
+    const double alpha = over.alphaF();
+    return QColor::fromRgbF(
+        over.redF() * alpha + under.redF() * (1.0 - alpha),
+        over.greenF() * alpha + under.greenF() * (1.0 - alpha),
+        over.blueF() * alpha + under.blueF() * (1.0 - alpha));
+}
+
+QList<QColor> glassComposites(const ThemePalette& palette)
+{
+    QList<QColor> values;
+    for (const QColor& backdrop : {palette.backdropStart,
+                                   palette.backdropMiddle,
+                                   palette.backdropEnd}) {
+        values << composite(palette.glassSurface, backdrop)
+               << composite(palette.glassSurfaceElevated, backdrop)
+               << composite(palette.glassSurfaceHover, backdrop)
+               << composite(palette.glassSurfacePressed, backdrop);
+    }
+    return values;
+}
+
+double worstContrast(const QColor& foreground,
+                     const QList<QColor>& backgrounds)
+{
+    double worst = 21.0;
+    for (const QColor& background : backgrounds) {
+        worst = qMin(worst, contrastRatio(foreground, background));
+    }
+    return worst;
+}
+
+double maxRgbDistance(const QList<QColor>& colors)
+{
+    double maximum = 0.0;
+    for (qsizetype first = 0; first < colors.size(); ++first) {
+        for (qsizetype second = first + 1; second < colors.size(); ++second) {
+            const double red = colors.at(first).redF() - colors.at(second).redF();
+            const double green = colors.at(first).greenF() - colors.at(second).greenF();
+            const double blue = colors.at(first).blueF() - colors.at(second).blueF();
+            maximum = qMax(maximum, qSqrt(red * red + green * green + blue * blue));
+        }
+    }
+    return maximum;
+}
+
 QList<QColor> ordinaryColors(const ThemePalette& palette)
 {
     return {palette.background, palette.surface, palette.surfaceElevated,
@@ -104,6 +151,10 @@ private slots:
     void recommendedGradientPresetsAreExposedToQml();
     void generatedSeedsMeetContract_data();
     void generatedSeedsMeetContract();
+    void generatedGlassPalettesMeetContract_data();
+    void generatedGlassPalettesMeetContract();
+    void solidBackdropExpandsSeedHue();
+    void generatedStopsDriveCompletePalette();
     void generatedSeedChangesCompleteOrdinaryPalette();
     void achromaticSeedStaysAchromatic();
     void semanticColorsKeepIdentity();
@@ -252,6 +303,151 @@ void ThemeManagerTest::generatedSeedsMeetContract()
     }
 }
 
+void ThemeManagerTest::generatedGlassPalettesMeetContract_data()
+{
+    QTest::addColumn<QColor>("start");
+    QTest::addColumn<QColor>("middle");
+    QTest::addColumn<QColor>("end");
+    for (const ThemeManager::Preset& preset : ThemeManager::presets()) {
+        QTest::newRow(preset.id.toLatin1().constData())
+            << preset.stops[0] << preset.stops[1] << preset.stops[2];
+    }
+    const auto addStops = [](const char* name, const char* start,
+                             const char* middle, const char* end) {
+        QTest::newRow(name) << QColor(QString::fromLatin1(start))
+                            << QColor(QString::fromLatin1(middle))
+                            << QColor(QString::fromLatin1(end));
+    };
+    addStops("black", "#000000", "#000000", "#000000");
+    addStops("white", "#FFFFFF", "#FFFFFF", "#FFFFFF");
+    addStops("gray", "#777777", "#777777", "#777777");
+    addStops("rgb", "#FF0000", "#00FF00", "#0000FF");
+    addStops("cmy", "#00FFFF", "#FF00FF", "#FFFF00");
+}
+
+void ThemeManagerTest::generatedGlassPalettesMeetContract()
+{
+    QFETCH(QColor, start);
+    QFETCH(QColor, middle);
+    QFETCH(QColor, end);
+    for (const auto appearance : {ThemeManager::AppearanceMode::Light,
+                                  ThemeManager::AppearanceMode::Dark}) {
+        ThemeManager manager(*qApp);
+        manager.applyPreferences(generated(
+            appearance, ThemeManager::SkinKind::Gradient,
+            {start, middle, end}));
+        const ThemePalette& palette = manager.palette();
+        const QList<QColor> composites = glassComposites(palette);
+        QVERIFY(worstContrast(palette.textPrimary, composites) >= 7.0);
+        QVERIFY(worstContrast(palette.textSecondary, composites) >= 4.5);
+        QVERIFY(worstContrast(palette.textTertiary, composites) >= 3.0);
+        QVERIFY(worstContrast(palette.accent, composites) >= 4.5);
+        QVERIFY(worstContrast(palette.focus, composites) >= 3.0);
+        QVERIFY(contrastRatio(palette.accentText, palette.accent) >= 4.5);
+        QVERIFY(maxRgbDistance({palette.backdropStart,
+                                palette.backdropMiddle,
+                                palette.backdropEnd}) >= 0.08);
+        QCOMPARE(palette.backdropStart.alpha(), 255);
+        QCOMPARE(palette.backdropMiddle.alpha(), 255);
+        QCOMPARE(palette.backdropEnd.alpha(), 255);
+        QCOMPARE(palette.glassSurface.alpha(),
+                 appearance == ThemeManager::AppearanceMode::Dark ? 184 : 173);
+        QCOMPARE(palette.glassSurfaceElevated.alpha(),
+                 appearance == ThemeManager::AppearanceMode::Dark ? 199 : 189);
+        QCOMPARE(palette.glassSurfaceHover.alpha(),
+                 appearance == ThemeManager::AppearanceMode::Dark ? 209 : 199);
+        QCOMPARE(palette.glassSurfacePressed.alpha(),
+                 appearance == ThemeManager::AppearanceMode::Dark ? 219 : 209);
+        QCOMPARE(palette.glassBorder.alpha(),
+                 appearance == ThemeManager::AppearanceMode::Dark ? 133 : 107);
+        QCOMPARE(palette.glassDivider.alpha(),
+                 appearance == ThemeManager::AppearanceMode::Dark ? 107 : 87);
+        QCOMPARE(palette.glassInnerHighlight.alpha(),
+                 appearance == ThemeManager::AppearanceMode::Dark ? 18 : 82);
+        QCOMPARE(palette.surface,
+                 composite(palette.glassSurface, palette.backdropMiddle));
+        QCOMPARE(palette.surfaceElevated,
+                 composite(palette.glassSurfaceElevated,
+                           palette.backdropMiddle));
+        QCOMPARE(palette.surfaceHover,
+                 composite(palette.glassSurfaceHover, palette.backdropMiddle));
+        QCOMPARE(palette.surfacePressed,
+                 composite(palette.glassSurfacePressed,
+                           palette.backdropMiddle));
+    }
+}
+
+void ThemeManagerTest::solidBackdropExpandsSeedHue()
+{
+    const QColor seed(QStringLiteral("#D948B1"));
+    const int seedHue = seed.toHsl().hslHue();
+    for (const auto appearance : {ThemeManager::AppearanceMode::Light,
+                                  ThemeManager::AppearanceMode::Dark}) {
+        ThemeManager manager(*qApp);
+        manager.applyPreferences(generated(
+            appearance, ThemeManager::SkinKind::Solid, {seed, seed, seed}));
+        const QList<QColor> stops{manager.palette().backdropStart,
+                                  manager.palette().backdropMiddle,
+                                  manager.palette().backdropEnd};
+        QVERIFY(maxRgbDistance(stops) >= 0.08);
+        for (const QColor& stop : stops) {
+            const int delta = qAbs(stop.toHsl().hslHue() - seedHue);
+            QVERIFY(qMin(delta, 360 - delta) <= 2);
+        }
+    }
+
+    const QColor gray(QStringLiteral("#777777"));
+    ThemeManager manager(*qApp);
+    manager.applyPreferences(generated(
+        ThemeManager::AppearanceMode::Dark, ThemeManager::SkinKind::Solid,
+        {gray, gray, gray}));
+    for (const QColor& stop : {manager.palette().backdropStart,
+                               manager.palette().backdropMiddle,
+                               manager.palette().backdropEnd}) {
+        QCOMPARE(stop.toHsl().hslSaturation(), 0);
+    }
+}
+
+void ThemeManagerTest::generatedStopsDriveCompletePalette()
+{
+    ThemeManager manager(*qApp);
+    const ThemeManager::SkinStops initial{
+        QColor(QStringLiteral("#73A6FF")), QColor(QStringLiteral("#A98BFF")),
+        QColor(QStringLiteral("#F0A8D8"))};
+    manager.applyPreferences(generated(
+        ThemeManager::AppearanceMode::Dark, ThemeManager::SkinKind::Gradient,
+        initial));
+    const ThemePalette first = manager.palette();
+    QSignalSpy changed(&manager, &ThemeManager::paletteChanged);
+
+    ThemeManager::SkinStops middleChanged = initial;
+    middleChanged[1] = QColor(QStringLiteral("#48D9A5"));
+    manager.applyPreferences(generated(
+        ThemeManager::AppearanceMode::Dark, ThemeManager::SkinKind::Gradient,
+        middleChanged));
+    const ThemePalette second = manager.palette();
+    QCOMPARE(changed.count(), 1);
+    QVERIFY(second != first);
+    QVERIFY(second.backdropMiddle != first.backdropMiddle);
+    QVERIFY(glassComposites(second) != glassComposites(first));
+
+    ThemeManager::SkinStops endChanged = middleChanged;
+    endChanged[2] = QColor(QStringLiteral("#FFD36E"));
+    manager.applyPreferences(generated(
+        ThemeManager::AppearanceMode::Dark, ThemeManager::SkinKind::Gradient,
+        endChanged));
+    const ThemePalette third = manager.palette();
+    QCOMPARE(changed.count(), 2);
+    QVERIFY(third != second);
+    QVERIFY(third.backdropEnd != second.backdropEnd);
+    QVERIFY(glassComposites(third) != glassComposites(second));
+
+    manager.applyPreferences(generated(
+        ThemeManager::AppearanceMode::Dark, ThemeManager::SkinKind::Gradient,
+        endChanged));
+    QCOMPARE(changed.count(), 2);
+}
+
 void ThemeManagerTest::generatedSeedChangesCompleteOrdinaryPalette()
 {
     ThemeManager manager(*qApp);
@@ -322,9 +518,27 @@ void ThemeManagerTest::normalizesPreferences()
     QCOMPARE(manager.preferences().skinMode, ThemeManager::SkinMode::Default);
     QCOMPARE(manager.preferences().skinKind, ThemeManager::SkinKind::Solid);
     QCOMPARE(manager.preferences().skinStops,
-             (ThemeManager::SkinStops{QColor(QStringLiteral("#123456")),
+             (ThemeManager::SkinStops{ThemeManager::defaultSeed(),
                                       ThemeManager::defaultSeed(),
-                                      QColor(QStringLiteral("#123456"))}));
+                                      ThemeManager::defaultSeed()}));
+
+    manager.applyPreferences(generated(
+        ThemeManager::AppearanceMode::Light, ThemeManager::SkinKind::Gradient,
+        {QColor(QStringLiteral("#123456")), QColor(),
+         QColor(QStringLiteral("#654321"))}));
+    QCOMPARE(manager.preferences().skinStops,
+             (ThemeManager::SkinStops{ThemeManager::defaultSeed(),
+                                      ThemeManager::defaultSeed(),
+                                      ThemeManager::defaultSeed()}));
+
+    manager.applyPreferences(generated(
+        ThemeManager::AppearanceMode::Light, ThemeManager::SkinKind::Gradient,
+        {QColor(QStringLiteral("#123456")), translucent,
+         QColor(QStringLiteral("#654321"))}));
+    QCOMPARE(manager.preferences().skinStops,
+             (ThemeManager::SkinStops{ThemeManager::defaultSeed(),
+                                      ThemeManager::defaultSeed(),
+                                      ThemeManager::defaultSeed()}));
 }
 
 void ThemeManagerTest::notifiesOnceOnlyForRealChanges()
@@ -343,26 +557,26 @@ void ThemeManagerTest::notifiesOnceOnlyForRealChanges()
     manager.applyPreferences(generated(
         ThemeManager::AppearanceMode::Dark, ThemeManager::SkinKind::Solid,
         {translucentBlue, translucentBlue, translucentBlue}));
-    QCOMPARE(changed.count(), 0);
+    QCOMPARE(changed.count(), 1);
     const QColor redSeed(QStringLiteral("#FF3B30"));
     manager.applyPreferences(generated(
         ThemeManager::AppearanceMode::Dark, ThemeManager::SkinKind::Solid,
         {redSeed, redSeed, redSeed}));
-    QCOMPARE(changed.count(), 1);
+    QCOMPARE(changed.count(), 2);
     manager.applyPreferences({ThemeManager::AppearanceMode::Dark,
                               ThemeManager::SkinMode::Default,
                               ThemeManager::SkinKind::Solid,
                               {QColor(QStringLiteral("#00FF00")),
                                QColor(QStringLiteral("#00FF00")),
                                QColor(QStringLiteral("#00FF00"))}});
-    QCOMPARE(changed.count(), 2);
+    QCOMPARE(changed.count(), 3);
     manager.applyPreferences({ThemeManager::AppearanceMode::Dark,
                               ThemeManager::SkinMode::Default,
                               ThemeManager::SkinKind::Solid,
                               {QColor(QStringLiteral("#FF00FF")),
                                QColor(QStringLiteral("#FF00FF")),
                                QColor(QStringLiteral("#FF00FF"))}});
-    QCOMPARE(changed.count(), 2);
+    QCOMPARE(changed.count(), 3);
 }
 
 void ThemeManagerTest::refreshesSystemPaletteOncePerRealChange()
@@ -449,6 +663,14 @@ void ThemeManagerTest::synchronizesNativePalette()
     QCOMPARE(qApp->palette().color(QPalette::Highlight), p.highlight);
     QCOMPARE(qApp->palette().color(QPalette::HighlightedText), p.highlightText);
     QCOMPARE(qApp->palette().color(QPalette::Link), p.accent);
+    for (int group = 0; group < QPalette::NColorGroups; ++group) {
+        for (int role = 0; role < QPalette::NColorRoles; ++role) {
+            const QColor color = qApp->palette().color(
+                static_cast<QPalette::ColorGroup>(group),
+                static_cast<QPalette::ColorRole>(role));
+            QCOMPARE(color.alpha(), 255);
+        }
+    }
 }
 
 void ThemeManagerTest::synchronizerOwnsConnectionLifetime()
