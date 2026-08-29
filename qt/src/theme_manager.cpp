@@ -4,10 +4,13 @@
 
 #include <QEvent>
 #include <QGuiApplication>
+#include <QHash>
 #include <QStyleHints>
+#include <QVariantMap>
 #include <QtMath>
 
 #include <tuple>
+#include <utility>
 
 namespace {
 
@@ -101,35 +104,46 @@ QColor visibleTone(const QColor& seed, const QColor& background,
                         lightBackground ? -1 : 1, {background}, target);
 }
 
-QColor resolveColorChoice(const int mode, const QString& presetId,
-                          const QString& customColor)
+std::pair<ThemeManager::SkinKind, ThemeManager::SkinStops> resolveColorChoice(
+    const int mode, const QString& presetId, const QString& customColor)
 {
     if (mode == 0) {
-        return ThemeManager::defaultSeed();
+        const QColor seed = ThemeManager::defaultSeed();
+        return {ThemeManager::SkinKind::Solid, {seed, seed, seed}};
     }
     if (mode == 1) {
         const QList<ThemeManager::Preset> presets = ThemeManager::presets();
         for (const ThemeManager::Preset& preset : presets) {
             if (preset.id == presetId) {
-                return preset.seed;
+                return {ThemeManager::SkinKind::Gradient, preset.stops};
             }
         }
-        return ThemeManager::defaultSeed();
+        if (const auto legacy = ThemeManager::legacyPresetSeed(presetId)) {
+            return {ThemeManager::SkinKind::Solid,
+                    {*legacy, *legacy, *legacy}};
+        }
+        const QColor seed = ThemeManager::defaultSeed();
+        return {ThemeManager::SkinKind::Solid, {seed, seed, seed}};
     }
 
-    const QColor custom(customColor);
-    return custom.isValid() ? custom : ThemeManager::defaultSeed();
+    const QColor requested(customColor);
+    const QColor seed = requested.isValid() ? requested
+                                             : ThemeManager::defaultSeed();
+    return {ThemeManager::SkinKind::Solid, {seed, seed, seed}};
 }
 
 ThemeManager::Preferences preferencesFromSettings(
     const SettingsController& settings)
 {
     const int mode = settings.skinColorMode();
+    const auto choice = resolveColorChoice(
+        mode, settings.skinPreset(), settings.skinCustomColor());
     return {
         static_cast<ThemeManager::AppearanceMode>(settings.themeMode()),
         mode == 0 ? ThemeManager::SkinMode::Default
                   : ThemeManager::SkinMode::Generated,
-        resolveColorChoice(mode, settings.skinPreset(), settings.skinCustomColor())};
+        choice.first,
+        choice.second};
 }
 
 QColor stateTone(const QColor& base, const QColor& foreground, const int amount)
@@ -181,7 +195,7 @@ ThemePalette calculatePalette(const ThemeManager::Preferences& preferences,
         palette.critical = QColor(QStringLiteral("#C93632"));
     }
 
-    const QColor seed = normalizedSeed(preferences.skinSeed);
+    const QColor seed = normalizedSeed(preferences.skinStops.front());
     if (preferences.skinMode == ThemeManager::SkinMode::Generated) {
         if (dark) {
             palette.background = tone(seed, 16, 0.22);
@@ -258,6 +272,16 @@ ThemePalette calculatePalette(const ThemeManager::Preferences& preferences,
         palette.highlight = QColor(QStringLiteral("#007AFF"));
         palette.focus = palette.accent;
         palette.currentTrackSurface = QColor(143, 87, 201, 87);
+        palette.backdropStart = palette.background;
+        palette.backdropMiddle = palette.background;
+        palette.backdropEnd = palette.background;
+        palette.glassSurface = palette.surface;
+        palette.glassSurfaceElevated = palette.surfaceElevated;
+        palette.glassSurfaceHover = palette.surfaceHover;
+        palette.glassSurfacePressed = palette.surfacePressed;
+        palette.glassBorder = palette.border;
+        palette.glassDivider = palette.divider;
+        palette.glassInnerHighlight = palette.border;
     }
 
     palette.accentText = readableForeground(palette.accent);
@@ -277,23 +301,31 @@ ThemePalette calculatePalette(const ThemeManager::Preferences& preferences,
 
 bool ThemePalette::operator==(const ThemePalette& other) const
 {
-    return std::tie(background, surface, surfaceElevated, surfaceHover,
-                    surfacePressed, textPrimary, textSecondary, textTertiary,
-                    textDisabled, border, borderStrong, divider, disabled, accent,
-                    accentHover, accentPressed, accentSoft, accentText, highlight,
-                    highlightHover, highlightPressed, highlightSoft, highlightText,
-                    focus, currentTrackSurface, success, warning, error, danger,
-                    recording, critical)
-        == std::tie(other.background, other.surface, other.surfaceElevated,
+    return std::tie(background, backdropStart, backdropMiddle, backdropEnd,
+                    surface, surfaceElevated, surfaceHover, surfacePressed,
+                    textPrimary, textSecondary, textTertiary, textDisabled,
+                    border, borderStrong, divider, disabled, accent, accentHover,
+                    accentPressed, accentSoft, accentText, highlight,
+                    highlightHover, highlightPressed, highlightSoft,
+                    highlightText, focus, currentTrackSurface, glassSurface,
+                    glassSurfaceElevated, glassSurfaceHover, glassSurfacePressed,
+                    glassBorder, glassDivider, glassInnerHighlight, success,
+                    warning, error, danger, recording, critical)
+        == std::tie(other.background, other.backdropStart, other.backdropMiddle,
+                    other.backdropEnd, other.surface, other.surfaceElevated,
                     other.surfaceHover, other.surfacePressed, other.textPrimary,
                     other.textSecondary, other.textTertiary, other.textDisabled,
-                    other.border, other.borderStrong, other.divider, other.disabled,
-                    other.accent, other.accentHover, other.accentPressed,
-                    other.accentSoft, other.accentText, other.highlight,
-                     other.highlightHover, other.highlightPressed,
-                     other.highlightSoft, other.highlightText, other.focus,
-                     other.currentTrackSurface, other.success, other.warning,
-                     other.error, other.danger, other.recording, other.critical);
+                    other.border, other.borderStrong, other.divider,
+                    other.disabled, other.accent, other.accentHover,
+                    other.accentPressed, other.accentSoft, other.accentText,
+                    other.highlight, other.highlightHover, other.highlightPressed,
+                    other.highlightSoft, other.highlightText, other.focus,
+                    other.currentTrackSurface, other.glassSurface,
+                    other.glassSurfaceElevated, other.glassSurfaceHover,
+                    other.glassSurfacePressed, other.glassBorder,
+                    other.glassDivider, other.glassInnerHighlight, other.success,
+                    other.warning, other.error, other.danger, other.recording,
+                    other.critical);
 }
 
 ThemeManager::ThemeManager(QGuiApplication& application, QObject* parent)
@@ -316,6 +348,17 @@ QColor ThemeManager::defaultSeed()
 QList<ThemeManager::Preset> ThemeManager::presets()
 {
     return {
+        {QStringLiteral("aurora"), {QColor(QStringLiteral("#73A6FF")), QColor(QStringLiteral("#A98BFF")), QColor(QStringLiteral("#F0A8D8"))}},
+        {QStringLiteral("seaGlass"), {QColor(QStringLiteral("#71D9D0")), QColor(QStringLiteral("#82C9F4")), QColor(QStringLiteral("#A7B7FF"))}},
+        {QStringLiteral("sunset"), {QColor(QStringLiteral("#F49BC2")), QColor(QStringLiteral("#FF9B86")), QColor(QStringLiteral("#FFC97A"))}},
+        {QStringLiteral("lavenderMist"), {QColor(QStringLiteral("#8295F2")), QColor(QStringLiteral("#B89BE8")), QColor(QStringLiteral("#E8B7D5"))}},
+        {QStringLiteral("morningGlow"), {QColor(QStringLiteral("#8EDFCB")), QColor(QStringLiteral("#D4E9C2")), QColor(QStringLiteral("#FFD995"))}},
+    };
+}
+
+std::optional<QColor> ThemeManager::legacyPresetSeed(const QString& id)
+{
+    static const QHash<QString, QColor> legacy{
         {QStringLiteral("systemBlue"), QColor(QStringLiteral("#007AFF"))},
         {QStringLiteral("indigo"), QColor(QStringLiteral("#5856D6"))},
         {QStringLiteral("purple"), QColor(QStringLiteral("#AF52DE"))},
@@ -327,6 +370,25 @@ QList<ThemeManager::Preset> ThemeManager::presets()
         {QStringLiteral("teal"), QColor(QStringLiteral("#30B0C7"))},
         {QStringLiteral("cyan"), QColor(QStringLiteral("#32ADE6"))},
     };
+    const auto it = legacy.constFind(id);
+    return it == legacy.cend() ? std::nullopt
+                               : std::optional<QColor>(*it);
+}
+
+QVariantList ThemeManager::recommendedPresets() const
+{
+    const QList<Preset> values = presets();
+    QVariantList result;
+    result.reserve(values.size());
+    for (const Preset& preset : values) {
+        result.append(QVariantMap{
+            {QStringLiteral("id"), preset.id},
+            {QStringLiteral("start"), preset.stops[0]},
+            {QStringLiteral("middle"), preset.stops[1]},
+            {QStringLiteral("end"), preset.stops[2]},
+        });
+    }
+    return result;
 }
 
 void ThemeManager::applyPreferences(const Preferences& preferences)
@@ -344,7 +406,12 @@ void ThemeManager::applyPreferences(const Preferences& preferences)
     if (preferences_.skinMode != SkinMode::Generated) {
         preferences_.skinMode = SkinMode::Default;
     }
-    preferences_.skinSeed = normalizedSeed(preferences_.skinSeed);
+    if (preferences_.skinKind != SkinKind::Gradient) {
+        preferences_.skinKind = SkinKind::Solid;
+    }
+    for (QColor& stop : preferences_.skinStops) {
+        stop = normalizedSeed(stop);
+    }
     refreshPalette();
 }
 
