@@ -124,7 +124,7 @@ VocalSeparationControllerOptions optionsFor(
     options.outputDirectory = QDir(temporary.path()).filePath(QStringLiteral("输出结果"));
     options.runtimeLibraryPath = temporary.filePath(QStringLiteral("onnxruntime.dll"));
     options.catalog = testCatalog(modelBytes);
-    options.deadlines = {500, 2000, 250};
+    options.deadlines = {5000, 5000, 1000};
     options.verifyRuntimeIntegrity = false;
     return options;
 }

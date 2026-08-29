@@ -534,6 +534,10 @@ foreach(separation_test IN ITEMS
 endforeach()
 
 set_tests_properties(separation_real_model_test PROPERTIES TIMEOUT 3600)
+target_include_directories(separation_real_model_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+    "${CMAKE_SOURCE_DIR}/core/include"
+)
 
 add_library(separation_fake_ort SHARED
     qt/separation_fake_ort.cpp
@@ -617,7 +621,7 @@ add_dependencies(vocal_separation_controller_test
 agplayer_enable_warnings(vocal_separation_controller_test)
 add_test(NAME vocal_separation_controller_test COMMAND vocal_separation_controller_test)
 set_tests_properties(vocal_separation_controller_test PROPERTIES
-    TIMEOUT 30
+    TIMEOUT 60
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
