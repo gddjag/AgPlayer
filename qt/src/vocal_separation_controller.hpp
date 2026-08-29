@@ -50,6 +50,9 @@ class VocalSeparationController final : public QObject {
     Q_PROPERTY(QString stage READ stage NOTIFY jobStateChanged)
     Q_PROPERTY(double progress READ progress NOTIFY progressChanged)
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
+    Q_PROPERTY(QString outputFormat READ outputFormat NOTIFY outputFormatChanged)
+    Q_PROPERTY(QString outputDirectory READ outputDirectory
+                   NOTIFY outputDirectoryChanged)
     Q_PROPERTY(QVariantList stems READ stems NOTIFY stemsChanged)
     Q_PROPERTY(QVariantList history READ history NOTIFY historyChanged)
 
@@ -107,10 +110,13 @@ public:
     QString stage() const;
     double progress() const noexcept;
     QString error() const;
+    QString outputFormat() const;
+    QString outputDirectory() const;
     QVariantList stems() const;
     QVariantList history() const;
 
     Q_INVOKABLE bool selectInput(const QUrl& url);
+    Q_INVOKABLE bool clearInput();
     Q_INVOKABLE bool verifyInstalledModels();
     Q_INVOKABLE bool dropInput(const QList<QUrl>& urls);
     Q_INVOKABLE bool downloadModel(const QString& modelId);
@@ -145,6 +151,8 @@ signals:
     void jobStateChanged();
     void progressChanged();
     void errorChanged();
+    void outputFormatChanged();
+    void outputDirectoryChanged();
     void stemsChanged();
     void historyChanged();
     void playlistOperationFinished(bool success, const QString& diagnostic);
@@ -272,5 +280,7 @@ private:
     QString publishedOutputRoot_;
     QList<WaveformWork> waveformQueue_;
     quint64 resultGeneration_ = 0;
+    quint64 inputWaveformGeneration_ = 0;
+    QString inputWaveformTrackId_;
     std::optional<PlaylistOperation> playlistOperation_;
 };

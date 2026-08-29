@@ -13,13 +13,17 @@ Rectangle {
     radius: referenceWorkbench ? 0 : Theme.radiusMd
     implicitHeight: referenceWorkbench ? 52 : 55
 
-    readonly property var toolNames: [
-        qsTr("音频编辑"), qsTr("格式转换"),
-        qsTr("元数据编辑"), qsTr("文件名处理")
-    ]
     property int currentTool: 0
     property Window window
-    signal toolSelected(int index)
+    readonly property var visibleToolOrder: [0, 4, 1, 2, 3]
+    readonly property var visibleTools: [
+        { toolId: 0, name: qsTr("音频编辑"), icon: "equalizer-line" },
+        { toolId: 4, name: qsTr("人声伴奏分离"), icon: "music-2-line" },
+        { toolId: 1, name: qsTr("格式转换"), icon: "briefcase-4-line" },
+        { toolId: 2, name: qsTr("元数据编辑"), icon: "information-line" },
+        { toolId: 3, name: qsTr("文件名处理"), icon: "file-copy-line" }
+    ]
+    signal toolSelected(int toolId)
 
     RowLayout {
         anchors.fill: parent
@@ -30,12 +34,7 @@ Rectangle {
         Item { Layout.fillWidth: !navigation.referenceWorkbench }
 
         Repeater {
-            model: [
-                { name: qsTr("音频编辑"), icon: "equalizer-line" },
-                { name: qsTr("格式转换"), icon: "briefcase-4-line" },
-                { name: qsTr("元数据编辑"), icon: "information-line" },
-                { name: qsTr("文件名处理"), icon: "file-copy-line" }
-            ]
+            model: navigation.visibleTools
 
             Button {
                 id: navButton
@@ -44,8 +43,10 @@ Rectangle {
                 Layout.preferredHeight: navigation.referenceWorkbench ? 52 : 53
                 Layout.maximumHeight: navigation.referenceWorkbench ? 52 : 53
                 flat: true
-                checked: navigation.currentTool === index
+                checked: navigation.currentTool === modelData.toolId
                 focusPolicy: Qt.StrongFocus
+                Accessible.name: modelData.name
+                Accessible.role: Accessible.PageTab
 
                 contentItem: RowLayout {
                     spacing: 7
@@ -90,7 +91,7 @@ Rectangle {
                     }
                 }
 
-                onClicked: navigation.toolSelected(index)
+                onClicked: navigation.toolSelected(modelData.toolId)
             }
         }
 

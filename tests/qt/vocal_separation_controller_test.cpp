@@ -29,6 +29,8 @@ class VocalSeparationControllerTest final : public QObject {
 
 private slots:
     void doesNotLaunchWorkerDuringConstruction();
+    void exposesOutputChoicesAndPublishesTheSelectedInputWaveform();
+    void clearsTheSelectedInputWithoutLeavingStaleWaveformData();
     void downloadsMultipleArtifactsSequentiallyThroughTheController();
     void installedMappingUsesCheapDiscoveryThenExplicitAsyncHashing();
     void cancellingVerificationImmediatelyRestoresCheapModelStates();
@@ -182,6 +184,37 @@ private:
 
 } // namespace
 
+void VocalSeparationControllerTest::
+exposesOutputChoicesAndPublishesTheSelectedInputWaveform()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray modelBytes("trusted-test-model");
+    const auto options = optionsFor(temporary, QStringLiteral("success"), modelBytes);
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+
+    QCOMPARE(controller.outputDirectory(), options.outputDirectory);
+    QCOMPARE(controller.outputFormat(), QStringLiteral("wav"));
+    QSignalSpy outputDirectoryChanged(&controller,
+                                      &VocalSeparationController::outputDirectoryChanged);
+    QSignalSpy outputFormatChanged(&controller,
+                                   &VocalSeparationController::outputFormatChanged);
+    QVERIFY(controller.selectOutputDirectory(QUrl::fromLocalFile(
+        temporary.filePath(QStringLiteral("export")))));
+    QVERIFY(controller.selectOutputFormat(QStringLiteral("flac")));
+    QCOMPARE(outputDirectoryChanged.count(), 1);
+    QCOMPARE(outputFormatChanged.count(), 1);
+
+    QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
+    QTRY_VERIFY_WITH_TIMEOUT(
+        !controller.inputInfo().value(QStringLiteral("waveform")).toList().isEmpty(),
+        5'000);
+    QVERIFY(controller.inputInfo().value(QStringLiteral("durationMs")).toLongLong() > 0);
+}
+
 void VocalSeparationControllerTest::doesNotLaunchWorkerDuringConstruction()
 {
     QTemporaryDir temporary;
@@ -196,6 +229,23 @@ void VocalSeparationControllerTest::doesNotLaunchWorkerDuringConstruction()
         &preview, &waveforms, nullptr, nullptr, nullptr, options);
     QTest::qWait(200);
     QVERIFY(!QFileInfo::exists(marker));
+}
+
+void VocalSeparationControllerTest::
+clearsTheSelectedInputWithoutLeavingStaleWaveformData()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray modelBytes("trusted-test-model");
+    const auto options = optionsFor(temporary, QStringLiteral("success"), modelBytes);
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+
+    QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
+    QVERIFY(controller.clearInput());
+    QVERIFY(controller.inputInfo().isEmpty());
 }
 
 void VocalSeparationControllerTest::

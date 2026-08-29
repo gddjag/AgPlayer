@@ -7,8 +7,11 @@
 #include "metadata_editor.hpp"
 #include "native_drop_router.hpp"
 #include "playback_controller.hpp"
+#include "playlist_model.hpp"
 #include "qml_registration.hpp"
 #include "settings_controller.hpp"
+#include "audio_preview_controller.hpp"
+#include "vocal_separation_controller.hpp"
 #include "waveform_provider.hpp"
 #include "window_controller.hpp"
 
@@ -38,13 +41,15 @@ class NativeDropHelper final : public QObject {
 public:
     void bind(AudioToolsController* tools, FormatConverter* format,
               AudioEditorController* editor, MetadataEditor* metadata,
-              FilenameProcessor* filenames)
+              FilenameProcessor* filenames,
+              VocalSeparationController* separation)
     {
         tools_ = tools;
         format_ = format;
         editor_ = editor;
         metadata_ = metadata;
         filenames_ = filenames;
+        separation_ = separation;
         connect(&router_, &NativeDropRouter::pathsDropped, this,
                 [this](NativeDropRouter::Target target,
                        const QStringList& paths) {
@@ -63,6 +68,7 @@ public:
             case 1: format_->loadFiles(urls); break;
             case 2: metadata_->loadFiles(urls); break;
             case 3: filenames_->loadFiles(urls); break;
+            case 4: separation_->dropInput(urls); break;
             default: return;
             }
             delivered_ = true;
@@ -151,6 +157,7 @@ private:
     AudioEditorController* editor_ = nullptr;
     MetadataEditor* metadata_ = nullptr;
     FilenameProcessor* filenames_ = nullptr;
+    VocalSeparationController* separation_ = nullptr;
     bool delivered_ = false;
 };
 
@@ -189,16 +196,28 @@ public slots:
         audioEditor_ = std::make_unique<AudioEditorController>(AG_AUDIO_BACKEND_NULL);
         settings_ = std::make_unique<SettingsController>();
         waveformProvider_ = std::make_unique<WaveformProvider>(settings_.get());
+        playlists_ = std::make_unique<PlaylistModel>();
+        audioPreview_ = std::make_unique<AudioPreviewController>(
+            AG_AUDIO_BACKEND_NULL, playback_.get());
+        VocalSeparationControllerOptions separationOptions;
+        separationOptions.dataRoot = QDir(QStandardPaths::writableLocation(
+            QStandardPaths::AppDataLocation)).filePath(QStringLiteral("separation"));
+        separationOptions.outputDirectory = QDir(QStandardPaths::writableLocation(
+            QStandardPaths::MusicLocation)).filePath(QStringLiteral("AgPlayer Separation"));
+        vocalSeparation_ = std::make_unique<VocalSeparationController>(
+            audioPreview_.get(), waveformProvider_.get(), library_.get(),
+            importer_.get(), playlists_.get(), separationOptions);
         nativeDropHelper_.bind(audioTools_.get(), formatConverter_.get(),
                                audioEditor_.get(), metadataEditor_.get(),
-                               filenameProcessor_.get());
+                               filenameProcessor_.get(), vocalSeparation_.get());
 
         register_agplayer_qml_types(library_.get(), playback_.get(),
                                     importer_.get(), windows_.get(),
                                     audioTools_.get(), metadataEditor_.get(),
                                     formatConverter_.get(), filenameProcessor_.get(),
                                     settings_.get(), waveformProvider_.get(),
-                                    nullptr, nullptr, audioEditor_.get());
+                                    playlists_.get(), nullptr, audioEditor_.get(),
+                                    audioPreview_.get(), vocalSeparation_.get());
     }
 
     void qmlEngineAvailable(QQmlEngine* engine)
@@ -225,6 +244,9 @@ private:
     std::unique_ptr<AudioEditorController> audioEditor_;
     std::unique_ptr<SettingsController> settings_;
     std::unique_ptr<WaveformProvider> waveformProvider_;
+    std::unique_ptr<PlaylistModel> playlists_;
+    std::unique_ptr<AudioPreviewController> audioPreview_;
+    std::unique_ptr<VocalSeparationController> vocalSeparation_;
     NativeDropHelper nativeDropHelper_;
 };
 

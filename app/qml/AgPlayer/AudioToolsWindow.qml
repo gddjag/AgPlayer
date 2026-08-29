@@ -16,6 +16,13 @@ Window {
     color: "transparent"
     title: "AgPlayer · " + qsTr("音频工具")
     readonly property bool metadataWorkbench: AudioToolsController.currentTool === 2
+    function pageIndexForTool(toolId) {
+        if (toolId === 4) return 1
+        if (toolId === 1) return 2
+        if (toolId === 2) return 3
+        if (toolId === 3) return 4
+        return 0
+    }
     function requestHide() {
         if (AudioToolsController.currentTool === 0
                 && AudioEditorController.modified) {
@@ -176,8 +183,8 @@ Window {
                 window: window
                 currentTool: AudioToolsController.currentTool
                 referenceWorkbench: window.metadataWorkbench
-                onToolSelected: function(index) {
-                    AudioToolsController.selectTool(index)
+                onToolSelected: function(toolId) {
+                    AudioToolsController.selectTool(toolId)
                 }
             }
 
@@ -194,9 +201,10 @@ Window {
 
                 StackLayout {
                     anchors.fill: parent
-                    currentIndex: AudioToolsController.currentTool
+                    currentIndex: window.pageIndexForTool(AudioToolsController.currentTool)
 
                     AudioEditorPage { objectName: "audioEditorPage" }
+                    VocalSeparationPage {}
                     FormatConvertPage { objectName: "formatConvertPage" }
                     MetadataEditPage {}
                     FilenameProcessPage {}

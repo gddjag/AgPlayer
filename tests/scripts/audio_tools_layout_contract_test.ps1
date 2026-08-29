@@ -12,6 +12,7 @@ $formatTable = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'FormatTaskTa
 $formatSurface = $formatPage + "`n" + $formatSettings + "`n" + $formatTable
 $metadataPage = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'MetadataEditPage.qml')
 $filenamePage = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'FilenameProcessPage.qml')
+$separationPage = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'VocalSeparationPage.qml')
 $miniControls = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/MiniPlayerControls.qml')
 $toolsWindow = Get-Content -Raw -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/AudioToolsWindow.qml')
 $toolsNavigation = Get-Content -Raw -LiteralPath (Join-Path $toolsRoot 'ToolSidebar.qml')
@@ -58,7 +59,25 @@ if ($toolsNavigation -notmatch 'objectName:\s*"audioToolsTopNav"' -or
     $toolsNavigation -notmatch 'RowLayout' -or
     $toolsNavigation -notmatch 'radius:\s*referenceWorkbench\s*\?\s*0\s*:\s*Theme\.radiusMd' -or
     $toolsNavigation -notmatch 'visible:\s*navigation\.referenceWorkbench\s*&&\s*navButton\.checked') {
-    throw 'The four audio tools must remain in the top navigation, with the metadata reference workbench using its active underline.'
+    throw 'The five audio tools must remain in the top navigation, with the metadata reference workbench using its active underline.'
+}
+if ($toolsNavigation -notmatch 'visibleToolOrder:\s*\[0,\s*4,\s*1,\s*2,\s*3\]' -or
+    $toolsNavigation -notmatch 'modelData.toolId') {
+    throw 'The audio tools navigation must retain stable IDs and display [0,4,1,2,3].'
+}
+foreach ($control in @(
+    'vocalSeparationPage', 'separationInputPanel', 'separationInputWaveform',
+    'separationModelDeck', 'separationSettingsPanel', 'separationStemSelector',
+    'separationTimeline', 'separationHistoryPanel', 'separationBottomBar',
+    'separationPrimaryAction', 'separationErrorPanel')) {
+    if ($separationPage -notmatch ('objectName:\s*"' + $control + '"')) {
+        throw "The separation workbench is missing $control."
+    }
+}
+if ($separationPage -match 'Emoji|Segoe UI Symbol' -or
+    $separationPage -notmatch 'VocalSeparationController\.inputInfo' -or
+    $separationPage -notmatch 'VocalSeparationController\.history') {
+    throw 'The separation workbench must bind real controller data and use shipped icons only.'
 }
 if ($settingsPage -notmatch 'designRole:\s*"settingsCategoryRail"' -or
     $settingsPage -notmatch 'designRole:\s*"settingsContentSurface"' -or

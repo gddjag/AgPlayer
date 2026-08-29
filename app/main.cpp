@@ -263,7 +263,7 @@ int main(int argc, char* argv[])
                        && i + 1 < cliArgs.size()) {
                 bool ok = false;
                 const int requestedTool = cliArgs.at(++i).toInt(&ok);
-                if (ok && requestedTool >= 0 && requestedTool <= 5) {
+                if (ok && requestedTool >= 0 && requestedTool <= 4) {
                     qaTool = requestedTool;
                 }
             } else if (arg == QStringLiteral("--qa-tools-size")
@@ -732,6 +732,9 @@ int main(int argc, char* argv[])
             case 3:
                 filenameProcessor.loadFiles(qaToolUrls);
                 break;
+            case 4:
+                vocalSeparation.selectInput(qaToolUrls.constFirst());
+                break;
             default:
                 break;
             }
@@ -1083,9 +1086,7 @@ int main(int argc, char* argv[])
                             filenameProcessor.loadFiles(urls);
                             break;
                         case 4:
-                        case 5:
-                            // Placeholder routing for plugin tools. UI layer
-                            // handles installation/execution states.
+                            vocalSeparation.dropInput(urls);
                             break;
                         default:
                             break;

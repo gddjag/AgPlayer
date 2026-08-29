@@ -17,6 +17,7 @@
 #include <QJsonArray>
 #include <QStandardPaths>
 #include <QTemporaryFile>
+#include <QTimer>
 #include <QUuid>
 #include <QtConcurrent/QtConcurrentRun>
 
@@ -245,6 +246,8 @@ VocalSeparationController::JobState VocalSeparationController::jobState() const 
 QString VocalSeparationController::stage() const { return stage_; }
 double VocalSeparationController::progress() const noexcept { return progress_; }
 QString VocalSeparationController::error() const { return error_; }
+QString VocalSeparationController::outputFormat() const { return outputFormat_; }
+QString VocalSeparationController::outputDirectory() const { return outputDirectory_; }
 QVariantList VocalSeparationController::stems() const { return stems_; }
 QVariantList VocalSeparationController::history() const { return history_; }
 
@@ -257,18 +260,50 @@ bool VocalSeparationController::selectInput(const QUrl& url)
         setError(tr("输入音频不存在"));
         return false;
     }
+    ++inputWaveformGeneration_;
+    inputWaveformTrackId_ = QStringLiteral("separation-input-%1")
+                                .arg(inputWaveformGeneration_);
     inputInfo_ = {{QStringLiteral("path"), path},
                   {QStringLiteral("name"), file.fileName()},
-                  {QStringLiteral("bytes"), file.size()}};
+                  {QStringLiteral("bytes"), file.size()},
+                  {QStringLiteral("waveform"), QVariantList{}},
+                  {QStringLiteral("durationMs"), qlonglong(0)}};
     invalidateRetry();
     setError({});
     emit inputInfoChanged();
+    if (waveformProvider_ != nullptr) {
+        const QString trackId = inputWaveformTrackId_;
+        const quint64 generation = inputWaveformGeneration_;
+        QTimer::singleShot(0, this, [this, trackId, path, generation] {
+            if (waveformProvider_ != nullptr
+                && inputWaveformGeneration_ == generation
+                && inputWaveformTrackId_ == trackId
+                && inputInfo_.value(QStringLiteral("path")).toString() == path) {
+                waveformProvider_->loadForTrack(trackId, path);
+            }
+        });
+    }
     return true;
 }
 
 bool VocalSeparationController::dropInput(const QList<QUrl>& urls)
 {
     return urls.size() == 1 && selectInput(urls.first());
+}
+
+bool VocalSeparationController::clearInput()
+{
+    if (requestInFlight() || inputInfo_.isEmpty()) return false;
+    const QString path = inputInfo_.value(QStringLiteral("path")).toString();
+    ++inputWaveformGeneration_;
+    inputWaveformTrackId_.clear();
+    inputInfo_.clear();
+    invalidateRetry();
+    setError({});
+    if (waveformProvider_ != nullptr && !path.isEmpty())
+        waveformProvider_->cancelForTrack(path);
+    emit inputInfoChanged();
+    return true;
 }
 
 bool VocalSeparationController::downloadModel(const QString& modelId)
@@ -365,6 +400,7 @@ bool VocalSeparationController::selectOutputFormat(const QString& format)
                      QStringLiteral("mp3")}.contains(normalized)) return false;
     outputFormat_ = normalized;
     invalidateRetry();
+    emit outputFormatChanged();
     return true;
 }
 
@@ -375,6 +411,7 @@ bool VocalSeparationController::selectOutputDirectory(const QUrl& directory)
     if (path.isEmpty() || (!QDir(path).exists() && !QDir().mkpath(path))) return false;
     outputDirectory_ = path;
     invalidateRetry();
+    emit outputDirectoryChanged();
     return true;
 }
 
@@ -1072,6 +1109,17 @@ void VocalSeparationController::analyzeNextWaveform()
 void VocalSeparationController::handleWaveform(
     const QString& path, const QVariantMap& layers)
 {
+    if (!inputWaveformTrackId_.isEmpty()
+        && layers.value(QStringLiteral("_trackId")).toString()
+               == inputWaveformTrackId_
+        && inputInfo_.value(QStringLiteral("path")).toString() == path) {
+        inputInfo_.insert(QStringLiteral("waveform"),
+                          boundedPeaks(layers.value(QStringLiteral("mix")).toList()));
+        inputInfo_.insert(QStringLiteral("durationMs"),
+                          layers.value(QStringLiteral("_durationMs")).toLongLong());
+        emit inputInfoChanged();
+        return;
+    }
     if (waveformQueue_.isEmpty()) return;
     const WaveformWork work = waveformQueue_.first();
     if (work.path != path || work.resultGeneration != resultGeneration_
@@ -1094,6 +1142,13 @@ void VocalSeparationController::handleWaveform(
 void VocalSeparationController::handleWaveformFailure(
     const QString& path, const QString& trackId, qulonglong, int)
 {
+    if (trackId == inputWaveformTrackId_
+        && inputInfo_.value(QStringLiteral("path")).toString() == path) {
+        inputInfo_.insert(QStringLiteral("waveform"), QVariantList{});
+        inputInfo_.insert(QStringLiteral("durationMs"), qlonglong(0));
+        emit inputInfoChanged();
+        return;
+    }
     if (waveformQueue_.isEmpty()) return;
     const WaveformWork work = waveformQueue_.first();
     if (work.path != path || work.trackId != trackId

@@ -128,6 +128,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/tools/FormatErrorDialog.qml
         qml/AgPlayer/components/tools/FilenameProcessPage.qml
         qml/AgPlayer/components/tools/ToolSidebar.qml
+        qml/AgPlayer/components/tools/VocalSeparationPage.qml
         qml/AgPlayer/components/tools/MetadataEditPage.qml
         qml/AgPlayer/components/tools/AudioEditorPage.qml
         qml/AgPlayer/components/audioeditor/EditorCommandBar.qml
