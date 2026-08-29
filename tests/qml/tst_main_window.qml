@@ -348,6 +348,15 @@ TestCase {
         }
     }
 
+    Component {
+        id: recursiveBackdropDecoyComponent
+        Item {
+            width: 8
+            height: 8
+            SkinBackdrop { anchors.fill: parent }
+        }
+    }
+
     function initTestCase() {
         verify(typeof testMainWindow !== "undefined", "testMainWindow context property should exist")
         mainWindow = testMainWindow
@@ -404,6 +413,32 @@ TestCase {
         for (var index = 0; index < childItems.length; ++index)
             total += countObjectsNamed(childItems[index], expectedName)
         return total
+    }
+
+    function mainBackdropFrame() {
+        var childItems = mainWindow.contentItem.children || []
+        for (var index = 0; index < childItems.length; ++index) {
+            var child = childItems[index]
+            if (typeof child.windowRole !== "undefined"
+                    && child.windowRole === "main"
+                    && typeof child.showBorders !== "undefined"
+                    && !child.showBorders)
+                return child
+        }
+        return null
+    }
+
+    function backdropForFrame(frame) {
+        if (!frame)
+            return null
+        var childItems = frame.children || []
+        for (var index = 0; index < childItems.length; ++index) {
+            var child = childItems[index]
+            if (typeof child.item !== "undefined" && child.item
+                    && child.item.objectName === "skinBackdrop")
+                return child.item
+        }
+        return null
     }
 
     function trackRowForId(parentObject, trackId) {
@@ -2057,30 +2092,32 @@ TestCase {
         try {
             SettingsController.selectDefaultSkin()
             wait(0)
-            compare(Theme.backdropStart.toString(),
-                    Theme.backdropMiddle.toString())
-            compare(Theme.backdropMiddle.toString(),
-                    Theme.backdropEnd.toString())
+            compare(ThemeManager.backdropStart.toString(),
+                    ThemeManager.backdropMiddle.toString())
+            compare(ThemeManager.backdropMiddle.toString(),
+                    ThemeManager.backdropEnd.toString())
             compare(Theme.playRingPlaying.toString(), "#00e676")
             compare(Theme.playRingPaused.toString(), "#ffb020")
 
-            var backdrop = findChild(mainWindow, "skinBackdrop")
+            var frame = mainBackdropFrame()
+            verify(frame, "main fill DockedWindowFrame must exist")
+            var backdrop = backdropForFrame(frame)
             verify(backdrop, "main window must render one shared SkinBackdrop")
-            var gradientPaint = findChild(backdrop, "skinBackdropGradient")
-            verify(gradientPaint, "SkinBackdrop must expose its rendered gradient")
-            compare(gradientPaint.gradient.stops[0].color.toString(),
-                    Theme.backdropStart.toString())
-            compare(gradientPaint.gradient.stops[1].color.toString(),
-                    Theme.backdropMiddle.toString())
-            compare(gradientPaint.gradient.stops[2].color.toString(),
-                    Theme.backdropEnd.toString())
 
             SettingsController.selectSkinPreset("aurora")
             wait(0)
-            verify(Theme.backdropStart.toString()
-                   !== Theme.backdropMiddle.toString())
-            verify(Theme.backdropMiddle.toString()
-                   !== Theme.backdropEnd.toString())
+            verify(ThemeManager.backdropStart.toString()
+                   !== ThemeManager.backdropMiddle.toString())
+            verify(ThemeManager.backdropMiddle.toString()
+                   !== ThemeManager.backdropEnd.toString())
+            var gradientPaint = findChild(backdrop, "skinBackdropGradient")
+            verify(gradientPaint, "SkinBackdrop must expose its rendered gradient")
+            compare(gradientPaint.gradient.stops[0].color.toString(),
+                    ThemeManager.backdropStart.toString())
+            compare(gradientPaint.gradient.stops[1].color.toString(),
+                    ThemeManager.backdropMiddle.toString())
+            compare(gradientPaint.gradient.stops[2].color.toString(),
+                    ThemeManager.backdropEnd.toString())
             compare(Theme.playRingPlaying.toString(), Theme.accent.toString())
             compare(Theme.playRingPaused.toString(), Theme.accent.toString())
             compare(findChild(mainWindow, "playButtonBody").border.color.toString(),
@@ -2092,6 +2129,31 @@ TestCase {
                 SettingsController.selectDefaultSkin()
             else if (savedMode === 1)
                 SettingsController.selectSkinPreset(savedPreset)
+        }
+    }
+
+    function test_main_skin_lookup_rejects_recursive_decoy() {
+        var frame = mainBackdropFrame()
+        verify(frame, "main fill DockedWindowFrame must exist")
+        var decoy = null
+
+        try {
+            frame.showFill = false
+            wait(0)
+            compare(backdropForFrame(frame), null)
+
+            decoy = recursiveBackdropDecoyComponent.createObject(
+                        mainWindow.contentItem)
+            verify(decoy, "recursive backdrop decoy must be created")
+            verify(findChild(mainWindow, "skinBackdrop"),
+                   "fixture must prove broad recursive lookup accepts the decoy")
+            compare(backdropForFrame(frame), null,
+                    "scoped lookup must reject a backdrop outside Main fill frame")
+        } finally {
+            if (decoy)
+                decoy.destroy()
+            frame.showFill = true
+            wait(0)
         }
     }
 

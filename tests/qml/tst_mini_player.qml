@@ -120,11 +120,11 @@ TestCase {
             var gradientPaint = findChild(backdrop, "skinBackdropGradient")
             verify(gradientPaint, "mini SkinBackdrop must render Theme stops")
             compare(gradientPaint.gradient.stops[0].color.toString(),
-                    Theme.backdropStart.toString())
+                    ThemeManager.backdropStart.toString())
             compare(gradientPaint.gradient.stops[1].color.toString(),
-                    Theme.backdropMiddle.toString())
+                    ThemeManager.backdropMiddle.toString())
             compare(gradientPaint.gradient.stops[2].color.toString(),
-                    Theme.backdropEnd.toString())
+                    ThemeManager.backdropEnd.toString())
             compare(findChild(miniPlayer, "miniPlayButtonBody")
                     .border.color.toString(), Theme.accent.toString())
         } finally {
