@@ -46,6 +46,23 @@ Item {
             service.pauseFollow(5000)
     }
 
+    function stopCinematicSettle() {
+        currentLineSettle.stop()
+        currentLine.settleOpacity = 1
+        currentLine.settleScale = 1
+    }
+
+    function startCinematicSettle() {
+        stopCinematicSettle()
+        if (!spatialMode || !enabled || !visible || !service
+                || !service.enabled || service.status !== LyricsService.Ready
+                || service.currentLine.length === 0)
+            return
+        currentLine.settleOpacity = 0.62
+        currentLine.settleScale = 0.94
+        currentLineSettle.start()
+    }
+
     Rectangle {
         id: glass
         anchors.fill: parent
@@ -59,6 +76,7 @@ Item {
 
     Column {
         id: lyricStack
+        objectName: "cinematicLyricsStage"
         anchors.fill: parent
         anchors.leftMargin: root.spatialMode ? 0 : 18
         anchors.rightMargin: root.spatialMode ? 0 : 18
@@ -66,6 +84,7 @@ Item {
         anchors.bottomMargin: root.spatialMode ? 0 : 8
         spacing: Math.max(3, 6 * root.sizeScale)
         transform: Rotation {
+            objectName: "cinematicLyricsPerspective"
             origin.x: root.placement === PlayerExperienceController.Right
                       ? lyricStack.width : root.placement === PlayerExperienceController.Left
                                            ? 0 : lyricStack.width / 2
@@ -73,7 +92,7 @@ Item {
             axis { x: 0; y: 1; z: 0 }
             angle: !root.spatialMode || !root.sidePlacement ? 0
                    : (root.placement === PlayerExperienceController.Left ? -1 : 1)
-                     * (7 + root.depthScale * 15)
+                     * (6 + root.depthScale * 10)
         }
 
         Text {
@@ -84,15 +103,25 @@ Item {
                            0.22 + root.clarityScale * 0.30)
             font.pixelSize: Math.round(13 * root.sizeScale)
             horizontalAlignment: root.lineAlignment
+            wrapMode: root.spatialMode ? Text.Wrap : Text.NoWrap
+            maximumLineCount: root.spatialMode ? 2 : 1
             elide: Text.ElideRight
-            scale: 1.0 - root.depthScale * 0.08
+            opacity: root.spatialMode
+                     ? 0.32 + root.clarityScale * 0.18 : 1
+            visible: !root.spatialMode || text.length > 0
+            scale: root.spatialMode
+                   ? 0.88 - root.depthScale * 0.05
+                   : 1.0 - root.depthScale * 0.08
             transformOrigin: root.placement === PlayerExperienceController.Right
                              ? Item.Right : root.placement === PlayerExperienceController.Left
                                             ? Item.Left : Item.Center
         }
 
         Text {
+            id: currentLine
             objectName: "currentLyricLine"
+            property real settleOpacity: 1
+            property real settleScale: 1
             width: parent.width
             text: root.service && root.service.currentLine.length > 0
                   ? root.service.currentLine : root.statusText()
@@ -101,7 +130,12 @@ Item {
             font.pixelSize: Math.round(21 * root.sizeScale)
             font.weight: root.clarity >= 64 ? Font.DemiBold : Font.Medium
             horizontalAlignment: root.lineAlignment
+            wrapMode: root.spatialMode ? Text.Wrap : Text.NoWrap
+            maximumLineCount: root.spatialMode ? 2 : 1
             elide: Text.ElideRight
+            opacity: root.spatialMode ? settleOpacity : 1
+            scale: root.spatialMode
+                   ? (1.04 + root.depthScale * 0.05) * settleScale : 1
         }
 
         Text {
@@ -112,13 +146,56 @@ Item {
                            0.19 + root.clarityScale * 0.26)
             font.pixelSize: Math.round(13 * root.sizeScale)
             horizontalAlignment: root.lineAlignment
+            wrapMode: root.spatialMode ? Text.Wrap : Text.NoWrap
+            maximumLineCount: root.spatialMode ? 2 : 1
             elide: Text.ElideRight
-            scale: 1.0 - root.depthScale * 0.14
+            opacity: root.spatialMode
+                     ? 0.26 + root.clarityScale * 0.15 : 1
+            visible: !root.spatialMode || text.length > 0
+            scale: root.spatialMode
+                   ? 0.82 - root.depthScale * 0.05
+                   : 1.0 - root.depthScale * 0.14
             transformOrigin: root.placement === PlayerExperienceController.Right
                              ? Item.Right : root.placement === PlayerExperienceController.Left
                                             ? Item.Left : Item.Center
         }
     }
+
+    ParallelAnimation {
+        id: currentLineSettle
+        objectName: "cinematicLyricsSettleAnimation"
+        NumberAnimation {
+            target: currentLine
+            property: "settleOpacity"
+            to: 1
+            duration: 180
+            easing.type: Easing.OutCubic
+        }
+        NumberAnimation {
+            target: currentLine
+            property: "settleScale"
+            to: 1
+            duration: 220
+            easing.type: Easing.OutCubic
+        }
+    }
+
+    Connections {
+        target: root.service
+        function onCurrentLineChanged() { root.startCinematicSettle() }
+        function onStatusChanged() {
+            if (!root.service || root.service.status !== LyricsService.Ready)
+                root.stopCinematicSettle()
+        }
+        function onEnabledChanged() {
+            if (!root.service || !root.service.enabled)
+                root.stopCinematicSettle()
+        }
+    }
+
+    onSpatialModeChanged: if (!spatialMode) stopCinematicSettle()
+    onEnabledChanged: if (!enabled) stopCinematicSettle()
+    onVisibleChanged: if (!visible) stopCinematicSettle()
 
     WheelHandler { onWheel: root.noteManualScroll() }
 

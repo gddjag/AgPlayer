@@ -42,6 +42,52 @@ Rectangle {
         { "title": qsTr("星河"), "sub": qsTr("深空主题 · 流星冲击"),
           "from": "#442037", "to": "#91356d" } // theme-color-allow: immersive media visual contract
     ]
+    readonly property var dynamicsGroups: [
+        {
+            "key": "Terrain", "title": qsTr("地形"),
+            "sliders": [
+                { "label": qsTr("输入压制"), "key": "inputCompression", "from": 20, "to": 150 },
+                { "label": qsTr("音频响应"), "key": "audioResponse", "from": 20, "to": 200, "scale": 100, "decimals": 2 },
+                { "label": qsTr("响应范围"), "key": "responseRange", "from": 50, "to": 220, "scale": 100, "decimals": 2 },
+                { "label": qsTr("主体清晰度"), "key": "subjectClarity", "from": 20, "to": 140 }
+            ],
+            "effects": []
+        },
+        {
+            "key": "Light", "title": qsTr("光影"),
+            "sliders": [
+                { "label": qsTr("中心高光"), "key": "centerHighlight", "from": 0, "to": 100, "scale": 100, "decimals": 2 },
+                { "label": qsTr("画面景深"), "key": "depthOfField", "from": 0, "to": 150, "scale": 100, "decimals": 2 }
+            ],
+            "effects": [
+                { "label": qsTr("歌曲换色"), "key": "songAdaptiveColorEnabled" },
+                { "label": qsTr("流光高亮"), "key": "streamHighlightEnabled" }
+            ]
+        },
+        {
+            "key": "Motion", "title": qsTr("运动"),
+            "sliders": [
+                { "label": qsTr("自动旋转速度"), "key": "autoRotateSpeed", "from": 0, "to": 100, "scale": 100, "decimals": 2 },
+                { "label": qsTr("律动灵敏度"), "key": "rhythmSensitivity", "from": 0, "to": 100, "scale": 100, "decimals": 2 }
+            ],
+            "effects": [
+                { "label": qsTr("自动旋转"), "key": "autoRotate" },
+                { "label": qsTr("空闲呼吸"), "key": "idleBreathingEnabled" },
+                { "label": qsTr("漂浮晶体"), "key": "floatingCubesEnabled" }
+            ]
+        },
+        {
+            "key": "Impact", "title": qsTr("冲击"),
+            "sliders": [
+                { "label": qsTr("律动强度"), "key": "rhythmStrength", "from": 0, "to": 140, "scale": 100, "decimals": 2 }
+            ],
+            "effects": [
+                { "label": qsTr("彩色冲击波"), "key": "ripplesEnabled" },
+                { "label": qsTr("星尘喷发"), "key": "burstEnabled" },
+                { "label": qsTr("8拍流星"), "key": "meteorsEnabled" }
+            ]
+        }
+    ]
 
     function setEqGain(index, value) {
         var gains = PlayerExperienceController.visualEqGains.slice()
@@ -469,62 +515,59 @@ Rectangle {
                 visible: root.currentTab === 2
                 Layout.fillWidth: true
                 spacing: 7
-                Text { text: qsTr("声音响应"); color: Qt.rgba(0.9, 0.86, 0.92, 0.5); font.pixelSize: 9 } // theme-color-allow: immersive media visual contract
                 Repeater {
-                    model: [
-                        { "label": qsTr("输入压制"), "key": "inputCompression", "from": 20, "to": 150 },
-                        { "label": qsTr("音频响应"), "key": "audioResponse", "from": 20, "to": 200, "scale": 100, "decimals": 2 },
-                        { "label": qsTr("响应范围"), "key": "responseRange", "from": 50, "to": 220, "scale": 100, "decimals": 2 },
-                        { "label": qsTr("中心高光"), "key": "centerHighlight", "from": 0, "to": 100, "scale": 100, "decimals": 2 },
-                        { "label": qsTr("律动强度"), "key": "rhythmStrength", "from": 0, "to": 140, "scale": 100, "decimals": 2 },
-                        { "label": qsTr("画面景深"), "key": "depthOfField", "from": 0, "to": 150, "scale": 100, "decimals": 2 },
-                        { "label": qsTr("主体清晰度"), "key": "subjectClarity", "from": 20, "to": 140 },
-                        { "label": qsTr("自动旋转速度"), "key": "autoRotateSpeed", "from": 0, "to": 100, "scale": 100, "decimals": 2 },
-                        { "label": qsTr("律动灵敏度"), "key": "rhythmSensitivity", "from": 0, "to": 100, "scale": 100, "decimals": 2 }
-                    ]
-                    RowLayout {
+                    model: root.dynamicsGroups
+                    ColumnLayout {
                         required property var modelData
+                        property var groupData: modelData
+                        objectName: "dynamics" + groupData.key + "Group"
                         Layout.fillWidth: true
-                        spacing: 7
-                        Text { Layout.preferredWidth: 62; text: modelData.label; color: Qt.rgba(0.94, 0.91, 0.95, 0.68); font.pixelSize: 9 } // theme-color-allow: immersive media visual contract
-                        Slider {
-                            objectName: "dynamicSlider_" + modelData.key
-                            Layout.fillWidth: true
-                            implicitHeight: 20
-                            from: modelData.from
-                            to: modelData.to
-                            value: Number(PlayerExperienceController[modelData.key])
-                            onMoved: root.setControllerValue(modelData.key, value)
+                        spacing: 5
+                        Text {
+                            text: groupData.title
+                            color: Qt.rgba(0.9, 0.86, 0.92, 0.5) // theme-color-allow: immersive media visual contract
+                            font.pixelSize: 9
+                            font.weight: Font.DemiBold
                         }
-                        Text { Layout.preferredWidth: 34; horizontalAlignment: Text.AlignRight; text: root.displayValue(modelData); color: "#F5F0F6"; font.pixelSize: 9 } // theme-color-allow: immersive media visual contract
-                    }
-                }
-                Flow {
-                    Layout.fillWidth: true
-                    spacing: 4
-                    Repeater {
-                        model: [
-                            { "label": qsTr("彩色冲击波"), "key": "ripplesEnabled" },
-                            { "label": qsTr("星尘喷发"), "key": "burstEnabled" },
-                            { "label": qsTr("漂浮晶体"), "key": "floatingCubesEnabled" },
-                            { "label": qsTr("8拍流星"), "key": "meteorsEnabled" },
-                            { "label": qsTr("自动旋转"), "key": "autoRotate" },
-                            { "label": qsTr("空闲呼吸"), "key": "idleBreathingEnabled" },
-                            { "label": qsTr("歌曲换色"), "key": "songAdaptiveColorEnabled" },
-                            { "label": qsTr("流光高亮"), "key": "streamHighlightEnabled" }
-                        ]
-                        ThemedCheckBox {
-                            required property var modelData
-                            objectName: "effectToggle_" + modelData.key
-                            text: modelData.label
-                            checked: modelData.key === "autoRotate"
-                                     ? Number(PlayerExperienceController.autoRotate) > 0
-                                     : !!PlayerExperienceController[modelData.key]
-                            onToggled: {
-                                if (modelData.key === "autoRotate")
-                                    PlayerExperienceController.autoRotate = checked ? 54 : 0
-                                else
-                                    PlayerExperienceController[modelData.key] = checked
+                        Repeater {
+                            model: groupData.sliders
+                            RowLayout {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                spacing: 7
+                                Text { Layout.preferredWidth: 62; text: modelData.label; color: Qt.rgba(0.94, 0.91, 0.95, 0.68); font.pixelSize: 9 } // theme-color-allow: immersive media visual contract
+                                Slider {
+                                    objectName: "dynamicSlider_" + modelData.key
+                                    Layout.fillWidth: true
+                                    implicitHeight: 20
+                                    from: modelData.from
+                                    to: modelData.to
+                                    value: Number(PlayerExperienceController[modelData.key])
+                                    onMoved: root.setControllerValue(modelData.key, value)
+                                }
+                                Text { Layout.preferredWidth: 34; horizontalAlignment: Text.AlignRight; text: root.displayValue(modelData); color: "#F5F0F6"; font.pixelSize: 9 } // theme-color-allow: immersive media visual contract
+                            }
+                        }
+                        Flow {
+                            Layout.fillWidth: true
+                            visible: groupData.effects.length > 0
+                            spacing: 4
+                            Repeater {
+                                model: groupData.effects
+                                ThemedCheckBox {
+                                    required property var modelData
+                                    objectName: "effectToggle_" + modelData.key
+                                    text: modelData.label
+                                    checked: modelData.key === "autoRotate"
+                                             ? Number(PlayerExperienceController.autoRotate) > 0
+                                             : !!PlayerExperienceController[modelData.key]
+                                    onToggled: {
+                                        if (modelData.key === "autoRotate")
+                                            PlayerExperienceController.autoRotate = checked ? 54 : 0
+                                        else
+                                            PlayerExperienceController[modelData.key] = checked
+                                    }
+                                }
                             }
                         }
                     }
