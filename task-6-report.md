@@ -65,5 +65,20 @@ control code was changed.
 - Direct full `tst_main_window.qml`: 114 passed, 0 failed, 1 skipped because
   `WM_DROPFILES` requires the native qwindows platform rather than offscreen.
 
+## Review stability correction
+
+Independent review found that the CTest registration's 35-second timeout for
+the unfiltered `qml_main_window_test` was shorter than legitimate loaded runs:
+two fresh runs timed out at 35 and 43 seconds while the same full fixture ran
+normally when invoked directly. This is a test-infrastructure timeout, not a
+test-content or production failure.
+
+`tests/CMakeLists.txt` now registers a 90-second timeout. The Release build
+tree was reconfigured with VS2022 `VsDevCmd`, and three complete CTest runs
+passed at 30.83 s, 43.80 s, and 42.35 s. The threshold is more than twice the
+observed slow run while still detecting a genuine stalled full-window test. A
+final seven-test Task 6 regression selection also passed; its main-window run
+took 53.75 s and the complete selection took 73.34 s.
+
 Visual dark/light/system, DPI, and real-audio acceptance remain Task 13 work;
 this task makes no packaging or full-release claim.
