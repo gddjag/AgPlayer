@@ -95,14 +95,16 @@ Item {
     }
 
     function applyWaveformMode() {
-        if (!waveform)
+        if (!waveform || !playedWaveform)
             return
         if (SettingsController.waveformMode === 2) {
             var spectrum = root.displayedSpectrumPeaks
             waveform.peaks = spectrum
+            playedWaveform.peaks = spectrum
         } else {
             var layers = root.displayedWaveformLayers
             waveform.layers = layers
+            playedWaveform.layers = layers
         }
     }
 
@@ -517,9 +519,9 @@ Item {
                 anchors.topMargin: 20
                 pointerInteractionEnabled: false
                 duration: root.effectiveDurationMs
-                // Progress colour and cursor share this single waveform canvas;
-                // no clipped duplicate WaveformItem is created.
-                position: root.playbackPositionMs
+                // The base pass remains entirely unplayed. A fully played
+                // duplicate below is clipped to this cursor's exact pixel.
+                position: 0
                 cursorPosition: root.playbackPositionMs
                 analysisProgress: root.waveformProvider
                                   ? root.waveformProvider.analysisProgress : 0
@@ -556,6 +558,44 @@ Item {
                 amplitudeScale: SettingsController.waveformHeight
                 density: SettingsController.waveformDensity
                 lineWidth: SettingsController.waveformThickness
+            }
+
+            Item {
+                id: playedWaveformClip
+                objectName: "integratedWaveformPlayedClip"
+                anchors.left: waveform.left
+                anchors.top: waveform.top
+                width: waveform.waveformCursorX
+                height: waveform.height
+                clip: true
+                enabled: false
+
+                WaveformItem {
+                    id: playedWaveform
+                    objectName: "integratedPlayedWaveform"
+                    enabled: false
+                    width: waveform.width
+                    height: waveform.height
+                    duration: waveform.duration
+                    position: duration
+                    visibleStartMs: waveform.visibleStartMs
+                    visibleEndMs: waveform.visibleEndMs
+                    analysisProgress: waveform.analysisProgress
+                    visualMode: waveform.visualMode
+                    baseColor: waveform.baseColor
+                    progressColor: waveform.progressColor
+                    gradientStartColor: waveform.gradientStartColor
+                    gradientMiddleColor: waveform.gradientMiddleColor
+                    gradientEndColor: waveform.gradientEndColor
+                    frequencyLowColor: waveform.frequencyLowColor
+                    frequencyMidColor: waveform.frequencyMidColor
+                    frequencyHighColor: waveform.frequencyHighColor
+                    frequencyStrength: waveform.frequencyStrength
+                    rgbProgress: waveform.rgbProgress
+                    amplitudeScale: waveform.amplitudeScale
+                    density: waveform.density
+                    lineWidth: waveform.lineWidth
+                }
             }
 
             Item {
