@@ -57,6 +57,50 @@ bool waitForBarrierPhase(std::atomic<int>& phase,
     return false;
 }
 
+bool waitForFlag(std::atomic<bool>& flag,
+                 const std::chrono::milliseconds timeout)
+{
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    do {
+        if (flag.load(std::memory_order_acquire)) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    } while (std::chrono::steady_clock::now() < deadline);
+    return false;
+}
+
+bool waitForPlayerState(ag_player* const player,
+                        const ag_playback_state expected,
+                        ag_playback_snapshot& snapshot,
+                        const std::chrono::milliseconds timeout)
+{
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    do {
+        if (ag_player_snapshot(player, &snapshot) == AG_OK
+            && snapshot.state == expected) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    } while (std::chrono::steady_clock::now() < deadline);
+    return false;
+}
+
+template <typename Predicate>
+bool waitForEngineOutputPeak(agplayer::AudioEngine& engine,
+                             Predicate&& predicate,
+                             const std::chrono::milliseconds timeout)
+{
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    do {
+        if (predicate(engine.equalizer_status().output_peak_db)) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    } while (std::chrono::steady_clock::now() < deadline);
+    return false;
+}
+
 template <typename Predicate>
 double waitForOutputPeak(ag_player* const player,
                          Predicate&& predicate,
@@ -343,6 +387,88 @@ bool outputDeviceSwitchRejectsInFlightOldCallback()
     return switched && new_callback_entered && stale_peak_rejected;
 }
 
+bool outputDeviceSwitchFailureRejectsInFlightOldCallback(
+    const agplayer::OutputDeviceSwitchTestFailure failure,
+    const ag_result expected_result,
+    const char* const label)
+{
+    agplayer::OutputDeviceSwitchTestBarrier barrier;
+    agplayer::AudioEngine engine(agplayer::AudioBackend::Null, 4'096U);
+    assert(engine.load_stream(std::make_shared<ContinuousAudioStream>())
+           == AG_OK);
+    assert(waitForBufferedFrames(engine, 1'024U,
+                                 std::chrono::milliseconds(1'000)));
+    assert(engine.play() == AG_OK);
+    assert(waitForEngineOutputPeak(
+        engine, [](const double peak) { return peak > kMeterFloorDb; },
+        std::chrono::milliseconds(1'000)));
+
+    barrier.failure.store(failure, std::memory_order_release);
+    engine.set_output_device_switch_test_barrier(&barrier);
+    std::atomic<ag_result> switch_result{AG_OK};
+    std::atomic<bool> switch_done{false};
+    std::thread switch_thread([&] {
+        switch_result.store(engine.set_output_device({}, true),
+                            std::memory_order_release);
+        switch_done.store(true, std::memory_order_release);
+    });
+
+    const bool old_callback_entered = waitForBarrierPhase(
+        barrier.entered_phase, 1, std::chrono::milliseconds(2'000));
+    const bool failed_while_old_callback_held = old_callback_entered
+        && waitForFlag(switch_done, std::chrono::milliseconds(2'000));
+    if (!failed_while_old_callback_held) {
+        barrier.cancelled.store(true, std::memory_order_release);
+        barrier.release_phase.store(2, std::memory_order_release);
+        switch_thread.join();
+        engine.set_output_device_switch_test_barrier(nullptr);
+        std::fprintf(stderr, "%s did not fail while old callback was held\n",
+                     label);
+        return false;
+    }
+    switch_thread.join();
+
+    barrier.armed_phase.store(2, std::memory_order_release);
+    barrier.release_phase.store(1, std::memory_order_release);
+    const bool fresh_callback_held = waitForBarrierPhase(
+        barrier.entered_phase, 2, std::chrono::milliseconds(2'000));
+    const bool stale_peak_rejected = fresh_callback_held
+        && engine.equalizer_status().output_peak_db == kMeterFloorDb;
+    barrier.release_phase.store(2, std::memory_order_release);
+    if (!fresh_callback_held) {
+        barrier.cancelled.store(true, std::memory_order_release);
+    }
+    engine.set_output_device_switch_test_barrier(nullptr);
+
+    const bool result_matches =
+        switch_result.load(std::memory_order_acquire) == expected_result;
+    const bool fresh_peak_published = waitForEngineOutputPeak(
+        engine, [](const double peak) { return peak > kMeterFloorDb; },
+        std::chrono::milliseconds(1'000));
+    if (!stale_peak_rejected) {
+        std::fprintf(stderr, "%s accepted an in-flight stale peak\n", label);
+    }
+    if (!fresh_peak_published) {
+        std::fprintf(stderr, "%s did not resume fresh meter publication\n",
+                     label);
+    }
+    return result_matches && stale_peak_rejected && fresh_peak_published;
+}
+
+bool outputDeviceStopFailureRejectsInFlightOldCallback()
+{
+    return outputDeviceSwitchFailureRejectsInFlightOldCallback(
+        agplayer::OutputDeviceSwitchTestFailure::StopOutput,
+        AG_DEVICE_ERROR, "stop_output failure");
+}
+
+bool outputDeviceSnapshotExceptionRejectsInFlightOldCallback()
+{
+    return outputDeviceSwitchFailureRejectsInFlightOldCallback(
+        agplayer::OutputDeviceSwitchTestFailure::BeforeStateSnapshot,
+        AG_INTERNAL_ERROR, "pre-shutdown snapshot exception");
+}
+
 bool outputMeterUsesRequestedFramesForPartialUnderrun()
 {
     auto stream = std::make_shared<PartialUnderrunStream>();
@@ -542,9 +668,8 @@ int main(const int argc, char** argv)
 
     assert(ag_player_seek(player, 1'900) == AG_OK);
     assert(ag_player_play(player) == AG_OK);
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
-    assert(ag_player_snapshot(player, &snapshot) == AG_OK);
-    assert(snapshot.state == AG_STOPPED);
+    assert(waitForPlayerState(player, AG_STOPPED, snapshot,
+                              std::chrono::milliseconds(2'000)));
 
     assert(ag_player_seek(player, 500) == AG_OK);
     std::this_thread::sleep_for(std::chrono::milliseconds(80));
@@ -580,9 +705,15 @@ int main(const int argc, char** argv)
         outputMeterInvalidatesAcrossPlaybackBoundaries();
     const bool deviceSwitchRegression =
         outputDeviceSwitchRejectsInFlightOldCallback();
+    const bool deviceStopFailureRegression =
+        outputDeviceStopFailureRejectsInFlightOldCallback();
+    const bool deviceSnapshotExceptionRegression =
+        outputDeviceSnapshotExceptionRejectsInFlightOldCallback();
     const bool partialUnderrunRegression =
         outputMeterUsesRequestedFramesForPartialUnderrun();
     assert(boundaryRegression);
     assert(deviceSwitchRegression);
+    assert(deviceStopFailureRegression);
+    assert(deviceSnapshotExceptionRegression);
     assert(partialUnderrunRegression);
 }

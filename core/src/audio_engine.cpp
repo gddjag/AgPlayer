@@ -21,6 +21,7 @@
 #include <condition_variable>
 #include <cstdint>
 #include <mutex>
+#include <new>
 #include <random>
 #include <thread>
 #include <utility>
@@ -38,6 +39,8 @@ static_assert(std::atomic<PlaybackMode>::is_always_lock_free);
 static_assert(std::atomic<ag_result>::is_always_lock_free);
 static_assert(
     std::atomic<OutputDeviceSwitchTestBarrier*>::is_always_lock_free);
+static_assert(
+    std::atomic<OutputDeviceSwitchTestFailure>::is_always_lock_free);
 
 namespace {
 
@@ -48,6 +51,28 @@ constexpr float spectrum_pi = 3.14159265358979323846F;
 constexpr float output_meter_floor_linear = 1.0e-6F;
 constexpr double output_meter_floor_db = -120.0;
 constexpr float output_meter_release_db_per_second = 12.0F;
+
+class OutputMeterAttemptGuard final {
+public:
+    explicit OutputMeterAttemptGuard(
+        std::atomic<std::uint64_t>& generation) noexcept
+        : generation_(generation)
+    {
+    }
+
+    ~OutputMeterAttemptGuard()
+    {
+        if (!succeeded_) {
+            generation_.fetch_add(1U, std::memory_order_acq_rel);
+        }
+    }
+
+    void succeed() noexcept { succeeded_ = true; }
+
+private:
+    std::atomic<std::uint64_t>& generation_;
+    bool succeeded_ = false;
+};
 
 float integer_power(float base, std::size_t exponent) noexcept
 {
@@ -1151,9 +1176,8 @@ public:
                 return AG_OK;
             }
             invalidate_output_meter();
+            OutputMeterAttemptGuard meter_attempt(output_meter_generation_);
 
-            const std::string previous_id = selected_device_id_;
-            const bool previous_exclusive = exclusive_mode_;
             const EngineState previous_state =
                 state_.load(std::memory_order_acquire);
             const bool resume = previous_state == EngineState::Playing;
@@ -1162,6 +1186,12 @@ public:
             if (resume) {
                 arm_output_device_switch_test_barrier(1, true);
             }
+            if (output_device_switch_test_failure()
+                == OutputDeviceSwitchTestFailure::BeforeStateSnapshot) {
+                throw std::bad_alloc{};
+            }
+            const std::string previous_id = selected_device_id_;
+            const bool previous_exclusive = exclusive_mode_;
 
             if (device_initialized_) {
                 if (stop_output() != AG_OK && !recovering) {
@@ -1178,6 +1208,7 @@ public:
             selected_device_id_ = std::move(utf8_id);
             exclusive_mode_ = exclusive;
             if (!loaded_) {
+                meter_attempt.succeed();
                 return AG_OK;
             }
 
@@ -1195,6 +1226,7 @@ public:
                 }
                 seek_cv_.notify_all();
                 if (!resume || start_output() == AG_OK) {
+                    meter_attempt.succeed();
                     return AG_OK;
                 }
             }
@@ -1319,6 +1351,10 @@ private:
         const std::lock_guard<std::recursive_mutex> lock(device_mutex_);
         if (backend_ == AudioBackend::Manual || !device_initialized_) {
             return AG_OK;
+        }
+        if (output_device_switch_test_failure()
+            == OutputDeviceSwitchTestFailure::StopOutput) {
+            return AG_DEVICE_ERROR;
         }
         return ma_device_stop(&device_) == MA_SUCCESS ? AG_OK : AG_DEVICE_ERROR;
     }
@@ -2097,6 +2133,16 @@ private:
                && !barrier->cancelled.load(std::memory_order_acquire)) {
             std::this_thread::yield();
         }
+    }
+
+    [[nodiscard]] OutputDeviceSwitchTestFailure
+    output_device_switch_test_failure() const noexcept
+    {
+        OutputDeviceSwitchTestBarrier* const barrier =
+            output_device_switch_test_barrier_.load(std::memory_order_acquire);
+        return barrier == nullptr
+            ? OutputDeviceSwitchTestFailure::None
+            : barrier->failure.load(std::memory_order_acquire);
     }
 
     AudioBackend backend_;
