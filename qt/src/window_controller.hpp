@@ -192,6 +192,9 @@ private:
     bool miniVisible_ = false;
     bool immersivePresentationActive_ = false;
     PendingView immersiveRestoreView_ = PendingView::Main;
+    int immersiveRestoreMainWindowShellMode_ = 0;
+    QRect immersiveRestoreMainGeometry_;
+    QRect immersiveRestoreMiniGeometry_;
     bool audioToolsVisible_ = false;
     bool alwaysOnTop_ = false;
     bool magneticSnapEnabled_ = true;

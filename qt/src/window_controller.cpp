@@ -201,6 +201,10 @@ void WindowController::setMainWindowShellMode(int mode)
     if (mainWindowShellMode_ == mode) {
         return;
     }
+    if (immersivePresentationActive_) {
+        mainWindowShellMode_ = mode;
+        return;
+    }
     persistGeometry(mainWindow_, mainWindowGeometryKey());
     mainWindowShellMode_ = mode;
     if (mainWindow_ != nullptr) {
@@ -597,6 +601,11 @@ void WindowController::enterImmersivePresentation()
         return;
     }
     immersiveRestoreView_ = miniVisible_ ? PendingView::Mini : PendingView::Main;
+    immersiveRestoreMainWindowShellMode_ = mainWindowShellMode_;
+    immersiveRestoreMainGeometry_ = mainWindow_ != nullptr
+        ? mainWindow_->geometry() : QRect();
+    immersiveRestoreMiniGeometry_ = miniWindow_ != nullptr
+        ? miniWindow_->geometry() : QRect();
     immersivePresentationActive_ = true;
     emit immersivePresentationActiveChanged();
     applyMainVisible(false);
@@ -610,6 +619,13 @@ void WindowController::leaveImmersivePresentation()
     }
     immersivePresentationActive_ = false;
     emit immersivePresentationActiveChanged();
+    mainWindowShellMode_ = immersiveRestoreMainWindowShellMode_;
+    if (mainWindow_ != nullptr && immersiveRestoreMainGeometry_.isValid()) {
+        mainWindow_->setGeometry(immersiveRestoreMainGeometry_);
+    }
+    if (miniWindow_ != nullptr && immersiveRestoreMiniGeometry_.isValid()) {
+        miniWindow_->setGeometry(immersiveRestoreMiniGeometry_);
+    }
     if (immersiveRestoreView_ == PendingView::Mini) {
         showMini();
     } else {
@@ -1260,8 +1276,10 @@ void WindowController::scheduleWindowStateSync()
 void WindowController::flushWindowState()
 {
     windowStateSyncTimer_.stop();
-    persistGeometry(mainWindow_, mainWindowGeometryKey());
-    persistGeometry(miniWindow_, QStringLiteral("windows/miniGeometry"));
+    if (!immersivePresentationActive_) {
+        persistGeometry(mainWindow_, mainWindowGeometryKey());
+        persistGeometry(miniWindow_, QStringLiteral("windows/miniGeometry"));
+    }
     persistGeometry(listWindow_, QStringLiteral("windows/listGeometry"));
     if (!isMinimized(audioToolsWindow_) && !isMaximized(audioToolsWindow_)) {
         persistGeometry(audioToolsWindow_, QStringLiteral("windows/audioToolsGeometry"));
