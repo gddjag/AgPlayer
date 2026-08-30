@@ -438,6 +438,7 @@ private:
     void updatePlaybackMix() noexcept;
     void applyTrackMix(agplayer::editor::TimelineSnapshot& snapshot) const noexcept;
     bool preparePlayback();
+    void releaseEditorPlaybackOutput() noexcept;
     [[nodiscard]] qint64 currentPlaybackTimelineFrame() const noexcept;
     void finishTimePitchChange(bool wasPlaying, qint64 timelineFrame);
     void ensureSelectionHandoffServices();

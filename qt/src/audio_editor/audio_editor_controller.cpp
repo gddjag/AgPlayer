@@ -881,15 +881,16 @@ AudioEditorController::~AudioEditorController()
 void AudioEditorController::setPlaybackController(
     PlaybackController* const controller)
 {
-    playback_controller_ = controller;
-    if (controller == nullptr || controller->playerHandle() == player_) return;
+    if (controller == playback_controller_) return;
     if (playback_adapter_) {
         (void)playback_adapter_->stop();
-        playback_adapter_->release();
+        releaseEditorPlaybackOutput();
     }
-    if (editor_playback_owns_player_) {
-        editor_playback_owns_player_ = false;
-        emit playbackOwnershipChanged();
+    playback_controller_ = controller;
+    if (controller == nullptr || controller->playerHandle() == player_) {
+        playback_adapter_ = std::make_unique<EditorPlaybackAdapter>(
+            player_, controller);
+        return;
     }
     if (player_ != nullptr && owns_player_) ag_player_destroy(player_);
     player_ = controller->playerHandle();
@@ -1629,12 +1630,7 @@ void AudioEditorController::deactivate()
     }
     if (playback_adapter_) {
         (void)playback_adapter_->stop();
-        playback_adapter_->release();
-        playback_prepared_ = false;
-    }
-    if (editor_playback_owns_player_) {
-        editor_playback_owns_player_ = false;
-        emit playbackOwnershipChanged();
+        releaseEditorPlaybackOutput();
     }
     playback_timer_.stop();
     playing_ = false;
@@ -1657,6 +1653,15 @@ void AudioEditorController::activate()
     }
     if (has_document_) refreshSourcePeakCachesAsync();
     emit activated();
+}
+
+void AudioEditorController::releaseEditorPlaybackOutput() noexcept
+{
+    if (playback_adapter_) playback_adapter_->release();
+    playback_prepared_ = false;
+    if (!editor_playback_owns_player_) return;
+    editor_playback_owns_player_ = false;
+    emit playbackOwnershipChanged();
 }
 
 bool AudioEditorController::reduceNoise()
@@ -2874,6 +2879,7 @@ bool AudioEditorController::seekMs(const qint64 value)
                 / time_pitch_.speedPercent()))
             : value;
         if (playback_adapter_->seek(previewPosition) != AG_OK) {
+            releaseEditorPlaybackOutput();
             setError(tr("无法定位编辑预览"));
             return false;
         }
@@ -2898,6 +2904,7 @@ bool AudioEditorController::seekFrame(const qint64 frame)
                 / time_pitch_.speedPercent()))
             : positionMs;
         if (playback_adapter_->seek(previewPosition) != AG_OK) {
+            releaseEditorPlaybackOutput();
             setError(tr("无法定位编辑预览"));
             return false;
         }
@@ -3044,7 +3051,7 @@ bool AudioEditorController::preparePlayback()
     parameters.formant_preservation = time_pitch_.formantPreservation();
     QString error;
     if (!playback_adapter_->prepare(std::move(snapshot), parameters, error)) {
-        playback_prepared_ = false;
+        releaseEditorPlaybackOutput();
         setError(error.isEmpty() ? tr("无法载入编辑预览") : error);
         return false;
     }
@@ -3062,8 +3069,7 @@ bool AudioEditorController::preparePlayback()
             / time_pitch_.speedPercent()))
         : position_ms_;
     if (previewPosition > 0 && playback_adapter_->seek(previewPosition) != AG_OK) {
-        playback_adapter_->release();
-        playback_prepared_ = false;
+        releaseEditorPlaybackOutput();
         setError(tr("无法定位编辑预览"));
         return false;
     }
@@ -3076,6 +3082,7 @@ void AudioEditorController::pollPlayback()
     if (!playback_adapter_ || !playback_prepared_) return;
     ag_playback_snapshot snapshot{};
     if (playback_adapter_->snapshot(snapshot) != AG_OK) {
+        releaseEditorPlaybackOutput();
         playing_ = false;
         playback_timer_.stop();
         setState(EditorSessionState::Error);
@@ -3103,6 +3110,7 @@ void AudioEditorController::pollPlayback()
                         / time_pitch_.speedPercent()))
                     : start;
                 if (playback_adapter_->seek(previewStart) != AG_OK) {
+                    releaseEditorPlaybackOutput();
                     playing_ = false;
                     playback_timer_.stop();
                     setState(EditorSessionState::Error);
@@ -3113,6 +3121,7 @@ void AudioEditorController::pollPlayback()
                 }
                 if (snapshot.state != AG_PLAYING
                     && playback_adapter_->play() != AG_OK) {
+                    releaseEditorPlaybackOutput();
                     playing_ = false;
                     playback_timer_.stop();
                     setState(EditorSessionState::Error);
@@ -3142,6 +3151,7 @@ void AudioEditorController::pollPlayback()
         }
     }
     if (snapshot.state == AG_ERROR) {
+        releaseEditorPlaybackOutput();
         playing_ = false;
         playback_timer_.stop();
         setState(EditorSessionState::Error);

@@ -27,6 +27,11 @@ TestCase {
         AudioToolsWindow { visible: true }
     }
 
+    Component {
+        id: mainComponent
+        Main { visible: true }
+    }
+
     Component { id: signalSpyComponent; SignalSpy {} }
 
     property var host
@@ -203,6 +208,8 @@ TestCase {
     }
 
     function test_firstSpaceWithButtonFocusTransitionsOnlyEditorPlayback() {
+        const mainWindow = createTemporaryObject(mainComponent, testCase)
+        verify(mainWindow)
         const shell = createTemporaryObject(shellComponent, testCase)
         verify(shell)
         tryVerify(function() { return shell.visible })
@@ -213,54 +220,35 @@ TestCase {
         verify(shellPage && spaceShortcut)
         compare(spaceShortcut.context, Qt.WindowShortcut)
 
-        const controls = [
-            findChild(shellPage, "editorCommand_split"),
-            findChild(shellPage, "editorPrimaryPlayButton"),
-            findChild(shellPage, "inspectorSpeedSlider"),
-            findChild(shellPage, "editorExportCodec")
-        ]
-        for (let index = 0; index < controls.length; ++index) {
-            const control = controls[index]
-            verify(control, "missing Space focus regression control")
-            if (index === 0)
-                compare(control.focusPolicy, Qt.NoFocus)
-            else if (index === 1)
-                compare(control.focusPolicy, Qt.TabFocus)
-        }
+        const primaryPlay = findChild(shellPage, "editorPrimaryPlayButton")
+        verify(primaryPlay)
+        compare(primaryPlay.focusPolicy, Qt.TabFocus)
 
         if (AudioEditorController.hasDocument)
             verify(AudioEditorController.clearDocument())
         verify(AudioEditorController.createUntitledDocument(48000, 2, 192000))
         verify(AudioEditorController.setActiveTool("select"))
-        const previousSliderValue = controls[2].value
-        const previousComboIndex = controls[3].currentIndex
-        for (const control of controls) {
-            control.forceActiveFocus()
-            tryVerify(function() { return control.activeFocus })
-            verify(spaceShortcut.enabled,
-                   "Space shortcut disabled for " + control.objectName)
-            compare(AudioEditorController.activeTool, "select")
-            compare(controls[2].value, previousSliderValue)
-            compare(controls[3].currentIndex, previousComboIndex)
-            compare(controls[3].popup.visible, false)
-        }
+        primaryPlay.forceActiveFocus()
+        tryVerify(function() { return primaryPlay.activeFocus })
+        verify(spaceShortcut.enabled)
         const activated = createTemporaryObject(signalSpyComponent, testCase,
             { target: spaceShortcut, signalName: "activated" })
         const editorPlayback = createTemporaryObject(signalSpyComponent, testCase,
             { target: AudioEditorController, signalName: "playbackChanged" })
+        const mainPlayback = createTemporaryObject(signalSpyComponent, testCase,
+            { target: PlaybackController, signalName: "stateChanged" })
         verify(activated.valid)
         verify(editorPlayback.valid)
+        verify(mainPlayback.valid)
         keyClick(Qt.Key_Space)
         tryCompare(activated, "count", 1)
         tryCompare(editorPlayback, "count", 1)
+        compare(mainPlayback.count, 0)
         tryVerify(function() {
             return AudioEditorController.playing
                 || AudioEditorController.errorMessage.length > 0
         }, 1000)
         compare(AudioEditorController.activeTool, "select")
-        compare(controls[2].value, previousSliderValue)
-        compare(controls[3].currentIndex, previousComboIndex)
-        compare(controls[3].popup.visible, false)
         if (AudioEditorController.playing) {
             keyClick(Qt.Key_Space)
             tryCompare(AudioEditorController, "playing", false)

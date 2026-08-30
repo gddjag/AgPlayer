@@ -340,6 +340,62 @@ private slots:
         QVERIFY(!editor.property("editorPlaybackOwnsPlayer").toBool());
     }
 
+    void failedPreviewPreparationReleasesPlaybackOwnership()
+    {
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("source.wav"));
+        QVERIFY(QFile::copy(fixture, source));
+
+        ag_player_config config{};
+        config.backend = AG_AUDIO_BACKEND_NULL;
+        ag_player* sharedPlayer = nullptr;
+        QCOMPARE(ag_player_create_with_config(&config, &sharedPlayer), AG_OK);
+        const auto destroyPlayer = qScopeGuard([&] {
+            ag_player_destroy(sharedPlayer);
+        });
+        PlaybackController mainPlayback(sharedPlayer);
+        AudioEditorController editor;
+        editor.setPlaybackController(&mainPlayback);
+        QVERIFY(openFileAndWait(editor, QUrl::fromLocalFile(source)));
+        editor.cancelAndWaitForBpmTaskForTesting();
+
+        editor.activate();
+        QVERIFY(editor.editorPlaybackOwnsPlayer());
+        QVERIFY(QFile::remove(source));
+
+        QVERIFY(editor.playPause());
+        QTRY_COMPARE_WITH_TIMEOUT(editor.state(), EditorSessionState::Error,
+                                  10'000);
+        QVERIFY(!editor.editorPlaybackOwnsPlayer());
+    }
+
+    void changingControllerWithSamePlayerReleasesPreviousOwnership()
+    {
+        ag_player_config config{};
+        config.backend = AG_AUDIO_BACKEND_NULL;
+        ag_player* sharedPlayer = nullptr;
+        QCOMPARE(ag_player_create_with_config(&config, &sharedPlayer), AG_OK);
+        const auto destroyPlayer = qScopeGuard([&] {
+            ag_player_destroy(sharedPlayer);
+        });
+        PlaybackController firstMainPlayback(sharedPlayer);
+        PlaybackController secondMainPlayback(sharedPlayer);
+        AudioEditorController editor;
+        editor.setPlaybackController(&firstMainPlayback);
+        editor.activate();
+        QVERIFY(editor.editorPlaybackOwnsPlayer());
+
+        editor.setPlaybackController(&secondMainPlayback);
+
+        QVERIFY(!editor.editorPlaybackOwnsPlayer());
+        editor.activate();
+        QVERIFY(editor.editorPlaybackOwnsPlayer());
+        editor.deactivate();
+    }
+
     void multiChannelDocumentReportsUnsupportedRealtimeCapabilities()
     {
         QTemporaryDir temporary;
