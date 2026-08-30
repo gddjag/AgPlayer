@@ -137,10 +137,86 @@ void write_tone_wave(const std::filesystem::path& path,
     assert(output);
 }
 
+void write_program_mixture_wave(const std::filesystem::path& path)
+{
+    constexpr std::uint32_t sample_rate = 48'000U;
+    constexpr std::uint16_t channels = 2U;
+    constexpr std::uint32_t segment_frames = sample_rate / 2U;
+    constexpr std::uint32_t frame_count = segment_frames * 5U;
+    constexpr std::uint16_t block_align = channels * 2U;
+    constexpr std::uint32_t data_size = frame_count * block_align;
+
+    std::ofstream output(path, std::ios::binary);
+    assert(output);
+    output.write("RIFF", 4);
+    write_u32(output, 36U + data_size);
+    output.write("WAVEfmt ", 8);
+    write_u32(output, 16U);
+    write_u16(output, 1U);
+    write_u16(output, channels);
+    write_u32(output, sample_rate);
+    write_u32(output, sample_rate * block_align);
+    write_u16(output, block_align);
+    write_u16(output, 16U);
+    output.write("data", 4);
+    write_u32(output, data_size);
+
+    for (std::uint32_t frame = 0U; frame < frame_count; ++frame) {
+        const std::uint32_t segment = frame / segment_frames;
+        const std::uint32_t local_frame = frame % segment_frames;
+        const double time = static_cast<double>(frame) / sample_rate;
+        float sample = 0.0F;
+        if (segment == 0U) {
+            sample = static_cast<float>(
+                0.75 * std::sin(2.0 * kPi * 100.0 * time));
+        } else if (segment == 1U) {
+            sample = static_cast<float>(
+                0.65 * std::sin(2.0 * kPi * 900.0 * time)
+                + 0.10 * std::sin(2.0 * kPi * 200.0 * time));
+        } else if (segment == 2U) {
+            const bool transient = local_frame % (sample_rate / 10U)
+                < sample_rate / 100U;
+            if (transient) {
+                sample = static_cast<float>(
+                    0.55 * std::sin(2.0 * kPi * 1'600.0 * time)
+                    + 0.65 * std::sin(2.0 * kPi * 8'000.0 * time));
+            }
+        } else if (segment == 3U) {
+            const double fade = 1.0
+                - static_cast<double>(local_frame) / segment_frames;
+            sample = static_cast<float>(fade * (
+                0.25 * std::sin(2.0 * kPi * 100.0 * time)
+                + 0.55 * std::sin(2.0 * kPi * 1'000.0 * time)
+                + 0.25 * std::sin(2.0 * kPi * 7'000.0 * time)));
+        } else if (local_frame < segment_frames / 2U) {
+            sample = std::clamp(static_cast<float>(
+                1.8 * std::sin(2.0 * kPi * 1'000.0 * time)), -1.0F, 1.0F);
+        }
+
+        const float channel_samples[] = {sample, sample * 0.8F};
+        for (const float channel_sample : channel_samples) {
+            const auto value = static_cast<std::int16_t>(std::lround(
+                std::clamp(channel_sample, -1.0F, 1.0F) * 32'767.0F));
+            write_u16(output, static_cast<std::uint16_t>(value));
+        }
+    }
+    output.flush();
+    assert(output);
+}
+
 float maximum(const std::vector<float>& values)
 {
     return values.empty() ? 0.0F
                           : *std::max_element(values.begin(), values.end());
+}
+
+float range_maximum(const std::vector<float>& values,
+                    const std::size_t begin,
+                    const std::size_t end)
+{
+    assert(begin < end && end <= values.size());
+    return *std::max_element(values.begin() + static_cast<std::ptrdiff_t>(begin),
+                             values.begin() + static_cast<std::ptrdiff_t>(end));
 }
 
 std::vector<float> tone(const std::uint32_t sample_rate,
@@ -376,6 +452,46 @@ void test_timeline_policy_uses_declared_timestamp_sources()
     assert(coarse.mapBlock(4'057, 2'048U, mapped) == AG_OK);
     assert(coarse.mapBlock(6'130, 2'048U, mapped) == AG_OK);
     assert(mapped.begin_frame == 6'105U);
+}
+
+void test_negative_preroll_tracks_signed_source_continuity()
+{
+    // Catches fully-negative blocks returning before source PTS state advances.
+    agplayer::detail::FrequencyTimelineBlock mapped;
+
+    agplayer::detail::FrequencyTimelineCursor continuous(1U, 12U);
+    assert(continuous.mapBlock(-12, 4U, mapped) == AG_OK);
+    assert(mapped.skip_frames == 4U && mapped.frame_count == 0U);
+    assert(continuous.mapBlock(-8, 5U, mapped) == AG_OK);
+    assert(mapped.skip_frames == 5U && mapped.frame_count == 0U);
+    assert(continuous.mapBlock(-3, 3U, mapped) == AG_OK);
+    assert(mapped.skip_frames == 3U && mapped.frame_count == 0U);
+    assert(continuous.mapBlock(0, 2U, mapped) == AG_OK);
+    assert(mapped.begin_frame == 0U && mapped.frame_count == 2U);
+
+    agplayer::detail::FrequencyTimelineCursor repeated(1U, 12U);
+    assert(repeated.mapBlock(-12, 4U, mapped) == AG_OK);
+    assert(repeated.mapBlock(-12, 4U, mapped) == AG_DECODE_ERROR);
+
+    agplayer::detail::FrequencyTimelineCursor overlapping(1U, 12U);
+    assert(overlapping.mapBlock(-12, 6U, mapped) == AG_OK);
+    assert(overlapping.mapBlock(-8, 4U, mapped) == AG_DECODE_ERROR);
+
+    agplayer::detail::FrequencyTimelineCursor crossing_zero(1U, 5U);
+    assert(crossing_zero.mapBlock(-5, 8U, mapped) == AG_OK);
+    assert(mapped.skip_frames == 5U);
+    assert(mapped.begin_frame == 0U && mapped.frame_count == 3U);
+    assert(crossing_zero.mapBlock(3, 2U, mapped) == AG_OK);
+    assert(mapped.begin_frame == 3U && mapped.frame_count == 2U);
+
+    agplayer::detail::FrequencyTimelineCursor at_padding_limit(1U, 12U);
+    assert(at_padding_limit.mapBlock(-12, 1U, mapped) == AG_OK);
+    agplayer::detail::FrequencyTimelineCursor past_padding_limit(1U, 12U);
+    assert(past_padding_limit.mapBlock(-13, 1U, mapped) == AG_DECODE_ERROR);
+
+    agplayer::detail::FrequencyTimelineCursor overflow(1U, 0U);
+    assert(overflow.mapBlock(std::numeric_limits<std::int64_t>::max(), 2U,
+                             mapped) == AG_DECODE_ERROR);
 }
 
 void test_all_layers_share_one_normalization_reference_and_gate()
@@ -623,6 +739,54 @@ void test_analyzer_is_one_pass_bounded_and_clears_cancelled_output(
     assert(state.progress.back() < 1.0F);
 }
 
+void test_public_analyzer_tracks_real_pcm_program_material(
+    const std::filesystem::path& source)
+{
+    // Catches tests bypassing decoder/downmix/LR4 with pre-separated helper data.
+    const std::filesystem::path path = source.parent_path()
+        / "frequency-program-mixture.wav";
+    write_program_mixture_wave(path);
+
+    agplayer::FrequencyColorWaveformData output;
+    assert(agplayer::FrequencyColorWaveformAnalyzer::analyze(
+               path.string(), 2'000U, nullptr, nullptr, nullptr,
+               output, nullptr) == AG_OK);
+    assert(output.timeline_frames == 120'000U);
+    assert(output.sample_rate == 48'000U);
+    for (const auto* layer : {&output.mix, &output.low, &output.mid,
+                              &output.high}) {
+        assert(layer->size() == 2'000U);
+        assert(std::all_of(layer->begin(), layer->end(), [](const float value) {
+            return std::isfinite(value) && value >= 0.0F && value <= 0.98F;
+        }));
+    }
+
+    const float bass_low = range_maximum(output.low, 40U, 360U);
+    assert(bass_low > range_maximum(output.mid, 40U, 360U));
+    assert(bass_low > range_maximum(output.high, 40U, 360U));
+
+    const float vocal_mid = range_maximum(output.mid, 440U, 760U);
+    assert(vocal_mid > range_maximum(output.low, 440U, 760U));
+    assert(vocal_mid > range_maximum(output.high, 440U, 760U));
+
+    assert(range_maximum(output.mid, 800U, 1'200U)
+           > range_maximum(output.low, 800U, 1'200U));
+    assert(range_maximum(output.high, 800U, 1'200U)
+           > range_maximum(output.low, 800U, 1'200U));
+
+    assert(range_maximum(output.mix, 1'200U, 1'300U)
+           > range_maximum(output.mix, 1'500U, 1'600U));
+    assert(std::abs(range_maximum(output.mix, 1'600U, 1'800U) - 0.98F)
+           < 0.000'001F);
+    for (std::size_t index = 1'870U; index < 2'000U; ++index) {
+        assert(output.mix[index] == 0.0F);
+        assert(output.low[index] == 0.0F);
+        assert(output.mid[index] == 0.0F);
+        assert(output.high[index] == 0.0F);
+    }
+    std::filesystem::remove(path);
+}
+
 void test_decoder_pcm_matrix_preserves_band_dominance(
     const std::filesystem::path& source)
 {
@@ -861,6 +1025,7 @@ int main(const int argc, char** argv)
     test_2001_frames_map_to_exactly_2000_buckets();
     test_overlapping_pts_and_nonfinite_samples_are_rejected();
     test_timeline_policy_uses_declared_timestamp_sources();
+    test_negative_preroll_tracks_signed_source_continuity();
     test_all_layers_share_one_normalization_reference_and_gate();
     test_peak_rms_weights_shared_percentile_and_exact_cap();
     test_exact_band_gains_and_smoothing_windows();
@@ -868,6 +1033,7 @@ int main(const int argc, char** argv)
     test_deterministic_program_material_profiles();
     test_symmetric_smoothing_preserves_a_constant_band_at_edges();
     test_analyzer_is_one_pass_bounded_and_clears_cancelled_output(argv[1]);
+    test_public_analyzer_tracks_real_pcm_program_material(argv[1]);
     test_low_sample_rates_use_safe_fallback(argv[1]);
     test_decoder_pcm_matrix_preserves_band_dominance(argv[1]);
     test_repository_lossless_lossy_vbr_formats_preserve_band_dominance(

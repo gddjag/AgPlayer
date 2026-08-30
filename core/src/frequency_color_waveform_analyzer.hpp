@@ -61,8 +61,8 @@ public:
 private:
     std::uint64_t timestamp_quantization_frames_ = 1U;
     std::uint64_t leading_padding_frames_ = 0U;
-    std::uint64_t expected_frame_ = 0U;
-    bool timeline_started_ = false;
+    std::int64_t previous_source_end_ = 0;
+    bool source_started_ = false;
     bool failed_ = false;
 };
 

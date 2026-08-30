@@ -143,46 +143,69 @@ ag_result FrequencyTimelineCursor::mapBlock(
     output = {};
     if (failed_) return AG_DECODE_ERROR;
 
-    std::uint64_t candidate = 0U;
-    if (timestamp_frame < 0) {
-        const std::uint64_t magnitude = timestamp_frame
+    if (frame_count
+        > static_cast<std::uint64_t>(
+            std::numeric_limits<std::int64_t>::max())) {
+        failed_ = true;
+        return AG_DECODE_ERROR;
+    }
+    std::int64_t source_begin = timestamp_frame;
+    if (source_started_) {
+        const std::uint64_t ordered_begin =
+            static_cast<std::uint64_t>(source_begin)
+            ^ (std::uint64_t{1U} << 63U);
+        const std::uint64_t ordered_previous =
+            static_cast<std::uint64_t>(previous_source_end_)
+            ^ (std::uint64_t{1U} << 63U);
+        const std::uint64_t difference = ordered_begin > ordered_previous
+            ? ordered_begin - ordered_previous
+            : ordered_previous - ordered_begin;
+        const bool positive_quantization = source_begin >= 0
+            && previous_source_end_ >= 0
+            && timestamp_quantization_frames_ > 1U
+            && difference < timestamp_quantization_frames_;
+        if (positive_quantization) {
+            source_begin = previous_source_end_;
+        } else if (source_begin < previous_source_end_) {
+            failed_ = true;
+            return AG_DECODE_ERROR;
+        }
+    }
+
+    const std::int64_t signed_frame_count =
+        static_cast<std::int64_t>(frame_count);
+    if (source_begin > std::numeric_limits<std::int64_t>::max()
+                           - signed_frame_count) {
+        failed_ = true;
+        return AG_DECODE_ERROR;
+    }
+    const std::int64_t source_end = source_begin + signed_frame_count;
+
+    if (source_begin < 0) {
+        const std::uint64_t magnitude = source_begin
             == std::numeric_limits<std::int64_t>::min()
             ? std::uint64_t{1U} << 63U
-            : static_cast<std::uint64_t>(-timestamp_frame);
-        if (timeline_started_ || magnitude > leading_padding_frames_) {
+            : static_cast<std::uint64_t>(-source_begin);
+        if (magnitude > leading_padding_frames_) {
             failed_ = true;
             return AG_DECODE_ERROR;
         }
         output.skip_frames = static_cast<std::size_t>(
             std::min<std::uint64_t>(magnitude, frame_count));
-        if (output.skip_frames == frame_count) return AG_OK;
-        candidate = 0U;
-    } else {
-        candidate = static_cast<std::uint64_t>(timestamp_frame);
     }
 
+    previous_source_end_ = source_end;
+    source_started_ = true;
     output.frame_count = frame_count - output.skip_frames;
-    if (timeline_started_ && timestamp_quantization_frames_ > 1U) {
-        const std::uint64_t difference = candidate > expected_frame_
-            ? candidate - expected_frame_ : expected_frame_ - candidate;
-        if (difference < timestamp_quantization_frames_) {
-            candidate = expected_frame_;
-        }
-    }
-    if (timeline_started_ && candidate < expected_frame_) {
+    if (output.frame_count == 0U) return AG_OK;
+    const std::int64_t output_begin = source_begin
+        + static_cast<std::int64_t>(output.skip_frames);
+    if (output_begin < 0) {
         failed_ = true;
         output = {};
         return AG_DECODE_ERROR;
     }
-    if (output.frame_count
-        > std::numeric_limits<std::uint64_t>::max() - candidate) {
-        failed_ = true;
-        output = {};
-        return AG_DECODE_ERROR;
-    }
-    output.begin_frame = candidate;
-    expected_frame_ = candidate + output.frame_count;
-    timeline_started_ = true;
+    output.begin_frame = static_cast<std::uint64_t>(output_begin);
     return AG_OK;
 }
 
