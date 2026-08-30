@@ -18,6 +18,11 @@ class EqualizerController final : public QAbstractListModel {
     Q_PROPERTY(double preampDb READ preampDb WRITE setPreampDb
                    NOTIFY preampDbChanged)
     Q_PROPERTY(double protectionDb READ protectionDb NOTIFY protectionDbChanged)
+    Q_PROPERTY(double gainRangeDb READ gainRangeDb WRITE setGainRangeDb
+                   NOTIFY gainRangeDbChanged)
+    Q_PROPERTY(QString precisionMode READ precisionMode WRITE setPrecisionMode
+                   NOTIFY precisionModeChanged)
+    Q_PROPERTY(double gainStepDb READ gainStepDb NOTIFY gainStepDbChanged)
     Q_PROPERTY(QString currentPresetId READ currentPresetId
                    NOTIFY currentPresetChanged)
     Q_PROPERTY(QStringList presetIds READ presetIds NOTIFY presetsChanged)
@@ -51,6 +56,11 @@ public:
     [[nodiscard]] double preampDb() const noexcept;
     void setPreampDb(double value);
     [[nodiscard]] double protectionDb() const noexcept;
+    [[nodiscard]] double gainRangeDb() const noexcept;
+    Q_INVOKABLE bool setGainRangeDb(double value);
+    [[nodiscard]] QString precisionMode() const;
+    Q_INVOKABLE bool setPrecisionMode(const QString& mode);
+    [[nodiscard]] double gainStepDb() const noexcept;
     [[nodiscard]] QString currentPresetId() const;
     [[nodiscard]] QStringList presetIds() const;
     [[nodiscard]] QStringList presetNames() const;
@@ -73,6 +83,9 @@ signals:
     void autoClipProtectionChanged();
     void preampDbChanged();
     void protectionDbChanged();
+    void gainRangeDbChanged();
+    void precisionModeChanged();
+    void gainStepDbChanged();
     void bandGainChanged(int index, double gainDb);
     void currentPresetChanged();
     void presetsChanged();
@@ -89,6 +102,7 @@ private:
     };
 
     static double normalizedGain(double value) noexcept;
+    [[nodiscard]] double quantizedGain(double value) const noexcept;
     [[nodiscard]] QList<Preset> builtInPresets() const;
     [[nodiscard]] std::optional<Preset> findPreset(const QString& id) const;
     void load();
@@ -102,6 +116,8 @@ private:
     bool autoClipProtection_ = true;
     double preampDb_ = 0.0;
     double protectionDb_ = 0.0;
+    double gainRangeDb_ = 12.0;
+    QString precisionMode_ = QStringLiteral("high");
     std::array<double, AG_EQUALIZER_BAND_COUNT> gains_{};
     QString currentPresetId_ = QStringLiteral("flat");
     QList<Preset> customPresets_;

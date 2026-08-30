@@ -13,12 +13,16 @@ namespace {
 
 constexpr std::array<double, AG_EQUALIZER_BAND_COUNT> kFrequencies{
     20.0, 31.5, 50.0, 80.0, 125.0, 200.0, 315.0, 500.0, 800.0,
+    1'250.0, 2'000.0, 3'150.0, 5'000.0, 8'000.0, 10'000.0,
+    12'500.0, 16'000.0, 20'000.0};
+constexpr std::array<double, 17> kSchemaTwoFrequencies{
+    20.0, 31.5, 50.0, 80.0, 125.0, 200.0, 315.0, 500.0, 800.0,
     1'250.0, 2'000.0, 3'150.0, 5'000.0, 8'000.0, 12'500.0,
     16'000.0, 20'000.0};
 constexpr std::array<double, 10> kLegacyFrequencies{
     31.25, 62.5, 125.0, 250.0, 500.0,
     1'000.0, 2'000.0, 4'000.0, 8'000.0, 16'000.0};
-constexpr int kSettingsSchemaVersion = 2;
+constexpr int kSettingsSchemaVersion = 3;
 
 QString frequencyLabel(const int row)
 {
@@ -51,17 +55,31 @@ double normalizedStoredGain(const double value)
                : 0.0;
 }
 
+std::array<double, AG_EQUALIZER_BAND_COUNT> insertTenKHzBand(
+    const std::array<double, kSchemaTwoFrequencies.size()>& oldGains)
+{
+    std::array<double, AG_EQUALIZER_BAND_COUNT> result{};
+    for (std::size_t index = 0; index < 14U; ++index) {
+        result[index] = oldGains[index];
+    }
+    result[14] = 0.0;
+    for (std::size_t index = 14U; index < oldGains.size(); ++index) {
+        result[index + 1U] = oldGains[index];
+    }
+    return result;
+}
+
 std::array<double, AG_EQUALIZER_BAND_COUNT> migrateLegacyGains(
     const QVariantList& values)
 {
-    std::array<double, AG_EQUALIZER_BAND_COUNT> result{};
+    std::array<double, kSchemaTwoFrequencies.size()> result{};
     std::array<double, kLegacyFrequencies.size()> legacy{};
     for (std::size_t index = 0; index < legacy.size(); ++index) {
         legacy[index] = normalizedStoredGain(
             values.at(static_cast<int>(index)).toDouble());
     }
-    for (std::size_t target = 0; target < kFrequencies.size(); ++target) {
-        const double frequency = kFrequencies[target];
+    for (std::size_t target = 0; target < kSchemaTwoFrequencies.size(); ++target) {
+        const double frequency = kSchemaTwoFrequencies[target];
         if (frequency <= kLegacyFrequencies.front()) {
             result[target] = legacy.front();
             continue;
@@ -81,7 +99,7 @@ std::array<double, AG_EQUALIZER_BAND_COUNT> migrateLegacyGains(
         result[target] = normalizedStoredGain(
             legacy[low] + fraction * (legacy[high] - legacy[low]));
     }
-    return result;
+    return insertTenKHzBand(result);
 }
 
 std::array<double, AG_EQUALIZER_BAND_COUNT> gainsFromVariant(
@@ -91,6 +109,14 @@ std::array<double, AG_EQUALIZER_BAND_COUNT> gainsFromVariant(
     const QVariantList values = value.toList();
     if (values.size() == static_cast<int>(kLegacyFrequencies.size())) {
         return migrateLegacyGains(values);
+    }
+    if (values.size() == static_cast<int>(kSchemaTwoFrequencies.size())) {
+        std::array<double, kSchemaTwoFrequencies.size()> oldGains{};
+        for (int index = 0; index < values.size(); ++index) {
+            oldGains[static_cast<std::size_t>(index)] =
+                normalizedStoredGain(values.at(index).toDouble());
+        }
+        return insertTenKHzBand(oldGains);
     }
     for (int index = 0;
          index < values.size() && index < AG_EQUALIZER_BAND_COUNT; ++index) {
@@ -130,11 +156,11 @@ QVariant EqualizerController::data(const QModelIndex& index, const int role) con
     case GainRole:
         return gains_[row];
     case MinimumRole:
-        return -12.0;
+        return -gainRangeDb_;
     case MaximumRole:
-        return 12.0;
+        return gainRangeDb_;
     case StepRole:
-        return 0.1;
+        return gainStepDb();
     default:
         return {};
     }
@@ -193,10 +219,11 @@ double EqualizerController::preampDb() const noexcept { return preampDb_; }
 
 void EqualizerController::setPreampDb(const double value)
 {
-    if (!std::isfinite(value) || value < -12.0 || value > 12.0) {
+    if (!std::isfinite(value) || value < -gainRangeDb_
+        || value > gainRangeDb_) {
         return;
     }
-    const double normalized = normalizedGain(value);
+    const double normalized = quantizedGain(value);
     if (qFuzzyCompare(preampDb_ + 13.0, normalized + 13.0)) {
         return;
     }
@@ -209,6 +236,93 @@ void EqualizerController::setPreampDb(const double value)
 double EqualizerController::protectionDb() const noexcept
 {
     return protectionDb_;
+}
+
+double EqualizerController::gainRangeDb() const noexcept
+{
+    return gainRangeDb_;
+}
+
+bool EqualizerController::setGainRangeDb(const double value)
+{
+    if (value != 6.0 && value != 12.0 && value != 18.0) {
+        return false;
+    }
+    if (qFuzzyCompare(gainRangeDb_ + 1.0, value + 1.0)) {
+        return true;
+    }
+
+    gainRangeDb_ = value;
+    bool gainsChanged = false;
+    for (int index = 0; index < AG_EQUALIZER_BAND_COUNT; ++index) {
+        double& gain = gains_[static_cast<std::size_t>(index)];
+        const double clamped = std::clamp(gain, -gainRangeDb_, gainRangeDb_);
+        if (!qFuzzyCompare(gain + 19.0, clamped + 19.0)) {
+            gain = clamped;
+            gainsChanged = true;
+            emit bandGainChanged(index, gain);
+        }
+    }
+    const double clampedPreamp =
+        std::clamp(preampDb_, -gainRangeDb_, gainRangeDb_);
+    const bool preampChanged =
+        !qFuzzyCompare(preampDb_ + 19.0, clampedPreamp + 19.0);
+    if (preampChanged) {
+        preampDb_ = clampedPreamp;
+        emit preampDbChanged();
+    }
+
+    emit gainRangeDbChanged();
+    if (gainsChanged) {
+        emit dataChanged(this->index(0, 0),
+                         this->index(AG_EQUALIZER_BAND_COUNT - 1, 0),
+                         {GainRole, MinimumRole, MaximumRole});
+    } else {
+        emit dataChanged(this->index(0, 0),
+                         this->index(AG_EQUALIZER_BAND_COUNT - 1, 0),
+                         {MinimumRole, MaximumRole});
+    }
+    if (gainsChanged || preampChanged) {
+        setCurrentPresetId(QStringLiteral("custom"));
+        return submit();
+    }
+    persist();
+    return true;
+}
+
+QString EqualizerController::precisionMode() const
+{
+    return precisionMode_;
+}
+
+bool EqualizerController::setPrecisionMode(const QString& mode)
+{
+    if (mode != QStringLiteral("high") && mode != QStringLiteral("medium")
+        && mode != QStringLiteral("low")) {
+        return false;
+    }
+    if (precisionMode_ == mode) {
+        return true;
+    }
+    precisionMode_ = mode;
+    emit precisionModeChanged();
+    emit gainStepDbChanged();
+    emit dataChanged(this->index(0, 0),
+                     this->index(AG_EQUALIZER_BAND_COUNT - 1, 0),
+                     {StepRole});
+    persist();
+    return true;
+}
+
+double EqualizerController::gainStepDb() const noexcept
+{
+    if (precisionMode_ == QStringLiteral("medium")) {
+        return 0.5;
+    }
+    if (precisionMode_ == QStringLiteral("low")) {
+        return 1.0;
+    }
+    return 0.1;
 }
 
 QString EqualizerController::currentPresetId() const
@@ -250,10 +364,11 @@ double EqualizerController::bandGain(const int index) const noexcept
 bool EqualizerController::setBandGain(const int index, const double value)
 {
     if (index < 0 || index >= AG_EQUALIZER_BAND_COUNT
-        || !std::isfinite(value) || value < -12.0 || value > 12.0) {
+        || !std::isfinite(value) || value < -gainRangeDb_
+        || value > gainRangeDb_) {
         return false;
     }
-    const double normalized = normalizedGain(value);
+    const double normalized = quantizedGain(value);
     double& gain = gains_[static_cast<std::size_t>(index)];
     if (qFuzzyCompare(gain + 13.0, normalized + 13.0)) {
         return true;
@@ -413,6 +528,11 @@ double EqualizerController::normalizedGain(const double value) noexcept
     return qRound(value * 10.0) / 10.0;
 }
 
+double EqualizerController::quantizedGain(const double value) const noexcept
+{
+    return normalizedGain(qRound(value / gainStepDb()) * gainStepDb());
+}
+
 QList<EqualizerController::Preset> EqualizerController::builtInPresets() const
 {
     const auto preset = [](QString id, QString name, double preamp,
@@ -421,28 +541,28 @@ QList<EqualizerController::Preset> EqualizerController::builtInPresets() const
     };
     return {
         preset(QStringLiteral("flat"), tr("Flat"), 0.0,
-               {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}),
+               {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}),
         preset(QStringLiteral("bass"), tr("Bass"), -6.9,
                {5, 4.5, 3.5, 2.5, 1.5, 0.5, 0, 0, -0.5, -0.5,
-                0, 0, 0, 0, 0, 0, 0}),
+                0, 0, 0, 0, 0, 0, 0, 0}),
         preset(QStringLiteral("classical"), tr("Classical"), -4.5,
                {2.5, 2, 1.5, 0.5, -0.5, -1, -1, -0.5, 0.5, 1.5,
-                2, 2.5, 3, 2.5, 1.5, 0.5, 0}),
+                2, 2.5, 3, 2.5, 0, 1.5, 0.5, 0}),
         preset(QStringLiteral("pop"), tr("Pop"), -3.8,
                {-0.5, 0, 1, 2, 2.5, 1.5, 0, -1, -1, 0,
-                1, 2, 2.5, 2, 1, 0, -0.5}),
+                1, 2, 2.5, 2, 0, 1, 0, -0.5}),
         preset(QStringLiteral("rock"), tr("Rock"), -5.4,
                {4, 3.5, 2, 0, -1.5, -2, -1, 0.5, 2, 3,
-                3.5, 3, 2.5, 2, 1.5, 1, 0}),
+                3.5, 3, 2.5, 2, 0, 1.5, 1, 0}),
         preset(QStringLiteral("vocal"), tr("Vocal"), -4.9,
                {-3, -2.5, -2, -1, -0.5, 0.5, 1.5, 2.5, 3, 3,
-                2.5, 2, 1, -0.5, -1.5, -2, -2}),
+                2.5, 2, 1, -0.5, 0, -1.5, -2, -2}),
         preset(QStringLiteral("edm"), tr("EDM"), -6.6,
                {4.5, 4, 3.5, 2, 0.5, -1, -1.5, -1, 0, 1.5,
-                3, 4, 4.5, 4, 3, 2, 1}),
+                3, 4, 4.5, 4, 0, 3, 2, 1}),
         preset(QStringLiteral("jazz"), tr("Jazz"), -4.7,
                {2.5, 2, 1.5, 0.5, -0.5, -1, -0.5, 0.5, 1.5, 2.5,
-                3, 2.5, 2, 1.5, 1, 0.5, 0})};
+                3, 2.5, 2, 1.5, 0, 1, 0.5, 0})};
 }
 
 std::optional<EqualizerController::Preset> EqualizerController::findPreset(
@@ -472,9 +592,23 @@ void EqualizerController::load()
     bypassed_ = settings.value(QStringLiteral("bypassed"), false).toBool();
     autoClipProtection_ =
         settings.value(QStringLiteral("autoClipProtection"), true).toBool();
-    preampDb_ = normalizedGain(
+    preampDb_ = normalizedStoredGain(
         settings.value(QStringLiteral("preampDb"), 0.0).toDouble());
     gains_ = gainsFromVariant(settings.value(QStringLiteral("bandGains")));
+    const double storedRange =
+        settings.value(QStringLiteral("gainRangeDb"), 12.0).toDouble();
+    gainRangeDb_ = (storedRange == 6.0 || storedRange == 12.0
+                    || storedRange == 18.0)
+                       ? storedRange
+                       : 12.0;
+    const QString storedPrecision =
+        settings.value(QStringLiteral("precisionMode"), QStringLiteral("high"))
+            .toString();
+    precisionMode_ = (storedPrecision == QStringLiteral("high")
+                      || storedPrecision == QStringLiteral("medium")
+                      || storedPrecision == QStringLiteral("low"))
+                         ? storedPrecision
+                         : QStringLiteral("high");
     currentPresetId_ =
         settings.value(QStringLiteral("currentPresetId"),
                        QStringLiteral("flat")).toString();
@@ -528,6 +662,8 @@ void EqualizerController::persist() const
                       autoClipProtection_);
     settings.setValue(QStringLiteral("preampDb"), preampDb_);
     settings.setValue(QStringLiteral("bandGains"), gainsToVariant(gains_));
+    settings.setValue(QStringLiteral("gainRangeDb"), gainRangeDb_);
+    settings.setValue(QStringLiteral("precisionMode"), precisionMode_);
     settings.setValue(QStringLiteral("currentPresetId"), currentPresetId_);
     settings.setValue(QStringLiteral("schemaVersion"), kSettingsSchemaVersion);
     settings.setValue(QStringLiteral("bandCount"), AG_EQUALIZER_BAND_COUNT);
