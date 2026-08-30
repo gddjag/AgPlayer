@@ -85,7 +85,15 @@ void test_supported_sample_rates_and_boundaries()
         assert(program->sample_rate == sample_rate);
     }
 
+    agplayer::GraphicEqSettings preamp_boundary;
+    preamp_boundary.preamp_db = -18.0;
+    assert(agplayer::prepare_graphic_eq(preamp_boundary, 48'000, 1).has_value());
+    preamp_boundary.preamp_db = 18.0;
+    assert(agplayer::prepare_graphic_eq(preamp_boundary, 48'000, 1).has_value());
+
     agplayer::GraphicEqSettings invalid;
+    invalid.preamp_db = -18.1;
+    assert(!agplayer::prepare_graphic_eq(invalid, 48'000, 1).has_value());
     invalid.preamp_db = 18.1;
     assert(!agplayer::prepare_graphic_eq(invalid, 48'000, 1).has_value());
 
