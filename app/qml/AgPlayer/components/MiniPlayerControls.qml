@@ -242,7 +242,9 @@ Rectangle {
                                ? SettingsController.waveformSolidBaseColor
                                : (SettingsController.waveformMode === 2
                                   ? SettingsController.spectrumSolidColor
-                                  : SettingsController.waveformRgbBaseColor)
+                                  : SettingsController.waveformMode === 3
+                                    ? Theme.textSecondary
+                                    : SettingsController.waveformRgbBaseColor)
                     progressColor: SettingsController.waveformSolidProgressColor
                     gradientStartColor: SettingsController.waveformMode === 2
                                         ? (SettingsController.spectrumColorMode === 0
@@ -262,6 +264,7 @@ Rectangle {
                     frequencyLowColor: SettingsController.waveformFrequencyLowColor
                     frequencyMidColor: SettingsController.waveformFrequencyMidColor
                     frequencyHighColor: SettingsController.waveformFrequencyHighColor
+                    frequencyStrength: SettingsController.waveformFrequencyStrength
                     rgbProgress: SettingsController.waveformMode === 1
                                  && SettingsController.waveformRgbProgress
                     amplitudeScale: SettingsController.waveformMode === 2
@@ -294,6 +297,7 @@ Rectangle {
                         frequencyLowColor: waveform.frequencyLowColor
                         frequencyMidColor: waveform.frequencyMidColor
                         frequencyHighColor: waveform.frequencyHighColor
+                        frequencyStrength: waveform.frequencyStrength
                         rgbProgress: waveform.rgbProgress
                         amplitudeScale: waveform.amplitudeScale
                         density: waveform.density

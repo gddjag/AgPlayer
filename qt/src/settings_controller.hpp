@@ -86,6 +86,9 @@ class SettingsController final : public QObject {
     Q_PROPERTY(QString waveformFrequencyHighColor READ waveformFrequencyHighColor
                    WRITE setWaveformFrequencyHighColor
                    NOTIFY waveformFrequencyHighColorChanged)
+    Q_PROPERTY(double waveformFrequencyStrength READ waveformFrequencyStrength
+                   WRITE setWaveformFrequencyStrength
+                   NOTIFY waveformFrequencyStrengthChanged)
     Q_PROPERTY(bool waveformRgbProgress READ waveformRgbProgress
                    WRITE setWaveformRgbProgress NOTIFY waveformRgbProgressChanged)
     Q_PROPERTY(bool waveformHoverTimePreview READ waveformHoverTimePreview
@@ -218,6 +221,7 @@ public:
     QString waveformFrequencyLowColor() const;
     QString waveformFrequencyMidColor() const;
     QString waveformFrequencyHighColor() const;
+    double waveformFrequencyStrength() const noexcept;
     bool waveformRgbProgress() const noexcept;
     bool waveformHoverTimePreview() const noexcept;
     bool waveformPlaybackGuide() const noexcept;
@@ -306,6 +310,7 @@ public:
     void setWaveformFrequencyLowColor(const QString& value);
     void setWaveformFrequencyMidColor(const QString& value);
     void setWaveformFrequencyHighColor(const QString& value);
+    void setWaveformFrequencyStrength(double value);
     void setWaveformRgbProgress(bool value);
     void setWaveformHoverTimePreview(bool value);
     void setWaveformPlaybackGuide(bool value);
@@ -405,6 +410,7 @@ signals:
     void waveformFrequencyLowColorChanged();
     void waveformFrequencyMidColorChanged();
     void waveformFrequencyHighColorChanged();
+    void waveformFrequencyStrengthChanged();
     void waveformRgbProgressChanged();
     void waveformHoverTimePreviewChanged();
     void waveformPlaybackGuideChanged();
@@ -511,9 +517,10 @@ private:
     QString waveformRgbStartColor_ = QStringLiteral("#00d4ff");
     QString waveformRgbMiddleColor_ = QStringLiteral("#7b2ff7");
     QString waveformRgbEndColor_ = QStringLiteral("#e62e9b");
-    QString waveformFrequencyLowColor_ = QStringLiteral("#ff647c");
-    QString waveformFrequencyMidColor_ = QStringLiteral("#3ed6ae");
-    QString waveformFrequencyHighColor_ = QStringLiteral("#8a7cff");
+    QString waveformFrequencyLowColor_ = QStringLiteral("#c45100");
+    QString waveformFrequencyMidColor_ = QStringLiteral("#b04bcd");
+    QString waveformFrequencyHighColor_ = QStringLiteral("#0a819a");
+    double waveformFrequencyStrength_ = 0.85;
     bool waveformRgbProgress_ = false;
     bool waveformHoverTimePreview_ = true;
     bool waveformPlaybackGuide_ = false;

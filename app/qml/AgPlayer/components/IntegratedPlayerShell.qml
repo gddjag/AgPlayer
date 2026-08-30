@@ -528,7 +528,9 @@ Item {
                            ? SettingsController.spectrumSolidColor
                            : SettingsController.waveformMode === 0
                              ? SettingsController.waveformSolidBaseColor
-                             : SettingsController.waveformRgbBaseColor
+                             : SettingsController.waveformMode === 3
+                               ? Theme.textSecondary
+                               : SettingsController.waveformRgbBaseColor
                 progressColor: SettingsController.waveformSolidProgressColor
                 gradientStartColor: SettingsController.waveformMode === 2
                                     ? (SettingsController.spectrumColorMode === 0
@@ -548,6 +550,7 @@ Item {
                 frequencyLowColor: SettingsController.waveformFrequencyLowColor
                 frequencyMidColor: SettingsController.waveformFrequencyMidColor
                 frequencyHighColor: SettingsController.waveformFrequencyHighColor
+                frequencyStrength: SettingsController.waveformFrequencyStrength
                 rgbProgress: SettingsController.waveformMode === 1
                              && SettingsController.waveformRgbProgress
                 amplitudeScale: SettingsController.waveformHeight

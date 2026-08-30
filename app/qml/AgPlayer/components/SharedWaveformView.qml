@@ -45,9 +45,11 @@ Item {
         // colours always carry frequency meaning regardless of the normal
         // player waveform preference.
         visualMode: 3
+        baseColor: Theme.textSecondary
         frequencyLowColor: SettingsController.waveformFrequencyLowColor
         frequencyMidColor: SettingsController.waveformFrequencyMidColor
         frequencyHighColor: SettingsController.waveformFrequencyHighColor
+        frequencyStrength: SettingsController.waveformFrequencyStrength
         amplitudeScale: SettingsController.waveformHeight
         density: SettingsController.waveformDensity
         lineWidth: SettingsController.waveformThickness

@@ -906,6 +906,12 @@ Item {
         id: thumb
         property int mode: 0
         property bool selected: false
+        readonly property color frequencyLowColor:
+            SettingsController.waveformFrequencyLowColor
+        readonly property color frequencyMidColor:
+            SettingsController.waveformFrequencyMidColor
+        readonly property color frequencyHighColor:
+            SettingsController.waveformFrequencyHighColor
         property string modeLabel: mode === 0 ? qsTr("纯色波形")
                                    : mode === 3 ? qsTr("频彩波形")
                                    : mode === 1 ? qsTr("RGB波形")
@@ -950,12 +956,25 @@ Item {
                             var low = 0.28 + 0.72 * Math.abs(Math.sin(ft * 9.0))
                             var mid = 0.22 + 0.78 * Math.abs(Math.sin(ft * 17.0 + 1.1))
                             var high = 0.16 + 0.84 * Math.abs(Math.sin(ft * 31.0 + 2.3))
-                            ctx.strokeStyle = low >= mid && low >= high
-                                    ? SettingsController.waveformFrequencyLowColor
-                                    : mid >= high
-                                      ? SettingsController.waveformFrequencyMidColor
-                                      : SettingsController.waveformFrequencyHighColor
-                            var frequencyAmp = (0.18 + Math.max(low, mid, high) * 0.72)
+                            var total = low + mid + high
+                            var strength = SettingsController.waveformFrequencyStrength
+                            var mixedRed = (low * thumb.frequencyLowColor.r
+                                            + mid * thumb.frequencyMidColor.r
+                                            + high * thumb.frequencyHighColor.r) / total
+                            var mixedGreen = (low * thumb.frequencyLowColor.g
+                                              + mid * thumb.frequencyMidColor.g
+                                              + high * thumb.frequencyHighColor.g) / total
+                            var mixedBlue = (low * thumb.frequencyLowColor.b
+                                             + mid * thumb.frequencyMidColor.b
+                                             + high * thumb.frequencyHighColor.b) / total
+                            ctx.strokeStyle = Qt.rgba(
+                                Theme.textSecondary.r * (1 - strength) + mixedRed * strength,
+                                Theme.textSecondary.g * (1 - strength) + mixedGreen * strength,
+                                Theme.textSecondary.b * (1 - strength) + mixedBlue * strength,
+                                1)
+                            var mix = 0.18 + 0.82 * Math.abs(
+                                Math.sin(ft * 13.0) * Math.cos(ft * 4.0 + 0.4))
+                            var frequencyAmp = (0.18 + mix * 0.72)
                                     * cy * SettingsController.waveformHeight
                             ctx.beginPath()
                             ctx.moveTo(fx, cy - frequencyAmp)
@@ -1065,6 +1084,10 @@ Item {
             function onWaveformRgbStartColorChanged() { waveformPreviewCanvas.requestPaint() }
             function onWaveformRgbMiddleColorChanged() { waveformPreviewCanvas.requestPaint() }
             function onWaveformRgbEndColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onWaveformFrequencyLowColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onWaveformFrequencyMidColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onWaveformFrequencyHighColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onWaveformFrequencyStrengthChanged() { waveformPreviewCanvas.requestPaint() }
             function onSpectrumColorModeChanged() { waveformPreviewCanvas.requestPaint() }
             function onSpectrumSolidColorChanged() { waveformPreviewCanvas.requestPaint() }
             function onSpectrumRgbStartColorChanged() { waveformPreviewCanvas.requestPaint() }
@@ -1743,6 +1766,22 @@ Item {
                         ColorField { objectName: "waveformFrequencyLowColorField"; visible: SettingsController.waveformMode === 3; colorValue: SettingsController.waveformFrequencyLowColor; targetProperty: "waveformFrequencyLowColor" }
                         ColorField { objectName: "waveformFrequencyMidColorField"; visible: SettingsController.waveformMode === 3; colorValue: SettingsController.waveformFrequencyMidColor; targetProperty: "waveformFrequencyMidColor" }
                         ColorField { objectName: "waveformFrequencyHighColorField"; visible: SettingsController.waveformMode === 3; colorValue: SettingsController.waveformFrequencyHighColor; targetProperty: "waveformFrequencyHighColor" }
+                    }
+                }
+
+                SettingRow {
+                    visible: SettingsController.waveformMode === 3
+                    label: qsTr("频彩强度")
+                    SettingStepper {
+                        objectName: "waveformFrequencyStrengthControl"
+                        anchors.verticalCenter: parent.verticalCenter
+                        value: SettingsController.waveformFrequencyStrength
+                        minimumValue: 0.0
+                        maximumValue: 1.0
+                        stepSize: 0.05
+                        decimals: 2
+                        onValueEdited: nextValue =>
+                            SettingsController.waveformFrequencyStrength = nextValue
                     }
                 }
 

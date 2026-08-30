@@ -104,6 +104,36 @@ void test_average_absolute_and_rms_aggregation()
     assert(std::abs(peaks[1] - std::sqrt(0.5F)) < 0.000'001F);
 }
 
+void test_frequency_layers_preserve_cross_band_energy()
+{
+    constexpr std::size_t frames = 4'800U;
+    constexpr float sample_rate = 48'000.0F;
+    constexpr double pi = 3.14159265358979323846;
+    std::vector<float> samples(frames);
+    for (std::size_t frame = 0U; frame < frames; ++frame) {
+        samples[frame] = static_cast<float>(
+            std::sin(2.0 * pi * 100.0 * static_cast<double>(frame)
+                     / sample_rate));
+    }
+
+    agplayer::WaveformBucketizer bucketizer(
+        frames, 1U, 1U, sample_rate, agplayer::WaveformAggregation::Rms);
+    assert(bucketizer.add(samples, frames) == AG_OK);
+    std::vector<float> peaks;
+    std::vector<float> bass;
+    std::vector<float> mid;
+    std::vector<float> high;
+    assert(bucketizer.finish(peaks, bass, mid, high) == AG_OK);
+
+    assert(peaks.size() == 1U);
+    assert(bass.size() == 1U);
+    assert(mid.size() == 1U);
+    assert(high.size() == 1U);
+    assert(bass[0] > 0.8F);
+    assert(mid[0] < bass[0] * 0.35F);
+    assert(high[0] < bass[0] * 0.1F);
+}
+
 struct ProgressState final {
     std::vector<float> values;
     ag_cancel_token* token = nullptr;
@@ -132,6 +162,7 @@ int main(const int argc, char** argv)
     test_actual_frame_bucketing_and_channel_combination();
     test_non_finite_pcm_is_rejected();
     test_average_absolute_and_rms_aggregation();
+    test_frequency_layers_preserve_cross_band_energy();
     const std::string source_path = argv[1];
 
     ag_waveform* waveform = reinterpret_cast<ag_waveform*>(

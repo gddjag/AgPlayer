@@ -156,6 +156,34 @@ void normalize_layer(std::vector<float>& layer) noexcept
     }
 }
 
+void normalize_frequency_layers(std::vector<float>& bass,
+                                std::vector<float>& mid,
+                                std::vector<float>& high) noexcept
+{
+    float maximum = 0.0F;
+    const auto include_maximum = [&maximum](const std::vector<float>& layer) {
+        for (const float value : layer) {
+            if (std::isfinite(value)) {
+                maximum = std::max(maximum, value);
+            }
+        }
+    };
+    include_maximum(bass);
+    include_maximum(mid);
+    include_maximum(high);
+
+    const auto normalize = [maximum](std::vector<float>& layer) {
+        for (float& value : layer) {
+            value = maximum > 0.0F && std::isfinite(value)
+                ? std::clamp(value / maximum, 0.0F, 1.0F)
+                : 0.0F;
+        }
+    };
+    normalize(bass);
+    normalize(mid);
+    normalize(high);
+}
+
 void finalize_aggregation(std::vector<float>& layer,
                           const std::vector<std::size_t>& counts,
                           const WaveformAggregation aggregation) noexcept
@@ -196,9 +224,7 @@ ag_result WaveformBucketizer::finish(std::vector<float>& peaks,
     finalize_aggregation(mid_buckets_, bucket_sample_counts_, aggregation_);
     finalize_aggregation(high_buckets_, bucket_sample_counts_, aggregation_);
     normalize_layer(buckets_);
-    normalize_layer(bass_buckets_);
-    normalize_layer(mid_buckets_);
-    normalize_layer(high_buckets_);
+    normalize_frequency_layers(bass_buckets_, mid_buckets_, high_buckets_);
 
     peaks = std::move(buckets_);
     bass = std::move(bass_buckets_);

@@ -4785,6 +4785,8 @@ TestCase {
                     page, "waveformFrequencyMidColorField")
         var frequencyHighField = findChild(
                     page, "waveformFrequencyHighColorField")
+        var frequencyStrengthControl = findChild(
+                    page, "waveformFrequencyStrengthControl")
         var listThumbnailSwitch = findChild(
                     page, "listWaveformThumbnailEnabledControl")
         var listThumbnailMode = findChild(
@@ -4798,6 +4800,7 @@ TestCase {
         verify(frequencyLowField)
         verify(frequencyMidField)
         verify(frequencyHighField)
+        verify(frequencyStrengthControl)
         verify(listThumbnailSwitch)
         verify(listThumbnailMode)
 
@@ -4822,10 +4825,13 @@ TestCase {
         SettingsController.waveformFrequencyLowColor = "#112233"
         SettingsController.waveformFrequencyMidColor = "#445566"
         SettingsController.waveformFrequencyHighColor = "#778899"
+        SettingsController.waveformFrequencyStrength = 0.4
+        tryCompare(frequencyStrengthControl, "value", 0.4)
         frequencyResetButton.clicked()
-        compare(SettingsController.waveformFrequencyLowColor, "#ff647c")
-        compare(SettingsController.waveformFrequencyMidColor, "#3ed6ae")
-        compare(SettingsController.waveformFrequencyHighColor, "#8a7cff")
+        compare(SettingsController.waveformFrequencyLowColor, "#c45100")
+        compare(SettingsController.waveformFrequencyMidColor, "#b04bcd")
+        compare(SettingsController.waveformFrequencyHighColor, "#0a819a")
+        compare(SettingsController.waveformFrequencyStrength, 0.4)
         SettingsController.waveformMode = previousWaveformMode
         SettingsController.waveformThickness = 2.2
         SettingsController.waveformPeakAlgorithm = 1
@@ -4846,6 +4852,7 @@ TestCase {
         tryCompare(SettingsController, "waveformDensity", 2.0)
         tryCompare(SettingsController, "waveformThickness", 1.0)
         tryCompare(SettingsController, "waveformPeakAlgorithm", 0)
+        tryCompare(SettingsController, "waveformFrequencyStrength", 0.85)
         tryCompare(SettingsController, "listWaveformThumbnailEnabled", true)
         tryCompare(SettingsController, "listWaveformThumbnailMode", "Color36")
         page.close()

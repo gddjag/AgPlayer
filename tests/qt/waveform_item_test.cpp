@@ -51,7 +51,7 @@ private slots:
     void waveformStrokesStayInsideContainerEdges();
     void onePixelWaveformLeavesTheCanvasEdgeClear();
     void visualModesUseConfiguredProgressAndBaseColors();
-    void frequencyColorModeOverlaysMixAndThreeBandsOnOneCenterAxis();
+    void frequencyColorModeUsesOneMixEnvelopeAndWeightedBandColor();
     void spectrumUsesBottomBaselineAndCenterEnvelope();
     void spectrumUpsamplesSparseInputToDenseBars();
     void spectrumContractUsesFixedBarsWithPeakCaps();
@@ -238,7 +238,7 @@ void WaveformItemTest::visualModesUseConfiguredProgressAndBaseColors()
     delete node;
 }
 
-void WaveformItemTest::frequencyColorModeOverlaysMixAndThreeBandsOnOneCenterAxis()
+void WaveformItemTest::frequencyColorModeUsesOneMixEnvelopeAndWeightedBandColor()
 {
     TestableWaveformItem item;
     item.setWidth(4);
@@ -248,12 +248,14 @@ void WaveformItemTest::frequencyColorModeOverlaysMixAndThreeBandsOnOneCenterAxis
     item.setDensity(2.0);
     item.setLineWidth(1.0);
     item.setVisualMode(3);
+    item.setBaseColor(QColor(QStringLiteral("#000000")));
     QVERIFY(item.setProperty("frequencyLowColor",
-                             QColor(QStringLiteral("#ff647c"))));
+                             QColor(QStringLiteral("#ff0000"))));
     QVERIFY(item.setProperty("frequencyMidColor",
-                             QColor(QStringLiteral("#3ed6ae"))));
+                             QColor(QStringLiteral("#00ff00"))));
     QVERIFY(item.setProperty("frequencyHighColor",
-                             QColor(QStringLiteral("#8a7cff"))));
+                             QColor(QStringLiteral("#0000ff"))));
+    QVERIFY(item.setProperty("frequencyStrength", 1.0));
     item.setLayers(makeLayers(
         peaks({1.0, 1.0, 1.0, 1.0}),
         peaks({1.0, 0.0, 0.0, 1.0}),
@@ -263,20 +265,15 @@ void WaveformItemTest::frequencyColorModeOverlaysMixAndThreeBandsOnOneCenterAxis
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
     const auto* data = vertices(node);
-    const int peaksPerLayer = renderedPeakCount(node, item, 4);
-    QCOMPARE(peaksPerLayer, 4);
-    const int verticesPerLayer = peaksPerLayer * 2;
+    QCOMPARE(renderedPeakCount(node, item), 4);
+    compareColor(data[0], 0xFF, 0x00, 0x00, 0xFF);
+    compareColor(data[2], 0x00, 0xFF, 0x00, 0xFF);
+    compareColor(data[4], 0x00, 0x00, 0xFF, 0xFF);
+    compareColor(data[6], 0x55, 0x55, 0x55, 0xFF);
 
-    // Mix, low, mid and high share the same timeline and mirrored centre axis.
-    for (int layer = 1; layer < 4; ++layer) {
-        QCOMPARE(data[layer * verticesPerLayer].x, data[0].x);
-        QCOMPARE(data[layer * verticesPerLayer].y
-                 + data[layer * verticesPerLayer + 1].y,
-                 item.height());
-    }
-    compareColor(data[verticesPerLayer], 0xFF, 0x64, 0x7C, 0x9A);
-    compareColor(data[verticesPerLayer * 2 + 2], 0x3E, 0xD6, 0xAE, 0x9A);
-    compareColor(data[verticesPerLayer * 3 + 4], 0x8A, 0x7C, 0xFF, 0x9A);
+    QVERIFY(item.setProperty("frequencyStrength", 0.5));
+    node = item.updatePaintNode(node, nullptr);
+    compareColor(vertices(node)[0], 0x80, 0x00, 0x00, 0xFF);
     delete node;
 }
 
@@ -812,9 +809,9 @@ void WaveformItemTest::frequencyModeFallsBackToBandEnvelopeWhenMixMissing()
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
     const auto* geometryNode = static_cast<const QSGGeometryNode*>(node);
-    // Missing Mix is synthesized while the available low/mid envelopes remain
-    // separate, co-timed overlays.
-    QCOMPARE(geometryNode->geometry()->vertexCount(), 600);
+    // Missing Mix is synthesized from the available bands, but frequency mode
+    // still renders one shared envelope instead of separate band overlays.
+    QCOMPARE(geometryNode->geometry()->vertexCount(), 200);
 
     const auto* data = vertices(node);
     QCOMPARE(data[0].x, 1.0F);
