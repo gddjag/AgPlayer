@@ -757,10 +757,8 @@ private:
             const bool matrix_roles_known = stream_layout_available
                 ? stream_layout.order != AV_CHANNEL_ORDER_UNSPEC
                 : source_layout.order != AV_CHANNEL_ORDER_UNSPEC;
-            const AVChannelLayout& matrix_layout = stream_layout_available
-                ? stream_layout : input_layout_;
             const std::vector<double> matrix = analysis_mono_matrix(
-                matrix_layout, matrix_roles_known);
+                input_layout_, matrix_roles_known);
             if (matrix.size() != static_cast<std::size_t>(input_layout_.nb_channels)) {
                 return AG_UNSUPPORTED_FORMAT;
             }
