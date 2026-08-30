@@ -62,7 +62,8 @@ failures (the RED run before the production change already returned exit code 2)
    prior export/status activity; Task 5 leaves the status overlay in the same
    existing visual stack so it remains reachable.
 2. `test_selectionEnablesLoopAndTimelineClicksClearItPrecisely` at
-   `tst_audio_editor.qml:849`: `AudioEditorController.playing` is `false`,
+   `tst_audio_editor.qml:975` in the final test file (849 before Task 5 test
+   insertions): `AudioEditorController.playing` is `false`,
    expected `true` in the selection-loop scenario.  This is playback behavior
    outside this task's default/export/layout scope.
 
