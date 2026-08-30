@@ -180,6 +180,17 @@ if ($toolsNavigation -notmatch 'visibleToolOrder:\s*\[0,\s*4,\s*1,\s*2,\s*3\]' -
     $toolsNavigation -match '#[0-9A-Fa-f]{6}') {
     throw 'The five audio tools must retain stable IDs and use shared theme tokens.'
 }
+$repeaterPosition = $toolsNavigation.IndexOf('Repeater {')
+$firstFillSpacerPosition = $toolsNavigation.IndexOf('Item { Layout.fillWidth:')
+if ($firstFillSpacerPosition -ge 0 -and $firstFillSpacerPosition -lt $repeaterPosition) {
+    throw 'The shared tool navigation must not use a leading fill spacer.'
+}
+$trailingFillSpacers = [regex]::Matches(
+    $toolsNavigation, '(?m)^        Item \{ Layout\.fillWidth: true \}$')
+if ($trailingFillSpacers.Count -ne 1 -or
+    $trailingFillSpacers[0].Index -lt $repeaterPosition) {
+    throw 'The shared tool navigation must have exactly one trailing fill spacer.'
+}
 $navOrder = @(
     (ConvertFrom-Utf8Base64 '6Z+z6aKR57yW6L6R'),
     (ConvertFrom-Utf8Base64 '5Lq65aOw5Ly05aWP5YiG56a7'),
