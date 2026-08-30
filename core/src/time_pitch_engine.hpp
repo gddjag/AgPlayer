@@ -23,5 +23,14 @@ public:
 };
 
 [[nodiscard]] std::unique_ptr<ITimePitchEngine> create_time_pitch_engine();
+// Explicit fallback for diagnostics and for the primary factory when a
+// Signalsmith instance rejects its configuration.
+[[nodiscard]] std::unique_ptr<ITimePitchEngine>
+create_soundtouch_time_pitch_engine();
+
+// Kept separate so the primary factory can guard configuration failures while
+// callers continue to depend only on ITimePitchEngine.
+[[nodiscard]] std::unique_ptr<ITimePitchEngine>
+create_signalsmith_time_pitch_engine();
 
 } // namespace agplayer

@@ -27,6 +27,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(Warnings)
 include(CTest)
+include(FetchContent)
 
 find_package(Qt6 6.7 REQUIRED COMPONENTS
     Core
@@ -43,6 +44,20 @@ find_package(Qt6 6.7 REQUIRED COMPONENTS
 find_package(FFMPEG REQUIRED)
 find_path(MINIAUDIO_INCLUDE_DIRS miniaudio.h REQUIRED)
 find_package(SoundTouch CONFIG REQUIRED)
+
+# Keep the DSP source reproducible and offline-cacheable.  Both dependencies
+# are header-only targets, so this adds no runtime DLL.
+FetchContent_Declare(signalsmith_linear
+    URL https://codeload.github.com/Signalsmith-Audio/linear/zip/refs/tags/0.3.1
+    URL_HASH SHA256=DC44DE0DFC3AA25BC215CDAB5467E1FEC19E3FB4938AA32BF45FC5EA7EB59C7B
+)
+FetchContent_MakeAvailable(signalsmith_linear)
+
+FetchContent_Declare(signalsmith_stretch
+    URL https://codeload.github.com/Signalsmith-Audio/signalsmith-stretch/zip/57b93f4e9206a089a45387eaa39bdc9f310d3308
+    URL_HASH SHA256=441F029651286E746399793F1FD90E3589A8B6F28B63512F8FE441B9131D722C
+)
+FetchContent_MakeAvailable(signalsmith_stretch)
 
 add_subdirectory(core)
 add_subdirectory(qt)

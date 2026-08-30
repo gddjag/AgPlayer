@@ -1,6 +1,7 @@
 #include "audio_editor/audio_document.hpp"
 #include "audio_editor/time_pitch_session.hpp"
 #include "decoder.hpp"
+#include "time_pitch_engine.hpp"
 
 #include <agplayer/c_api.h>
 
@@ -10,6 +11,7 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <limits>
 #include <vector>
 
 namespace {
@@ -40,6 +42,129 @@ agplayer::editor::SampleFrame decoded_frames(
     return frames;
 }
 
+std::vector<float> sine(const int sampleRate, const std::size_t frames,
+                        const double frequency)
+{
+    std::vector<float> result(frames);
+    const double step = 2.0 * std::acos(-1.0) * frequency / sampleRate;
+    for (std::size_t frame = 0; frame < frames; ++frame) {
+        result[frame] = static_cast<float>(0.6 * std::sin(step * frame));
+    }
+    return result;
+}
+
+std::vector<float> receiveAvailable(agplayer::ITimePitchEngine& engine,
+                                    const std::size_t capacity = 4'096U)
+{
+    std::vector<float> buffer(capacity);
+    const std::size_t frames = engine.receive(buffer.data(), capacity);
+    buffer.resize(frames);
+    return buffer;
+}
+
+std::vector<float> processStream(const std::vector<float>& input,
+                                 const double tempo, const double pitchCents,
+                                 const double rate, const std::size_t chunk)
+{
+    auto engine = agplayer::create_time_pitch_engine();
+    require(engine != nullptr, "time/pitch engine factory returned null");
+    require(engine->configure(48'000, 1), "time/pitch engine configure failed");
+    require(engine->setTempoRatio(tempo), "time/pitch engine tempo rejected");
+    require(engine->setPitchCents(pitchCents), "time/pitch engine pitch rejected");
+    require(engine->setRateRatio(rate), "time/pitch engine rate rejected");
+
+    std::vector<float> output;
+    for (std::size_t offset = 0; offset < input.size(); offset += chunk) {
+        const std::size_t frames = std::min(chunk, input.size() - offset);
+        engine->put(input.data() + offset, frames);
+        const auto available = receiveAvailable(*engine);
+        output.insert(output.end(), available.begin(), available.end());
+    }
+    engine->flush();
+    for (;;) {
+        const auto available = receiveAvailable(*engine);
+        if (available.empty()) break;
+        output.insert(output.end(), available.begin(), available.end());
+    }
+    return output;
+}
+
+double crossingFrequency(const std::vector<float>& samples)
+{
+    std::size_t crossings = 0U;
+    for (std::size_t index = 1; index < samples.size(); ++index) {
+        if (samples[index - 1U] <= 0.0F && samples[index] > 0.0F) {
+            ++crossings;
+        }
+    }
+    return samples.empty() ? 0.0
+        : static_cast<double>(crossings) * 48'000.0 / samples.size();
+}
+
+void timePitchEngineRealtimeContract()
+{
+    const auto input = sine(48'000, 48'000U, 440.0);
+    auto bypass = agplayer::create_time_pitch_engine();
+    require(bypass != nullptr && bypass->configure(48'000, 1),
+            "neutral engine configuration failed");
+    require(bypass->setTempoRatio(1.0) && bypass->setPitchCents(0.0)
+                && bypass->setRateRatio(1.0),
+            "neutral engine parameter setup failed");
+    bypass->put(input.data(), 257U);
+    const auto immediate = receiveAvailable(*bypass, 257U);
+    require(immediate.size() == 257U,
+            "neutral realtime path withheld the first PCM block");
+    require(immediate == std::vector<float>(input.begin(), input.begin() + 257),
+            "neutral realtime path did not preserve samples exactly");
+
+    const auto slow = processStream(input, 0.75, 0.0, 1.0, 257U);
+    const auto fast = processStream(input, 1.5, 0.0, 1.0, 257U);
+    require(std::llabs(static_cast<long long>(slow.size()) - 64'000LL) < 2'048LL,
+            "0.75 tempo output duration is outside tolerance");
+    require(std::llabs(static_cast<long long>(fast.size()) - 32'000LL) < 2'048LL,
+            "1.5 tempo output duration is outside tolerance");
+
+    const auto raised = processStream(input, 1.0, 1'200.0, 1.0, 257U);
+    const auto lowered = processStream(input, 1.0, -1'200.0, 1.0, 257U);
+    require(std::abs(crossingFrequency(raised) - 880.0) < 80.0,
+            "+12 semitone output frequency is outside tolerance");
+    require(std::abs(crossingFrequency(lowered) - 220.0) < 45.0,
+            "-12 semitone output frequency is outside tolerance");
+
+    const auto realtime = processStream(input, 1.25, 300.0, 1.0, 257U);
+    const auto offline = processStream(input, 1.25, 300.0, 1.0, input.size());
+    require(!realtime.empty() && !offline.empty(),
+            "processed output was unexpectedly empty");
+    const auto finiteBounded = [](const float sample) {
+        return std::isfinite(sample) && std::abs(sample) <= 1.5F;
+    };
+    require(std::all_of(realtime.begin(), realtime.end(), finiteBounded)
+                && std::all_of(offline.begin(), offline.end(), finiteBounded),
+            "processed output contains non-finite or unbounded samples");
+    require(std::llabs(static_cast<long long>(realtime.size())
+                       - static_cast<long long>(offline.size())) < 256LL,
+            "realtime and offline processing diverged across chunk boundaries");
+
+    auto resetEngine = agplayer::create_time_pitch_engine();
+    require(resetEngine != nullptr && resetEngine->configure(48'000, 1)
+                && resetEngine->setTempoRatio(1.25)
+                && resetEngine->setPitchCents(0.0)
+                && resetEngine->setRateRatio(1.0),
+            "reset engine setup failed");
+    resetEngine->put(input.data(), 4'096U);
+    resetEngine->flush();
+    while (!receiveAvailable(*resetEngine).empty()) {
+    }
+    resetEngine->reset();
+    const std::vector<float> silence(512U, 0.0F);
+    resetEngine->put(silence.data(), silence.size());
+    resetEngine->flush();
+    const auto afterReset = receiveAvailable(*resetEngine, 4'096U);
+    require(std::all_of(afterReset.begin(), afterReset.end(), [](const float value) {
+        return std::abs(value) < 0.0001F;
+    }), "reset leaked previous input into a new stream");
+}
+
 } // namespace
 
 int main(const int argc, char** argv)
@@ -47,6 +172,8 @@ int main(const int argc, char** argv)
     require(argc == 2, "fixture argument required");
     namespace fs = std::filesystem;
     using namespace agplayer::editor;
+
+    timePitchEngineRealtimeContract();
 
     TimePitchSession parameters;
     require(parameters.setTargetBpm(130.0),

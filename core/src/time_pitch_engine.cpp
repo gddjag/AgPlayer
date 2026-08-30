@@ -1,6 +1,8 @@
 #include "time_pitch_engine.hpp"
 
 #include <cmath>
+#include <atomic>
+#include <cstdio>
 #include <limits>
 #include <utility>
 
@@ -97,9 +99,77 @@ private:
 
 } // namespace
 
-std::unique_ptr<ITimePitchEngine> create_time_pitch_engine()
+class PreferredTimePitchEngine final : public ITimePitchEngine {
+public:
+    bool configure(const int sampleRate, const int channels) override
+    {
+        if (primary_ != nullptr && primary_->configure(sampleRate, channels)) {
+            active_ = primary_.get();
+            return true;
+        }
+        fallback_ = create_soundtouch_time_pitch_engine();
+        if (fallback_ == nullptr || !fallback_->configure(sampleRate, channels)) {
+            return false;
+        }
+        static std::atomic_bool logged{false};
+        if (!logged.exchange(true, std::memory_order_relaxed)) {
+            std::fputs("Signalsmith time/pitch configure failed; using SoundTouch fallback\n",
+                       stderr);
+        }
+        active_ = fallback_.get();
+        return true;
+    }
+
+    bool setTempoRatio(const double ratio) override
+    {
+        return active_ != nullptr && active_->setTempoRatio(ratio);
+    }
+
+    bool setPitchCents(const double cents) override
+    {
+        return active_ != nullptr && active_->setPitchCents(cents);
+    }
+
+    bool setRateRatio(const double ratio) override
+    {
+        return active_ != nullptr && active_->setRateRatio(ratio);
+    }
+
+    void put(const float* const samples, const std::size_t frames) override
+    {
+        if (active_ != nullptr) active_->put(samples, frames);
+    }
+
+    [[nodiscard]] std::size_t receive(float* const samples,
+                                      const std::size_t frames) override
+    {
+        return active_ != nullptr ? active_->receive(samples, frames) : 0U;
+    }
+
+    void flush() override
+    {
+        if (active_ != nullptr) active_->flush();
+    }
+
+    void reset() override
+    {
+        if (active_ != nullptr) active_->reset();
+    }
+
+private:
+    std::unique_ptr<ITimePitchEngine> primary_{create_signalsmith_time_pitch_engine()};
+    std::unique_ptr<ITimePitchEngine> fallback_;
+    ITimePitchEngine* active_{};
+};
+
+std::unique_ptr<ITimePitchEngine> create_soundtouch_time_pitch_engine()
 {
     return std::make_unique<SoundTouchTimePitchEngine>();
+}
+
+std::unique_ptr<ITimePitchEngine> create_time_pitch_engine()
+{
+    return std::make_unique<PreferredTimePitchEngine>();
 }
 
 } // namespace agplayer

@@ -50,6 +50,7 @@ add_library(agplayer_core STATIC
     src/transcode_verifier.hpp
     src/time_pitch_engine.cpp
     src/time_pitch_engine.hpp
+    src/signalsmith_time_pitch_engine.cpp
     src/waveform_analyzer.cpp
     src/bpm_analyzer.cpp
     src/bpm_analyzer.hpp
@@ -65,6 +66,18 @@ target_include_directories(agplayer_core SYSTEM
         "${FFMPEG_INCLUDE_DIRS}"
         "${MINIAUDIO_INCLUDE_DIRS}"
 )
-target_link_libraries(agplayer_core PRIVATE ${FFMPEG_LIBRARIES} SoundTouch::SoundTouch)
+target_link_libraries(agplayer_core PRIVATE
+    ${FFMPEG_LIBRARIES}
+    SoundTouch::SoundTouch
+    signalsmith-stretch
+)
+
+# Stretch/Linear are header-only templates.  Keep their upstream MSVC
+# conversion/shadowing warnings from weakening this project's /WX policy for
+# any other translation unit.
+if(MSVC)
+    set_source_files_properties(src/signalsmith_time_pitch_engine.cpp
+        PROPERTIES COMPILE_OPTIONS "/wd4244;/wd4267;/wd4305;/wd4127;/wd4456")
+endif()
 
 agplayer_enable_warnings(agplayer_core)
