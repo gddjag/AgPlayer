@@ -1515,6 +1515,101 @@ private slots:
         QCOMPARE(controller.totalFrames(), qint64{1'000});
     }
 
+    void selectedEventCommandsTakePriorityOverTheTimeSelection()
+    {
+        struct EventActionCase final {
+            QString actionId;
+            QString changedProperty;
+            QVariant expected;
+        };
+        const std::array<EventActionCase, 3> cases{{
+            {QStringLiteral("editor.fadeIn"), QStringLiteral("fadeIn"), qint64{600}},
+            {QStringLiteral("editor.fadeOut"), QStringLiteral("fadeOut"), qint64{600}},
+            {QStringLiteral("editor.deleteSelection"), {}, {}}
+        }};
+
+        for (const EventActionCase& testCase : cases) {
+            AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+            QVERIFY(controller.createUntitledDocument(48'000, 2, 1'000));
+            QVERIFY(controller.splitEvent(1, 400));
+            QVERIFY(controller.setSelection(0, 400));
+            controller.selectEvent(QStringLiteral("2"));
+            QCOMPARE(controller.selectedEventId(), QStringLiteral("2"));
+            const auto historyBefore = controller.historyStateIdForTesting();
+
+            QVERIFY(controller.actionEnabled(testCase.actionId));
+            QVERIFY(controller.triggerAction(testCase.actionId));
+            QCOMPARE(controller.historyStateIdForTesting(), historyBefore + 1);
+            const QVariantList events = controller.timelineEventViews();
+            QCOMPARE(events.front().toMap().value(QStringLiteral("id")).toString(),
+                     QStringLiteral("1"));
+            QCOMPARE(events.front().toMap().value(QStringLiteral("sourceEnd")).toLongLong(),
+                     qint64{400});
+
+            if (testCase.actionId == QStringLiteral("editor.deleteSelection")) {
+                QCOMPARE(events.size(), 1);
+                QVERIFY(controller.selectedEventId().isEmpty());
+            } else {
+                QCOMPARE(events.size(), 2);
+                QCOMPARE(events.at(1).toMap().value(testCase.changedProperty),
+                         testCase.expected);
+                QCOMPARE(events.at(0).toMap().value(testCase.changedProperty),
+                         QVariant{qint64{0}});
+            }
+        }
+    }
+
+    void selectedEventCopyAndPasteSelectTheFreshDecimalIdAtThePlayhead()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(48'000, 2, 1'000));
+        QVERIFY(controller.splitEvent(1, 400));
+        controller.selectEvent(QStringLiteral("2"));
+        QVERIFY(controller.actionEnabled(QStringLiteral("editor.copy")));
+        const auto copyHistory = controller.historyStateIdForTesting();
+        QVERIFY(controller.triggerAction(QStringLiteral("editor.copy")));
+        QCOMPARE(controller.historyStateIdForTesting(), copyHistory);
+
+        QVERIFY(controller.seekFrame(1'000));
+        QVERIFY(controller.actionEnabled(QStringLiteral("editor.paste")));
+        QVERIFY(controller.triggerAction(QStringLiteral("editor.paste")));
+        QCOMPARE(controller.selectedEventId(), QStringLiteral("3"));
+        const QVariantList events = controller.timelineEventViews();
+        QCOMPARE(events.size(), 3);
+        QCOMPARE(events.at(2).toMap().value(QStringLiteral("id")).toString(),
+                 QStringLiteral("3"));
+        QCOMPARE(events.at(2).toMap().value(QStringLiteral("timelineStart")).toLongLong(),
+                 qint64{1'000});
+        QCOMPARE(events.at(2).toMap().value(QStringLiteral("sourceStart")).toLongLong(),
+                 qint64{400});
+    }
+
+    void unselectedEventCommandsFallBackToTheTimeRangeWhileCropStaysRangeOnly()
+    {
+        AudioEditorController fallback(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(fallback.createUntitledDocument(48'000, 2, 1'000));
+        QVERIFY(fallback.splitEvent(1, 400));
+        QVERIFY(fallback.setSelection(0, 400));
+        QVERIFY(fallback.selectedEventId().isEmpty());
+        QVERIFY(fallback.triggerAction(QStringLiteral("editor.deleteSelection")));
+        QCOMPARE(fallback.timelineEventViews().size(), 1);
+        QCOMPARE(fallback.timelineEventViews().front().toMap()
+                     .value(QStringLiteral("id")).toString(), QStringLiteral("2"));
+
+        AudioEditorController crop(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(crop.createUntitledDocument(48'000, 2, 1'000));
+        QVERIFY(crop.splitEvent(1, 400));
+        QVERIFY(crop.setSelection(0, 400));
+        crop.selectEvent(QStringLiteral("2"));
+        QVERIFY(crop.triggerAction(QStringLiteral("editor.cropToSelection")));
+        QCOMPARE(crop.timelineEventViews().size(), 1);
+        QCOMPARE(crop.timelineEventViews().front().toMap()
+                     .value(QStringLiteral("id")).toString(), QStringLiteral("1"));
+        QCOMPARE(crop.timelineEventViews().front().toMap()
+                     .value(QStringLiteral("sourceEnd")).toLongLong(), qint64{400});
+        QVERIFY(crop.selectedEventId().isEmpty());
+    }
+
     void tailRemovalClampsViewportAndProjectSave_data()
     {
         QTest::addColumn<QString>("actionId");

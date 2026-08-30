@@ -160,6 +160,69 @@ private slots:
         QCOMPARE(cut.timelineSnapshot().events.at(1).timelineStart, SampleFrame{300});
     }
 
+    void eventCommandsChangeOnlyTheExplicitSplitClip()
+    {
+        auto copied = document();
+        QVERIFY(copied.splitEventAt(1, 400));
+        const TimelineSnapshot beforeCopy = copied.timelineSnapshot();
+        const AudioEvent right = beforeCopy.events.at(1);
+        const auto historyBeforeCopy = copied.historyStateId();
+        QVERIFY(copied.copyEvent(right.id));
+        QCOMPARE(copied.historyStateId(), historyBeforeCopy);
+        QCOMPARE(copied.timelineSnapshot().events.size(), std::size_t{2});
+        QCOMPARE(copied.timelineSnapshot().events.at(0).sourceStart, SampleFrame{0});
+        QCOMPARE(copied.timelineSnapshot().events.at(0).sourceEnd, SampleFrame{400});
+        QVERIFY(copied.pasteAt(1'200));
+        const TimelineSnapshot copiedSnapshot = copied.timelineSnapshot();
+        QCOMPARE(copiedSnapshot.events.size(), std::size_t{3});
+        QCOMPARE(copiedSnapshot.events.at(2).sourceStart, SampleFrame{400});
+        QCOMPARE(copiedSnapshot.events.at(2).sourceEnd, SampleFrame{1'000});
+        QCOMPARE(copiedSnapshot.events.at(2).timelineStart, SampleFrame{1'200});
+
+        auto cut = document();
+        QVERIFY(cut.splitEventAt(1, 400));
+        const auto cutHistory = cut.historyStateId();
+        QVERIFY(cut.cutEvent(2));
+        QCOMPARE(cut.historyStateId(), cutHistory + 1);
+        QCOMPARE(cut.timelineSnapshot().events.size(), std::size_t{1});
+        QCOMPARE(cut.timelineSnapshot().events.front().id, EventId{1});
+        QCOMPARE(cut.timelineSnapshot().events.front().sourceEnd, SampleFrame{400});
+        QVERIFY(cut.undo());
+        QCOMPARE(cut.timelineSnapshot().events.size(), std::size_t{2});
+
+        auto deleted = document();
+        QVERIFY(deleted.splitEventAt(1, 400));
+        const auto deleteHistory = deleted.historyStateId();
+        QVERIFY(deleted.deleteEvent(2));
+        QCOMPARE(deleted.historyStateId(), deleteHistory + 1);
+        QCOMPARE(deleted.timelineSnapshot().events.size(), std::size_t{1});
+        QCOMPARE(deleted.timelineSnapshot().events.front().id, EventId{1});
+        QCOMPARE(deleted.timelineSnapshot().events.front().timelineStart, SampleFrame{0});
+
+        auto silenced = document();
+        QVERIFY(silenced.splitEventAt(1, 400));
+        const auto silenceHistory = silenced.historyStateId();
+        QVERIFY(silenced.silenceEvent(2));
+        QCOMPARE(silenced.historyStateId(), silenceHistory + 1);
+        QVERIFY(!silenced.timelineSnapshot().events.at(0).mute);
+        QVERIFY(silenced.timelineSnapshot().events.at(1).mute);
+
+        for (const bool fadeIn : {true, false}) {
+            auto faded = document();
+            QVERIFY(faded.splitEventAt(1, 400));
+            const auto fadeHistory = faded.historyStateId();
+            QVERIFY(faded.fadeEvent(2, fadeIn));
+            QCOMPARE(faded.historyStateId(), fadeHistory + 1);
+            const TimelineSnapshot fadedSnapshot = faded.timelineSnapshot();
+            QCOMPARE(fadedSnapshot.events.at(0).fadeIn, SampleFrame{0});
+            QCOMPARE(fadedSnapshot.events.at(0).fadeOut, SampleFrame{0});
+            QCOMPARE(fadedSnapshot.events.at(1).fadeIn,
+                     fadeIn ? SampleFrame{600} : SampleFrame{0});
+            QCOMPARE(fadedSnapshot.events.at(1).fadeOut,
+                     fadeIn ? SampleFrame{0} : SampleFrame{600});
+        }
+    }
+
     void multiEventClipboardPreservesGapsIdsAndRollback()
     {
         auto value = document();

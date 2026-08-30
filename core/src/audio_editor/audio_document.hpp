@@ -68,6 +68,11 @@ public:
     bool removeEnvelopePoint(EventId id, SampleFrame offset);
     bool copySelection();
     bool cutSelection();
+    bool copyEvent(EventId id);
+    bool cutEvent(EventId id);
+    bool deleteEvent(EventId id);
+    bool silenceEvent(EventId id);
+    bool fadeEvent(EventId id, bool fadeIn);
     bool pasteAt(SampleFrame playhead);
     bool duplicateEvent(EventId id, SampleFrame timelineStart);
     bool mergeEvents(EventId left, EventId right);

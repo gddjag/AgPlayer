@@ -703,6 +703,64 @@ bool AudioDocument::cutSelection()
     return true;
 }
 
+bool AudioDocument::copyEvent(const EventId id)
+{
+    const TimelineSnapshot snapshot = timeline_.snapshot();
+    const auto event = std::find_if(snapshot.events.cbegin(), snapshot.events.cend(),
+        [id](const AudioEvent& item) { return item.id == id; });
+    if (event == snapshot.events.cend()) return false;
+    clipboard_ = {*event};
+    return true;
+}
+
+bool AudioDocument::cutEvent(const EventId id)
+{
+    std::vector<AudioEvent> candidate = timeline_.snapshot().events;
+    const auto event = std::find_if(candidate.cbegin(), candidate.cend(),
+        [id](const AudioEvent& item) { return item.id == id; });
+    if (event == candidate.cend()) return false;
+    const AudioEvent copied = *event;
+    candidate.erase(event);
+    if (!applyCandidate(std::move(candidate))) return false;
+    clipboard_ = {copied};
+    return true;
+}
+
+bool AudioDocument::deleteEvent(const EventId id)
+{
+    std::vector<AudioEvent> candidate = timeline_.snapshot().events;
+    const auto event = std::find_if(candidate.cbegin(), candidate.cend(),
+        [id](const AudioEvent& item) { return item.id == id; });
+    if (event == candidate.cend()) return false;
+    candidate.erase(event);
+    return applyCandidate(std::move(candidate));
+}
+
+bool AudioDocument::silenceEvent(const EventId id)
+{
+    std::vector<AudioEvent> candidate = timeline_.snapshot().events;
+    const auto event = std::find_if(candidate.begin(), candidate.end(),
+        [id](const AudioEvent& item) { return item.id == id; });
+    if (event == candidate.end() || event->mute) return false;
+    event->mute = true;
+    return applyCandidate(std::move(candidate));
+}
+
+bool AudioDocument::fadeEvent(const EventId id, const bool fadeIn)
+{
+    std::vector<AudioEvent> candidate = timeline_.snapshot().events;
+    const auto event = std::find_if(candidate.begin(), candidate.end(),
+        [id](const AudioEvent& item) { return item.id == id; });
+    if (event == candidate.end()) return false;
+    const SampleFrame frames = audibleFrames(*event);
+    SampleFrame& fade = fadeIn ? event->fadeIn : event->fadeOut;
+    const SampleFrame opposite = fadeIn ? event->fadeOut : event->fadeIn;
+    const SampleFrame target = frames - opposite;
+    if (fade == target) return false;
+    fade = target;
+    return applyCandidate(std::move(candidate));
+}
+
 bool AudioDocument::pasteAt(const SampleFrame playhead)
 {
     if (clipboard_.empty() || playhead < 0) return false;

@@ -1615,6 +1615,7 @@ void AudioEditorController::selectEvent(const QString& id)
     const QString normalized = QString::number(*eventId);
     if (selected_event_id_ == normalized) return;
     selected_event_id_ = normalized;
+    refreshActions();
     emit selectedEventChanged();
 }
 
@@ -1622,6 +1623,7 @@ void AudioEditorController::clearEventSelection()
 {
     if (selected_event_id_.isEmpty()) return;
     selected_event_id_.clear();
+    refreshActions();
     emit selectedEventChanged();
 }
 
@@ -2819,21 +2821,61 @@ bool AudioEditorController::triggerAction(const QString& id)
             document_.timelineSnapshot(), document_.selection());
         return pair && mergeEvents(pair->first, pair->second);
     }
+    const auto selectedEvent = parseEventId(selected_event_id_);
+    const auto snapshot = document_.timelineSnapshot();
+    const bool hasSelectedEvent = selectedEvent && std::any_of(
+        snapshot.events.cbegin(), snapshot.events.cend(),
+        [selectedEvent](const AudioEvent& event) {
+            return event.id == *selectedEvent;
+        });
     bool changed = false;
-    if (id == QStringLiteral("editor.cut")) changed = document_.cutSelection();
-    else if (id == QStringLiteral("editor.copy")) changed = document_.copySelection();
+    std::optional<agplayer::editor::EventId> pastedEvent;
+    if (id == QStringLiteral("editor.cut")) {
+        changed = hasSelectedEvent ? document_.cutEvent(*selectedEvent)
+                                   : document_.cutSelection();
+    }
+    else if (id == QStringLiteral("editor.copy")) {
+        changed = hasSelectedEvent ? document_.copyEvent(*selectedEvent)
+                                   : document_.copySelection();
+    }
     else if (id == QStringLiteral("editor.paste")) {
         const qint64 frame = playhead_frame_;
         changed = document_.pasteAt(frame);
+        if (changed) {
+            const auto pasted = document_.timelineSnapshot();
+            for (const AudioEvent& event : pasted.events) {
+                const bool existed = std::any_of(
+                    snapshot.events.cbegin(), snapshot.events.cend(),
+                    [&event](const AudioEvent& prior) {
+                        return prior.id == event.id;
+                    });
+                if (!existed && (!pastedEvent || event.id < *pastedEvent)) {
+                    pastedEvent = event.id;
+                }
+            }
+        }
     }
-    else if (id == QStringLiteral("editor.deleteSelection")) changed = document_.deleteSelection();
+    else if (id == QStringLiteral("editor.deleteSelection")) {
+        changed = hasSelectedEvent ? document_.deleteEvent(*selectedEvent)
+                                   : document_.deleteSelection();
+    }
     else if (id == QStringLiteral("editor.cropToSelection")) changed = document_.cropToSelection();
-    else if (id == QStringLiteral("editor.silenceSelection")) changed = document_.silenceSelection();
-    else if (id == QStringLiteral("editor.fadeIn")) changed = document_.fadeIn();
-    else if (id == QStringLiteral("editor.fadeOut")) changed = document_.fadeOut();
+    else if (id == QStringLiteral("editor.silenceSelection")) {
+        changed = hasSelectedEvent ? document_.silenceEvent(*selectedEvent)
+                                   : document_.silenceSelection();
+    }
+    else if (id == QStringLiteral("editor.fadeIn")) {
+        changed = hasSelectedEvent ? document_.fadeEvent(*selectedEvent, true)
+                                   : document_.fadeIn();
+    }
+    else if (id == QStringLiteral("editor.fadeOut")) {
+        changed = hasSelectedEvent ? document_.fadeEvent(*selectedEvent, false)
+                                   : document_.fadeOut();
+    }
     if (!changed) return false;
     if (id != QStringLiteral("editor.copy")) {
         finishTimelineMutation();
+        if (pastedEvent) selectEvent(QString::number(*pastedEvent));
         return true;
     }
     refreshActions();
@@ -3785,6 +3827,13 @@ void AudioEditorController::startViewportWaveformJob(ViewportWaveformJob job)
 void AudioEditorController::refreshActions()
 {
     const bool selection = document_.selection().has_value();
+    const auto selectedEvent = parseEventId(selected_event_id_);
+    const auto snapshot = document_.timelineSnapshot();
+    const bool eventSelection = selectedEvent && std::any_of(
+        snapshot.events.cbegin(), snapshot.events.cend(),
+        [selectedEvent](const AudioEvent& event) {
+            return event.id == *selectedEvent;
+        });
     const bool idle = state_ != EditorSessionState::Saving
         && state_ != EditorSessionState::Exporting
         && state_ != EditorSessionState::Processing;
@@ -3806,12 +3855,13 @@ void AudioEditorController::refreshActions()
     for (const QString& id : {
              QStringLiteral("editor.cut"), QStringLiteral("editor.copy"),
              QStringLiteral("editor.deleteSelection")}) {
-        actions_.setEnabled(id, has_document_ && selection && idle);
+        actions_.setEnabled(id, has_document_ && (selection || eventSelection) && idle);
     }
-    for (const QString& id : {QStringLiteral("editor.cropToSelection"),
-             QStringLiteral("editor.silenceSelection"), QStringLiteral("editor.fadeIn"),
-             QStringLiteral("editor.fadeOut")}) {
-        actions_.setEnabled(id, has_document_ && selection && idle);
+    actions_.setEnabled(QStringLiteral("editor.cropToSelection"),
+                        has_document_ && selection && idle);
+    for (const QString& id : {QStringLiteral("editor.silenceSelection"),
+             QStringLiteral("editor.fadeIn"), QStringLiteral("editor.fadeOut")}) {
+        actions_.setEnabled(id, has_document_ && (selection || eventSelection) && idle);
     }
 }
 
