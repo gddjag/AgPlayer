@@ -119,19 +119,23 @@ using FrequencyWaitTestHook = void (*)(int phase, void* user_data);
 constexpr int wait_before_callback = 0;
 constexpr int wait_after_callback = 1;
 constexpr int cancel_before_lock = 2;
-std::atomic<FrequencyWaitTestHook> frequency_wait_test_hook{nullptr};
-std::atomic<void*> frequency_wait_test_user_data{nullptr};
+struct FrequencyWaitHookRegistration final {
+    FrequencyWaitTestHook hook = nullptr;
+    void* user_data = nullptr;
+};
+std::shared_ptr<const FrequencyWaitHookRegistration>
+    frequency_wait_test_hook_registration;
 
 void invoke_frequency_wait_test_hook(const int phase) noexcept
 {
-    const FrequencyWaitTestHook hook =
-        frequency_wait_test_hook.load(std::memory_order_acquire);
-    if (hook == nullptr) {
-        return;
-    }
     try {
-        hook(phase,
-             frequency_wait_test_user_data.load(std::memory_order_acquire));
+        const std::shared_ptr<const FrequencyWaitHookRegistration> registration =
+            std::atomic_load_explicit(
+                &frequency_wait_test_hook_registration,
+                std::memory_order_acquire);
+        if (registration != nullptr && registration->hook != nullptr) {
+            registration->hook(phase, registration->user_data);
+        }
     } catch (...) {
     }
 }
@@ -225,8 +229,17 @@ namespace agplayer::testing {
 void set_frequency_wait_test_hook(FrequencyWaitTestHook hook,
                                   void* user_data) noexcept
 {
-    frequency_wait_test_user_data.store(user_data, std::memory_order_release);
-    frequency_wait_test_hook.store(hook, std::memory_order_release);
+    try {
+        std::shared_ptr<const FrequencyWaitHookRegistration> registration;
+        if (hook != nullptr) {
+            registration = std::make_shared<FrequencyWaitHookRegistration>(
+                FrequencyWaitHookRegistration{hook, user_data});
+        }
+        std::atomic_store_explicit(
+            &frequency_wait_test_hook_registration, std::move(registration),
+            std::memory_order_release);
+    } catch (...) {
+    }
 }
 
 } // namespace agplayer::testing

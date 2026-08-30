@@ -38,6 +38,8 @@ namespace testing {
 
 /* Internal deterministic failure seam used by the cache persistence tests. */
 void fail_next_frequency_color_cache_replace() noexcept;
+void force_next_frequency_color_cache_temp(
+    const std::filesystem::path& path) noexcept;
 
 } // namespace testing
 

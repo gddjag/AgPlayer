@@ -4,6 +4,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cerrno>
 #include <climits>
 #include <cmath>
 #include <cstddef>
@@ -11,6 +12,8 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <mutex>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <type_traits>
@@ -38,6 +41,8 @@ constexpr std::uint32_t kMaximumPointCount = 1'000'000U;
 constexpr std::uint64_t kFnvOffset = 14'695'981'039'346'656'037ULL;
 constexpr std::uint64_t kFnvPrime = 1'099'511'628'211ULL;
 std::atomic_bool fail_next_replace{false};
+std::mutex forced_temp_mutex;
+std::optional<std::filesystem::path> forced_temp_path;
 
 constexpr std::size_t kFormatVersionOffset = 4U;
 constexpr std::size_t kHeaderSizeOffset = 6U;
@@ -136,9 +141,23 @@ bool identifies_same_file(const std::filesystem::path& left,
         if (std::filesystem::equivalent(left, right, equivalent_error)) {
             return true;
         }
+        if (equivalent_error
+            && equivalent_error
+                   != std::errc::no_such_file_or_directory) {
+            return true;
+        }
 
-        const std::filesystem::path normalized_left = canonical_path(left);
-        const std::filesystem::path normalized_right = canonical_path(right);
+        std::error_code left_error;
+        std::error_code right_error;
+        const std::filesystem::path normalized_left =
+            std::filesystem::weakly_canonical(left, left_error)
+                .lexically_normal();
+        const std::filesystem::path normalized_right =
+            std::filesystem::weakly_canonical(right, right_error)
+                .lexically_normal();
+        if (left_error || right_error) {
+            return true;
+        }
 #ifdef _WIN32
         const std::wstring left_native = normalized_left.native();
         const std::wstring right_native = normalized_right.native();
@@ -146,11 +165,10 @@ bool identifies_same_file(const std::filesystem::path& left,
             || right_native.size() > static_cast<std::size_t>(INT_MAX)) {
             return true;
         }
-        return CompareStringOrdinal(
-                   left_native.c_str(), static_cast<int>(left_native.size()),
-                   right_native.c_str(), static_cast<int>(right_native.size()),
-                   TRUE)
-               == CSTR_EQUAL;
+        const int comparison = CompareStringOrdinal(
+            left_native.c_str(), static_cast<int>(left_native.size()),
+            right_native.c_str(), static_cast<int>(right_native.size()), TRUE);
+        return comparison == 0 || comparison == CSTR_EQUAL;
 #else
         return normalized_left == normalized_right;
 #endif
@@ -198,6 +216,14 @@ std::uint64_t process_id() noexcept
 std::filesystem::path temporary_path(
     const std::filesystem::path& cache_path)
 {
+    {
+        std::lock_guard<std::mutex> lock(forced_temp_mutex);
+        if (forced_temp_path.has_value()) {
+            std::filesystem::path result = std::move(*forced_temp_path);
+            forced_temp_path.reset();
+            return result;
+        }
+    }
     static std::atomic_uint64_t counter{0U};
     std::filesystem::path result = cache_path;
     result += ".tmp-" + std::to_string(process_id()) + "-"
@@ -206,26 +232,132 @@ std::filesystem::path temporary_path(
     return result;
 }
 
-bool flush_file(const std::filesystem::path& path) noexcept
+enum class TempReservationStatus {
+    owned,
+    collision,
+    unsafe,
+    error,
+};
+
+struct TempReservation final {
+    std::filesystem::path path;
+#ifdef _WIN32
+    HANDLE handle = INVALID_HANDLE_VALUE;
+#else
+    int handle = -1;
+#endif
+    bool owned = false;
+
+    ~TempReservation() noexcept
+    {
+#ifdef _WIN32
+        if (handle != INVALID_HANDLE_VALUE) {
+            CloseHandle(handle);
+        }
+#else
+        if (handle >= 0) {
+            close(handle);
+        }
+#endif
+        if (owned) {
+            try {
+                std::error_code cleanup_error;
+                std::filesystem::remove(path, cleanup_error);
+            } catch (...) {
+            }
+        }
+    }
+};
+
+TempReservationStatus reserve_temp_candidate(
+    const std::filesystem::path& candidate,
+    const std::filesystem::path& source,
+    TempReservation& reservation) noexcept
 {
+    if (identifies_same_file(candidate, source)) {
+        return TempReservationStatus::unsafe;
+    }
+    try {
+        reservation.path = candidate;
+    } catch (...) {
+        return TempReservationStatus::error;
+    }
 #ifdef _WIN32
     const HANDLE handle = CreateFileW(
-        path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+        candidate.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_NEW,
         FILE_ATTRIBUTE_NORMAL, nullptr);
     if (handle == INVALID_HANDLE_VALUE) {
-        return false;
+        const DWORD error = GetLastError();
+        if (error == ERROR_FILE_EXISTS || error == ERROR_ALREADY_EXISTS
+            || GetFileAttributesW(candidate.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            return TempReservationStatus::collision;
+        }
+        return TempReservationStatus::error;
     }
-    const bool result = FlushFileBuffers(handle) != FALSE;
-    CloseHandle(handle);
-    return result;
+    reservation.handle = handle;
 #else
-    const int file = open(path.c_str(), O_RDONLY);
+    const int file = open(candidate.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0600);
     if (file < 0) {
-        return false;
+        return errno == EEXIST ? TempReservationStatus::collision
+                              : TempReservationStatus::error;
     }
-    const bool result = fsync(file) == 0;
-    close(file);
-    return result;
+    reservation.handle = file;
+#endif
+    reservation.owned = true;
+    return TempReservationStatus::owned;
+}
+
+bool write_temp(TempReservation& reservation,
+                const std::uint8_t* const header,
+                const std::size_t header_size,
+                const std::uint8_t* const payload,
+                const std::size_t payload_size) noexcept
+{
+#ifdef _WIN32
+    const auto write_all = [&](const std::uint8_t* data,
+                               std::size_t size) noexcept {
+        while (size > 0U) {
+            const DWORD chunk = static_cast<DWORD>(std::min<std::size_t>(
+                size, std::numeric_limits<DWORD>::max()));
+            DWORD written = 0U;
+            if (WriteFile(reservation.handle, data, chunk, &written, nullptr)
+                    == FALSE
+                || written == 0U) {
+                return false;
+            }
+            data += written;
+            size -= written;
+        }
+        return true;
+    };
+    const bool wrote = write_all(header, header_size)
+                       && write_all(payload, payload_size)
+                       && FlushFileBuffers(reservation.handle) != FALSE;
+    const bool closed = CloseHandle(reservation.handle) != FALSE;
+    reservation.handle = INVALID_HANDLE_VALUE;
+    return wrote && closed;
+#else
+    const auto write_all = [&](const std::uint8_t* data,
+                               std::size_t size) noexcept {
+        while (size > 0U) {
+            const ssize_t written = write(reservation.handle, data, size);
+            if (written < 0 && errno == EINTR) {
+                continue;
+            }
+            if (written <= 0) {
+                return false;
+            }
+            data += static_cast<std::size_t>(written);
+            size -= static_cast<std::size_t>(written);
+        }
+        return true;
+    };
+    const bool wrote = write_all(header, header_size)
+                       && write_all(payload, payload_size)
+                       && fsync(reservation.handle) == 0;
+    const bool closed = close(reservation.handle) == 0;
+    reservation.handle = -1;
+    return wrote && closed;
 #endif
 }
 
@@ -280,6 +412,16 @@ namespace testing {
 void fail_next_frequency_color_cache_replace() noexcept
 {
     fail_next_replace.store(true, std::memory_order_relaxed);
+}
+
+void force_next_frequency_color_cache_temp(
+    const std::filesystem::path& path) noexcept
+{
+    try {
+        std::lock_guard<std::mutex> lock(forced_temp_mutex);
+        forced_temp_path = path;
+    } catch (...) {
+    }
 }
 
 } // namespace testing
@@ -397,7 +539,6 @@ bool FrequencyColorWaveformCache::save_atomic(
     const std::filesystem::path& source,
     const FrequencyColorCacheData& data) noexcept
 {
-    std::filesystem::path temp;
     try {
         if (identifies_same_file(cache, source)) {
             return false;
@@ -446,35 +587,34 @@ bool FrequencyColorWaveformCache::save_atomic(
         store_little_endian(header, kHeaderCrcOffset,
                             crc32(header.data(), header.size()));
 
-        temp = temporary_path(cache);
-        std::ofstream output(temp, std::ios::binary | std::ios::trunc);
-        output.write(reinterpret_cast<const char*>(header.data()),
-                     static_cast<std::streamsize>(header.size()));
-        output.write(reinterpret_cast<const char*>(payload.data()),
-                     static_cast<std::streamsize>(payload.size()));
-        output.flush();
-        const bool wrote = static_cast<bool>(output);
-        output.close();
-        if (!wrote || !flush_file(temp)) {
-            std::error_code cleanup_error;
-            std::filesystem::remove(temp, cleanup_error);
+        TempReservation reservation;
+        constexpr int maximum_temp_attempts = 128;
+        for (int attempt = 0; attempt < maximum_temp_attempts; ++attempt) {
+            const std::filesystem::path candidate = temporary_path(cache);
+            const TempReservationStatus status = reserve_temp_candidate(
+                candidate, source, reservation);
+            if (status == TempReservationStatus::owned) {
+                break;
+            }
+            if (status != TempReservationStatus::collision) {
+                return false;
+            }
+        }
+        if (!reservation.owned
+            || !write_temp(reservation, header.data(), header.size(),
+                           payload.data(), payload.size())) {
             return false;
         }
 
         FrequencyColorCacheData verified;
-        if (!load(temp, source, data.algorithm_version, verified)
+        if (!load(reservation.path, source, data.algorithm_version, verified)
             || !same_data(verified, data)
-            || !atomic_replace(temp, cache)) {
-            std::error_code cleanup_error;
-            std::filesystem::remove(temp, cleanup_error);
+            || !atomic_replace(reservation.path, cache)) {
             return false;
         }
+        reservation.owned = false;
         return true;
     } catch (...) {
-        if (!temp.empty()) {
-            std::error_code cleanup_error;
-            std::filesystem::remove(temp, cleanup_error);
-        }
         return false;
     }
 }

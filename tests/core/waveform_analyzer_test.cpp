@@ -188,6 +188,77 @@ struct WaitHookState final {
     bool cancel_attempted = false;
 };
 
+struct HookPairPayload final {
+    int marker = 0;
+    std::atomic_int* failures = nullptr;
+};
+std::atomic<std::atomic_int*> hook_pair_failure_sink{nullptr};
+
+void record_hook_pair_failure(const HookPairPayload* payload)
+{
+    std::atomic_int* failures =
+        payload == nullptr ? hook_pair_failure_sink.load(
+                                 std::memory_order_relaxed)
+                           : payload->failures;
+    if (failures != nullptr) {
+        failures->fetch_add(1, std::memory_order_relaxed);
+    }
+}
+
+void hook_pair_one(const int, void* user_data)
+{
+    const auto* payload = static_cast<const HookPairPayload*>(user_data);
+    if (payload == nullptr || payload->marker != 1) {
+        record_hook_pair_failure(payload);
+    }
+}
+
+void hook_pair_two(const int, void* user_data)
+{
+    const auto* payload = static_cast<const HookPairPayload*>(user_data);
+    if (payload == nullptr || payload->marker != 2) {
+        record_hook_pair_failure(payload);
+    }
+}
+
+void test_wait_hook_registration_pairing()
+{
+    std::atomic_int failures{0};
+    HookPairPayload first{1, &failures};
+    HookPairPayload second{2, &failures};
+    hook_pair_failure_sink.store(&failures, std::memory_order_relaxed);
+    ag_cancel_token* token = ag_cancel_token_create();
+    assert(token != nullptr);
+    std::atomic_bool start{false};
+    std::thread invoker([&] {
+        while (!start.load(std::memory_order_acquire)) {
+            std::this_thread::yield();
+        }
+        for (int attempt = 0; attempt < 10'000; ++attempt) {
+            ag_cancel_token_cancel(token);
+        }
+    });
+    std::thread replacer([&] {
+        while (!start.load(std::memory_order_acquire)) {
+            std::this_thread::yield();
+        }
+        for (int attempt = 0; attempt < 10'000; ++attempt) {
+            agplayer::testing::set_frequency_wait_test_hook(
+                hook_pair_one, &first);
+            agplayer::testing::set_frequency_wait_test_hook(nullptr, nullptr);
+            agplayer::testing::set_frequency_wait_test_hook(
+                hook_pair_two, &second);
+        }
+    });
+    start.store(true, std::memory_order_release);
+    invoker.join();
+    replacer.join();
+    agplayer::testing::set_frequency_wait_test_hook(nullptr, nullptr);
+    ag_cancel_token_destroy(token);
+    assert(failures.load(std::memory_order_relaxed) == 0);
+    hook_pair_failure_sink.store(nullptr, std::memory_order_relaxed);
+}
+
 void wait_test_hook(const int phase, void* user_data)
 {
     auto& state = *static_cast<WaitHookState*>(user_data);
@@ -263,6 +334,7 @@ void throw_from_progress(const float, void*)
 
 void test_frequency_color_c_api(const std::string& source_path)
 {
+    test_wait_hook_registration_pairing();
     ag_waveform* waveform = reinterpret_cast<ag_waveform*>(
         static_cast<std::uintptr_t>(1U));
     assert(ag_track_frequency_color_analysis(

@@ -246,6 +246,48 @@ int main()
     assert(!has_temporary_for(case_alias));
 #endif
 
+    const std::filesystem::path temp_collision_cache =
+        case_dir / "temp-collision.fcw1";
+    agplayer::testing::force_next_frequency_color_cache_temp(source);
+    assert(!FrequencyColorWaveformCache::save_atomic(
+        temp_collision_cache, source, original));
+    assert(read_bytes(source) == source_bytes);
+    assert(!std::filesystem::exists(temp_collision_cache));
+
+    if (!hardlink_error) {
+        agplayer::testing::force_next_frequency_color_cache_temp(
+            hardlink_source);
+        assert(!FrequencyColorWaveformCache::save_atomic(
+            temp_collision_cache, source, original));
+        assert(read_bytes(source) == source_bytes);
+        assert(read_bytes(hardlink_source) == source_bytes);
+        assert(!std::filesystem::exists(temp_collision_cache));
+    }
+
+    const std::filesystem::path unrelated_temp =
+        case_dir / "preexisting-unrelated.tmp";
+    const Bytes unrelated_bytes{'u', 'n', 'r', 'e', 'l', 'a', 't', 'e', 'd'};
+    write_bytes(unrelated_temp, unrelated_bytes);
+    agplayer::testing::force_next_frequency_color_cache_temp(unrelated_temp);
+    assert(FrequencyColorWaveformCache::save_atomic(
+        temp_collision_cache, source, original));
+    assert(read_bytes(unrelated_temp) == unrelated_bytes);
+    assert(read_bytes(source) == source_bytes);
+
+    const std::filesystem::path unrelated_directory =
+        case_dir / "preexisting-directory.tmp";
+    std::filesystem::create_directories(unrelated_directory);
+    const std::filesystem::path unrelated_child =
+        unrelated_directory / "keep.bin";
+    write_bytes(unrelated_child, unrelated_bytes);
+    agplayer::testing::force_next_frequency_color_cache_temp(
+        unrelated_directory);
+    assert(FrequencyColorWaveformCache::save_atomic(
+        temp_collision_cache, source, original));
+    assert(std::filesystem::is_directory(unrelated_directory));
+    assert(read_bytes(unrelated_child) == unrelated_bytes);
+    assert(read_bytes(source) == source_bytes);
+
     const std::filesystem::path cache = case_dir / "waveform.fcw1";
     assert(FrequencyColorWaveformCache::save_atomic(cache, source, original));
     assert(std::filesystem::file_size(cache) == 64U + 3U * 2'000U);
@@ -441,29 +483,59 @@ int main()
     const std::filesystem::path concurrent_cache = case_dir / "concurrent.fcw1";
     assert(FrequencyColorWaveformCache::save_atomic(
         concurrent_cache, source, concurrent_a));
+    const Bytes concurrent_old_bytes = read_bytes(concurrent_cache);
+    const std::filesystem::path concurrent_new_fixture =
+        case_dir / "concurrent-new.fcw1";
+    assert(FrequencyColorWaveformCache::save_atomic(
+        concurrent_new_fixture, source, concurrent_b));
+    const Bytes concurrent_new_bytes = read_bytes(concurrent_new_fixture);
+    assert(concurrent_old_bytes != concurrent_new_bytes);
+    std::filesystem::remove(concurrent_new_fixture);
     std::mutex reader_mutex;
     std::condition_variable reader_condition;
-    bool reader_ready = false;
+    bool reader_saw_old = false;
+    bool reader_saw_new = false;
+    bool replacement_finished = false;
     std::atomic_bool stop_reader{false};
     std::atomic_int reader_failures{0};
     std::atomic_int reader_successes{0};
-    std::atomic_int reader_cache_misses{0};
+    std::atomic_int reader_open_misses{0};
     std::thread reader([&] {
         while (!stop_reader.load(std::memory_order_relaxed)) {
-            FrequencyColorCacheData observed;
-            if (!FrequencyColorWaveformCache::load(
-                    concurrent_cache, source, original.algorithm_version,
-                    observed)) {
-                reader_cache_misses.fetch_add(1, std::memory_order_relaxed);
-            } else if (!same_data(observed, concurrent_a)
-                       && !same_data(observed, concurrent_b)) {
+            Bytes observed;
+            bool opened = false;
+            bool read_failed = false;
+            {
+                std::ifstream input(concurrent_cache, std::ios::binary);
+                opened = input.is_open();
+                if (opened) {
+                    observed.assign(std::istreambuf_iterator<char>(input),
+                                    std::istreambuf_iterator<char>());
+                    read_failed = input.bad();
+                }
+            }
+            if (!opened) {
+                reader_open_misses.fetch_add(1, std::memory_order_relaxed);
+            } else if (read_failed
+                       || (observed != concurrent_old_bytes
+                           && observed != concurrent_new_bytes)) {
                 reader_failures.fetch_add(1, std::memory_order_relaxed);
             } else {
                 reader_successes.fetch_add(1, std::memory_order_relaxed);
             }
             {
-                std::lock_guard<std::mutex> lock(reader_mutex);
-                reader_ready = true;
+                std::unique_lock<std::mutex> lock(reader_mutex);
+                reader_saw_old = reader_saw_old
+                                 || observed == concurrent_old_bytes;
+                reader_saw_new = reader_saw_new
+                                 || observed == concurrent_new_bytes;
+                reader_condition.notify_all();
+                if (reader_saw_old && !replacement_finished) {
+                    reader_condition.wait(lock, [&] {
+                        return replacement_finished
+                               || stop_reader.load(std::memory_order_relaxed);
+                    });
+                }
             }
             reader_condition.notify_all();
         }
@@ -471,7 +543,19 @@ int main()
     {
         std::unique_lock<std::mutex> lock(reader_mutex);
         assert(reader_condition.wait_for(
-            lock, std::chrono::seconds(2), [&] { return reader_ready; }));
+            lock, std::chrono::seconds(2), [&] { return reader_saw_old; }));
+    }
+    assert(FrequencyColorWaveformCache::save_atomic(
+        concurrent_cache, source, concurrent_b));
+    {
+        std::lock_guard<std::mutex> lock(reader_mutex);
+        replacement_finished = true;
+    }
+    reader_condition.notify_all();
+    {
+        std::unique_lock<std::mutex> lock(reader_mutex);
+        assert(reader_condition.wait_for(
+            lock, std::chrono::seconds(2), [&] { return reader_saw_new; }));
     }
     std::atomic_int save_successes{0};
     const auto save_many = [&](const FrequencyColorCacheData& data) {
@@ -491,7 +575,9 @@ int main()
     assert(save_successes.load(std::memory_order_relaxed) > 0);
     assert(reader_successes.load(std::memory_order_relaxed) > 0);
     assert(reader_failures.load(std::memory_order_relaxed) == 0);
-    (void)reader_cache_misses;
+#ifndef _WIN32
+    assert(reader_open_misses.load(std::memory_order_relaxed) == 0);
+#endif
     loaded = {};
     assert(FrequencyColorWaveformCache::load(
         concurrent_cache, source, original.algorithm_version, loaded));
