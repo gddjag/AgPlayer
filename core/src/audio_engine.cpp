@@ -420,6 +420,7 @@ public:
         if (state != EngineState::Stopped && state != EngineState::Paused) {
             return AG_INVALID_ARGUMENT;
         }
+        invalidate_output_meter();
         if (!state_.compare_exchange_strong(state,
                                             EngineState::Playing,
                                             std::memory_order_acq_rel,
@@ -459,6 +460,7 @@ public:
         if (state != EngineState::Playing) {
             return AG_INVALID_ARGUMENT;
         }
+        invalidate_output_meter();
         if (stop_output() != AG_OK) {
             device_lock.unlock();
             return enter_error(AG_DEVICE_ERROR);
@@ -484,6 +486,7 @@ public:
         if (!loaded_) {
             return AG_INVALID_ARGUMENT;
         }
+        invalidate_output_meter();
         state_.store(EngineState::Stopped, std::memory_order_release);
         stop_decode_thread();
         if (stop_output() != AG_OK) {
@@ -523,6 +526,7 @@ public:
         if (!loaded_ || position_ms < 0 || position_ms > duration) {
             return AG_INVALID_ARGUMENT;
         }
+        invalidate_output_meter();
 
         // Fast path: the decode thread is running. Hand the seek off to it
         // via atomic flags so we avoid stopping/restarting the output device
@@ -730,13 +734,19 @@ public:
     [[nodiscard]] EqualizerStatus equalizer_status() const noexcept
     {
         double output_peak_db = output_meter_floor_db;
-        if (state_.load(std::memory_order_acquire) == EngineState::Playing
+        const std::uint64_t meter_generation =
+            output_meter_generation_.load(std::memory_order_acquire);
+        if (output_meter_valid_generation_.load(std::memory_order_acquire)
+                == meter_generation
+            && state_.load(std::memory_order_acquire) == EngineState::Playing
             && !muted_.load(std::memory_order_acquire)
             && !device_lost_.load(std::memory_order_acquire)
             && !seeking_.load(std::memory_order_acquire)) {
             const float output_peak =
                 output_peak_linear_.load(std::memory_order_acquire);
-            if (std::isfinite(output_peak)
+            if (output_meter_generation_.load(std::memory_order_acquire)
+                    == meter_generation
+                && std::isfinite(output_peak)
                 && output_peak > output_meter_floor_linear) {
                 output_peak_db = (std::max)(
                     output_meter_floor_db,
@@ -756,6 +766,10 @@ public:
 
     void set_muted(const bool muted) noexcept
     {
+        if (muted_.load(std::memory_order_acquire) == muted) {
+            return;
+        }
+        invalidate_output_meter();
         muted_.store(muted, std::memory_order_release);
     }
 
@@ -795,8 +809,12 @@ public:
 
     void render(float* output, const std::size_t requested_frames) noexcept
     {
+        const std::uint64_t meter_generation =
+            output_meter_generation_.load(std::memory_order_acquire);
         if (output == nullptr || requested_frames == 0U) {
             output_peak_linear_.store(0.0F, std::memory_order_release);
+            output_meter_valid_generation_.store(0U,
+                                                  std::memory_order_release);
             return;
         }
         const std::size_t channels = static_cast<std::size_t>(channels_);
@@ -804,6 +822,8 @@ public:
             || device_lost_.load(std::memory_order_acquire)
             || seeking_.load(std::memory_order_acquire)) {
             output_peak_linear_.store(0.0F, std::memory_order_release);
+            output_meter_valid_generation_.store(0U,
+                                                  std::memory_order_release);
             std::fill(output, output + requested_frames * channels, 0.0F);
             return;
         }
@@ -856,16 +876,34 @@ public:
         }
         if (frames == 0U || gain <= 0.0F) {
             output_peak_linear_.store(0.0F, std::memory_order_release);
+            output_meter_valid_generation_.store(0U,
+                                                  std::memory_order_release);
         } else {
             const float previous_peak =
-                output_peak_linear_.load(std::memory_order_relaxed);
+                output_meter_valid_generation_.load(
+                    std::memory_order_relaxed) == meter_generation
+                ? output_peak_linear_.load(std::memory_order_relaxed)
+                : 0.0F;
             const float release_gain = integer_power(
                 output_meter_release_per_frame_.load(
                     std::memory_order_relaxed),
-                frames);
-            output_peak_linear_.store(
-                (std::max)(block_peak, previous_peak * release_gain),
-                std::memory_order_release);
+                requested_frames);
+            if (output_meter_generation_.load(std::memory_order_acquire)
+                    == meter_generation
+                && state_.load(std::memory_order_acquire)
+                       == EngineState::Playing
+                && !muted_.load(std::memory_order_acquire)
+                && !device_lost_.load(std::memory_order_acquire)
+                && !seeking_.load(std::memory_order_acquire)) {
+                output_peak_linear_.store(
+                    (std::max)(block_peak, previous_peak * release_gain),
+                    std::memory_order_release);
+                output_meter_valid_generation_.store(
+                    meter_generation, std::memory_order_release);
+            } else {
+                output_meter_valid_generation_.store(
+                    0U, std::memory_order_release);
+            }
         }
         tap_spectrum(output, frames, channels);
         std::fill(output + frames * channels,
@@ -917,6 +955,7 @@ public:
         if (!device_lost_.load(std::memory_order_acquire)) {
             return AG_OK;
         }
+        invalidate_output_meter();
         if (!loaded_) {
             // No media loaded: nothing to reinitialize. Clear the stale flag
             // so callers (and tests) see the recovered state. The device will
@@ -954,6 +993,7 @@ public:
     {
         const std::lock_guard<std::recursive_mutex> control_lock(
             control_mutex_);
+        invalidate_output_meter();
         device_lost_.store(true, std::memory_order_release);
         terminal_error_.store(AG_DEVICE_ERROR,
                               std::memory_order_release);
@@ -1107,6 +1147,7 @@ public:
                 && !device_lost_.load(std::memory_order_acquire)) {
                 return AG_OK;
             }
+            invalidate_output_meter();
 
             const std::string previous_id = selected_device_id_;
             const bool previous_exclusive = exclusive_mode_;
@@ -1231,6 +1272,7 @@ private:
         // closest equivalent and fires when the audio session is interrupted
         // (device unplugged, exclusive-mode takeover, etc.).
         if (notification->type == ma_device_notification_type_interruption_began) {
+            self->invalidate_output_meter();
             self->device_lost_.store(true, std::memory_order_release);
             self->terminal_error_.store(AG_DEVICE_ERROR,
                                         std::memory_order_release);
@@ -1850,6 +1892,7 @@ private:
 
     void reset_timeline(const std::int64_t position_frames) noexcept
     {
+        invalidate_output_meter();
         equalizer_.reset();
         rendered_frames_total_.store(position_frames, std::memory_order_release);
         track_start_frame_.store(0, std::memory_order_release);
@@ -1996,6 +2039,11 @@ private:
                                        std::memory_order_release);
     }
 
+    void invalidate_output_meter() noexcept
+    {
+        output_meter_generation_.fetch_add(1U, std::memory_order_acq_rel);
+    }
+
     AudioBackend backend_;
     static constexpr std::int64_t no_pending_boundary = -1;
     static constexpr std::int64_t publishing_boundary = -2;
@@ -2058,6 +2106,8 @@ private:
     std::atomic<double> equalizer_protection_status_{0.0};
     std::atomic<float> output_peak_linear_{0.0F};
     std::atomic<float> output_meter_release_per_frame_{0.0F};
+    std::atomic<std::uint64_t> output_meter_generation_{1U};
+    std::atomic<std::uint64_t> output_meter_valid_generation_{0U};
     std::atomic<bool> muted_{false};
     std::atomic<int> transition_fade_ms_{0};
     std::atomic<bool> match_track_sample_rate_{false};
