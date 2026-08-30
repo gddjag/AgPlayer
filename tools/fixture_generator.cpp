@@ -8,10 +8,12 @@
 namespace {
 
 enum class FixtureLayout {
-    Mono,
+    DuplicatedSine,
     StereoIndependent,
     StereoAntiphase,
     Surround51Independent,
+    Surround51Unknown,
+    Durationless,
 };
 
 void write_u16(std::ofstream& output, const std::uint16_t value)
@@ -44,7 +46,8 @@ bool write_wave_header(std::ofstream& output,
                        const std::uint32_t sample_rate,
                        const std::uint16_t channels,
                        const std::uint32_t frame_count,
-                       const bool extensible)
+                       const bool extensible,
+                       const std::uint32_t channel_mask)
 {
     constexpr std::uint16_t bits_per_sample = 16U;
     const std::uint32_t bytes_per_frame =
@@ -69,7 +72,7 @@ bool write_wave_header(std::ofstream& output,
     if (extensible) {
         write_u16(output, 22U);
         write_u16(output, bits_per_sample);
-        write_u32(output, 0x3fU);
+        write_u32(output, channel_mask);
         write_u16(output, 1U);
         write_u16(output, 0U);
         write_u16(output, 0U);
@@ -100,7 +103,7 @@ int main(const int argc, char** argv)
     std::uint16_t channels = 2U;
     std::uint32_t start_frame = 0U;
     std::uint32_t frame_count = sample_rate * 2U;
-    FixtureLayout layout = FixtureLayout::Mono;
+    FixtureLayout layout = FixtureLayout::DuplicatedSine;
     if (argc == 3) {
         const std::string_view mode(argv[2]);
         if (mode == "stereo-independent") {
@@ -112,6 +115,13 @@ int main(const int argc, char** argv)
         } else if (mode == "surround-5.1-independent") {
             layout = FixtureLayout::Surround51Independent;
             channels = 6U;
+        } else if (mode == "surround-5.1-unknown") {
+            layout = FixtureLayout::Surround51Unknown;
+            channels = 6U;
+        } else if (mode == "durationless") {
+            layout = FixtureLayout::Durationless;
+            frame_count = 0U;
+            channels = 2U;
         } else {
             return 1;
         }
@@ -155,8 +165,12 @@ int main(const int argc, char** argv)
         return 2;
     }
 
+    const bool extensible = layout == FixtureLayout::Surround51Independent
+                            || layout == FixtureLayout::Surround51Unknown;
+    const std::uint32_t channel_mask = layout == FixtureLayout::Surround51Independent
+        ? 0x3fU : 0U;
     if (!write_wave_header(output, sample_rate, channels, frame_count,
-                           layout == FixtureLayout::Surround51Independent)) {
+                           extensible, channel_mask)) {
         return 3;
     }
 
@@ -171,7 +185,8 @@ int main(const int argc, char** argv)
             write_pcm_sample(output, -0.25F);
             continue;
         }
-        if (layout == FixtureLayout::Surround51Independent) {
+        if (layout == FixtureLayout::Surround51Independent
+            || layout == FixtureLayout::Surround51Unknown) {
             constexpr float samples[] = {0.10F, 0.20F, 0.30F,
                                          0.40F, 0.50F, 0.60F};
             for (const float sample : samples) write_pcm_sample(output, sample);

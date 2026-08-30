@@ -506,10 +506,10 @@ public:
                                ? options.output_channels
                                : codec_context_->ch_layout.nb_channels;
 
-        result = initialize_resampler(options);
-        if (result < 0) {
+        const ag_result resampler_result = initialize_resampler(options);
+        if (resampler_result != AG_OK) {
             reset();
-            return AG_DECODE_ERROR;
+            return resampler_result;
         }
 
         packet_ = av_packet_alloc();
@@ -710,20 +710,24 @@ private:
         return AG_OK;
     }
 
-    int initialize_resampler(const DecoderOpenOptions& options)
+    ag_result initialize_resampler(const DecoderOpenOptions& options)
     {
         av_channel_layout_uninit(&input_layout_);
         int result = 0;
+        const AVChannelLayout& stream_layout = format_context_->streams[
+            audio_stream_index_]->codecpar->ch_layout;
+        const AVChannelLayout& source_layout = stream_layout.nb_channels > 0
+            ? stream_layout : codec_context_->ch_layout;
         input_layout_roles_known_ =
-            codec_context_->ch_layout.order != AV_CHANNEL_ORDER_UNSPEC;
-        if (codec_context_->ch_layout.order == AV_CHANNEL_ORDER_UNSPEC) {
+            source_layout.order != AV_CHANNEL_ORDER_UNSPEC;
+        if (source_layout.order == AV_CHANNEL_ORDER_UNSPEC) {
             av_channel_layout_default(
-                &input_layout_, codec_context_->ch_layout.nb_channels);
+                &input_layout_, source_layout.nb_channels);
         } else {
             result = av_channel_layout_copy(&input_layout_,
-                                            &codec_context_->ch_layout);
+                                            &source_layout);
             if (result < 0) {
-                return result;
+                return AG_DECODE_ERROR;
             }
         }
 
@@ -740,23 +744,26 @@ private:
                                      0,
                                      nullptr);
         if (result < 0) {
-            return result;
+            return options.downmix == DecoderDownmix::AnalysisMono
+                ? AG_UNSUPPORTED_FORMAT : AG_DECODE_ERROR;
         }
         if (options.downmix == DecoderDownmix::AnalysisMono) {
             const std::vector<double> matrix = analysis_mono_matrix(
                 input_layout_, input_layout_roles_known_);
             if (matrix.size() != static_cast<std::size_t>(input_layout_.nb_channels)) {
-                return AVERROR(EINVAL);
+                return AG_UNSUPPORTED_FORMAT;
             }
             result = swr_set_matrix(swr_context_, matrix.data(), input_layout_.nb_channels);
-            if (result < 0) return result;
+            if (result < 0) return AG_UNSUPPORTED_FORMAT;
         }
         result = swr_init(swr_context_);
-        if (result >= 0) {
-            output_format_.sample_rate = output_sample_rate_;
-            output_format_.channels = output_channels_;
+        if (result < 0) {
+            return options.downmix == DecoderDownmix::AnalysisMono
+                ? AG_UNSUPPORTED_FORMAT : AG_DECODE_ERROR;
         }
-        return result;
+        output_format_.sample_rate = output_sample_rate_;
+        output_format_.channels = output_channels_;
+        return AG_OK;
     }
 
     void set_output_timeline(const AVStream& audio_stream) noexcept
