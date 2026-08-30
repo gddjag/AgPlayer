@@ -368,6 +368,9 @@ void ImportControllerTest::productionProbeImportsMetadataAndUsesBrandFallback()
     const TrackRecord& track = model.tracks().front();
     QCOMPARE(track.format, QStringLiteral("wav"));
     QVERIFY(track.sampleRate > 0);
+    QVERIFY(track.bitDepth > 0);
+    QVERIFY(track.channels > 0);
+    QVERIFY(track.bitRate > 0);
     QVERIFY(track.durationMs > 0);
     QVERIFY(track.fileSize > 0);
     QCOMPARE(track.coverUrl,

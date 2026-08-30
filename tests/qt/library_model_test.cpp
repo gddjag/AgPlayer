@@ -179,6 +179,7 @@ void LibraryModelTest::exposesRolesAndUpdatesFavorite()
     track.format = QStringLiteral("wav");
     track.sampleRate = 96000;
     track.bitDepth = 24;
+    track.channels = 2;
     track.bitRate = 4608000;
     track.durationMs = 1234;
     track.fileSize = 5678;
@@ -199,6 +200,7 @@ void LibraryModelTest::exposesRolesAndUpdatesFavorite()
     QCOMPARE(model.data(index, LibraryModel::YearRole).toString(), track.year);
     QCOMPARE(model.data(index, LibraryModel::DateRole).toString(), track.date);
     QCOMPARE(model.data(index, LibraryModel::ComposerRole).toString(), track.composer);
+    QCOMPARE(model.data(index, LibraryModel::ChannelsRole).toInt(), track.channels);
     QCOMPARE(model.data(index, LibraryModel::CoverUrlRole).toUrl(), track.coverUrl);
     QCOMPARE(model.data(index, LibraryModel::FavoriteRole).toBool(), track.favorite);
     QCOMPARE(model.data(index, LibraryModel::RatingRole).toInt(), track.rating);
@@ -218,6 +220,7 @@ void LibraryModelTest::exposesRolesAndUpdatesFavorite()
     QCOMPARE(roles.value(LibraryModel::FormatRole), QByteArray("format"));
     QCOMPARE(roles.value(LibraryModel::SampleRateRole), QByteArray("sampleRate"));
     QCOMPARE(roles.value(LibraryModel::BitDepthRole), QByteArray("bitDepth"));
+    QCOMPARE(roles.value(LibraryModel::ChannelsRole), QByteArray("channels"));
     QCOMPARE(roles.value(LibraryModel::BitRateRole), QByteArray("bitRate"));
     QCOMPARE(roles.value(LibraryModel::DurationMsRole), QByteArray("durationMs"));
     QCOMPARE(roles.value(LibraryModel::FileSizeRole), QByteArray("fileSize"));

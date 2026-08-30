@@ -163,7 +163,13 @@ QVariantMap LibraryFileOperations::trackDetails(const QString& trackId) const
 {
     if (library_ == nullptr) return {};
     QVariantMap details = library_->trackForId(trackId);
-    const QFileInfo info(details.value(QStringLiteral("path")).toString());
+    QFileInfo info(details.value(QStringLiteral("path")).toString());
+    if (info.isFile()
+        && details.value(QStringLiteral("channels")).toInt() <= 0
+        && library_->refreshMetadataForPath(info.absoluteFilePath())) {
+        details = library_->trackForId(trackId);
+        info.setFile(details.value(QStringLiteral("path")).toString());
+    }
     details.insert(QStringLiteral("directory"), info.absolutePath());
     details.insert(QStringLiteral("modifiedAt"), info.lastModified());
     details.insert(QStringLiteral("fileName"), info.fileName());

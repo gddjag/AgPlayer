@@ -22,6 +22,7 @@ struct TrackRecord {
     QString format;
     int sampleRate = 0;
     int bitDepth = 0;
+    int channels = 0;
     qint64 bitRate = 0;
     qint64 durationMs = 0;
     qint64 fileSize = 0;
@@ -93,7 +94,8 @@ public:
         GenreRole,
         YearRole,
         DateRole,
-        ComposerRole
+        ComposerRole,
+        ChannelsRole
     };
     Q_ENUM(Role)
 

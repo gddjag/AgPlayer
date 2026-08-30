@@ -421,8 +421,8 @@ TestCase {
             verify(label !== null, "missing file information label for " + key)
             verify(value !== null, "missing file information value for " + key)
             if (requiredValueKeys.indexOf(key) >= 0) {
-                verify(String(value.text || "").length > 0,
-                       "required file information value must not be empty: " + key)
+                verify(String(panel.rows[rowIndex].value || "").length > 0,
+                       "required raw file information value must not be empty: " + key)
             }
         }
         compare(panel.fullPath, expectedPath)

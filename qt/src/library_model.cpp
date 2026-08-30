@@ -193,6 +193,8 @@ QVariant LibraryModel::data(const QModelIndex& index, int role) const
         return track.sampleRate;
     case BitDepthRole:
         return track.bitDepth;
+    case ChannelsRole:
+        return track.channels;
     case BitRateRole:
         return track.bitRate;
     case DurationMsRole:
@@ -255,6 +257,7 @@ QHash<int, QByteArray> LibraryModel::roleNames() const
             {FormatRole, "format"},
             {SampleRateRole, "sampleRate"},
             {BitDepthRole, "bitDepth"},
+            {ChannelsRole, "channels"},
             {BitRateRole, "bitRate"},
             {DurationMsRole, "durationMs"},
             {FileSizeRole, "fileSize"},
@@ -788,6 +791,7 @@ bool LibraryModel::refreshMetadataForPath(const QString& path)
     track.format = copiedMetadata(ag_metadata_format(metadata));
     track.sampleRate = ag_metadata_sample_rate(metadata);
     track.bitDepth = ag_metadata_bits_per_sample(metadata);
+    track.channels = ag_metadata_channels(metadata);
     track.bitRate = ag_metadata_bit_rate(metadata);
     track.durationMs = ag_metadata_duration_ms(metadata);
     track.fileSize = QFileInfo(path).size();
@@ -816,7 +820,8 @@ bool LibraryModel::refreshMetadataForPath(const QString& path)
     emit dataChanged(changed, changed,
                      {TitleRole, ArtistRole, AlbumRole, AlbumArtistRole,
                       GenreRole, YearRole, DateRole, ComposerRole, FormatRole,
-                      SampleRateRole, BitDepthRole, BitRateRole, DurationMsRole,
+                      SampleRateRole, BitDepthRole, ChannelsRole, BitRateRole,
+                      DurationMsRole,
                       FileSizeRole, CoverUrlRole, BpmRole});
     emit flushRequested();
     return true;

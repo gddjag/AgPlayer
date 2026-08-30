@@ -2,6 +2,7 @@
 #include "library_model.hpp"
 
 #include <QFile>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -10,7 +11,41 @@ class LibraryFileOperationsTest final : public QObject {
 private slots:
     void renamesCopiesMovesAndRelocatesWithoutSilentOverwrite();
     void trashTracksReportsPartialFailureWithoutDroppingLibraryRows();
+    void trackDetailsHydratesMissingAudioMetadataOnce();
 };
+
+void LibraryFileOperationsTest::trackDetailsHydratesMissingAudioMetadataOnce()
+{
+    const QString fixture = QString::fromLocal8Bit(qgetenv("AGPLAYER_TEST_AUDIO"));
+    QVERIFY2(QFileInfo::exists(fixture),
+             "AGPLAYER_TEST_AUDIO must name the generated WAV fixture");
+
+    TrackRecord legacy;
+    legacy.trackId = QStringLiteral("legacy-audio");
+    legacy.path = fixture;
+    legacy.title = QStringLiteral("Legacy audio");
+    legacy.available = true;
+    LibraryModel library;
+    library.replaceAll({legacy});
+    LibraryFileOperations operations;
+    operations.setLibraryModel(&library);
+    QSignalSpy flushRequested(&library, &LibraryModel::flushRequested);
+
+    const QVariantMap details = operations.trackDetails(legacy.trackId);
+    QVERIFY(details.value(QStringLiteral("sampleRate")).toInt() > 0);
+    QVERIFY(details.value(QStringLiteral("bitDepth")).toInt() > 0);
+    QVERIFY(details.value(QStringLiteral("channels")).toInt() > 0);
+    QVERIFY(details.value(QStringLiteral("bitRate")).toLongLong() > 0);
+    QVERIFY(details.value(QStringLiteral("durationMs")).toLongLong() > 0);
+    QCOMPARE(library.tracks().front().channels,
+             details.value(QStringLiteral("channels")).toInt());
+    QCOMPARE(flushRequested.count(), 1);
+
+    const QVariantMap secondDetails = operations.trackDetails(legacy.trackId);
+    QCOMPARE(secondDetails.value(QStringLiteral("channels")),
+             details.value(QStringLiteral("channels")));
+    QCOMPARE(flushRequested.count(), 1);
+}
 
 void LibraryFileOperationsTest::renamesCopiesMovesAndRelocatesWithoutSilentOverwrite()
 {
