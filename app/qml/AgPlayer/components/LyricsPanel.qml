@@ -52,9 +52,9 @@ Item {
         anchors.margins: root.spatialMode ? -18 : 0
         radius: 16
         color: root.spatialMode ? "transparent"
-                                : Qt.rgba(0.025, 0.035, 0.065, 0.46)
+                                : Qt.rgba(0.025, 0.035, 0.065, 0.46) // theme-color-allow: immersive media visual contract
         border.width: root.spatialMode ? 0 : 1
-        border.color: Qt.rgba(1, 1, 1, 0.08)
+        border.color: Qt.rgba(1, 1, 1, 0.08) // theme-color-allow: immersive media visual contract
     }
 
     Column {
@@ -80,7 +80,7 @@ Item {
             objectName: "previousLyricLine"
             width: parent.width
             text: root.service ? root.service.previousLine : ""
-            color: Qt.rgba(0.86, 0.89, 0.94,
+            color: Qt.rgba(0.86, 0.89, 0.94, // theme-color-allow: immersive media visual contract
                            0.22 + root.clarityScale * 0.30)
             font.pixelSize: Math.round(13 * root.sizeScale)
             horizontalAlignment: root.lineAlignment
@@ -97,7 +97,7 @@ Item {
             text: root.service && root.service.currentLine.length > 0
                   ? root.service.currentLine : root.statusText()
             color: root.sidePlacement && root.spatialMode
-                   ? PlayerExperienceController.warmColor : "#FFF8F0"
+                   ? PlayerExperienceController.warmColor : "#FFF8F0" // theme-color-allow: immersive media visual contract
             font.pixelSize: Math.round(21 * root.sizeScale)
             font.weight: root.clarity >= 64 ? Font.DemiBold : Font.Medium
             horizontalAlignment: root.lineAlignment
@@ -108,7 +108,7 @@ Item {
             objectName: "nextLyricLine"
             width: parent.width
             text: root.service ? root.service.nextLine : ""
-            color: Qt.rgba(0.86, 0.89, 0.94,
+            color: Qt.rgba(0.86, 0.89, 0.94, // theme-color-allow: immersive media visual contract
                            0.19 + root.clarityScale * 0.26)
             font.pixelSize: Math.round(13 * root.sizeScale)
             horizontalAlignment: root.lineAlignment

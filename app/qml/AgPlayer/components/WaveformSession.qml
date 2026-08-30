@@ -27,10 +27,10 @@ QtObject {
         var jitter = ((hash % 61) - 30) / 360.0
         return {
             hash: hash,
-            cool: Qt.hsla((0.52 + jitter + 1.0) % 1.0, 0.78, 0.66, 1.0),
-            warm: Qt.hsla((0.96 + jitter * 0.55 + 1.0) % 1.0, 0.82, 0.65, 1.0),
-            highlight: Qt.hsla((0.11 + jitter * 0.25 + 1.0) % 1.0, 0.76, 0.78, 1.0),
-            ambient: Qt.hsla((0.60 + jitter * 0.80 + 1.0) % 1.0, 0.62, 0.48, 1.0)
+            cool: Qt.hsla((0.52 + jitter + 1.0) % 1.0, 0.78, 0.66, 1.0), // theme-color-allow: immersive media visual contract
+            warm: Qt.hsla((0.96 + jitter * 0.55 + 1.0) % 1.0, 0.82, 0.65, 1.0), // theme-color-allow: immersive media visual contract
+            highlight: Qt.hsla((0.11 + jitter * 0.25 + 1.0) % 1.0, 0.76, 0.78, 1.0), // theme-color-allow: immersive media visual contract
+            ambient: Qt.hsla((0.60 + jitter * 0.80 + 1.0) % 1.0, 0.62, 0.48, 1.0) // theme-color-allow: immersive media visual contract
         }
     }
 

@@ -16,34 +16,24 @@ RowLayout {
         Layout.preferredWidth: root.buttonSize()
         Layout.preferredHeight: root.buttonSize()
         flat: true
-        icon.source: Theme.icon(SettingsController.playerShellMode === 0
-                                ? "merge-cells-horizontal"
-                                : "split-cells-horizontal")
-        icon.color: Theme.iconPrimary
+        icon.source: Theme.icon(PlayerExperienceController.immersiveMode
+                                !== PlayerExperienceController.Off
+                                ? "pulse-line"
+                                : SettingsController.playerShellMode === 0
+                                  ? "merge-cells-horizontal"
+                                  : "fullscreen-fill")
+        icon.color: PlayerExperienceController.immersiveMode
+                    !== PlayerExperienceController.Off
+                    ? Theme.iconAccent : Theme.iconPrimary
         icon.width: root.compact ? 15 : 18
         icon.height: root.compact ? 15 : 18
-        Accessible.name: SettingsController.playerShellMode === 0
-                         ? qsTr("切换到集成单窗口") : qsTr("切换到经典双窗口")
-        onClicked: PlayerExperienceController.togglePlayerShellMode()
-        ToolTip.text: Accessible.name
-        ToolTip.visible: hovered
-        background: null
-    }
-
-    ToolButton {
-        objectName: "immersiveActionButton"
-        Layout.preferredWidth: root.buttonSize()
-        Layout.preferredHeight: root.buttonSize()
-        flat: true
-        checkable: true
-        checked: PlayerExperienceController.immersiveMode
-                 !== PlayerExperienceController.Off
-        icon.source: Theme.icon("pulse-line")
-        icon.color: checked ? Theme.iconAccent : Theme.iconPrimary
-        icon.width: root.compact ? 15 : 18
-        icon.height: root.compact ? 15 : 18
-        Accessible.name: checked ? qsTr("关闭沉浸视觉") : qsTr("开启沉浸视觉")
-        onClicked: PlayerExperienceController.toggleImmersiveMode()
+        Accessible.name: PlayerExperienceController.immersiveMode
+                         !== PlayerExperienceController.Off
+                         ? qsTr("切换到经典双窗口")
+                         : SettingsController.playerShellMode === 0
+                           ? qsTr("切换到集成单窗口")
+                           : qsTr("切换到独立沉浸视觉")
+        onClicked: PlayerExperienceController.cycleExperienceTheme()
         ToolTip.text: Accessible.name
         ToolTip.visible: hovered
         background: null

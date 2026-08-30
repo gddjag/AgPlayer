@@ -72,9 +72,9 @@ Item {
         width: Math.min(326, Math.max(270, parent.width * 0.20))
         x: root.opened ? root.width - width - 14 : root.width + 8
         radius: 20
-        color: Qt.rgba(0.025, 0.035, 0.06, 0.76)
+        color: Qt.rgba(0.025, 0.035, 0.06, 0.76) // theme-color-allow: immersive media visual contract
         border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.13)
+        border.color: Qt.rgba(1, 1, 1, 0.13) // theme-color-allow: immersive media visual contract
         clip: true
         layer.enabled: root.opened
         z: 4
@@ -158,8 +158,8 @@ Item {
                     anchors.leftMargin: 5
                     anchors.rightMargin: 5
                     radius: 11
-                    color: row.hoveredForQa ? Qt.rgba(1, 1, 1, 0.10)
-                                             : Qt.rgba(1, 1, 1, 0.025)
+                    color: row.hoveredForQa ? Qt.rgba(1, 1, 1, 0.10) // theme-color-allow: immersive media visual contract
+                                             : Qt.rgba(1, 1, 1, 0.025) // theme-color-allow: immersive media visual contract
                     border.width: row.trackId === (root.playback
                                                    ? root.playback.currentTrackId : "") ? 1 : 0
                     border.color: Theme.iconAccent

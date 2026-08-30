@@ -14,24 +14,24 @@ Rectangle {
     width: 356
     height: collapsed ? 52 : Math.min(650, parent ? parent.height - 108 : 650)
     radius: 22
-    color: Qt.rgba(0.032, 0.030, 0.044, 0.88)
+    color: Qt.rgba(0.032, 0.030, 0.044, 0.88) // theme-color-allow: immersive media visual contract
     border.width: 1
-    border.color: Qt.rgba(1, 1, 1, 0.105)
+    border.color: Qt.rgba(1, 1, 1, 0.105) // theme-color-allow: immersive media visual contract
     clip: true
 
     readonly property var presetCards: [
         { "title": qsTr("音域回响"), "sub": qsTr("中央脉冲 · 多彩地形"),
-          "from": "#4a2935", "to": "#82724c" },
+          "from": "#4a2935", "to": "#82724c" }, // theme-color-allow: immersive media visual contract
         { "title": qsTr("霓虹雨夜"), "sub": qsTr("青蓝粉紫 · 高动态"),
-          "from": "#252044", "to": "#7d2c88" },
+          "from": "#252044", "to": "#7d2c88" }, // theme-color-allow: immersive media visual contract
         { "title": qsTr("水墨"), "sub": qsTr("低饱和 · 轻呼吸"),
-          "from": "#2c353a", "to": "#8b7378" },
+          "from": "#2c353a", "to": "#8b7378" }, // theme-color-allow: immersive media visual contract
         { "title": qsTr("纯净舞台"), "sub": qsTr("中心聚焦 · 清晰结构"),
-          "from": "#173a3b", "to": "#40777c" },
+          "from": "#173a3b", "to": "#40777c" }, // theme-color-allow: immersive media visual contract
         { "title": qsTr("安静"), "sub": qsTr("低响应 · 柔和环境"),
-          "from": "#17303c", "to": "#176a7b" },
+          "from": "#17303c", "to": "#176a7b" }, // theme-color-allow: immersive media visual contract
         { "title": qsTr("星河"), "sub": qsTr("深空主题 · 流星冲击"),
-          "from": "#442037", "to": "#91356d" }
+          "from": "#442037", "to": "#91356d" } // theme-color-allow: immersive media visual contract
     ]
 
     function setEqGain(index, value) {
@@ -68,13 +68,13 @@ Rectangle {
             spacing: 2
             Text {
                 text: qsTr("视觉反应控制")
-                color: "#F5F1F7"
+                color: "#F5F1F7" // theme-color-allow: immersive media visual contract
                 font.pixelSize: 14
                 font.weight: Font.DemiBold
             }
             Text {
                 text: "VISUAL REACTOR"
-                color: Qt.rgba(0.86, 0.81, 0.89, 0.43)
+                color: Qt.rgba(0.86, 0.81, 0.89, 0.43) // theme-color-allow: immersive media visual contract
                 font.pixelSize: 7
                 font.letterSpacing: 1.1
             }
@@ -86,7 +86,7 @@ Rectangle {
             flat: true
             icon.source: Theme.icon(root.collapsed ? "arrow-down-s-line"
                                                     : "arrow-up-s-line")
-            icon.color: "#EAE5ED"
+            icon.color: "#EAE5ED" // theme-color-allow: immersive media visual contract
             icon.width: 16
             icon.height: 16
             Accessible.name: root.collapsed ? qsTr("展开视觉设置")
@@ -94,10 +94,10 @@ Rectangle {
             onClicked: root.collapsed = !root.collapsed
             background: Rectangle {
                 radius: 10
-                color: parent.hovered ? Qt.rgba(1, 1, 1, 0.10)
-                                      : Qt.rgba(1, 1, 1, 0.045)
+                color: parent.hovered ? Qt.rgba(1, 1, 1, 0.10) // theme-color-allow: immersive media visual contract
+                                      : Qt.rgba(1, 1, 1, 0.045) // theme-color-allow: immersive media visual contract
                 border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.08)
+                border.color: Qt.rgba(1, 1, 1, 0.08) // theme-color-allow: immersive media visual contract
             }
         }
     }
@@ -109,7 +109,7 @@ Rectangle {
         anchors.right: parent.right
         anchors.top: header.bottom
         height: 1
-        color: Qt.rgba(1, 1, 1, 0.065)
+        color: Qt.rgba(1, 1, 1, 0.065) // theme-color-allow: immersive media visual contract
     }
 
     RowLayout {
@@ -139,13 +139,13 @@ Rectangle {
                 onClicked: root.currentTab = index
                 background: Rectangle {
                     radius: 9
-                    color: parent.checked ? Qt.rgba(1, 1, 1, 0.105)
+                    color: parent.checked ? Qt.rgba(1, 1, 1, 0.105) // theme-color-allow: immersive media visual contract
                                           : "transparent"
                 }
                 contentItem: Text {
                     text: parent.text
-                    color: parent.checked ? "#F7F3F8"
-                                          : Qt.rgba(0.9, 0.86, 0.92, 0.48)
+                    color: parent.checked ? "#F7F3F8" // theme-color-allow: immersive media visual contract
+                                          : Qt.rgba(0.9, 0.86, 0.92, 0.48) // theme-color-allow: immersive media visual contract
                     font: parent.font
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
@@ -185,8 +185,8 @@ Rectangle {
                 spacing: 9
                 RowLayout {
                     Layout.fillWidth: true
-                    Text { Layout.fillWidth: true; text: qsTr("预设与存储"); color: Qt.rgba(0.9, 0.86, 0.92, 0.5); font.pixelSize: 9 }
-                    Text { text: "Recent"; color: Qt.rgba(0.9, 0.86, 0.92, 0.38); font.pixelSize: 8 }
+                    Text { Layout.fillWidth: true; text: qsTr("预设与存储"); color: Qt.rgba(0.9, 0.86, 0.92, 0.5); font.pixelSize: 9 } // theme-color-allow: immersive media visual contract
+                    Text { text: "Recent"; color: Qt.rgba(0.9, 0.86, 0.92, 0.38); font.pixelSize: 8 } // theme-color-allow: immersive media visual contract
                 }
                 GridLayout {
                     id: presetGrid
@@ -212,8 +212,8 @@ Rectangle {
                             background: Rectangle {
                                 radius: 12
                                 border.width: 1
-                                border.color: parent.hovered ? Qt.rgba(1, 1, 1, 0.28)
-                                                             : Qt.rgba(1, 1, 1, 0.10)
+                                border.color: parent.hovered ? Qt.rgba(1, 1, 1, 0.28) // theme-color-allow: immersive media visual contract
+                                                             : Qt.rgba(1, 1, 1, 0.10) // theme-color-allow: immersive media visual contract
                                 gradient: Gradient {
                                     orientation: Gradient.Horizontal
                                     GradientStop { position: 0; color: modelData.from }
@@ -225,7 +225,7 @@ Rectangle {
                                 Text {
                                     width: parent.width
                                     text: modelData.title
-                                    color: "#FFFFFF"
+                                    color: "#FFFFFF" // theme-color-allow: immersive media visual contract
                                     font.pixelSize: 11
                                     font.weight: Font.DemiBold
                                     horizontalAlignment: Text.AlignHCenter
@@ -234,7 +234,7 @@ Rectangle {
                                 Text {
                                     width: parent.width
                                     text: modelData.sub
-                                    color: Qt.rgba(1, 1, 1, 0.48)
+                                    color: Qt.rgba(1, 1, 1, 0.48) // theme-color-allow: immersive media visual contract
                                     font.pixelSize: 7
                                     horizontalAlignment: Text.AlignHCenter
                                     elide: Text.ElideRight
@@ -245,7 +245,7 @@ Rectangle {
                 }
                 RowLayout {
                     Layout.fillWidth: true
-                    Text { Layout.fillWidth: true; text: qsTr("歌曲自适应配色"); color: Qt.rgba(0.9, 0.86, 0.92, 0.5); font.pixelSize: 9 }
+                    Text { Layout.fillWidth: true; text: qsTr("歌曲自适应配色"); color: Qt.rgba(0.9, 0.86, 0.92, 0.5); font.pixelSize: 9 } // theme-color-allow: immersive media visual contract
                     ThemedCheckBox {
                         objectName: "songColorToggle"
                         text: qsTr("自动")
@@ -279,7 +279,7 @@ Rectangle {
                                 border.width: colorSwatch.visualFocus ? 2 : 1
                                 border.color: colorSwatch.visualFocus
                                               ? Theme.focus
-                                              : Qt.rgba(1, 1, 1, 0.22)
+                                              : Qt.rgba(1, 1, 1, 0.22) // theme-color-allow: immersive media visual contract
                             }
                         }
                     }
@@ -296,7 +296,7 @@ Rectangle {
                         PlayerExperienceController.songAdaptiveColorEnabled = false
                     }
                 }
-                Text { text: qsTr("显示宿主与性能"); color: Qt.rgba(0.9, 0.86, 0.92, 0.5); font.pixelSize: 9 }
+                Text { text: qsTr("显示宿主与性能"); color: Qt.rgba(0.9, 0.86, 0.92, 0.5); font.pixelSize: 9 } // theme-color-allow: immersive media visual contract
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 6
@@ -314,11 +314,11 @@ Rectangle {
                             onClicked: PlayerExperienceController.hostMode = index
                             background: Rectangle {
                                 radius: 8
-                                color: parent.checked ? Qt.rgba(0.35, 0.82, 0.92, 0.16)
-                                                      : Qt.rgba(1, 1, 1, 0.04)
+                                color: parent.checked ? Qt.rgba(0.35, 0.82, 0.92, 0.16) // theme-color-allow: immersive media visual contract
+                                                      : Qt.rgba(1, 1, 1, 0.04) // theme-color-allow: immersive media visual contract
                                 border.width: 1
-                                border.color: parent.checked ? "#65DCEA"
-                                                             : Qt.rgba(1, 1, 1, 0.08)
+                                border.color: parent.checked ? "#65DCEA" // theme-color-allow: immersive media visual contract
+                                                             : Qt.rgba(1, 1, 1, 0.08) // theme-color-allow: immersive media visual contract
                             }
                         }
                     }
@@ -348,8 +348,8 @@ Rectangle {
                     Column {
                         Layout.fillWidth: true
                         spacing: 2
-                        Text { text: qsTr("歌词显示"); color: "#F3EEF5"; font.pixelSize: 11; font.weight: Font.DemiBold }
-                        Text { text: qsTr("三行同步歌词 · 空间纵深"); color: Qt.rgba(0.9, 0.86, 0.92, 0.45); font.pixelSize: 8 }
+                        Text { text: qsTr("歌词显示"); color: "#F3EEF5"; font.pixelSize: 11; font.weight: Font.DemiBold } // theme-color-allow: immersive media visual contract
+                        Text { text: qsTr("三行同步歌词 · 空间纵深"); color: Qt.rgba(0.9, 0.86, 0.92, 0.45); font.pixelSize: 8 } // theme-color-allow: immersive media visual contract
                     }
                     Switch {
                         objectName: "immersiveLyricsVisibleSwitch"
@@ -357,7 +357,7 @@ Rectangle {
                         onToggled: PlayerExperienceController.lyricsVisible = checked
                     }
                 }
-                Text { text: qsTr("显示位置"); color: Qt.rgba(0.9, 0.86, 0.92, 0.5); font.pixelSize: 9 }
+                Text { text: qsTr("显示位置"); color: Qt.rgba(0.9, 0.86, 0.92, 0.5); font.pixelSize: 9 } // theme-color-allow: immersive media visual contract
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 6
@@ -375,11 +375,11 @@ Rectangle {
                             onClicked: PlayerExperienceController.lyricPosition = index
                             background: Rectangle {
                                 radius: 8
-                                color: parent.checked ? Qt.rgba(0.95, 0.55, 0.28, 0.18)
-                                                      : Qt.rgba(1, 1, 1, 0.04)
+                                color: parent.checked ? Qt.rgba(0.95, 0.55, 0.28, 0.18) // theme-color-allow: immersive media visual contract
+                                                      : Qt.rgba(1, 1, 1, 0.04) // theme-color-allow: immersive media visual contract
                                 border.width: 1
-                                border.color: parent.checked ? "#F4A66F"
-                                                             : Qt.rgba(1, 1, 1, 0.08)
+                                border.color: parent.checked ? "#F4A66F" // theme-color-allow: immersive media visual contract
+                                                             : Qt.rgba(1, 1, 1, 0.08) // theme-color-allow: immersive media visual contract
                             }
                         }
                     }
@@ -397,7 +397,7 @@ Rectangle {
                         required property var modelData
                         Layout.fillWidth: true
                         spacing: 7
-                        Text { Layout.preferredWidth: 62; text: modelData.label; color: Qt.rgba(0.94, 0.91, 0.95, 0.68); font.pixelSize: 9 }
+                        Text { Layout.preferredWidth: 62; text: modelData.label; color: Qt.rgba(0.94, 0.91, 0.95, 0.68); font.pixelSize: 9 } // theme-color-allow: immersive media visual contract
                         Slider {
                             objectName: "lyricSlider_" + modelData.key
                             Layout.fillWidth: true
@@ -407,7 +407,7 @@ Rectangle {
                             value: Number(PlayerExperienceController[modelData.key])
                             onMoved: root.setControllerValue(modelData.key, value)
                         }
-                        Text { Layout.preferredWidth: 28; horizontalAlignment: Text.AlignRight; text: Math.round(PlayerExperienceController[modelData.key]); color: "#F5F0F6"; font.pixelSize: 9 }
+                        Text { Layout.preferredWidth: 28; horizontalAlignment: Text.AlignRight; text: Math.round(PlayerExperienceController[modelData.key]); color: "#F5F0F6"; font.pixelSize: 9 } // theme-color-allow: immersive media visual contract
                     }
                 }
             }
@@ -416,27 +416,24 @@ Rectangle {
                 visible: root.currentTab === 2
                 Layout.fillWidth: true
                 spacing: 7
-                Text { text: qsTr("声音响应"); color: Qt.rgba(0.9, 0.86, 0.92, 0.5); font.pixelSize: 9 }
+                Text { text: qsTr("声音响应"); color: Qt.rgba(0.9, 0.86, 0.92, 0.5); font.pixelSize: 9 } // theme-color-allow: immersive media visual contract
                 Repeater {
                     model: [
-                        { "label": qsTr("输入压缩"), "key": "inputCompression", "from": 20, "to": 150 },
+                        { "label": qsTr("输入压制"), "key": "inputCompression", "from": 20, "to": 150 },
                         { "label": qsTr("音频响应"), "key": "audioResponse", "from": 20, "to": 200, "scale": 100, "decimals": 2 },
                         { "label": qsTr("响应范围"), "key": "responseRange", "from": 50, "to": 220, "scale": 100, "decimals": 2 },
-                        { "label": qsTr("中心亮光"), "key": "centerHighlight", "from": 0, "to": 100 },
+                        { "label": qsTr("中心高光"), "key": "centerHighlight", "from": 0, "to": 100, "scale": 100, "decimals": 2 },
                         { "label": qsTr("律动强度"), "key": "rhythmStrength", "from": 0, "to": 140, "scale": 100, "decimals": 2 },
-                        { "label": qsTr("景深雾化"), "key": "depthOfField", "from": 0, "to": 150 },
-                        { "label": qsTr("主体清晰"), "key": "subjectClarity", "from": 20, "to": 140 },
-                        { "label": qsTr("旋转速度"), "key": "autoRotateSpeed", "from": 0, "to": 100 },
-                        { "label": qsTr("节拍灵敏"), "key": "rhythmSensitivity", "from": 0, "to": 100 },
-                        { "label": qsTr("地形振幅"), "key": "terrainAmplitude", "from": 0, "to": 100 },
-                        { "label": qsTr("运动响应"), "key": "motionResponse", "from": 0, "to": 100 },
-                        { "label": qsTr("发光强度"), "key": "glowIntensity", "from": 0, "to": 100 }
+                        { "label": qsTr("画面景深"), "key": "depthOfField", "from": 0, "to": 150, "scale": 100, "decimals": 2 },
+                        { "label": qsTr("主体清晰度"), "key": "subjectClarity", "from": 20, "to": 140 },
+                        { "label": qsTr("自动旋转速度"), "key": "autoRotateSpeed", "from": 0, "to": 100, "scale": 100, "decimals": 2 },
+                        { "label": qsTr("律动灵敏度"), "key": "rhythmSensitivity", "from": 0, "to": 100, "scale": 100, "decimals": 2 }
                     ]
                     RowLayout {
                         required property var modelData
                         Layout.fillWidth: true
                         spacing: 7
-                        Text { Layout.preferredWidth: 62; text: modelData.label; color: Qt.rgba(0.94, 0.91, 0.95, 0.68); font.pixelSize: 9 }
+                        Text { Layout.preferredWidth: 62; text: modelData.label; color: Qt.rgba(0.94, 0.91, 0.95, 0.68); font.pixelSize: 9 } // theme-color-allow: immersive media visual contract
                         Slider {
                             objectName: "dynamicSlider_" + modelData.key
                             Layout.fillWidth: true
@@ -446,7 +443,7 @@ Rectangle {
                             value: Number(PlayerExperienceController[modelData.key])
                             onMoved: root.setControllerValue(modelData.key, value)
                         }
-                        Text { Layout.preferredWidth: 34; horizontalAlignment: Text.AlignRight; text: root.displayValue(modelData); color: "#F5F0F6"; font.pixelSize: 9 }
+                        Text { Layout.preferredWidth: 34; horizontalAlignment: Text.AlignRight; text: root.displayValue(modelData); color: "#F5F0F6"; font.pixelSize: 9 } // theme-color-allow: immersive media visual contract
                     }
                 }
                 Flow {
@@ -455,10 +452,13 @@ Rectangle {
                     Repeater {
                         model: [
                             { "label": qsTr("彩色冲击波"), "key": "ripplesEnabled" },
+                            { "label": qsTr("星尘喷发"), "key": "burstEnabled" },
                             { "label": qsTr("漂浮晶体"), "key": "floatingCubesEnabled" },
                             { "label": qsTr("8拍流星"), "key": "meteorsEnabled" },
                             { "label": qsTr("自动旋转"), "key": "autoRotate" },
-                            { "label": qsTr("空闲呼吸"), "key": "idleBreathingEnabled" }
+                            { "label": qsTr("空闲呼吸"), "key": "idleBreathingEnabled" },
+                            { "label": qsTr("歌曲换色"), "key": "songAdaptiveColorEnabled" },
+                            { "label": qsTr("流光高亮"), "key": "streamHighlightEnabled" }
                         ]
                         ThemedCheckBox {
                             required property var modelData
@@ -476,7 +476,7 @@ Rectangle {
                         }
                     }
                 }
-                Text { text: qsTr("视觉 EQ · 8 音域"); color: Qt.rgba(0.9, 0.86, 0.92, 0.5); font.pixelSize: 9 }
+                Text { text: qsTr("视觉 EQ · 8 音域"); color: Qt.rgba(0.9, 0.86, 0.92, 0.5); font.pixelSize: 9 } // theme-color-allow: immersive media visual contract
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 2
@@ -496,7 +496,7 @@ Rectangle {
                                 value: Number(PlayerExperienceController.visualEqGains[index])
                                 onMoved: root.setEqGain(index, value)
                             }
-                            Text { Layout.alignment: Qt.AlignHCenter; text: modelData; color: Qt.rgba(0.9, 0.86, 0.92, 0.45); font.pixelSize: 7 }
+                            Text { Layout.alignment: Qt.AlignHCenter; text: modelData; color: Qt.rgba(0.9, 0.86, 0.92, 0.45); font.pixelSize: 7 } // theme-color-allow: immersive media visual contract
                         }
                     }
                 }

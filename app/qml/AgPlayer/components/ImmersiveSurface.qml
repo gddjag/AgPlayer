@@ -61,11 +61,11 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: "#03040a"
+        color: "#03040a" // theme-color-allow: immersive media visual contract
         gradient: Gradient {
-            GradientStop { position: 0.0; color: "#090b13" }
-            GradientStop { position: 0.58; color: "#04050a" }
-            GradientStop { position: 1.0; color: "#010204" }
+            GradientStop { position: 0.0; color: "#101218" } // theme-color-allow: immersive media visual contract
+            GradientStop { position: 0.58; color: "#080a0f" } // theme-color-allow: immersive media visual contract
+            GradientStop { position: 1.0; color: "#020305" } // theme-color-allow: immersive media visual contract
         }
     }
 
@@ -107,13 +107,13 @@ Item {
                  && root.hostMode !== PlayerExperienceController.Desktop
                  && PlayerExperienceController.glowIntensity > 4
         blurEnabled: true
-        blur: 0.42 + PlayerExperienceController.glowIntensity / 100 * 0.28
-        blurMax: 24
-        blurMultiplier: 0.64
-        brightness: 0.32 + (root.terrainItem
-                            ? Math.min(1, root.terrainItem.featureEnergy) * 0.24 : 0)
-        saturation: 0.20
-        opacity: 0.32 + PlayerExperienceController.glowIntensity / 100 * 0.38
+        blur: 0.52 + PlayerExperienceController.glowIntensity / 100 * 0.26
+        blurMax: 28
+        blurMultiplier: 0.72
+        brightness: 0.48 + (root.terrainItem
+                            ? Math.min(1, root.terrainItem.featureEnergy) * 0.32 : 0)
+        saturation: 0.16
+        opacity: 0.18 + PlayerExperienceController.glowIntensity / 100 * 0.16
     }
 
     Item {
@@ -148,7 +148,8 @@ Item {
             hostExposed: root.hostExposed
             featureSource: AudioVisualFeatureController
             styleSource: PlayerExperienceController
-            trackIdentity: PlayerExperienceController.songAdaptiveColorEnabled
+            trackIdentity: root.qaSyntheticFeatures ? "qa-reference-track"
+                         : PlayerExperienceController.songAdaptiveColorEnabled
                            && root.waveformSession
                            ? root.waveformSession.trackId : ""
             quality: root.qualityForHost()
@@ -198,9 +199,9 @@ Item {
         width: Math.min(520, parent.width - 48)
         height: renderBackendFallbackText.implicitHeight + 30
         radius: 12
-        color: Qt.rgba(0.035, 0.04, 0.06, 0.92)
+        color: Qt.rgba(0.035, 0.04, 0.06, 0.92) // theme-color-allow: immersive media visual contract
         border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.16)
+        border.color: Qt.rgba(1, 1, 1, 0.16) // theme-color-allow: immersive media visual contract
         visible: root.terrainItem
                  && (root.terrainItem.renderStatus
                      === TerrainReactorItem.SoftwareBackend
@@ -214,7 +215,7 @@ Item {
             text: root.terrainItem && root.terrainItem.diagnostic
                   ? root.terrainItem.diagnostic
                   : qsTr("当前图形后端无法运行沉浸视觉，播放不受影响。")
-            color: Qt.rgba(1, 1, 1, 0.84)
+            color: Qt.rgba(1, 1, 1, 0.84) // theme-color-allow: immersive media visual contract
             font.pixelSize: 12
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
@@ -261,52 +262,9 @@ Item {
         color: "transparent"
         border.width: 0
         gradient: Gradient {
-            GradientStop { position: 0.00; color: Qt.rgba(0, 0, 0, 0.10) }
-            GradientStop { position: 0.62; color: Qt.rgba(0, 0, 0, 0.00) }
-            GradientStop { position: 1.00; color: Qt.rgba(0, 0, 0, 0.48) }
-        }
-    }
-
-    Row {
-        anchors.left: parent.left
-        anchors.top: parent.top
-        anchors.leftMargin: 16
-        anchors.topMargin: 14
-        spacing: 9
-        z: 20
-
-        Rectangle {
-            width: 28
-            height: 28
-            radius: 8
-            color: Qt.rgba(1, 1, 1, 0.08)
-            border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.12)
-            Text {
-                anchors.centerIn: parent
-                text: "A"
-                color: "#f5f7fb"
-                font.pixelSize: 13
-                font.bold: true
-            }
-        }
-
-        Column {
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: 1
-            Text {
-                objectName: "immersiveBrandTitle"
-                text: qsTr("AgPlayer · 沉浸视觉")
-                color: "#f4f6fa"
-                font.pixelSize: 13
-                font.bold: true
-            }
-            Text {
-                text: qsTr("声音地形反应堆")
-                color: Qt.rgba(0.72, 0.84, 0.83, 0.62)
-                font.pixelSize: 8
-                font.letterSpacing: 1.2
-            }
+            GradientStop { position: 0.00; color: Qt.rgba(0, 0, 0, 0.10) } // theme-color-allow: immersive media visual contract
+            GradientStop { position: 0.62; color: Qt.rgba(0, 0, 0, 0.00) } // theme-color-allow: immersive media visual contract
+            GradientStop { position: 1.00; color: Qt.rgba(0, 0, 0, 0.48) } // theme-color-allow: immersive media visual contract
         }
     }
 
@@ -318,52 +276,31 @@ Item {
         spacing: 8
         z: 20
 
-        Button {
-            objectName: "immersivePanelToggleButton"
-            implicitWidth: 70
-            implicitHeight: 28
-            text: PlayerExperienceController.panelVisible
-                  ? qsTr("隐藏控制") : qsTr("显示控制")
-            onClicked: PlayerExperienceController.togglePanelVisible()
-            background: Rectangle {
-                radius: 9
-                color: parent.hovered ? Qt.rgba(1, 1, 1, 0.105)
-                                      : Qt.rgba(0.04, 0.035, 0.05, 0.72)
-                border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.10)
-            }
-            contentItem: Text {
-                text: parent.text
-                color: "#ece8ef"
-                font.pixelSize: 9
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
-        }
-
-        Button {
+        ToolButton {
             objectName: "immersiveFullscreenButton"
-            implicitWidth: 62
-            implicitHeight: 28
+            display: AbstractButton.IconOnly
+            implicitWidth: 32
+            implicitHeight: 32
             text: root.hostMode === PlayerExperienceController.Fullscreen
-                  ? qsTr("退出全屏") : qsTr("全屏")
+                   ? qsTr("退出全屏") : qsTr("全屏")
+            icon.source: Theme.icon(root.hostMode
+                                    === PlayerExperienceController.Fullscreen
+                                    ? "fullscreen-exit-fill"
+                                    : "fullscreen-fill")
+            icon.color: "#ece8ef" // theme-color-allow: immersive media visual contract
+            icon.width: 16
+            icon.height: 16
+            Accessible.name: text
             onClicked: PlayerExperienceController.hostMode =
                        root.hostMode === PlayerExperienceController.Fullscreen
                        ? PlayerExperienceController.Windowed
                        : PlayerExperienceController.Fullscreen
             background: Rectangle {
                 radius: 9
-                color: parent.hovered ? Qt.rgba(1, 1, 1, 0.105)
-                                      : Qt.rgba(0.04, 0.035, 0.05, 0.72)
+                color: parent.hovered ? Qt.rgba(1, 1, 1, 0.105) // theme-color-allow: immersive media visual contract
+                                      : Qt.rgba(0.04, 0.035, 0.05, 0.72) // theme-color-allow: immersive media visual contract
                 border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.10)
-            }
-            contentItem: Text {
-                text: parent.text
-                color: "#ece8ef"
-                font.pixelSize: 9
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
+                border.color: Qt.rgba(1, 1, 1, 0.10) // theme-color-allow: immersive media visual contract
             }
         }
     }
@@ -396,7 +333,7 @@ Item {
         anchors.bottom: waveform.top
         anchors.bottomMargin: 2
         text: root.currentTitle()
-        color: Qt.rgba(0.88, 0.92, 0.97, root.panelIdle ? 0.42 : 0.72)
+        color: Qt.rgba(0.88, 0.92, 0.97, root.panelIdle ? 0.42 : 0.72) // theme-color-allow: immersive media visual contract
         font.pixelSize: 11
         elide: Text.ElideRight
         width: Math.min(parent.width * 0.68, implicitWidth)
@@ -454,9 +391,9 @@ Item {
         width: fallbackText.implicitWidth + 28
         height: 36
         radius: 12
-        color: Qt.rgba(0.08, 0.09, 0.12, 0.88)
+        color: Qt.rgba(0.08, 0.09, 0.12, 0.88) // theme-color-allow: immersive media visual contract
         border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.12)
+        border.color: Qt.rgba(1, 1, 1, 0.12) // theme-color-allow: immersive media visual contract
         z: 20
         Text {
             id: fallbackText

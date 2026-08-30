@@ -23,7 +23,7 @@ Item {
         width: 38
         horizontalAlignment: Text.AlignHCenter
         text: root.formatTime(root.playback ? root.playback.positionMs : 0)
-        color: Qt.rgba(0.86, 0.91, 0.96, 0.72 * root.opacityScale)
+        color: Qt.rgba(0.86, 0.91, 0.96, 0.72 * root.opacityScale) // theme-color-allow: immersive media visual contract
         font.pixelSize: 10
     }
 
@@ -66,7 +66,7 @@ Item {
         anchors.verticalCenter: waveform.verticalCenter
         width: 1
         height: waveform.height - 8
-        color: Qt.rgba(1, 1, 1, 0.82 * root.opacityScale)
+        color: Qt.rgba(1, 1, 1, 0.82 * root.opacityScale) // theme-color-allow: immersive media visual contract
     }
 
     Text {
@@ -75,7 +75,7 @@ Item {
         width: 38
         horizontalAlignment: Text.AlignHCenter
         text: root.formatTime(root.effectiveDurationMs)
-        color: Qt.rgba(0.86, 0.91, 0.96, 0.72 * root.opacityScale)
+        color: Qt.rgba(0.86, 0.91, 0.96, 0.72 * root.opacityScale) // theme-color-allow: immersive media visual contract
         font.pixelSize: 10
     }
 }
