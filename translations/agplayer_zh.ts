@@ -3679,8 +3679,8 @@
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="1576"/>
-        <source>深色</source>
-        <translation>深色</translation>
+        <source>深色（默认）</source>
+        <translation>深色（默认）</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="240"/>
@@ -3708,7 +3708,6 @@
         <source>打开音频工具</source>
         <translation>打开音频工具</translation>
     </message>
-    <message><source>主题皮肤色</source><translation>主题皮肤色</translation></message>
     <message><source>歌曲列表</source><translation>歌曲列表</translation></message>
     <message><source>显示歌曲列表波形缩略图</source><translation>显示歌曲列表波形缩略图</translation></message>
     <message><source>缩略波形颜色</source><translation>缩略波形颜色</translation></message>
@@ -4072,53 +4071,6 @@
         <source>评分</source>
         <translation>评分</translation>
     </message>
-</context>
-<context>
-    <name>ThemeColorSelector</name>
-    <message><source>默认</source><translation>默认</translation></message>
-    <message><source>，已选择</source><translation>，已选择</translation></message>
-    <message><source>自定义</source><translation>自定义</translation></message>
-    <message><source>自定义颜色 %1</source><translation>自定义颜色 %1</translation></message>
-    <message><source>系统蓝</source><translation>系统蓝</translation></message>
-    <message><source>靛蓝</source><translation>靛蓝</translation></message>
-    <message><source>紫色</source><translation>紫色</translation></message>
-    <message><source>粉色</source><translation>粉色</translation></message>
-    <message><source>红色</source><translation>红色</translation></message>
-    <message><source>橙色</source><translation>橙色</translation></message>
-    <message><source>金色</source><translation>金色</translation></message>
-    <message><source>绿色</source><translation>绿色</translation></message>
-    <message><source>蓝绿色</source><translation>蓝绿色</translation></message>
-    <message><source>青色</source><translation>青色</translation></message>
-    <message><source>Aurora</source><translation>极光</translation></message>
-    <message><source>Sea Glass</source><translation>海盐</translation></message>
-    <message><source>Sunset</source><translation>日落</translation></message>
-    <message><source>Lavender Mist</source><translation>薰衣草</translation></message>
-    <message><source>Morning Glow</source><translation>晨光</translation></message>
-    <message><source>Solid</source><translation>单色</translation></message>
-    <message><source>Gradient</source><translation>三色渐变</translation></message>
-    <message><source>Preview</source><translation>预览</translation></message>
-    <message><source>Start</source><translation>起点颜色</translation></message>
-    <message><source>Middle</source><translation>中点颜色</translation></message>
-    <message><source>End</source><translation>终点颜色</translation></message>
-</context>
-<context>
-    <name>AgColorPicker</name>
-    <message><source>十六进制颜色</source><translation>十六进制颜色</translation></message>
-    <message><source>关闭颜色选择器</source><translation>关闭颜色选择器</translation></message>
-    <message><source>红色通道</source><translation>红色通道</translation></message>
-    <message><source>绿色通道</source><translation>绿色通道</translation></message>
-    <message><source>蓝色通道</source><translation>蓝色通道</translation></message>
-    <message><source>红色通道滑块</source><translation>红色通道滑块</translation></message>
-    <message><source>绿色通道滑块</source><translation>绿色通道滑块</translation></message>
-    <message><source>蓝色通道滑块</source><translation>蓝色通道滑块</translation></message>
-    <message><source>候选颜色 %1</source><translation>候选颜色 %1</translation></message>
-    <message><source>色相饱和度和明度</source><translation>色相饱和度和明度</translation></message>
-    <message><source>色相</source><translation>色相</translation></message>
-    <message><source>当前颜色 %1</source><translation>当前颜色 %1</translation></message>
-    <message><source>取消颜色更改</source><translation>取消颜色更改</translation></message>
-    <message><source>取消</source><translation>取消</translation></message>
-    <message><source>应用颜色</source><translation>应用颜色</translation></message>
-    <message><source>应用</source><translation>应用</translation></message>
 </context>
 <context>
     <name>LibraryNavigationModel</name>

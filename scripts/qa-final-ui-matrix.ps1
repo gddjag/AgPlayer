@@ -6,12 +6,6 @@ param(
     [string[]]$Languages = @("zh", "en", "th", "vi"),
     [ValidateSet("dark", "light", "system")]
     [string[]]$Themes = @("dark", "light", "system"),
-    [string]$Skin = "",
-    [string]$SkinKind = "",
-    [string]$SkinStart = "",
-    [string]$SkinMiddle = "",
-    [string]$SkinEnd = "",
-    [string]$OpenSkinPicker = "",
     [ValidateSet(
         "startup", "playback", "mini", "settings", "list",
         "details",
@@ -34,34 +28,6 @@ $cachePath = Join-Path $buildRoot "CMakeCache.txt"
 $playFixture = Join-Path $buildRoot "tests/fixtures/sine-440hz.wav"
 $formatFixtures = Join-Path $buildRoot "tests/fixtures/formats"
 $outputPath = Join-Path $repoRoot $OutputDirectory
-
-$hasExplicitSkin = $SkinKind -or $SkinStart -or $SkinMiddle -or $SkinEnd
-$isHexColor = { param([string]$Value) $Value -match '^#[0-9A-Fa-f]{6}$' }
-if ($Skin -and $hasExplicitSkin) {
-    throw "-Skin cannot be combined with -SkinKind/-SkinStart/-SkinMiddle/-SkinEnd"
-}
-if ($hasExplicitSkin) {
-    $SkinKind = $SkinKind.ToLowerInvariant()
-    if ($SkinKind -eq "solid") {
-        if (-not (& $isHexColor $SkinStart) -or $SkinMiddle -or $SkinEnd) {
-            throw "Solid skin requires only one valid -SkinStart #RRGGBB"
-        }
-    }
-    elseif ($SkinKind -eq "gradient") {
-        if (-not (& $isHexColor $SkinStart) -or
-            -not (& $isHexColor $SkinMiddle) -or
-            -not (& $isHexColor $SkinEnd)) {
-            throw "Gradient skin requires valid -SkinStart/-SkinMiddle/-SkinEnd"
-        }
-    }
-    else {
-        throw "Explicit skin requires -SkinKind solid or gradient"
-    }
-}
-if ($OpenSkinPicker -and
-    $OpenSkinPicker -notin @("start", "middle", "end")) {
-    throw "-OpenSkinPicker must be start, middle, or end"
-}
 
 foreach ($requiredPath in @(
     $appPath, $cachePath, $playFixture, $formatFixtures
@@ -144,13 +110,7 @@ function Measure-Screenshot {
             $bitmap.GetPixel(0, $bitmap.Height - 1).A
             $bitmap.GetPixel($bitmap.Width - 1, $bitmap.Height - 1).A
         )
-        $outerCornerAlpha = if ($Surface -eq "settings" -and
-            $OpenSkinPicker) {
-            # The modal in-app picker intentionally owns the full overlay,
-            # including the transparent window corners during its capture.
-            @()
-        }
-        elseif ($Surface -match "^(list|library|details|tool-\d+)$") {
+        $outerCornerAlpha = if ($Surface -match "^(list|library|details|tool-\d+)$") {
             # Borderless list and audio-tool workspaces intentionally fill
             # their native rectangles; no corner-alpha contract applies.
             @()
@@ -285,24 +245,6 @@ function Invoke-Capture {
         "--qa-language", $Language,
         "--qa-theme", $Theme
     )
-    if ($Skin) {
-        $common += @("--qa-skin", $Skin)
-    }
-    elseif ($SkinKind) {
-        $common += @(
-            "--qa-skin-kind", $SkinKind,
-            "--qa-skin-start", $SkinStart
-        )
-        if ($SkinKind -eq "gradient") {
-            $common += @(
-                "--qa-skin-middle", $SkinMiddle,
-                "--qa-skin-end", $SkinEnd
-            )
-        }
-    }
-    if ($OpenSkinPicker) {
-        $common += @("--qa-open-skin-picker", $OpenSkinPicker)
-    }
     $process = Start-Process -FilePath $appPath `
         -ArgumentList ($common + $Arguments + @($screenshot)) `
         -Wait -PassThru
@@ -325,12 +267,6 @@ function Invoke-Capture {
     $results.Add([pscustomobject]@{
         Language = $Language
         Theme = $Theme
-        Skin = $Skin
-        SkinKind = $SkinKind
-        SkinStart = $SkinStart
-        SkinMiddle = $SkinMiddle
-        SkinEnd = $SkinEnd
-        OpenSkinPicker = $OpenSkinPicker
         Surface = $Surface
         Bytes = (Get-Item -LiteralPath $screenshot).Length
         Width = $metrics.Width
@@ -352,21 +288,6 @@ function Get-CaptureStem {
     $parts = [System.Collections.Generic.List[string]]::new()
     $parts.Add($Language)
     $parts.Add($Theme)
-    if ($Skin) {
-        $safeSkin = ($Skin -replace "[^A-Za-z0-9]+", "-").Trim("-")
-        $parts.Add("skin-" + $safeSkin)
-    }
-    if ($SkinKind) {
-        $parts.Add("kind-" + $SkinKind)
-        $parts.Add("start-" + $SkinStart.Substring(1).ToUpperInvariant())
-        if ($SkinKind -eq "gradient") {
-            $parts.Add("middle-" + $SkinMiddle.Substring(1).ToUpperInvariant())
-            $parts.Add("end-" + $SkinEnd.Substring(1).ToUpperInvariant())
-        }
-    }
-    if ($OpenSkinPicker) {
-        $parts.Add("picker-" + $OpenSkinPicker)
-    }
     $parts.Add($Surface)
     return $parts -join "-"
 }

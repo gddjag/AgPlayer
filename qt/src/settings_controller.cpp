@@ -1,7 +1,6 @@
 #include "settings_controller.hpp"
 
 #include "agplayer_version.hpp"
-#include "theme_manager.hpp"
 
 #include <QCoreApplication>
 #include <QColor>
@@ -43,44 +42,6 @@ QString normalizedColor(const QString& value)
 {
     const QColor color(value);
     return color.isValid() ? color.name(QColor::HexRgb) : QString();
-}
-
-constexpr int kDefaultColorChoiceMode = 0;
-constexpr int kCustomColorChoiceMode = 2;
-
-int normalizedColorChoiceMode(const int value)
-{
-    return value >= kDefaultColorChoiceMode && value <= kCustomColorChoiceMode
-        ? value
-        : kDefaultColorChoiceMode;
-}
-
-QString defaultThemePresetId()
-{
-    return ThemeManager::presets().constFirst().id;
-}
-
-QString normalizedThemePreset(const QString& value)
-{
-    const QList<ThemeManager::Preset> presets = ThemeManager::presets();
-    const auto match = std::find_if(presets.cbegin(), presets.cend(),
-                                    [&value](const ThemeManager::Preset& preset) {
-                                        return preset.id == value;
-                                    });
-    return match == presets.cend() ? QString() : match->id;
-}
-
-QString defaultThemeCustomColor()
-{
-    return ThemeManager::defaultSeed().name(QColor::HexRgb).toUpper();
-}
-
-QString normalizedOpaqueThemeColor(const QString& value)
-{
-    const QColor color(value);
-    return color.isValid() && color.alpha() == 255
-        ? color.name(QColor::HexRgb).toUpper()
-        : QString();
 }
 
 std::optional<int> storedInteger(const QVariant& value)
@@ -161,18 +122,6 @@ bool SettingsController::autoReadRating() const noexcept { return autoReadRating
 
 // Appearance & Visualizer getters
 int SettingsController::themeMode() const noexcept { return themeMode_; }
-int SettingsController::skinColorMode() const noexcept { return skinColorMode_; }
-QString SettingsController::skinPreset() const { return skinPreset_; }
-int SettingsController::skinCustomKind() const noexcept { return skinCustomKind_; }
-QString SettingsController::skinCustomColor() const { return skinCustomColor_; }
-QString SettingsController::skinCustomColorMiddle() const
-{
-    return skinCustomColorMiddle_;
-}
-QString SettingsController::skinCustomColorEnd() const
-{
-    return skinCustomColorEnd_;
-}
 int SettingsController::waveformMode() const noexcept { return waveformMode_; }
 double SettingsController::waveformHeight() const noexcept { return waveformHeight_; }
 double SettingsController::waveformDensity() const noexcept { return waveformDensity_; }
@@ -430,167 +379,13 @@ void SettingsController::setAutoReadRating(bool value)
 // Appearance & Visualizer setters
 void SettingsController::setThemeMode(int value)
 {
-    value = value >= 0 && value <= 2 ? value : 2;
+    value = value >= 0 && value <= 2 ? value : 0;
     if (themeMode_ == value) {
         return;
     }
     themeMode_ = value;
     persistValue(QStringLiteral("appearance/themeMode"), value);
     emit themeModeChanged();
-}
-
-void SettingsController::setSkinColorMode(int value)
-{
-    applySkinFields(normalizedColorChoiceMode(value), skinPreset_,
-                    skinCustomKind_, skinCustomColor_,
-                    skinCustomColorMiddle_, skinCustomColorEnd_);
-}
-
-void SettingsController::setSkinPreset(const QString& value)
-{
-    const QString normalized = normalizedThemePreset(value);
-    if (normalized.isEmpty()) {
-        selectDefaultSkin();
-        return;
-    }
-    applySkinFields(skinColorMode_, normalized,
-                    skinCustomKind_, skinCustomColor_,
-                    skinCustomColorMiddle_, skinCustomColorEnd_);
-}
-
-void SettingsController::setSkinCustomKind(const int value)
-{
-    applySkinCustomConfiguration(skinColorMode_, value, skinCustomColor_,
-                                 skinCustomColorMiddle_, skinCustomColorEnd_);
-}
-
-void SettingsController::setSkinCustomColor(const QString& value)
-{
-    applySkinCustomConfiguration(skinColorMode_, skinCustomKind_, value,
-                                 skinCustomColorMiddle_, skinCustomColorEnd_);
-}
-
-void SettingsController::setSkinCustomColorMiddle(const QString& value)
-{
-    applySkinCustomConfiguration(skinColorMode_, skinCustomKind_,
-                                 skinCustomColor_, value, skinCustomColorEnd_);
-}
-
-void SettingsController::setSkinCustomColorEnd(const QString& value)
-{
-    applySkinCustomConfiguration(skinColorMode_, skinCustomKind_,
-                                 skinCustomColor_, skinCustomColorMiddle_, value);
-}
-
-void SettingsController::selectDefaultSkin()
-{
-    applySkinFields(0, skinPreset_, 0, skinCustomColor_,
-                    skinCustomColorMiddle_, skinCustomColorEnd_);
-}
-
-void SettingsController::selectSkinPreset(const QString& id)
-{
-    const QList<ThemeManager::Preset> values = ThemeManager::presets();
-    const auto preset = std::find_if(
-        values.cbegin(), values.cend(),
-        [&id](const ThemeManager::Preset& value) { return value.id == id; });
-    if (preset == values.cend()) {
-        selectDefaultSkin();
-        return;
-    }
-    applySkinFields(1, id, 1,
-                    preset->stops[0].name(QColor::HexRgb).toUpper(),
-                    preset->stops[1].name(QColor::HexRgb).toUpper(),
-                    preset->stops[2].name(QColor::HexRgb).toUpper());
-}
-
-void SettingsController::setSkinCustomConfiguration(
-    const int kind, const QString& start, const QString& middle,
-    const QString& end)
-{
-    applySkinCustomConfiguration(2, kind, start, middle, end);
-}
-
-void SettingsController::applySkinCustomConfiguration(
-    const int colorMode, const int kind, const QString& start,
-    const QString& middle, const QString& end)
-{
-    const int normalizedKind = kind == 1 ? 1 : 0;
-    const QString normalizedStart = normalizedOpaqueThemeColor(start);
-    const QString normalizedMiddle = normalizedOpaqueThemeColor(middle);
-    const QString normalizedEnd = normalizedOpaqueThemeColor(end);
-    const QString fallback = defaultThemeCustomColor();
-    const bool validGradient = !normalizedStart.isEmpty()
-        && !normalizedMiddle.isEmpty() && !normalizedEnd.isEmpty();
-    applySkinFields(colorMode, skinPreset_, normalizedKind,
-                    normalizedKind == 1
-                        ? (validGradient ? normalizedStart : fallback)
-                        : (normalizedStart.isEmpty() ? fallback
-                                                     : normalizedStart),
-                    normalizedKind == 1
-                        ? (validGradient ? normalizedMiddle : fallback)
-                        : (normalizedMiddle.isEmpty() ? fallback
-                                                      : normalizedMiddle),
-                    normalizedKind == 1
-                        ? (validGradient ? normalizedEnd : fallback)
-                        : (normalizedEnd.isEmpty() ? fallback : normalizedEnd));
-}
-
-void SettingsController::applySkinFields(
-    const int colorMode, const QString& preset, const int customKind,
-    const QString& customStart, const QString& customMiddle,
-    const QString& customEnd)
-{
-    const bool modeChanged = skinColorMode_ != colorMode;
-    const bool presetChanged = skinPreset_ != preset;
-    const bool kindChanged = skinCustomKind_ != customKind;
-    const bool startChanged = skinCustomColor_ != customStart;
-    const bool middleChanged = skinCustomColorMiddle_ != customMiddle;
-    const bool endChanged = skinCustomColorEnd_ != customEnd;
-    if (!modeChanged && !presetChanged && !kindChanged && !startChanged
-        && !middleChanged && !endChanged) {
-        return;
-    }
-
-    skinColorMode_ = colorMode;
-    skinPreset_ = preset;
-    skinCustomKind_ = customKind;
-    skinCustomColor_ = customStart;
-    skinCustomColorMiddle_ = customMiddle;
-    skinCustomColorEnd_ = customEnd;
-
-    if (!editActive_) {
-        settings_.beginGroup(QStringLiteral("appearance"));
-        persistValue(QStringLiteral("skinColorMode"), skinColorMode_);
-        persistValue(QStringLiteral("skinPreset"), skinPreset_);
-        persistValue(QStringLiteral("skinCustomKind"), skinCustomKind_);
-        persistValue(QStringLiteral("skinCustomColor"), skinCustomColor_);
-        persistValue(QStringLiteral("skinCustomColorMiddle"),
-                     skinCustomColorMiddle_);
-        persistValue(QStringLiteral("skinCustomColorEnd"),
-                     skinCustomColorEnd_);
-        settings_.endGroup();
-    }
-
-    if (modeChanged) {
-        emit skinColorModeChanged();
-    }
-    if (presetChanged) {
-        emit skinPresetChanged();
-    }
-    if (kindChanged) {
-        emit skinCustomKindChanged();
-    }
-    if (startChanged) {
-        emit skinCustomColorChanged();
-    }
-    if (middleChanged) {
-        emit skinCustomColorMiddleChanged();
-    }
-    if (endChanged) {
-        emit skinCustomColorEndChanged();
-    }
-    emit skinConfigurationChanged();
 }
 
 void SettingsController::setWaveformMode(int value)
@@ -1150,13 +945,6 @@ void SettingsController::emitAllChanged(const bool includeMediaSettings)
     emit autoReadRatingChanged();
 
     emit themeModeChanged();
-    emit skinColorModeChanged();
-    emit skinPresetChanged();
-    emit skinCustomKindChanged();
-    emit skinCustomColorChanged();
-    emit skinCustomColorMiddleChanged();
-    emit skinCustomColorEndChanged();
-    emit skinConfigurationChanged();
     if (includeMediaSettings) {
         emit waveformModeChanged();
         emit waveformHeightChanged();
@@ -1410,30 +1198,12 @@ void SettingsController::load()
         themeMode_ = storedThemeMode.has_value()
                 && *storedThemeMode >= 0 && *storedThemeMode <= 2
             ? *storedThemeMode
-            : 2;
+            : 0;
         if (!storedThemeMode.has_value()
             || *storedThemeMode < 0 || *storedThemeMode > 2) {
             settings_.setValue(QStringLiteral("themeMode"), themeMode_);
         }
     }
-    skinColorMode_ = settings_.value(
-        QStringLiteral("skinColorMode"), skinColorMode_).toInt();
-    skinPreset_ = settings_.value(QStringLiteral("skinPreset"), skinPreset_).toString();
-    const bool hasSkinCustomColor =
-        settings_.contains(QStringLiteral("skinCustomColor"));
-    const bool hasSkinCustomColorMiddle =
-        settings_.contains(QStringLiteral("skinCustomColorMiddle"));
-    const bool hasSkinCustomColorEnd =
-        settings_.contains(QStringLiteral("skinCustomColorEnd"));
-    skinCustomKind_ = settings_.value(
-        QStringLiteral("skinCustomKind"), skinCustomKind_).toInt();
-    skinCustomColor_ = settings_.value(
-        QStringLiteral("skinCustomColor"), skinCustomColor_).toString();
-    skinCustomColorMiddle_ = settings_.value(
-        QStringLiteral("skinCustomColorMiddle"),
-        skinCustomColorMiddle_).toString();
-    skinCustomColorEnd_ = settings_.value(
-        QStringLiteral("skinCustomColorEnd"), skinCustomColorEnd_).toString();
     settings_.remove(QStringLiteral("glassEffect"));
     waveformMode_ = settings_.value(QStringLiteral("waveformMode"), waveformMode_).toInt();
     waveformHeight_ =
@@ -1666,55 +1436,7 @@ void SettingsController::load()
     listWindowPosition_ = clampValue(listWindowPosition_, 0, 3);
     closeBehavior_ = clampValue(closeBehavior_, 0, 1);
     defaultPlaybackMode_ = clampValue(defaultPlaybackMode_, 0, 3);
-    themeMode_ = themeMode_ >= 0 && themeMode_ <= 2 ? themeMode_ : 2;
-    skinColorMode_ = normalizedColorChoiceMode(skinColorMode_);
-    skinCustomKind_ = skinCustomKind_ == 1 ? 1 : 0;
-    const QString normalizedSkinCustomColor =
-        normalizedOpaqueThemeColor(skinCustomColor_);
-    const QString normalizedSkinCustomColorMiddle =
-        normalizedOpaqueThemeColor(skinCustomColorMiddle_);
-    const QString normalizedSkinCustomColorEnd =
-        normalizedOpaqueThemeColor(skinCustomColorEnd_);
-    const bool validSkinGradientConfiguration = hasSkinCustomColor
-        && hasSkinCustomColorMiddle && hasSkinCustomColorEnd
-        && !normalizedSkinCustomColor.isEmpty()
-        && !normalizedSkinCustomColorMiddle.isEmpty()
-        && !normalizedSkinCustomColorEnd.isEmpty();
-    const QString skinFallback = defaultThemeCustomColor();
-    skinCustomColor_ = skinCustomKind_ == 1
-        ? (validSkinGradientConfiguration ? normalizedSkinCustomColor
-                                          : skinFallback)
-        : (hasSkinCustomColor && !normalizedSkinCustomColor.isEmpty()
-               ? normalizedSkinCustomColor : skinFallback);
-    skinCustomColorMiddle_ = skinCustomKind_ == 1
-        ? (validSkinGradientConfiguration ? normalizedSkinCustomColorMiddle
-                                          : skinFallback)
-        : (hasSkinCustomColorMiddle
-                   && !normalizedSkinCustomColorMiddle.isEmpty()
-               ? normalizedSkinCustomColorMiddle : skinFallback);
-    skinCustomColorEnd_ = skinCustomKind_ == 1
-        ? (validSkinGradientConfiguration ? normalizedSkinCustomColorEnd
-                                          : skinFallback)
-        : (hasSkinCustomColorEnd && !normalizedSkinCustomColorEnd.isEmpty()
-               ? normalizedSkinCustomColorEnd : skinFallback);
-    if (skinColorMode_ == 1) {
-        if (const auto legacy = ThemeManager::legacyPresetSeed(skinPreset_)) {
-            skinColorMode_ = 2;
-            skinCustomKind_ = 0;
-            skinCustomColor_ = legacy->name(QColor::HexRgb).toUpper();
-            skinCustomColorMiddle_ = skinFallback;
-            skinCustomColorEnd_ = skinFallback;
-        } else {
-            const QString normalizedPreset =
-                normalizedThemePreset(skinPreset_);
-            if (normalizedPreset.isEmpty()) {
-                skinColorMode_ = 0;
-                skinPreset_ = defaultThemePresetId();
-            } else {
-                skinPreset_ = normalizedPreset;
-            }
-        }
-    }
+    themeMode_ = themeMode_ >= 0 && themeMode_ <= 2 ? themeMode_ : 0;
     waveformMode_ = clampValue(waveformMode_, 0, 2);
     waveformHeight_ = quantize(waveformHeight_, 0.3, 1.5, 0.1);
     waveformDensity_ = quantize(waveformDensity_, 0.5, 5.0, 0.5);
@@ -1802,13 +1524,6 @@ void SettingsController::saveAll(const bool includeMediaSettings)
 
     settings_.beginGroup(QStringLiteral("appearance"));
     persistValue(QStringLiteral("themeMode"), themeMode_);
-    persistValue(QStringLiteral("skinColorMode"), skinColorMode_);
-    persistValue(QStringLiteral("skinPreset"), skinPreset_);
-    persistValue(QStringLiteral("skinCustomKind"), skinCustomKind_);
-    persistValue(QStringLiteral("skinCustomColor"), skinCustomColor_);
-    persistValue(QStringLiteral("skinCustomColorMiddle"),
-                 skinCustomColorMiddle_);
-    persistValue(QStringLiteral("skinCustomColorEnd"), skinCustomColorEnd_);
     if (includeMediaSettings) {
         persistValue(QStringLiteral("waveformMode"), waveformMode_);
         persistValue(QStringLiteral("waveformHeight"), waveformHeight_);
@@ -1897,13 +1612,7 @@ void SettingsController::restoreDefaults(const bool includeMediaSettings)
     autoReadBpm_ = true;
     autoReadRating_ = true;
 
-    themeMode_ = 2;
-    skinColorMode_ = kDefaultColorChoiceMode;
-    skinPreset_ = defaultThemePresetId();
-    skinCustomKind_ = 0;
-    skinCustomColor_ = defaultThemeCustomColor();
-    skinCustomColorMiddle_ = defaultThemeCustomColor();
-    skinCustomColorEnd_ = defaultThemeCustomColor();
+    themeMode_ = 0;
     if (includeMediaSettings) {
         waveformMode_ = 0;
         waveformHeight_ = 0.8;

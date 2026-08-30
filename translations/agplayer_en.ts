@@ -3679,8 +3679,8 @@ Clear: Remove all known aliases for this field.</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="1576"/>
-        <source>深色</source>
-        <translation>Dark</translation>
+        <source>深色（默认）</source>
+        <translation>Dark (Default)</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="240"/>
@@ -3708,7 +3708,6 @@ Clear: Remove all known aliases for this field.</translation>
         <source>打开音频工具</source>
         <translation>Open audio tools</translation>
     </message>
-    <message><source>主题皮肤色</source><translation>Theme skin color</translation></message>
     <message><source>歌曲列表</source><translation>Song list</translation></message>
     <message><source>显示歌曲列表波形缩略图</source><translation>Show waveform thumbnails in the song list</translation></message>
     <message><source>缩略波形颜色</source><translation>Thumbnail waveform color</translation></message>
@@ -4072,53 +4071,6 @@ Clear: Remove all known aliases for this field.</translation>
         <source>评分</source>
         <translation>Rating</translation>
     </message>
-</context>
-<context>
-    <name>ThemeColorSelector</name>
-    <message><source>默认</source><translation>Default</translation></message>
-    <message><source>，已选择</source><translation>, selected</translation></message>
-    <message><source>自定义</source><translation>Custom</translation></message>
-    <message><source>自定义颜色 %1</source><translation>Custom color %1</translation></message>
-    <message><source>系统蓝</source><translation>System Blue</translation></message>
-    <message><source>靛蓝</source><translation>Indigo</translation></message>
-    <message><source>紫色</source><translation>Purple</translation></message>
-    <message><source>粉色</source><translation>Pink</translation></message>
-    <message><source>红色</source><translation>Red</translation></message>
-    <message><source>橙色</source><translation>Orange</translation></message>
-    <message><source>金色</source><translation>Gold</translation></message>
-    <message><source>绿色</source><translation>Green</translation></message>
-    <message><source>蓝绿色</source><translation>Teal</translation></message>
-    <message><source>青色</source><translation>Cyan</translation></message>
-    <message><source>Aurora</source><translation>Aurora</translation></message>
-    <message><source>Sea Glass</source><translation>Sea Glass</translation></message>
-    <message><source>Sunset</source><translation>Sunset</translation></message>
-    <message><source>Lavender Mist</source><translation>Lavender Mist</translation></message>
-    <message><source>Morning Glow</source><translation>Morning Glow</translation></message>
-    <message><source>Solid</source><translation>Solid</translation></message>
-    <message><source>Gradient</source><translation>3-color gradient</translation></message>
-    <message><source>Preview</source><translation>Preview</translation></message>
-    <message><source>Start</source><translation>Start color</translation></message>
-    <message><source>Middle</source><translation>Middle color</translation></message>
-    <message><source>End</source><translation>End color</translation></message>
-</context>
-<context>
-    <name>AgColorPicker</name>
-    <message><source>十六进制颜色</source><translation>Hex color</translation></message>
-    <message><source>关闭颜色选择器</source><translation>Close color picker</translation></message>
-    <message><source>红色通道</source><translation>Red channel</translation></message>
-    <message><source>绿色通道</source><translation>Green channel</translation></message>
-    <message><source>蓝色通道</source><translation>Blue channel</translation></message>
-    <message><source>红色通道滑块</source><translation>Red channel slider</translation></message>
-    <message><source>绿色通道滑块</source><translation>Green channel slider</translation></message>
-    <message><source>蓝色通道滑块</source><translation>Blue channel slider</translation></message>
-    <message><source>候选颜色 %1</source><translation>Candidate color %1</translation></message>
-    <message><source>色相饱和度和明度</source><translation>Hue, saturation, and brightness</translation></message>
-    <message><source>色相</source><translation>Hue</translation></message>
-    <message><source>当前颜色 %1</source><translation>Current color %1</translation></message>
-    <message><source>取消颜色更改</source><translation>Cancel color changes</translation></message>
-    <message><source>取消</source><translation>Cancel</translation></message>
-    <message><source>应用颜色</source><translation>Apply color</translation></message>
-    <message><source>应用</source><translation>Apply</translation></message>
 </context>
 <context>
     <name>LibraryNavigationModel</name>

@@ -63,12 +63,6 @@ Window {
         border.width: 1
         radius: window.visibility === Window.Maximized ? 0 : Theme.windowRadius
 
-        SkinBackdrop {
-            anchors.fill: parent
-            anchors.margins: parent.border.width
-            radius: Math.max(0, parent.radius - parent.border.width)
-        }
-
         ColumnLayout {
             anchors.fill: parent
             spacing: 0

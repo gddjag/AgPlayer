@@ -9,7 +9,6 @@
 #include "playback_controller.hpp"
 #include "qml_registration.hpp"
 #include "settings_controller.hpp"
-#include "theme_manager.hpp"
 #include "waveform_provider.hpp"
 #include "window_controller.hpp"
 
@@ -531,9 +530,6 @@ public slots:
         formatConverter_ = std::make_unique<FormatConverter>();
         audioEditor_ = std::make_unique<AudioEditorController>(AG_AUDIO_BACKEND_NULL);
         settings_ = std::make_unique<SettingsController>();
-        themeManager_ = std::make_unique<ThemeManager>(*qGuiApp);
-        themeSettings_ = std::make_unique<ThemeSettingsSynchronizer>(
-            *themeManager_, *settings_);
         waveformProvider_ = std::make_unique<WaveformProvider>(settings_.get());
         visualFormatTaskModel_ = std::make_unique<VisualFormatTaskModel>();
         nativeDropHelper_.bind(audioTools_.get(), formatConverter_.get(),
@@ -546,9 +542,7 @@ public slots:
                                     formatConverter_.get(), filenameProcessor_.get(),
                                     settings_.get(), waveformProvider_.get(),
                                     nullptr, nullptr, audioEditor_.get(),
-                                    AgPlayerQmlRuntimeModels{nullptr, nullptr,
-                                                              nullptr, nullptr,
-                                                              themeManager_.get()});
+                                    AgPlayerQmlRuntimeModels{});
     }
 
     void qmlEngineAvailable(QQmlEngine* engine)
@@ -579,8 +573,6 @@ private:
     std::unique_ptr<FormatConverter> formatConverter_;
     std::unique_ptr<AudioEditorController> audioEditor_;
     std::unique_ptr<SettingsController> settings_;
-    std::unique_ptr<ThemeManager> themeManager_;
-    std::unique_ptr<ThemeSettingsSynchronizer> themeSettings_;
     std::unique_ptr<WaveformProvider> waveformProvider_;
     std::unique_ptr<VisualFormatTaskModel> visualFormatTaskModel_;
     NativeDropHelper nativeDropHelper_;

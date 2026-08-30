@@ -1,70 +1,64 @@
 pragma Singleton
 import QtQuick
-import AgPlayer
+import AgPlayer as Runtime
 
 QtObject {
     id: root
 
-    // Canonical complete-palette tokens. The C++ singleton owns all adaptive
-    // color decisions and the native QPalette; this façade keeps existing QML
-    // consumers source-compatible while migration proceeds page by page.
-    readonly property bool isLight: ThemeManager.isLight
-    readonly property color background: ThemeManager.background
-    readonly property color surface: ThemeManager.surface
-    readonly property color surfaceElevated: ThemeManager.surfaceElevated
-    readonly property color surfaceHover: ThemeManager.surfaceHover
-    readonly property color surfacePressed: ThemeManager.surfacePressed
-    readonly property color textPrimary: ThemeManager.textPrimary
-    readonly property color textSecondary: ThemeManager.textSecondary
-    readonly property color textTertiary: ThemeManager.textTertiary
-    readonly property color textDisabled: ThemeManager.textDisabled
-    readonly property color opaqueBorder: ThemeManager.border
-    readonly property color borderStrong: ThemeManager.borderStrong
-    readonly property color opaqueDivider: ThemeManager.divider
-    readonly property color disabled: ThemeManager.disabled
-    readonly property color accent: ThemeManager.accent
-    readonly property color accentHover: ThemeManager.accentHover
-    readonly property color accentPressed: ThemeManager.accentPressed
-    readonly property color accentSoft: ThemeManager.accentSoft
-    readonly property color accentText: ThemeManager.accentText
-    readonly property color accentBorder: ThemeManager.accent
-    readonly property color focus: ThemeManager.focus
-    readonly property color highlight: ThemeManager.highlight
-    readonly property color highlightHover: ThemeManager.highlightHover
-    readonly property color highlightPressed: ThemeManager.highlightPressed
-    readonly property color highlightSoft: ThemeManager.highlightSoft
-    readonly property color highlightText: ThemeManager.highlightText
-    readonly property color highlightBorder: ThemeManager.highlight
-    readonly property color success: ThemeManager.success
-    readonly property color warning: ThemeManager.warning
-    readonly property color error: ThemeManager.error
-    readonly property color danger: ThemeManager.danger
-    readonly property color recording: ThemeManager.recording
-    readonly property color critical: ThemeManager.critical
-    readonly property color backdropStart: ThemeManager.backdropStart
-    readonly property color backdropMiddle: ThemeManager.backdropMiddle
-    readonly property color backdropEnd: ThemeManager.backdropEnd
-    readonly property color glassSurface: ThemeManager.glassSurface
-    readonly property color glassSurfaceElevated: ThemeManager.glassSurfaceElevated
-    readonly property color glassSurfaceHover: ThemeManager.glassSurfaceHover
-    readonly property color glassSurfacePressed: ThemeManager.glassSurfacePressed
-    readonly property color glassBorder: ThemeManager.glassBorder
-    readonly property color glassDivider: ThemeManager.glassDivider
-    readonly property color glassInnerHighlight: ThemeManager.glassInnerHighlight
-
-    // Compatibility aliases for existing QML pages.
-    readonly property int mode: SettingsController.themeMode
+    readonly property int mode: Runtime.SettingsController.themeMode
     readonly property int requestedMode: mode
     readonly property bool followsSystem: mode === 2
-    readonly property bool systemIsLight: ThemeManager.isLight
-    readonly property int effectiveMode: isLight ? 1 : 0
-    readonly property bool generatedSkin: SettingsController.skinColorMode !== 0
-    readonly property color panel: glassSurface
-    readonly property color elevated: glassSurfaceElevated
-    readonly property color hoverSurface: glassSurfaceHover
-    readonly property color pressedSurface: glassSurfacePressed
-    readonly property color border: glassBorder
-    readonly property color divider: glassDivider
+    readonly property bool systemIsLight:
+        Application.styleHints.colorScheme === Qt.Light
+    readonly property int effectiveMode: followsSystem
+                                         ? (systemIsLight ? 1 : 0)
+                                         : (mode === 1 ? 1 : 0)
+    readonly property bool isLight: effectiveMode === 1
+
+    // Fixed three-mode palette. Custom seeds, generated gradients and glass
+    // derivation are intentionally absent.
+    readonly property color background: isLight ? "#F3F3F3" : "#071018"
+    readonly property color surface: isLight ? "#FFFFFF" : "#0B1721"
+    readonly property color surfaceElevated: isLight ? "#F9F9F9" : "#101E28"
+    readonly property color surfaceHover: isLight ? "#EAEAEA" : "#172A37"
+    readonly property color surfacePressed: isLight ? "#DEDEDE" : "#1D3443"
+    readonly property color textPrimary: isLight ? "#1B1B1B" : "#FFFFFF"
+    readonly property color textSecondary: isLight ? "#5D5D5D" : "#CFCFCF"
+    readonly property color textTertiary: isLight ? "#767676" : "#9EABB5"
+    readonly property color textDisabled: isLight ? "#9A9A9A" : "#73808A"
+    readonly property color opaqueBorder: isLight ? "#D1D1D1" : "#203340"
+    readonly property color borderStrong: isLight ? "#AFAFAF" : "#385064"
+    readonly property color opaqueDivider: isLight ? "#DEDEDE" : "#1A2A35"
+    readonly property color disabled: isLight ? "#E4E4E4" : "#15232D"
+
+    readonly property color accent: "#007AFF"
+    readonly property color accentHover: "#1A86FF"
+    readonly property color accentPressed: "#0068D9"
+    readonly property color accentSoft: isLight ? "#1F007AFF" : "#33007AFF"
+    readonly property color accentText: "#FFFFFF"
+    readonly property color accentBorder: accent
+    readonly property color focus: accent
+    readonly property color highlight: accent
+    readonly property color highlightHover: accentHover
+    readonly property color highlightPressed: accentPressed
+    readonly property color highlightSoft: isLight ? "#26007AFF" : "#3D007AFF"
+    readonly property color highlightText: "#FFFFFF"
+    readonly property color highlightBorder: accent
+
+    readonly property color success: "#22C55E"
+    readonly property color warning: "#F59E0B"
+    readonly property color error: "#EF4444"
+    readonly property color danger: error
+    readonly property color recording: "#FF4057"
+    readonly property color critical: error
+
+    // Compatibility aliases retained for existing controls.
+    readonly property color panel: surface
+    readonly property color elevated: surfaceElevated
+    readonly property color hoverSurface: surfaceHover
+    readonly property color pressedSurface: surfacePressed
+    readonly property color border: opaqueBorder
+    readonly property color divider: opaqueDivider
     readonly property color primaryText: textPrimary
     readonly property color secondaryText: textSecondary
     readonly property color cyan: accent
@@ -73,56 +67,55 @@ QtObject {
     readonly property color activeSelectionText: highlightText
     readonly property color inactiveSelection: highlight
     readonly property color inactiveSelectionText: highlightText
-    readonly property color currentTrackSurface: ThemeManager.currentTrackSurface
+    readonly property color currentTrackSurface: "#578F57C9"
     readonly property color currentTrackInactiveSurface: currentTrackSurface
     readonly property color currentTrackSelection: currentTrackSurface
-    readonly property color selectedTrackSelection: highlightSoft
+    readonly property color selectedTrackSelection: "#2E007AFF"
     readonly property color currentTrackSelectionInactive: currentTrackSurface
-    readonly property color selectedTrackSelectionInactive: highlightSoft
+    readonly property color selectedTrackSelectionInactive: "#2E007AFF"
     readonly property color onCyanText: accentText
-    readonly property color onBrandGradientText: accentText
+    readonly property color onBrandGradientText: "#FFFFFF"
     readonly property color iconPrimary: primaryText
     readonly property color iconSecondary: secondaryText
     readonly property color iconAccent: accent
-    readonly property color playButtonBorder: borderStrong
+    readonly property color playButtonBorder: isLight ? "#1B1B1B" : "#FFFFFF"
 
-    // Visualizer, waveform, editor and equalizer colors intentionally remain
-    // media-domain constants; they never derive from Accent or Highlight.
+    // Media-domain colors stay independent of the appearance mode.
     readonly property color waveformCyan: "#00D4FF"
     readonly property color waveformBlue: "#1688FF"
     readonly property color waveformGreen: "#00E676"
     readonly property color waveformViolet: "#7B2FF7"
     readonly property color waveformMagenta: "#E62E9B"
     readonly property color waveformRed: "#FF4057"
-    readonly property color editorCanvas: surface
-    readonly property color editorRuler: surfaceElevated
-    readonly property color editorOverview: surfaceHover
+    readonly property color editorCanvas: isLight ? "#F7FAFA" : "#11191B"
+    readonly property color editorRuler: isLight ? "#EEF3F3" : "#151F21"
+    readonly property color editorOverview: isLight ? "#EAF2F2" : "#132124"
     readonly property color editorWaveform: isLight ? "#169B97" : "#39C7C0"
     readonly property color editorOverviewWaveform: isLight ? "#2B9692" : "#297E7B"
     readonly property color editorSelection: isLight ? "#26169B97" : "#2639C7C0"
     readonly property color editorOverviewSelection: isLight ? "#122B9692" : "#12297E7B"
-    readonly property color playRingPlaying: generatedSkin ? accent : waveformGreen
-    readonly property color playRingPaused: generatedSkin ? accent : "#FFB020"
+    readonly property color playRingPlaying: waveformGreen
+    readonly property color playRingPaused: "#FFB020"
 
     readonly property color favoriteRed: "#FF334D"
     readonly property color ratingGold: "#FF9800"
-    readonly property color listWorkspaceSurface: surface
-    readonly property color listWorkspaceBorder: borderStrong
-    readonly property color listDivider: divider
-    readonly property color listHeaderSurface: surfaceElevated
-    readonly property color listSelectedSurface: highlightSoft
-    readonly property color tagAddSurface: accentSoft
-    readonly property color tagSecondaryText: textSecondary
+    readonly property color listWorkspaceSurface: isLight ? "#FCFAFD" : "#06101F"
+    readonly property color listWorkspaceBorder: isLight ? "#B8A9BC" : "#60475F"
+    readonly property color listDivider: isLight ? "#D8CFDC" : "#33283D"
+    readonly property color listHeaderSurface: isLight ? "#F4EFF6" : "#091728"
+    readonly property color listSelectedSurface: isLight ? "#E7DCEF" : "#231238"
+    readonly property color tagAddSurface: isLight ? "#EEE2F3" : "#241039"
+    readonly property color tagSecondaryText: isLight ? "#745B43" : "#C8A77D"
     readonly property color listWaveformMono: isLight ? "#6B5A70" : "#C7B8CB"
-    readonly property color tagPillSurface: surface
-    readonly property color tagPillHoverSurface: surfaceHover
-    readonly property color tagPillSelectedSurface: highlightSoft
-    readonly property color tagPillDropSurface: accentSoft
-    readonly property color tagPillBorder: border
-    readonly property color tagPillHighlightBorder: highlightBorder
-    readonly property color tagPillText: textPrimary
-    readonly property color tagPillSecondaryText: textSecondary
-    readonly property color tagPillShadow: "#30000000"
+    readonly property color tagPillSurface: isLight ? "#B8FFFFFF" : "#D11A2B3B"
+    readonly property color tagPillHoverSurface: isLight ? "#E0DEEDF7" : "#EB213D54"
+    readonly property color tagPillSelectedSurface: isLight ? "#33407DB3" : "#66407DB3"
+    readonly property color tagPillDropSurface: isLight ? "#45458CC2" : "#80428FC2"
+    readonly property color tagPillBorder: isLight ? "#A5B8C6" : "#496477"
+    readonly property color tagPillHighlightBorder: isLight ? "#5A89AA" : "#76A8CB"
+    readonly property color tagPillText: isLight ? "#21313D" : "#EFF7FC"
+    readonly property color tagPillSecondaryText: isLight ? "#526B7C" : "#B9CCDA"
+    readonly property color tagPillShadow: isLight ? "#241A2E3D" : "#4D000000"
 
     readonly property int radiusSm: 8
     readonly property int radiusMd: 12

@@ -1491,7 +1491,7 @@ Item {
                             model: [
                                 { text: qsTr("跟随系统"), value: 2 },
                                 { text: qsTr("浅色"), value: 1 },
-                                { text: qsTr("深色"), value: 0 }
+                                { text: qsTr("深色（默认）"), value: 0 }
                             ]
 
                             delegate: Button {
@@ -1518,32 +1518,6 @@ Item {
                                     implicitHeight: 32
                                 }
                             }
-                        }
-                    }
-                }
-
-                SettingRow {
-                    label: qsTr("主题皮肤色")
-                    Layout.preferredHeight: skinSelector.implicitHeight
-
-                    ThemeColorSelector {
-                        id: skinSelector
-                        objectName: "themeSkinColorSelector"
-                        anchors.fill: parent
-                        title: qsTr("主题皮肤色")
-                        selectedMode: SettingsController.skinColorMode
-                        selectedPreset: SettingsController.skinPreset
-                        customKind: SettingsController.skinCustomKind
-                        customColor: SettingsController.skinCustomColor
-                        customColorMiddle: SettingsController.skinCustomColorMiddle
-                        customColorEnd: SettingsController.skinCustomColorEnd
-                        onDefaultRequested: SettingsController.selectDefaultSkin()
-                        onPresetRequested: function(id) {
-                            SettingsController.selectSkinPreset(id)
-                        }
-                        onCustomConfigurationRequested: function(kind, start, middle, end) {
-                            SettingsController.setSkinCustomConfiguration(
-                                        kind, start, middle, end)
                         }
                     }
                 }
