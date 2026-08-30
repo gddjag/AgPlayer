@@ -150,19 +150,23 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
 
     DeterministicRandom random(seed);
     constexpr float extent = 168.0F;
+    constexpr float stageRadius = extent * 0.5F;
     const float spacing = extent / static_cast<float>(boundedGrid);
     const float center = static_cast<float>(boundedGrid - 1) * 0.5F;
-    const float maxDistance = std::sqrt(2.0F) * extent * 0.5F;
     for (int z = 0; z < boundedGrid; ++z) {
         for (int x = 0; x < boundedGrid; ++x) {
             SceneInstance instance;
             const float worldX = (static_cast<float>(x) - center) * spacing;
             const float worldZ = (static_cast<float>(z) - center) * spacing;
+            const float distance = std::hypot(worldX, worldZ);
+            if (distance > stageRadius) {
+                continue;
+            }
             instance.position = QVector3D(worldX, 0.0F, worldZ);
-            instance.scale = QVector3D(spacing * 0.988F, 1.0F,
-                                       spacing * 0.988F);
+            instance.scale = QVector3D(spacing * 0.997F, 1.0F,
+                                       spacing * 0.997F);
             instance.random = random.unit();
-            const float radius = std::hypot(worldX, worldZ) / maxDistance;
+            const float radius = distance / stageRadius;
             instance.zone = zoneFor(worldX, worldZ, radius, instance.random);
             result.terrain.append(instance);
         }
@@ -204,9 +208,10 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
         }
     }
     for (int index = 0; index < particleCount; ++index) {
-        SceneInstance particle = makeExtra(random, 0.0F, 18.0F,
-                                           0.5F, 8.0F, ColorZone::Accent);
-        particle.scale = QVector3D(0.16F, 0.16F, 0.16F);
+        SceneInstance particle = makeExtra(random, 72.0F, 168.0F,
+                                           10.0F, 82.0F, ColorZone::Accent);
+        const float starSize = 0.10F + random.unit() * 0.18F;
+        particle.scale = QVector3D(starSize, starSize, starSize);
         result.particles.append(particle);
     }
     return result;
@@ -236,7 +241,7 @@ RenderDynamics mapRenderDynamics(const RenderStyleSnapshot& style) noexcept
     RenderDynamics result;
     result.inputCompression = std::clamp(style.inputCompression, 0.2F, 1.5F);
     result.audioResponse = std::clamp(style.audioResponse, 0.2F, 2.0F);
-    result.responseRadius = 72.0F * std::clamp(style.responseRange, 0.5F, 2.2F);
+    result.responseRadius = 56.0F * std::clamp(style.responseRange, 0.5F, 2.2F);
     result.centerHighlight = clampUnit(style.centerHighlight);
     result.rhythmStrength = std::clamp(style.rhythmStrength, 0.0F, 1.4F);
     result.depthOfField = std::clamp(style.depthOfField, 0.0F, 1.5F);
@@ -588,7 +593,7 @@ void CameraMotion::orbitBy(float yawDelta, float pitchDelta,
 void CameraMotion::zoomBy(float wheelDelta, double nowSeconds) noexcept
 {
     snapshot_.distance = std::clamp(snapshot_.distance + wheelDelta * 0.04F,
-                                    42.0F, 128.0F);
+                                     42.0F, 220.0F);
     markManual(nowSeconds);
 }
 void CameraMotion::applyBeatPunch(float strength) noexcept
@@ -627,7 +632,7 @@ void CameraMotion::applyManualDelta(const CameraSnapshot& previous,
         || std::abs(next.distance - previous.distance) > 0.000001F;
     snapshot_.yaw += yawDelta;
     snapshot_.pitch = std::clamp(snapshot_.pitch + pitchDelta, 0.12F, 1.15F);
-    snapshot_.distance = std::clamp(next.distance, 42.0F, 128.0F);
+    snapshot_.distance = std::clamp(next.distance, 42.0F, 220.0F);
     if (manuallyMoved) markManual(nowSeconds);
 }
 void CameraMotion::markManual(double nowSeconds) noexcept

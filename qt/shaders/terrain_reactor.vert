@@ -31,11 +31,8 @@ layout(location = 3) out float opacity;
 layout(location = 4) out float glow;
 layout(location = 5) out float focus;
 layout(location = 6) out float impactLight;
-
-float hash(vec2 p)
-{
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-}
+layout(location = 7) out float topSurface;
+layout(location = 8) out float streamSheen;
 
 void main()
 {
@@ -50,7 +47,7 @@ void main()
     vec4 bandsHigh = ubuf.bandsHigh * ubuf.equalizerHigh;
     float amplitude = mix(0.20, 1.45, ubuf.styleParameters.x);
     float motion = mix(0.2, 1.8, ubuf.styleParameters.y);
-    float responseRadius = max(36.0, ubuf.styleAudio.z);
+    float responseRadius = max(28.0, ubuf.styleAudio.z);
     float impactStrength = ubuf.impact.x;
     float impactAge = ubuf.impact.y;
     float impactWave = 0.0;
@@ -60,6 +57,8 @@ void main()
     float terrainSpike = 0.0;
     opacity = 1.0;
     impactLight = 0.0;
+    topSurface = 0.0;
+    streamSheen = 0.0;
 
     if (type < 0.5) {
         float center = clamp(1.0 - distanceFromCore / responseRadius, 0.0, 1.0);
@@ -96,7 +95,7 @@ void main()
                                  + clusteredSpire * 0.28
                                  + towerProfile * 0.95, 0.0, 1.0);
         terrainSpike = spikeField * center;
-        float highSpike = bandsHigh.x * ubuf.styleExtra.z
+        float highSpike = bandsHigh.x
                         * mix(0.10, 18.00, spikeField)
                         * center * mix(0.5, 1.8, ubuf.styleDynamics.y);
         float idlePhase = sin(position.x * 0.032 + position.z * 0.041) * 0.72;
@@ -161,13 +160,29 @@ void main()
             softCap * (1.0 - exp(-rawHeight / softCap)));
         scale.y = height;
         position.y += height * 0.5;
-        float outerField = smoothstep(responseRadius * 0.52,
-                                      118.0, distanceFromCore);
-        float cellNoise = clamp(hash(floor(instancePosition.xz * 0.72))
-                                + randomValue * 0.28, 0.0, 1.0);
-        float sparseCell = smoothstep(0.44 + outerField * 0.28,
-                                      0.94, cellNoise);
-        opacity *= mix(1.0, 0.10 + sparseCell * 0.90, outerField);
+        float outerField = smoothstep(responseRadius * 0.84,
+                                      84.0, distanceFromCore);
+        float coherentNoise = 0.5 + 0.5 * sin(instancePosition.x * 0.11
+                                             + instancePosition.z * 0.075);
+        float cellNoise = clamp(coherentNoise * 0.68
+                                + randomValue * 0.32, 0.0, 1.0);
+        float sparseCell = smoothstep(0.54 + outerField * 0.20,
+                                      0.92, cellNoise);
+        opacity *= mix(1.0, 0.18 + sparseCell * 0.58, outerField);
+        opacity *= 1.0 - smoothstep(79.5, 84.0, distanceFromCore);
+        topSurface = smoothstep(0.72, 0.98, vertexNormal.y);
+        float highEnergy = clamp(bandsHigh.y * 0.28
+                                 + bandsHigh.z * 0.46
+                                 + bandsHigh.w * 0.62, 0.0, 1.0);
+        float flowPhase = fract(t * (0.12 + highEnergy * 0.22)
+                                + randomValue * 0.83
+                                + distanceFromCore * 0.010);
+        float flowingBand = exp(-pow((flowPhase - 0.20) / 0.095, 2.0));
+        float sparkle = pow(0.5 + 0.5 * sin(t * (3.4 + highEnergy * 8.0)
+                                           + randomValue * 47.0), 12.0);
+        streamSheen = ubuf.styleExtra.z * topSurface
+                    * (0.03 + highEnergy * 0.62)
+                    * (flowingBand * 1.05 + sparkle * 1.45);
     } else if (type < 1.5) {
         position.y += sin(t * 0.74 * motion + randomValue * 18.0) * 1.95
                     + bandsLow.x * 2.2;
@@ -191,12 +206,15 @@ void main()
         scale.xz *= visibleFactor;
         opacity = visibleFactor;
     } else if (type < 3.5) {
-        float burst = ubuf.effects.x * (0.2 + randomValue) * ubuf.styleExtra.y;
-        position.xz += vec2(cos(randomValue * 31.0), sin(randomValue * 31.0))
-                     * mod(t * 3.0 + randomValue * 9.0, 8.0) * burst;
-        position.y += abs(sin(t * 2.0 + randomValue * 12.0)) * 6.0 * burst;
-        scale *= ubuf.styleExtra.y;
-        opacity = ubuf.styleExtra.y;
+        float starPulse = 0.5 + 0.5
+            * sin(t * (0.7 + randomValue * 1.8) + randomValue * 38.0);
+        float burst = ubuf.effects.x * ubuf.styleExtra.y;
+        vec2 outward = normalize(position.xz + vec2(0.001));
+        position.xz += outward * mod(t * 1.4 + randomValue * 11.0, 10.0)
+                     * burst * 0.42;
+        position.y += sin(t * 0.34 + randomValue * 17.0) * (0.35 + burst);
+        scale *= 0.62 + starPulse * 0.78 + burst * 0.35;
+        opacity = 0.24 + starPulse * 0.58 + burst * 0.18;
     } else {
         float group = floor(instanceData.w + 0.001);
         float localValue = fract(instanceData.w);
@@ -258,7 +276,10 @@ void main()
         float edge = smoothstep(0.34, 0.94,
                                 clamp(distanceFromCore / 118.0, 0.0, 1.0));
         color = mix(color, base, edge * 0.52);
-    } else if (type < 1.5) color = mix(warm, peak, 0.58);
+        float corePresence = pow(clamp(1.0 - distanceFromCore / 84.0,
+                                       0.0, 1.0), 0.58);
+        color *= mix(0.15, 1.04, corePresence);
+    } else if (type < 1.5) color = mix(warm, peak, 0.76);
     else if (zone < 0.5) color = base;
     else if (zone < 1.5) color = cool;
     else if (zone < 2.5) color = warm;
@@ -309,4 +330,9 @@ void main()
     glow = ubuf.styleParameters.z * (0.35 + max(max(color.r, color.g), color.b))
          + steadyCoreGlow * 1.25 + terrainSpike * 0.65 + coreGlow * 7.2
          + rippleWave * 0.30 + impactWave * 0.24;
+    if (type > 2.5 && type < 3.5) {
+        color = mix(color, peak, 0.36);
+        glow = 0.08 + ubuf.effects.x * 0.16;
+        focus = 1.0;
+    }
 }

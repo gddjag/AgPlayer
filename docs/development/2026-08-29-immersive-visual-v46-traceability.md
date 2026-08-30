@@ -33,8 +33,8 @@
 | 自动质量与低资源策略 | `TerrainReactorItem`、`TerrainReactorState` | 状态与 GPU smoke 测试通过；真实音频 31.14 秒运行工作集快照约 171.3 MB；尚无 30 分钟性能曲线 |
 | 队列抽屉保持当前队列作用域 | `ImmersiveQueueDrawer.qml` | Debug/Release QML 集成测试通过；使用现有 `queueTrackIds`/`trackForId`/`playTrackIds`，不复制队列模型 |
 | 主题、沉浸视觉、歌词三项状态互不干扰 | `PlayerExperienceController`、`ExperienceActions.qml` | Debug/Release 控制器与 QML 集成测试通过；主题切换不重建播放核心 |
-| 沉浸视觉作为独立主题窗口 | `ExperienceActions.qml`、`Main.qml`、`ImmersiveWindow.qml` | 主题动作按经典→单窗口→沉浸视觉循环；沉浸视觉始终由独立无边框窗口承载，播放器/列表页面不再作为渲染宿主 |
-| 纯净顶层操作 | `ImmersiveSurface.qml`、`ImmersiveWindow.qml` | 已移除左上角品牌文字和面板文字按钮；右上角只保留真实全屏/退出全屏图标，Esc 退出全屏的 QML 集成测试通过 |
+| 沉浸视觉作为独立主题窗口 | `ExperienceActions.qml`、`Main.qml`、`ImmersiveWindow.qml`、`WindowController` | 主题动作按经典→单窗口→沉浸视觉循环；进入时临时隐藏播放器与歌曲列表，退出后恢复此前主/迷你窗口和列表偏好；反应堆始终由独立无边框窗口承载 |
+| 纯净顶层操作 | `ImmersiveSurface.qml`、`ImmersiveWindow.qml` | 已移除左上角品牌文字和面板文字按钮；右上角保留“返回窗口主题”和全屏图标；Esc 退出全屏的 QML 集成测试通过 |
 | 最终 HTML 九项动态参数与开关 | `ImmersiveControlPanel.qml`、`PlayerExperienceController`、QRhi uniform/shader | 输入压缩、音频响应、响应范围、中心高光、律动强度、景深、主体清晰、自动旋转速度、律动灵敏度及爆发/流线开关均写入真实渲染快照；旧地形振幅等重复 UI 已移除 |
 
 ## 已执行验证
@@ -77,3 +77,13 @@
 - Release 真实音频运行日志：`build/qa/native-visual/release-real-video-30s-pass.log`
 - 视觉 QA：`docs/qa/2026-08-29-immersive-visual-design-qa.md`
 - 第三方来源审计：`docs/qa/2026-08-29-immersive-visual-license-audit.md`
+
+## 2026-08-30 本轮最终复核
+
+- `WindowController` 新增沉浸展示生命周期，窗口切换测试覆盖主窗口、迷你播放器、歌曲列表偏好和返回恢复；没有创建第二播放器或改动播放队列。
+- 主地形实例在 CPU 布局阶段裁成半径 84 的圆盘，外围星体独立分布；默认响应半径收拢为 56，默认相机距离调整为 180，并保留滚轮 42–220 的缩放范围，使黑色星空留白和中央反应堆比例更接近最终 HTML。
+- 顶面流光只作用于柱体上表面，由既有高频能量、稳定单元相位和时间共同驱动；外圈透明度与亮度渐隐，避免整片方阵和全场发白。冲击波、漂浮体、流星和频彩波形的数据链未改。
+- 动态页保留最终 HTML 的 9 个滑杆、8 个开关，并用现有八段频谱派生只读的 Warmth、Brightness、Sharpness、Smoothness、Density 五项反馈；低/高频占比及锐度、平滑度、密度公式按最终原型语义校准，kick 通过 520 ms 轻量衰减包络平滑影响锐度和密度，没有新增解码、FFT 或音频缓存。
+- `TerrainReactorItem` 将八段频谱、能量、频谱通量和 kick/snare 作为只读 QML 属性暴露；集成回归通过真实 `TerrainReactorItem` 合成特征验证五项读数，不再由测试直接给面板赋值。`WindowController::showMain/showMini` 在沉浸展示期间只更新退出后的恢复目标，主窗口、迷你播放器和列表继续保持隐藏。
+- Debug/Release 功能聚焦回归均为 13/13，QML lint 无错误。Release 全量 `ctest` 为 118/121；`import_controller_test` 隔离复跑 24/24 通过，`windows_shell_runtime_test` 在另一工作树的 AgPlayer 进程出现前曾隔离通过、之后受前台激活冲突限制；与本功能无关的 `audio_editor_controller_test` 仍在当前机器失败，因此不报告全套全绿。
+- 最终固定频谱截图为 `design-qa/2026-08-30-immersive-revision-current-f.png`；最终 HTML 与原生实现的同输入对比为 `design-qa/2026-08-30-html-reference-vs-native-final.png`。

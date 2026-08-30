@@ -9,10 +9,19 @@ Rectangle {
     property bool collapsed: false
     property int currentTab: 0
     property string editingColorProperty: ""
+    property var featureBands: []
+    property real featureEnergy: 0
+    property real featureSpectralFlux: 0
+    property bool featureKick: false
+    property real featureKickEnvelope: 0
+    readonly property real expandedHeight: currentTab === 0 ? 390
+                                                : currentTab === 1 ? 520 : 690
     signal pointerActivity()
 
     width: 356
-    height: collapsed ? 52 : Math.min(650, parent ? parent.height - 108 : 650)
+    height: collapsed ? 52 : Math.min(expandedHeight,
+                                      parent ? parent.height - 108
+                                             : expandedHeight)
     radius: 22
     color: Qt.rgba(0.032, 0.030, 0.044, 0.88) // theme-color-allow: immersive media visual contract
     border.width: 1
@@ -49,6 +58,50 @@ Rectangle {
         if (item.scale)
             return (value / item.scale).toFixed(item.decimals || 2)
         return Math.round(value).toString()
+    }
+
+    function clampFeature(value) {
+        return Math.max(0, Math.min(1, Number(value) || 0))
+    }
+
+    function band(index) {
+        return featureBands && index >= 0 && index < featureBands.length
+                ? clampFeature(featureBands[index]) : 0
+    }
+
+    function semanticFeatureValue(index) {
+        var low = band(0) + band(1) + band(2) + band(3)
+        var high = band(5) + band(6) + band(7)
+        var tonalTotal = Math.max(0.001, low + high)
+        if (index === 0)
+            return clampFeature(low / tonalTotal)
+        if (index === 1)
+            return clampFeature(high / tonalTotal)
+        if (index === 2)
+            return clampFeature(band(4) * 0.5 + band(5) * 0.3
+                                + featureKickEnvelope * 0.2)
+        if (index === 3)
+            return clampFeature(1.0 - band(6) * 0.35 - band(7) * 0.22
+                                + band(3) * 0.16)
+        return clampFeature(0.42 + band(6) * 0.3 + band(7) * 0.22
+                            + featureKickEnvelope * 0.1)
+    }
+
+    onFeatureKickChanged: {
+        if (!featureKick)
+            return
+        kickEnvelopeDecay.stop()
+        featureKickEnvelope = 1
+        kickEnvelopeDecay.restart()
+    }
+
+    NumberAnimation {
+        id: kickEnvelopeDecay
+        target: root
+        property: "featureKickEnvelope"
+        to: 0
+        duration: 520
+        easing.type: Easing.OutCubic
     }
 
     Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
@@ -476,27 +529,87 @@ Rectangle {
                         }
                     }
                 }
-                Text { text: qsTr("视觉 EQ · 8 音域"); color: Qt.rgba(0.9, 0.86, 0.92, 0.5); font.pixelSize: 9 } // theme-color-allow: immersive media visual contract
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 2
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("音乐语义特征")
+                        color: Qt.rgba(0.9, 0.86, 0.92, 0.5) // theme-color-allow: immersive media visual contract
+                        font.pixelSize: 9
+                    }
+                    Text {
+                        text: qsTr("自动计算")
+                        color: Qt.rgba(0.9, 0.86, 0.92, 0.34) // theme-color-allow: immersive media visual contract
+                        font.pixelSize: 8
+                    }
+                }
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: 2
+                    rowSpacing: 6
+                    columnSpacing: 6
                     Repeater {
-                        model: ["SUB", "BASS", "LOW", "MID", "HIGH", "PRES", "BRILL", "AIR"]
-                        ColumnLayout {
+                        model: ["Warmth", "Brightness", "Sharpness",
+                                "Smoothness", "Density"]
+                        Rectangle {
                             required property int index
                             required property string modelData
+                            objectName: "semanticFeature" + index
+                            Layout.columnSpan: index === 4 ? 2 : 1
                             Layout.fillWidth: true
-                            spacing: 1
-                            Slider {
-                                orientation: Qt.Vertical
-                                Layout.alignment: Qt.AlignHCenter
-                                Layout.preferredHeight: 54
-                                from: 0
-                                to: 100
-                                value: Number(PlayerExperienceController.visualEqGains[index])
-                                onMoved: root.setEqGain(index, value)
+                            Layout.preferredHeight: 43
+                            radius: 8
+                            color: Qt.rgba(1, 1, 1, 0.035) // theme-color-allow: immersive media visual contract
+                            border.width: 1
+                            border.color: Qt.rgba(1, 1, 1, 0.065) // theme-color-allow: immersive media visual contract
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 7
+                                spacing: 3
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: modelData
+                                        color: Qt.rgba(0.94, 0.91, 0.95, 0.68) // theme-color-allow: immersive media visual contract
+                                        font.pixelSize: 8
+                                    }
+                                    Text {
+                                        text: root.semanticFeatureValue(index).toFixed(2)
+                                        color: Qt.rgba(0.96, 0.93, 0.97, 0.56) // theme-color-allow: immersive media visual contract
+                                        font.pixelSize: 8
+                                    }
+                                }
+                                ProgressBar {
+                                    id: semanticBar
+                                    objectName: "semanticFeatureBar" + index
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 3
+                                    from: 0
+                                    to: 1
+                                    value: root.semanticFeatureValue(index)
+                                    background: Rectangle {
+                                        implicitHeight: 3
+                                        radius: 2
+                                        color: Qt.rgba(1, 1, 1, 0.08) // theme-color-allow: immersive media visual contract
+                                    }
+                                    contentItem: Item {
+                                        implicitHeight: 3
+                                        Rectangle {
+                                            width: parent.width
+                                                   * semanticBar.visualPosition
+                                            height: parent.height
+                                            radius: 2
+                                            gradient: Gradient {
+                                                orientation: Gradient.Horizontal
+                                                GradientStop { position: 0; color: PlayerExperienceController.warmColor }
+                                                GradientStop { position: 1; color: PlayerExperienceController.coolColor }
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                            Text { Layout.alignment: Qt.AlignHCenter; text: modelData; color: Qt.rgba(0.9, 0.86, 0.92, 0.45); font.pixelSize: 7 } // theme-color-allow: immersive media visual contract
                         }
                     }
                 }

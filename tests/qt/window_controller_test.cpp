@@ -27,6 +27,7 @@ private slots:
     void legacyListWidthsMigrateWithoutOverwritingIndependentSize();
     void dpiChangePreservesNativePixelSize();
     void switchingWindowsDoesNotRecreatePlayback();
+    void immersivePresentationTemporarilyHidesAndRestoresPlayerWindows();
     void updatesExistingWindowObjectsAndFlags();
     void visibilityWaitsForDestinationReadiness();
     void shutdownIsOrderedAndIdempotent();
@@ -165,6 +166,62 @@ void WindowControllerTest::switchingWindowsDoesNotRecreatePlayback()
     windows.showMain();
     QVERIFY(windows.mainVisible());
     QVERIFY(!windows.miniVisible());
+}
+
+void WindowControllerTest::immersivePresentationTemporarilyHidesAndRestoresPlayerWindows()
+{
+    QWindow mainWindow;
+    QWindow miniWindow;
+    QWindow listWindow;
+    WindowController windows;
+    windows.setWindows(&mainWindow, &miniWindow);
+    windows.setListWindow(&listWindow);
+    windows.showListWindow();
+
+    QVERIFY(windows.mainVisible());
+    QVERIFY(windows.listWindowVisible());
+    QVERIFY(!windows.immersivePresentationActive());
+
+    windows.enterImmersivePresentation();
+    QVERIFY(windows.immersivePresentationActive());
+    QVERIFY(!windows.mainVisible());
+    QVERIFY(!windows.miniVisible());
+    QVERIFY(!windows.listWindowVisible());
+    QVERIFY(!mainWindow.isVisible());
+    QVERIFY(!miniWindow.isVisible());
+    QVERIFY(!listWindow.isVisible());
+
+    windows.leaveImmersivePresentation();
+    QVERIFY(!windows.immersivePresentationActive());
+    QVERIFY(windows.mainVisible());
+    QVERIFY(!windows.miniVisible());
+    QVERIFY(windows.listWindowVisible());
+    QVERIFY(mainWindow.isVisible());
+    QVERIFY(listWindow.isVisible());
+
+    windows.enterImmersivePresentation();
+    windows.showMini();
+    QVERIFY(windows.immersivePresentationActive());
+    QVERIFY(!windows.mainVisible());
+    QVERIFY(!windows.miniVisible());
+    QVERIFY(!mainWindow.isVisible());
+    QVERIFY(!miniWindow.isVisible());
+    windows.leaveImmersivePresentation();
+    QVERIFY(!windows.mainVisible());
+    QVERIFY(windows.miniVisible());
+    QVERIFY(!windows.listWindowVisible());
+
+    windows.enterImmersivePresentation();
+    windows.showMain();
+    QVERIFY(windows.immersivePresentationActive());
+    QVERIFY(!windows.mainVisible());
+    QVERIFY(!windows.miniVisible());
+    QVERIFY(!mainWindow.isVisible());
+    QVERIFY(!miniWindow.isVisible());
+    windows.leaveImmersivePresentation();
+    QVERIFY(windows.mainVisible());
+    QVERIFY(!windows.miniVisible());
+    QVERIFY(windows.listWindowVisible());
 }
 
 void WindowControllerTest::shellModesPersistIndependentMainWindowGeometry()

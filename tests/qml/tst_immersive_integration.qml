@@ -14,6 +14,7 @@ TestCase {
     property int originalImmersiveMode: 0
     property int originalHostMode: 0
     property bool originalLyricsVisible: false
+    property bool originalImmersiveRenderingEnabled: false
 
     QtObject {
         id: queuePlayback
@@ -85,6 +86,7 @@ TestCase {
         originalImmersiveMode = PlayerExperienceController.immersiveMode
         originalHostMode = PlayerExperienceController.hostMode
         originalLyricsVisible = PlayerExperienceController.lyricsVisible
+        originalImmersiveRenderingEnabled = mainWindow.immersiveRenderingEnabled
         PlayerExperienceController.immersiveMode = PlayerExperienceController.Off
         PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
         wait(50)
@@ -96,6 +98,7 @@ TestCase {
         PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
         PlayerExperienceController.lyricsVisible = false
         PlayerExperienceController.panelVisible = true
+        mainWindow.immersiveRenderingEnabled = originalImmersiveRenderingEnabled
         queuePlayback.lastQueue = []
         queuePlayback.lastTrackId = ""
         var coordinator = findChild(mainWindow, "immersiveCoordinator")
@@ -106,6 +109,32 @@ TestCase {
                            "renderingRequested", false, 6000)
         }
         wait(50)
+    }
+
+    function test_independent_window_hides_player_group_and_return_restores_it() {
+        WindowController.showListWindow()
+        PlayerExperienceController.immersiveMode =
+                PlayerExperienceController.TerrainReactor
+        PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
+        tryCompare(WindowController, "immersivePresentationActive", true, 2000)
+        compare(WindowController.mainVisible, false)
+        compare(WindowController.miniVisible, false)
+        compare(WindowController.listWindowVisible, false)
+
+        var coordinator = findChild(mainWindow, "immersiveCoordinator")
+        tryCompare(coordinator, "attachedHostMode",
+                   PlayerExperienceController.Windowed, 2000)
+        var returnButton = findChild(coordinator.surface,
+                                     "immersiveReturnToWindowButton")
+        verify(returnButton)
+        compare(returnButton.display, AbstractButton.IconOnly)
+        returnButton.clicked()
+
+        tryCompare(PlayerExperienceController, "immersiveMode",
+                   PlayerExperienceController.Off, 1000)
+        tryCompare(WindowController, "immersivePresentationActive", false, 2000)
+        compare(WindowController.mainVisible, true)
+        compare(WindowController.listWindowVisible, true)
     }
 
     function cleanupTestCase() {
@@ -256,6 +285,8 @@ TestCase {
                 ? findChild(coordinator.surface, "immersiveControlPanelHost")
                 : null
         verify(panel)
+        compare(panel.currentTab, 0)
+        verify(panel.height < 500)
         var presetCards = []
         for (var preset = 0; preset < 6; ++preset) {
             var presetCard = findChild(panel, "immersivePresetCard" + preset)
@@ -282,6 +313,43 @@ TestCase {
         verify(findChild(panel, "dynamicSlider_rhythmStrength"))
         verify(findChild(panel, "effectToggle_burstEnabled"))
         verify(findChild(panel, "effectToggle_streamHighlightEnabled"))
+        for (var feature = 0; feature < 5; ++feature) {
+            var featureCard = findChild(panel, "semanticFeature" + feature)
+            var featureBar = findChild(panel, "semanticFeatureBar" + feature)
+            verify(featureCard)
+            verify(featureBar)
+            verify(featureBar.value >= 0 && featureBar.value <= 1)
+        }
+        mainWindow.immersiveRenderingEnabled = true
+        tryVerify(function() {
+            return coordinator.surface.terrainItem
+                    && coordinator.surface.terrainItem.useSyntheticFeatures
+                       !== undefined
+        }, 2000)
+        var terrain = coordinator.surface.terrainItem
+        terrain.useSyntheticFeatures = true
+        terrain.setSyntheticFeatures([1.0, 0.9, 0.8, 0.7,
+                                      0.6, 0.5, 0.4, 0.3],
+                                     0.72, 0.64, true, false)
+        tryVerify(function() {
+            return Math.abs(findChild(panel, "semanticFeatureBar0").value
+                            - 3.4 / 4.6) < 0.01
+        }, 1000)
+        verify(Math.abs(findChild(panel, "semanticFeatureBar1").value
+                        - 1.2 / 4.6) < 0.01)
+        verify(findChild(panel, "semanticFeatureBar2").value > 0.45)
+        verify(findChild(panel, "semanticFeatureBar2").value <= 0.651)
+        verify(Math.abs(findChild(panel, "semanticFeatureBar3").value
+                        - 0.906) < 0.01)
+        verify(findChild(panel, "semanticFeatureBar4").value > 0.606)
+        verify(findChild(panel, "semanticFeatureBar4").value <= 0.707)
+        tryVerify(function() {
+            return Math.abs(findChild(panel, "semanticFeatureBar2").value
+                            - 0.45) < 0.015
+                    && Math.abs(findChild(panel, "semanticFeatureBar4").value
+                                - 0.606) < 0.015
+        }, 1000)
+        mainWindow.immersiveRenderingEnabled = originalImmersiveRenderingEnabled
         compare(findChild(panel, "dynamicSlider_terrainAmplitude"), null)
         compare(PlayerExperienceController.responseRange, 100)
         compare(PlayerExperienceController.rhythmStrength, 30)
@@ -289,7 +357,7 @@ TestCase {
         var fallbackMessage = findChild(coordinator.surface,
                                         "immersiveRenderFallbackMessage")
         verify(fallbackMessage)
-        compare(fallbackMessage.visible, false)
+        tryCompare(fallbackMessage, "visible", false, 1000)
 
         var colorSwatch = findChild(panel, "immersiveColorSwatch0")
         var colorPicker = findChild(panel, "immersiveColorPicker")
@@ -306,6 +374,8 @@ TestCase {
         PlayerExperienceController.coolColor = originalCoolColor
 
         panel.currentTab = 2
+        tryVerify(function() { return panel.height > 590 }, 500)
+        verify(panel.height <= panel.parent.height - 108)
         var autoRotateToggle = findChild(panel, "effectToggle_autoRotate")
         verify(autoRotateToggle)
         PlayerExperienceController.autoRotate = 0

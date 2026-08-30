@@ -13,6 +13,7 @@ class TerrainReactorStateTest final : public QObject {
 
 private slots:
     void fixedSeedProducesStableLayoutAndColorZones();
+    void terrainLayoutFormsCircularStageAndStarsStayOutsideCore();
     void meteorsHaveFiniteTrailsAndCollisionEffects();
     void meteorGroupsKeepOneDeterministicPrimaryImpact();
     void audioFeaturesDriveBoundedVisualParameters();
@@ -46,7 +47,8 @@ void TerrainReactorStateTest::fixedSeedProducesStableLayoutAndColorZones()
     QCOMPARE(first.floating, repeated.floating);
     QCOMPARE(first.meteors, repeated.meteors);
     QCOMPARE(first.particles, repeated.particles);
-    QCOMPARE(first.terrain.size(), 81);
+    QVERIFY(first.terrain.size() < 81);
+    QVERIFY(first.terrain.size() > 48);
     QCOMPARE(first.floating.size(), 12);
     QCOMPARE(first.meteors.size(), 4);
     QCOMPARE(first.particles.size(), 16);
@@ -62,7 +64,32 @@ void TerrainReactorStateTest::fixedSeedProducesStableLayoutAndColorZones()
     QVERIFY(hasZone(ColorZone::Warm));
     QVERIFY(hasZone(ColorZone::Accent));
     QVERIFY(hasZone(ColorZone::Peak));
-    QCOMPARE(first.terrain.at(40).zone, ColorZone::Peak);
+    const auto center = std::find_if(first.terrain.cbegin(), first.terrain.cend(),
+                                     [](const SceneInstance& instance) {
+        return qFuzzyIsNull(instance.position.x())
+            && qFuzzyIsNull(instance.position.z());
+    });
+    QVERIFY(center != first.terrain.cend());
+    QCOMPARE(center->zone, ColorZone::Peak);
+}
+
+void TerrainReactorStateTest::terrainLayoutFormsCircularStageAndStarsStayOutsideCore()
+{
+    const SceneLayout layout = makeSceneLayout(0x5eedU, 32, 8, 4, 48);
+    QVERIFY(!layout.terrain.isEmpty());
+    QVERIFY(!layout.particles.isEmpty());
+
+    for (const SceneInstance& instance : layout.terrain) {
+        const float radius = std::hypot(instance.position.x(),
+                                        instance.position.z());
+        QVERIFY2(radius <= 84.01F, "terrain cell escaped the circular stage");
+    }
+    for (const SceneInstance& star : layout.particles) {
+        const float radius = std::hypot(star.position.x(), star.position.z());
+        QVERIFY2(radius >= 72.0F, "deep-space star leaked into the reactor core");
+        QVERIFY2(star.position.y() >= 10.0F,
+                 "deep-space star is too low to read as environment");
+    }
 }
 
 void TerrainReactorStateTest::trackIdentityProducesStableBoundedDistinctPalette()
@@ -199,8 +226,8 @@ void TerrainReactorStateTest::immersiveStyleControlsMapToBoundedDistinctDynamics
     QCOMPARE(high.inputCompression, 1.5F);
     QCOMPARE(low.audioResponse, 0.2F);
     QCOMPARE(high.audioResponse, 2.0F);
-    QCOMPARE(low.responseRadius, 36.0F);
-    QCOMPARE(high.responseRadius, 158.4F);
+    QCOMPARE(low.responseRadius, 28.0F);
+    QCOMPARE(high.responseRadius, 123.2F);
     QCOMPARE(low.centerHighlight, 0.0F);
     QCOMPARE(high.centerHighlight, 1.0F);
     QCOMPARE(low.rhythmStrength, 0.0F);
@@ -636,6 +663,10 @@ void TerrainReactorStateTest::manualCameraControlRecoversAfterFourSeconds()
 {
     CameraMotion camera;
     const CameraSnapshot initial = camera.snapshot();
+    QCOMPARE(initial.distance, 180.0F);
+    CameraMotion zoomedOut;
+    zoomedOut.zoomBy(10000.0F, 1.0);
+    QCOMPARE(zoomedOut.snapshot().distance, 220.0F);
     camera.orbitBy(0.4F, -0.2F, 1.0);
     camera.zoomBy(-10000.0F, 1.0);
     camera.applyBeatPunch(0.8F);

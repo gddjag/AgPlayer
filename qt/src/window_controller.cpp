@@ -87,6 +87,10 @@ WindowController::~WindowController()
 
 bool WindowController::mainVisible() const noexcept { return mainVisible_; }
 bool WindowController::miniVisible() const noexcept { return miniVisible_; }
+bool WindowController::immersivePresentationActive() const noexcept
+{
+    return immersivePresentationActive_;
+}
 bool WindowController::audioToolsVisible() const noexcept { return audioToolsVisible_; }
 bool WindowController::alwaysOnTop() const noexcept { return alwaysOnTop_; }
 bool WindowController::magneticSnapEnabled() const noexcept { return magneticSnapEnabled_; }
@@ -546,6 +550,13 @@ void WindowController::setListWindowHeight(int height) noexcept
 void WindowController::showMini()
 {
     pendingView_ = PendingView::Mini;
+    if (immersivePresentationActive_) {
+        immersiveRestoreView_ = PendingView::Mini;
+        pendingView_ = PendingView::None;
+        applyMainVisible(false);
+        applyMiniVisible(false);
+        return;
+    }
     if (!miniReady_) {
         return;
     }
@@ -557,6 +568,13 @@ void WindowController::showMini()
 void WindowController::showMain()
 {
     pendingView_ = PendingView::Main;
+    if (immersivePresentationActive_) {
+        immersiveRestoreView_ = PendingView::Main;
+        pendingView_ = PendingView::None;
+        applyMainVisible(false);
+        applyMiniVisible(false);
+        return;
+    }
     if (!mainReady_) {
         return;
     }
@@ -571,6 +589,32 @@ void WindowController::showMain()
         raiseDockedGroup();
     }
     pendingView_ = PendingView::None;
+}
+
+void WindowController::enterImmersivePresentation()
+{
+    if (immersivePresentationActive_) {
+        return;
+    }
+    immersiveRestoreView_ = miniVisible_ ? PendingView::Mini : PendingView::Main;
+    immersivePresentationActive_ = true;
+    emit immersivePresentationActiveChanged();
+    applyMainVisible(false);
+    applyMiniVisible(false);
+}
+
+void WindowController::leaveImmersivePresentation()
+{
+    if (!immersivePresentationActive_) {
+        return;
+    }
+    immersivePresentationActive_ = false;
+    emit immersivePresentationActiveChanged();
+    if (immersiveRestoreView_ == PendingView::Mini) {
+        showMini();
+    } else {
+        showMain();
+    }
 }
 
 void WindowController::showAudioTools()

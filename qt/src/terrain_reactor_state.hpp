@@ -256,7 +256,7 @@ private:
 struct CameraSnapshot {
     float yaw = 2.6075219F;
     float pitch = 0.38F;
-    float distance = 120.0F;
+    float distance = 180.0F;
     float punch = 0.0F;
 };
 

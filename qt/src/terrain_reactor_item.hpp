@@ -45,6 +45,16 @@ class TerrainReactorItem : public QQuickRhiItem {
     Q_PROPERTY(quint64 punchRevision READ punchRevision NOTIFY cameraChanged)
     Q_PROPERTY(qreal impactStrength READ impactStrength NOTIFY impactChanged)
     Q_PROPERTY(quint64 impactRevision READ impactRevision NOTIFY impactChanged)
+    Q_PROPERTY(QVariantList featureBands READ featureBands
+                   NOTIFY featureRevisionChanged)
+    Q_PROPERTY(qreal featureEnergy READ featureEnergy
+                   NOTIFY featureRevisionChanged)
+    Q_PROPERTY(qreal featureSpectralFlux READ featureSpectralFlux
+                   NOTIFY featureRevisionChanged)
+    Q_PROPERTY(bool featureKick READ featureKick
+                   NOTIFY featureRevisionChanged)
+    Q_PROPERTY(bool featureSnare READ featureSnare
+                   NOTIFY featureRevisionChanged)
     Q_PROPERTY(quint64 featureRevision READ featureRevision
                    NOTIFY featureRevisionChanged)
     Q_PROPERTY(quint64 styleRevision READ styleRevision
