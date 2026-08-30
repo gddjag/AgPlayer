@@ -2,8 +2,8 @@
 
 ## Scope and clean-room statement
 
-- Implemented only in the Task 2 renderer state, vertex shader, and the two
-  authorized terrain tests.
+- Implemented only in the Task 2 renderer state, vertex shader, renderer item
+  telemetry/ingestion boundary, and the two authorized terrain tests.
 - No uploaded media or external repository source was opened or used. The
   response model and numeric bounds below were derived from the product
   criteria in `task-2-brief.md`.
@@ -49,6 +49,67 @@ strength. The old shader failed the height-subordinate visual assertion:
 
 Summary: `2 passed, 1 failed`, exit `1`.
 
+The independent review correctly rejected that first GPU assertion as too
+close to backend raster edges and not synchronized to the requested renderer
+snapshot. The original RED above is retained as history, but it is not the
+acceptance gate used below.
+
+## Independent-review follow-up RED/GREEN
+
+Non-finite state RED was recorded before the boundary fix:
+
+```powershell
+build/release/tests/terrain_reactor_state_test.exe `
+  nonFiniteInputsUseFiniteBoundedFallbacks
+```
+
+The new NaN/positive-infinity/negative-infinity loop failed at
+`std::isfinite(dynamics.inputCompression)` (`2 passed, 1 failed`, exit `1`).
+The matching item-ingestion case failed because synthetic and live feature
+bands were exposed as non-finite values. After the minimal fix, both targeted
+tests passed `3/3`.
+
+Fallbacks are explicit and finite before mapping/uniform upload:
+
+- non-finite audio bands, energy, flux, event strength, and camera punch use
+  `0` (silence/no event), then retain the existing `[0, 1]` bound;
+- non-finite style values use the corresponding `RenderStyleSnapshot` default
+  before the existing parameter-specific bound; visual-EQ ingestion uses
+  neutral `0.5` and cinema shake uses its existing default;
+- non-finite terrain instance coordinates use `0`, random uses bounded `0`,
+  and explicit time falls back to the sanitized snapshot time, then `0`;
+- every `RenderDynamics` and `VisualParameters` member is asserted finite and
+  within its product range, while `terrainHeight` remains `0.035..36`.
+
+Renderer synchronization also produced a real pre-production RED: the GPU
+case required dynamic `renderedFeatureRevision`, `renderedStyleRevision`, and
+`stableRenderedFrameCount` properties, and the old item failed because the
+exact-revision acknowledgement did not exist. The final renderer publishes
+the feature/style revision pair used by the completed render pass and a stable
+pair count. Each capture now waits for the exact pair, at least three stable
+rendered frames, and three additional `QQuickWindow::frameSwapped` signals.
+The test explicitly requests frames while waiting because an otherwise idle
+`QQuickRhiItem` does not promise continuous presentation.
+
+The replacement product metric compares each driven frame with a silent
+neutral frame, sorts per-pixel absolute RGB response, and sums the strongest
+one percent. This is relative to both image size and the same-backend neutral
+render, while focusing on visible relief instead of a rasterized silhouette.
+The acceptance requirement is high-frequency response no more than `90%` of
+equal-strength low/mid response, leaving a deliberate `10%` perceptual margin.
+A temporary, locally reconstructed `d48c288` height-behavior mutation (never
+committed) produced a valid RED on Direct3D 11:
+
+- high strongest-1% response: `228,103`;
+- low/mid strongest-1% response: `246,330`;
+- ratio: `92.60%`, failing the required `<= 90%`;
+- localized sheen: `5,561` pixels;
+- plain/sheen light: `9,690,067 / 9,957,571`.
+
+The mutation was immediately reversed with `apply_patch`.
+`git diff --exit-code HEAD -- qt/shaders/terrain_reactor.vert` then confirmed
+the refined shader was restored exactly, and the CMake target rebuilt QSB/RCC.
+
 ## Design and bound rationale
 
 - Low bands now build central weight from a wide radial core plus a slow broad
@@ -64,10 +125,11 @@ Summary: `2 passed, 1 failed`, exit `1`.
 - Floating cubes are deterministically `0.324..0.72` world units. The test
   permits a maximum of `0.85` and median of `0.68`, comfortably below a
   representative terrain cell's `6.72`-unit span.
-- The GPU test allows only eight occupied edge pixels of backend tolerance,
-  requires at least `1/3000` but fewer than `1/8` of pixels to gain visible
-  sheen, and caps whole-frame light increase at `8%`. This distinguishes a
-  readable localized top shimmer from broad exposure lift.
+- The GPU test requires strongest-1% high relief to stay at or below `90%` of
+  equal-strength low/mid relief. Independently, it requires more than `1/3000`
+  but fewer than `1/8` of pixels to gain visible sheen and caps whole-frame
+  light increase at `8%`. These relative limits distinguish subordinate high
+  detail and readable localized top shimmer from broad exposure lift.
 
 ## Changed parameter meanings
 
@@ -104,13 +166,21 @@ Generating .qsb/shaders/terrain_reactor.vert.qsb
 Running rcc for resource agplayer_terrain_reactor_shaders
 ```
 
-Accelerated GPU GREEN on Direct3D 11:
+Accelerated GPU GREEN on Direct3D 11 after exact-revision/presentation
+synchronization:
 
-- high/low-mid occupied pixels: `26,348 / 26,345`;
-- localized sheen: `6,854 / 129,600` pixels (about `5.3%`);
-- plain/sheen light totals: `9,853,067 / 10,170,527`
-  (about `3.2%` increase);
-- targeted GPU case passed.
+- representative high/low-mid strongest-1% response:
+  `97,413 / 308,502` (about `31.58%`, versus the `90%` limit);
+- representative localized sheen: `6,126 / 129,600` pixels;
+- representative plain/sheen light totals:
+  `9,709,895 / 10,000,387` (about `2.99%`, versus the `8%` limit);
+- isolated case passed `10/10` consecutively. Ratios remained approximately
+  `31.6%..32.1%`; one DPI-scaled capture changed both raw sums to
+  `219,996 / 690,993` while preserving the `31.84%` ratio;
+- the complete GPU executable passed `10/10` consecutively, each execution
+  reporting `6 passed, 0 failed`. After the final expanded ingestion assertion,
+  the complete executable again passed `10/10` consecutively;
+- Direct3D 11 was the only available accelerated backend in this environment.
 
 Fresh final Release verification:
 
@@ -120,7 +190,7 @@ ctest --test-dir build/release `
   --output-on-failure
 ```
 
-Result: `4/4` tests passed in the final fresh run (`3.83 s`). This includes
+Result: `4/4` tests passed in the final fresh run (`6.26 s`). This includes
 lifecycle/ownership, zero-work, quality order, camera/impact, palette,
 accelerated GPU smoke, and the unchanged six-preset snapshots.
 `git diff --check` returned no whitespace errors (only the repository's
@@ -128,9 +198,9 @@ existing LF-to-CRLF checkout warnings).
 
 ## Remaining risks
 
-- The accelerated image assertion was exercised on Windows Direct3D 11; the
-  eight-pixel tolerance is designed for backend edge variation, but Metal,
-  Vulkan, and OpenGL were not available in this run.
+- The accelerated image assertion was exercised on Windows Direct3D 11.
+  Its neutral-relative, percentage-based limits avoid absolute edge/pixel
+  assumptions, but Metal, Vulkan, and OpenGL were not available in this run.
 - Per the task instruction, the GUI was not launched manually. Visual evidence
   is deterministic synthetic-spectrum state and accelerated frame analysis,
   not a subjective full-app usability session.

@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <limits>
 #include <thread>
 
 using namespace agplayer::terrain;
@@ -35,6 +36,7 @@ private slots:
     void representativeGridHasBroadCoreWithoutIsolatedTowers();
     void floatingCubesAreDeterministicAndVisuallySubordinate();
     void continuousAndEventControlsStayDistinctBoundedAndLive();
+    void nonFiniteInputsUseFiniteBoundedFallbacks();
     void idleTerrainKeepsFineVisibleReliefWithoutMusic();
     void idleTerrainFadesOutsideResponseField();
     void trackIdentityProducesStableBoundedDistinctPalette();
@@ -557,6 +559,105 @@ void TerrainReactorStateTest::continuousAndEventControlsStayDistinctBoundedAndLi
     QVERIFY2(terrainHeight(ring, pulse, 1.0F, ripplesOn)
                  > terrainHeight(ring, pulse, 1.0F, ripplesOff) + 0.20F,
              "Ripple toggle must disable discrete ring relief");
+}
+
+void TerrainReactorStateTest::nonFiniteInputsUseFiniteBoundedFallbacks()
+{
+    const std::array nonFinite{
+        std::numeric_limits<float>::quiet_NaN(),
+        std::numeric_limits<float>::infinity(),
+        -std::numeric_limits<float>::infinity(),
+    };
+    const auto boundedUnit = [](float value) {
+        return std::isfinite(value) && value >= 0.0F && value <= 1.0F;
+    };
+
+    for (const float invalid : nonFinite) {
+        RenderStyleSnapshot style;
+        style.terrainAmplitude = invalid;
+        style.motionResponse = invalid;
+        style.gradientLayers = invalid;
+        style.glowIntensity = invalid;
+        style.cinemaShake = invalid;
+        style.autoRotate = invalid;
+        style.peakBoost = invalid;
+        style.inputCompression = invalid;
+        style.audioResponse = invalid;
+        style.responseRange = invalid;
+        style.centerHighlight = invalid;
+        style.rhythmStrength = invalid;
+        style.depthOfField = invalid;
+        style.subjectClarity = invalid;
+        style.autoRotateSpeed = invalid;
+        style.rhythmSensitivity = invalid;
+        const RenderDynamics dynamics = mapRenderDynamics(style);
+        QVERIFY(std::isfinite(dynamics.inputCompression));
+        QVERIFY(std::isfinite(dynamics.audioResponse));
+        QVERIFY(std::isfinite(dynamics.responseRadius));
+        QVERIFY(std::isfinite(dynamics.centerHighlight));
+        QVERIFY(std::isfinite(dynamics.rhythmStrength));
+        QVERIFY(std::isfinite(dynamics.depthOfField));
+        QVERIFY(std::isfinite(dynamics.subjectClarity));
+        QVERIFY(std::isfinite(dynamics.autoRotateSpeed));
+        QVERIFY(std::isfinite(dynamics.rhythmSensitivity));
+        QVERIFY(dynamics.inputCompression >= 0.2F
+                && dynamics.inputCompression <= 1.5F);
+        QVERIFY(dynamics.audioResponse >= 0.2F
+                && dynamics.audioResponse <= 2.0F);
+        QVERIFY(dynamics.responseRadius >= 28.0F
+                && dynamics.responseRadius <= 123.2F);
+        QVERIFY(dynamics.centerHighlight >= 0.0F
+                && dynamics.centerHighlight <= 1.0F);
+        QVERIFY(dynamics.rhythmStrength >= 0.0F
+                && dynamics.rhythmStrength <= 1.4F);
+        QVERIFY(dynamics.depthOfField >= 0.0F
+                && dynamics.depthOfField <= 1.5F);
+        QVERIFY(dynamics.subjectClarity >= 0.2F
+                && dynamics.subjectClarity <= 1.4F);
+        QVERIFY(dynamics.autoRotateSpeed >= 0.0F
+                && dynamics.autoRotateSpeed <= 2.0F);
+        QVERIFY(dynamics.rhythmSensitivity >= 0.0F
+                && dynamics.rhythmSensitivity <= 1.0F);
+
+        AudioFeatures features;
+        features.bands.fill(invalid);
+        features.energy = invalid;
+        features.spectralFlux = invalid;
+        features.kick = invalid;
+        features.snare = invalid;
+        const VisualParameters visual = mapVisualParameters(
+            features, invalid, style);
+        for (const float band : visual.bands) QVERIFY(boundedUnit(band));
+        QVERIFY(boundedUnit(visual.energy));
+        QVERIFY(boundedUnit(visual.spectralFlux));
+        QVERIFY(boundedUnit(visual.rippleStrength));
+        QVERIFY(boundedUnit(visual.particleActivity));
+        QVERIFY(boundedUnit(visual.meteorActivity));
+        QVERIFY(boundedUnit(visual.cameraPunch));
+        QVERIFY(boundedUnit(visual.impactStrength));
+        QVERIFY(boundedUnit(visual.impactAge));
+        QVERIFY(std::isfinite(visual.timeSeconds));
+        QVERIFY(visual.timeSeconds >= 0.0F);
+
+        SceneInstance instance;
+        instance.position = QVector3D(invalid, 0.0F, invalid);
+        instance.random = invalid;
+        VisualParameters unsafe;
+        unsafe.bands.fill(invalid);
+        unsafe.energy = invalid;
+        unsafe.spectralFlux = invalid;
+        unsafe.rippleStrength = invalid;
+        unsafe.particleActivity = invalid;
+        unsafe.meteorActivity = invalid;
+        unsafe.cameraPunch = invalid;
+        unsafe.impactStrength = invalid;
+        unsafe.impactAge = invalid;
+        unsafe.timeSeconds = invalid;
+        const float height = terrainHeight(instance, unsafe, invalid, style);
+        QVERIFY2(std::isfinite(height),
+                 "terrainHeight must never send a non-finite scale to uniforms");
+        QVERIFY(height >= 0.035F && height <= 36.0F);
+    }
 }
 
 void TerrainReactorStateTest::idleTerrainKeepsFineVisibleReliefWithoutMusic()

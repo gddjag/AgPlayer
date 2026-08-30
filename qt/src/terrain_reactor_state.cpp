@@ -8,9 +8,20 @@
 namespace agplayer::terrain {
 namespace {
 
-float clampUnit(float value) noexcept
+float finiteOr(float value, float fallback) noexcept
 {
-    return std::clamp(value, 0.0F, 1.0F);
+    return std::isfinite(value) ? value : fallback;
+}
+
+float clampRange(float value, float minimum, float maximum,
+                 float fallback) noexcept
+{
+    return std::clamp(finiteOr(value, fallback), minimum, maximum);
+}
+
+float clampUnit(float value, float fallback = 0.0F) noexcept
+{
+    return clampRange(value, 0.0F, 1.0F, fallback);
 }
 
 class DeterministicRandom final {
@@ -238,17 +249,26 @@ MeteorPhase meteorPhase(float random, float timeSeconds) noexcept
 
 RenderDynamics mapRenderDynamics(const RenderStyleSnapshot& style) noexcept
 {
+    const RenderStyleSnapshot defaults;
     RenderDynamics result;
-    result.inputCompression = std::clamp(style.inputCompression, 0.2F, 1.5F);
-    result.audioResponse = std::clamp(style.audioResponse, 0.2F, 2.0F);
-    result.responseRadius = 56.0F * std::clamp(style.responseRange, 0.5F, 2.2F);
-    result.centerHighlight = clampUnit(style.centerHighlight);
-    result.rhythmStrength = std::clamp(style.rhythmStrength, 0.0F, 1.4F);
-    result.depthOfField = std::clamp(style.depthOfField, 0.0F, 1.5F);
-    result.subjectClarity = std::clamp(style.subjectClarity, 0.2F, 1.4F);
-    result.autoRotateSpeed = clampUnit(style.autoRotate)
-        * clampUnit(style.autoRotateSpeed) * 2.0F;
-    result.rhythmSensitivity = clampUnit(style.rhythmSensitivity);
+    result.inputCompression = clampRange(style.inputCompression, 0.2F, 1.5F,
+                                         defaults.inputCompression);
+    result.audioResponse = clampRange(style.audioResponse, 0.2F, 2.0F,
+                                      defaults.audioResponse);
+    result.responseRadius = 56.0F * clampRange(style.responseRange, 0.5F, 2.2F,
+                                               defaults.responseRange);
+    result.centerHighlight = clampUnit(style.centerHighlight,
+                                       defaults.centerHighlight);
+    result.rhythmStrength = clampRange(style.rhythmStrength, 0.0F, 1.4F,
+                                       defaults.rhythmStrength);
+    result.depthOfField = clampRange(style.depthOfField, 0.0F, 1.5F,
+                                     defaults.depthOfField);
+    result.subjectClarity = clampRange(style.subjectClarity, 0.2F, 1.4F,
+                                       defaults.subjectClarity);
+    result.autoRotateSpeed = clampUnit(style.autoRotate, defaults.autoRotate)
+        * clampUnit(style.autoRotateSpeed, defaults.autoRotateSpeed) * 2.0F;
+    result.rhythmSensitivity = clampUnit(style.rhythmSensitivity,
+                                         defaults.rhythmSensitivity);
     return result;
 }
 
@@ -278,15 +298,39 @@ VisualParameters mapVisualParameters(const AudioFeatures& features,
                                           * rhythmStrength);
     result.cameraPunch = clampUnit((kick * 0.78F + snare * 0.32F)
                                    * rhythmStrength);
-    result.timeSeconds = std::max(0.0F, timeSeconds);
+    result.timeSeconds = std::max(0.0F, finiteOr(timeSeconds, 0.0F));
     return result;
 }
 
-float terrainHeight(const SceneInstance& instance,
-                    const VisualParameters& parameters,
-                    float timeSeconds,
-                    const RenderStyleSnapshot& style) noexcept
+float terrainHeight(const SceneInstance& unsafeInstance,
+                    const VisualParameters& unsafeParameters,
+                    float unsafeTimeSeconds,
+                    const RenderStyleSnapshot& unsafeStyle) noexcept
 {
+    const RenderStyleSnapshot defaults;
+    RenderStyleSnapshot style = unsafeStyle;
+    style.terrainAmplitude = clampUnit(style.terrainAmplitude,
+                                       defaults.terrainAmplitude);
+    style.peakBoost = clampUnit(style.peakBoost, defaults.peakBoost);
+    VisualParameters parameters = unsafeParameters;
+    for (float& band : parameters.bands) band = clampUnit(band);
+    parameters.energy = clampUnit(parameters.energy);
+    parameters.spectralFlux = clampUnit(parameters.spectralFlux);
+    parameters.rippleStrength = clampUnit(parameters.rippleStrength);
+    parameters.particleActivity = clampUnit(parameters.particleActivity);
+    parameters.meteorActivity = clampUnit(parameters.meteorActivity);
+    parameters.cameraPunch = clampUnit(parameters.cameraPunch);
+    parameters.impactStrength = clampUnit(parameters.impactStrength);
+    parameters.impactAge = clampUnit(parameters.impactAge);
+    parameters.timeSeconds = std::max(
+        0.0F, finiteOr(parameters.timeSeconds, 0.0F));
+    const float timeSeconds = std::max(
+        0.0F, finiteOr(unsafeTimeSeconds, parameters.timeSeconds));
+    SceneInstance instance = unsafeInstance;
+    instance.position.setX(finiteOr(instance.position.x(), 0.0F));
+    instance.position.setY(finiteOr(instance.position.y(), 0.0F));
+    instance.position.setZ(finiteOr(instance.position.z(), 0.0F));
+    instance.random = clampUnit(instance.random);
     const RenderDynamics dynamics = mapRenderDynamics(style);
     const float distance = std::hypot(instance.position.x(),
                                       instance.position.z());
