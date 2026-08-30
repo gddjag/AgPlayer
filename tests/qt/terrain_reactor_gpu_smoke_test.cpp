@@ -410,6 +410,8 @@ void TerrainReactorGpuSmokeTest::steadyCorePreservesHighlightDetailWithoutWhiteP
     window.resize(480, 270);
     window.setColor(QColor(4, 6, 11));
     PlayerExperienceController style;
+    QVERIFY(style.applyPreset(0));
+    style.setThemeCycleEnabled(false);
     style.setAutoRotate(0);
     style.setAutoRotateSpeed(0);
     style.setMotionResponse(0);
