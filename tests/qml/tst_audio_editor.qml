@@ -500,13 +500,21 @@ TestCase {
     function test_shortcutCardUsesTwoStructuredReferenceRows() {
         const firstRow = findChild(page, "editorShortcutFirstRow")
         const secondRow = findChild(page, "editorShortcutSecondRow")
-        verify(firstRow && secondRow)
+        const rowDivider = findChild(page, "editorShortcutRowDivider")
+        const title = findChild(page, "editorShortcutTitle")
+        verify(firstRow && secondRow && rowDivider && title)
         compare(firstRow.groupCount, 5)
         compare(firstRow.dividerCount, 4)
         compare(secondRow.groupCount, 4)
         compare(secondRow.dividerCount, 3)
         compare(firstRow.height, 16)
         compare(secondRow.height, 16)
+        compare(firstRow.y, 4)
+        compare(secondRow.y, 34)
+        compare(rowDivider.y, 27)
+        compare(rowDivider.height, 1)
+        verify(firstRow.x > title.x + title.width)
+        verify(firstRow.y < title.y + title.height)
         compare(findChild(page, "editorShortcutFirstGroup_0").text,
                 "空格 = 播放 / 暂停")
         compare(findChild(page, "editorShortcutFirstGroup_4").text,
@@ -526,12 +534,16 @@ TestCase {
         verify(card && firstRow && secondRow && status)
         verify(card.y + card.height <= status.y,
                "shortcut rows must not sit beneath the status overlay")
-        for (const row of [firstRow, secondRow]) {
-            compare(row.x, 18)
-            compare(row.width, card.width - 36)
+        const rows = [[firstRow, 168, card.width - 186],
+                      [secondRow, 18, card.width - 36]]
+        for (const entry of rows) {
+            const row = entry[0]
+            compare(row.x, entry[1])
+            compare(row.width, entry[2])
             compare(row.x + row.width, card.width - 18)
             verify(row.contentWidth <= row.width,
-                   row.objectName + " should not need scrolling at 1672 px")
+                    row.objectName + " should not need scrolling at 1672 px: "
+                    + row.contentWidth + "/" + row.width)
             compare(row.contentX, 0)
             for (let index = 0; index < row.groupCount; ++index) {
                 const prefix = row === firstRow
@@ -547,16 +559,111 @@ TestCase {
         }
     }
 
-    function test_shortcutRowWheelHandlersCoverTheirFullViewports() {
+    function test_shortcutRowWheelOverlaysCoverTheirFullViewports() {
         const firstRow = findChild(page, "editorShortcutFirstRow")
         const secondRow = findChild(page, "editorShortcutSecondRow")
+        const firstOverlay = findChild(page, "editorShortcutFirstRowWheelOverlay")
+        const secondOverlay = findChild(page, "editorShortcutSecondRowWheelOverlay")
         const firstWheel = findChild(page, "editorShortcutFirstRowWheel")
         const secondWheel = findChild(page, "editorShortcutSecondRowWheel")
-        verify(firstRow && secondRow && firstWheel && secondWheel)
-        compare(firstWheel.parent, firstRow.contentItem)
-        compare(firstWheel.target, firstRow)
-        compare(secondWheel.parent, secondRow.contentItem)
-        compare(secondWheel.target, secondRow)
+        verify(firstRow && secondRow && firstOverlay && secondOverlay
+               && firstWheel && secondWheel)
+        for (const pair of [[firstRow, firstOverlay, firstWheel],
+                            [secondRow, secondOverlay, secondWheel]]) {
+            const row = pair[0]
+            const overlay = pair[1]
+            const wheel = pair[2]
+            compare(overlay.x, row.x)
+            compare(overlay.y, row.y)
+            compare(overlay.width, row.width)
+            compare(overlay.height, row.height)
+            verify(overlay.z > row.z)
+            compare(wheel.parent, overlay)
+            compare(wheel.acceptedButtons, Qt.NoButton)
+            compare(wheel.hoverEnabled, false)
+            compare(wheel.preventStealing, false)
+        }
+    }
+
+    function test_shortcutWheelOverlaysReceiveWheelFromBlankWideViewport() {
+        host.width = 1672
+        host.height = 822
+        wait(0)
+        const card = findChild(page, "editorShortcutCard")
+        const pairs = [
+            [findChild(page, "editorShortcutFirstRow"),
+             findChild(page, "editorShortcutFirstRowWheelOverlay"),
+             findChild(page, "editorShortcutFirstRowWheel"),
+             findChild(page, "editorShortcutFirstGroup_4")],
+            [findChild(page, "editorShortcutSecondRow"),
+             findChild(page, "editorShortcutSecondRowWheelOverlay"),
+             findChild(page, "editorShortcutSecondRowWheel"),
+             findChild(page, "editorShortcutSecondGroup_3")]
+        ]
+        verify(card)
+        for (const pair of pairs) {
+            const row = pair[0]
+            const overlay = pair[1]
+            const wheel = pair[2]
+            const lastLabel = pair[3]
+            verify(row && overlay && wheel && lastLabel)
+            verify(row.contentWidth <= row.width)
+            const blank = lastLabel.mapToItem(card,
+                lastLabel.width + 1, lastLabel.height / 2)
+            verify(blank.x >= overlay.x && blank.x < overlay.x + overlay.width)
+            verify(blank.y >= overlay.y && blank.y < overlay.y + overlay.height)
+            const spy = createTemporaryObject(signalSpyComponent, testCase,
+                { target: wheel, signalName: "wheel" })
+            verify(spy.valid)
+            mouseWheel(card, blank.x, blank.y, 0, -120,
+                       Qt.NoButton, Qt.NoModifier)
+            tryVerify(function() { return spy.count > 0 })
+            compare(row.contentX, 0)
+        }
+    }
+
+    function test_shortcutWheelOverlayScrollsVisible1280RowToEnd() {
+        host.width = 1280
+        host.height = 720
+        wait(0)
+        const card = findChild(page, "editorShortcutCard")
+        const pairs = [
+            [findChild(page, "editorShortcutFirstRow"),
+             findChild(page, "editorShortcutFirstRowWheelOverlay"),
+             findChild(page, "editorShortcutFirstRowWheel")],
+            [findChild(page, "editorShortcutSecondRow"),
+             findChild(page, "editorShortcutSecondRowWheelOverlay"),
+             findChild(page, "editorShortcutSecondRowWheel")]
+        ]
+        verify(card)
+        const overflowed = pairs.filter(function(pair) {
+            return pair[0] && pair[1] && pair[2]
+                && pair[0].contentWidth > pair[0].width
+        })
+        verify(overflowed.length > 0,
+               "a visible 1280 px shortcut row must overflow horizontally")
+        for (const pair of overflowed) {
+            const row = pair[0]
+            const overlay = pair[1]
+            const wheel = pair[2]
+            verify(row && overlay)
+            const maximum = row.contentWidth - row.width
+            row.contentX = 0
+            wait(0)
+            verify(maximum > 0)
+            const viewportPoint = overlay.mapToItem(card,
+                overlay.width - 1, overlay.height / 2)
+            const spy = createTemporaryObject(signalSpyComponent, testCase,
+                { target: wheel, signalName: "wheel" })
+            verify(spy.valid)
+            for (let step = 0; step <= Math.ceil(maximum / 80); ++step) {
+                mouseWheel(card, viewportPoint.x, viewportPoint.y,
+                           0, -120, Qt.NoButton, Qt.NoModifier)
+            }
+            tryVerify(function() { return spy.count > 0 })
+            tryVerify(function() { return row.contentX > 0 })
+            compare(row.contentX, maximum)
+        }
     }
 
     function test_compactShortcutRowsKeepHorizontalAccessAndTextSize_data() {

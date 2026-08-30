@@ -67,3 +67,34 @@ failures (the RED run before the production change already returned exit code 2)
    outside this task's default/export/layout scope.
 
 No full CTest suite was claimed or run for this task.
+
+## Final review correction: visible input viewport
+
+The earlier follow-up description of direct `WheelHandler` children is superseded.
+Qt Quick reparents a handler declared in a `Flickable` to `contentItem`, so it
+cannot make the unused viewport to the right of a short content row receive a
+wheel event.  Each shortcut row now has a transparent sibling `Item` in the
+shortcut card, with geometry bound exactly to that row's viewport.  A single
+full-size `MouseArea` inside that item accepts `Qt.NoButton`, has no hover state,
+cannot steal a drag, and handles only `wheel`; it clamps `contentX` from
+`wheel.angleDelta.y`.  There is no competing same-row `WheelHandler`.
+
+The screenshot correction is also reflected in the final layout: the keyboard
+icon/title and the first five groups share the first row; the remaining four
+groups form the second row below a horizontal divider.  All label text remains
+13 px and each group retains its vertical divider.  Reducing only the previous
+extra per-group padding lets both natural rows fit at 1672 px without scrolling.
+
+The final QuickTest RED cases covered overlay-to-row geometry, both wide-row
+blank areas, and a real 1280x720 wheel event that advances an overflowing,
+visible row to its maximum `contentX`.  The final GREEN XML run reports 57
+passing test functions.  The two failures remain the unrelated baseline cases
+above (`test_referenceTransportShortcutAndStatusCopy:483` and
+`test_selectionEnablesLoopAndTimelineClicksClearItPrecisely:975`).
+
+At 880x560 the existing page's narrow layout positions the shortcut card at
+y=568 while the page clips at y=560; it is therefore not a physically reachable
+wheel target.  Task 5 preserves its static two-row, 13-px, horizontal-access
+contract there, but does not falsely claim a real pointer event in that clipped
+location.  Making the card visible at that size requires responsive vertical
+reflow (without covering the playback controls), tracked as a Task 7 concern.

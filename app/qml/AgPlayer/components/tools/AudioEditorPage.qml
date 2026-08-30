@@ -971,20 +971,20 @@ Rectangle {
                     tint: Theme.textPrimary
                 }
                 Label {
+                    objectName: "editorShortcutTitle"
                     x: 50; y: 3
                     text: qsTr("快捷键与鼠标操作")
                     color: Theme.textPrimary
                     font.pixelSize: 14
                     font.bold: true
                 }
-                Rectangle { x: 16; y: 27; width: parent.width - 32; height: 1; color: Theme.borderStrong }
                 Flickable {
                     id: shortcutFirstRow
                     objectName: "editorShortcutFirstRow"
                     property int groupCount: 5
                     property int dividerCount: 4
-                    x: 18; y: 32
-                    width: parent.width - 36
+                    x: 168; y: 4
+                    width: parent.width - 186
                     height: 16
                     clip: true
                     interactive: contentWidth > width
@@ -1008,7 +1008,7 @@ Rectangle {
                             delegate: Item {
                                 required property int index
                                 required property string modelData
-                                width: firstGroupText.implicitWidth + 16
+                                width: firstGroupText.implicitWidth + 2
                                 height: shortcutFirstRow.height
                                 Text {
                                     id: firstGroupText
@@ -1031,29 +1031,19 @@ Rectangle {
                         }
 
                     }
-                    WheelHandler {
-                        objectName: "editorShortcutFirstRowWheel"
-                        target: shortcutFirstRow
-                        acceptedDevices: PointerDevice.Mouse
-                            | PointerDevice.TouchPad
-                        onWheel: function(event) {
-                            const delta = event.angleDelta.x !== 0
-                                ? event.angleDelta.x : event.angleDelta.y
-                            shortcutFirstRow.contentX = Math.max(0,
-                                Math.min(shortcutFirstRow.contentWidth
-                                             - shortcutFirstRow.width,
-                                         shortcutFirstRow.contentX
-                                             - Math.sign(delta) * 80))
-                            event.accepted = true
-                        }
-                    }
+                }
+                Rectangle {
+                    objectName: "editorShortcutRowDivider"
+                    x: 16; y: 27
+                    width: parent.width - 32; height: 1
+                    color: Theme.borderStrong
                 }
                 Flickable {
                     id: shortcutSecondRow
                     objectName: "editorShortcutSecondRow"
                     property int groupCount: 4
                     property int dividerCount: 3
-                    x: 18; y: 49
+                    x: 18; y: 34
                     width: parent.width - 36
                     height: 16
                     clip: true
@@ -1077,7 +1067,7 @@ Rectangle {
                             delegate: Item {
                                 required property int index
                                 required property string modelData
-                                width: secondGroupText.implicitWidth + 16
+                                width: secondGroupText.implicitWidth + 2
                                 height: shortcutSecondRow.height
                                 Text {
                                     id: secondGroupText
@@ -1098,20 +1088,54 @@ Rectangle {
                         }
                     }
 
-                    WheelHandler {
+                }
+                Item {
+                    id: shortcutFirstRowWheelOverlay
+                    objectName: "editorShortcutFirstRowWheelOverlay"
+                    x: shortcutFirstRow.x
+                    y: shortcutFirstRow.y
+                    width: shortcutFirstRow.width
+                    height: shortcutFirstRow.height
+                    z: 1
+
+                    MouseArea {
+                        objectName: "editorShortcutFirstRowWheel"
+                        anchors.fill: parent
+                        acceptedButtons: Qt.NoButton
+                        hoverEnabled: false
+                        preventStealing: false
+                        onWheel: function(wheel) {
+                            shortcutFirstRow.contentX = Math.max(0,
+                                Math.min(shortcutFirstRow.contentWidth
+                                             - shortcutFirstRow.width,
+                                         shortcutFirstRow.contentX
+                                             - wheel.angleDelta.y))
+                            wheel.accepted = true
+                        }
+                    }
+                }
+                Item {
+                    id: shortcutSecondRowWheelOverlay
+                    objectName: "editorShortcutSecondRowWheelOverlay"
+                    x: shortcutSecondRow.x
+                    y: shortcutSecondRow.y
+                    width: shortcutSecondRow.width
+                    height: shortcutSecondRow.height
+                    z: 1
+
+                    MouseArea {
                         objectName: "editorShortcutSecondRowWheel"
-                        target: shortcutSecondRow
-                        acceptedDevices: PointerDevice.Mouse
-                            | PointerDevice.TouchPad
-                        onWheel: function(event) {
-                            const delta = event.angleDelta.x !== 0
-                                ? event.angleDelta.x : event.angleDelta.y
+                        anchors.fill: parent
+                        acceptedButtons: Qt.NoButton
+                        hoverEnabled: false
+                        preventStealing: false
+                        onWheel: function(wheel) {
                             shortcutSecondRow.contentX = Math.max(0,
                                 Math.min(shortcutSecondRow.contentWidth
                                              - shortcutSecondRow.width,
                                          shortcutSecondRow.contentX
-                                             - Math.sign(delta) * 80))
-                            event.accepted = true
+                                             - wheel.angleDelta.y))
+                            wheel.accepted = true
                         }
                     }
                 }
