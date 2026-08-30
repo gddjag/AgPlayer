@@ -479,6 +479,16 @@ public:
         return true;
     }
 
+    Q_INVOKABLE bool doubleClickItem(QObject* target, qreal x, qreal y)
+    {
+        auto* item = qobject_cast<QQuickItem*>(target);
+        QQuickWindow* window = item == nullptr ? nullptr : item->window();
+        if (window == nullptr || !window->isVisible()) return false;
+        QTest::mouseDClick(window, Qt::LeftButton, Qt::NoModifier,
+                           item->mapToScene(QPointF(x, y)).toPoint(), 20);
+        return true;
+    }
+
     Q_INVOKABLE bool dragItemWithModifiers(QObject* target, qreal x, qreal y,
                                            qreal deltaX, qreal deltaY,
                                            int modifiers)

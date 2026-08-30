@@ -287,4 +287,84 @@ TestCase {
         compare(Number(AudioEditorController.timelineEventViews[0].sourceEnd),
                 Number(before.sourceEnd))
     }
+
+    function test_gainCurveOnlyAcceptsNativePointerWithinSixPixels() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 192000))
+        const canvas = findChild(page, "editorWaveformCanvas")
+        verify(canvas)
+        AudioEditorController.viewport.setViewportWidth(canvas.width)
+        verify(AudioEditorController.viewport.setVisibleRange(0, 192000))
+        tryVerify(function() {
+            return findVisibleItem(canvas, "editorEventCombinedGainLine") !== null
+        })
+        const gainLine = findVisibleItem(canvas, "editorEventCombinedGainLine")
+        verify(gainLine)
+        const onCurve = gainLine.mapToItem(canvas, gainLine.width * 0.6,
+                                            gainLine.height * 0.5)
+
+        verify(nativeDropHelper.doubleClickItem(canvas, onCurve.x, onCurve.y + 7))
+        wait(0)
+        compare(AudioEditorController.timelineEventViews[0].envelope.length, 0,
+                "a pointer outside the six-pixel curve target must not add a point")
+
+        verify(nativeDropHelper.doubleClickItem(canvas, onCurve.x, onCurve.y + 20))
+        wait(0)
+        compare(AudioEditorController.timelineEventViews[0].envelope.length, 0)
+        verify(nativeDropHelper.dragItem(canvas, onCurve.x, onCurve.y + 20,
+                                         80, 0))
+        verify(AudioEditorController.selectionEnd
+               > AudioEditorController.selectionStart,
+               "twenty pixels from the curve must remain available to range selection")
+    }
+
+    function test_fadeNodesDoNotCreateIndependentPointerSurfaces() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 192000))
+        const canvas = findChild(page, "editorWaveformCanvas")
+        verify(canvas)
+        AudioEditorController.viewport.setViewportWidth(canvas.width)
+        verify(AudioEditorController.viewport.setVisibleRange(0, 192000))
+        tryVerify(function() {
+            return findVisibleItem(canvas, "editorEventCombinedGainLine") !== null
+        })
+        verify(findVisibleItem(canvas, "editorEventFadeInNode") === null)
+        verify(findVisibleItem(canvas, "editorEventFadeOutNode") === null)
+    }
+
+    function test_nativeEnvelopePointAddsNearCurveAndDragsBothAxesInOneUndo() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 192000))
+        const canvas = findChild(page, "editorWaveformCanvas")
+        verify(canvas)
+        AudioEditorController.viewport.setViewportWidth(canvas.width)
+        verify(AudioEditorController.viewport.setVisibleRange(0, 192000))
+        tryVerify(function() {
+            return findVisibleItem(canvas, "editorEventCombinedGainLine") !== null
+        })
+        const gainLine = findVisibleItem(canvas, "editorEventCombinedGainLine")
+        verify(gainLine)
+        const onCurve = gainLine.mapToItem(canvas, gainLine.width * 0.55,
+                                            gainLine.height * 0.5)
+        verify(nativeDropHelper.doubleClickItem(canvas, onCurve.x, onCurve.y + 5))
+        tryVerify(function() {
+            return AudioEditorController.timelineEventViews[0].envelope.length === 1
+        })
+        const beforeDrag = AudioEditorController.timelineEventViews[0]
+            .envelope[0]
+        const point = findVisibleItem(canvas, "editorEnvelopePoint")
+        verify(point)
+        verify(nativeDropHelper.dragItem(point, point.width * 0.5,
+                                         point.height * 0.5, 72, -64))
+        tryVerify(function() {
+            const changed = AudioEditorController.timelineEventViews[0].envelope[0]
+            return Number(changed.offset) !== Number(beforeDrag.offset)
+                && Math.abs(Number(changed.gain) - Number(beforeDrag.gain)) > 0.01
+        })
+
+        verify(AudioEditorController.undo())
+        const restored = AudioEditorController.timelineEventViews[0].envelope[0]
+        compare(Number(restored.offset), Number(beforeDrag.offset))
+        compare(Number(restored.gain), Number(beforeDrag.gain))
+        verify(AudioEditorController.undo(),
+               "one additional undo removes the add, proving the drag used one item")
+        compare(AudioEditorController.timelineEventViews[0].envelope.length, 0)
+    }
 }

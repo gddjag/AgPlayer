@@ -943,7 +943,7 @@ TestCase {
         compare(visibleBaselineCount, 1)
     }
 
-    function test_centerLineOwnsCombinedGainEnvelopeAndFadeWithoutTopHandles() {
+    function test_centerLineOwnsCombinedGainEnvelopeAndFadeWithoutPointerNodes() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 480000))
         const canvas = findChild(page, "editorWaveformCanvas")
         verify(canvas)
@@ -953,29 +953,23 @@ TestCase {
         compare(findChild(canvas, "editorEventFadeOutHandle"), null)
         compare(findChild(canvas, "editorEventFadeOutCurve"), null)
         const combinedLine = findChild(canvas, "editorEventCombinedGainLine")
-        const fadeOutNode = findChild(canvas, "editorEventFadeOutNode")
-        verify(combinedLine && fadeOutNode)
+        verify(combinedLine)
         verify(combinedLine.visible)
-        verify(Math.abs(fadeOutNode.y + fadeOutNode.height / 2
-                        - combinedLine.y) <= 2)
+        compare(findChild(canvas, "editorEventFadeInNode"), null)
+        compare(findChild(canvas, "editorEventFadeOutNode"), null)
     }
 
-    function test_fadeNodeRightClickShowsAllCurveChoices() {
+    function test_fadeCurveDataRemainsEditableWithoutPointerNodes() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 480000))
         const canvas = findChild(page, "editorWaveformCanvas")
         AudioEditorController.viewport.setViewportWidth(canvas.width)
         verify(AudioEditorController.viewport.setVisibleRange(0, 480000))
         wait(0)
-        const fadeOutNode = findChild(canvas, "editorEventFadeOutNode")
         verify(canvas)
-        verify(fadeOutNode, "missing fade-out center-line node")
-        const fadeMenu = fadeOutNode.curveMenu
-        verify(fadeMenu, "missing fade curve menu delegate")
-        mouseClick(fadeOutNode, fadeOutNode.width / 2, fadeOutNode.height / 2,
-                   Qt.RightButton)
-        tryVerify(function() { return fadeMenu.visible })
-        compare(fadeMenu.actionCount, 3)
-        compare(fadeMenu.curveLabels.join(","), "线性,平滑,指数")
+        const eventId = AudioEditorController.timelineEventViews[0].id
+        verify(AudioEditorController.setEventFadeCurve(eventId, false, "Linear"))
+        compare(AudioEditorController.timelineEventViews[0].fadeOutCurve,
+                "linear")
     }
 
     function test_envelopePointDragPreviewsLocallyThenCommitsOnceOnRelease() {
@@ -1084,41 +1078,31 @@ TestCase {
                "gain interaction must follow the visible composite line")
     }
 
-    function test_fadeInNodePreviewsLocallyThenCommitsOneUndoStep() {
+    function test_fadeInDataStillUpdatesCombinedGainCurveWithoutPointerNode() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
         const canvas = findChild(page, "editorWaveformCanvas")
         AudioEditorController.viewport.setViewportWidth(canvas.width)
         verify(AudioEditorController.viewport.setVisibleRange(0, 96000))
         wait(0)
-        const node = findChild(canvas, "editorEventFadeInNode")
-        verify(node)
-        compare(Number(AudioEditorController.timelineEventViews[0].fadeIn), 0)
-        mousePress(node, node.width / 2, node.height / 2, Qt.LeftButton)
-        mouseMove(node, node.width / 2 + 80, node.height / 2, 0)
-        verify(node.candidateFadeIn > 0)
-        compare(Number(AudioEditorController.timelineEventViews[0].fadeIn), 0)
-        mouseRelease(node, node.width / 2 + 80, node.height / 2, Qt.LeftButton)
+        const eventId = AudioEditorController.timelineEventViews[0].id
+        verify(AudioEditorController.setEventFadeIn(eventId, 24000))
         verify(Number(AudioEditorController.timelineEventViews[0].fadeIn) > 0)
+        verify(findChild(canvas, "editorEventCombinedGainCurve").visible)
         verify(AudioEditorController.undo())
         compare(Number(AudioEditorController.timelineEventViews[0].fadeIn), 0)
         compare(AudioEditorController.undo(), false)
     }
 
-    function test_fadeOutNodePreviewsLocallyThenCommitsOneUndoStep() {
+    function test_fadeOutDataStillUpdatesCombinedGainCurveWithoutPointerNode() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
         const canvas = findChild(page, "editorWaveformCanvas")
         AudioEditorController.viewport.setViewportWidth(canvas.width)
         verify(AudioEditorController.viewport.setVisibleRange(0, 96000))
         wait(0)
-        const node = findChild(canvas, "editorEventFadeOutNode")
-        verify(node)
-        compare(Number(AudioEditorController.timelineEventViews[0].fadeOut), 0)
-        mousePress(node, node.width / 2, node.height / 2, Qt.LeftButton)
-        mouseMove(node, node.width / 2 - 80, node.height / 2, 0)
-        verify(node.candidateFadeOut > 0)
-        compare(Number(AudioEditorController.timelineEventViews[0].fadeOut), 0)
-        mouseRelease(node, node.width / 2 - 80, node.height / 2, Qt.LeftButton)
+        const eventId = AudioEditorController.timelineEventViews[0].id
+        verify(AudioEditorController.setEventFadeOut(eventId, 24000))
         verify(Number(AudioEditorController.timelineEventViews[0].fadeOut) > 0)
+        verify(findChild(canvas, "editorEventCombinedGainCurve").visible)
         verify(AudioEditorController.undo())
         compare(Number(AudioEditorController.timelineEventViews[0].fadeOut), 0)
         compare(AudioEditorController.undo(), false)
