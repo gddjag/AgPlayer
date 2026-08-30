@@ -2850,7 +2850,8 @@ bool AudioEditorController::playPause()
 
 bool AudioEditorController::stopPlayback()
 {
-    if (!playback_adapter_ || !playback_adapter_->available()) return false;
+    if (state_ == EditorSessionState::Error || !playback_adapter_
+        || !playback_adapter_->available()) return false;
     const bool wasActive = playing_ || position_ms_ != 0;
     const bool playheadChanged = playhead_frame_ != 0 || position_ms_ != 0;
     if (playback_prepared_ && playback_adapter_->stop() != AG_OK) {
@@ -2870,7 +2871,8 @@ bool AudioEditorController::stopPlayback()
 
 bool AudioEditorController::seekMs(const qint64 value)
 {
-    if (!has_document_ || value < 0 || value > durationMs()) return false;
+    if (!has_document_ || state_ == EditorSessionState::Error
+        || value < 0 || value > durationMs()) return false;
     if (playback_prepared_ && playback_adapter_
         && playback_adapter_->available()) {
         const qint64 previewPosition = time_pitch_preview_active_
@@ -2894,7 +2896,8 @@ bool AudioEditorController::seekMs(const qint64 value)
 
 bool AudioEditorController::seekFrame(const qint64 frame)
 {
-    if (!has_document_ || frame < 0 || frame > document_.totalFrames()) return false;
+    if (!has_document_ || state_ == EditorSessionState::Error
+        || frame < 0 || frame > document_.totalFrames()) return false;
     const qint64 positionMs = sample_rate_ > 0 ? frame * 1'000 / sample_rate_ : 0;
     if (playback_prepared_ && playback_adapter_
         && playback_adapter_->available()) {
