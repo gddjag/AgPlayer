@@ -43,13 +43,9 @@ passed after `reset()` began clearing the preallocated pre-roll buffer.
 MSVC Release:
 
 ```text
-cmake --build build/release-msvc --target time_pitch_session_test
-ctest --test-dir build/release-msvc --output-on-failure -R ^time_pitch_session_test$
-# 1/1 passed (0.80s)
-
-cmake --build build/release-msvc --target editor_playback_stream_test
-ctest --test-dir build/release-msvc --output-on-failure -R ^editor_playback_stream_test$
-# 1/1 passed (0.81s)
+cmake --build build/release-msvc --target time_pitch_session_test editor_playback_stream_test
+ctest --test-dir build/release-msvc --output-on-failure -R "^(time_pitch_session_test|editor_playback_stream_test)$"
+# 2/2 passed (1.11s)
 ```
 
 MSVC Debug:
@@ -57,7 +53,7 @@ MSVC Debug:
 ```text
 cmake --build build/debug-msvc --target time_pitch_session_test editor_playback_stream_test
 ctest --test-dir build/debug-msvc --output-on-failure -R "^(time_pitch_session_test|editor_playback_stream_test)$"
-# 2/2 passed (11.27s)
+# 2/2 passed (11.65s)
 ```
 
 ## Remaining validation and risk
