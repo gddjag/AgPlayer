@@ -20,6 +20,7 @@ private slots:
     void firstActiveCreatesResourcesAndRendersStaticFeatures();
     void explicitImpactBrightensAStableTerrainFrame();
     void highFrequencySheenStaysLocalizedAndHeightSubordinate();
+    void steadyCorePreservesHighlightDetailWithoutWhitePlateau();
     void nonFiniteFeatureInputsAreSanitizedBeforeExposure();
     void nonFiniteCameraControlsRemainRenderable();
 };
@@ -399,6 +400,124 @@ void TerrainReactorGpuSmokeTest::highFrequencySheenStaysLocalizedAndHeightSubord
              "High-frequency sheen spread broadly instead of staying localized");
     QVERIFY2(sheenLight < plainLight * 108 / 100,
              "High-frequency sheen lifted the whole frame instead of the top faces");
+    item.setActive(false);
+    QTest::qWait(100);
+}
+
+void TerrainReactorGpuSmokeTest::steadyCorePreservesHighlightDetailWithoutWhitePlateau()
+{
+    QQuickWindow window;
+    window.resize(480, 270);
+    window.setColor(QColor(4, 6, 11));
+    PlayerExperienceController style;
+    style.setAutoRotate(0);
+    style.setAutoRotateSpeed(0);
+    style.setMotionResponse(0);
+    style.setCinemaShake(0.0);
+    style.setIdleBreathingEnabled(false);
+    style.setRipplesEnabled(false);
+    style.setFloatingCubesEnabled(false);
+    style.setMeteorsEnabled(false);
+    style.setBurstEnabled(false);
+    style.setStreamHighlightEnabled(false);
+    TerrainReactorItem item(window.contentItem());
+    item.setSize(QSizeF(480, 270));
+    item.setStyleSource(&style);
+    item.setUseSyntheticFeatures(true);
+    item.setQuality(TerrainReactorItem::Quality::High);
+    item.setSyntheticFeatures({0.92, 0.88, 0.45, 0.42,
+                               0.62, 0.70, 0.56, 0.38},
+                              0.72, 0.64, false, false);
+    const auto presentedFrames = std::make_shared<std::atomic<int>>(0);
+    QObject::connect(&window, &QQuickWindow::frameSwapped, &window,
+                     [presentedFrames] {
+        presentedFrames->fetch_add(1, std::memory_order_release);
+    }, Qt::DirectConnection);
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    const auto api = window.rendererInterface()->graphicsApi();
+    if (api != QSGRendererInterface::Direct3D11
+        && api != QSGRendererInterface::OpenGL
+        && api != QSGRendererInterface::Vulkan
+        && api != QSGRendererInterface::Metal) {
+        QSKIP("No accelerated Qt Quick backend is available");
+    }
+
+    const auto waitForStableRevisions = [&item, presentedFrames] {
+        const quint64 expectedFeatureRevision = item.featureRevision();
+        const quint64 expectedStyleRevision = item.styleRevision();
+        QTRY_VERIFY_WITH_TIMEOUT(([&item, expectedFeatureRevision,
+                                   expectedStyleRevision] {
+            item.update();
+            return item.property("renderedFeatureRevision").toULongLong()
+                    == expectedFeatureRevision
+                && item.property("renderedStyleRevision").toULongLong()
+                    == expectedStyleRevision;
+        }()), 5000);
+        const int presentedBaseline = presentedFrames->load(
+            std::memory_order_acquire);
+        QTRY_VERIFY_WITH_TIMEOUT(([&item, presentedFrames, presentedBaseline,
+                                   expectedFeatureRevision,
+                                   expectedStyleRevision] {
+            item.update();
+            return item.property("renderedFeatureRevision").toULongLong()
+                    == expectedFeatureRevision
+                && item.property("renderedStyleRevision").toULongLong()
+                    == expectedStyleRevision
+                && item.property("stableRenderedFrameCount").toULongLong() >= 3
+                && presentedFrames->load(std::memory_order_acquire)
+                    >= presentedBaseline + 3;
+        }()), 5000);
+    };
+
+    item.setActive(true);
+    QTRY_COMPARE_WITH_TIMEOUT(item.renderStatus(),
+                              TerrainReactorItem::RenderStatus::Ready, 5000);
+    waitForStableRevisions();
+    const QImage frame = window.grabWindow().convertToFormat(
+        QImage::Format_RGBA8888);
+    QVERIFY(!frame.isNull());
+
+    const QRect roi(frame.width() * 18 / 100, frame.height() * 20 / 100,
+                    frame.width() * 64 / 100, frame.height() * 62 / 100);
+    QVector<int> visibleLuminance;
+    visibleLuminance.reserve(roi.width() * roi.height());
+    int nearWhitePixels = 0;
+    for (int y = roi.top(); y <= roi.bottom(); ++y) {
+        for (int x = roi.left(); x <= roi.right(); ++x) {
+            const QColor sample = frame.pixelColor(x, y);
+            const int luminance = (54 * sample.red() + 183 * sample.green()
+                                   + 19 * sample.blue()) / 256;
+            if (luminance >= 20) visibleLuminance.append(luminance);
+            if (luminance >= 248) ++nearWhitePixels;
+        }
+    }
+    std::sort(visibleLuminance.begin(), visibleLuminance.end());
+    QVERIFY2(!visibleLuminance.isEmpty(),
+             "Stable synthetic spectrum produced no visible reactor pixels");
+    const auto percentile = [&visibleLuminance](int numerator) {
+        const qsizetype index = std::min(
+            visibleLuminance.size() - 1,
+            visibleLuminance.size() * numerator / 100);
+        return visibleLuminance.at(index);
+    };
+    const int p90 = percentile(90);
+    const int p95 = percentile(95);
+    const int p99 = percentile(99);
+    const int roiPixels = roi.width() * roi.height();
+    qInfo() << "Terrain Reactor steady highlight ROI: near-white"
+            << nearWhitePixels << "/" << roiPixels
+            << "visible" << visibleLuminance.size()
+            << "P90/P95/P99" << p90 << p95 << p99;
+
+    QVERIFY2(visibleLuminance.size() * 100 >= roiPixels * 20,
+             "Stable core became too dark or too sparse");
+    QVERIFY2(nearWhitePixels * 100 <= visibleLuminance.size(),
+             "Stable core contains a broad near-white clipped plateau");
+    QVERIFY2(p95 >= 165 && p99 >= 195,
+             "Highlight compression removed the bright focal core");
+    QVERIFY2(p99 >= p90 + 8,
+             "Highlight tail collapsed instead of retaining visible gradation");
     item.setActive(false);
     QTest::qWait(100);
 }

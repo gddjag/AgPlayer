@@ -40,6 +40,7 @@ void main()
     finalColor = mix(finalColor, topGlow,
                      clamp(streamSheen * 0.34, 0.0, 0.68));
     finalColor *= 0.90 + focus * 0.22;
+    finalColor /= vec3(1.0) + max(finalColor - vec3(0.72), vec3(0.0));
     fragColor = vec4(finalColor,
                      opacity * clamp(0.18 + fog * 0.82, 0.0, 1.0));
 }
