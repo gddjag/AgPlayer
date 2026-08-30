@@ -2,6 +2,7 @@
 #include "player_experience_controller.hpp"
 
 #include <QGuiApplication>
+#include <QFile>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
 #include <QTest>
@@ -17,6 +18,7 @@ class TerrainReactorGpuSmokeTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void shaderFalloffsKeepSmoothstepEdgesAscending();
     void firstActiveCreatesResourcesAndRendersStaticFeatures();
     void explicitImpactBrightensAStableTerrainFrame();
     void highFrequencySheenStaysLocalizedAndHeightSubordinate();
@@ -24,6 +26,21 @@ private slots:
     void nonFiniteFeatureInputsAreSanitizedBeforeExposure();
     void nonFiniteCameraControlsRemainRenderable();
 };
+
+void TerrainReactorGpuSmokeTest::shaderFalloffsKeepSmoothstepEdgesAscending()
+{
+    QFile shader(QString::fromUtf8(AGPLAYER_TERRAIN_SHADER_SOURCE));
+    QVERIFY2(shader.open(QIODevice::ReadOnly),
+             qPrintable(shader.errorString()));
+    const QString source = QString::fromUtf8(shader.readAll());
+
+    QVERIFY2(!source.contains(
+                 QStringLiteral("smoothstep(responseRadius * 1.15")),
+             "Core terrain falloff uses reversed smoothstep edges");
+    QVERIFY2(!source.contains(
+                 QStringLiteral("smoothstep(responseRadius * 0.84")),
+             "Maximum response range can reverse the outer smoothstep edges");
+}
 
 class MutableFeatureSource final : public QObject {
     Q_OBJECT
@@ -520,6 +537,44 @@ void TerrainReactorGpuSmokeTest::steadyCorePreservesHighlightDetailWithoutWhiteP
              "Highlight compression removed the bright focal core");
     QVERIFY2(p99 >= p90 + 8,
              "Highlight tail collapsed instead of retaining visible gradation");
+
+    // Keep both public response-range endpoints on the real GPU path. Besides
+    // guarding the maximum-radius falloff, this proves the control changes
+    // the rendered footprint instead of only updating its UI value.
+    const auto visiblePixelCount = [&roi](const QImage& image) {
+        int count = 0;
+        for (int y = roi.top(); y <= roi.bottom(); ++y) {
+            for (int x = roi.left(); x <= roi.right(); ++x) {
+                const QColor sample = image.pixelColor(x, y);
+                const int luminance = (54 * sample.red() + 183 * sample.green()
+                                       + 19 * sample.blue()) / 256;
+                if (luminance >= 20) ++count;
+            }
+        }
+        return count;
+    };
+    style.setResponseRange(50);
+    waitForStableRevisions();
+    const QImage minimumRange = window.grabWindow().convertToFormat(
+        QImage::Format_RGBA8888);
+    QCOMPARE(minimumRange.size(), frame.size());
+    const int minimumRangeVisible = visiblePixelCount(minimumRange);
+
+    style.setResponseRange(220);
+    waitForStableRevisions();
+    const QImage maximumRange = window.grabWindow().convertToFormat(
+        QImage::Format_RGBA8888);
+    QCOMPARE(maximumRange.size(), frame.size());
+    const int maximumRangeVisible = visiblePixelCount(maximumRange);
+    qInfo() << "Terrain Reactor response-range visible pixels:"
+            << minimumRangeVisible << "->" << maximumRangeVisible
+            << "/" << roiPixels;
+    QVERIFY2(minimumRangeVisible * 100 >= roiPixels * 2,
+             "Minimum response range removed the visible terrain");
+    QVERIFY2(maximumRangeVisible * 100 >= roiPixels * 20,
+             "Maximum response range removed the visible terrain");
+    QVERIFY2(maximumRangeVisible >= minimumRangeVisible + roiPixels / 50,
+             "Response range endpoints did not change the rendered footprint");
     item.setActive(false);
     QTest::qWait(100);
 }

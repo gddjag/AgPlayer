@@ -63,9 +63,9 @@ void main()
     if (type < 0.5) {
         float center = clamp(1.0 - distanceFromCore / responseRadius, 0.0, 1.0);
         float core = pow(center, 1.18);
-        float terrainField = smoothstep(responseRadius * 1.15,
-                                        responseRadius * 0.45,
-                                        distanceFromCore);
+        float terrainField = 1.0 - smoothstep(responseRadius * 0.45,
+                                              responseRadius * 1.15,
+                                              distanceFromCore);
         float bassField = 0.78 + 0.22
             * sin(position.x * 0.038 - position.z * 0.029 + t * 0.20);
         float ridgeA = 0.5 + 0.5
@@ -154,8 +154,9 @@ void main()
             softCap * (1.0 - exp(-rawHeight / softCap)));
         scale.y = height;
         position.y += height * 0.5;
-        float outerField = smoothstep(responseRadius * 0.84,
-                                      84.0, distanceFromCore);
+        float outerFieldStart = min(responseRadius * 0.84, 79.5);
+        float outerField = smoothstep(outerFieldStart, 84.0,
+                                      distanceFromCore);
         float coherentNoise = 0.5 + 0.5 * sin(instancePosition.x * 0.11
                                              + instancePosition.z * 0.075);
         float cellNoise = clamp(coherentNoise * 0.68
