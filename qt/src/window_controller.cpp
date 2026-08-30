@@ -198,11 +198,13 @@ void WindowController::setWindows(QWindow* mainWindow, QWindow* miniWindow)
 void WindowController::setMainWindowShellMode(int mode)
 {
     mode = mode == 1 ? 1 : 0;
-    if (mainWindowShellMode_ == mode) {
+    if (immersivePresentationActive_) {
+        immersiveDeferredMainWindowShellMode_ = mode;
+        immersiveDeferredMainWindowShellModeRequested_ =
+            mode != immersiveRestoreMainWindowShellMode_;
         return;
     }
-    if (immersivePresentationActive_) {
-        mainWindowShellMode_ = mode;
+    if (mainWindowShellMode_ == mode) {
         return;
     }
     persistGeometry(mainWindow_, mainWindowGeometryKey());
@@ -602,6 +604,8 @@ void WindowController::enterImmersivePresentation()
     }
     immersiveRestoreView_ = miniVisible_ ? PendingView::Mini : PendingView::Main;
     immersiveRestoreMainWindowShellMode_ = mainWindowShellMode_;
+    immersiveDeferredMainWindowShellMode_ = mainWindowShellMode_;
+    immersiveDeferredMainWindowShellModeRequested_ = false;
     immersiveRestoreMainGeometry_ = mainWindow_ != nullptr
         ? mainWindow_->geometry() : QRect();
     immersiveRestoreMiniGeometry_ = miniWindow_ != nullptr
@@ -624,9 +628,20 @@ void WindowController::leaveImmersivePresentation()
     }
     immersivePresentationActive_ = false;
     emit immersivePresentationActiveChanged();
-    mainWindowShellMode_ = immersiveRestoreMainWindowShellMode_;
-    if (mainWindow_ != nullptr && immersiveRestoreMainGeometry_.isValid()) {
-        mainWindow_->setGeometry(immersiveRestoreMainGeometry_);
+    if (immersiveDeferredMainWindowShellModeRequested_) {
+        mainWindowShellMode_ = immersiveDeferredMainWindowShellMode_;
+        immersiveRestoreMainGeometryKey_ = mainWindowGeometryKey();
+        immersiveRestoreMainGeometryWasPersisted_ =
+            settings_.contains(immersiveRestoreMainGeometryKey_);
+        if (mainWindow_ != nullptr) {
+            restoreMainWindowGeometry(mainWindow_);
+            immersiveRestoreMainGeometry_ = mainWindow_->geometry();
+        }
+    } else {
+        mainWindowShellMode_ = immersiveRestoreMainWindowShellMode_;
+        if (mainWindow_ != nullptr && immersiveRestoreMainGeometry_.isValid()) {
+            mainWindow_->setGeometry(immersiveRestoreMainGeometry_);
+        }
     }
     if (miniWindow_ != nullptr && immersiveRestoreMiniGeometry_.isValid()) {
         miniWindow_->setGeometry(immersiveRestoreMiniGeometry_);

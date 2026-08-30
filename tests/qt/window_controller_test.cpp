@@ -28,11 +28,12 @@ private slots:
     void dpiChangePreservesNativePixelSize();
     void switchingWindowsDoesNotRecreatePlayback();
     void immersivePresentationTemporarilyHidesAndRestoresPlayerWindows();
-    void immersivePresentationRestoresMainShellAndGeometryWithoutPersistingTemporaryState();
+    void immersivePresentationHonorsDeferredShellRequestWithoutPersistingTemporaryState();
     void immersivePresentationRestoresMiniGeometry();
     void immersivePresentationRestoresFirstRunIntegratedGeometryWithoutCreatingASetting();
     void immersivePresentationRestoresFirstRunMiniGeometryWithoutCreatingASetting();
     void immersivePresentationFirstRunGeometryPersistsAfterLaterUserMove();
+    void immersivePresentationDefersClassicShellRequestWithoutOverwritingIntegratedGeometry();
     void updatesExistingWindowObjectsAndFlags();
     void visibilityWaitsForDestinationReadiness();
     void shutdownIsOrderedAndIdempotent();
@@ -229,7 +230,7 @@ void WindowControllerTest::immersivePresentationTemporarilyHidesAndRestoresPlaye
     QVERIFY(windows.listWindowVisible());
 }
 
-void WindowControllerTest::immersivePresentationRestoresMainShellAndGeometryWithoutPersistingTemporaryState()
+void WindowControllerTest::immersivePresentationHonorsDeferredShellRequestWithoutPersistingTemporaryState()
 {
     const QRect classicGeometry(24, 36, 520, 280);
     const QRect integratedGeometry(92, 74, 640, 420);
@@ -251,7 +252,7 @@ void WindowControllerTest::immersivePresentationRestoresMainShellAndGeometryWith
     windows.setMainWindowShellMode(0);
 
     windows.leaveImmersivePresentation();
-    QCOMPARE(mainWindow.geometry(), integratedGeometry);
+    QCOMPARE(mainWindow.geometry(), classicGeometry);
     QCOMPARE(settings.value(QStringLiteral("windows/mainGeometry")).toRect(),
              classicGeometry);
     QCOMPARE(settings.value(QStringLiteral("windows/integratedMainGeometry")).toRect(),
@@ -368,6 +369,55 @@ void WindowControllerTest::immersivePresentationFirstRunGeometryPersistsAfterLat
     settings.sync();
     QCOMPARE(settings.value(QStringLiteral("windows/integratedMainGeometry")).toRect(),
              userGeometry);
+}
+
+void WindowControllerTest::immersivePresentationDefersClassicShellRequestWithoutOverwritingIntegratedGeometry()
+{
+    const QRect classicGeometry(24, 36, 520, 280);
+    const QRect integratedGeometry(92, 74, 640, 420);
+    const QRect userClassicGeometry(48, 62, 560, 300);
+    QSettings settings;
+    settings.setValue(QStringLiteral("windows/mainGeometry"), classicGeometry);
+    settings.setValue(QStringLiteral("windows/integratedMainGeometry"),
+                      integratedGeometry);
+    settings.sync();
+
+    QWindow mainWindow;
+    {
+        WindowController windows;
+        windows.setWindows(&mainWindow, nullptr);
+        windows.setMainWindowShellMode(1);
+        QCOMPARE(mainWindow.geometry(), integratedGeometry);
+
+        windows.enterImmersivePresentation();
+        windows.setMainWindowShellMode(0);
+        windows.leaveImmersivePresentation();
+
+        QCOMPARE(mainWindow.geometry(), classicGeometry);
+        QTest::qWait(300);
+        settings.sync();
+        QCOMPARE(settings.value(QStringLiteral("windows/mainGeometry")).toRect(),
+                 classicGeometry);
+        QCOMPARE(settings.value(
+                     QStringLiteral("windows/integratedMainGeometry")).toRect(),
+                 integratedGeometry);
+
+        mainWindow.setGeometry(userClassicGeometry);
+        QTest::qWait(300);
+        settings.sync();
+        QCOMPARE(settings.value(QStringLiteral("windows/mainGeometry")).toRect(),
+                 userClassicGeometry);
+        QCOMPARE(settings.value(
+                     QStringLiteral("windows/integratedMainGeometry")).toRect(),
+                 integratedGeometry);
+    }
+    QSettings persistedSettings;
+    persistedSettings.sync();
+    QCOMPARE(persistedSettings.value(QStringLiteral("windows/mainGeometry")).toRect(),
+             userClassicGeometry);
+    QCOMPARE(persistedSettings.value(
+                 QStringLiteral("windows/integratedMainGeometry")).toRect(),
+             integratedGeometry);
 }
 
 void WindowControllerTest::shellModesPersistIndependentMainWindowGeometry()

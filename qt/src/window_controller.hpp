@@ -193,6 +193,8 @@ private:
     bool immersivePresentationActive_ = false;
     PendingView immersiveRestoreView_ = PendingView::Main;
     int immersiveRestoreMainWindowShellMode_ = 0;
+    int immersiveDeferredMainWindowShellMode_ = 0;
+    bool immersiveDeferredMainWindowShellModeRequested_ = false;
     QRect immersiveRestoreMainGeometry_;
     QRect immersiveRestoreMiniGeometry_;
     QString immersiveRestoreMainGeometryKey_;
