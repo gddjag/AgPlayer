@@ -258,10 +258,8 @@ ApplicationWindow {
 
     Component {
         id: integratedBottomBarComponent
-        PlayerControls {
-            objectName: "playerControls"
+        IntegratedPlayerControls {
             emptyMode: LibraryModel.count === 0
-            showListWindowButton: false
             onOpenEqualizerRequested: mainWindow.openEqualizer()
         }
     }

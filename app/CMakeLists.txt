@@ -62,6 +62,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/picture-in-picture-2-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/play-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/play-order-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/player-shell-mode.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/price-tag-3-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/pulse-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/playlist-2-fill.svg
@@ -149,6 +150,9 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/SharedWaveformView.qml
         qml/AgPlayer/components/PlayerPane.qml
         qml/AgPlayer/components/PlayerControls.qml
+        qml/AgPlayer/components/TransportControls.qml
+        qml/AgPlayer/components/PlayerVolumeControl.qml
+        qml/AgPlayer/components/IntegratedPlayerControls.qml
         qml/AgPlayer/components/ExperienceActions.qml
         qml/AgPlayer/components/FallbackCoverImage.qml
         qml/AgPlayer/components/ImmersiveSurface.qml

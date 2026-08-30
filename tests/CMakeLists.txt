@@ -1275,6 +1275,12 @@ add_test(NAME format_converter_reference_contract_test
 set_tests_properties(format_converter_reference_contract_test PROPERTIES
     TIMEOUT 10)
 
+add_test(NAME player_action_icon_contract_test
+    COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+        -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/player_action_icon_contract_test.ps1
+        -SourceRoot ${CMAKE_SOURCE_DIR})
+set_tests_properties(player_action_icon_contract_test PROPERTIES TIMEOUT 10)
+
 
 target_include_directories(import_controller_test PRIVATE
     "${CMAKE_SOURCE_DIR}/tests/core"

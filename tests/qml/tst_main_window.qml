@@ -373,6 +373,18 @@ TestCase {
         task4TemporaryTagKeys = []
     }
 
+    function verifyAscendingX(parent, names) {
+        var previousX = -1
+        for (var i = 0; i < names.length; ++i) {
+            var item = findChild(parent, names[i])
+            verify(item !== null, "missing " + names[i])
+            verify(item.visible, names[i] + " must be visible")
+            var x = item.mapToItem(parent, 0, 0).x
+            verify(x > previousX, names[i] + " is out of order")
+            previousX = x
+        }
+    }
+
     function cleanup() {
         for (var index = 0; index < task4TemporaryTagKeys.length; ++index)
             TagModel.removeTag(task4TemporaryTagKeys[index])
@@ -5010,6 +5022,45 @@ TestCase {
         compare(Theme.ratingGold.toString(), "#ff9800")
         for (var index = 0; index < 5; ++index)
             compare(Theme.ratingColor(index).toString(), "#ff9800")
+    }
+
+    function test_integrated_player_control_order() {
+        var previousLayoutTheme = SettingsController.windowLayoutTheme
+        ignoreWarning(new RegExp(
+            ".*Unable to assign \\[undefined\\] to QUrl"))
+        ignoreWarning(new RegExp(
+            "This plugin does not support propagateSizeHints\\(\\)"))
+        ignoreWarning(new RegExp(
+            "This plugin does not support propagateSizeHints\\(\\)"))
+        ignoreWarning(new RegExp(
+            "This plugin does not support propagateSizeHints\\(\\)"))
+        ignoreWarning(new RegExp(
+            "This plugin does not support propagateSizeHints\\(\\)"))
+        SettingsController.playerShellMode = 1
+        SettingsController.windowLayoutTheme = "single-window"
+        try {
+            tryVerify(function() {
+                return findChild(mainWindow, "integratedPlayerShell") !== null
+            }, 1500)
+            tryVerify(function() {
+                return findChild(mainWindow, "integratedPlayerControls") !== null
+            }, 1500)
+            var controls = findChild(mainWindow, "integratedPlayerControls")
+            verifyAscendingX(controls, [
+                "listWindowButton", "audioToolsButton", "equalizerButton",
+                "waveformModeButton", "previousButton", "playPauseButton",
+                "nextButton", "modeButton", "lyricsActionButton", "muteButton",
+                "themeModeButton", "immersiveActionButton", "windowLayoutButton"
+            ])
+        } finally {
+            SettingsController.playerShellMode = 0
+            SettingsController.windowLayoutTheme = previousLayoutTheme
+            tryVerify(function() {
+                var classicShell = findChild(mainWindow, "classicPlayerShell")
+                return classicShell !== null && classicShell.visible
+                        && findChild(mainWindow, "integratedPlayerControls") === null
+            }, 1500)
+        }
     }
 
     function test_title_buttons_use_compact_chinese_labels() {

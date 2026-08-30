@@ -14,7 +14,7 @@ RowLayout {
     function buttonSize() { return compact ? 26 : 32 }
 
     ToolButton {
-        objectName: "immersiveActionButton"
+        objectName: root.showImmersive ? "immersiveActionButton" : ""
         visible: root.showImmersive
         Layout.preferredWidth: root.buttonSize()
         Layout.preferredHeight: root.buttonSize()
@@ -24,8 +24,8 @@ RowLayout {
                  !== PlayerExperienceController.Off
         icon.source: Theme.icon("immersive-visual-mode")
         icon.color: checked ? Theme.iconAccent : Theme.iconPrimary
-        icon.width: root.compact ? 15 : 18
-        icon.height: root.compact ? 15 : 18
+        icon.width: root.compact ? 16 : 20
+        icon.height: root.compact ? 16 : 20
         Accessible.name: checked ? qsTr("关闭沉浸视觉") : qsTr("开启沉浸视觉")
         onClicked: PlayerExperienceController.toggleImmersiveMode()
         ToolTip.text: Accessible.name
@@ -34,7 +34,7 @@ RowLayout {
     }
 
     ToolButton {
-        objectName: "lyricsActionButton"
+        objectName: root.showLyrics ? "lyricsActionButton" : ""
         visible: root.showLyrics
         Layout.preferredWidth: root.buttonSize()
         Layout.preferredHeight: root.buttonSize()
@@ -43,8 +43,8 @@ RowLayout {
         checked: PlayerExperienceController.lyricsVisible
         icon.source: Theme.icon("lyrics")
         icon.color: checked ? Theme.iconAccent : Theme.iconPrimary
-        icon.width: root.compact ? 15 : 18
-        icon.height: root.compact ? 15 : 18
+        icon.width: root.compact ? 16 : 20
+        icon.height: root.compact ? 16 : 20
         Accessible.name: checked ? qsTr("隐藏歌词") : qsTr("显示歌词")
         onClicked: PlayerExperienceController.toggleLyricsVisible()
         ToolTip.text: Accessible.name

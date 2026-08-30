@@ -115,22 +115,30 @@ TestCase {
 
     function test_shared_actions_reuse_one_state_source() {
         var mainActions = findChild(mainWindow, "experienceActions")
-        var miniActions = findChild(miniWindow, "miniExperienceActions")
-        verify(mainActions && miniActions)
+        var miniControls = findChild(miniWindow, "miniPlayerControls")
+        verify(mainActions && miniControls)
         compare(findChild(mainActions, "themeActionButton"), null)
-        compare(findChild(miniActions, "themeActionButton"), null)
-        compare(findChild(miniActions, "immersiveActionButton").visible, false)
+        compare(findChild(miniControls, "lyricsActionButton"), null)
+        compare(findChild(miniControls, "immersiveActionButton"), null)
+        compare(findChild(mainActions, "lyricsActionButton").icon.width, 20)
+        compare(findChild(mainActions, "lyricsActionButton").icon.height, 20)
+
+        mainActions.compact = true
+        compare(findChild(mainActions, "lyricsActionButton").icon.width, 16)
+        compare(findChild(mainActions, "lyricsActionButton").icon.height, 16)
+        mainActions.compact = false
 
         PlayerExperienceController.lyricsVisible = false
         findChild(mainActions, "lyricsActionButton").clicked()
         compare(PlayerExperienceController.lyricsVisible, true)
-        compare(findChild(miniActions, "lyricsActionButton").checked, true)
 
         PlayerExperienceController.immersiveMode = PlayerExperienceController.Off
-        findChild(mainActions, "immersiveActionButton").clicked()
+        var immersiveAction = findChild(mainWindow, "immersiveActionButton")
+        verify(immersiveAction)
+        immersiveAction.clicked()
         compare(PlayerExperienceController.immersiveMode,
                 PlayerExperienceController.TerrainReactor)
-        compare(findChild(mainActions, "immersiveActionButton").checked, true)
+        compare(immersiveAction.checked, true)
     }
 
     function test_one_terrain_item_stays_in_independent_window_for_all_hosts() {

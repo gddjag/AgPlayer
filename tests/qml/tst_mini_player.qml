@@ -91,6 +91,29 @@ TestCase {
         miniPlayer = null
     }
 
+    function verifyAscendingX(parent, names) {
+        var previousX = -1
+        for (var i = 0; i < names.length; ++i) {
+            var item = findChild(parent, names[i])
+            verify(item !== null, "missing " + names[i])
+            verify(item.visible, names[i] + " must be visible")
+            var x = item.mapToItem(parent, 0, 0).x
+            verify(x > previousX, names[i] + " is out of order")
+            previousX = x
+        }
+    }
+
+    function test_mini_player_control_order_excludes_experience_actions() {
+        var controls = findChild(miniPlayer, "miniPlayerControls")
+        verify(controls)
+        verifyAscendingX(controls, [
+            "miniWaveformModeButton", "miniPreviousButton", "miniPlayPauseButton",
+            "miniNextButton", "miniModeButton", "miniMuteButton"
+        ])
+        verify(findChild(controls, "lyricsActionButton") === null)
+        verify(findChild(controls, "immersiveActionButton") === null)
+    }
+
     function test_mini_and_main_share_state() {
         playbackFake.publishPlaying(25000, 286000)
         compare(findChild(miniPlayer, "miniPlayButtonBody").border.color.toString(),
