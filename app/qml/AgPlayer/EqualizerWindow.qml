@@ -243,14 +243,14 @@ Window {
             objectName: "equalizerBandsPanel"
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.leftMargin: 16
-            Layout.rightMargin: 16
+            Layout.leftMargin: 0
+            Layout.rightMargin: 0
             Layout.topMargin: 8
             Layout.bottomMargin: 8
-            spacing: 4
+            spacing: 0
 
             Item {
-                Layout.preferredWidth: 36
+                Layout.preferredWidth: 20
                 Layout.fillHeight: true
                 Label { anchors.top: parent.top; text: "+12"; color: Theme.secondaryText; font.pixelSize: 11 }
                 Label { anchors.verticalCenter: parent.verticalCenter; text: "0"; color: Theme.secondaryText; font.pixelSize: 11 }
@@ -274,7 +274,7 @@ Window {
                     property real slotWidth: (width - 1) / 18
                     height: bandFlickable.height - 8
                     width: Math.max(bandFlickable.width,
-                                    18 * (window.spacious ? 72 : 56) + 1)
+                                    18 * (window.spacious ? 72 : 46) + 1)
                     spacing: 0
 
                     Repeater {

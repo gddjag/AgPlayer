@@ -70,6 +70,10 @@ TestCase {
         compare(findChild(equalizer, "equalizerTitle").font.pixelSize, 20)
         compare(findChild(equalizer, "equalizerBand-0-frequency").font.pixelSize, 14)
         compare(findChild(equalizer, "equalizerBand-0-value").font.pixelSize, 12)
+        var bandFlickable = findChild(equalizer, "equalizerBandScroller")
+        verify(bandFlickable)
+        verify(bandFlickable.contentWidth <= bandFlickable.width)
+        compare(bandFlickable.interactive, false)
         equalizer.destroy()
         equalizer = null
     }
