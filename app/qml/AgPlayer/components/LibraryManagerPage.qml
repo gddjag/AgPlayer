@@ -7,6 +7,7 @@ import AgPlayer
 Item {
     id: root
     objectName: "libraryManagerPage"
+    readonly property var manager: LibraryManagerController
 
     property string selectedTrackId: ""
     property var selectedTrackIds: []
@@ -83,14 +84,21 @@ Item {
         }
     }
 
-    LibraryManagerController {
-        id: manager
+    Binding {
         objectName: "libraryManagerController"
-        libraryModel: LibraryModel
-        importController: ImportController
-        keyword: root.searchText
-        formatFilter: root.formatFilter
-        exactRating: root.exactRating
+        target: root.manager
+        property: "keyword"
+        value: root.searchText
+    }
+    Binding {
+        target: root.manager
+        property: "formatFilter"
+        value: root.formatFilter
+    }
+    Binding {
+        target: root.manager
+        property: "exactRating"
+        value: root.exactRating
     }
 
     LibraryFileOperations { id: fileOps; libraryModel: LibraryModel }
@@ -103,6 +111,22 @@ Item {
         trackMenu.targetTrackId = trackId
         trackMenu.targetTrackIds = selectedTrackIds.slice()
         trackMenu.popup()
+    }
+
+    function removeTracksFromLibrary(trackIds) {
+        var failedIds = []
+        for (var index = 0; index < trackIds.length; ++index) {
+            if (!manager.removeTrackFromLibrary(trackIds[index]))
+                failedIds.push(trackIds[index])
+        }
+        selectedTrackIds = failedIds
+        selectedTrackId = failedIds.length > 0 ? failedIds[failedIds.length - 1] : ""
+        if (failedIds.length > 0) removeTrackErrorDialog.open()
+    }
+
+    function openFileDetails(trackId) {
+        fileDetailsPanel.details = fileOps.trackDetails(trackId)
+        fileDetailsPanel.open()
     }
 
     function selectedFileUrls() {
@@ -181,37 +205,6 @@ Item {
                                              selectedFolder,
                                              LibraryFileOperations.AutoRename)
     }
-    FileDialog {
-        id: relocateTrackDialog
-        title: qsTr("重新定位文件")
-        fileMode: FileDialog.OpenFile
-        nameFilters: ["Audio (*.mp3 *.wav *.flac *.aac *.m4a *.ogg *.opus *.wma)"]
-        onAccepted: fileOps.relocateTrackToUrl(trackMenu.targetTrackId,
-                                               selectedFile)
-    }
-    Dialog {
-        id: renameTrackDialog
-        width: 420
-        title: qsTr("重命名")
-        modal: true
-        anchors.centerIn: parent
-        standardButtons: Dialog.Ok | Dialog.Cancel
-        onOpened: {
-            var details = fileOps.trackDetails(trackMenu.targetTrackId)
-            renameTrackField.text = String(details.fileName || "")
-                    .replace(/\.[^.]+$/, "")
-            renameTrackField.forceActiveFocus()
-            renameTrackField.selectAll()
-        }
-        onAccepted: fileOps.renameTrack(trackMenu.targetTrackId,
-                                        renameTrackField.text)
-        contentItem: TextField { id: renameTrackField }
-        background: Rectangle {
-            color: Theme.elevated
-            border.color: Theme.border
-            radius: Theme.radiusMd
-        }
-    }
     Dialog {
         id: tagTrackDialog
         width: 420
@@ -228,8 +221,7 @@ Item {
         onAccepted: {
             var values = tagTrackField.text.split(/[,，]/).map(
                         function(value) { return value.trim() })
-            for (var index = 0; index < trackMenu.targetTrackIds.length; ++index)
-                LibraryModel.setTags(trackMenu.targetTrackIds[index], values)
+            LibraryModel.setTagsForTracks(trackMenu.targetTrackIds, values)
         }
         contentItem: TextField {
             id: tagTrackField
@@ -261,6 +253,107 @@ Item {
             color: Theme.elevated
             border.color: Theme.border
             radius: Theme.radiusMd
+        }
+    }
+
+    Dialog {
+        id: removeTrackErrorDialog
+        objectName: "libraryTrackRemoveErrorDialog"
+        width: 460
+        title: qsTr("无法从列表删除")
+        modal: true
+        anchors.centerIn: parent
+        standardButtons: Dialog.Ok
+        contentItem: Label {
+            text: manager.lastPersistenceError || qsTr("无法保存曲库排除记录")
+            color: Theme.primaryText
+            wrapMode: Text.Wrap
+        }
+        background: Rectangle {
+            color: Theme.elevated
+            border.color: Theme.border
+            radius: Theme.radiusMd
+        }
+    }
+
+    Popup {
+        id: fileDetailsPanel
+        objectName: "libraryAudioFileInfoPanel"
+        property var details: ({})
+        width: 300
+        height: Math.min(root.height - 24, 470)
+        x: root.width - width - 12
+        y: 12
+        modal: false
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        background: Rectangle {
+            color: Theme.elevated
+            border.color: Theme.border
+            radius: Theme.radiusMd
+        }
+        contentItem: ColumnLayout {
+            spacing: 7
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    text: qsTr("文件信息")
+                    color: Theme.primaryText
+                    font.pixelSize: 15
+                    font.weight: Font.DemiBold
+                    Layout.fillWidth: true
+                }
+                ToolButton {
+                    icon.source: Theme.icon("close-fill")
+                    onClicked: fileDetailsPanel.close()
+                    background: null
+                }
+            }
+            Repeater {
+                model: [
+                    [qsTr("格式"), fileDetailsPanel.details.format],
+                    [qsTr("采样率"), fileDetailsPanel.details.sampleRate
+                                      ? fileDetailsPanel.details.sampleRate + " Hz" : ""],
+                    [qsTr("比特率"), fileDetailsPanel.details.bitRate
+                                      ? Math.round(fileDetailsPanel.details.bitRate / 1000) + " kbps" : ""],
+                    [qsTr("时长"), root.formatDuration(fileDetailsPanel.details.durationMs || 0)],
+                    [qsTr("大小"), fileDetailsPanel.details.fileSize
+                                    ? (fileDetailsPanel.details.fileSize / 1048576).toFixed(2) + " MB" : ""],
+                    ["BPM", fileDetailsPanel.details.bpm || ""],
+                    [qsTr("修改时间"), fileDetailsPanel.details.modifiedAt
+                                        ? Qt.formatDateTime(fileDetailsPanel.details.modifiedAt,
+                                                            "yyyy-MM-dd HH:mm:ss") : ""],
+                    [qsTr("目录"), fileDetailsPanel.details.directory],
+                    [qsTr("完整路径"), fileDetailsPanel.details.path],
+                    [qsTr("标签"), (fileDetailsPanel.details.tags || []).join(", ")]
+                ]
+                delegate: RowLayout {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    Text {
+                        text: modelData[0]
+                        color: Theme.secondaryText
+                        Layout.preferredWidth: 62
+                        font.pixelSize: 11
+                    }
+                    Text {
+                        text: modelData[1] || "—"
+                        color: Theme.primaryText
+                        elide: Text.ElideMiddle
+                        Layout.fillWidth: true
+                        font.pixelSize: 11
+                    }
+                }
+            }
+            Image {
+                visible: Boolean(fileDetailsPanel.details.coverUrl)
+                source: fileDetailsPanel.details.coverUrl || ""
+                Layout.preferredWidth: 120
+                Layout.preferredHeight: 120
+                Layout.alignment: Qt.AlignHCenter
+                fillMode: Image.PreserveAspectFit
+            }
+            Item { Layout.fillHeight: true }
         }
     }
 
@@ -359,12 +452,6 @@ Item {
             onTriggered: tagTrackDialog.open()
         }
         SystemMenuItem {
-            objectName: "libraryTrackRename"
-            text: qsTr("重命名")
-            enabled: trackMenu.targetTrackIds.length === 1
-            onTriggered: renameTrackDialog.open()
-        }
-        SystemMenuItem {
             objectName: "libraryTrackMoveFile"
             text: qsTr("移动到指定文件夹")
             onTriggered: moveTrackFolderDialog.open()
@@ -378,24 +465,19 @@ Item {
         SystemMenuItem {
             objectName: "libraryTrackRemove"
             text: qsTr("从列表删除")
-            onTriggered: {
-                for (var index = 0; index < trackMenu.targetTrackIds.length;
-                     ++index)
-                    LibraryModel.removeTrack(trackMenu.targetTrackIds[index])
-                root.selectedTrackIds = []
-                root.selectedTrackId = ""
-            }
+            onTriggered: root.removeTracksFromLibrary(trackMenu.targetTrackIds)
         }
         SystemMenuItem {
             objectName: "libraryTrackTrash"
             text: qsTr("彻底删除至回收站")
             onTriggered: trashTrackDialog.open()
         }
+        MenuSeparator {}
         SystemMenuItem {
-            objectName: "libraryTrackRelocate"
-            text: qsTr("重新定位文件")
+            objectName: "libraryTrackDetails"
+            text: qsTr("查看音频文件信息")
             enabled: trackMenu.targetTrackIds.length === 1
-            onTriggered: relocateTrackDialog.open()
+            onTriggered: root.openFileDetails(trackMenu.targetTrackId)
         }
     }
 
@@ -453,15 +535,15 @@ Item {
                 model: [
                     {id: "all", t: qsTr("总歌曲量"), v: manager.totalCount, icon: "music-2-fill", c: Theme.violet},
                     {id: "storage", t: qsTr("占用大小"), v: root.formatBytes(manager.totalBytes), icon: "folder-open-line", c: Theme.waveformBlue},
-                    {id: "missing", t: qsTr("丢失文件"), v: manager.missingCount, icon: "information-line", c: Theme.favoriteRed},
-                    {id: "duplicates", t: qsTr("重复歌曲"), v: manager.duplicateCount, icon: "file-copy-line", c: Theme.ratingGold},
+                    {id: "missing", t: qsTr("丢失文件"), v: manager.missingCount, icon: "information-line", c: Theme.error},
+                    {id: "duplicates", t: qsTr("重复歌曲"), v: manager.duplicateCount, icon: "file-copy-line", c: Theme.warning},
                     {id: "uncovered", t: qsTr("无封面"), v: manager.uncoveredCount, icon: "picture-in-picture-2-line", c: Theme.secondaryText},
-                    {id: "untagged", t: qsTr("无标签"), v: manager.untaggedCount, icon: "checkbox-blank-line", c: "#36d56a"},
+                    {id: "untagged", t: qsTr("无标签"), v: manager.untaggedCount, icon: "checkbox-blank-line", c: Theme.success},
                     {id: "recentAdded", t: qsTr("最近添加"), v: manager.recentAddedCount, icon: "add-line", c: Theme.violet},
                     {id: "recentPlayed", t: qsTr("最近播放"), v: manager.recentPlayedCount, icon: "play-fill", c: Theme.waveformBlue},
-                    {id: "highFrequency", t: qsTr("高频播放"), v: manager.highFrequencyCount, icon: "equalizer-line", c: "#19cbd1"},
-                    {id: "lowFrequency", t: qsTr("低频播放"), v: manager.lowFrequencyCount, icon: "equalizer-line", c: "#19cbd1"},
-                    {id: "neverPlayed", t: qsTr("从未播放"), v: manager.neverPlayedCount, icon: "time-line", c: Theme.ratingGold},
+                    {id: "highFrequency", t: qsTr("高频播放"), v: manager.highFrequencyCount, icon: "equalizer-line", c: Theme.waveformCyan},
+                    {id: "lowFrequency", t: qsTr("低频播放"), v: manager.lowFrequencyCount, icon: "equalizer-line", c: Theme.waveformCyan},
+                    {id: "neverPlayed", t: qsTr("从未播放"), v: manager.neverPlayedCount, icon: "time-line", c: Theme.textTertiary},
                     {id: "unrated", t: qsTr("未评分"), v: manager.unratedCount, icon: "star-line", c: Theme.violet}
                 ]
                 delegate: Surface {
@@ -481,7 +563,7 @@ Item {
                             Layout.preferredWidth: 28
                             Layout.preferredHeight: 28
                             radius: 8
-                            color: Qt.rgba(modelData.c.r, modelData.c.g, modelData.c.b, 0.14)
+                            color: Theme.surfaceHover
                             ThemedIcon {
                                 anchors.centerIn: parent
                                 width: 16
@@ -670,10 +752,7 @@ Item {
                         model: manager
                         boundsBehavior: Flickable.StopAtBounds
                         Keys.onDeletePressed: {
-                            for (var i = 0; i < root.selectedTrackIds.length; ++i)
-                                LibraryModel.removeTrack(root.selectedTrackIds[i])
-                            root.selectedTrackIds = []
-                            root.selectedTrackId = ""
+                            root.removeTracksFromLibrary(root.selectedTrackIds)
                         }
                         delegate: Rectangle {
                             id: row
@@ -692,7 +771,7 @@ Item {
                             width: ListView.view.width
                             height: root.trackRowHeight
                             color: root.selectedTrackIds.indexOf(trackId) >= 0
-                                   ? Qt.rgba(0.45, 0.2, 0.85, 0.32)
+                                   ? Theme.highlightSoft
                                    : rowHover.hovered ? Theme.hoverSurface : "transparent"
                             RowLayout {
                                 anchors.fill: parent
@@ -754,8 +833,8 @@ Item {
                                 Text {
                                     text: status === "missing" ? qsTr("丢失文件")
                                         : duplicateGroup.length > 0 ? qsTr("重复歌曲") : qsTr("正常")
-                                    color: status === "missing" ? Theme.favoriteRed
-                                        : duplicateGroup.length > 0 ? Theme.ratingGold : "#39d66d"
+                                    color: status === "missing" ? Theme.error
+                                        : duplicateGroup.length > 0 ? Theme.warning : Theme.success
                                     Layout.preferredWidth: 70
                                 }
                             }

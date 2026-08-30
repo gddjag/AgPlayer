@@ -11,6 +11,13 @@
 
 namespace agplayer {
 
+namespace metadata_writer_detail {
+
+bool parse_adts_audio_parameters(unsigned char byte2, unsigned char byte3,
+                                 int& sample_rate, int& channels) noexcept;
+
+} // namespace metadata_writer_detail
+
 // QML and container adapters communicate exclusively through canonical fields;
 // FFmpeg dictionary keys remain an implementation detail of this module.
 enum class MetadataAction { Keep, Set, Clear };

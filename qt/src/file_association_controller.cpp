@@ -1,4 +1,5 @@
 #include "file_association_controller.hpp"
+#include "audio_file_discovery.hpp"
 
 #include <QCoreApplication>
 #include <QDebug>
@@ -55,10 +56,7 @@ FileAssociationController::FileAssociationController(QObject* parent)
 
 QStringList FileAssociationController::supportedAudioExtensions()
 {
-    return {QStringLiteral("mp3"), QStringLiteral("wav"), QStringLiteral("flac"),
-            QStringLiteral("aac"), QStringLiteral("m4a"), QStringLiteral("ogg"),
-            QStringLiteral("wma"), QStringLiteral("ape"), QStringLiteral("opus"),
-            QStringLiteral("aif"), QStringLiteral("aiff")};
+    return agplayer::qt::supportedAudioExtensions();
 }
 
 QString FileAssociationController::lastError() const

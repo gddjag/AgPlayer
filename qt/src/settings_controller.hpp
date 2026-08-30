@@ -9,6 +9,7 @@
 #include <memory>
 
 class FileAssociationController;
+class SettingsControllerTest;
 
 class SettingsController final : public QObject {
     Q_OBJECT
@@ -51,7 +52,22 @@ class SettingsController final : public QObject {
 
     // Appearance & Visualizer
     Q_PROPERTY(int themeMode READ themeMode WRITE setThemeMode NOTIFY themeModeChanged)
-    Q_PROPERTY(bool glassEffect READ glassEffect WRITE setGlassEffect NOTIFY glassEffectChanged)
+    Q_PROPERTY(QString windowLayoutTheme READ windowLayoutTheme
+                   WRITE setWindowLayoutTheme NOTIFY windowLayoutThemeChanged)
+    Q_PROPERTY(int playerShellMode READ playerShellMode WRITE setPlayerShellMode
+                   NOTIFY playerShellModeChanged)
+    Q_PROPERTY(int skinColorMode READ skinColorMode WRITE setSkinColorMode
+                   NOTIFY skinColorModeChanged)
+    Q_PROPERTY(QString skinPreset READ skinPreset WRITE setSkinPreset
+                   NOTIFY skinPresetChanged)
+    Q_PROPERTY(int skinCustomKind READ skinCustomKind WRITE setSkinCustomKind
+                   NOTIFY skinCustomKindChanged)
+    Q_PROPERTY(QString skinCustomColor READ skinCustomColor WRITE setSkinCustomColor
+                   NOTIFY skinCustomColorChanged)
+    Q_PROPERTY(QString skinCustomColorMiddle READ skinCustomColorMiddle
+                   WRITE setSkinCustomColorMiddle NOTIFY skinCustomColorMiddleChanged)
+    Q_PROPERTY(QString skinCustomColorEnd READ skinCustomColorEnd
+                   WRITE setSkinCustomColorEnd NOTIFY skinCustomColorEndChanged)
     Q_PROPERTY(int waveformMode READ waveformMode WRITE setWaveformMode NOTIFY waveformModeChanged)
     Q_PROPERTY(double waveformHeight READ waveformHeight WRITE setWaveformHeight
                    NOTIFY waveformHeightChanged)
@@ -64,8 +80,7 @@ class SettingsController final : public QObject {
     Q_PROPERTY(QString waveformSolidBaseColor READ waveformSolidBaseColor
                    WRITE setWaveformSolidBaseColor NOTIFY waveformSolidBaseColorChanged)
     Q_PROPERTY(QString waveformSolidProgressColor READ waveformSolidProgressColor
-                   WRITE setWaveformSolidProgressColor
-                   NOTIFY waveformSolidProgressColorChanged)
+                   WRITE setWaveformSolidProgressColor NOTIFY waveformSolidProgressColorChanged)
     Q_PROPERTY(QString waveformRgbBaseColor READ waveformRgbBaseColor
                    WRITE setWaveformRgbBaseColor NOTIFY waveformRgbBaseColorChanged)
     Q_PROPERTY(QString waveformRgbStartColor READ waveformRgbStartColor
@@ -74,6 +89,15 @@ class SettingsController final : public QObject {
                    WRITE setWaveformRgbMiddleColor NOTIFY waveformRgbMiddleColorChanged)
     Q_PROPERTY(QString waveformRgbEndColor READ waveformRgbEndColor
                    WRITE setWaveformRgbEndColor NOTIFY waveformRgbEndColorChanged)
+    Q_PROPERTY(QString waveformFrequencyLowColor READ waveformFrequencyLowColor
+                   WRITE setWaveformFrequencyLowColor
+                   NOTIFY waveformFrequencyLowColorChanged)
+    Q_PROPERTY(QString waveformFrequencyMidColor READ waveformFrequencyMidColor
+                   WRITE setWaveformFrequencyMidColor
+                   NOTIFY waveformFrequencyMidColorChanged)
+    Q_PROPERTY(QString waveformFrequencyHighColor READ waveformFrequencyHighColor
+                   WRITE setWaveformFrequencyHighColor
+                   NOTIFY waveformFrequencyHighColorChanged)
     Q_PROPERTY(bool waveformRgbProgress READ waveformRgbProgress
                    WRITE setWaveformRgbProgress NOTIFY waveformRgbProgressChanged)
     Q_PROPERTY(bool waveformHoverTimePreview READ waveformHoverTimePreview
@@ -84,16 +108,24 @@ class SettingsController final : public QObject {
                    WRITE setWaveformCanvasHeight NOTIFY waveformCanvasHeightChanged)
     Q_PROPERTY(bool waveformCanvasLocked READ waveformCanvasLocked
                    WRITE setWaveformCanvasLocked NOTIFY waveformCanvasLockedChanged)
+    Q_PROPERTY(bool listWaveformThumbnailEnabled
+                   READ listWaveformThumbnailEnabled
+                   WRITE setListWaveformThumbnailEnabled
+                   NOTIFY listWaveformThumbnailEnabledChanged)
+    Q_PROPERTY(QString listWaveformThumbnailMode
+                   READ listWaveformThumbnailMode
+                   WRITE setListWaveformThumbnailMode
+                   NOTIFY listWaveformThumbnailModeChanged)
     Q_PROPERTY(int spectrumColorMode READ spectrumColorMode WRITE setSpectrumColorMode
                    NOTIFY spectrumColorModeChanged)
-    Q_PROPERTY(QString spectrumSolidColor READ spectrumSolidColor WRITE setSpectrumSolidColor
-                   NOTIFY spectrumSolidColorChanged)
-    Q_PROPERTY(QString spectrumRgbStartColor READ spectrumRgbStartColor WRITE setSpectrumRgbStartColor
-                   NOTIFY spectrumRgbStartColorChanged)
-    Q_PROPERTY(QString spectrumRgbMiddleColor READ spectrumRgbMiddleColor WRITE setSpectrumRgbMiddleColor
-                   NOTIFY spectrumRgbMiddleColorChanged)
-    Q_PROPERTY(QString spectrumRgbEndColor READ spectrumRgbEndColor WRITE setSpectrumRgbEndColor
-                   NOTIFY spectrumRgbEndColorChanged)
+    Q_PROPERTY(QString spectrumSolidColor READ spectrumSolidColor
+                   WRITE setSpectrumSolidColor NOTIFY spectrumSolidColorChanged)
+    Q_PROPERTY(QString spectrumRgbStartColor READ spectrumRgbStartColor
+                   WRITE setSpectrumRgbStartColor NOTIFY spectrumRgbStartColorChanged)
+    Q_PROPERTY(QString spectrumRgbMiddleColor READ spectrumRgbMiddleColor
+                   WRITE setSpectrumRgbMiddleColor NOTIFY spectrumRgbMiddleColorChanged)
+    Q_PROPERTY(QString spectrumRgbEndColor READ spectrumRgbEndColor
+                   WRITE setSpectrumRgbEndColor NOTIFY spectrumRgbEndColorChanged)
     Q_PROPERTY(int replayGainMode READ replayGainMode WRITE setReplayGainMode
                    NOTIFY replayGainModeChanged)
     Q_PROPERTY(bool replayGainClipProtection READ replayGainClipProtection
@@ -102,6 +134,8 @@ class SettingsController final : public QObject {
     // Audio Tools
     Q_PROPERTY(QString defaultOutputDirectory READ defaultOutputDirectory
                    WRITE setDefaultOutputDirectory NOTIFY defaultOutputDirectoryChanged)
+    Q_PROPERTY(int parallelJobs READ parallelJobs WRITE setParallelJobs
+                   NOTIFY parallelJobsChanged)
     Q_PROPERTY(int overwritePolicy READ overwritePolicy WRITE setOverwritePolicy
                    NOTIFY overwritePolicyChanged)
     Q_PROPERTY(QString transcodeFormat READ transcodeFormat WRITE setTranscodeFormat
@@ -114,6 +148,13 @@ class SettingsController final : public QObject {
                    NOTIFY transcodeChannelsChanged)
     Q_PROPERTY(bool preserveMetadata READ preserveMetadata WRITE setPreserveMetadata
                    NOTIFY preserveMetadataChanged)
+    Q_PROPERTY(bool preserveCover READ preserveCover WRITE setPreserveCover
+                   NOTIFY preserveCoverChanged)
+    Q_PROPERTY(bool preserveDirectoryStructure READ preserveDirectoryStructure
+                   WRITE setPreserveDirectoryStructure
+                   NOTIFY preserveDirectoryStructureChanged)
+    Q_PROPERTY(bool extractVideoAudio READ extractVideoAudio WRITE setExtractVideoAudio
+                   NOTIFY extractVideoAudioChanged)
     Q_PROPERTY(bool keepPitchWhileSpeedChange READ keepPitchWhileSpeedChange
                    WRITE setKeepPitchWhileSpeedChange NOTIFY keepPitchWhileSpeedChangeChanged)
     Q_PROPERTY(bool vocalProtection READ vocalProtection WRITE setVocalProtection
@@ -173,7 +214,14 @@ public:
 
     // Appearance & Visualizer getters
     int themeMode() const noexcept;
-    bool glassEffect() const noexcept;
+    QString windowLayoutTheme() const;
+    int playerShellMode() const noexcept;
+    int skinColorMode() const noexcept;
+    QString skinPreset() const;
+    int skinCustomKind() const noexcept;
+    QString skinCustomColor() const;
+    QString skinCustomColorMiddle() const;
+    QString skinCustomColorEnd() const;
     int waveformMode() const noexcept;
     double waveformHeight() const noexcept;
     double waveformDensity() const noexcept;
@@ -185,11 +233,16 @@ public:
     QString waveformRgbStartColor() const;
     QString waveformRgbMiddleColor() const;
     QString waveformRgbEndColor() const;
+    QString waveformFrequencyLowColor() const;
+    QString waveformFrequencyMidColor() const;
+    QString waveformFrequencyHighColor() const;
     bool waveformRgbProgress() const noexcept;
     bool waveformHoverTimePreview() const noexcept;
     bool waveformPlaybackGuide() const noexcept;
     int waveformCanvasHeight() const noexcept;
     bool waveformCanvasLocked() const noexcept;
+    bool listWaveformThumbnailEnabled() const noexcept;
+    QString listWaveformThumbnailMode() const;
     int spectrumColorMode() const noexcept;
     QString spectrumSolidColor() const;
     QString spectrumRgbStartColor() const;
@@ -200,12 +253,16 @@ public:
 
     // Audio Tools getters
     QString defaultOutputDirectory() const;
+    int parallelJobs() const noexcept;
     int overwritePolicy() const noexcept;
     QString transcodeFormat() const;
     int transcodeBitrateKbps() const noexcept;
     int transcodeSampleRateHz() const noexcept;
     int transcodeChannels() const noexcept;
     bool preserveMetadata() const noexcept;
+    bool preserveCover() const noexcept;
+    bool preserveDirectoryStructure() const noexcept;
+    bool extractVideoAudio() const noexcept;
     bool keepPitchWhileSpeedChange() const noexcept;
     bool vocalProtection() const noexcept;
 
@@ -251,7 +308,14 @@ public:
 
     // Appearance & Visualizer setters
     void setThemeMode(int value);
-    void setGlassEffect(bool value);
+    void setWindowLayoutTheme(const QString& value);
+    void setPlayerShellMode(int value);
+    void setSkinColorMode(int value);
+    void setSkinPreset(const QString& value);
+    void setSkinCustomKind(int value);
+    void setSkinCustomColor(const QString& value);
+    void setSkinCustomColorMiddle(const QString& value);
+    void setSkinCustomColorEnd(const QString& value);
     void setWaveformMode(int value);
     void setWaveformHeight(double value);
     void setWaveformDensity(double value);
@@ -263,11 +327,16 @@ public:
     void setWaveformRgbStartColor(const QString& value);
     void setWaveformRgbMiddleColor(const QString& value);
     void setWaveformRgbEndColor(const QString& value);
+    void setWaveformFrequencyLowColor(const QString& value);
+    void setWaveformFrequencyMidColor(const QString& value);
+    void setWaveformFrequencyHighColor(const QString& value);
     void setWaveformRgbProgress(bool value);
     void setWaveformHoverTimePreview(bool value);
     void setWaveformPlaybackGuide(bool value);
     void setWaveformCanvasHeight(int value);
     void setWaveformCanvasLocked(bool value);
+    void setListWaveformThumbnailEnabled(bool value);
+    void setListWaveformThumbnailMode(const QString& value);
     void setSpectrumColorMode(int value);
     void setSpectrumSolidColor(const QString& value);
     void setSpectrumRgbStartColor(const QString& value);
@@ -278,12 +347,16 @@ public:
 
     // Audio Tools setters
     void setDefaultOutputDirectory(const QString& value);
+    void setParallelJobs(int value);
     void setOverwritePolicy(int value);
     void setTranscodeFormat(const QString& value);
     void setTranscodeBitrateKbps(int value);
     void setTranscodeSampleRateHz(int value);
     void setTranscodeChannels(int value);
     void setPreserveMetadata(bool value);
+    void setPreserveCover(bool value);
+    void setPreserveDirectoryStructure(bool value);
+    void setExtractVideoAudio(bool value);
     void setKeepPitchWhileSpeedChange(bool value);
     void setVocalProtection(bool value);
 
@@ -302,8 +375,15 @@ public:
     void setCleanTempOnExit(bool value);
     void setCacheSizeLimitMB(int value);
 
+    Q_INVOKABLE void selectDefaultSkin();
+    Q_INVOKABLE void selectSkinPreset(const QString& id);
+    Q_INVOKABLE void setSkinCustomConfiguration(
+        int kind, const QString& start, const QString& middle,
+        const QString& end);
     Q_INVOKABLE void resetToDefaults();
     Q_INVOKABLE void resetWaveformDefaults();
+    Q_INVOKABLE void resetWaveformFrequencyColors();
+    Q_INVOKABLE void cycleWaveformMode();
     Q_INVOKABLE void beginEdit();
     Q_INVOKABLE void commitEdit();
     Q_INVOKABLE void cancelEdit();
@@ -338,7 +418,15 @@ signals:
     void autoReadRatingChanged();
 
     void themeModeChanged();
-    void glassEffectChanged();
+    void windowLayoutThemeChanged();
+    void playerShellModeChanged();
+    void skinColorModeChanged();
+    void skinPresetChanged();
+    void skinCustomKindChanged();
+    void skinCustomColorChanged();
+    void skinCustomColorMiddleChanged();
+    void skinCustomColorEndChanged();
+    void skinConfigurationChanged();
     void waveformModeChanged();
     void waveformHeightChanged();
     void waveformDensityChanged();
@@ -350,11 +438,16 @@ signals:
     void waveformRgbStartColorChanged();
     void waveformRgbMiddleColorChanged();
     void waveformRgbEndColorChanged();
+    void waveformFrequencyLowColorChanged();
+    void waveformFrequencyMidColorChanged();
+    void waveformFrequencyHighColorChanged();
     void waveformRgbProgressChanged();
     void waveformHoverTimePreviewChanged();
     void waveformPlaybackGuideChanged();
     void waveformCanvasHeightChanged();
     void waveformCanvasLockedChanged();
+    void listWaveformThumbnailEnabledChanged();
+    void listWaveformThumbnailModeChanged();
     void spectrumColorModeChanged();
     void spectrumSolidColorChanged();
     void spectrumRgbStartColorChanged();
@@ -364,12 +457,16 @@ signals:
     void replayGainClipProtectionChanged();
 
     void defaultOutputDirectoryChanged();
+    void parallelJobsChanged();
     void overwritePolicyChanged();
     void transcodeFormatChanged();
     void transcodeBitrateKbpsChanged();
     void transcodeSampleRateHzChanged();
     void transcodeChannelsChanged();
     void preserveMetadataChanged();
+    void preserveCoverChanged();
+    void preserveDirectoryStructureChanged();
+    void extractVideoAudioChanged();
     void keepPitchWhileSpeedChangeChanged();
     void vocalProtectionChanged();
 
@@ -389,10 +486,20 @@ signals:
     void cacheTrimReport(qint64 bytesFreed, int filesRemoved);
 
 private:
+    friend class SettingsControllerTest;
+
     void load();
-    void saveAll();
-    void restoreDefaults();
-    void emitAllChanged();
+    void saveAll(bool includeMediaSettings = true);
+    void restoreDefaults(bool includeMediaSettings = true);
+    void emitAllChanged(bool includeMediaSettings = true);
+    void applySkinFields(int colorMode, const QString& preset, int customKind,
+                         const QString& customStart,
+                         const QString& customMiddle,
+                         const QString& customEnd);
+    void applySkinCustomConfiguration(int colorMode, int kind,
+                                      const QString& start,
+                                      const QString& middle,
+                                      const QString& end);
     void persistValue(const QString& key, const QVariant& value);
     void applyAutoStartWithWindows();
     void applyCommittedEffects();
@@ -400,6 +507,9 @@ private:
     void enforceCacheSizeLimit();
     static qint64 directorySizeBytes(const QString& path);
     static QString defaultMusicDirectory();
+    static QString resolveTestCacheDirectory(const QString& cacheLocation,
+                                             const QString& tempLocation,
+                                             const QString& appDataLocation);
     static QString defaultCacheDirectory();
     static QString defaultExportDir();
     static QString validatedLanguage(const QString& value);
@@ -419,9 +529,7 @@ private:
     int closeBehavior_ = 0;
     QString language_ = QStringLiteral("zh");
     bool setAsDefaultPlayer_ = false;
-    QStringList fileAssociations_ = {QStringLiteral("mp3"), QStringLiteral("wav"),
-        QStringLiteral("flac"), QStringLiteral("aac"), QStringLiteral("m4a"),
-        QStringLiteral("ogg")};
+    QStringList fileAssociations_;
 
     // Playback & Engine
     QString outputDevice_;
@@ -433,8 +541,15 @@ private:
     bool autoReadRating_ = true;
 
     // Appearance & Visualizer
-    int themeMode_ = 0;
-    bool glassEffect_ = true;
+    int themeMode_ = 2;
+    QString windowLayoutTheme_ = QStringLiteral("dual-window");
+    int playerShellMode_ = 0;
+    int skinColorMode_ = 0;
+    QString skinPreset_ = QStringLiteral("aurora");
+    int skinCustomKind_ = 0;
+    QString skinCustomColor_ = QStringLiteral("#D27722");
+    QString skinCustomColorMiddle_ = QStringLiteral("#D27722");
+    QString skinCustomColorEnd_ = QStringLiteral("#D27722");
     int waveformMode_ = 0;
     double waveformHeight_ = 0.8;
     double waveformDensity_ = 2.0;
@@ -446,11 +561,16 @@ private:
     QString waveformRgbStartColor_ = QStringLiteral("#00d4ff");
     QString waveformRgbMiddleColor_ = QStringLiteral("#7b2ff7");
     QString waveformRgbEndColor_ = QStringLiteral("#e62e9b");
+    QString waveformFrequencyLowColor_ = QStringLiteral("#ff647c");
+    QString waveformFrequencyMidColor_ = QStringLiteral("#3ed6ae");
+    QString waveformFrequencyHighColor_ = QStringLiteral("#8a7cff");
     bool waveformRgbProgress_ = false;
     bool waveformHoverTimePreview_ = true;
     bool waveformPlaybackGuide_ = false;
     int waveformCanvasHeight_ = 78;
     bool waveformCanvasLocked_ = true;
+    bool listWaveformThumbnailEnabled_ = true;
+    QString listWaveformThumbnailMode_ = QStringLiteral("Color36");
     int spectrumColorMode_ = 0;
     QString spectrumSolidColor_ = QStringLiteral("#0078d4");
     QString spectrumRgbStartColor_ = QStringLiteral("#00d4ff");
@@ -461,12 +581,16 @@ private:
 
     // Audio Tools
     QString defaultOutputDirectory_;
+    int parallelJobs_ = 5;
     int overwritePolicy_ = 0;
     QString transcodeFormat_ = QStringLiteral("MP3");
     int transcodeBitrateKbps_ = 320;
     int transcodeSampleRateHz_ = 44100;
     int transcodeChannels_ = 2;
     bool preserveMetadata_ = true;
+    bool preserveCover_ = true;
+    bool preserveDirectoryStructure_ = true;
+    bool extractVideoAudio_ = true;
     bool keepPitchWhileSpeedChange_ = true;
     bool vocalProtection_ = true;
 
@@ -483,6 +607,6 @@ private:
     QString cacheDirectory_;
     bool autoCleanCache_ = true;
     bool cleanTempOnExit_ = true;
-    int cacheSizeLimitMB_ = 1024;
+    int cacheSizeLimitMB_ = 10 * 1024;
     int currentCacheSizeMB_ = 0;
 };

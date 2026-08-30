@@ -7,7 +7,9 @@ Rectangle {
     id: root
     color: "transparent"
     property bool emptyMode: false
+    property bool showListWindowButton: true
     property bool volumeExpanded: false
+    readonly property bool compactTransport: width < 760
     signal openEqualizerRequested()
 
     function playbackModeName() {
@@ -31,9 +33,10 @@ Rectangle {
 
     Timer {
         id: volumeCloseTimer
-        interval: 280
+        objectName: "mainVolumeCloseTimer"
+        interval: 2000
         onTriggered: {
-            if (!volumeSlider.pressed && !volumeSlider.activeFocus)
+            if (!volumeSlider.pressed && !volumeHover.hovered)
                 root.volumeExpanded = false
         }
     }
@@ -44,13 +47,13 @@ Rectangle {
         anchors.left: parent.left
         anchors.leftMargin: 24
         anchors.verticalCenter: parent.verticalCenter
-        anchors.verticalCenterOffset: root.emptyMode ? -4 : -8
+        anchors.verticalCenterOffset: 0
         flat: true
         icon.source: Theme.icon("list-unordered")
         icon.color: WindowController.listWindowVisible
                     ? Theme.iconAccent : Theme.iconPrimary
-        icon.width: 24
-        icon.height: 24
+        icon.width: 20
+        icon.height: 20
         Accessible.name: WindowController.listWindowVisible
                          ? qsTr("Hide playlist window")
                          : qsTr("Show playlist window")
@@ -58,6 +61,7 @@ Rectangle {
         ToolTip.text: Accessible.name
         ToolTip.visible: hovered
         background: null
+        visible: root.showListWindowButton
     }
 
     RowLayout {
@@ -65,32 +69,19 @@ Rectangle {
         objectName: "centerPlaybackControls"
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.verticalCenter: parent.verticalCenter
-        anchors.verticalCenterOffset: root.emptyMode ? -4 : -8
+        anchors.verticalCenterOffset: 0
         spacing: root.emptyMode ? 28 : 16
 
         ToolButton {
-            objectName: "audioToolsButton"
-            flat: true
-            icon.source: Theme.icon("briefcase-4-line")
-            icon.color: Theme.iconPrimary
-            icon.width: root.emptyMode ? 28 : 24
-            icon.height: root.emptyMode ? 28 : 24
-            Accessible.name: qsTr("Open audio tools")
-            onClicked: WindowController.showAudioTools()
-            ToolTip.text: Accessible.name
-            ToolTip.visible: hovered
-            background: null
-        }
-
-        ToolButton {
             objectName: "equalizerButton"
+            visible: !root.compactTransport
             flat: true
             icon.source: Theme.icon("equalizer-line")
-            icon.color: Theme.isLight ? "#000000" : "#ffffff"
-            icon.width: root.emptyMode ? 28 : 24
-            icon.height: root.emptyMode ? 28 : 24
+            icon.color: Theme.iconPrimary
+            icon.width: 20
+            icon.height: 20
             contentItem.rotation: 90
-            Accessible.name: qsTr("十段图形均衡器")
+            Accessible.name: qsTr("十八段图形均衡器")
             onClicked: root.openEqualizerRequested()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
@@ -99,14 +90,14 @@ Rectangle {
 
         ToolButton {
             objectName: "waveformModeButton"
+            visible: !root.compactTransport
             flat: true
             icon.source: Theme.icon("waveform-switch")
             icon.color: Theme.iconPrimary
-            icon.width: root.emptyMode ? 28 : 24
-            icon.height: root.emptyMode ? 28 : 24
+            icon.width: 20
+            icon.height: 20
             Accessible.name: qsTr("Change waveform mode")
-            onClicked: SettingsController.waveformMode =
-                       (SettingsController.waveformMode + 1) % 3
+            onClicked: SettingsController.cycleWaveformMode()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
             background: null
@@ -194,8 +185,8 @@ Rectangle {
                 }
             }
             icon.color: Theme.iconPrimary
-            icon.width: 24
-            icon.height: 24
+            icon.width: 20
+            icon.height: 20
             Accessible.name: root.playbackModeName()
             onClicked: PlaybackController.cycleMode()
             ToolTip.text: Accessible.name
@@ -203,15 +194,28 @@ Rectangle {
             background: null
         }
 
-        Item {
-            id: volumeControl
-            Layout.preferredWidth: root.emptyMode
-                                   ? 44 : 44 + volumeSlider.width
-                                          + volumePercent.width
-            Layout.preferredHeight: 44
-            clip: false
+        ExperienceActions {
+            objectName: "experienceActions"
+            compact: root.compactTransport
+        }
+    }
+
+    Item {
+        id: volumeControl
+        objectName: "mainVolumeControl"
+        property alias expandedForQa: root.volumeExpanded
+        anchors.left: centerControls.right
+        anchors.leftMargin: 12
+        anchors.verticalCenter: centerControls.verticalCenter
+        width: root.emptyMode ? 44 : 44 + volumeSlider.width
+                                  + volumePercent.width
+                                  + (volumePercent.width > 0 ? 6 : 0)
+        height: 44
+        z: 10
+        clip: false
 
             HoverHandler {
+                id: volumeHover
                 onHoveredChanged: {
                     if (hovered) {
                         volumeCloseTimer.stop()
@@ -233,10 +237,10 @@ Rectangle {
                 flat: true
                 icon.source: PlaybackController.muted
                              ? Theme.icon("volume-mute-line")
-                             : Theme.icon("volume-up-fill")
+                             : Theme.icon("volume-up-line")
                 icon.color: Theme.iconPrimary
-                icon.width: 24
-                icon.height: 24
+                icon.width: 20
+                icon.height: 20
                 Accessible.name: PlaybackController.muted
                                  ? qsTr("Unmute") : qsTr("Mute")
                 onClicked: PlaybackController.toggleMuted()
@@ -306,7 +310,7 @@ Rectangle {
                     width: 10
                     height: 10
                     radius: 5
-                    color: "#ffffff"
+                    color: Theme.onBrandGradientText
                     border.width: 1
                     border.color: Theme.border
                 }
@@ -337,24 +341,89 @@ Rectangle {
                 }
             }
         }
-    }
 
-    ToolButton {
-        objectName: "miniPlayerButton"
+    RowLayout {
+        id: secondaryActions
+        objectName: "playerSecondaryActions"
         anchors.right: parent.right
         anchors.rightMargin: 24
         anchors.verticalCenter: parent.verticalCenter
-        anchors.verticalCenterOffset: -8
-        visible: !root.emptyMode
-        flat: true
-        icon.source: Theme.icon("picture-in-picture-2-line")
-        icon.color: Theme.iconPrimary
-        icon.width: 24
-        icon.height: 24
-        Accessible.name: qsTr("Switch to mini player")
-        onClicked: WindowController.showMini()
-        ToolTip.text: Accessible.name
-        ToolTip.visible: hovered
-        background: null
+        anchors.verticalCenterOffset: 0
+        spacing: root.compactTransport ? 4 : 14
+
+        ToolButton {
+            objectName: "audioToolsButton"
+            flat: true
+            icon.source: Theme.icon("briefcase-4-line")
+            icon.color: Theme.iconPrimary
+            icon.width: 20
+            icon.height: 20
+            Accessible.name: qsTr("Open audio tools")
+            onClicked: WindowController.showAudioTools()
+            ToolTip.text: Accessible.name
+            ToolTip.visible: hovered
+            background: null
+        }
+
+        ToolButton {
+            id: playerShellModeButton
+            objectName: "playerShellModeButton"
+            visible: !root.compactTransport
+            flat: true
+            icon.source: Theme.icon("player-shell-mode")
+            icon.color: Theme.iconPrimary
+            icon.width: 20
+            icon.height: 20
+            Accessible.name: qsTr("选择播放器皮肤模式")
+            onClicked: playerExperienceModeMenu.open()
+            ToolTip.text: Accessible.name
+            ToolTip.visible: hovered
+            background: null
+        }
+
+        ToolButton {
+            objectName: "miniPlayerButton"
+            visible: !root.emptyMode && !root.compactTransport
+            flat: true
+            icon.source: Theme.icon("picture-in-picture-2-line")
+            icon.color: Theme.iconPrimary
+            icon.width: 20
+            icon.height: 20
+            Accessible.name: qsTr("Switch to mini player")
+            onClicked: WindowController.showMini()
+            ToolTip.text: Accessible.name
+            ToolTip.visible: hovered
+            background: null
+        }
+    }
+
+    Menu {
+        id: playerExperienceModeMenu
+        objectName: "playerExperienceModeMenu"
+        parent: root
+        x: Math.max(8, root.width - implicitWidth - 56)
+        y: -implicitHeight - 6
+        width: 188
+
+        MenuItem {
+            objectName: "classicShellModeMenuItem"
+            text: qsTr("双窗口模式")
+            checkable: true
+            checked: SettingsController.playerShellMode === 0
+            onClicked: SettingsController.playerShellMode = 0
+        }
+        MenuItem {
+            objectName: "integratedShellModeMenuItem"
+            text: qsTr("单窗口模式")
+            checkable: true
+            checked: SettingsController.playerShellMode === 1
+            onClicked: SettingsController.playerShellMode = 1
+        }
+        background: Rectangle {
+            color: Theme.elevated
+            border.color: Theme.subtleGlassBorder
+            border.width: 1
+            radius: Theme.radiusSm
+        }
     }
 }

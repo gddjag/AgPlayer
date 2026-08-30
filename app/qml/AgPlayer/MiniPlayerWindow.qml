@@ -17,17 +17,18 @@ Window {
     title: "AgPlayer Mini"
     palette.window: Theme.background
     palette.windowText: Theme.primaryText
-    palette.base: Theme.elevated
-    palette.alternateBase: Theme.panel
+    palette.base: Theme.surfaceElevated
+    palette.alternateBase: Theme.surface
     palette.text: Theme.primaryText
-    palette.button: Theme.elevated
+    palette.button: Theme.surfaceElevated
     palette.buttonText: Theme.primaryText
-    palette.highlight: Theme.accent
-    palette.highlightedText: Theme.accentText
-    palette.mid: Theme.border
+    palette.highlight: Theme.highlight
+    palette.highlightedText: Theme.highlightText
+    palette.mid: Theme.opaqueBorder
 
     property var playback: PlaybackController
     property var windows: WindowController
+    property var waveformSession: null
     property int positionMs: playback ? playback.positionMs : 0
 
     property alias playPauseButton: controls.playPauseButton
@@ -47,13 +48,16 @@ Window {
         anchors.fill: parent
         anchors.margins: 2
         radius: Theme.windowRadius
-        color: SettingsController.glassEffect
-               ? Qt.rgba(Theme.background.r, Theme.background.g,
-                         Theme.background.b, 0.94)
-               : Theme.background
+        color: Theme.background
         border.color: Theme.border
         border.width: 1
         clip: true
+
+        SkinBackdrop {
+            anchors.fill: parent
+            anchors.margins: surface.border.width
+            radius: Math.max(0, surface.radius - surface.border.width)
+        }
 
         ColumnLayout {
             anchors.fill: parent
@@ -94,8 +98,8 @@ Window {
                         icon.source: Theme.icon("pushpin-line")
                         icon.color: windows && windows.alwaysOnTop ? Theme.cyan
                                                                    : Theme.secondaryText
-                        icon.width: 15
-                        icon.height: 15
+                        icon.width: 16
+                        icon.height: 16
                         Accessible.name: windows && windows.alwaysOnTop
                                          ? qsTr("Disable always on top")
                                          : qsTr("Pin on top")
@@ -115,8 +119,8 @@ Window {
                         Layout.preferredWidth: 32; Layout.preferredHeight: 32
                         icon.source: Theme.icon("restore-line")
                         icon.color: Theme.secondaryText
-                        icon.width: 15
-                        icon.height: 15
+                        icon.width: 16
+                        icon.height: 16
                         Accessible.name: qsTr("Restore main window")
                         onClicked: windows.showMain()
                         background: Rectangle {
@@ -131,8 +135,8 @@ Window {
                         Layout.preferredWidth: 32; Layout.preferredHeight: 32
                         icon.source: Theme.icon("subtract-line")
                         icon.color: Theme.secondaryText
-                        icon.width: 15
-                        icon.height: 15
+                        icon.width: 16
+                        icon.height: 16
                         Accessible.name: qsTr("Minimize")
                         onClicked: miniWindow.showMinimized()
                         background: Rectangle {
@@ -147,12 +151,12 @@ Window {
                         Layout.preferredWidth: 32; Layout.preferredHeight: 32
                         icon.source: Theme.icon("close-line")
                         icon.color: Theme.secondaryText
-                        icon.width: 15
-                        icon.height: 15
+                        icon.width: 16
+                        icon.height: 16
                         Accessible.name: qsTr("Close")
                         onClicked: windows.requestClose()
                         background: Rectangle {
-                            color: parent.hovered ? Theme.favoriteRed
+                            color: parent.hovered ? Theme.danger
                                                   : "transparent"
                             radius: Theme.radiusSm
                         }
@@ -172,6 +176,7 @@ Window {
                 Layout.fillHeight: true
                 playback: miniWindow.playback
                 windows: miniWindow.windows
+                waveformSession: miniWindow.waveformSession
             }
         }
     }

@@ -3,11 +3,17 @@
 #include "format_converter.hpp"
 #include "import_controller.hpp"
 #include "library_model.hpp"
+#include "library_manager_controller.hpp"
+#include "library_navigation_model.hpp"
 #include "metadata_editor.hpp"
 #include "native_drop_router.hpp"
 #include "playback_controller.hpp"
+#include "playlist_model.hpp"
 #include "qml_registration.hpp"
 #include "settings_controller.hpp"
+#include "tag_model.hpp"
+#include "theme_manager.hpp"
+#include "track_waveform_thumbnail_provider.hpp"
 #include "waveform_provider.hpp"
 #include "window_controller.hpp"
 
@@ -20,6 +26,9 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QKeyEvent>
 #include <QMimeData>
 #include <QPointer>
 #include <QQmlComponent>
@@ -172,6 +181,83 @@ public:
         return enter.isAccepted() && drop.isAccepted();
     }
 
+    Q_INVOKABLE bool sendTrackIds(QObject* target, const QStringList& trackIds)
+    {
+        auto* item = qobject_cast<QQuickItem*>(target);
+        QWindow* window = item == nullptr ? qobject_cast<QWindow*>(target)
+                                           : item->window();
+        if (window == nullptr || trackIds.isEmpty()) return false;
+
+        QJsonArray values;
+        for (const QString& trackId : trackIds) values.append(trackId);
+        QMimeData mime;
+        mime.setData("application/x-agplayer-track-ids",
+                     QJsonDocument(values).toJson(QJsonDocument::Compact));
+        const QPointF scenePosition = item != nullptr
+            ? item->mapToScene(QPointF(item->width() / 2.0,
+                                       item->height() / 2.0))
+            : QPointF(window->width() / 2.0, window->height() / 2.0);
+        QDragEnterEvent enter(scenePosition.toPoint(), Qt::MoveAction, &mime,
+                              Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(window, &enter);
+        QDropEvent drop(scenePosition, Qt::MoveAction, &mime,
+                        Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(window, &drop);
+        return enter.isAccepted() && drop.isAccepted();
+    }
+
+    Q_INVOKABLE bool sendKey(QObject* target, int key)
+    {
+        auto* item = qobject_cast<QQuickItem*>(target);
+        QWindow* window = item == nullptr ? qobject_cast<QWindow*>(target)
+                                           : item->window();
+        if (window == nullptr) return false;
+
+        QKeyEvent press(QEvent::KeyPress, key, Qt::NoModifier);
+        QCoreApplication::sendEvent(window, &press);
+        QKeyEvent release(QEvent::KeyRelease, key, Qt::NoModifier);
+        QCoreApplication::sendEvent(window, &release);
+        return true;
+    }
+
+    Q_INVOKABLE bool registerListDropWindow(QObject* target)
+    {
+        auto* window = qobject_cast<QWindow*>(target);
+        if (window == nullptr) return false;
+        listDrops_ = std::make_unique<NativeDropRouter>();
+        listDrops_->registerWindow(window, NativeDropRouter::Target::List);
+        const QPointer<QObject> guardedWindow = window;
+        listDrops_->registerHitTarget(
+            window, NativeDropRouter::Target::ResourceFolder,
+            [guardedWindow](const QPointF& position) {
+                if (guardedWindow == nullptr) return false;
+                QVariant hit;
+                return QMetaObject::invokeMethod(
+                           guardedWindow, "resourceDropContainsPoint",
+                           Q_RETURN_ARG(QVariant, hit),
+                           Q_ARG(QVariant, position.x()),
+                           Q_ARG(QVariant, position.y()))
+                    && hit.toBool();
+            });
+        connect(listDrops_.get(), &NativeDropRouter::pathsDropped, window,
+                [guardedWindow](const NativeDropRouter::Target dropTarget,
+                                const QStringList& paths) {
+            if (guardedWindow == nullptr) return;
+            QList<QUrl> urls;
+            urls.reserve(paths.size());
+            for (const QString& path : paths) {
+                urls.append(QUrl::fromLocalFile(path));
+            }
+            const char* method = dropTarget
+                    == NativeDropRouter::Target::ResourceFolder
+                ? "handleResourceDropUrls" : "handleListDropUrls";
+            QMetaObject::invokeMethod(
+                guardedWindow, method,
+                Q_ARG(QVariant, QVariant::fromValue(urls)));
+        });
+        return true;
+    }
+
     Q_INVOKABLE bool sendWindowsDropFiles(QObject* target,
                                           const QList<QUrl>& urls)
     {
@@ -270,9 +356,44 @@ public:
             ? QUrl::fromLocalFile(copyPath) : QUrl{};
     }
 
+    Q_INVOKABLE QUrl createDropDirectory()
+    {
+        if (!dropDirectory_.isValid()) return {};
+        const QString path = dropDirectory_.filePath(
+            QStringLiteral("resource-%1").arg(
+                QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        return QDir().mkpath(path) ? QUrl::fromLocalFile(path) : QUrl{};
+    }
+
+    Q_INVOKABLE QUrl createNonAudioDropFile()
+    {
+        if (!dropDirectory_.isValid()) return {};
+        const QString path = dropDirectory_.filePath(
+            QStringLiteral("ignored-%1.txt").arg(
+                QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        QFile file(path);
+        return file.open(QIODevice::WriteOnly) && file.write("not audio") > 0
+            ? QUrl::fromLocalFile(path) : QUrl{};
+    }
+
+    Q_INVOKABLE QUrl missingDropUrl() const
+    {
+        return dropDirectory_.isValid()
+            ? QUrl::fromLocalFile(dropDirectory_.filePath(
+                QStringLiteral("missing-%1.mp3").arg(
+                    QUuid::createUuid().toString(QUuid::WithoutBraces))))
+            : QUrl{};
+    }
+
+    Q_INVOKABLE bool pathExists(const QUrl& url) const
+    {
+        return url.isLocalFile() && QFileInfo::exists(url.toLocalFile());
+    }
+
 private:
     QPointer<LibraryModel> library_;
     QTemporaryDir dropDirectory_;
+    std::unique_ptr<NativeDropRouter> listDrops_;
 };
 
 class QmlMainWindowSetup final : public QObject {
@@ -296,12 +417,23 @@ public slots:
         QStandardPaths::setTestModeEnabled(true);
         QCoreApplication::setOrganizationName("AgPlayer");
         QCoreApplication::setApplicationName("AgPlayer-test");
-        QSettings().remove(QStringLiteral("windows/settingsGeometry"));
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                           settingsDirectory_.path());
+        // Keep edit-session expectations independent of test order and avoid
+        // touching the real Windows registry from an isolated UI test.
+        QSettings().clear();
 
         if (ag_player_create(&core_) != AG_OK) {
             return;
         }
         library_ = std::make_unique<LibraryModel>();
+        playlists_ = std::make_unique<PlaylistModel>(
+            runtimeDataDirectory_.filePath(QStringLiteral("playlists.json")));
+        playlists_->load();
+        tagModel_ = std::make_unique<TagModel>(
+            library_.get(),
+            runtimeDataDirectory_.filePath(QStringLiteral("tags.json")));
         nativeDropHelper_.setLibraryModel(library_.get());
         playback_ = std::make_unique<PlaybackController>(core_, library_.get());
         importer_ = std::make_unique<ImportController>(library_.get());
@@ -312,13 +444,41 @@ public slots:
         filenameProcessor_->setLibraryModel(library_.get());
         formatConverter_ = std::make_unique<FormatConverter>();
         settings_ = std::make_unique<SettingsController>();
+        themeManager_ = std::make_unique<ThemeManager>(*qGuiApp);
+        themeSettings_ = std::make_unique<ThemeSettingsSynchronizer>(
+            *themeManager_, *settings_);
         waveformProvider_ = std::make_unique<WaveformProvider>(settings_.get());
+        thumbnailProvider_ = std::make_unique<TrackWaveformThumbnailProvider>(
+            settings_->cacheDirectory());
+        QObject::connect(
+            settings_.get(), &SettingsController::cacheDirectoryChanged,
+            thumbnailProvider_.get(), [this] {
+                thumbnailProvider_->setCacheDirectory(
+                    settings_->cacheDirectory());
+            });
+        libraryManager_ = std::make_unique<LibraryManagerController>();
+        libraryManager_->setStoragePath(runtimeDataDirectory_.filePath(
+            QStringLiteral("resource-roots.json")));
+        libraryManager_->setLibraryDataPath(runtimeDataDirectory_.filePath(
+            QStringLiteral("library.json")));
+        libraryManager_->setLibraryModel(library_.get());
+        libraryManager_->setImportController(importer_.get());
+        libraryNavigation_ = std::make_unique<LibraryNavigationModel>(
+            library_.get(), playlists_.get(), tagModel_.get(),
+            libraryManager_.get());
 
         register_agplayer_qml_types(library_.get(), playback_.get(),
                                     importer_.get(), windows_.get(),
                                     audioTools_.get(), metadataEditor_.get(),
                                     formatConverter_.get(), filenameProcessor_.get(),
-                                    settings_.get(), waveformProvider_.get());
+                                    settings_.get(), waveformProvider_.get(),
+                                    playlists_.get(), nullptr, nullptr,
+                                    AgPlayerQmlRuntimeModels{
+                                        tagModel_.get(),
+                                        libraryNavigation_.get(),
+                                        libraryManager_.get(),
+                                        thumbnailProvider_.get(),
+                                        themeManager_.get()});
     }
 
     void qmlEngineAvailable(QQmlEngine* engine)
@@ -330,6 +490,14 @@ public slots:
             "testAudioUrl", QUrl::fromLocalFile(fixture));
         engine->rootContext()->setContextProperty("nativeDropHelper",
                                                   &nativeDropHelper_);
+        engine->rootContext()->setContextProperty(
+            "expectedTagModel", tagModel_.get());
+        engine->rootContext()->setContextProperty(
+            "expectedLibraryNavigationModel", libraryNavigation_.get());
+        engine->rootContext()->setContextProperty(
+            "expectedLibraryManagerController", libraryManager_.get());
+        engine->rootContext()->setContextProperty(
+            "expectedThumbnailProvider", thumbnailProvider_.get());
 
         component_ = std::make_unique<QQmlComponent>(engine);
         component_->loadFromModule("AgPlayer", "Main");
@@ -377,8 +545,12 @@ public slots:
     }
 
 private:
+    QTemporaryDir settingsDirectory_;
     ag_player* core_ = nullptr;
+    QTemporaryDir runtimeDataDirectory_;
     std::unique_ptr<LibraryModel> library_;
+    std::unique_ptr<PlaylistModel> playlists_;
+    std::unique_ptr<TagModel> tagModel_;
     std::unique_ptr<PlaybackController> playback_;
     std::unique_ptr<ImportController> importer_;
     std::unique_ptr<WindowController> windows_;
@@ -387,7 +559,12 @@ private:
     std::unique_ptr<FilenameProcessor> filenameProcessor_;
     std::unique_ptr<FormatConverter> formatConverter_;
     std::unique_ptr<SettingsController> settings_;
+    std::unique_ptr<ThemeManager> themeManager_;
+    std::unique_ptr<ThemeSettingsSynchronizer> themeSettings_;
     std::unique_ptr<WaveformProvider> waveformProvider_;
+    std::unique_ptr<TrackWaveformThumbnailProvider> thumbnailProvider_;
+    std::unique_ptr<LibraryManagerController> libraryManager_;
+    std::unique_ptr<LibraryNavigationModel> libraryNavigation_;
     std::unique_ptr<NativeDropRouter> nativeDrops_;
     std::unique_ptr<QQmlComponent> component_;
     QObject* mainWindow_ = nullptr;

@@ -6,9 +6,11 @@
 #include <QFileSystemWatcher>
 #include <QFutureWatcher>
 #include <QPointer>
+#include <QHash>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantList>
+#include <QVariantMap>
 
 #include <atomic>
 #include <memory>
@@ -19,6 +21,9 @@ class LibraryManagerController : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(LibraryModel* libraryModel READ libraryModel WRITE setLibraryModel NOTIFY libraryModelChanged)
     Q_PROPERTY(QStringList monitoredFolders READ monitoredFolders NOTIFY monitoredFoldersChanged)
+    Q_PROPERTY(QStringList resourceDirectories READ resourceDirectories
+                   NOTIFY resourceTopologyChanged)
+    Q_PROPERTY(QString audioFileNameFilter READ audioFileNameFilter CONSTANT)
     Q_PROPERTY(bool scanning READ scanning NOTIFY scanningChanged)
     Q_PROPERTY(int progress READ progress NOTIFY progressChanged)
     Q_PROPERTY(int totalCount READ totalCount NOTIFY summaryChanged)
@@ -38,6 +43,8 @@ class LibraryManagerController : public QAbstractListModel {
                    WRITE setImportController NOTIFY importControllerChanged)
     Q_PROPERTY(QString storagePath READ storagePath WRITE setStoragePath
                    NOTIFY storagePathChanged)
+    Q_PROPERTY(QString lastPersistenceError READ lastPersistenceError
+                   NOTIFY persistenceStateChanged)
     Q_PROPERTY(QString libraryDataPath READ libraryDataPath WRITE setLibraryDataPath
                    NOTIFY libraryDataPathChanged)
     Q_PROPERTY(QString lastBackupPath READ lastBackupPath NOTIFY backupStateChanged)
@@ -55,6 +62,9 @@ class LibraryManagerController : public QAbstractListModel {
     Q_PROPERTY(int pageCount READ pageCount NOTIFY filterChanged)
 
 public:
+    enum class DropPathKind { Invalid, Directory, AudioFile, OtherFile };
+    Q_ENUM(DropPathKind)
+
     enum Role { TrackIdRole = Qt::UserRole + 1, PathRole, TitleRole, ArtistRole,
                 AlbumRole, FormatRole, StatusRole, ContentHashRole,
                 DuplicateGroupRole, CoverRole, FavoriteRole, RatingRole,
@@ -70,9 +80,15 @@ public:
     LibraryModel* libraryModel() const noexcept;
     void setLibraryModel(LibraryModel* model);
     QStringList monitoredFolders() const;
+    QStringList resourceDirectories() const;
+    QString audioFileNameFilter() const;
     Q_INVOKABLE bool addMonitoredFolder(const QString& folder);
     Q_INVOKABLE bool addMonitoredFolderUrl(const QUrl& folder);
+    Q_INVOKABLE QVariantMap classifyDropUrl(const QUrl& url) const;
+    Q_INVOKABLE bool pathIsWithin(const QString& candidate,
+                                  const QString& root) const;
     Q_INVOKABLE bool removeMonitoredFolder(const QString& folder);
+    Q_INVOKABLE bool removeTrackFromLibrary(const QString& trackId);
     Q_INVOKABLE void rescan();
     Q_INVOKABLE void cancelScan();
     Q_INVOKABLE QVariantList duplicateGroups() const;
@@ -80,6 +96,7 @@ public:
     void setImportController(ImportController* controller);
     QString storagePath() const;
     void setStoragePath(const QString& path);
+    QString lastPersistenceError() const;
     QString libraryDataPath() const;
     void setLibraryDataPath(const QString& path);
     QString lastBackupPath() const;
@@ -123,12 +140,15 @@ public:
 signals:
     void libraryModelChanged();
     void monitoredFoldersChanged();
+    void resourceRootsChanged();
+    void resourceTopologyChanged();
     void scanningChanged();
     void progressChanged();
     void summaryChanged();
     void scanFinished();
     void importControllerChanged();
     void storagePathChanged();
+    void persistenceStateChanged();
     void libraryDataPathChanged();
     void backupStateChanged();
     void filterChanged();
@@ -145,7 +165,7 @@ private:
     void rebuildDirectoryWatches();
     void applyDirectoryWatches(const QStringList& directories);
     void loadMonitoredFolders();
-    void saveMonitoredFolders() const;
+    bool saveMonitoredFolders();
     QStringList discoverAudioFiles() const;
     void rebuildVisibleRows();
     bool matchesFilter(const IssueRow& issue) const;
@@ -165,7 +185,10 @@ private:
     int untaggedCount_ = 0;
     int damagedCount_ = 0;
     QStringList monitoredRoots_;
+    QHash<QString, QString> excludedPaths_;
+    QStringList resourceDirectories_;
     QString storagePath_;
+    QString lastPersistenceError_;
     QString libraryDataPath_;
     QString lastBackupPath_;
     QString lastBackupError_;

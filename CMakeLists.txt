@@ -1,19 +1,23 @@
 cmake_minimum_required(VERSION 3.28)
 
+include(cmake/AgPlayerVersion.cmake)
+
 if(POLICY CMP0174)
     cmake_policy(SET CMP0174 NEW)
 endif()
 
-project(AgPlayer VERSION 1.0.0 LANGUAGES C CXX)
+project(AgPlayer VERSION "${AGPLAYER_VERSION}" LANGUAGES C CXX)
+
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/generated")
+configure_file(
+    "${CMAKE_SOURCE_DIR}/cmake/agplayer_version.hpp.in"
+    "${CMAKE_BINARY_DIR}/generated/agplayer_version.hpp"
+    @ONLY
+)
 
 option(AG_ENABLE_AUDIO_EDITOR "Enable audio editor" ON)
-option(AG_ENABLE_NATIVE_RECORDING "Enable native recording" ON)
 option(AG_ENABLE_TIME_PITCH "Enable time and pitch processing" ON)
-
-if(NOT WIN32)
-    set(AG_ENABLE_NATIVE_RECORDING OFF CACHE BOOL
-        "Native recording is currently implemented on Windows" FORCE)
-endif()
+unset(AG_ENABLE_NATIVE_RECORDING CACHE)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -29,6 +33,7 @@ find_package(Qt6 6.7 REQUIRED COMPONENTS
     Gui
     Quick
     Qml
+    QmlWorkerScript
     QuickControls2
     Concurrent
     Test

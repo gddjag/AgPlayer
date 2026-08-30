@@ -1,5 +1,6 @@
 #include "audio_engine.hpp"
 
+#include "audio_stream_source.hpp"
 #include "decoder.hpp"
 #include "pcm_ring_buffer.hpp"
 
@@ -133,6 +134,65 @@ std::string device_id_token(const ma_backend backend,
 
 } // namespace
 
+class PlaybackDecoder final {
+public:
+    ag_result open(const std::string& path) noexcept
+    {
+        stream_.reset();
+        return file_.open(path);
+    }
+
+    ag_result open(const std::string& path, const int sampleRate,
+                   const int channels) noexcept
+    {
+        stream_.reset();
+        return file_.open(path, sampleRate, channels);
+    }
+
+    ag_result open(std::shared_ptr<IAudioStreamSource> stream) noexcept
+    {
+        if (!stream || stream->metadata().sample_rate <= 0
+            || stream->metadata().channels <= 0
+            || stream->metadata().channels > 2
+            || stream->metadata().duration_ms <= 0) {
+            return AG_INVALID_ARGUMENT;
+        }
+        file_.close();
+        stream_ = std::move(stream);
+        return AG_OK;
+    }
+
+    void close() noexcept
+    {
+        stream_.reset();
+        file_.close();
+    }
+
+    [[nodiscard]] bool is_open() const noexcept
+    {
+        return stream_ != nullptr || file_.is_open();
+    }
+
+    [[nodiscard]] ag_result read(DecodedAudioBlock& block) noexcept
+    {
+        return stream_ ? stream_->read(block) : file_.read(block);
+    }
+
+    [[nodiscard]] ag_result seek(const std::int64_t positionMs) noexcept
+    {
+        return stream_ ? stream_->seek(positionMs) : file_.seek(positionMs);
+    }
+
+    [[nodiscard]] const MediaMetadata& metadata() const noexcept
+    {
+        return stream_ ? stream_->metadata() : file_.metadata();
+    }
+
+private:
+    Decoder file_;
+    std::shared_ptr<IAudioStreamSource> stream_;
+};
+
 class AudioEngine::Impl final {
 public:
     Impl(const AudioBackend backend, const std::size_t buffer_frames)
@@ -173,6 +233,69 @@ public:
         }
     }
 
+    ag_result load_stream(std::shared_ptr<IAudioStreamSource> stream) noexcept
+    {
+        if (!stream) return AG_INVALID_ARGUMENT;
+        const std::lock_guard<std::recursive_mutex> controlLock(control_mutex_);
+        try {
+            shutdown_loaded_media();
+            state_.store(EngineState::Loading, std::memory_order_release);
+            session_.set_queue({"agplayer://editor-stream"}, 0U);
+            session_.set_mode(PlaybackMode::Sequential);
+            const ag_result decodeResult = decoder_.open(std::move(stream));
+            if (decodeResult != AG_OK) return fail_load(decodeResult);
+            editor_stream_ = true;
+            sample_rate_.store(decoder_.metadata().sample_rate,
+                               std::memory_order_release);
+            publish_equalizer_for_rate(decoder_.metadata().sample_rate);
+            channels_ = decoder_.metadata().channels;
+            duration_ms_.store(decoder_.metadata().duration_ms,
+                               std::memory_order_release);
+            ring_buffer_ = std::make_unique<PcmRingBuffer>(
+                buffer_frames_, static_cast<std::size_t>(channels_));
+            const ag_result deviceResult = initialize_device();
+            if (deviceResult != AG_OK) return fail_load(deviceResult);
+            reset_timeline(0);
+            loaded_ = true;
+            terminal_error_.store(AG_OK, std::memory_order_release);
+            state_.store(EngineState::Stopped, std::memory_order_release);
+            const ag_result threadResult = start_decode_thread();
+            if (threadResult != AG_OK) return fail_load(threadResult);
+            return AG_OK;
+        } catch (...) {
+            return fail_load(AG_INTERNAL_ERROR);
+        }
+    }
+
+    ag_result replace_stream(std::shared_ptr<IAudioStreamSource> stream) noexcept
+    {
+        if (!stream) return AG_INVALID_ARGUMENT;
+        const std::lock_guard<std::recursive_mutex> controlLock(control_mutex_);
+        const MediaMetadata& metadata = stream->metadata();
+        if (!loaded_ || !editor_stream_
+            || metadata.sample_rate != sample_rate_.load(std::memory_order_acquire)
+            || metadata.channels != channels_) {
+            return load_stream(std::move(stream));
+        }
+        try {
+            state_.store(EngineState::Stopped, std::memory_order_release);
+            if (stop_output() != AG_OK) return enter_error(AG_DEVICE_ERROR);
+            stop_decode_thread();
+            const ag_result decodeResult = decoder_.open(std::move(stream));
+            if (decodeResult != AG_OK) return enter_error(decodeResult);
+            duration_ms_.store(decoder_.metadata().duration_ms,
+                               std::memory_order_release);
+            ring_buffer_->clear();
+            reset_timeline(0);
+            terminal_error_.store(AG_OK, std::memory_order_release);
+            state_.store(EngineState::Stopped, std::memory_order_release);
+            const ag_result threadResult = start_decode_thread();
+            return threadResult == AG_OK ? AG_OK : enter_error(threadResult);
+        } catch (...) {
+            return enter_error(AG_INTERNAL_ERROR);
+        }
+    }
+
     ag_result set_queue(std::vector<std::string> paths,
                         const std::size_t start_index) noexcept
     {
@@ -208,6 +331,7 @@ public:
             control_mutex_);
         try {
             shutdown_loaded_media();
+            editor_stream_ = false;
             state_.store(EngineState::Loading, std::memory_order_release);
             if (scope_size > 0U) {
                 session_.set_scoped_queue(std::move(paths), start_index,
@@ -656,7 +780,7 @@ public:
         const std::size_t frames = ring_buffer_ == nullptr
                                        ? 0U
                                        : ring_buffer_->read(output, requested_frames);
-        equalizer_.process(output, frames, channels_);
+        equalizer_.process(output, frames, channels);
         const float gain = muted_.load(std::memory_order_relaxed)
                                ? 0.0F
                                : volume_.load(std::memory_order_relaxed)
@@ -1347,7 +1471,24 @@ private:
                         }
                     }
                     decode_eof_.store(true, std::memory_order_release);
-                    return;
+                    // Keep the decoder-owning thread parked at EOF. A later
+                    // seek can then wake it and reuse the open decoder instead
+                    // of paying for a thread join/restart on every scrub near
+                    // the end of a short track. The wait is dormant (zero
+                    // polling CPU) and stop/unload wakes it through seek_cv_.
+                    {
+                        std::unique_lock<std::mutex> lock(seek_mutex_);
+                        seek_cv_.wait(lock, [this] {
+                            return seek_requested_.load(
+                                       std::memory_order_acquire)
+                                   || stop_decode_.load(
+                                          std::memory_order_acquire);
+                        });
+                    }
+                    if (stop_decode_.load(std::memory_order_acquire)) {
+                        return;
+                    }
+                    continue;
                 }
 
                 bool seek_preempted = false;
@@ -1567,6 +1708,9 @@ private:
 
     ag_result restore_published_decoder() noexcept
     {
+        if (editor_stream_) {
+            return decoder_.is_open() ? AG_OK : AG_INVALID_ARGUMENT;
+        }
         const std::size_t published_index = session_.index();
         if (decode_track_index_ == published_index && decoder_.is_open()) {
             return AG_OK;
@@ -1698,6 +1842,7 @@ private:
             }
         }
         decoder_.close();
+        editor_stream_ = false;
         ring_buffer_.reset();
         session_.clear();
         loaded_ = false;
@@ -1768,6 +1913,7 @@ private:
             settings = equalizer_settings_;
             revision = equalizer_revision_;
         }
+
         equalizer_sample_rate_status_.store(sample_rate,
                                             std::memory_order_release);
         if (!is_graphic_eq_sample_rate_supported(sample_rate)) {
@@ -1782,6 +1928,7 @@ private:
                                                std::memory_order_release);
             return;
         }
+
         const auto program = prepare_graphic_eq(settings, sample_rate, revision);
         if (!program.has_value()) {
             equalizer_active_status_.store(false, std::memory_order_release);
@@ -1798,7 +1945,7 @@ private:
     static constexpr std::int64_t no_pending_boundary = -1;
     static constexpr std::int64_t publishing_boundary = -2;
     std::size_t buffer_frames_;
-    Decoder decoder_;
+    PlaybackDecoder decoder_;
     std::unique_ptr<PcmRingBuffer> ring_buffer_;
     PcmRingBuffer spectrum_tap_{spectrum_tap_capacity, 1U};
     std::array<float, spectrum_fft_size> spectrum_history_{};
@@ -1810,6 +1957,7 @@ private:
     std::atomic<bool> context_initialized_{false};
     std::atomic<bool> device_initialized_{false};
     bool loaded_ = false;
+    bool editor_stream_ = false;
     std::string selected_device_id_;
     bool exclusive_mode_ = false;
     std::atomic<bool> active_exclusive_mode_{false};
@@ -1874,6 +2022,18 @@ AudioEngine::~AudioEngine() = default;
 ag_result AudioEngine::load(const std::string& utf8_path) noexcept
 {
     return impl_->load(utf8_path);
+}
+
+ag_result AudioEngine::load_stream(
+    std::shared_ptr<IAudioStreamSource> stream) noexcept
+{
+    return impl_->load_stream(std::move(stream));
+}
+
+ag_result AudioEngine::replace_stream(
+    std::shared_ptr<IAudioStreamSource> stream) noexcept
+{
+    return impl_->replace_stream(std::move(stream));
 }
 
 ag_result AudioEngine::set_queue(std::vector<std::string> utf8_paths,

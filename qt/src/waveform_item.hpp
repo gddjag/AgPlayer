@@ -17,6 +17,10 @@ class WaveformItem : public QQuickItem {
     Q_PROPERTY(qreal cursorPosition READ cursorPosition WRITE setCursorPosition
                    NOTIFY cursorPositionChanged)
     Q_PROPERTY(qreal duration READ duration WRITE setDuration NOTIFY durationChanged)
+    Q_PROPERTY(qint64 visibleStartMs READ visibleStartMs WRITE setVisibleStartMs
+                   NOTIFY visibleStartMsChanged)
+    Q_PROPERTY(qint64 visibleEndMs READ visibleEndMs WRITE setVisibleEndMs
+                   NOTIFY visibleEndMsChanged)
     Q_PROPERTY(QColor waveformColor READ waveformColor WRITE setWaveformColor
                    NOTIFY waveformColorChanged)
     Q_PROPERTY(int visualMode READ visualMode WRITE setVisualMode
@@ -31,6 +35,12 @@ class WaveformItem : public QQuickItem {
                    WRITE setGradientMiddleColor NOTIFY gradientMiddleColorChanged)
     Q_PROPERTY(QColor gradientEndColor READ gradientEndColor
                    WRITE setGradientEndColor NOTIFY gradientEndColorChanged)
+    Q_PROPERTY(QColor frequencyLowColor READ frequencyLowColor
+                   WRITE setFrequencyLowColor NOTIFY frequencyLowColorChanged)
+    Q_PROPERTY(QColor frequencyMidColor READ frequencyMidColor
+                   WRITE setFrequencyMidColor NOTIFY frequencyMidColorChanged)
+    Q_PROPERTY(QColor frequencyHighColor READ frequencyHighColor
+                   WRITE setFrequencyHighColor NOTIFY frequencyHighColorChanged)
     Q_PROPERTY(bool rgbProgress READ rgbProgress WRITE setRgbProgress
                    NOTIFY rgbProgressChanged)
     Q_PROPERTY(qreal amplitudeScale READ amplitudeScale WRITE setAmplitudeScale
@@ -72,6 +82,10 @@ public:
 
     qreal duration() const;
     void setDuration(qreal duration);
+    qint64 visibleStartMs() const noexcept;
+    void setVisibleStartMs(qint64 startMs);
+    qint64 visibleEndMs() const noexcept;
+    void setVisibleEndMs(qint64 endMs);
 
     QColor waveformColor() const;
     void setWaveformColor(const QColor& color);
@@ -87,6 +101,12 @@ public:
     void setGradientMiddleColor(const QColor& color);
     QColor gradientEndColor() const;
     void setGradientEndColor(const QColor& color);
+    QColor frequencyLowColor() const;
+    void setFrequencyLowColor(const QColor& color);
+    QColor frequencyMidColor() const;
+    void setFrequencyMidColor(const QColor& color);
+    QColor frequencyHighColor() const;
+    void setFrequencyHighColor(const QColor& color);
     bool rgbProgress() const noexcept;
     void setRgbProgress(bool value);
     qreal amplitudeScale() const noexcept;
@@ -120,6 +140,8 @@ public:
 
     Q_INVOKABLE qint64 timeForX(qreal x) const;
     Q_INVOKABLE qreal pixelForTime(qint64 positionMs) const;
+    Q_INVOKABLE void zoomAt(qreal x, qreal factor);
+    Q_INVOKABLE void setVisibleRange(qint64 startMs, qint64 endMs);
     Q_INVOKABLE void setHoverPositionForInteraction(qint64 position);
 
     static constexpr int unplayedAlpha() noexcept { return 89; }
@@ -130,6 +152,8 @@ signals:
     void positionChanged();
     void cursorPositionChanged();
     void durationChanged();
+    void visibleStartMsChanged();
+    void visibleEndMsChanged();
     void waveformColorChanged();
     void visualModeChanged();
     void baseColorChanged();
@@ -137,6 +161,9 @@ signals:
     void gradientStartColorChanged();
     void gradientMiddleColorChanged();
     void gradientEndColorChanged();
+    void frequencyLowColorChanged();
+    void frequencyMidColorChanged();
+    void frequencyHighColorChanged();
     void rgbProgressChanged();
     void amplitudeScaleChanged();
     void hoverPositionChanged();
@@ -188,6 +215,8 @@ private:
     qint64 position_ = 0;
     qint64 cursorPosition_ = -1;
     qint64 duration_ = 0;
+    qint64 visibleStartMs_ = 0;
+    qint64 visibleEndMs_ = 0;
     QColor waveformColor_;
     int visualMode_ = -1;
     QColor baseColor_ = QColor(QStringLiteral("#9098a6"));
@@ -195,6 +224,9 @@ private:
     QColor gradientStartColor_ = QColor(QStringLiteral("#00d4ff"));
     QColor gradientMiddleColor_ = QColor(QStringLiteral("#7b2ff7"));
     QColor gradientEndColor_ = QColor(QStringLiteral("#e62e9b"));
+    QColor frequencyLowColor_ = QColor(QStringLiteral("#ff647c"));
+    QColor frequencyMidColor_ = QColor(QStringLiteral("#3ed6ae"));
+    QColor frequencyHighColor_ = QColor(QStringLiteral("#8a7cff"));
     bool rgbProgress_ = true;
     qreal amplitudeScale_ = 1.0;
     qint64 hoverPosition_ = -1;

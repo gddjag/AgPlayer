@@ -104,6 +104,39 @@ TestCase {
         compare(findChild(miniPlayer, "miniPlayButtonBody").border.width, 3)
     }
 
+    function test_generated_skin_reaches_mini_backdrop_and_ring() {
+        var savedMode = SettingsController.skinColorMode
+        var savedPreset = SettingsController.skinPreset
+        var savedKind = SettingsController.skinCustomKind
+        var savedStart = SettingsController.skinCustomColor
+        var savedMiddle = SettingsController.skinCustomColorMiddle
+        var savedEnd = SettingsController.skinCustomColorEnd
+
+        try {
+            SettingsController.selectSkinPreset("aurora")
+            wait(0)
+            var backdrop = findChild(miniPlayer, "skinBackdrop")
+            verify(backdrop, "mini player must render its root SkinBackdrop")
+            var gradientPaint = findChild(backdrop, "skinBackdropGradient")
+            verify(gradientPaint, "mini SkinBackdrop must render Theme stops")
+            compare(gradientPaint.gradient.stops[0].color.toString(),
+                    ThemeManager.backdropStart.toString())
+            compare(gradientPaint.gradient.stops[1].color.toString(),
+                    ThemeManager.backdropMiddle.toString())
+            compare(gradientPaint.gradient.stops[2].color.toString(),
+                    ThemeManager.backdropEnd.toString())
+            compare(findChild(miniPlayer, "miniPlayButtonBody")
+                    .border.color.toString(), Theme.accent.toString())
+        } finally {
+            SettingsController.setSkinCustomConfiguration(
+                        savedKind, savedStart, savedMiddle, savedEnd)
+            if (savedMode === 0)
+                SettingsController.selectDefaultSkin()
+            else if (savedMode === 1)
+                SettingsController.selectSkinPreset(savedPreset)
+        }
+    }
+
     function test_windows_keep_a_safe_position_when_playback_is_released() {
         miniPlayer.playback = null
         mainPlayer.playback = null
@@ -139,12 +172,16 @@ TestCase {
     function test_mini_player_can_cycle_the_shared_waveform_mode() {
         var button = findChild(miniPlayer, "miniWaveformModeButton")
         verify(button)
-        compare(button.icon.source.toString().endsWith("/pulse-line.svg"), true)
-        compare(button.icon.width, 17)
-        compare(button.icon.height, 17)
+        compare(button.icon.source.toString().endsWith("/waveform-switch.svg"), true)
+        compare(button.icon.width, 16)
+        compare(button.icon.height, 16)
         var previousMode = SettingsController.waveformMode
         mouseClick(button)
-        compare(SettingsController.waveformMode, (previousMode + 1) % 3)
+        var expectedMode = previousMode === 0 ? 3
+                         : previousMode === 3 ? 1
+                         : previousMode === 1 ? 2 : 0
+        compare(SettingsController.waveformMode,
+                expectedMode)
         SettingsController.waveformMode = previousMode
     }
 
@@ -195,14 +232,49 @@ TestCase {
         verify(percent)
         var metadataRow = findChild(miniPlayer, "miniMetadataRow")
         var title = findChild(miniPlayer, "miniTrackTitle")
+        var artist = findChild(miniPlayer, "miniArtist")
+        var album = findChild(miniPlayer, "miniAlbum")
+        var tags = findChild(miniPlayer, "miniTags")
         var rating = findChild(miniPlayer, "miniRating")
         var favorite = findChild(miniPlayer, "miniFavoriteButton")
-        verify(metadataRow && title && rating && favorite)
+        verify(metadataRow && title && artist && album && tags && rating && favorite)
+        var firstStar = findChild(rating, "miniRatingStar-0")
+        verify(firstStar, "rating stars must expose their native rendered item")
         verify(metadataRow.y >= title.y + title.height,
-               "rating and favorite must follow artist/album instead of the title")
+               "metadata must stay below the title")
+        compare(metadataRow.height, 26,
+                "metadata must use a compact single-row height")
+        compare(artist.wrapMode, Text.NoWrap)
+        compare(album.wrapMode, Text.NoWrap)
+        compare(tags.wrapMode, Text.NoWrap)
+        verify(artist.width <= artist.implicitWidth + 1,
+               "artist must not stretch and push later metadata right")
+        verify(album.width <= album.implicitWidth + 1,
+               "album must not stretch and push later metadata right")
+        if (tags.visible)
+            verify(tags.width <= tags.implicitWidth + 1,
+                   "tags must not stretch and push rating/favorite right")
+        verify(Math.abs(artist.mapToItem(metadataRow, 0, artist.height / 2).y
+                        - album.mapToItem(metadataRow, 0, album.height / 2).y) <= 1,
+               "artist and album must share one baseline")
+        verify(rating.x >= artist.x + artist.width,
+               "rating must follow the single metadata text run")
+        verify(favorite.x >= rating.x + rating.width,
+               "favorite must immediately follow rating in the metadata row")
+        verify(!tags.visible,
+               "empty tags must be omitted instead of showing placeholder text")
         compare(rating.spacing, 1)
-        compare(favorite.icon.width, 15)
-        compare(favorite.icon.height, 15)
+        compare(firstStar.width, firstStar.sourceSize.width)
+        compare(firstStar.height, firstStar.sourceSize.height)
+        compare(favorite.width, 16)
+        compare(favorite.height, 16)
+        compare(Math.round(firstStar.mapToItem(metadataRow, 0,
+                                               firstStar.height / 2).y),
+                Math.round(favorite.mapToItem(metadataRow, 0,
+                                              favorite.height / 2).y),
+                "stars and favorite must share one visual centerline")
+        compare(favorite.icon.width, 16)
+        compare(favorite.icon.height, 16)
         compare(findChild(miniPlayer, "miniElapsedTime").font.pixelSize, 11)
         compare(findChild(miniPlayer, "miniDurationTime").font.pixelSize, 11)
         compare(play.width, 34)
@@ -232,22 +304,39 @@ TestCase {
                     Theme.iconPrimary.toString())
         }
         playbackFake.mode = PlaybackController.Sequential
-        compare(button.icon.width, 17)
-        compare(button.icon.height, 17)
-        compare(findChild(miniPlayer, "miniMuteButton").icon.width, 17)
+        compare(button.icon.width, 16)
+        compare(button.icon.height, 16)
+        compare(findChild(miniPlayer, "miniMuteButton").icon.width, 16)
+    }
+
+    function test_mini_metadata_refreshes_when_current_track_tags_change() {
+        var artist = findChild(miniPlayer, "miniArtist")
+        var album = findChild(miniPlayer, "miniAlbum")
+        var tags = findChild(miniPlayer, "miniTags")
+        verify(artist && album && tags)
+        playbackFake.currentTrackId = miniMetadataTrackId
+        tryCompare(artist, "text", "Mini Artist")
+        tryCompare(album, "text", "Mini Album")
+        verify(!tags.visible)
+
+        verify(LibraryModel.setTags(miniMetadataTrackId, ["现场", "测试"]))
+        tryVerify(function() {
+            return tags.visible && tags.text === "现场、测试"
+        }, 1000, "mini player must react to tag edits on the playing track")
+        LibraryModel.setTags(miniMetadataTrackId, [])
     }
 
     function test_titlebar_uses_thin_system_icons() {
         verify(miniPlayer.pinButton.icon.source.toString().endsWith("/pushpin-line.svg"))
         verify(miniPlayer.restoreButton.icon.source.toString().endsWith("/restore-line.svg"))
-        compare(miniPlayer.pinButton.icon.width, 15)
-        compare(miniPlayer.restoreButton.icon.width, 15)
+        compare(miniPlayer.pinButton.icon.width, 16)
+        compare(miniPlayer.restoreButton.icon.width, 16)
         var close = findChild(miniPlayer, "miniCloseButton")
         var minimize = findChild(miniPlayer, "miniMinimizeButton")
         verify(close && minimize)
         verify(close.icon.source.toString().endsWith("/close-line.svg"))
-        compare(close.icon.width, 15)
-        compare(minimize.icon.width, 15)
+        compare(close.icon.width, 16)
+        compare(minimize.icon.width, 16)
     }
 
     function test_mini_spectrum_uses_same_fixed_bars_as_main() {

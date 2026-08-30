@@ -1,14 +1,30 @@
-AgPlayer UI Icons License
+AgPlayer UI Icons Notice
 =========================
 
-The SVG files under assets/icons/ are original works created by the
-AgPlayer project. They are NOT copies of Remix Icon or any other
-third-party icon library. The visual style (24x24 viewBox, currentColor
-fill) is inspired by the Remix Icon layout convention but the path
-data is hand-authored for AgPlayer.
+AgPlayer project icons
+----------------------
 
-License: Same license as the AgPlayer source code.
+Icons not listed in the third-party section below remain AgPlayer project
+assets and retain the license that applies to the AgPlayer source tree.
 
-Reference: Remix Icon (https://remixicon.com/) is licensed under
-Apache License 2.0. AgPlayer does not redistribute any Remix Icon
-asset; this reference is for attribution of design inspiration only.
+Third-party Remix Icon assets
+-----------------------------
+
+The following unmodified SVG assets are redistributed from Remix Icon v4.6.0:
+
+  - assets/icons/arrow-down-s-line.svg
+  - assets/icons/arrow-up-s-line.svg
+  - assets/icons/checkbox-blank-fill.svg
+  - assets/icons/checkbox-circle-line.svg
+  - assets/icons/check-line.svg
+  - assets/icons/error-warning-line.svg
+  - assets/icons/file-music-fill.svg
+  - assets/icons/filter-3-line.svg
+
+Upstream source and selected tag:
+  https://github.com/Remix-Design/RemixIcon/tree/v4.6.0
+
+These assets are licensed under the Apache License, Version 2.0. The complete
+upstream license text from the v4.6.0 release is included in
+assets/licenses/RemixIcon-Apache-2.0.txt. The selected SVG files and that
+upstream license file do not carry an additional per-file copyright notice.

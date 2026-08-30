@@ -34,6 +34,31 @@ private slots:
         QVERIFY(pyramid.levelCount() <= std::size_t{16});
     }
 
+    void deepZoomKeepsTheFinestAvailableBaseBuckets()
+    {
+        const std::vector<std::vector<PeakBucket>> channels{{
+            {-0.1F, 0.1F}, {-0.2F, 0.2F}, {-0.3F, 0.3F}, {-0.4F, 0.4F},
+            {-0.5F, 0.5F}, {-0.6F, 0.6F}, {-0.7F, 0.7F}, {-0.8F, 0.8F}}};
+        const auto pyramid = PeakPyramid::fromBaseBuckets(channels, 1, 8);
+
+        const auto peaks = pyramid.read(0, 0, 8, 8);
+        QCOMPARE(peaks.size(), std::size_t{8});
+        QCOMPARE(peaks[1].minimum, -0.2F);
+        QCOMPARE(peaks[6].maximum, 0.7F);
+    }
+
+    void readWindowReportsTheAlignedSourceRange()
+    {
+        std::vector<PeakBucket> buckets(10, PeakBucket{-0.5F, 0.5F});
+        const auto pyramid = PeakPyramid::fromBaseBuckets(
+            {std::move(buckets)}, 10, 100);
+
+        const auto window = pyramid.readWindow(0, 15, 10, 100);
+        QCOMPARE(window.start, SampleFrame{10});
+        QCOMPARE(window.bucketFrames, SampleFrame{10});
+        QCOMPARE(window.buckets.size(), std::size_t{2});
+    }
+
     void invalidChannelAndRangeReturnEmpty()
     {
         const auto pyramid = PeakPyramid::fromBaseBuckets(

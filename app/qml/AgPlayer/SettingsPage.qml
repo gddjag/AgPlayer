@@ -30,6 +30,10 @@ Item {
     function open() {
         if (visible)
             return
+        if (hostWindow && !hostWindow.visible) {
+            hostWindow.openSettings()
+            return
+        }
         visible = true
         forceActiveFocus()
         opened()
@@ -332,8 +336,8 @@ Item {
                 Accessible.name: qsTr("Close settings")
 
                 background: Rectangle {
-                    color: parent.pressed ? Theme.favoriteRed
-                          : parent.hovered ? Theme.border
+                    color: parent.pressed ? Theme.danger
+                          : parent.hovered ? Theme.surfaceHover
                           : "transparent"
                     radius: Theme.radiusSm
                 }
@@ -358,7 +362,7 @@ Item {
                 id: settingsSidebar
                 objectName: "settingsSidebar"
                 property string designRole: "settingsCategoryRail"
-                Layout.preferredWidth: 208
+                Layout.preferredWidth: 184
                 Layout.fillHeight: true
                 color: "transparent"
 
@@ -380,8 +384,8 @@ Item {
                         height: 32
                         radius: Theme.radiusSm
                         color: root.selectedSection === modelData.index
-                               ? Qt.rgba(Theme.cyan.r, Theme.cyan.g, Theme.cyan.b, 0.15)
-                               : (mouseArea.containsMouse ? Theme.border : "transparent")
+                               ? Theme.highlightSoft
+                               : (mouseArea.containsMouse ? Theme.surfaceHover : "transparent")
 
                         RowLayout {
                             anchors.fill: parent
@@ -392,7 +396,7 @@ Item {
                             ThemedIcon {
                                 source: Theme.icon(modelData.icon)
                                 tint: root.selectedSection === modelData.index
-                                      ? Theme.iconAccent
+                                      ? Theme.highlight
                                       : Theme.iconSecondary
                                 sourceSize.width: 17
                                 sourceSize.height: 17
@@ -401,18 +405,24 @@ Item {
                             }
 
                             Text {
+                                objectName: "settingsSectionLabel-" + modelData.index
                                 text: modelData.text
                                 color: root.selectedSection === modelData.index
-                                       ? Theme.primaryText
+                                       ? Theme.highlightText
                                        : Theme.secondaryText
                                 font.family: Theme.fontPrimary
                                 font.pixelSize: 14
                                 Layout.fillWidth: true
+                                elide: Text.ElideRight
+                                clip: true
+                                ToolTip.text: text
+                                ToolTip.visible: truncated && mouseArea.containsMouse
                             }
                         }
 
                         MouseArea {
                             id: mouseArea
+                            objectName: "settingsSectionHoverArea-" + modelData.index
                             anchors.fill: parent
                             hoverEnabled: true
                             onClicked: root.selectSection(modelData.index)
@@ -550,9 +560,9 @@ Item {
                 }
 
                 background: Rectangle {
-                    color: parent.pressed ? Qt.lighter(Theme.cyan, 1.1)
-                          : parent.hovered ? Qt.lighter(Theme.cyan, 1.2)
-                          : Theme.cyan
+                    color: parent.pressed ? Theme.accentPressed
+                          : parent.hovered ? Theme.accentHover
+                          : Theme.accent
                     radius: Theme.radiusSm
                     implicitWidth: 110
                     implicitHeight: 36
@@ -643,6 +653,9 @@ Item {
 
     component SettingRow: Item {
         property alias label: labelText.text
+        property string labelObjectName: ""
+        property real labelWidth: 176
+        property bool fitLabelToContent: false
         default property alias content: contentContainer.children
 
         Layout.fillWidth: true
@@ -650,12 +663,16 @@ Item {
 
         Text {
             id: labelText
+            objectName: parent.labelObjectName
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             color: Theme.secondaryText
             font.family: Theme.fontPrimary
             font.pixelSize: 14
-            width: 176
+            width: parent.fitLabelToContent
+                   ? Math.min(parent.width - 190,
+                              Math.max(parent.labelWidth, contentWidth))
+                   : parent.labelWidth
         }
 
         Item {
@@ -668,40 +685,7 @@ Item {
         }
     }
 
-    component SettingSwitch: Switch {
-        id: control
-        property alias labelText: label.text
-
-        indicator: Rectangle {
-            implicitWidth: 40
-            implicitHeight: 22
-            radius: 11
-            color: control.checked ? Theme.cyan : Theme.border
-
-            Rectangle {
-                anchors.verticalCenter: parent.verticalCenter
-                x: control.checked ? parent.width - width - 2 : 2
-                width: 18
-                height: 18
-                radius: 9
-                color: "#FFFFFF"
-
-                Behavior on x {
-                    NumberAnimation { duration: 120 }
-                }
-            }
-        }
-
-        contentItem: Text {
-            id: label
-            text: parent.text
-            color: Theme.primaryText
-            font.family: Theme.fontPrimary
-            font.pixelSize: 14
-            leftPadding: parent.indicator ? parent.indicator.width + parent.spacing : 0
-            verticalAlignment: Text.AlignVCenter
-        }
-    }
+    component SettingSwitch: ThemedSwitch {}
 
     component SettingCombo: ComboBox {
         id: combo
@@ -765,7 +749,7 @@ Item {
             }
 
             background: Rectangle {
-                color: highlighted ? Qt.rgba(Theme.cyan.r, Theme.cyan.g, Theme.cyan.b, 0.15)
+                color: highlighted ? Theme.highlightSoft
                                   : "transparent"
             }
         }
@@ -864,40 +848,12 @@ Item {
         }
     }
 
-    component FileAssociationCheck: CheckBox {
+    component FileAssociationCheck: ThemedCheckBox {
         id: associationCheck
         property string extPrimary
         property string extSecondary: ""
-        implicitWidth: associationLabel.implicitWidth
-        implicitHeight: Math.max(indicator.implicitHeight,
-                                 associationLabel.implicitHeight)
-
-        indicator: Rectangle {
-            implicitWidth: 18
-            implicitHeight: 18
-            radius: 4
-            color: parent.checked ? Theme.cyan : "transparent"
-            border.color: parent.checked ? Theme.cyan : Theme.border
-            border.width: 1
-
-            Text {
-                anchors.centerIn: parent
-                text: "\u2713"
-                color: Theme.accentText
-                font.pixelSize: 11
-                visible: parent.parent.checked
-            }
-        }
-
-        contentItem: Text {
-            id: associationLabel
-            text: parent.text
-            color: Theme.primaryText
-            font.family: Theme.fontPrimary
-            font.pixelSize: 11
-            leftPadding: parent.indicator.width + parent.spacing
-            verticalAlignment: Text.AlignVCenter
-        }
+        implicitWidth: contentItem.implicitWidth
+        implicitHeight: 32
     }
 
     component PathFieldRow: RowLayout {
@@ -950,15 +906,18 @@ Item {
         id: thumb
         property int mode: 0
         property bool selected: false
-        property string modeLabel: mode === 0 ? qsTr("纯色波形") : (mode === 1 ? qsTr("RGB波形") : qsTr("频谱波形"))
+        property string modeLabel: mode === 0 ? qsTr("纯色波形")
+                                   : mode === 3 ? qsTr("频彩波形")
+                                   : mode === 1 ? qsTr("RGB波形")
+                                                : qsTr("柱状频谱")
         signal clicked()
 
         width: 96
         height: 72
         radius: Theme.radiusSm
-        color: selected ? Qt.rgba(Theme.cyan.r, Theme.cyan.g, Theme.cyan.b, 0.12)
+        color: selected ? Theme.highlightSoft
                         : Theme.background
-        border.color: selected ? Theme.cyan : Theme.border
+        border.color: selected ? Theme.highlightBorder : Theme.border
         border.width: 1
 
         ColumnLayout {
@@ -983,13 +942,32 @@ Item {
                     ctx.lineTo(width, cy)
                     ctx.stroke()
 
-                    if (mode === 1) {
-                        // RGB gradient waveform using project RGBA layers
-                        var rGrad = ctx.createLinearGradient(0, 0, width, 0)
-                        rGrad.addColorStop(0, SettingsController.waveformRgbStartColor)
-                        rGrad.addColorStop(0.5, SettingsController.waveformRgbMiddleColor)
-                        rGrad.addColorStop(1, SettingsController.waveformRgbEndColor)
-                        ctx.strokeStyle = rGrad
+                    if (mode === 3) {
+                        ctx.lineWidth = Math.max(
+                            1, SettingsController.waveformThickness)
+                        for (var fx = 0; fx <= width; fx += 2) {
+                            var ft = fx / Math.max(1, width)
+                            var low = 0.28 + 0.72 * Math.abs(Math.sin(ft * 9.0))
+                            var mid = 0.22 + 0.78 * Math.abs(Math.sin(ft * 17.0 + 1.1))
+                            var high = 0.16 + 0.84 * Math.abs(Math.sin(ft * 31.0 + 2.3))
+                            ctx.strokeStyle = low >= mid && low >= high
+                                    ? SettingsController.waveformFrequencyLowColor
+                                    : mid >= high
+                                      ? SettingsController.waveformFrequencyMidColor
+                                      : SettingsController.waveformFrequencyHighColor
+                            var frequencyAmp = (0.18 + Math.max(low, mid, high) * 0.72)
+                                    * cy * SettingsController.waveformHeight
+                            ctx.beginPath()
+                            ctx.moveTo(fx, cy - frequencyAmp)
+                            ctx.lineTo(fx, cy + frequencyAmp)
+                            ctx.stroke()
+                        }
+                    } else if (mode === 1) {
+                        var waveformGradient = ctx.createLinearGradient(0, 0, width, 0)
+                        waveformGradient.addColorStop(0, SettingsController.waveformRgbStartColor)
+                        waveformGradient.addColorStop(0.5, SettingsController.waveformRgbMiddleColor)
+                        waveformGradient.addColorStop(1, SettingsController.waveformRgbEndColor)
+                        ctx.strokeStyle = waveformGradient
                         ctx.lineWidth = SettingsController.waveformThickness
                         ctx.beginPath()
                         for (var x = 0; x <= width; x += 2) {
@@ -1008,11 +986,15 @@ Item {
                             var bx = i * (step + 2)
                             var envelope = 0.22 + 0.78 * Math.sin(Math.PI * i / Math.max(1, barCount - 1))
                             var barHeight = Math.max(2, Math.abs(Math.sin(i * 0.4) * Math.cos(i * 0.17)) * (height * 0.82) * envelope)
-                            var t = i / barCount
-                            var rr = Math.round(170 * (1 - t) + 55 * t)
-                            var gg = Math.round(55 * (1 - t) + 140 * t)
-                            var bb = Math.round(55 + 90 * t)
-                            ctx.fillStyle = "rgba(" + rr + "," + gg + "," + bb + ",0.72)"
+                            if (SettingsController.spectrumColorMode === 0) {
+                                ctx.fillStyle = SettingsController.spectrumSolidColor
+                            } else {
+                                var spectrumGradient = ctx.createLinearGradient(0, 0, width, 0)
+                                spectrumGradient.addColorStop(0, SettingsController.spectrumRgbStartColor)
+                                spectrumGradient.addColorStop(0.5, SettingsController.spectrumRgbMiddleColor)
+                                spectrumGradient.addColorStop(1, SettingsController.spectrumRgbEndColor)
+                                ctx.fillStyle = spectrumGradient
+                            }
                             ctx.fillRect(bx, cy - barHeight / 2, step, barHeight)
                         }
                     } else {
@@ -1083,7 +1065,11 @@ Item {
             function onWaveformRgbStartColorChanged() { waveformPreviewCanvas.requestPaint() }
             function onWaveformRgbMiddleColorChanged() { waveformPreviewCanvas.requestPaint() }
             function onWaveformRgbEndColorChanged() { waveformPreviewCanvas.requestPaint() }
-            function onWaveformRgbProgressChanged() { waveformPreviewCanvas.requestPaint() }
+            function onSpectrumColorModeChanged() { waveformPreviewCanvas.requestPaint() }
+            function onSpectrumSolidColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onSpectrumRgbStartColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onSpectrumRgbMiddleColorChanged() { waveformPreviewCanvas.requestPaint() }
+            function onSpectrumRgbEndColorChanged() { waveformPreviewCanvas.requestPaint() }
         }
 
         MouseArea {
@@ -1174,12 +1160,13 @@ Item {
                 SettingRow {
                     label: qsTr("语言")
                     SettingCombo {
+                        objectName: "languageCombo"
                         anchors.verticalCenter: parent.verticalCenter
                         valueModel: [
-                            { text: "中文", value: "zh" },
-                            { text: "English", value: "en" },
-                            { text: "\u0E20\u0E32\u0E29\u0E32\u0E44\u0E17\u0E22", value: "th" },
-                            { text: "Ti\u1EBFng Vi\u1EC7t", value: "vi" }
+                            { text: "🇨🇳 中文", value: "zh" },
+                            { text: "🇺🇸 English", value: "en" },
+                            { text: "🇹🇭 ไทย", value: "th" },
+                            { text: "🇻🇳 Tiếng Việt", value: "vi" }
                         ]
                         currentIndex: {
                             const values = ["zh", "en", "th", "vi"]
@@ -1380,7 +1367,7 @@ Item {
                                 !== PlaybackController.Stopped
                              && !PlaybackController.exclusiveModeActive
                     text: qsTr("独占不可用，当前使用共享模式")
-                    color: Theme.ratingGold
+                    color: Theme.warning
                     font.pixelSize: 12
                     Layout.leftMargin: Theme.spacingMd
                 }
@@ -1470,7 +1457,7 @@ Item {
                 Label {
                     visible: PlaybackController.replayGainClippingWarning
                     text: qsTr("当前 ReplayGain 增益可能削波，已按设置限制峰值")
-                    color: Theme.ratingGold
+                    color: Theme.warning
                     wrapMode: Text.Wrap
                     Layout.fillWidth: true
                 }
@@ -1522,6 +1509,21 @@ Item {
                 title: qsTr("主题样式")
 
                 SettingRow {
+                    label: qsTr("窗口主题")
+                    SettingCombo {
+                        objectName: "windowLayoutThemeCombo"
+                        anchors.verticalCenter: parent.verticalCenter
+                        valueModel: [
+                            { text: qsTr("双窗口主题"), value: "dual-window" },
+                            { text: qsTr("单窗口主题"), value: "single-window" }
+                        ]
+                        currentIndex: SettingsController.windowLayoutTheme === "single-window"
+                                      ? 1 : 0
+                        onActivated: SettingsController.windowLayoutTheme = currentValue
+                    }
+                }
+
+                SettingRow {
                     label: qsTr("主题模式")
                     RowLayout {
                         anchors.fill: parent
@@ -1529,12 +1531,16 @@ Item {
 
                         Repeater {
                             model: [
-                                { text: qsTr("深色"), value: 0 },
-                                { text: qsTr("浅色"), value: 1 },
-                                { text: qsTr("跟随系统"), value: 2 }
+                                { text: qsTr("跟随系统"), value: 2,
+                                  objectName: "themeModeSystem" },
+                                { text: qsTr("浅色"), value: 1,
+                                  objectName: "themeModeLight" },
+                                { text: qsTr("深色"), value: 0,
+                                  objectName: "themeModeDark" }
                             ]
 
                             delegate: Button {
+                                objectName: modelData.objectName
                                 text: modelData.text
                                 checked: SettingsController.themeMode === modelData.value
                                 checkable: true
@@ -1562,15 +1568,64 @@ Item {
                     }
                 }
 
+                SettingRow {
+                    label: qsTr("主题皮肤颜色")
+                    Layout.preferredHeight: skinSelector.implicitHeight
+
+                    ThemeColorSelector {
+                        id: skinSelector
+                        objectName: "themeSkinColorSelector"
+                        anchors.fill: parent
+                        title: qsTr("推荐颜色")
+                        selectedMode: SettingsController.skinColorMode
+                        selectedPreset: SettingsController.skinPreset
+                        customKind: SettingsController.skinCustomKind
+                        customColor: SettingsController.skinCustomColor
+                        customColorMiddle: SettingsController.skinCustomColorMiddle
+                        customColorEnd: SettingsController.skinCustomColorEnd
+                        onDefaultRequested: SettingsController.selectDefaultSkin()
+                        onPresetRequested: function(id) {
+                            SettingsController.selectSkinPreset(id)
+                        }
+                        onCustomConfigurationRequested: function(kind, start, middle, end) {
+                            SettingsController.setSkinCustomConfiguration(
+                                        kind, start, middle, end)
+                        }
+                    }
+                }
+
+            }
+
+            SettingCard {
+                title: qsTr("歌曲列表")
+
                 SettingSwitch {
-                    text: qsTr("毛玻璃 / 悬浮特效：开启迷你播放器与悬浮窗口模糊背景")
-                    checked: SettingsController.glassEffect
-                    onToggled: SettingsController.glassEffect = checked
+                    objectName: "listWaveformThumbnailEnabledControl"
+                    text: qsTr("显示歌曲列表波形缩略图")
+                    checked: SettingsController.listWaveformThumbnailEnabled
+                    onToggled: SettingsController.listWaveformThumbnailEnabled = checked
+                }
+
+                SettingRow {
+                    label: qsTr("缩略波形颜色")
+                    SettingCombo {
+                        objectName: "listWaveformThumbnailModeControl"
+                        anchors.verticalCenter: parent.verticalCenter
+                        enabled: SettingsController.listWaveformThumbnailEnabled
+                        valueModel: [
+                            { text: qsTr("36 色"), value: "Color36" },
+                            { text: qsTr("纯色"), value: "Mono" }
+                        ]
+                        currentIndex: SettingsController.listWaveformThumbnailMode
+                                      === "Mono" ? 1 : 0
+                        onActivated: SettingsController.listWaveformThumbnailMode
+                                     = currentValue
+                    }
                 }
             }
 
             SettingCard {
-                title: qsTr("Waveform RGB 波形设置")
+                title: qsTr("波形与频谱颜色")
 
                 SettingRow {
                     label: qsTr("默认波形模式")
@@ -1583,6 +1638,12 @@ Item {
                             mode: 0
                             selected: SettingsController.waveformMode === 0
                             onClicked: SettingsController.waveformMode = 0
+                        }
+
+                        WaveformThumbnail {
+                            mode: 3
+                            selected: SettingsController.waveformMode === 3
+                            onClicked: SettingsController.waveformMode = 3
                         }
 
                         WaveformThumbnail {
@@ -1600,7 +1661,7 @@ Item {
                 }
 
                 SettingRow {
-                    visible: SettingsController.waveformMode !== 2
+                        visible: SettingsController.waveformMode !== 2
                     label: qsTr("波形高度")
                     SettingStepper {
                         objectName: "waveformHeightStepper"
@@ -1639,6 +1700,8 @@ Item {
 
                 SettingRow {
                     visible: SettingsController.waveformMode !== 2
+                    labelObjectName: "waveformDensityRowLabel"
+                    fitLabelToContent: true
                     label: qsTr("波形采样密度")
                     SettingStepper {
                         objectName: "waveformDensityStepper"
@@ -1672,6 +1735,8 @@ Item {
 
                 SettingRow {
                     visible: SettingsController.waveformMode !== 2
+                    labelObjectName: "waveformAggregationRowLabel"
+                    fitLabelToContent: true
                     label: qsTr("波形峰值算法")
                     SettingCombo {
                         objectName: "waveformAggregationCombo"
@@ -1689,52 +1754,40 @@ Item {
                     visible: SettingsController.waveformMode !== 2
                     label: SettingsController.waveformMode === 0
                            ? qsTr("底色 / 进度色")
-                           : qsTr("纯色 / RGB渐变")
+                           : SettingsController.waveformMode === 3
+                             ? qsTr("低频 / 中频 / 高频")
+                             : qsTr("底色 / RGB 渐变")
                     RowLayout {
                         anchors.fill: parent
                         spacing: Theme.spacingSm
-
-                        ColorField {
-                            visible: SettingsController.waveformMode === 0
-                            colorValue: SettingsController.waveformSolidBaseColor
-                            targetProperty: "waveformSolidBaseColor"
-                        }
-                        ColorField {
-                            visible: SettingsController.waveformMode === 0
-                            colorValue: SettingsController.waveformSolidProgressColor
-                            targetProperty: "waveformSolidProgressColor"
-                        }
-                        ColorField {
-                            visible: SettingsController.waveformMode !== 0
-                            colorValue: SettingsController.waveformRgbBaseColor
-                            targetProperty: "waveformRgbBaseColor"
-                        }
-                        ColorField {
-                            visible: SettingsController.waveformMode !== 0
-                            colorValue: SettingsController.spectrumRgbStartColor
-                            targetProperty: "spectrumRgbStartColor"
-                        }
-                        ColorField {
-                            visible: SettingsController.waveformMode !== 0
-                            colorValue: SettingsController.spectrumRgbMiddleColor
-                            targetProperty: "spectrumRgbMiddleColor"
-                        }
-                        ColorField {
-                            visible: SettingsController.waveformMode !== 0
-                            colorValue: SettingsController.spectrumRgbEndColor
-                            targetProperty: "spectrumRgbEndColor"
-                        }
+                        ColorField { objectName: "waveformSolidBaseColorField"; visible: SettingsController.waveformMode === 0; colorValue: SettingsController.waveformSolidBaseColor; targetProperty: "waveformSolidBaseColor" }
+                        ColorField { objectName: "waveformSolidProgressColorField"; visible: SettingsController.waveformMode === 0; colorValue: SettingsController.waveformSolidProgressColor; targetProperty: "waveformSolidProgressColor" }
+                        ColorField { objectName: "waveformRgbBaseColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbBaseColor; targetProperty: "waveformRgbBaseColor" }
+                        ColorField { objectName: "waveformRgbStartColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbStartColor; targetProperty: "waveformRgbStartColor" }
+                        ColorField { objectName: "waveformRgbMiddleColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbMiddleColor; targetProperty: "waveformRgbMiddleColor" }
+                        ColorField { objectName: "waveformRgbEndColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbEndColor; targetProperty: "waveformRgbEndColor" }
+                        ColorField { objectName: "waveformFrequencyLowColorField"; visible: SettingsController.waveformMode === 3; colorValue: SettingsController.waveformFrequencyLowColor; targetProperty: "waveformFrequencyLowColor" }
+                        ColorField { objectName: "waveformFrequencyMidColorField"; visible: SettingsController.waveformMode === 3; colorValue: SettingsController.waveformFrequencyMidColor; targetProperty: "waveformFrequencyMidColor" }
+                        ColorField { objectName: "waveformFrequencyHighColorField"; visible: SettingsController.waveformMode === 3; colorValue: SettingsController.waveformFrequencyHighColor; targetProperty: "waveformFrequencyHighColor" }
                     }
                 }
 
+                Button {
+                    objectName: "waveformFrequencyResetButton"
+                    visible: SettingsController.waveformMode === 3
+                    text: qsTr("恢复默认颜色")
+                    onClicked: SettingsController.resetWaveformFrequencyColors()
+                }
+
                 SettingRow {
-                    label: qsTr("RGB显示区域")
-                    visible: SettingsController.waveformMode !== 0
+                    visible: SettingsController.waveformMode === 1
+                    label: qsTr("RGB 显示区域")
                     SettingCombo {
+                        objectName: "waveformRgbRegionSelector"
                         anchors.verticalCenter: parent.verticalCenter
                         valueModel: [
-                            { text: qsTr("播放进度为RGB"), value: true },
-                            { text: qsTr("未播放区域为RGB"), value: false }
+                            { text: qsTr("已播放区域为 RGB"), value: true },
+                            { text: qsTr("未播放区域为 RGB"), value: false }
                         ]
                         currentIndex: SettingsController.waveformRgbProgress ? 0 : 1
                         onActivated: SettingsController.waveformRgbProgress = currentValue
@@ -1747,38 +1800,50 @@ Item {
                     onToggled: SettingsController.waveformHoverTimePreview = checked
                 }
 
+                SettingSwitch {
+                    objectName: "waveformPlaybackGuideSwitch"
+                    text: qsTr("播放进度竖条")
+                    checked: SettingsController.waveformPlaybackGuide
+                    onToggled: SettingsController.waveformPlaybackGuide = checked
+                }
+
                 SettingRow {
                     visible: SettingsController.waveformMode === 2
                     label: qsTr("频谱颜色")
                     RowLayout {
                         anchors.fill: parent
                         SettingCombo {
+                            objectName: "spectrumColorModeSelector"
                             valueModel: [
-                                { text: qsTr("单色"), value: 0 },
-                                { text: qsTr("自定义 RGB"), value: 1 }
+                            { text: qsTr("单色"), value: 0 },
+                            { text: qsTr("自定义 RGB"), value: 1 }
                             ]
                             currentIndex: SettingsController.spectrumColorMode
                             onActivated: SettingsController.spectrumColorMode = currentValue
                         }
                         ColorField {
+                            objectName: "spectrumSolidColorField"
                             visible: SettingsController.spectrumColorMode === 0
                             colorValue: SettingsController.spectrumSolidColor
                             targetProperty: "spectrumSolidColor"
                         }
                         ColorField {
+                            objectName: "spectrumRgbStartColorField"
                             visible: SettingsController.spectrumColorMode === 1
-                            colorValue: SettingsController.waveformRgbStartColor
-                            targetProperty: "waveformRgbStartColor"
+                            colorValue: SettingsController.spectrumRgbStartColor
+                            targetProperty: "spectrumRgbStartColor"
                         }
                         ColorField {
+                            objectName: "spectrumRgbMiddleColorField"
                             visible: SettingsController.spectrumColorMode === 1
-                            colorValue: SettingsController.waveformRgbMiddleColor
-                            targetProperty: "waveformRgbMiddleColor"
+                            colorValue: SettingsController.spectrumRgbMiddleColor
+                            targetProperty: "spectrumRgbMiddleColor"
                         }
                         ColorField {
+                            objectName: "spectrumRgbEndColorField"
                             visible: SettingsController.spectrumColorMode === 1
-                            colorValue: SettingsController.waveformRgbEndColor
-                            targetProperty: "waveformRgbEndColor"
+                            colorValue: SettingsController.spectrumRgbEndColor
+                            targetProperty: "spectrumRgbEndColor"
                         }
                     }
                 }
@@ -1853,9 +1918,14 @@ Item {
                         valueModel: [
                             { text: "MP3", value: "MP3" },
                             { text: "WAV", value: "WAV" },
-                            { text: "FLAC", value: "FLAC" }
+                            { text: "FLAC", value: "FLAC" },
+                            { text: "AAC", value: "AAC" },
+                            { text: "Opus", value: "OPUS" },
+                            { text: "OGG", value: "OGG" },
+                            { text: "ALAC", value: "ALAC" },
+                            { text: "AIFF", value: "AIFF" }
                         ]
-                        currentIndex: ["MP3", "WAV", "FLAC"].indexOf(
+                        currentIndex: ["MP3", "WAV", "FLAC", "AAC", "OPUS", "OGG", "ALAC", "AIFF"].indexOf(
                                           SettingsController.transcodeFormat)
                         onActivated: SettingsController.transcodeFormat = currentValue
                     }
@@ -2034,7 +2104,7 @@ Item {
             Layout.fillHeight: true
             color: Theme.background
             radius: Theme.radiusSm
-            border.color: parent.invalidShortcut ? Theme.favoriteRed : Theme.border
+            border.color: parent.invalidShortcut ? Theme.error : Theme.border
             border.width: 1
 
             TextField {
@@ -2247,7 +2317,7 @@ Item {
                         onClicked: clearCacheConfirmDialog.open()
                         contentItem: Text {
                             text: parent.text
-                            color: "#FFFFFF"
+                            color: Theme.onBrandGradientText
                             font.family: Theme.fontPrimary
                             font.pixelSize: 12
                             font.weight: Font.Medium
@@ -2255,9 +2325,8 @@ Item {
                             verticalAlignment: Text.AlignVCenter
                         }
                         background: Rectangle {
-                            color: parent.pressed ? Qt.darker(Theme.favoriteRed, 1.2)
-                                  : parent.hovered ? Qt.lighter(Theme.favoriteRed, 1.1)
-                                  : Theme.favoriteRed
+                            color: parent.pressed ? Theme.critical
+                                  : Theme.danger
                             radius: Theme.radiusSm
                             implicitWidth: 90
                             implicitHeight: 32

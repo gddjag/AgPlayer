@@ -8,6 +8,8 @@
 #include <QTimer>
 #include <QVariantList>
 
+#include <optional>
+
 struct ag_player;
 class LibraryModel;
 
@@ -35,6 +37,12 @@ class PlaybackController final : public QObject {
     Q_PROPERTY(QVariantList spectrum READ spectrum NOTIFY spectrumChanged)
     Q_PROPERTY(bool replayGainClippingWarning READ replayGainClippingWarning
                    NOTIFY replayGainClippingWarningChanged)
+    Q_PROPERTY(qint64 selectionStartMs READ selectionStartMs
+                   NOTIFY selectionStartMsChanged)
+    Q_PROPERTY(qint64 selectionEndMs READ selectionEndMs
+                   NOTIFY selectionEndMsChanged)
+    Q_PROPERTY(bool selectionLoopEnabled READ selectionLoopEnabled
+                   NOTIFY selectionLoopEnabledChanged)
 
 public:
     static constexpr int PollIntervalMs = 17;
@@ -68,15 +76,25 @@ public:
     bool exclusiveModeActive() const noexcept;
     QVariantList spectrum() const;
     bool replayGainClippingWarning() const noexcept;
+    qint64 selectionStartMs() const noexcept;
+    qint64 selectionEndMs() const noexcept;
+    bool selectionLoopEnabled() const noexcept;
 
     void setLibraryModel(LibraryModel* library);
     void setPlayer(ag_player* player);
+    [[nodiscard]] ag_player* playerHandle() const noexcept { return player_; }
+    [[nodiscard]] bool acquireEditorOutput() noexcept;
+    void releaseEditorOutput() noexcept;
 
     Q_INVOKABLE void play();
     Q_INVOKABLE void pause();
     Q_INVOKABLE void stop();
     Q_INVOKABLE void togglePlayback();
     Q_INVOKABLE void seek(qint64 positionMs);
+    Q_INVOKABLE void commitSelection(qint64 startMs, qint64 endMs);
+    Q_INVOKABLE void adjustSelection(qint64 startMs, qint64 endMs);
+    Q_INVOKABLE void disableSelectionLoopAndSeek(qint64 positionMs);
+    Q_INVOKABLE void clearSelection();
     // Full PCM analysis supplies the exact decoded-frame duration used by both
     // the playback snapshot and the waveform pixel timeline.
     Q_INVOKABLE bool applyWaveformDuration(const QString& trackId,
@@ -124,12 +142,26 @@ signals:
     void exclusiveModeActiveChanged();
     void spectrumChanged();
     void replayGainClippingWarningChanged();
+    void selectionStartMsChanged();
+    void selectionEndMsChanged();
+    void selectionLoopEnabledChanged();
 
 private:
+    struct PlaybackSessionSnapshot final {
+        QStringList queueTrackIds;
+        QString currentTrackId;
+        qint64 positionMs{};
+        State state{Stopped};
+        Mode mode{Sequential};
+        qsizetype scopeSize{};
+        bool allowFallback{};
+    };
+
     void pollSnapshot();
     void pollSpectrum();
     bool prepareRow(int row);
     bool applyReplayGainForTrack(const QString& trackId);
+    bool setSelection(qint64 startMs, qint64 endMs, bool loopEnabled);
     void setErrorMessage(QString message);
     void runCommand(int result);
 
@@ -158,4 +190,11 @@ private:
     int replayGainMode_ = 0;
     bool replayGainClipProtection_ = true;
     bool replayGainClippingWarning_ = false;
+    qint64 selectionStartMs_ = 0;
+    qint64 selectionEndMs_ = 0;
+    bool selectionLoopEnabled_ = false;
+    bool editorOutputOwned_ = false;
+    qsizetype activeScopeSize_{};
+    bool activeScopeAllowsFallback_{};
+    std::optional<PlaybackSessionSnapshot> editorSessionSnapshot_;
 };

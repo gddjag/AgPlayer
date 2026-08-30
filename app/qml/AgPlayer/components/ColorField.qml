@@ -1,12 +1,13 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import AgPlayer
 
-Control {
+AbstractButton {
     id: root
+    objectName: "colorFieldButton"
     property color colorValue: "#000000"
+    property string editingLabel: ""
     property string targetProperty: ""
     signal colorEdited(string value)
     onColorEdited: function(value) {
@@ -17,6 +18,9 @@ Control {
     implicitWidth: 106
     implicitHeight: 32
     padding: 1
+    focusPolicy: Qt.StrongFocus
+    Accessible.role: Accessible.Button
+    Accessible.name: qsTr("Color %1").arg(root.normalized(root.colorValue))
 
     function normalized(value) {
         var text = String(value || "").trim().toUpperCase()
@@ -32,37 +36,44 @@ Control {
             radius: 4
             color: root.colorValue
             border.color: Theme.border
-            TapHandler { onTapped: picker.open() }
         }
 
-        TextField {
+        Text {
             id: field
+            objectName: "colorFieldHex"
             Layout.fillWidth: true
-            text: root.colorValue.toString().toUpperCase()
-            selectByMouse: true
-            color: acceptableInput ? Theme.primaryText : Theme.favoriteRed
-            validator: RegularExpressionValidator {
-                regularExpression: /^#[0-9A-Fa-f]{6}$/
-            }
-            onEditingFinished: {
-                var value = root.normalized(text)
-                if (value.length > 0) root.colorEdited(value)
-                else text = root.colorValue.toString().toUpperCase()
-            }
-            background: null
+            text: root.normalized(root.colorValue)
+            color: Theme.primaryText
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
         }
     }
 
     background: Rectangle {
         color: Theme.background
-        border.color: field.acceptableInput ? Theme.border : Theme.favoriteRed
+        border.width: root.activeFocus ? 2 : 1
+        border.color: root.activeFocus ? Theme.focus : Theme.border
         radius: Theme.radiusSm
     }
 
-    ColorDialog {
+    onClicked: picker.openForColor(root.colorValue, root.editingLabel)
+    Keys.onSpacePressed: function(event) {
+        root.clicked()
+        event.accepted = true
+    }
+    Keys.onReturnPressed: function(event) {
+        root.clicked()
+        event.accepted = true
+    }
+    Keys.onEnterPressed: function(event) {
+        root.clicked()
+        event.accepted = true
+    }
+
+    AgColorPicker {
         id: picker
-        title: qsTr("选择颜色")
-        selectedColor: root.colorValue
-        onAccepted: root.colorEdited(selectedColor.toString().toUpperCase())
+        objectName: "colorFieldPicker"
+        onApplied: color => root.colorEdited(root.normalized(color))
+        onClosed: root.forceActiveFocus()
     }
 }

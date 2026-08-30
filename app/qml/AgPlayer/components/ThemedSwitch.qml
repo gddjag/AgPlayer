@@ -5,24 +5,33 @@ import AgPlayer
 T.Switch {
     id: control
 
-    implicitWidth: Math.max(40, contentItem.implicitWidth)
-    implicitHeight: 22
+    property color checkedColor: Theme.accent
+    property real indicatorWidth: 38
+    property real indicatorHeight: 20
+    property real labelPixelSize: 14
+
+    implicitWidth: Math.max(indicatorWidth + 6, contentItem.implicitWidth)
+    implicitHeight: Math.max(32, indicatorHeight + 8)
 
     indicator: Rectangle {
-        implicitWidth: 40
-        implicitHeight: 22
+        implicitWidth: control.indicatorWidth
+        implicitHeight: control.indicatorHeight
         x: 0
         y: (control.height - height) / 2
         radius: height / 2
-        color: control.checked ? Theme.cyan : Theme.border
+        color: !control.enabled ? Theme.disabled
+               : control.checked ? (control.hovered ? Theme.accentHover : control.checkedColor)
+               : (control.hovered ? Theme.hoverSurface : Theme.border)
+        border.color: control.activeFocus ? Theme.focus : "transparent"
+        border.width: control.activeFocus ? 2 : 0
 
         Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             x: control.checked ? parent.width - width - 2 : 2
-            width: 18
-            height: 18
+            width: parent.height - 4
+            height: width
             radius: width / 2
-            color: "#FFFFFF"
+            color: control.enabled ? Theme.onBrandGradientText : Theme.textDisabled
 
             Behavior on x {
                 NumberAnimation { duration: 120 }
@@ -33,9 +42,9 @@ T.Switch {
     contentItem: Text {
         text: control.text
         visible: text.length > 0
-        color: Theme.primaryText
+        color: control.enabled ? Theme.primaryText : Theme.secondaryText
         font.family: Theme.fontPrimary
-        font.pixelSize: 13
+        font.pixelSize: control.labelPixelSize
         leftPadding: visible ? control.indicator.width + control.spacing : 0
         verticalAlignment: Text.AlignVCenter
     }

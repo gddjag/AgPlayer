@@ -30,6 +30,7 @@ private slots:
     void newerTrackSuppressesStaleAnalysisResult();
     void resultCarriesTrackIdentityAndGeneration();
     void prefetchTracksWarmsCacheWithoutChangingCurrentTrack();
+    void successfulAnalysisAnnouncesWrittenCache();
 
 private:
     QString fixturePath_;
@@ -393,6 +394,41 @@ void WaveformProviderTest::prefetchTracksWarmsCacheWithoutChangingCurrentTrack()
 
     provider.loadForTrack(prefetchedPath);
     QCOMPARE(waveformSpy.count(), 1);
+}
+
+void WaveformProviderTest::successfulAnalysisAnnouncesWrittenCache()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("cache-ready.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(path, 120, 2));
+
+    SettingsController settings;
+    const QString cacheDirectory =
+        directory.filePath(QStringLiteral("waveform-cache"));
+    settings.setCacheDirectory(cacheDirectory);
+    WaveformProvider provider(&settings);
+    QSignalSpy waveformSpy(&provider, &WaveformProvider::waveformReady);
+    QSignalSpy cacheSpy(&provider, &WaveformProvider::waveformCacheReady);
+
+    provider.loadForTrack(QStringLiteral("cache-ready-track"), path);
+    if (waveformSpy.isEmpty()) {
+        QVERIFY2(waveformSpy.wait(10'000),
+                 "waveform analysis did not finish");
+    }
+    QTRY_COMPARE_WITH_TIMEOUT(cacheSpy.count(), 1, 1000);
+    QCOMPARE(cacheSpy.takeFirst().at(0).toString(), path);
+    QCOMPARE(QDir(cacheDirectory).entryList(
+                 {QStringLiteral("*.agwf")}, QDir::Files).size(), 1);
+
+    WaveformProvider cacheHitProvider(&settings);
+    QSignalSpy cacheHitWaveformSpy(
+        &cacheHitProvider, &WaveformProvider::waveformReady);
+    QSignalSpy cacheHitAnnouncementSpy(
+        &cacheHitProvider, &WaveformProvider::waveformCacheReady);
+    cacheHitProvider.loadForTrack(QStringLiteral("cache-hit-track"), path);
+    QCOMPARE(cacheHitWaveformSpy.count(), 1);
+    QCOMPARE(cacheHitAnnouncementSpy.count(), 0);
 }
 
 QTEST_MAIN(WaveformProviderTest)

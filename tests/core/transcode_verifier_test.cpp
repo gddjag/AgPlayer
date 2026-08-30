@@ -4,8 +4,10 @@
 #include "transcode_verifier.hpp"
 #include "transcoder.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <cassert>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -25,6 +27,60 @@ void write_all(const std::filesystem::path& path, const std::string& contents)
     std::ofstream output(path, std::ios::binary | std::ios::trunc);
     output.write(contents.data(), static_cast<std::streamsize>(contents.size()));
     assert(output.good());
+}
+
+std::uint16_t read_u16_le(const std::string& bytes, const std::size_t offset)
+{
+    assert(offset + 2U <= bytes.size());
+    return static_cast<std::uint16_t>(
+        static_cast<unsigned char>(bytes[offset])
+        | (static_cast<unsigned int>(
+               static_cast<unsigned char>(bytes[offset + 1U])) << 8U));
+}
+
+std::uint32_t read_u32_le(const std::string& bytes, const std::size_t offset)
+{
+    assert(offset + 4U <= bytes.size());
+    std::uint32_t value = 0;
+    for (unsigned int byte = 0; byte < 4U; ++byte) {
+        value |= static_cast<std::uint32_t>(
+                     static_cast<unsigned char>(bytes[offset + byte]))
+                 << (byte * 8U);
+    }
+    return value;
+}
+
+void write_u32_le(std::string& bytes, const std::size_t offset,
+                  const std::uint32_t value)
+{
+    assert(offset + 4U <= bytes.size());
+    for (unsigned int byte = 0; byte < 4U; ++byte) {
+        bytes[offset + byte] = static_cast<char>(value >> (byte * 8U));
+    }
+}
+
+void write_short_decodable_wav(const std::filesystem::path& source,
+                               const std::filesystem::path& output)
+{
+    std::string bytes = read_all(source);
+    assert(bytes.size() > 44U);
+    assert(bytes.compare(0, 4, "RIFF") == 0);
+    assert(bytes.compare(8, 4, "WAVE") == 0);
+    const std::size_t fmt = bytes.find("fmt ", 12U);
+    const std::size_t data = bytes.find("data", 12U);
+    assert(fmt != std::string::npos && data != std::string::npos);
+    const std::uint16_t block_align = read_u16_le(bytes, fmt + 12U);
+    const std::uint32_t data_size = read_u32_le(bytes, data + 4U);
+    const std::size_t data_offset = data + 8U;
+    const std::size_t available = std::min<std::size_t>(
+        data_size, bytes.size() - data_offset);
+    const std::size_t short_size =
+        std::max<std::size_t>(block_align, (available / 4U) / block_align
+                                              * block_align);
+    bytes.resize(data_offset + short_size);
+    write_u32_le(bytes, data + 4U, static_cast<std::uint32_t>(short_size));
+    write_u32_le(bytes, 4U, static_cast<std::uint32_t>(bytes.size() - 8U));
+    write_all(output, bytes);
 }
 
 } // namespace
@@ -109,6 +165,74 @@ int main(const int argc, char** argv)
                                                verification, error) != AG_OK);
     assert(!error.empty());
 
+    // A raw AAC probe reports only a bitrate-derived estimate. The production
+    // transcode path must carry the complete source decode length into staged
+    // output verification, so a shorter but otherwise valid/decodable output
+    // cannot be committed as success.
+    const std::filesystem::path raw_aac =
+        directory / "reliable-duration-source.aac";
+    const std::filesystem::path short_wav =
+        directory / "short-decodable-output.wav";
+    const std::filesystem::path incomplete_output =
+        directory / "raw-aac-completeness.wav";
+    std::filesystem::remove(raw_aac);
+    std::filesystem::remove(short_wav);
+    std::filesystem::remove(incomplete_output);
+    agplayer::TranscodeConfig raw_aac_config;
+    raw_aac_config.output_path = raw_aac.u8string();
+    raw_aac_config.container_name = "adts";
+    raw_aac_config.codec_name = "aac";
+    raw_aac_config.sample_rate = 44'100;
+    raw_aac_config.channels = 2;
+    error.clear();
+    assert(agplayer::transcode(input.u8string(), raw_aac_config,
+                               nullptr, nullptr, error) == AG_OK);
+
+    agplayer::TranscodeVerificationPlan source_plan;
+    agplayer::TranscodeVerificationResult source_verification;
+    error.clear();
+    assert(agplayer::verify_transcoded_output(
+               raw_aac.u8string(), source_plan, source_verification, error)
+           == AG_OK);
+    write_short_decodable_wav(input, short_wav);
+    agplayer::TranscodeVerificationResult short_verification;
+    error.clear();
+    assert(agplayer::verify_transcoded_output(
+               short_wav.u8string(), source_plan, short_verification, error)
+           == AG_OK);
+    assert(short_verification.decoded_duration_ms + 500
+           < source_verification.decoded_duration_ms);
+
+    agplayer::TranscodeConfig incomplete_config;
+    incomplete_config.output_path = incomplete_output.u8string();
+    incomplete_config.container_name = "wav";
+    incomplete_config.codec_name = "pcm_s16le";
+    bool replaced_staged_output = false;
+    incomplete_config.stage_callback = [&](const std::string_view stage) {
+        if (stage != "verifying") return;
+        for (const auto& item : std::filesystem::directory_iterator(directory)) {
+            const std::string name = item.path().filename().u8string();
+            if (name.rfind("raw-aac-completeness.agpart-", 0) == 0
+                && item.path().extension() == ".wav") {
+                std::filesystem::copy_file(
+                    short_wav, item.path(),
+                    std::filesystem::copy_options::overwrite_existing);
+                replaced_staged_output = true;
+                return;
+            }
+        }
+        assert(false && "production staging output not found");
+    };
+    error.clear();
+    const ag_result incomplete_result = agplayer::transcode(
+        raw_aac.u8string(), incomplete_config, nullptr, nullptr, error);
+    assert(replaced_staged_output);
+    assert(incomplete_result == AG_DECODE_ERROR);
+    assert(error.find("decoded duration is incomplete") != std::string::npos);
+    assert(error.find("actual=") != std::string::npos);
+    assert(error.find("expected=") != std::string::npos);
+    assert(!std::filesystem::exists(incomplete_output));
+
     const std::filesystem::path protected_output =
         directory / "protected-existing.flac";
     const std::string sentinel = "pre-existing-output";
@@ -137,6 +261,9 @@ int main(const int argc, char** argv)
     std::filesystem::remove(truncated);
     std::filesystem::remove(output);
     std::filesystem::remove(no_cover_output);
+    std::filesystem::remove(incomplete_output);
+    std::filesystem::remove(short_wav);
+    std::filesystem::remove(raw_aac);
     std::cout << "transcode verifier tests passed\n";
     return 0;
 }

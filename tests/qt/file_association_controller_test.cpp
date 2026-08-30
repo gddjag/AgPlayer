@@ -4,6 +4,7 @@
 #include <memory>
 
 #include "file_association_controller.hpp"
+#include "audio_file_discovery.hpp"
 
 #ifdef Q_OS_WIN
 #define WIN32_LEAN_AND_MEAN
@@ -46,19 +47,27 @@ private slots:
 #endif
     }
 
-    void supportedAudioExtensionsCoverDropFormats()
+    void supportedAudioExtensionsCoverDropFormats_data()
     {
-        const QStringList extensions =
-            FileAssociationController::supportedAudioExtensions();
+        QTest::addColumn<QString>("extension");
         for (const QString& extension : {
                  QStringLiteral("mp3"), QStringLiteral("wav"),
                  QStringLiteral("flac"), QStringLiteral("aac"),
                  QStringLiteral("m4a"), QStringLiteral("ogg"),
-                 QStringLiteral("aif"), QStringLiteral("aiff")}) {
-            QVERIFY2(extensions.contains(extension),
-                     qPrintable(QStringLiteral("missing extension: %1")
-                                    .arg(extension)));
+                 QStringLiteral("wma"), QStringLiteral("ape"),
+                 QStringLiteral("opus"), QStringLiteral("aif"),
+                 QStringLiteral("aiff")}) {
+            QTest::newRow(qPrintable(extension)) << extension;
         }
+    }
+
+    void supportedAudioExtensionsCoverDropFormats()
+    {
+        QFETCH(QString, extension);
+        QVERIFY(FileAssociationController::supportedAudioExtensions().contains(extension));
+        QVERIFY(agplayer::qt::isSupportedAudioExtension(extension));
+        QVERIFY(agplayer::qt::isSupportedAudioExtension(
+            QStringLiteral(".") + extension.toUpper()));
     }
 
     void registersWindowsDefaultAppsCapabilities()

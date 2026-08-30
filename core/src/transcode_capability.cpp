@@ -19,6 +19,7 @@ struct FormatDefinition {
     const char* label;
     const char* muxer;
     const char* codec;
+    const char* extension;
     bool lossy;
     bool metadata;
     bool cover;
@@ -26,15 +27,78 @@ struct FormatDefinition {
 };
 
 constexpr std::array<FormatDefinition, 8> kFormats{{
-    {"mp3", "MP3", "mp3", "libmp3lame", true, true, true, true},
-    {"flac", "FLAC", "flac", "flac", false, true, true, false},
-    {"wav", "WAV", "wav", "pcm_s16le", false, true, false, false},
-    {"aac", "AAC", "adts", "aac", true, false, false, true},
-    {"opus", "Opus", "ogg", "libopus", true, true, true, true},
-    {"ogg", "OGG", "ogg", "libvorbis", true, true, true, true},
-    {"alac", "ALAC", "ipod", "alac", false, true, true, false},
-    {"m4a", "M4A", "ipod", "aac", true, true, true, true},
+    {"mp3", "MP3", "mp3", "libmp3lame", "mp3", true, true, true, true},
+    {"flac", "FLAC", "flac", "flac", "flac", false, true, true, false},
+    {"wav", "WAV", "wav", "pcm_s16le", "wav", false, true, false, false},
+    {"aac", "AAC", "adts", "aac", "aac", true, false, false, true},
+    {"opus", "Opus", "ogg", "libopus", "opus", true, true, false, true},
+    {"ogg", "OGG", "ogg", "libvorbis", "ogg", true, true, false, true},
+    {"alac", "ALAC", "ipod", "alac", "m4a", false, true, true, false},
+    {"aiff", "AIFF", "aiff", "pcm_s16be", "aiff", false, false, false, false},
 }};
+
+const std::vector<int> kLossySampleRates{0, 44100, 48000};
+const std::vector<int> kLosslessSampleRates{
+    0, 44100, 48000, 88200, 96000, 176400, 192000};
+
+void apply_recommended_parameters(TranscodeFormatCapability& result)
+{
+    if (result.key == "mp3") {
+        result.sample_rate_choices = kLossySampleRates;
+        result.bit_rate_choices = {128000, 192000, 256000, 320000};
+        result.default_bit_rate = 320000;
+    } else if (result.key == "aac") {
+        result.sample_rate_choices = kLossySampleRates;
+        result.bit_rate_choices = {96000, 128000, 192000, 256000, 320000};
+        result.default_bit_rate = 256000;
+    } else if (result.key == "opus") {
+        result.sample_rate_choices = {48000};
+        result.bit_rate_choices = {64000, 96000, 128000, 160000,
+                                   192000, 256000, 320000};
+        result.default_bit_rate = 320000;
+    } else if (result.key == "ogg") {
+        result.sample_rate_choices = kLossySampleRates;
+    } else {
+        result.sample_rate_choices = kLosslessSampleRates;
+    }
+}
+
+void apply_friendly_parameters(TranscodeFormatCapability& result)
+{
+    if (result.key == "ogg") {
+        result.parameter_kind = "quality";
+        result.quality_choices = {0, 2, 4, 6, 8, 10};
+        // Vorbis is quality-based. Q8 is the documented high-quality default,
+        // rather than pretending it maps to a 320 kbps CBR setting.
+        result.default_quality = 8;
+        result.bitrate_modes.clear();
+    } else if (result.key == "flac") {
+        result.parameter_kind = "compression";
+        result.quality_choices = {0, 3, 5, 8};
+        result.default_quality = 5;
+    } else if (result.lossy) {
+        result.parameter_kind = "bitrate";
+    } else {
+        result.parameter_kind = "none";
+    }
+
+    if (result.key == "wav") {
+        result.bit_depth_choices = {{"", "Source (Auto)", true},
+                                    {"s16", "16-bit PCM", false},
+                                    {"s24", "24-bit PCM", false},
+                                    {"s32", "32-bit PCM", false},
+                                    {"flt", "32-bit Float", false}};
+    } else if (result.key == "flac" || result.key == "alac") {
+        result.bit_depth_choices = {{"", "Source (Auto)", true},
+                                    {"s16", "16-bit", false},
+                                    {"s24", "24-bit", false}};
+    } else if (result.key == "aiff") {
+        result.bit_depth_choices = {{"", "Source (Auto)", true},
+                                    {"s16", "16-bit PCM", false},
+                                    {"s24", "24-bit PCM", false},
+                                    {"s32", "32-bit PCM", false}};
+    }
+}
 
 template <typename T>
 std::vector<T> supported_config(const AVCodec* codec,
@@ -128,6 +192,7 @@ TranscodeFormatCapability inspect(const FormatDefinition& definition)
     result.label = definition.label;
     result.muxer_name = definition.muxer;
     result.codec_name = definition.codec;
+    result.output_extension = definition.extension;
     result.lossy = definition.lossy;
     result.supports_metadata = definition.metadata;
     result.supports_cover = definition.cover;
@@ -135,6 +200,8 @@ TranscodeFormatCapability inspect(const FormatDefinition& definition)
         result.bitrate_modes = {{"cbr", "CBR", true},
                                 {"vbr", "VBR", false}};
     }
+    apply_friendly_parameters(result);
+    apply_recommended_parameters(result);
 
     const AVCodec* codec = avcodec_find_encoder_by_name(definition.codec);
     if (codec == nullptr) {

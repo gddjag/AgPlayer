@@ -23,8 +23,12 @@ extern "C" {
 #include <string_view>
 
 #if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #endif
 
@@ -482,6 +486,11 @@ struct EncoderState {
     }
 };
 
+struct TranscodePassStats {
+    std::int64_t decoded_samples = 0;
+    int decoded_sample_rate = 0;
+};
+
 ag_result open_decoder(const std::string& path,
                        const int requested_stream_index,
                        DecoderState& d,
@@ -540,8 +549,10 @@ ag_result open_encoder(const std::string& output_path,
                        const TranscodeConfig& config,
                        EncoderState& enc,
                        AVSampleFormat in_sample_fmt,
-                       std::string& error)
+                       std::string& error,
+                       bool* output_has_cover = nullptr)
 {
+    if (output_has_cover != nullptr) *output_has_cover = false;
     // Output format guessed from file extension.
     const char* muxer_name = config.container_name.empty()
         ? nullptr : config.container_name.c_str();
@@ -599,19 +610,31 @@ ag_result open_encoder(const std::string& output_path,
     }
     enc.ctx->sample_rate = out_sample_rate;
     enc.ctx->bit_rate = config.bit_rate > 0 ? config.bit_rate : 0;
-    if (config.variable_bit_rate) {
-        const int quality = std::clamp(config.quality, 0, 100);
-        const int qscale = std::clamp(9 - (quality * 9 / 100), 0, 9);
+    const std::string_view encoder_name(enc.codec->name);
+    if (encoder_name == "libvorbis") {
+        const int quality = config.quality <= 10
+            ? std::clamp(config.quality, 0, 10)
+            : std::clamp((config.quality + 5) / 10, 0, 10);
+        enc.ctx->bit_rate = 0;
         enc.ctx->flags |= AV_CODEC_FLAG_QSCALE;
-        enc.ctx->global_quality = FF_QP2LAMBDA * qscale;
-        if (enc.ctx->priv_data != nullptr) {
-            if (std::string_view(enc.codec->name) == "libopus") {
+        enc.ctx->global_quality = FF_QP2LAMBDA * quality;
+    } else if (config.variable_bit_rate) {
+        if (std::string_view(enc.codec->name) == "libopus") {
+            if (enc.ctx->priv_data != nullptr) {
                 av_opt_set(enc.ctx->priv_data, "vbr", "on", 0);
             }
+        } else {
+            const int quality = std::clamp(config.quality, 0, 100);
+            const int qscale = std::clamp(9 - (quality * 9 / 100), 0, 9);
+            enc.ctx->flags |= AV_CODEC_FLAG_QSCALE;
+            enc.ctx->global_quality = FF_QP2LAMBDA * qscale;
         }
     } else if (enc.ctx->priv_data != nullptr
                && std::string_view(enc.codec->name) == "libopus") {
         av_opt_set(enc.ctx->priv_data, "vbr", "off", 0);
+    }
+    if (encoder_name == "flac") {
+        enc.ctx->compression_level = std::clamp(config.quality, 0, 8);
     }
     enc.ctx->thread_count = 1;
     if (!config.channel_layout.empty()) {
@@ -678,6 +701,7 @@ ag_result open_encoder(const std::string& output_path,
         enc.cover_stream->attached_pic.flags |= AV_PKT_FLAG_KEY;
         av_dict_set(&enc.cover_stream->metadata, "title", "Album cover", 0);
         av_dict_set(&enc.cover_stream->metadata, "comment", "Cover (front)", 0);
+        if (output_has_cover != nullptr) *output_has_cover = true;
     } else if (config.keep_cover
                && config.metadata_edit_plan.cover_action
                       == CoverAction::Keep) {
@@ -690,8 +714,9 @@ ag_result open_encoder(const std::string& output_path,
             if (avformat_query_codec(enc.fmt_ctx->oformat,
                                      source->codecpar->codec_id,
                                      FF_COMPLIANCE_NORMAL) <= 0) {
-                error = "Selected container cannot preserve the cover image";
-                return AG_UNSUPPORTED_FORMAT;
+                // Cover media is optional.  Preserve audio when this specific
+                // image codec cannot be muxed by the selected output.
+                break;
             }
             enc.cover_stream = avformat_new_stream(enc.fmt_ctx, nullptr);
             if (enc.cover_stream == nullptr
@@ -704,6 +729,7 @@ ag_result open_encoder(const std::string& output_path,
             enc.cover_stream->time_base = source->time_base;
             av_dict_copy(&enc.cover_stream->metadata, source->metadata, 0);
             enc.input_cover_stream_index = static_cast<int>(index);
+            if (output_has_cover != nullptr) *output_has_cover = true;
             break;
         }
     }
@@ -916,7 +942,9 @@ ag_result run_transcode_pass(const std::string& input_path,
                              const std::atomic_bool* cancelled,
                              std::function<void(float)> progress_callback,
                              std::string& error,
-                             double gain = 1.0)
+                             double gain = 1.0,
+                             bool* output_has_cover = nullptr,
+                             TranscodePassStats* stats = nullptr)
 {
     if (config.output_path.empty()) {
         error = "Output path is empty";
@@ -932,13 +960,17 @@ ag_result run_transcode_pass(const std::string& input_path,
     ag_result r = open_decoder(input_path, config.audio_stream_index,
                                dec, error);
     if (r != AG_OK) return r;
+    if (stats != nullptr) {
+        *stats = {};
+        stats->decoded_sample_rate = dec.ctx->sample_rate;
+    }
 
     const bool apply_gain = (gain != 1.0);
 
     EncoderState enc;
     r = open_encoder(config.output_path, config.codec_name, dec, config, enc,
                      apply_gain ? AV_SAMPLE_FMT_FLTP : dec.ctx->sample_fmt,
-                     error);
+                     error, output_has_cover);
     if (r != AG_OK) return r;
 
     if (config.keep_metadata || has_metadata_edits(config.metadata_edit_plan)) {
@@ -1137,6 +1169,9 @@ ag_result run_transcode_pass(const std::string& input_path,
     // In the gain path this means input -> FLTP -> gain -> output.
     // In the no-gain path this is a single-step input -> output conversion.
     auto convert_and_encode = [&](AVFrame* frame) -> bool {
+        if (stats != nullptr) {
+            stats->decoded_samples += frame->nb_samples;
+        }
         AVFrame* src_for_enc = frame;
         int src_samples = frame->nb_samples;
 
@@ -1559,10 +1594,6 @@ ag_result transcode(const std::string& input_path,
         error = "Input and output path must be different";
         return AG_INVALID_ARGUMENT;
     }
-    const ag_result metadata_preflight =
-        preflight_transcode_metadata(config, error);
-    if (metadata_preflight != AG_OK) return metadata_preflight;
-
     const fs::path final_output = path_from_utf8(config.output_path);
     const fs::path staged_output = make_staging_path(final_output);
     if (staged_output.empty()) {
@@ -1578,18 +1609,38 @@ ag_result transcode(const std::string& input_path,
         error = std::move(probe_error);
         return AG_DECODE_ERROR;
     }
+    const std::string output_muxer = staged_config.container_name.empty()
+        ? final_output.extension().u8string() : staged_config.container_name;
+    const bool output_supports_cover = output_muxer == "mp3" || output_muxer == ".mp3"
+        || output_muxer == "flac" || output_muxer == ".flac"
+        || output_muxer == "ipod" || output_muxer == "mp4" || output_muxer == ".m4a"
+        || output_muxer == "mov";
+    // A cover is optional media.  When the target cannot carry it, keep the
+    // audio conversion usable and make the resulting plan explicitly coverless.
+    if (!output_supports_cover
+        && (staged_config.keep_cover
+            || staged_config.metadata_edit_plan.cover_action != CoverAction::Keep)) {
+        staged_config.keep_cover = false;
+        staged_config.metadata_edit_plan.cover_action = CoverAction::Clear;
+    }
     if (staged_config.keep_cover
         && staged_config.metadata_edit_plan.cover_action == CoverAction::Keep
         && source_probe.has_cover) {
         std::size_t attached_picture_count = 0;
         const ag_result cover_probe_result = count_attached_pictures(
             input_path, attached_picture_count, error);
-        if (cover_probe_result != AG_OK) return cover_probe_result;
+        if (cover_probe_result != AG_OK) {
+            staged_config.keep_cover = false;
+            staged_config.metadata_edit_plan.cover_action = CoverAction::Clear;
+        }
         if (attached_picture_count > 1U) {
-            error = "Cover Keep cannot preserve multiple attached pictures";
-            return AG_UNSUPPORTED_FORMAT;
+            staged_config.keep_cover = false;
+            staged_config.metadata_edit_plan.cover_action = CoverAction::Clear;
         }
     }
+    const ag_result metadata_preflight =
+        preflight_transcode_metadata(staged_config, error);
+    if (metadata_preflight != AG_OK) return metadata_preflight;
     if (staged_config.stage_callback) {
         staged_config.stage_callback("probing");
     }
@@ -1617,13 +1668,23 @@ ag_result transcode(const std::string& input_path,
     if (staged_config.stage_callback) {
         staged_config.stage_callback("encoding");
     }
+    bool output_has_cover = false;
+    TranscodePassStats transcode_stats;
     const ag_result encode_result = run_transcode_pass(
         input_path, staged_config, cancelled, std::move(progress_callback),
-        error, gain);
+        error, gain, &output_has_cover, &transcode_stats);
     if (encode_result != AG_OK) {
         std::error_code remove_error;
         fs::remove(staged_output, remove_error);
         return encode_result;
+    }
+    if (staged_config.keep_cover && !output_has_cover
+        && staged_config.metadata_edit_plan.cover_action == CoverAction::Keep) {
+        // A source image codec rejected by the selected muxer is optional
+        // media. Keep the encoded audio and make all later verification use
+        // the same coverless staged configuration.
+        staged_config.keep_cover = false;
+        staged_config.metadata_edit_plan.cover_action = CoverAction::Clear;
     }
 
     if (staged_config.stage_callback) {
@@ -1638,7 +1699,19 @@ ag_result transcode(const std::string& input_path,
             return stream.stream_index == selected_stream;
         });
     TranscodeVerificationPlan verification_plan;
-    if (selected != source_probe.audio_streams.end()) {
+    const bool source_duration_is_estimated = source_probe.container == "aac";
+    if (source_duration_is_estimated) {
+        if (transcode_stats.decoded_samples <= 0
+            || transcode_stats.decoded_sample_rate <= 0) {
+            std::error_code remove_error;
+            fs::remove(staged_output, remove_error);
+            error = "Verification failed: reliable raw AAC source duration is unavailable";
+            return AG_DECODE_ERROR;
+        }
+        verification_plan.expected_duration_ms =
+            transcode_stats.decoded_samples * 1000
+            / transcode_stats.decoded_sample_rate;
+    } else if (selected != source_probe.audio_streams.end()) {
         verification_plan.expected_duration_ms = selected->duration_ms;
     }
     verification_plan.lossless =
@@ -1651,7 +1724,10 @@ ag_result transcode(const std::string& input_path,
     const bool output_supports_metadata = muxer_key != "adts"
                                           && muxer_key != ".aac"
                                           && muxer_key != "wav"
-                                          && muxer_key != ".wav";
+                                          && muxer_key != ".wav"
+                                          && muxer_key != "aiff"
+                                          && muxer_key != ".aiff"
+                                          && muxer_key != ".aif";
     const bool sets_metadata = std::any_of(
         staged_config.metadata_edit_plan.fields.cbegin(),
         staged_config.metadata_edit_plan.fields.cend(),

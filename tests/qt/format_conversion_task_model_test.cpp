@@ -11,6 +11,7 @@ class FormatConversionTaskModelTest final : public QObject {
 private slots:
     void exposesNineColumnsAndStableRoles();
     void keepsIdsStableAndChecksVisibleRows();
+    void visibleCountsNotifyWhenChecksChangeThroughSourceModel();
     void filtersSearchStatusAndFormatWithinBudget();
 };
 
@@ -89,6 +90,29 @@ void FormatConversionTaskModelTest::keepsIdsStableAndChecksVisibleRows()
     QCOMPARE(model.checkedCount(), 0);
     proxy.setAllVisibleChecked(true);
     QCOMPARE(model.checkedCount(), 2);
+}
+
+void FormatConversionTaskModelTest::visibleCountsNotifyWhenChecksChangeThroughSourceModel()
+{
+    FormatConversionTaskModel model;
+    model.appendTask(task(QStringLiteral("done"), QStringLiteral("done.wav"),
+                          QStringLiteral("wav"), QStringLiteral("flac"),
+                          QStringLiteral("Done"), false));
+    model.appendTask(task(QStringLiteral("error"), QStringLiteral("error.wav"),
+                          QStringLiteral("wav"), QStringLiteral("flac"),
+                          QStringLiteral("Error"), true));
+
+    FormatConversionFilterModel proxy;
+    proxy.setSourceModel(&model);
+    proxy.setStatusFilter(QStringLiteral("Done"));
+    QCOMPARE(proxy.visibleCount(), 1);
+    QCOMPARE(proxy.visibleCheckedCount(), 0);
+
+    QSignalSpy visibleCountsChanged(
+        &proxy, &FormatConversionFilterModel::visibleCountsChanged);
+    model.setChecked(QStringLiteral("done"), true);
+    QVERIFY(visibleCountsChanged.count() > 0);
+    QCOMPARE(proxy.visibleCheckedCount(), 1);
 }
 
 void FormatConversionTaskModelTest::filtersSearchStatusAndFormatWithinBudget()

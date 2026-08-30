@@ -42,6 +42,11 @@ QString ordinalText(const FilenameRuleSet& rules, int ordinal)
 
 QString removeKnownPrefix(QString stem, const FilenameRuleSet& rules)
 {
+    if (!rules.removePrefix.isEmpty()
+        && stem.startsWith(rules.removePrefix, Qt::CaseInsensitive)) {
+        stem.remove(0, rules.removePrefix.size());
+        return stem;
+    }
     if (!rules.removePrefixWhenEmpty) return stem;
     static const QRegularExpression tagAtStart(
         QStringLiteral("^\\s*(?:\\[[^\\]]+\\]|【[^】]+】|\\([^)]*\\)|（[^）]*）)\\s*[_\\- ]*"));
@@ -56,6 +61,11 @@ QString removeKnownPrefix(QString stem, const FilenameRuleSet& rules)
 
 QString removeKnownSuffix(QString stem, const FilenameRuleSet& rules)
 {
+    if (!rules.removeSuffix.isEmpty()
+        && stem.endsWith(rules.removeSuffix, Qt::CaseInsensitive)) {
+        stem.chop(rules.removeSuffix.size());
+        return stem;
+    }
     if (!rules.removeSuffixWhenEmpty) return stem;
     static const QRegularExpression tagAtEnd(
         QStringLiteral("\\s*[_\\- ]*(?:\\[[^\\]]+\\]|【[^】]+】|\\([^)]*\\)|（[^）]*）)\\s*$"));
@@ -101,19 +111,25 @@ QString FilenameTransformEngine::transform(const QString& sourceFileName,
                                            const FilenameRuleSet& rules,
                                            int ordinal)
 {
-    const NameParts parts = splitName(sourceFileName);
-    QString stem = removeExplicitAffixes(parts.stem, rules);
-    if (rules.prefix.isEmpty()) stem = removeKnownPrefix(stem, rules);
-    if (rules.suffix.isEmpty()) stem = removeKnownSuffix(stem, rules);
-    if (rules.replaceSpaces) {
-        stem.replace(QRegularExpression(QStringLiteral(" +")),
-                     rules.spaceReplacement);
+    FilenameRuleSet effectiveRules = rules;
+    if (effectiveRules.autoNumber) {
+        effectiveRules.removeSequenceWhenEmpty = false;
+        effectiveRules.removeSequenceAtStart = false;
+        effectiveRules.removeSequenceAtEnd = false;
     }
-    stem = convertCase(stem, rules.caseRule);
-    QString prefix = rules.prefix;
-    QString suffix = rules.suffix;
-    const QString number = rules.autoNumber ? ordinalText(rules, ordinal) : QString();
-    switch (rules.numberPosition) {
+    const NameParts parts = splitName(sourceFileName);
+    QString stem = removeExplicitAffixes(parts.stem, effectiveRules);
+    if (effectiveRules.prefix.isEmpty()) stem = removeKnownPrefix(stem, effectiveRules);
+    if (effectiveRules.suffix.isEmpty()) stem = removeKnownSuffix(stem, effectiveRules);
+    if (effectiveRules.replaceSpaces) {
+        stem.replace(QRegularExpression(QStringLiteral(" +")),
+                     effectiveRules.spaceReplacement);
+    }
+    stem = convertCase(stem, effectiveRules.caseRule);
+    QString prefix = effectiveRules.prefix;
+    QString suffix = effectiveRules.suffix;
+    const QString number = effectiveRules.autoNumber ? ordinalText(effectiveRules, ordinal) : QString();
+    switch (effectiveRules.numberPosition) {
     case NumberPosition::Beginning:
         stem = number.isEmpty() ? stem : number + rules.numberSeparator + stem;
         break;
@@ -128,8 +144,8 @@ QString FilenameTransformEngine::transform(const QString& sourceFileName,
         break;
     }
     QString extension = parts.extension;
-    if (!rules.preserveExtension && !extension.isEmpty()) {
-        extension = convertCase(extension, rules.caseRule);
+    if (!effectiveRules.preserveExtension && !extension.isEmpty()) {
+        extension = convertCase(extension, effectiveRules.caseRule);
     }
     const QString transformed = prefix + stem + suffix;
     return extension.isEmpty() ? transformed

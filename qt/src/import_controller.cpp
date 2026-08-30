@@ -3,6 +3,7 @@
 #include "audio_file_discovery.hpp"
 #include "bpm_analyzer.hpp"
 #include "metadata_probe.hpp"
+#include "metadata_text.hpp"
 
 #include <QByteArray>
 #include <QCryptographicHash>
@@ -17,6 +18,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <cmath>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -35,10 +37,7 @@ namespace {
 const QUrl kBrandCover(
     QStringLiteral("qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"));
 
-QString copiedUtf8(const char* value)
-{
-    return value == nullptr ? QString{} : QString::fromUtf8(value);
-}
+using agplayer::qt::decodeMetadataText;
 
 QString errorFor(ag_result result)
 {
@@ -146,7 +145,7 @@ double readEmbeddedBpmTag(const QString& requestedPath)
         || metadata == nullptr) {
         return 0.0;
     }
-    const QString text = copiedUtf8(ag_metadata_bpm_tag(metadata)).trimmed();
+    const QString text = decodeMetadataText(ag_metadata_bpm_tag(metadata)).trimmed();
     ag_metadata_destroy(metadata);
     bool ok = false;
     const double value = text.toDouble(&ok);
@@ -166,27 +165,27 @@ ProbeResult probeMetadata(const QString& requestedPath, bool analyzeBpm)
 
     TrackRecord track;
     track.path = path;
-    track.title = copiedUtf8(ag_metadata_title(metadata));
-    track.artist = copiedUtf8(ag_metadata_artist(metadata));
-    track.album = copiedUtf8(ag_metadata_album(metadata));
-    track.albumArtist = copiedUtf8(ag_metadata_album_artist(metadata));
-    track.genre = copiedUtf8(ag_metadata_genre(metadata));
-    track.year = copiedUtf8(ag_metadata_year(metadata));
-    track.date = copiedUtf8(ag_metadata_date(metadata));
-    track.composer = copiedUtf8(ag_metadata_composer(metadata));
-    track.lyrics = copiedUtf8(ag_metadata_lyrics(metadata));
-    track.format = copiedUtf8(ag_metadata_format(metadata));
+    track.title = decodeMetadataText(ag_metadata_title(metadata));
+    track.artist = decodeMetadataText(ag_metadata_artist(metadata));
+    track.album = decodeMetadataText(ag_metadata_album(metadata));
+    track.albumArtist = decodeMetadataText(ag_metadata_album_artist(metadata));
+    track.genre = decodeMetadataText(ag_metadata_genre(metadata));
+    track.year = decodeMetadataText(ag_metadata_year(metadata));
+    track.date = decodeMetadataText(ag_metadata_date(metadata));
+    track.composer = decodeMetadataText(ag_metadata_composer(metadata));
+    track.lyrics = decodeMetadataText(ag_metadata_lyrics(metadata));
+    track.format = decodeMetadataText(ag_metadata_format(metadata));
     track.sampleRate = ag_metadata_sample_rate(metadata);
     track.bitDepth = ag_metadata_bits_per_sample(metadata);
     track.bitRate = ag_metadata_bit_rate(metadata);
     track.durationMs = ag_metadata_duration_ms(metadata);
-    const QString embeddedBpm = copiedUtf8(ag_metadata_bpm_tag(metadata)).trimmed();
+    const QString embeddedBpm = decodeMetadataText(ag_metadata_bpm_tag(metadata)).trimmed();
     bool embeddedBpmOk = false;
     const double embeddedBpmValue = embeddedBpm.toDouble(&embeddedBpmOk);
     size_t coverSize = 0;
     const char* coverMime = nullptr;
     const unsigned char* coverData = ag_metadata_cover(metadata, &coverSize, &coverMime);
-    const QString mimeType = copiedUtf8(coverMime);
+    const QString mimeType = decodeMetadataText(coverMime);
     const QByteArray coverBytes = coverData == nullptr
         ? QByteArray{}
         : QByteArray(reinterpret_cast<const char*>(coverData), static_cast<qsizetype>(coverSize));

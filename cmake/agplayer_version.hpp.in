@@ -1,0 +1,7 @@
+#pragma once
+
+namespace agplayer::version {
+
+inline constexpr char kVersion[] = "@PROJECT_VERSION@";
+
+} // namespace agplayer::version

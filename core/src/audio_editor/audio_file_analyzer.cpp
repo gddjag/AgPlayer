@@ -73,6 +73,11 @@ AudioFileAnalysis AudioFileAnalyzer::analyze(
                 channel[point * 2U + 1U] = -1.0F;
             }
         }
+        result.visual_mix_peaks.assign(points * 2U, 0.0F);
+        for (std::size_t point = 0; point < points; ++point) {
+            result.visual_mix_peaks[point * 2U] = 1.0F;
+            result.visual_mix_peaks[point * 2U + 1U] = -1.0F;
+        }
 
         agplayer::Decoder decoder;
         if (decoder.open(path.u8string()) != AG_OK) {
@@ -94,6 +99,7 @@ AudioFileAnalysis AudioFileAnalyzer::analyze(
                     std::min<SampleFrame>(points - 1U,
                         (absolute_frame + static_cast<SampleFrame>(frame))
                             * static_cast<SampleFrame>(points) / total_frames));
+                double mixedSample = 0.0;
                 for (int channel = 0; channel < metadata.channels; ++channel) {
                     const float sample = block.samples[
                         frame * static_cast<std::size_t>(metadata.channels)
@@ -102,12 +108,19 @@ AudioFileAnalysis AudioFileAnalyzer::analyze(
                         result.message = "audio contains invalid samples";
                         return result;
                     }
+                    mixedSample += sample;
                     auto& peaks = result.channel_peaks[
                         static_cast<std::size_t>(channel)];
                     peaks[bucket * 2U] = std::min(peaks[bucket * 2U], sample);
                     peaks[bucket * 2U + 1U] = std::max(
                         peaks[bucket * 2U + 1U], sample);
                 }
+                const float visualSample = static_cast<float>(
+                    mixedSample / metadata.channels);
+                result.visual_mix_peaks[bucket * 2U] = std::min(
+                    result.visual_mix_peaks[bucket * 2U], visualSample);
+                result.visual_mix_peaks[bucket * 2U + 1U] = std::max(
+                    result.visual_mix_peaks[bucket * 2U + 1U], visualSample);
             }
             absolute_frame += static_cast<SampleFrame>(block.frames);
         } while (!block.end_of_stream);
@@ -118,6 +131,13 @@ AudioFileAnalysis AudioFileAnalyzer::analyze(
                     channel[point * 2U] = 0.0F;
                     channel[point * 2U + 1U] = 0.0F;
                 }
+            }
+        }
+        for (std::size_t point = 0; point < points; ++point) {
+            if (result.visual_mix_peaks[point * 2U]
+                > result.visual_mix_peaks[point * 2U + 1U]) {
+                result.visual_mix_peaks[point * 2U] = 0.0F;
+                result.visual_mix_peaks[point * 2U + 1U] = 0.0F;
             }
         }
         result.source = AudioSource{

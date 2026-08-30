@@ -91,6 +91,21 @@ int main(const int argc, char** argv)
     assert(std::abs(block.samples[0] - expected_sample) < 0.000'1F);
     assert(std::abs(block.samples[1] - expected_sample) < 0.000'1F);
 
+    constexpr std::int64_t exact_seek_frame = 66'913;
+    assert(decoder.seekFrame(exact_seek_frame) == AG_OK);
+    do {
+        assert(decoder.read(block) == AG_OK);
+    } while (block.frames == 0U && !block.end_of_stream);
+    assert(block.frames > 0U);
+    const double exact_phase = 2.0 * pi * 440.0
+        * static_cast<double>(exact_seek_frame)
+        / static_cast<double>(sample_rate);
+    const auto exact_pcm = static_cast<std::int16_t>(
+        std::lround(std::sin(exact_phase) * 0.251188643150958 * 32'767.0));
+    const float exact_sample = static_cast<float>(exact_pcm) / 32'768.0F;
+    assert(std::abs(block.samples[0] - exact_sample) < 0.000'1F);
+    assert(std::abs(block.samples[1] - exact_sample) < 0.000'1F);
+
     agplayer::Decoder failed_decoder;
     assert(failed_decoder.open(missing_filename) == AG_IO_ERROR);
     assert(!failed_decoder.is_open());

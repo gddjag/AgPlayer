@@ -6,6 +6,12 @@ param(
     [string[]]$Languages = @("zh", "en", "th", "vi"),
     [ValidateSet("dark", "light", "system")]
     [string[]]$Themes = @("dark", "light", "system"),
+    [string]$Skin = "",
+    [string]$SkinKind = "",
+    [string]$SkinStart = "",
+    [string]$SkinMiddle = "",
+    [string]$SkinEnd = "",
+    [string]$OpenSkinPicker = "",
     [ValidateSet(
         "startup", "playback", "mini", "settings", "list",
         "details",
@@ -28,6 +34,34 @@ $cachePath = Join-Path $buildRoot "CMakeCache.txt"
 $playFixture = Join-Path $buildRoot "tests/fixtures/sine-440hz.wav"
 $formatFixtures = Join-Path $buildRoot "tests/fixtures/formats"
 $outputPath = Join-Path $repoRoot $OutputDirectory
+
+$hasExplicitSkin = $SkinKind -or $SkinStart -or $SkinMiddle -or $SkinEnd
+$isHexColor = { param([string]$Value) $Value -match '^#[0-9A-Fa-f]{6}$' }
+if ($Skin -and $hasExplicitSkin) {
+    throw "-Skin cannot be combined with -SkinKind/-SkinStart/-SkinMiddle/-SkinEnd"
+}
+if ($hasExplicitSkin) {
+    $SkinKind = $SkinKind.ToLowerInvariant()
+    if ($SkinKind -eq "solid") {
+        if (-not (& $isHexColor $SkinStart) -or $SkinMiddle -or $SkinEnd) {
+            throw "Solid skin requires only one valid -SkinStart #RRGGBB"
+        }
+    }
+    elseif ($SkinKind -eq "gradient") {
+        if (-not (& $isHexColor $SkinStart) -or
+            -not (& $isHexColor $SkinMiddle) -or
+            -not (& $isHexColor $SkinEnd)) {
+            throw "Gradient skin requires valid -SkinStart/-SkinMiddle/-SkinEnd"
+        }
+    }
+    else {
+        throw "Explicit skin requires -SkinKind solid or gradient"
+    }
+}
+if ($OpenSkinPicker -and
+    $OpenSkinPicker -notin @("start", "middle", "end")) {
+    throw "-OpenSkinPicker must be start, middle, or end"
+}
 
 foreach ($requiredPath in @(
     $appPath, $cachePath, $playFixture, $formatFixtures
@@ -59,10 +93,11 @@ function Get-SurfaceExpectation {
             return [pscustomobject]@{ Width = 860; Height = 900 }
         }
         "^list$|^details$" {
-            return [pscustomobject]@{ Width = 960; Height = 570 }
+            # 38px title + 56px header + ten 62px waveform rows + 54px filter.
+            return [pscustomobject]@{ Width = 960; Height = 768 }
         }
         "^tool-\d+$" {
-            return [pscustomobject]@{ Width = 1672; Height = 942 }
+            return [pscustomobject]@{ Width = 1672; Height = 941 }
         }
         default {
             throw "No screenshot expectation configured for surface '$Surface'"
@@ -109,11 +144,16 @@ function Measure-Screenshot {
             $bitmap.GetPixel(0, $bitmap.Height - 1).A
             $bitmap.GetPixel($bitmap.Width - 1, $bitmap.Height - 1).A
         )
-        $outerCornerAlpha = if ($Surface -match "^(list|library|details)$") {
-            # The list surface is captured while docked below the player. Its
-            # top corners are intentionally square at the shared edge; only
-            # the two outer bottom corners must remain transparent.
-            $cornerAlpha[2..3]
+        $outerCornerAlpha = if ($Surface -eq "settings" -and
+            $OpenSkinPicker) {
+            # The modal in-app picker intentionally owns the full overlay,
+            # including the transparent window corners during its capture.
+            @()
+        }
+        elseif ($Surface -match "^(list|library|details|tool-\d+)$") {
+            # Borderless list and audio-tool workspaces intentionally fill
+            # their native rectangles; no corner-alpha contract applies.
+            @()
         }
         elseif ($Surface -eq "playback") {
             # Playback is captured with the list window docked below it. The
@@ -124,7 +164,8 @@ function Measure-Screenshot {
         else {
             $cornerAlpha
         }
-        if (($outerCornerAlpha | Measure-Object -Maximum).Maximum -ne 0) {
+        if ($outerCornerAlpha.Count -gt 0 -and
+            ($outerCornerAlpha | Measure-Object -Maximum).Maximum -ne 0) {
             throw "$Surface does not preserve transparent outer corners"
         }
 
@@ -180,6 +221,52 @@ function Measure-ThemeDifference {
     }
 }
 
+function Measure-CaptureDifferencePercent {
+    param(
+        [string]$FirstPath,
+        [string]$SecondPath
+    )
+
+    $first = [System.Drawing.Bitmap]::new($FirstPath)
+    $second = [System.Drawing.Bitmap]::new($SecondPath)
+    try {
+        if ($first.Width -ne $second.Width -or
+            $first.Height -ne $second.Height) {
+            throw "Compared screenshots have different dimensions"
+        }
+
+        $changedSamples = 0
+        $samples = 0
+        for ($y = 0; $y -lt $first.Height; $y += 4) {
+            for ($x = 0; $x -lt $first.Width; $x += 4) {
+                $samples++
+                if ($first.GetPixel($x, $y).ToArgb() -ne
+                    $second.GetPixel($x, $y).ToArgb()) {
+                    $changedSamples++
+                }
+            }
+        }
+        return [Math]::Round(100.0 * $changedSamples / $samples, 2)
+    }
+    finally {
+        $first.Dispose()
+        $second.Dispose()
+    }
+}
+
+function New-QALibraryPath {
+    param(
+        [string]$StateRoot,
+        [string]$Surface
+    )
+
+    # TagModel persists tags.json beside the library file. Give every capture
+    # its own directory so one seeded surface cannot contaminate another.
+    $surfaceRoot = Join-Path $StateRoot $Surface
+    New-Item -ItemType Directory -Force -Path $surfaceRoot | Out-Null
+    return Join-Path $surfaceRoot "library.json"
+}
+
 function Invoke-Capture {
     param(
         [string]$Language,
@@ -188,7 +275,7 @@ function Invoke-Capture {
         [string[]]$Arguments
     )
 
-    $stem = "{0}-{1}-{2}" -f $Language, $Theme, $Surface
+    $stem = Get-CaptureStem -Language $Language -Theme $Theme -Surface $Surface
     $screenshot = Join-Path $outputPath ($stem + ".png")
     $log = Join-Path $outputPath ($stem + ".log")
     Remove-Item -LiteralPath $screenshot, $log -Force -ErrorAction SilentlyContinue
@@ -198,6 +285,24 @@ function Invoke-Capture {
         "--qa-language", $Language,
         "--qa-theme", $Theme
     )
+    if ($Skin) {
+        $common += @("--qa-skin", $Skin)
+    }
+    elseif ($SkinKind) {
+        $common += @(
+            "--qa-skin-kind", $SkinKind,
+            "--qa-skin-start", $SkinStart
+        )
+        if ($SkinKind -eq "gradient") {
+            $common += @(
+                "--qa-skin-middle", $SkinMiddle,
+                "--qa-skin-end", $SkinEnd
+            )
+        }
+    }
+    if ($OpenSkinPicker) {
+        $common += @("--qa-open-skin-picker", $OpenSkinPicker)
+    }
     $process = Start-Process -FilePath $appPath `
         -ArgumentList ($common + $Arguments + @($screenshot)) `
         -Wait -PassThru
@@ -220,6 +325,12 @@ function Invoke-Capture {
     $results.Add([pscustomobject]@{
         Language = $Language
         Theme = $Theme
+        Skin = $Skin
+        SkinKind = $SkinKind
+        SkinStart = $SkinStart
+        SkinMiddle = $SkinMiddle
+        SkinEnd = $SkinEnd
+        OpenSkinPicker = $OpenSkinPicker
         Surface = $Surface
         Bytes = (Get-Item -LiteralPath $screenshot).Length
         Width = $metrics.Width
@@ -229,6 +340,35 @@ function Invoke-Capture {
         CornerAlpha = $metrics.CornerAlpha
         Result = "PASS"
     })
+}
+
+function Get-CaptureStem {
+    param(
+        [string]$Language,
+        [string]$Theme,
+        [string]$Surface
+    )
+
+    $parts = [System.Collections.Generic.List[string]]::new()
+    $parts.Add($Language)
+    $parts.Add($Theme)
+    if ($Skin) {
+        $safeSkin = ($Skin -replace "[^A-Za-z0-9]+", "-").Trim("-")
+        $parts.Add("skin-" + $safeSkin)
+    }
+    if ($SkinKind) {
+        $parts.Add("kind-" + $SkinKind)
+        $parts.Add("start-" + $SkinStart.Substring(1).ToUpperInvariant())
+        if ($SkinKind -eq "gradient") {
+            $parts.Add("middle-" + $SkinMiddle.Substring(1).ToUpperInvariant())
+            $parts.Add("end-" + $SkinEnd.Substring(1).ToUpperInvariant())
+        }
+    }
+    if ($OpenSkinPicker) {
+        $parts.Add("picker-" + $OpenSkinPicker)
+    }
+    $parts.Add($Surface)
+    return $parts -join "-"
 }
 
 try {
@@ -244,45 +384,61 @@ try {
 
             if ($Surfaces -contains "startup") {
                 Invoke-Capture $language $theme "startup" @(
-                    "--qa-library", (Join-Path $stateRoot "startup.json"),
+                    "--qa-library", (New-QALibraryPath $stateRoot "startup"),
                     "--qa-screenshot-main"
                 )
             }
             if ($Surfaces -contains "playback") {
                 Invoke-Capture $language $theme "playback" @(
-                    "--qa-library", (Join-Path $stateRoot "playback.json"),
+                    "--qa-library", (New-QALibraryPath $stateRoot "playback"),
                     "--qa-play", $playFixture,
                     "--qa-screenshot-main"
                 )
             }
             if ($Surfaces -contains "mini") {
                 Invoke-Capture $language $theme "mini" @(
-                    "--qa-library", (Join-Path $stateRoot "mini.json"),
+                    "--qa-library", (New-QALibraryPath $stateRoot "mini"),
                     "--qa-play", $playFixture,
                     "--qa-screenshot-mini"
                 )
             }
             if ($Surfaces -contains "settings") {
                 Invoke-Capture $language $theme "settings" @(
-                    "--qa-library", (Join-Path $stateRoot "settings.json"),
+                    "--qa-library", (New-QALibraryPath $stateRoot "settings"),
                     "--qa-open-settings",
+                    "--qa-settings-section", "2",
                     "--qa-screenshot-main"
                 )
             }
             if ($Surfaces -contains "list") {
                 Invoke-Capture $language $theme "list" @(
-                    "--qa-library", (Join-Path $stateRoot "list.json"),
+                    "--qa-library", (New-QALibraryPath $stateRoot "list"),
                     "--qa-import-folder", $formatFixtures,
                     "--qa-screenshot-list"
                 )
             }
             if ($Surfaces -contains "details") {
                 Invoke-Capture $language $theme "details" @(
-                    "--qa-library", (Join-Path $stateRoot "details.json"),
+                    "--qa-library", (New-QALibraryPath $stateRoot "details"),
                     "--qa-import-folder", $formatFixtures,
                     "--qa-show-track-details",
                     "--qa-screenshot-list"
                 )
+                if ($Surfaces -contains "list") {
+                    $listPath = Join-Path $outputPath (
+                        (Get-CaptureStem -Language $language -Theme $theme `
+                            -Surface "list") + ".png")
+                    $detailsPath = Join-Path $outputPath (
+                        (Get-CaptureStem -Language $language -Theme $theme `
+                            -Surface "details") + ".png")
+                    $detailsDifference = Measure-CaptureDifferencePercent `
+                        -FirstPath $listPath -SecondPath $detailsPath
+                    if ($detailsDifference -lt 1) {
+                        throw (("{0}-{1} list/details differ at only {2}%; " +
+                                "the real details panel was not captured") -f
+                                $language, $theme, $detailsDifference)
+                    }
+                }
             }
             foreach ($tool in 0..3) {
                 $toolSurface = "tool-{0}" -f $tool
@@ -290,7 +446,7 @@ try {
                     continue
                 }
                 Invoke-Capture $language $theme $toolSurface @(
-                    "--qa-library", (Join-Path $stateRoot ("tool-{0}.json" -f $tool)),
+                    "--qa-library", (New-QALibraryPath $stateRoot $toolSurface),
                     "--qa-tool", [string]$tool,
                     "--qa-screenshot-tools"
                 )
@@ -302,13 +458,15 @@ try {
         foreach ($language in $Languages) {
             foreach ($surface in $Surfaces) {
                 $darkPath = Join-Path $outputPath (
-                    "{0}-dark-{1}.png" -f $language, $surface)
+                    (Get-CaptureStem -Language $language -Theme "dark" `
+                        -Surface $surface) + ".png")
                 $lightPath = Join-Path $outputPath (
-                    "{0}-light-{1}.png" -f $language, $surface)
+                    (Get-CaptureStem -Language $language -Theme "light" `
+                        -Surface $surface) + ".png")
                 $difference = Measure-ThemeDifference $darkPath $lightPath
                 if ($difference -lt 12) {
-                    throw ("{0}-{1} dark/light difference is only {2}; " +
-                        "theme coverage may be incomplete" -f
+                    throw (("{0}-{1} dark/light difference is only {2}; " +
+                        "theme coverage may be incomplete") -f
                         $language, $surface, $difference)
                 }
             }

@@ -61,7 +61,7 @@ typedef struct ag_playback_snapshot {
     ag_playback_mode mode;
 } ag_playback_snapshot;
 
-#define AG_EQUALIZER_BAND_COUNT 10
+#define AG_EQUALIZER_BAND_COUNT 17
 
 typedef struct ag_equalizer_settings {
     unsigned long long revision;

@@ -65,6 +65,80 @@ TestCase {
         verify(cover.height === 210)
     }
 
+    function test_changePreviewClipsAndScrollsInternally() {
+        const preview = findChild(page, "metadataChangePreview")
+        const scroll = findChild(page, "metadataChangePreviewScroll")
+        verify(preview && scroll)
+        verify(preview.clip)
+        verify(scroll.clip)
+        verify(scroll.mapToItem(preview, 0, 0).y >= 0)
+        verify(scroll.mapToItem(preview, scroll.width, scroll.height).x
+               <= preview.width)
+        verify(scroll.mapToItem(preview, scroll.width, scroll.height).y
+               <= preview.height)
+        for (let index = 0; index < page.fieldDefinitions.length; ++index) {
+            const key = page.fieldDefinitions[index].key
+            page.setFieldMode(key, "set")
+            page.setFieldValue(key, "long-preview-value-" + index)
+        }
+        const overflow = Math.max(0, scroll.contentHeight
+                                     - scroll.availableHeight)
+        if (overflow > 0) {
+            scroll.contentItem.contentY = overflow
+            tryVerify(function() { return scroll.contentItem.contentY > 0 }, 1000)
+        } else {
+            compare(scroll.contentItem.contentY, 0)
+        }
+        page.resetEdits()
+    }
+
+    function test_runtimeLayoutMatrix_data() {
+        return [
+            { tag: "minimum", w: 880, h: 560 },
+            { tag: "compact", w: 1000, h: 720 },
+            { tag: "desktop", w: 1280, h: 720 },
+            { tag: "reference", w: 1672, h: 942 }
+        ]
+    }
+
+    function test_runtimeLayoutMatrix(data) {
+        const candidate = createTemporaryObject(responsivePageComponent,
+                                                 testCase,
+                                                 { width: data.w, height: data.h })
+        verify(candidate)
+        wait(0)
+        const toolbar = findChild(candidate, "metadataToolbar")
+        const files = findChild(candidate, "metadataFilePanel")
+        const inspector = findChild(candidate, "metadataInspectorPanel")
+        const tabs = findChild(candidate, "metadataCompactTabs")
+        verify(toolbar && files && inspector && tabs)
+        const toolbarPosition = toolbar.mapToItem(candidate, 0, 0)
+        verify(toolbarPosition.x >= 0 && toolbarPosition.y >= 0)
+        verify(toolbarPosition.x + toolbar.width <= candidate.width)
+        verify(toolbarPosition.y + toolbar.height <= candidate.height)
+        if (candidate.compactLayout) {
+            verify(tabs.visible && files.visible)
+            tabs.currentIndex = 1
+            tryVerify(function() { return inspector.visible })
+        }
+        const visiblePanel = candidate.compactLayout ? inspector : files
+        tryVerify(function() {
+            const panelPosition = visiblePanel.mapToItem(candidate, 0, 0)
+            return panelPosition.x >= 0 && panelPosition.y >= 0
+                    && panelPosition.x + visiblePanel.width <= candidate.width
+                    && panelPosition.y + visiblePanel.height <= candidate.height
+        })
+    }
+
+    function test_resultsSummaryIncludesUnsupportedCount() {
+        const summary = findChild(page, "metadataResultsSummaryLabel")
+        verify(summary)
+        if (!summary)
+            return
+        verify(summary.text.indexOf("不支持") >= 0,
+               "result summary must expose unsupported rows: " + summary.text)
+    }
+
     function test_compactLayoutKeepsBothWorkspacesReachable() {
         const compactPage = createTemporaryObject(compactPageComponent, testCase)
         verify(compactPage)
@@ -76,7 +150,10 @@ TestCase {
         verify(files.visible)
         tabs.currentIndex = 1
         tryVerify(function() { return inspector.visible && inspector.width > 0 })
-        verify(inspector.mapToItem(compactPage, inspector.width, 0).x <= compactPage.width)
+        tryVerify(function() {
+            return inspector.mapToItem(compactPage, inspector.width, 0).x
+                    <= compactPage.width
+        })
     }
 
     function test_responsiveThresholdUsesBothPanelMinimumWidths() {
@@ -150,13 +227,30 @@ TestCase {
     function test_mixedValuesAndCoversAreVisibleWithoutChoosingFirstFile() {
         const titleRow = page.rowForField("title")
         const titleField = findChild(page, "metadataValueField_title")
+        const clearButton = findChild(page, "metadataClearButton_title")
         const coverSummary = findChild(page, "metadataCoverSummaryLabel")
-        verify(titleRow && titleField && coverSummary)
+        verify(titleRow && titleField && clearButton && coverSummary)
         titleRow.reset({ value: "", multiple: true })
         compare(titleField.text, "")
         compare(titleField.placeholderText, "多种值")
+        verify(clearButton.visible)
+        mouseClick(clearButton)
+        compare(titleRow.selectedMode, "clear")
+        compare(titleField.placeholderText, "将清除")
         page.scopeAggregate = { cover: { state: "multiple" } }
         tryCompare(coverSummary, "text", "当前封面：多种封面")
+    }
+
+    function test_loadedFieldsStayUntouchedAndDeletingExistingValueClears() {
+        const titleRow = page.rowForField("title")
+        const titleField = findChild(page, "metadataValueField_title")
+        verify(titleRow && titleField)
+        titleRow.reset({ value: "Existing title", multiple: false })
+        compare(titleRow.selectedMode, "keep")
+        titleField.text = ""
+        titleField.textEdited()
+        compare(titleRow.selectedMode, "clear")
+        compare(titleRow.descriptor().mode, "clear")
     }
 
     function test_customTagReplacesYearInEditorSchema() {
@@ -190,6 +284,130 @@ TestCase {
         compare(page.targetCount(), 1)
         scope.currentIndex = 2
         compare(page.targetCount(), MetadataEditor.fileCount)
+    }
+
+    function test_realCurrentSelectedAndAllScopesWriteAndReadBackSnapshots() {
+        const scope = findChild(page, "metadataScopeBox")
+        verify(scope)
+
+        function loadCopies(count) {
+            const urls = []
+            for (let index = 0; index < count; ++index) {
+                const copy = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+                verify(copy.toString().length > 0)
+                urls.push(copy)
+            }
+            MetadataEditor.loadFiles(urls)
+            tryVerify(function() { return !MetadataEditor.busy }, 5000)
+            compare(MetadataEditor.fileCount, count)
+            return urls
+        }
+
+        function applyTitle(title, mutateSelection) {
+            page.refreshFields()
+            page.setFieldMode("title", "set")
+            page.setFieldValue("title", title)
+            const apply = findChild(page, "metadataApplyButton")
+            verify(apply && apply.enabled)
+            mouseClick(apply, apply.width / 2, apply.height / 2,
+                       Qt.LeftButton)
+            mutateSelection()
+            tryVerify(function() { return !MetadataEditor.busy }, 30000)
+        }
+
+        let files = loadCopies(2)
+        page.selectedIndices = [0, 1]
+        page.selectionAnchor = 1
+        scope.currentIndex = 0
+        applyTitle("qml-current-snapshot", function() {
+            page.selectedIndices = [0]
+            page.selectionAnchor = 0
+        })
+        compare(nativeDropHelper.probeMetadataTitle(files[0]), "")
+        compare(nativeDropHelper.probeMetadataTitle(files[1]),
+                "qml-current-snapshot")
+        compare(MetadataEditor.results.length, 1)
+
+        MetadataEditor.clear()
+        files = loadCopies(3)
+        page.selectedIndices = [0, 2]
+        page.selectionAnchor = 0
+        scope.currentIndex = 1
+        applyTitle("qml-selected-snapshot", function() {
+            page.selectedIndices = [1]
+            page.selectionAnchor = 1
+        })
+        compare(nativeDropHelper.probeMetadataTitle(files[0]),
+                "qml-selected-snapshot")
+        compare(nativeDropHelper.probeMetadataTitle(files[1]), "")
+        compare(nativeDropHelper.probeMetadataTitle(files[2]),
+                "qml-selected-snapshot")
+        compare(MetadataEditor.results.length, 2)
+
+        MetadataEditor.clear()
+        files = loadCopies(2)
+        page.selectedIndices = [0]
+        page.selectionAnchor = 0
+        scope.currentIndex = 2
+        applyTitle("qml-all-snapshot", function() {
+            page.selectedIndices = []
+            page.selectionAnchor = -1
+        })
+        compare(nativeDropHelper.probeMetadataTitle(files[0]),
+                "qml-all-snapshot")
+        compare(nativeDropHelper.probeMetadataTitle(files[1]),
+                "qml-all-snapshot")
+        compare(MetadataEditor.results.length, 2)
+    }
+
+    function test_realChinesePathsRetainOverwriteAndClearFieldsInBatch() {
+        const first = nativeDropHelper.copyForNativeDropWithFileName(
+                          testAudioUrl, "歌曲一号.wav")
+        const second = nativeDropHelper.copyForNativeDropWithFileName(
+                           testAudioUrl, "歌曲二号.wav")
+        verify(first.toString().length > 0)
+        verify(second.toString().length > 0)
+
+        MetadataEditor.clear()
+        MetadataEditor.loadFiles([first, second])
+        tryVerify(function() { return !MetadataEditor.busy }, 5000)
+        compare(MetadataEditor.fileCount, 2)
+        page.selectedIndices = [0, 1]
+        page.selectionAnchor = 0
+        const scope = findChild(page, "metadataScopeBox")
+        const apply = findChild(page, "metadataApplyButton")
+        verify(scope && apply)
+        scope.currentIndex = 2
+        page.refreshFields()
+        page.setFieldMode("title", "set")
+        page.setFieldValue("title", "中文标题")
+        page.setFieldMode("artist", "set")
+        page.setFieldValue("artist", "原艺术家")
+        page.setFieldMode("album", "set")
+        page.setFieldValue("album", "保留专辑")
+        mouseClick(apply)
+        tryVerify(function() { return !MetadataEditor.busy }, 30000)
+        compare(MetadataEditor.successCount, 2)
+
+        MetadataEditor.clear()
+        MetadataEditor.loadFiles([first, second])
+        tryVerify(function() { return !MetadataEditor.busy }, 5000)
+        page.selectedIndices = [0]
+        page.selectionAnchor = 0
+        scope.currentIndex = 0
+        page.refreshFields()
+        page.setFieldMode("title", "clear")
+        page.setFieldMode("artist", "set")
+        page.setFieldValue("artist", "新艺术家")
+        mouseClick(apply)
+        tryVerify(function() { return !MetadataEditor.busy }, 30000)
+        compare(MetadataEditor.successCount, 1)
+        compare(nativeDropHelper.probeMetadataText(first, "title"), "")
+        compare(nativeDropHelper.probeMetadataText(first, "artist"), "新艺术家")
+        compare(nativeDropHelper.probeMetadataText(first, "album"), "保留专辑")
+        compare(nativeDropHelper.probeMetadataText(second, "title"), "中文标题")
+        compare(nativeDropHelper.probeMetadataText(second, "artist"), "原艺术家")
+        compare(nativeDropHelper.probeMetadataText(second, "album"), "保留专辑")
     }
 
 

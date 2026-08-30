@@ -3,6 +3,8 @@
 #include "library_store.hpp"
 #include "playback_controller.hpp"
 #include "runtime_log.hpp"
+#include "tag_model.hpp"
+#include "tag_store.hpp"
 #include "window_controller.hpp"
 
 #include <agplayer/c_api.h>
@@ -29,6 +31,7 @@ private slots:
     void closeDuringWaveformWriteLeavesValidState();
     void closeIsIdempotentWhenImportStillRunning();
     void closeReleasesCoreAndFlushesLibraryEvenIfImportEmpty();
+    void closeSynchronouslyFlushesImmediateTagEdit();
 };
 
 namespace {
@@ -44,6 +47,7 @@ public:
     Harness(QTemporaryDir& scratch, QSemaphore& probeEntered, QSemaphore& probeRelease)
         : libraryPath_(scratch.filePath(QStringLiteral("library.json")))
         , store_(libraryPath_)
+        , tags_(&library_, scratch.filePath(QStringLiteral("tags.json")))
         , importer_(&library_, makeBlockingProbe(probeEntered, probeRelease))
     {
         ag_player_config config{AG_AUDIO_BACKEND_NULL, 2048};
@@ -76,7 +80,10 @@ public:
                     ag_player_stop(core_);
                 }
             };
-        actions.flushLibrary = [this] { library_.flush(); };
+        actions.flushLibrary = [this] {
+            library_.flush();
+            tagFlushSucceeded_ = tags_.flush();
+        };
         actions.releaseCore = [this] {
             playback_->setPlayer(nullptr);
             if (core_ != nullptr) {
@@ -112,6 +119,8 @@ public:
 
     QString libraryPath() const { return libraryPath_; }
     QString libraryDirectory() const { return QFileInfo(libraryPath_).absolutePath(); }
+    QString tagPath() const { return QFileInfo(libraryPath_).dir().filePath(QStringLiteral("tags.json")); }
+    bool tagFlushSucceeded() const { return tagFlushSucceeded_; }
 
     bool libraryJsonIsValid() const
     {
@@ -135,6 +144,7 @@ public:
     // Public accessors for test assertions.
     LibraryModel library_;
     LibraryStore store_;
+    TagModel tags_;
     ImportController importer_;
 
 private:
@@ -160,6 +170,7 @@ private:
     ag_player* core_ = nullptr;
     std::unique_ptr<PlaybackController> playback_;
     WindowController windows_;
+    bool tagFlushSucceeded_ = false;
 };
 
 QStringList makeFixtureFiles(QTemporaryDir& dir, int count)
@@ -269,6 +280,25 @@ void ShutdownTest::closeReleasesCoreAndFlushesLibraryEvenIfImportEmpty()
     const QJsonDocument document = QJsonDocument::fromJson(json.readAll());
     QVERIFY(document.isArray());
     QCOMPARE(document.array().size(), 1);
+}
+
+void ShutdownTest::closeSynchronouslyFlushesImmediateTagEdit()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QSemaphore probeEntered;
+    QSemaphore probeRelease;
+    Harness app(dir, probeEntered, probeRelease);
+
+    QVERIFY(app.tags_.createTag(QStringLiteral("Immediate")));
+    QVERIFY(app.tags_.dirty());
+    app.requestClose();
+
+    QVERIFY(app.tagFlushSucceeded());
+    QVERIFY(!app.tags_.dirty());
+    const QList<TagEntry> restored = TagStore(app.tagPath()).load();
+    QCOMPARE(restored.size(), 1);
+    QCOMPARE(restored.constFirst().key, QStringLiteral("immediate"));
 }
 
 QTEST_GUILESS_MAIN(ShutdownTest)

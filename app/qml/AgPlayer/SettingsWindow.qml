@@ -7,23 +7,23 @@ Window {
     id: settingsWindow
     objectName: "settingsWindow"
     visible: false
-    width: 1228
+    width: 860
     height: Math.min(900, Math.max(640, Screen.desktopAvailableHeight - 40))
-    minimumWidth: 900
+    minimumWidth: 840
     minimumHeight: 640
     flags: Qt.FramelessWindowHint
     color: "transparent"
     title: qsTr("AgPlayer · 设置")
     palette.window: Theme.background
     palette.windowText: Theme.primaryText
-    palette.base: Theme.elevated
-    palette.alternateBase: Theme.panel
+    palette.base: Theme.surfaceElevated
+    palette.alternateBase: Theme.surface
     palette.text: Theme.primaryText
-    palette.button: Theme.elevated
+    palette.button: Theme.surfaceElevated
     palette.buttonText: Theme.primaryText
-    palette.highlight: Theme.accent
-    palette.highlightedText: Theme.accentText
-    palette.mid: Theme.border
+    palette.highlight: Theme.highlight
+    palette.highlightedText: Theme.highlightText
+    palette.mid: Theme.opaqueBorder
 
     Component.onCompleted: WindowController.registerSettingsWindow(settingsWindow)
 
@@ -44,9 +44,15 @@ Window {
         settingsPage.cancelAndClose()
     }
 
+    SkinBackdrop {
+        anchors.fill: parent
+        radius: settingsWindow.visibility === Window.Maximized
+                ? 0 : Theme.windowRadius
+    }
+
     Rectangle {
         anchors.fill: parent
-        color: Theme.background
+        color: "transparent"
         radius: settingsWindow.visibility === Window.Maximized
                 ? 0 : Theme.windowRadius
         border.color: Theme.border

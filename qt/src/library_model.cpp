@@ -1,4 +1,5 @@
 #include "library_model.hpp"
+#include "metadata_text.hpp"
 
 #include "agplayer/c_api.h"
 
@@ -31,7 +32,7 @@ QString pathKey(const QString& path)
 
 QString copiedMetadata(const char* value)
 {
-    return value == nullptr ? QString{} : QString::fromUtf8(value);
+    return agplayer::qt::decodeMetadataText(value);
 }
 
 QString coverSuffix(const QString& mimeType)
@@ -88,6 +89,22 @@ QUrl cacheEmbeddedCover(const unsigned char* data,
         }
     }
     return QUrl::fromLocalFile(coverPath);
+}
+
+QStringList normalizeTags(const QStringList& tags)
+{
+    QStringList normalized;
+    QSet<QString> keys;
+    normalized.reserve(tags.size());
+    for (const QString& tag : tags) {
+        const QString displayName = tag.trimmed();
+        const QString key = displayName.toCaseFolded();
+        if (!displayName.isEmpty() && !keys.contains(key)) {
+            keys.insert(key);
+            normalized.append(displayName);
+        }
+    }
+    return normalized;
 }
 }
 
@@ -265,6 +282,7 @@ QStringList LibraryModel::insertBatch(int row, QList<TrackRecord> tracks)
     QList<TrackRecord> accepted;
     accepted.reserve(tracks.size());
     QSet<QString> batchKeys;
+    const qint64 batchAddedAtMs = QDateTime::currentMSecsSinceEpoch();
     for (TrackRecord& track : tracks) {
         track.path = canonicalLibraryPath(track.path);
         const QString key = normalizedCanonicalKey(track.path);
@@ -275,7 +293,7 @@ QStringList LibraryModel::insertBatch(int row, QList<TrackRecord> tracks)
             track.trackId = trackIdForPath(track.path);
         }
         if (track.addedAtMs <= 0) {
-            track.addedAtMs = QDateTime::currentMSecsSinceEpoch();
+            track.addedAtMs = batchAddedAtMs;
         }
         batchKeys.insert(key);
         accepted.append(std::move(track));
@@ -493,25 +511,132 @@ bool LibraryModel::setTags(const QString& trackId, const QStringList& tags)
     if (row < 0) {
         return false;
     }
+    if (!applyTagsAtRow(row, normalizeTags(tags))) return false;
+    emit flushRequested();
+    return true;
+}
 
-    QStringList normalized;
-    QSet<QString> keys;
-    for (const QString& tag : tags) {
-        const QString trimmed = tag.trimmed();
-        const QString key = trimmed.toCaseFolded();
-        if (!trimmed.isEmpty() && !keys.contains(key)) {
-            keys.insert(key);
-            normalized.append(trimmed);
+int LibraryModel::setTagsForTracks(const QStringList& trackIds,
+                                   const QStringList& tags)
+{
+    const QStringList normalized = normalizeTags(tags);
+    QSet<QString> requestedIds;
+    int changed = 0;
+    for (const QString& trackId : trackIds) {
+        if (trackId.isEmpty() || requestedIds.contains(trackId)) continue;
+        requestedIds.insert(trackId);
+        const int row = indexForTrackId(trackId);
+        if (row >= 0 && applyTagsAtRow(row, normalized)) ++changed;
+    }
+    if (changed > 0) emit flushRequested();
+    return changed;
+}
+
+int LibraryModel::addTagToTracks(const QStringList& trackIds,
+                                 const QString& tag)
+{
+    const QStringList normalizedTag = normalizeTags({tag});
+    if (normalizedTag.isEmpty()) return 0;
+
+    const QString targetKey = normalizedTag.constFirst().toCaseFolded();
+    QSet<QString> requestedIds;
+    QList<int> requestedRows;
+    requestedRows.reserve(trackIds.size());
+    for (const QString& trackId : trackIds) {
+        if (trackId.isEmpty() || requestedIds.contains(trackId)) continue;
+        requestedIds.insert(trackId);
+        const int row = indexForTrackId(trackId);
+        if (row < 0) return 0;
+        requestedRows.append(row);
+    }
+
+    int changed = 0;
+    for (const int row : requestedRows) {
+        QStringList next = tracks_.at(row).tags;
+        const bool alreadyPresent = std::any_of(
+            next.cbegin(), next.cend(), [&targetKey](const QString& existing) {
+                return existing.toCaseFolded() == targetKey;
+            });
+        if (alreadyPresent) continue;
+        next.append(normalizedTag.constFirst());
+        if (applyTagsAtRow(row, normalizeTags(next))) ++changed;
+    }
+    if (changed > 0) emit flushRequested();
+    return changed;
+}
+
+int LibraryModel::removeTagFromTracks(const QStringList& trackIds,
+                                      const QString& tag)
+{
+    const QString targetKey = tag.trimmed().toCaseFolded();
+    if (targetKey.isEmpty()) return 0;
+
+    QSet<QString> requestedIds;
+    int changed = 0;
+    for (const QString& trackId : trackIds) {
+        if (trackId.isEmpty() || requestedIds.contains(trackId)) continue;
+        requestedIds.insert(trackId);
+        const int row = indexForTrackId(trackId);
+        if (row < 0) continue;
+        QStringList next = tracks_.at(row).tags;
+        next.erase(std::remove_if(next.begin(), next.end(),
+                                  [&targetKey](const QString& existing) {
+            return existing.toCaseFolded() == targetKey;
+        }), next.end());
+        if (applyTagsAtRow(row, next)) ++changed;
+    }
+    if (changed > 0) emit flushRequested();
+    return changed;
+}
+
+int LibraryModel::renameTag(const QString& oldKey, const QString& displayName)
+{
+    const QString normalizedOldKey = oldKey.trimmed().toCaseFolded();
+    const QStringList replacement = normalizeTags({displayName});
+    if (normalizedOldKey.isEmpty() || replacement.isEmpty()) return 0;
+
+    int changed = 0;
+    for (int row = 0; row < tracks_.size(); ++row) {
+        QStringList next = tracks_.at(row).tags;
+        bool found = false;
+        for (QString& tag : next) {
+            if (tag.toCaseFolded() == normalizedOldKey) {
+                tag = replacement.front();
+                found = true;
+            }
         }
+        if (found && applyTagsAtRow(row, normalizeTags(next))) ++changed;
     }
-    if (tracks_[row].tags == normalized) {
-        return false;
-    }
+    if (changed > 0) emit flushRequested();
+    return changed;
+}
 
-    tracks_[row].tags = std::move(normalized);
+int LibraryModel::removeTag(const QString& key)
+{
+    const QString normalizedKey = key.trimmed().toCaseFolded();
+    if (normalizedKey.isEmpty()) return 0;
+
+    int changed = 0;
+    for (int row = 0; row < tracks_.size(); ++row) {
+        QStringList next = tracks_.at(row).tags;
+        next.erase(std::remove_if(next.begin(), next.end(),
+                                  [&normalizedKey](const QString& tag) {
+                                      return tag.toCaseFolded() == normalizedKey;
+                                  }), next.end());
+        if (applyTagsAtRow(row, next)) ++changed;
+    }
+    if (changed > 0) emit flushRequested();
+    return changed;
+}
+
+bool LibraryModel::applyTagsAtRow(const int row, const QStringList& tags)
+{
+    if (row < 0 || row >= tracks_.size() || tracks_.at(row).tags == tags) return false;
+    const QStringList oldTags = tracks_.at(row).tags;
+    tracks_[row].tags = tags;
     const QModelIndex changed = index(row, 0);
     emit dataChanged(changed, changed, {TagsRole});
-    emit flushRequested();
+    emit tagsChanged(tracks_.at(row).trackId, oldTags, tags);
     return true;
 }
 

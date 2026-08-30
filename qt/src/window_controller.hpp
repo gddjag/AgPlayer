@@ -2,8 +2,10 @@
 
 #include <QObject>
 #include <QAbstractNativeEventFilter>
+#include <QList>
 #include <QPointer>
 #include <QRect>
+#include <QSet>
 #include <QSettings>
 #include <QSize>
 #include <QTimer>
@@ -67,8 +69,17 @@ public:
     int listWindowHeight() const noexcept;
     static QRect geometryForDpiChange(const QRect& currentGeometry,
                                       const QRect& suggestedGeometry);
+    static QRect geometryForDpiChange(const QRect& currentNativeGeometry,
+                                      qreal currentDpr,
+                                      const QRect& suggestedNativeGeometry,
+                                      qreal targetDpr,
+                                      const QRect& targetAvailableGeometry);
+    static QRect geometryForAvailableScreens(
+        const QRect& savedGeometry, const QSize& minimumSize,
+        const QList<QRect>& availableScreens, int primaryScreenIndex);
 
     void setWindows(QWindow* mainWindow, QWindow* miniWindow);
+    void setMainWindowShellMode(int mode);
     void setListWindow(QWindow* listWindow);
     void setAudioToolsWindow(QWindow* audioToolsWindow);
     void setMainReady(bool ready) noexcept;
@@ -86,6 +97,7 @@ public:
 
     Q_INVOKABLE void showMini();
     Q_INVOKABLE void showMain();
+    Q_INVOKABLE void toggleMainWindowGroup();
     Q_INVOKABLE void showAudioTools();
     Q_INVOKABLE void hideAudioTools();
     Q_INVOKABLE void requestClose();
@@ -139,10 +151,12 @@ private:
     void setListDockEdge(const QString& edge);
     QString snapEdgeForPosition(int x, int y) const;
     void loadPersistedWindowState();
-    void restoreGeometry(QWindow* window, const QString& key);
+    bool restoreGeometry(QWindow* window, const QString& key);
     void persistGeometry(QWindow* window, const QString& key);
     void scheduleWindowStateSync();
     void flushWindowState();
+    QString mainWindowGeometryKey() const;
+    bool restoreMainWindowGeometry(QWindow* window);
     static QString edgeForPreference(int edge);
     void updateListWindowPosition();
     QPoint computeSnappedPosition(int x, int y) const;
@@ -161,12 +175,19 @@ private:
     QSize listNativePixelSize_;
     qreal listTrackedDpr_ = 1.0;
     QPointer<QWindow> audioToolsWindow_;
+    quintptr audioToolsWindowHandle_ = 0;
+    qreal audioToolsTrackedDpr_ = 1.0;
     QPointer<QWindow> settingsWindow_;
+    quintptr settingsWindowHandle_ = 0;
+    QSize settingsNativePixelSize_;
+    qreal settingsTrackedDpr_ = 1.0;
     QPointer<QWindow> lastAuxiliaryWindow_;
+    QSet<QWindow*> positionedAuxiliaryWindows_;
     ShutdownActions shutdownActions_;
     QSettings settings_;
     QTimer windowStateSyncTimer_;
     bool mainVisible_ = true;
+    int mainWindowShellMode_ = 0;
     bool miniVisible_ = false;
     bool audioToolsVisible_ = false;
     bool alwaysOnTop_ = false;
@@ -183,8 +204,8 @@ private:
     bool listWindowDetached_ = false;
     int listWindowX_ = 0;
     int listWindowY_ = 0;
-    int listWindowWidth_ = 1228;
-    int listWindowHeight_ = 570;
+    int listWindowWidth_ = 960;
+    int listWindowHeight_ = 568;
     bool listWindowGeometryInitialized_ = false;
     bool updatingWindowGeometry_ = false;
     bool updatingWindowZOrder_ = false;

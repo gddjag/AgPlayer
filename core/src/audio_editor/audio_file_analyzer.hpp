@@ -17,6 +17,7 @@ struct AudioFileAnalysis final {
     int bits_per_sample{};
     std::int64_t bit_rate{};
     std::vector<std::vector<float>> channel_peaks;
+    std::vector<float> visual_mix_peaks;
     std::string message;
 };
 

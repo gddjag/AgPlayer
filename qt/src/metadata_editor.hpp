@@ -38,6 +38,9 @@ struct MetadataEntry {
     QString format;
     qint64 durationMs = 0;
     qint64 fileSize = 0;
+    qint64 sourceLastModifiedMs = 0;
+    QString canonicalPath;
+    QString stableSourceId;
     bool hasCover = false;
     QString coverPreview;
     QString coverInfo;
@@ -142,6 +145,7 @@ private:
     QVariantList results_;
     QVariantMap pendingFields_;
     QList<int> pendingTargets_;
+    QList<MetadataEntry> pendingEntrySnapshot_;
     QList<int> pendingSupportedTargets_;
     QVariantList pendingUnsupportedResults_;
     bool requiresPreflightDecision_ = false;
@@ -161,7 +165,8 @@ private:
     void startMetadataLoad(QList<QUrl> expandedUrls);
     void startPreflight(const QVariantMap& fields, const QList<int>& indices,
                         bool applyWhenSupported);
-    void startApply(const QVariantMap& fields, const QList<int>& indices);
+    void startApply(const QVariantMap& fields, const QList<int>& indices,
+                    const QList<MetadataEntry>& snapshot);
     void resetOperationState();
     void resetCover();
     static QString mimeTypeForFormat(const QByteArray& format);
