@@ -52,6 +52,27 @@ An initial build attempt without the Visual Studio developer environment
 failed to locate the C++ standard library and was discarded as invalid RED
 evidence. All subsequent builds loaded `VsDevCmd.bat` first.
 
+### Independent-review follow-up REDs
+
+The independent review found two lifecycle/rendered-geometry gaps. Both fixes
+were again driven from the untouched `d8109f5` production state:
+
+1. `test_replacing_lyrics_service_resets_and_restarts_only_eligible_text`
+   failed because an active service-A settle animation remained `running ==
+   true` after synchronously replacing A with a Loading service B; expected
+   `false`. The test independently covers A to Loading B, A to disabled Ready
+   B, A to empty Ready B, eligible Ready B, a rapid latest-wins B update, an
+   old-A callback after replacement, and B to `null`.
+2. The strengthened real-surface safe-zone test maps all four corners of every
+   visible `Text` into the actual `ImmersiveSurface`. Before the production
+   fix, Left placement at X/Y `0/0`, size `60`, and depth `100` mapped the
+   current line to `left == 14.68 px`, below the required `20 px` inset.
+   This proves the previous panel-box assertion did not measure the rendered
+   scale/perspective result.
+
+No production file changed until both REDs had been captured. The combined
+RED run reported `15 passed, 2 failed`.
+
 ## Cinematic lyric behavior
 
 Stable test selectors added:
@@ -80,6 +101,13 @@ Spatial-mode behavior:
 - Loading, NotFound, Offline, and Error fallback text is immediately readable
   without the entrance animation. Spatial-mode off, item disabled, or lyrics
   hidden stops and resets the animation.
+- Replacing the lyric service now runs the same synchronous stop/reset/start
+  gate. Loading, disabled, empty, or null replacements remain stable; only an
+  eligible Ready replacement starts a fresh settle. `Connections` follows the
+  new service identity, so an old-service signal cannot restart presentation.
+- The focal line now uses the same placement-aware transform origin as both
+  context lines: Left expands inward from its left edge, Right expands inward
+  from its right edge, and Center remains symmetric.
 - Root opacity is untouched and remains bound exclusively to the existing
   `lyricOpacity` user setting.
 
@@ -90,16 +118,25 @@ offset/retry/import actions, and manual-follow pause are unchanged.
 
 ## Real-surface safe-zone evidence
 
-The real existing `ImmersiveSurface` was exercised in windowed immersive mode
-for Left, Center, and Right placement at both extremes:
+The existing real `ImmersiveSurface` is exercised in windowed immersive mode
+for every combination of Left/Center/Right, X `0/100`, Y `0/100`, size
+`60/140`, and depth `0/100`. Each previous/current/next line contains long
+text capable of reaching the two-line limit. A second complete matrix covers
+the Loading status fallback with empty lyric lines.
 
-- position X/Y `0/0`, size/depth `60/0`;
-- position X/Y `100/100`, size/depth `140/100`.
+For every visible `Text`, all four corners are mapped through scale and the
+stage's Y-axis rotation into surface coordinates. The assertions require both
+horizontal edges to remain at least `20 px` inboard, the rendered top to stay
+below the `56 px` top safe zone, and the rendered bottom to remain at least
+`12 px` above `waveform.y`. The final measured minima were `28.00 px`
+horizontal inset, `61.63 px` top inset, and `59.84 px` waveform gap.
 
-All combinations already remained at least `20 px` inside both horizontal
-edges, below a `56 px` top safe zone, and at least `12 px` above the existing
-waveform. This characterization passed before any surface edit, so no
-unnecessary `ImmersiveSurface.qml` change was made.
+The matrix waits on an explicit `Column.forceLayout()` relationship between
+the three line positions, rather than a timing-only sleep. During test
+development, a zero-duration event yield exposed stale size-140 child
+positions immediately after changing to size 60; the explicit layout
+condition prevents stale geometry from being mistaken for a rendered frame.
+No clipping, host-size change, or `ImmersiveSurface.qml` edit was needed.
 
 ## Settings grouping and unchanged wiring
 
@@ -129,8 +166,8 @@ continues to assert no horizontal overflow.
 
 ## GREEN and regression evidence
 
-After the final minimal QML edits, the direct Quick Test run passed all
-`16/16` QML functions. The full CTest integration target was then repeated
+After the independent-review fixes, the direct Quick Test run passed all
+`17/17` QML functions. The full CTest integration target was then repeated
 three times consecutively:
 
 ```powershell
@@ -139,10 +176,12 @@ ctest --test-dir build/release -C Release `
   --repeat until-fail:3 --output-on-failure --no-tests=error
 ```
 
-Result: `3/3` consecutive executions passed (`16.64 s`). One earlier complete
-run exposed an existing queue-open `140 ms` timing assertion once; the lyric
-case passed in that run, no queue code/test was changed, and the same suite
-then passed once plus the final three consecutive executions.
+Result: `3/3` consecutive executions passed (`20.42 s`). The preceding repeat
+attempt passed twice, then CTest reported one process failure with no QML
+failure output. An isolated direct run returned exit `0`; no product or
+unrelated harness code changed before the successful final repeat. The prior
+Task 3 queue-open timing observation remains unrelated and no queue code/test
+was changed.
 
 Focused Release regression:
 
@@ -152,7 +191,7 @@ ctest --test-dir build/release -C Release `
   --output-on-failure --no-tests=error
 ```
 
-Result: `3/3` tests passed (`8.77 s`).
+Result: `3/3` tests passed (`15.66 s`).
 
 QML lint:
 

@@ -17,6 +17,7 @@ TestCase {
     property bool originalImmersiveRenderingEnabled: false
     property var originalLyricSettings: ({})
     property var originalDynamicsSettings: ({})
+    property var transientLyricsPanel: null
 
     QtObject {
         id: queuePlayback
@@ -57,6 +58,32 @@ TestCase {
         function importLrc(url) { return true }
     }
 
+    QtObject {
+        id: loadingLyricsFake
+        property bool enabled: true
+        property int status: LyricsService.Loading
+        property string previousLine: ""
+        property string currentLine: ""
+        property string nextLine: ""
+        property int offsetMs: 0
+        function retry() {}
+        function pauseFollow(milliseconds) {}
+        function importLrc(url) { return true }
+    }
+
+    QtObject {
+        id: readyLyricsFake
+        property bool enabled: true
+        property int status: LyricsService.Ready
+        property string previousLine: "B 上一句"
+        property string currentLine: "B 当前句"
+        property string nextLine: "B 下一句"
+        property int offsetMs: 0
+        function retry() {}
+        function pauseFollow(milliseconds) {}
+        function importLrc(url) { return true }
+    }
+
     Component {
         id: queueDrawerComponent
         ImmersiveQueueDrawer {
@@ -79,6 +106,102 @@ TestCase {
     Component {
         id: immersiveControlPanelComponent
         ImmersiveControlPanel { currentTab: 2 }
+    }
+
+    function mappedBounds(item, target) {
+        var points = [item.mapToItem(target, 0, 0),
+                      item.mapToItem(target, item.width, 0),
+                      item.mapToItem(target, 0, item.height),
+                      item.mapToItem(target, item.width, item.height)]
+        var left = points[0].x
+        var right = points[0].x
+        var top = points[0].y
+        var bottom = points[0].y
+        for (var index = 1; index < points.length; ++index) {
+            left = Math.min(left, points[index].x)
+            right = Math.max(right, points[index].x)
+            top = Math.min(top, points[index].y)
+            bottom = Math.max(bottom, points[index].y)
+        }
+        return { "left": left, "right": right,
+                 "top": top, "bottom": bottom }
+    }
+
+    function verifyMappedLyricBounds(item, surface, waveform, label) {
+        if (!item.visible)
+            return
+        var bounds = mappedBounds(item, surface)
+        var details = label + " mapped=" + bounds.left.toFixed(2) + ","
+                + bounds.top.toFixed(2) + ".." + bounds.right.toFixed(2)
+                + "," + bounds.bottom.toFixed(2)
+                + " local=" + item.x.toFixed(2) + "," + item.y.toFixed(2)
+                + " " + item.width.toFixed(2) + "x" + item.height.toFixed(2)
+                + " surface=" + surface.width + "x" + surface.height
+                + " waveformY=" + waveform.y.toFixed(2)
+        verify(bounds.left >= 20, details)
+        verify(bounds.right <= surface.width - 20, details)
+        verify(bounds.top >= 56, details)
+        verify(bounds.bottom <= waveform.y - 12, details)
+    }
+
+    function verifyMappedLyricsAtExistingExtremes(panel, surface, waveform,
+                                                   label) {
+        var previousLine = findChild(panel, "previousLyricLine")
+        var currentLine = findChild(panel, "currentLyricLine")
+        var nextLine = findChild(panel, "nextLyricLine")
+        verify(previousLine && currentLine && nextLine)
+        var endpoints = [0, 100]
+        var sizes = [60, 140]
+        for (var placement = PlayerExperienceController.Left;
+             placement <= PlayerExperienceController.Right; ++placement) {
+            PlayerExperienceController.lyricPosition = placement
+            for (var xIndex = 0; xIndex < endpoints.length; ++xIndex) {
+                PlayerExperienceController.lyricPositionX = endpoints[xIndex]
+                for (var yIndex = 0; yIndex < endpoints.length; ++yIndex) {
+                    PlayerExperienceController.lyricPositionY = endpoints[yIndex]
+                    for (var sizeIndex = 0; sizeIndex < sizes.length;
+                         ++sizeIndex) {
+                        PlayerExperienceController.lyricSize = sizes[sizeIndex]
+                        for (var depthIndex = 0; depthIndex < endpoints.length;
+                             ++depthIndex) {
+                            PlayerExperienceController.lyricDepth
+                                    = endpoints[depthIndex]
+                            var stage = currentLine.parent
+                            tryVerify(function() {
+                                stage.forceLayout()
+                                var expectedCurrentY = previousLine.visible
+                                        ? previousLine.y + previousLine.height
+                                          + stage.spacing : 0
+                                var expectedNextY = currentLine.y
+                                        + currentLine.height + stage.spacing
+                                return Math.abs(currentLine.y
+                                                - expectedCurrentY) < 0.01
+                                        && (!nextLine.visible
+                                            || Math.abs(nextLine.y
+                                                        - expectedNextY) < 0.01)
+                                        && (!nextLine.visible
+                                            || nextLine.y + nextLine.height
+                                               <= panel.height + 0.5)
+                            }, 200)
+                            var state = label + " placement=" + placement
+                                    + " x=" + endpoints[xIndex]
+                                    + " y=" + endpoints[yIndex]
+                                    + " size=" + sizes[sizeIndex]
+                                    + " depth=" + endpoints[depthIndex]
+                            verifyMappedLyricBounds(previousLine, surface,
+                                                    waveform,
+                                                    state + " previous")
+                            verifyMappedLyricBounds(currentLine, surface,
+                                                    waveform,
+                                                    state + " current")
+                            verifyMappedLyricBounds(nextLine, surface,
+                                                    waveform,
+                                                    state + " next")
+                        }
+                    }
+                }
+            }
+        }
     }
 
     function initTestCase() {
@@ -128,6 +251,10 @@ TestCase {
     }
 
     function cleanup() {
+        if (transientLyricsPanel) {
+            transientLyricsPanel.destroy()
+            transientLyricsPanel = null
+        }
         SettingsController.playerShellMode = originalShellMode
         PlayerExperienceController.immersiveMode = PlayerExperienceController.Off
         PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
@@ -146,8 +273,26 @@ TestCase {
         lyricsFake.previousLine = "上一句"
         lyricsFake.currentLine = "当前句"
         lyricsFake.nextLine = "下一句"
+        loadingLyricsFake.enabled = true
+        loadingLyricsFake.status = LyricsService.Loading
+        loadingLyricsFake.previousLine = ""
+        loadingLyricsFake.currentLine = ""
+        loadingLyricsFake.nextLine = ""
+        readyLyricsFake.enabled = true
+        readyLyricsFake.status = LyricsService.Ready
+        readyLyricsFake.previousLine = "B 上一句"
+        readyLyricsFake.currentLine = "B 当前句"
+        readyLyricsFake.nextLine = "B 下一句"
         var coordinator = findChild(mainWindow, "immersiveCoordinator")
         if (coordinator) {
+            if (coordinator.surface) {
+                var immersiveLyrics = findChild(coordinator.surface,
+                                                "immersiveLyricsPanel")
+                if (immersiveLyrics)
+                    immersiveLyrics.service = Qt.binding(function() {
+                        return LyricsService
+                    })
+            }
             tryCompare(coordinator, "handoffPhase", 0, 6000)
             if (coordinator.surface && coordinator.surface.terrainItem)
                 tryCompare(coordinator.surface.terrainItem,
@@ -549,27 +694,24 @@ TestCase {
         var panel = findChild(surface, "immersiveLyricsPanel")
         var waveform = findChild(surface, "immersiveWaveformHost")
         verify(surface && panel && waveform)
+        panel.service = lyricsFake
+        lyricsFake.status = LyricsService.Ready
+        lyricsFake.previousLine = "很长的上一句歌词用于验证真实变换后的两个视觉行仍留在镜头安全区内"
+        lyricsFake.currentLine = "很长的当前歌词用于验证缩放透视后的两个视觉行不会越过安全边界"
+        lyricsFake.nextLine = "很长的下一句歌词用于验证真实变换后的两个视觉行仍位于波形上方"
+        var settle = findChild(panel, "cinematicLyricsSettleAnimation")
+        tryCompare(settle, "running", false, 400)
+        verifyMappedLyricsAtExistingExtremes(panel, surface, waveform,
+                                              "ready")
 
-        var extremes = [
-            { "x": 0, "y": 0, "size": 60, "depth": 0 },
-            { "x": 100, "y": 100, "size": 140, "depth": 100 }
-        ]
-        for (var placement = PlayerExperienceController.Left;
-             placement <= PlayerExperienceController.Right; ++placement) {
-            PlayerExperienceController.lyricPosition = placement
-            for (var index = 0; index < extremes.length; ++index) {
-                var extreme = extremes[index]
-                PlayerExperienceController.lyricPositionX = extreme.x
-                PlayerExperienceController.lyricPositionY = extreme.y
-                PlayerExperienceController.lyricSize = extreme.size
-                PlayerExperienceController.lyricDepth = extreme.depth
-                wait(0)
-                verify(panel.x >= 20)
-                verify(panel.x + panel.width <= surface.width - 20)
-                verify(panel.y >= 56)
-                verify(panel.y + panel.height <= waveform.y - 12)
-            }
-        }
+        lyricsFake.previousLine = ""
+        lyricsFake.nextLine = ""
+        lyricsFake.currentLine = ""
+        lyricsFake.status = LyricsService.Loading
+        compare(findChild(panel, "currentLyricLine").text,
+                panel.statusText())
+        verifyMappedLyricsAtExistingExtremes(panel, surface, waveform,
+                                              "status")
     }
 
     function test_spatial_lyrics_settle_latest_line_without_residual_animation() {
@@ -637,6 +779,61 @@ TestCase {
         lyricsFake.currentLine = "隐藏时歌词"
         compare(settle.running, false)
         panel.destroy()
+    }
+
+    function test_replacing_lyrics_service_resets_and_restarts_only_eligible_text() {
+        transientLyricsPanel = lyricsPanelComponent.createObject(
+                    mainWindow.contentItem)
+        verify(transientLyricsPanel)
+        transientLyricsPanel.spatialMode = true
+        var currentLine = findChild(transientLyricsPanel, "currentLyricLine")
+        var settle = findChild(transientLyricsPanel,
+                               "cinematicLyricsSettleAnimation")
+        verify(currentLine && settle)
+        var stableScale = currentLine.scale
+
+        lyricsFake.currentLine = "A 正在进入"
+        tryCompare(settle, "running", true, 50)
+        transientLyricsPanel.service = loadingLyricsFake
+        compare(currentLine.text, transientLyricsPanel.statusText())
+        compare(settle.running, false)
+        compare(currentLine.opacity, 1)
+        verify(Math.abs(currentLine.scale - stableScale) < 0.001)
+
+        lyricsFake.currentLine = "A 的过期回调"
+        compare(settle.running, false)
+        compare(currentLine.text, transientLyricsPanel.statusText())
+
+        readyLyricsFake.enabled = false
+        transientLyricsPanel.service = readyLyricsFake
+        compare(settle.running, false)
+        readyLyricsFake.enabled = true
+        readyLyricsFake.currentLine = ""
+        transientLyricsPanel.service = loadingLyricsFake
+        transientLyricsPanel.service = readyLyricsFake
+        compare(settle.running, false)
+
+        readyLyricsFake.currentLine = "B 新服务歌词"
+        transientLyricsPanel.service = loadingLyricsFake
+        transientLyricsPanel.service = readyLyricsFake
+        compare(currentLine.text, "B 新服务歌词")
+        tryCompare(settle, "running", true, 50)
+        verify(currentLine.opacity < 1)
+        readyLyricsFake.currentLine = "B 最终歌词"
+        compare(currentLine.text, "B 最终歌词")
+        tryCompare(settle, "running", false, 400)
+        compare(currentLine.text, "B 最终歌词")
+        compare(currentLine.opacity, 1)
+        verify(Math.abs(currentLine.scale - stableScale) < 0.001)
+
+        readyLyricsFake.currentLine = "B 再次进入"
+        tryCompare(settle, "running", true, 50)
+        transientLyricsPanel.service = null
+        compare(settle.running, false)
+        compare(currentLine.text, "")
+        compare(currentLine.opacity, 1)
+        transientLyricsPanel.destroy()
+        transientLyricsPanel = null
     }
 
     function test_dynamics_controls_are_grouped_by_meaning_and_remain_wired() {

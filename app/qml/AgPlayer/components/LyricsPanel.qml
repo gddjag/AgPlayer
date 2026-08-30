@@ -136,6 +136,9 @@ Item {
             opacity: root.spatialMode ? settleOpacity : 1
             scale: root.spatialMode
                    ? (1.04 + root.depthScale * 0.05) * settleScale : 1
+            transformOrigin: root.placement === PlayerExperienceController.Right
+                             ? Item.Right : root.placement === PlayerExperienceController.Left
+                                            ? Item.Left : Item.Center
         }
 
         Text {
@@ -194,6 +197,7 @@ Item {
     }
 
     onSpatialModeChanged: if (!spatialMode) stopCinematicSettle()
+    onServiceChanged: if (currentLine && currentLineSettle) startCinematicSettle()
     onEnabledChanged: if (!enabled) stopCinematicSettle()
     onVisibleChanged: if (!visible) stopCinematicSettle()
 
