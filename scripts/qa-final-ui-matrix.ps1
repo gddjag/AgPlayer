@@ -59,8 +59,9 @@ function Get-SurfaceExpectation {
             return [pscustomobject]@{ Width = 860; Height = 900 }
         }
         "^list$|^details$" {
-            # 38px title + 56px header + ten 62px waveform rows + 54px filter.
-            return [pscustomobject]@{ Width = 960; Height = 768 }
+            # 38px title + 56px header + ten default 50px waveform rows
+            # + 54px filter. Keep this aligned with ListWindow.defaultListHeight.
+            return [pscustomobject]@{ Width = 960; Height = 648 }
         }
         "^tool-\d+$" {
             return [pscustomobject]@{ Width = 1672; Height = 941 }
