@@ -267,11 +267,16 @@ ListView {
         renameDialog.open(); renameField.forceActiveFocus(); renameField.selectAll()
     }
     function openDetails() {
-        detailsPanel.details = fileOps.trackDetails(trackMenu.targetTrackId)
+        detailsPanel.trackId = trackMenu.targetTrackId
+        refreshDetailsPanel(detailsPanel.trackId)
+        detailsPanel.open()
+        fileOps.requestTrackDetailsHydration(detailsPanel.trackId)
+    }
+    function refreshDetailsPanel(trackId) {
+        detailsPanel.details = fileOps.trackDetails(trackId)
         detailsPanel.fullPath = String(detailsPanel.details.path || "")
         detailsPanel.coverUrl = detailsPanel.details.coverUrl || ""
         detailsPanel.rows = fileDetailRows(detailsPanel.details)
-        detailsPanel.open()
     }
     function fileDetailRows(details) {
         return [
@@ -1063,9 +1068,17 @@ ListView {
     AudioFileInfoPanel {
         id: detailsPanel
         parent: Overlay.overlay
+        property string trackId: ""
         x: parent ? Math.max(12, parent.width - width - 12) : 12
         y: parent ? Math.max(12, (parent.height - height) / 2) : 12
-        onCopyRequested: fileOps.copyPath(trackMenu.targetTrackId)
+        onCopyRequested: fileOps.copyPath(trackId)
+    }
+    Connections {
+        target: fileOps
+        function onTrackDetailsChanged(trackId) {
+            if (detailsPanel.visible && detailsPanel.trackId === trackId)
+                root.refreshDetailsPanel(trackId)
+        }
     }
 
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }

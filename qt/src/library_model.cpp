@@ -9,6 +9,7 @@
 #include <QFileInfo>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <QThread>
 
 #include <algorithm>
 #include <cmath>
@@ -195,6 +196,8 @@ QVariant LibraryModel::data(const QModelIndex& index, int role) const
         return track.bitDepth;
     case ChannelsRole:
         return track.channels;
+    case MetadataProbeAttemptedRole:
+        return track.metadataProbeAttempted;
     case BitRateRole:
         return track.bitRate;
     case DurationMsRole:
@@ -258,6 +261,7 @@ QHash<int, QByteArray> LibraryModel::roleNames() const
             {SampleRateRole, "sampleRate"},
             {BitDepthRole, "bitDepth"},
             {ChannelsRole, "channels"},
+            {MetadataProbeAttemptedRole, "metadataProbeAttempted"},
             {BitRateRole, "bitRate"},
             {DurationMsRole, "durationMs"},
             {FileSizeRole, "fileSize"},
@@ -359,6 +363,7 @@ void LibraryModel::replaceAll(QList<TrackRecord> tracks)
 {
     const int previousCount = tracks_.size();
     beginResetModel();
+    metadataProbeInFlight_.clear();
     tracks_.clear();
     pathKeys_.clear();
     pathRows_.clear();
@@ -440,6 +445,7 @@ bool LibraryModel::removeTrack(const QString& trackId)
     }
 
     const TrackRecord removed = tracks_.at(row);
+    metadataProbeInFlight_.remove(trackId);
     beginRemoveRows({}, row, row);
     tracks_.removeAt(row);
     pathKeys_.remove(pathKey(removed.path));
@@ -769,6 +775,56 @@ int LibraryModel::applyMaintenanceResults(const QVariantList& results)
     return changedCount;
 }
 
+std::optional<MetadataProbeClaim> LibraryModel::beginMetadataProbe(
+    const QString& trackId)
+{
+    if (QThread::currentThread() != thread()) return std::nullopt;
+    const int row = indexForTrackId(trackId);
+    if (row < 0 || tracks_.at(row).metadataProbeAttempted
+        || metadataProbeInFlight_.contains(trackId)) {
+        return std::nullopt;
+    }
+    metadataProbeInFlight_.insert(trackId, tracks_.at(row).path);
+    return MetadataProbeClaim{trackId, tracks_.at(row).path};
+}
+
+bool LibraryModel::completeMetadataProbe(const MetadataProbeClaim& claim,
+                                         bool succeeded,
+                                         const TrackRecord& probed)
+{
+    if (QThread::currentThread() != thread()) {
+        return false;
+    }
+    const auto inFlight = metadataProbeInFlight_.constFind(claim.trackId);
+    if (inFlight == metadataProbeInFlight_.cend()
+        || pathKey(inFlight.value()) != pathKey(claim.path)) {
+        return false;
+    }
+    metadataProbeInFlight_.remove(claim.trackId);
+    const int row = indexForTrackId(claim.trackId);
+    if (row < 0 || pathKey(tracks_.at(row).path) != pathKey(claim.path)) {
+        return false;
+    }
+
+    TrackRecord& track = tracks_[row];
+    track.metadataProbeAttempted = true;
+    QList<int> roles{MetadataProbeAttemptedRole};
+    if (succeeded) {
+        track.format = probed.format;
+        track.sampleRate = probed.sampleRate;
+        track.bitDepth = probed.bitDepth;
+        track.channels = probed.channels;
+        track.bitRate = probed.bitRate;
+        track.durationMs = probed.durationMs;
+        track.fileSize = probed.fileSize;
+        roles.append({FormatRole, SampleRateRole, BitDepthRole, ChannelsRole,
+                      BitRateRole, DurationMsRole, FileSizeRole});
+    }
+    const QModelIndex changed = index(row, 0);
+    emit dataChanged(changed, changed, roles);
+    return true;
+}
+
 bool LibraryModel::refreshMetadataForPath(const QString& path)
 {
     const int row = indexForLocalFile(path);
@@ -792,6 +848,7 @@ bool LibraryModel::refreshMetadataForPath(const QString& path)
     track.sampleRate = ag_metadata_sample_rate(metadata);
     track.bitDepth = ag_metadata_bits_per_sample(metadata);
     track.channels = ag_metadata_channels(metadata);
+    track.metadataProbeAttempted = true;
     track.bitRate = ag_metadata_bit_rate(metadata);
     track.durationMs = ag_metadata_duration_ms(metadata);
     track.fileSize = QFileInfo(path).size();
@@ -816,12 +873,13 @@ bool LibraryModel::refreshMetadataForPath(const QString& path)
         }
     }
     ag_metadata_destroy(metadata);
+    metadataProbeInFlight_.remove(track.trackId);
     const QModelIndex changed = index(row, 0);
     emit dataChanged(changed, changed,
                      {TitleRole, ArtistRole, AlbumRole, AlbumArtistRole,
                       GenreRole, YearRole, DateRole, ComposerRole, FormatRole,
-                      SampleRateRole, BitDepthRole, ChannelsRole, BitRateRole,
-                      DurationMsRole,
+                      SampleRateRole, BitDepthRole, ChannelsRole,
+                      MetadataProbeAttemptedRole, BitRateRole, DurationMsRole,
                       FileSizeRole, CoverUrlRole, BpmRole});
     emit flushRequested();
     return true;
@@ -872,12 +930,16 @@ bool LibraryModel::updateTrackPath(const QString& trackId, const QString& newPat
     pathKeys_.insert(newKey);
     pathRows_.insert(newKey, row);
     TrackRecord& track = tracks_[row];
+    metadataProbeInFlight_.remove(trackId);
     track.path = canonical;
+    track.metadataProbeAttempted = false;
     track.available = QFileInfo::exists(canonical);
     track.fileStatus = track.available ? QStringLiteral("normal")
                                        : QStringLiteral("missing");
     const QModelIndex changed = index(row, 0);
-    emit dataChanged(changed, changed, {PathRole, AvailableRole, FileStatusRole});
+    emit dataChanged(changed, changed,
+                     {PathRole, AvailableRole, FileStatusRole,
+                      MetadataProbeAttemptedRole});
     emit flushRequested();
     return true;
 }
@@ -910,14 +972,18 @@ bool LibraryModel::updateTrackPaths(const QHash<QString, QString>& paths)
         const QString canonical = canonicalLibraryPath(it.value());
         const QString key = normalizedCanonicalKey(canonical);
         TrackRecord& track = tracks_[row];
+        metadataProbeInFlight_.remove(track.trackId);
         track.path = canonical;
+        track.metadataProbeAttempted = false;
         track.available = QFileInfo::exists(canonical);
         track.fileStatus = track.available ? QStringLiteral("normal")
                                           : QStringLiteral("missing");
         pathKeys_.insert(key);
         pathRows_.insert(key, row);
         const QModelIndex changed = index(row, 0);
-        emit dataChanged(changed, changed, {PathRole, AvailableRole, FileStatusRole});
+        emit dataChanged(changed, changed,
+                         {PathRole, AvailableRole, FileStatusRole,
+                          MetadataProbeAttemptedRole});
     }
     emit flushRequested();
     return true;

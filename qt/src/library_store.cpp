@@ -25,6 +25,8 @@ QJsonObject toJson(const TrackRecord& track)
             {QStringLiteral("sampleRate"), track.sampleRate},
             {QStringLiteral("bitDepth"), track.bitDepth},
             {QStringLiteral("channels"), track.channels},
+            {QStringLiteral("metadataProbeAttempted"),
+             track.metadataProbeAttempted},
             {QStringLiteral("bitRate"), QJsonValue(track.bitRate)},
             {QStringLiteral("durationMs"), QJsonValue(track.durationMs)},
             {QStringLiteral("fileSize"), QJsonValue(track.fileSize)},
@@ -66,6 +68,8 @@ TrackRecord fromJson(const QJsonObject& object)
     track.sampleRate = object.value(QStringLiteral("sampleRate")).toInt();
     track.bitDepth = object.value(QStringLiteral("bitDepth")).toInt();
     track.channels = object.value(QStringLiteral("channels")).toInt();
+    track.metadataProbeAttempted = object.value(
+        QStringLiteral("metadataProbeAttempted")).toBool();
     track.bitRate = object.value(QStringLiteral("bitRate")).toInteger();
     track.durationMs = object.value(QStringLiteral("durationMs")).toInteger();
     track.fileSize = object.value(QStringLiteral("fileSize")).toInteger();

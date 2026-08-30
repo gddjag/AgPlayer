@@ -371,6 +371,7 @@ void ImportControllerTest::productionProbeImportsMetadataAndUsesBrandFallback()
     QVERIFY(track.bitDepth > 0);
     QVERIFY(track.channels > 0);
     QVERIFY(track.bitRate > 0);
+    QVERIFY(track.metadataProbeAttempted);
     QVERIFY(track.durationMs > 0);
     QVERIFY(track.fileSize > 0);
     QCOMPARE(track.coverUrl,

@@ -1,4 +1,5 @@
 #include "library_file_operations.hpp"
+#include "metadata_probe.hpp"
 
 #include <QClipboard>
 #include <QDateTime>
@@ -9,15 +10,51 @@
 #include <QGuiApplication>
 #include <QProcess>
 #include <QUrl>
+#include <QtConcurrent/QtConcurrentRun>
 
-LibraryFileOperations::LibraryFileOperations(QObject* parent) : QObject(parent) {}
+#include <utility>
+
+LibraryFileOperations::LibraryFileOperations(QObject* parent)
+    : LibraryFileOperations(
+          [](const QString& path) { return probeMetadata(path, false); }, parent)
+{}
+
+LibraryFileOperations::LibraryFileOperations(ProbeFunction probe, QObject* parent)
+    : QObject(parent), probe_(std::move(probe))
+{}
 
 LibraryModel* LibraryFileOperations::libraryModel() const noexcept { return library_; }
 
 void LibraryFileOperations::setLibraryModel(LibraryModel* model)
 {
     if (library_ == model) return;
+    QObject::disconnect(detailsConnection_);
     library_ = model;
+    if (model != nullptr) {
+        detailsConnection_ = connect(
+            model, &LibraryModel::dataChanged, this,
+            [this, model](const QModelIndex& topLeft,
+                          const QModelIndex& bottomRight,
+                          const QList<int>& roles) {
+                if (library_ != model) return;
+                const bool relevant = roles.isEmpty()
+                    || roles.contains(LibraryModel::FormatRole)
+                    || roles.contains(LibraryModel::SampleRateRole)
+                    || roles.contains(LibraryModel::BitDepthRole)
+                    || roles.contains(LibraryModel::ChannelsRole)
+                    || roles.contains(LibraryModel::BitRateRole)
+                    || roles.contains(LibraryModel::DurationMsRole)
+                    || roles.contains(LibraryModel::FileSizeRole)
+                    || roles.contains(LibraryModel::MetadataProbeAttemptedRole);
+                if (!relevant) return;
+                for (int row = topLeft.row(); row <= bottomRight.row(); ++row) {
+                    const QString trackId = model->data(
+                        model->index(row, 0),
+                        LibraryModel::TrackIdRole).toString();
+                    if (!trackId.isEmpty()) emit trackDetailsChanged(trackId);
+                }
+            });
+    }
     emit libraryModelChanged();
 }
 
@@ -163,13 +200,7 @@ QVariantMap LibraryFileOperations::trackDetails(const QString& trackId) const
 {
     if (library_ == nullptr) return {};
     QVariantMap details = library_->trackForId(trackId);
-    QFileInfo info(details.value(QStringLiteral("path")).toString());
-    if (info.isFile()
-        && details.value(QStringLiteral("channels")).toInt() <= 0
-        && library_->refreshMetadataForPath(info.absoluteFilePath())) {
-        details = library_->trackForId(trackId);
-        info.setFile(details.value(QStringLiteral("path")).toString());
-    }
+    const QFileInfo info(details.value(QStringLiteral("path")).toString());
     details.insert(QStringLiteral("directory"), info.absolutePath());
     details.insert(QStringLiteral("modifiedAt"), info.lastModified());
     details.insert(QStringLiteral("fileName"), info.fileName());
@@ -177,6 +208,32 @@ QVariantMap LibraryFileOperations::trackDetails(const QString& trackId) const
         details.insert(QStringLiteral("format"), info.suffix().toUpper());
     }
     return details;
+}
+
+bool LibraryFileOperations::requestTrackDetailsHydration(const QString& trackId)
+{
+    LibraryModel* const model = library_.data();
+    if (model == nullptr || !probe_) return false;
+    const std::optional<MetadataProbeClaim> claim = model->beginMetadataProbe(trackId);
+    if (!claim.has_value()) return false;
+
+    const QPointer<LibraryModel> guardedModel(model);
+    const ProbeFunction probe = probe_;
+    const MetadataProbeClaim snapshot = *claim;
+    (void)QtConcurrent::run(
+        [guardedModel, probe, snapshot] {
+            const ProbeResult result = probe(snapshot.path);
+            if (guardedModel == nullptr) return;
+            QMetaObject::invokeMethod(
+                guardedModel.data(),
+                [guardedModel, result, snapshot] {
+                    if (guardedModel == nullptr) return;
+                    guardedModel->completeMetadataProbe(
+                        snapshot, result.result == AG_OK, result.track);
+                },
+                Qt::QueuedConnection);
+        });
+    return true;
 }
 
 QString LibraryFileOperations::resolvedDestination(const QString& sourcePath,

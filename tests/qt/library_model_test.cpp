@@ -29,7 +29,49 @@ private slots:
     void stampsNewImportsWithoutOverwritingExistingTimestamps();
     void exposesLiveRecentAndNeverPlayedCounts();
     void missingLocalCoverFallsBackToPackagedArtwork();
+    void staleMetadataProbeCannotOverwriteRelocatedTrack();
 };
+
+void LibraryModelTest::staleMetadataProbeCannotOverwriteRelocatedTrack()
+{
+    TrackRecord legacy;
+    legacy.trackId = QStringLiteral("relocated-probe");
+    legacy.path = QStringLiteral("C:/old/location.wav");
+    legacy.available = true;
+    LibraryModel model;
+    model.replaceAll({legacy});
+
+    const auto claim = model.beginMetadataProbe(legacy.trackId);
+    QVERIFY(claim.has_value());
+    QVERIFY(model.updateTrackPath(legacy.trackId,
+                                  QStringLiteral("C:/new/location.wav")));
+    const auto relocatedClaim = model.beginMetadataProbe(legacy.trackId);
+    QVERIFY(relocatedClaim.has_value());
+    TrackRecord staleResult;
+    staleResult.path = claim->path;
+    staleResult.format = QStringLiteral("wav");
+    staleResult.sampleRate = 44100;
+    staleResult.bitDepth = 16;
+    staleResult.channels = 2;
+    staleResult.bitRate = 1411200;
+    staleResult.durationMs = 5000;
+    staleResult.fileSize = 882000;
+
+    QVERIFY(!model.completeMetadataProbe(*claim, true, staleResult));
+    const TrackRecord* current = model.recordForId(legacy.trackId);
+    QVERIFY(current != nullptr);
+    QCOMPARE(current->sampleRate, 0);
+    QCOMPARE(current->channels, 0);
+    QVERIFY(!current->metadataProbeAttempted);
+
+    TrackRecord relocatedResult = staleResult;
+    relocatedResult.path = relocatedClaim->path;
+    relocatedResult.sampleRate = 96000;
+    QVERIFY(model.completeMetadataProbe(*relocatedClaim, true, relocatedResult));
+    current = model.recordForId(legacy.trackId);
+    QCOMPARE(current->sampleRate, 96000);
+    QVERIFY(current->metadataProbeAttempted);
+}
 
 void LibraryModelTest::missingLocalCoverFallsBackToPackagedArtwork()
 {

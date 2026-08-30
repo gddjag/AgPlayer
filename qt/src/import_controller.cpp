@@ -514,6 +514,7 @@ void ImportController::handleBatch(QList<Outcome> outcomes, int completed, int t
             outcome.result.track.path = canonicalLibraryPath(
                 outcome.result.track.path.isEmpty()
                     ? outcome.path : outcome.result.track.path);
+            outcome.result.track.metadataProbeAttempted = true;
             tracks.append(std::move(outcome.result.track));
             continue;
         }

@@ -1,50 +1,153 @@
 #include "library_file_operations.hpp"
 #include "library_model.hpp"
 
+#include <QElapsedTimer>
 #include <QFile>
+#include <QSemaphore>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+
+#include <atomic>
 
 class LibraryFileOperationsTest final : public QObject {
     Q_OBJECT
 private slots:
     void renamesCopiesMovesAndRelocatesWithoutSilentOverwrite();
     void trashTracksReportsPartialFailureWithoutDroppingLibraryRows();
-    void trackDetailsHydratesMissingAudioMetadataOnce();
+    void trackDetailsIsPureRead();
+    void hydrationRequestReturnsImmediatelyAndDeduplicatesSlowProbe();
+    void failedAndZeroChannelHydrationsAreAttemptedOnce();
 };
 
-void LibraryFileOperationsTest::trackDetailsHydratesMissingAudioMetadataOnce()
+void LibraryFileOperationsTest::trackDetailsIsPureRead()
 {
-    const QString fixture = QString::fromLocal8Bit(qgetenv("AGPLAYER_TEST_AUDIO"));
-    QVERIFY2(QFileInfo::exists(fixture),
-             "AGPLAYER_TEST_AUDIO must name the generated WAV fixture");
-
     TrackRecord legacy;
     legacy.trackId = QStringLiteral("legacy-audio");
-    legacy.path = fixture;
+    legacy.path = QStringLiteral("C:/virtual/legacy.wav");
     legacy.title = QStringLiteral("Legacy audio");
     legacy.available = true;
     LibraryModel library;
     library.replaceAll({legacy});
-    LibraryFileOperations operations;
+    std::atomic_int probeCalls = 0;
+    LibraryFileOperations operations([&probeCalls](const QString&) {
+        ++probeCalls;
+        return ProbeResult{AG_OK, {}, {}};
+    });
     operations.setLibraryModel(&library);
+    QSignalSpy dataChanged(&library, &LibraryModel::dataChanged);
     QSignalSpy flushRequested(&library, &LibraryModel::flushRequested);
 
     const QVariantMap details = operations.trackDetails(legacy.trackId);
-    QVERIFY(details.value(QStringLiteral("sampleRate")).toInt() > 0);
-    QVERIFY(details.value(QStringLiteral("bitDepth")).toInt() > 0);
-    QVERIFY(details.value(QStringLiteral("channels")).toInt() > 0);
-    QVERIFY(details.value(QStringLiteral("bitRate")).toLongLong() > 0);
-    QVERIFY(details.value(QStringLiteral("durationMs")).toLongLong() > 0);
-    QCOMPARE(library.tracks().front().channels,
-             details.value(QStringLiteral("channels")).toInt());
-    QCOMPARE(flushRequested.count(), 1);
+    QCOMPARE(details.value(QStringLiteral("channels")).toInt(), 0);
+    QCOMPARE(probeCalls.load(), 0);
+    QCOMPARE(dataChanged.count(), 0);
+    QCOMPARE(flushRequested.count(), 0);
+}
 
-    const QVariantMap secondDetails = operations.trackDetails(legacy.trackId);
-    QCOMPARE(secondDetails.value(QStringLiteral("channels")),
-             details.value(QStringLiteral("channels")));
-    QCOMPARE(flushRequested.count(), 1);
+void LibraryFileOperationsTest::hydrationRequestReturnsImmediatelyAndDeduplicatesSlowProbe()
+{
+    TrackRecord legacy;
+    legacy.trackId = QStringLiteral("slow-audio");
+    legacy.path = QStringLiteral("C:/virtual/slow.wav");
+    legacy.available = true;
+    LibraryModel library;
+    library.replaceAll({legacy});
+    QSemaphore entered;
+    QSemaphore release;
+    std::atomic_int probeCalls = 0;
+    const ProbeFunction probe =
+        [&entered, &release, &probeCalls](const QString& path) {
+            ++probeCalls;
+            entered.release();
+            release.acquire();
+            TrackRecord probed;
+            probed.path = path;
+            probed.format = QStringLiteral("wav");
+            probed.sampleRate = 48000;
+            probed.bitDepth = 24;
+            probed.channels = 2;
+            probed.bitRate = 2304000;
+            probed.durationMs = 12000;
+            probed.fileSize = 3456;
+            return ProbeResult{AG_OK, probed, {}};
+        };
+    LibraryFileOperations operations(probe);
+    LibraryFileOperations competingOperations(probe);
+    operations.setLibraryModel(&library);
+    competingOperations.setLibraryModel(&library);
+    QSignalSpy detailsChanged(&operations,
+                              &LibraryFileOperations::trackDetailsChanged);
+    QSignalSpy flushRequested(&library, &LibraryModel::flushRequested);
+
+    QElapsedTimer elapsed;
+    elapsed.start();
+    QVERIFY(operations.requestTrackDetailsHydration(legacy.trackId));
+    QVERIFY2(elapsed.elapsed() < 250,
+             "requestTrackDetailsHydration must not wait for the probe");
+    QVERIFY(entered.tryAcquire(1, 1000));
+    QVERIFY(!operations.requestTrackDetailsHydration(legacy.trackId));
+    QVERIFY(!competingOperations.requestTrackDetailsHydration(legacy.trackId));
+    release.release();
+    QTRY_COMPARE_WITH_TIMEOUT(detailsChanged.count(), 1, 3000);
+
+    const QVariantMap details = operations.trackDetails(legacy.trackId);
+    QCOMPARE(details.value(QStringLiteral("sampleRate")).toInt(), 48000);
+    QCOMPARE(details.value(QStringLiteral("bitDepth")).toInt(), 24);
+    QCOMPARE(details.value(QStringLiteral("channels")).toInt(), 2);
+    QCOMPARE(details.value(QStringLiteral("bitRate")).toLongLong(), qint64{2304000});
+    QCOMPARE(details.value(QStringLiteral("durationMs")).toLongLong(), qint64{12000});
+    QCOMPARE(details.value(QStringLiteral("fileSize")).toLongLong(), qint64{3456});
+    QVERIFY(library.tracks().front().metadataProbeAttempted);
+    QVERIFY(!operations.requestTrackDetailsHydration(legacy.trackId));
+    QCOMPARE(probeCalls.load(), 1);
+    QCOMPARE(flushRequested.count(), 0);
+}
+
+void LibraryFileOperationsTest::failedAndZeroChannelHydrationsAreAttemptedOnce()
+{
+    TrackRecord failed;
+    failed.trackId = QStringLiteral("failed-audio");
+    failed.path = QStringLiteral("C:/virtual/failed.wav");
+    failed.available = true;
+    TrackRecord zeroChannels;
+    zeroChannels.trackId = QStringLiteral("zero-channel-audio");
+    zeroChannels.path = QStringLiteral("C:/virtual/zero.wav");
+    zeroChannels.available = true;
+    LibraryModel library;
+    library.replaceAll({failed, zeroChannels});
+    std::atomic_int probeCalls = 0;
+    LibraryFileOperations operations([&probeCalls](const QString& path) {
+        ++probeCalls;
+        if (path.contains(QStringLiteral("failed"))) {
+            return ProbeResult{AG_DECODE_ERROR, {}, QStringLiteral("decode failed")};
+        }
+        TrackRecord probed;
+        probed.path = path;
+        probed.format = QStringLiteral("wav");
+        probed.sampleRate = 48000;
+        probed.bitDepth = 24;
+        probed.channels = 0;
+        probed.bitRate = 1152000;
+        probed.durationMs = 1000;
+        probed.fileSize = 512;
+        return ProbeResult{AG_OK, probed, {}};
+    });
+    operations.setLibraryModel(&library);
+    QSignalSpy detailsChanged(&operations,
+                              &LibraryFileOperations::trackDetailsChanged);
+    QSignalSpy flushRequested(&library, &LibraryModel::flushRequested);
+
+    QVERIFY(operations.requestTrackDetailsHydration(failed.trackId));
+    QVERIFY(operations.requestTrackDetailsHydration(zeroChannels.trackId));
+    QTRY_COMPARE_WITH_TIMEOUT(detailsChanged.count(), 2, 3000);
+    QVERIFY(library.recordForId(failed.trackId)->metadataProbeAttempted);
+    QVERIFY(library.recordForId(zeroChannels.trackId)->metadataProbeAttempted);
+    QCOMPARE(library.recordForId(zeroChannels.trackId)->channels, 0);
+    QVERIFY(!operations.requestTrackDetailsHydration(failed.trackId));
+    QVERIFY(!operations.requestTrackDetailsHydration(zeroChannels.trackId));
+    QCOMPARE(probeCalls.load(), 2);
+    QCOMPARE(flushRequested.count(), 0);
 }
 
 void LibraryFileOperationsTest::renamesCopiesMovesAndRelocatesWithoutSilentOverwrite()

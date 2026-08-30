@@ -125,12 +125,16 @@ Item {
     }
 
     function openFileDetails(trackId) {
+        fileDetailsPanel.trackId = trackId
+        refreshFileDetailsPanel(trackId)
+        fileDetailsPanel.open()
+        fileOps.requestTrackDetailsHydration(trackId)
+    }
+    function refreshFileDetailsPanel(trackId) {
         fileDetailsPanel.details = fileOps.trackDetails(trackId)
         fileDetailsPanel.fullPath = String(fileDetailsPanel.details.path || "")
         fileDetailsPanel.coverUrl = fileDetailsPanel.details.coverUrl || ""
         fileDetailsPanel.rows = fileDetailRows(fileDetailsPanel.details)
-        fileDetailsPanel.trackId = trackId
-        fileDetailsPanel.open()
     }
     function fileDetailRows(details) {
         return [
@@ -304,6 +308,13 @@ Item {
         x: root.width - width - 12
         y: 12
         onCopyRequested: fileOps.copyPath(trackId)
+    }
+    Connections {
+        target: fileOps
+        function onTrackDetailsChanged(trackId) {
+            if (fileDetailsPanel.visible && fileDetailsPanel.trackId === trackId)
+                root.refreshFileDetailsPanel(trackId)
+        }
     }
 
     Menu {

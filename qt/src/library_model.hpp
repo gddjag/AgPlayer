@@ -8,6 +8,8 @@
 #include <QStringList>
 #include <QUrl>
 
+#include <optional>
+
 struct TrackRecord {
     QString trackId;
     QString path;
@@ -23,6 +25,7 @@ struct TrackRecord {
     int sampleRate = 0;
     int bitDepth = 0;
     int channels = 0;
+    bool metadataProbeAttempted = false;
     qint64 bitRate = 0;
     qint64 durationMs = 0;
     qint64 fileSize = 0;
@@ -44,6 +47,11 @@ struct TrackRecord {
     double replayGainTrackDb = 0.0;
     double replayGainAlbumDb = 0.0;
     double replayPeak = 0.0;
+};
+
+struct MetadataProbeClaim {
+    QString trackId;
+    QString path;
 };
 
 QString canonicalLibraryPath(const QString& path);
@@ -95,7 +103,8 @@ public:
         YearRole,
         DateRole,
         ComposerRole,
-        ChannelsRole
+        ChannelsRole,
+        MetadataProbeAttemptedRole
     };
     Q_ENUM(Role)
 
@@ -138,6 +147,9 @@ public:
                                 const QString& fileStatus,
                                 const QString& contentHash);
     int applyMaintenanceResults(const QVariantList& results);
+    std::optional<MetadataProbeClaim> beginMetadataProbe(const QString& trackId);
+    bool completeMetadataProbe(const MetadataProbeClaim& claim, bool succeeded,
+                               const TrackRecord& probed);
     bool refreshMetadataForPath(const QString& path);
     int refreshMetadataForPaths(const QStringList& paths);
     bool applyReplayGainResult(const QString& trackId, double trackGainDb,
@@ -172,4 +184,5 @@ private:
     QSet<QString> pathKeys_;
     QHash<QString, int> pathRows_;
     QHash<QString, int> trackRows_;
+    QHash<QString, QString> metadataProbeInFlight_;
 };

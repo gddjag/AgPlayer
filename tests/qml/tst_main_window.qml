@@ -469,6 +469,22 @@ TestCase {
         copySpy.destroy()
     }
 
+    function requiredFileInfoRowsAreHydrated(panel) {
+        if (!panel || !panel.rows)
+            return false
+        var requiredValueKeys = [
+            "format", "sampleRate", "bitDepth", "channels", "bitRate",
+            "duration", "fileSize", "path"
+        ]
+        for (var rowIndex = 0; rowIndex < panel.rows.length; ++rowIndex) {
+            var row = panel.rows[rowIndex]
+            if (requiredValueKeys.indexOf(row.key) >= 0
+                    && String(row.value || "").length === 0)
+                return false
+        }
+        return true
+    }
+
     function positionMenuActionInViewport(menu, action) {
         var menuView = menu.contentItem
         verify(menuView !== null, "context menu must expose a content viewport")
@@ -1209,6 +1225,9 @@ TestCase {
                     "clicking file information must trigger its menu action")
             panel = findChild(list, "audioFileInfoPanel")
             tryVerify(function() { return panel && panel.visible }, 500)
+            tryVerify(function() {
+                return requiredFileInfoRowsAreHydrated(panel)
+            }, 3000)
             verifyFileInfoPanel(panel, String(panel.details.path || ""))
             mainWindow.requestActivate()
             tryVerify(function() { return mainWindow.active }, 1000)
@@ -1294,6 +1313,9 @@ TestCase {
                     "clicking file information must trigger its menu action")
             panel = findChild(page, "audioFileInfoPanel")
             tryVerify(function() { return panel && panel.visible }, 500)
+            tryVerify(function() {
+                return requiredFileInfoRowsAreHydrated(panel)
+            }, 3000)
             verifyFileInfoPanel(panel, String(panel.details.path || ""))
             mainWindow.requestActivate()
             tryVerify(function() { return mainWindow.active }, 1000)
