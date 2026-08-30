@@ -4,6 +4,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <climits>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -36,6 +37,7 @@ constexpr std::uint16_t kHeaderSize = 64U;
 constexpr std::uint32_t kMaximumPointCount = 1'000'000U;
 constexpr std::uint64_t kFnvOffset = 14'695'981'039'346'656'037ULL;
 constexpr std::uint64_t kFnvPrime = 1'099'511'628'211ULL;
+std::atomic_bool fail_next_replace{false};
 
 constexpr std::size_t kFormatVersionOffset = 4U;
 constexpr std::size_t kHeaderSizeOffset = 6U;
@@ -126,6 +128,37 @@ std::uint64_t path_fingerprint(const std::filesystem::path& path)
     return hash;
 }
 
+bool identifies_same_file(const std::filesystem::path& left,
+                          const std::filesystem::path& right) noexcept
+{
+    try {
+        std::error_code equivalent_error;
+        if (std::filesystem::equivalent(left, right, equivalent_error)) {
+            return true;
+        }
+
+        const std::filesystem::path normalized_left = canonical_path(left);
+        const std::filesystem::path normalized_right = canonical_path(right);
+#ifdef _WIN32
+        const std::wstring left_native = normalized_left.native();
+        const std::wstring right_native = normalized_right.native();
+        if (left_native.size() > static_cast<std::size_t>(INT_MAX)
+            || right_native.size() > static_cast<std::size_t>(INT_MAX)) {
+            return true;
+        }
+        return CompareStringOrdinal(
+                   left_native.c_str(), static_cast<int>(left_native.size()),
+                   right_native.c_str(), static_cast<int>(right_native.size()),
+                   TRUE)
+               == CSTR_EQUAL;
+#else
+        return normalized_left == normalized_right;
+#endif
+    } catch (...) {
+        return true;
+    }
+}
+
 bool source_identity(const std::filesystem::path& source_path,
                      SourceIdentity& identity) noexcept
 {
@@ -199,6 +232,9 @@ bool flush_file(const std::filesystem::path& path) noexcept
 bool atomic_replace(const std::filesystem::path& from,
                     const std::filesystem::path& to) noexcept
 {
+    if (fail_next_replace.exchange(false, std::memory_order_relaxed)) {
+        return false;
+    }
 #ifdef _WIN32
     constexpr int max_attempts = 6;
     for (int attempt = 0; attempt < max_attempts; ++attempt) {
@@ -238,6 +274,15 @@ bool same_data(const FrequencyColorCacheData& left,
 }
 
 } // namespace
+
+namespace testing {
+
+void fail_next_frequency_color_cache_replace() noexcept
+{
+    fail_next_replace.store(true, std::memory_order_relaxed);
+}
+
+} // namespace testing
 
 std::uint8_t quantize_frequency_color_peak(const float value) noexcept
 {
@@ -354,6 +399,9 @@ bool FrequencyColorWaveformCache::save_atomic(
 {
     std::filesystem::path temp;
     try {
+        if (identifies_same_file(cache, source)) {
+            return false;
+        }
         if (data.point_count == 0U
             || data.point_count > kMaximumPointCount
             || data.low.size() != data.point_count

@@ -222,6 +222,11 @@ ag_result ag_metadata_write_extended(const char* utf8_path,
                                      size_t cover_size,
                                      const char* cover_mime_type);
 
+/* ag_cancel_token_cancel and ag_cancel_token_set_paused may be called while an
+ * operation is active. Destroy only after the operation has definitely entered
+ * and retained the token state; the preferred lifecycle is cancel, join the
+ * operation, then destroy. Starting an operation concurrently with destroy is
+ * invalid. */
 ag_cancel_token* ag_cancel_token_create(void);
 void ag_cancel_token_cancel(ag_cancel_token* token);
 void ag_cancel_token_set_paused(ag_cancel_token* token, int paused);

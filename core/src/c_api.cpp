@@ -115,6 +115,27 @@ struct ag_cancel_token {
 
 namespace {
 
+using FrequencyWaitTestHook = void (*)(int phase, void* user_data);
+constexpr int wait_before_callback = 0;
+constexpr int wait_after_callback = 1;
+constexpr int cancel_before_lock = 2;
+std::atomic<FrequencyWaitTestHook> frequency_wait_test_hook{nullptr};
+std::atomic<void*> frequency_wait_test_user_data{nullptr};
+
+void invoke_frequency_wait_test_hook(const int phase) noexcept
+{
+    const FrequencyWaitTestHook hook =
+        frequency_wait_test_hook.load(std::memory_order_acquire);
+    if (hook == nullptr) {
+        return;
+    }
+    try {
+        hook(phase,
+             frequency_wait_test_user_data.load(std::memory_order_acquire));
+    } catch (...) {
+    }
+}
+
 std::shared_ptr<ag_cancel_state> retain_cancel_state(
     const ag_cancel_token* const token) noexcept
 {
@@ -133,21 +154,55 @@ struct FrequencyProgressBridge final {
     void* user_data = nullptr;
     std::atomic_bool cancelled{false};
     bool callback_failed = false;
+    bool bridge_failed = false;
 };
+
+bool wait_until_runnable(FrequencyProgressBridge& bridge,
+                         const int wait_phase) noexcept
+{
+    if (bridge.state == nullptr) {
+        return !bridge.cancelled.load(std::memory_order_relaxed);
+    }
+    try {
+        std::unique_lock<std::mutex> lock(bridge.state->pause_mutex);
+        while (bridge.state->paused
+               && !bridge.state->cancelled.load(std::memory_order_relaxed)) {
+            invoke_frequency_wait_test_hook(wait_phase);
+            bridge.state->pause_condition.wait(lock);
+        }
+        if (bridge.state->cancelled.load(std::memory_order_relaxed)) {
+            bridge.cancelled.store(true, std::memory_order_relaxed);
+            return false;
+        }
+        return true;
+    } catch (...) {
+        bridge.bridge_failed = true;
+        bridge.cancelled.store(true, std::memory_order_relaxed);
+        return false;
+    }
+}
+
+void request_cancel_noexcept(
+    const std::shared_ptr<ag_cancel_state>& state) noexcept
+{
+    if (state == nullptr) {
+        return;
+    }
+    invoke_frequency_wait_test_hook(cancel_before_lock);
+    try {
+        std::lock_guard<std::mutex> lock(state->pause_mutex);
+        state->cancelled.store(true, std::memory_order_relaxed);
+    } catch (...) {
+        state->cancelled.store(true, std::memory_order_relaxed);
+    }
+    state->pause_condition.notify_all();
+}
 
 void bridge_frequency_progress(const float progress, void* const user_data) noexcept
 {
     auto& bridge = *static_cast<FrequencyProgressBridge*>(user_data);
-    if (bridge.state != nullptr) {
-        std::unique_lock<std::mutex> lock(bridge.state->pause_mutex);
-        bridge.state->pause_condition.wait(lock, [&] {
-            return !bridge.state->paused
-                   || bridge.state->cancelled.load(std::memory_order_relaxed);
-        });
-        if (bridge.state->cancelled.load(std::memory_order_relaxed)) {
-            bridge.cancelled.store(true, std::memory_order_relaxed);
-            return;
-        }
+    if (!wait_until_runnable(bridge, wait_before_callback)) {
+        return;
     }
 
     if (bridge.callback == nullptr) {
@@ -160,13 +215,21 @@ void bridge_frequency_progress(const float progress, void* const user_data) noex
         bridge.cancelled.store(true, std::memory_order_relaxed);
         return;
     }
-    if (bridge.state != nullptr
-        && bridge.state->cancelled.load(std::memory_order_relaxed)) {
-        bridge.cancelled.store(true, std::memory_order_relaxed);
-    }
+    (void)wait_until_runnable(bridge, wait_after_callback);
 }
 
 } // namespace
+
+namespace agplayer::testing {
+
+void set_frequency_wait_test_hook(FrequencyWaitTestHook hook,
+                                  void* user_data) noexcept
+{
+    frequency_wait_test_user_data.store(user_data, std::memory_order_release);
+    frequency_wait_test_hook.store(hook, std::memory_order_release);
+}
+
+} // namespace agplayer::testing
 
 ag_result agplayer::editor::load_editor_playback_stream(
     ag_player* const player,
@@ -934,8 +997,7 @@ void ag_cancel_token_cancel(ag_cancel_token* token)
 {
     if (token != nullptr) {
         const std::shared_ptr<ag_cancel_state> state = retain_cancel_state(token);
-        state->cancelled.store(true, std::memory_order_relaxed);
-        state->pause_condition.notify_all();
+        request_cancel_noexcept(state);
     }
 }
 
@@ -944,10 +1006,15 @@ void ag_cancel_token_set_paused(ag_cancel_token* token, const int paused)
     if (token == nullptr) {
         return;
     }
-    const std::shared_ptr<ag_cancel_state> state = retain_cancel_state(token);
-    {
-        std::lock_guard<std::mutex> lock(state->pause_mutex);
-        state->paused = paused != 0;
+    std::shared_ptr<ag_cancel_state> state;
+    try {
+        state = retain_cancel_state(token);
+        {
+            std::lock_guard<std::mutex> lock(state->pause_mutex);
+            state->paused = paused != 0;
+        }
+    } catch (...) {
+        return;
     }
     if (paused == 0) {
         state->pause_condition.notify_all();
@@ -958,8 +1025,7 @@ void ag_cancel_token_destroy(ag_cancel_token* token)
 {
     if (token != nullptr) {
         const std::shared_ptr<ag_cancel_state> state = retain_cancel_state(token);
-        state->cancelled.store(true, std::memory_order_relaxed);
-        state->pause_condition.notify_all();
+        request_cancel_noexcept(state);
     }
     delete token;
 }
@@ -1522,7 +1588,7 @@ ag_result ag_track_frequency_color_analysis(
             agplayer::FrequencyColorWaveformAnalyzer::analyze(
                 utf8_path, target_points, &bridge.cancelled,
                 bridge_frequency_progress, &bridge, data);
-        if (bridge.callback_failed) {
+        if (bridge.callback_failed || bridge.bridge_failed) {
             return AG_INTERNAL_ERROR;
         }
         if (result != AG_OK) {

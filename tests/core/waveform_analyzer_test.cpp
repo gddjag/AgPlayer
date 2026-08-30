@@ -13,15 +13,25 @@
 #include <cassert>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <limits>
 #include <future>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
+
+namespace agplayer::testing {
+
+using FrequencyWaitTestHook = void (*)(int phase, void* user_data);
+void set_frequency_wait_test_hook(FrequencyWaitTestHook hook,
+                                  void* user_data) noexcept;
+
+} // namespace agplayer::testing
 
 namespace {
 
@@ -165,19 +175,85 @@ struct AsyncProgressState final {
     ag_cancel_token* token = nullptr;
 };
 
+constexpr int wait_before_callback = 0;
+constexpr int wait_after_callback = 1;
+constexpr int cancel_before_lock = 2;
+
+struct WaitHookState final {
+    std::mutex mutex;
+    std::condition_variable condition;
+    int phase = -1;
+    bool entered = false;
+    bool release = false;
+    bool cancel_attempted = false;
+};
+
+void wait_test_hook(const int phase, void* user_data)
+{
+    auto& state = *static_cast<WaitHookState*>(user_data);
+    std::unique_lock<std::mutex> lock(state.mutex);
+    if (phase == cancel_before_lock) {
+        state.cancel_attempted = true;
+        state.condition.notify_all();
+        return;
+    }
+    state.phase = phase;
+    state.entered = true;
+    state.condition.notify_all();
+    state.condition.wait(lock, [&] { return state.release; });
+}
+
+bool wait_for_hook(WaitHookState& state,
+                   const int phase,
+                   const std::chrono::milliseconds timeout)
+{
+    std::unique_lock<std::mutex> lock(state.mutex);
+    return state.condition.wait_for(lock, timeout, [&] {
+        return state.entered && state.phase == phase;
+    });
+}
+
+void release_hook(WaitHookState& state)
+{
+    {
+        std::lock_guard<std::mutex> lock(state.mutex);
+        state.release = true;
+    }
+    state.condition.notify_all();
+}
+
+struct CallbackGate final {
+    std::mutex mutex;
+    std::condition_variable condition;
+    ag_cancel_token* token = nullptr;
+    bool entered = false;
+    bool release = false;
+};
+
+void pause_and_wait_in_callback(const float, void* user_data)
+{
+    auto& state = *static_cast<CallbackGate*>(user_data);
+    ag_cancel_token_set_paused(state.token, 1);
+    std::unique_lock<std::mutex> lock(state.mutex);
+    state.entered = true;
+    state.condition.notify_all();
+    state.condition.wait(lock, [&] { return state.release; });
+}
+
+void pause_in_callback(const float, void* user_data)
+{
+    auto& state = *static_cast<AsyncProgressState*>(user_data);
+    const int previous = state.calls.fetch_add(1, std::memory_order_relaxed);
+    if (previous == 0) {
+        ag_cancel_token_set_paused(state.token, 1);
+    }
+}
+
 void record_async_progress(const float progress, void* user_data)
 {
     assert(std::isfinite(progress));
     auto& state = *static_cast<AsyncProgressState*>(user_data);
     state.calls.fetch_add(1, std::memory_order_relaxed);
-}
-
-void pause_and_cancel_reentrantly(const float, void* user_data)
-{
-    auto& state = *static_cast<AsyncProgressState*>(user_data);
-    state.calls.fetch_add(1, std::memory_order_relaxed);
-    ag_cancel_token_set_paused(state.token, 1);
-    ag_cancel_token_cancel(state.token);
 }
 
 void throw_from_progress(const float, void*)
@@ -237,6 +313,9 @@ void test_frequency_color_c_api(const std::string& source_path)
     assert(token != nullptr);
     ag_cancel_token_set_paused(token, 1);
     AsyncProgressState progress;
+    WaitHookState resume_wait;
+    agplayer::testing::set_frequency_wait_test_hook(
+        wait_test_hook, &resume_wait);
     std::atomic<ag_waveform*> async_waveform{reinterpret_cast<ag_waveform*>(
         static_cast<std::uintptr_t>(1U))};
     auto resumed = std::async(std::launch::async, [&] {
@@ -248,10 +327,12 @@ void test_frequency_color_c_api(const std::string& source_path)
         async_waveform.store(result, std::memory_order_relaxed);
         return status;
     });
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    assert(wait_for_hook(
+        resume_wait, wait_before_callback, std::chrono::seconds(2)));
     assert(progress.calls.load(std::memory_order_relaxed) == 0);
     assert(resumed.wait_for(std::chrono::milliseconds(0))
            == std::future_status::timeout);
+    release_hook(resume_wait);
     ag_cancel_token_set_paused(token, 0);
     if (resumed.wait_for(std::chrono::seconds(5)) != std::future_status::ready) {
         ag_cancel_token_cancel(token);
@@ -261,11 +342,15 @@ void test_frequency_color_c_api(const std::string& source_path)
     waveform = async_waveform.load(std::memory_order_relaxed);
     assert(waveform != nullptr);
     ag_waveform_destroy(waveform);
+    agplayer::testing::set_frequency_wait_test_hook(nullptr, nullptr);
     ag_cancel_token_destroy(token);
 
     token = ag_cancel_token_create();
     assert(token != nullptr);
     ag_cancel_token_set_paused(token, 1);
+    WaitHookState cancel_wait;
+    agplayer::testing::set_frequency_wait_test_hook(
+        wait_test_hook, &cancel_wait);
     auto cancelled = std::async(std::launch::async, [&] {
         ag_waveform* result = reinterpret_cast<ag_waveform*>(
             static_cast<std::uintptr_t>(1U));
@@ -274,28 +359,56 @@ void test_frequency_color_c_api(const std::string& source_path)
         async_waveform.store(result, std::memory_order_relaxed);
         return status;
     });
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    ag_cancel_token_cancel(token);
+    assert(wait_for_hook(
+        cancel_wait, wait_before_callback, std::chrono::seconds(2)));
+    auto cancel_call = std::async(std::launch::async, [&] {
+        ag_cancel_token_cancel(token);
+    });
+    {
+        std::unique_lock<std::mutex> lock(cancel_wait.mutex);
+        assert(cancel_wait.condition.wait_for(
+            lock, std::chrono::seconds(2),
+            [&] { return cancel_wait.cancel_attempted; }));
+    }
+    assert(cancel_call.wait_for(std::chrono::milliseconds(100))
+           == std::future_status::timeout);
+    release_hook(cancel_wait);
+    assert(cancel_call.wait_for(std::chrono::seconds(2))
+           == std::future_status::ready);
+    cancel_call.get();
     assert(cancelled.wait_for(std::chrono::seconds(2))
            == std::future_status::ready);
     assert(cancelled.get() == AG_CANCELLED);
     assert(async_waveform.load(std::memory_order_relaxed) == nullptr);
+    agplayer::testing::set_frequency_wait_test_hook(nullptr, nullptr);
     ag_cancel_token_destroy(token);
 
     token = ag_cancel_token_create();
     assert(token != nullptr);
-    ag_cancel_token_set_paused(token, 1);
+    CallbackGate destroy_gate;
+    destroy_gate.token = token;
     auto destroyed = std::async(std::launch::async, [&] {
         ag_waveform* result = reinterpret_cast<ag_waveform*>(
             static_cast<std::uintptr_t>(1U));
         const ag_result status = ag_track_frequency_color_analysis(
-            source_path.c_str(), 2'000U, token, nullptr, nullptr, &result);
+            source_path.c_str(), 2'000U, token, pause_and_wait_in_callback,
+            &destroy_gate, &result);
         async_waveform.store(result, std::memory_order_relaxed);
         return status;
     });
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    {
+        std::unique_lock<std::mutex> lock(destroy_gate.mutex);
+        assert(destroy_gate.condition.wait_for(
+            lock, std::chrono::seconds(2),
+            [&] { return destroy_gate.entered; }));
+    }
     ag_cancel_token_destroy(token);
     token = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(destroy_gate.mutex);
+        destroy_gate.release = true;
+    }
+    destroy_gate.condition.notify_all();
     assert(destroyed.wait_for(std::chrono::seconds(2))
            == std::future_status::ready);
     assert(destroyed.get() == AG_CANCELLED);
@@ -303,15 +416,33 @@ void test_frequency_color_c_api(const std::string& source_path)
 
     token = ag_cancel_token_create();
     assert(token != nullptr);
-    AsyncProgressState reentrant;
-    reentrant.token = token;
-    waveform = reinterpret_cast<ag_waveform*>(static_cast<std::uintptr_t>(1U));
-    assert(ag_track_frequency_color_analysis(
-               source_path.c_str(), 2'000U, token,
-               pause_and_cancel_reentrantly, &reentrant, &waveform)
-           == AG_CANCELLED);
-    assert(reentrant.calls.load(std::memory_order_relaxed) == 1);
-    assert(waveform == nullptr);
+    AsyncProgressState reentrant_pause;
+    reentrant_pause.token = token;
+    WaitHookState post_callback_wait;
+    agplayer::testing::set_frequency_wait_test_hook(
+        wait_test_hook, &post_callback_wait);
+    auto paused_in_callback = std::async(std::launch::async, [&] {
+        ag_waveform* result = nullptr;
+        const ag_result status = ag_track_frequency_color_analysis(
+            source_path.c_str(), 2'000U, token, pause_in_callback,
+            &reentrant_pause, &result);
+        async_waveform.store(result, std::memory_order_relaxed);
+        return status;
+    });
+    assert(wait_for_hook(post_callback_wait, wait_after_callback,
+                         std::chrono::seconds(2)));
+    assert(reentrant_pause.calls.load(std::memory_order_relaxed) == 1);
+    assert(paused_in_callback.wait_for(std::chrono::milliseconds(0))
+           == std::future_status::timeout);
+    release_hook(post_callback_wait);
+    ag_cancel_token_set_paused(token, 0);
+    assert(paused_in_callback.wait_for(std::chrono::seconds(5))
+           == std::future_status::ready);
+    assert(paused_in_callback.get() == AG_OK);
+    waveform = async_waveform.load(std::memory_order_relaxed);
+    assert(waveform != nullptr);
+    ag_waveform_destroy(waveform);
+    agplayer::testing::set_frequency_wait_test_hook(nullptr, nullptr);
     ag_cancel_token_destroy(token);
 
     waveform = reinterpret_cast<ag_waveform*>(static_cast<std::uintptr_t>(1U));

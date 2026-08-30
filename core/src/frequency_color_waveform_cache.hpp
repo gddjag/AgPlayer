@@ -34,4 +34,11 @@ public:
         const FrequencyColorCacheData& data) noexcept;
 };
 
+namespace testing {
+
+/* Internal deterministic failure seam used by the cache persistence tests. */
+void fail_next_frequency_color_cache_replace() noexcept;
+
+} // namespace testing
+
 } // namespace agplayer
