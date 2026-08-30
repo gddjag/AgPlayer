@@ -817,14 +817,49 @@ Rectangle {
                     y: (1 - volumeLine.combinedGainAtOffset(hoverOffset) / 2)
                         * volumeLine.height - height / 2
                     height: 12
-                    acceptedButtons: Qt.LeftButton
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
                     cursorShape: Qt.SizeVerCursor
+                    readonly property var fadeMenu: fadeCurveMenu
                     property bool gainMoved: false
                     property bool playOnRelease: false
+                    function fadeSideAtOffset(offset) {
+                        const eventFrames = Number(
+                            eventDelegate.modelData.timelineEnd)
+                            - Number(eventDelegate.modelData.timelineStart)
+                        const fadeIn = volumeLine.displayedFadeIn
+                        const fadeOut = volumeLine.displayedFadeOut
+                        const inFade = fadeIn > 0 && offset < fadeIn
+                        const outFade = fadeOut > 0
+                            && offset >= eventFrames - fadeOut
+                        if (inFade && outFade) {
+                            const distanceToIn = offset
+                            const distanceToOut = eventFrames - 1 - offset
+                            return distanceToIn <= distanceToOut ? "in" : "out"
+                        }
+                        if (inFade) return "in"
+                        if (outFade) return "out"
+                        return ""
+                    }
                     onPressed: function(mouse) {
                         const canvasPoint = mapToItem(
                             canvas, mouse.x, mouse.y)
                         const frame = canvas.frameAtCanvasPixel(canvasPoint.x)
+                        if (mouse.button === Qt.RightButton) {
+                            const offset = Math.max(0, Math.min(
+                                Number(eventDelegate.modelData.timelineEnd)
+                                    - Number(eventDelegate.modelData.timelineStart) - 1,
+                                frame - Number(eventDelegate.modelData.timelineStart)))
+                            const fadeSide = fadeSideAtOffset(offset)
+                            if (fadeSide.length === 0) {
+                                mouse.accepted = false
+                                return
+                            }
+                            fadeCurveMenu.eventId = eventDelegate.modelData.id
+                            fadeCurveMenu.fadeSide = fadeSide
+                            fadeCurveMenu.popup()
+                            mouse.accepted = true
+                            return
+                        }
                         const outsideSelection = !canvas.selectionContains(frame)
                         playOnRelease = canvas.displayedSelectionEnd
                             > canvas.displayedSelectionStart && outsideSelection
@@ -846,7 +881,8 @@ Rectangle {
                         volumeLine.gainCandidate = nextGain
                         combinedGainCurve.requestPaint()
                     }
-                    onReleased: {
+                    onReleased: function(mouse) {
+                        if (mouse.button !== Qt.LeftButton) return
                         if (gainMoved)
                             AudioEditorController.setEventGain(
                                 eventDelegate.modelData.id,

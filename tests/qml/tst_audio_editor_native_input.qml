@@ -330,6 +330,53 @@ TestCase {
         verify(findVisibleItem(canvas, "editorEventFadeOutNode") === null)
     }
 
+    function test_nativeRightClickOnEligibleCentralCurveOpensAndAppliesFadeMenu() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 192000))
+        const canvas = findChild(page, "editorWaveformCanvas")
+        verify(canvas)
+        AudioEditorController.viewport.setViewportWidth(canvas.width)
+        verify(AudioEditorController.viewport.setVisibleRange(0, 192000))
+        tryVerify(function() {
+            return findVisibleItem(canvas, "editorEventGainInteraction") !== null
+        })
+        let gain = findVisibleItem(canvas, "editorEventGainInteraction")
+        verify(gain, "missing central gain interaction")
+        let fadeMenu = gain.fadeMenu
+        verify(fadeMenu, "missing fade curve menu")
+        const eventId = AudioEditorController.timelineEventViews[0].id
+
+        verify(AudioEditorController.setSelection(1000, 3000))
+        verify(nativeDropHelper.clickItem(gain, gain.width * 0.5,
+                                          gain.height * 0.5,
+                                          Qt.RightButton),
+               "native right click without fade did not reach the window")
+        wait(0)
+        compare(fadeMenu.visible, false,
+                "a central curve without fades must leave right click to range clearing")
+        compare(AudioEditorController.selectionStart, -1)
+
+        verify(AudioEditorController.setEventFadeOut(eventId, 120000))
+        tryVerify(function() {
+            return findVisibleItem(canvas, "editorEventGainInteraction") !== null
+        })
+        gain = findVisibleItem(canvas, "editorEventGainInteraction")
+        fadeMenu = gain.fadeMenu
+        verify(fadeMenu, "fade curve menu was not recreated with the event")
+        verify(nativeDropHelper.clickItem(gain, gain.width * 0.5,
+                                          gain.height * 0.5,
+                                          Qt.RightButton),
+               "native right click on eligible curve did not reach the window")
+        tryVerify(function() { return fadeMenu.visible })
+        const linear = fadeMenu.itemAt(0)
+        verify(linear, "missing linear fade curve menu item")
+        verify(nativeDropHelper.clickItem(linear, linear.width * 0.5,
+                                          linear.height * 0.5, Qt.LeftButton))
+        tryVerify(function() {
+            return AudioEditorController.timelineEventViews[0]
+                .fadeOutCurve === "linear"
+        })
+    }
+
     function test_nativeEnvelopePointAddsNearCurveAndDragsBothAxesInOneUndo() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 192000))
         const canvas = findChild(page, "editorWaveformCanvas")
