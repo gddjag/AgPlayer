@@ -375,7 +375,6 @@ git commit -m "fix(library): use compact file information panel"
 - Delete: `translations/agplayer_th.ts`
 - Delete: `translations/agplayer_vi.ts`
 - Modify: `installer/AgPlayer.iss`
-- Delete: `installer/languages/Vietnamese.isl`
 - Modify: `tests/qt/translation_manager_test.cpp`
 - Modify: `tests/qt/settings_controller_test.cpp`
 - Modify: `tests/qml/tst_main_window.qml`
@@ -401,11 +400,12 @@ Update the installer script contract to require:
 ```powershell
 if ($installer -notmatch '(?m)^ShowLanguageDialog=no\r?$' -or
     $installer.IndexOf('Name: "chinesesimplified"') -gt
-    $installer.IndexOf('Name: "english"') -or
-    $installer -match 'Name:\s*"thai"|Name:\s*"vietnamese"') {
+    $installer.IndexOf('Name: "english"')) {
     throw "Installer must start in Chinese without a language dialog"
 }
 ```
+
+Keep assertions for the existing English, Thai, and Vietnamese installer resources and localized custom messages, because explicit `/LANG=<name>` compatibility is independent from the two-language application settings UI.
 
 - [ ] **Step 2: Run the focused tests and verify failure**
 
@@ -435,7 +435,7 @@ ShowLanguageDialog=no
 LanguageDetectionMethod=none
 ```
 
-Keep Simplified Chinese first and English second for explicit `/LANG=english` compatibility. Remove Thai/Vietnamese language entries and their custom-message rows; delete `Vietnamese.isl`.
+Keep Simplified Chinese first and English second, and keep every existing installer language entry and custom-message row after them. They remain available only to explicit installer command-line selection; `ShowLanguageDialog=no` makes normal double-click installation Chinese without presenting those choices.
 
 - [ ] **Step 5: Rebuild translations, rerun tests, and commit**
 
@@ -921,7 +921,7 @@ git commit -m "feat(lyrics): integrate free multi route search"
 ### Task 13: Run full regression, visual, network-failure, and Windows interaction acceptance
 
 **Files:**
-- Modify: `docs/development/player-polish-lyrics-acceptance.md`
+- Create: `docs/development/player-polish-lyrics-acceptance.md`
 - Modify only if evidence exposes a defect: files owned by Tasks 1–12 and their tests.
 
 **Interfaces:**
@@ -976,8 +976,8 @@ At 100% and 150% DPI, in dual and integrated layouts, verify actual taskbar clic
 
 ```powershell
 git status --short
-git diff --stat HEAD~12..HEAD
-git diff --check HEAD~12..HEAD
+git diff --stat 1020fd1..HEAD
+git diff --check 1020fd1..HEAD
 git log --oneline --decorate -15
 git add -- docs/development/player-polish-lyrics-acceptance.md
 git commit -m "docs(qa): record player polish acceptance"
