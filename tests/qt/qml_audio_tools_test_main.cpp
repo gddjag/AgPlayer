@@ -300,7 +300,7 @@ public:
                 urls.append(QUrl::fromLocalFile(path));
             }
             switch (tools_->currentTool()) {
-            case 0: editor_->openFile(urls.constFirst()); break;
+            case 0: editor_->openDroppedUrls(urls); break;
             case 1: format_->loadFiles(urls); break;
             case 2: metadata_->loadFiles(urls); break;
             case 3: filenames_->loadFiles(urls); break;
@@ -308,6 +308,15 @@ public:
             }
             delivered_ = true;
         });
+    }
+
+    void clearBindings()
+    {
+        tools_ = nullptr;
+        format_ = nullptr;
+        editor_ = nullptr;
+        metadata_ = nullptr;
+        filenames_ = nullptr;
     }
 
     Q_INVOKABLE bool sendUrls(QObject* target, const QList<QUrl>& urls)
@@ -460,6 +469,16 @@ public:
                                      static_cast<int>(Qt::NoModifier));
     }
 
+    Q_INVOKABLE bool keyClickItem(QObject* target, int key, int modifiers)
+    {
+        auto* item = qobject_cast<QQuickItem*>(target);
+        QQuickWindow* window = item == nullptr ? nullptr : item->window();
+        if (window == nullptr || !window->isVisible()) return false;
+        QTest::keyClick(window, static_cast<Qt::Key>(key),
+                        Qt::KeyboardModifiers(modifiers));
+        return true;
+    }
+
     Q_INVOKABLE bool dragItemWithModifiers(QObject* target, qreal x, qreal y,
                                            qreal deltaX, qreal deltaY,
                                            int modifiers)
@@ -472,6 +491,18 @@ public:
         const QPoint start = item->mapToScene(QPointF(x, y)).toPoint();
         const QPoint end = start + QPoint(qRound(deltaX), qRound(deltaY));
         const auto keyboardModifiers = Qt::KeyboardModifiers(modifiers);
+        const bool controlHeld = keyboardModifiers.testFlag(Qt::ControlModifier);
+        QQuickItem* modifierOwner = item;
+        while (modifierOwner != nullptr
+               && modifierOwner->objectName() != "audioEditorPage") {
+            modifierOwner = modifierOwner->parentItem();
+        }
+        if (controlHeld) QTest::keyPress(window, Qt::Key_Control);
+        if (controlHeld && modifierOwner != nullptr) {
+            // Mirror the page's real Keys.onPressed state after the native key
+            // event so the following pointer press snapshots the held modifier.
+            modifierOwner->setProperty("controlModifierHeld", true);
+        }
         QTest::mousePress(window, Qt::LeftButton, keyboardModifiers,
                           start, 20);
         constexpr int steps = 6;
@@ -481,6 +512,10 @@ public:
         }
         QTest::mouseRelease(window, Qt::LeftButton, keyboardModifiers,
                             end, 20);
+        if (controlHeld) QTest::keyRelease(window, Qt::Key_Control);
+        if (controlHeld && modifierOwner != nullptr) {
+            modifierOwner->setProperty("controlModifierHeld", false);
+        }
         return true;
     }
 
@@ -503,6 +538,7 @@ class QmlAudioToolsSetup final : public QObject {
 public:
     ~QmlAudioToolsSetup() override
     {
+        nativeDropHelper_.clearBindings();
         // Test controllers own workers and several of them retain the player
         // handle.  Destroy them before the C core so parallel/serial QML test
         // processes cannot race their teardown against an already freed core.
@@ -547,7 +583,8 @@ public slots:
         metadataEditor_ = std::make_unique<MetadataEditor>();
         filenameProcessor_ = std::make_unique<FilenameProcessor>();
         formatConverter_ = std::make_unique<FormatConverter>();
-        audioEditor_ = std::make_unique<AudioEditorController>(AG_AUDIO_BACKEND_NULL);
+        audioEditor_ = std::make_unique<AudioEditorController>();
+        audioEditor_->setPlaybackController(playback_.get());
         settings_ = std::make_unique<SettingsController>();
         themeManager_ = std::make_unique<ThemeManager>(*qGuiApp);
         themeSettings_ = std::make_unique<ThemeSettingsSynchronizer>(

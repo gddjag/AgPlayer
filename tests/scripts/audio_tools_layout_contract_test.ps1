@@ -28,6 +28,62 @@ $qaFinalMatrix = Get-Content -Raw -Encoding UTF8 -LiteralPath (
 $qaComparisonPath = Join-Path $SourceRoot `
     'scripts/qa-audio-editor-reference-compare.ps1'
 
+$forbidden = @('RecordingSession', 'Finalizing', 'recordingSupported', 'startRecording',
+               'editor.newRecording', 'editorRecordingTransport',
+               'inspectorRecordingGroup')
+$productionRoots = @(
+    (Join-Path $SourceRoot 'core/src'),
+    (Join-Path $SourceRoot 'qt/src'),
+    (Join-Path $SourceRoot 'app/qml'))
+$productionFiles = foreach ($root in $productionRoots) {
+    Get-ChildItem -LiteralPath $root -File -Recurse
+}
+$productionFiles += @(
+    (Join-Path $SourceRoot 'CMakeLists.txt'),
+    (Join-Path $SourceRoot 'core/CMakeLists.txt')) | Where-Object {
+    Test-Path -LiteralPath $_
+}
+foreach ($symbol in $forbidden) {
+    $matches = $productionFiles | Select-String -SimpleMatch -Pattern $symbol
+    if ($matches) {
+        throw "Recording production symbol remains: $symbol ($($matches[0].Path):$($matches[0].LineNumber))"
+    }
+}
+
+$recordingTranslationSources = @(
+    '6K+36YCJ5oup5b2V6Z+z5L+d5a2Y5L2N572u',
+    '5peg5rOV5ZCv5Yqo5b2V6Z+z6K6+5aSH77yM6K+35qOA5p+l6K6+5aSH5LiO5p2D6ZmQ',
+    '5b2V6Z+z5a6M5oiQ77yM5L2G5peg5rOV5o+S5YWl5b2T5YmN5paH5qGj',
+    '5b2V6Z+z5bey5Y+W5raI', '5b2V6Z+z',
+    '6YCJ5oup5b2V6Z+z6K6+5aSH77yIQWx0K1LvvIk=',
+    '5pqC5YGcIC8g57un57ut5b2V6Z+z77yIU2hpZnQrUu+8iQ==',
+    '5byA5aeLIC8g57un57ut5b2V6Z+z77yIUu+8iQ==',
+    '5YGc5q2i5bm25L+d5a2Y5b2V6Z+z77yIQ3RybCtS77yJ',
+    '56m65qC8ID0g5pKt5pS+IC8g5pqC5YGcICAgICAgIFIgPSDlvIDlp4vlvZXpn7MgICAgICAgU2hpZnQrUiA9IOaaguWBnCAvIOe7p+e7reW9lemfsyAgICAgICBDdHJsK1IgPSDlgZzmraLlubbkv53lrZggICAgICAgUyA9IOWcqOaSreaUvuWktOWkhOWIhuWJsiAgICAgICBEZWxldGUgPSDliKDpmaTniYfmrrUgICAgICAgQ3RybCtDIC8gWCAvIFYgPSDlpI3liLYgLyDliarliIcgLyDnspjotLQgICAgICAgQ3RybCtaIC8gWSA9IOaSpOmUgCAvIOmHjeWBmg==',
+    '5pyq5qOA5rWL5Yiw6L6T5YWl6K6+5aSH', '5Y+W5raI5b2V6Z+z',
+    '5b2V6Z+z5o6n5Yi2', '5byA5aeL5b2V6Z+z',
+    '5pqC5YGc5oiW57un57ut5b2V6Z+z', '5b2V6Z+z5bey5pqC5YGc',
+    '5q2j5Zyo5b2V6Z+z', '5YeG5aSH5b2V6Z+z', 'QS4g5b2V6Z+z',
+    '6L6T5YWl6K6+5aSH', '6L6T5YWl55S15bmz', '55uR5ZCs',
+    '5b2V6Z+z5qC85byP', 'UGhhc2UgOSDliY3kuI3lj6/nlKg=',
+    '57un57ut5b2V6Z+z', '6YCJ5oup5b2V6Z+z6K6+5aSH',
+    '5pqC5YGc5b2V6Z+z', '5YGc5q2i5bm25L+d5a2Y5b2V6Z+z',
+    '5bGV5byA5b2V6Z+z6K6+572u', '5oqY5Y+g5b2V6Z+z6K6+572u',
+    '5YGc5q2i5b2V6Z+z', '5Yi35paw6L6T5YWl6K6+5aSH',
+    '5paw5bu65b2V6Z+z', '5omT5byA6Z+z6aKR5oiW5paw5bu65b2V6Z+z5Lul5byA5aeL57yW6L6R',
+    '5pKt5pS+77yaUGhhc2UgMTIg5o6l5YWlIMK3IFLvvJpQaGFzZSA5IOaOpeWFpSDCtyBDdHJsK1NoaWZ0K0Eg5Y+W5raI6YCJ5Yy6IMK3IEN0cmwrVyDmuIXnqbo=') |
+    ForEach-Object { ConvertFrom-Utf8Base64 $_ }
+$translationFiles = @('agplayer_zh.ts', 'agplayer_en.ts', 'agplayer_th.ts',
+                      'agplayer_vi.ts') | ForEach-Object {
+    Join-Path $SourceRoot "translations/$_"
+}
+foreach ($source in $recordingTranslationSources) {
+    $matches = Select-String -Path $translationFiles -SimpleMatch -Pattern "<source>$source</source>"
+    if ($matches) {
+        throw "Recording translation remains: $source ($($matches[0].Path):$($matches[0].LineNumber))"
+    }
+}
+
 if ($appMain -notmatch 'audioEditor\.setPlaybackController\(&playback\)') {
     throw 'The production audio editor is not wired to the shared playback controller.'
 }
@@ -64,7 +120,7 @@ foreach ($control in @(
     'editorMainColumn', 'editorInspector', 'editorCommandBar', 'fileSummaryBar',
     'editorTimelineWorkspace', 'editorTrackHeader', 'editorTimeRuler',
     'editorWaveformCanvas', 'editorTimelineScrollbar',
-    'editorRecordingTransport', 'editorPlaybackTransport',
+    'editorPlaybackTransport',
     'editorShortcutCard', 'editorStatusBar')) {
     if ($audioEditor -notmatch ('objectName:\s*"' + $control + '"')) {
         throw "The Phase 6 audio editor is missing $control."
@@ -73,8 +129,8 @@ foreach ($control in @(
 
 if ($toolsWindow -notmatch 'width:\s*1672' -or
     $toolsWindow -notmatch 'height:\s*941' -or
-    $toolsWindow -notmatch 'Layout\.preferredHeight:\s*49' -or
-    $toolsWindow -notmatch 'Layout\.preferredHeight:\s*43' -or
+    $toolsWindow -notmatch 'Layout\.preferredHeight:\s*60' -or
+    $toolsWindow -notmatch 'Layout\.preferredHeight:\s*59' -or
     $toolsWindow -notmatch 'title:\s*qsTr\("AgPlayer') {
     throw 'The tools shell must match the 1672x941 title/nav geometry and title.'
 }
@@ -91,12 +147,18 @@ if ($toolsWindow -notmatch ('title:\s*qsTr\("' + $audioToolsTitle + '"\)') -or
     $toolsWindow -notmatch ('text:\s*qsTr\("' + $audioToolsTitle + '"\)')) {
     throw 'The native and custom title bars must use AgPlayer · 音频工具.'
 }
-if ($audioEditor -notmatch 'sequence:\s*"Space"' -or
-    $audioEditor -notmatch 'onActivated:\s*AudioEditorController\.playPause\(\)') {
-    throw 'The composed tools shell is missing its real Space playback shortcut.'
+if ($toolsWindow -notmatch 'objectName:\s*"audioToolsSpaceShortcut"' -or
+    $toolsWindow -notmatch 'sequence:\s*"Space"' -or
+    $toolsWindow -notmatch 'context:\s*Qt\.ApplicationShortcut' -or
+    $audioEditor -match 'objectName:\s*"editorSpaceShortcut"') {
+    throw 'The tools shell must own the only global Space playback shortcut.'
+}
+if ($toolsWindow -notmatch 'window\.startSystemMove\(\)' -or
+    $toolsWindow -match 'window\.(x|y)\s*\+=') {
+    throw 'The audio tools title bar must use native movement without manual coordinates.'
 }
 if ($toolsWindow -match 'Layout\.(left|right|bottom)Margin:\s*[1-9]') {
-    throw 'The tools content stack must occupy the complete 0,92,1672,849 area.'
+    throw 'The tools content stack must occupy the complete 0,119,1672,822 area.'
 }
 if ($qaMatrix -notmatch '"1672x941"' -or $qaMatrix -match '"1672x942"') {
     throw 'The audio-tools QA matrix must capture the exact 1672x941 reference size.'
@@ -107,7 +169,7 @@ if ($qaFinalMatrix -match 'Width\s*=\s*1672;\s*Height\s*=\s*942') {
 if (-not (Test-Path -LiteralPath $qaComparisonPath)) {
     throw 'The Phase 6 source/candidate comparison and difference-mask script is missing.'
 }
-if ($toolsNavigation -notmatch 'anchors\.leftMargin:\s*49' -or
+if ($toolsNavigation -notmatch 'anchors\.leftMargin:\s*32' -or
     $toolsNavigation -notmatch 'height:\s*3' -or
     $toolsNavigation -match 'radius:\s*Theme\.radiusMd' -or
     $toolsNavigation -match 'ThemedIcon') {
@@ -143,9 +205,9 @@ foreach ($laterPhaseAction in @('cropToSelection', 'fadeIn', 'fadeOut', 'silence
         throw "The later-phase command must retain its honest disabled state: $laterPhaseAction"
     }
 }
-if ($commandBar -notmatch 'clearTransientState\(\)' -or
+if ($commandBar -notmatch 'clearTimeline\(\)' -or
     $commandBar -match 'clearDocument\(') {
-    throw 'Clear must only clear selection and transient tool state.'
+    throw 'Clear must remove all timeline events without closing the document.'
 }
 foreach ($obsolete in @(
     'insertSilence', 'clearDocument', 'exportMenu',
@@ -156,15 +218,14 @@ foreach ($obsolete in @(
 }
 
 foreach ($group in @(
-    'inspectorRecordingGroup', 'inspectorTempoGroup', 'inspectorPitchGroup',
+    'inspectorTempoGroup', 'inspectorPitchGroup',
     'inspectorPreservePitchGroup', 'inspectorExportGroup')) {
     if ($audioEditor -notmatch ('objectName:\s*"' + $group + '"')) {
         throw "The Phase 6 inspector is missing $group."
     }
 }
 foreach ($control in @(
-    'inspectorRecordingDevice', 'inspectorInputMeter', 'inspectorMonitorSwitch',
-    'inspectorRecordingFormat', 'inspectorBpmInput', 'inspectorDetectBpmButton',
+    'inspectorBpmInput', 'inspectorDetectBpmButton',
     'inspectorSpeedSlider', 'inspectorSpeedValue', 'inspectorSpeedResetButton',
     'inspectorPitchMinus', 'inspectorPitchSlider', 'inspectorPitchPlus',
     'inspectorPitchValue', 'inspectorPreservePitchSwitch',
@@ -224,20 +285,20 @@ if ($waveformCanvas -notmatch 'SettingsController\.waveformDensity' -or
     $waveformCanvas -match 'waveformColor:\s*"#2587ff"') {
     throw 'Editor and player waveforms must use the same configurable style inputs.'
 }
-foreach ($shortcut in @('Ctrl\+1', 'Ctrl\+2', 'Ctrl\+B', 'Ctrl\+C', 'Ctrl\+X', 'Ctrl\+V',
-    'sequence:\s*"R"', 'sequence:\s*"Shift\+R"', 'sequence:\s*"Ctrl\+R"')) {
+foreach ($shortcut in @('Ctrl\+1', 'Ctrl\+2', 'Ctrl\+B', 'Ctrl\+C', 'Ctrl\+X', 'Ctrl\+V')) {
     if ($audioEditor -notmatch $shortcut) {
         throw "The editor is missing the interaction shortcut: $shortcut"
     }
 }
-foreach ($responsiveHook in @('referenceLayout', 'narrowLayout',
-    'editorInspectorScroller', 'editorInspectorAccess')) {
+foreach ($responsiveHook in @('inspectorWidth', 'mainWidth',
+    'responsiveContentHeight', 'narrowLayout', 'editorInspectorScroller',
+    'editorInspectorAccess')) {
     if ($audioEditor -notmatch $responsiveHook) {
         throw "The responsive editor is missing $responsiveHook."
     }
 }
 
-foreach ($capability in @('recordingSupported', 'bpmDetectionSupported',
+foreach ($capability in @('bpmDetectionSupported',
     'timePitchSupported', 'playbackSupported', 'exportSupported')) {
     if ($controllerHeader -notmatch ('Q_PROPERTY\(bool\s+' + $capability) -or
         $audioEditor -notmatch ('AudioEditorController\.' + $capability)) {
@@ -248,28 +309,28 @@ foreach ($field in @('editorExportCodec', 'editorExportSampleRate',
     'editorExportBitDepth', 'editorExportChannels', 'editorExportBitRate',
     'editorExportDirectory')) {
     if ($audioEditor -notmatch ('objectName:\s*"' + $field + '"')) {
-        throw "The editable E group is missing $field."
+        throw "The D. export settings group is missing $field."
     }
 }
 $shortcutPlay = [regex]::Escape((ConvertFrom-Utf8Base64 '56m65qC8ID0g5pKt5pS+IC8g5pqC5YGc'))
-$shortcutFade = [regex]::Escape((ConvertFrom-Utf8Base64 '5ouW5ou95Y+z5LiK6KeSID0g6LCD5pW05reh5Ye6'))
 $shortcutEnvelope = [regex]::Escape((ConvertFrom-Utf8Base64 '5Y+M5Ye76Z+z6YeP57q/ID0g5re75Yqg5o6n5Yi254K5'))
-$recordingReady = [regex]::Escape((ConvertFrom-Utf8Base64 '5YeG5aSH5b2V6Z+z'))
 if (($audioEditor + "`n" + $commandBar) -match 'Phase\s*[0-9]' -or
     $audioEditor -notmatch $shortcutPlay -or
-    $audioEditor -notmatch $shortcutFade -or
-    $audioEditor -notmatch $shortcutEnvelope -or
-    $audioEditor -notmatch ('qsTr\("' + $recordingReady + '"\)')) {
+    $audioEditor -notmatch $shortcutEnvelope) {
     throw 'The editor still contains phased placeholder copy or is missing reference instructions.'
 }
-if ($audioEditor -notmatch 'objectName:\s*"recordingTimeText"[\s\S]{0,220}00:00:00' -or
-    $audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,160}visible:\s*false') {
-    throw 'Recording time or the visually absent reference status bar does not match the source image.'
+$statusOverlay = 'objectName:\s*"editorStatusBar"[\s\S]{0,240}' +
+    'visible:\s*AudioEditorController\.busy\s*\|\|\s*' +
+    'AudioEditorController\.errorMessage\.length\s*>\s*0\s*\|\|\s*' +
+    'statusSuccessTimer\.running'
+if ($audioEditor -notmatch $statusOverlay -or
+    $audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,360}y:\s*mainSurface\.height\s*-\s*25' -or
+    $audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,420}width:\s*mainSurface\.width' -or
+    $audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,460}height:\s*25') {
+    throw 'Status feedback must be a 25 px bottom overlay shown only for processing, errors, or export success.'
 }
 foreach ($accessibleObject in @('audioToolsMinimizeButton',
     'audioToolsMaximizeButton', 'audioToolsCloseButton',
-    'recordingMicrophoneButton', 'recordingPauseButton',
-    'recordingRecordButton', 'recordingStopButton',
     'editorPrimaryPlayButton', 'editorPlayheadHandle',
     'editorSelectionStartHandle', 'editorSelectionEndHandle',
     'editorEventLeftTrimHandle', 'editorEventRightTrimHandle')) {

@@ -1,18 +1,21 @@
 #include "audio_editor/audio_file_analyzer.hpp"
 #include "audio_editor/editor_playback_stream.hpp"
 #include "audio_editor/editor_player_bridge.hpp"
+#include "audio_editor/automation_time_mapper.hpp"
 #include "formant_preserver.hpp"
 
 #include <agplayer/c_api.h>
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <vector>
 
 namespace {
@@ -231,6 +234,87 @@ void automationRunsAfterTimePitchInRealtimeStream()
     std::filesystem::remove(path, ignored);
 }
 
+std::chrono::nanoseconds renderMutedEventTimeline(
+    const agplayer::editor::AudioSource& source, const std::size_t eventCount)
+{
+    using namespace agplayer::editor;
+    const auto sharedSource = std::make_shared<const AudioSource>(source);
+    std::vector<AudioEvent> events;
+    events.reserve(eventCount);
+    for (std::size_t index = 0; index < eventCount; ++index) {
+        AudioEvent event{static_cast<EventId>(index + 1U), sharedSource,
+                         0, 1, static_cast<SampleFrame>(index)};
+        event.mute = true;
+        events.push_back(std::move(event));
+    }
+    TimelineSnapshot snapshot{std::move(events),
+                              static_cast<SampleFrame>(eventCount), 1};
+    EditorPlaybackParameters parameters;
+    std::string error;
+    auto stream = EditorPlaybackStream::create(
+        std::move(snapshot), parameters, error);
+    require(stream != nullptr, "many-event stream creation failed");
+
+    agplayer::DecodedAudioBlock block;
+    std::size_t renderedFrames = 0;
+    const auto started = std::chrono::steady_clock::now();
+    do {
+        require(stream->read(block) == AG_OK,
+                "many-event stream read failed");
+        renderedFrames += block.frames;
+    } while (!block.end_of_stream);
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+    require(renderedFrames == eventCount,
+            "many-event stream frame count mismatch");
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed);
+}
+
+void sequentialAutomationCursorSearchRemainsNearLinear()
+{
+    using namespace agplayer::editor;
+    const auto path = writeAutomationOrderFixture();
+    const auto analysis = AudioFileAnalyzer::analyze(path, 64U);
+    require(analysis.success, "many-event fixture analysis failed");
+
+    (void)renderMutedEventTimeline(analysis.source, 2'000U);
+    const auto small = renderMutedEventTimeline(analysis.source, 100'000U);
+    const auto large = renderMutedEventTimeline(analysis.source, 400'000U);
+    require(large < small * 8,
+            "automation event lookup rescanned the timeline per output block");
+
+    std::error_code ignored;
+    std::filesystem::remove(path, ignored);
+}
+
+void automationCursorRepositionsAfterBackwardSeek()
+{
+    using namespace agplayer::editor;
+    const auto path = writeAutomationOrderFixture();
+    const auto analysis = AudioFileAnalyzer::analyze(path, 64U);
+    require(analysis.success, "automation seek fixture analysis failed");
+    const auto source = std::make_shared<const AudioSource>(analysis.source);
+    AudioEvent quiet{1U, source, 0, 4'000, 0};
+    quiet.gain = 0.25F;
+    AudioEvent loud{2U, source, 4'000, 8'000, 4'000};
+    TimelineSnapshot snapshot{{quiet, loud}, 8'000, 1};
+    EditorPlaybackParameters parameters;
+    std::string error;
+    auto stream = EditorPlaybackStream::create(snapshot, parameters, error);
+    require(stream != nullptr, "automation seek stream creation failed");
+
+    agplayer::DecodedAudioBlock block;
+    require(stream->read(block) == AG_OK && block.frames == 4'096,
+            "automation seek initial read failed");
+    require(stream->seek(0) == AG_OK && stream->read(block) == AG_OK
+                && block.frames > 0,
+            "automation backward seek failed");
+    require(std::abs(block.samples.front() - 0.125F) < 0.001F,
+            "automation cursor did not return to the first event after seek");
+
+    std::error_code ignored;
+    std::filesystem::remove(path, ignored);
+}
+
 void awkward44100OffsetsRemainSampleExact()
 {
     using namespace agplayer::editor;
@@ -261,6 +345,27 @@ void awkward44100OffsetsRemainSampleExact()
             "sample-exact seek failed");
     require(std::abs(block.samples.front() - frame45) < 0.0001F,
             "1ms seek at 44.1kHz landed one PCM frame early");
+
+    auto automatedEvent = AudioDocument::fromSource(analysis.source)
+        .timelineSnapshot().events.front();
+    automatedEvent.envelope = {{44, 0.0F}, {45, 1.0F}};
+    auto automatedSeek = EditorPlaybackStream::create(
+        TimelineSnapshot{{automatedEvent}, 200, 1}, neutral, error);
+    require(automatedSeek && automatedSeek->seek(1) == AG_OK
+                && automatedSeek->read(block) == AG_OK && block.frames > 0,
+            "sample-exact automated seek failed");
+    require(std::abs(block.samples.front() - frame45) < 0.0001F,
+            "seek applied automation from the preceding 44.1kHz frame");
+
+    for (const double ratio : {0.5, 1.25, 2.0}) {
+        AutomationTimeMapper mapper(0, 200, ratio);
+        constexpr SampleFrame outputFrame = 45;
+        const SampleFrame rawFrame = static_cast<SampleFrame>(std::ceil(
+            44.1L * static_cast<long double>(ratio)));
+        mapper.resetAnchor(outputFrame, rawFrame);
+        require(mapper.map(outputFrame) == rawFrame,
+                "seek automation anchor did not match raw PCM frame");
+    }
     std::error_code ignored;
     std::filesystem::remove(path, ignored);
 }
@@ -325,6 +430,8 @@ int main(int argc, char** argv)
     require(argc == 2, "fixture path argument missing");
     formantPreserverRestoresControlledSpectralCentroids();
     automationRunsAfterTimePitchInRealtimeStream();
+    sequentialAutomationCursorSearchRemainsNearLinear();
+    automationCursorRepositionsAfterBackwardSeek();
     awkward44100OffsetsRemainSampleExact();
     multiEventProcessingAndDecodeFailuresAreCovered();
     const auto analysis = AudioFileAnalyzer::analyze(

@@ -27,7 +27,7 @@ bool isValidProjectExportSettings(const ProjectExportSettings& settings) noexcep
     const bool validSampleRate = settings.sampleRate == 0
         || (settings.sampleRate >= 8'000 && settings.sampleRate <= 384'000);
     return validSampleRate && settings.bitDepth >= 8 && settings.bitDepth <= 32
-        && settings.channels >= 0 && settings.channels <= 2
+        && settings.channels >= 0 && settings.channels <= 8
         && settings.bitRate >= 0 && settings.bitRate <= 1'536'000
         && settings.quality >= 0 && settings.quality <= 100;
 }
@@ -131,6 +131,59 @@ bool safeRelative(const QString& path)
     if (path.isEmpty() || QFileInfo(path).isAbsolute()) return false;
     const QString clean = QDir::cleanPath(QDir::fromNativeSeparators(path));
     return clean != QStringLiteral("..") && !clean.startsWith(QStringLiteral("../"));
+}
+
+bool isValidProjectEditorSettings(const ProjectEditorSettings& settings) noexcept
+{
+    const auto validBpm = [](const double value) {
+        return std::isfinite(value)
+            && (value == 0.0 || (value >= 20.0 && value <= 400.0));
+    };
+    if (!validBpm(settings.originalBpm) || !validBpm(settings.targetBpm)
+        || !std::isfinite(settings.speedPercent)
+        || settings.speedPercent < 50.0 || settings.speedPercent > 200.0
+        || settings.pitchCents < -1'200 || settings.pitchCents > 1'200
+        || settings.trackMuted && settings.trackSolo
+        || !std::isfinite(settings.trackGainDb)
+        || settings.trackGainDb < -60.0 || settings.trackGainDb > 12.0) {
+        return false;
+    }
+    if (settings.originalBpm == 0.0) return settings.targetBpm == 0.0;
+    return std::abs(settings.targetBpm
+                    - settings.originalBpm * settings.speedPercent / 100.0)
+        < 0.001;
+}
+
+QString fadeCurveName(const FadeCurve curve)
+{
+    switch (curve) {
+    case FadeCurve::Linear:
+        return QStringLiteral("linear");
+    case FadeCurve::Smooth:
+        return QStringLiteral("smooth");
+    case FadeCurve::Exponential:
+        return QStringLiteral("exponential");
+    }
+    return {};
+}
+
+bool fadeCurve(const QJsonValue& value, FadeCurve& result)
+{
+    if (!value.isString()) return false;
+    const QString name = value.toString();
+    if (name == QStringLiteral("linear")) {
+        result = FadeCurve::Linear;
+        return true;
+    }
+    if (name == QStringLiteral("smooth")) {
+        result = FadeCurve::Smooth;
+        return true;
+    }
+    if (name == QStringLiteral("exponential")) {
+        result = FadeCurve::Exponential;
+        return true;
+    }
+    return false;
 }
 
 bool integer(const QJsonValue& value, qint64& output)
@@ -281,6 +334,53 @@ bool parseExport(const QJsonValue& value, ProjectExportSettings& output)
     return true;
 }
 
+QJsonObject editorJson(const ProjectEditorSettings& settings)
+{
+    return {{QStringLiteral("originalBpm"), settings.originalBpm},
+            {QStringLiteral("targetBpm"), settings.targetBpm},
+            {QStringLiteral("speedPercent"), settings.speedPercent},
+            {QStringLiteral("keepPitch"), settings.keepPitch},
+            {QStringLiteral("formantPreservation"), settings.formantPreservation},
+            {QStringLiteral("pitchCents"), settings.pitchCents},
+            {QStringLiteral("trackMuted"), settings.trackMuted},
+            {QStringLiteral("trackSolo"), settings.trackSolo},
+            {QStringLiteral("trackGainDb"), settings.trackGainDb}};
+}
+
+bool parseEditor(const QJsonValue& value, ProjectEditorSettings& output)
+{
+    if (value.isUndefined()) {
+        output = {};
+        return true;
+    }
+    if (!value.isObject()) return false;
+    const QJsonObject object = value.toObject();
+    ProjectEditorSettings parsed;
+    qint64 pitch{};
+    if (!finiteDouble(object.value(QStringLiteral("originalBpm")),
+                      parsed.originalBpm)
+        || !finiteDouble(object.value(QStringLiteral("targetBpm")),
+                         parsed.targetBpm)
+        || !finiteDouble(object.value(QStringLiteral("speedPercent")),
+                         parsed.speedPercent)
+        || !boolValue(object, "keepPitch", parsed.keepPitch)
+        || !boolValue(object, "formantPreservation",
+                      parsed.formantPreservation)
+        || !integer(object.value(QStringLiteral("pitchCents")), pitch)
+        || pitch < std::numeric_limits<int>::min()
+        || pitch > std::numeric_limits<int>::max()
+        || !boolValue(object, "trackMuted", parsed.trackMuted)
+        || !boolValue(object, "trackSolo", parsed.trackSolo)
+        || !finiteDouble(object.value(QStringLiteral("trackGainDb")),
+                         parsed.trackGainDb)) {
+        return false;
+    }
+    parsed.pitchCents = static_cast<int>(pitch);
+    if (!isValidProjectEditorSettings(parsed)) return false;
+    output = parsed;
+    return true;
+}
+
 bool exceedsProjectResourceLimits(const QJsonObject& root)
 {
     const QJsonArray sources = root.value(QStringLiteral("sources")).toArray();
@@ -310,7 +410,8 @@ bool exceedsProjectResourceLimits(const QJsonObject& root)
 ProjectSaveResult ProjectDocument::save(const QString& path, const ProjectSaveRequest& request)
 {
     if (path.isEmpty() || request.document == nullptr || !validViewport(request)
-        || !isValidProjectExportSettings(request.exportSettings)) {
+        || !isValidProjectExportSettings(request.exportSettings)
+        || !isValidProjectEditorSettings(request.editorSettings)) {
         return {false, QStringLiteral("invalid project save request")};
     }
     const QString projectPath = absolutePath(path);
@@ -415,6 +516,8 @@ ProjectSaveResult ProjectDocument::save(const QString& path, const ProjectSaveRe
                        {QStringLiteral("gain"), event.gain},
                        {QStringLiteral("fadeIn"), integerJson(event.fadeIn)},
                        {QStringLiteral("fadeOut"), integerJson(event.fadeOut)},
+                       {QStringLiteral("fadeInCurve"), fadeCurveName(event.fadeInCurve)},
+                       {QStringLiteral("fadeOutCurve"), fadeCurveName(event.fadeOutCurve)},
                        {QStringLiteral("speedRatio"), event.speedRatio},
                        {QStringLiteral("pitchSemitone"), event.pitchSemitone},
                        {QStringLiteral("mute"), event.mute},
@@ -437,7 +540,8 @@ ProjectSaveResult ProjectDocument::save(const QString& path, const ProjectSaveRe
                            {QStringLiteral("playheadFrame"), integerJson(request.playheadFrame)},
                            {QStringLiteral("visibleStartFrame"), integerJson(request.visibleStartFrame)},
                            {QStringLiteral("visibleEndFrame"), integerJson(request.visibleEndFrame)},
-                           {QStringLiteral("exportSettings"), exportJson(request.exportSettings)}};
+                           {QStringLiteral("exportSettings"), exportJson(request.exportSettings)},
+                           {QStringLiteral("editorSettings"), editorJson(request.editorSettings)}};
     const QByteArray payload = QJsonDocument(root).toJson(QJsonDocument::Indented);
     if (payload.size() > kMaxProjectJsonBytes) {
         return {false, QString::fromLatin1(kResourceLimitMessage)};
@@ -476,7 +580,11 @@ ProjectLoadResult ProjectDocument::load(const QString& path,
     if (error.error != QJsonParseError::NoError || !json.isObject()) { result.message = QStringLiteral("malformed project JSON"); return result; }
     const QJsonObject root = json.object();
     qint64 version{};
-    if (!integer(root.value(QStringLiteral("schemaVersion")), version) || version != schemaVersion()) { result.message = QStringLiteral("unsupported project schema"); return result; }
+    if (!integer(root.value(QStringLiteral("schemaVersion")), version)
+        || (version != 1 && version != schemaVersion())) {
+        result.message = QStringLiteral("unsupported project schema");
+        return result;
+    }
     if (!root.value(QStringLiteral("sources")).isArray() || !root.value(QStringLiteral("events")).isArray() || !root.value(QStringLiteral("markers")).isArray()) { result.message = QStringLiteral("invalid project arrays"); return result; }
     if (exceedsProjectResourceLimits(root)) {
         result.message = QString::fromLatin1(kResourceLimitMessage);
@@ -588,7 +696,9 @@ ProjectLoadResult ProjectDocument::load(const QString& path,
         }
         if (!value.isObject()) { result.message = QStringLiteral("invalid event"); return result; }
         const QJsonObject object = value.toObject(); AudioEvent event; quint64 sourceId{}; qint64 start{}, end{}, timeline{}, fadeIn{}, fadeOut{}, pitch{};
-        if (!positiveId(object.value(QStringLiteral("id")), event.id) || !eventIds.insert(event.id).second
+        if (!positiveId(object.value(QStringLiteral("id")), event.id)
+            || event.id == std::numeric_limits<quint64>::max()
+            || !eventIds.insert(event.id).second
             || !validSourceId(object.value(QStringLiteral("sourceId")), sourceId) || sourceMap.find(sourceId) == sourceMap.end()
             || !integer(object.value(QStringLiteral("sourceStart")), start) || !integer(object.value(QStringLiteral("sourceEnd")), end)
             || !integer(object.value(QStringLiteral("timelineStart")), timeline) || !finiteFloat(object.value(QStringLiteral("gain")), event.gain)
@@ -596,6 +706,16 @@ ProjectLoadResult ProjectDocument::load(const QString& path,
             || !finiteDouble(object.value(QStringLiteral("speedRatio")), event.speedRatio) || !integer(object.value(QStringLiteral("pitchSemitone")), pitch)
             || !boolValue(object, "mute", event.mute) || !object.value(QStringLiteral("envelope")).isArray()
             || pitch < std::numeric_limits<int>::min() || pitch > std::numeric_limits<int>::max()) { result.message = QStringLiteral("invalid event metadata"); return result; }
+        if (version == 1) {
+            event.fadeInCurve = FadeCurve::Linear;
+            event.fadeOutCurve = FadeCurve::Linear;
+        } else if (!fadeCurve(object.value(QStringLiteral("fadeInCurve")),
+                              event.fadeInCurve)
+                   || !fadeCurve(object.value(QStringLiteral("fadeOutCurve")),
+                                 event.fadeOutCurve)) {
+            result.message = QStringLiteral("invalid event metadata");
+            return result;
+        }
         event.source = sourceMap.at(sourceId); event.sourceStart = start; event.sourceEnd = end; event.timelineStart = timeline; event.fadeIn = fadeIn; event.fadeOut = fadeOut; event.pitchSemitone = static_cast<int>(pitch);
         for (const QJsonValue& pointValue : object.value(QStringLiteral("envelope")).toArray()) {
             if (!pointValue.isObject()) { result.message = QStringLiteral("invalid envelope"); return result; }
@@ -632,7 +752,12 @@ ProjectLoadResult ProjectDocument::load(const QString& path,
                 : (result.visibleStartFrame < 0
                    || result.visibleEndFrame <= result.visibleStartFrame
                    || result.visibleEndFrame > document.totalFrames()))
-        || !parseExport(root.value(QStringLiteral("exportSettings")), result.exportSettings)) { result.message = QStringLiteral("invalid editor state"); return result; }
+        || !parseExport(root.value(QStringLiteral("exportSettings")), result.exportSettings)
+        || !parseEditor(root.value(QStringLiteral("editorSettings")),
+                        result.editorSettings)) {
+        result.message = QStringLiteral("invalid editor state");
+        return result;
+    }
     result.document = std::make_unique<AudioDocument>(std::move(document));
     return result;
 }

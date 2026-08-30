@@ -117,6 +117,104 @@ bool reframeEvent(AudioEvent& event, const SampleFrame newSourceStart,
     return isValid(event);
 }
 
+struct SourceEnvelopePoint final {
+    SampleFrame sourceFrame{};
+    float gain{1.0F};
+};
+
+void appendSourceEnvelope(const AudioEvent& event,
+                          std::vector<SourceEnvelopePoint>& result)
+{
+    result.push_back({event.sourceStart, envelopeGainAt(event, 0)});
+    for (const EnvelopePoint& point : event.envelope) {
+        result.push_back({event.sourceStart + point.offset, point.gain});
+    }
+}
+
+std::vector<SourceEnvelopePoint> sharedSourceEnvelope(
+    const AudioEvent& left, const AudioEvent& right)
+{
+    std::vector<SourceEnvelopePoint> result;
+    result.reserve(left.envelope.size() + right.envelope.size() + 2U);
+    appendSourceEnvelope(left, result);
+    appendSourceEnvelope(right, result);
+    std::stable_sort(result.begin(), result.end(),
+        [](const SourceEnvelopePoint& first, const SourceEnvelopePoint& second) {
+            return first.sourceFrame < second.sourceFrame;
+        });
+    std::vector<SourceEnvelopePoint> unique;
+    unique.reserve(result.size());
+    for (const SourceEnvelopePoint& point : result) {
+        if (!unique.empty() && unique.back().sourceFrame == point.sourceFrame) {
+            unique.back().gain = point.gain;
+        } else {
+            unique.push_back(point);
+        }
+    }
+    return unique;
+}
+
+float sourceEnvelopeGainAt(const std::vector<SourceEnvelopePoint>& points,
+                           const SampleFrame sourceFrame) noexcept
+{
+    if (points.empty()) return 1.0F;
+    SourceEnvelopePoint previous = points.front();
+    if (sourceFrame <= previous.sourceFrame) return previous.gain;
+    for (std::size_t index = 1; index < points.size(); ++index) {
+        const SourceEnvelopePoint& next = points[index];
+        if (sourceFrame <= next.sourceFrame) {
+            const double fraction = static_cast<double>(
+                sourceFrame - previous.sourceFrame)
+                / static_cast<double>(next.sourceFrame - previous.sourceFrame);
+            return previous.gain + static_cast<float>(
+                (next.gain - previous.gain) * fraction);
+        }
+        previous = next;
+    }
+    return previous.gain;
+}
+
+std::vector<EnvelopePoint> reframeSharedEnvelope(
+    const std::vector<SourceEnvelopePoint>& points,
+    const SampleFrame sourceStart, const SampleFrame sourceEnd)
+{
+    const SampleFrame frames = sourceEnd - sourceStart;
+    std::vector<EnvelopePoint> result;
+    result.reserve(points.size() + 1U);
+    const float startGain = sourceEnvelopeGainAt(points, sourceStart);
+    if (startGain != 1.0F) result.push_back({0, startGain});
+    for (const SourceEnvelopePoint& point : points) {
+        if (point.sourceFrame <= sourceStart || point.sourceFrame >= sourceEnd) {
+            continue;
+        }
+        const SampleFrame offset = point.sourceFrame - sourceStart;
+        if (!result.empty() && result.back().offset == offset) {
+            result.back().gain = point.gain;
+        } else {
+            result.push_back({offset, point.gain});
+        }
+    }
+    const SampleFrame lastOffset = frames - 1;
+    const float lastGain = sourceEnvelopeGainAt(points,
+                                                sourceStart + lastOffset);
+    if (!result.empty() && result.back().offset == lastOffset) {
+        result.back().gain = lastGain;
+    } else if (lastGain != 1.0F
+               && (result.empty() || result.back().gain != lastGain)) {
+        result.push_back({lastOffset, lastGain});
+    }
+    fitEnvelopePointLimit(result);
+    return result;
+}
+
+bool sameSharedBoundaryParameters(const AudioEvent& left,
+                                  const AudioEvent& right) noexcept
+{
+    return left.source == right.source && left.gain == right.gain
+        && left.speedRatio == right.speedRatio
+        && left.pitchSemitone == right.pitchSemitone && left.mute == right.mute;
+}
+
 } // namespace
 
 bool operator==(const Selection& left, const Selection& right) noexcept
@@ -127,6 +225,33 @@ bool operator==(const Selection& left, const Selection& right) noexcept
 bool operator==(const Marker& left, const Marker& right) noexcept
 {
     return left.name == right.name && left.frame == right.frame;
+}
+
+bool reframeSharedBoundary(AudioEvent& left, AudioEvent& right,
+                           const SampleFrame sourceBoundary)
+{
+    if (!left.source || left.source != right.source
+        || left.timelineStart + audibleFrames(left) != right.timelineStart
+        || left.sourceEnd != right.sourceStart
+        || !sameSharedBoundaryParameters(left, right)
+        || sourceBoundary <= left.sourceStart
+        || sourceBoundary >= right.sourceEnd) {
+        return false;
+    }
+    const auto envelope = sharedSourceEnvelope(left, right);
+    const SampleFrame leftTimelineStart = left.timelineStart;
+    const SampleFrame rightSourceEnd = right.sourceEnd;
+    if (!reframeEvent(left, left.sourceStart, sourceBoundary,
+                      leftTimelineStart)
+        || !reframeEvent(right, sourceBoundary, rightSourceEnd,
+                         leftTimelineStart + audibleFrames(left))) {
+        return false;
+    }
+    left.envelope = reframeSharedEnvelope(envelope, left.sourceStart,
+                                          left.sourceEnd);
+    right.envelope = reframeSharedEnvelope(envelope, right.sourceStart,
+                                           right.sourceEnd);
+    return isValid(left) && isValid(right);
 }
 
 AudioDocument AudioDocument::fromSource(AudioSource source)
@@ -234,13 +359,31 @@ bool AudioDocument::trimEvent(const EventId id, const SampleFrame sourceStart,
     return applyCandidate(std::move(candidate));
 }
 
+bool AudioDocument::trimSharedBoundary(const EventId leftId,
+                                       const EventId rightId,
+                                       const SampleFrame sourceBoundary)
+{
+    if (leftId == rightId) return false;
+    std::vector<AudioEvent> candidate = timeline_.snapshot().events;
+    const auto left = std::find_if(candidate.begin(), candidate.end(),
+        [leftId](const AudioEvent& event) { return event.id == leftId; });
+    const auto right = std::find_if(candidate.begin(), candidate.end(),
+        [rightId](const AudioEvent& event) { return event.id == rightId; });
+    if (left == candidate.end() || right == candidate.end()
+        || !reframeSharedBoundary(*left, *right, sourceBoundary)) {
+        return false;
+    }
+    return applyCandidate(std::move(candidate));
+}
+
 bool AudioDocument::splitAt(std::vector<AudioEvent>& events, const EventId id,
                             const SampleFrame frame, const EventId rightId)
 {
     const auto found = std::find_if(events.begin(), events.end(),
         [id](const AudioEvent& event) { return event.id == id; });
     if (found == events.end() || frame <= found->timelineStart
-        || frame >= found->timelineStart + audibleFrames(*found) || rightId == id) {
+        || frame >= found->timelineStart + audibleFrames(*found) || rightId == id
+        || rightId == std::numeric_limits<EventId>::max()) {
         return false;
     }
     const AudioEvent original = *found;
@@ -265,6 +408,7 @@ bool AudioDocument::splitAtFrame(std::vector<AudioEvent>& events,
         const SampleFrame end = event.timelineStart + audibleFrames(event);
         if (frame == event.timelineStart || frame == end) return true;
         if (frame > event.timelineStart && frame < end) {
+            if (nextId == std::numeric_limits<EventId>::max()) return false;
             if (!splitAt(events, event.id, frame, nextId)) return false;
             ++nextId;
             return true;
@@ -275,11 +419,18 @@ bool AudioDocument::splitAtFrame(std::vector<AudioEvent>& events,
 
 bool AudioDocument::splitEventAt(const EventId id, const SampleFrame frame)
 {
+    if (next_event_id_ == std::numeric_limits<EventId>::max()) return false;
     std::vector<AudioEvent> candidate = timeline_.snapshot().events;
     if (!splitAt(candidate, id, frame, next_event_id_)
         || !applyCandidate(std::move(candidate))) return false;
     ++next_event_id_;
     return true;
+}
+
+bool AudioDocument::clearTimeline()
+{
+    if (timeline_.snapshot().events.empty()) return false;
+    return applyCandidate({});
 }
 
 bool AudioDocument::hasValidSelection() const noexcept
@@ -426,10 +577,25 @@ bool AudioDocument::setEventFadeIn(const EventId id,
     return isValid(*event) && applyCandidate(std::move(candidate));
 }
 
+bool AudioDocument::setEventFadeCurve(const EventId id, const bool fadeIn,
+                                      const FadeCurve curve)
+{
+    if (!isSupportedFadeCurve(curve)) return false;
+    std::vector<AudioEvent> candidate = timeline_.snapshot().events;
+    const auto event = std::find_if(candidate.begin(), candidate.end(),
+        [id](const AudioEvent& item) { return item.id == id; });
+    if (event == candidate.end()) return false;
+    FadeCurve& current = fadeIn ? event->fadeInCurve : event->fadeOutCurve;
+    if (current == curve) return false;
+    current = curve;
+    return isValid(*event) && applyCandidate(std::move(candidate));
+}
+
 bool AudioDocument::addEnvelopePoint(const EventId id,
                                      const SampleFrame offset,
                                      const float gain)
 {
+    if (!std::isfinite(gain)) return false;
     std::vector<AudioEvent> candidate = timeline_.snapshot().events;
     const auto event = std::find_if(candidate.begin(), candidate.end(),
         [id](const AudioEvent& item) { return item.id == id; });
@@ -440,7 +606,8 @@ bool AudioDocument::addEnvelopePoint(const EventId id,
             return item.offset < value;
         });
     if (point != event->envelope.end() && point->offset == offset) return false;
-    event->envelope.insert(point, EnvelopePoint{offset, gain});
+    event->envelope.insert(
+        point, EnvelopePoint{offset, std::clamp(gain, 0.0F, 2.0F)});
     return isValid(*event) && applyCandidate(std::move(candidate));
 }
 
@@ -542,6 +709,11 @@ bool AudioDocument::pasteAt(const SampleFrame playhead)
     const SampleFrame origin = clipboard_.front().timelineStart;
     std::vector<AudioEvent> candidate = timeline_.snapshot().events;
     EventId candidateId = next_event_id_;
+    constexpr EventId reserved = std::numeric_limits<EventId>::max();
+    if (candidateId == reserved
+        || clipboard_.size() > static_cast<std::size_t>(reserved - candidateId)) {
+        return false;
+    }
     for (const AudioEvent& original : clipboard_) {
         const SampleFrame offset = original.timelineStart - origin;
         if (offset < 0 || playhead > std::numeric_limits<SampleFrame>::max() - offset) {
@@ -588,6 +760,8 @@ bool AudioDocument::sameParameters(const AudioEvent& left,
                       });
     return left.source == right.source && left.gain == right.gain
         && left.fadeIn == right.fadeIn && left.fadeOut == right.fadeOut
+        && left.fadeInCurve == right.fadeInCurve
+        && left.fadeOutCurve == right.fadeOutCurve
         && left.speedRatio == right.speedRatio
         && left.pitchSemitone == right.pitchSemitone && left.mute == right.mute
         && sameEnvelope;

@@ -269,7 +269,7 @@ void WindowController::setAudioToolsWindow(QWindow* audioToolsWindow)
         positionedAuxiliaryWindows_.remove(audioToolsWindow_);
     }
     audioToolsWindowHandle_ = 0;
-    audioToolsNativePixelSize_ = {};
+    audioToolsTrackedDpr_ = 1.0;
     audioToolsWindow_ = audioToolsWindow;
     if (audioToolsWindow_ != nullptr) {
         const QString geometryKey = QStringLiteral("windows/audioToolsGeometry");
@@ -288,11 +288,10 @@ void WindowController::setAudioToolsWindow(QWindow* audioToolsWindow)
             positionedAuxiliaryWindows_.remove(trackedWindow);
             if (audioToolsWindow_.isNull()) {
                 audioToolsWindowHandle_ = 0;
-                audioToolsNativePixelSize_ = {};
                 audioToolsTrackedDpr_ = 1.0;
             }
         });
-        rememberNativePixelSize(audioToolsWindow_);
+        audioToolsTrackedDpr_ = audioToolsWindow_->devicePixelRatio();
         audioToolsWindow_->installEventFilter(this);
         applyPlatformWindowStyle(audioToolsWindow_);
         persistGeometry(audioToolsWindow_, geometryKey);
@@ -989,23 +988,39 @@ bool WindowController::nativeEventFilter(const QByteArray& eventType, void* mess
                     suggestedRect->left, suggestedRect->top,
                     suggestedRect->right - suggestedRect->left,
                     suggestedRect->bottom - suggestedRect->top);
-                QRect adjusted = geometryForDpiChange(
-                    currentGeometry, suggestedGeometry);
-                const QSize preservedSize = mainChanged ? mainNativePixelSize_
-                    : listChanged ? listNativePixelSize_
-                    : audioToolsChanged ? audioToolsNativePixelSize_
-                                        : settingsNativePixelSize_;
-                if (preservedSize.isValid()) adjusted.setSize(preservedSize);
+                const qreal newDpr = qreal(LOWORD(msg->wParam)) / 96.0;
+                QRect adjusted;
+                if (audioToolsChanged) {
+                    MONITORINFO targetMonitorInfo{};
+                    targetMonitorInfo.cbSize = sizeof(targetMonitorInfo);
+                    QRect targetAvailableGeometry;
+                    const HMONITOR targetMonitor = MonitorFromRect(
+                        suggestedRect, MONITOR_DEFAULTTONEAREST);
+                    if (targetMonitor != nullptr
+                        && GetMonitorInfoW(targetMonitor, &targetMonitorInfo)) {
+                        const RECT& workArea = targetMonitorInfo.rcWork;
+                        targetAvailableGeometry = QRect(
+                            workArea.left, workArea.top,
+                            workArea.right - workArea.left,
+                            workArea.bottom - workArea.top);
+                    }
+                    adjusted = geometryForDpiChange(
+                        currentGeometry, audioToolsTrackedDpr_, suggestedGeometry,
+                        newDpr, targetAvailableGeometry);
+                } else {
+                    adjusted = geometryForDpiChange(
+                        currentGeometry, suggestedGeometry);
+                    const QSize preservedSize = mainChanged ? mainNativePixelSize_
+                        : listChanged ? listNativePixelSize_ : settingsNativePixelSize_;
+                    if (preservedSize.isValid()) adjusted.setSize(preservedSize);
+                }
                 const HWND changedWindow = msg->hwnd;
                 const quintptr capturedHandle = reinterpret_cast<quintptr>(changedWindow);
                 const QPointer<QWindow> changedQtWindow = mainChanged ? mainWindow_
                     : listChanged ? listWindow_
                     : audioToolsChanged ? audioToolsWindow_ : settingsWindow_;
-                const qreal newDpr = qreal(LOWORD(msg->wParam)) / 96.0;
                 // Let Qt consume WM_DPICHANGED first so its screen/DPR state is
-                // current, then restore the user's native-pixel rectangle. Qt
-                // otherwise preserves logical size and enlarges the window on
-                // a higher-DPI monitor.
+                // current, then apply the calculated native rectangle.
                 QTimer::singleShot(0, this,
                                    [this, changedWindow, capturedHandle,
                                      changedQtWindow, adjusted,
@@ -1081,9 +1096,6 @@ void WindowController::rememberNativePixelSize(QWindow* window)
     } else if (window == listWindow_) {
         listNativePixelSize_ = size;
         listTrackedDpr_ = window->devicePixelRatio();
-    } else if (window == audioToolsWindow_) {
-        audioToolsNativePixelSize_ = size;
-        audioToolsTrackedDpr_ = window->devicePixelRatio();
     } else if (window == settingsWindow_) {
         settingsNativePixelSize_ = size;
         settingsTrackedDpr_ = window->devicePixelRatio();
@@ -1303,6 +1315,34 @@ QRect WindowController::geometryForDpiChange(
     return adjusted;
 }
 
+QRect WindowController::geometryForDpiChange(
+    const QRect& currentNativeGeometry, qreal currentDpr,
+    const QRect& suggestedNativeGeometry, qreal targetDpr,
+    const QRect& targetAvailableGeometry)
+{
+    if (!currentNativeGeometry.isValid() || !suggestedNativeGeometry.isValid()) {
+        return suggestedNativeGeometry;
+    }
+    currentDpr = qMax(currentDpr, 0.01);
+    targetDpr = qMax(targetDpr, 0.01);
+    const QSize logicalSize(
+        qMax(1, qRound(currentNativeGeometry.width() / currentDpr)),
+        qMax(1, qRound(currentNativeGeometry.height() / currentDpr)));
+    const QSize targetNativeSize(
+        qMax(1, qRound(logicalSize.width() * targetDpr)),
+        qMax(1, qRound(logicalSize.height() * targetDpr)));
+    QRect adjusted(suggestedNativeGeometry.topLeft(), targetNativeSize);
+    if (!targetAvailableGeometry.isValid()) return adjusted;
+
+    adjusted.setSize(QSize(qMin(adjusted.width(), targetAvailableGeometry.width()),
+                           qMin(adjusted.height(), targetAvailableGeometry.height())));
+    const int maxX = targetAvailableGeometry.right() - adjusted.width() + 1;
+    const int maxY = targetAvailableGeometry.bottom() - adjusted.height() + 1;
+    adjusted.moveLeft(qBound(targetAvailableGeometry.left(), adjusted.left(), maxX));
+    adjusted.moveTop(qBound(targetAvailableGeometry.top(), adjusted.top(), maxY));
+    return adjusted;
+}
+
 QRect WindowController::geometryForAvailableScreens(
     const QRect& savedGeometry, const QSize& minimumSize,
     const QList<QRect>& availableScreens, int primaryScreenIndex)
@@ -1450,10 +1490,8 @@ bool WindowController::eventFilter(QObject* watched, QEvent* event)
 #ifdef Q_OS_WIN
         if (event->type() == QEvent::Resize) {
             auto* const window = qobject_cast<QWindow*>(watched);
-            const qreal trackedDpr = watched == audioToolsWindow_
-                ? audioToolsTrackedDpr_ : settingsTrackedDpr_;
-            if (window != nullptr
-                && qFuzzyCompare(trackedDpr, window->devicePixelRatio())) {
+            if (window != nullptr && watched == settingsWindow_
+                && qFuzzyCompare(settingsTrackedDpr_, window->devicePixelRatio())) {
                 rememberNativePixelSize(window);
             }
         }

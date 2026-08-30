@@ -25,7 +25,7 @@ private slots:
     void glassBackdropContractIsAbsent();
     void defaultListSizeMatchesReference();
     void legacyListWidthsMigrateWithoutOverwritingIndependentSize();
-    void dpiChangePreservesNativePixelSize();
+    void dpiChangePreservesLogicalSizeAcrossScales();
     void switchingWindowsDoesNotRecreatePlayback();
     void updatesExistingWindowObjectsAndFlags();
     void visibilityWaitsForDestinationReadiness();
@@ -147,14 +147,46 @@ void WindowControllerTest::legacyListWidthsMigrateWithoutOverwritingIndependentS
     QCOMPARE(independentList.size(), QSize(733, 611));
 }
 
-void WindowControllerTest::dpiChangePreservesNativePixelSize()
+void WindowControllerTest::dpiChangePreservesLogicalSizeAcrossScales()
 {
-    const QRect currentGeometry(120, 80, 1104, 342);
-    const QRect windowsSuggestedGeometry(1920, 120, 1656, 513);
+    struct DpiTransition {
+        const char* name;
+        qreal sourceDpr;
+        qreal targetDpr;
+        QRect currentNativeGeometry;
+        QSize currentLogicalSize;
+        QRect suggestedNativeGeometry;
+        QRect targetAvailableGeometry;
+    };
+    const QList<DpiTransition> transitions{
+        {"100-to-125", 1.0, 1.25, QRect(120, 80, 1104, 342), QSize(1104, 342),
+         QRect(1920, 120, 1380, 428),
+         QRect(1920, 0, 1920, 1040)},
+        {"125-to-150", 1.25, 1.5, QRect(1920, 120, 1380, 428), QSize(1104, 342),
+         QRect(3840, 80, 1656, 513),
+         QRect(3840, 0, 2560, 1400)},
+        {"150-to-100", 1.5, 1.0, QRect(3840, 80, 1656, 513), QSize(1104, 342),
+         QRect(0, 100, 1104, 342),
+         QRect(0, 0, 1920, 1080)},
+    };
 
-    QCOMPARE(WindowController::geometryForDpiChange(
-                 currentGeometry, windowsSuggestedGeometry),
-             QRect(1920, 120, 1104, 342));
+    for (const DpiTransition& transition : transitions) {
+        const QRect result = WindowController::geometryForDpiChange(
+            transition.currentNativeGeometry, transition.sourceDpr,
+            transition.suggestedNativeGeometry, transition.targetDpr,
+            transition.targetAvailableGeometry);
+        QCOMPARE(QSize(qRound(result.width() / transition.targetDpr),
+                       qRound(result.height() / transition.targetDpr)),
+                 transition.currentLogicalSize);
+        QCOMPARE(result.topLeft(), transition.suggestedNativeGeometry.topLeft());
+        QVERIFY2(transition.targetAvailableGeometry.contains(result), transition.name);
+    }
+
+    const QRect bounded = WindowController::geometryForDpiChange(
+        QRect(0, 0, 1800, 900), 1.0, QRect(1500, 900, 2250, 1125), 1.25,
+        QRect(1920, 0, 1600, 900));
+    QCOMPARE(bounded.size(), QSize(1600, 900));
+    QVERIFY(QRect(1920, 0, 1600, 900).contains(bounded));
 }
 
 void WindowControllerTest::switchingWindowsDoesNotRecreatePlayback()
@@ -636,17 +668,34 @@ void WindowControllerTest::auxiliaryWindowsKeepNativeSizeAcrossScreens()
     }
     const QList<QScreen*> screens = QGuiApplication::screens();
     if (screens.size() < 2) {
-        QSKIP("requires two active displays; DPI size policy has an algorithm test");
+        QSKIP("hardware gap: requires at least two active Windows displays for mixed-DPI coverage");
+    }
+
+    QScreen* sourceScreen = nullptr;
+    QScreen* targetScreen = nullptr;
+    for (QScreen* source : screens) {
+        for (QScreen* target : screens) {
+            if (source != target
+                && !qFuzzyCompare(source->devicePixelRatio(), target->devicePixelRatio())) {
+                sourceScreen = source;
+                targetScreen = target;
+                break;
+            }
+        }
+        if (sourceScreen != nullptr) break;
+    }
+    if (sourceScreen == nullptr) {
+        QSKIP("hardware gap: requires two active Windows displays with different device-pixel ratios");
     }
 
     QWindow mainWindow;
-    mainWindow.setGeometry(QRect(screens.at(0)->availableGeometry().topLeft()
+    mainWindow.setGeometry(QRect(sourceScreen->availableGeometry().topLeft()
                                      + QPoint(60, 60),
                                  QSize(640, 320)));
     QWindow toolsWindow;
     QWindow settingsWindow;
     const QRect initialGeometry(
-        screens.at(0)->availableGeometry().topLeft() + QPoint(100, 100),
+        sourceScreen->availableGeometry().topLeft() + QPoint(100, 100),
         QSize(880, 560));
     toolsWindow.setGeometry(initialGeometry);
     settingsWindow.setGeometry(initialGeometry);
@@ -660,13 +709,22 @@ void WindowControllerTest::auxiliaryWindowsKeepNativeSizeAcrossScreens()
     QVERIFY(QTest::qWaitForWindowExposed(&settingsWindow));
 
     for (QWindow* window : {&toolsWindow, &settingsWindow}) {
+        QTRY_VERIFY(window->screen() == sourceScreen);
         RECT before{};
         QVERIFY(GetWindowRect(reinterpret_cast<HWND>(window->winId()), &before));
         const QSize nativeSize(before.right - before.left,
                                before.bottom - before.top);
-        window->setPosition(screens.at(1)->availableGeometry().topLeft()
-                            + QPoint(100, 100));
-        QTRY_VERIFY(window->screen() == screens.at(1));
+        const qreal sourceDpr = window->devicePixelRatio();
+        const QSize logicalSize(qRound(nativeSize.width() / sourceDpr),
+                                qRound(nativeSize.height() / sourceDpr));
+        // Drive the actual Windows DPI-change message path; QWindow::setPosition()
+        // can update its screen association without producing that transition.
+        const QPoint targetPosition = targetScreen->availableGeometry().topLeft()
+            + QPoint(100, 100);
+        QVERIFY(SetWindowPos(reinterpret_cast<HWND>(window->winId()), nullptr,
+                              targetPosition.x(), targetPosition.y(), 0, 0,
+                              SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE));
+        QTRY_VERIFY(window->screen() == targetScreen);
         const auto currentNativeSize = [window]() {
             RECT rect{};
             if (!GetWindowRect(reinterpret_cast<HWND>(window->winId()), &rect)) {
@@ -674,7 +732,14 @@ void WindowControllerTest::auxiliaryWindowsKeepNativeSizeAcrossScreens()
             }
             return QSize(rect.right - rect.left, rect.bottom - rect.top);
         };
-        QTRY_COMPARE(currentNativeSize(), nativeSize);
+        if (window == &toolsWindow) {
+            const QSize expectedNativeSize(
+                qRound(logicalSize.width() * window->devicePixelRatio()),
+                qRound(logicalSize.height() * window->devicePixelRatio()));
+            QTRY_COMPARE(currentNativeSize(), expectedNativeSize);
+        } else {
+            QTRY_COMPARE(currentNativeSize(), nativeSize);
+        }
     }
 }
 

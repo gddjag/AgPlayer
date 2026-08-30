@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -38,7 +39,38 @@ struct AudioEvent final {
     int pitchSemitone{};
     bool mute{};
     std::vector<EnvelopePoint> envelope;
+    FadeCurve fadeInCurve{FadeCurve::Smooth};
+    FadeCurve fadeOutCurve{FadeCurve::Smooth};
 };
+
+[[nodiscard]] inline bool isSupportedFadeCurve(const FadeCurve curve) noexcept
+{
+    switch (curve) {
+    case FadeCurve::Linear:
+    case FadeCurve::Smooth:
+    case FadeCurve::Exponential:
+        return true;
+    }
+    return false;
+}
+
+[[nodiscard]] inline float fadeCurveGainAt(const FadeCurve curve,
+                                            const double t) noexcept
+{
+    const double bounded = std::clamp(t, 0.0, 1.0);
+    switch (curve) {
+    case FadeCurve::Linear:
+        return static_cast<float>(bounded);
+    case FadeCurve::Smooth:
+        return static_cast<float>(bounded * bounded
+                                  * (3.0 - 2.0 * bounded));
+    case FadeCurve::Exponential: {
+        static const double denominator = std::expm1(5.0);
+        return static_cast<float>(std::expm1(5.0 * bounded) / denominator);
+    }
+    }
+    return 0.0F;
+}
 
 [[nodiscard]] inline SampleFrame audibleFrames(const AudioEvent& event) noexcept
 {
@@ -72,15 +104,17 @@ struct AudioEvent final {
     const SampleFrame frames = audibleFrames(event);
     double result = 1.0;
     if (event.fadeIn > 0 && offset < event.fadeIn) {
-        result *= event.fadeIn == 1 ? 0.0
+        const double t = event.fadeIn == 1 ? 0.0
             : static_cast<double>(offset)
                 / static_cast<double>(event.fadeIn - 1);
+        result *= fadeCurveGainAt(event.fadeInCurve, t);
     }
     const SampleFrame fadeOutStart = frames - event.fadeOut;
     if (event.fadeOut > 0 && offset >= fadeOutStart) {
-        result *= event.fadeOut == 1 ? 0.0
+        const double t = event.fadeOut == 1 ? 0.0
             : static_cast<double>(frames - 1 - offset)
                 / static_cast<double>(event.fadeOut - 1);
+        result *= fadeCurveGainAt(event.fadeOutCurve, t);
     }
     return static_cast<float>(result);
 }
@@ -88,9 +122,10 @@ struct AudioEvent final {
 [[nodiscard]] inline float eventAmplitudeGainAt(
     const AudioEvent& event, const SampleFrame offset) noexcept
 {
-    return event.mute ? 0.0F
-        : event.gain * fadeGainAt(event, offset)
-            * envelopeGainAt(event, offset);
+    return event.mute ? 0.0F : std::clamp(
+        event.gain * fadeGainAt(event, offset)
+            * envelopeGainAt(event, offset),
+        0.0F, 2.0F);
 }
 
 [[nodiscard]] inline bool isValid(const AudioEvent& event) noexcept
@@ -106,7 +141,9 @@ struct AudioEvent final {
     const SampleFrame frames = audibleFrames(event);
     if (event.fadeIn < 0 || event.fadeOut < 0 || event.fadeIn > frames
         || event.fadeOut > frames || event.fadeIn > frames - event.fadeOut
-        || event.envelope.size() > kMaxEnvelopePoints) {
+        || event.envelope.size() > kMaxEnvelopePoints
+        || !isSupportedFadeCurve(event.fadeInCurve)
+        || !isSupportedFadeCurve(event.fadeOutCurve)) {
         return false;
     }
 

@@ -66,6 +66,7 @@ public:
 
     ag_result load(const std::string& utf8_path) noexcept;
     ag_result load_stream(std::shared_ptr<IAudioStreamSource> stream) noexcept;
+    ag_result replace_stream(std::shared_ptr<IAudioStreamSource> stream) noexcept;
     ag_result set_queue(std::vector<std::string> utf8_paths,
                         std::size_t start_index) noexcept;
     ag_result set_scoped_queue(std::vector<std::string> utf8_paths,

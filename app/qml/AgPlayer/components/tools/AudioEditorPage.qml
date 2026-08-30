@@ -11,17 +11,21 @@ Rectangle {
     clip: true
     focus: true
 
-    Component.onCompleted: AudioEditorController.refreshRecordingDevices()
-
-    readonly property bool referenceLayout: width >= 1500 && height >= 800
     readonly property bool narrowLayout: width < 1000
     readonly property real narrowActionBandHeight: narrowLayout ? 52 : 0
     readonly property real narrowActionBandY: 124
-    readonly property real mainWidth: referenceLayout ? 1300
-        : narrowLayout ? width : Math.max(680, width - 320)
+    readonly property real inspectorWidth: narrowLayout ? 350
+        : Math.max(320, Math.min(372, width - 1328))
+    readonly property real mainWidth: narrowLayout ? width
+        : width - inspectorWidth
     readonly property real responsiveContentHeight: narrowLayout ? 772
         : Math.max(height, 660)
+    readonly property real roomyLayoutFactor: narrowLayout ? 0
+        : Math.max(0, Math.min(1,
+            (responsiveContentHeight - 660) / 162))
     property bool inspectorExpanded: false
+    property bool controlModifierHeld: false
+    property bool pendingExportAfterDirectory: false
     property string pendingRelinkSourceId: ""
     readonly property bool modalInputActive: openDialog.visible
         || saveProjectDialog.visible || relinkSourceDialog.visible
@@ -31,6 +35,9 @@ Rectangle {
             ? AudioEditorController.projectIssues[0] : null
     readonly property var persistedExportSettings:
         AudioEditorController.projectExportSettings
+    onPersistedExportSettingsChanged: Qt.callLater(function() {
+        page.ensureExportSettingsConsistent()
+    })
 
     function textInputHasFocus() {
         const active = page.Window.window ? page.Window.window.activeFocusItem : null
@@ -44,10 +51,63 @@ Rectangle {
     function splitAtPlayhead() {
         AudioEditorController.triggerAction("editor.split")
     }
+    function interpolateLayout(compactValue, referenceValue) {
+        return compactValue
+            + (referenceValue - compactValue) * page.roomyLayoutFactor
+    }
+    function seekPreviousSegment() {
+        const events = AudioEditorController.timelineEventViews
+        const playhead = AudioEditorController.playheadFrame
+        let target = 0
+        for (let index = 0; index < events.length; ++index) {
+            const start = Number(events[index].timelineStart)
+            if (start >= playhead)
+                break
+            target = start
+        }
+        return AudioEditorController.seekFrame(target)
+    }
+    function seekNextSegment() {
+        const events = AudioEditorController.timelineEventViews
+        const playhead = AudioEditorController.playheadFrame
+        for (let index = 0; index < events.length; ++index) {
+            const start = Number(events[index].timelineStart)
+            if (start > playhead)
+                return AudioEditorController.seekFrame(start)
+        }
+        return AudioEditorController.seekFrame(AudioEditorController.totalFrames)
+    }
     function updateExportSetting(name, value) {
         const settings = Object.assign({}, page.persistedExportSettings)
         settings[name] = value
         AudioEditorController.setProjectExportSettingsMap(settings)
+    }
+    function normalizedExportCodec() {
+        return String(page.persistedExportSettings.codecName || "WAV")
+            .toUpperCase()
+    }
+    function defaultBitRateForCodec(codec) {
+        return codec === "MP3" ? 320000 : codec === "AAC" ? 256000 : 0
+    }
+    function selectExportCodec(codec) {
+        const normalized = String(codec || "WAV").toUpperCase()
+        const settings = Object.assign({}, page.persistedExportSettings)
+        const previous = String(settings.codecName || "WAV").toUpperCase()
+        settings.codecName = normalized
+        if ((normalized === "MP3" || normalized === "AAC")
+                && (previous !== normalized
+                    || Number(settings.bitRate || 0) <= 0)) {
+            settings.bitRate = defaultBitRateForCodec(normalized)
+        }
+        AudioEditorController.setProjectExportSettingsMap(settings)
+    }
+    function ensureExportSettingsConsistent() {
+        const normalized = normalizedExportCodec()
+        const bitRate = Number(page.persistedExportSettings.bitRate || 0)
+        if ((normalized === "MP3" || normalized === "AAC")
+                && bitRate <= 0) {
+            selectExportCodec(normalized)
+        }
     }
     function timeTextFromFrames(frames, includeMillis) {
         const sampleRate = Math.max(1, AudioEditorController.sampleRate)
@@ -61,58 +121,6 @@ Rectangle {
             + String(minutes).padStart(2, "0") + ":"
             + String(seconds).padStart(2, "0")
             + (includeMillis ? "." + String(millis).padStart(3, "0") : "")
-    }
-    function recordingTimeText(frames) {
-        const sampleRate = Math.max(1, AudioEditorController.sampleRate)
-        const totalSeconds = Math.max(0, Math.floor(frames / sampleRate))
-        const hours = Math.floor(totalSeconds / 3600)
-        const minutes = Math.floor(totalSeconds % 3600 / 60)
-        const seconds = totalSeconds % 60
-        return String(hours).padStart(2, "0") + ":"
-            + String(minutes).padStart(2, "0") + ":"
-            + String(seconds).padStart(2, "0")
-    }
-    function startOrResumeRecording() {
-        if (AudioEditorController.recordingPaused) {
-            AudioEditorController.resumeRecording()
-            return
-        }
-        if (!AudioEditorController.recording) {
-            AudioEditorController.startRecordingToTemporaryFile(
-                recordingDeviceCombo.currentValue || "",
-                44100, 2, recordingMonitorSwitch.checked, false)
-        }
-    }
-    function pauseOrResumeRecording() {
-        if (AudioEditorController.recordingPaused)
-            AudioEditorController.resumeRecording()
-        else if (AudioEditorController.recording)
-            AudioEditorController.pauseRecording()
-    }
-    function openRecordingDevicePicker() {
-        recordingDeviceCombo.forceActiveFocus()
-        if (recordingDeviceCombo.count > 0)
-            recordingDeviceCombo.popup.open()
-    }
-
-    Shortcut {
-        objectName: "editorDeviceShortcut"
-        sequence: "Alt+R"
-        context: Qt.WindowShortcut
-        enabled: page.editorShortcutAvailable()
-            && AudioEditorController.recordingSupported
-            && !AudioEditorController.recording
-            && !AudioEditorController.busy
-        onActivated: page.openRecordingDevicePicker()
-    }
-    Shortcut {
-        objectName: "editorSpaceShortcut"
-        sequence: "Space"
-        context: Qt.WindowShortcut
-        enabled: page.editorShortcutAvailable()
-            && AudioEditorController.playbackSupported
-            && AudioEditorController.hasDocument
-        onActivated: AudioEditorController.playPause()
     }
     Shortcut {
         objectName: "editorToStartShortcut"
@@ -152,37 +160,6 @@ Rectangle {
             && AudioEditorController.playbackSupported
             && AudioEditorController.hasDocument
         onActivated: AudioEditorController.stopPlayback()
-    }
-    Shortcut {
-        objectName: "editorRecordShortcut"
-        sequence: "R"
-        context: Qt.WindowShortcut
-        enabled: page.editorShortcutAvailable()
-            && AudioEditorController.recordingSupported
-            && !AudioEditorController.busy
-            && (!AudioEditorController.recording
-                || AudioEditorController.recordingPaused)
-        onActivated: page.startOrResumeRecording()
-    }
-    Shortcut {
-        objectName: "editorPauseRecordingShortcut"
-        sequence: "Shift+R"
-        context: Qt.WindowShortcut
-        enabled: page.editorShortcutAvailable()
-            && AudioEditorController.recordingSupported
-            && AudioEditorController.recording
-            && !AudioEditorController.busy
-        onActivated: page.pauseOrResumeRecording()
-    }
-    Shortcut {
-        objectName: "editorStopRecordingShortcut"
-        sequence: "Ctrl+R"
-        context: Qt.WindowShortcut
-        enabled: page.editorShortcutAvailable()
-            && AudioEditorController.recordingSupported
-            && AudioEditorController.recording
-            && !AudioEditorController.busy
-        onActivated: AudioEditorController.stopRecording()
     }
     Shortcut {
         sequence: "Ctrl+1"
@@ -246,6 +223,10 @@ Rectangle {
     }
 
     Keys.onPressed: function(event) {
+        if (event.key === Qt.Key_Control) {
+            controlModifierHeld = true
+            return
+        }
         if (event.key === Qt.Key_Escape) {
             AudioEditorController.clearTransientState()
             inspectorExpanded = false
@@ -282,8 +263,18 @@ Rectangle {
     FolderDialog {
         id: exportDirectoryDialog
         title: qsTr("选择音频导出目录")
-        onAccepted: page.updateExportSetting(
-            "outputDirectory", selectedFolder.toLocalFile())
+        onAccepted: {
+            page.updateExportSetting(
+                "outputDirectory", selectedFolder.toLocalFile())
+            const continueExport = page.pendingExportAfterDirectory
+            page.pendingExportAfterDirectory = false
+            if (continueExport) {
+                Qt.callLater(function() {
+                    AudioEditorController.exportToConfiguredDirectory()
+                })
+            }
+        }
+        onRejected: page.pendingExportAfterDirectory = false
     }
     Dialog {
         id: discardDialog
@@ -300,8 +291,40 @@ Rectangle {
         target: AudioEditorController
         function onOpenRequested() { openDialog.open() }
         function onSaveProjectAsRequested() { saveProjectDialog.open() }
-        function onExportDirectoryRequested() { exportDirectoryDialog.open() }
+        function onExportDirectoryRequested() {
+            page.pendingExportAfterDirectory = true
+            exportDirectoryDialog.open()
+        }
         function onDiscardConfirmationRequested() { discardDialog.open() }
+        function onProjectChanged() {
+            Qt.callLater(function() {
+                page.ensureExportSettingsConsistent()
+            })
+        }
+    }
+    Component.onCompleted: Qt.callLater(function() {
+        page.ensureExportSettingsConsistent()
+    })
+    DropArea {
+        id: editorAudioDropArea
+        objectName: "editorAudioDropArea"
+        anchors.fill: parent
+        z: 100
+        onDropped: function(drop) {
+            if (drop.urls.length !== 1) {
+                if (typeof AudioEditorController.openDroppedUrls === "function")
+                    AudioEditorController.openDroppedUrls(drop.urls)
+                return
+            }
+            if (typeof AudioEditorController.openDroppedUrls === "function")
+                AudioEditorController.openDroppedUrls(drop.urls)
+            else
+                AudioEditorController.openFile(drop.urls[0])
+        }
+    }
+    Keys.onReleased: function(event) {
+        if (event.key === Qt.Key_Control)
+            controlModifierHeld = false
     }
     Flickable {
         id: mainColumn
@@ -311,10 +334,9 @@ Rectangle {
         width: page.mainWidth
         height: page.height
         contentWidth: width
-        contentHeight: page.referenceLayout ? 849
-            : page.responsiveContentHeight
+        contentHeight: page.responsiveContentHeight
         clip: true
-        interactive: !page.referenceLayout && contentHeight > height
+        interactive: contentHeight > height
         boundsBehavior: Flickable.StopAtBounds
 
         Item {
@@ -326,9 +348,9 @@ Rectangle {
                 id: commandBar
                 objectName: "editorCommandBar"
                 x: 12
-                y: page.referenceLayout ? 13 : 8
+                y: page.interpolateLayout(8, 13)
                 width: mainSurface.width - 22
-                height: page.referenceLayout ? 61 : 56
+                height: page.interpolateLayout(56, 64)
                 onImportRequested: openDialog.open()
                 onSaveProjectRequested: AudioEditorController.save()
             }
@@ -336,17 +358,17 @@ Rectangle {
             FileSummaryBar {
                 objectName: "fileSummaryBar"
                 x: 12
-                y: page.referenceLayout ? 88 : 72
+                y: page.interpolateLayout(72, 88)
                 width: mainSurface.width - 22
-                height: page.referenceLayout ? 48 : 44
+                height: page.interpolateLayout(44, 52)
             }
 
             Rectangle {
                 objectName: "editorOfflineSourceBanner"
                 x: 12
-                y: page.referenceLayout ? 88 : 72
+                y: page.interpolateLayout(72, 88)
                 width: mainSurface.width - 22
-                height: page.referenceLayout ? 48 : 44
+                height: page.interpolateLayout(44, 52)
                 visible: page.firstProjectIssue !== null
                 color: Theme.surfacePressed
                 border.color: Theme.warning
@@ -369,6 +391,8 @@ Rectangle {
                     }
                     Button {
                         objectName: "editorRelinkSourceButton"
+                        focusPolicy: Qt.TabFocus
+                        Keys.onSpacePressed: function(event) { event.accepted = true }
                         text: qsTr("重新定位文件")
                         enabled: !AudioEditorController.busy
                         onClicked: {
@@ -383,10 +407,10 @@ Rectangle {
             Rectangle {
                 objectName: "editorTimelineWorkspace"
                 x: 12
-                y: page.referenceLayout ? 152
-                    : 124 + page.narrowActionBandHeight
+                y: page.interpolateLayout(124, 152)
+                    + page.narrowActionBandHeight
                 width: mainSurface.width - 24
-                height: page.referenceLayout ? 364 : 276
+                height: page.interpolateLayout(276, 451)
                 color: Theme.editorCanvas
                 border.color: Theme.divider
                 border.width: 1
@@ -397,10 +421,10 @@ Rectangle {
                 id: trackHeader
                 objectName: "editorTrackHeader"
                 x: 12
-                y: page.referenceLayout ? 202
-                    : 168 + page.narrowActionBandHeight
-                width: page.referenceLayout ? 96 : 84
-                height: page.referenceLayout ? 284 : 204
+                y: page.interpolateLayout(168, 188)
+                    + page.narrowActionBandHeight
+                width: page.interpolateLayout(84, 96)
+                height: page.interpolateLayout(204, 387)
                 color: Theme.surfaceElevated
                 border.color: Theme.divider
                 border.width: 1
@@ -420,6 +444,8 @@ Rectangle {
                         Layout.alignment: Qt.AlignHCenter
                         Button {
                             objectName: "editorTrackMute"
+                            focusPolicy: Qt.TabFocus
+                            Keys.onSpacePressed: function(event) { event.accepted = true }
                             text: "M"
                             checkable: true
                             checked: AudioEditorController.trackMuted
@@ -430,6 +456,8 @@ Rectangle {
                         }
                         Button {
                             objectName: "editorTrackSolo"
+                            focusPolicy: Qt.TabFocus
+                            Keys.onSpacePressed: function(event) { event.accepted = true }
                             text: "S"
                             checkable: true
                             checked: AudioEditorController.trackSolo
@@ -442,6 +470,9 @@ Rectangle {
                     EditorSlider {
                         id: trackGainSlider
                         objectName: "editorTrackGain"
+                        Keys.onSpacePressed: function(event) {
+                            event.accepted = true
+                        }
                         orientation: Qt.Vertical
                         from: -60
                         to: 12
@@ -466,11 +497,11 @@ Rectangle {
             Rectangle {
                 id: ruler
                 objectName: "editorTimeRuler"
-                x: page.referenceLayout ? 118 : trackHeader.x + trackHeader.width + 10
-                y: page.referenceLayout ? 152
-                    : 124 + page.narrowActionBandHeight
-                width: mainSurface.width - x - 15
-                height: page.referenceLayout ? 50 : 44
+                x: trackHeader.x + trackHeader.width + 12
+                y: page.interpolateLayout(124, 152)
+                    + page.narrowActionBandHeight
+                width: mainSurface.width - x - 10
+                height: page.interpolateLayout(44, 52)
                 color: Theme.surface
                 border.color: Theme.divider
                 Repeater {
@@ -565,24 +596,57 @@ Rectangle {
                         border.width: 2
                     }
                 }
+                MouseArea {
+                    objectName: "editorRulerSelectionInteraction"
+                    anchors.fill: parent
+                    z: 3
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    property double pressFrame: 0
+                    property bool selecting: false
+                    onPressed: function(mouse) {
+                        if (mouse.button === Qt.RightButton) {
+                            waveformCanvas.cancelSelectionPreview()
+                            AudioEditorController.clearSelection()
+                            return
+                        }
+                        pressFrame = AudioEditorController.viewport.frameAtPixel(mouse.x)
+                        selecting = false
+                        waveformCanvas.cancelSelectionPreview()
+                        AudioEditorController.clearSelection()
+                        AudioEditorController.seekFrame(pressFrame)
+                    }
+                    onPositionChanged: function(mouse) {
+                        if (!pressed || (pressedButtons & Qt.LeftButton) === 0)
+                            return
+                        const frame = AudioEditorController.viewport.frameAtPixel(mouse.x)
+                        selecting = frame !== pressFrame
+                        if (selecting) waveformCanvas.previewSelection(pressFrame, frame)
+                    }
+                    onReleased: {
+                        if (selecting) waveformCanvas.commitSelection()
+                        selecting = false
+                    }
+                    onCanceled: waveformCanvas.cancelSelectionPreview()
+                }
             }
 
             EditorWaveformCanvas {
                 id: waveformCanvas
                 objectName: "editorWaveformCanvas"
+                controlModifierHeld: page.controlModifierHeld
                 x: ruler.x
-                y: page.referenceLayout ? 202
-                    : 168 + page.narrowActionBandHeight
+                y: page.interpolateLayout(168, 188)
+                    + page.narrowActionBandHeight
                 width: ruler.width
-                height: page.referenceLayout ? 284 : 204
+                height: page.interpolateLayout(204, 387)
             }
 
             EditorSlider {
                 id: timelineScrollbar
                 objectName: "editorTimelineScrollbar"
                 x: ruler.x
-                y: page.referenceLayout ? 500
-                    : 378 + page.narrowActionBandHeight
+                y: page.interpolateLayout(378, 589)
+                    + page.narrowActionBandHeight
                 width: ruler.width
                 height: 16
                 pointerHitExtent: 16
@@ -599,351 +663,298 @@ Rectangle {
             }
 
             Rectangle {
-                id: recordingTransport
-                objectName: "editorRecordingTransport"
-                x: 12
-                y: page.referenceLayout ? 527
-                    : 410 + page.narrowActionBandHeight
-                width: page.referenceLayout ? 556
-                    : Math.max(310, mainSurface.width * 0.43)
-                height: page.referenceLayout ? 130 : 110
-                color: Theme.surfaceElevated
-                border.color: Theme.divider
-                border.width: 1
-                radius: 6
-                readonly property real recordingButtonStartX:
-                    page.referenceLayout ? 151 : 135
-                readonly property real recordingButtonSize:
-                    page.referenceLayout ? 74
-                        : Math.max(40, Math.min(74,
-                            (width - recordingButtonStartX - 36) / 4))
-                readonly property real recordingButtonGap:
-                    page.referenceLayout ? 28
-                        : Math.max(4, (width - recordingButtonStartX
-                            - 4 * recordingButtonSize - 12) / 3)
-                Label {
-                    x: 18; y: 12
-                    text: qsTr("录音控制")
-                    color: Theme.textPrimary
-                    font.pixelSize: 14
-                    font.bold: true
-                }
-                Label {
-                    objectName: "recordingTimeText"
-                    x: 18; y: 48
-                    text: AudioEditorController.recordingFrames <= 0
-                        ? "00:00:00"
-                        : page.recordingTimeText(
-                            AudioEditorController.recordingFrames)
-                    color: Theme.textPrimary
-                    font.pixelSize: 24
-                }
-                Label {
-                    objectName: "recordingStateText"
-                    x: 18; y: 88
-                    text: AudioEditorController.recording
-                        ? (AudioEditorController.recordingPaused
-                            ? qsTr("录音已暂停") : qsTr("正在录音"))
-                        : qsTr("准备录音")
-                    color: Theme.textSecondary
-                    font.pixelSize: 13
-                }
-                RoundButton {
-                    id: recordingMicrophoneButton
-                    objectName: "recordingMicrophoneButton"
-                    x: recordingTransport.recordingButtonStartX
-                    y: 31
-                    width: recordingTransport.recordingButtonSize
-                    height: width
-                    enabled: AudioEditorController.recordingSupported
-                        && !AudioEditorController.recording
-                        && !AudioEditorController.busy
-                    opacity: 1.0
-                    property string toolTipText: qsTr("选择录音设备（Alt+R）")
-                    property int toolTipDelay: 500
-                    Accessible.name: qsTr("选择录音设备")
-                    Accessible.role: Accessible.Button
-                    contentItem: Item {
-                        Rectangle {
-                            anchors.centerIn: parent
-                            anchors.verticalCenterOffset: -2
-                            width: 8; height: 23; radius: 4
-                            color: Theme.success
-                        }
-                        ThemedIcon {
-                            anchors.centerIn: parent
-                            width: 44; height: 44
-                            source: Theme.icon("mic-line")
-                            tint: Theme.textPrimary
-                        }
-                    }
-                    ToolTip.visible: hovered
-                    ToolTip.delay: toolTipDelay
-                    ToolTip.text: toolTipText
-                    onClicked: page.openRecordingDevicePicker()
-                    background: Rectangle {
-                        radius: width / 2
-                        color: Theme.surface
-                        border.color: Theme.borderStrong
-                        border.width: 1
-                    }
-                }
-                RoundButton {
-                    objectName: "recordingPauseButton"
-                    x: page.referenceLayout ? 253
-                        : recordingTransport.recordingButtonStartX
-                            + recordingTransport.recordingButtonSize
-                            + recordingTransport.recordingButtonGap
-                    y: 31
-                    width: recordingTransport.recordingButtonSize
-                    height: width
-                    enabled: AudioEditorController.recordingSupported
-                        && AudioEditorController.recording
-                        && !AudioEditorController.busy
-                    opacity: 1.0
-                    property string toolTipText: qsTr("暂停 / 继续录音（Shift+R）")
-                    property int toolTipDelay: 500
-                    Accessible.name: AudioEditorController.recordingPaused
-                        ? qsTr("继续录音") : qsTr("暂停录音")
-                    Accessible.role: Accessible.Button
-                    contentItem: Item {
-                        ThemedIcon {
-                            anchors.centerIn: parent
-                            source: Theme.icon("pause-fill")
-                            tint: Theme.textPrimary
-                            width: 44; height: 44
-                        }
-                    }
-                    onClicked: page.pauseOrResumeRecording()
-                    ToolTip.visible: hovered
-                    ToolTip.delay: toolTipDelay
-                    ToolTip.text: toolTipText
-                    background: Rectangle {
-                        radius: width / 2
-                        color: Theme.surface
-                        border.color: Theme.borderStrong
-                        border.width: 1
-                    }
-                }
-                RoundButton {
-                    objectName: "recordingRecordButton"
-                    x: page.referenceLayout ? 356
-                        : recordingTransport.recordingButtonStartX
-                            + 2 * (recordingTransport.recordingButtonSize
-                                + recordingTransport.recordingButtonGap)
-                    y: 31
-                    width: recordingTransport.recordingButtonSize
-                    height: width
-                    enabled: AudioEditorController.recordingSupported
-                        && !AudioEditorController.busy
-                        && (!AudioEditorController.recording
-                            || AudioEditorController.recordingPaused)
-                    opacity: 1.0
-                    property string toolTipText: qsTr("开始 / 继续录音（R）")
-                    property int toolTipDelay: 500
-                    Accessible.name: AudioEditorController.recordingPaused
-                        ? qsTr("继续录音") : qsTr("开始录音")
-                    Accessible.role: Accessible.Button
-                    contentItem: Rectangle {
-                        color: "transparent"
-                        Rectangle {
-                            objectName: "recordingToggleIndicator"
-                            anchors.centerIn: parent
-                            width: 34; height: 34; radius: 17
-                            color: Theme.recording
-                        }
-                    }
-                    background: Rectangle {
-                        radius: width / 2
-                        color: Theme.surface
-                        border.color: Theme.borderStrong
-                        border.width: 1
-                    }
-                    onClicked: page.startOrResumeRecording()
-                    ToolTip.visible: hovered
-                    ToolTip.delay: toolTipDelay
-                    ToolTip.text: toolTipText
-                }
-                RoundButton {
-                    objectName: "recordingStopButton"
-                    x: page.referenceLayout ? 458
-                        : recordingTransport.recordingButtonStartX
-                            + 3 * (recordingTransport.recordingButtonSize
-                                + recordingTransport.recordingButtonGap)
-                    y: 31
-                    width: recordingTransport.recordingButtonSize
-                    height: width
-                    enabled: AudioEditorController.recordingSupported
-                        && AudioEditorController.recording
-                        && !AudioEditorController.busy
-                    opacity: 1.0
-                    property string toolTipText: qsTr("停止并保存录音（Ctrl+R）")
-                    property int toolTipDelay: 500
-                    Accessible.name: qsTr("停止并保存录音")
-                    Accessible.role: Accessible.Button
-                    contentItem: Item {
-                        ThemedIcon {
-                            anchors.centerIn: parent
-                            source: Theme.icon("stop-fill")
-                            tint: Theme.textPrimary
-                            width: 42; height: 42
-                        }
-                    }
-                    onClicked: AudioEditorController.stopRecording()
-                    ToolTip.visible: hovered
-                    ToolTip.delay: toolTipDelay
-                    ToolTip.text: toolTipText
-                    background: Rectangle {
-                        radius: width / 2
-                        color: Theme.surface
-                        border.color: Theme.borderStrong
-                        border.width: 1
-                    }
-                }
-            }
-
-            Rectangle {
                 id: playbackTransport
                 objectName: "editorPlaybackTransport"
-                x: page.referenceLayout ? 580
-                    : recordingTransport.x + recordingTransport.width + 12
-                y: recordingTransport.y
-                width: mainSurface.width - x - 12
-                height: recordingTransport.height
+                x: 12
+                y: page.interpolateLayout(410, 618)
+                    + page.narrowActionBandHeight
+                width: mainSurface.width - 24
+                height: page.interpolateLayout(110, 112)
                 color: Theme.surfaceElevated
                 border.color: Theme.divider
                 border.width: 1
                 radius: 6
-                Label {
-                    x: 18; y: 12
-                    text: qsTr("播放控制")
-                    color: Theme.textPrimary
-                    font.pixelSize: 14
-                    font.bold: true
-                }
                 RowLayout {
-                    anchors.centerIn: parent
-                    anchors.verticalCenterOffset: 10
+                    anchors.fill: parent
+                    anchors.leftMargin: 18
+                    anchors.rightMargin: 18
                     spacing: 18
-                    Button {
-                        objectName: "editorPlaybackToStartButton"
-                        icon.source: Theme.icon("skip-back-fill")
-                        icon.width: 32
-                        icon.height: 32
-                        enabled: AudioEditorController.playbackSupported
-                            && AudioEditorController.hasDocument
-                        opacity: 1.0
-                        property string toolTipText: qsTr("跳到开头（Home）")
-                        property int toolTipDelay: 500
-                        Accessible.name: qsTr("跳到开头")
-                        Accessible.role: Accessible.Button
-                        Layout.preferredWidth: 74; Layout.preferredHeight: 56
-                        background: Rectangle {
-                            radius: 6; color: Theme.surface
-                            border.color: Theme.borderStrong; border.width: 1
+
+                    ColumnLayout {
+                        Layout.preferredWidth: 270
+                        Layout.fillHeight: true
+                        spacing: 2
+                        Item { Layout.fillHeight: true }
+                        Label {
+                            text: qsTr("当前时间")
+                            color: Theme.textTertiary
+                            font.pixelSize: 12
                         }
-                        onClicked: AudioEditorController.seekMs(0)
-                        ToolTip.visible: hovered
-                        ToolTip.delay: toolTipDelay
-                        ToolTip.text: toolTipText
+                        Label {
+                            objectName: "editorCurrentTime"
+                            text: page.timeTextFromFrames(
+                                AudioEditorController.playheadFrame, true)
+                            color: Theme.accent
+                            font.pixelSize: 22
+                        }
+                        Label {
+                            text: qsTr("总时长  ")
+                                + page.timeTextFromFrames(
+                                    AudioEditorController.totalFrames, true)
+                            color: Theme.textSecondary
+                            font.pixelSize: 12
+                        }
+                        Item { Layout.fillHeight: true }
                     }
-                    Button {
-                        objectName: "editorPlaybackRewindButton"
-                        icon.source: Theme.icon("rewind-fill")
-                        icon.width: 32
-                        icon.height: 32
-                        enabled: AudioEditorController.playbackSupported
-                            && AudioEditorController.hasDocument
-                        opacity: 1.0
-                        property string toolTipText: qsTr("后退 5 秒（←）")
-                        property int toolTipDelay: 500
-                        Accessible.name: qsTr("后退五秒")
-                        Accessible.role: Accessible.Button
-                        Layout.preferredWidth: 74; Layout.preferredHeight: 56
-                        background: Rectangle {
-                            radius: 6; color: Theme.surface
-                            border.color: Theme.borderStrong; border.width: 1
-                        }
-                        onClicked: AudioEditorController.seekMs(
-                            Math.max(0, AudioEditorController.positionMs - 5000))
-                        ToolTip.visible: hovered
-                        ToolTip.delay: toolTipDelay
-                        ToolTip.text: toolTipText
+
+                    Rectangle {
+                        Layout.preferredWidth: 1
+                        Layout.preferredHeight: 84
+                        color: Theme.divider
                     }
-                    RoundButton {
-                        id: primaryPlayButton
-                        objectName: "editorPrimaryPlayButton"
-                        icon.source: Theme.icon(AudioEditorController.playing
-                            ? "pause-fill" : "play-fill")
-                        icon.color: Theme.textPrimary
-                        icon.width: 42
-                        icon.height: 42
-                        enabled: AudioEditorController.playbackSupported
-                            && AudioEditorController.hasDocument
-                        opacity: 1.0
-                        property string toolTipText: qsTr("播放 / 暂停（Space）")
-                        property int toolTipDelay: 500
-                        Accessible.name: AudioEditorController.playing
-                            ? qsTr("暂停") : qsTr("播放")
-                        Accessible.role: Accessible.Button
-                        Layout.preferredWidth: 82; Layout.preferredHeight: 82
-                        background: Rectangle {
-                            objectName: "editorPrimaryPlayBackground"
-                            radius: width / 2
-                            color: Theme.surfaceElevated
-                            border.color: Theme.success
-                            border.width: 3
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.alignment: Qt.AlignVCenter
+                        spacing: Math.max(8, Math.min(18,
+                            (width - 6 * 74) / 8))
+
+                        ColumnLayout {
+                            spacing: 2
+                            Button {
+                                objectName: "editorPlaybackToStartButton"
+                                focusPolicy: Qt.TabFocus
+                                Keys.onSpacePressed: function(event) {
+                                    event.accepted = true
+                                }
+                                icon.source: Theme.icon("skip-back-fill")
+                                icon.width: 32; icon.height: 32
+                                enabled: AudioEditorController.playbackSupported
+                                    && AudioEditorController.hasDocument
+                                opacity: 1.0
+                                property string toolTipText: qsTr("上一段（Home）")
+                                property int toolTipDelay: 500
+                                Accessible.name: qsTr("上一段")
+                                Accessible.role: Accessible.Button
+                                Layout.preferredWidth: 74
+                                Layout.preferredHeight: 56
+                                background: Rectangle {
+                                    radius: 6; color: Theme.surface
+                                    border.color: Theme.borderStrong
+                                    border.width: 1
+                                }
+                                onClicked: page.seekPreviousSegment()
+                                ToolTip.visible: hovered
+                                ToolTip.delay: toolTipDelay
+                                ToolTip.text: toolTipText
+                            }
+                            Label {
+                                text: qsTr("上一段")
+                                color: Theme.textSecondary
+                                Layout.alignment: Qt.AlignHCenter
+                            }
                         }
-                        onClicked: AudioEditorController.playPause()
-                        ToolTip.visible: hovered
-                        ToolTip.delay: toolTipDelay
-                        ToolTip.text: toolTipText
-                    }
-                    Button {
-                        objectName: "editorPlaybackForwardButton"
-                        icon.source: Theme.icon("speed-fill")
-                        icon.width: 32
-                        icon.height: 32
-                        enabled: AudioEditorController.playbackSupported
-                            && AudioEditorController.hasDocument
-                        opacity: 1.0
-                        property string toolTipText: qsTr("前进 5 秒（→）")
-                        property int toolTipDelay: 500
-                        Accessible.name: qsTr("快进 5 秒")
-                        Accessible.role: Accessible.Button
-                        Layout.preferredWidth: 74; Layout.preferredHeight: 56
-                        background: Rectangle {
-                            radius: 6; color: Theme.surface
-                            border.color: Theme.borderStrong; border.width: 1
+
+                        ColumnLayout {
+                            spacing: 2
+                            Button {
+                                objectName: "editorPlaybackRewindButton"
+                                focusPolicy: Qt.TabFocus
+                                Keys.onSpacePressed: function(event) {
+                                    event.accepted = true
+                                }
+                                icon.source: Theme.icon("rewind-fill")
+                                icon.width: 32; icon.height: 32
+                                enabled: AudioEditorController.playbackSupported
+                                    && AudioEditorController.hasDocument
+                                opacity: 1.0
+                                property string toolTipText: qsTr("后退 5 秒（←）")
+                                property int toolTipDelay: 500
+                                Accessible.name: qsTr("后退五秒")
+                                Accessible.role: Accessible.Button
+                                Layout.preferredWidth: 74
+                                Layout.preferredHeight: 56
+                                background: Rectangle {
+                                    radius: 6; color: Theme.surface
+                                    border.color: Theme.borderStrong
+                                    border.width: 1
+                                }
+                                onClicked: AudioEditorController.seekMs(
+                                    Math.max(0,
+                                        AudioEditorController.positionMs - 5000))
+                                ToolTip.visible: hovered
+                                ToolTip.delay: toolTipDelay
+                                ToolTip.text: toolTipText
+                            }
+                            Label {
+                                text: qsTr("后退")
+                                color: Theme.textSecondary
+                                Layout.alignment: Qt.AlignHCenter
+                            }
                         }
-                        onClicked: AudioEditorController.seekMs(Math.min(
-                            AudioEditorController.durationMs,
-                            AudioEditorController.positionMs + 5000))
-                        ToolTip.visible: hovered
-                        ToolTip.delay: toolTipDelay
-                        ToolTip.text: toolTipText
-                    }
-                    Button {
-                        objectName: "editorPlaybackStopButton"
-                        icon.source: Theme.icon("stop-fill")
-                        icon.width: 32
-                        icon.height: 32
-                        enabled: AudioEditorController.playbackSupported
-                            && AudioEditorController.playing
-                        opacity: 1.0
-                        property string toolTipText: qsTr("停止（Ctrl+Space）")
-                        property int toolTipDelay: 500
-                        Accessible.name: qsTr("停止")
-                        Accessible.role: Accessible.Button
-                        Layout.preferredWidth: 74; Layout.preferredHeight: 56
-                        background: Rectangle {
-                            radius: 6; color: Theme.surface
-                            border.color: Theme.borderStrong; border.width: 1
+
+                        ColumnLayout {
+                            spacing: 0
+                            RoundButton {
+                                id: primaryPlayButton
+                                objectName: "editorPrimaryPlayButton"
+                                focusPolicy: Qt.TabFocus
+                                Keys.onSpacePressed: function(event) {
+                                    event.accepted = true
+                                }
+                                icon.source: Theme.icon(
+                                    AudioEditorController.playing
+                                        ? "pause-fill" : "play-fill")
+                                icon.color: Theme.textPrimary
+                                icon.width: 42; icon.height: 42
+                                enabled: AudioEditorController.playbackSupported
+                                    && AudioEditorController.hasDocument
+                                opacity: 1.0
+                                property string toolTipText:
+                                    qsTr("播放 / 暂停（Space）")
+                                property int toolTipDelay: 500
+                                Accessible.name: AudioEditorController.playing
+                                    ? qsTr("暂停") : qsTr("播放")
+                                Accessible.role: Accessible.Button
+                                Layout.preferredWidth: 82
+                                Layout.preferredHeight: 82
+                                background: Rectangle {
+                                    objectName: "editorPrimaryPlayBackground"
+                                    radius: width / 2
+                                    color: Theme.surfaceElevated
+                                    border.color: Theme.success
+                                    border.width: 3
+                                }
+                                onClicked: AudioEditorController.playPause()
+                                ToolTip.visible: hovered
+                                ToolTip.delay: toolTipDelay
+                                ToolTip.text: toolTipText
+                            }
+                            Label {
+                                text: AudioEditorController.playing
+                                    ? qsTr("暂停") : qsTr("播放")
+                                color: Theme.textPrimary
+                                Layout.alignment: Qt.AlignHCenter
+                            }
                         }
-                        onClicked: AudioEditorController.stopPlayback()
-                        ToolTip.visible: hovered
-                        ToolTip.delay: toolTipDelay
-                        ToolTip.text: toolTipText
+
+                        ColumnLayout {
+                            spacing: 2
+                            Button {
+                                objectName: "editorPlaybackForwardButton"
+                                focusPolicy: Qt.TabFocus
+                                Keys.onSpacePressed: function(event) {
+                                    event.accepted = true
+                                }
+                                icon.source: Theme.icon("speed-fill")
+                                icon.width: 32; icon.height: 32
+                                enabled: AudioEditorController.playbackSupported
+                                    && AudioEditorController.hasDocument
+                                opacity: 1.0
+                                property string toolTipText: qsTr("前进 5 秒（→）")
+                                property int toolTipDelay: 500
+                                Accessible.name: qsTr("快进 5 秒")
+                                Accessible.role: Accessible.Button
+                                Layout.preferredWidth: 74
+                                Layout.preferredHeight: 56
+                                background: Rectangle {
+                                    radius: 6; color: Theme.surface
+                                    border.color: Theme.borderStrong
+                                    border.width: 1
+                                }
+                                onClicked: AudioEditorController.seekMs(Math.min(
+                                    AudioEditorController.durationMs,
+                                    AudioEditorController.positionMs + 5000))
+                                ToolTip.visible: hovered
+                                ToolTip.delay: toolTipDelay
+                                ToolTip.text: toolTipText
+                            }
+                            Label {
+                                text: qsTr("前进")
+                                color: Theme.textSecondary
+                                Layout.alignment: Qt.AlignHCenter
+                            }
+                        }
+
+                        ColumnLayout {
+                            spacing: 2
+                            Button {
+                                objectName: "editorPlaybackNextButton"
+                                focusPolicy: Qt.TabFocus
+                                Keys.onSpacePressed: function(event) {
+                                    event.accepted = true
+                                }
+                                icon.source: Theme.icon("skip-forward-fill")
+                                icon.width: 32; icon.height: 32
+                                enabled: AudioEditorController.playbackSupported
+                                    && AudioEditorController.hasDocument
+                                opacity: 1.0
+                                property string toolTipText: qsTr("下一段")
+                                property int toolTipDelay: 500
+                                Accessible.name: qsTr("下一段")
+                                Accessible.role: Accessible.Button
+                                Layout.preferredWidth: 74
+                                Layout.preferredHeight: 56
+                                background: Rectangle {
+                                    radius: 6; color: Theme.surface
+                                    border.color: Theme.borderStrong
+                                    border.width: 1
+                                }
+                                onClicked: page.seekNextSegment()
+                                ToolTip.visible: hovered
+                                ToolTip.delay: toolTipDelay
+                                ToolTip.text: toolTipText
+                            }
+                            Label {
+                                text: qsTr("下一段")
+                                color: Theme.textSecondary
+                                Layout.alignment: Qt.AlignHCenter
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.preferredWidth: 1
+                            Layout.preferredHeight: 84
+                            color: Theme.divider
+                        }
+
+                        ColumnLayout {
+                            spacing: 2
+                            Button {
+                                objectName: "editorPlaybackStopButton"
+                                focusPolicy: Qt.TabFocus
+                                Keys.onSpacePressed: function(event) {
+                                    event.accepted = true
+                                }
+                                icon.source: Theme.icon("stop-fill")
+                                icon.width: 32; icon.height: 32
+                                enabled: AudioEditorController.playbackSupported
+                                    && AudioEditorController.playing
+                                opacity: 1.0
+                                property string toolTipText:
+                                    qsTr("停止（Ctrl+Space）")
+                                property int toolTipDelay: 500
+                                Accessible.name: qsTr("停止")
+                                Accessible.role: Accessible.Button
+                                Layout.preferredWidth: 74
+                                Layout.preferredHeight: 56
+                                background: Rectangle {
+                                    radius: 6; color: Theme.surface
+                                    border.color: Theme.borderStrong
+                                    border.width: 1
+                                }
+                                onClicked: AudioEditorController.stopPlayback()
+                                ToolTip.visible: hovered
+                                ToolTip.delay: toolTipDelay
+                                ToolTip.text: toolTipText
+                            }
+                            Label {
+                                text: qsTr("停止")
+                                color: Theme.textSecondary
+                                Layout.alignment: Qt.AlignHCenter
+                            }
+                        }
                     }
                 }
             }
@@ -952,122 +963,98 @@ Rectangle {
                 id: shortcutCard
                 objectName: "editorShortcutCard"
                 x: 12
-                y: page.referenceLayout ? 667
-                    : 532 + page.narrowActionBandHeight
+                y: page.interpolateLayout(532, 746)
+                    + page.narrowActionBandHeight
                 width: mainSurface.width - 24
-                height: page.referenceLayout ? 157 : 103
+                height: page.interpolateLayout(103, 67)
                 color: Theme.surfaceElevated
                 border.color: Theme.divider
                 border.width: 1
                 radius: 6
                 ThemedIcon {
                     objectName: "editorShortcutKeyboardIcon"
-                    x: 20; y: 13
-                    width: 24; height: 24
+                    x: 20; y: 8
+                    width: 22; height: 22
                     source: Theme.icon("keyboard-box-line")
                     tint: Theme.textPrimary
                 }
                 Label {
-                    x: 52; y: 14
+                    x: 50; y: 9
                     text: qsTr("快捷键与鼠标操作")
                     color: Theme.textPrimary
                     font.pixelSize: 14
                     font.bold: true
                 }
-                Rectangle { x: 16; y: 48; width: parent.width - 32; height: 1; color: Theme.borderStrong }
-                RowLayout {
+                Rectangle { x: 16; y: 38; width: parent.width - 32; height: 1; color: Theme.borderStrong }
+                Flickable {
                     id: shortcutFirstRow
                     objectName: "editorShortcutFirstRow"
-                    property int groupCount: 5
-                    property int dividerCount: 4
-                    readonly property var columnWeights: [0.16, 0.19, 0.17, 0.31, 0.17]
-                    x: 22; y: 62
-                    width: parent.width - 44
-                    height: 18
-                    spacing: 0
-                    Repeater {
-                        model: [
-                            qsTr("空格 = 播放 / 暂停"),
-                            qsTr("S = 在播放头处分割"),
-                            qsTr("Delete = 删除片段"),
-                            qsTr("Ctrl+C / X / V = 复制 / 剪切 / 粘贴"),
-                            qsTr("Ctrl+Z / Y = 撤销 / 重做")
-                        ]
-                        delegate: Item {
-                            required property int index
-                            required property string modelData
-                            Layout.fillWidth: true
-                            Layout.minimumWidth: firstGroupText.implicitWidth + 2
-                            Layout.preferredWidth: Math.max(Layout.minimumWidth,
-                                shortcutFirstRow.width
-                                * shortcutFirstRow.columnWeights[index])
-                            Layout.fillHeight: true
-                            Text {
-                                id: firstGroupText
-                                objectName: "editorShortcutFirstGroup_" + index
-                                anchors.centerIn: parent
-                                text: modelData
-                                color: Theme.textSecondary
-                                font.pixelSize: 11
-                            }
-                            Rectangle {
-                                objectName: index === 0
-                                    ? "editorShortcutDivider"
-                                    : "editorShortcutFirstDivider_" + index
-                                visible: index < shortcutFirstRow.groupCount - 1
-                                x: parent.width - width
-                                y: 0; width: 1; height: 18
-                                color: Theme.borderStrong
+                    property int groupCount: 9
+                    property int dividerCount: 8
+                    x: 18; y: 44
+                    width: parent.width - 36
+                    height: 16
+                    clip: true
+                    interactive: contentWidth > width
+                    flickableDirection: Flickable.HorizontalFlick
+                    boundsBehavior: Flickable.StopAtBounds
+                    contentWidth: shortcutFirstRowContent.width
+                    contentHeight: height
+
+                    Row {
+                        id: shortcutFirstRowContent
+                        height: shortcutFirstRow.height
+                        spacing: 0
+                        Repeater {
+                            model: [
+                                qsTr("空格 = 播放 / 暂停"),
+                                qsTr("S = 在播放头处分割"),
+                                qsTr("Delete = 删除片段"),
+                                qsTr("Ctrl+C / X / V = 复制 / 剪切 / 粘贴"),
+                                qsTr("Ctrl+Z / Y = 撤销 / 重做"),
+                                qsTr("Ctrl+鼠标滚轮 = 放大 / 缩小时间线"),
+                                qsTr("Shift+鼠标滚轮 = 横向滚动"),
+                                qsTr("拖拽片段边缘 = 修剪"),
+                                qsTr("双击音量线 = 添加控制点")
+                            ]
+                            delegate: Item {
+                                required property int index
+                                required property string modelData
+                                width: firstGroupText.implicitWidth + 16
+                                height: shortcutFirstRow.height
+                                Text {
+                                    id: firstGroupText
+                                    objectName: "editorShortcutFirstGroup_" + index
+                                    anchors.centerIn: parent
+                                    text: modelData
+                                    color: Theme.textSecondary
+                                    font.pixelSize: 13
+                                }
+                                Rectangle {
+                                    objectName: index === 0
+                                        ? "editorShortcutDivider"
+                                        : "editorShortcutFirstDivider_" + index
+                                    visible: index < shortcutFirstRow.groupCount - 1
+                                    x: parent.width - width
+                                    y: 0; width: 1; height: 16
+                                    color: Theme.borderStrong
+                                }
                             }
                         }
                     }
-                }
-                RowLayout {
-                    id: shortcutSecondRow
-                    objectName: "editorShortcutSecondRow"
-                    visible: page.referenceLayout
-                    property int groupCount: 6
-                    property int dividerCount: 5
-                    readonly property var columnWeights: [0.16, 0.22, 0.18, 0.16, 0.15, 0.17]
-                    x: 22; y: 105
-                    width: parent.width - 44
-                    height: 18
-                    spacing: 0
-                    Repeater {
-                        model: [
-                            qsTr("Ctrl+拖动 = 快速复制片段"),
-                            qsTr("Ctrl+鼠标滚轮 = 放大 / 缩小时间线"),
-                            qsTr("Shift+鼠标滚轮 = 横向滚动"),
-                            qsTr("拖拽片段边缘 = 修剪"),
-                            qsTr("拖拽右上角 = 调整淡出"),
-                            qsTr("双击音量线 = 添加控制点")
-                        ]
-                        delegate: Item {
-                            required property int index
-                            required property string modelData
-                            Layout.fillWidth: true
-                            Layout.minimumWidth: secondGroupText.implicitWidth + 2
-                            Layout.preferredWidth: Math.max(Layout.minimumWidth,
-                                shortcutSecondRow.width
-                                * shortcutSecondRow.columnWeights[index])
-                            Layout.fillHeight: true
-                            Text {
-                                id: secondGroupText
-                                objectName: "editorShortcutSecondGroup_" + index
-                                anchors.centerIn: parent
-                                text: modelData
-                                color: Theme.textTertiary
-                                font.pixelSize: 11
-                            }
-                            Rectangle {
-                                objectName: index === 0
-                                    ? "editorShortcutSecondDivider"
-                                    : "editorShortcutSecondRowDivider_" + index
-                                visible: index < shortcutSecondRow.groupCount - 1
-                                x: parent.width - width
-                                y: 0; width: 1; height: 18
-                                color: Theme.borderStrong
-                            }
+
+                    WheelHandler {
+                        acceptedDevices: PointerDevice.Mouse
+                            | PointerDevice.TouchPad
+                        onWheel: function(event) {
+                            const delta = event.angleDelta.x !== 0
+                                ? event.angleDelta.x : event.angleDelta.y
+                            shortcutFirstRow.contentX = Math.max(0,
+                                Math.min(shortcutFirstRow.contentWidth
+                                             - shortcutFirstRow.width,
+                                         shortcutFirstRow.contentX
+                                             - Math.sign(delta) * 80))
+                            event.accepted = true
                         }
                     }
                 }
@@ -1075,11 +1062,23 @@ Rectangle {
 
             EditorStatusBar {
                 objectName: "editorStatusBar"
-                visible: false
+                showSuccess: statusSuccessTimer.running
+                visible: AudioEditorController.busy
+                    || AudioEditorController.errorMessage.length > 0
+                    || statusSuccessTimer.running
                 x: 0
-                y: page.referenceLayout ? 824 : mainSurface.height - 25
+                y: mainSurface.height - 25
                 width: mainSurface.width
                 height: 25
+            }
+            Timer {
+                id: statusSuccessTimer
+                interval: 3200
+                repeat: false
+            }
+            Connections {
+                target: AudioEditorController
+                function onExportSucceeded(path) { statusSuccessTimer.restart() }
             }
         }
     }
@@ -1087,11 +1086,10 @@ Rectangle {
     Rectangle {
         id: inspector
         objectName: "editorInspector"
-        x: page.referenceLayout ? 1300
-            : page.narrowLayout ? page.width - width : page.mainWidth
-        y: 0
-        width: page.referenceLayout ? 372 : page.narrowLayout ? 350 : 320
-        height: page.height
+        x: page.narrowLayout ? page.width - width : page.mainWidth
+        y: page.narrowLayout ? 0 : 7
+        width: page.inspectorWidth
+        height: page.narrowLayout ? page.height : page.height - 14
         visible: !page.narrowLayout || page.inspectorExpanded
         z: page.narrowLayout ? 30 : 2
         color: Theme.background
@@ -1111,123 +1109,14 @@ Rectangle {
             Column {
                 id: inspectorGroups
                 width: inspectorScroller.width
-                spacing: 6
-
-                Rectangle {
-                    id: recordingGroup
-                    objectName: "inspectorRecordingGroup"
-                    width: parent.width
-                    property bool collapsed: false
-                    height: collapsed ? 38 : 186
-                    clip: true
-                    color: Theme.surfaceElevated
-                    border.color: Theme.borderStrong
-                    radius: 6
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: recordingGroup.collapsed ? 6 : 12
-                        spacing: 6
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Label { text: qsTr("A. 录音"); color: Theme.textPrimary; font.bold: true; font.pixelSize: 14; Layout.fillWidth: true }
-                            ToolButton {
-                                objectName: "inspectorRecordingCollapse"
-                                Accessible.name: recordingGroup.collapsed ? qsTr("展开录音设置") : qsTr("折叠录音设置")
-                                Accessible.role: Accessible.Button
-                                icon.source: Theme.icon("arrow-down-s-line")
-                                rotation: recordingGroup.collapsed ? 0 : 180
-                                Layout.preferredWidth: 28; Layout.preferredHeight: 24
-                                onClicked: recordingGroup.collapsed = !recordingGroup.collapsed
-                            }
-                        }
-                        GridLayout {
-                            visible: !recordingGroup.collapsed
-                            Layout.fillWidth: true
-                            columns: 2
-                            Label { text: qsTr("输入设备"); color: Theme.textSecondary }
-                            ComboBox {
-                                id: recordingDeviceCombo
-                                objectName: "inspectorRecordingDevice"
-                                Layout.fillWidth: true
-                                model: AudioEditorController.recordingDevices
-                                textRole: "name"; valueRole: "id"
-                                enabled: AudioEditorController.recordingSupported
-                                    && !AudioEditorController.recording
-                                displayText: count > 0 ? currentText
-                                    : qsTr("未检测到输入设备")
-                                Component.onCompleted: {
-                                    for (let index = 0; index < count; ++index) {
-                                        if (valueAt(index)
-                                                === AudioEditorController.recordingDeviceId) {
-                                            currentIndex = index
-                                            break
-                                        }
-                                    }
-                                }
-                            }
-                            Label { text: qsTr("输入电平"); color: Theme.textSecondary }
-                            Rectangle {
-                                objectName: "inspectorInputMeter"
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 18
-                                color: "transparent"
-                                Row {
-                                    anchors.left: parent.left
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    spacing: 2
-                                    Repeater {
-                                        model: 14
-                                        Rectangle {
-                                            required property int index
-                                            width: 8; height: 13; radius: 1
-                                            color: index < 9 ? Theme.success
-                                                : index < 12 ? Theme.warning : Theme.error
-                                            opacity: index / 14
-                                                <= AudioEditorController.inputLevel
-                                                ? 1.0 : 0.18
-                                        }
-                                    }
-                                }
-                                Label {
-                                    anchors.right: parent.right
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: AudioEditorController.inputLevel > 0
-                                        ? (20 * Math.log(
-                                            AudioEditorController.inputLevel)
-                                            / Math.LN10).toFixed(1) + " dB"
-                                        : "−∞ dB"
-                                    color: Theme.textPrimary; font.pixelSize: 11
-                                }
-                            }
-                            Label { text: qsTr("监听"); color: Theme.textSecondary }
-                            ThemedSwitch {
-                                id: recordingMonitorSwitch
-                                objectName: "inspectorMonitorSwitch"
-                                checked: AudioEditorController.recordingMonitor
-                                enabled: AudioEditorController.recordingSupported
-                                    && !AudioEditorController.recording
-                                checkedColor: Theme.accent
-                                Layout.preferredWidth: 40
-                                Layout.preferredHeight: 22
-                            }
-                            Label { text: qsTr("录音格式"); color: Theme.textSecondary }
-                            ComboBox {
-                                objectName: "inspectorRecordingFormat"
-                                model: ["WAV (24-bit, 44.1 kHz)"]
-                                Layout.fillWidth: true
-                                enabled: AudioEditorController.recordingSupported
-                                    && !AudioEditorController.recording
-                            }
-                        }
-                    }
-                }
+                spacing: 8
 
                 Rectangle {
                     id: tempoGroup
                     objectName: "inspectorTempoGroup"
                     width: parent.width
                     property bool collapsed: false
-                    height: collapsed ? 38 : 129
+                    height: collapsed ? 38 : 153
                     clip: true
                     color: Theme.surfaceElevated
                     border.color: Theme.borderStrong
@@ -1236,9 +1125,20 @@ Rectangle {
                         anchors.fill: parent; anchors.margins: tempoGroup.collapsed ? 6 : 12; spacing: 6
                         RowLayout {
                             Layout.fillWidth: true
-                            Label { text: qsTr("B. 速度 / BPM"); color: Theme.textPrimary; font.bold: true; font.pixelSize: 14; Layout.fillWidth: true }
+                            Label {
+                                objectName: "inspectorTempoTitle"
+                                text: qsTr("A. 速度 / BPM")
+                                color: Theme.textPrimary
+                                font.bold: true
+                                font.pixelSize: 14
+                                Layout.fillWidth: true
+                            }
                             ToolButton {
                                 objectName: "inspectorTempoCollapse"
+                                focusPolicy: Qt.TabFocus
+                                Keys.onSpacePressed: function(event) {
+                                    event.accepted = true
+                                }
                                 Accessible.name: tempoGroup.collapsed ? qsTr("展开速度设置") : qsTr("折叠速度设置")
                                 Accessible.role: Accessible.Button
                                 icon.source: Theme.icon("arrow-down-s-line")
@@ -1254,22 +1154,57 @@ Rectangle {
                             TextField {
                                 objectName: "inspectorBpmInput"
                                 Layout.fillWidth: true
-                                text: AudioEditorController.originalBpm > 0
-                                    ? AudioEditorController.originalBpm.toFixed(0) : ""
+                                Layout.preferredHeight: 34
+                                text: AudioEditorController.targetBpm > 0
+                                    ? AudioEditorController.targetBpm.toFixed(0) : ""
                                 horizontalAlignment: TextInput.AlignHCenter
                                 validator: IntValidator { bottom: 20; top: 400 }
+                                color: Theme.textPrimary
+                                background: Rectangle {
+                                    color: Theme.elevated
+                                    border.width: 1
+                                    border.color: parent.activeFocus ? Theme.focus
+                                        : Theme.borderStrong
+                                    radius: 5
+                                }
                                 onEditingFinished: {
                                     const bpm = Number(text)
                                     if (bpm >= 20 && bpm <= 400)
-                                        AudioEditorController.setOriginalBpm(bpm)
+                                        AudioEditorController.setTargetBpm(bpm)
                                 }
                             }
                             Button {
                                 objectName: "inspectorDetectBpmButton"
-                                text: qsTr("自动检测BPM")
+                                focusPolicy: Qt.TabFocus
+                                Layout.preferredHeight: 34
+                                Keys.onSpacePressed: function(event) {
+                                    event.accepted = true
+                                }
+                                text: bpmStatusLabel.text
                                 enabled: AudioEditorController.bpmDetectionSupported
                                     && AudioEditorController.hasDocument
+                                    && !AudioEditorController.bpmBusy
                                 onClicked: AudioEditorController.detectBpm()
+                                contentItem: Label {
+                                    id: bpmStatusLabel
+                                    objectName: "inspectorBpmStatus"
+                                    text: AudioEditorController.bpmBusy
+                                        ? qsTr("检测中…")
+                                        : AudioEditorController.originalBpm > 0
+                                        ? qsTr("原始 %1 BPM").arg(
+                                            AudioEditorController.originalBpm.toFixed(0))
+                                        : AudioEditorController.bpmError.length > 0
+                                        ? AudioEditorController.bpmError
+                                        : qsTr("自动检测BPM")
+                                    color: parent.enabled
+                                        ? Theme.textPrimary : Theme.textDisabled
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
+                                }
+                                ToolTip.visible: hovered
+                                    && AudioEditorController.bpmError.length > 0
+                                ToolTip.text: AudioEditorController.bpmError
                             }
                         }
                         RowLayout {
@@ -1279,13 +1214,23 @@ Rectangle {
                             EditorSlider {
                                 id: speedSlider
                                 objectName: "inspectorSpeedSlider"
+                                Keys.onSpacePressed: function(event) {
+                                    event.accepted = true
+                                }
                                 Layout.fillWidth: true; from: 0.5; to: 2.0
                                 stepSize: 0.01
                                 value: AudioEditorController.speedPercent / 100
                                 enabled: AudioEditorController.timePitchSupported
                                     && AudioEditorController.hasDocument
-                                onMoved: AudioEditorController.setSpeedPercent(
-                                    value * 100)
+                                onPressedChanged: {
+                                    if (!pressed)
+                                        AudioEditorController.setSpeedPercent(value * 100)
+                                }
+                                onValueChanged: {
+                                    if (!pressed && Math.abs(value * 100
+                                            - AudioEditorController.speedPercent) > 0.001)
+                                        AudioEditorController.setSpeedPercent(value * 100)
+                                }
                             }
                             Label {
                                 objectName: "inspectorSpeedValue"
@@ -1294,10 +1239,15 @@ Rectangle {
                             }
                             Button {
                                 objectName: "inspectorSpeedResetButton"
+                                focusPolicy: Qt.TabFocus
+                                Layout.preferredHeight: 34
+                                Keys.onSpacePressed: function(event) {
+                                    event.accepted = true
+                                }
                                 text: qsTr("重置")
                                 enabled: AudioEditorController.timePitchSupported
                                     && AudioEditorController.hasDocument
-                                onClicked: AudioEditorController.setSpeedPercent(100)
+                                onClicked: AudioEditorController.resetTimePitch()
                             }
                         }
                     }
@@ -1308,7 +1258,7 @@ Rectangle {
                     objectName: "inspectorPitchGroup"
                     width: parent.width
                     property bool collapsed: false
-                    height: collapsed ? 38 : 107
+                    height: collapsed ? 38 : 114
                     clip: true
                     color: Theme.surfaceElevated
                     border.color: Theme.borderStrong
@@ -1317,9 +1267,20 @@ Rectangle {
                         anchors.fill: parent; anchors.margins: pitchGroup.collapsed ? 6 : 12; spacing: 8
                         RowLayout {
                             Layout.fillWidth: true
-                            Label { text: qsTr("C. 升调降调"); color: Theme.textPrimary; font.bold: true; font.pixelSize: 14; Layout.fillWidth: true }
+                            Label {
+                                objectName: "inspectorPitchTitle"
+                                text: qsTr("B. 升调降调")
+                                color: Theme.textPrimary
+                                font.bold: true
+                                font.pixelSize: 14
+                                Layout.fillWidth: true
+                            }
                             ToolButton {
                                 objectName: "inspectorPitchCollapse"
+                                focusPolicy: Qt.TabFocus
+                                Keys.onSpacePressed: function(event) {
+                                    event.accepted = true
+                                }
                                 Accessible.name: pitchGroup.collapsed ? qsTr("展开升降调设置") : qsTr("折叠升降调设置")
                                 Accessible.role: Accessible.Button
                                 icon.source: Theme.icon("arrow-down-s-line")
@@ -1334,6 +1295,10 @@ Rectangle {
                             Label { text: qsTr("半音"); color: Theme.textSecondary }
                             Button {
                                 objectName: "inspectorPitchMinus"
+                                focusPolicy: Qt.TabFocus
+                                Keys.onSpacePressed: function(event) {
+                                    event.accepted = true
+                                }
                                 text: "−"
                                 Layout.preferredWidth: 28
                                 enabled: AudioEditorController.timePitchSupported
@@ -1349,12 +1314,24 @@ Rectangle {
                             EditorSlider {
                                 id: pitchSlider
                                 objectName: "inspectorPitchSlider"
+                                Keys.onSpacePressed: function(event) {
+                                    event.accepted = true
+                                }
                                 Layout.fillWidth: true; from: -12; to: 12; stepSize: 1
                                 value: Math.trunc(AudioEditorController.pitchCents / 100)
                                 enabled: AudioEditorController.timePitchSupported
                                     && AudioEditorController.hasDocument
-                                onMoved: AudioEditorController.setPitch(
-                                    Math.round(value), 0)
+                                onPressedChanged: {
+                                    if (!pressed)
+                                        AudioEditorController.setPitch(
+                                            Math.round(value), 0)
+                                }
+                                onValueChanged: {
+                                    if (!pressed && Math.round(value) * 100
+                                        !== AudioEditorController.pitchCents)
+                                        AudioEditorController.setPitch(
+                                            Math.round(value), 0)
+                                }
                             }
                             Label {
                                 text: "+12"
@@ -1362,6 +1339,10 @@ Rectangle {
                             }
                             Button {
                                 objectName: "inspectorPitchPlus"
+                                focusPolicy: Qt.TabFocus
+                                Keys.onSpacePressed: function(event) {
+                                    event.accepted = true
+                                }
                                 text: "+"
                                 Layout.preferredWidth: 28
                                 enabled: AudioEditorController.timePitchSupported
@@ -1388,7 +1369,7 @@ Rectangle {
                     objectName: "inspectorPreservePitchGroup"
                     width: parent.width
                     property bool collapsed: false
-                    height: collapsed ? 38 : 104
+                    height: collapsed ? 38 : 143
                     clip: true
                     color: Theme.surfaceElevated
                     border.color: Theme.borderStrong
@@ -1397,9 +1378,20 @@ Rectangle {
                         anchors.fill: parent; anchors.margins: preservePitchGroup.collapsed ? 6 : 8; spacing: 4
                         RowLayout {
                             Layout.fillWidth: true
-                            Label { text: qsTr("D. 保持音调"); color: Theme.textPrimary; font.bold: true; font.pixelSize: 14; Layout.fillWidth: true }
+                            Label {
+                                objectName: "inspectorPreservePitchTitle"
+                                text: qsTr("C. 保持音调")
+                                color: Theme.textPrimary
+                                font.bold: true
+                                font.pixelSize: 14
+                                Layout.fillWidth: true
+                            }
                             ToolButton {
                                 objectName: "inspectorPreservePitchCollapse"
+                                focusPolicy: Qt.TabFocus
+                                Keys.onSpacePressed: function(event) {
+                                    event.accepted = true
+                                }
                                 Accessible.name: preservePitchGroup.collapsed ? qsTr("展开音调保护设置") : qsTr("折叠音调保护设置")
                                 Accessible.role: Accessible.Button
                                 icon.source: Theme.icon("arrow-down-s-line")
@@ -1454,7 +1446,7 @@ Rectangle {
                     objectName: "inspectorExportGroup"
                     width: parent.width
                     property bool collapsed: false
-                    height: collapsed ? 38 : 276
+                    height: collapsed ? 38 : 336
                     clip: true
                     color: Theme.surfaceElevated
                     border.color: Theme.borderStrong
@@ -1463,9 +1455,20 @@ Rectangle {
                         anchors.fill: parent; anchors.margins: exportGroup.collapsed ? 6 : 12; spacing: 7
                         RowLayout {
                             Layout.fillWidth: true
-                            Label { text: qsTr("E. 导出设置"); color: Theme.textPrimary; font.bold: true; font.pixelSize: 14; Layout.fillWidth: true }
+                            Label {
+                                objectName: "inspectorExportTitle"
+                                text: qsTr("D. 导出设置")
+                                color: Theme.textPrimary
+                                font.bold: true
+                                font.pixelSize: 14
+                                Layout.fillWidth: true
+                            }
                             ToolButton {
                                 objectName: "inspectorExportCollapse"
+                                focusPolicy: Qt.TabFocus
+                                Keys.onSpacePressed: function(event) {
+                                    event.accepted = true
+                                }
                                 Accessible.name: exportGroup.collapsed ? qsTr("展开导出设置") : qsTr("折叠导出设置")
                                 Accessible.role: Accessible.Button
                                 icon.source: Theme.icon("arrow-down-s-line")
@@ -1479,90 +1482,253 @@ Rectangle {
                             Layout.fillWidth: true; columns: 4
                             columnSpacing: 6; rowSpacing: 6
                             Label { text: qsTr("输出格式"); color: Theme.textSecondary }
-                            ComboBox {
+                            ThemedComboBox {
+                                id: exportCodec
                                 objectName: "editorExportCodec"
+                                Keys.onSpacePressed: function(event) {
+                                    event.accepted = true
+                                }
                                 Layout.columnSpan: 3
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 32
+                                Layout.preferredHeight: 34
                                 readonly property string text: displayText
                                 model: ["WAV", "FLAC", "MP3", "AAC"]
                                 currentIndex: Math.max(0, model.indexOf(
-                                    page.persistedExportSettings.codecName || "WAV"))
-                                onActivated: page.updateExportSetting(
-                                    "codecName", currentText)
+                                    page.normalizedExportCodec()))
+                                onActivated: page.selectExportCodec(currentText)
+                                Connections {
+                                    target: AudioEditorController
+                                    function onProjectChanged() {
+                                        exportCodec.currentIndex = Math.max(0,
+                                            exportCodec.model.indexOf(
+                                                page.normalizedExportCodec()))
+                                    }
+                                }
+                                background: Rectangle {
+                                    color: !parent.enabled ? Theme.panel
+                                        : parent.pressed ? Theme.surfacePressed
+                                        : parent.hovered ? Theme.surfaceHover
+                                        : Theme.elevated
+                                    border.width: 1
+                                    border.color: parent.activeFocus ? Theme.focus
+                                        : Theme.borderStrong
+                                    radius: 5
+                                }
                             }
                             Label { text: qsTr("采样率"); color: Theme.textSecondary }
-                            ComboBox {
+                            ThemedComboBox {
                                 objectName: "editorExportSampleRate"
+                                Keys.onSpacePressed: function(event) {
+                                    event.accepted = true
+                                }
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 32
+                                Layout.preferredHeight: 34
                                 readonly property string text: displayText
-                                model: ["44.1 kHz", "48 kHz", "96 kHz"]
-                                currentIndex: page.persistedExportSettings.sampleRate === 48000
-                                    ? 1 : page.persistedExportSettings.sampleRate === 96000
-                                    ? 2 : 0
+                                readonly property int selectedSampleRate: Math.max(1,
+                                    Number(page.persistedExportSettings.sampleRate)
+                                    || Number(AudioEditorController.sampleRate) || 44100)
+                                readonly property var sampleRateValues: {
+                                    const values = [44100, 48000, 96000]
+                                    if (values.indexOf(selectedSampleRate) < 0)
+                                        values.push(selectedSampleRate)
+                                    values.sort(function(first, second) {
+                                        return first - second
+                                    })
+                                    return values
+                                }
+                                model: sampleRateValues.map(function(value) {
+                                    return value % 1000 === 0
+                                        ? String(value / 1000) + " kHz"
+                                        : String(value / 1000) + " kHz"
+                                })
+                                currentIndex: sampleRateValues.indexOf(selectedSampleRate)
                                 onActivated: page.updateExportSetting(
-                                    "sampleRate", [44100, 48000, 96000][currentIndex])
+                                    "sampleRate", sampleRateValues[currentIndex])
+                                background: Rectangle {
+                                    color: !parent.enabled ? Theme.panel
+                                        : parent.pressed ? Theme.surfacePressed
+                                        : parent.hovered ? Theme.surfaceHover
+                                        : Theme.elevated
+                                    border.width: 1
+                                    border.color: parent.activeFocus ? Theme.focus
+                                        : Theme.borderStrong
+                                    radius: 5
+                                }
                             }
                             Label { text: qsTr("位深"); color: Theme.textSecondary }
-                            ComboBox {
+                            ThemedComboBox {
                                 objectName: "editorExportBitDepth"
+                                Keys.onSpacePressed: function(event) {
+                                    event.accepted = true
+                                }
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 32
+                                Layout.preferredHeight: 34
                                 readonly property string text: displayText
-                                model: ["16-bit", "24-bit", "32-bit"]
-                                currentIndex: page.persistedExportSettings.bitDepth === 16
+                                readonly property bool codecUsesBitDepth:
+                                    page.normalizedExportCodec() === "WAV"
+                                enabled: codecUsesBitDepth
+                                model: codecUsesBitDepth
+                                    ? ["16-bit", "24-bit", "32-bit"]
+                                    : [qsTr("— / 不适用")]
+                                currentIndex: !codecUsesBitDepth ? 0
+                                    : page.persistedExportSettings.bitDepth === 16
                                     ? 0 : page.persistedExportSettings.bitDepth === 32
                                     ? 2 : 1
-                                onActivated: page.updateExportSetting(
-                                    "bitDepth", [16, 24, 32][currentIndex])
+                                onActivated: {
+                                    if (codecUsesBitDepth)
+                                        page.updateExportSetting(
+                                            "bitDepth", [16, 24, 32][currentIndex])
+                                }
+                                background: Rectangle {
+                                    color: !parent.enabled ? Theme.panel
+                                        : parent.pressed ? Theme.surfacePressed
+                                        : parent.hovered ? Theme.surfaceHover
+                                        : Theme.elevated
+                                    border.width: 1
+                                    border.color: parent.activeFocus ? Theme.focus
+                                        : Theme.borderStrong
+                                    radius: 5
+                                }
                             }
                             Label { text: qsTr("声道"); color: Theme.textSecondary }
-                            ComboBox {
+                            ThemedComboBox {
                                 objectName: "editorExportChannels"
+                                Keys.onSpacePressed: function(event) {
+                                    event.accepted = true
+                                }
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 32
+                                Layout.preferredHeight: 34
                                 readonly property string text: displayText
-                                model: [qsTr("单声道"), qsTr("立体声")]
-                                currentIndex: page.persistedExportSettings.channels === 1
-                                    ? 0 : 1
+                                readonly property int selectedChannels: Math.max(1,
+                                    Math.min(8, Number(
+                                        page.persistedExportSettings.channels)
+                                        || Number(AudioEditorController.channels)
+                                        || 2))
+                                readonly property int maximumChannels: Math.max(2,
+                                    Math.min(8, Math.max(selectedChannels,
+                                        Number(AudioEditorController.channels) || 2)))
+                                readonly property var channelValues: {
+                                    const values = []
+                                    for (let channel = 1;
+                                            channel <= maximumChannels; ++channel) {
+                                        values.push(channel)
+                                    }
+                                    return values
+                                }
+                                model: channelValues.map(function(channel) {
+                                    return channel === 1 ? qsTr("单声道")
+                                        : channel === 2 ? qsTr("立体声")
+                                        : qsTr("%1 声道").arg(channel)
+                                })
+                                currentIndex: Math.max(0,
+                                    channelValues.indexOf(selectedChannels))
                                 onActivated: page.updateExportSetting(
-                                    "channels", currentIndex + 1)
+                                    "channels", channelValues[currentIndex])
+                                background: Rectangle {
+                                    color: !parent.enabled ? Theme.panel
+                                        : parent.pressed ? Theme.surfacePressed
+                                        : parent.hovered ? Theme.surfaceHover
+                                        : Theme.elevated
+                                    border.width: 1
+                                    border.color: parent.activeFocus ? Theme.focus
+                                        : Theme.borderStrong
+                                    radius: 5
+                                }
                             }
                             Label { text: qsTr("比特率"); color: Theme.textSecondary }
-                            ComboBox {
+                            ThemedComboBox {
                                 objectName: "editorExportBitRate"
+                                Keys.onSpacePressed: function(event) {
+                                    event.accepted = true
+                                }
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 32
+                                Layout.preferredHeight: 34
                                 readonly property string text: displayText
-                                model: ["128 kbps", "192 kbps", "256 kbps", "320 kbps"]
-                                currentIndex: page.persistedExportSettings.bitRate <= 128000
+                                readonly property bool codecUsesBitRate:
+                                    page.normalizedExportCodec() === "MP3"
+                                    || page.normalizedExportCodec() === "AAC"
+                                enabled: codecUsesBitRate
+                                model: codecUsesBitRate
+                                    ? ["128 kbps", "192 kbps", "256 kbps", "320 kbps"]
+                                    : [qsTr("— / 不适用")]
+                                currentIndex: !codecUsesBitRate ? 0
+                                    : page.persistedExportSettings.bitRate <= 128000
                                     ? 0 : page.persistedExportSettings.bitRate <= 192000
                                     ? 1 : page.persistedExportSettings.bitRate <= 256000
                                     ? 2 : 3
-                                onActivated: page.updateExportSetting(
-                                    "bitRate", [128000, 192000, 256000, 320000][currentIndex])
+                                onActivated: {
+                                    if (codecUsesBitRate)
+                                        page.updateExportSetting("bitRate",
+                                            [128000, 192000, 256000, 320000][currentIndex])
+                                }
+                                background: Rectangle {
+                                    color: !parent.enabled ? Theme.panel
+                                        : parent.pressed ? Theme.surfacePressed
+                                        : parent.hovered ? Theme.surfaceHover
+                                        : Theme.elevated
+                                    border.width: 1
+                                    border.color: parent.activeFocus ? Theme.focus
+                                        : Theme.borderStrong
+                                    radius: 5
+                                }
                             }
                             Label { text: qsTr("输出目录"); color: Theme.textSecondary }
                             TextField {
                                 objectName: "editorExportDirectory"
                                 Layout.columnSpan: 2
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 32
+                                Layout.preferredHeight: 34
                                 text: page.persistedExportSettings.outputDirectory || "--"
                                 readOnly: true
                                 selectByMouse: true
+                                color: Theme.textPrimary
+                                background: Rectangle {
+                                    color: Theme.elevated
+                                    border.width: 1
+                                    border.color: parent.activeFocus ? Theme.focus
+                                        : Theme.borderStrong
+                                    radius: 5
+                                }
                             }
                             Button {
                                 objectName: "editorExportBrowseButton"
-                                Layout.preferredHeight: 32
+                                focusPolicy: Qt.TabFocus
+                                Keys.onSpacePressed: function(event) {
+                                    event.accepted = true
+                                }
+                                Layout.preferredHeight: 34
                                 text: qsTr("浏览")
-                                onClicked: exportDirectoryDialog.open()
+                                onClicked: {
+                                    page.pendingExportAfterDirectory = false
+                                    exportDirectoryDialog.open()
+                                }
+                                contentItem: Text {
+                                    text: parent.text
+                                    color: parent.enabled ? Theme.textPrimary
+                                        : Theme.textDisabled
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                    font.pixelSize: 13
+                                }
+                                background: Rectangle {
+                                    color: !parent.enabled ? Theme.panel
+                                        : parent.down ? Theme.surfacePressed
+                                        : parent.hovered ? Theme.surfaceHover
+                                        : Theme.elevated
+                                    border.width: 1
+                                    border.color: parent.activeFocus ? Theme.focus
+                                        : Theme.borderStrong
+                                    radius: 5
+                                }
                             }
                         }
                         Item { Layout.fillHeight: true }
                         Button {
                             objectName: "editorExportButton"
+                            focusPolicy: Qt.TabFocus
+                            Keys.onSpacePressed: function(event) {
+                                event.accepted = true
+                            }
                             visible: !exportGroup.collapsed
                             Layout.fillWidth: true
                             Layout.preferredHeight: 58
@@ -1588,6 +1754,8 @@ Rectangle {
     Button {
         id: narrowPlaybackAccess
         objectName: "editorNarrowPlaybackAccess"
+        focusPolicy: Qt.TabFocus
+        Keys.onSpacePressed: function(event) { event.accepted = true }
         visible: page.narrowLayout
         z: 40
         x: page.width - inspectorAccess.width - width - 24
@@ -1608,6 +1776,8 @@ Rectangle {
     Button {
         id: inspectorAccess
         objectName: "editorInspectorAccess"
+        focusPolicy: Qt.TabFocus
+        Keys.onSpacePressed: function(event) { event.accepted = true }
         visible: page.narrowLayout
         z: 40
         x: page.width - width - 12

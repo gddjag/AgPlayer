@@ -114,6 +114,17 @@ ag_result agplayer::editor::load_editor_playback_stream(
         });
 }
 
+ag_result agplayer::editor::replace_editor_playback_stream(
+    ag_player* const player,
+    std::shared_ptr<agplayer::IAudioStreamSource> stream) noexcept
+{
+    return player == nullptr || !stream
+        ? AG_INVALID_ARGUMENT
+        : guard_result([&] {
+            return player->context.replace_stream(std::move(stream));
+        });
+}
+
 ag_result ag_player_create(ag_player** out_player)
 {
     const ag_player_config config{AG_AUDIO_BACKEND_DEFAULT, 0U};

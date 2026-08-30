@@ -34,7 +34,7 @@ bool EditorPlaybackAdapter::prepare(
         release();
         return false;
     }
-    const ag_result result = agplayer::editor::load_editor_playback_stream(
+    const ag_result result = agplayer::editor::replace_editor_playback_stream(
         player_, std::move(stream));
     if (result != AG_OK) {
         error = QStringLiteral("Unable to attach editor playback stream");

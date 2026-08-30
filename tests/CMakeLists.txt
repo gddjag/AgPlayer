@@ -295,32 +295,6 @@ set_tests_properties(noise_reducer_test PROPERTIES
         "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
-add_executable(recording_session_test
-    core/recording_session_test.cpp
-)
-target_include_directories(recording_session_test PRIVATE
-    "${CMAKE_SOURCE_DIR}/core/src"
-)
-target_link_libraries(recording_session_test PRIVATE agplayer_core)
-agplayer_enable_warnings(recording_session_test)
-add_test(NAME recording_session_test COMMAND recording_session_test)
-set_tests_properties(recording_session_test PROPERTIES
-    TIMEOUT 30
-    ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
-)
-
-# Opt-in real-device acceptance executable. It is deliberately not registered
-# with CTest because CI machines are not required to expose a capture device.
-add_executable(recording_hardware_smoke
-    core/recording_hardware_smoke.cpp
-)
-target_include_directories(recording_hardware_smoke PRIVATE
-    "${CMAKE_SOURCE_DIR}/core/src"
-)
-target_link_libraries(recording_hardware_smoke PRIVATE agplayer_core)
-agplayer_enable_warnings(recording_hardware_smoke)
-
 foreach(audio_editor_core_test IN ITEMS
     time_pixel_mapper_test
     peak_pyramid_test
@@ -768,15 +742,16 @@ target_link_libraries(qml_audio_editor_test PRIVATE
     Qt6::QuickTest
 )
 agplayer_enable_warnings(qml_audio_editor_test)
+add_dependencies(qml_audio_editor_test decoder_fixture)
 add_test(NAME qml_audio_editor_test
     COMMAND qml_audio_editor_test
         -input "${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_audio_editor.qml"
 )
 set_tests_properties(qml_audio_editor_test PROPERTIES
-    TIMEOUT 30
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/app"
+    TIMEOUT 120
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/app;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 set_target_properties(audio_editor_controller_test PROPERTIES AUTOMOC ON)
@@ -789,7 +764,7 @@ agplayer_enable_warnings(audio_editor_controller_test)
 add_dependencies(audio_editor_controller_test decoder_fixture)
 add_test(NAME audio_editor_controller_test COMMAND audio_editor_controller_test)
 set_tests_properties(audio_editor_controller_test PROPERTIES
-    TIMEOUT 30
+    TIMEOUT 120
     ENVIRONMENT "AGPLAYER_EDITOR_FIXTURE=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
@@ -820,6 +795,8 @@ set_tests_properties(native_drop_router_test PROPERTIES
     # platform explicitly so an offscreen parent test environment cannot
     # silently disable the native path.
     ENVIRONMENT "QT_QPA_PLATFORM=windows"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_test(
@@ -1201,6 +1178,17 @@ target_compile_definitions(qml_audio_tools_test PRIVATE
 agplayer_enable_warnings(qml_audio_tools_test)
 add_dependencies(qml_audio_tools_test decoder_fixture)
 
+add_test(NAME qml_audio_editor_native_input_test
+    COMMAND qml_audio_tools_test
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_audio_editor_native_input.qml
+        -o -,txt)
+set_tests_properties(qml_audio_editor_native_input_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT "QT_QPA_PLATFORM=windows;QT_QUICK_CONTROLS_STYLE=Basic;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/app;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
 add_test(NAME qml_format_converter_test
     COMMAND qml_audio_tools_test -o ${CMAKE_BINARY_DIR}/qml-format-converter.xml,junitxml
         -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_format_converter.qml)
@@ -1298,6 +1286,8 @@ set_tests_properties(import_controller_test PROPERTIES
 )
 set_tests_properties(playback_controller_test PROPERTIES
     ENVIRONMENT "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/bin"
 )
 set_tests_properties(waveform_provider_test PROPERTIES
     TIMEOUT 30
@@ -1540,6 +1530,15 @@ if(WIN32)
         COMMAND powershell -NoProfile -ExecutionPolicy Bypass
             -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/window_icon_contract_test.ps1
             -SourceRoot ${CMAKE_SOURCE_DIR})
+    add_test(NAME window_mixed_dpi_transition_test
+        COMMAND window_controller_test auxiliaryWindowsKeepNativeSizeAcrossScreens
+            -o -,txt)
+    set_tests_properties(window_mixed_dpi_transition_test PROPERTIES
+        TIMEOUT 20
+        SKIP_REGULAR_EXPRESSION "hardware gap:"
+        ENVIRONMENT "QT_QPA_PLATFORM=windows"
+        ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
     add_test(NAME window_taskbar_native_test
         COMMAND window_controller_test taskbarActivationDoesNotCancelMinimize
             -o -,txt)

@@ -1,4 +1,5 @@
 #include "audio_editor_waveform_item.hpp"
+#include "waveform_render_limits.hpp"
 
 #include <QSGFlatColorMaterial>
 #include <QSGGeometry>
@@ -45,10 +46,36 @@ std::vector<float> resampleChannel(const std::vector<float>& input,
 
     if (sourceBuckets <= targetBuckets) {
         for (std::size_t target = 0; target < targetBuckets; ++target) {
-            const std::size_t source = std::min(
-                sourceBuckets - 1U, target * sourceBuckets / targetBuckets);
-            result[target * 2U] = input[source * 2U];
-            result[target * 2U + 1U] = input[source * 2U + 1U];
+            if (sourceBuckets == 1U) {
+                result[target * 2U] = input[0];
+                result[target * 2U + 1U] = input[1];
+                continue;
+            }
+            const double position = static_cast<double>(target)
+                * static_cast<double>(sourceBuckets - 1U)
+                / static_cast<double>(targetBuckets - 1U);
+            const std::size_t left = static_cast<std::size_t>(
+                std::floor(position));
+            const std::size_t right = std::min(sourceBuckets - 1U, left + 1U);
+            const float leftMinimum = input[left * 2U];
+            const float leftMaximum = input[left * 2U + 1U];
+            const float rightMinimum = input[right * 2U];
+            const float rightMaximum = input[right * 2U + 1U];
+            if (left == right && std::isfinite(leftMinimum)
+                && std::isfinite(leftMaximum)) {
+                result[target * 2U] = leftMinimum;
+                result[target * 2U + 1U] = leftMaximum;
+                continue;
+            }
+            if (!std::isfinite(leftMinimum) || !std::isfinite(leftMaximum)
+                || !std::isfinite(rightMinimum) || !std::isfinite(rightMaximum)) {
+                continue;
+            }
+            const float fraction = static_cast<float>(position - left);
+            result[target * 2U] = leftMinimum
+                + (rightMinimum - leftMinimum) * fraction;
+            result[target * 2U + 1U] = leftMaximum
+                + (rightMaximum - leftMaximum) * fraction;
         }
         return result;
     }
@@ -221,8 +248,9 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
         delete oldNode;
         return nullptr;
     }
-    const qreal devicePixelRatio = window() != nullptr
-        ? window()->effectiveDevicePixelRatio() : 1.0;
+    const qreal devicePixelRatio = std::clamp(window() != nullptr
+        ? window()->effectiveDevicePixelRatio() : 1.0, 1.0,
+        kMaxWaveformDevicePixelRatio);
     const qreal densityScale = std::min<qreal>(2.0, density_) / 2.0;
     const std::size_t maximum_buckets = std::max<std::size_t>(1U,
         static_cast<std::size_t>(std::ceil(
@@ -255,6 +283,20 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
                 && std::isfinite(channel[previous + 1U])
                 && std::isfinite(channel[current])
                 && std::isfinite(channel[current + 1U])) {
+                ++segment_count;
+            }
+        }
+        for (std::size_t index = 0; index < buckets; ++index) {
+            const std::size_t current = index * 2U;
+            const bool valid = std::isfinite(channel[current])
+                && std::isfinite(channel[current + 1U]);
+            const bool previousValid = index > 0U
+                && std::isfinite(channel[current - 2U])
+                && std::isfinite(channel[current - 1U]);
+            const bool nextValid = index + 1U < buckets
+                && std::isfinite(channel[current + 2U])
+                && std::isfinite(channel[current + 3U]);
+            if (valid && !previousValid && !nextValid && buckets > 1U) {
                 ++segment_count;
             }
         }
@@ -344,6 +386,30 @@ QSGNode* AudioEditorWaveformItem::updatePaintNode(
                     right,
                     center + peaks[current] * half_height,
                     center + peaks[current + 1U] * half_height);
+                appendQuad(left, centerTop, centerBottom,
+                           right, centerTop, centerBottom);
+            }
+            for (std::size_t index = 0; index < renderedPairCount; ++index) {
+                const std::size_t current = index * 2U;
+                const bool valid = std::isfinite(peaks[current])
+                    && std::isfinite(peaks[current + 1U]);
+                const bool previousValid = index > 0U
+                    && std::isfinite(peaks[current - 2U])
+                    && std::isfinite(peaks[current - 1U]);
+                const bool nextValid = index + 1U < renderedPairCount
+                    && std::isfinite(peaks[current + 2U])
+                    && std::isfinite(peaks[current + 3U]);
+                if (!valid || previousValid || nextValid || renderedPairCount == 1U) {
+                    continue;
+                }
+                const qreal middle = alignedX(static_cast<qreal>(index) * width()
+                    / static_cast<qreal>(renderedPairCount - 1U));
+                const qreal left = std::max<qreal>(0.0, middle - 0.5);
+                const qreal right = std::min(width(), middle + 0.5);
+                appendQuad(left, center + peaks[current] * half_height,
+                           center + peaks[current + 1U] * half_height,
+                           right, center + peaks[current] * half_height,
+                           center + peaks[current + 1U] * half_height);
                 appendQuad(left, centerTop, centerBottom,
                            right, centerTop, centerBottom);
             }

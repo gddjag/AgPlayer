@@ -390,6 +390,47 @@ private slots:
         QVERIFY(!value.canUndo());
     }
 
+    void setEventFadeCurveIsUndoableAndRejectsNoOpsOrInvalidCurves()
+    {
+        auto value = document();
+        const auto initialState = value.historyStateId();
+
+        QVERIFY(value.setEventFadeCurve(1, true, FadeCurve::Exponential));
+        QCOMPARE(value.timelineSnapshot().events.front().fadeInCurve,
+                 FadeCurve::Exponential);
+        QCOMPARE(value.historyStateId(), initialState + 1);
+
+        const auto changed = value.timelineSnapshot();
+        const auto changedState = value.historyStateId();
+        QVERIFY(!value.setEventFadeCurve(1, true, FadeCurve::Exponential));
+        QVERIFY(!value.setEventFadeCurve(99, true, FadeCurve::Linear));
+        QVERIFY(!value.setEventFadeCurve(1, false,
+            static_cast<FadeCurve>(99)));
+        QCOMPARE(value.timelineSnapshot().revision, changed.revision);
+        QCOMPARE(value.historyStateId(), changedState);
+
+        QVERIFY(value.undo());
+        QCOMPARE(value.timelineSnapshot().events.front().fadeInCurve,
+                 FadeCurve::Smooth);
+        QVERIFY(value.redo());
+        QCOMPARE(value.timelineSnapshot().events.front().fadeInCurve,
+                 FadeCurve::Exponential);
+    }
+
+    void mergeRejectsEventsWithDifferentFadeCurves()
+    {
+        const auto source = std::make_shared<const AudioSource>(AudioSource{
+            "fixture.wav", 48'000, 2, 1'000});
+        AudioEvent left{1, source, 0, 500, 0};
+        AudioEvent right{2, source, 500, 1'000, 500};
+        right.fadeInCurve = FadeCurve::Linear;
+        auto value = AudioDocument::fromEvents({left, right});
+
+        QVERIFY(!value.mergeEvents(1, 2));
+        QCOMPARE(value.timelineSnapshot().events.size(), std::size_t{2});
+        QVERIFY(!value.canUndo());
+    }
+
     void addEnvelopePointKeepsOrderingAndEachPointIsOneUndoStep()
     {
         auto value = document();
@@ -417,6 +458,19 @@ private slots:
         const auto afterUndo = value.timelineSnapshot().events.front().envelope;
         QCOMPARE(afterUndo.size(), std::size_t{1});
         QCOMPARE(afterUndo.front().offset, SampleFrame{700});
+    }
+
+    void addEnvelopePointBoundsGainToTheEditorRange()
+    {
+        auto value = document();
+
+        QVERIFY(value.addEnvelopePoint(1, 100, -1.0F));
+        QVERIFY(value.addEnvelopePoint(1, 200, 3.0F));
+
+        const auto points = value.timelineSnapshot().events.front().envelope;
+        QCOMPARE(points.size(), std::size_t{2});
+        QCOMPARE(points[0].gain, 0.0F);
+        QCOMPARE(points[1].gain, 2.0F);
     }
 
     void eventGainIsBoundedTransactionalAndUndoable()
@@ -601,6 +655,150 @@ private slots:
             QVERIFY(std::abs(envelopeGainAt(trimmed, offset)
                 - envelopeGainAt(event, offset + 5)) < 0.0001F);
         }
+    }
+
+    void clearTimelineIsUndoableAndRetainsDocumentShell()
+    {
+        auto value = document();
+        const auto original = value.timelineSnapshot();
+        QVERIFY(value.setSelection({100, 200}));
+
+        QVERIFY(value.clearTimeline());
+        QCOMPARE(value.totalFrames(), SampleFrame{0});
+        QVERIFY(value.timelineSnapshot().events.empty());
+        QVERIFY(!value.selection().has_value());
+
+        QVERIFY(value.undo());
+        QCOMPARE(value.timelineSnapshot().events.size(), original.events.size());
+        QCOMPARE(value.totalFrames(), SampleFrame{1'000});
+    }
+
+    void sharedSplitBoundaryReframesBothClipsInOneUndoStep()
+    {
+        const auto source = std::make_shared<const AudioSource>(AudioSource{
+            "fixture.wav", 48'000, 2, 1'000});
+        AudioEvent event{1, source, 0, 1'000, 0};
+        event.envelope = {{100, 0.5F}, {500, 1.5F}, {900, 0.25F}};
+        auto value = AudioDocument::fromEvents({event});
+        QVERIFY(value.splitEventAt(1, 400));
+        const auto historyAfterSplit = value.historyStateId();
+
+        QVERIFY(value.trimSharedBoundary(1, 2, 250));
+        const auto movedLeft = value.timelineSnapshot().events[0];
+        const auto movedRight = value.timelineSnapshot().events[1];
+        QCOMPARE(movedLeft.sourceStart, SampleFrame{0});
+        QCOMPARE(movedLeft.sourceEnd, SampleFrame{250});
+        QCOMPARE(movedRight.sourceStart, SampleFrame{250});
+        QCOMPARE(movedRight.sourceEnd, SampleFrame{1'000});
+        QCOMPARE(movedLeft.timelineStart + audibleFrames(movedLeft),
+                 movedRight.timelineStart);
+        QVERIFY(isValid(movedLeft));
+        QVERIFY(isValid(movedRight));
+        QCOMPARE(value.historyStateId(), historyAfterSplit + 1);
+
+        QVERIFY(value.undo());
+        const auto restored = value.timelineSnapshot();
+        QCOMPARE(restored.events[0].sourceEnd, SampleFrame{400});
+        QCOMPARE(restored.events[1].sourceStart, SampleFrame{400});
+        QVERIFY(value.redo());
+        QVERIFY(value.trimSharedBoundary(1, 2, 640));
+        const auto expanded = value.timelineSnapshot();
+        QCOMPARE(expanded.events[0].sourceEnd, SampleFrame{640});
+        QCOMPARE(expanded.events[1].sourceStart, SampleFrame{640});
+        QCOMPARE(expanded.events[0].timelineStart
+                     + audibleFrames(expanded.events[0]),
+                 expanded.events[1].timelineStart);
+    }
+
+    void sharedBoundaryPreservesEnvelopeAcrossBothDirections()
+    {
+        const auto source = std::make_shared<const AudioSource>(AudioSource{
+            "fixture.wav", 48'000, 2, 1'000});
+        AudioEvent original{1, source, 0, 1'000, 0};
+        original.envelope = {{100, 0.2F}, {400, 0.8F},
+                             {700, 1.6F}, {900, 0.4F}};
+        const auto expectedGain = [&original](const SampleFrame sourceFrame) {
+            return envelopeGainAt(original, sourceFrame);
+        };
+        const auto gainAtSource = [](const AudioEvent& event,
+                                     const SampleFrame sourceFrame) {
+            return envelopeGainAt(event, sourceFrame - event.sourceStart);
+        };
+        const auto verifyGain = [&](const AudioEvent& event,
+                                    const SampleFrame sourceFrame) {
+            QVERIFY(std::abs(gainAtSource(event, sourceFrame)
+                             - expectedGain(sourceFrame)) < 0.0001F);
+        };
+
+        auto value = AudioDocument::fromEvents({original});
+        QVERIFY(value.splitEventAt(1, 500));
+        QVERIFY(value.trimSharedBoundary(1, 2, 250));
+        auto events = value.timelineSnapshot().events;
+        QVERIFY(events.size() == 2);
+        verifyGain(events[0], 100);
+        verifyGain(events[0], 249);
+        verifyGain(events[1], 250);
+        verifyGain(events[1], 400);
+        verifyGain(events[1], 700);
+        verifyGain(events[1], 900);
+
+        QVERIFY(value.trimSharedBoundary(1, 2, 750));
+        events = value.timelineSnapshot().events;
+        verifyGain(events[0], 100);
+        verifyGain(events[0], 400);
+        verifyGain(events[0], 700);
+        verifyGain(events[0], 749);
+        verifyGain(events[1], 750);
+        verifyGain(events[1], 900);
+    }
+
+    void sharedBoundaryRejectsIncompatiblePairs()
+    {
+        const auto first = std::make_shared<const AudioSource>(AudioSource{
+            "first.wav", 48'000, 2, 1'000});
+        const auto second = std::make_shared<const AudioSource>(AudioSource{
+            "second.wav", 48'000, 2, 1'000});
+        const AudioEvent left{1, first, 0, 400, 0};
+        const AudioEvent right{2, first, 400, 1'000, 400};
+
+        auto value = AudioDocument::fromEvents({left, right});
+        QVERIFY(!value.trimSharedBoundary(1, 2, 0));
+        QVERIFY(!value.trimSharedBoundary(1, 2, 1'000));
+
+        auto differentSource = right;
+        differentSource.source = second;
+        value = AudioDocument::fromEvents({left, differentSource});
+        QVERIFY(!value.trimSharedBoundary(1, 2, 500));
+
+        auto gapped = right;
+        gapped.timelineStart = 401;
+        value = AudioDocument::fromEvents({left, gapped});
+        QVERIFY(!value.trimSharedBoundary(1, 2, 500));
+
+        auto overlapping = right;
+        overlapping.timelineStart = 399;
+        value = AudioDocument::fromEvents({left, overlapping});
+        QVERIFY(!value.trimSharedBoundary(1, 2, 500));
+
+        auto differentGain = right;
+        differentGain.gain = 0.5F;
+        value = AudioDocument::fromEvents({left, differentGain});
+        QVERIFY(!value.trimSharedBoundary(1, 2, 500));
+
+        auto differentSpeed = right;
+        differentSpeed.speedRatio = 1.25;
+        value = AudioDocument::fromEvents({left, differentSpeed});
+        QVERIFY(!value.trimSharedBoundary(1, 2, 500));
+
+        auto differentPitch = right;
+        differentPitch.pitchSemitone = 2;
+        value = AudioDocument::fromEvents({left, differentPitch});
+        QVERIFY(!value.trimSharedBoundary(1, 2, 500));
+
+        auto differentMute = right;
+        differentMute.mute = true;
+        value = AudioDocument::fromEvents({left, differentMute});
+        QVERIFY(!value.trimSharedBoundary(1, 2, 500));
     }
 };
 

@@ -25,8 +25,9 @@ set(configure_arguments
         "-DSoundTouch_DIR=${SOUNDTOUCH_DIR}"
         -DVCPKG_MANIFEST_MODE=OFF
         -DVCPKG_TARGET_TRIPLET=x64-windows
-        -DAG_ENABLE_NATIVE_RECORDING=OFF
 )
+
+list(APPEND configure_arguments -DAG_ENABLE_NATIVE_RECORDING=ON)
 
 if(DEFINED VCVARS_BAT AND NOT "${VCVARS_BAT}" STREQUAL "")
     if(NOT EXISTS "${VCVARS_BAT}")
@@ -65,6 +66,42 @@ if(NOT configure_result EQUAL 0)
         "stderr:\n${configure_stderr}")
 endif()
 
+list(POP_BACK configure_arguments legacy_recording_option)
+
+if(DEFINED VCVARS_BAT AND NOT "${VCVARS_BAT}" STREQUAL "")
+    set(configure_command "\"${CMAKE_COMMAND}\"")
+    foreach(argument IN LISTS configure_arguments)
+        string(REPLACE "\"" "\\\"" escaped_argument "${argument}")
+        string(APPEND configure_command " \"${escaped_argument}\"")
+    endforeach()
+    set(configure_batch "${TEST_BINARY_DIR}-configure.cmd")
+    file(WRITE "${configure_batch}"
+        "@echo off\r\n"
+        "call \"${VCVARS_BAT}\" >nul\r\n"
+        "if errorlevel 1 exit /b %errorlevel%\r\n"
+        "${configure_command}\r\n")
+    execute_process(
+        COMMAND cmd.exe /D /C "${configure_batch}"
+        RESULT_VARIABLE configure_result
+        OUTPUT_VARIABLE configure_stdout
+        ERROR_VARIABLE configure_stderr
+    )
+else()
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}" ${configure_arguments}
+        RESULT_VARIABLE configure_result
+        OUTPUT_VARIABLE configure_stdout
+        ERROR_VARIABLE configure_stderr
+    )
+endif()
+
+if(NOT configure_result EQUAL 0)
+    message(FATAL_ERROR
+        "Legacy-cache reconfigure failed (${configure_result})\n"
+        "stdout:\n${configure_stdout}\n"
+        "stderr:\n${configure_stderr}")
+endif()
+
 file(READ "${TEST_BINARY_DIR}/CMakeCache.txt" cache)
 
 foreach(enabled_option IN ITEMS AG_ENABLE_AUDIO_EDITOR AG_ENABLE_TIME_PITCH)
@@ -74,7 +111,7 @@ foreach(enabled_option IN ITEMS AG_ENABLE_AUDIO_EDITOR AG_ENABLE_TIME_PITCH)
     endif()
 endforeach()
 
-if(NOT cache MATCHES "AG_ENABLE_NATIVE_RECORDING:BOOL=OFF")
+if(cache MATCHES "AG_ENABLE_NATIVE_RECORDING")
     message(FATAL_ERROR
-        "AG_ENABLE_NATIVE_RECORDING=OFF must survive configuration")
+        "AG_ENABLE_NATIVE_RECORDING must not remain in the configured project")
 endif()

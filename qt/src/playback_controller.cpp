@@ -182,7 +182,15 @@ bool PlaybackController::acquireEditorOutput() noexcept
         saved.scopeSize = activeScopeSize_ > 0
             ? activeScopeSize_ : queueTrackIds_.size();
         saved.allowFallback = activeScopeAllowsFallback_;
-        if (ag_player_stop(player_) != AG_OK) return false;
+        // A fresh player and an already-stopped loaded player both report
+        // AG_STOPPED.  Neither needs a stop command before the editor stream
+        // replaces its source; an unloaded core rejects stop as invalid.
+        // Active/error states still take the real stop path and propagate any
+        // failure instead of claiming the output was acquired.
+        if (snapshot.state != AG_STOPPED
+            && ag_player_stop(player_) != AG_OK) {
+            return false;
+        }
         editorSessionSnapshot_ = std::move(saved);
         editorOutputOwned_ = true;
         if (state_ != Stopped) {

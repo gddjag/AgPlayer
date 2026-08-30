@@ -949,7 +949,7 @@ void AudioToolsEndToEndTest::formatConverterCreateActionRejectsPublishRace()
     QVERIFY(!QFileInfo::exists(target));
 
     bool foreignFileCreated = false;
-    connect(&converter, &FormatConverter::progressChanged, this, [&] {
+    connect(&converter, &FormatConverter::progressChanged, &converter, [&] {
         if (foreignFileCreated || converter.progress() <= 0.0
             || converter.progress() >= 1.0) {
             return;

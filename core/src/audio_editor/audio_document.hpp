@@ -30,6 +30,12 @@ struct Marker final {
 [[nodiscard]] bool operator==(const Marker& left,
                               const Marker& right) noexcept;
 
+// Rebuilds two contiguous views of one source around a new shared boundary.
+// Both event envelopes are mapped onto their source coordinate before being
+// reframed, so extending either side retains automation from the other side.
+[[nodiscard]] bool reframeSharedBoundary(AudioEvent& left, AudioEvent& right,
+                                         SampleFrame sourceBoundary);
+
 class AudioDocument final {
 public:
     [[nodiscard]] static AudioDocument fromSource(AudioSource source);
@@ -43,7 +49,10 @@ public:
     bool moveEvent(EventId id, SampleFrame timelineStart);
     bool trimEvent(EventId id, SampleFrame sourceStart, SampleFrame sourceEnd,
                    SampleFrame timelineStart);
+    bool trimSharedBoundary(EventId leftId, EventId rightId,
+                            SampleFrame sourceBoundary);
     bool splitEventAt(EventId id, SampleFrame frame);
+    bool clearTimeline();
     bool deleteSelection();
     bool cropToSelection();
     bool silenceSelection();
@@ -51,6 +60,7 @@ public:
     bool fadeOut();
     bool setEventFadeIn(EventId id, SampleFrame frames);
     bool setEventFadeOut(EventId id, SampleFrame frames);
+    bool setEventFadeCurve(EventId id, bool fadeIn, FadeCurve curve);
     bool setEventGain(EventId id, float gain);
     bool addEnvelopePoint(EventId id, SampleFrame offset, float gain);
     bool moveEnvelopePoint(EventId id, SampleFrame originalOffset,

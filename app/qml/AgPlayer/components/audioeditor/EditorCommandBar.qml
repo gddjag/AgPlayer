@@ -32,6 +32,8 @@ Rectangle {
         property bool mirrorIcon: false
         property real referenceWidth: 0
         objectName: "editorCommand_" + commandName
+        focusPolicy: Qt.NoFocus
+        Keys.onSpacePressed: function(event) { event.accepted = true }
         enabled: commandEnabled
         Layout.fillWidth: false
         Layout.preferredWidth: referenceWidth * bar.referenceScale
@@ -109,7 +111,7 @@ Rectangle {
             commandName: "split"
             label: qsTr("分割")
             iconName: "scissors-cut-line"
-            shortcutText: "S / Ctrl+2"
+            shortcutText: "S / Ctrl+B"
             referenceWidth: 80
             selected: AudioEditorController.activeTool === "scissors"
             commandEnabled: AudioEditorController.hasDocument
@@ -199,6 +201,7 @@ Rectangle {
             shortcutText: "Ctrl+N"
             referenceWidth: 73
             commandEnabled: AudioEditorController.hasDocument
+                && AudioEditorController.totalFrames > 0
                 && !AudioEditorController.busy
             onClicked: AudioEditorController.reduceNoise()
         }
@@ -209,8 +212,9 @@ Rectangle {
             shortcutText: "Ctrl+Backspace"
             referenceWidth: 82
             commandEnabled: AudioEditorController.hasDocument
+                && AudioEditorController.totalFrames > 0
                 && !AudioEditorController.busy
-            onClicked: AudioEditorController.clearDocument()
+            onClicked: AudioEditorController.clearTimeline()
         }
     }
 }

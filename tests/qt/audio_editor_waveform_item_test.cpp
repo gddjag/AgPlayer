@@ -231,6 +231,60 @@ private slots:
         delete node;
     }
 
+    void devicePixelRatioDoesNotExceedSharedWaveformBudget()
+    {
+        QQuickWindow window;
+        QImage image(80, 320, QImage::Format_RGBA8888_Premultiplied);
+        QQuickRenderTarget renderTarget = QQuickRenderTarget::fromPaintDevice(
+            &image);
+        renderTarget.setDevicePixelRatio(8.0);
+        window.setRenderTarget(renderTarget);
+
+        TestableAudioEditorWaveformItem item;
+        item.setParentItem(window.contentItem());
+        item.setWidth(10.0);
+        item.setHeight(80.0);
+        QVariantList dense;
+        for (int index = 0; index < 100; ++index) {
+            dense.append(-0.75);
+            dense.append(0.75);
+        }
+        item.setChannelPeaks({QVariant(dense), QVariant(dense)});
+
+        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+        QVERIFY(node != nullptr);
+        QCOMPARE(window.effectiveDevicePixelRatio(), 8.0);
+        QCOMPARE(item.generatedPointCount(), 160);
+        delete node;
+    }
+
+    void sparseFiniteBucketsInterpolateWithoutCrossingBlankBuckets()
+    {
+        TestableAudioEditorWaveformItem item;
+        item.setWidth(5.0);
+        item.setHeight(100.0);
+        item.setChannelPeaks({QVariant(QVariantList{
+            -0.2, 0.2, -0.8, 0.8, -0.4, 0.4})});
+
+        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+        QVERIFY(node != nullptr);
+        const auto* geometryNode = static_cast<QSGGeometryNode*>(node);
+        const auto* vertices = geometryNode->geometry()->vertexDataAsPoint2D();
+        // The second rendered bucket is halfway between the first two finite
+        // buckets.  Geometry is half-pixel aligned on this five-pixel item.
+        // Nearest-neighbour replication leaves it at -0.2 instead of -0.5.
+        bool sawInterpolatedTop = false;
+        for (int index = 0; index < geometryNode->geometry()->vertexCount(); ++index) {
+            if (std::abs(vertices[index].x - 1.5F) < 0.001F
+                && std::abs(vertices[index].y - 27.0F) < 0.6F) {
+                sawInterpolatedTop = true;
+            }
+        }
+        QVERIFY2(sawInterpolatedTop,
+                 "finite sparse buckets must interpolate rather than stair-step");
+        delete node;
+    }
+
     void exposesSharedPlayerStyleInputs()
     {
         AudioEditorWaveformItem item;

@@ -20,6 +20,7 @@
 
 using agplayer::editor::AudioDocument;
 using agplayer::editor::AudioFileAnalyzer;
+using agplayer::editor::FadeCurve;
 using agplayer::editor::Selection;
 
 class SelectionDragControllerTest final : public QObject {
@@ -300,6 +301,65 @@ private slots:
         QVERIFY(gainFile.open(QIODevice::ReadOnly));
         QVERIFY(fadeFile.open(QIODevice::ReadOnly));
         QVERIFY(gainFile.readAll() != fadeFile.readAll());
+    }
+
+    void cacheKeyIncludesFadeInAndFadeOutCurves()
+    {
+        const QByteArray fixture = qgetenv("AGPLAYER_EDITOR_FIXTURE");
+        QVERIFY2(!fixture.isEmpty(), "AGPLAYER_EDITOR_FIXTURE is required");
+        const auto analysis = AudioFileAnalyzer::analyze(
+            std::filesystem::u8path(fixture.constData()), 256);
+        QVERIFY2(analysis.success, analysis.message.c_str());
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+
+        HandoffRequest request;
+        request.snapshot = AudioDocument::fromSource(analysis.source)
+            .timelineSnapshot();
+        auto& event = request.snapshot.events.front();
+        const qint64 frames = std::min<qint64>(
+            analysis.source.total_frames, 4'096);
+        event.sourceEnd = event.sourceStart + frames;
+        event.fadeIn = frames / 4;
+        event.fadeOut = frames / 4;
+        event.fadeInCurve = FadeCurve::Linear;
+        event.fadeOutCurve = FadeCurve::Linear;
+        request.snapshot.totalFrames = frames;
+        request.selection = Selection{0, frames};
+        request.sourceIdentity = QString::fromUtf8(fixture)
+            + QStringLiteral(":")
+            + QString::number(QFileInfo(QString::fromUtf8(fixture)).size());
+        request.timelineRevision = request.snapshot.revision;
+        request.renderState = {
+            static_cast<int>(analysis.source.sample_rate),
+            static_cast<int>(analysis.source.channels), 1.0F, false};
+        HandoffAssetManager manager(directory.path());
+
+        const auto linear = manager.prepare(request);
+        QVERIFY2(linear.success, qPrintable(linear.error));
+
+        request.snapshot.events.front().fadeInCurve = FadeCurve::Exponential;
+        const auto exponentialIn = manager.prepare(request);
+        QVERIFY2(exponentialIn.success, qPrintable(exponentialIn.error));
+        QVERIFY2(exponentialIn.path != linear.path,
+                 "fade-in curve collided in the handoff cache");
+
+        request.snapshot.events.front().fadeInCurve = FadeCurve::Linear;
+        request.snapshot.events.front().fadeOutCurve = FadeCurve::Exponential;
+        const auto exponentialOut = manager.prepare(request);
+        QVERIFY2(exponentialOut.success, qPrintable(exponentialOut.error));
+        QVERIFY2(exponentialOut.path != linear.path,
+                 "fade-out curve collided in the handoff cache");
+
+        QFile linearFile(linear.path);
+        QFile exponentialInFile(exponentialIn.path);
+        QFile exponentialOutFile(exponentialOut.path);
+        QVERIFY(linearFile.open(QIODevice::ReadOnly));
+        QVERIFY(exponentialInFile.open(QIODevice::ReadOnly));
+        QVERIFY(exponentialOutFile.open(QIODevice::ReadOnly));
+        const QByteArray linearBytes = linearFile.readAll();
+        QVERIFY(linearBytes != exponentialInFile.readAll());
+        QVERIFY(linearBytes != exponentialOutFile.readAll());
     }
 
     void rebeginWhileOldPrepareFinishesKeepsNewestGesture()

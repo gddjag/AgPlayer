@@ -67,6 +67,8 @@ void compareEvent(const AudioEvent& actual, const AudioEvent& expected)
     QCOMPARE(actual.gain, expected.gain);
     QCOMPARE(actual.fadeIn, expected.fadeIn);
     QCOMPARE(actual.fadeOut, expected.fadeOut);
+    QCOMPARE(actual.fadeInCurve, expected.fadeInCurve);
+    QCOMPARE(actual.fadeOutCurve, expected.fadeOutCurve);
     QCOMPARE(actual.speedRatio, expected.speedRatio);
     QCOMPARE(actual.pitchSemitone, expected.pitchSemitone);
     QCOMPARE(actual.mute, expected.mute);
@@ -87,6 +89,7 @@ class ProjectDocumentTest final : public QObject {
         QString sourcePath;
         AudioDocument document;
         ProjectExportSettings exportSettings;
+        ProjectEditorSettings editorSettings;
     };
 
     static QString fixturePath()
@@ -114,12 +117,16 @@ class ProjectDocumentTest final : public QObject {
         first.gain = 0.75F;
         first.fadeIn = 320;
         first.fadeOut = 640;
+        first.fadeInCurve = FadeCurve::Exponential;
+        first.fadeOutCurve = FadeCurve::Smooth;
         first.mute = true;
         first.envelope = {{100, 0.5F}, {10'000, 0.9F}};
         AudioEvent second{9, shared, 20'000, 30'000, 30'000};
         second.gain = 1.1F;
         second.fadeIn = 120;
         second.fadeOut = 240;
+        second.fadeInCurve = FadeCurve::Linear;
+        second.fadeOutCurve = FadeCurve::Exponential;
         second.envelope = {{500, 0.8F}};
         AudioDocument document = AudioDocument::fromEvents({first, second});
         document.addMarker({u8"前奏", 1'000});
@@ -136,8 +143,17 @@ class ProjectDocumentTest final : public QObject {
         settings.variableBitRate = true;
         settings.quality = 73;
         settings.outputDirectory = temporary.filePath(QStringLiteral("导出目录"));
+        ProjectEditorSettings editor;
+        editor.originalBpm = 120.0;
+        editor.targetBpm = 150.0;
+        editor.speedPercent = 125.0;
+        editor.keepPitch = false;
+        editor.formantPreservation = true;
+        editor.pitchCents = 250;
+        editor.trackSolo = true;
+        editor.trackGainDb = -3.5;
         return {temporary.filePath(QStringLiteral("工程 测试.agproj")),
-                sourcePath, std::move(document), settings};
+                sourcePath, std::move(document), settings, editor};
     }
 
     static ProjectSaveRequest request(const FixtureProject& project)
@@ -148,6 +164,7 @@ class ProjectDocumentTest final : public QObject {
         value.visibleStartFrame = 100;
         value.visibleEndFrame = 8'000;
         value.exportSettings = project.exportSettings;
+        value.editorSettings = project.editorSettings;
         return value;
     }
 
@@ -185,7 +202,12 @@ private slots:
         }
 
         const QJsonObject root = QJsonDocument::fromJson(json).object();
-        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 1);
+        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 2);
+        const QJsonArray events = root.value(QStringLiteral("events")).toArray();
+        QCOMPARE(events[0].toObject().value(QStringLiteral("fadeInCurve")).toString(),
+                 QStringLiteral("exponential"));
+        QCOMPARE(events[0].toObject().value(QStringLiteral("fadeOutCurve")).toString(),
+                 QStringLiteral("smooth"));
         QCOMPARE(root.value(QStringLiteral("exportSettings")).toObject()
                      .value(QStringLiteral("bitDepth")).toInt(), 24);
         const QJsonArray sources = root.value(QStringLiteral("sources")).toArray();
@@ -213,6 +235,24 @@ private slots:
         QCOMPARE(loaded.exportSettings.quality, project.exportSettings.quality);
         QCOMPARE(loaded.exportSettings.outputDirectory,
                  project.exportSettings.outputDirectory);
+        QCOMPARE(loaded.editorSettings.originalBpm,
+                 project.editorSettings.originalBpm);
+        QCOMPARE(loaded.editorSettings.targetBpm,
+                 project.editorSettings.targetBpm);
+        QCOMPARE(loaded.editorSettings.speedPercent,
+                 project.editorSettings.speedPercent);
+        QCOMPARE(loaded.editorSettings.keepPitch,
+                 project.editorSettings.keepPitch);
+        QCOMPARE(loaded.editorSettings.formantPreservation,
+                 project.editorSettings.formantPreservation);
+        QCOMPARE(loaded.editorSettings.pitchCents,
+                 project.editorSettings.pitchCents);
+        QCOMPARE(loaded.editorSettings.trackMuted,
+                 project.editorSettings.trackMuted);
+        QCOMPARE(loaded.editorSettings.trackSolo,
+                 project.editorSettings.trackSolo);
+        QCOMPARE(loaded.editorSettings.trackGainDb,
+                 project.editorSettings.trackGainDb);
 
         const TimelineSnapshot expected = project.document.timelineSnapshot();
         const TimelineSnapshot actual = loaded.document->timelineSnapshot();
@@ -234,14 +274,47 @@ private slots:
         auto project = makeProject(temporary);
         QVERIFY(ProjectDocument::save(project.projectPath, request(project)).ok());
         QJsonObject root = readObject(project.projectPath);
+        root.insert(QStringLiteral("schemaVersion"), 1);
         QJsonObject settings = root.value(QStringLiteral("exportSettings")).toObject();
         settings.remove(QStringLiteral("bitDepth"));
         root.insert(QStringLiteral("exportSettings"), settings);
+        QJsonArray events = root.value(QStringLiteral("events")).toArray();
+        for (qsizetype index = 0; index < events.size(); ++index) {
+            QJsonObject event = events[index].toObject();
+            event.remove(QStringLiteral("fadeInCurve"));
+            event.remove(QStringLiteral("fadeOutCurve"));
+            events[index] = event;
+        }
+        root.insert(QStringLiteral("events"), events);
         QVERIFY(writeObject(project.projectPath, root));
 
         const ProjectLoadResult loaded = ProjectDocument::load(project.projectPath);
         QVERIFY2(loaded.ok(), qPrintable(loaded.message));
         QCOMPARE(loaded.exportSettings.bitDepth, 24);
+        for (const AudioEvent& event : loaded.document->timelineSnapshot().events) {
+            QCOMPARE(event.fadeInCurve, FadeCurve::Linear);
+            QCOMPARE(event.fadeOutCurve, FadeCurve::Linear);
+        }
+    }
+
+    void rejectsUnknownSchemaTwoFadeCurve()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        auto project = makeProject(temporary);
+        QVERIFY(ProjectDocument::save(project.projectPath, request(project)).ok());
+        QJsonObject root = readObject(project.projectPath);
+        QJsonArray events = root.value(QStringLiteral("events")).toArray();
+        QJsonObject event = events[0].toObject();
+        event.insert(QStringLiteral("fadeInCurve"), QStringLiteral("bezier"));
+        events[0] = event;
+        root.insert(QStringLiteral("events"), events);
+        QVERIFY(writeObject(project.projectPath, root));
+
+        const ProjectLoadResult loaded = ProjectDocument::load(project.projectPath);
+
+        QVERIFY(!loaded.ok());
+        QCOMPARE(loaded.message, QStringLiteral("invalid event metadata"));
     }
 
     void rejectsUnsupportedPerEventTimePitchBeforePersistingOrLoading()
@@ -294,7 +367,7 @@ private slots:
         };
 
         QJsonObject newer = valid;
-        newer.insert(QStringLiteral("schemaVersion"), 2);
+        newer.insert(QStringLiteral("schemaVersion"), 3);
         rejects(newer);
 
         QVERIFY(writeBytes(project.projectPath, QByteArrayLiteral("{broken")));
@@ -626,7 +699,7 @@ private slots:
         invalid = project.exportSettings;
         invalid.channels = -1;
         rejects(invalid);
-        invalid.channels = 3;
+        invalid.channels = 9;
         rejects(invalid);
         invalid = project.exportSettings;
         invalid.bitRate = -1;
@@ -663,11 +736,25 @@ private slots:
         rejects("bitDepth", 7);
         rejects("bitDepth", 33);
         rejects("channels", -1);
-        rejects("channels", 3);
+        rejects("channels", 9);
         rejects("bitRate", QStringLiteral("-1"));
         rejects("bitRate", QStringLiteral("1536001"));
         rejects("quality", -1);
         rejects("quality", 101);
+    }
+
+    void exportSettingsPreserveSupportedMultichannelRoundTrip()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        auto project = makeProject(temporary);
+        project.exportSettings.channels = 8;
+
+        QVERIFY(ProjectDocument::save(project.projectPath, request(project)).ok());
+        const ProjectLoadResult loaded = ProjectDocument::load(project.projectPath);
+
+        QVERIFY(loaded.ok());
+        QCOMPARE(loaded.exportSettings.channels, 8);
     }
 
     void sourceIdsRemainStableWhenNewSourcesAreInsertedBetweenSaves()

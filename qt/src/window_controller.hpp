@@ -69,6 +69,11 @@ public:
     int listWindowHeight() const noexcept;
     static QRect geometryForDpiChange(const QRect& currentGeometry,
                                       const QRect& suggestedGeometry);
+    static QRect geometryForDpiChange(const QRect& currentNativeGeometry,
+                                      qreal currentDpr,
+                                      const QRect& suggestedNativeGeometry,
+                                      qreal targetDpr,
+                                      const QRect& targetAvailableGeometry);
     static QRect geometryForAvailableScreens(
         const QRect& savedGeometry, const QSize& minimumSize,
         const QList<QRect>& availableScreens, int primaryScreenIndex);
@@ -171,7 +176,6 @@ private:
     qreal listTrackedDpr_ = 1.0;
     QPointer<QWindow> audioToolsWindow_;
     quintptr audioToolsWindowHandle_ = 0;
-    QSize audioToolsNativePixelSize_;
     qreal audioToolsTrackedDpr_ = 1.0;
     QPointer<QWindow> settingsWindow_;
     quintptr settingsWindowHandle_ = 0;

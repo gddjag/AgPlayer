@@ -222,6 +222,8 @@ bool TimelineEditCommand::sameEvent(const AudioEvent& left,
         && left.sourceStart == right.sourceStart && left.sourceEnd == right.sourceEnd
         && left.timelineStart == right.timelineStart && left.gain == right.gain
         && left.fadeIn == right.fadeIn && left.fadeOut == right.fadeOut
+        && left.fadeInCurve == right.fadeInCurve
+        && left.fadeOutCurve == right.fadeOutCurve
         && left.speedRatio == right.speedRatio
         && left.pitchSemitone == right.pitchSemitone && left.mute == right.mute
         && left.envelope.size() == right.envelope.size()

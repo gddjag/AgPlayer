@@ -15,6 +15,20 @@ Window {
     flags: Qt.Window | Qt.FramelessWindowHint
     color: "transparent"
     title: qsTr("AgPlayer · 音频工具")
+    function editableTextHasFocus() {
+        const active = window.activeFocusItem
+        return active && active.readOnly !== true
+            && (active.echoMode !== undefined
+                || active.textDocument !== undefined
+                || active.editable === true)
+    }
+    function playPauseFromSpace() {
+        // QShortcut is resolved before the focused control receives the key.
+        // Move focus to the window surface so Button/ComboBox cannot process
+        // the same Space press as a second, unrelated activation.
+        window.contentItem.forceActiveFocus()
+        AudioEditorController.playPause()
+    }
     function requestHide() {
         if (AudioToolsController.currentTool === 0
                 && AudioEditorController.modified) {
@@ -54,6 +68,18 @@ Window {
         }
     }
 
+    Shortcut {
+        objectName: "audioToolsSpaceShortcut"
+        sequence: "Space"
+        context: Qt.ApplicationShortcut
+        enabled: window.visible
+            && AudioToolsController.currentTool === 0
+            && !window.editableTextHasFocus()
+            && AudioEditorController.playbackSupported
+            && AudioEditorController.hasDocument
+        onActivated: window.playPauseFromSpace()
+    }
+
     Dialog {
         id: unsavedCloseDialog
         parent: window.contentItem
@@ -91,15 +117,15 @@ Window {
                 id: titleBar
                 objectName: "audioToolsTitleBar"
                 Layout.fillWidth: true
-                Layout.preferredHeight: 49
+                Layout.preferredHeight: 60
                 color: Theme.panel
 
                 RowLayout {
                     z: 1
                     anchors.fill: parent
-                    anchors.leftMargin: 16
+                    anchors.leftMargin: 24
                     anchors.rightMargin: 8
-                    spacing: 10
+                    spacing: 14
 
                     Item {
                         objectName: "audioToolsLogo"
@@ -118,7 +144,7 @@ Window {
                         text: qsTr("AgPlayer · 音频工具")
                         color: Theme.primaryText
                         font.family: Theme.fontFallback
-                        font.pixelSize: 18
+                        font.pixelSize: 20
                         font.weight: Font.Medium
                     }
 
@@ -126,6 +152,8 @@ Window {
 
                     ToolButton {
                         objectName: "audioToolsMinimizeButton"
+                        focusPolicy: Qt.NoFocus
+                        Keys.onSpacePressed: function(event) { event.accepted = true }
                         Layout.preferredWidth: 52
                         Layout.preferredHeight: 32
                         icon.source: Theme.icon("subtract-line")
@@ -140,6 +168,8 @@ Window {
                     }
                     ToolButton {
                         objectName: "audioToolsMaximizeButton"
+                        focusPolicy: Qt.NoFocus
+                        Keys.onSpacePressed: function(event) { event.accepted = true }
                         Layout.preferredWidth: 52
                         Layout.preferredHeight: 32
                         icon.source: Theme.icon(window.visibility === Window.Maximized
@@ -158,6 +188,8 @@ Window {
                     }
                     ToolButton {
                         objectName: "audioToolsCloseButton"
+                        focusPolicy: Qt.NoFocus
+                        Keys.onSpacePressed: function(event) { event.accepted = true }
                         Layout.preferredWidth: 52
                         Layout.preferredHeight: 32
                         icon.source: Theme.icon("close-fill")
@@ -174,8 +206,6 @@ Window {
 
                 MouseArea {
                     objectName: "audioToolsMoveArea"
-                    property point lastGlobalPoint: Qt.point(0, 0)
-                    property bool nativeMoveStarted: false
                     anchors.left: parent.left
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
@@ -184,30 +214,16 @@ Window {
                     z: 2
                     acceptedButtons: Qt.LeftButton
                     onPressed: function(mouse) {
-                        lastGlobalPoint = mapToGlobal(mouse.x, mouse.y)
-                        // The tools shell has custom docking/resizing. Moving it
-                        // directly keeps that path deterministic on Windows and
-                        // avoids startSystemMove swallowing drag delivery from
-                        // QML, which made the title bar appear unresponsive.
-                        nativeMoveStarted = false
+                        if (window.visibility !== Window.Maximized)
+                            window.startSystemMove()
                         mouse.accepted = true
                     }
-                    onPositionChanged: function(mouse) {
-                        if (!pressed || nativeMoveStarted
-                                || window.visibility === Window.Maximized)
-                            return
-                        var globalPoint = mapToGlobal(mouse.x, mouse.y)
-                        window.x += globalPoint.x - lastGlobalPoint.x
-                        window.y += globalPoint.y - lastGlobalPoint.y
-                        lastGlobalPoint = globalPoint
-                    }
-                    onReleased: nativeMoveStarted = false
                 }
             }
 
             ToolSidebar {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 43
+                Layout.preferredHeight: 59
                 window: window
                 currentTool: AudioToolsController.currentTool
                 onToolSelected: function(index) {
