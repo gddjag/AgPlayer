@@ -61,6 +61,7 @@ private slots:
     void nativeTaskbarGroupUsesMainAsOnlyAppWindow();
     void taskbarCommandsToggleDockedGroupWithoutResizing();
     void taskbarToggleEntryPointMinimizesAndRestoresWindowGroup();
+    void taskbarToggleEntryPointActivatesBackgroundGroup();
     void taskbarActivationDoesNotCancelMinimize();
 #endif
     void mainMinimizeRestoresOnlyRequestedList();
@@ -1069,13 +1070,36 @@ void WindowControllerTest::nativeTaskbarGroupUsesMainAsOnlyAppWindow()
     const DWORD mainStyle = exStyle(mainWindow);
     QVERIFY(mainStyle & WS_EX_APPWINDOW);
     QVERIFY(!(mainStyle & WS_EX_TOOLWINDOW));
+    const LONG_PTR mainWindowStyle = GetWindowLongPtrW(
+        reinterpret_cast<HWND>(mainWindow.winId()), GWL_STYLE);
+    QVERIFY2(mainWindowStyle & WS_SYSMENU,
+             "the frameless main HWND must retain normal Shell system commands");
+    QVERIFY2(mainWindowStyle & WS_MINIMIZEBOX,
+             "the frameless main HWND must support Explorer taskbar minimize");
+    constexpr LONG_PTR addedTaskbarStyles = WS_SYSMENU | WS_MINIMIZEBOX;
     for (QWindow* auxiliary : {&listWindow, &toolsWindow, &settingsWindow}) {
         const DWORD style = exStyle(*auxiliary);
         QVERIFY2(style & WS_EX_TOOLWINDOW,
                  "auxiliary windows must not create taskbar entries");
         QVERIFY2(!(style & WS_EX_APPWINDOW),
                  "only the main player may be the taskbar group entry");
+        const LONG_PTR auxiliaryStyle = GetWindowLongPtrW(
+            reinterpret_cast<HWND>(auxiliary->winId()), GWL_STYLE);
+        QVERIFY2(!(auxiliaryStyle & addedTaskbarStyles),
+                 "auxiliary windows must not receive main taskbar styles");
     }
+
+    const LONG_PTR styleWithoutTaskbarBits =
+        mainWindowStyle & ~addedTaskbarStyles;
+    SetWindowLongPtrW(reinterpret_cast<HWND>(mainWindow.winId()), GWL_STYLE,
+                      styleWithoutTaskbarBits);
+    windows.setWindows(&mainWindow, nullptr);
+    const LONG_PTR reappliedMainWindowStyle = GetWindowLongPtrW(
+        reinterpret_cast<HWND>(mainWindow.winId()), GWL_STYLE);
+    QCOMPARE(reappliedMainWindowStyle & addedTaskbarStyles,
+             addedTaskbarStyles);
+    QCOMPARE(reappliedMainWindowStyle & ~addedTaskbarStyles,
+             styleWithoutTaskbarBits);
 }
 
 void WindowControllerTest::taskbarCommandsToggleDockedGroupWithoutResizing()
@@ -1161,6 +1185,37 @@ void WindowControllerTest::taskbarToggleEntryPointMinimizesAndRestoresWindowGrou
                                       Qt::DirectConnection));
     QTRY_VERIFY(mainWindow.windowState() != Qt::WindowMinimized);
     QTRY_VERIFY(listWindow.isVisible());
+    QTRY_VERIFY(mainWindow.isActive());
+}
+
+void WindowControllerTest::taskbarToggleEntryPointActivatesBackgroundGroup()
+{
+    if (QGuiApplication::platformName().compare(QStringLiteral("windows"),
+                                                Qt::CaseInsensitive) != 0) {
+        QSKIP("requires the Windows native window manager");
+    }
+
+    WindowController windows;
+    QWindow mainWindow;
+    mainWindow.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    mainWindow.setGeometry(180, 120, 720, 280);
+    QWindow otherWindow;
+    otherWindow.setGeometry(960, 120, 320, 240);
+    windows.setWindows(&mainWindow, nullptr);
+    QVERIFY(QTest::qWaitForWindowExposed(&mainWindow));
+
+    otherWindow.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&otherWindow));
+    otherWindow.requestActivate();
+    QTRY_VERIFY(otherWindow.isActive());
+    QVERIFY(mainWindow.isVisible());
+    QVERIFY(mainWindow.windowState() != Qt::WindowMinimized);
+
+    QVERIFY(QMetaObject::invokeMethod(&windows, "toggleMainWindowGroup",
+                                      Qt::DirectConnection));
+    QTRY_VERIFY(mainWindow.isActive());
+    QVERIFY(mainWindow.isVisible());
+    QVERIFY(mainWindow.windowState() != Qt::WindowMinimized);
 }
 
 void WindowControllerTest::taskbarActivationDoesNotCancelMinimize()

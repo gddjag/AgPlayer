@@ -17,9 +17,13 @@ using System.Runtime.InteropServices;
 
 public static class AgPlayerShellProbe
 {
+    public const int GWL_STYLE = -16;
     public const int GWL_EXSTYLE = -20;
     public const uint GW_OWNER = 4;
+    public const long WS_SYSMENU = 0x00080000L;
+    public const long WS_MINIMIZEBOX = 0x00020000L;
     public const long WS_EX_APPWINDOW = 0x00040000L;
+    public const long WS_EX_TOOLWINDOW = 0x00000080L;
     public const uint WM_GETICON = 0x007F;
     public const uint WM_SYSCOMMAND = 0x0112;
     public static readonly UIntPtr SC_MINIMIZE = new UIntPtr(0xF020);
@@ -131,6 +135,13 @@ try {
         } else { '' }
         throw "AgPlayer did not publish one taskbar window with complete shell identity:`n$stderr"
     }
+    $mainStyle = [AgPlayerShellProbe]::GetWindowLongPtr(
+        $mainWindow, [AgPlayerShellProbe]::GWL_STYLE).ToInt64()
+    $requiredTaskbarStyles = [AgPlayerShellProbe]::WS_SYSMENU -bor
+        [AgPlayerShellProbe]::WS_MINIMIZEBOX
+    if (($mainStyle -band $requiredTaskbarStyles) -ne $requiredTaskbarStyles) {
+        throw 'The frameless taskbar HWND is missing WS_SYSMENU/WS_MINIMIZEBOX'
+    }
     $bigIcon = [AgPlayerShellProbe]::SendMessage(
         $mainWindow, [AgPlayerShellProbe]::WM_GETICON,
         [AgPlayerShellProbe]::ICON_BIG, [IntPtr]::Zero)
@@ -162,7 +173,17 @@ try {
     if ($auxiliaryBefore.Count -lt 2) {
         throw "Shell probe did not open both tools/settings owner windows (found $($auxiliaryBefore.Count))"
     }
+    foreach ($auxiliary in $auxiliaryBefore) {
+        $auxiliaryExStyle = [AgPlayerShellProbe]::GetWindowLongPtr(
+            $auxiliary, [AgPlayerShellProbe]::GWL_EXSTYLE).ToInt64()
+        if (($auxiliaryExStyle -band [AgPlayerShellProbe]::WS_EX_TOOLWINDOW) -eq 0 -or
+            ($auxiliaryExStyle -band [AgPlayerShellProbe]::WS_EX_APPWINDOW) -ne 0) {
+            throw 'An auxiliary owner window became an independent taskbar entry'
+        }
+    }
 
+    # Deterministic native-command regression only. SendMessage does not prove
+    # a click from Explorer; real taskbar clicks remain a Task 13 acceptance.
     [void][AgPlayerShellProbe]::SendMessage(
         $mainWindow, [AgPlayerShellProbe]::WM_SYSCOMMAND,
         [AgPlayerShellProbe]::SC_MINIMIZE, [IntPtr]::Zero)
@@ -172,7 +193,7 @@ try {
         Start-Sleep -Milliseconds 25
     }
     if (-not [AgPlayerShellProbe]::IsIconic($mainWindow)) {
-        throw 'A second taskbar activation did not minimize the foreground player'
+        throw 'SC_MINIMIZE did not minimize the foreground player window group'
     }
     foreach ($auxiliary in $auxiliaryBefore) {
         if ([AgPlayerShellProbe]::WindowVisible($auxiliary)) {
@@ -200,10 +221,10 @@ try {
         Start-Sleep -Milliseconds 25
     }
     if ([AgPlayerShellProbe]::IsIconic($mainWindow)) {
-        throw 'Taskbar restore did not restore the existing player window'
+        throw 'SC_RESTORE did not restore the existing player window'
     }
     if (-not $foregroundAccepted) {
-        Write-Warning 'Windows foreground lock denied the synthetic CTest activation; real Explorer taskbar activation remains an interactive check'
+        Write-Warning 'Windows foreground lock denied the synthetic CTest activation; Task 13 must verify real Explorer taskbar clicks'
     }
     $after = [AgPlayerShellProbe+Rect]::new()
     if (-not [AgPlayerShellProbe]::GetWindowRect($mainWindow, [ref]$after) -or
