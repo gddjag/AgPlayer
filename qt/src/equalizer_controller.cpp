@@ -48,10 +48,17 @@ QVariantList gainsToVariant(
     return result;
 }
 
-double normalizedStoredGain(const double value)
+double legacyStoredGain(const double value)
 {
     return std::isfinite(value) && value >= -12.0 && value <= 12.0
                ? qRound(value * 10.0) / 10.0
+               : 0.0;
+}
+
+double storedDspValue(const double value)
+{
+    return std::isfinite(value) && value >= -18.0 && value <= 18.0
+               ? value
                : 0.0;
 }
 
@@ -75,7 +82,7 @@ std::array<double, AG_EQUALIZER_BAND_COUNT> migrateLegacyGains(
     std::array<double, kSchemaTwoFrequencies.size()> result{};
     std::array<double, kLegacyFrequencies.size()> legacy{};
     for (std::size_t index = 0; index < legacy.size(); ++index) {
-        legacy[index] = normalizedStoredGain(
+        legacy[index] = legacyStoredGain(
             values.at(static_cast<int>(index)).toDouble());
     }
     for (std::size_t target = 0; target < kSchemaTwoFrequencies.size(); ++target) {
@@ -96,7 +103,7 @@ std::array<double, AG_EQUALIZER_BAND_COUNT> migrateLegacyGains(
         const double fraction =
             std::log(frequency / kLegacyFrequencies[low])
             / std::log(kLegacyFrequencies[high] / kLegacyFrequencies[low]);
-        result[target] = normalizedStoredGain(
+        result[target] = legacyStoredGain(
             legacy[low] + fraction * (legacy[high] - legacy[low]));
     }
     return insertTenKHzBand(result);
@@ -114,14 +121,14 @@ std::array<double, AG_EQUALIZER_BAND_COUNT> gainsFromVariant(
         std::array<double, kSchemaTwoFrequencies.size()> oldGains{};
         for (int index = 0; index < values.size(); ++index) {
             oldGains[static_cast<std::size_t>(index)] =
-                normalizedStoredGain(values.at(index).toDouble());
+                storedDspValue(values.at(index).toDouble());
         }
         return insertTenKHzBand(oldGains);
     }
     for (int index = 0;
          index < values.size() && index < AG_EQUALIZER_BAND_COUNT; ++index) {
         result[static_cast<std::size_t>(index)] =
-            normalizedStoredGain(values.at(index).toDouble());
+            storedDspValue(values.at(index).toDouble());
     }
     return result;
 }
@@ -525,12 +532,18 @@ void EqualizerController::refreshStatus()
 
 double EqualizerController::normalizedGain(const double value) noexcept
 {
-    return qRound(value * 10.0) / 10.0;
+    return static_cast<double>(qRound64(value * 10.0)) / 10.0;
 }
 
 double EqualizerController::quantizedGain(const double value) const noexcept
 {
-    return normalizedGain(qRound(value / gainStepDb()) * gainStepDb());
+    if (precisionMode_ == QStringLiteral("medium")) {
+        return static_cast<double>(qRound64(value * 2.0)) / 2.0;
+    }
+    if (precisionMode_ == QStringLiteral("low")) {
+        return static_cast<double>(qRound64(value));
+    }
+    return normalizedGain(value);
 }
 
 QList<EqualizerController::Preset> EqualizerController::builtInPresets() const
@@ -592,7 +605,7 @@ void EqualizerController::load()
     bypassed_ = settings.value(QStringLiteral("bypassed"), false).toBool();
     autoClipProtection_ =
         settings.value(QStringLiteral("autoClipProtection"), true).toBool();
-    preampDb_ = normalizedStoredGain(
+    preampDb_ = storedDspValue(
         settings.value(QStringLiteral("preampDb"), 0.0).toDouble());
     gains_ = gainsFromVariant(settings.value(QStringLiteral("bandGains")));
     const double storedRange =
@@ -618,7 +631,7 @@ void EqualizerController::load()
         Preset preset;
         preset.id = settings.value(QStringLiteral("id")).toString();
         preset.name = settings.value(QStringLiteral("name")).toString();
-        preset.preampDb = normalizedGain(
+        preset.preampDb = storedDspValue(
             settings.value(QStringLiteral("preampDb"), 0.0).toDouble());
         preset.gains = gainsFromVariant(
             settings.value(QStringLiteral("bandGains")));
@@ -632,6 +645,9 @@ void EqualizerController::load()
     const bool requiresMigration = storedSchema != kSettingsSchemaVersion
                                    || storedBandCount != AG_EQUALIZER_BAND_COUNT;
     const bool presetExists = findPreset(currentPresetId_).has_value();
+    const bool selectedCustomPreset = std::any_of(
+        customPresets_.cbegin(), customPresets_.cend(),
+        [this](const Preset& preset) { return preset.id == currentPresetId_; });
     const bool migratedCurveIsFlat = currentPresetId_ == QStringLiteral("flat")
                                      && std::abs(preampDb_) <= 1.0e-9
                                      && std::all_of(
@@ -642,7 +658,8 @@ void EqualizerController::load()
     // A retained identifier such as "rock" does not prove that the migrated
     // ten-band gains match the new reference curve. Preserve the interpolated
     // sound as a custom state instead of mislabelling it as a built-in preset.
-    if ((requiresMigration && hadStoredCurve && !migratedCurveIsFlat)
+    if ((!selectedCustomPreset && requiresMigration && hadStoredCurve
+         && !migratedCurveIsFlat)
         || !presetExists) {
         currentPresetId_ = QStringLiteral("custom");
     }

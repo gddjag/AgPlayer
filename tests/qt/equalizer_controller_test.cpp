@@ -8,6 +8,8 @@
 #include <QStandardPaths>
 #include <QTest>
 
+#include <limits>
+
 class EqualizerControllerTest final : public QObject {
     Q_OBJECT
 
@@ -22,6 +24,8 @@ private slots:
     void legacyFlatSettingsRemainFlatAfterMigration();
     void retainedLegacyPresetIdBecomesCustomAfterMigration();
     void migratesLegacyCustomPresetsAndRemovedPresetId();
+    void restoresStoredDspValuesWithoutApplyingEditorPrecision();
+    void validatesCustomPresetStoredPreamps();
     void customPresetsPersistRenameAndDelete();
     void persistsSupportedGainRangesAndClampsInOneSnapshot();
     void precisionControlsFutureEditsWithoutRewritingStoredValues();
@@ -196,10 +200,10 @@ void EqualizerControllerTest::migratesSchemaTwoSeventeenBandSettingsAndCustomPre
         settings.setValue(QStringLiteral("schemaVersion"), 2);
         settings.setValue(QStringLiteral("bandCount"), 17);
         settings.setValue(QStringLiteral("bandGains"),
-                          QVariantList{-8, -7, -6, -5, -4, -3, -2, -1, 0,
+                          QVariantList{15.0, 1.25, -6, -5, -4, -3, -2, -1, 0,
                                        1, 2, 3, 4, 5, 6, 7, 8});
         settings.setValue(QStringLiteral("currentPresetId"),
-                          QStringLiteral("custom"));
+                          QStringLiteral("custom-v2"));
         settings.beginWriteArray(QStringLiteral("customPresets"), 1);
         settings.setArrayIndex(0);
         settings.setValue(QStringLiteral("id"), QStringLiteral("custom-v2"));
@@ -217,10 +221,14 @@ void EqualizerControllerTest::migratesSchemaTwoSeventeenBandSettingsAndCustomPre
     QCOMPARE(ag_player_create_with_config(&config, &player), AG_OK);
     EqualizerController controller(player);
     QCOMPARE(controller.rowCount(), 18);
-    QCOMPARE(controller.currentPresetId(), QStringLiteral("custom"));
+    QCOMPARE(controller.currentPresetId(), QStringLiteral("custom-v2"));
+    const std::array<double, 17> migratedCurrent{
+        15.0, 1.25, -6, -5, -4, -3, -2, -1, 0,
+        1, 2, 3, 4, 5, 6, 7, 8};
     for (int oldBand = 0; oldBand < 17; ++oldBand) {
         const int newBand = oldBand < 14 ? oldBand : oldBand + 1;
-        QCOMPARE(controller.bandGain(newBand), static_cast<double>(oldBand - 8));
+        QCOMPARE(controller.bandGain(newBand),
+                 migratedCurrent[static_cast<std::size_t>(oldBand)]);
     }
     QCOMPARE(controller.bandGain(14), 0.0);
 
@@ -306,7 +314,7 @@ void EqualizerControllerTest::migratesLegacyCustomPresetsAndRemovedPresetId()
         settings.setValue(QStringLiteral("bandGains"),
                           QVariantList{0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
         settings.setValue(QStringLiteral("currentPresetId"),
-                          QStringLiteral("treble-cut"));
+                          QStringLiteral("custom-old"));
         settings.beginWriteArray(QStringLiteral("customPresets"), 1);
         settings.setArrayIndex(0);
         settings.setValue(QStringLiteral("id"), QStringLiteral("custom-old"));
@@ -322,7 +330,7 @@ void EqualizerControllerTest::migratesLegacyCustomPresetsAndRemovedPresetId()
     ag_player* player = nullptr;
     QCOMPARE(ag_player_create_with_config(&config, &player), AG_OK);
     EqualizerController controller(player);
-    QCOMPARE(controller.currentPresetId(), QStringLiteral("custom"));
+    QCOMPARE(controller.currentPresetId(), QStringLiteral("custom-old"));
     QVERIFY(controller.presetIds().contains(QStringLiteral("custom-old")));
     QVERIFY(controller.applyPreset(QStringLiteral("custom-old")));
     QCOMPARE(controller.bandGain(0), 0.0);
@@ -377,17 +385,30 @@ void EqualizerControllerTest::persistsSupportedGainRangesAndClampsInOneSnapshot(
     QVERIFY(controller.setBandGain(1, -10.0));
     QVERIFY(controller.setBandGain(2, 3.1));
     controller.setPreampDb(11.0);
+    const QString customPresetId =
+        controller.saveCustomPreset(QStringLiteral("待收窄"));
+    QVERIFY(!customPresetId.isEmpty());
     ag_equalizer_status before{};
     QCOMPARE(ag_player_equalizer_status(player, &before), AG_OK);
 
     QSignalSpy rangeChanged(&controller, &EqualizerController::gainRangeDbChanged);
+    QSignalSpy bandChanged(&controller, &EqualizerController::bandGainChanged);
+    QSignalSpy preampChanged(&controller, &EqualizerController::preampDbChanged);
+    QSignalSpy modelChanged(&controller, &EqualizerController::dataChanged);
+    QSignalSpy presetChanged(&controller,
+                             &EqualizerController::currentPresetChanged);
     QVERIFY(controller.setGainRangeDb(6.0));
     QCOMPARE(rangeChanged.count(), 1);
+    QCOMPARE(bandChanged.count(), 2);
+    QCOMPARE(preampChanged.count(), 1);
+    QCOMPARE(modelChanged.count(), 1);
+    QCOMPARE(presetChanged.count(), 1);
     QCOMPARE(controller.gainRangeDb(), 6.0);
     QCOMPARE(controller.bandGain(0), 6.0);
     QCOMPARE(controller.bandGain(1), -6.0);
     QCOMPARE(controller.bandGain(2), 3.1);
     QCOMPARE(controller.preampDb(), 6.0);
+    QCOMPARE(controller.currentPresetId(), QStringLiteral("custom"));
     QCOMPARE(controller.data(controller.index(0, 0),
                              EqualizerController::MaximumRole).toDouble(),
              6.0);
@@ -400,8 +421,24 @@ void EqualizerControllerTest::persistsSupportedGainRangesAndClampsInOneSnapshot(
     QCOMPARE(settings.value(QStringLiteral("gainRangeDb")).toDouble(), 6.0);
     settings.endGroup();
 
+    rangeChanged.clear();
+    bandChanged.clear();
+    preampChanged.clear();
+    modelChanged.clear();
+    presetChanged.clear();
+    ag_equalizer_status beforeNoopRange{};
+    QCOMPARE(ag_player_equalizer_status(player, &beforeNoopRange), AG_OK);
     QVERIFY(!controller.setGainRangeDb(7.0));
+    QVERIFY(controller.setGainRangeDb(6.0));
     QCOMPARE(controller.gainRangeDb(), 6.0);
+    QCOMPARE(rangeChanged.count(), 0);
+    QCOMPARE(bandChanged.count(), 0);
+    QCOMPARE(preampChanged.count(), 0);
+    QCOMPARE(modelChanged.count(), 0);
+    QCOMPARE(presetChanged.count(), 0);
+    ag_equalizer_status afterNoopRange{};
+    QCOMPARE(ag_player_equalizer_status(player, &afterNoopRange), AG_OK);
+    QCOMPARE(afterNoopRange.revision, beforeNoopRange.revision);
     QVERIFY(!controller.setBandGain(3, 6.1));
     QVERIFY(controller.setGainRangeDb(18.0));
     QCOMPARE(controller.gainRangeDb(), 18.0);
@@ -419,6 +456,103 @@ void EqualizerControllerTest::persistsSupportedGainRangesAndClampsInOneSnapshot(
     ag_player_destroy(player);
 }
 
+void EqualizerControllerTest::restoresStoredDspValuesWithoutApplyingEditorPrecision()
+{
+    {
+        QSettings settings;
+        settings.beginGroup(QStringLiteral("equalizer"));
+        settings.setValue(QStringLiteral("schemaVersion"), 3);
+        settings.setValue(QStringLiteral("bandCount"), 18);
+        settings.setValue(QStringLiteral("gainRangeDb"), 6.0);
+        settings.setValue(QStringLiteral("precisionMode"), QStringLiteral("low"));
+        settings.setValue(QStringLiteral("preampDb"), 15.0);
+        settings.setValue(QStringLiteral("bandGains"),
+                          QVariantList{15.0, 1.25, -18.0, 0, 0, 0, 0, 0, 0,
+                                       0, 0, 0, 0, 0, 0, 0, 0, 0});
+        settings.setValue(QStringLiteral("currentPresetId"),
+                          QStringLiteral("custom-exact"));
+        settings.beginWriteArray(QStringLiteral("customPresets"), 1);
+        settings.setArrayIndex(0);
+        settings.setValue(QStringLiteral("id"), QStringLiteral("custom-exact"));
+        settings.setValue(QStringLiteral("name"), QStringLiteral("精确保留"));
+        settings.setValue(QStringLiteral("preampDb"), -18.0);
+        settings.setValue(QStringLiteral("bandGains"),
+                          QVariantList{-15.0, 1.25, 18.0, 0, 0, 0, 0, 0, 0,
+                                       0, 0, 0, 0, 0, 0, 0, 0, 0});
+        settings.endArray();
+        settings.endGroup();
+    }
+
+    const ag_player_config config{AG_AUDIO_BACKEND_NULL, 4'096U};
+    ag_player* player = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &player), AG_OK);
+    EqualizerController controller(player);
+    QCOMPARE(controller.gainRangeDb(), 6.0);
+    QCOMPARE(controller.precisionMode(), QStringLiteral("low"));
+    QCOMPARE(controller.preampDb(), 15.0);
+    QCOMPARE(controller.bandGain(0), 15.0);
+    QCOMPARE(controller.bandGain(1), 1.25);
+    QCOMPARE(controller.bandGain(2), -18.0);
+    QCOMPARE(controller.currentPresetId(), QStringLiteral("custom-exact"));
+    QVERIFY(controller.applyPreset(QStringLiteral("custom-exact")));
+    QCOMPARE(controller.preampDb(), -18.0);
+    QCOMPARE(controller.bandGain(0), -15.0);
+    QCOMPARE(controller.bandGain(1), 1.25);
+    QCOMPARE(controller.bandGain(2), 18.0);
+    EqualizerController restored(player);
+    QCOMPARE(restored.gainRangeDb(), 6.0);
+    QCOMPARE(restored.precisionMode(), QStringLiteral("low"));
+    QCOMPARE(restored.bandGain(1), 1.25);
+    QCOMPARE(restored.preampDb(), -18.0);
+    ag_player_destroy(player);
+}
+
+void EqualizerControllerTest::validatesCustomPresetStoredPreamps()
+{
+    {
+        QSettings settings;
+        settings.beginGroup(QStringLiteral("equalizer"));
+        settings.setValue(QStringLiteral("schemaVersion"), 3);
+        settings.setValue(QStringLiteral("bandCount"), 18);
+        settings.beginWriteArray(QStringLiteral("customPresets"), 5);
+        const auto writePreset = [&settings](const int index, const QString& id,
+                                             const double preamp) {
+            settings.setArrayIndex(index);
+            settings.setValue(QStringLiteral("id"), id);
+            settings.setValue(QStringLiteral("name"), id);
+            settings.setValue(QStringLiteral("preampDb"), preamp);
+            settings.setValue(QStringLiteral("bandGains"),
+                              QVariantList{0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                           0, 0, 0, 0, 0, 0, 0, 0, 0});
+        };
+        writePreset(0, QStringLiteral("custom-negative-limit"), -18.0);
+        writePreset(1, QStringLiteral("custom-positive-limit"), 18.0);
+        writePreset(2, QStringLiteral("custom-nan"),
+                    std::numeric_limits<double>::quiet_NaN());
+        writePreset(3, QStringLiteral("custom-infinity"),
+                    std::numeric_limits<double>::infinity());
+        writePreset(4, QStringLiteral("custom-outside"), 18.1);
+        settings.endArray();
+        settings.endGroup();
+    }
+
+    const ag_player_config config{AG_AUDIO_BACKEND_NULL, 4'096U};
+    ag_player* player = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &player), AG_OK);
+    EqualizerController controller(player);
+    QVERIFY(controller.applyPreset(QStringLiteral("custom-negative-limit")));
+    QCOMPARE(controller.preampDb(), -18.0);
+    QVERIFY(controller.applyPreset(QStringLiteral("custom-positive-limit")));
+    QCOMPARE(controller.preampDb(), 18.0);
+    QVERIFY(controller.applyPreset(QStringLiteral("custom-nan")));
+    QCOMPARE(controller.preampDb(), 0.0);
+    QVERIFY(controller.applyPreset(QStringLiteral("custom-infinity")));
+    QCOMPARE(controller.preampDb(), 0.0);
+    QVERIFY(controller.applyPreset(QStringLiteral("custom-outside")));
+    QCOMPARE(controller.preampDb(), 0.0);
+    ag_player_destroy(player);
+}
+
 void EqualizerControllerTest::precisionControlsFutureEditsWithoutRewritingStoredValues()
 {
     const ag_player_config config{AG_AUDIO_BACKEND_NULL, 4'096U};
@@ -428,8 +562,23 @@ void EqualizerControllerTest::precisionControlsFutureEditsWithoutRewritingStored
 
     QCOMPARE(controller.precisionMode(), QStringLiteral("high"));
     QCOMPARE(controller.gainStepDb(), 0.1);
-    QVERIFY(controller.setBandGain(0, 1.24));
+    QVERIFY(controller.setGainRangeDb(18.0));
+    QVERIFY(controller.setBandGain(0, 1.15));
     QCOMPARE(controller.bandGain(0), 1.2);
+    QVERIFY(controller.setBandGain(1, -1.15));
+    QCOMPARE(controller.bandGain(1), -1.2);
+    QVERIFY(controller.setBandGain(2, 18.0));
+    QCOMPARE(controller.bandGain(2), 18.0);
+
+    QSignalSpy highBandChanged(&controller,
+                               &EqualizerController::bandGainChanged);
+    ag_equalizer_status beforeIdempotentBand{};
+    QCOMPARE(ag_player_equalizer_status(player, &beforeIdempotentBand), AG_OK);
+    QVERIFY(controller.setBandGain(0, 1.15));
+    QCOMPARE(highBandChanged.count(), 0);
+    ag_equalizer_status afterIdempotentBand{};
+    QCOMPARE(ag_player_equalizer_status(player, &afterIdempotentBand), AG_OK);
+    QCOMPARE(afterIdempotentBand.revision, beforeIdempotentBand.revision);
 
     QSignalSpy precisionChanged(&controller,
                                 &EqualizerController::precisionModeChanged);
@@ -443,6 +592,29 @@ void EqualizerControllerTest::precisionControlsFutureEditsWithoutRewritingStored
     controller.setPreampDb(-1.26);
     QCOMPARE(controller.bandGain(0), 1.5);
     QCOMPARE(controller.preampDb(), -1.5);
+
+    ag_equalizer_status beforeNoopSetters{};
+    QCOMPARE(ag_player_equalizer_status(player, &beforeNoopSetters), AG_OK);
+    precisionChanged.clear();
+    stepChanged.clear();
+    QVERIFY(controller.setPrecisionMode(QStringLiteral("medium")));
+    QVERIFY(!controller.setPrecisionMode(QStringLiteral("ultra")));
+    QCOMPARE(precisionChanged.count(), 0);
+    QCOMPARE(stepChanged.count(), 0);
+    ag_equalizer_status afterNoopSetters{};
+    QCOMPARE(ag_player_equalizer_status(player, &afterNoopSetters), AG_OK);
+    QCOMPARE(afterNoopSetters.revision, beforeNoopSetters.revision);
+
+    QSignalSpy noopPreampChanged(&controller,
+                                 &EqualizerController::preampDbChanged);
+    ag_equalizer_status beforeNoopPreamp{};
+    QCOMPARE(ag_player_equalizer_status(player, &beforeNoopPreamp), AG_OK);
+    controller.setPreampDb(-1.5);
+    controller.setPreampDb(18.1);
+    QCOMPARE(noopPreampChanged.count(), 0);
+    ag_equalizer_status afterNoopPreamp{};
+    QCOMPARE(ag_player_equalizer_status(player, &afterNoopPreamp), AG_OK);
+    QCOMPARE(afterNoopPreamp.revision, beforeNoopPreamp.revision);
 
     QVERIFY(controller.setPrecisionMode(QStringLiteral("low")));
     QCOMPARE(controller.gainStepDb(), 1.0);
