@@ -8,13 +8,33 @@
 - The default is intentionally independent of the codec: no WAV export or codec
   selection logic changed.  Existing encoder behavior remains responsible for
   ignoring a lossy bitrate where WAV does not use one.
-- The shortcut card is split into two fixed 13 logical-pixel horizontal rows: the
-  first five command groups and the remaining four mouse/timeline groups.  At the
+- The shortcut card is split into two 16 logical-pixel horizontal rows with
+  13-pixel labels: the first five command groups and the remaining four
+  mouse/timeline groups.  At the
   1672-pixel reference width both natural row widths fit without scrolling; at
   1280x720 and 880x560 each row remains a `HorizontalFlick` and keeps 13-pixel
   labels, with the last label reachable at the row's maximum content offset.
 - The card remains below the playback panel and the existing status overlay stays
   later in the visual stack; no reference-external controls were added.
+
+## Follow-up review correction
+
+Independent review found that a 13-pixel font can have an implicit text height
+greater than 13, so the earlier 13-pixel rows could clip vertically.  The rows
+now use 16 logical pixels, and every label contract checks
+`implicitHeight <= row.height`.  The card is moved to y=730 at the 1672x941
+reference geometry: its bottom is exactly the status bar's y=797, so a visible
+status overlay no longer covers either row.
+
+The two `WheelHandler`s are direct Flickable children with `target` set to their
+full Flickable row.  Runtime Flickable parenting correctly exposes them below
+the row `contentItem`, rather than the short content `Row`; the QuickTest checks
+that parent and the full-row target for both handlers.
+
+TDD follow-up: the new height/implicit-height/handler/overlay tests failed first
+against the 13-pixel-row implementation.  After the fix, the full XML QuickTest
+run reported 55 passed test functions and only the two pre-existing failures
+listed below.
 
 ## TDD evidence
 

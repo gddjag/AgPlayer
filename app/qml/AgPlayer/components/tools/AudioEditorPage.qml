@@ -955,7 +955,7 @@ Rectangle {
                 id: shortcutCard
                 objectName: "editorShortcutCard"
                 x: 12
-                y: page.interpolateLayout(532, 746)
+                y: page.interpolateLayout(516, 730)
                     + page.narrowActionBandHeight
                 width: mainSurface.width - 24
                 height: page.interpolateLayout(103, 67)
@@ -965,27 +965,27 @@ Rectangle {
                 radius: 6
                 ThemedIcon {
                     objectName: "editorShortcutKeyboardIcon"
-                    x: 20; y: 5
+                    x: 20; y: 2
                     width: 22; height: 22
                     source: Theme.icon("keyboard-box-line")
                     tint: Theme.textPrimary
                 }
                 Label {
-                    x: 50; y: 6
+                    x: 50; y: 3
                     text: qsTr("快捷键与鼠标操作")
                     color: Theme.textPrimary
                     font.pixelSize: 14
                     font.bold: true
                 }
-                Rectangle { x: 16; y: 32; width: parent.width - 32; height: 1; color: Theme.borderStrong }
+                Rectangle { x: 16; y: 27; width: parent.width - 32; height: 1; color: Theme.borderStrong }
                 Flickable {
                     id: shortcutFirstRow
                     objectName: "editorShortcutFirstRow"
                     property int groupCount: 5
                     property int dividerCount: 4
-                    x: 18; y: 37
+                    x: 18; y: 32
                     width: parent.width - 36
-                    height: 13
+                    height: 16
                     clip: true
                     interactive: contentWidth > width
                     flickableDirection: Flickable.HorizontalFlick
@@ -1030,19 +1030,21 @@ Rectangle {
                             }
                         }
 
-                        WheelHandler {
-                            acceptedDevices: PointerDevice.Mouse
-                                | PointerDevice.TouchPad
-                            onWheel: function(event) {
-                                const delta = event.angleDelta.x !== 0
-                                    ? event.angleDelta.x : event.angleDelta.y
-                                shortcutFirstRow.contentX = Math.max(0,
-                                    Math.min(shortcutFirstRow.contentWidth
-                                                 - shortcutFirstRow.width,
-                                             shortcutFirstRow.contentX
-                                                 - Math.sign(delta) * 80))
-                                event.accepted = true
-                            }
+                    }
+                    WheelHandler {
+                        objectName: "editorShortcutFirstRowWheel"
+                        target: shortcutFirstRow
+                        acceptedDevices: PointerDevice.Mouse
+                            | PointerDevice.TouchPad
+                        onWheel: function(event) {
+                            const delta = event.angleDelta.x !== 0
+                                ? event.angleDelta.x : event.angleDelta.y
+                            shortcutFirstRow.contentX = Math.max(0,
+                                Math.min(shortcutFirstRow.contentWidth
+                                             - shortcutFirstRow.width,
+                                         shortcutFirstRow.contentX
+                                             - Math.sign(delta) * 80))
+                            event.accepted = true
                         }
                     }
                 }
@@ -1051,9 +1053,9 @@ Rectangle {
                     objectName: "editorShortcutSecondRow"
                     property int groupCount: 4
                     property int dividerCount: 3
-                    x: 18; y: 52
+                    x: 18; y: 49
                     width: parent.width - 36
-                    height: 13
+                    height: 16
                     clip: true
                     interactive: contentWidth > width
                     flickableDirection: Flickable.HorizontalFlick
@@ -1097,15 +1099,17 @@ Rectangle {
                     }
 
                     WheelHandler {
+                        objectName: "editorShortcutSecondRowWheel"
+                        target: shortcutSecondRow
                         acceptedDevices: PointerDevice.Mouse
                             | PointerDevice.TouchPad
                         onWheel: function(event) {
                             const delta = event.angleDelta.x !== 0
                                 ? event.angleDelta.x : event.angleDelta.y
-                                shortcutSecondRow.contentX = Math.max(0,
+                            shortcutSecondRow.contentX = Math.max(0,
                                 Math.min(shortcutSecondRow.contentWidth
                                              - shortcutSecondRow.width,
-                                          shortcutSecondRow.contentX
+                                         shortcutSecondRow.contentX
                                              - Math.sign(delta) * 80))
                             event.accepted = true
                         }

@@ -126,7 +126,7 @@ TestCase {
         verifyGeometry("editorWaveformCanvas", 120, 188, 1198, 387)
         verifyGeometry("editorTimelineScrollbar", 120, 589, 1198, 16)
         verifyGeometry("editorPlaybackTransport", 12, 618, 1304, 112)
-        verifyGeometry("editorShortcutCard", 12, 746, 1304, 67)
+        verifyGeometry("editorShortcutCard", 12, 730, 1304, 67)
         verifyGeometry("editorStatusBar", 0, 797, 1328, 25)
 
         compare(findChild(page, "inspectorTempoTitle").text,
@@ -493,8 +493,8 @@ TestCase {
         verify(keyboard.source.toString().indexOf("keyboard-box-line.svg") >= 0)
         compare(divider.width, 1)
         compare(laterDivider.width, 1)
-        compare(divider.height, 13)
-        compare(laterDivider.height, 13)
+        compare(divider.height, 16)
+        compare(laterDivider.height, 16)
     }
 
     function test_shortcutCardUsesTwoStructuredReferenceRows() {
@@ -505,8 +505,8 @@ TestCase {
         compare(firstRow.dividerCount, 4)
         compare(secondRow.groupCount, 4)
         compare(secondRow.dividerCount, 3)
-        compare(firstRow.height, 13)
-        compare(secondRow.height, 13)
+        compare(firstRow.height, 16)
+        compare(secondRow.height, 16)
         compare(findChild(page, "editorShortcutFirstGroup_0").text,
                 "空格 = 播放 / 暂停")
         compare(findChild(page, "editorShortcutFirstGroup_4").text,
@@ -522,7 +522,10 @@ TestCase {
         const card = findChild(page, "editorShortcutCard")
         const firstRow = findChild(page, "editorShortcutFirstRow")
         const secondRow = findChild(page, "editorShortcutSecondRow")
-        verify(card && firstRow && secondRow)
+        const status = findChild(page, "editorStatusBar")
+        verify(card && firstRow && secondRow && status)
+        verify(card.y + card.height <= status.y,
+               "shortcut rows must not sit beneath the status overlay")
         for (const row of [firstRow, secondRow]) {
             compare(row.x, 18)
             compare(row.width, card.width - 36)
@@ -537,8 +540,23 @@ TestCase {
                 verify(label)
                 verify(label.width >= label.implicitWidth,
                        row.objectName + " label " + index + " is clipped")
+                verify(label.implicitHeight <= row.height,
+                       row.objectName + " label " + index
+                       + " is vertically clipped")
             }
         }
+    }
+
+    function test_shortcutRowWheelHandlersCoverTheirFullViewports() {
+        const firstRow = findChild(page, "editorShortcutFirstRow")
+        const secondRow = findChild(page, "editorShortcutSecondRow")
+        const firstWheel = findChild(page, "editorShortcutFirstRowWheel")
+        const secondWheel = findChild(page, "editorShortcutSecondRowWheel")
+        verify(firstRow && secondRow && firstWheel && secondWheel)
+        compare(firstWheel.parent, firstRow.contentItem)
+        compare(firstWheel.target, firstRow)
+        compare(secondWheel.parent, secondRow.contentItem)
+        compare(secondWheel.target, secondRow)
     }
 
     function test_compactShortcutRowsKeepHorizontalAccessAndTextSize_data() {
@@ -556,13 +574,14 @@ TestCase {
         const secondRow = findChild(page, "editorShortcutSecondRow")
         verify(firstRow && secondRow)
         for (const row of [firstRow, secondRow]) {
-            compare(row.height, 13)
+            compare(row.height, 16)
             compare(row.flickableDirection, Flickable.HorizontalFlick)
             const prefix = row === firstRow
                 ? "editorShortcutFirstGroup_" : "editorShortcutSecondGroup_"
             const lastLabel = findChild(page, prefix + (row.groupCount - 1))
             verify(lastLabel)
             compare(lastLabel.font.pixelSize, 13)
+            verify(lastLabel.implicitHeight <= row.height)
             row.contentX = Math.max(0, row.contentWidth - row.width)
             wait(0)
             const lastPosition = lastLabel.mapToItem(row, 0, 0)
