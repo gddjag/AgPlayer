@@ -64,7 +64,8 @@ std::vector<float> receiveAvailable(agplayer::ITimePitchEngine& engine,
 
 std::vector<float> processStream(const std::vector<float>& input,
                                  const double tempo, const double pitchCents,
-                                 const double rate, const std::size_t chunk)
+                                 const double rate, const std::size_t chunk,
+                                 const bool formantPreservation = false)
 {
     auto engine = agplayer::create_time_pitch_engine();
     require(engine != nullptr, "time/pitch engine factory returned null");
@@ -72,6 +73,8 @@ std::vector<float> processStream(const std::vector<float>& input,
     require(engine->setTempoRatio(tempo), "time/pitch engine tempo rejected");
     require(engine->setPitchCents(pitchCents), "time/pitch engine pitch rejected");
     require(engine->setRateRatio(rate), "time/pitch engine rate rejected");
+    require(engine->setFormantPreservation(formantPreservation),
+            "time/pitch engine formant setting rejected");
 
     std::vector<float> output;
     for (std::size_t offset = 0; offset < input.size(); offset += chunk) {
@@ -101,6 +104,24 @@ double crossingFrequency(const std::vector<float>& samples)
         : static_cast<double>(crossings) * 48'000.0 / samples.size();
 }
 
+double alignedCorrelation(const std::vector<float>& left,
+                          const std::vector<float>& right)
+{
+    const std::size_t start = 2'048U;
+    const std::size_t count = std::min(left.size(), right.size()) - start * 2U;
+    long double leftEnergy = 0.0L;
+    long double rightEnergy = 0.0L;
+    long double product = 0.0L;
+    for (std::size_t index = 0U; index < count; ++index) {
+        const long double leftValue = left[start + index];
+        const long double rightValue = right[start + index];
+        leftEnergy += leftValue * leftValue;
+        rightEnergy += rightValue * rightValue;
+        product += leftValue * rightValue;
+    }
+    return static_cast<double>(product / std::sqrt(leftEnergy * rightEnergy));
+}
+
 void timePitchEngineRealtimeContract()
 {
     const auto input = sine(48'000, 48'000U, 440.0);
@@ -124,6 +145,18 @@ void timePitchEngineRealtimeContract()
     require(std::llabs(static_cast<long long>(fast.size()) - 32'000LL) < 2'048LL,
             "1.5 tempo output duration is outside tolerance");
 
+    for (const std::size_t frames : {5'000U, 8'192U}) {
+        const std::vector<float> shortInput(input.begin(), input.begin() + frames);
+        const auto quarterSpeed = processStream(shortInput, 0.5, 0.0, 0.5,
+                                                frames);
+        require(!quarterSpeed.empty(),
+                "quarter-speed flush returned no output for a short stream");
+        const long long expected = static_cast<long long>(frames * 4U);
+        require(std::llabs(static_cast<long long>(quarterSpeed.size()) - expected)
+                    < 2'048LL,
+                "quarter-speed flush duration is outside tolerance");
+    }
+
     const auto raised = processStream(input, 1.0, 1'200.0, 1.0, 257U);
     const auto lowered = processStream(input, 1.0, -1'200.0, 1.0, 257U);
     require(std::abs(crossingFrequency(raised) - 880.0) < 80.0,
@@ -144,6 +177,19 @@ void timePitchEngineRealtimeContract()
     require(std::llabs(static_cast<long long>(realtime.size())
                        - static_cast<long long>(offline.size())) < 256LL,
             "realtime and offline processing diverged across chunk boundaries");
+    require(alignedCorrelation(realtime, offline) > 0.85,
+            "realtime and offline processing diverged in waveform shape");
+
+    const auto plainFormants = processStream(input, 1.0, 700.0, 1.0, 257U);
+    const auto protectedFormants = processStream(input, 1.0, 700.0, 1.0,
+                                                 257U, true);
+    require(std::all_of(protectedFormants.begin(), protectedFormants.end(),
+                        finiteBounded),
+            "formant-protected engine output is non-finite or unbounded");
+    require(plainFormants.size() == protectedFormants.size()
+                && !std::equal(plainFormants.begin(), plainFormants.end(),
+                               protectedFormants.begin()),
+            "formant toggle did not change the unified engine output");
 
     auto resetEngine = agplayer::create_time_pitch_engine();
     require(resetEngine != nullptr && resetEngine->configure(48'000, 1)

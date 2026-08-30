@@ -38,32 +38,62 @@ must not expose stale pre-roll samples.  That test was added during final
 review, failed first with `reset leaked previous input into a new stream`, and
 passed after `reset()` began clearing the preallocated pre-roll buffer.
 
+## Review fix round 1
+
+The review identified that a .25 effective playback rate could ask the fixed
+8192-frame planar buffer for more than 8192 output frames, and that the old
+offline caller supplied an entire render before receiving any output.
+
+Additional RED evidence:
+
+```text
+ctest --test-dir build/release-msvc --output-on-failure -R ^time_pitch_session_test$
+# failed: Signalsmith processing block exceeded fixed capacity
+# failed: quarter-speed flush returned no output for a short stream
+
+ctest --test-dir build/release-msvc --output-on-failure -R ^pitch_shifter_test$
+# failed: 10-second, 48kHz offline render decoded to a frame count outside
+# the expected 960000 +/- 4096 range
+```
+
+The former test uses 5000 and 8192 input frames with tempo 0.5 and rate 0.5;
+it verifies non-empty output and approximately 4x duration.  It also now
+compares aligned realtime/offline waveforms by correlation, not length alone.
+The long offline test generates a 10-second 48kHz WAV, calls the real
+`pitch_shift()` path, reopens the export, and verifies its approximately 20
+second duration.
+
+The unified engine boundary now exposes `setFormantPreservation(bool)`.
+Signalsmith maps it to `setFormantFactor(1.0F, enabled)`; the SoundTouch
+fallback applies the existing `FormantPreserver` on receive.  Realtime and
+offline callers pass their existing formant options through that boundary and
+do not apply a second output-stage formant pass.
+
 ## Verification
 
 MSVC Release:
 
 ```text
-cmake --build build/release-msvc --target time_pitch_session_test editor_playback_stream_test
-ctest --test-dir build/release-msvc --output-on-failure -R "^(time_pitch_session_test|editor_playback_stream_test)$"
-# 2/2 passed (1.11s)
+cmake --build build/release-msvc --target time_pitch_session_test editor_playback_stream_test pitch_shifter_test
+ctest --test-dir build/release-msvc --output-on-failure -R "^(time_pitch_session_test|editor_playback_stream_test|pitch_shifter_test)$"
+# 3/3 passed (1.47s)
 ```
 
 MSVC Debug:
 
 ```text
-cmake --build build/debug-msvc --target time_pitch_session_test editor_playback_stream_test
-ctest --test-dir build/debug-msvc --output-on-failure -R "^(time_pitch_session_test|editor_playback_stream_test)$"
-# 2/2 passed (11.65s)
+cmake --build build/debug-msvc --target time_pitch_session_test editor_playback_stream_test pitch_shifter_test
+ctest --test-dir build/debug-msvc --output-on-failure -R "^(time_pitch_session_test|editor_playback_stream_test|pitch_shifter_test)$"
+# 3/3 passed (14.96s)
 ```
 
 ## Remaining validation and risk
 
 - No real hardware/device latency or listening A/B test was run.  Automated
   checks do not establish subjective artifact, transient, or formant quality.
-- `ITimePitchEngine` has no formant setting.  Existing callers keep their
-  established `FormantPreserver` path, so the public interface and Controller
-  are unchanged; mapping that UI switch directly to Signalsmith would require
-  an explicitly approved interface/caller change.
+- Formant preservation now follows the unified engine setting.  Automated
+  A/B coverage proves finite, differing output, but it does not establish
+  subjective quality for Signalsmith or the SoundTouch fallback.
 - The fixed 131072-frame ring intentionally reports a diagnostic and stops
   accepting data if a caller supplies more buffered audio than it receives.
   Normal production blocks interleave `put()`/`receive()`; no sample is
@@ -76,6 +106,9 @@ ctest --test-dir build/debug-msvc --output-on-failure -R "^(time_pitch_session_t
 - `core/src/time_pitch_engine.hpp`
 - `core/src/time_pitch_engine.cpp`
 - `core/src/signalsmith_time_pitch_engine.cpp`
+- `core/src/pitch_shifter.cpp`
+- `core/src/audio_editor/editor_playback_stream.cpp`
 - `tests/core/time_pitch_session_test.cpp`
+- `tests/core/pitch_shifter_test.cpp`
 - `THIRD-PARTY-NOTICES.md`
 - `.superpowers/sdd/2026-08-30-audio-editor-acid-editing/task-6-report.md`

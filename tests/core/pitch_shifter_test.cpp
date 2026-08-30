@@ -4,8 +4,10 @@
 
 #include "decoder.hpp"
 
+#include <array>
 #include <cassert>
 #include <cmath>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -14,6 +16,64 @@
 #include <vector>
 
 namespace {
+
+void write_u16(std::ostream& stream, const std::uint16_t value)
+{
+    const std::array<char, 2> bytes{static_cast<char>(value & 0xffU),
+        static_cast<char>((value >> 8U) & 0xffU)};
+    stream.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+}
+
+void write_u32(std::ostream& stream, const std::uint32_t value)
+{
+    const std::array<char, 4> bytes{static_cast<char>(value & 0xffU),
+        static_cast<char>((value >> 8U) & 0xffU),
+        static_cast<char>((value >> 16U) & 0xffU),
+        static_cast<char>((value >> 24U) & 0xffU)};
+    stream.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+}
+
+std::filesystem::path make_long_sine_fixture()
+{
+    constexpr std::uint32_t sample_rate = 48'000U;
+    constexpr std::uint32_t frames = sample_rate * 10U;
+    const auto path = std::filesystem::temp_directory_path()
+        / "agplayer-pitch-shifter-long.wav";
+    std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+    stream.write("RIFF", 4);
+    write_u32(stream, 36U + frames * 2U);
+    stream.write("WAVEfmt ", 8);
+    write_u32(stream, 16U);
+    write_u16(stream, 1U);
+    write_u16(stream, 1U);
+    write_u32(stream, sample_rate);
+    write_u32(stream, sample_rate * 2U);
+    write_u16(stream, 2U);
+    write_u16(stream, 16U);
+    stream.write("data", 4);
+    write_u32(stream, frames * 2U);
+    const double step = 2.0 * std::acos(-1.0) * 440.0 / sample_rate;
+    for (std::uint32_t frame = 0U; frame < frames; ++frame) {
+        const auto sample = static_cast<std::int16_t>(std::lround(
+            16'000.0 * std::sin(step * frame)));
+        write_u16(stream, static_cast<std::uint16_t>(sample));
+    }
+    assert(stream.good());
+    return path;
+}
+
+std::size_t decoded_frames(const std::filesystem::path& path)
+{
+    agplayer::Decoder decoder;
+    assert(decoder.open(path.string()) == AG_OK);
+    agplayer::DecodedAudioBlock block;
+    std::size_t frames = 0U;
+    do {
+        assert(decoder.read(block) == AG_OK);
+        frames += block.frames;
+    } while (!block.end_of_stream);
+    return frames;
+}
 
 std::filesystem::path make_corrupt_adpcm_wav(const std::filesystem::path& source)
 {
@@ -158,6 +218,30 @@ int main(const int argc, char** argv)
     assert(result == AG_OK);
     assert(std::filesystem::exists(happy_output));
 
+    // A real long offline render must drain the streaming processor while it
+    // feeds it.  This is longer than the engine's fixed output FIFO.
+    const auto long_input = make_long_sine_fixture();
+    const auto long_output = long_input.parent_path()
+        / "agplayer-pitch-shifter-long-output.wav";
+    std::filesystem::remove(long_output);
+    agplayer::PitchShiftConfig long_config;
+    long_config.output_path = long_output.string();
+    long_config.output_codec_name = "pcm_s16le";
+    long_config.keep_tempo = true;
+    long_config.tempo_ratio = 0.5;
+    error.clear();
+    result = agplayer::pitch_shift(long_input.string(), long_config,
+                                   nullptr, nullptr, error);
+    if (result != AG_OK) {
+        std::cerr << "long pitch_shift failed: " << static_cast<int>(result)
+                  << " " << error << "\n";
+    }
+    assert(result == AG_OK);
+    assert(std::filesystem::exists(long_output));
+    const auto long_frames = decoded_frames(long_output);
+    assert(std::llabs(static_cast<long long>(long_frames) - 960'000LL)
+           < 4'096LL);
+
     // Failure path: corrupted ADPCM-tagged WAV triggers avcodec_send_packet
     // failure. The tool must return a non-AG_OK status and must not leave a
     // complete/successful output file.
@@ -267,6 +351,8 @@ int main(const int argc, char** argv)
     assert(smooth_edges.second < abrupt_edges.second * 0.75);
 
     std::filesystem::remove(happy_output);
+    std::filesystem::remove(long_input);
+    std::filesystem::remove(long_output);
     std::filesystem::remove(corrupt_path);
     std::filesystem::remove(protected_output);
     std::filesystem::remove(unprotected_output);

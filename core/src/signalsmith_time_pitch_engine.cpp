@@ -75,6 +75,14 @@ public:
         return true;
     }
 
+    bool setFormantPreservation(const bool enabled) override
+    {
+        if (!configured_) return false;
+        formant_preservation_ = enabled;
+        applySettings();
+        return true;
+    }
+
     void put(const float* const samples, const std::size_t frames) override
     {
         if (!configured_ || failed_ || samples == nullptr || frames == 0U
@@ -98,7 +106,7 @@ public:
             if (startup_frames_ == input_latency_) prime();
         }
         while (!failed_ && primed_ && offset < frames) {
-            const std::size_t count = std::min(kWorkFrames, frames - offset);
+            const std::size_t count = std::min(maxInputFrames(), frames - offset);
             processInterleaved(samples + offset * channels_, count,
                                outputFramesFor(count));
             offset += count;
@@ -108,7 +116,7 @@ public:
     [[nodiscard]] std::size_t receive(float* const samples,
                                       const std::size_t frames) override
     {
-        if (!configured_ || failed_ || samples == nullptr || frames == 0U) {
+        if (!configured_ || samples == nullptr || frames == 0U) {
             return 0U;
         }
         const std::size_t count = std::min(frames, ring_frames_);
@@ -135,16 +143,21 @@ public:
             // startup_frames_ samples contain the short input supplied so far.
             startup_frames_ = input_latency_;
             prime();
-            processSilence(input_latency_, final_output_frames_ + output_latency_);
+            processSilence(input_latency_);
         } else {
-            processSilence(input_latency_, outputFramesFor(input_latency_));
+            processSilence(input_latency_);
         }
         if (!failed_) {
-            for (std::size_t channel = 0U; channel < channels_; ++channel) {
-                output_ptrs_[channel] = output_planar_[channel].data();
+            std::size_t remaining = output_latency_;
+            while (!failed_ && remaining > 0U) {
+                const std::size_t count = std::min(kWorkFrames, remaining);
+                for (std::size_t channel = 0U; channel < channels_; ++channel) {
+                    output_ptrs_[channel] = output_planar_[channel].data();
+                }
+                stretch_.flush(output_ptrs_, static_cast<int>(count));
+                pushPlanar(count);
+                remaining -= count;
             }
-            stretch_.flush(output_ptrs_, static_cast<int>(output_latency_));
-            pushPlanar(output_latency_);
         }
     }
 
@@ -188,7 +201,7 @@ private:
         const double transpose = std::pow(2.0, pitch_cents_ / 1'200.0)
             * rate_ratio_;
         stretch_.setTransposeFactor(static_cast<float>(transpose));
-        stretch_.setFormantFactor(1.0F, false);
+        stretch_.setFormantFactor(1.0F, formant_preservation_);
     }
 
     void prime()
@@ -213,6 +226,14 @@ private:
         return result;
     }
 
+    [[nodiscard]] std::size_t maxInputFrames() const noexcept
+    {
+        const long double limit = std::floor(
+            static_cast<long double>(kWorkFrames) * playbackRate());
+        return std::max<std::size_t>(1U, std::min(
+            kWorkFrames, static_cast<std::size_t>(limit)));
+    }
+
     void processInterleaved(const float* const samples, const std::size_t inputFrames,
                             const std::size_t outputFrames)
     {
@@ -230,21 +251,21 @@ private:
         pushPlanar(outputFrames);
     }
 
-    void processSilence(const std::size_t inputFrames,
-                        const std::size_t outputFrames)
+    void processSilence(std::size_t inputFrames)
     {
-        if (inputFrames > kWorkFrames || outputFrames > kWorkFrames) {
-            markFailed("Signalsmith flush block exceeded fixed capacity");
-            return;
+        while (!failed_ && inputFrames > 0U) {
+            const std::size_t count = std::min(maxInputFrames(), inputFrames);
+            for (std::size_t channel = 0U; channel < channels_; ++channel) {
+                std::fill_n(input_planar_[channel].data(), count, 0.0F);
+                input_ptrs_[channel] = input_planar_[channel].data();
+                output_ptrs_[channel] = output_planar_[channel].data();
+            }
+            const std::size_t outputFrames = outputFramesFor(count);
+            stretch_.process(input_ptrs_, static_cast<int>(count), output_ptrs_,
+                             static_cast<int>(outputFrames));
+            pushPlanar(outputFrames);
+            inputFrames -= count;
         }
-        for (std::size_t channel = 0U; channel < channels_; ++channel) {
-            std::fill_n(input_planar_[channel].data(), inputFrames, 0.0F);
-            input_ptrs_[channel] = input_planar_[channel].data();
-            output_ptrs_[channel] = output_planar_[channel].data();
-        }
-        stretch_.process(input_ptrs_, static_cast<int>(inputFrames), output_ptrs_,
-                         static_cast<int>(outputFrames));
-        pushPlanar(outputFrames);
     }
 
     void deinterleave(const float* const samples, const std::size_t frames)
@@ -301,7 +322,7 @@ private:
 
     void markFailed(const char* const reason) noexcept
     {
-        if (!failed_) std::fputs(reason, stderr);
+        if (!failed_) std::fprintf(stderr, "%s\n", reason);
         failed_ = true;
     }
 
@@ -329,6 +350,7 @@ private:
     double tempo_ratio_{1.0};
     double pitch_cents_{};
     double rate_ratio_{1.0};
+    bool formant_preservation_{};
     bool configured_{};
     bool primed_{};
     bool flushed_{};

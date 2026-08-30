@@ -15,6 +15,7 @@ public:
     virtual bool setTempoRatio(double ratio) = 0;
     virtual bool setPitchCents(double cents) = 0;
     virtual bool setRateRatio(double ratio) = 0;
+    virtual bool setFormantPreservation(bool enabled) = 0;
     virtual void put(const float* samples, std::size_t frames) = 0;
     [[nodiscard]] virtual std::size_t receive(float* samples,
                                                std::size_t frames) = 0;

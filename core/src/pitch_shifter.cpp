@@ -1,7 +1,6 @@
 #define _USE_MATH_DEFINES
 #include "pitch_shifter.hpp"
 #include "ffmpeg_codec_support.hpp"
-#include "formant_preserver.hpp"
 #include "time_pitch_engine.hpp"
 
 extern "C" {
@@ -353,28 +352,41 @@ ag_result pitch_shift(const std::string& input_path,
         || !processor->setTempoRatio(config.tempo_ratio)
         || (config.keep_tempo
                 ? !processor->setPitchCents(config.pitch_cents)
-                : !processor->setRateRatio(pitch_ratio))) {
+                : !processor->setRateRatio(pitch_ratio))
+        || !processor->setFormantPreservation(config.vocal_protection)) {
         error = "Invalid time/pitch processor configuration";
         return AG_INVALID_ARGUMENT;
     }
-    processor->put(interleaved.data(), input_frames);
-    processor->flush();
 
     std::vector<float> processed;
-    processed.reserve(interleaved.size());
+    processed.reserve(static_cast<std::size_t>(std::ceil(
+        static_cast<long double>(interleaved.size()) / config.tempo_ratio)));
     constexpr unsigned int receive_frames = 4096;
     std::vector<float> receive_buffer(
         static_cast<std::size_t>(receive_frames)
         * static_cast<std::size_t>(channels));
-    while (!is_cancelled(cancelled)) {
-        const std::size_t received =
-            processor->receive(receive_buffer.data(), receive_frames);
-        if (received == 0U) break;
-        processed.insert(processed.end(), receive_buffer.begin(),
-            receive_buffer.begin()
-                + static_cast<std::ptrdiff_t>(received)
-                    * static_cast<std::ptrdiff_t>(channels));
+    const auto drain_processor = [&] {
+        while (!is_cancelled(cancelled)) {
+            const std::size_t received = processor->receive(
+                receive_buffer.data(), receive_frames);
+            if (received == 0U) return;
+            processed.insert(processed.end(), receive_buffer.begin(),
+                receive_buffer.begin()
+                    + static_cast<std::ptrdiff_t>(received)
+                        * static_cast<std::ptrdiff_t>(channels));
+        }
+    };
+    constexpr std::size_t put_frames = 4'096U;
+    for (std::size_t offset = 0U; offset < input_frames
+         && !is_cancelled(cancelled); offset += put_frames) {
+        const std::size_t count = std::min(put_frames, input_frames - offset);
+        processor->put(interleaved.data()
+                           + offset * static_cast<std::size_t>(channels),
+                       count);
+        drain_processor();
     }
+    processor->flush();
+    drain_processor();
     if (is_cancelled(cancelled)) {
         error = "Pitch shift cancelled";
         return AG_CANCELLED;
@@ -394,18 +406,6 @@ ag_result pitch_shift(const std::string& input_path,
     }
 
     const int enc_sample_rate = out_sample_rate;
-
-    if (config.vocal_protection && std::abs(pitch_ratio - 1.0) > 0.000001) {
-        FormantPreserver preserver(enc_sample_rate, channels, pitch_ratio);
-        preserver.process(processed.data(), processed_frames);
-        for (std::size_t frame = 0; frame < processed_frames; ++frame) {
-            for (int ch = 0; ch < channels; ++ch) {
-                stretched[static_cast<std::size_t>(ch)][frame] =
-                    processed[frame * static_cast<std::size_t>(channels)
-                              + static_cast<std::size_t>(ch)];
-            }
-        }
-    }
 
     if (config.smooth_transition) {
         const std::size_t fade_samples = std::min<std::size_t>(

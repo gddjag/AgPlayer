@@ -1,4 +1,5 @@
 #include "time_pitch_engine.hpp"
+#include "formant_preserver.hpp"
 
 #include <cmath>
 #include <atomic>
@@ -21,7 +22,10 @@ public:
         processor_.clear();
         processor_.setSampleRate(static_cast<unsigned int>(sampleRate));
         processor_.setChannels(static_cast<unsigned int>(channels));
+        sample_rate_ = sampleRate;
+        channels_ = channels;
         configured_ = true;
+        refreshFormantPreserver();
         return true;
     }
 
@@ -41,6 +45,8 @@ public:
             return false;
         }
         processor_.setPitchSemiTones(static_cast<float>(cents / 100.0));
+        pitch_cents_ = cents;
+        refreshFormantPreserver();
         return true;
     }
 
@@ -50,6 +56,16 @@ public:
             return false;
         }
         processor_.setRate(static_cast<float>(ratio));
+        rate_ratio_ = ratio;
+        refreshFormantPreserver();
+        return true;
+    }
+
+    bool setFormantPreservation(const bool enabled) override
+    {
+        if (!configured_) return false;
+        formant_preservation_ = enabled;
+        refreshFormantPreserver();
         return true;
     }
 
@@ -69,8 +85,12 @@ public:
         }
         const std::size_t bounded = std::min(
             frames, static_cast<std::size_t>(std::numeric_limits<unsigned int>::max()));
-        return static_cast<std::size_t>(processor_.receiveSamples(
-            samples, static_cast<unsigned int>(bounded)));
+        const std::size_t received = static_cast<std::size_t>(
+            processor_.receiveSamples(samples, static_cast<unsigned int>(bounded)));
+        if (formant_preserver_ && received > 0U) {
+            formant_preserver_->process(samples, received);
+        }
+        return received;
     }
 
     void flush() override
@@ -84,6 +104,7 @@ public:
     {
         if (configured_) {
             processor_.clear();
+            refreshFormantPreserver();
         }
     }
 
@@ -93,7 +114,23 @@ private:
         return std::isfinite(ratio) && ratio >= 0.5 && ratio <= 2.0;
     }
 
+    void refreshFormantPreserver()
+    {
+        formant_preserver_.reset();
+        if (!configured_ || !formant_preservation_) return;
+        const double ratio = std::pow(2.0, pitch_cents_ / 1'200.0) * rate_ratio_;
+        if (std::abs(ratio - 1.0) < 0.000001) return;
+        formant_preserver_ = std::make_unique<FormantPreserver>(sample_rate_,
+                                                                  channels_, ratio);
+    }
+
     soundtouch::SoundTouch processor_;
+    std::unique_ptr<FormantPreserver> formant_preserver_;
+    int sample_rate_{};
+    int channels_{};
+    double pitch_cents_{};
+    double rate_ratio_{1.0};
+    bool formant_preservation_{};
     bool configured_ = false;
 };
 
@@ -133,6 +170,11 @@ public:
     bool setRateRatio(const double ratio) override
     {
         return active_ != nullptr && active_->setRateRatio(ratio);
+    }
+
+    bool setFormantPreservation(const bool enabled) override
+    {
+        return active_ != nullptr && active_->setFormantPreservation(enabled);
     }
 
     void put(const float* const samples, const std::size_t frames) override
