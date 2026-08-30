@@ -369,12 +369,14 @@ ag_result pitch_shift(const std::string& input_path,
         while (!is_cancelled(cancelled)) {
             const std::size_t received = processor->receive(
                 receive_buffer.data(), receive_frames);
-            if (received == 0U) return;
+            if (processor->failed()) return false;
+            if (received == 0U) return true;
             processed.insert(processed.end(), receive_buffer.begin(),
                 receive_buffer.begin()
                     + static_cast<std::ptrdiff_t>(received)
                         * static_cast<std::ptrdiff_t>(channels));
         }
+        return !processor->failed();
     };
     constexpr std::size_t put_frames = 4'096U;
     for (std::size_t offset = 0U; offset < input_frames
@@ -383,10 +385,16 @@ ag_result pitch_shift(const std::string& input_path,
         processor->put(interleaved.data()
                            + offset * static_cast<std::size_t>(channels),
                        count);
-        drain_processor();
+        if (processor->failed() || !drain_processor()) {
+            error = "Time/pitch processor failed while accepting audio";
+            return AG_INTERNAL_ERROR;
+        }
     }
     processor->flush();
-    drain_processor();
+    if (processor->failed() || !drain_processor()) {
+        error = "Time/pitch processor failed while flushing audio";
+        return AG_INTERNAL_ERROR;
+    }
     if (is_cancelled(cancelled)) {
         error = "Pitch shift cancelled";
         return AG_CANCELLED;

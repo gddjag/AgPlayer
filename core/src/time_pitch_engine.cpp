@@ -108,6 +108,11 @@ public:
         }
     }
 
+    [[nodiscard]] bool failed() const noexcept override
+    {
+        return false;
+    }
+
 private:
     static bool validRatio(const double ratio)
     {
@@ -196,6 +201,11 @@ public:
     void reset() override
     {
         if (active_ != nullptr) active_->reset();
+    }
+
+    [[nodiscard]] bool failed() const noexcept override
+    {
+        return active_ != nullptr && active_->failed();
     }
 
 private:

@@ -69,6 +69,31 @@ fallback applies the existing `FormantPreserver` on receive.  Realtime and
 offline callers pass their existing formant options through that boundary and
 do not apply a second output-stage formant pass.
 
+## Review fix round 2
+
+The bounded Signalsmith FIFO could report an error internally, but the old
+boundary left that state private.  A caller could then mistake a zero-frame
+`receive()` for normal latency or end-of-stream.
+
+Additional RED evidence (MSVC Release build):
+
+```text
+cmake --build build/release-msvc --target time_pitch_session_test
+# failed: time_pitch_session_test.cpp(221): error C2039: "failed" is not a
+# member of agplayer::ITimePitchEngine
+```
+
+The new production test configures the real Signalsmith engine, sends one
+131073-frame passthrough block without receiving, and requires that the
+bounded-FIFO failure is observable.  `ITimePitchEngine::failed() noexcept`
+now exposes that state: Signalsmith reports its existing failure flag,
+SoundTouch reports false, and the preferred wrapper delegates to the active
+engine.  `pitch_shift()` checks after every put, receive, and flush boundary;
+it returns `AG_INTERNAL_ERROR` with a specific error message if the engine
+fails.  `EditorPlaybackStream::read()` checks the same boundaries and returns
+`AG_INTERNAL_ERROR`, never converting an engine failure into EOS.  The FIFO
+contract is documented at the interface: callers must interleave put/receive.
+
 ## Verification
 
 MSVC Release:
@@ -87,6 +112,22 @@ ctest --test-dir build/debug-msvc --output-on-failure -R "^(time_pitch_session_t
 # 3/3 passed (14.96s)
 ```
 
+Review round 2 re-verification (MSVC Release):
+
+```text
+cmake --build build/release-msvc --target time_pitch_session_test editor_playback_stream_test pitch_shifter_test
+ctest --test-dir build/release-msvc --output-on-failure -R "^(time_pitch_session_test|editor_playback_stream_test|pitch_shifter_test)$"
+# 3/3 passed (4.02s)
+```
+
+MSVC Debug:
+
+```text
+cmake --build build/debug-msvc --target time_pitch_session_test editor_playback_stream_test pitch_shifter_test
+ctest --test-dir build/debug-msvc --output-on-failure -R "^(time_pitch_session_test|editor_playback_stream_test|pitch_shifter_test)$"
+# 3/3 passed (27.28s)
+```
+
 ## Remaining validation and risk
 
 - No real hardware/device latency or listening A/B test was run.  Automated
@@ -94,10 +135,10 @@ ctest --test-dir build/debug-msvc --output-on-failure -R "^(time_pitch_session_t
 - Formant preservation now follows the unified engine setting.  Automated
   A/B coverage proves finite, differing output, but it does not establish
   subjective quality for Signalsmith or the SoundTouch fallback.
-- The fixed 131072-frame ring intentionally reports a diagnostic and stops
-  accepting data if a caller supplies more buffered audio than it receives.
-  Normal production blocks interleave `put()`/`receive()`; no sample is
-  silently discarded.
+- The fixed 131072-frame ring rejects a caller that does not interleave
+  `put()`/`receive()`; the failure is now explicit and propagated as
+  `AG_INTERNAL_ERROR` by offline and realtime production callers.  No sample
+  is silently discarded.
 
 ## Files
 

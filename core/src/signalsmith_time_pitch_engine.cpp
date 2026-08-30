@@ -182,6 +182,11 @@ public:
         failed_ = false;
     }
 
+    [[nodiscard]] bool failed() const noexcept override
+    {
+        return failed_;
+    }
+
 private:
     [[nodiscard]] bool isPassthrough() const noexcept
     {

@@ -309,18 +309,24 @@ public:
                 metadata_value.channels));
             std::size_t received = processor->receive(block.samples.data(),
                                                        kReadFrames);
+            if (processor->failed()) return AG_INTERNAL_ERROR;
             while (received == 0 && !flushed) {
                 std::vector<float> raw;
                 const ag_result result = readRaw(raw, kReadFrames);
                 if (result != AG_OK) return result;
                 const std::size_t frames = raw.size()
                     / static_cast<std::size_t>(metadata_value.channels);
-                if (frames > 0) processor->put(raw.data(), frames);
+                if (frames > 0) {
+                    processor->put(raw.data(), frames);
+                    if (processor->failed()) return AG_INTERNAL_ERROR;
+                }
                 if (raw_eof) {
                     processor->flush();
+                    if (processor->failed()) return AG_INTERNAL_ERROR;
                     flushed = true;
                 }
                 received = processor->receive(block.samples.data(), kReadFrames);
+                if (processor->failed()) return AG_INTERNAL_ERROR;
             }
             block.samples.resize(received * static_cast<std::size_t>(
                 metadata_value.channels));

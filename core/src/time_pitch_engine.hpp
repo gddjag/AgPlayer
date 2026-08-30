@@ -21,6 +21,9 @@ public:
                                                std::size_t frames) = 0;
     virtual void flush() = 0;
     virtual void reset() = 0;
+    // The fixed internal FIFO requires callers to interleave put()/receive().
+    // A full FIFO is a processing failure, never an end-of-stream indication.
+    [[nodiscard]] virtual bool failed() const noexcept = 0;
 };
 
 [[nodiscard]] std::unique_ptr<ITimePitchEngine> create_time_pitch_engine();

@@ -211,6 +211,17 @@ void timePitchEngineRealtimeContract()
     }), "reset leaked previous input into a new stream");
 }
 
+void signalsmithFifoBackpressureIsObservable()
+{
+    auto engine = agplayer::create_signalsmith_time_pitch_engine();
+    require(engine != nullptr && engine->configure(48'000, 1),
+            "Signalsmith engine configuration failed");
+    const std::vector<float> overflow(131'073U, 0.25F);
+    engine->put(overflow.data(), overflow.size());
+    require(engine->failed(),
+            "Signalsmith FIFO overflow was not exposed to its caller");
+}
+
 } // namespace
 
 int main(const int argc, char** argv)
@@ -220,6 +231,7 @@ int main(const int argc, char** argv)
     using namespace agplayer::editor;
 
     timePitchEngineRealtimeContract();
+    signalsmithFifoBackpressureIsObservable();
 
     TimePitchSession parameters;
     require(parameters.setTargetBpm(130.0),
