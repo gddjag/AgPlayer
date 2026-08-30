@@ -297,6 +297,29 @@ private slots:
         }
     }
 
+    void freshExportSettingsPersistDefault320Kbps()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        auto project = makeProject(temporary);
+
+        ProjectExportSettings freshSettings;
+        QCOMPARE(freshSettings.bitRate, qint64{320'000});
+        project.exportSettings = freshSettings;
+
+        const ProjectSaveResult saved = ProjectDocument::save(
+            project.projectPath, request(project));
+        QVERIFY2(saved.ok(), qPrintable(saved.message));
+        QCOMPARE(readObject(project.projectPath)
+                     .value(QStringLiteral("exportSettings")).toObject()
+                     .value(QStringLiteral("bitRate")).toString(),
+                 QStringLiteral("320000"));
+
+        const ProjectLoadResult loaded = ProjectDocument::load(project.projectPath);
+        QVERIFY2(loaded.ok(), qPrintable(loaded.message));
+        QCOMPARE(loaded.exportSettings.bitRate, qint64{320'000});
+    }
+
     void rejectsUnknownSchemaTwoFadeCurve()
     {
         QTemporaryDir temporary;

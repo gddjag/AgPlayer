@@ -472,7 +472,7 @@ TestCase {
     function test_referenceTransportShortcutAndStatusCopy() {
         const playBackground = findChild(page, "editorPrimaryPlayBackground")
         const shortcutFirst = findChild(page, "editorShortcutFirstGroup_0")
-        const shortcutEnvelope = findChild(page, "editorShortcutFirstGroup_8")
+        const shortcutEnvelope = findChild(page, "editorShortcutSecondGroup_3")
         verify(playBackground && shortcutFirst && shortcutEnvelope)
         verify(shortcutFirst.text.indexOf("空格 = 播放 / 暂停") >= 0)
         compare(shortcutFirst.text.indexOf("R = 开始录音"), -1)
@@ -486,70 +486,89 @@ TestCase {
     function test_shortcutCardUsesKeyboardIconAndRealDividers() {
         const keyboard = findChild(page, "editorShortcutKeyboardIcon")
         const divider = findChild(page, "editorShortcutDivider")
-        const laterDivider = findChild(page, "editorShortcutFirstDivider_7")
+        const laterDivider = findChild(page, "editorShortcutSecondDivider_2")
         verify(keyboard, "shortcut keyboard icon is missing")
         verify(divider, "first shortcut divider is missing")
         verify(laterDivider, "last shortcut divider is missing")
         verify(keyboard.source.toString().indexOf("keyboard-box-line.svg") >= 0)
         compare(divider.width, 1)
         compare(laterDivider.width, 1)
-        verify(divider.height >= 16)
-        verify(laterDivider.height >= 16)
+        compare(divider.height, 13)
+        compare(laterDivider.height, 13)
     }
 
-    function test_shortcutCardUsesStructuredReferenceGroups() {
+    function test_shortcutCardUsesTwoStructuredReferenceRows() {
         const firstRow = findChild(page, "editorShortcutFirstRow")
-        verify(firstRow)
-        compare(firstRow.groupCount, 9)
-        compare(firstRow.dividerCount, 8)
+        const secondRow = findChild(page, "editorShortcutSecondRow")
+        verify(firstRow && secondRow)
+        compare(firstRow.groupCount, 5)
+        compare(firstRow.dividerCount, 4)
+        compare(secondRow.groupCount, 4)
+        compare(secondRow.dividerCount, 3)
+        compare(firstRow.height, 13)
+        compare(secondRow.height, 13)
         compare(findChild(page, "editorShortcutFirstGroup_0").text,
                 "空格 = 播放 / 暂停")
         compare(findChild(page, "editorShortcutFirstGroup_4").text,
                 "Ctrl+Z / Y = 撤销 / 重做")
-        compare(findChild(page, "editorShortcutFirstGroup_8").text,
+        compare(findChild(page, "editorShortcutSecondGroup_3").text,
                 "双击音量线 = 添加控制点")
     }
 
-    function test_shortcutReferenceRowsFillTheCardWithoutClippingLabels() {
+    function test_shortcutReferenceRowsExposeAllLabelsWithoutScrolling() {
         host.width = 1672
         host.height = 822
         wait(0)
         const card = findChild(page, "editorShortcutCard")
         const firstRow = findChild(page, "editorShortcutFirstRow")
-        verify(card && firstRow)
-        compare(firstRow.x, 18)
-        compare(firstRow.width, card.width - 36)
-        compare(firstRow.x + firstRow.width, card.width - 18)
-
-        const lastFirstDivider = findChild(page, "editorShortcutFirstDivider_7")
-        verify(lastFirstDivider)
-        const firstDividerPosition = lastFirstDivider.mapToItem(firstRow, 0, 0)
-        verify(firstDividerPosition.x > firstRow.width * 0.70)
-
-        for (let index = 0; index < firstRow.groupCount; ++index) {
-            const label = findChild(page, "editorShortcutFirstGroup_" + index)
-            verify(label)
-            verify(label.width >= label.implicitWidth,
-                   "first row label " + index + " is clipped")
+        const secondRow = findChild(page, "editorShortcutSecondRow")
+        verify(card && firstRow && secondRow)
+        for (const row of [firstRow, secondRow]) {
+            compare(row.x, 18)
+            compare(row.width, card.width - 36)
+            compare(row.x + row.width, card.width - 18)
+            verify(row.contentWidth <= row.width,
+                   row.objectName + " should not need scrolling at 1672 px")
+            compare(row.contentX, 0)
+            for (let index = 0; index < row.groupCount; ++index) {
+                const prefix = row === firstRow
+                    ? "editorShortcutFirstGroup_" : "editorShortcutSecondGroup_"
+                const label = findChild(page, prefix + index)
+                verify(label)
+                verify(label.width >= label.implicitWidth,
+                       row.objectName + " label " + index + " is clipped")
+            }
         }
     }
 
-    function test_compactShortcutRowScrollsInsteadOfShrinkingOrClipping() {
-        host.width = 1280
-        host.height = 720
+    function test_compactShortcutRowsKeepHorizontalAccessAndTextSize_data() {
+        return [
+            { tag: "desktop", width: 1280, height: 720 },
+            { tag: "compact", width: 880, height: 560 }
+        ]
+    }
+
+    function test_compactShortcutRowsKeepHorizontalAccessAndTextSize(data) {
+        host.width = data.width
+        host.height = data.height
         wait(0)
         const firstRow = findChild(page, "editorShortcutFirstRow")
-        const firstLabel = findChild(page, "editorShortcutFirstGroup_0")
-        const lastLabel = findChild(page, "editorShortcutFirstGroup_8")
-        verify(firstRow && firstLabel && lastLabel)
-        verify(firstRow.contentWidth > firstRow.width)
-        verify(firstLabel.font.pixelSize >= 13)
-        verify(lastLabel.font.pixelSize >= 13)
-        firstRow.contentX = firstRow.contentWidth - firstRow.width
-        wait(0)
-        verify(firstRow.contentX > 0)
-        const lastPosition = lastLabel.mapToItem(firstRow, 0, 0)
-        verify(lastPosition.x + lastLabel.width <= firstRow.width + 1)
+        const secondRow = findChild(page, "editorShortcutSecondRow")
+        verify(firstRow && secondRow)
+        for (const row of [firstRow, secondRow]) {
+            compare(row.height, 13)
+            compare(row.flickableDirection, Flickable.HorizontalFlick)
+            const prefix = row === firstRow
+                ? "editorShortcutFirstGroup_" : "editorShortcutSecondGroup_"
+            const lastLabel = findChild(page, prefix + (row.groupCount - 1))
+            verify(lastLabel)
+            compare(lastLabel.font.pixelSize, 13)
+            row.contentX = Math.max(0, row.contentWidth - row.width)
+            wait(0)
+            const lastPosition = lastLabel.mapToItem(row, 0, 0)
+            verify(lastPosition.x + lastLabel.width <= row.width + 1,
+                   row.objectName + " last label is unreachable")
+        }
     }
 
     function test_referenceTransportUsesFineControlsAndHoverShortcuts() {

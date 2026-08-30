@@ -722,7 +722,7 @@ ProjectExportSettings defaultProjectExportSettings(
     settings.sampleRate = std::clamp(sourceSampleRate, 8'000, 384'000);
     settings.bitDepth = 24;
     settings.channels = std::clamp(sourceChannels, 1, 8);
-    settings.bitRate = 0;
+    settings.bitRate = 320'000;
     settings.keepMetadata = true;
     settings.variableBitRate = false;
     settings.quality = 100;
