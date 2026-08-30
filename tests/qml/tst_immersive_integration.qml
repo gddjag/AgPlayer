@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtTest
 import AgPlayer
 
@@ -100,7 +101,9 @@ TestCase {
         var coordinator = findChild(mainWindow, "immersiveCoordinator")
         if (coordinator) {
             tryCompare(coordinator, "handoffPhase", 0, 6000)
-            tryCompare(coordinator, "surface", null, 6000)
+            if (coordinator.surface && coordinator.surface.terrainItem)
+                tryCompare(coordinator.surface.terrainItem,
+                           "renderingRequested", false, 6000)
         }
         wait(50)
     }
@@ -130,10 +133,9 @@ TestCase {
         compare(findChild(mainActions, "immersiveActionButton").checked, true)
     }
 
-    function test_one_terrain_item_uses_two_phase_host_handoff() {
+    function test_one_terrain_item_stays_in_independent_window_for_all_hosts() {
         var coordinator = findChild(mainWindow, "immersiveCoordinator")
         verify(coordinator)
-        compare(coordinator.releasePollLimit, 300)
         PlayerExperienceController.immersiveMode =
                 PlayerExperienceController.TerrainReactor
         PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
@@ -142,9 +144,16 @@ TestCase {
         var terrain = findChild(mainWindow, "terrainReactor")
         verify(terrain)
         verify(terrain.liveRendererCount <= 1)
+        var immersiveWindow = findChild(mainWindow, "immersiveVisualWindow")
+        verify(immersiveWindow)
+        compare(immersiveWindow.visible, true)
+        var embeddedHost = findChild(mainWindow, "windowedImmersiveHost")
+        verify(embeddedHost)
+        verify(coordinator.surface.parent !== embeddedHost)
+        verify(coordinator.surface.parent === immersiveWindow.contentItem)
 
         var hosts = [PlayerExperienceController.Fullscreen,
-                     PlayerExperienceController.Desktop,
+                      PlayerExperienceController.Desktop,
                      PlayerExperienceController.Windowed]
         for (var index = 0; index < hosts.length; ++index) {
             PlayerExperienceController.hostMode = hosts[index]
@@ -152,11 +161,8 @@ TestCase {
             compare(coordinator.handoffPhase, 0)
             verify(terrain.liveRendererCount <= 1)
         }
-        var fullscreenWindow = findChild(mainWindow, "immersiveFullscreenWindow")
-        var desktopWindow = findChild(mainWindow, "immersiveDesktopWindow")
-        verify(fullscreenWindow && desktopWindow)
-        compare(fullscreenWindow.visible, false)
-        compare(desktopWindow.visible, false)
+        compare(findChild(mainWindow, "immersiveFullscreenWindow"), null)
+        compare(findChild(mainWindow, "immersiveDesktopWindow"), null)
     }
 
     function test_fullscreen_idle_and_manual_camera_timers_match_contract() {
@@ -168,7 +174,11 @@ TestCase {
         var coordinator = findChild(mainWindow, "immersiveCoordinator")
         var surface = coordinator ? coordinator.surface : null
         verify(surface)
-        verify(findChild(surface, "immersiveBrandTitle"))
+        compare(findChild(surface, "immersiveBrandTitle"), null)
+        compare(findChild(surface, "immersivePanelToggleButton"), null)
+        var fullscreenButton = findChild(surface, "immersiveFullscreenButton")
+        verify(fullscreenButton)
+        compare(fullscreenButton.display, AbstractButton.IconOnly)
         tryCompare(AudioVisualFeatureController, "active",
                    surface.terrainItem.renderingRequested, 1000)
         compare(findChild(surface, "immersivePanelIdleTimer").interval, 3000)
@@ -178,6 +188,15 @@ TestCase {
         compare(surface.panelIdle, false)
         surface.noteManualCameraActivity()
         compare(surface.manualCameraActive, true)
+
+        fullscreenButton.clicked()
+        tryCompare(PlayerExperienceController, "hostMode",
+                   PlayerExperienceController.Fullscreen, 1000)
+        var escapeShortcut = findChild(mainWindow, "immersiveEscapeShortcut")
+        verify(escapeShortcut)
+        escapeShortcut.activated()
+        compare(PlayerExperienceController.hostMode,
+                PlayerExperienceController.Windowed)
     }
 
     function test_queue_drawer_timers_scope_and_transform_only_magnification() {
@@ -245,6 +264,9 @@ TestCase {
         verify(findChild(panel, "lyricSlider_lyricDepth"))
         verify(findChild(panel, "dynamicSlider_responseRange"))
         verify(findChild(panel, "dynamicSlider_rhythmStrength"))
+        verify(findChild(panel, "effectToggle_burstEnabled"))
+        verify(findChild(panel, "effectToggle_streamHighlightEnabled"))
+        compare(findChild(panel, "dynamicSlider_terrainAmplitude"), null)
         compare(PlayerExperienceController.responseRange, 100)
         compare(PlayerExperienceController.rhythmStrength, 30)
 

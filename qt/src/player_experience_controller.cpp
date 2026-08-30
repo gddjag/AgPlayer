@@ -107,10 +107,12 @@ struct StylePreset {
     int autoRotate;
     int peakBoost;
     bool ripplesEnabled;
+    bool burstEnabled;
     bool floatingCubesEnabled;
     bool meteorsEnabled;
     bool idleBreathingEnabled;
     bool themeCycleEnabled;
+    bool streamHighlightEnabled;
     QVariantList visualEqGains;
     int inputCompression;
     int audioResponse;
@@ -126,23 +128,23 @@ struct StylePreset {
 const std::array<StylePreset, 6>& visualPresets()
 {
     static const std::array<StylePreset, 6> presets = {{
-        {0, "#5AD8FF", "#FF5F96", "#FFC56F", "#FFF5DF", "#090B12",
-         62, 56, 74, 38, 0.30, 54, 58, true, true, true, true, true,
+        {0, "#8BDCFF", "#EB7894", "#FFD7DF", "#FFF7FB", "#050206",
+         62, 56, 74, 38, 0.30, 54, 58, true, true, true, true, true, true, true,
          {90, 92, 50, 50, 50, 50, 50, 48}, 82, 136, 100, 64, 30, 86, 112, 42, 80},
         {2, "#7F5CFF", "#FF4FD8", "#22F0FF", "#F7F2FF", "#070310",
-         70, 80, 84, 58, 0.48, 64, 72, true, true, true, false, true,
+         70, 80, 84, 58, 0.48, 64, 72, true, true, true, true, false, true, true,
          {92, 84, 58, 48, 54, 72, 96, 100}, 84, 144, 178, 68, 106, 94, 108, 48, 84},
         {1, "#6F8DB8", "#D2645E", "#E9D7D1", "#F6F0E8", "#111317",
-         48, 36, 42, 22, 0.12, 30, 36, true, false, false, true, false,
+         48, 36, 42, 22, 0.12, 30, 36, true, true, false, false, true, false, true,
          {62, 58, 54, 50, 48, 44, 42, 40}, 88, 122, 160, 48, 82, 116, 120, 30, 72},
         {1, "#8EDFFF", "#D9B9FF", "#9EF2D1", "#F7FFFF", "#0B1117",
-         52, 48, 36, 24, 0.18, 34, 42, true, false, false, false, false,
+         52, 48, 36, 24, 0.18, 34, 42, true, true, false, false, false, false, true,
          {70, 68, 62, 58, 58, 62, 68, 72}, 80, 134, 166, 56, 92, 70, 126, 34, 80},
         {0, "#5264D9", "#B89CFF", "#46C7BC", "#DAF3EE", "#0A1018",
-         28, 22, 30, 16, 0.08, 26, 24, true, false, false, true, false,
+         28, 22, 30, 16, 0.08, 26, 24, true, true, false, false, true, false, true,
          {48, 46, 44, 42, 42, 40, 38, 36}, 92, 108, 154, 46, 64, 112, 106, 26, 66},
         {2, "#44D9FF", "#FF4FA7", "#FF8A45", "#FFF1D1", "#05030D",
-         72, 68, 76, 52, 0.45, 58, 68, true, true, true, true, true,
+         72, 68, 76, 52, 0.45, 58, 68, true, true, true, true, true, true, true,
          {96, 88, 66, 54, 58, 76, 94, 100}, 80, 140, 182, 64, 104, 96, 110, 46, 84},
     }};
     return presets;
@@ -180,6 +182,7 @@ double PlayerExperienceController::cinemaShake() const noexcept { return cinemaS
 int PlayerExperienceController::autoRotate() const noexcept { return autoRotate_; }
 int PlayerExperienceController::peakBoost() const noexcept { return peakBoost_; }
 bool PlayerExperienceController::ripplesEnabled() const noexcept { return ripplesEnabled_; }
+bool PlayerExperienceController::burstEnabled() const noexcept { return burstEnabled_; }
 bool PlayerExperienceController::floatingCubesEnabled() const noexcept
 {
     return floatingCubesEnabled_;
@@ -192,6 +195,10 @@ bool PlayerExperienceController::idleBreathingEnabled() const noexcept
 bool PlayerExperienceController::themeCycleEnabled() const noexcept
 {
     return themeCycleEnabled_;
+}
+bool PlayerExperienceController::streamHighlightEnabled() const noexcept
+{
+    return streamHighlightEnabled_;
 }
 
 bool PlayerExperienceController::songAdaptiveColorEnabled() const noexcept
@@ -396,6 +403,14 @@ void PlayerExperienceController::setRipplesEnabled(bool value)
     emit ripplesEnabledChanged();
 }
 
+void PlayerExperienceController::setBurstEnabled(bool value)
+{
+    if (burstEnabled_ == value) return;
+    burstEnabled_ = value;
+    persist(QStringLiteral("burstEnabled"), value);
+    emit burstEnabledChanged();
+}
+
 void PlayerExperienceController::setFloatingCubesEnabled(bool value)
 {
     if (floatingCubesEnabled_ == value) return;
@@ -426,6 +441,14 @@ void PlayerExperienceController::setThemeCycleEnabled(bool value)
     themeCycleEnabled_ = value;
     persist(QStringLiteral("themeCycleEnabled"), value);
     emit themeCycleEnabledChanged();
+}
+
+void PlayerExperienceController::setStreamHighlightEnabled(bool value)
+{
+    if (streamHighlightEnabled_ == value) return;
+    streamHighlightEnabled_ = value;
+    persist(QStringLiteral("streamHighlightEnabled"), value);
+    emit streamHighlightEnabledChanged();
 }
 
 void PlayerExperienceController::setSongAdaptiveColorEnabled(bool value)
@@ -607,10 +630,12 @@ bool PlayerExperienceController::applyPreset(int preset)
     setAutoRotate(values.autoRotate);
     setPeakBoost(values.peakBoost);
     setRipplesEnabled(values.ripplesEnabled);
+    setBurstEnabled(values.burstEnabled);
     setFloatingCubesEnabled(values.floatingCubesEnabled);
     setMeteorsEnabled(values.meteorsEnabled);
     setIdleBreathingEnabled(values.idleBreathingEnabled);
     setThemeCycleEnabled(values.themeCycleEnabled);
+    setStreamHighlightEnabled(values.streamHighlightEnabled);
     setVisualEqGains(values.visualEqGains);
     setInputCompression(values.inputCompression);
     setAudioResponse(values.audioResponse);
@@ -647,6 +672,22 @@ void PlayerExperienceController::togglePlayerShellMode()
     }
 }
 
+void PlayerExperienceController::cycleExperienceTheme()
+{
+    if (settingsController_ == nullptr) return;
+    if (immersiveMode_ != Off) {
+        setImmersiveMode(Off);
+        settingsController_->setPlayerShellMode(0);
+        return;
+    }
+    if (settingsController_->playerShellMode() == 0) {
+        settingsController_->setPlayerShellMode(1);
+        return;
+    }
+    setHostMode(Windowed);
+    setImmersiveMode(TerrainReactor);
+}
+
 void PlayerExperienceController::load()
 {
     settings_.beginGroup(QLatin1String(kSettingsGroup));
@@ -673,20 +714,20 @@ void PlayerExperienceController::load()
     colorMode_ = enumOrDefault(integer(QStringLiteral("colorMode"), MultiRegion),
                                MultiRegion, RgbSweep, MultiRegion);
     coolColor_ = normalizedColor(storedColor(settings_.value(QStringLiteral("coolColor")),
-                                             QStringLiteral("#4F6FFF")),
-                                 QStringLiteral("#4F6FFF"));
+                                             QStringLiteral("#8BDCFF")),
+                                 QStringLiteral("#8BDCFF"));
     warmColor_ = normalizedColor(storedColor(settings_.value(QStringLiteral("warmColor")),
-                                             QStringLiteral("#FF4778")),
-                                 QStringLiteral("#FF4778"));
+                                             QStringLiteral("#EB7894")),
+                                 QStringLiteral("#EB7894"));
     accentColor_ = normalizedColor(storedColor(settings_.value(QStringLiteral("accentColor")),
-                                               QStringLiteral("#77EAFF")),
-                                   QStringLiteral("#77EAFF"));
+                                               QStringLiteral("#FFD7DF")),
+                                   QStringLiteral("#FFD7DF"));
     peakColor_ = normalizedColor(storedColor(settings_.value(QStringLiteral("peakColor")),
-                                             QStringLiteral("#D7FF58")),
-                                 QStringLiteral("#D7FF58"));
+                                             QStringLiteral("#FFF7FB")),
+                                 QStringLiteral("#FFF7FB"));
     baseColor_ = normalizedColor(storedColor(settings_.value(QStringLiteral("baseColor")),
-                                             QStringLiteral("#080616")),
-                                 QStringLiteral("#080616"));
+                                             QStringLiteral("#050206")),
+                                 QStringLiteral("#050206"));
     terrainAmplitude_ = clampPercent(integer(QStringLiteral("terrainAmplitude"), 62));
     motionResponse_ = clampPercent(integer(QStringLiteral("motionResponse"), 56));
     gradientLayers_ = clampPercent(integer(QStringLiteral("gradientLayers"), 74));
@@ -695,10 +736,13 @@ void PlayerExperienceController::load()
     autoRotate_ = clampPercent(integer(QStringLiteral("autoRotate"), 54));
     peakBoost_ = clampPercent(integer(QStringLiteral("peakBoost"), 58));
     ripplesEnabled_ = boolean(QStringLiteral("ripplesEnabled"), true);
+    burstEnabled_ = boolean(QStringLiteral("burstEnabled"), true);
     floatingCubesEnabled_ = boolean(QStringLiteral("floatingCubesEnabled"), true);
     meteorsEnabled_ = boolean(QStringLiteral("meteorsEnabled"), true);
     idleBreathingEnabled_ = boolean(QStringLiteral("idleBreathingEnabled"), true);
     themeCycleEnabled_ = boolean(QStringLiteral("themeCycleEnabled"), false);
+    streamHighlightEnabled_ = boolean(
+        QStringLiteral("streamHighlightEnabled"), true);
     songAdaptiveColorEnabled_ = boolean(
         QStringLiteral("songAdaptiveColorEnabled"), true);
     const QVariant persistedGains = settings_.value(QStringLiteral("visualEqGains"));
@@ -744,10 +788,13 @@ void PlayerExperienceController::load()
     settings_.setValue(QStringLiteral("autoRotate"), autoRotate_);
     settings_.setValue(QStringLiteral("peakBoost"), peakBoost_);
     settings_.setValue(QStringLiteral("ripplesEnabled"), ripplesEnabled_);
+    settings_.setValue(QStringLiteral("burstEnabled"), burstEnabled_);
     settings_.setValue(QStringLiteral("floatingCubesEnabled"), floatingCubesEnabled_);
     settings_.setValue(QStringLiteral("meteorsEnabled"), meteorsEnabled_);
     settings_.setValue(QStringLiteral("idleBreathingEnabled"), idleBreathingEnabled_);
     settings_.setValue(QStringLiteral("themeCycleEnabled"), themeCycleEnabled_);
+    settings_.setValue(QStringLiteral("streamHighlightEnabled"),
+                       streamHighlightEnabled_);
     settings_.setValue(QStringLiteral("songAdaptiveColorEnabled"),
                        songAdaptiveColorEnabled_);
     settings_.setValue(QStringLiteral("visualEqGains"), visualEqGains_);

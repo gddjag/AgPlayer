@@ -51,6 +51,18 @@ ApplicationWindow {
         Qt.application.arguments.indexOf("--qa-immersive") >= 0
     readonly property bool qaImmersiveSynthetic:
         Qt.application.arguments.indexOf("--qa-immersive-synthetic") >= 0
+    readonly property bool qaImmersiveFullscreen:
+        Qt.application.arguments.indexOf("--qa-immersive-fullscreen") >= 0
+    readonly property int qaImmersiveWidth: qaArgumentNumber("--qa-width", 0)
+    readonly property int qaImmersiveHeight: qaArgumentNumber("--qa-height", 0)
+
+    function qaArgumentNumber(name, fallback) {
+        var index = Qt.application.arguments.indexOf(name)
+        if (index < 0 || index + 1 >= Qt.application.arguments.length)
+            return fallback
+        var value = Number(Qt.application.arguments[index + 1])
+        return isFinite(value) && value > 0 ? Math.round(value) : fallback
+    }
 
     DockedWindowFrame {
         anchors.fill: parent
@@ -101,7 +113,9 @@ ApplicationWindow {
     Component.onCompleted: {
         if (qaImmersive) {
             PlayerExperienceController.hostMode =
-                    PlayerExperienceController.Windowed
+                    qaImmersiveFullscreen
+                    ? PlayerExperienceController.Fullscreen
+                    : PlayerExperienceController.Windowed
             PlayerExperienceController.panelVisible = true
             PlayerExperienceController.immersiveMode =
                     PlayerExperienceController.TerrainReactor
@@ -180,8 +194,7 @@ ApplicationWindow {
         id: shellLoader
         objectName: "playerShellLoader"
         anchors.fill: parent
-        visible: PlayerExperienceController.immersiveMode
-                 === PlayerExperienceController.Off
+        visible: true
         sourceComponent: mainWindow.integratedShell
                          ? integratedShellComponent : classicShellComponent
         onLoaded: {
@@ -292,10 +305,7 @@ ApplicationWindow {
         id: windowedImmersiveHost
         objectName: "windowedImmersiveHost"
         anchors.fill: parent
-        visible: PlayerExperienceController.immersiveMode
-                 !== PlayerExperienceController.Off
-                 && immersiveCoordinator.attachedHostMode
-                    === PlayerExperienceController.Windowed
+        visible: false
         z: 80
     }
 
@@ -312,22 +322,12 @@ ApplicationWindow {
 
     Component {
         id: fullscreenWindowComponent
-        Window {
-            objectName: "immersiveFullscreenWindow"
-            visible: false
-            flags: Qt.Window | Qt.FramelessWindowHint
-            color: "black" // theme-color-allow: immersive compositor clear color
-            title: qsTr("AgPlayer 全屏沉浸")
-            onClosing: function(close) {
-                close.accepted = false
-                PlayerExperienceController.hostMode =
-                        PlayerExperienceController.Windowed
-            }
-            Shortcut {
-                sequence: "Escape"
-                onActivated: PlayerExperienceController.hostMode =
-                             PlayerExperienceController.Windowed
-            }
+        ImmersiveWindow {
+            waveformSession: sharedWaveformSession
+            renderingEnabled: mainWindow.immersiveRenderingEnabled
+            qaSyntheticFeatures: mainWindow.qaImmersiveSynthetic
+            qaViewportWidth: mainWindow.qaImmersiveWidth
+            qaViewportHeight: mainWindow.qaImmersiveHeight
         }
     }
 
@@ -371,40 +371,26 @@ ApplicationWindow {
         property bool handoffTimedOut: false
 
         function ensureSurface() {
-            if (!surface)
-                surface = immersiveSurfaceComponent.createObject(
-                            windowedImmersiveHost)
+            ensureWindow(PlayerExperienceController.Windowed)
+            if (!surface && fullscreenWindow)
+                surface = fullscreenWindow.surfaceItem
             return surface
         }
 
         function ensureWindow(mode) {
-            if (mode === PlayerExperienceController.Fullscreen
-                    && !fullscreenWindow) {
+            if (!fullscreenWindow) {
                 fullscreenWindow = fullscreenWindowComponent.createObject(mainWindow)
                 fullscreenWindow.visible = false
-            }
-            if (mode === PlayerExperienceController.Desktop
-                    && !desktopWindow) {
-                desktopWindow = desktopWindowComponent.createObject(mainWindow)
-                desktopWindow.visible = false
             }
         }
 
         function targetItem(mode) {
-            if (mode === PlayerExperienceController.Windowed)
-                return windowedImmersiveHost
             ensureWindow(mode)
-            if (mode === PlayerExperienceController.Fullscreen)
-                return fullscreenWindow ? fullscreenWindow.contentItem : null
-            return desktopWindow ? desktopWindow.contentItem : null
+            return fullscreenWindow ? fullscreenWindow.contentItem : null
         }
 
         function currentWindow(mode) {
-            if (mode === PlayerExperienceController.Windowed)
-                return mainWindow
-            if (mode === PlayerExperienceController.Fullscreen)
-                return fullscreenWindow
-            return desktopWindow
+            return fullscreenWindow
         }
 
         function refreshExposure() {
@@ -417,12 +403,9 @@ ApplicationWindow {
         }
 
         function hideDetachedWindows() {
-            if (attachedHostMode !== PlayerExperienceController.Fullscreen
-                    && fullscreenWindow)
+            if (PlayerExperienceController.immersiveMode
+                    === PlayerExperienceController.Off && fullscreenWindow)
                 fullscreenWindow.visible = false
-            if (attachedHostMode !== PlayerExperienceController.Desktop
-                    && desktopWindow)
-                desktopWindow.visible = false
         }
 
         function detach() {
@@ -430,18 +413,11 @@ ApplicationWindow {
                 attachedHostMode = -1
                 return
             }
-            var oldWindow = currentWindow(attachedHostMode)
-            surface.attached = false
             surface.hostExposed = false
             surface.visible = false
-            surface.parent = null
-            surface.x = 0
-            surface.y = 0
-            surface.width = 0
-            surface.height = 0
             attachedHostMode = -1
-            if (oldWindow && oldWindow !== mainWindow)
-                oldWindow.visible = false
+            if (fullscreenWindow)
+                fullscreenWindow.visible = false
         }
 
         function beginHandoff() {
@@ -459,28 +435,11 @@ ApplicationWindow {
         function attachRequestedHost() {
             if (!ensureSurface())
                 return false
-            var target = targetItem(requestedHostMode)
-            if (!target)
-                return false
             handoffPhase = 2
-            surface.parent = target
-            surface.x = 0
-            surface.y = 0
-            surface.width = Qt.binding(function() {
-                return surface.parent ? surface.parent.width : 0
-            })
-            surface.height = Qt.binding(function() {
-                return surface.parent ? surface.parent.height : 0
-            })
             surface.hostMode = requestedHostMode
-            var targetWindow = currentWindow(requestedHostMode)
-            if (targetWindow && targetWindow !== mainWindow) {
-                targetWindow.visible = true
-                if (requestedHostMode === PlayerExperienceController.Fullscreen)
-                    targetWindow.showFullScreen()
-            }
             surface.visible = true
-            surface.attached = true
+            if (fullscreenWindow)
+                fullscreenWindow.synchronizeHost()
             attachedHostMode = requestedHostMode
             refreshExposure()
             handoffPhase = 0
@@ -509,10 +468,13 @@ ApplicationWindow {
                     handoffPhase = 0
                 return
             }
-            if (attachedHostMode !== requestedHostMode)
-                beginHandoff()
-            else
-                refreshExposure()
+            if (attachedHostMode !== requestedHostMode) {
+                surface.hostMode = requestedHostMode
+                attachedHostMode = requestedHostMode
+                if (fullscreenWindow)
+                    fullscreenWindow.synchronizeHost()
+            }
+            refreshExposure()
         }
 
         Timer {
@@ -542,11 +504,6 @@ ApplicationWindow {
                         === PlayerExperienceController.Off) {
                     immersiveCoordinator.handoffPhase = 0
                     immersiveCoordinator.hideDetachedWindows()
-                    if (immersiveCoordinator.surface) {
-                        var doomedSurface = immersiveCoordinator.surface
-                        immersiveCoordinator.surface = null
-                        doomedSurface.destroy()
-                    }
                     return
                 }
                 immersiveCoordinator.requestedHostMode =

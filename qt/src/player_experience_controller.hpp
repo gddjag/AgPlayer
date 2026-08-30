@@ -48,6 +48,8 @@ class PlayerExperienceController final : public QObject {
     Q_PROPERTY(int peakBoost READ peakBoost WRITE setPeakBoost NOTIFY peakBoostChanged)
     Q_PROPERTY(bool ripplesEnabled READ ripplesEnabled WRITE setRipplesEnabled
                    NOTIFY ripplesEnabledChanged)
+    Q_PROPERTY(bool burstEnabled READ burstEnabled WRITE setBurstEnabled
+                   NOTIFY burstEnabledChanged)
     Q_PROPERTY(bool floatingCubesEnabled READ floatingCubesEnabled
                    WRITE setFloatingCubesEnabled NOTIFY floatingCubesEnabledChanged)
     Q_PROPERTY(bool meteorsEnabled READ meteorsEnabled WRITE setMeteorsEnabled
@@ -56,6 +58,9 @@ class PlayerExperienceController final : public QObject {
                    WRITE setIdleBreathingEnabled NOTIFY idleBreathingEnabledChanged)
     Q_PROPERTY(bool themeCycleEnabled READ themeCycleEnabled
                    WRITE setThemeCycleEnabled NOTIFY themeCycleEnabledChanged)
+    Q_PROPERTY(bool streamHighlightEnabled READ streamHighlightEnabled
+                   WRITE setStreamHighlightEnabled
+                   NOTIFY streamHighlightEnabledChanged)
     Q_PROPERTY(bool songAdaptiveColorEnabled READ songAdaptiveColorEnabled
                    WRITE setSongAdaptiveColorEnabled
                    NOTIFY songAdaptiveColorEnabledChanged)
@@ -138,10 +143,12 @@ public:
     int autoRotate() const noexcept;
     int peakBoost() const noexcept;
     bool ripplesEnabled() const noexcept;
+    bool burstEnabled() const noexcept;
     bool floatingCubesEnabled() const noexcept;
     bool meteorsEnabled() const noexcept;
     bool idleBreathingEnabled() const noexcept;
     bool themeCycleEnabled() const noexcept;
+    bool streamHighlightEnabled() const noexcept;
     bool songAdaptiveColorEnabled() const noexcept;
     QVariantList visualEqGains() const;
     int lyricClarity() const noexcept;
@@ -181,10 +188,12 @@ public:
     void setAutoRotate(int value);
     void setPeakBoost(int value);
     void setRipplesEnabled(bool value);
+    void setBurstEnabled(bool value);
     void setFloatingCubesEnabled(bool value);
     void setMeteorsEnabled(bool value);
     void setIdleBreathingEnabled(bool value);
     void setThemeCycleEnabled(bool value);
+    void setStreamHighlightEnabled(bool value);
     void setSongAdaptiveColorEnabled(bool value);
     void setVisualEqGains(const QVariantList& values);
     void setLyricClarity(int value);
@@ -209,6 +218,7 @@ public:
     Q_INVOKABLE void toggleLyricsVisible();
     Q_INVOKABLE void togglePanelVisible();
     Q_INVOKABLE void togglePlayerShellMode();
+    Q_INVOKABLE void cycleExperienceTheme();
 
 signals:
     void immersiveModeChanged();
@@ -231,10 +241,12 @@ signals:
     void autoRotateChanged();
     void peakBoostChanged();
     void ripplesEnabledChanged();
+    void burstEnabledChanged();
     void floatingCubesEnabledChanged();
     void meteorsEnabledChanged();
     void idleBreathingEnabledChanged();
     void themeCycleEnabledChanged();
+    void streamHighlightEnabledChanged();
     void songAdaptiveColorEnabledChanged();
     void visualEqGainsChanged();
     void lyricClarityChanged();
@@ -272,11 +284,11 @@ private:
     bool desktopMousePassthrough_ = false;
     int qualityPreset_ = Auto;
     int colorMode_ = MultiRegion;
-    QString coolColor_ = QStringLiteral("#4F6FFF");
-    QString warmColor_ = QStringLiteral("#FF4778");
-    QString accentColor_ = QStringLiteral("#77EAFF");
-    QString peakColor_ = QStringLiteral("#D7FF58");
-    QString baseColor_ = QStringLiteral("#080616");
+    QString coolColor_ = QStringLiteral("#8BDCFF");
+    QString warmColor_ = QStringLiteral("#EB7894");
+    QString accentColor_ = QStringLiteral("#FFD7DF");
+    QString peakColor_ = QStringLiteral("#FFF7FB");
+    QString baseColor_ = QStringLiteral("#050206");
     int terrainAmplitude_ = 62;
     int motionResponse_ = 56;
     int gradientLayers_ = 74;
@@ -285,10 +297,12 @@ private:
     int autoRotate_ = 54;
     int peakBoost_ = 58;
     bool ripplesEnabled_ = true;
+    bool burstEnabled_ = true;
     bool floatingCubesEnabled_ = true;
     bool meteorsEnabled_ = true;
     bool idleBreathingEnabled_ = true;
     bool themeCycleEnabled_ = false;
+    bool streamHighlightEnabled_ = true;
     bool songAdaptiveColorEnabled_ = true;
     QVariantList visualEqGains_ = defaultVisualEqGains();
     int lyricClarity_ = 78;

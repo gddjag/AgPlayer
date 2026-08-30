@@ -1861,6 +1861,9 @@ int main(int argc, char* argv[])
             }
             if (wantScreenshotMain || wantScreenshotMini
                 || wantScreenshotTools || wantScreenshotList) {
+                const bool wantScreenshotImmersive = wantScreenshotMain
+                    && QCoreApplication::arguments().contains(
+                        QStringLiteral("--qa-immersive"));
                 QWindow* const targetWindow = wantScreenshotMain
                     ? qobject_cast<QWindow*>(
                           qaOpenEqualizer && equalizerWindow != nullptr
@@ -1880,14 +1883,20 @@ int main(int argc, char* argv[])
                             ? qaScreenshotTools : qaScreenshotList;
 
                 const auto captureWindow = [targetWindow, screenshotPath,
-                                            mainWindow, &playback]() {
-                    if (targetWindow == nullptr) {
+                                            mainWindow, &playback,
+                                            wantScreenshotImmersive]() {
+                    QWindow* captureTarget = targetWindow;
+                    if (wantScreenshotImmersive) {
+                        captureTarget = mainWindow->findChild<QWindow*>(
+                            QStringLiteral("immersiveVisualWindow"));
+                    }
+                    if (captureTarget == nullptr) {
                         qWarning("QA screenshot target window was not created");
                         QCoreApplication::quit();
                         return;
                     }
-                    targetWindow->setVisible(true);
-                    targetWindow->requestActivate();
+                    captureTarget->setVisible(true);
+                    captureTarget->requestActivate();
                     if (QObject* waveform = mainWindow->findChild<QObject*>(
                             QStringLiteral("integratedWaveform"))) {
                         qInfo().noquote()
@@ -1917,7 +1926,7 @@ int main(int argc, char* argv[])
                         << playback.selectionStartMs()
                         << "endMs=" << playback.selectionEndMs()
                         << "loop=" << playback.selectionLoopEnabled();
-                    auto* const quickWin = qobject_cast<QQuickWindow*>(targetWindow);
+                    auto* const quickWin = qobject_cast<QQuickWindow*>(captureTarget);
                     if (quickWin != nullptr) {
                         quickWin->update();
                         QCoreApplication::processEvents(QEventLoop::AllEvents, 500);
@@ -1947,11 +1956,14 @@ int main(int argc, char* argv[])
                     // grabWindow() can leave a Qt Quick render job in flight.
                     // Hide the captured surface and let the render loop drain
                     // before QQmlApplicationEngine begins destroying windows.
-                    targetWindow->setVisible(false);
+                    captureTarget->setVisible(false);
                     QTimer::singleShot(250, QCoreApplication::quit);
                 };
 
-                if (wantScreenshotTools || (wantScreenshotMain && library.count() == 0)) {
+                if (wantScreenshotImmersive) {
+                    QTimer::singleShot(2500, captureWindow);
+                } else if (wantScreenshotTools
+                           || (wantScreenshotMain && library.count() == 0)) {
                     QTimer::singleShot(1500, captureWindow);
                 } else if (wantScreenshotList
                            && qaListCategory == QStringLiteral("tags")) {

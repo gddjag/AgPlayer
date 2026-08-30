@@ -422,18 +422,15 @@ Rectangle {
                 Text { text: qsTr("声音响应"); color: Theme.textSecondary; font.pixelSize: 9 }
                 Repeater {
                     model: [
-                        { "label": qsTr("输入压缩"), "key": "inputCompression", "from": 20, "to": 150 },
+                        { "label": qsTr("输入压制"), "key": "inputCompression", "from": 20, "to": 150 },
                         { "label": qsTr("音频响应"), "key": "audioResponse", "from": 20, "to": 200, "scale": 100, "decimals": 2 },
                         { "label": qsTr("响应范围"), "key": "responseRange", "from": 50, "to": 220, "scale": 100, "decimals": 2 },
-                        { "label": qsTr("中心亮光"), "key": "centerHighlight", "from": 0, "to": 100 },
+                        { "label": qsTr("中心高光"), "key": "centerHighlight", "from": 0, "to": 100, "scale": 100, "decimals": 2 },
                         { "label": qsTr("律动强度"), "key": "rhythmStrength", "from": 0, "to": 140, "scale": 100, "decimals": 2 },
-                        { "label": qsTr("景深雾化"), "key": "depthOfField", "from": 0, "to": 150 },
-                        { "label": qsTr("主体清晰"), "key": "subjectClarity", "from": 20, "to": 140 },
-                        { "label": qsTr("旋转速度"), "key": "autoRotateSpeed", "from": 0, "to": 100 },
-                        { "label": qsTr("节拍灵敏"), "key": "rhythmSensitivity", "from": 0, "to": 100 },
-                        { "label": qsTr("地形振幅"), "key": "terrainAmplitude", "from": 0, "to": 100 },
-                        { "label": qsTr("运动响应"), "key": "motionResponse", "from": 0, "to": 100 },
-                        { "label": qsTr("发光强度"), "key": "glowIntensity", "from": 0, "to": 100 }
+                        { "label": qsTr("画面景深"), "key": "depthOfField", "from": 0, "to": 150, "scale": 100, "decimals": 2 },
+                        { "label": qsTr("主体清晰度"), "key": "subjectClarity", "from": 20, "to": 140 },
+                        { "label": qsTr("自动旋转速度"), "key": "autoRotateSpeed", "from": 0, "to": 100, "scale": 100, "decimals": 2 },
+                        { "label": qsTr("律动灵敏度"), "key": "rhythmSensitivity", "from": 0, "to": 100, "scale": 100, "decimals": 2 }
                     ]
                     RowLayout {
                         required property var modelData
@@ -458,10 +455,13 @@ Rectangle {
                     Repeater {
                         model: [
                             { "label": qsTr("彩色冲击波"), "key": "ripplesEnabled" },
+                            { "label": qsTr("星尘喷发"), "key": "burstEnabled" },
                             { "label": qsTr("漂浮晶体"), "key": "floatingCubesEnabled" },
                             { "label": qsTr("8拍流星"), "key": "meteorsEnabled" },
                             { "label": qsTr("自动旋转"), "key": "autoRotate" },
-                            { "label": qsTr("空闲呼吸"), "key": "idleBreathingEnabled" }
+                            { "label": qsTr("空闲呼吸"), "key": "idleBreathingEnabled" },
+                            { "label": qsTr("歌曲换色"), "key": "songAdaptiveColorEnabled" },
+                            { "label": qsTr("流光高亮"), "key": "streamHighlightEnabled" }
                         ]
                         ThemedCheckBox {
                             required property var modelData

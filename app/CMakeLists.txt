@@ -134,6 +134,7 @@ qt_add_qml_module(agplayer_app_qml
     VERSION 1.0
     QML_FILES
         qml/AgPlayer/Main.qml
+        qml/AgPlayer/ImmersiveWindow.qml
         qml/AgPlayer/MiniPlayerWindow.qml
         qml/AgPlayer/ListWindow.qml
         qml/AgPlayer/AudioToolsWindow.qml

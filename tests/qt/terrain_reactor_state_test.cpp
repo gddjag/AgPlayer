@@ -29,6 +29,7 @@ private slots:
     void explicitImpactRaisesCenterAndTravelingRing();
     void steadyMusicKeepsCenterVisiblyFocused();
     void nearbyRandomnessKeepsTerrainSoftWithoutThresholdSpikes();
+    void finalReferenceProfileKeepsCoreBroadAndSpikesSubordinate();
     void idleTerrainKeepsFineVisibleReliefWithoutMusic();
     void idleTerrainFadesOutsideResponseField();
     void trackIdentityProducesStableBoundedDistinctPalette();
@@ -326,6 +327,41 @@ void TerrainReactorStateTest::nearbyRandomnessKeepsTerrainSoftWithoutThresholdSp
     const float upperHeight = terrainHeight(upper, visual, 2.0F, style);
     QVERIFY2(std::abs(upperHeight - lowerHeight) < 0.35F,
              "Near-identical neighbouring seeds must not create a hard spike");
+}
+
+void TerrainReactorStateTest::finalReferenceProfileKeepsCoreBroadAndSpikesSubordinate()
+{
+    AudioFeatures features;
+    features.bands.fill(0.48F);
+    features.energy = 0.68F;
+    RenderStyleSnapshot style;
+    style.centerHighlight = 0.74F;
+    const VisualParameters visual = mapVisualParameters(features, 2.0F, style);
+
+    SceneInstance quietCore;
+    quietCore.position = QVector3D(0.0F, 0.0F, 0.0F);
+    quietCore.random = 0.08F;
+    quietCore.zone = ColorZone::Peak;
+    SceneInstance spikyCore = quietCore;
+    spikyCore.random = 0.96F;
+    SceneInstance shoulder = quietCore;
+    shoulder.position = QVector3D(19.0F, 0.0F, 0.0F);
+    shoulder.random = 0.52F;
+    SceneInstance outer = shoulder;
+    outer.position = QVector3D(62.0F, 0.0F, 0.0F);
+
+    const float quietCoreHeight = terrainHeight(quietCore, visual, 2.0F, style);
+    const float spikyCoreHeight = terrainHeight(spikyCore, visual, 2.0F, style);
+    const float shoulderHeight = terrainHeight(shoulder, visual, 2.0F, style);
+    const float outerHeight = terrainHeight(outer, visual, 2.0F, style);
+
+    QVERIFY2(std::abs(spikyCoreHeight - quietCoreHeight) < 4.0F,
+             "Random seeds must texture the core without creating isolated towers");
+    QVERIFY2((quietCoreHeight + spikyCoreHeight) * 0.5F > outerHeight + 5.0F,
+             "The luminous center must remain dominant over the outer field");
+    QVERIFY2(shoulderHeight > outerHeight + 0.45F,
+             "The reactor must retain a layered falloff instead of a flat noisy field");
+    QVERIFY(std::max(quietCoreHeight, spikyCoreHeight) < 22.0F);
 }
 
 void TerrainReactorStateTest::idleTerrainKeepsFineVisibleReliefWithoutMusic()

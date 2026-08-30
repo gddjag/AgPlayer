@@ -105,10 +105,12 @@ struct RenderStyleSnapshot {
     float autoRotateSpeed = 0.42F;
     float rhythmSensitivity = 0.78F;
     bool ripplesEnabled = true;
+    bool burstEnabled = true;
     bool floatingCubesEnabled = true;
     bool meteorsEnabled = true;
     bool idleBreathingEnabled = true;
     bool themeCycleEnabled = false;
+    bool streamHighlightEnabled = true;
 };
 
 struct AudioFeatures {

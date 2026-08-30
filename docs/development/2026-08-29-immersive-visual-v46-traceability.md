@@ -33,12 +33,15 @@
 | 自动质量与低资源策略 | `TerrainReactorItem`、`TerrainReactorState` | 状态与 GPU smoke 测试通过；真实音频 31.14 秒运行工作集快照约 171.3 MB；尚无 30 分钟性能曲线 |
 | 队列抽屉保持当前队列作用域 | `ImmersiveQueueDrawer.qml` | Debug/Release QML 集成测试通过；使用现有 `queueTrackIds`/`trackForId`/`playTrackIds`，不复制队列模型 |
 | 主题、沉浸视觉、歌词三项状态互不干扰 | `PlayerExperienceController`、`ExperienceActions.qml` | Debug/Release 控制器与 QML 集成测试通过；主题切换不重建播放核心 |
+| 沉浸视觉作为独立主题窗口 | `ExperienceActions.qml`、`Main.qml`、`ImmersiveWindow.qml` | 主题动作按经典→单窗口→沉浸视觉循环；沉浸视觉始终由独立无边框窗口承载，播放器/列表页面不再作为渲染宿主 |
+| 纯净顶层操作 | `ImmersiveSurface.qml`、`ImmersiveWindow.qml` | 已移除左上角品牌文字和面板文字按钮；右上角只保留真实全屏/退出全屏图标，Esc 退出全屏的 QML 集成测试通过 |
+| 最终 HTML 九项动态参数与开关 | `ImmersiveControlPanel.qml`、`PlayerExperienceController`、QRhi uniform/shader | 输入压缩、音频响应、响应范围、中心高光、律动强度、景深、主体清晰、自动旋转速度、律动灵敏度及爆发/流线开关均写入真实渲染快照；旧地形振幅等重复 UI 已移除 |
 
 ## 已执行验证
 
 - Debug：从干净构建目录完成应用全量构建；功能聚焦目标在最终 Diff 后再次验证。
 - Release：应用全量构建、11 个功能聚焦测试与 QML lint 在最终 Diff 后再次验证。
-- Release 全量 `ctest`：118/121 通过。失败项为音频编辑控制器、既有沉浸 QML 主题色分类审计，以及只在整套顺序运行中失败的主窗口 QML；主窗口 QML 在同一最终构建的 11 项隔离聚焦运行中通过。
+- Release 全量 `ctest` 最终复跑：119/121 通过。功能相关 GPU smoke、主题颜色分类、沉浸 QML 集成均通过；剩余失败为当前机器无录音后端的 `audio_editor_controller_test`，以及已有安装版 AgPlayer 正在运行时 Windows 前台激活受限的 `windows_shell_runtime_test`，两项均未标记通过。
 - 测试覆盖：设置持久化、频彩波形几何与颜色语义、音频视觉特征、体验控制器、反应堆状态、RHI item、GPU smoke、共享波形、音频冲击 QML、迷你播放器和沉浸集成。
 - GPU 冲击高光在 Debug/Release 均通过；迷你播放器测试夹具按“先销毁窗口、再派发延迟事件”的顺序清理，Release 连续三次及最终聚焦回归均通过。
 - QML lint 只有 `Theme.qml`、`WaveformSession.qml`、`SharedWaveformView.qml` 的未使用 import 信息提示，无错误。
@@ -55,6 +58,15 @@
 - 未执行 LRCLIB 线上实网查询；本地歌词服务自动测试通过，不扩大为网络服务可用性结论。
 - 未制作安装包。新增柔光只使用项目 Qt 6.7 自带 `QtQuick.Effects`，没有第三方运行时；安装包增量目标需在后续正式打包时测量，当前不声称已完成包体验收。
 - 视觉已经降低外围颗粒噪声、增加中央簇状高峰与节奏亮度、强化彩色环带并加入受质量策略控制的柔光层。参考原型/视频的多通道后期和空气雾化仍更强，不宣称逐像素一致。
+
+## 2026-08-30 独立主题窗口与反应堆复核
+
+- 当前修复只发生在 `codex/immersive-visual-lyrics` 隔离工作树，没有触碰正在打包的主线工作区。
+- Release 全量构建和 `agplayer_app_qml_qmllint` 完成；QML lint 只有既有未使用 import 信息提示，无错误。
+- Release 功能聚焦回归通过：体验控制器、地形状态、地形 RHI item、Direct3D 11 GPU smoke、迷你播放器、沉浸集成、主题颜色分类。
+- Release 全量 `ctest` 最终为 119/121；本功能相关的 GPU smoke、主题颜色分类、沉浸 QML 集成及迷你播放器均通过。`audio_editor_controller_test` 在当前机器缺少录音后端时有 3 个录音断言失败；`windows_shell_runtime_test` 在已有安装版 AgPlayer 运行期间无法满足 Windows 前台窗口激活断言。两项限制均保留原始失败结论。
+- 新增数值回归保证中心随机种子只负责细节，不再产生孤立高塔；连续空间簇峰负责成组柱体，冲击帧必须在 GPU 实测中形成宽范围增亮。
+- 使用固定合成频谱在 1900×939 视口生成原生截图，并将用户最终参考截图缩放到同一 1900×939 后与原生实现放入一张 1900×1878 对比输入复核。后续用户真机试听仍是动态节奏手感的最终验收。
 
 ## 证据路径
 

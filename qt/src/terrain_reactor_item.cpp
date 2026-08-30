@@ -54,7 +54,7 @@ struct alignas(16) UniformBlock {
     float styleParameters[4]{}; // amplitude, motion, glow, cinema
     float styleDynamics[4]{}; // rotate, peak, color mode, gradient
     float styleToggles[4]{}; // ripples, cubes, meteors, breathing
-    float styleExtra[4]{}; // theme cycle, reserved
+    float styleExtra[4]{}; // theme cycle, burst, stream highlight, reserved
     float styleAudio[4]{}; // compression, response, range, center highlight
     float stylePresentation[4]{}; // rhythm, depth, clarity, rotation speed
     float impact[4]{}; // strength, age, active, sensitivity
@@ -523,6 +523,8 @@ private:
         result.styleToggles[2] = snapshot_.style.meteorsEnabled ? 1.0F : 0.0F;
         result.styleToggles[3] = snapshot_.style.idleBreathingEnabled ? 1.0F : 0.0F;
         result.styleExtra[0] = snapshot_.style.themeCycleEnabled ? 1.0F : 0.0F;
+        result.styleExtra[1] = snapshot_.style.burstEnabled ? 1.0F : 0.0F;
+        result.styleExtra[2] = snapshot_.style.streamHighlightEnabled ? 1.0F : 0.0F;
         result.styleAudio[0] = dynamics.inputCompression;
         result.styleAudio[1] = dynamics.audioResponse;
         result.styleAudio[2] = dynamics.responseRadius;
@@ -694,6 +696,8 @@ void TerrainReactorItem::setStyleSource(QObject* source)
         styleConnections_.append(connect(styleSource_,
             &PlayerExperienceController::ripplesEnabledChanged, this, capture));
         styleConnections_.append(connect(styleSource_,
+            &PlayerExperienceController::burstEnabledChanged, this, capture));
+        styleConnections_.append(connect(styleSource_,
             &PlayerExperienceController::floatingCubesEnabledChanged, this, capture));
         styleConnections_.append(connect(styleSource_,
             &PlayerExperienceController::meteorsEnabledChanged, this, capture));
@@ -701,6 +705,8 @@ void TerrainReactorItem::setStyleSource(QObject* source)
             &PlayerExperienceController::idleBreathingEnabledChanged, this, capture));
         styleConnections_.append(connect(styleSource_,
             &PlayerExperienceController::themeCycleEnabledChanged, this, capture));
+        styleConnections_.append(connect(styleSource_,
+            &PlayerExperienceController::streamHighlightEnabledChanged, this, capture));
         styleConnections_.append(connect(styleSource_,
             &PlayerExperienceController::visualEqGainsChanged, this, capture));
         styleConnections_.append(connect(styleSource_,
@@ -1047,10 +1053,12 @@ void TerrainReactorItem::copyStyleSource()
     next.autoRotateSpeed = float(styleSource_->autoRotateSpeed()) / 100.0F;
     next.rhythmSensitivity = float(styleSource_->rhythmSensitivity()) / 100.0F;
     next.ripplesEnabled = styleSource_->ripplesEnabled();
+    next.burstEnabled = styleSource_->burstEnabled();
     next.floatingCubesEnabled = styleSource_->floatingCubesEnabled();
     next.meteorsEnabled = styleSource_->meteorsEnabled();
     next.idleBreathingEnabled = styleSource_->idleBreathingEnabled();
     next.themeCycleEnabled = styleSource_->themeCycleEnabled();
+    next.streamHighlightEnabled = styleSource_->streamHighlightEnabled();
     renderStyle_ = next;
     ++styleRevision_;
     emit styleRevisionChanged();
