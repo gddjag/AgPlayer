@@ -3,6 +3,7 @@
 #include "core_context.hpp"
 #include "audio_editor/editor_player_bridge.hpp"
 #include "decoder.hpp"
+#include "frequency_color_waveform_analyzer.hpp"
 #include "metadata_writer.hpp"
 #include "pitch_shifter.hpp"
 #include "transcoder.hpp"
@@ -12,9 +13,11 @@
 #include "waveform_analyzer.hpp"
 
 #include <atomic>
+#include <condition_variable>
 #include <cstring>
 #include <functional>
 #include <mutex>
+#include <memory>
 #include <new>
 #include <string>
 #include <utility>
@@ -99,9 +102,71 @@ struct ag_waveform {
     int sample_rate_ = 0;
 };
 
-struct ag_cancel_token {
+struct ag_cancel_state final {
     std::atomic_bool cancelled{false};
+    std::mutex pause_mutex;
+    std::condition_variable pause_condition;
+    bool paused = false;
 };
+
+struct ag_cancel_token {
+    std::shared_ptr<ag_cancel_state> state;
+};
+
+namespace {
+
+std::shared_ptr<ag_cancel_state> retain_cancel_state(
+    const ag_cancel_token* const token) noexcept
+{
+    return token == nullptr ? nullptr : token->state;
+}
+
+const std::atomic_bool* cancelled_flag(
+    const std::shared_ptr<ag_cancel_state>& state) noexcept
+{
+    return state == nullptr ? nullptr : &state->cancelled;
+}
+
+struct FrequencyProgressBridge final {
+    std::shared_ptr<ag_cancel_state> state;
+    ag_progress_callback callback = nullptr;
+    void* user_data = nullptr;
+    std::atomic_bool cancelled{false};
+    bool callback_failed = false;
+};
+
+void bridge_frequency_progress(const float progress, void* const user_data) noexcept
+{
+    auto& bridge = *static_cast<FrequencyProgressBridge*>(user_data);
+    if (bridge.state != nullptr) {
+        std::unique_lock<std::mutex> lock(bridge.state->pause_mutex);
+        bridge.state->pause_condition.wait(lock, [&] {
+            return !bridge.state->paused
+                   || bridge.state->cancelled.load(std::memory_order_relaxed);
+        });
+        if (bridge.state->cancelled.load(std::memory_order_relaxed)) {
+            bridge.cancelled.store(true, std::memory_order_relaxed);
+            return;
+        }
+    }
+
+    if (bridge.callback == nullptr) {
+        return;
+    }
+    try {
+        bridge.callback(progress, bridge.user_data);
+    } catch (...) {
+        bridge.callback_failed = true;
+        bridge.cancelled.store(true, std::memory_order_relaxed);
+        return;
+    }
+    if (bridge.state != nullptr
+        && bridge.state->cancelled.load(std::memory_order_relaxed)) {
+        bridge.cancelled.store(true, std::memory_order_relaxed);
+    }
+}
+
+} // namespace
 
 ag_result agplayer::editor::load_editor_playback_stream(
     ag_player* const player,
@@ -857,18 +922,45 @@ ag_result ag_metadata_write_extended(const char* utf8_path,
 
 ag_cancel_token* ag_cancel_token_create(void)
 {
-    return new (std::nothrow) ag_cancel_token;
+    try {
+        auto state = std::make_shared<ag_cancel_state>();
+        return new (std::nothrow) ag_cancel_token{std::move(state)};
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 void ag_cancel_token_cancel(ag_cancel_token* token)
 {
     if (token != nullptr) {
-        token->cancelled.store(true, std::memory_order_relaxed);
+        const std::shared_ptr<ag_cancel_state> state = retain_cancel_state(token);
+        state->cancelled.store(true, std::memory_order_relaxed);
+        state->pause_condition.notify_all();
+    }
+}
+
+void ag_cancel_token_set_paused(ag_cancel_token* token, const int paused)
+{
+    if (token == nullptr) {
+        return;
+    }
+    const std::shared_ptr<ag_cancel_state> state = retain_cancel_state(token);
+    {
+        std::lock_guard<std::mutex> lock(state->pause_mutex);
+        state->paused = paused != 0;
+    }
+    if (paused == 0) {
+        state->pause_condition.notify_all();
     }
 }
 
 void ag_cancel_token_destroy(ag_cancel_token* token)
 {
+    if (token != nullptr) {
+        const std::shared_ptr<ag_cancel_state> state = retain_cancel_state(token);
+        state->cancelled.store(true, std::memory_order_relaxed);
+        state->pause_condition.notify_all();
+    }
     delete token;
 }
 
@@ -904,8 +996,9 @@ ag_result ag_transcode_ex(const char* input_path,
             config.quality = std::clamp(options->quality, 0, 100);
         }
 
-        const std::atomic_bool* cancelled =
-            cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
+        const std::shared_ptr<ag_cancel_state> cancel_state =
+            retain_cancel_state(cancel_token);
+        const std::atomic_bool* cancelled = cancelled_flag(cancel_state);
 
         std::function<void(float)> cb;
         if (progress_callback != nullptr) {
@@ -1075,8 +1168,9 @@ ag_result ag_transcode_v2(const char* input_path,
             }
         }
 
-        const std::atomic_bool* cancelled = cancel_token == nullptr
-            ? nullptr : &cancel_token->cancelled;
+        const std::shared_ptr<ag_cancel_state> cancel_state =
+            retain_cancel_state(cancel_token);
+        const std::atomic_bool* cancelled = cancelled_flag(cancel_state);
         std::function<void(float)> callback;
         if (progress_callback != nullptr) {
             callback = [progress_callback, user_data](const float progress) {
@@ -1134,8 +1228,9 @@ ag_result ag_pitch_shift_ex(const char* input_path,
             config.output_sample_rate = options->output_sample_rate;
         }
 
-        const std::atomic_bool* cancelled =
-            cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
+        const std::shared_ptr<ag_cancel_state> cancel_state =
+            retain_cancel_state(cancel_token);
+        const std::atomic_bool* cancelled = cancelled_flag(cancel_state);
 
         std::function<void(float)> cb;
         if (progress_callback != nullptr) {
@@ -1187,8 +1282,9 @@ ag_result ag_waveform_analyze(const char* utf8_path,
         std::vector<float> bass;
         std::vector<float> mid;
         std::vector<float> high;
-        const std::atomic_bool* cancelled =
-            cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
+        const std::shared_ptr<ag_cancel_state> cancel_state =
+            retain_cancel_state(cancel_token);
+        const std::atomic_bool* cancelled = cancelled_flag(cancel_state);
         std::uint64_t duration_ms = 0U;
         std::uint64_t total_samples = 0U;
         int sample_rate = 0;
@@ -1339,8 +1435,9 @@ ag_result ag_track_analysis_with_aggregation(
     }
 
     return guard_result([&] {
-        const std::atomic_bool* cancelled =
-            cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
+        const std::shared_ptr<ag_cancel_state> cancel_state =
+            retain_cancel_state(cancel_token);
+        const std::atomic_bool* cancelled = cancelled_flag(cancel_state);
 
         std::vector<float> peaks;
         std::vector<float> bass;
@@ -1389,6 +1486,62 @@ ag_result ag_track_analysis_with_aggregation(
         // leave *out_bpm at 0.
 
         *out_waveform = waveform;
+        return AG_OK;
+    });
+}
+
+ag_result ag_track_frequency_color_analysis(
+    const char* utf8_path,
+    const size_t target_points,
+    const ag_cancel_token* cancel_token,
+    const ag_progress_callback progress_callback,
+    void* const user_data,
+    ag_waveform** out_waveform)
+{
+    if (out_waveform == nullptr) {
+        return AG_INVALID_ARGUMENT;
+    }
+    *out_waveform = nullptr;
+    if (utf8_path == nullptr || utf8_path[0] == '\0'
+        || target_points == 0U) {
+        return AG_INVALID_ARGUMENT;
+    }
+
+    return guard_result([&] {
+        FrequencyProgressBridge bridge;
+        bridge.state = retain_cancel_state(cancel_token);
+        bridge.callback = progress_callback;
+        bridge.user_data = user_data;
+        if (bridge.state != nullptr
+            && bridge.state->cancelled.load(std::memory_order_relaxed)) {
+            bridge.cancelled.store(true, std::memory_order_relaxed);
+        }
+
+        agplayer::FrequencyColorWaveformData data;
+        const ag_result result =
+            agplayer::FrequencyColorWaveformAnalyzer::analyze(
+                utf8_path, target_points, &bridge.cancelled,
+                bridge_frequency_progress, &bridge, data);
+        if (bridge.callback_failed) {
+            return AG_INTERNAL_ERROR;
+        }
+        if (result != AG_OK) {
+            return result;
+        }
+
+        auto waveform = std::unique_ptr<ag_waveform>(
+            new (std::nothrow) ag_waveform{});
+        if (waveform == nullptr) {
+            return AG_INTERNAL_ERROR;
+        }
+        waveform->peaks = std::move(data.mix);
+        waveform->bass_ = std::move(data.low);
+        waveform->mid_ = std::move(data.mid);
+        waveform->high_ = std::move(data.high);
+        waveform->duration_ms_ = data.duration_ms;
+        waveform->total_samples_ = data.timeline_frames;
+        waveform->sample_rate_ = static_cast<int>(data.sample_rate);
+        *out_waveform = waveform.release();
         return AG_OK;
     });
 }

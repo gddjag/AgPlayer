@@ -5,16 +5,22 @@
 
 #include <agplayer/c_api.h>
 
+#include "decoder.hpp"
 #include "waveform_analyzer.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <limits>
+#include <future>
+#include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -154,6 +160,168 @@ void record_progress(const float progress, void* user_data)
     }
 }
 
+struct AsyncProgressState final {
+    std::atomic_int calls{0};
+    ag_cancel_token* token = nullptr;
+};
+
+void record_async_progress(const float progress, void* user_data)
+{
+    assert(std::isfinite(progress));
+    auto& state = *static_cast<AsyncProgressState*>(user_data);
+    state.calls.fetch_add(1, std::memory_order_relaxed);
+}
+
+void pause_and_cancel_reentrantly(const float, void* user_data)
+{
+    auto& state = *static_cast<AsyncProgressState*>(user_data);
+    state.calls.fetch_add(1, std::memory_order_relaxed);
+    ag_cancel_token_set_paused(state.token, 1);
+    ag_cancel_token_cancel(state.token);
+}
+
+void throw_from_progress(const float, void*)
+{
+    throw std::runtime_error("callback failure");
+}
+
+void test_frequency_color_c_api(const std::string& source_path)
+{
+    ag_waveform* waveform = reinterpret_cast<ag_waveform*>(
+        static_cast<std::uintptr_t>(1U));
+    assert(ag_track_frequency_color_analysis(
+               nullptr, 2'000U, nullptr, nullptr, nullptr, &waveform)
+           == AG_INVALID_ARGUMENT);
+    assert(waveform == nullptr);
+    waveform = reinterpret_cast<ag_waveform*>(static_cast<std::uintptr_t>(1U));
+    assert(ag_track_frequency_color_analysis(
+               "", 2'000U, nullptr, nullptr, nullptr, &waveform)
+           == AG_INVALID_ARGUMENT);
+    assert(waveform == nullptr);
+    waveform = reinterpret_cast<ag_waveform*>(static_cast<std::uintptr_t>(1U));
+    assert(ag_track_frequency_color_analysis(
+               source_path.c_str(), 0U, nullptr, nullptr, nullptr, &waveform)
+           == AG_INVALID_ARGUMENT);
+    assert(waveform == nullptr);
+    assert(ag_track_frequency_color_analysis(
+               source_path.c_str(), 2'000U, nullptr, nullptr, nullptr, nullptr)
+           == AG_INVALID_ARGUMENT);
+
+    const std::uint64_t opens_before = agplayer::Decoder::threadOpenCount();
+    assert(ag_track_frequency_color_analysis(
+               source_path.c_str(), 2'000U, nullptr, nullptr, nullptr, &waveform)
+           == AG_OK);
+    assert(agplayer::Decoder::threadOpenCount() - opens_before == 1U);
+    assert(waveform != nullptr);
+    for (const ag_waveform_layer layer : {
+             AG_WAVEFORM_LAYER_MIX,
+             AG_WAVEFORM_LAYER_BASS,
+             AG_WAVEFORM_LAYER_MID,
+             AG_WAVEFORM_LAYER_HIGH,
+         }) {
+        assert(ag_waveform_layer_count(waveform, layer) == 2'000U);
+        for (std::size_t index = 0U; index < 2'000U; ++index) {
+            const float value = ag_waveform_layer_peak(waveform, layer, index);
+            assert(std::isfinite(value));
+            assert(value >= 0.0F && value <= 1.0F);
+        }
+    }
+    assert(ag_waveform_duration_ms(waveform) > 0U);
+    assert(ag_waveform_total_samples(waveform) > 0U);
+    assert(ag_waveform_sample_rate(waveform) > 0);
+    assert(ag_waveform_bpm(waveform) == 0.0);
+    ag_waveform_destroy(waveform);
+
+    ag_cancel_token_set_paused(nullptr, 1);
+    ag_cancel_token* token = ag_cancel_token_create();
+    assert(token != nullptr);
+    ag_cancel_token_set_paused(token, 1);
+    AsyncProgressState progress;
+    std::atomic<ag_waveform*> async_waveform{reinterpret_cast<ag_waveform*>(
+        static_cast<std::uintptr_t>(1U))};
+    auto resumed = std::async(std::launch::async, [&] {
+        ag_waveform* result = reinterpret_cast<ag_waveform*>(
+            static_cast<std::uintptr_t>(1U));
+        const ag_result status = ag_track_frequency_color_analysis(
+            source_path.c_str(), 2'000U, token, record_async_progress,
+            &progress, &result);
+        async_waveform.store(result, std::memory_order_relaxed);
+        return status;
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    assert(progress.calls.load(std::memory_order_relaxed) == 0);
+    assert(resumed.wait_for(std::chrono::milliseconds(0))
+           == std::future_status::timeout);
+    ag_cancel_token_set_paused(token, 0);
+    if (resumed.wait_for(std::chrono::seconds(5)) != std::future_status::ready) {
+        ag_cancel_token_cancel(token);
+        assert(false && "resumed analysis timed out");
+    }
+    assert(resumed.get() == AG_OK);
+    waveform = async_waveform.load(std::memory_order_relaxed);
+    assert(waveform != nullptr);
+    ag_waveform_destroy(waveform);
+    ag_cancel_token_destroy(token);
+
+    token = ag_cancel_token_create();
+    assert(token != nullptr);
+    ag_cancel_token_set_paused(token, 1);
+    auto cancelled = std::async(std::launch::async, [&] {
+        ag_waveform* result = reinterpret_cast<ag_waveform*>(
+            static_cast<std::uintptr_t>(1U));
+        const ag_result status = ag_track_frequency_color_analysis(
+            source_path.c_str(), 2'000U, token, nullptr, nullptr, &result);
+        async_waveform.store(result, std::memory_order_relaxed);
+        return status;
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    ag_cancel_token_cancel(token);
+    assert(cancelled.wait_for(std::chrono::seconds(2))
+           == std::future_status::ready);
+    assert(cancelled.get() == AG_CANCELLED);
+    assert(async_waveform.load(std::memory_order_relaxed) == nullptr);
+    ag_cancel_token_destroy(token);
+
+    token = ag_cancel_token_create();
+    assert(token != nullptr);
+    ag_cancel_token_set_paused(token, 1);
+    auto destroyed = std::async(std::launch::async, [&] {
+        ag_waveform* result = reinterpret_cast<ag_waveform*>(
+            static_cast<std::uintptr_t>(1U));
+        const ag_result status = ag_track_frequency_color_analysis(
+            source_path.c_str(), 2'000U, token, nullptr, nullptr, &result);
+        async_waveform.store(result, std::memory_order_relaxed);
+        return status;
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    ag_cancel_token_destroy(token);
+    token = nullptr;
+    assert(destroyed.wait_for(std::chrono::seconds(2))
+           == std::future_status::ready);
+    assert(destroyed.get() == AG_CANCELLED);
+    assert(async_waveform.load(std::memory_order_relaxed) == nullptr);
+
+    token = ag_cancel_token_create();
+    assert(token != nullptr);
+    AsyncProgressState reentrant;
+    reentrant.token = token;
+    waveform = reinterpret_cast<ag_waveform*>(static_cast<std::uintptr_t>(1U));
+    assert(ag_track_frequency_color_analysis(
+               source_path.c_str(), 2'000U, token,
+               pause_and_cancel_reentrantly, &reentrant, &waveform)
+           == AG_CANCELLED);
+    assert(reentrant.calls.load(std::memory_order_relaxed) == 1);
+    assert(waveform == nullptr);
+    ag_cancel_token_destroy(token);
+
+    waveform = reinterpret_cast<ag_waveform*>(static_cast<std::uintptr_t>(1U));
+    assert(ag_track_frequency_color_analysis(
+               source_path.c_str(), 2'000U, nullptr, throw_from_progress,
+               nullptr, &waveform)
+           == AG_INTERNAL_ERROR);
+    assert(waveform == nullptr);
+}
+
 } // namespace
 
 int main(const int argc, char** argv)
@@ -164,6 +332,7 @@ int main(const int argc, char** argv)
     test_average_absolute_and_rms_aggregation();
     test_frequency_layers_preserve_cross_band_energy();
     const std::string source_path = argv[1];
+    test_frequency_color_c_api(source_path);
 
     ag_waveform* waveform = reinterpret_cast<ag_waveform*>(
         static_cast<std::uintptr_t>(1U));
