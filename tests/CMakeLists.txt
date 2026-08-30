@@ -697,6 +697,24 @@ set_tests_properties(lyrics_ovh_provider_test PROPERTIES
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
+add_executable(lyrics_provider_chain_test
+    qt/lyrics_provider_chain_test.cpp
+)
+set_target_properties(lyrics_provider_chain_test PROPERTIES AUTOMOC ON)
+target_include_directories(lyrics_provider_chain_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+)
+target_link_libraries(lyrics_provider_chain_test PRIVATE
+    agplayer_qt Qt6::Test
+)
+agplayer_enable_warnings(lyrics_provider_chain_test)
+add_test(NAME lyrics_provider_chain_test COMMAND lyrics_provider_chain_test)
+set_tests_properties(lyrics_provider_chain_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
 target_include_directories(format_conversion_plan_test PRIVATE
     "${CMAKE_SOURCE_DIR}/core/src"
 )
