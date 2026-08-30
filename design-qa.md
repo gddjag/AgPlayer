@@ -85,3 +85,53 @@ Dark and light were exercised through the real application theme path: `design-q
 No P0 was observed in the captured states and the discovered structural/lifecycle P1 defects are fixed, but the mandatory real-window interactions, physical DPI reachability and reference-equivalent same-frame evidence are incomplete. P1/P2 acceptance findings therefore remain open.
 
 final result: blocked
+
+---
+
+# Audio editor interaction and responsive gate — 2026-08-31
+
+## Reference and measured layouts
+
+- Visual reference inspected: `C:/Users/Administrator/Desktop/音视频播放器/AgPlayer音频播放器完整版/音频编辑.png`.
+- The production QuickTest measures the 1672×941 shell-content reference at
+  1672×822: timeline workspace `(12,152,1304,451)`, playback `(12,618,1304,112)`,
+  shortcut card `(12,730,1304,67)`, and status `(0,797,1328,25)`.
+- At 1280×720, the two 13px shortcut rows remain horizontally reachable by wheel
+  input when content overflows; no copy was hidden or reduced.
+- At 880×560, the former card `(y=568,h=103)` overlapped the playback panel and
+  extended to `y=671`, 111px below the clipped page.  The narrow production
+  geometry is now playback `(y=372,h=80)`, shortcut card `(y=460,h=67)`, and
+  status `(y=535,h=25)`.  Both 16px rows, their horizontal divider and the
+  narrow playback entry are fully above the status overlay; the card does not
+  cover transport.
+
+## Functional evidence
+
+- A native-window QML journey uses the real generated WAV fixture through the
+  production drop route, then performs mouse/key input for split, right-clip
+  selection, copy/paste, trim, mute, fade, delete, undo, body-range loop and
+  first focused Space playback.  It does not call a controller import/edit API
+  in place of these interactions.
+- Clearing a document now clears a stale failed-playback error, so the status
+  bar no longer survives a successful clear as an obsolete visible error.
+- A paste colliding with occupied timeline space inserts its clipboard span in
+  one history entry: the containing event is split only when needed, trailing
+  events shift right, and clones receive IDs before an automatic right split.
+  Gap paste keeps the existing non-ripple behavior.
+
+## Automated verification
+
+- Release CTest: `event_edit_test` (15/15), `audio_editor_controller_test`
+  (1/1, fixture injected by CTest), `qml_audio_editor_test` and
+  `qml_audio_editor_native_input_test` (2/2).
+- Debug CTest: `qml_audio_editor_test` and
+  `qml_audio_editor_native_input_test` (2/2).
+- `qmllint` (Qt 6.7) completed with zero warnings for `AudioEditorPage.qml` and
+  `EditorWaveformCanvas.qml`.
+
+## Explicit limits
+
+- No physical hardware audio/output-device or subjective listening check was
+  performed.
+- No external desktop screenshot capture was taken for this gate; the geometry
+  evidence is production QML test measurement, not a visual pixel-diff.

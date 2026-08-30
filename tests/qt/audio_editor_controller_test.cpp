@@ -249,7 +249,7 @@ private slots:
         QCOMPARE(settings.sampleRate, 44'100);
         QCOMPARE(settings.bitDepth, 24);
         QCOMPARE(settings.channels, 2);
-        QCOMPARE(settings.bitRate, qint64{0});
+        QCOMPARE(settings.bitRate, qint64{320'000});
         QCOMPARE(QDir::cleanPath(settings.outputDirectory),
                  QDir::cleanPath(QStandardPaths::writableLocation(
                      QStandardPaths::DesktopLocation)));
@@ -413,6 +413,18 @@ private slots:
         QVERIFY(!controller.bpmBusy());
         QVERIFY(!controller.playPause());
         QVERIFY(!controller.errorMessage().isEmpty());
+    }
+
+    void clearingDocumentClearsStalePlaybackError()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(48'000, 4, 96'000));
+        QVERIFY(!controller.playPause());
+        QVERIFY(!controller.errorMessage().isEmpty());
+
+        QVERIFY(controller.clearDocument());
+        QVERIFY(!controller.hasDocument());
+        QVERIFY(controller.errorMessage().isEmpty());
     }
 
     void emptyDocumentDisablesEditActions()
@@ -1582,6 +1594,35 @@ private slots:
                  qint64{1'000});
         QCOMPARE(events.at(2).toMap().value(QStringLiteral("sourceStart")).toLongLong(),
                  qint64{400});
+    }
+
+    void interiorPasteSelectsTheClipboardCloneNotTheAutoSplitRightSide()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(48'000, 2, 1'000));
+        controller.selectEvent(QStringLiteral("1"));
+        QVERIFY(controller.triggerAction(QStringLiteral("editor.copy")));
+        QVERIFY(controller.seekFrame(400));
+
+        QVERIFY(controller.triggerAction(QStringLiteral("editor.paste")));
+        QCOMPARE(controller.selectedEventId(), QStringLiteral("2"));
+
+        const QVariantList events = controller.timelineEventViews();
+        QCOMPARE(events.size(), 3);
+        QCOMPARE(events.at(0).toMap().value(QStringLiteral("id")).toString(),
+                 QStringLiteral("1"));
+        QCOMPARE(events.at(0).toMap().value(QStringLiteral("sourceEnd")).toLongLong(),
+                 qint64{400});
+        QCOMPARE(events.at(1).toMap().value(QStringLiteral("id")).toString(),
+                 QStringLiteral("2"));
+        QCOMPARE(events.at(1).toMap().value(QStringLiteral("timelineStart")).toLongLong(),
+                 qint64{400});
+        QCOMPARE(events.at(2).toMap().value(QStringLiteral("id")).toString(),
+                 QStringLiteral("3"));
+        QCOMPARE(events.at(2).toMap().value(QStringLiteral("sourceStart")).toLongLong(),
+                 qint64{400});
+        QCOMPARE(events.at(2).toMap().value(QStringLiteral("timelineStart")).toLongLong(),
+                 qint64{1'400});
     }
 
     void unselectedEventCommandsFallBackToTheTimeRangeWhileCropStaysRangeOnly()

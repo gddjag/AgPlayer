@@ -766,12 +766,15 @@ bool AudioDocument::pasteAt(const SampleFrame playhead)
     if (clipboard_.empty() || playhead < 0) return false;
     const SampleFrame origin = clipboard_.front().timelineStart;
     std::vector<AudioEvent> candidate = timeline_.snapshot().events;
+    std::vector<AudioEvent> clones;
+    clones.reserve(clipboard_.size());
     EventId candidateId = next_event_id_;
     constexpr EventId reserved = std::numeric_limits<EventId>::max();
     if (candidateId == reserved
         || clipboard_.size() > static_cast<std::size_t>(reserved - candidateId)) {
         return false;
     }
+    SampleFrame clipboardEnd = origin;
     for (const AudioEvent& original : clipboard_) {
         const SampleFrame offset = original.timelineStart - origin;
         if (offset < 0 || playhead > std::numeric_limits<SampleFrame>::max() - offset) {
@@ -780,8 +783,49 @@ bool AudioDocument::pasteAt(const SampleFrame playhead)
         AudioEvent clone = original;
         clone.id = candidateId++;
         clone.timelineStart = playhead + offset;
-        candidate.push_back(std::move(clone));
+        const SampleFrame cloneFrames = audibleFrames(clone);
+        if (clone.timelineStart > std::numeric_limits<SampleFrame>::max()
+                - cloneFrames
+            || original.timelineStart > std::numeric_limits<SampleFrame>::max()
+                - cloneFrames) {
+            return false;
+        }
+        clipboardEnd = std::max(clipboardEnd,
+            original.timelineStart + cloneFrames);
+        clones.push_back(std::move(clone));
     }
+
+    const bool collides = std::any_of(clones.cbegin(), clones.cend(),
+        [&candidate](const AudioEvent& clone) {
+            const SampleFrame cloneEnd = clone.timelineStart + audibleFrames(clone);
+            return std::any_of(candidate.cbegin(), candidate.cend(),
+                [clone, cloneEnd](const AudioEvent& existing) {
+                    const SampleFrame existingEnd = existing.timelineStart
+                        + audibleFrames(existing);
+                    return clone.timelineStart < existingEnd
+                        && existing.timelineStart < cloneEnd;
+                });
+        });
+    if (collides) {
+        const SampleFrame clipboardFrames = clipboardEnd - origin;
+        if (clipboardFrames <= 0
+            || playhead > std::numeric_limits<SampleFrame>::max()
+                - clipboardFrames
+            || !splitAtFrame(candidate, playhead, candidateId)) {
+            return false;
+        }
+        for (AudioEvent& event : candidate) {
+            if (event.timelineStart < playhead) continue;
+            if (event.timelineStart > std::numeric_limits<SampleFrame>::max()
+                    - clipboardFrames) {
+                return false;
+            }
+            event.timelineStart += clipboardFrames;
+        }
+    }
+
+    candidate.insert(candidate.end(), std::make_move_iterator(clones.begin()),
+                     std::make_move_iterator(clones.end()));
     if (!applyCandidate(std::move(candidate))) return false;
     next_event_id_ = candidateId;
     selection_.reset();

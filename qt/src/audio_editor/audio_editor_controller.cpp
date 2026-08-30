@@ -2776,6 +2776,7 @@ bool AudioEditorController::clearDocument()
     setViewportDocumentFrames(0);
     markProjectClean();
     setState(EditorSessionState::Empty);
+    setError({});
     refreshActions();
     emit waveformChanged();
     emit playbackChanged();

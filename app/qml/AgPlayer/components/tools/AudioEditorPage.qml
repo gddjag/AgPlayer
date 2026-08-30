@@ -18,7 +18,8 @@ Rectangle {
         : Math.max(320, Math.min(372, width - 1328))
     readonly property real mainWidth: narrowLayout ? width
         : width - inspectorWidth
-    readonly property real responsiveContentHeight: narrowLayout ? 772
+    readonly property real responsiveContentHeight: narrowLayout
+        ? Math.max(height, 560)
         : Math.max(height, 660)
     readonly property real roomyLayoutFactor: narrowLayout ? 0
         : Math.max(0, Math.min(1,
@@ -399,10 +400,11 @@ Rectangle {
             Rectangle {
                 objectName: "editorTimelineWorkspace"
                 x: 12
-                y: page.interpolateLayout(124, 152)
-                    + page.narrowActionBandHeight
+                y: page.narrowLayout ? 176
+                    : page.interpolateLayout(124, 152)
                 width: mainSurface.width - 24
-                height: page.interpolateLayout(276, 451)
+                height: page.narrowLayout ? 184
+                    : page.interpolateLayout(276, 451)
                 color: Theme.editorCanvas
                 border.color: Theme.divider
                 border.width: 1
@@ -413,10 +415,11 @@ Rectangle {
                 id: trackHeader
                 objectName: "editorTrackHeader"
                 x: 12
-                y: page.interpolateLayout(168, 188)
-                    + page.narrowActionBandHeight
+                y: page.narrowLayout ? 212
+                    : page.interpolateLayout(168, 188)
                 width: page.interpolateLayout(84, 96)
-                height: page.interpolateLayout(204, 387)
+                height: page.narrowLayout ? 120
+                    : page.interpolateLayout(204, 387)
                 color: Theme.surfaceElevated
                 border.color: Theme.divider
                 border.width: 1
@@ -490,10 +493,11 @@ Rectangle {
                 id: ruler
                 objectName: "editorTimeRuler"
                 x: trackHeader.x + trackHeader.width + 12
-                y: page.interpolateLayout(124, 152)
-                    + page.narrowActionBandHeight
+                y: page.narrowLayout ? 176
+                    : page.interpolateLayout(124, 152)
                 width: mainSurface.width - x - 10
-                height: page.interpolateLayout(44, 52)
+                height: page.narrowLayout ? 36
+                    : page.interpolateLayout(44, 52)
                 color: Theme.surface
                 border.color: Theme.divider
                 Repeater {
@@ -627,18 +631,19 @@ Rectangle {
                 objectName: "editorWaveformCanvas"
                 controlModifierHeld: page.controlModifierHeld
                 x: ruler.x
-                y: page.interpolateLayout(168, 188)
-                    + page.narrowActionBandHeight
+                y: page.narrowLayout ? 212
+                    : page.interpolateLayout(168, 188)
                 width: ruler.width
-                height: page.interpolateLayout(204, 387)
+                height: page.narrowLayout ? 120
+                    : page.interpolateLayout(204, 387)
             }
 
             EditorSlider {
                 id: timelineScrollbar
                 objectName: "editorTimelineScrollbar"
                 x: ruler.x
-                y: page.interpolateLayout(378, 589)
-                    + page.narrowActionBandHeight
+                y: page.narrowLayout ? 340
+                    : page.interpolateLayout(378, 589)
                 width: ruler.width
                 height: 16
                 pointerHitExtent: 16
@@ -658,10 +663,11 @@ Rectangle {
                 id: playbackTransport
                 objectName: "editorPlaybackTransport"
                 x: 12
-                y: page.interpolateLayout(410, 618)
-                    + page.narrowActionBandHeight
+                y: page.narrowLayout ? 372
+                    : page.interpolateLayout(410, 618)
                 width: mainSurface.width - 24
-                height: page.interpolateLayout(110, 112)
+                height: page.narrowLayout ? 80
+                    : page.interpolateLayout(110, 112)
                 color: Theme.surfaceElevated
                 border.color: Theme.divider
                 border.width: 1
@@ -955,10 +961,11 @@ Rectangle {
                 id: shortcutCard
                 objectName: "editorShortcutCard"
                 x: 12
-                y: page.interpolateLayout(516, 730)
-                    + page.narrowActionBandHeight
+                y: page.narrowLayout ? 460
+                    : page.interpolateLayout(516, 730)
                 width: mainSurface.width - 24
-                height: page.interpolateLayout(103, 67)
+                height: page.narrowLayout ? 67
+                    : page.interpolateLayout(103, 67)
                 color: Theme.surfaceElevated
                 border.color: Theme.divider
                 border.width: 1

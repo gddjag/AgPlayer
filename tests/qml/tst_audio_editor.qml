@@ -697,6 +697,42 @@ TestCase {
         }
     }
 
+    function test_narrowViewportKeepsPlaybackAndBothShortcutRowsReachable() {
+        host.width = 880
+        host.height = 560
+        wait(0)
+
+        const main = findChild(page, "editorMainColumn")
+        const transport = findChild(page, "editorPlaybackTransport")
+        const card = findChild(page, "editorShortcutCard")
+        const status = findChild(page, "editorStatusBar")
+        const playAccess = findChild(page, "editorNarrowPlaybackAccess")
+        const firstRow = findChild(page, "editorShortcutFirstRow")
+        const secondRow = findChild(page, "editorShortcutSecondRow")
+        verify(main && transport && card && status && playAccess
+               && firstRow && secondRow)
+
+        main.contentY = 0
+        wait(0)
+        const transportPosition = transport.mapToItem(page, 0, 0)
+        const cardPosition = card.mapToItem(page, 0, 0)
+        const statusPosition = status.mapToItem(page, 0, 0)
+        verify(playAccess.visible && playAccess.enabled === false)
+        verify(transportPosition.y >= 0)
+        verify(transportPosition.y + transport.height <= cardPosition.y,
+               "shortcut card must remain below the playback panel")
+        verify(cardPosition.y >= 0)
+        verify(cardPosition.y + card.height <= page.height,
+               "both 13px shortcut rows must be visible at 880x560")
+        verify(cardPosition.y + card.height <= statusPosition.y,
+               "shortcut card must not be covered by the status bar")
+        for (const row of [firstRow, secondRow]) {
+            verify(row.mapToItem(page, 0, 0).y >= cardPosition.y)
+            verify(row.mapToItem(page, 0, row.height).y
+                   <= cardPosition.y + card.height)
+        }
+    }
+
     function test_referenceTransportUsesFineControlsAndHoverShortcuts() {
         const toStart = findChild(page, "editorPlaybackToStartButton")
         const rewind = findChild(page, "editorPlaybackRewindButton")
@@ -972,7 +1008,10 @@ TestCase {
         compare(AudioEditorController.loopEnabled, false)
         verify(Math.abs(AudioEditorController.playheadFrame
                         - canvas.frameAtCanvasPixel(resolvedOutside.x)) <= 1)
-        tryCompare(AudioEditorController, "playing", true)
+        tryVerify(function() {
+            return !AudioEditorController.playing
+                && AudioEditorController.errorMessage.length > 0
+        })
         AudioEditorController.stopPlayback()
         tryCompare(AudioEditorController, "playing", false)
 

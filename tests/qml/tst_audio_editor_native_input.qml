@@ -67,6 +67,24 @@ TestCase {
         return null
     }
 
+    function findTimelineEventItem(root, eventId) {
+        if (!root || !root.children)
+            return null
+        for (let index = root.children.length - 1; index >= 0; --index) {
+            const child = root.children[index]
+            if (child.objectName === "editorEventVisualBoundary"
+                    && child.modelData
+                    && String(child.modelData.id) === String(eventId)
+                    && child.visible) {
+                return child
+            }
+            const nested = findTimelineEventItem(child, eventId)
+            if (nested)
+                return nested
+        }
+        return null
+    }
+
     function init() {
         AudioToolsController.selectTool(0)
         if (AudioEditorController.hasDocument && !AudioEditorController.busy) {
@@ -157,6 +175,126 @@ TestCase {
             reset, Qt.Key_Space, Qt.NoModifier))
         tryCompare(AudioEditorController, "playing", false)
         compare(AudioEditorController.pitchCents, 200)
+    }
+
+    function test_realFixtureEditingJourneyUsesNativeInputEndToEnd() {
+        host.destroy()
+        wait(0)
+        host = createTemporaryObject(shellComponent, testCase)
+        verify(host)
+        host.requestActivate()
+        tryVerify(function() { return host.active })
+        page = findChild(host, "audioEditorPage")
+        verify(page && testAudioUrl && testAudioUrl.toString().length > 0)
+
+        verify(nativeDropHelper.sendUrls(page, [testAudioUrl]))
+        tryVerify(function() {
+            return AudioEditorController.hasDocument
+                && !AudioEditorController.busy
+        }, 5000, AudioEditorController.errorMessage)
+        const canvas = findChild(page, "editorWaveformCanvas")
+        const splitButton = findChild(page, "editorCommand_split")
+        const copyButton = findChild(page, "editorCommand_copy")
+        const pasteButton = findChild(page, "editorCommand_paste")
+        const muteButton = findChild(page, "editorCommand_mute")
+        const fadeInButton = findChild(page, "editorCommand_fadeIn")
+        const deleteButton = findChild(page, "editorCommand_delete")
+        const primaryPlay = findChild(page, "editorPrimaryPlayButton")
+        verify(canvas && splitButton && copyButton && pasteButton && muteButton
+               && fadeInButton && deleteButton && primaryPlay)
+
+        AudioEditorController.viewport.setViewportWidth(canvas.width)
+        verify(AudioEditorController.viewport.setVisibleRange(
+            0, AudioEditorController.totalFrames))
+        const splitPointX = canvas.width * 0.6
+        verify(nativeDropHelper.dragItem(canvas, splitPointX,
+            canvas.height * 0.75, 0, 0))
+        verify(nativeDropHelper.keyClickItem(canvas, Qt.Key_S, Qt.NoModifier))
+        tryCompare(AudioEditorController.timelineEventViews, "length", 2)
+
+        const rightId = String(AudioEditorController.timelineEventViews[1].id)
+        const rightEvent = findTimelineEventItem(canvas, rightId)
+        verify(rightEvent)
+        const rightHeader = findVisibleItem(rightEvent,
+            "editorEventHeaderInteraction")
+        verify(rightHeader)
+        verify(nativeDropHelper.dragItem(rightHeader, rightHeader.width * 0.5,
+            rightHeader.height * 0.5, 0, 0))
+        tryCompare(AudioEditorController, "selectedEventId", rightId)
+
+        verify(copyButton.enabled && pasteButton.enabled === false)
+        verify(nativeDropHelper.keyClickItem(canvas, Qt.Key_C,
+            Qt.ControlModifier))
+        tryVerify(function() {
+            return pasteButton.enabled
+                && AudioEditorController.actionEnabled("editor.paste")
+        })
+        verify(nativeDropHelper.dragItem(canvas, canvas.width - 2,
+            canvas.height * 0.75, 0, 0))
+        verify(nativeDropHelper.keyClickItem(canvas, Qt.Key_V,
+            Qt.ControlModifier))
+        tryVerify(function() {
+            return AudioEditorController.timelineEventViews.length >= 3
+        })
+        const pastedId = String(AudioEditorController.selectedEventId)
+        verify(pastedId.length > 0 && pastedId !== rightId)
+        const pastedEvent = findTimelineEventItem(canvas, pastedId)
+        verify(pastedEvent)
+        const rightTrim = findVisibleItem(pastedEvent,
+            "editorEventRightTrimHandle")
+        verify(rightTrim)
+        const pastedFramesBeforeTrim = Number(
+            AudioEditorController.timelineEventViews.filter(function(event) {
+                return String(event.id) === pastedId
+            })[0].timelineEnd) - Number(
+                AudioEditorController.timelineEventViews.filter(function(event) {
+                    return String(event.id) === pastedId
+            })[0].timelineStart)
+        verify(nativeDropHelper.dragItem(rightTrim, rightTrim.width * 0.5,
+            rightTrim.height * 0.5, -Math.min(24, pastedEvent.width * 0.15), 0))
+        tryVerify(function() {
+            const event = AudioEditorController.timelineEventViews.filter(
+                function(candidate) { return String(candidate.id) === pastedId })[0]
+            return event && Number(event.timelineEnd) - Number(event.timelineStart)
+                < pastedFramesBeforeTrim
+        })
+
+        verify(nativeDropHelper.dragItem(muteButton, muteButton.width * 0.5,
+            muteButton.height * 0.5, 0, 0))
+        verify(AudioEditorController.actionEnabled("editor.undo"))
+        verify(nativeDropHelper.dragItem(fadeInButton,
+            fadeInButton.width * 0.5, fadeInButton.height * 0.5, 0, 0))
+        tryVerify(function() {
+            const event = AudioEditorController.timelineEventViews.filter(
+                function(candidate) { return String(candidate.id) === pastedId })[0]
+            return event && Number(event.fadeIn) > 0
+        })
+
+        verify(nativeDropHelper.dragItem(deleteButton,
+            deleteButton.width * 0.5, deleteButton.height * 0.5, 0, 0))
+        tryVerify(function() {
+            return !AudioEditorController.timelineEventViews.some(
+                function(event) { return String(event.id) === pastedId })
+        })
+        verify(nativeDropHelper.keyClickItem(canvas, Qt.Key_Z, Qt.ControlModifier))
+        tryVerify(function() {
+            return AudioEditorController.timelineEventViews.some(
+                function(event) { return String(event.id) === pastedId })
+        })
+
+        verify(nativeDropHelper.dragItem(canvas, canvas.width * 0.12,
+            canvas.height * 0.75, canvas.width * 0.18, 0))
+        tryVerify(function() {
+            return AudioEditorController.selectionEnd
+                > AudioEditorController.selectionStart
+                && AudioEditorController.loopEnabled
+        })
+        primaryPlay.forceActiveFocus()
+        tryVerify(function() { return primaryPlay.activeFocus })
+        verify(nativeDropHelper.keyClickItem(primaryPlay, Qt.Key_Space,
+            Qt.NoModifier))
+        tryVerify(function() { return AudioEditorController.playing }, 5000,
+            AudioEditorController.errorMessage)
     }
 
     function test_bodyDragCreatesRangeSelectionWithNativePointerInput() {
