@@ -94,3 +94,48 @@ direct gesture assertions changed here; they were left unchanged.
 - The complete offscreen `qml_audio_editor_test` still has the two failures
   noted above and emits a binding-loop warning while the Ctrl-copy test
   previews an event. Neither was remediated in this task.
+
+## Review fix round 1: native Ctrl-copy
+
+### RED and root cause
+
+The requested native-only header regression was added before changing the
+helper. Its first focused native run failed at the intended behaviour with
+`Actual: 1, Expected: 2` for the event count. A minimal `Connections`
+observer attached to the actual `editorEventHeaderInteraction` then proved
+that the `QTest::mousePress` event carries `Qt.ControlModifier` to that
+MouseArea; this does not use `controlModifierHeld`.
+
+The existing helper separately mirrored `controlModifierHeld` onto the QML
+page. That is a test-only shortcut rather than native keyboard delivery, so
+it was removed. With the real `QTest::keyPress`/`mousePress` path and a
+non-overlapping destination, the copy count became GREEN, but the regression
+then correctly failed its final selection assertion: the new event was
+created but `selectedEventId` remained the original decimal ID.
+
+### GREEN
+
+`endEventGesture()` now identifies the one event newly present after a
+successful duplicate and selects its decimal ID. The helper keeps only native
+`QTest::keyPress`, pointer events with modifier flags, and `QTest::keyRelease`.
+
+```powershell
+cmd /c 'call "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 && cmake --build build\agent-qml-release --target qml_audio_tools_test --parallel 4'
+
+$env:QT_QPA_PLATFORM = 'windows'
+$env:QT_QUICK_CONTROLS_STYLE = 'Basic'
+& .\build\agent-qml-release\tests\qml_audio_tools_test.exe `
+  -input .\tests\qml\tst_audio_editor_native_input.qml
+```
+
+Output: build succeeded; native QuickTest `8 passed, 0 failed, 0 skipped`.
+The Ctrl-header test asserts `1 -> 2` events, original start unchanged, copy
+at its requested destination, decimal-string selected copy ID, and that the
+actual header MouseArea received `Qt.ControlModifier`.
+
+### Binding-loop check
+
+The final native `windows` QuickTest output contains no
+`displayedTimelineStart` binding-loop warning. The earlier warning remains an
+offscreen-only observation from the broader suite and was not reproduced by
+the real native Ctrl path; no unrelated QML layout change was made.

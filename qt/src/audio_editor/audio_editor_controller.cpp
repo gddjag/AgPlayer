@@ -2095,8 +2095,21 @@ bool AudioEditorController::endEventGesture()
     }
 
     bool changed = false;
+    std::optional<agplayer::editor::EventId> duplicatedId;
     if (gesture.duplicate) {
+        const auto before = document_.timelineSnapshot();
         changed = document_.duplicateEvent(gesture.id, gesture.timelineStart);
+        if (changed) {
+            const auto after = document_.timelineSnapshot();
+            const auto duplicate = std::find_if(after.events.cbegin(),
+                after.events.cend(), [&before](const AudioEvent& event) {
+                    return std::none_of(before.events.cbegin(),
+                        before.events.cend(), [&event](const AudioEvent& item) {
+                            return item.id == event.id;
+                        });
+                });
+            if (duplicate != after.events.cend()) duplicatedId = duplicate->id;
+        }
     } else if (gesture.kind == EventGestureKind::Move) {
         changed = document_.moveEvent(gesture.id, gesture.timelineStart);
     } else if (gesture.kind == EventGestureKind::Trim) {
@@ -2123,6 +2136,7 @@ bool AudioEditorController::endEventGesture()
         return false;
     }
     finishTimelineMutation();
+    if (duplicatedId) selectEvent(QString::number(*duplicatedId));
     return true;
 }
 

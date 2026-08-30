@@ -27,6 +27,25 @@ TestCase {
         AudioToolsWindow { visible: true }
     }
 
+    Component {
+        id: mouseModifierObserverComponent
+        Item {
+            id: observer
+            width: 0
+            height: 0
+            visible: false
+            property var target
+            property int observedModifiers: Qt.NoModifier
+
+            Connections {
+                target: observer.target
+                function onPressed(event) {
+                    observer.observedModifiers = event.modifiers
+                }
+            }
+        }
+    }
+
     property var host
     property var page
 
@@ -194,6 +213,54 @@ TestCase {
         compare(AudioEditorController.selectedEventId, String(eventId))
         verify(Number(AudioEditorController.timelineEventViews[0].timelineStart)
             < 96000)
+    }
+
+    function test_ctrlHeaderDragCreatesSelectedCopyWithNativeModifierInput() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 192000))
+        verify(AudioEditorController.setActiveTool("select"))
+        const originalId = String(AudioEditorController.timelineEventViews[0].id)
+        verify(AudioEditorController.moveEvent(originalId, 96000))
+        verify(AudioEditorController.trimEvent(originalId, 0, 96000, 96000))
+        const canvas = findChild(page, "editorWaveformCanvas")
+        verify(canvas)
+        AudioEditorController.viewport.setViewportWidth(canvas.width)
+        verify(AudioEditorController.viewport.setVisibleRange(0, 192000))
+        tryVerify(function() {
+            return findVisibleItem(canvas, "editorEventHeaderInteraction") !== null
+        })
+        const header = findVisibleItem(canvas, "editorEventHeaderInteraction")
+        verify(header)
+        const modifierObserver = createTemporaryObject(
+            mouseModifierObserverComponent, testCase,
+            { "target": header })
+        verify(modifierObserver)
+        const startX = header.width * 0.75
+        const pressOnCanvas = header.mapToItem(canvas, startX,
+            header.height * 0.5)
+        const pressFrame = canvas.frameAtCanvasPixel(pressOnCanvas.x)
+        const destinationOnHeader = canvas.mapToItem(header,
+            canvas.pixelAtFrame(pressFrame - 96000), pressOnCanvas.y)
+
+        verify(nativeDropHelper.dragItemWithModifiers(
+            header, startX, header.height * 0.5,
+            destinationOnHeader.x - startX, 0, Qt.ControlModifier))
+
+        verify((modifierObserver.observedModifiers & Qt.ControlModifier) !== 0)
+
+        const events = AudioEditorController.timelineEventViews
+        compare(events.length, 2)
+        let original = null
+        let copied = null
+        for (let index = 0; index < events.length; ++index) {
+            if (String(events[index].id) === originalId)
+                original = events[index]
+            else
+                copied = events[index]
+        }
+        verify(original && copied)
+        compare(Number(original.timelineStart), 96000)
+        compare(Number(copied.timelineStart), 0)
+        compare(AudioEditorController.selectedEventId, String(copied.id))
     }
 
     function test_rightTrimHandleKeepsNativeGrabAndCommitsOneUndoStep() {

@@ -492,17 +492,7 @@ public:
         const QPoint end = start + QPoint(qRound(deltaX), qRound(deltaY));
         const auto keyboardModifiers = Qt::KeyboardModifiers(modifiers);
         const bool controlHeld = keyboardModifiers.testFlag(Qt::ControlModifier);
-        QQuickItem* modifierOwner = item;
-        while (modifierOwner != nullptr
-               && modifierOwner->objectName() != "audioEditorPage") {
-            modifierOwner = modifierOwner->parentItem();
-        }
         if (controlHeld) QTest::keyPress(window, Qt::Key_Control);
-        if (controlHeld && modifierOwner != nullptr) {
-            // Mirror the page's real Keys.onPressed state after the native key
-            // event so the following pointer press snapshots the held modifier.
-            modifierOwner->setProperty("controlModifierHeld", true);
-        }
         QTest::mousePress(window, Qt::LeftButton, keyboardModifiers,
                           start, 20);
         constexpr int steps = 6;
@@ -513,9 +503,6 @@ public:
         QTest::mouseRelease(window, Qt::LeftButton, keyboardModifiers,
                             end, 20);
         if (controlHeld) QTest::keyRelease(window, Qt::Key_Control);
-        if (controlHeld && modifierOwner != nullptr) {
-            modifierOwner->setProperty("controlModifierHeld", false);
-        }
         return true;
     }
 
