@@ -43,6 +43,22 @@ constexpr std::size_t spectrum_fft_size = 512U;
 constexpr std::size_t spectrum_tap_capacity = 8'192U;
 constexpr std::size_t spectrum_max_bins = spectrum_fft_size / 2U;
 constexpr float spectrum_pi = 3.14159265358979323846F;
+constexpr float output_meter_floor_linear = 1.0e-6F;
+constexpr double output_meter_floor_db = -120.0;
+constexpr float output_meter_release_db_per_second = 12.0F;
+
+float integer_power(float base, std::size_t exponent) noexcept
+{
+    float result = 1.0F;
+    while (exponent > 0U) {
+        if ((exponent & 1U) != 0U) {
+            result *= base;
+        }
+        base *= base;
+        exponent >>= 1U;
+    }
+    return result;
+}
 
 void fft(std::array<std::complex<float>, spectrum_fft_size>& values) noexcept
 {
@@ -713,6 +729,20 @@ public:
 
     [[nodiscard]] EqualizerStatus equalizer_status() const noexcept
     {
+        double output_peak_db = output_meter_floor_db;
+        if (state_.load(std::memory_order_acquire) == EngineState::Playing
+            && !muted_.load(std::memory_order_acquire)
+            && !device_lost_.load(std::memory_order_acquire)
+            && !seeking_.load(std::memory_order_acquire)) {
+            const float output_peak =
+                output_peak_linear_.load(std::memory_order_acquire);
+            if (std::isfinite(output_peak)
+                && output_peak > output_meter_floor_linear) {
+                output_peak_db = (std::max)(
+                    output_meter_floor_db,
+                    20.0 * std::log10(static_cast<double>(output_peak)));
+            }
+        }
         return {
             equalizer_revision_status_.load(std::memory_order_acquire),
             equalizer_enabled_status_.load(std::memory_order_acquire),
@@ -720,7 +750,8 @@ public:
             equalizer_auto_protection_status_.load(std::memory_order_acquire),
             equalizer_sample_rate_status_.load(std::memory_order_acquire),
             equalizer_active_status_.load(std::memory_order_acquire),
-            equalizer_protection_status_.load(std::memory_order_acquire)};
+            equalizer_protection_status_.load(std::memory_order_acquire),
+            output_peak_db};
     }
 
     void set_muted(const bool muted) noexcept
@@ -765,12 +796,14 @@ public:
     void render(float* output, const std::size_t requested_frames) noexcept
     {
         if (output == nullptr || requested_frames == 0U) {
+            output_peak_linear_.store(0.0F, std::memory_order_release);
             return;
         }
         const std::size_t channels = static_cast<std::size_t>(channels_);
         if (state_.load(std::memory_order_acquire) != EngineState::Playing
             || device_lost_.load(std::memory_order_acquire)
             || seeking_.load(std::memory_order_acquire)) {
+            output_peak_linear_.store(0.0F, std::memory_order_release);
             std::fill(output, output + requested_frames * channels, 0.0F);
             return;
         }
@@ -796,6 +829,7 @@ public:
                         : 0;
         const std::int64_t fade_boundary =
             fade_boundary_frame_.load(std::memory_order_acquire);
+        float block_peak = 0.0F;
         for (std::size_t frame = 0U; frame < frames; ++frame) {
             float transition_gain = 1.0F;
             if (fade_frames > 0 && fade_boundary >= 0) {
@@ -815,9 +849,23 @@ public:
                 }
             }
             for (std::size_t channel = 0U; channel < channels; ++channel) {
-                output[frame * channels + channel] *=
-                    gain * transition_gain;
+                float& sample = output[frame * channels + channel];
+                sample *= gain * transition_gain;
+                block_peak = (std::max)(block_peak, std::abs(sample));
             }
+        }
+        if (frames == 0U || gain <= 0.0F) {
+            output_peak_linear_.store(0.0F, std::memory_order_release);
+        } else {
+            const float previous_peak =
+                output_peak_linear_.load(std::memory_order_relaxed);
+            const float release_gain = integer_power(
+                output_meter_release_per_frame_.load(
+                    std::memory_order_relaxed),
+                frames);
+            output_peak_linear_.store(
+                (std::max)(block_peak, previous_peak * release_gain),
+                std::memory_order_release);
         }
         tap_spectrum(output, frames, channels);
         std::fill(output + frames * channels,
@@ -1906,6 +1954,13 @@ private:
 
     void publish_equalizer_for_rate(const int sample_rate) noexcept
     {
+        const float release_per_frame = sample_rate > 0
+            ? std::pow(10.0F,
+                       -output_meter_release_db_per_second
+                           / (20.0F * static_cast<float>(sample_rate)))
+            : 0.0F;
+        output_meter_release_per_frame_.store(release_per_frame,
+                                              std::memory_order_release);
         GraphicEqSettings settings;
         std::uint64_t revision = 0;
         {
@@ -2001,6 +2056,8 @@ private:
     std::atomic<int> equalizer_sample_rate_status_{0};
     std::atomic<bool> equalizer_active_status_{false};
     std::atomic<double> equalizer_protection_status_{0.0};
+    std::atomic<float> output_peak_linear_{0.0F};
+    std::atomic<float> output_meter_release_per_frame_{0.0F};
     std::atomic<bool> muted_{false};
     std::atomic<int> transition_fade_ms_{0};
     std::atomic<bool> match_track_sample_rate_{false};

@@ -1,5 +1,7 @@
 #include "equalizer_controller.hpp"
 
+#include "../../core/src/audio_editor/editor_player_bridge.hpp"
+
 #include <agplayer/c_api.h>
 
 #include <QCoreApplication>
@@ -9,6 +11,55 @@
 #include <QTest>
 
 #include <limits>
+#include <memory>
+
+namespace {
+
+class ConstantAudioStream final : public agplayer::IAudioStreamSource {
+public:
+    ConstantAudioStream()
+    {
+        metadata_.sample_rate = 48'000;
+        metadata_.channels = 2;
+        metadata_.duration_ms = 3'000;
+    }
+
+    const agplayer::MediaMetadata& metadata() const noexcept override
+    {
+        return metadata_;
+    }
+
+    ag_result read(agplayer::DecodedAudioBlock& block) noexcept override
+    {
+        constexpr std::int64_t totalFrames = 144'000;
+        const std::int64_t remaining = totalFrames - positionFrames_;
+        const std::size_t frames = static_cast<std::size_t>(
+            std::max<std::int64_t>(0, std::min<std::int64_t>(1'024, remaining)));
+        block = {};
+        block.frames = frames;
+        block.timestamp_frame = positionFrames_;
+        block.timestamp_ms = positionFrames_ * 1'000 / metadata_.sample_rate;
+        block.samples.assign(frames * 2U, 0.5F);
+        positionFrames_ += static_cast<std::int64_t>(frames);
+        block.end_of_stream = positionFrames_ >= totalFrames;
+        return AG_OK;
+    }
+
+    ag_result seek(const std::int64_t positionMs) noexcept override
+    {
+        if (positionMs < 0 || positionMs > metadata_.duration_ms) {
+            return AG_INVALID_ARGUMENT;
+        }
+        positionFrames_ = positionMs * metadata_.sample_rate / 1'000;
+        return AG_OK;
+    }
+
+private:
+    agplayer::MediaMetadata metadata_;
+    std::int64_t positionFrames_ = 0;
+};
+
+} // namespace
 
 class EqualizerControllerTest final : public QObject {
     Q_OBJECT
@@ -30,6 +81,7 @@ private slots:
     void persistsSupportedGainRangesAndClampsInOneSnapshot();
     void precisionControlsFutureEditsWithoutRewritingStoredValues();
     void responseCurveReflectsTheActualDspProgram();
+    void refreshStatusPublishesOutputPeakOnlyWhenItChanges();
 };
 
 void EqualizerControllerTest::initTestCase()
@@ -661,6 +713,42 @@ void EqualizerControllerTest::responseCurveReflectsTheActualDspProgram()
         });
     QVERIFY(peak != boosted.cend());
     QVERIFY(peak->toDouble() > 4.5);
+
+    ag_player_destroy(player);
+}
+
+void EqualizerControllerTest::refreshStatusPublishesOutputPeakOnlyWhenItChanges()
+{
+    const ag_player_config config{AG_AUDIO_BACKEND_NULL, 4'096U};
+    ag_player* player = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &player), AG_OK);
+    QCOMPARE(agplayer::editor::load_editor_playback_stream(
+                 player, std::make_shared<ConstantAudioStream>()),
+             AG_OK);
+
+    EqualizerController controller(player);
+    QSignalSpy peakChanged(&controller,
+                           &EqualizerController::outputPeakDbChanged);
+    QCOMPARE(controller.outputPeakDb(), -120.0);
+    QCOMPARE(ag_player_play(player), AG_OK);
+    QTRY_VERIFY_WITH_TIMEOUT(
+        (controller.refreshStatus(), controller.outputPeakDb() > -100.0),
+        1'000);
+    QCOMPARE(peakChanged.count(), 1);
+
+    ag_equalizer_status status{};
+    QCOMPARE(ag_player_equalizer_status(player, &status), AG_OK);
+    controller.refreshStatus();
+    QCOMPARE(controller.outputPeakDb(), status.output_peak_db);
+    QCOMPARE(peakChanged.count(), 1);
+
+    QCOMPARE(ag_player_set_muted(player, 1), AG_OK);
+    QTRY_COMPARE_WITH_TIMEOUT(
+        (controller.refreshStatus(), controller.outputPeakDb()),
+        -120.0, 250);
+    QCOMPARE(peakChanged.count(), 2);
+    controller.refreshStatus();
+    QCOMPARE(peakChanged.count(), 2);
 
     ag_player_destroy(player);
 }

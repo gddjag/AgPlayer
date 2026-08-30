@@ -22,6 +22,28 @@
 
 namespace {
 
+constexpr double kMeterFloorDb = -120.0;
+
+template <typename Predicate>
+double waitForOutputPeak(ag_player* const player,
+                         Predicate&& predicate,
+                         const std::chrono::milliseconds timeout)
+{
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    double peakDb = kMeterFloorDb;
+    do {
+        ag_equalizer_status status{};
+        assert(ag_player_equalizer_status(player, &status) == AG_OK);
+        peakDb = status.output_peak_db;
+        if (predicate(peakDb)) {
+            return peakDb;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    } while (std::chrono::steady_clock::now() < deadline);
+    assert(false && "timed out waiting for output peak");
+    return peakDb;
+}
+
 class SilentEditorStream final : public agplayer::IAudioStreamSource {
 public:
     explicit SilentEditorStream(const std::int64_t durationMs)
@@ -112,6 +134,11 @@ int main(const int argc, char** argv)
            == AG_INVALID_ARGUMENT);
     assert(ag_player_equalizer_status(nullptr, nullptr)
            == AG_INVALID_ARGUMENT);
+    ag_equalizer_status null_status{};
+    assert(ag_player_equalizer_status(nullptr, &null_status)
+           == AG_INVALID_ARGUMENT);
+    assert(ag_player_equalizer_status(player, nullptr)
+           == AG_INVALID_ARGUMENT);
     assert(ag_player_set_muted(nullptr, 0) == AG_INVALID_ARGUMENT);
     assert(ag_player_snapshot(nullptr, &snapshot) == AG_INVALID_ARGUMENT);
 
@@ -136,6 +163,38 @@ int main(const int argc, char** argv)
     assert(snapshot.state == AG_STOPPED);
     assert(snapshot.duration_ms >= 1'990);
     assert(snapshot.position_ms == 0);
+
+    ag_equalizer_status meter_status{};
+    assert(ag_player_equalizer_status(player, &meter_status) == AG_OK);
+    assert(meter_status.output_peak_db == kMeterFloorDb);
+
+    assert(ag_player_set_volume(player, 1.0F) == AG_OK);
+    assert(ag_player_set_replay_gain(player, 0.0F, 1.0F, 1) == AG_OK);
+    assert(ag_player_set_muted(player, 0) == AG_OK);
+    assert(ag_player_play(player) == AG_OK);
+    const double full_volume_peak = waitForOutputPeak(
+        player,
+        [](const double peakDb) {
+            return std::isfinite(peakDb) && peakDb > -100.0;
+        },
+        std::chrono::milliseconds(1'000));
+    assert(ag_player_set_volume(player, 0.1F) == AG_OK);
+    const double reduced_volume_peak = waitForOutputPeak(
+        player,
+        [full_volume_peak](const double peakDb) {
+            return std::isfinite(peakDb)
+                   && peakDb <= full_volume_peak - 6.0;
+        },
+        std::chrono::milliseconds(1'000));
+    assert(reduced_volume_peak < full_volume_peak);
+    assert(ag_player_set_muted(player, 1) == AG_OK);
+    assert(waitForOutputPeak(
+               player,
+               [](const double peakDb) { return peakDb == kMeterFloorDb; },
+               std::chrono::milliseconds(250))
+           == kMeterFloorDb);
+    assert(ag_player_set_muted(player, 0) == AG_OK);
+    assert(ag_player_set_volume(player, 1.0F) == AG_OK);
 
     assert(ag_player_play(player) == AG_OK);
     std::this_thread::sleep_for(std::chrono::milliseconds(120));
@@ -176,7 +235,7 @@ int main(const int argc, char** argv)
            == AG_INVALID_ARGUMENT);
     assert(ag_player_set_replay_gain(player, 0.0F, -1.0F, 1)
            == AG_INVALID_ARGUMENT);
-    equalizer.band_gain_db[5] = 12.1;
+    equalizer.band_gain_db[5] = 18.1;
     assert(ag_player_set_equalizer(player, &equalizer)
            == AG_INVALID_ARGUMENT);
     equalizer.band_gain_db[5] = 0.0;
@@ -189,6 +248,8 @@ int main(const int argc, char** argv)
     assert(ag_player_snapshot(player, &snapshot) == AG_OK);
     assert(snapshot.state == AG_STOPPED);
     assert(snapshot.position_ms == 0);
+    assert(ag_player_equalizer_status(player, &meter_status) == AG_OK);
+    assert(meter_status.output_peak_db == kMeterFloorDb);
 
     assert(ag_player_seek(player, 1'900) == AG_OK);
     assert(ag_player_play(player) == AG_OK);

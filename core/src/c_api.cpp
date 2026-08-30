@@ -372,6 +372,7 @@ ag_result ag_player_equalizer_status(const ag_player* player,
         status->sample_rate = value.sample_rate;
         status->active = value.active ? 1 : 0;
         status->protection_db = value.protection_db;
+        status->output_peak_db = value.output_peak_db;
         return AG_OK;
     });
 }

@@ -82,6 +82,7 @@ typedef struct ag_equalizer_status {
     int sample_rate;
     int active;
     double protection_db;
+    double output_peak_db;
 } ag_equalizer_status;
 
 ag_result ag_player_create(ag_player** out_player);

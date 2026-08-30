@@ -54,6 +54,7 @@ struct EqualizerStatus {
     int sample_rate = 0;
     bool active = false;
     double protection_db = 0.0;
+    double output_peak_db = -120.0;
 };
 
 class AudioEngine final {

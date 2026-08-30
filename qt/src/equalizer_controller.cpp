@@ -245,6 +245,11 @@ double EqualizerController::protectionDb() const noexcept
     return protectionDb_;
 }
 
+double EqualizerController::outputPeakDb() const noexcept
+{
+    return outputPeakDb_;
+}
+
 double EqualizerController::gainRangeDb() const noexcept
 {
     return gainRangeDb_;
@@ -527,6 +532,11 @@ void EqualizerController::refreshStatus()
                        status.protection_db + 24.0)) {
         protectionDb_ = status.protection_db;
         emit protectionDbChanged();
+    }
+    if (!qFuzzyCompare(outputPeakDb_ + 121.0,
+                       status.output_peak_db + 121.0)) {
+        outputPeakDb_ = status.output_peak_db;
+        emit outputPeakDbChanged();
     }
 }
 
