@@ -156,6 +156,14 @@ VocalSeparationController::VocalSeparationController(
     if (!options_.catalog.isEmpty()) selectedModelId_ = options_.catalog.first().id;
     rebuildStems();
 
+    if (preview_ != nullptr) {
+        connect(preview_, &AudioPreviewController::errorOccurred, this,
+                [this](const QString& message) {
+            setError(message);
+            resetResultPreviewState();
+        });
+    }
+
     connect(&process_, &SeparationProcessClient::progressReceived, this,
             [this](double fraction, const QString& stage) {
         progress_ = std::max(progress_, fraction);
@@ -335,6 +343,17 @@ QString VocalSeparationController::startDisabledReason() const
 }
 QVariantList VocalSeparationController::stems() const { return stems_; }
 QVariantList VocalSeparationController::history() const { return history_; }
+VocalSeparationController::ResultPreviewMode
+VocalSeparationController::resultPreviewMode() const noexcept
+{
+    return resultPreviewMode_;
+}
+
+VocalSeparationController::StemKind
+VocalSeparationController::resultPreviewSoloKind() const noexcept
+{
+    return resultPreviewSoloKind_;
+}
 
 bool VocalSeparationController::selectInput(const QUrl& url)
 {
@@ -474,6 +493,13 @@ bool VocalSeparationController::selectModel(const QString& modelId)
 {
     if (modelForId(modelId) == nullptr || requestInFlight()) return false;
     if (selectedModelId_ == modelId) return true;
+    if (resultPreviewMode_ != ResultPreviewMode::None
+        || (preview_ != nullptr && preview_->mixActive())) {
+        if (preview_ != nullptr) preview_->stop();
+        resetResultPreviewState();
+    }
+    ++resultGeneration_;
+    clearPublishedResult();
     selectedModelId_ = modelId;
     invalidateRetry();
     emit selectedModelIdChanged();
@@ -579,6 +605,7 @@ bool VocalSeparationController::beginSeparationRequest(
     ActiveRequestContext context)
 {
     context.resultGeneration = ++resultGeneration_;
+    stopPreviewForCurrentInputOrResult();
     clearPublishedResult();
     if (!safeExistingFile(context.inputPath) || context.stemNames.isEmpty()) {
         failRequest(context, tr("请选择有效输入音频和至少一个输出音轨"),
@@ -672,6 +699,7 @@ bool VocalSeparationController::previewInput()
 {
     const QString path = inputInfo_.value(QStringLiteral("path")).toString();
     if (preview_ != nullptr) preview_->setVolume(1.0);
+    resetResultPreviewState();
     return togglePreviewPath(path);
 }
 
@@ -681,7 +709,38 @@ bool VocalSeparationController::previewStem(StemKind kind)
     if (preview_ != nullptr) {
         preview_->setVolume(stemPreviewVolumes_.value(int(kind), 0.8));
     }
-    return togglePreviewPath(path, publishedOutputRoot_);
+    const bool started = togglePreviewPath(path, publishedOutputRoot_);
+    if (started) {
+        const bool changed = resultPreviewMode_ != ResultPreviewMode::Solo
+            || resultPreviewSoloKind_ != kind
+            || resultPreviewMixKinds_ != QList<StemKind>{kind};
+        resultPreviewMode_ = ResultPreviewMode::Solo;
+        resultPreviewSoloKind_ = kind;
+        resultPreviewMixKinds_ = {kind};
+        if (changed) emit resultPreviewChanged();
+    }
+    return started;
+}
+
+bool VocalSeparationController::toggleResultMix(const qint64 positionMs)
+{
+    if (preview_ == nullptr) return false;
+    if (resultPreviewMode_ == ResultPreviewMode::Mix
+        && preview_->mixActive()) {
+        if (preview_->playing()) preview_->pause();
+        else preview_->resume();
+        return true;
+    }
+    const QList<StemKind> kinds = resultMixKinds();
+    return startResultPreview(kinds, positionMs, ResultPreviewMode::Mix,
+                              StemKind::Original);
+}
+
+bool VocalSeparationController::previewStemAt(const StemKind kind,
+                                              const qint64 positionMs)
+{
+    return startResultPreview({kind}, positionMs, ResultPreviewMode::Solo,
+                              kind);
 }
 
 bool VocalSeparationController::setStemPreviewVolume(StemKind kind,
@@ -696,9 +755,12 @@ bool VocalSeparationController::setStemPreviewVolume(StemKind kind,
         stem.insert(QStringLiteral("previewVolume"), bounded);
         value = stem;
         const QString path = stem.value(QStringLiteral("path")).toString();
-        if (preview_ != nullptr && !path.isEmpty()
-            && preview_->isCurrentSource(QUrl::fromLocalFile(path))) {
-            preview_->setVolume(bounded);
+        if (preview_ != nullptr && !path.isEmpty()) {
+            if (preview_->mixSourceIds().contains(path)) {
+                (void)preview_->setMixSourceGain(path, bounded);
+            } else if (preview_->isCurrentSource(QUrl::fromLocalFile(path))) {
+                preview_->setVolume(bounded);
+            }
         }
         emit stemsChanged();
         return true;
@@ -1444,9 +1506,101 @@ void VocalSeparationController::resetInputSession()
     setJobState(JobState::Idle, {});
 }
 
+QList<VocalSeparationController::StemKind>
+VocalSeparationController::resultMixKinds() const
+{
+    const auto available = [this](const StemKind kind) {
+        for (const QVariant& value : stems_) {
+            const QVariantMap stem = value.toMap();
+            if (stem.value(QStringLiteral("kind")).toInt() == int(kind)) {
+                return stem.value(QStringLiteral("available")).toBool()
+                    && !stem.value(QStringLiteral("path")).toString().isEmpty();
+            }
+        }
+        return false;
+    };
+
+    QList<StemKind> result;
+    if (available(StemKind::Vocals)) result.push_back(StemKind::Vocals);
+
+    const bool completeComponents = available(StemKind::Drums)
+        && available(StemKind::Bass) && available(StemKind::Other);
+    if (completeComponents) {
+        result.push_back(StemKind::Drums);
+        result.push_back(StemKind::Bass);
+        result.push_back(StemKind::Other);
+    } else if (available(StemKind::Accompaniment)) {
+        result.push_back(StemKind::Accompaniment);
+    } else {
+        for (const StemKind kind : {StemKind::Drums, StemKind::Bass,
+                                    StemKind::Other}) {
+            if (available(kind)) result.push_back(kind);
+        }
+    }
+    return result;
+}
+
+bool VocalSeparationController::startResultPreview(
+    const QList<StemKind>& kinds, const qint64 positionMs,
+    const ResultPreviewMode mode, const StemKind soloKind)
+{
+    if (preview_ == nullptr || kinds.isEmpty()) return false;
+
+    QList<AudioPreviewController::MixSource> sources;
+    sources.reserve(kinds.size());
+    for (const StemKind kind : kinds) {
+        const QString path = pathForStem(kind);
+        const bool safe = publishedOutputRoot_.isEmpty()
+            ? safeExistingFile(path)
+            : safeExistingFileWithin(path, publishedOutputRoot_);
+        if (!safe) return false;
+        sources.push_back({path, path,
+                           stemPreviewVolumes_.value(int(kind), 0.8)});
+    }
+
+    const qint64 duration = inputInfo_
+        .value(QStringLiteral("durationMs")).toLongLong();
+    const qint64 target = qBound<qint64>(
+        0, positionMs, duration > 0 ? duration : std::max<qint64>(0, positionMs));
+    if (!preview_->playMix(sources, target)) {
+        resetResultPreviewState();
+        return false;
+    }
+
+    const bool changed = resultPreviewMode_ != mode
+        || resultPreviewSoloKind_ != soloKind
+        || resultPreviewMixKinds_ != kinds;
+    resultPreviewMode_ = mode;
+    resultPreviewSoloKind_ = soloKind;
+    resultPreviewMixKinds_ = kinds;
+    if (changed) emit resultPreviewChanged();
+    return true;
+}
+
+void VocalSeparationController::resetResultPreviewState()
+{
+    const bool changed = resultPreviewMode_ != ResultPreviewMode::None
+        || resultPreviewSoloKind_ != StemKind::Original
+        || !resultPreviewMixKinds_.isEmpty();
+    resultPreviewMode_ = ResultPreviewMode::None;
+    resultPreviewSoloKind_ = StemKind::Original;
+    resultPreviewMixKinds_.clear();
+    if (changed) emit resultPreviewChanged();
+}
+
 void VocalSeparationController::stopPreviewForCurrentInputOrResult()
 {
-    if (preview_ == nullptr || !preview_->hasSource()) return;
+    if (preview_ == nullptr) {
+        resetResultPreviewState();
+        return;
+    }
+    if (resultPreviewMode_ != ResultPreviewMode::None
+        || preview_->mixActive()) {
+        if (preview_->hasSource()) preview_->stop();
+        resetResultPreviewState();
+        return;
+    }
+    if (!preview_->hasSource()) return;
     const QString inputPath = inputInfo_.value(QStringLiteral("path")).toString();
     if (!inputPath.isEmpty()
         && preview_->isCurrentSource(QUrl::fromLocalFile(inputPath))) {

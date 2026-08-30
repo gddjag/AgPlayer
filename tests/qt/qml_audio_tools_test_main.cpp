@@ -364,6 +364,18 @@ public:
                                  QStringLiteral("completed"));
     }
 
+    Q_INVOKABLE QVariantList activeResultMixKinds() const
+    {
+        QVariantList kinds;
+        if (controller_ == nullptr) return kinds;
+        kinds.reserve(controller_->resultPreviewMixKinds_.size());
+        for (const VocalSeparationController::StemKind kind
+             : controller_->resultPreviewMixKinds_) {
+            kinds.push_back(int(kind));
+        }
+        return kinds;
+    }
+
     Q_INVOKABLE bool setCompletedWithAudio(const QUrl& source)
     {
         if (controller_ == nullptr || !source.isLocalFile()) return false;

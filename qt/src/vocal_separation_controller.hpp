@@ -63,6 +63,10 @@ class VocalSeparationController final : public QObject {
     Q_PROPERTY(bool canRetry READ canRetry NOTIFY jobStateChanged)
     Q_PROPERTY(QVariantList stems READ stems NOTIFY stemsChanged)
     Q_PROPERTY(QVariantList history READ history NOTIFY historyChanged)
+    Q_PROPERTY(ResultPreviewMode resultPreviewMode READ resultPreviewMode
+                   NOTIFY resultPreviewChanged)
+    Q_PROPERTY(StemKind resultPreviewSoloKind READ resultPreviewSoloKind
+                   NOTIFY resultPreviewChanged)
 
 public:
     enum class ModelState {
@@ -100,6 +104,9 @@ public:
     enum class DeviceMode { Auto, CPU, GPU };
     Q_ENUM(DeviceMode)
 
+    enum class ResultPreviewMode { None, Mix, Solo };
+    Q_ENUM(ResultPreviewMode)
+
     explicit VocalSeparationController(
         AudioPreviewController* preview,
         WaveformProvider* waveformProvider,
@@ -129,6 +136,8 @@ public:
     bool canRetry() const noexcept;
     QVariantList stems() const;
     QVariantList history() const;
+    ResultPreviewMode resultPreviewMode() const noexcept;
+    StemKind resultPreviewSoloKind() const noexcept;
 
     Q_INVOKABLE bool selectInput(const QUrl& url);
     Q_INVOKABLE bool clearInput();
@@ -149,6 +158,8 @@ public:
     Q_INVOKABLE bool retry();
     Q_INVOKABLE bool previewInput();
     Q_INVOKABLE bool previewStem(StemKind kind);
+    Q_INVOKABLE bool toggleResultMix(qint64 positionMs);
+    Q_INVOKABLE bool previewStemAt(StemKind kind, qint64 positionMs);
     Q_INVOKABLE bool setStemPreviewVolume(StemKind kind, double volume);
     Q_INVOKABLE bool exportStem(StemKind kind, const QUrl& destination);
     Q_INVOKABLE bool exportSelected(const QUrl& destinationDirectory);
@@ -177,6 +188,7 @@ signals:
     void startEligibilityChanged();
     void stemsChanged();
     void historyChanged();
+    void resultPreviewChanged();
     void playlistOperationFinished(bool success, const QString& diagnostic);
 
 private:
@@ -256,6 +268,10 @@ private:
     void clearPublishedResult();
     void resetInputSession();
     void stopPreviewForCurrentInputOrResult();
+    QList<StemKind> resultMixKinds() const;
+    bool startResultPreview(const QList<StemKind>& kinds, qint64 positionMs,
+                            ResultPreviewMode mode, StemKind soloKind);
+    void resetResultPreviewState();
     bool togglePreviewPath(const QString& path, const QString& root = {});
     bool requestInFlight() const noexcept;
     QString pathForStem(StemKind kind) const;
@@ -298,6 +314,7 @@ private:
     qint64 completedDownloadBytes_ = 0;
     qint64 totalDownloadBytes_ = 0;
     QHash<int, double> stemPreviewVolumes_;
+    QList<StemKind> resultPreviewMixKinds_;
     QVariantMap inputInfo_;
     QVariantList models_;
     QVariantList availableDevices_;
@@ -311,6 +328,8 @@ private:
     QString stage_;
     double progress_ = 0.0;
     QString error_;
+    ResultPreviewMode resultPreviewMode_ = ResultPreviewMode::None;
+    StemKind resultPreviewSoloKind_ = StemKind::Original;
     std::optional<ActiveRequestContext> activeRequest_;
     std::optional<ActiveRequestContext> failedRequest_;
     QString publishedOutputRoot_;

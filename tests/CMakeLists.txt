@@ -288,6 +288,21 @@ agplayer_enable_warnings(audio_engine_test)
 add_test(NAME audio_engine_test COMMAND audio_engine_test "${SINE_WAV_FIXTURE}")
 set_tests_properties(audio_engine_test PROPERTIES TIMEOUT 10)
 
+add_executable(stem_preview_mixer_test
+    core/stem_preview_mixer_test.cpp
+)
+target_include_directories(stem_preview_mixer_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(stem_preview_mixer_test PRIVATE agplayer_core)
+agplayer_enable_warnings(stem_preview_mixer_test)
+add_test(NAME stem_preview_mixer_test COMMAND stem_preview_mixer_test)
+set_tests_properties(stem_preview_mixer_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
 add_executable(graphic_equalizer_test
     core/graphic_equalizer_test.cpp
 )
@@ -621,7 +636,7 @@ add_dependencies(vocal_separation_controller_test
 agplayer_enable_warnings(vocal_separation_controller_test)
 add_test(NAME vocal_separation_controller_test COMMAND vocal_separation_controller_test)
 set_tests_properties(vocal_separation_controller_test PROPERTIES
-    TIMEOUT 60
+    TIMEOUT 120
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"

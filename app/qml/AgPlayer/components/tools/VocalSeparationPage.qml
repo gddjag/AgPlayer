@@ -46,16 +46,12 @@ Rectangle {
     property string rememberedInputPath: ""
     readonly property string inputPreviewPath:
         VocalSeparationController.inputInfo.path || ""
-    readonly property string resultPreviewPath: {
-        const stem = page.stemInfo(page.activeResultStemKind)
-        return stem.available ? (stem.path || "") : ""
-    }
     readonly property bool inputPreviewCurrent:
         page.inputPreviewPath.length > 0
         && AudioPreviewController.sourcePath === page.inputPreviewPath
     readonly property bool resultPreviewCurrent:
-        page.resultPreviewPath.length > 0
-        && AudioPreviewController.sourcePath === page.resultPreviewPath
+        VocalSeparationController.resultPreviewMode
+        !== VocalSeparationController.None
 
     component WorkbenchButton: Button {
         id: control
@@ -293,17 +289,6 @@ Rectangle {
         return qsTr("试听")
     }
 
-    function resultStemKindForPath(path) {
-        if (!path || path.length === 0)
-            return -1
-        for (let index = 0; index < VocalSeparationController.stems.length; ++index) {
-            const stem = VocalSeparationController.stems[index]
-            if (stem.available && stem.path === path)
-                return stem.kind
-        }
-        return -1
-    }
-
     function availableResultStemKind() {
         const preferred = [page.activeResultStemKind,
                            VocalSeparationController.Accompaniment,
@@ -329,7 +314,7 @@ Rectangle {
     function rememberCurrentPreviewPosition() {
         if (page.inputPreviewCurrent) {
             page.inputPreviewPositionMs = AudioPreviewController.positionMs
-        } else if (page.resultStemKindForPath(AudioPreviewController.sourcePath) >= 0) {
+        } else if (page.resultPreviewCurrent) {
             page.resultPreviewPositionMs = AudioPreviewController.positionMs
         }
     }
@@ -362,45 +347,29 @@ Rectangle {
     }
 
     function toggleResultPreview() {
-        const kind = page.availableResultStemKind()
-        if (kind < 0)
+        if (!page.hasAvailableResultStem())
             return
-        const stem = page.stemInfo(kind)
-        if (page.activeResultStemKind === kind
-                && AudioPreviewController.sourcePath === stem.path) {
+        if (page.resultPreviewCurrent)
             page.resultPreviewPositionMs = AudioPreviewController.positionMs
-            if (AudioPreviewController.playing)
-                AudioPreviewController.pause()
-            else
-                AudioPreviewController.resume()
-            return
-        }
-        page.rememberCurrentPreviewPosition()
+        else
+            page.rememberCurrentPreviewPosition()
         const targetPosition = page.resultPreviewPositionMs
-        page.activeResultStemKind = kind
-        VocalSeparationController.previewStem(kind)
-        if (targetPosition > 0)
-            AudioPreviewController.seek(targetPosition)
+        VocalSeparationController.toggleResultMix(targetPosition)
     }
 
     function seekResultPreview(kind, positionMs) {
         const stem = page.stemInfo(kind)
         if (!stem.available)
             return
-        if (AudioPreviewController.sourcePath !== stem.path) {
-            page.rememberCurrentPreviewPosition()
-            page.activeResultStemKind = kind
-            VocalSeparationController.previewStem(kind)
-        } else {
-            page.activeResultStemKind = kind
-        }
+        page.rememberCurrentPreviewPosition()
+        page.activeResultStemKind = kind
         page.resultPreviewPositionMs = positionMs
-        AudioPreviewController.seek(positionMs)
+        VocalSeparationController.previewStemAt(kind, positionMs)
     }
 
     function rewindResultPreview() {
         page.resultPreviewPositionMs = 0
-        if (page.resultStemKindForPath(AudioPreviewController.sourcePath) >= 0)
+        if (page.resultPreviewCurrent)
             AudioPreviewController.seek(0)
     }
 
@@ -635,11 +604,10 @@ Rectangle {
 
     Connections {
         target: AudioPreviewController
-        function onPositionMsChanged() {
+        function onStateChanged() {
             if (page.inputPreviewCurrent) {
                 page.inputPreviewPositionMs = AudioPreviewController.positionMs
-            } else if (page.resultStemKindForPath(
-                           AudioPreviewController.sourcePath) >= 0) {
+            } else if (page.resultPreviewCurrent) {
                 page.resultPreviewPositionMs = AudioPreviewController.positionMs
             }
         }

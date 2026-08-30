@@ -626,6 +626,7 @@ public:
                 sample_rate <= 0 ? 0 : track_frames * 1'000 / sample_rate,
                 duration_ms_.load(std::memory_order_acquire),
                 sample_rate,
+                channels_.load(std::memory_order_acquire),
                 volume_.load(std::memory_order_acquire),
                 muted_.load(std::memory_order_acquire),
                 session_.index(),
@@ -729,6 +730,11 @@ public:
     [[nodiscard]] std::size_t buffered_frames() const noexcept
     {
         return ring_buffer_ == nullptr ? 0U : ring_buffer_->available_frames();
+    }
+
+    [[nodiscard]] bool end_of_stream() const noexcept
+    {
+        return decode_eof_.load(std::memory_order_acquire);
     }
 
     [[nodiscard]] bool device_lost() const noexcept
@@ -1814,7 +1820,7 @@ private:
     bool exclusive_mode_ = false;
     std::atomic<bool> active_exclusive_mode_{false};
     std::atomic<int> sample_rate_{0};
-    int channels_ = 0;
+    std::atomic<int> channels_{0};
     std::atomic<std::int64_t> duration_ms_{0};
     std::thread decode_thread_;
     std::atomic<bool> stop_decode_{false};
@@ -1978,6 +1984,11 @@ ag_result AudioEngine::spectrum(float* bins,
 std::size_t AudioEngine::buffered_frames() const noexcept
 {
     return impl_->buffered_frames();
+}
+
+bool AudioEngine::end_of_stream() const noexcept
+{
+    return impl_->end_of_stream();
 }
 
 bool AudioEngine::device_lost() const noexcept

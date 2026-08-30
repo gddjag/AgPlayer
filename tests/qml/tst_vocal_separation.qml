@@ -220,10 +220,14 @@ TestCase {
                && accompanimentPath !== VocalSeparationController.inputInfo.path)
         mouseClick(resultPlay)
         tryVerify(function() {
-            return AudioPreviewController.sourcePath === accompanimentPath
+            return VocalSeparationController.resultPreviewMode
+                   === VocalSeparationController.Mix
         }, 2000)
         verify(!page.inputPreviewCurrent)
         verify(page.resultPreviewCurrent)
+        compare(separationTestDriver.activeResultMixKinds(),
+                [VocalSeparationController.Vocals,
+                 VocalSeparationController.Accompaniment])
         compare(sourcePlay.iconName, "play-fill")
 
         const inputWaveform = findChild(page, "separationInputWaveform")
@@ -268,6 +272,47 @@ TestCase {
         tryVerify(function() { return page.resultPreviewCurrent }, 2000)
         verify(AudioPreviewController.positionMs >= resultPosition - 100,
                "result preview must resume near its stored position")
+
+        AudioPreviewController.stop()
+        separationTestDriver.reset()
+    }
+
+    function test_clickingAResultWaveformStartsSoloAndBottomRestoresTheMixPosition() {
+        verify(separationTestDriver.setReady(testAudioUrl))
+        verify(separationTestDriver.setCompletedWithAudio(testAudioUrl))
+        const resultPlay = findChild(page, "separationTransportPlay")
+        const vocalsWaveform = findChild(
+            page, "separationStemWaveform-" + VocalSeparationController.Vocals)
+        verify(resultPlay && resultPlay.enabled && vocalsWaveform)
+
+        mouseClick(resultPlay)
+        tryCompare(VocalSeparationController, "resultPreviewMode",
+                   VocalSeparationController.Mix, 2000)
+        tryVerify(function() { return AudioPreviewController.positionMs > 100 }, 2000)
+
+        const expectedSoloPosition = Math.round(
+            (VocalSeparationController.inputInfo.durationMs || 0) * 0.64)
+        mouseClick(vocalsWaveform, vocalsWaveform.width * 0.64,
+                   vocalsWaveform.height / 2)
+        tryCompare(VocalSeparationController, "resultPreviewMode",
+                   VocalSeparationController.Solo, 2000)
+        compare(VocalSeparationController.resultPreviewSoloKind,
+                VocalSeparationController.Vocals)
+        verify(AudioPreviewController.playing,
+               "clicking a result row must immediately play that stem")
+        verify(Math.abs(AudioPreviewController.positionMs - expectedSoloPosition) <= 180,
+               "solo playback must start at the clicked waveform position")
+        const soloPosition = AudioPreviewController.positionMs
+
+        mouseClick(resultPlay)
+        tryCompare(VocalSeparationController, "resultPreviewMode",
+                   VocalSeparationController.Mix, 2000)
+        compare(separationTestDriver.activeResultMixKinds(),
+                [VocalSeparationController.Vocals,
+                 VocalSeparationController.Accompaniment])
+        verify(AudioPreviewController.playing)
+        verify(AudioPreviewController.positionMs >= soloPosition - 100,
+               "switching from solo back to the bottom mix must preserve position")
 
         AudioPreviewController.stop()
         separationTestDriver.reset()
@@ -644,15 +689,16 @@ TestCase {
         page.forceActiveFocus()
         verify(page.activeFocus)
         keyClick(Qt.Key_Space)
-        const accompanimentPath = page.stemInfo(
-            VocalSeparationController.Accompaniment).path
         tryVerify(function() {
-            return AudioPreviewController.sourcePath
-                   === accompanimentPath
+            return VocalSeparationController.resultPreviewMode
+                   === VocalSeparationController.Mix
         }, 2000)
+        compare(separationTestDriver.activeResultMixKinds(),
+                [VocalSeparationController.Vocals,
+                 VocalSeparationController.Accompaniment])
         keyClick(Qt.Key_Space)
-        verify(AudioPreviewController.sourcePath
-               === accompanimentPath)
+        compare(VocalSeparationController.resultPreviewMode,
+                VocalSeparationController.Mix)
         verify(!AudioPreviewController.playing)
         AudioPreviewController.stop()
         separationTestDriver.reset()

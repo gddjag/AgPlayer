@@ -47,6 +47,10 @@ private slots:
     void workerPayloadUsesCurrentLanguageStemLabelsAndCatalogDisplayName();
     void successfulWorkerResultPublishesExistingOutputsWaveformsAndFallbackReason();
     void stemPreviewVolumesRemainIndependentAndDriveTheSharedPreview();
+    void mdxResultPreviewSwitchesBetweenMixAndSoloAtTheSharedPosition();
+    void demucsResultMixExcludesTheDerivedAccompanimentWhenComponentsAreComplete();
+    void demucsResultMixFallsBackToTheDerivedAccompanimentWhenComponentsAreIncomplete_data();
+    void demucsResultMixFallsBackToTheDerivedAccompanimentWhenComponentsAreIncomplete();
     void startingANewResultGenerationClearsPreviouslyPublishedStems();
     void selectingANewInputImmediatelyClearsCompletedResultAndItsPreview();
     void waveformFailuresAdvanceAcrossEveryResultStem();
@@ -523,6 +527,18 @@ exposesTypedCatalogAndStemAvailabilityFromTheInstalledCatalog()
              true);
     QCOMPARE(QMetaEnum::fromType<VocalSeparationController::DeviceMode>().keyCount() > 0,
              true);
+    QCOMPARE(QMetaEnum::fromType<VocalSeparationController::ResultPreviewMode>()
+                 .keyCount(),
+             3);
+    QCOMPARE(QMetaEnum::fromType<VocalSeparationController::ResultPreviewMode>()
+                 .keyToValue("None"),
+             int(VocalSeparationController::ResultPreviewMode::None));
+    QCOMPARE(QMetaEnum::fromType<VocalSeparationController::ResultPreviewMode>()
+                 .keyToValue("Mix"),
+             int(VocalSeparationController::ResultPreviewMode::Mix));
+    QCOMPARE(QMetaEnum::fromType<VocalSeparationController::ResultPreviewMode>()
+                 .keyToValue("Solo"),
+             int(VocalSeparationController::ResultPreviewMode::Solo));
     const QMetaEnum modelStates = QMetaEnum::fromType<VocalSeparationController::ModelState>();
     const QMetaEnum jobStates = QMetaEnum::fromType<VocalSeparationController::JobState>();
     QVERIFY(modelStates.keyToValue("ModelFailed") >= 0);
@@ -738,6 +754,175 @@ stemPreviewVolumesRemainIndependentAndDriveTheSharedPreview()
     QCOMPARE(preview.volume(), 0.75);
     QVERIFY(controller.previewInput());
     QCOMPARE(preview.volume(), 1.0);
+}
+
+void VocalSeparationControllerTest::
+mdxResultPreviewSwitchesBetweenMixAndSoloAtTheSharedPosition()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray modelBytes("trusted-test-model");
+    auto options = optionsFor(temporary, QStringLiteral("success"), modelBytes);
+    installTestModel(options, QStringLiteral("two-stem"), modelBytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, QByteArrayLiteral("runtime")));
+
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
+    QVERIFY(controller.start());
+    QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(),
+                              VocalSeparationController::JobState::Completed,
+                              5'000);
+
+    const QString vocalsPath = stemFor(
+        controller.stems(), VocalSeparationController::StemKind::Vocals)
+                                    .value(QStringLiteral("path")).toString();
+    const QString accompanimentPath = stemFor(
+        controller.stems(), VocalSeparationController::StemKind::Accompaniment)
+                                           .value(QStringLiteral("path")).toString();
+    QVERIFY(!vocalsPath.isEmpty());
+    QVERIFY(!accompanimentPath.isEmpty());
+    QCOMPARE(controller.resultPreviewMode(),
+             VocalSeparationController::ResultPreviewMode::None);
+
+    QVERIFY(controller.toggleResultMix(240));
+    QCOMPARE(controller.resultPreviewMode(),
+             VocalSeparationController::ResultPreviewMode::Mix);
+    QCOMPARE(preview.mixSourceIds(), QStringList({vocalsPath, accompanimentPath}));
+    QTRY_VERIFY_WITH_TIMEOUT(preview.playing(), 1'000);
+    QTRY_VERIFY_WITH_TIMEOUT(preview.positionMs() >= 190, 1'000);
+
+    QVERIFY(controller.previewStemAt(
+        VocalSeparationController::StemKind::Vocals, 620));
+    QCOMPARE(controller.resultPreviewMode(),
+             VocalSeparationController::ResultPreviewMode::Solo);
+    QCOMPARE(controller.resultPreviewSoloKind(),
+             VocalSeparationController::StemKind::Vocals);
+    QCOMPARE(preview.mixSourceIds(), QStringList({vocalsPath}));
+    QTRY_VERIFY_WITH_TIMEOUT(preview.playing(), 1'000);
+    QTRY_VERIFY_WITH_TIMEOUT(preview.positionMs() >= 570, 1'000);
+    const qint64 soloPosition = preview.positionMs();
+
+    QVERIFY(controller.toggleResultMix(soloPosition));
+    QCOMPARE(controller.resultPreviewMode(),
+             VocalSeparationController::ResultPreviewMode::Mix);
+    QCOMPARE(preview.mixSourceIds(), QStringList({vocalsPath, accompanimentPath}));
+    QTRY_VERIFY_WITH_TIMEOUT(preview.playing(), 1'000);
+    QTRY_VERIFY_WITH_TIMEOUT(preview.positionMs() >= soloPosition - 50, 1'000);
+}
+
+void VocalSeparationControllerTest::
+demucsResultMixExcludesTheDerivedAccompanimentWhenComponentsAreComplete()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray modelBytes("trusted-test-model");
+    auto options = optionsFor(temporary, QStringLiteral("success"), modelBytes);
+    installTestModel(options, QStringLiteral("five-stem"), modelBytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, QByteArrayLiteral("runtime")));
+
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.selectModel(QStringLiteral("five-stem")));
+    QVERIFY(controller.setStemSelected(
+        VocalSeparationController::StemKind::Drums, true));
+    QVERIFY(controller.setStemSelected(
+        VocalSeparationController::StemKind::Bass, true));
+    QVERIFY(controller.setStemSelected(
+        VocalSeparationController::StemKind::Other, true));
+    QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
+    QVERIFY(controller.start());
+    QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(),
+                              VocalSeparationController::JobState::Completed,
+                              5'000);
+
+    const auto path = [&controller](VocalSeparationController::StemKind kind) {
+        return stemFor(controller.stems(), kind)
+            .value(QStringLiteral("path")).toString();
+    };
+    const QString accompanimentPath = path(
+        VocalSeparationController::StemKind::Accompaniment);
+    QVERIFY(!accompanimentPath.isEmpty());
+
+    QVERIFY(controller.toggleResultMix(0));
+    QCOMPARE(preview.mixSourceIds(),
+             QStringList({path(VocalSeparationController::StemKind::Vocals),
+                          path(VocalSeparationController::StemKind::Drums),
+                          path(VocalSeparationController::StemKind::Bass),
+                          path(VocalSeparationController::StemKind::Other)}));
+    QVERIFY(!preview.mixSourceIds().contains(accompanimentPath));
+}
+
+void VocalSeparationControllerTest::
+demucsResultMixFallsBackToTheDerivedAccompanimentWhenComponentsAreIncomplete_data()
+{
+    QTest::addColumn<bool>("drums");
+    QTest::addColumn<bool>("bass");
+    QTest::addColumn<bool>("other");
+
+    QTest::newRow("no-components") << false << false << false;
+    QTest::newRow("one-component") << true << false << false;
+    QTest::newRow("two-components") << true << true << false;
+}
+
+void VocalSeparationControllerTest::
+demucsResultMixFallsBackToTheDerivedAccompanimentWhenComponentsAreIncomplete()
+{
+    QFETCH(bool, drums);
+    QFETCH(bool, bass);
+    QFETCH(bool, other);
+
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray modelBytes("trusted-test-model");
+    auto options = optionsFor(temporary, QStringLiteral("success"), modelBytes);
+    installTestModel(options, QStringLiteral("five-stem"), modelBytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, QByteArrayLiteral("runtime")));
+
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.selectModel(QStringLiteral("five-stem")));
+    if (drums) {
+        QVERIFY(controller.setStemSelected(
+            VocalSeparationController::StemKind::Drums, true));
+    }
+    if (bass) {
+        QVERIFY(controller.setStemSelected(
+            VocalSeparationController::StemKind::Bass, true));
+    }
+    if (other) {
+        QVERIFY(controller.setStemSelected(
+            VocalSeparationController::StemKind::Other, true));
+    }
+    QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
+    QVERIFY(controller.start());
+    QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(),
+                              VocalSeparationController::JobState::Completed,
+                              5'000);
+
+    const QString vocalsPath = stemFor(
+        controller.stems(), VocalSeparationController::StemKind::Vocals)
+                                    .value(QStringLiteral("path")).toString();
+    const QString accompanimentPath = stemFor(
+        controller.stems(), VocalSeparationController::StemKind::Accompaniment)
+                                           .value(QStringLiteral("path")).toString();
+    QVERIFY(!vocalsPath.isEmpty());
+    QVERIFY(!accompanimentPath.isEmpty());
+    QCOMPARE(stemFor(controller.stems(), VocalSeparationController::StemKind::Drums)
+                 .value(QStringLiteral("available")).toBool(), drums);
+    QCOMPARE(stemFor(controller.stems(), VocalSeparationController::StemKind::Bass)
+                 .value(QStringLiteral("available")).toBool(), bass);
+    QCOMPARE(stemFor(controller.stems(), VocalSeparationController::StemKind::Other)
+                 .value(QStringLiteral("available")).toBool(), other);
+
+    QVERIFY(controller.toggleResultMix(0));
+    QCOMPARE(preview.mixSourceIds(), QStringList({vocalsPath, accompanimentPath}));
 }
 
 void VocalSeparationControllerTest::

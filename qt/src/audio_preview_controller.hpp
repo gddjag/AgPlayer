@@ -4,7 +4,9 @@
 
 #include <QObject>
 #include <QPointer>
+#include <QList>
 #include <QString>
+#include <QStringList>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantList>
@@ -15,6 +17,10 @@ template <typename T>
 class QFutureWatcher;
 class QTemporaryDir;
 class PlaybackController;
+namespace agplayer {
+class StemPreviewMixer;
+}
+
 class AudioPreviewController final : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool hasSource READ hasSource NOTIFY sourceChanged)
@@ -28,6 +34,12 @@ class AudioPreviewController final : public QObject {
     Q_PROPERTY(int pitchCents READ pitchCents NOTIFY dspParametersChanged)
 
 public:
+    struct MixSource {
+        QString id;
+        QString path;
+        double gain = 1.0;
+    };
+
     explicit AudioPreviewController(
         ag_audio_backend backend = AG_AUDIO_BACKEND_DEFAULT,
         PlaybackController* mainPlayback = nullptr,
@@ -61,6 +73,11 @@ public:
         bool smoothTransition);
     void setVolume(double value);
 
+    bool playMix(const QList<MixSource>& sources, qint64 positionMs);
+    bool setMixSourceGain(const QString& id, double gain);
+    QStringList mixSourceIds() const;
+    bool mixActive() const noexcept;
+
 signals:
     void sourceChanged();
     void stateChanged();
@@ -73,11 +90,13 @@ private:
     friend class AudioPreviewControllerTest;
 
     ag_player* player_ = nullptr;
+    std::unique_ptr<agplayer::StemPreviewMixer> stemMixer_;
     ag_audio_backend backend_ = AG_AUDIO_BACKEND_DEFAULT;
     PlaybackController* mainPlayback_ = nullptr;
     QTimer pollTimer_;
     QString sourcePath_;
     QString playbackPath_;
+    QStringList mixSourceIds_;
     bool playing_ = false;
     qint64 positionMs_ = 0;
     qint64 durationMs_ = 0;
