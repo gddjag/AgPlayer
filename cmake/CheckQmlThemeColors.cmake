@@ -37,6 +37,13 @@ foreach(qml_file IN LISTS qml_files)
                 "${relative_path}:${line_number}: page-local color derivation")
         endif()
 
+        if(source_line MATCHES
+           "(color|tint|border\\.color):[ \\t]*\"(white|black)\""
+           AND NOT source_line MATCHES "theme-color-allow:")
+            list(APPEND violations
+                "${relative_path}:${line_number}: unclassified named color")
+        endif()
+
         if(NOT relative_path IN_LIST exempt_files)
             if(source_line MATCHES "Qt\\.(rgba|tint)\\("
                AND NOT source_line MATCHES "theme-color-allow:")
@@ -49,6 +56,7 @@ foreach(qml_file IN LISTS qml_files)
                 list(APPEND violations
                     "${relative_path}:${line_number}: unclassified hex color")
             endif()
+
         endif()
     endforeach()
 endforeach()

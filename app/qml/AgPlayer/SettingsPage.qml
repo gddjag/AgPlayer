@@ -1523,14 +1523,14 @@ Item {
                 }
 
                 SettingRow {
-                    label: qsTr("主题皮肤颜色")
+                    label: qsTr("主题皮肤色")
                     Layout.preferredHeight: skinSelector.implicitHeight
 
                     ThemeColorSelector {
                         id: skinSelector
                         objectName: "themeSkinColorSelector"
                         anchors.fill: parent
-                        title: qsTr("主题皮肤颜色")
+                        title: qsTr("主题皮肤色")
                         selectedMode: SettingsController.skinColorMode
                         selectedPreset: SettingsController.skinPreset
                         customKind: SettingsController.skinCustomKind

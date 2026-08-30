@@ -623,10 +623,11 @@ Rectangle {
         z: 10
         Text {
             id: selectionDragLabel
+            objectName: "editorSelectionDragLabel"
             anchors.centerIn: parent
             text: AudioEditorController.selectionDragReady
                 ? qsTr("拖出片段 WAV") : qsTr("按住准备 WAV")
-            color: "white"
+            color: Theme.accentText
             font.pixelSize: 10
         }
         MouseArea {

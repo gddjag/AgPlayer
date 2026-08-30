@@ -332,21 +332,15 @@ ColumnLayout {
                         orientation: Gradient.Horizontal
                         GradientStop {
                             position: 0.0
-                            color: root.customKind === 0
-                                   ? ThemeManager.backdropStart
-                                   : root.customColor
+                            color: ThemeManager.backdropStart
                         }
                         GradientStop {
                             position: 0.5
-                            color: root.customKind === 0
-                                   ? ThemeManager.backdropMiddle
-                                   : root.customColorMiddle
+                            color: ThemeManager.backdropMiddle
                         }
                         GradientStop {
                             position: 1.0
-                            color: root.customKind === 0
-                                   ? ThemeManager.backdropEnd
-                                   : root.customColorEnd
+                            color: ThemeManager.backdropEnd
                         }
                     }
                 }

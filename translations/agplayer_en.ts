@@ -3708,7 +3708,7 @@ Clear: Remove all known aliases for this field.</translation>
         <source>打开音频工具</source>
         <translation>Open audio tools</translation>
     </message>
-    <message><source>主题皮肤颜色</source><translation>Theme skin color</translation></message>
+    <message><source>主题皮肤色</source><translation>Theme skin color</translation></message>
     <message><source>歌曲列表</source><translation>Song list</translation></message>
     <message><source>显示歌曲列表波形缩略图</source><translation>Show waveform thumbnails in the song list</translation></message>
     <message><source>缩略波形颜色</source><translation>Thumbnail waveform color</translation></message>

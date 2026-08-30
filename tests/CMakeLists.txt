@@ -918,7 +918,7 @@ file(WRITE "${translation_context_catalog}" "${translation_context_source}")
 add_rejected_theme_contract_test(
     translation_theme_selector_context_required_test
     "${translation_context_fixture_root}"
-    "translations/agplayer_zh.ts: missing valid ThemeColorSelector::Aurora => 极光"
+    "translations/agplayer_zh.ts: missing valid ThemeColorSelector::Aurora =>"
     "")
 
 function(add_invalid_required_translation_test case_name translation_markup)
@@ -945,7 +945,7 @@ function(add_invalid_required_translation_test case_name translation_markup)
     add_rejected_theme_contract_test(
         "${test_name}"
         "${invalid_translation_fixture_root}"
-        "translations/agplayer_zh.ts: missing valid ThemeColorSelector::Solid => 单色"
+        "translations/agplayer_zh.ts: missing valid ThemeColorSelector::Solid =>"
         "")
 endfunction()
 

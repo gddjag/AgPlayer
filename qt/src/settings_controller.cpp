@@ -1704,6 +1704,15 @@ void SettingsController::load()
             skinCustomColor_ = legacy->name(QColor::HexRgb).toUpper();
             skinCustomColorMiddle_ = skinFallback;
             skinCustomColorEnd_ = skinFallback;
+        } else {
+            const QString normalizedPreset =
+                normalizedThemePreset(skinPreset_);
+            if (normalizedPreset.isEmpty()) {
+                skinColorMode_ = 0;
+                skinPreset_ = defaultThemePresetId();
+            } else {
+                skinPreset_ = normalizedPreset;
+            }
         }
     }
     waveformMode_ = clampValue(waveformMode_, 0, 2);

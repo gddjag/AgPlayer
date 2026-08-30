@@ -35,6 +35,7 @@ TestCase {
             y: (parent ? parent.height : 0) - height - 28
             colorValue: SettingsController.waveformSolidBaseColor
             targetProperty: "waveformSolidBaseColor"
+            editingLabel: "Waveform base"
         }
 
         Column {
@@ -419,6 +420,8 @@ TestCase {
         verify(red.Accessible.name.length > 0)
         compare(apply.Accessible.role, Accessible.Button)
         compare(cancel.Accessible.role, Accessible.Button)
+        compare(apply.contentItem.color.toString(),
+                Theme.accentText.toString())
 
         apply.forceActiveFocus(Qt.TabFocusReason)
         keyClick(Qt.Key_Space)
@@ -477,7 +480,8 @@ TestCase {
         compare(integratedField.objectName, "colorFieldButton")
         compare(integratedField.focusPolicy, Qt.StrongFocus)
         compare(integratedField.Accessible.role, Accessible.Button)
-        compare(integratedField.Accessible.name, "Color #63316B")
+        compare(integratedField.Accessible.name,
+                "Waveform base Color #63316B")
 
         integratedField.forceActiveFocus()
         verify(integratedField.activeFocus)
@@ -716,6 +720,9 @@ TestCase {
         compare(start.editingLabel, "Start")
         compare(middle.editingLabel, "Middle")
         compare(end.editingLabel, "End")
+        verify(start.Accessible.name.indexOf("Start") >= 0)
+        verify(middle.Accessible.name.indexOf("Middle") >= 0)
+        verify(end.Accessible.name.indexOf("End") >= 0)
         compare(preview.gradient.stops.length, 3)
         compare(normalizedColor(preview.gradient.stops[0].color),
                 normalizedColor(ThemeManager.backdropStart))
@@ -776,9 +783,12 @@ TestCase {
         compare(SettingsController.skinCustomColorMiddle, "#A98BFF")
         compare(SettingsController.skinCustomColorEnd, "#F0A8D8")
         compare(skinConfigurationChangedSpy.count, 1)
-        compare(normalizedColor(preview.gradient.stops[0].color), "#73A6FF")
-        compare(normalizedColor(preview.gradient.stops[1].color), "#A98BFF")
-        compare(normalizedColor(preview.gradient.stops[2].color), "#F0A8D8")
+        compare(normalizedColor(preview.gradient.stops[0].color),
+                normalizedColor(ThemeManager.backdropStart))
+        compare(normalizedColor(preview.gradient.stops[1].color),
+                normalizedColor(ThemeManager.backdropMiddle))
+        compare(normalizedColor(preview.gradient.stops[2].color),
+                normalizedColor(ThemeManager.backdropEnd))
 
         skinConfigurationChangedSpy.clear()
         solid.forceActiveFocus()

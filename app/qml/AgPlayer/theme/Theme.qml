@@ -80,7 +80,7 @@ QtObject {
     readonly property color currentTrackSelectionInactive: currentTrackSurface
     readonly property color selectedTrackSelectionInactive: highlightSoft
     readonly property color onCyanText: accentText
-    readonly property color onBrandGradientText: "#FFFFFF"
+    readonly property color onBrandGradientText: accentText
     readonly property color iconPrimary: primaryText
     readonly property color iconSecondary: secondaryText
     readonly property color iconAccent: accent

@@ -3651,7 +3651,7 @@
         <source>打开音频工具</source>
         <translation>เปิดเครื่องมือเสียง</translation>
     </message>
-    <message><source>主题皮肤颜色</source><translation>สีสกินธีม</translation></message>
+    <message><source>主题皮肤色</source><translation>สีสกินธีม</translation></message>
     <message><source>歌曲列表</source><translation>รายการเพลง</translation></message>
     <message><source>显示歌曲列表波形缩略图</source><translation>แสดงภาพย่อรูปคลื่นในรายการเพลง</translation></message>
     <message><source>缩略波形颜色</source><translation>สีรูปคลื่นขนาดย่อ</translation></message>
