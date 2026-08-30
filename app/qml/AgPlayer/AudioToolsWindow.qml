@@ -71,7 +71,7 @@ Window {
     Shortcut {
         objectName: "audioToolsSpaceShortcut"
         sequence: "Space"
-        context: Qt.ApplicationShortcut
+        context: Qt.WindowShortcut
         enabled: window.visible
             && AudioToolsController.currentTool === 0
             && !window.editableTextHasFocus()

@@ -887,6 +887,10 @@ void AudioEditorController::setPlaybackController(
         (void)playback_adapter_->stop();
         playback_adapter_->release();
     }
+    if (editor_playback_owns_player_) {
+        editor_playback_owns_player_ = false;
+        emit playbackOwnershipChanged();
+    }
     if (player_ != nullptr && owns_player_) ag_player_destroy(player_);
     player_ = controller->playerHandle();
     owns_player_ = false;
@@ -1624,9 +1628,13 @@ void AudioEditorController::deactivate()
         viewport_waveform_cancel_token_->store(true, std::memory_order_release);
     }
     if (playback_adapter_) {
-        (void)playback_adapter_->pause();
+        (void)playback_adapter_->stop();
         playback_adapter_->release();
         playback_prepared_ = false;
+    }
+    if (editor_playback_owns_player_) {
+        editor_playback_owns_player_ = false;
+        emit playbackOwnershipChanged();
     }
     playback_timer_.stop();
     playing_ = false;
@@ -1639,6 +1647,14 @@ void AudioEditorController::deactivate()
 
 void AudioEditorController::activate()
 {
+    if (playback_controller_ != nullptr) {
+        playback_controller_->stop();
+        const bool ownsPlayer = playback_controller_->acquireEditorOutput();
+        if (editor_playback_owns_player_ != ownsPlayer) {
+            editor_playback_owns_player_ = ownsPlayer;
+            emit playbackOwnershipChanged();
+        }
+    }
     if (has_document_) refreshSourcePeakCachesAsync();
     emit activated();
 }

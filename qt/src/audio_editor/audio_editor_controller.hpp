@@ -82,6 +82,8 @@ class AudioEditorController final : public QObject {
                    NOTIFY documentChanged)
     Q_PROPERTY(bool playbackSupported READ playbackSupported
                    NOTIFY documentChanged)
+    Q_PROPERTY(bool editorPlaybackOwnsPlayer READ editorPlaybackOwnsPlayer
+                   NOTIFY playbackOwnershipChanged)
     Q_PROPERTY(bool exportSupported READ exportSupported NOTIFY documentChanged)
     Q_PROPERTY(bool playing READ playing NOTIFY playbackChanged)
     Q_PROPERTY(qint64 positionMs READ positionMs NOTIFY playbackChanged)
@@ -167,6 +169,8 @@ public:
     { return player_ != nullptr
         && (!has_document_ || document_.totalFrames() > 0)
         && channels_ >= 0 && channels_ <= 2; }
+    [[nodiscard]] bool editorPlaybackOwnsPlayer() const noexcept
+    { return editor_playback_owns_player_; }
     [[nodiscard]] bool exportSupported() const noexcept
     { return has_document_ && document_.totalFrames() > 0; }
     [[nodiscard]] bool playing() const noexcept { return playing_; }
@@ -351,6 +355,7 @@ signals:
     void deactivated();
     void toolChanged();
     void playbackChanged();
+    void playbackOwnershipChanged();
     void trackMixChanged();
     void errorMessageChanged();
     void progressChanged();
@@ -471,6 +476,7 @@ private:
     agplayer::editor::AudioDocument document_;
     ag_player* player_{};
     PlaybackController* playback_controller_{};
+    bool editor_playback_owns_player_{};
     bool owns_player_{};
     std::unique_ptr<EditorPlaybackAdapter> playback_adapter_;
     std::unique_ptr<HandoffAssetManager> handoff_assets_;

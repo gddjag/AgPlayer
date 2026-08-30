@@ -303,6 +303,43 @@ private slots:
         ag_player_destroy(sharedPlayer);
     }
 
+    void activationStopsMainPlaybackBeforePreparingEditorOutput()
+    {
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+
+        ag_player_config config{};
+        config.backend = AG_AUDIO_BACKEND_NULL;
+        ag_player* sharedPlayer = nullptr;
+        QCOMPARE(ag_player_create_with_config(&config, &sharedPlayer), AG_OK);
+        const auto destroyPlayer = qScopeGuard([&] {
+            ag_player_destroy(sharedPlayer);
+        });
+        const QByteArray encodedFixture = QFile::encodeName(fixture);
+        QCOMPARE(ag_player_load(sharedPlayer, encodedFixture.constData()), AG_OK);
+
+        PlaybackController mainPlayback(sharedPlayer);
+        mainPlayback.play();
+        ag_playback_snapshot beforeActivation{};
+        QCOMPARE(ag_player_snapshot(sharedPlayer, &beforeActivation), AG_OK);
+        QCOMPARE(beforeActivation.state, AG_PLAYING);
+
+        AudioEditorController editor;
+        editor.setPlaybackController(&mainPlayback);
+        QVERIFY(!editor.property("editorPlaybackOwnsPlayer").toBool());
+
+        editor.activate();
+
+        ag_playback_snapshot afterActivation{};
+        QCOMPARE(ag_player_snapshot(sharedPlayer, &afterActivation), AG_OK);
+        QCOMPARE(afterActivation.state, AG_STOPPED);
+        QVERIFY(editor.property("editorPlaybackOwnsPlayer").toBool());
+        QVERIFY(!editor.playing());
+
+        editor.deactivate();
+        QVERIFY(!editor.property("editorPlaybackOwnsPlayer").toBool());
+    }
+
     void multiChannelDocumentReportsUnsupportedRealtimeCapabilities()
     {
         QTemporaryDir temporary;

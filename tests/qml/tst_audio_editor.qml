@@ -202,7 +202,7 @@ TestCase {
         compare(shortcutText.indexOf("Phase"), -1)
     }
 
-    function test_spaceTransportOwnsFocusAcrossNonTextControls() {
+    function test_firstSpaceWithButtonFocusTransitionsOnlyEditorPlayback() {
         const shell = createTemporaryObject(shellComponent, testCase)
         verify(shell)
         tryVerify(function() { return shell.visible })
@@ -211,7 +211,7 @@ TestCase {
         const shellPage = findChild(shell, "audioEditorPage")
         const spaceShortcut = findChild(shell, "audioToolsSpaceShortcut")
         verify(shellPage && spaceShortcut)
-        compare(spaceShortcut.context, Qt.ApplicationShortcut)
+        compare(spaceShortcut.context, Qt.WindowShortcut)
 
         const controls = [
             findChild(shellPage, "editorCommand_split"),
@@ -246,9 +246,13 @@ TestCase {
         }
         const activated = createTemporaryObject(signalSpyComponent, testCase,
             { target: spaceShortcut, signalName: "activated" })
+        const editorPlayback = createTemporaryObject(signalSpyComponent, testCase,
+            { target: AudioEditorController, signalName: "playbackChanged" })
         verify(activated.valid)
+        verify(editorPlayback.valid)
         keyClick(Qt.Key_Space)
         tryCompare(activated, "count", 1)
+        tryCompare(editorPlayback, "count", 1)
         tryVerify(function() {
             return AudioEditorController.playing
                 || AudioEditorController.errorMessage.length > 0
