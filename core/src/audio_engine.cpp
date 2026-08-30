@@ -36,6 +36,8 @@ static_assert(std::atomic<int>::is_always_lock_free);
 static_assert(std::atomic<EngineState>::is_always_lock_free);
 static_assert(std::atomic<PlaybackMode>::is_always_lock_free);
 static_assert(std::atomic<ag_result>::is_always_lock_free);
+static_assert(
+    std::atomic<OutputDeviceSwitchTestBarrier*>::is_always_lock_free);
 
 namespace {
 
@@ -811,6 +813,7 @@ public:
     {
         const std::uint64_t meter_generation =
             output_meter_generation_.load(std::memory_order_acquire);
+        wait_at_output_device_switch_test_barrier();
         if (output == nullptr || requested_frames == 0U) {
             output_peak_linear_.store(0.0F, std::memory_order_release);
             output_meter_valid_generation_.store(0U,
@@ -1156,6 +1159,9 @@ public:
             const bool resume = previous_state == EngineState::Playing;
             const bool recovering =
                 device_lost_.load(std::memory_order_acquire);
+            if (resume) {
+                arm_output_device_switch_test_barrier(1, true);
+            }
 
             if (device_initialized_) {
                 if (stop_output() != AG_OK && !recovering) {
@@ -1163,6 +1169,10 @@ public:
                 }
                 ma_device_uninit(&device_);
                 device_initialized_ = false;
+            }
+            invalidate_output_meter();
+            if (resume) {
+                arm_output_device_switch_test_barrier(2, false);
             }
 
             selected_device_id_ = std::move(utf8_id);
@@ -1215,6 +1225,13 @@ public:
     [[nodiscard]] bool exclusive_mode_active() const noexcept
     {
         return device_initialized_ && active_exclusive_mode_;
+    }
+
+    void set_output_device_switch_test_barrier(
+        OutputDeviceSwitchTestBarrier* const barrier) noexcept
+    {
+        output_device_switch_test_barrier_.store(barrier,
+                                                 std::memory_order_release);
     }
 
     ag_result set_transition_fade_ms(const int milliseconds) noexcept
@@ -2044,6 +2061,44 @@ private:
         output_meter_generation_.fetch_add(1U, std::memory_order_acq_rel);
     }
 
+    void wait_at_output_device_switch_test_barrier() noexcept
+    {
+        OutputDeviceSwitchTestBarrier* const barrier =
+            output_device_switch_test_barrier_.load(std::memory_order_acquire);
+        if (barrier == nullptr) {
+            return;
+        }
+        int phase = barrier->armed_phase.load(std::memory_order_acquire);
+        if (phase == 0
+            || !barrier->armed_phase.compare_exchange_strong(
+                phase, 0, std::memory_order_acq_rel,
+                std::memory_order_acquire)) {
+            return;
+        }
+        barrier->entered_phase.store(phase, std::memory_order_release);
+        while (barrier->release_phase.load(std::memory_order_acquire) < phase
+               && !barrier->cancelled.load(std::memory_order_acquire)) {
+            std::this_thread::yield();
+        }
+    }
+
+    void arm_output_device_switch_test_barrier(const int phase,
+                                                const bool wait) noexcept
+    {
+        OutputDeviceSwitchTestBarrier* const barrier =
+            output_device_switch_test_barrier_.load(std::memory_order_acquire);
+        if (barrier == nullptr) {
+            return;
+        }
+        barrier->armed_phase.store(phase, std::memory_order_release);
+        while (wait
+               && barrier->entered_phase.load(std::memory_order_acquire)
+                      < phase
+               && !barrier->cancelled.load(std::memory_order_acquire)) {
+            std::this_thread::yield();
+        }
+    }
+
     AudioBackend backend_;
     static constexpr std::int64_t no_pending_boundary = -1;
     static constexpr std::int64_t publishing_boundary = -2;
@@ -2108,6 +2163,8 @@ private:
     std::atomic<float> output_meter_release_per_frame_{0.0F};
     std::atomic<std::uint64_t> output_meter_generation_{1U};
     std::atomic<std::uint64_t> output_meter_valid_generation_{0U};
+    std::atomic<OutputDeviceSwitchTestBarrier*>
+        output_device_switch_test_barrier_{nullptr};
     std::atomic<bool> muted_{false};
     std::atomic<int> transition_fade_ms_{0};
     std::atomic<bool> match_track_sample_rate_{false};
@@ -2276,6 +2333,12 @@ ag_result AudioEngine::set_output_device(std::string utf8_id,
 bool AudioEngine::exclusive_mode_active() const noexcept
 {
     return impl_->exclusive_mode_active();
+}
+
+void AudioEngine::set_output_device_switch_test_barrier(
+    OutputDeviceSwitchTestBarrier* const barrier) noexcept
+{
+    impl_->set_output_device_switch_test_barrier(barrier);
 }
 
 ag_result AudioEngine::set_transition_fade_ms(

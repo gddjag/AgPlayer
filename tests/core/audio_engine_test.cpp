@@ -9,6 +9,7 @@
 #include "../../core/src/audio_editor/editor_player_bridge.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <chrono>
 #include <cmath>
@@ -35,6 +36,20 @@ bool waitForBufferedFrames(agplayer::AudioEngine& engine,
     const auto deadline = std::chrono::steady_clock::now() + timeout;
     do {
         if (engine.buffered_frames() >= minimumFrames) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    } while (std::chrono::steady_clock::now() < deadline);
+    return false;
+}
+
+bool waitForBarrierPhase(std::atomic<int>& phase,
+                         const int expected,
+                         const std::chrono::milliseconds timeout)
+{
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    do {
+        if (phase.load(std::memory_order_acquire) >= expected) {
             return true;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -275,6 +290,59 @@ bool outputMeterInvalidatesAcrossPlaybackBoundaries()
     return ok;
 }
 
+bool outputDeviceSwitchRejectsInFlightOldCallback()
+{
+    agplayer::OutputDeviceSwitchTestBarrier barrier;
+    agplayer::AudioEngine engine(agplayer::AudioBackend::Null, 4'096U);
+    assert(engine.load_stream(std::make_shared<ContinuousAudioStream>())
+           == AG_OK);
+    assert(waitForBufferedFrames(engine, 64U,
+                                 std::chrono::milliseconds(1'000)));
+    assert(engine.play() == AG_OK);
+
+    engine.set_output_device_switch_test_barrier(&barrier);
+    std::atomic<ag_result> switch_result{AG_INTERNAL_ERROR};
+    std::thread switch_thread([&] {
+        switch_result.store(engine.set_output_device({}, true),
+                            std::memory_order_release);
+    });
+
+    const bool old_callback_entered = waitForBarrierPhase(
+        barrier.entered_phase, 1, std::chrono::milliseconds(2'000));
+    if (!old_callback_entered) {
+        barrier.cancelled.store(true, std::memory_order_release);
+        switch_thread.join();
+        engine.set_output_device_switch_test_barrier(nullptr);
+        std::fprintf(stderr,
+                     "old output callback did not enter switch barrier\n");
+        return false;
+    }
+    barrier.release_phase.store(1, std::memory_order_release);
+
+    const bool new_callback_entered = waitForBarrierPhase(
+        barrier.entered_phase, 2, std::chrono::milliseconds(2'000));
+    const bool stale_peak_rejected =
+        engine.equalizer_status().output_peak_db == kMeterFloorDb;
+    barrier.release_phase.store(2, std::memory_order_release);
+    if (!new_callback_entered) {
+        barrier.cancelled.store(true, std::memory_order_release);
+    }
+    switch_thread.join();
+    engine.set_output_device_switch_test_barrier(nullptr);
+
+    const bool switched =
+        switch_result.load(std::memory_order_acquire) == AG_OK;
+    if (!new_callback_entered) {
+        std::fprintf(stderr,
+                     "new output callback did not enter switch barrier\n");
+    }
+    if (!stale_peak_rejected) {
+        std::fprintf(stderr,
+                     "old output callback peak survived device switch\n");
+    }
+    return switched && new_callback_entered && stale_peak_rejected;
+}
+
 bool outputMeterUsesRequestedFramesForPartialUnderrun()
 {
     auto stream = std::make_shared<PartialUnderrunStream>();
@@ -510,8 +578,11 @@ int main(const int argc, char** argv)
 
     const bool boundaryRegression =
         outputMeterInvalidatesAcrossPlaybackBoundaries();
+    const bool deviceSwitchRegression =
+        outputDeviceSwitchRejectsInFlightOldCallback();
     const bool partialUnderrunRegression =
         outputMeterUsesRequestedFramesForPartialUnderrun();
     assert(boundaryRegression);
+    assert(deviceSwitchRegression);
     assert(partialUnderrunRegression);
 }

@@ -5,6 +5,7 @@
 
 #include <agplayer/c_api.h>
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -57,6 +58,15 @@ struct EqualizerStatus {
     double output_peak_db = -120.0;
 };
 
+// Test-only lock-free seam for deterministically holding the old and new
+// device callbacks around set_output_device(). Null in production.
+struct OutputDeviceSwitchTestBarrier final {
+    std::atomic<int> armed_phase{0};
+    std::atomic<int> entered_phase{0};
+    std::atomic<int> release_phase{0};
+    std::atomic<bool> cancelled{false};
+};
+
 class AudioEngine final {
 public:
     AudioEngine(AudioBackend backend, std::size_t buffer_frames);
@@ -98,6 +108,9 @@ public:
     [[nodiscard]] std::vector<OutputDevice> output_devices() noexcept;
     ag_result set_output_device(std::string utf8_id,
                                 bool exclusive) noexcept;
+    // Installs no production behavior unless a test explicitly supplies it.
+    void set_output_device_switch_test_barrier(
+        OutputDeviceSwitchTestBarrier* barrier) noexcept;
     [[nodiscard]] bool exclusive_mode_active() const noexcept;
     ag_result set_transition_fade_ms(int milliseconds) noexcept;
     ag_result set_duration_ms(std::int64_t duration_ms) noexcept;
