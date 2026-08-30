@@ -8,15 +8,15 @@ Window {
     id: window
     objectName: "equalizerWindow"
     visible: false
-    width: 1000
-    height: 600
-    minimumWidth: 880
-    minimumHeight: 520
+    width: 860
+    height: 520
+    minimumWidth: 760
+    minimumHeight: 480
     flags: Qt.FramelessWindowHint
     color: "transparent"
     title: qsTr("十八段图形均衡器")
     property int gainRevision: 0
-    readonly property bool spacious: width >= 1400 && height >= 800
+    readonly property bool spacious: width >= 1000 && height >= 600
     palette.window: Theme.background
     palette.windowText: Theme.primaryText
     palette.base: Theme.surfaceElevated
@@ -266,6 +266,7 @@ Window {
                 boundsBehavior: Flickable.StopAtBounds
                 contentWidth: bandRow.width
                 contentHeight: height
+                interactive: contentWidth > width
                 ScrollBar.horizontal: ScrollBar { policy: bandFlickable.contentWidth > bandFlickable.width ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff }
 
                 Row {
@@ -282,6 +283,7 @@ Window {
                         model: 17
                         EqualizerBandSlider {
                             required property int index
+                            objectName: "equalizerBand-" + index
                             width: bandRow.slotWidth
                             height: bandRow.height
                             bandIndex: index
@@ -309,6 +311,7 @@ Window {
                     }
 
                     EqualizerBandSlider {
+                        objectName: "equalizerBand-17"
                         width: bandRow.slotWidth
                         height: bandRow.height
                         bandIndex: -1
