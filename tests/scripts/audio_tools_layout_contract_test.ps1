@@ -77,8 +77,7 @@ $recordingTranslationSources = @(
     '5paw5bu65b2V6Z+z', '5omT5byA6Z+z6aKR5oiW5paw5bu65b2V6Z+z5Lul5byA5aeL57yW6L6R',
     '5pKt5pS+77yaUGhhc2UgMTIg5o6l5YWlIMK3IFLvvJpQaGFzZSA5IOaOpeWFpSDCtyBDdHJsK1NoaWZ0K0Eg5Y+W5raI6YCJ5Yy6IMK3IEN0cmwrVyDmuIXnqbo=') |
     ForEach-Object { ConvertFrom-Utf8Base64 $_ }
-$translationFiles = @('agplayer_zh.ts', 'agplayer_en.ts', 'agplayer_th.ts',
-                      'agplayer_vi.ts') | ForEach-Object {
+$translationFiles = @('agplayer_zh.ts', 'agplayer_en.ts') | ForEach-Object {
     Join-Path $SourceRoot "translations/$_"
 }
 foreach ($source in $recordingTranslationSources) {

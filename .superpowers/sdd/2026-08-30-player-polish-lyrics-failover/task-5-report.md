@@ -42,3 +42,25 @@ The direct Qt test logs are retained under `build/release/test-results/`:
 - No player controls, lyrics, waveform, taskbar, audio core, installer language resource files, or package output were changed.
 - The installer source contract is automated here; compiling and interactively launching it in a clean Windows VM remains Task 13 acceptance work. This task intentionally did not package an EXE.
 - Ninja reported recovery from a prematurely ended build log during incremental builds, but configure, generation, all requested builds, and all tests completed successfully.
+
+## Independent-review correction
+
+The first review found two stale test-only catalog lists that still named the
+deleted Thai and Vietnamese application catalogs. Before correction,
+`translation_catalog_test` failed because `agplayer_th.ts` was missing and
+`audio_tools_layout_contract_test` failed when `Select-String` tried to open
+that same deleted file. Both lists now enumerate exactly the supported Chinese
+and English application catalogs. The audio-tools contract still scans every
+recording-removal source and retains all of its layout and production-wiring
+assertions; only the obsolete file inputs changed. The first correction run
+then exposed a second stale expectation inside `CheckTranslationCatalogs.cmake`;
+its expected locale set and diagnostic now also describe exactly `en_US` and
+`zh_CN`, while all catalog message-count, unfinished-text, and encoding checks
+remain unchanged.
+
+Correction verification:
+
+- `translation_catalog_test` and `audio_tools_layout_contract_test`: 2/2 passed.
+- Original Task 5 focused CTest set: 5/5 passed in 24.97 seconds.
+- Direct complete `tst_main_window.qml`: 114 passed / 0 failed / 1 expected offscreen `WM_DROPFILES` skip.
+- The correction is test-contract-only; no application, installer, playback, audio, lyrics, waveform, or taskbar production source changed.
