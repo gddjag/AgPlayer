@@ -51,74 +51,6 @@ bool isCancelled(const std::atomic_bool* cancelled) noexcept
         && cancelled->load(std::memory_order_relaxed);
 }
 
-bool frameToSeekMilliseconds(const SampleFrame frame,
-                             const std::uint32_t sampleRate,
-                             std::int64_t& result) noexcept
-{
-    if (frame < 0 || sampleRate == 0) return false;
-    const SampleFrame seconds = frame / sampleRate;
-    const SampleFrame remainder = frame % sampleRate;
-    if (seconds > std::numeric_limits<std::int64_t>::max() / 1'000) {
-        return false;
-    }
-    result = seconds * 1'000
-        + remainder * 1'000 / static_cast<SampleFrame>(sampleRate);
-    return true;
-}
-
-bool seekMillisecondsToFrame(const std::int64_t milliseconds,
-                             const std::uint32_t sampleRate,
-                             SampleFrame& result) noexcept
-{
-    if (milliseconds < 0 || sampleRate == 0) return false;
-    const std::int64_t seconds = milliseconds / 1'000;
-    const std::int64_t remainder = milliseconds % 1'000;
-    if (seconds > std::numeric_limits<SampleFrame>::max() / sampleRate) {
-        return false;
-    }
-    const SampleFrame base = seconds * static_cast<SampleFrame>(sampleRate);
-    const SampleFrame tail = (remainder * static_cast<SampleFrame>(sampleRate)
-                              + 999) / 1'000;
-    if (base > std::numeric_limits<SampleFrame>::max() - tail) return false;
-    result = base + tail;
-    return true;
-}
-
-float envelopeGain(const AudioEvent& event, const SampleFrame offset) noexcept
-{
-    if (event.envelope.empty()) return 1.0F;
-    EnvelopePoint previous{0, 1.0F};
-    for (const EnvelopePoint& point : event.envelope) {
-        if (offset <= point.offset) {
-            if (point.offset == previous.offset) return point.gain;
-            const double fraction = static_cast<double>(offset - previous.offset)
-                / static_cast<double>(point.offset - previous.offset);
-            return static_cast<float>(previous.gain
-                + (point.gain - previous.gain) * fraction);
-        }
-        previous = point;
-    }
-    return previous.gain;
-}
-
-float fadeGain(const AudioEvent& event, const SampleFrame offset) noexcept
-{
-    const SampleFrame frames = audibleFrames(event);
-    double result = 1.0;
-    if (event.fadeIn > 0 && offset < event.fadeIn) {
-        result *= event.fadeIn == 1 ? 0.0
-            : static_cast<double>(offset)
-                / static_cast<double>(event.fadeIn - 1);
-    }
-    const SampleFrame fadeOutStart = frames - event.fadeOut;
-    if (event.fadeOut > 0 && offset >= fadeOutStart) {
-        result *= event.fadeOut == 1 ? 0.0
-            : static_cast<double>(frames - 1 - offset)
-                / static_cast<double>(event.fadeOut - 1);
-    }
-    return static_cast<float>(result);
-}
-
 } // namespace
 
 RenderResult DocumentRenderer::renderFloatWav(
@@ -211,14 +143,9 @@ RenderResult DocumentRenderer::renderFloatWav(
         }
         const SampleFrame eventOffset = timelineStart - event.timelineStart;
         const SampleFrame sourceStart = event.sourceStart + eventOffset;
-        std::int64_t seekMs = 0;
-        SampleFrame decoderStart = 0;
-        if (!frameToSeekMilliseconds(sourceStart, source.sample_rate, seekMs)
-            || !seekMillisecondsToFrame(seekMs, source.sample_rate, decoderStart)
-            || decoderStart > sourceStart || decoder.seek(seekMs) != AG_OK) {
+        if (decoder.seekFrame(sourceStart) != AG_OK) {
             return false;
         }
-        SampleFrame discard = sourceStart - decoderStart;
         SampleFrame eventRendered = 0;
         agplayer::DecodedAudioBlock block;
         while (eventRendered < frames) {
@@ -227,9 +154,7 @@ RenderResult DocumentRenderer::renderFloatWav(
                 if (block.end_of_stream) return false;
                 continue;
             }
-            const auto begin = static_cast<std::size_t>(std::min<SampleFrame>(
-                discard, static_cast<SampleFrame>(block.frames)));
-            discard -= static_cast<SampleFrame>(begin);
+            constexpr std::size_t begin = 0;
             const auto available = static_cast<SampleFrame>(block.frames - begin);
             const auto take = static_cast<std::size_t>(std::min(
                 frames - eventRendered, available));
@@ -238,8 +163,7 @@ RenderResult DocumentRenderer::renderFloatWav(
             for (std::size_t frame = 0; frame < take; ++frame) {
                 const SampleFrame localOffset = eventOffset + eventRendered
                     + static_cast<SampleFrame>(frame);
-                const float gain = event.gain * fadeGain(event, localOffset)
-                    * envelopeGain(event, localOffset);
+                const float gain = eventAmplitudeGainAt(event, localOffset);
                 if (gain != 1.0F) {
                     for (std::uint32_t channel = 0; channel < source.channels;
                          ++channel) {

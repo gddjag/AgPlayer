@@ -22,6 +22,7 @@ private slots:
     void removesOnlyTheSelectedHistoryEntry();
     void updatesTagsAndManualOrder();
     void batchesTagMutationsWithoutResetOrExtraFlush();
+    void removesOneTagOnlyFromRequestedTracks();
     void removesTrackWithoutDeletingTheFile();
     void appendsLargeBatchesWithSingleModelNotification();
     void appliesMaintenanceResultsWithSingleModelNotification();
@@ -505,6 +506,36 @@ void LibraryModelTest::batchesTagMutationsWithoutResetOrExtraFlush()
     QCOMPARE(model.renameTag(QStringLiteral("road"), QStringLiteral("Driving")), 2);
     QCOMPARE(model.removeTag(QStringLiteral("DRIVING")), 2);
     QCOMPARE(model.count(), 2);
+}
+
+void LibraryModelTest::removesOneTagOnlyFromRequestedTracks()
+{
+    TrackRecord first;
+    first.trackId = QStringLiteral("one");
+    first.path = QStringLiteral("C:/music/one.wav");
+    first.tags = {QStringLiteral("Focus"), QStringLiteral("Night")};
+    TrackRecord second;
+    second.trackId = QStringLiteral("two");
+    second.path = QStringLiteral("C:/music/two.wav");
+    second.tags = {QStringLiteral("focus"), QStringLiteral("Road")};
+    LibraryModel model;
+    model.replaceAll({first, second});
+    QSignalSpy changes(&model, &LibraryModel::tagsChanged);
+    QSignalSpy flushes(&model, &LibraryModel::flushRequested);
+    QSignalSpy resets(&model, &QAbstractItemModel::modelReset);
+
+    QCOMPARE(model.removeTagFromTracks({QStringLiteral("one"),
+                                        QStringLiteral("two")},
+                                       QStringLiteral(" FOCUS ")), 2);
+    QCOMPARE(changes.count(), 2);
+    QCOMPARE(flushes.count(), 1);
+    QCOMPARE(resets.count(), 0);
+    QCOMPARE(model.trackForId(QStringLiteral("one"))
+                 .value(QStringLiteral("tags")).toStringList(),
+             QStringList{QStringLiteral("Night")});
+    QCOMPARE(model.trackForId(QStringLiteral("two"))
+                 .value(QStringLiteral("tags")).toStringList(),
+             QStringList{QStringLiteral("Road")});
 }
 
 void LibraryModelTest::removesTrackWithoutDeletingTheFile()

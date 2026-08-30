@@ -123,6 +123,24 @@ set_tests_properties(document_renderer_test PROPERTIES
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
 
+add_executable(editor_playback_stream_test
+    core/editor_playback_stream_test.cpp
+)
+add_dependencies(editor_playback_stream_test decoder_fixture)
+target_include_directories(editor_playback_stream_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(editor_playback_stream_test PRIVATE agplayer_core)
+agplayer_enable_warnings(editor_playback_stream_test)
+add_test(NAME editor_playback_stream_test
+    COMMAND editor_playback_stream_test "${SINE_WAV_FIXTURE}"
+)
+set_tests_properties(editor_playback_stream_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
 add_executable(audio_source_probe_test
     core/audio_source_probe_test.cpp
 )
@@ -693,6 +711,27 @@ add_executable(audio_editor_controller_test
     qt/audio_editor_controller_test.cpp
 )
 
+add_executable(selection_drag_controller_test
+    qt/selection_drag_controller_test.cpp
+)
+set_target_properties(selection_drag_controller_test PROPERTIES AUTOMOC ON)
+target_include_directories(selection_drag_controller_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(selection_drag_controller_test PRIVATE
+    agplayer_qt Qt6::Test Qt6::Widgets
+)
+agplayer_enable_warnings(selection_drag_controller_test)
+add_dependencies(selection_drag_controller_test decoder_fixture)
+add_test(NAME selection_drag_controller_test COMMAND selection_drag_controller_test)
+set_tests_properties(selection_drag_controller_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT "AGPLAYER_EDITOR_FIXTURE=${SINE_WAV_FIXTURE};QT_QPA_PLATFORM=offscreen"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
 add_executable(project_document_test
     qt/project_document_test.cpp
 )
@@ -1051,6 +1090,28 @@ set_tests_properties(qml_main_window_test PROPERTIES
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
+add_test(NAME qml_equalizer_visual_test
+    COMMAND qml_main_window_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_equalizer_visual.qml)
+set_tests_properties(qml_equalizer_visual_test PROPERTIES
+    TIMEOUT 20
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+add_test(NAME integrated_shell_contract_test
+    COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+        -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/integrated_shell_contract_test.ps1
+        -SourceRoot ${CMAKE_SOURCE_DIR})
+set_tests_properties(integrated_shell_contract_test PROPERTIES TIMEOUT 10)
+add_test(NAME qml_integrated_theme_test
+    COMMAND qml_main_window_test
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_integrated_theme.qml)
+set_tests_properties(qml_integrated_theme_test PROPERTIES
+    TIMEOUT 25
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
 add_test(NAME qml_color_picker_test
     COMMAND qml_main_window_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_color_picker.qml)
 set_tests_properties(qml_color_picker_test PROPERTIES
@@ -1132,6 +1193,7 @@ target_link_libraries(qml_audio_tools_test PRIVATE
     agplayer_app_qml
     agplayer_app_qmlplugin
     Qt6::QuickTest
+    Qt6::QmlWorkerScript
 )
 target_compile_definitions(qml_audio_tools_test PRIVATE
     QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml"
@@ -1144,6 +1206,7 @@ add_test(NAME qml_format_converter_test
         -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_format_converter.qml)
 set_tests_properties(qml_format_converter_test PROPERTIES
     TIMEOUT 30
+    RESOURCE_LOCK qml_audio_tools_runtime
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
@@ -1154,6 +1217,7 @@ add_test(NAME qml_format_converter_matrix_test
         -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_format_converter_matrix.qml)
 set_tests_properties(qml_format_converter_matrix_test PROPERTIES
     TIMEOUT 90
+    RESOURCE_LOCK qml_audio_tools_runtime
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
@@ -1165,6 +1229,7 @@ add_test(NAME qml_format_converter_visual_fixture_test
     COMMAND qml_audio_tools_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_format_converter_visual_fixture.qml)
 set_tests_properties(qml_format_converter_visual_fixture_test PROPERTIES
     TIMEOUT 30
+    RESOURCE_LOCK qml_audio_tools_runtime
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
@@ -1174,15 +1239,29 @@ add_test(NAME qml_filename_process_test
     COMMAND qml_audio_tools_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_filename_process.qml)
 set_tests_properties(qml_filename_process_test PROPERTIES
     TIMEOUT 30
+    RESOURCE_LOCK qml_audio_tools_runtime
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
 add_test(NAME qml_metadata_editor_test
-    COMMAND qml_audio_tools_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_metadata_editor.qml)
+    COMMAND qml_audio_tools_test -o ${CMAKE_BINARY_DIR}/qml-metadata-editor.txt,txt
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_metadata_editor.qml)
 set_tests_properties(qml_metadata_editor_test PROPERTIES
     TIMEOUT 30
+    RESOURCE_LOCK qml_audio_tools_runtime
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
+add_test(NAME qml_metadata_status_filter_test
+    COMMAND qml_audio_tools_test -o ${CMAKE_BINARY_DIR}/qml-metadata-status-filter.txt,txt
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_metadata_status_filter.qml)
+set_tests_properties(qml_metadata_status_filter_test PROPERTIES
+    TIMEOUT 15
+    RESOURCE_LOCK qml_audio_tools_runtime
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
@@ -1227,7 +1306,9 @@ set_tests_properties(waveform_provider_test PROPERTIES
 set_tests_properties(window_controller_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
-set_tests_properties(playback_controller_test qml_main_window_test qml_waveform_test
+set_tests_properties(playback_controller_test qml_main_window_test
+    qml_integrated_theme_test
+    qml_color_picker_test qml_waveform_test
     PROPERTIES
     # Qt/FFmpeg global process state and the shared generated fixtures make
     # these integration tests deterministic only when they do not overlap.
@@ -1406,6 +1487,22 @@ if (WIN32)
     )
     set_tests_properties(single_instance_test PROPERTIES
         TIMEOUT 20
+        ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+    )
+
+    add_test(
+        NAME integrated_shell_lifecycle_smoke_test
+        COMMAND $<TARGET_FILE:AgPlayer>
+                --qa-test-mode
+                --qa-integrated-shell-lifecycle-probe
+                --qa-library
+                ${CMAKE_CURRENT_BINARY_DIR}/integrated-shell-lifecycle-library.json
+    )
+    set_tests_properties(integrated_shell_lifecycle_smoke_test PROPERTIES
+        TIMEOUT 20
+        RUN_SERIAL TRUE
+        ENVIRONMENT "QT_QUICK_BACKEND=software"
         ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
     )

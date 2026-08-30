@@ -7,6 +7,8 @@
 
 namespace agplayer {
 
+class IAudioStreamSource;
+
 struct BpmAnalyzeInput {
     const char* file_path = nullptr;
     int max_duration_seconds = 90;
@@ -20,5 +22,8 @@ struct BpmAnalyzeOutput {
 
 // Offline BPM analysis. Returns AG_OK on success.
 ag_result analyze_bpm(const BpmAnalyzeInput& input, BpmAnalyzeOutput* out);
+ag_result analyze_bpm(IAudioStreamSource& stream, int max_duration_seconds,
+                      const std::atomic_bool* cancelled,
+                      BpmAnalyzeOutput* out);
 
 } // namespace agplayer

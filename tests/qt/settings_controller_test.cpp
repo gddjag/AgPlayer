@@ -35,6 +35,8 @@ private slots:
     void listWaveformThumbnailSettingsPersistFallbackAndReset();
     void visualizerCanvasAndReplayGainSettingsPersist();
     void glassFeatureIsAbsentFromSettingsContract();
+    void playerShellModeDefaultsPersistsAndNormalizes();
+    void windowLayoutThemeDefaultsAndNormalizesToDualWindow();
     void skinSettingsDefaultToSystemAppearanceAndDefaultSkin();
     void skinSettingsPersistAndNormalize();
     void solidSkinPreservesValidAuxiliaryStopsAcrossCommitAndReload();
@@ -72,6 +74,56 @@ void SettingsControllerTest::glassFeatureIsAbsentFromSettingsContract()
     QCOMPARE(settings.metaObject()->indexOfProperty("glassEffect"), -1);
     QVERIFY(!persisted.contains(QStringLiteral("appearance/glassEffect")));
     persisted.clear();
+}
+
+void SettingsControllerTest::playerShellModeDefaultsPersistsAndNormalizes()
+{
+    QSettings persisted;
+    persisted.clear();
+    persisted.setValue(QStringLiteral("appearance/themeMode"), 1);
+
+    {
+        SettingsController settings;
+        QCOMPARE(settings.playerShellMode(), 0);
+        QCOMPARE(settings.themeMode(), 1);
+        settings.setPlayerShellMode(1);
+        QCOMPARE(settings.themeMode(), 1);
+        QCOMPARE(settings.windowLayoutTheme(), QStringLiteral("single-window"));
+        QCOMPARE(persisted.value(QStringLiteral("appearance/playerShellMode")).toInt(), 1);
+    }
+
+    SettingsController reloaded;
+    QCOMPARE(reloaded.playerShellMode(), 1);
+    QCOMPARE(reloaded.windowLayoutTheme(), QStringLiteral("single-window"));
+
+    persisted.setValue(QStringLiteral("appearance/playerShellMode"), 99);
+    persisted.setValue(QStringLiteral("appearance/windowLayoutTheme"),
+                       QStringLiteral("unknown"));
+    SettingsController malformed;
+    QCOMPARE(malformed.playerShellMode(), 0);
+    QCOMPARE(malformed.windowLayoutTheme(), QStringLiteral("dual-window"));
+    QCOMPARE(persisted.value(QStringLiteral("appearance/playerShellMode")).toInt(), 0);
+}
+
+void SettingsControllerTest::windowLayoutThemeDefaultsAndNormalizesToDualWindow()
+{
+    QSettings persisted;
+    persisted.clear();
+
+    SettingsController settings;
+    QCOMPARE(settings.windowLayoutTheme(), QStringLiteral("dual-window"));
+    QCOMPARE(settings.playerShellMode(), 0);
+
+    settings.setWindowLayoutTheme(QStringLiteral("single-window"));
+    QCOMPARE(settings.windowLayoutTheme(), QStringLiteral("single-window"));
+    QCOMPARE(settings.playerShellMode(), 1);
+
+    settings.setPlayerShellMode(0);
+    QCOMPARE(settings.windowLayoutTheme(), QStringLiteral("dual-window"));
+    settings.setWindowLayoutTheme(QStringLiteral("unknown"));
+    QCOMPARE(settings.windowLayoutTheme(), QStringLiteral("dual-window"));
+    QCOMPARE(persisted.value(QStringLiteral("appearance/windowLayoutTheme")).toString(),
+             QStringLiteral("dual-window"));
 }
 
 void SettingsControllerTest::skinSettingsDefaultToSystemAppearanceAndDefaultSkin()

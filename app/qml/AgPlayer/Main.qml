@@ -10,8 +10,8 @@ ApplicationWindow {
     visible: true
     width: 960
     height: 298
-    minimumWidth: 612
-    minimumHeight: 228
+    minimumWidth: SettingsController.playerShellMode === 1 ? 1180 : 612
+    minimumHeight: SettingsController.playerShellMode === 1 ? 720 : 228
     onClosing: function(close) {
         close.accepted = false
         WindowController.requestClose()
@@ -37,6 +37,11 @@ ApplicationWindow {
     property var playback: PlaybackController
     property int positionMs: playback ? playback.positionMs : 0
     property bool playFirstDroppedTrack: false
+    property string tagSearchText: ""
+    property int integratedSidePanelPage: 0
+    property bool integratedSidePanelExpanded: true
+    readonly property bool integratedShell:
+        SettingsController.playerShellMode === 1
 
     DockedWindowFrame {
         anchors.fill: parent
@@ -67,10 +72,14 @@ ApplicationWindow {
     // The filter model is owned by the main window but consumed by the
     // separate ListWindow so filtering state stays in sync.
     LibraryFilterModel {
-        id: filterModel
+        id: sharedFilterModel
         objectName: "filterModel"
         sourceModel: LibraryModel
         playlistModel: PlaylistModel
+    }
+
+    WaveformSession {
+        id: sharedWaveformSession
     }
 
     function openImportDialog() {
@@ -141,47 +150,98 @@ ApplicationWindow {
         }
     }
 
-    ColumnLayout {
+    Loader {
+        id: shellLoader
+        objectName: "playerShellLoader"
         anchors.fill: parent
-        spacing: 0
-
-        TitleBar {
-            id: titleBar
-            Layout.fillWidth: true
-            Layout.preferredHeight: 36
-            window: mainWindow
-            showBrand: true
-            onOpenSettings: mainWindow.openSettingsPage()
+        sourceComponent: mainWindow.integratedShell
+                         ? integratedShellComponent : classicShellComponent
+        onLoaded: {
+            if (item && item.tagSearchText !== undefined)
+                item.tagSearchText = mainWindow.tagSearchText
         }
+    }
 
-        EmptyStartup {
-            id: emptyStartup
-            objectName: "emptyStartup"
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            visible: LibraryModel.count === 0 && !importStatus.active
-            onOpenFileRequested: mainWindow.openImportDialog()
-            onImportFolderRequested: mainWindow.openFolderDialog()
+    Connections {
+        target: shellLoader.item
+        ignoreUnknownSignals: true
+        function onTagSearchTextChanged() {
+            mainWindow.tagSearchText = shellLoader.item.tagSearchText
         }
+    }
 
-        PlayerPane {
-            id: playerPane
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.minimumHeight: 128
-            visible: LibraryModel.count > 0
+    Component {
+        id: classicShellComponent
+        Item {
+            objectName: "classicPlayerShell"
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 0
+
+                TitleBar {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 36
+                    window: mainWindow
+                    showBrand: true
+                    onOpenSettings: mainWindow.openSettingsPage()
+                }
+
+                EmptyStartup {
+                    id: emptyStartup
+                    objectName: "emptyStartup"
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    visible: LibraryModel.count === 0 && !importStatus.active
+                    onOpenFileRequested: mainWindow.openImportDialog()
+                    onImportFolderRequested: mainWindow.openFolderDialog()
+                }
+
+                PlayerPane {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 128
+                    visible: LibraryModel.count > 0
+                    waveformSession: sharedWaveformSession
+                }
+
+                PlayerControls {
+                    objectName: "playerControls"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: LibraryModel.count === 0 ? 72 : 64
+                    emptyMode: LibraryModel.count === 0
+                    onOpenEqualizerRequested: mainWindow.openEqualizer()
+                }
+            }
         }
+    }
 
+    Component {
+        id: integratedBottomBarComponent
         PlayerControls {
-            id: playerControls
             objectName: "playerControls"
-            Layout.fillWidth: true
-            // Empty startup reserves enough room for the responsive action
-            // area.  The controls stay anchored at the bottom instead of
-            // cutting through the format hint on compact windows.
-            Layout.preferredHeight: LibraryModel.count === 0 ? 72 : 64
             emptyMode: LibraryModel.count === 0
+            showListWindowButton: false
             onOpenEqualizerRequested: mainWindow.openEqualizer()
+        }
+    }
+
+    Component {
+        id: integratedShellComponent
+        IntegratedPlayerShell {
+            filterModel: sharedFilterModel
+            hostWindow: mainWindow
+            waveformLayers: sharedWaveformSession.layers
+            waveformDurationMs: sharedWaveformSession.durationMs
+            sidePanelPage: mainWindow.integratedSidePanelPage
+            sidePanelExpanded: mainWindow.integratedSidePanelExpanded
+            bottomBarComponent: integratedBottomBarComponent
+            onOpenSettingsRequested: mainWindow.openSettingsPage()
+            onSidePanelPageChanged: {
+                mainWindow.integratedSidePanelPage = sidePanelPage
+            }
+            onSidePanelExpandedChanged: {
+                mainWindow.integratedSidePanelExpanded = sidePanelExpanded
+            }
         }
     }
 
@@ -216,6 +276,7 @@ ApplicationWindow {
 
     Loader {
         id: equalizerWindowLoader
+        objectName: "equalizerWindowLoader"
         active: false
         sourceComponent: Component {
             EqualizerWindow {}

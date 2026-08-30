@@ -565,6 +565,30 @@ int LibraryModel::addTagToTracks(const QStringList& trackIds,
     return changed;
 }
 
+int LibraryModel::removeTagFromTracks(const QStringList& trackIds,
+                                      const QString& tag)
+{
+    const QString targetKey = tag.trimmed().toCaseFolded();
+    if (targetKey.isEmpty()) return 0;
+
+    QSet<QString> requestedIds;
+    int changed = 0;
+    for (const QString& trackId : trackIds) {
+        if (trackId.isEmpty() || requestedIds.contains(trackId)) continue;
+        requestedIds.insert(trackId);
+        const int row = indexForTrackId(trackId);
+        if (row < 0) continue;
+        QStringList next = tracks_.at(row).tags;
+        next.erase(std::remove_if(next.begin(), next.end(),
+                                  [&targetKey](const QString& existing) {
+            return existing.toCaseFolded() == targetKey;
+        }), next.end());
+        if (applyTagsAtRow(row, next)) ++changed;
+    }
+    if (changed > 0) emit flushRequested();
+    return changed;
+}
+
 int LibraryModel::renameTag(const QString& oldKey, const QString& displayName)
 {
     const QString normalizedOldKey = oldKey.trimmed().toCaseFolded();

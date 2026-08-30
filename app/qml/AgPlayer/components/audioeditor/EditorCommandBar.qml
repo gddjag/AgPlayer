@@ -10,6 +10,12 @@ Rectangle {
     signal importRequested()
     signal saveProjectRequested()
     property int actionRevision: 0
+    readonly property real referenceCommandWidth: 1175
+    readonly property real commandSpacingWidth: 12 * commandRow.spacing
+    readonly property real availableCommandWidth: Math.max(0,
+        width - commandSpacingWidth - commandRow.spacing)
+    readonly property real referenceScale: Math.min(1.0,
+        availableCommandWidth / referenceCommandWidth)
 
     Connections {
         target: AudioEditorController.actions
@@ -27,8 +33,9 @@ Rectangle {
         property real referenceWidth: 0
         objectName: "editorCommand_" + commandName
         enabled: commandEnabled
-        Layout.fillWidth: referenceWidth <= 0
-        Layout.preferredWidth: referenceWidth
+        Layout.fillWidth: false
+        Layout.preferredWidth: referenceWidth * bar.referenceScale
+        Layout.minimumWidth: 0
         Layout.fillHeight: true
         Accessible.name: label
         ToolTip.visible: hovered
@@ -38,7 +45,7 @@ Rectangle {
             spacing: 2
             ThemedIcon {
                 source: Theme.icon(iconName)
-                tint: parent.parent.enabled ? Theme.iconPrimary : Theme.iconSecondary
+                tint: parent.parent.enabled ? Theme.textPrimary : Theme.textDisabled
                 sourceSize.width: 24
                 sourceSize.height: 24
                 Layout.preferredWidth: 24
@@ -51,22 +58,23 @@ Rectangle {
             }
             Text {
                 text: parent.parent.label
-                color: parent.parent.enabled ? Theme.primaryText : Theme.secondaryText
+                color: parent.parent.enabled ? Theme.textPrimary : Theme.textDisabled
                 font.family: Theme.fontPrimary
                 font.pixelSize: 13
                 Layout.alignment: Qt.AlignHCenter
             }
         }
         background: Rectangle {
-            color: parent.selected ? Theme.activeSelection
-                : parent.hovered && parent.enabled ? Theme.hoverSurface : Theme.elevated
-            border.color: parent.selected ? Theme.accent : Theme.border
+            color: parent.selected ? Theme.accentPressed
+                : parent.hovered && parent.enabled ? Theme.surfaceHover : Theme.surface
+            border.color: parent.selected ? Theme.accentHover : Theme.borderStrong
             border.width: 1
             radius: 6
         }
     }
 
     RowLayout {
+        id: commandRow
         anchors.fill: parent
         spacing: 8
 
@@ -93,6 +101,7 @@ Rectangle {
             label: qsTr("选择")
             iconName: "cursor-line"
             shortcutText: "Ctrl+1"
+            referenceWidth: 80
             selected: AudioEditorController.activeTool === "select"
             onClicked: AudioEditorController.setActiveTool("select")
         }
@@ -101,6 +110,7 @@ Rectangle {
             label: qsTr("分割")
             iconName: "scissors-cut-line"
             shortcutText: "S / Ctrl+2"
+            referenceWidth: 80
             selected: AudioEditorController.activeTool === "scissors"
             commandEnabled: AudioEditorController.hasDocument
                 && !AudioEditorController.busy
@@ -113,6 +123,7 @@ Rectangle {
             label: qsTr("删除")
             iconName: "delete-bin-line"
             shortcutText: "Delete"
+            referenceWidth: 86
             commandEnabled: bar.actionRevision >= 0
                 && AudioEditorController.actionEnabled("editor.deleteSelection")
             onClicked: AudioEditorController.triggerAction(
@@ -123,6 +134,7 @@ Rectangle {
             label: qsTr("裁剪")
             iconName: "crop-line"
             shortcutText: "Shift+C"
+            referenceWidth: 83
             commandEnabled: bar.actionRevision >= 0
                 && AudioEditorController.actionEnabled("editor.cropToSelection")
             onClicked: AudioEditorController.triggerAction(
@@ -133,6 +145,7 @@ Rectangle {
             label: qsTr("复制")
             iconName: "file-copy-line"
             shortcutText: "Ctrl+C"
+            referenceWidth: 81
             commandEnabled: bar.actionRevision >= 0
                 && AudioEditorController.actionEnabled("editor.copy")
             onClicked: AudioEditorController.triggerAction("editor.copy")
@@ -142,6 +155,7 @@ Rectangle {
             label: qsTr("粘贴")
             iconName: "clipboard-line"
             shortcutText: "Ctrl+V"
+            referenceWidth: 91
             commandEnabled: bar.actionRevision >= 0
                 && AudioEditorController.actionEnabled("editor.paste")
             onClicked: AudioEditorController.triggerAction("editor.paste")
@@ -151,6 +165,7 @@ Rectangle {
             label: qsTr("淡入")
             iconName: "bar-chart-line"
             shortcutText: "I"
+            referenceWidth: 77
             commandEnabled: bar.actionRevision >= 0
                 && AudioEditorController.actionEnabled("editor.fadeIn")
             onClicked: AudioEditorController.triggerAction("editor.fadeIn")
@@ -160,6 +175,7 @@ Rectangle {
             label: qsTr("淡出")
             iconName: "bar-chart-line"
             shortcutText: "O"
+            referenceWidth: 75
             mirrorIcon: true
             commandEnabled: bar.actionRevision >= 0
                 && AudioEditorController.actionEnabled("editor.fadeOut")
@@ -170,6 +186,7 @@ Rectangle {
             label: qsTr("静音片段")
             iconName: "volume-mute-line"
             shortcutText: "M"
+            referenceWidth: 95
             commandEnabled: bar.actionRevision >= 0
                 && AudioEditorController.actionEnabled("editor.silenceSelection")
             onClicked: AudioEditorController.triggerAction(
@@ -180,6 +197,7 @@ Rectangle {
             label: qsTr("降噪")
             iconName: "sound-module-line"
             shortcutText: "Ctrl+N"
+            referenceWidth: 73
             commandEnabled: AudioEditorController.hasDocument
                 && !AudioEditorController.busy
             onClicked: AudioEditorController.reduceNoise()
@@ -189,6 +207,7 @@ Rectangle {
             label: qsTr("清除")
             iconName: "brush-line"
             shortcutText: "Ctrl+Backspace"
+            referenceWidth: 82
             commandEnabled: AudioEditorController.hasDocument
                 && !AudioEditorController.busy
             onClicked: AudioEditorController.clearDocument()

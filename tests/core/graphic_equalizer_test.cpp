@@ -62,12 +62,18 @@ double measured_sine_gain_db(std::size_t band, double gain_db,
 
 void test_fixed_band_frequencies()
 {
-    constexpr std::array<double, 10> expected{
-        31.25, 62.5, 125.0, 250.0, 500.0,
-        1'000.0, 2'000.0, 4'000.0, 8'000.0, 16'000.0};
+    constexpr std::array<double, 17> expected{
+        20.0, 31.5, 50.0, 80.0, 125.0, 200.0, 315.0, 500.0, 800.0,
+        1'250.0, 2'000.0, 3'150.0, 5'000.0, 8'000.0, 12'500.0,
+        16'000.0, 20'000.0};
+    static_assert(agplayer::kGraphicEqBandCount == expected.size());
     for (std::size_t index = 0; index < expected.size(); ++index) {
         assert(agplayer::kGraphicEqBandFrequenciesHz[index] == expected[index]);
     }
+
+    agplayer::GraphicEqSettings defaults;
+    assert(near(defaults.q, agplayer::kGraphicEqDefaultQ, 1.0e-12));
+    assert(near(agplayer::kGraphicEqDefaultQ, 2.145, 1.0e-12));
 }
 
 void test_supported_sample_rates_and_boundaries()
@@ -110,6 +116,19 @@ void test_center_frequency_response()
             }
         }
     }
+}
+
+void test_twenty_kilohertz_band_at_cd_sample_rate()
+{
+    agplayer::GraphicEqSettings settings;
+    settings.auto_clip_protection = false;
+    settings.band_gain_db.back() = 6.0;
+    const auto program = agplayer::prepare_graphic_eq(settings, 44'100, 17);
+    assert(program.has_value());
+    const double response = agplayer::graphic_eq_response_db(
+        *program, 20'000.0);
+    assert(std::isfinite(response));
+    assert(near(response, 6.0, kToleranceDb));
 }
 
 void test_pcm_sine_response_matches_every_band()
@@ -288,6 +307,35 @@ void test_updates_and_bypass_are_smoothed_and_finite()
     }
 }
 
+void test_full_band_eight_channel_192khz_transition_stays_finite()
+{
+    agplayer::GraphicEqSettings firstSettings;
+    firstSettings.auto_clip_protection = false;
+    firstSettings.transition_ms = 1.0;
+    for (std::size_t band = 0; band < firstSettings.band_gain_db.size(); ++band)
+        firstSettings.band_gain_db[band] = band % 2 == 0 ? 12.0 : -12.0;
+
+    auto secondSettings = firstSettings;
+    for (double& gain : secondSettings.band_gain_db)
+        gain = -gain;
+    const auto first = agplayer::prepare_graphic_eq(firstSettings, 192'000, 1);
+    const auto second = agplayer::prepare_graphic_eq(secondSettings, 192'000, 2);
+    assert(first.has_value());
+    assert(second.has_value());
+
+    agplayer::GraphicEqualizerProcessor processor;
+    assert(processor.submit(*first));
+    constexpr std::size_t channels = agplayer::kGraphicEqMaxChannels;
+    constexpr std::size_t frames = 4'096;
+    std::vector<float> samples(frames * channels, 0.125F);
+    processor.process(samples.data(), frames / 2, channels);
+    assert(processor.submit(*second));
+    processor.process(samples.data() + frames / 2 * channels,
+                      frames / 2, channels);
+    for (const float sample : samples)
+        assert(std::isfinite(sample));
+}
+
 void test_reset_clears_filter_memory()
 {
     agplayer::GraphicEqSettings settings;
@@ -336,11 +384,13 @@ int main()
     test_fixed_band_frequencies();
     test_supported_sample_rates_and_boundaries();
     test_center_frequency_response();
+    test_twenty_kilohertz_band_at_cd_sample_rate();
     test_pcm_sine_response_matches_every_band();
     test_flat_and_automatic_protection();
     test_flat_processing_is_transparent();
     test_channel_state_is_independent();
     test_updates_and_bypass_are_smoothed_and_finite();
+    test_full_band_eight_channel_192khz_transition_stays_finite();
     test_reset_clears_filter_memory();
     test_ui_updates_are_coalesced_without_losing_the_latest_program();
     write_measurement_evidence_if_requested();

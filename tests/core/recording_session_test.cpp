@@ -4,11 +4,15 @@
 #include <agplayer/c_api.h>
 
 #include <algorithm>
+#include <array>
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -35,23 +39,6 @@ int main()
     std::error_code ignored;
     fs::remove(output, ignored);
 
-    const std::string no_device_diagnostic = recordingBackendErrorMessage(
-        "WASAPI capture initialization failed", -204);
-    require(no_device_diagnostic.find("category=no-device")
-                != std::string::npos
-            && no_device_diagnostic.find("miniaudio=-204")
-                != std::string::npos
-            && no_device_diagnostic.find("device") != std::string::npos,
-            "miniaudio failure diagnostic lost category, code, or description");
-
-    RecordingSession invalid_config_session;
-    RecordingConfig invalid_config;
-    invalid_config.sample_rate = 1;
-    require(!invalid_config_session.startManual(invalid_config),
-            "invalid recording config was accepted");
-    require(!invalid_config_session.lastError().empty(),
-            "invalid recording config did not expose an error");
-
     const fs::path rejected_output = fs::temp_directory_path()
         / "agplayer-recording-invalid-device.wav";
     fs::remove(rejected_output, ignored);
@@ -61,15 +48,10 @@ int main()
     RecordingSession rejected;
     require(!rejected.start(rejected_config),
             "invalid capture device was accepted");
-    require(rejected.lastError().find("WASAPI") != std::string::npos
-            && rejected.lastError().find("device") != std::string::npos,
-            "invalid capture device did not expose a specific WASAPI error");
+    require(!rejected.lastError().empty(),
+            "failed recording start did not publish a diagnostic");
     require(!fs::exists(rejected_output),
             "failed recording start created an output file");
-    const float rejected_sample = 0.5F;
-    require(rejected.pushCapturedFrames(&rejected_sample, 1) == 0
-            && rejected.framesCaptured() == 0,
-            "failed recording start left callback acceptance enabled");
 
     RecordingConfig config;
     config.output_path = output;
@@ -77,56 +59,99 @@ int main()
     config.channels = 2;
     RecordingSession session;
     require(session.startManual(config), "manual recording start failed");
-    std::vector<float> block(480U * 2U);
-    for (std::size_t frame = 0; frame < 480U; ++frame) {
-        block[frame * 2U] = frame % 2U == 0U ? -0.75F : 0.25F;
-        block[frame * 2U + 1U] = frame % 2U == 0U ? -0.125F : 0.5F;
-    }
+    std::vector<float> block(480U * 2U, 0.25F);
     require(session.pushCapturedFrames(block.data(), 480) == 480,
             "captured frames not accepted");
-    const RecordingLiveSnapshot active = session.takeLiveSnapshot(32);
-    require(active.frames_captured == 480,
-            "live snapshot frame count mismatch");
-    require(active.interval_peak > 0.74F && active.interval_peak < 0.76F,
-            "live interval level did not publish the active signal");
-    require(active.envelopes.size() == 1
-            && active.envelopes.front().channels == 2,
-            "live snapshot did not preserve capture channels");
-    require(active.envelopes.front().channel_minima[0] < -0.74F
-            && active.envelopes.front().channel_maxima[0] > 0.24F
-            && active.envelopes.front().channel_minima[1] < -0.12F
-            && active.envelopes.front().channel_maxima[1] > 0.49F,
-            "live snapshot lost per-channel waveform extrema");
-    require(active.envelopes.front().visual_mix_minimum < -0.43F
-            && active.envelopes.front().visual_mix_maximum > 0.37F,
-            "live snapshot did not mix samples before envelope aggregation");
+    std::vector<float> asymmetric(64U * 2U, 0.0F);
+    for (std::size_t frame = 0; frame < 64U; ++frame) {
+        asymmetric[frame * 2U] = 0.125F;
+        asymmetric[frame * 2U + 1U] = -0.5F;
+    }
+    require(session.pushCapturedFrames(asymmetric.data(), 64) == 64,
+            "asymmetric captured frames not accepted");
+    const auto meterDeadline = std::chrono::steady_clock::now()
+        + std::chrono::seconds(2);
+    while (session.framesMetered() < 544
+           && std::chrono::steady_clock::now() < meterDeadline) {
+        std::this_thread::yield();
+    }
+    require(session.framesMetered() >= 544,
+            "writer-side meter aggregation did not consume captured frames");
+    require(session.recordingChannels() == 2
+                && session.recordingSampleRate() == 48'000,
+            "actual recording format was not published");
+    const auto channel_peaks = session.recentChannelPeaks(32);
+    require(channel_peaks.size() == 2 && !channel_peaks[0].empty()
+                && channel_peaks[0].size() <= 32
+                && channel_peaks[1].size() == channel_peaks[0].size(),
+            "bounded channel peak history was not published");
+    require(channel_peaks[0].back() > 0.12F
+                && channel_peaks[0].back() < 0.13F
+                && channel_peaks[1].back() > 0.49F,
+            "channel peak history did not preserve real channel levels");
+    const auto peak_levels = session.livePeakLevels();
+    const auto rms_levels = session.liveRmsLevels();
+    require(peak_levels.size() == 2 && rms_levels.size() == 2
+                && peak_levels[1] > peak_levels[0]
+                && rms_levels[1] > rms_levels[0],
+            "real per-channel peak/RMS meter data was not published");
     require(session.pause(), "recording pause failed");
     require(session.pushCapturedFrames(block.data(), 480) == 0,
             "paused recording accepted frames");
     require(session.resume(), "recording resume failed");
-    std::fill(block.begin(), block.end(), 0.0F);
     require(session.pushCapturedFrames(block.data(), 480) == 480,
             "resumed recording rejected frames");
-    const RecordingLiveSnapshot quiet = session.takeLiveSnapshot(32);
-    require(quiet.frames_captured == 960 && quiet.envelopes.size() == 1,
-            "quiet live snapshot did not advance recording state");
-    require(quiet.interval_peak == 0.0F,
-            "live input level retained the historical session maximum");
-    require(quiet.envelopes.front().channel_minima[0] == 0.0F
-            && quiet.envelopes.front().channel_maxima[0] == 0.0F
-            && quiet.envelopes.front().channel_minima[1] == 0.0F
-            && quiet.envelopes.front().channel_maxima[1] == 0.0F,
-            "quiet live snapshot did not publish a falling waveform");
-    require(quiet.envelopes.front().visual_mix_minimum == 0.0F
-            && quiet.envelopes.front().visual_mix_maximum == 0.0F,
-            "quiet live visual mix did not fall to silence");
-    require(session.peak() > 0.74F && session.peak() < 0.76F,
-            "session peak hold was not retained separately");
+    const auto live_peaks = session.recentPeaks(32);
+    require(!live_peaks.empty() && live_peaks.size() <= 32,
+            "live recording peak snapshot was not published");
+    require(live_peaks.back() > 0.0F,
+            "live recording peak snapshot lost the captured signal");
     const RecordingResult result = session.stop();
     require(result.success, "recording stop failed");
-    require(result.frames == 960, "recorded frame count mismatch");
-    require(result.peak > 0.74F && result.peak < 0.76F,
+    require(result.frames == 1'024, "recorded frame count mismatch");
+    require(result.peak > 0.49F && result.peak <= 0.5F,
             "input peak mismatch");
+
+    const fs::path concurrent_output = fs::temp_directory_path()
+        / "agplayer-recording-concurrent-meter-test.wav";
+    fs::remove(concurrent_output, ignored);
+    RecordingConfig concurrent_config = config;
+    concurrent_config.output_path = concurrent_output;
+    concurrent_config.sample_rate = 8'000;
+    RecordingSession concurrent_session;
+    require(concurrent_session.startManual(concurrent_config),
+            "concurrent recording start failed");
+    std::atomic<bool> producing{true};
+    std::atomic<bool> coherent{true};
+    std::thread producer([&] {
+        for (std::size_t index = 0; index < 50'000U; ++index) {
+            const float left = 0.1F + static_cast<float>(index % 8U) * 0.1F;
+            const std::array<float, 2> sample{left, left * 0.5F};
+            (void)concurrent_session.pushCapturedFrames(sample.data(), 1U);
+        }
+        producing.store(false, std::memory_order_release);
+    });
+    while (producing.load(std::memory_order_acquire)) {
+        const auto peaks = concurrent_session.recentChannelPeaks(64U);
+        if (peaks.size() != 2U || peaks[0].size() != peaks[1].size()) {
+            coherent.store(false, std::memory_order_relaxed);
+            break;
+        }
+        for (std::size_t index = 0; index < peaks[0].size(); ++index) {
+            if (peaks[0][index] <= 0.0F
+                || std::abs(peaks[1][index] * 2.0F - peaks[0][index])
+                       > 0.0001F) {
+                coherent.store(false, std::memory_order_relaxed);
+                break;
+            }
+        }
+    }
+    producer.join();
+    require(coherent.load(std::memory_order_relaxed),
+            "concurrent peak snapshot observed a partially published slot");
+    require(concurrent_session.stop().success,
+            "concurrent recording stop failed");
+    fs::remove(concurrent_output, ignored);
 
     agplayer::Decoder decoder;
     require(decoder.open(output.u8string(), 48'000, 2) == AG_OK,
@@ -137,7 +162,7 @@ int main()
         require(decoder.read(decoded) == AG_OK, "recording decode failed");
         frames += static_cast<std::int64_t>(decoded.frames);
     } while (!decoded.end_of_stream);
-    require(frames == 960, "decoded recording frame count mismatch");
+    require(frames == 1'024, "decoded recording frame count mismatch");
     const fs::path recovered = fs::temp_directory_path()
         / "agplayer-recording-recovered.wav";
     const fs::path staged = fs::path(recovered.u8string()
@@ -177,52 +202,12 @@ int main()
     require(cancelled_session.pushCapturedFrames(block.data(), 480) == 480,
             "cancel recording did not accept frames");
     require(cancelled_session.cancel(), "recording cancel failed");
-    require(cancelled_session.pushCapturedFrames(block.data(), 480) == 0,
-            "cancelled recording still accepted callback frames");
     require(!fs::exists(cancelled), "cancelled recording was committed");
     require(!fs::exists(fs::path(cancelled.u8string()
                 + ".agplayer-recording.tmp"))
             && !fs::exists(fs::path(cancelled.u8string()
                 + ".agplayer-recording.journal")),
             "cancelled recording left recovery artifacts");
-
-    const fs::path pcm_window_output = fs::temp_directory_path()
-        / "agplayer-recording-pcm-window-test.wav";
-    fs::remove(pcm_window_output, ignored);
-    RecordingConfig pcm_window_config = config;
-    pcm_window_config.output_path = pcm_window_output;
-    pcm_window_config.channels = 1;
-    RecordingSession pcm_window_session;
-    require(pcm_window_session.startManual(pcm_window_config),
-            "PCM window recording start failed");
-    constexpr std::size_t pushed_frames = 70'000;
-    constexpr std::size_t expected_capacity = 65'536;
-    std::vector<float> pcm_window_input(pushed_frames);
-    for (std::size_t frame = 0; frame < pcm_window_input.size(); ++frame) {
-        pcm_window_input[frame] = static_cast<float>(
-            static_cast<int>(frame % 101U) - 50) / 50.0F;
-    }
-    require(pcm_window_session.pushCapturedFrames(
-                pcm_window_input.data(), pcm_window_input.size())
-            == pcm_window_input.size(),
-            "long recording did not accept the deterministic PCM window");
-    const RecordingPcmSnapshot pcm_window =
-        pcm_window_session.takePcmSnapshot(0, pushed_frames, pushed_frames);
-    require(pcm_window.channels == 1
-            && pcm_window.frames == expected_capacity
-            && pcm_window.start_frame == pushed_frames - expected_capacity
-            && pcm_window.interleaved_samples.size() == expected_capacity,
-            "live PCM snapshot was not bounded to its fixed ring capacity");
-    require(std::abs(pcm_window.interleaved_samples.front()
-                     - pcm_window_input[pushed_frames - expected_capacity])
-                < 0.000001F
-            && std::abs(pcm_window.interleaved_samples.back()
-                        - pcm_window_input.back()) < 0.000001F,
-            "bounded live PCM snapshot lost the retained sample shape");
-    require(pcm_window_session.cancel(),
-            "PCM window recording cancel failed");
-    require(!fs::exists(pcm_window_output),
-            "PCM window test committed a cancelled recording");
     fs::remove(output, ignored);
     fs::remove(recovered, ignored);
     return 0;

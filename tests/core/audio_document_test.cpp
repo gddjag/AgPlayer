@@ -235,7 +235,7 @@ private slots:
 
         QVERIFY(fadeIn ? value.fadeIn() : value.fadeOut());
 
-        const AudioEvent& faded = value.timelineSnapshot().events.front();
+        const AudioEvent faded = value.timelineSnapshot().events.front();
         QCOMPARE(faded.fadeIn, fadeIn ? SampleFrame{800} : SampleFrame{200});
         QCOMPARE(faded.fadeOut, fadeIn ? SampleFrame{200} : SampleFrame{800});
         QVERIFY(value.undo());
@@ -417,6 +417,190 @@ private slots:
         const auto afterUndo = value.timelineSnapshot().events.front().envelope;
         QCOMPARE(afterUndo.size(), std::size_t{1});
         QCOMPARE(afterUndo.front().offset, SampleFrame{700});
+    }
+
+    void eventGainIsBoundedTransactionalAndUndoable()
+    {
+        auto value = document();
+        const auto initialState = value.historyStateId();
+
+        QVERIFY(value.setEventGain(1, 3.0F));
+        QCOMPARE(value.timelineSnapshot().events.front().gain, 2.0F);
+        QCOMPARE(value.historyStateId(), initialState + 1);
+        QVERIFY(value.setEventGain(1, -0.5F));
+        QCOMPARE(value.timelineSnapshot().events.front().gain, 0.0F);
+        QCOMPARE(value.historyStateId(), initialState + 2);
+
+        QVERIFY(value.undo());
+        QCOMPARE(value.timelineSnapshot().events.front().gain, 2.0F);
+        QVERIFY(value.undo());
+        QCOMPARE(value.timelineSnapshot().events.front().gain, 1.0F);
+        QVERIFY(value.redo());
+        QCOMPARE(value.timelineSnapshot().events.front().gain, 2.0F);
+    }
+
+    void envelopePointMoveRemoveClampCollisionAndLimitAreTransactional()
+    {
+        auto value = document(1'000);
+        QVERIFY(value.addEnvelopePoint(1, 200, 0.5F));
+        QVERIFY(value.addEnvelopePoint(1, 700, 1.5F));
+        const auto beforeMove = value.historyStateId();
+
+        QVERIFY(value.moveEnvelopePoint(1, 200, -50, 3.0F));
+        const auto moved = value.timelineSnapshot().events.front().envelope;
+        QCOMPARE(moved.size(), std::size_t{2});
+        QCOMPARE(moved[0].offset, SampleFrame{0});
+        QCOMPARE(moved[0].gain, 2.0F);
+        QCOMPARE(value.historyStateId(), beforeMove + 1);
+
+        const auto collisionSnapshot = value.timelineSnapshot();
+        const auto collisionState = value.historyStateId();
+        QVERIFY(!value.moveEnvelopePoint(1, 0, 700, 0.75F));
+        QCOMPARE(value.timelineSnapshot().revision, collisionSnapshot.revision);
+        QCOMPARE(value.historyStateId(), collisionState);
+
+        QVERIFY(value.removeEnvelopePoint(1, 700));
+        QCOMPARE(value.timelineSnapshot().events.front().envelope.size(),
+                 std::size_t{1});
+        QVERIFY(value.undo());
+        QCOMPARE(value.timelineSnapshot().events.front().envelope.size(),
+                 std::size_t{2});
+
+        auto limited = document(1'000);
+        for (std::size_t index = 0; index < kMaxEnvelopePoints; ++index) {
+            QVERIFY(limited.addEnvelopePoint(
+                1, static_cast<SampleFrame>(index * 10), 1.0F));
+        }
+        const auto full = limited.timelineSnapshot();
+        const auto fullState = limited.historyStateId();
+        QVERIFY(!limited.addEnvelopePoint(1, 999, 1.0F));
+        QCOMPARE(limited.timelineSnapshot().revision, full.revision);
+        QCOMPARE(limited.historyStateId(), fullState);
+    }
+
+    void splitClipsAndRebasesEnvelopeWithInterpolatedBoundary()
+    {
+        const auto source = std::make_shared<const AudioSource>(AudioSource{
+            "fixture.wav", 48'000, 2, 1'000});
+        AudioEvent event{1, source, 0, 1'000, 0};
+        event.envelope = {{100, 0.5F}, {500, 1.5F}, {900, 0.25F}};
+        auto value = AudioDocument::fromEvents({event});
+
+        QVERIFY(value.splitEventAt(1, 400));
+        const auto split = value.timelineSnapshot();
+        QCOMPARE(split.events.size(), std::size_t{2});
+        QCOMPARE(split.events[0].envelope.size(), std::size_t{2});
+        QCOMPARE(split.events[0].envelope[0].offset, SampleFrame{100});
+        QCOMPARE(split.events[0].envelope[1].offset, SampleFrame{399});
+        QVERIFY(std::abs(split.events[0].envelope[1].gain - 1.2475F)
+                < 0.0001F);
+        QCOMPARE(split.events[1].envelope.size(), std::size_t{3});
+        QCOMPARE(split.events[1].envelope[0].offset, SampleFrame{0});
+        QVERIFY(std::abs(split.events[1].envelope[0].gain - 1.25F) < 0.0001F);
+        QCOMPARE(split.events[1].envelope[1].offset, SampleFrame{100});
+        QCOMPARE(split.events[1].envelope[1].gain, 1.5F);
+        QCOMPARE(split.events[1].envelope[2].offset, SampleFrame{500});
+        QCOMPARE(split.events[1].envelope[2].gain, 0.25F);
+
+        QVERIFY(value.undo());
+        const auto restored = value.timelineSnapshot().events.front().envelope;
+        QCOMPARE(restored.size(), event.envelope.size());
+        QCOMPARE(restored[0].offset, event.envelope[0].offset);
+        QCOMPARE(restored[1].gain, event.envelope[1].gain);
+        QCOMPARE(restored[2].offset, event.envelope[2].offset);
+        QVERIFY(value.redo());
+        QCOMPARE(value.timelineSnapshot().events.size(), std::size_t{2});
+    }
+
+    void leftAndRightTrimPreserveEnvelopeShapeWithinRemainingAudio()
+    {
+        const auto source = std::make_shared<const AudioSource>(AudioSource{
+            "fixture.wav", 48'000, 2, 1'000});
+        AudioEvent event{1, source, 0, 1'000, 0};
+        event.envelope = {{100, 0.5F}, {500, 1.5F}, {900, 0.25F}};
+
+        auto leftTrimmed = AudioDocument::fromEvents({event});
+        QVERIFY(leftTrimmed.trimEvent(1, 400, 1'000, 400));
+        const auto left = leftTrimmed.timelineSnapshot().events.front().envelope;
+        QCOMPARE(left.size(), std::size_t{3});
+        QCOMPARE(left[0].offset, SampleFrame{0});
+        QVERIFY(std::abs(left[0].gain - 1.25F) < 0.0001F);
+        QCOMPARE(left[1].offset, SampleFrame{100});
+        QCOMPARE(left[2].offset, SampleFrame{500});
+
+        auto rightTrimmed = AudioDocument::fromEvents({event});
+        QVERIFY(rightTrimmed.trimEvent(1, 0, 600, 0));
+        const auto right = rightTrimmed.timelineSnapshot().events.front().envelope;
+        QCOMPARE(right.size(), std::size_t{3});
+        QCOMPARE(right[0].offset, SampleFrame{100});
+        QCOMPARE(right[1].offset, SampleFrame{500});
+        QCOMPARE(right[2].offset, SampleFrame{599});
+        QVERIFY(std::abs(right[2].gain - 1.190625F) < 0.0001F);
+    }
+
+    void cropRebasesEnvelopeAndInsertsSelectionBoundaryValue()
+    {
+        const auto source = std::make_shared<const AudioSource>(AudioSource{
+            "fixture.wav", 48'000, 2, 1'000});
+        AudioEvent event{1, source, 0, 1'000, 0};
+        event.envelope = {{100, 0.5F}, {500, 1.5F}, {900, 0.25F}};
+        auto value = AudioDocument::fromEvents({event});
+        QVERIFY(value.setSelection({400, 800}));
+
+        QVERIFY(value.cropToSelection());
+        const auto cropped = value.timelineSnapshot();
+        QCOMPARE(cropped.events.size(), std::size_t{1});
+        QCOMPARE(cropped.events.front().timelineStart, SampleFrame{0});
+        QCOMPARE(cropped.events.front().sourceStart, SampleFrame{400});
+        QCOMPARE(cropped.events.front().sourceEnd, SampleFrame{800});
+        const auto envelope = cropped.events.front().envelope;
+        QCOMPARE(envelope.size(), std::size_t{3});
+        QCOMPARE(envelope[0].offset, SampleFrame{0});
+        QVERIFY(std::abs(envelope[0].gain - 1.25F) < 0.0001F);
+        QCOMPARE(envelope[1].offset, SampleFrame{100});
+        QCOMPARE(envelope[1].gain, 1.5F);
+        QCOMPARE(envelope[2].offset, SampleFrame{399});
+        QVERIFY(std::abs(envelope[2].gain - 0.565625F) < 0.0001F);
+    }
+
+    void trimOfFullEnvelopeKeepsBoundaryAndDeterministicallyFitsLimit()
+    {
+        const auto source = std::make_shared<const AudioSource>(AudioSource{
+            "fixture.wav", 48'000, 2, 1'000});
+        AudioEvent event{1, source, 0, 1'000, 0};
+        for (std::size_t index = 0; index < kMaxEnvelopePoints; ++index) {
+            event.envelope.push_back({
+                static_cast<SampleFrame>(10 + index * 10),
+                0.5F + static_cast<float>(index) / 128.0F});
+        }
+        QVERIFY(isValid(event));
+
+        auto first = AudioDocument::fromEvents({event});
+        auto second = AudioDocument::fromEvents({event});
+        QVERIFY(first.trimEvent(1, 5, 1'000, 5));
+        QVERIFY(second.trimEvent(1, 5, 1'000, 5));
+        const auto firstSnapshot = first.timelineSnapshot();
+        const auto secondSnapshot = second.timelineSnapshot();
+        const AudioEvent& trimmed = firstSnapshot.events.front();
+        const AudioEvent& repeated = secondSnapshot.events.front();
+        QCOMPARE(trimmed.envelope.size(), kMaxEnvelopePoints);
+        QCOMPARE(trimmed.envelope.size(), repeated.envelope.size());
+        for (std::size_t index = 0; index < trimmed.envelope.size(); ++index) {
+            QCOMPARE(trimmed.envelope[index].offset,
+                     repeated.envelope[index].offset);
+            QCOMPARE(trimmed.envelope[index].gain,
+                     repeated.envelope[index].gain);
+        }
+        QCOMPARE(trimmed.envelope.front().offset, SampleFrame{0});
+        QVERIFY(std::abs(trimmed.envelope.front().gain - 0.75F) < 0.0001F);
+        QCOMPARE(trimmed.envelope.back().offset, SampleFrame{635});
+        QCOMPARE(trimmed.envelope.back().gain, event.envelope.back().gain);
+        QVERIFY(isValid(trimmed));
+        for (SampleFrame offset = 0; offset < audibleFrames(trimmed);
+             offset += 5) {
+            QVERIFY(std::abs(envelopeGainAt(trimmed, offset)
+                - envelopeGainAt(event, offset + 5)) < 0.0001F);
+        }
     }
 };
 

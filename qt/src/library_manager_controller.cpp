@@ -396,6 +396,25 @@ bool LibraryManagerController::removeMonitoredFolder(const QString& folder)
     return true;
 }
 
+bool LibraryManagerController::removeTrackFromLibrary(const QString& trackId)
+{
+    if (library_ == nullptr) return false;
+    const TrackRecord* const track = library_->recordForId(trackId);
+    if (track == nullptr) return false;
+    const QString path = canonicalLibraryPath(track->path);
+    if (path.isEmpty()) return false;
+    const QString key = resourceLookupKey(path);
+    excludedPaths_.insert(key, path);
+    if (!saveMonitoredFolders()) {
+        excludedPaths_.remove(key);
+        return false;
+    }
+    if (library_->removeTrack(trackId)) return true;
+    excludedPaths_.remove(key);
+    saveMonitoredFolders();
+    return false;
+}
+
 void LibraryManagerController::rescan()
 {
     debounce_.stop();
@@ -468,7 +487,8 @@ void LibraryManagerController::rescan()
             const QStringList discovered =
                 result.value(QStringLiteral("discovered")).toStringList();
             for (const QString& path : discovered) {
-                if (library_ == nullptr || !library_->containsPath(path))
+                if (!excludedPaths_.contains(resourceLookupKey(path))
+                    && (library_ == nullptr || !library_->containsPath(path)))
                     newFiles.append(path);
             }
             if (!newFiles.isEmpty()) importer_->importPaths(newFiles);
@@ -701,13 +721,40 @@ ImportController* LibraryManagerController::importController() const noexcept
 void LibraryManagerController::setImportController(ImportController* controller)
 {
     if (importer_ == controller) return;
+    if (importer_ != nullptr) importer_->disconnect(this);
     importer_ = controller;
+    if (importer_ != nullptr) {
+        connect(importer_, &ImportController::importedTrackIdsChanged, this,
+                [this] {
+            if (library_ == nullptr || importer_ == nullptr) return;
+            QHash<QString, QString> removedExclusions;
+            for (const QString& trackId : importer_->importedTrackIds()) {
+                const TrackRecord* const track = library_->recordForId(trackId);
+                if (track == nullptr) continue;
+                const QString key = resourceLookupKey(track->path);
+                const auto exclusion = excludedPaths_.constFind(key);
+                if (exclusion == excludedPaths_.cend()) continue;
+                removedExclusions.insert(key, exclusion.value());
+                excludedPaths_.remove(key);
+            }
+            if (!removedExclusions.isEmpty() && !saveMonitoredFolders()) {
+                for (auto it = removedExclusions.cbegin();
+                     it != removedExclusions.cend(); ++it)
+                    excludedPaths_.insert(it.key(), it.value());
+            }
+        });
+    }
     emit importControllerChanged();
 }
 
 QString LibraryManagerController::storagePath() const
 {
     return storagePath_;
+}
+
+QString LibraryManagerController::lastPersistenceError() const
+{
+    return lastPersistenceError_;
 }
 
 QString LibraryManagerController::keyword() const { return keyword_; }
@@ -905,6 +952,7 @@ void LibraryManagerController::applyDirectoryWatches(
 void LibraryManagerController::loadMonitoredFolders()
 {
     monitoredRoots_.clear();
+    excludedPaths_.clear();
     QFile file(storagePath_);
     if (file.open(QIODevice::ReadOnly)) {
         const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
@@ -924,6 +972,13 @@ void LibraryManagerController::loadMonitoredFolders()
                     monitoredRoots_.append(path);
                 }
             }
+            const QJsonArray excluded = document.object()
+                .value(QStringLiteral("excludedPaths")).toArray();
+            for (const QJsonValue& value : excluded) {
+                const QString path = canonicalLibraryPath(value.toString());
+                if (!path.isEmpty())
+                    excludedPaths_.insert(resourceLookupKey(path), path);
+            }
         }
     }
     const QStringList nextDirectories = normalizedResourcePaths(monitoredRoots_);
@@ -934,16 +989,43 @@ void LibraryManagerController::loadMonitoredFolders()
     emit resourceTopologyChanged();
 }
 
-void LibraryManagerController::saveMonitoredFolders() const
+bool LibraryManagerController::saveMonitoredFolders()
 {
-    if (storagePath_.isEmpty()) return;
+    const auto setError = [this](const QString& error) {
+        if (lastPersistenceError_ == error) return;
+        lastPersistenceError_ = error;
+        emit persistenceStateChanged();
+    };
+    if (storagePath_.isEmpty()) {
+        setError({});
+        return true;
+    }
+    QStringList excluded = excludedPaths_.values();
+    std::sort(excluded.begin(), excluded.end(), [](const QString& left,
+                                                   const QString& right) {
+        return left.compare(right, agplayer::qt::resourcePathCaseSensitivity()) < 0;
+    });
     const QByteArray data = QJsonDocument(QJsonObject{
         {QStringLiteral("version"), 1},
         {QStringLiteral("folders"), QJsonArray::fromStringList(monitoredRoots_)},
+        {QStringLiteral("excludedPaths"), QJsonArray::fromStringList(excluded)},
     }).toJson(QJsonDocument::Compact);
     QSaveFile file(storagePath_);
-    if (file.open(QIODevice::WriteOnly) && file.write(data) == data.size())
-        file.commit();
+    if (!file.open(QIODevice::WriteOnly)) {
+        setError(tr("无法保存曲库排除记录：%1").arg(file.errorString()));
+        return false;
+    }
+    if (file.write(data) != data.size()) {
+        file.cancelWriting();
+        setError(tr("无法写入曲库排除记录：%1").arg(file.errorString()));
+        return false;
+    }
+    if (!file.commit()) {
+        setError(tr("无法提交曲库排除记录：%1").arg(file.errorString()));
+        return false;
+    }
+    setError({});
+    return true;
 }
 
 QStringList LibraryManagerController::discoverAudioFiles() const

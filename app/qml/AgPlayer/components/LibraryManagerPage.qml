@@ -113,6 +113,22 @@ Item {
         trackMenu.popup()
     }
 
+    function removeTracksFromLibrary(trackIds) {
+        var failedIds = []
+        for (var index = 0; index < trackIds.length; ++index) {
+            if (!manager.removeTrackFromLibrary(trackIds[index]))
+                failedIds.push(trackIds[index])
+        }
+        selectedTrackIds = failedIds
+        selectedTrackId = failedIds.length > 0 ? failedIds[failedIds.length - 1] : ""
+        if (failedIds.length > 0) removeTrackErrorDialog.open()
+    }
+
+    function openFileDetails(trackId) {
+        fileDetailsPanel.details = fileOps.trackDetails(trackId)
+        fileDetailsPanel.open()
+    }
+
     function selectedFileUrls() {
         var urls = []
         for (var index = 0; index < trackMenu.targetTrackIds.length; ++index) {
@@ -189,37 +205,6 @@ Item {
                                              selectedFolder,
                                              LibraryFileOperations.AutoRename)
     }
-    FileDialog {
-        id: relocateTrackDialog
-        title: qsTr("重新定位文件")
-        fileMode: FileDialog.OpenFile
-        nameFilters: [LibraryManagerController.audioFileNameFilter]
-        onAccepted: fileOps.relocateTrackToUrl(trackMenu.targetTrackId,
-                                               selectedFile)
-    }
-    Dialog {
-        id: renameTrackDialog
-        width: 420
-        title: qsTr("重命名")
-        modal: true
-        anchors.centerIn: parent
-        standardButtons: Dialog.Ok | Dialog.Cancel
-        onOpened: {
-            var details = fileOps.trackDetails(trackMenu.targetTrackId)
-            renameTrackField.text = String(details.fileName || "")
-                    .replace(/\.[^.]+$/, "")
-            renameTrackField.forceActiveFocus()
-            renameTrackField.selectAll()
-        }
-        onAccepted: fileOps.renameTrack(trackMenu.targetTrackId,
-                                        renameTrackField.text)
-        contentItem: TextField { id: renameTrackField }
-        background: Rectangle {
-            color: Theme.elevated
-            border.color: Theme.border
-            radius: Theme.radiusMd
-        }
-    }
     Dialog {
         id: tagTrackDialog
         width: 420
@@ -268,6 +253,107 @@ Item {
             color: Theme.elevated
             border.color: Theme.border
             radius: Theme.radiusMd
+        }
+    }
+
+    Dialog {
+        id: removeTrackErrorDialog
+        objectName: "libraryTrackRemoveErrorDialog"
+        width: 460
+        title: qsTr("无法从列表删除")
+        modal: true
+        anchors.centerIn: parent
+        standardButtons: Dialog.Ok
+        contentItem: Label {
+            text: manager.lastPersistenceError || qsTr("无法保存曲库排除记录")
+            color: Theme.primaryText
+            wrapMode: Text.Wrap
+        }
+        background: Rectangle {
+            color: Theme.elevated
+            border.color: Theme.border
+            radius: Theme.radiusMd
+        }
+    }
+
+    Popup {
+        id: fileDetailsPanel
+        objectName: "libraryAudioFileInfoPanel"
+        property var details: ({})
+        width: 300
+        height: Math.min(root.height - 24, 470)
+        x: root.width - width - 12
+        y: 12
+        modal: false
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        background: Rectangle {
+            color: Theme.elevated
+            border.color: Theme.border
+            radius: Theme.radiusMd
+        }
+        contentItem: ColumnLayout {
+            spacing: 7
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    text: qsTr("文件信息")
+                    color: Theme.primaryText
+                    font.pixelSize: 15
+                    font.weight: Font.DemiBold
+                    Layout.fillWidth: true
+                }
+                ToolButton {
+                    icon.source: Theme.icon("close-fill")
+                    onClicked: fileDetailsPanel.close()
+                    background: null
+                }
+            }
+            Repeater {
+                model: [
+                    [qsTr("格式"), fileDetailsPanel.details.format],
+                    [qsTr("采样率"), fileDetailsPanel.details.sampleRate
+                                      ? fileDetailsPanel.details.sampleRate + " Hz" : ""],
+                    [qsTr("比特率"), fileDetailsPanel.details.bitRate
+                                      ? Math.round(fileDetailsPanel.details.bitRate / 1000) + " kbps" : ""],
+                    [qsTr("时长"), root.formatDuration(fileDetailsPanel.details.durationMs || 0)],
+                    [qsTr("大小"), fileDetailsPanel.details.fileSize
+                                    ? (fileDetailsPanel.details.fileSize / 1048576).toFixed(2) + " MB" : ""],
+                    ["BPM", fileDetailsPanel.details.bpm || ""],
+                    [qsTr("修改时间"), fileDetailsPanel.details.modifiedAt
+                                        ? Qt.formatDateTime(fileDetailsPanel.details.modifiedAt,
+                                                            "yyyy-MM-dd HH:mm:ss") : ""],
+                    [qsTr("目录"), fileDetailsPanel.details.directory],
+                    [qsTr("完整路径"), fileDetailsPanel.details.path],
+                    [qsTr("标签"), (fileDetailsPanel.details.tags || []).join(", ")]
+                ]
+                delegate: RowLayout {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    Text {
+                        text: modelData[0]
+                        color: Theme.secondaryText
+                        Layout.preferredWidth: 62
+                        font.pixelSize: 11
+                    }
+                    Text {
+                        text: modelData[1] || "—"
+                        color: Theme.primaryText
+                        elide: Text.ElideMiddle
+                        Layout.fillWidth: true
+                        font.pixelSize: 11
+                    }
+                }
+            }
+            Image {
+                visible: Boolean(fileDetailsPanel.details.coverUrl)
+                source: fileDetailsPanel.details.coverUrl || ""
+                Layout.preferredWidth: 120
+                Layout.preferredHeight: 120
+                Layout.alignment: Qt.AlignHCenter
+                fillMode: Image.PreserveAspectFit
+            }
+            Item { Layout.fillHeight: true }
         }
     }
 
@@ -366,12 +452,6 @@ Item {
             onTriggered: tagTrackDialog.open()
         }
         SystemMenuItem {
-            objectName: "libraryTrackRename"
-            text: qsTr("重命名")
-            enabled: trackMenu.targetTrackIds.length === 1
-            onTriggered: renameTrackDialog.open()
-        }
-        SystemMenuItem {
             objectName: "libraryTrackMoveFile"
             text: qsTr("移动到指定文件夹")
             onTriggered: moveTrackFolderDialog.open()
@@ -385,24 +465,19 @@ Item {
         SystemMenuItem {
             objectName: "libraryTrackRemove"
             text: qsTr("从列表删除")
-            onTriggered: {
-                for (var index = 0; index < trackMenu.targetTrackIds.length;
-                     ++index)
-                    LibraryModel.removeTrack(trackMenu.targetTrackIds[index])
-                root.selectedTrackIds = []
-                root.selectedTrackId = ""
-            }
+            onTriggered: root.removeTracksFromLibrary(trackMenu.targetTrackIds)
         }
         SystemMenuItem {
             objectName: "libraryTrackTrash"
             text: qsTr("彻底删除至回收站")
             onTriggered: trashTrackDialog.open()
         }
+        MenuSeparator {}
         SystemMenuItem {
-            objectName: "libraryTrackRelocate"
-            text: qsTr("重新定位文件")
+            objectName: "libraryTrackDetails"
+            text: qsTr("查看音频文件信息")
             enabled: trackMenu.targetTrackIds.length === 1
-            onTriggered: relocateTrackDialog.open()
+            onTriggered: root.openFileDetails(trackMenu.targetTrackId)
         }
     }
 
@@ -677,10 +752,7 @@ Item {
                         model: manager
                         boundsBehavior: Flickable.StopAtBounds
                         Keys.onDeletePressed: {
-                            for (var i = 0; i < root.selectedTrackIds.length; ++i)
-                                LibraryModel.removeTrack(root.selectedTrackIds[i])
-                            root.selectedTrackIds = []
-                            root.selectedTrackId = ""
+                            root.removeTracksFromLibrary(root.selectedTrackIds)
                         }
                         delegate: Rectangle {
                             id: row

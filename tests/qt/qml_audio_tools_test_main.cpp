@@ -503,8 +503,26 @@ class QmlAudioToolsSetup final : public QObject {
 public:
     ~QmlAudioToolsSetup() override
     {
+        // Test controllers own workers and several of them retain the player
+        // handle.  Destroy them before the C core so parallel/serial QML test
+        // processes cannot race their teardown against an already freed core.
+        visualFormatTaskModel_.reset();
+        waveformProvider_.reset();
+        themeSettings_.reset();
+        themeManager_.reset();
+        settings_.reset();
+        audioEditor_.reset();
+        formatConverter_.reset();
+        filenameProcessor_.reset();
+        metadataEditor_.reset();
+        audioTools_.reset();
+        windows_.reset();
+        importer_.reset();
+        playback_.reset();
+        library_.reset();
         if (core_ != nullptr) {
             ag_player_destroy(core_);
+            core_ = nullptr;
         }
     }
 

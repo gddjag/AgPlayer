@@ -7,6 +7,7 @@ Rectangle {
     id: root
     color: "transparent"
     property bool emptyMode: false
+    property bool showListWindowButton: true
     property bool volumeExpanded: false
     signal openEqualizerRequested()
 
@@ -45,7 +46,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.leftMargin: 24
         anchors.verticalCenter: parent.verticalCenter
-        anchors.verticalCenterOffset: root.emptyMode ? -4 : -8
+        anchors.verticalCenterOffset: 0
         flat: true
         icon.source: Theme.icon("list-unordered")
         icon.color: WindowController.listWindowVisible
@@ -59,6 +60,7 @@ Rectangle {
         ToolTip.text: Accessible.name
         ToolTip.visible: hovered
         background: null
+        visible: root.showListWindowButton
     }
 
     RowLayout {
@@ -66,22 +68,8 @@ Rectangle {
         objectName: "centerPlaybackControls"
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.verticalCenter: parent.verticalCenter
-        anchors.verticalCenterOffset: root.emptyMode ? -4 : -8
+        anchors.verticalCenterOffset: 0
         spacing: root.emptyMode ? 28 : 16
-
-        ToolButton {
-            objectName: "audioToolsButton"
-            flat: true
-            icon.source: Theme.icon("briefcase-4-line")
-            icon.color: Theme.iconPrimary
-            icon.width: 20
-            icon.height: 20
-            Accessible.name: qsTr("Open audio tools")
-            onClicked: WindowController.showAudioTools()
-            ToolTip.text: Accessible.name
-            ToolTip.visible: hovered
-            background: null
-        }
 
         ToolButton {
             objectName: "equalizerButton"
@@ -91,7 +79,7 @@ Rectangle {
             icon.width: 20
             icon.height: 20
             contentItem.rotation: 90
-            Accessible.name: qsTr("十段图形均衡器")
+            Accessible.name: qsTr("十八段图形均衡器")
             onClicked: root.openEqualizerRequested()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
@@ -203,6 +191,7 @@ Rectangle {
             ToolTip.visible: hovered
             background: null
         }
+
     }
 
     Item {
@@ -347,22 +336,94 @@ Rectangle {
             }
         }
 
-    ToolButton {
-        objectName: "miniPlayerButton"
+    RowLayout {
+        id: secondaryActions
+        objectName: "playerSecondaryActions"
         anchors.right: parent.right
         anchors.rightMargin: 24
         anchors.verticalCenter: parent.verticalCenter
-        anchors.verticalCenterOffset: -8
-        visible: !root.emptyMode
-        flat: true
-        icon.source: Theme.icon("picture-in-picture-2-line")
-        icon.color: Theme.iconPrimary
-        icon.width: 20
-        icon.height: 20
-        Accessible.name: qsTr("Switch to mini player")
-        onClicked: WindowController.showMini()
-        ToolTip.text: Accessible.name
-        ToolTip.visible: hovered
-        background: null
+        anchors.verticalCenterOffset: 0
+        spacing: 14
+
+        ToolButton {
+            objectName: "audioToolsButton"
+            flat: true
+            icon.source: Theme.icon("briefcase-4-line")
+            icon.color: Theme.iconPrimary
+            icon.width: 20
+            icon.height: 20
+            Accessible.name: qsTr("Open audio tools")
+            onClicked: WindowController.showAudioTools()
+            ToolTip.text: Accessible.name
+            ToolTip.visible: hovered
+            background: null
+        }
+
+        ToolButton {
+            id: playerShellModeButton
+            objectName: "playerShellModeButton"
+            flat: true
+            icon.source: Theme.icon("player-shell-mode")
+            icon.color: Theme.iconPrimary
+            icon.width: 20
+            icon.height: 20
+            Accessible.name: qsTr("选择播放器皮肤模式")
+            onClicked: playerExperienceModeMenu.open()
+            ToolTip.text: Accessible.name
+            ToolTip.visible: hovered
+            background: null
+        }
+
+        ToolButton {
+            objectName: "miniPlayerButton"
+            visible: !root.emptyMode
+            flat: true
+            icon.source: Theme.icon("picture-in-picture-2-line")
+            icon.color: Theme.iconPrimary
+            icon.width: 20
+            icon.height: 20
+            Accessible.name: qsTr("Switch to mini player")
+            onClicked: WindowController.showMini()
+            ToolTip.text: Accessible.name
+            ToolTip.visible: hovered
+            background: null
+        }
+    }
+
+    Menu {
+        id: playerExperienceModeMenu
+        objectName: "playerExperienceModeMenu"
+        parent: root
+        x: Math.max(8, root.width - implicitWidth - 56)
+        y: -implicitHeight - 6
+        width: 188
+
+        MenuItem {
+            objectName: "classicShellModeMenuItem"
+            text: qsTr("双窗口模式")
+            checkable: true
+            checked: SettingsController.playerShellMode === 0
+            onClicked: SettingsController.playerShellMode = 0
+        }
+        MenuItem {
+            objectName: "integratedShellModeMenuItem"
+            text: qsTr("单窗口模式")
+            checkable: true
+            checked: SettingsController.playerShellMode === 1
+            onClicked: SettingsController.playerShellMode = 1
+        }
+        MenuSeparator {}
+        MenuItem {
+            objectName: "immersiveVisualModeMenuItem"
+            text: qsTr("沉浸视觉模式（待集成）")
+            enabled: false
+        }
+
+        background: Rectangle {
+            color: Theme.elevated
+            border.color: Theme.subtleGlassBorder
+            border.width: 1
+            radius: Theme.radiusSm
+        }
     }
 }

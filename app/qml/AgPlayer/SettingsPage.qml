@@ -1138,8 +1138,8 @@ Item {
                         valueModel: [
                             { text: "🇨🇳 中文", value: "zh" },
                             { text: "🇺🇸 English", value: "en" },
-                            { text: "🇹🇭 \u0E20\u0E32\u0E29\u0E32\u0E44\u0E17\u0E22", value: "th" },
-                            { text: "🇻🇳 Ti\u1EBFng Vi\u1EC7t", value: "vi" }
+                            { text: "🇹🇭 ไทย", value: "th" },
+                            { text: "🇻🇳 Tiếng Việt", value: "vi" }
                         ]
                         currentIndex: {
                             const values = ["zh", "en", "th", "vi"]
@@ -1482,6 +1482,21 @@ Item {
                 title: qsTr("主题样式")
 
                 SettingRow {
+                    label: qsTr("窗口主题")
+                    SettingCombo {
+                        objectName: "windowLayoutThemeCombo"
+                        anchors.verticalCenter: parent.verticalCenter
+                        valueModel: [
+                            { text: qsTr("双窗口主题"), value: "dual-window" },
+                            { text: qsTr("单窗口主题"), value: "single-window" }
+                        ]
+                        currentIndex: SettingsController.windowLayoutTheme === "single-window"
+                                      ? 1 : 0
+                        onActivated: SettingsController.windowLayoutTheme = currentValue
+                    }
+                }
+
+                SettingRow {
                     label: qsTr("主题模式")
                     RowLayout {
                         anchors.fill: parent
@@ -1489,12 +1504,16 @@ Item {
 
                         Repeater {
                             model: [
-                                { text: qsTr("跟随系统"), value: 2 },
-                                { text: qsTr("浅色"), value: 1 },
-                                { text: qsTr("深色"), value: 0 }
+                                { text: qsTr("跟随系统"), value: 2,
+                                  objectName: "themeModeSystem" },
+                                { text: qsTr("浅色"), value: 1,
+                                  objectName: "themeModeLight" },
+                                { text: qsTr("深色"), value: 0,
+                                  objectName: "themeModeDark" }
                             ]
 
                             delegate: Button {
+                                objectName: modelData.objectName
                                 text: modelData.text
                                 checked: SettingsController.themeMode === modelData.value
                                 checkable: true
@@ -1530,7 +1549,7 @@ Item {
                         id: skinSelector
                         objectName: "themeSkinColorSelector"
                         anchors.fill: parent
-                        title: qsTr("主题皮肤颜色")
+                        title: qsTr("推荐颜色")
                         selectedMode: SettingsController.skinColorMode
                         selectedPreset: SettingsController.skinPreset
                         customKind: SettingsController.skinCustomKind

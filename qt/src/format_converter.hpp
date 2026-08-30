@@ -29,6 +29,10 @@ bool commit_staged_output(const QString& stagedPath,
                           OutputCommitMode mode,
                           const std::function<void()>& beforeCommit = {});
 
+bool validate_audio_output(const QString& path,
+                           const QVariantMap& resolvedProfile,
+                           QString& error);
+
 } // namespace format_converter_detail
 
 template <typename T>
@@ -44,7 +48,9 @@ class FormatConverter final : public QObject {
     Q_PROPERTY(double progress READ progress NOTIFY progressChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
     Q_PROPERTY(int fileCount READ fileCount NOTIFY fileCountChanged)
+    Q_PROPERTY(int finishedCount READ completedCount NOTIFY completedCountChanged)
     Q_PROPERTY(int completedCount READ completedCount NOTIFY completedCountChanged)
+    Q_PROPERTY(int doneCount READ doneCount NOTIFY doneCountChanged)
     Q_PROPERTY(int failedCount READ failedCount NOTIFY failedCountChanged)
     Q_PROPERTY(QVariantList files READ files NOTIFY filesChanged)
     Q_PROPERTY(QVariantList supportedOutputFormats READ supportedOutputFormats CONSTANT)
@@ -75,6 +81,7 @@ public:
     bool busy() const noexcept;
     int fileCount() const noexcept;
     int completedCount() const noexcept;
+    int doneCount() const noexcept;
     int failedCount() const noexcept;
     QVariantList files() const;
     QVariantList supportedOutputFormats() const;
@@ -163,6 +170,7 @@ signals:
     void busyChanged();
     void fileCountChanged();
     void completedCountChanged();
+    void doneCountChanged();
     void failedCountChanged();
     void filesChanged();
     void transcodeCompleted(int successCount, int failureCount);
@@ -263,6 +271,7 @@ private:
     std::atomic<double> progress_{0.0};
     std::atomic<bool> busy_{false};
     std::atomic<int> completedCount_{0};
+    std::atomic<int> doneCount_{0};
     std::atomic<int> failedCount_{0};
     QMutex tokenMutex_;
     QHash<int, ag_cancel_token*> activeTokens_;
@@ -290,6 +299,7 @@ private:
     void setBusy(bool value);
     void setProgress(double value);
     void setCompletedCount(int value);
+    void setDoneCount(int value);
     void setFailedCount(int value);
     void setEntryStatus(int index, FileStatus status);
     void setEntryError(int index, const QString& error);
@@ -345,5 +355,6 @@ private:
                       const QString& channelLayout,
                       int audioStreamIndex,
                       bool preserveDirectories,
+                      int parallelJobs,
                       const QVector<FrozenConversionJob>& plannedJobs);
 };

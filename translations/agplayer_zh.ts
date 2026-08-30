@@ -117,7 +117,32 @@
     <message><source>处理</source><translation>处理</translation></message>
     <message><source>导出</source><translation>导出</translation></message>
     <message><source>选择音频导出目录</source><translation>选择音频导出目录</translation></message>
-    <message><source>空格 = 播放 / 暂停       S = 在播放头处分割       Delete = 删除片段       Ctrl+C / X / V = 复制 / 剪切 / 粘贴       Ctrl+Z / Y = 撤销 / 重做</source><translation>空格 = 播放 / 暂停       S = 在播放头处分割       Delete = 删除片段       Ctrl+C / X / V = 复制 / 剪切 / 粘贴       Ctrl+Z / Y = 撤销 / 重做</translation></message>
+    <message><source>音频源不可用：</source><translation>音频源不可用：</translation></message>
+    <message><source>重新定位文件</source><translation>重新定位文件</translation></message>
+    <message><source>（单声道）</source><translation>（单声道）</translation></message>
+    <message><source>（立体声）</source><translation>（立体声）</translation></message>
+    <message><source>选择录音设备（Alt+R）</source><translation>选择录音设备（Alt+R）</translation></message>
+    <message><source>暂停 / 继续录音（Shift+R）</source><translation>暂停 / 继续录音（Shift+R）</translation></message>
+    <message><source>开始 / 继续录音（R）</source><translation>开始 / 继续录音（R）</translation></message>
+    <message><source>停止并保存录音（Ctrl+R）</source><translation>停止并保存录音（Ctrl+R）</translation></message>
+    <message><source>跳到开头（Home）</source><translation>跳到开头（Home）</translation></message>
+    <message><source>后退 5 秒（←）</source><translation>后退 5 秒（←）</translation></message>
+    <message><source>播放 / 暂停（Space）</source><translation>播放 / 暂停（Space）</translation></message>
+    <message><source>前进 5 秒（→）</source><translation>前进 5 秒（→）</translation></message>
+    <message><source>快进 5 秒</source><translation>快进 5 秒</translation></message>
+    <message><source>停止（Ctrl+Space）</source><translation>停止（Ctrl+Space）</translation></message>
+    <message><source>空格 = 播放 / 暂停</source><translation>空格 = 播放 / 暂停</translation></message>
+    <message><source>S = 在播放头处分割</source><translation>S = 在播放头处分割</translation></message>
+    <message><source>Delete = 删除片段</source><translation>Delete = 删除片段</translation></message>
+    <message><source>Ctrl+C / X / V = 复制 / 剪切 / 粘贴</source><translation>Ctrl+C / X / V = 复制 / 剪切 / 粘贴</translation></message>
+    <message><source>Ctrl+Z / Y = 撤销 / 重做</source><translation>Ctrl+Z / Y = 撤销 / 重做</translation></message>
+    <message><source>Ctrl+拖动 = 快速复制片段</source><translation>Ctrl+拖动 = 快速复制片段</translation></message>
+    <message><source>Ctrl+鼠标滚轮 = 放大 / 缩小时间线</source><translation>Ctrl+鼠标滚轮 = 放大 / 缩小时间线</translation></message>
+    <message><source>Shift+鼠标滚轮 = 横向滚动</source><translation>Shift+鼠标滚轮 = 横向滚动</translation></message>
+    <message><source>拖拽片段边缘 = 修剪</source><translation>拖拽片段边缘 = 修剪</translation></message>
+    <message><source>拖拽右上角 = 调整淡出</source><translation>拖拽右上角 = 调整淡出</translation></message>
+    <message><source>双击音量线 = 添加控制点</source><translation>双击音量线 = 添加控制点</translation></message>
+    <message><source>空格 = 播放 / 暂停       R = 开始录音       Shift+R = 暂停 / 继续录音       Ctrl+R = 停止并保存       S = 在播放头处分割       Delete = 删除片段       Ctrl+C / X / V = 复制 / 剪切 / 粘贴       Ctrl+Z / Y = 撤销 / 重做</source><translation>空格 = 播放 / 暂停       R = 开始录音       Shift+R = 暂停 / 继续录音       Ctrl+R = 停止并保存       S = 在播放头处分割       Delete = 删除片段       Ctrl+C / X / V = 复制 / 剪切 / 粘贴       Ctrl+Z / Y = 撤销 / 重做</translation></message>
     <message><source>Ctrl+拖动 = 快速复制片段       Ctrl+鼠标滚轮 = 放大 / 缩小时间线       Shift+鼠标滚轮 = 横向滚动       拖拽片段边缘 = 修剪       拖拽右上角 = 调整淡出       双击音量线 = 添加控制点</source><translation>Ctrl+拖动 = 快速复制片段       Ctrl+鼠标滚轮 = 放大 / 缩小时间线       Shift+鼠标滚轮 = 横向滚动       拖拽片段边缘 = 修剪       拖拽右上角 = 调整淡出       双击音量线 = 添加控制点</translation></message>
     <message><source>未检测到输入设备</source><translation>未检测到输入设备</translation></message>
     <message><source>BPM</source><translation>BPM</translation></message>
@@ -522,7 +547,7 @@
         <source>编辑设置</source>
         <translation>编辑设置</translation>
     </message>
-    <message><source>继续录音</source><translation>继续录音</translation></message><message><source>跳到末尾</source><translation>跳到末尾</translation></message><message><source>选择录音设备</source><translation>选择录音设备</translation></message><message><source>暂停录音</source><translation>暂停录音</translation></message>
+    <message><source>继续录音</source><translation>继续录音</translation></message><message><source>跳到末尾</source><translation>跳到末尾</translation></message><message><source>选择录音设备</source><translation>选择录音设备</translation></message><message><source>暂停录音</source><translation>暂停录音</translation></message><message><source>停止并保存录音</source><translation>停止并保存录音</translation></message>
     <message><source>展开导出设置</source><translation>展开导出设置</translation></message><message><source>展开录音设置</source><translation>展开录音设置</translation></message><message><source>展开升降调设置</source><translation>展开升降调设置</translation></message><message><source>展开速度设置</source><translation>展开速度设置</translation></message><message><source>展开音调保护设置</source><translation>展开音调保护设置</translation></message>
     <message><source>折叠导出设置</source><translation>折叠导出设置</translation></message><message><source>折叠录音设置</source><translation>折叠录音设置</translation></message><message><source>折叠升降调设置</source><translation>折叠升降调设置</translation></message><message><source>折叠速度设置</source><translation>折叠速度设置</translation></message><message><source>折叠音调保护设置</source><translation>折叠音调保护设置</translation></message>
     <message><source>停止录音</source><translation>停止录音</translation></message>
@@ -576,8 +601,8 @@
     <message>
         <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="17"/>
         <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="99"/>
-        <source>音频工具</source>
-        <translation>音频工具</translation>
+        <source>AgPlayer 音频编辑</source>
+        <translation>AgPlayer 音频编辑</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/AudioToolsWindow.qml" line="45"/>
@@ -775,6 +800,7 @@
 </context>
 <context>
     <name>EditorWaveformCanvas</name>
+    <message><source>拖出片段</source><translation>拖出片段</translation></message>
     <message><source>淡出控制点</source><translation>淡出控制点</translation></message>
     <message>
         <location filename="../app/qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml" line="173"/>
@@ -891,33 +917,37 @@
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="380"/>
-        <source>Bass Boost</source>
-        <translation>低频增强</translation>
+        <source>Bass</source>
+        <translation>重低音</translation>
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="382"/>
-        <source>Bass Cut</source>
-        <translation>低频衰减</translation>
+        <source>Classical</source>
+        <translation>古典</translation>
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="384"/>
-        <source>Vocal Clarity</source>
-        <translation>人声清晰</translation>
+        <source>Pop</source>
+        <translation>流行</translation>
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="386"/>
-        <source>Treble Boost</source>
-        <translation>高频增强</translation>
+        <source>Rock</source>
+        <translation>摇滚</translation>
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="388"/>
-        <source>Treble Cut</source>
-        <translation>高频衰减</translation>
+        <source>Vocal</source>
+        <translation>人声</translation>
     </message>
     <message>
         <location filename="../qt/src/equalizer_controller.cpp" line="390"/>
-        <source>Rock</source>
-        <translation>摇滚</translation>
+        <source>EDM</source>
+        <translation>EDM电子</translation>
+    </message>
+    <message>
+        <source>Jazz</source>
+        <translation>爵士</translation>
     </message>
 </context>
 <context>
@@ -925,9 +955,20 @@
     <message>
         <location filename="../app/qml/AgPlayer/EqualizerWindow.qml" line="17"/>
         <location filename="../app/qml/AgPlayer/EqualizerWindow.qml" line="82"/>
-        <source>十段图形均衡器</source>
-        <translation>十段图形均衡器</translation>
+        <source>十八段图形均衡器</source>
+        <translation>十八段图形均衡器</translation>
     </message>
+    <message><source>最小化</source><translation>最小化</translation></message>
+    <message><source>最大化</source><translation>最大化</translation></message>
+    <message><source>关闭</source><translation>关闭</translation></message>
+    <message><source>启用均衡器</source><translation>启用均衡器</translation></message>
+    <message><source>Custom</source><translation>自定义</translation></message>
+    <message><source>均衡器预设</source><translation>均衡器预设</translation></message>
+    <message><source>旁路均衡器</source><translation>旁路均衡器</translation></message>
+    <message><source>全部归零</source><translation>全部归零</translation></message>
+    <message><source>余量</source><translation>余量</translation></message>
+    <message><source>保护中</source><translation>保护中</translation></message>
+    <message><source>双击滑杆归零 · 滚轮或方向键微调</source><translation>双击滑杆归零 · 滚轮或方向键微调</translation></message>
     <message>
         <location filename="../app/qml/AgPlayer/EqualizerWindow.qml" line="136"/>
         <source>启用</source>
@@ -2904,8 +2945,8 @@
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="94"/>
-        <source>十段图形均衡器</source>
-        <translation>十段图形均衡器</translation>
+        <source>十八段图形均衡器</source>
+        <translation>十八段图形均衡器</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="108"/>
@@ -3489,6 +3530,21 @@
         <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="1566"/>
         <source>主题样式</source>
         <translation>主题样式</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="1470"/>
+        <source>窗口主题</source>
+        <translation>窗口主题</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="1475"/>
+        <source>双窗口主题</source>
+        <translation>双窗口主题</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="1476"/>
+        <source>单窗口主题</source>
+        <translation>单窗口主题</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="1853"/>

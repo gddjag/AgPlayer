@@ -1,11 +1,12 @@
 #include "audio_editor/audio_editor_waveform_item.hpp"
 
 #include <QGuiApplication>
+#include <QImage>
+#include <QQuickRenderTarget>
+#include <QQuickWindow>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
 #include <QtTest>
-
-#include <algorithm>
 
 class TestableAudioEditorWaveformItem final : public AudioEditorWaveformItem {
 public:
@@ -16,7 +17,7 @@ class AudioEditorWaveformItemTest final : public QObject {
     Q_OBJECT
 
 private slots:
-    void rendersOneCenteredMixWhileRetainingStereoInput()
+    void rendersBoundedStereoPeakGeometryInOneBuffer()
     {
         TestableAudioEditorWaveformItem item;
         item.setWidth(4.0);
@@ -28,12 +29,43 @@ private slots:
         QSGNode* node = item.updatePaintNode(nullptr, nullptr);
         QVERIFY(node != nullptr);
         const auto* geometry_node = static_cast<QSGGeometryNode*>(node);
-        QCOMPARE(item.channelPeaks().size(), 2);
         QCOMPARE(geometry_node->geometry()->drawingMode(),
-                 unsigned{QSGGeometry::DrawTriangles});
-        QCOMPARE(geometry_node->geometry()->vertexCount(), 36);
+                 QSGGeometry::DrawTriangles);
+        QCOMPARE(geometry_node->geometry()->vertexCount(), 72);
         QCOMPARE(node->childCount(), 0);
-        QCOMPARE(item.generatedPointCount(), 4);
+        QCOMPARE(item.generatedPointCount(), 16);
+        delete node;
+    }
+
+    void filledEnvelopeAndCenterLineShareOnePixelAlignedBuffer()
+    {
+        TestableAudioEditorWaveformItem item;
+        item.setWidth(3.0);
+        item.setHeight(20.0);
+        item.setLineWidth(1.0);
+        item.setChannelPeaks({QVariant(QVariantList{
+            -1.0, 1.0, -0.5, 0.5, -0.25, 0.25})});
+
+        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+        QVERIFY(node != nullptr);
+        const auto* geometryNode = static_cast<QSGGeometryNode*>(node);
+        QCOMPARE(node->childCount(), 0);
+        QCOMPARE(geometryNode->geometry()->drawingMode(),
+                 QSGGeometry::DrawTriangles);
+        QCOMPARE(geometryNode->geometry()->vertexCount(), 24);
+        const auto* vertices = geometryNode->geometry()->vertexDataAsPoint2D();
+        bool hasCenterTop = false;
+        bool hasCenterBottom = false;
+        for (int index = 0; index < geometryNode->geometry()->vertexCount(); ++index) {
+            QVERIFY(std::abs(vertices[index].x * 2.0F
+                             - std::round(vertices[index].x * 2.0F)) < 0.001F);
+            hasCenterTop = hasCenterTop
+                || std::abs(vertices[index].y - 9.5F) < 0.001F;
+            hasCenterBottom = hasCenterBottom
+                || std::abs(vertices[index].y - 10.5F) < 0.001F;
+        }
+        QVERIFY(hasCenterTop);
+        QVERIFY(hasCenterBottom);
         delete node;
     }
 
@@ -71,7 +103,7 @@ private slots:
         delete node;
     }
 
-    void highDensityStereoSharesOneVisualLogicalPixelBudget()
+    void stereoUsesTheFullLogicalPixelBudgetPerChannel()
     {
         TestableAudioEditorWaveformItem item;
         item.setWidth(10.0);
@@ -85,77 +117,22 @@ private slots:
 
         QSGNode* node = item.updatePaintNode(nullptr, nullptr);
         QVERIFY(node != nullptr);
-        QCOMPARE(item.generatedPointCount(), 20);
-        delete node;
-    }
-
-    void densityAndLineWidthConfigureTheCenteredMixBudget()
-    {
-        TestableAudioEditorWaveformItem item;
-        item.setWidth(10.0);
-        item.setHeight(80.0);
-        item.setDensity(2.0);
-        item.setLineWidth(3.0);
-        QVariantList dense;
-        for (int index = 0; index < 1'000; ++index) {
-            dense.append(-0.75);
-            dense.append(0.75);
-        }
-        item.setChannelPeaks({QVariant(dense), QVariant(dense)});
-
-        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
-        QVERIFY(node != nullptr);
-        QCOMPARE(item.density(), 2.0);
-        QCOMPARE(item.lineWidth(), 3.0);
         QCOMPARE(item.generatedPointCount(), 40);
-        const auto* geometryNode = static_cast<QSGGeometryNode*>(node);
-        QCOMPARE(geometryNode->geometry()->drawingMode(),
-                 unsigned{QSGGeometry::DrawTriangles});
         delete node;
     }
 
-    void subpixelLineWidthAndDensityAboveTwoRemainEffective()
+    void devicePixelRatioScalesEachChannelBudget()
     {
+        QQuickWindow window;
+        QImage image(40, 160, QImage::Format_RGBA8888_Premultiplied);
+        QQuickRenderTarget renderTarget = QQuickRenderTarget::fromPaintDevice(
+            &image);
+        renderTarget.setDevicePixelRatio(2.0);
+        window.setRenderTarget(renderTarget);
+
         TestableAudioEditorWaveformItem item;
+        item.setParentItem(window.contentItem());
         item.setWidth(10.0);
-        item.setHeight(80.0);
-        item.setDensity(5.0);
-        item.setLineWidth(0.3);
-        QVariantList dense;
-        for (int index = 0; index < 1'000; ++index) {
-            dense.append(-0.75);
-            dense.append(0.75);
-        }
-        item.setChannelPeaks({QVariant(dense), QVariant(dense)});
-
-        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
-        QVERIFY(node != nullptr);
-        QCOMPARE(item.density(), 5.0);
-        QCOMPARE(item.lineWidth(), 0.3);
-        QCOMPARE(item.generatedPointCount(), 100);
-        const auto* geometryNode = static_cast<QSGGeometryNode*>(node);
-        QCOMPARE(geometryNode->geometry()->drawingMode(),
-                 unsigned{QSGGeometry::DrawTriangles});
-        delete node;
-    }
-
-    void nonFiniteAppearanceValuesAreIgnored()
-    {
-        AudioEditorWaveformItem item;
-        item.setDensity(3.0);
-        item.setLineWidth(0.6);
-
-        item.setDensity(std::numeric_limits<double>::quiet_NaN());
-        item.setLineWidth(std::numeric_limits<double>::infinity());
-
-        QCOMPARE(item.density(), 3.0);
-        QCOMPARE(item.lineWidth(), 0.6);
-    }
-
-    void onePixelStereoRendersOneMixedEnvelope()
-    {
-        TestableAudioEditorWaveformItem item;
-        item.setWidth(1.0);
         item.setHeight(80.0);
         QVariantList dense;
         for (int index = 0; index < 100; ++index) {
@@ -166,58 +143,64 @@ private slots:
 
         QSGNode* node = item.updatePaintNode(nullptr, nullptr);
         QVERIFY(node != nullptr);
-        QCOMPARE(item.generatedPointCount(), 2);
+        QCOMPARE(window.effectiveDevicePixelRatio(), 2.0);
+        QCOMPARE(item.generatedPointCount(), 80);
         delete node;
     }
 
-    void oppositeStereoSamplesMixAtTheVisualCenter()
+    void blankBucketsDoNotBridgeTimelineGaps()
     {
         TestableAudioEditorWaveformItem item;
-        item.setWidth(20.0);
-        item.setHeight(100.0);
-        item.setChannelPeaks({
-            QVariant(QVariantList{-1.0, -1.0, 0.5, 0.5}),
-            QVariant(QVariantList{1.0, 1.0, -0.5, -0.5})});
+        item.setWidth(100.0);
+        item.setHeight(40.0);
+        QVariantList values{-1.0, 1.0, QVariant{}, QVariant{}, -0.5, 0.5};
+        item.setChannelPeaks({QVariant(values)});
 
         QSGNode* node = item.updatePaintNode(nullptr, nullptr);
         QVERIFY(node != nullptr);
         const auto* geometryNode = static_cast<QSGGeometryNode*>(node);
-        QCOMPARE(geometryNode->geometry()->vertexCount(), 36);
-        const auto* vertices =
-            geometryNode->geometry()->vertexDataAsColoredPoint2D();
-        QVERIFY(std::all_of(vertices, vertices + 36,
-                            [](const auto& vertex) {
-                                return vertex.y >= 48.0F && vertex.y <= 52.0F;
-                            }));
-        delete node;
-    }
-
-    void sceneGraphUsesFeatheredTriangleCoverageForAntialiasing()
-    {
-        TestableAudioEditorWaveformItem item;
-        item.setWidth(20.0);
-        item.setHeight(20.0);
-        item.setSampleMode(true);
-        item.setChannelPeaks({QVariant(QVariantList{
-            -1.0, -1.0, 1.0, 1.0})});
-
-        QVERIFY(item.antialiasing());
-        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
-        QVERIFY(node != nullptr);
-        const auto* geometryNode = static_cast<QSGGeometryNode*>(node);
-        QCOMPARE(geometryNode->geometry()->drawingMode(),
-                 unsigned{QSGGeometry::DrawTriangles});
-        const auto* vertices =
-            geometryNode->geometry()->vertexDataAsColoredPoint2D();
-        bool sawTransparentEdge = false;
-        bool sawOpaqueCore = false;
-        for (int index = 0; index < geometryNode->geometry()->vertexCount();
-             ++index) {
-            sawTransparentEdge = sawTransparentEdge || vertices[index].a == 0;
-            sawOpaqueCore = sawOpaqueCore || vertices[index].a == 255;
+        QVERIFY(geometryNode->geometry()->vertexCount() > 4);
+        const auto* vertices = geometryNode->geometry()->vertexDataAsPoint2D();
+        for (int index = 0; index < geometryNode->geometry()->vertexCount(); ++index) {
+            QVERIFY2(vertices[index].x < 34.0F || vertices[index].x > 65.0F,
+                     "resampling must preserve the blank timeline gap");
         }
-        QVERIFY(sawTransparentEdge);
-        QVERIFY(sawOpaqueCore);
+        QVERIFY(item.generatedPointCount() <= 200);
+        delete node;
+    }
+
+    void downsampledBlankBucketsDoNotBridgeTimelineGaps()
+    {
+        TestableAudioEditorWaveformItem item;
+        item.setWidth(2.0);
+        item.setHeight(40.0);
+        item.setDensity(2.0);
+        item.setChannelPeaks({QVariant(QVariantList{
+            -1.0, 1.0, QVariant{}, QVariant{},
+            QVariant{}, QVariant{}, -0.5, 0.5})});
+
+        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+        QVERIFY(node != nullptr);
+        const auto* geometryNode = static_cast<QSGGeometryNode*>(node);
+        QCOMPARE(geometryNode->geometry()->vertexCount(), 0);
+        QCOMPARE(item.generatedPointCount(), 0);
+        delete node;
+    }
+
+    void zoomedSparseFramesAreResampledAcrossLogicalPixels()
+    {
+        TestableAudioEditorWaveformItem item;
+        item.setWidth(100.0);
+        item.setHeight(40.0);
+        item.setDensity(2.0);
+        item.setChannelPeaks({QVariant(QVariantList{
+            -0.2, 0.2, -0.8, 0.8, -0.4, 0.4})});
+
+        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+        QVERIFY(node != nullptr);
+        QVERIFY2(item.generatedPointCount() >= 190,
+                 "zooming into a short range must not leave sparse peak rails");
+        QVERIFY(item.generatedPointCount() <= 200);
         delete node;
     }
 
@@ -234,26 +217,33 @@ private slots:
         QVERIFY(node != nullptr);
         const auto* geometryNode = static_cast<QSGGeometryNode*>(node);
         QCOMPARE(geometryNode->geometry()->drawingMode(),
-                 unsigned{QSGGeometry::DrawTriangles});
-        QCOMPARE(geometryNode->geometry()->vertexCount(), 36);
-        QCOMPARE(item.generatedPointCount(), 4);
+                 QSGGeometry::DrawTriangles);
+        QCOMPARE(geometryNode->geometry()->vertexCount(), 24);
+        QCOMPARE(item.generatedPointCount(), 6);
+        const auto* vertices = geometryNode->geometry()->vertexDataAsPoint2D();
+        bool hasMiddleSample = false;
+        for (int index = 0; index < geometryNode->geometry()->vertexCount();
+             ++index) {
+            hasMiddleSample = hasMiddleSample
+                || std::abs(vertices[index].x - 50.0F) < 0.001F;
+        }
+        QVERIFY(hasMiddleSample);
         delete node;
     }
 
-    void blankBucketsDoNotBridgeTimelineGaps()
+    void exposesSharedPlayerStyleInputs()
     {
-        TestableAudioEditorWaveformItem item;
-        item.setWidth(100.0);
-        item.setHeight(40.0);
-        QVariantList values{-1.0, 1.0, QVariant{}, QVariant{}, -0.5, 0.5};
-        item.setChannelPeaks({QVariant(values)});
-
-        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
-        QVERIFY(node != nullptr);
-        const auto* geometryNode = static_cast<QSGGeometryNode*>(node);
-        QCOMPARE(geometryNode->geometry()->vertexCount(), 36);
-        QCOMPARE(item.generatedPointCount(), 4);
-        delete node;
+        AudioEditorWaveformItem item;
+        item.setDensity(1.5);
+        item.setLineWidth(2.0);
+        item.setSampleMode(true);
+        QCOMPARE(item.density(), 1.5);
+        QCOMPARE(item.lineWidth(), 2.0);
+        QCOMPARE(item.sampleMode(), true);
+        const QMetaObject& meta = AudioEditorWaveformItem::staticMetaObject;
+        QVERIFY(meta.indexOfProperty("sampleMode") >= 0);
+        QVERIFY(meta.indexOfProperty("density") >= 0);
+        QVERIFY(meta.indexOfProperty("lineWidth") >= 0);
     }
 
     void obsoleteSecondCropPropertiesAreAbsent()

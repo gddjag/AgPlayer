@@ -56,6 +56,21 @@ struct ThemePalette final {
     QColor glassDivider;
     QColor glassInnerHighlight;
 
+    QColor controlSubtleBorder;
+    QColor controlHandleShadow;
+    QColor selectionGlassFill;
+    QColor selectionGlassHover;
+    QColor selectionGlassPressed;
+    QColor selectionGlassBorder;
+    QColor subtleGlassFill;
+    QColor subtleGlassHover;
+    QColor subtleGlassActive;
+    QColor subtleGlassBorder;
+    QColor integratedSoftOutline;
+    QColor integratedGlassHighlight;
+    QColor navigatorGlassTrack;
+    QColor navigatorGlassThumb;
+
     QColor success;
     QColor warning;
     QColor error;
@@ -105,6 +120,20 @@ class ThemeManager final : public QObject {
     Q_PROPERTY(QColor glassBorder READ glassBorder NOTIFY paletteChanged)
     Q_PROPERTY(QColor glassDivider READ glassDivider NOTIFY paletteChanged)
     Q_PROPERTY(QColor glassInnerHighlight READ glassInnerHighlight NOTIFY paletteChanged)
+    Q_PROPERTY(QColor controlSubtleBorder READ controlSubtleBorder NOTIFY paletteChanged)
+    Q_PROPERTY(QColor controlHandleShadow READ controlHandleShadow NOTIFY paletteChanged)
+    Q_PROPERTY(QColor selectionGlassFill READ selectionGlassFill NOTIFY paletteChanged)
+    Q_PROPERTY(QColor selectionGlassHover READ selectionGlassHover NOTIFY paletteChanged)
+    Q_PROPERTY(QColor selectionGlassPressed READ selectionGlassPressed NOTIFY paletteChanged)
+    Q_PROPERTY(QColor selectionGlassBorder READ selectionGlassBorder NOTIFY paletteChanged)
+    Q_PROPERTY(QColor subtleGlassFill READ subtleGlassFill NOTIFY paletteChanged)
+    Q_PROPERTY(QColor subtleGlassHover READ subtleGlassHover NOTIFY paletteChanged)
+    Q_PROPERTY(QColor subtleGlassActive READ subtleGlassActive NOTIFY paletteChanged)
+    Q_PROPERTY(QColor subtleGlassBorder READ subtleGlassBorder NOTIFY paletteChanged)
+    Q_PROPERTY(QColor integratedSoftOutline READ integratedSoftOutline NOTIFY paletteChanged)
+    Q_PROPERTY(QColor integratedGlassHighlight READ integratedGlassHighlight NOTIFY paletteChanged)
+    Q_PROPERTY(QColor navigatorGlassTrack READ navigatorGlassTrack NOTIFY paletteChanged)
+    Q_PROPERTY(QColor navigatorGlassThumb READ navigatorGlassThumb NOTIFY paletteChanged)
     Q_PROPERTY(QColor success READ success NOTIFY paletteChanged)
     Q_PROPERTY(QColor warning READ warning NOTIFY paletteChanged)
     Q_PROPERTY(QColor error READ error NOTIFY paletteChanged)
@@ -200,6 +229,20 @@ public:
     QColor glassBorder() const { return palette_.glassBorder; }
     QColor glassDivider() const { return palette_.glassDivider; }
     QColor glassInnerHighlight() const { return palette_.glassInnerHighlight; }
+    QColor controlSubtleBorder() const { return palette_.controlSubtleBorder; }
+    QColor controlHandleShadow() const { return palette_.controlHandleShadow; }
+    QColor selectionGlassFill() const { return palette_.selectionGlassFill; }
+    QColor selectionGlassHover() const { return palette_.selectionGlassHover; }
+    QColor selectionGlassPressed() const { return palette_.selectionGlassPressed; }
+    QColor selectionGlassBorder() const { return palette_.selectionGlassBorder; }
+    QColor subtleGlassFill() const { return palette_.subtleGlassFill; }
+    QColor subtleGlassHover() const { return palette_.subtleGlassHover; }
+    QColor subtleGlassActive() const { return palette_.subtleGlassActive; }
+    QColor subtleGlassBorder() const { return palette_.subtleGlassBorder; }
+    QColor integratedSoftOutline() const { return palette_.integratedSoftOutline; }
+    QColor integratedGlassHighlight() const { return palette_.integratedGlassHighlight; }
+    QColor navigatorGlassTrack() const { return palette_.navigatorGlassTrack; }
+    QColor navigatorGlassThumb() const { return palette_.navigatorGlassThumb; }
     QColor success() const { return palette_.success; }
     QColor warning() const { return palette_.warning; }
     QColor error() const { return palette_.error; }

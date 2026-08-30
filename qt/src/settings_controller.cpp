@@ -161,6 +161,8 @@ bool SettingsController::autoReadRating() const noexcept { return autoReadRating
 
 // Appearance & Visualizer getters
 int SettingsController::themeMode() const noexcept { return themeMode_; }
+QString SettingsController::windowLayoutTheme() const { return windowLayoutTheme_; }
+int SettingsController::playerShellMode() const noexcept { return playerShellMode_; }
 int SettingsController::skinColorMode() const noexcept { return skinColorMode_; }
 QString SettingsController::skinPreset() const { return skinPreset_; }
 int SettingsController::skinCustomKind() const noexcept { return skinCustomKind_; }
@@ -439,6 +441,30 @@ void SettingsController::setThemeMode(int value)
     emit themeModeChanged();
 }
 
+void SettingsController::setPlayerShellMode(int value)
+{
+    value = value == 1 ? 1 : 0;
+    const QString layout = value == 1
+        ? QStringLiteral("single-window") : QStringLiteral("dual-window");
+    const bool modeChanged = playerShellMode_ != value;
+    const bool layoutChanged = windowLayoutTheme_ != layout;
+    if (!modeChanged && !layoutChanged) {
+        persistValue(QStringLiteral("appearance/playerShellMode"), value);
+        persistValue(QStringLiteral("appearance/windowLayoutTheme"), layout);
+        return;
+    }
+    playerShellMode_ = value;
+    windowLayoutTheme_ = layout;
+    persistValue(QStringLiteral("appearance/playerShellMode"), value);
+    persistValue(QStringLiteral("appearance/windowLayoutTheme"), layout);
+    if (modeChanged) {
+        emit playerShellModeChanged();
+    }
+    if (layoutChanged) {
+        emit windowLayoutThemeChanged();
+    }
+}
+
 void SettingsController::setSkinColorMode(int value)
 {
     applySkinFields(normalizedColorChoiceMode(value), skinPreset_,
@@ -591,6 +617,30 @@ void SettingsController::applySkinFields(
         emit skinCustomColorEndChanged();
     }
     emit skinConfigurationChanged();
+}
+
+void SettingsController::setWindowLayoutTheme(const QString& value)
+{
+    const QString normalized = value == QStringLiteral("single-window")
+        ? QStringLiteral("single-window") : QStringLiteral("dual-window");
+    const int mode = normalized == QStringLiteral("single-window") ? 1 : 0;
+    const bool layoutChanged = windowLayoutTheme_ != normalized;
+    const bool modeChanged = playerShellMode_ != mode;
+    if (!layoutChanged && !modeChanged) {
+        persistValue(QStringLiteral("appearance/windowLayoutTheme"), normalized);
+        persistValue(QStringLiteral("appearance/playerShellMode"), mode);
+        return;
+    }
+    windowLayoutTheme_ = normalized;
+    playerShellMode_ = mode;
+    persistValue(QStringLiteral("appearance/windowLayoutTheme"), normalized);
+    persistValue(QStringLiteral("appearance/playerShellMode"), mode);
+    if (layoutChanged) {
+        emit windowLayoutThemeChanged();
+    }
+    if (modeChanged) {
+        emit playerShellModeChanged();
+    }
 }
 
 void SettingsController::setWaveformMode(int value)
@@ -1150,6 +1200,8 @@ void SettingsController::emitAllChanged(const bool includeMediaSettings)
     emit autoReadRatingChanged();
 
     emit themeModeChanged();
+    emit windowLayoutThemeChanged();
+    emit playerShellModeChanged();
     emit skinColorModeChanged();
     emit skinPresetChanged();
     emit skinCustomKindChanged();
@@ -1416,6 +1468,27 @@ void SettingsController::load()
             settings_.setValue(QStringLiteral("themeMode"), themeMode_);
         }
     }
+    const QString storedWindowLayoutTheme = settings_.value(
+        QStringLiteral("windowLayoutTheme")).toString();
+    const bool validStoredLayout = storedWindowLayoutTheme == QStringLiteral("dual-window")
+        || storedWindowLayoutTheme == QStringLiteral("single-window");
+    const std::optional<int> storedPlayerShellMode =
+        storedInteger(settings_.value(QStringLiteral("playerShellMode")));
+    const bool validStoredMode = storedPlayerShellMode.has_value()
+        && (*storedPlayerShellMode == 0 || *storedPlayerShellMode == 1);
+    if (validStoredLayout) {
+        windowLayoutTheme_ = storedWindowLayoutTheme;
+        playerShellMode_ = windowLayoutTheme_ == QStringLiteral("single-window") ? 1 : 0;
+    } else if (validStoredMode) {
+        playerShellMode_ = *storedPlayerShellMode;
+        windowLayoutTheme_ = playerShellMode_ == 1
+            ? QStringLiteral("single-window") : QStringLiteral("dual-window");
+    } else {
+        windowLayoutTheme_ = QStringLiteral("dual-window");
+        playerShellMode_ = 0;
+    }
+    settings_.setValue(QStringLiteral("windowLayoutTheme"), windowLayoutTheme_);
+    settings_.setValue(QStringLiteral("playerShellMode"), playerShellMode_);
     skinColorMode_ = settings_.value(
         QStringLiteral("skinColorMode"), skinColorMode_).toInt();
     skinPreset_ = settings_.value(QStringLiteral("skinPreset"), skinPreset_).toString();
@@ -1667,6 +1740,7 @@ void SettingsController::load()
     closeBehavior_ = clampValue(closeBehavior_, 0, 1);
     defaultPlaybackMode_ = clampValue(defaultPlaybackMode_, 0, 3);
     themeMode_ = themeMode_ >= 0 && themeMode_ <= 2 ? themeMode_ : 2;
+    playerShellMode_ = playerShellMode_ == 1 ? 1 : 0;
     skinColorMode_ = normalizedColorChoiceMode(skinColorMode_);
     skinCustomKind_ = skinCustomKind_ == 1 ? 1 : 0;
     const QString normalizedSkinCustomColor =
@@ -1792,7 +1866,9 @@ void SettingsController::saveAll(const bool includeMediaSettings)
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("appearance"));
+    persistValue(QStringLiteral("windowLayoutTheme"), windowLayoutTheme_);
     persistValue(QStringLiteral("themeMode"), themeMode_);
+    persistValue(QStringLiteral("playerShellMode"), playerShellMode_);
     persistValue(QStringLiteral("skinColorMode"), skinColorMode_);
     persistValue(QStringLiteral("skinPreset"), skinPreset_);
     persistValue(QStringLiteral("skinCustomKind"), skinCustomKind_);
@@ -1889,6 +1965,8 @@ void SettingsController::restoreDefaults(const bool includeMediaSettings)
     autoReadRating_ = true;
 
     themeMode_ = 2;
+    windowLayoutTheme_ = QStringLiteral("dual-window");
+    playerShellMode_ = 0;
     skinColorMode_ = kDefaultColorChoiceMode;
     skinPreset_ = defaultThemePresetId();
     skinCustomKind_ = 0;
@@ -2023,7 +2101,8 @@ QString SettingsController::defaultExportDir()
 
 QString SettingsController::validatedLanguage(const QString& value)
 {
-    static const QStringList supported = {QStringLiteral("zh"), QStringLiteral("en"),
+    static const QStringList supported = {
+        QStringLiteral("zh"), QStringLiteral("en"),
         QStringLiteral("th"), QStringLiteral("vi")};
     const QString lower = value.toLower();
     if (supported.contains(lower)) {

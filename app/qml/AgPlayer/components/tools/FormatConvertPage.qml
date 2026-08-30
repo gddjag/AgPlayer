@@ -284,7 +284,15 @@ Rectangle {
                             Layout.preferredWidth: 72
                             model: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
                             currentIndex: Math.max(0, model.indexOf(SettingsController.parallelJobs))
+                            enabled: !converter.busy
                             onActivated: SettingsController.parallelJobs = currentValue
+                            background: Rectangle {
+                                objectName: "converterParallelJobsBoxFrame"
+                                color: parent.enabled ? Theme.elevated : Theme.background
+                                border.color: Theme.border
+                                border.width: 1
+                                radius: 5
+                            }
                         }
                     }
                     Text {
@@ -310,7 +318,7 @@ Rectangle {
                         anchors.centerIn: parent
                         spacing: 18
                         ThemedIcon { objectName: "formatSummaryCompleteIcon"; source: Theme.icon("checkbox-circle-line"); tint: Theme.success; sourceSize.width: 18; sourceSize.height: 18 }
-                        Text { text: qsTr("已完成 %1").arg(converter.completedCount); color: Theme.success }
+                        Text { text: qsTr("已完成 %1").arg(converter.doneCount); color: Theme.success }
                         ThemedIcon { objectName: "formatSummaryFailedIcon"; source: Theme.icon("error-warning-line"); tint: Theme.error; sourceSize.width: 18; sourceSize.height: 18 }
                         Text { text: qsTr("失败 %1").arg(converter.failedCount); color: Theme.error }
                     }

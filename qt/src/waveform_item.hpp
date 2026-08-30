@@ -17,6 +17,10 @@ class WaveformItem : public QQuickItem {
     Q_PROPERTY(qreal cursorPosition READ cursorPosition WRITE setCursorPosition
                    NOTIFY cursorPositionChanged)
     Q_PROPERTY(qreal duration READ duration WRITE setDuration NOTIFY durationChanged)
+    Q_PROPERTY(qint64 visibleStartMs READ visibleStartMs WRITE setVisibleStartMs
+                   NOTIFY visibleStartMsChanged)
+    Q_PROPERTY(qint64 visibleEndMs READ visibleEndMs WRITE setVisibleEndMs
+                   NOTIFY visibleEndMsChanged)
     Q_PROPERTY(QColor waveformColor READ waveformColor WRITE setWaveformColor
                    NOTIFY waveformColorChanged)
     Q_PROPERTY(int visualMode READ visualMode WRITE setVisualMode
@@ -72,6 +76,10 @@ public:
 
     qreal duration() const;
     void setDuration(qreal duration);
+    qint64 visibleStartMs() const noexcept;
+    void setVisibleStartMs(qint64 startMs);
+    qint64 visibleEndMs() const noexcept;
+    void setVisibleEndMs(qint64 endMs);
 
     QColor waveformColor() const;
     void setWaveformColor(const QColor& color);
@@ -120,6 +128,8 @@ public:
 
     Q_INVOKABLE qint64 timeForX(qreal x) const;
     Q_INVOKABLE qreal pixelForTime(qint64 positionMs) const;
+    Q_INVOKABLE void zoomAt(qreal x, qreal factor);
+    Q_INVOKABLE void setVisibleRange(qint64 startMs, qint64 endMs);
     Q_INVOKABLE void setHoverPositionForInteraction(qint64 position);
 
     static constexpr int unplayedAlpha() noexcept { return 89; }
@@ -130,6 +140,8 @@ signals:
     void positionChanged();
     void cursorPositionChanged();
     void durationChanged();
+    void visibleStartMsChanged();
+    void visibleEndMsChanged();
     void waveformColorChanged();
     void visualModeChanged();
     void baseColorChanged();
@@ -188,6 +200,8 @@ private:
     qint64 position_ = 0;
     qint64 cursorPosition_ = -1;
     qint64 duration_ = 0;
+    qint64 visibleStartMs_ = 0;
+    qint64 visibleEndMs_ = 0;
     QColor waveformColor_;
     int visualMode_ = -1;
     QColor baseColor_ = QColor(QStringLiteral("#9098a6"));

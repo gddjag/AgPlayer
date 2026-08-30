@@ -8,6 +8,8 @@
 #include <QTest>
 #include <QWindow>
 
+#include <cstddef>
+#include <new>
 #include <vector>
 
 #ifdef Q_OS_WIN
@@ -38,8 +40,17 @@ private slots:
     void nativeMoveEventsSnapAndUseReleaseHysteresis();
     void toolWindowsShareMainTransientLayering();
     void auxiliaryWindowsOpenCenteredOverMain();
+    void audioToolsRestorePersistedGeometryWithoutRecentering();
+    void audioToolsCreatedAfterShowRequestUsesFirstRunCentering();
+    void audioToolsGeometryPersistsAcrossControllerLifetime();
+    void restoredGeometryAvoidsVirtualDesktopHoles();
+    void restoredGeometryRehomesAnOfflineScreen();
+    void destroyedAuxiliaryWindowDoesNotPoisonReplacementPositioning();
+    void destroyedSettingsWindowDoesNotPoisonReplacementPositioning();
 #ifdef Q_OS_WIN
     void auxiliaryWindowRemainsAboveDockedPlayerGroup();
+    void auxiliaryWindowsKeepNativeSizeAcrossScreens();
+    void maximizedAuxiliaryWindowsPreserveNormalGeometryForRestart();
 #endif
     void dockedListFollowsMainWindow();
     void firstAttachedListAlignsWithMainWindow();
@@ -49,6 +60,7 @@ private slots:
     void dockedWindowsKeepNativeSizeAcrossScreens();
     void nativeTaskbarGroupUsesMainAsOnlyAppWindow();
     void taskbarCommandsToggleDockedGroupWithoutResizing();
+    void taskbarToggleEntryPointMinimizesAndRestoresWindowGroup();
     void taskbarActivationDoesNotCancelMinimize();
 #endif
     void mainMinimizeRestoresOnlyRequestedList();
@@ -56,6 +68,7 @@ private slots:
     void mainMaximizeHidesOnlyDockedList();
     void geometryDockAndPinStatePersist();
     void legacyMiniGeometryMigratesToReferenceDefault();
+    void shellModesPersistIndependentMainWindowGeometry();
     void persistedDockEdgeSurvivesInitialPreferenceWiring();
     void restoredGeometryBalancesMinimumAndAvailableScreen();
     void offscreenGeometryRestoresInsideAvailableScreen();
@@ -153,6 +166,32 @@ void WindowControllerTest::switchingWindowsDoesNotRecreatePlayback()
     windows.showMain();
     QVERIFY(windows.mainVisible());
     QVERIFY(!windows.miniVisible());
+}
+
+void WindowControllerTest::shellModesPersistIndependentMainWindowGeometry()
+{
+    QWindow mainWindow;
+    mainWindow.setGeometry(40, 50, 960, 298);
+
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    mainWindow.setGeometry(20, 30, 700, 320);
+
+    windows.setMainWindowShellMode(1);
+    QCOMPARE(mainWindow.size(), QSize(1672, 941).boundedTo(
+                 mainWindow.screen()->availableGeometry().size()));
+    mainWindow.setGeometry(20, 40, 760, 700);
+
+    windows.setMainWindowShellMode(0);
+    QCOMPARE(mainWindow.geometry(), QRect(20, 30, 700, 320));
+
+    windows.setMainWindowShellMode(1);
+    QCOMPARE(mainWindow.geometry(), QRect(20, 40, 760, 700));
+    QCOMPARE(QSettings().value(QStringLiteral("windows/mainGeometry")).toRect(),
+             QRect(20, 30, 700, 320));
+    QCOMPARE(QSettings().value(
+                 QStringLiteral("windows/integratedMainGeometry")).toRect(),
+             QRect(20, 40, 760, 700));
 }
 
 void WindowControllerTest::updatesExistingWindowObjectsAndFlags()
@@ -452,6 +491,241 @@ void WindowControllerTest::auxiliaryWindowsOpenCenteredOverMain()
     QCOMPARE(settingsWindow.geometry().center(), mainWindow.geometry().center());
     QVERIFY(settingsWindow.isVisible());
 }
+
+void WindowControllerTest::audioToolsRestorePersistedGeometryWithoutRecentering()
+{
+    const QRect savedGeometry(40, 80, 700, 560);
+    QSettings settings;
+    settings.setValue(QStringLiteral("windows/audioToolsGeometry"), savedGeometry);
+    settings.sync();
+
+    QWindow mainWindow;
+    mainWindow.setGeometry(20, 30, 600, 300);
+    QWindow toolsWindow;
+    toolsWindow.setGeometry(0, 0, 1672, 941);
+
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setAudioToolsWindow(&toolsWindow);
+    windows.showAudioTools();
+    QCoreApplication::processEvents();
+
+    QCOMPARE(toolsWindow.geometry(), savedGeometry);
+}
+
+void WindowControllerTest::audioToolsCreatedAfterShowRequestUsesFirstRunCentering()
+{
+    QWindow mainWindow;
+    mainWindow.setGeometry(80, 100, 640, 360);
+    QWindow toolsWindow;
+    toolsWindow.setGeometry(10, 10, 360, 240);
+
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.showAudioTools();
+    windows.setAudioToolsWindow(&toolsWindow);
+    QCoreApplication::processEvents();
+
+    QVERIFY(toolsWindow.isVisible());
+    QCOMPARE(toolsWindow.geometry().center(), mainWindow.geometry().center());
+}
+
+void WindowControllerTest::audioToolsGeometryPersistsAcrossControllerLifetime()
+{
+    const QRect changedGeometry(60, 100, 680, 600);
+    {
+        QWindow mainWindow;
+        QWindow toolsWindow;
+        WindowController windows;
+        windows.setWindows(&mainWindow, nullptr);
+        windows.setAudioToolsWindow(&toolsWindow);
+        toolsWindow.setGeometry(changedGeometry);
+        QCoreApplication::processEvents();
+    }
+    QSettings().sync();
+
+    QWindow restoredMain;
+    QWindow restoredTools;
+    WindowController restored;
+    restored.setWindows(&restoredMain, nullptr);
+    restored.setAudioToolsWindow(&restoredTools);
+
+    QCOMPARE(restoredTools.geometry(), changedGeometry);
+}
+
+void WindowControllerTest::restoredGeometryAvoidsVirtualDesktopHoles()
+{
+    const QList<QRect> availableScreens{
+        QRect(0, 0, 1920, 1080),
+        QRect(1920, 0, 1920, 540),
+    };
+    const QRect restored = WindowController::geometryForAvailableScreens(
+        QRect(2200, 700, 720, 320), QSize(320, 200), availableScreens, 0);
+
+    QVERIFY(availableScreens.at(1).contains(restored));
+    QVERIFY(std::any_of(availableScreens.cbegin(), availableScreens.cend(),
+                        [&restored](const QRect& screen) {
+                            return screen.intersects(restored);
+                        }));
+}
+
+void WindowControllerTest::restoredGeometryRehomesAnOfflineScreen()
+{
+    const QList<QRect> availableScreens{QRect(0, 0, 1920, 1080)};
+    const QRect restored = WindowController::geometryForAvailableScreens(
+        QRect(3840, 100, 900, 700), QSize(320, 200), availableScreens, 0);
+
+    QVERIFY(availableScreens.first().contains(restored));
+    QCOMPARE(restored.size(), QSize(900, 700));
+}
+
+void WindowControllerTest::destroyedAuxiliaryWindowDoesNotPoisonReplacementPositioning()
+{
+    QWindow mainWindow;
+    mainWindow.setGeometry(100, 120, 640, 360);
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+
+    alignas(QWindow) std::byte storage[sizeof(QWindow)];
+    auto* first = new (storage) QWindow;
+    first->setGeometry(10, 10, 300, 220);
+    windows.setAudioToolsWindow(first);
+    windows.showAudioTools();
+    QCoreApplication::processEvents();
+    first->~QWindow();
+
+    auto* replacement = new (storage) QWindow;
+    replacement->setGeometry(10, 10, 300, 220);
+    windows.presentAuxiliaryWindow(replacement);
+    QCoreApplication::processEvents();
+
+    QCOMPARE(replacement->geometry().center(), mainWindow.geometry().center());
+    replacement->~QWindow();
+}
+
+void WindowControllerTest::destroyedSettingsWindowDoesNotPoisonReplacementPositioning()
+{
+    QWindow mainWindow;
+    mainWindow.setGeometry(100, 120, 640, 360);
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+
+    alignas(QWindow) std::byte storage[sizeof(QWindow)];
+    auto* first = new (storage) QWindow;
+    first->setGeometry(10, 10, 300, 220);
+    windows.registerSettingsWindow(first);
+    windows.presentAuxiliaryWindow(first);
+    QCoreApplication::processEvents();
+    first->~QWindow();
+
+    auto* replacement = new (storage) QWindow;
+    replacement->setGeometry(10, 10, 300, 220);
+    windows.presentAuxiliaryWindow(replacement);
+    QCoreApplication::processEvents();
+
+    QCOMPARE(replacement->geometry().center(), mainWindow.geometry().center());
+    replacement->~QWindow();
+}
+
+#ifdef Q_OS_WIN
+void WindowControllerTest::auxiliaryWindowsKeepNativeSizeAcrossScreens()
+{
+    if (QGuiApplication::platformName().compare(QStringLiteral("windows"),
+                                                Qt::CaseInsensitive) != 0) {
+        QSKIP("requires the Windows native window manager");
+    }
+    const QList<QScreen*> screens = QGuiApplication::screens();
+    if (screens.size() < 2) {
+        QSKIP("requires two active displays; DPI size policy has an algorithm test");
+    }
+
+    QWindow mainWindow;
+    mainWindow.setGeometry(QRect(screens.at(0)->availableGeometry().topLeft()
+                                     + QPoint(60, 60),
+                                 QSize(640, 320)));
+    QWindow toolsWindow;
+    QWindow settingsWindow;
+    const QRect initialGeometry(
+        screens.at(0)->availableGeometry().topLeft() + QPoint(100, 100),
+        QSize(880, 560));
+    toolsWindow.setGeometry(initialGeometry);
+    settingsWindow.setGeometry(initialGeometry);
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setAudioToolsWindow(&toolsWindow);
+    windows.registerSettingsWindow(&settingsWindow);
+    windows.showAudioTools();
+    windows.presentAuxiliaryWindow(&settingsWindow);
+    QVERIFY(QTest::qWaitForWindowExposed(&toolsWindow));
+    QVERIFY(QTest::qWaitForWindowExposed(&settingsWindow));
+
+    for (QWindow* window : {&toolsWindow, &settingsWindow}) {
+        RECT before{};
+        QVERIFY(GetWindowRect(reinterpret_cast<HWND>(window->winId()), &before));
+        const QSize nativeSize(before.right - before.left,
+                               before.bottom - before.top);
+        window->setPosition(screens.at(1)->availableGeometry().topLeft()
+                            + QPoint(100, 100));
+        QTRY_VERIFY(window->screen() == screens.at(1));
+        const auto currentNativeSize = [window]() {
+            RECT rect{};
+            if (!GetWindowRect(reinterpret_cast<HWND>(window->winId()), &rect)) {
+                return QSize();
+            }
+            return QSize(rect.right - rect.left, rect.bottom - rect.top);
+        };
+        QTRY_COMPARE(currentNativeSize(), nativeSize);
+    }
+}
+
+void WindowControllerTest::maximizedAuxiliaryWindowsPreserveNormalGeometryForRestart()
+{
+    if (QGuiApplication::platformName().compare(QStringLiteral("windows"),
+                                                Qt::CaseInsensitive) != 0) {
+        QSKIP("requires the Windows native window manager");
+    }
+    QScreen* const screen = QGuiApplication::primaryScreen();
+    QVERIFY(screen != nullptr);
+    const QPoint origin = screen->availableGeometry().topLeft() + QPoint(90, 70);
+    const QRect toolsNormal(origin, QSize(880, 560));
+    const QRect settingsNormal(origin + QPoint(40, 30), QSize(860, 640));
+    QSettings settings;
+    settings.setValue(QStringLiteral("windows/audioToolsGeometry"), toolsNormal);
+    settings.setValue(QStringLiteral("windows/settingsGeometry"), settingsNormal);
+    settings.sync();
+
+    {
+        QWindow mainWindow;
+        QWindow toolsWindow;
+        QWindow settingsWindow;
+        WindowController windows;
+        windows.setWindows(&mainWindow, nullptr);
+        windows.setAudioToolsWindow(&toolsWindow);
+        windows.registerSettingsWindow(&settingsWindow);
+        windows.showAudioTools();
+        windows.presentAuxiliaryWindow(&settingsWindow);
+        QVERIFY(QTest::qWaitForWindowExposed(&toolsWindow));
+        QVERIFY(QTest::qWaitForWindowExposed(&settingsWindow));
+
+        ShowWindow(reinterpret_cast<HWND>(toolsWindow.winId()), SW_MAXIMIZE);
+        ShowWindow(reinterpret_cast<HWND>(settingsWindow.winId()), SW_MAXIMIZE);
+        QTRY_COMPARE(toolsWindow.windowState(), Qt::WindowMaximized);
+        QTRY_COMPARE(settingsWindow.windowState(), Qt::WindowMaximized);
+    }
+    settings.sync();
+
+    QWindow restoredMain;
+    QWindow restoredTools;
+    QWindow restoredSettings;
+    WindowController restored;
+    restored.setWindows(&restoredMain, nullptr);
+    restored.setAudioToolsWindow(&restoredTools);
+    restored.registerSettingsWindow(&restoredSettings);
+
+    QCOMPARE(restoredTools.geometry(), toolsNormal);
+    QCOMPARE(restoredSettings.geometry(), settingsNormal);
+}
+#endif
 
 #ifdef Q_OS_WIN
 void WindowControllerTest::auxiliaryWindowRemainsAboveDockedPlayerGroup()
@@ -775,6 +1049,35 @@ void WindowControllerTest::taskbarCommandsToggleDockedGroupWithoutResizing()
         return false;
     };
     QTRY_VERIFY(isAbove(listHandle, mainHandle));
+}
+
+void WindowControllerTest::taskbarToggleEntryPointMinimizesAndRestoresWindowGroup()
+{
+    WindowController windows;
+    QWindow mainWindow;
+    mainWindow.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    mainWindow.setGeometry(180, 120, 720, 280);
+    QWindow listWindow;
+    listWindow.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    listWindow.setGeometry(180, 398, 720, 420);
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setListWindow(&listWindow);
+    windows.showListWindow();
+    windows.snapListWindow(QStringLiteral("bottom"));
+    QVERIFY(QTest::qWaitForWindowExposed(&mainWindow));
+    QVERIFY(QTest::qWaitForWindowExposed(&listWindow));
+    mainWindow.requestActivate();
+    QTRY_VERIFY(mainWindow.isActive());
+
+    QVERIFY(QMetaObject::invokeMethod(&windows, "toggleMainWindowGroup",
+                                      Qt::DirectConnection));
+    QTRY_VERIFY(mainWindow.windowState() == Qt::WindowMinimized);
+    QTRY_VERIFY(!listWindow.isVisible());
+
+    QVERIFY(QMetaObject::invokeMethod(&windows, "toggleMainWindowGroup",
+                                      Qt::DirectConnection));
+    QTRY_VERIFY(mainWindow.windowState() != Qt::WindowMinimized);
+    QTRY_VERIFY(listWindow.isVisible());
 }
 
 void WindowControllerTest::taskbarActivationDoesNotCancelMinimize()

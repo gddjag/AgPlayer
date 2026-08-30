@@ -16,6 +16,7 @@ extern "C" {
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <limits>
 #include <sstream>
 #include <string>
@@ -66,6 +67,24 @@ const std::vector<const char*>& known_metadata_aliases(const CanonicalField fiel
     case CanonicalField::CustomTag: return custom_tag;
     }
     return title;
+}
+
+bool metadata_writer_detail::parse_adts_audio_parameters(
+    const unsigned char byte2, const unsigned char byte3,
+    int& sample_rate, int& channels) noexcept
+{
+    static constexpr std::array<int, 13> sample_rates{
+        96'000, 88'200, 64'000, 48'000, 44'100, 32'000, 24'000,
+        22'050, 16'000, 12'000, 11'025, 8'000, 7'350};
+    const unsigned int rate_index = (byte2 >> 2U) & 0x0fU;
+    const unsigned int channel_count =
+        ((byte2 & 0x01U) << 2U) | ((byte3 >> 6U) & 0x03U);
+    if (rate_index >= sample_rates.size() || channel_count == 0U) {
+        return false;
+    }
+    sample_rate = sample_rates[rate_index];
+    channels = static_cast<int>(channel_count);
+    return true;
 }
 
 namespace {
@@ -189,6 +208,8 @@ public:
         if (!active_) return;
         active_ = false;
         std::error_code ec;
+        std::filesystem::remove(backup_, ec);
+        ec.clear();
         std::filesystem::remove(saved_, ec);
     }
 
@@ -225,7 +246,62 @@ int open_metadata_demuxer(AVFormatContext** context, const std::string& path,
     return avformat_open_input(context, path.c_str(), nullptr, nullptr);
 }
 
-bool prime_audio_headers_without_codec(AVFormatContext* context)
+bool populate_adts_parameters_without_decoder(AVFormatContext* context,
+                                              const std::string& path)
+{
+    AVCodecParameters* parameters = nullptr;
+    for (unsigned int index = 0; index < context->nb_streams; ++index) {
+        AVCodecParameters* candidate = context->streams[index]->codecpar;
+        if (candidate->codec_type == AVMEDIA_TYPE_AUDIO
+            && candidate->codec_id == AV_CODEC_ID_AAC) {
+            parameters = candidate;
+            break;
+        }
+    }
+    if (parameters == nullptr) return false;
+
+    std::ifstream input(filesystem_path_from_utf8(path), std::ios::binary);
+    if (!input) return false;
+    std::array<unsigned char, 10> id3{};
+    input.read(reinterpret_cast<char*>(id3.data()),
+               static_cast<std::streamsize>(id3.size()));
+    std::uintmax_t audio_offset = 0;
+    if (input.gcount() == static_cast<std::streamsize>(id3.size())
+        && id3[0] == 'I' && id3[1] == 'D' && id3[2] == '3') {
+        const std::uintmax_t tag_size =
+            (static_cast<std::uintmax_t>(id3[6] & 0x7fU) << 21U)
+            | (static_cast<std::uintmax_t>(id3[7] & 0x7fU) << 14U)
+            | (static_cast<std::uintmax_t>(id3[8] & 0x7fU) << 7U)
+            | static_cast<std::uintmax_t>(id3[9] & 0x7fU);
+        audio_offset = 10U + tag_size + ((id3[5] & 0x10U) != 0U ? 10U : 0U);
+    }
+    input.clear();
+    input.seekg(static_cast<std::streamoff>(audio_offset), std::ios::beg);
+    std::array<unsigned char, 8'192> bytes{};
+    input.read(reinterpret_cast<char*>(bytes.data()),
+               static_cast<std::streamsize>(bytes.size()));
+    const std::size_t count = static_cast<std::size_t>(input.gcount());
+    for (std::size_t offset = 0; offset + 6U < count; ++offset) {
+        if (bytes[offset] != 0xffU || (bytes[offset + 1U] & 0xf6U) != 0xf0U) {
+            continue;
+        }
+        int sample_rate = 0;
+        int channels = 0;
+        if (!metadata_writer_detail::parse_adts_audio_parameters(
+                bytes[offset + 2U], bytes[offset + 3U],
+                sample_rate, channels)) {
+            continue;
+        }
+        parameters->sample_rate = sample_rate;
+        av_channel_layout_uninit(&parameters->ch_layout);
+        av_channel_layout_default(&parameters->ch_layout, channels);
+        return true;
+    }
+    return false;
+}
+
+bool prime_audio_headers_without_codec(AVFormatContext* context,
+                                       const std::string& path)
 {
     const auto ready = [context] {
         bool has_audio = false;
@@ -241,6 +317,8 @@ bool prime_audio_headers_without_codec(AVFormatContext* context)
         }
         return has_audio;
     };
+    if (ready()) return true;
+    populate_adts_parameters_without_decoder(context, path);
     if (ready()) return true;
     AVPacket* packet = av_packet_alloc();
     if (packet == nullptr) return false;
@@ -723,6 +801,7 @@ std::string explicit_muxer_for_path(const std::filesystem::path& path)
     if (extension == ".wav") return "wav";
     if (extension == ".mp3") return "mp3";
     if (extension == ".flac") return "flac";
+    if (extension == ".aac") return "adts";
     if (extension == ".ogg" || extension == ".opus") return "ogg";
     if (extension == ".m4a") return "ipod";
     if (extension == ".aif" || extension == ".aiff") return "aiff";
@@ -739,7 +818,8 @@ bool muxer_supports_canonical_field(const std::string& muxer,
             || field == CanonicalField::Album || field == CanonicalField::Genre
             || field == CanonicalField::Year || field == CanonicalField::Date;
     }
-    return muxer == "mp3" || muxer == "flac" || muxer == "ogg"
+    return muxer == "mp3" || muxer == "flac" || muxer == "adts"
+        || muxer == "ogg"
         || muxer == "ipod" || muxer == "asf";
 }
 
@@ -1145,23 +1225,6 @@ std::optional<std::string>* update_slot(MetadataUpdate& update,
     return nullptr;
 }
 
-const char* read_field(const ag_metadata* metadata, const CanonicalField field)
-{
-    switch (field) {
-    case CanonicalField::Title: return ag_metadata_title(metadata);
-    case CanonicalField::Artist: return ag_metadata_artist(metadata);
-    case CanonicalField::Album: return ag_metadata_album(metadata);
-    case CanonicalField::AlbumArtist: return ag_metadata_album_artist(metadata);
-    case CanonicalField::Genre: return ag_metadata_genre(metadata);
-    case CanonicalField::Year: return ag_metadata_year(metadata);
-    case CanonicalField::Date: return ag_metadata_date(metadata);
-    case CanonicalField::Composer: return ag_metadata_composer(metadata);
-    case CanonicalField::Bpm: return ag_metadata_bpm_tag(metadata);
-    case CanonicalField::CustomTag: return ag_metadata_custom_tag(metadata);
-    }
-    return "";
-}
-
 MetadataErrorCode metadata_error_code_for_write(const ag_result result,
                                                 const std::string& error)
 {
@@ -1420,7 +1483,7 @@ static ag_result write_metadata_to_temp(const std::string& utf8_path,
         error = "Failed to open input file";
         return AG_IO_ERROR;
     }
-    if (!prime_audio_headers_without_codec(in_ctx)) {
+    if (!prime_audio_headers_without_codec(in_ctx, utf8_path)) {
         avformat_close_input(&in_ctx);
         error = "Failed to read codec parameters without opening a decoder";
         return AG_UNSUPPORTED_FORMAT;
@@ -1570,6 +1633,12 @@ static ag_result write_metadata_to_temp(const std::string& utf8_path,
     av_dict_copy(&out_ctx->metadata, in_ctx->metadata, 0);
     const std::string output_muxer = out_ctx->oformat != nullptr
         && out_ctx->oformat->name != nullptr ? out_ctx->oformat->name : "";
+    if (output_muxer == "adts") {
+        // Raw AAC has no container-level tag block of its own. FFmpeg's ADTS
+        // muxer can safely carry the canonical fields in an ID3v2 prefix while
+        // the AAC packets themselves remain byte-for-byte stream-copied.
+        av_opt_set(out_ctx->priv_data, "write_id3v2", "1", 0);
+    }
     if (test_hooks != nullptr && test_hooks->seed_preservation_fixture) {
         if (output_muxer == "flac") {
             av_dict_set(&out_ctx->metadata, "x-agplayer-private",

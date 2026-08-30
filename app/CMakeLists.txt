@@ -48,6 +48,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/heart-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/heart-outline.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/information-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/keyboard-box-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/list-unordered.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/lock-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/lock-unlock-line.svg
@@ -59,6 +60,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/picture-in-picture-2-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/play-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/play-order-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/player-shell-mode.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/price-tag-3-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/pulse-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/playlist-2-fill.svg
@@ -68,6 +70,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/repeat-list-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/repeat-one-line-alt.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/repeat-one-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/rewind-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/restore-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/save-3-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/search-line.svg
@@ -75,8 +78,11 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/settings-3-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/shuffle-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/shuffle-arrows-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/side-panel-toggle.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/skip-back-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/skip-forward-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/stop-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/speed-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/star-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/star-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/split-cells-horizontal.svg
@@ -135,6 +141,9 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/SettingsPage.qml
         qml/AgPlayer/theme/Theme.qml
         qml/AgPlayer/components/TitleBar.qml
+        qml/AgPlayer/components/IntegratedPlayerShell.qml
+        qml/AgPlayer/components/WaveSelectionOverlay.qml
+        qml/AgPlayer/components/WaveformSession.qml
         qml/AgPlayer/components/PlayerPane.qml
         qml/AgPlayer/components/PlayerControls.qml
         qml/AgPlayer/components/EqualizerBandSlider.qml
@@ -175,6 +184,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/audioeditor/EditorCommandBar.qml
         qml/AgPlayer/components/audioeditor/FileSummaryBar.qml
         qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml
+        qml/AgPlayer/components/audioeditor/EditorSlider.qml
         qml/AgPlayer/components/audioeditor/EditorStatusBar.qml
     RESOURCES
         ${BRAND_FILES}

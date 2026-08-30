@@ -23,8 +23,12 @@ extern "C" {
 #include <string_view>
 
 #if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #endif
 
@@ -482,6 +486,11 @@ struct EncoderState {
     }
 };
 
+struct TranscodePassStats {
+    std::int64_t decoded_samples = 0;
+    int decoded_sample_rate = 0;
+};
+
 ag_result open_decoder(const std::string& path,
                        const int requested_stream_index,
                        DecoderState& d,
@@ -934,7 +943,8 @@ ag_result run_transcode_pass(const std::string& input_path,
                              std::function<void(float)> progress_callback,
                              std::string& error,
                              double gain = 1.0,
-                             bool* output_has_cover = nullptr)
+                             bool* output_has_cover = nullptr,
+                             TranscodePassStats* stats = nullptr)
 {
     if (config.output_path.empty()) {
         error = "Output path is empty";
@@ -950,6 +960,10 @@ ag_result run_transcode_pass(const std::string& input_path,
     ag_result r = open_decoder(input_path, config.audio_stream_index,
                                dec, error);
     if (r != AG_OK) return r;
+    if (stats != nullptr) {
+        *stats = {};
+        stats->decoded_sample_rate = dec.ctx->sample_rate;
+    }
 
     const bool apply_gain = (gain != 1.0);
 
@@ -1155,6 +1169,9 @@ ag_result run_transcode_pass(const std::string& input_path,
     // In the gain path this means input -> FLTP -> gain -> output.
     // In the no-gain path this is a single-step input -> output conversion.
     auto convert_and_encode = [&](AVFrame* frame) -> bool {
+        if (stats != nullptr) {
+            stats->decoded_samples += frame->nb_samples;
+        }
         AVFrame* src_for_enc = frame;
         int src_samples = frame->nb_samples;
 
@@ -1652,9 +1669,10 @@ ag_result transcode(const std::string& input_path,
         staged_config.stage_callback("encoding");
     }
     bool output_has_cover = false;
+    TranscodePassStats transcode_stats;
     const ag_result encode_result = run_transcode_pass(
         input_path, staged_config, cancelled, std::move(progress_callback),
-        error, gain, &output_has_cover);
+        error, gain, &output_has_cover, &transcode_stats);
     if (encode_result != AG_OK) {
         std::error_code remove_error;
         fs::remove(staged_output, remove_error);
@@ -1681,7 +1699,19 @@ ag_result transcode(const std::string& input_path,
             return stream.stream_index == selected_stream;
         });
     TranscodeVerificationPlan verification_plan;
-    if (selected != source_probe.audio_streams.end()) {
+    const bool source_duration_is_estimated = source_probe.container == "aac";
+    if (source_duration_is_estimated) {
+        if (transcode_stats.decoded_samples <= 0
+            || transcode_stats.decoded_sample_rate <= 0) {
+            std::error_code remove_error;
+            fs::remove(staged_output, remove_error);
+            error = "Verification failed: reliable raw AAC source duration is unavailable";
+            return AG_DECODE_ERROR;
+        }
+        verification_plan.expected_duration_ms =
+            transcode_stats.decoded_samples * 1000
+            / transcode_stats.decoded_sample_rate;
+    } else if (selected != source_probe.audio_streams.end()) {
         verification_plan.expected_duration_ms = selected->duration_ms;
     }
     verification_plan.lossless =

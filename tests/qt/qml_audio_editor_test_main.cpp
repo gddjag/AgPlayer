@@ -1,73 +1,18 @@
 #include "audio_editor/audio_editor_controller.hpp"
 #include "audio_editor/audio_editor_waveform_item.hpp"
 #include "audio_tools_controller.hpp"
-#include "manual_recording_capture.hpp"
 #include "settings_controller.hpp"
 #include "theme_manager.hpp"
 
 #include <QCoreApplication>
-#include <QGuiApplication>
 #include <QQuickStyle>
 #include <QStandardPaths>
-#include <QTemporaryDir>
-#include <QUrl>
 #include <QtPlugin>
 #include <QtQuickTest/quicktest.h>
 
 #include <memory>
-#include <vector>
 
 Q_IMPORT_PLUGIN(AgPlayerPlugin)
-
-class RecordingTestDriver final : public QObject {
-    Q_OBJECT
-
-public:
-    using QObject::QObject;
-
-    void setCapture(ManualRecordingCapture* capture) noexcept
-    {
-        capture_ = capture;
-    }
-
-    Q_INVOKABLE QUrl nextOutputUrl()
-    {
-        return temporary_.isValid()
-            ? QUrl::fromLocalFile(temporary_.filePath(
-                QStringLiteral("active-%1.wav").arg(++output_index_)))
-            : QUrl{};
-    }
-
-    Q_INVOKABLE bool feedActive(const int frames)
-    {
-        if (capture_ == nullptr || frames <= 0) return false;
-        std::vector<float> samples(static_cast<std::size_t>(frames) * 2U);
-        for (int frame = 0; frame < frames; ++frame) {
-            samples[static_cast<std::size_t>(frame) * 2U] =
-                frame % 2 == 0 ? -0.8F : 0.3F;
-            samples[static_cast<std::size_t>(frame) * 2U + 1U] =
-                frame % 2 == 0 ? -0.2F : 0.6F;
-        }
-        return capture_->feed(samples, static_cast<std::size_t>(frames))
-            == static_cast<std::size_t>(frames);
-    }
-
-    Q_INVOKABLE bool feedQuiet(const int frames)
-    {
-        if (capture_ == nullptr || frames <= 0) return false;
-        const std::vector<float> samples(
-            static_cast<std::size_t>(frames) * 2U, 0.0F);
-        return capture_->feed(samples, static_cast<std::size_t>(frames))
-            == static_cast<std::size_t>(frames);
-    }
-
-private:
-    ManualRecordingCapture* capture_{};
-    QTemporaryDir temporary_;
-    int output_index_{};
-};
-
-RecordingTestDriver* recording_test_driver = nullptr;
 
 class QmlAudioEditorSetup final : public QObject {
     Q_OBJECT
@@ -80,23 +25,6 @@ public slots:
         QCoreApplication::setOrganizationName(QStringLiteral("AgPlayer"));
         QCoreApplication::setApplicationName(
             QStringLiteral("AgPlayer-test-audio-editor"));
-        recording_test_driver = new RecordingTestDriver(qApp);
-        qmlRegisterSingletonInstance(
-            "AgPlayer.Test", 1, 0, "RecordingTestDriver",
-            recording_test_driver);
-        qmlRegisterSingletonType<AudioEditorController>(
-            "AgPlayer", 1, 0, "AudioEditorController",
-            [](QQmlEngine*, QJSEngine*) -> QObject* {
-                auto capture = std::make_unique<ManualRecordingCapture>();
-                recording_test_driver->setCapture(capture.get());
-                return new AudioEditorController(
-                    AG_AUDIO_BACKEND_NULL, std::move(capture));
-            });
-        qmlRegisterSingletonType<AudioToolsController>(
-            "AgPlayer", 1, 0, "AudioToolsController",
-            [](QQmlEngine*, QJSEngine*) -> QObject* {
-                return new AudioToolsController();
-            });
         settings_ = std::make_unique<SettingsController>();
         themeManager_ = std::make_unique<ThemeManager>(*qGuiApp);
         themeSettings_ = std::make_unique<ThemeSettingsSynchronizer>(
@@ -105,6 +33,16 @@ public slots:
                                      settings_.get());
         qmlRegisterSingletonInstance("AgPlayer", 1, 0, "ThemeManager",
                                      themeManager_.get());
+        qmlRegisterSingletonType<AudioEditorController>(
+            "AgPlayer", 1, 0, "AudioEditorController",
+            [](QQmlEngine*, QJSEngine*) -> QObject* {
+                return new AudioEditorController(AG_AUDIO_BACKEND_NULL);
+            });
+        qmlRegisterSingletonType<AudioToolsController>(
+            "AgPlayer", 1, 0, "AudioToolsController",
+            [](QQmlEngine*, QJSEngine*) -> QObject* {
+                return new AudioToolsController();
+            });
         qmlRegisterType<AudioEditorWaveformItem>(
             "AgPlayer", 1, 0, "AudioEditorWaveformItem");
     }

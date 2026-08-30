@@ -126,7 +126,7 @@
     <message>
         <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="16"/>
         <source>音频文件 (*.wav *.flac *.mp3 *.aac *.m4a *.ogg *.opus *.wma)</source>
-        <translation>音频文件 (*.wav *.flac *.mp3 *.aac *.m4a *.ogg *.opus *.wma)</translation>
+        <translation>Tệp âm thanh (*.wav *.flac *.mp3 *.aac *.m4a *.ogg *.opus *.wma)</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="23"/>
@@ -530,6 +530,32 @@
     <message><source>正在处理音频…</source><translation>Đang xử lý âm thanh…</translation></message>
     <message><source>已导出到：</source><translation>Đã xuất đến:</translation></message>
     <message><source>WAV (24-bit, %1 kHz)</source><translation>WAV (24-bit, %1 kHz)</translation></message>
+    <message><source>音频源不可用：</source><translation>Nguồn âm thanh không khả dụng:</translation></message>
+    <message><source>重新定位文件</source><translation>Định vị lại tệp</translation></message>
+    <message><source>（单声道）</source><translation>(Đơn âm)</translation></message>
+    <message><source>（立体声）</source><translation>(Âm thanh nổi)</translation></message>
+    <message><source>选择录音设备（Alt+R）</source><translation>Chọn thiết bị ghi âm (Alt+R)</translation></message>
+    <message><source>暂停 / 继续录音（Shift+R）</source><translation>Tạm dừng / Tiếp tục ghi âm (Shift+R)</translation></message>
+    <message><source>开始 / 继续录音（R）</source><translation>Bắt đầu / Tiếp tục ghi âm (R)</translation></message>
+    <message><source>停止并保存录音（Ctrl+R）</source><translation>Dừng và lưu bản ghi (Ctrl+R)</translation></message>
+    <message><source>跳到开头（Home）</source><translation>Về đầu (Home)</translation></message>
+    <message><source>后退 5 秒（←）</source><translation>Lùi 5 giây (←)</translation></message>
+    <message><source>播放 / 暂停（Space）</source><translation>Phát / Tạm dừng (Space)</translation></message>
+    <message><source>前进 5 秒（→）</source><translation>Tiến 5 giây (→)</translation></message>
+    <message><source>快进 5 秒</source><translation>Tua tới 5 giây</translation></message>
+    <message><source>停止（Ctrl+Space）</source><translation>Dừng (Ctrl+Space)</translation></message>
+    <message><source>空格 = 播放 / 暂停</source><translation>Space = Phát / Tạm dừng</translation></message>
+    <message><source>S = 在播放头处分割</source><translation>S = Tách tại đầu phát</translation></message>
+    <message><source>Delete = 删除片段</source><translation>Delete = Xóa đoạn</translation></message>
+    <message><source>Ctrl+C / X / V = 复制 / 剪切 / 粘贴</source><translation>Ctrl+C / X / V = Sao chép / Cắt / Dán</translation></message>
+    <message><source>Ctrl+Z / Y = 撤销 / 重做</source><translation>Ctrl+Z / Y = Hoàn tác / Làm lại</translation></message>
+    <message><source>Ctrl+拖动 = 快速复制片段</source><translation>Ctrl+kéo = Nhân bản đoạn</translation></message>
+    <message><source>Ctrl+鼠标滚轮 = 放大 / 缩小时间线</source><translation>Ctrl+con lăn = Phóng to / thu nhỏ dòng thời gian</translation></message>
+    <message><source>Shift+鼠标滚轮 = 横向滚动</source><translation>Shift+con lăn = Cuộn ngang</translation></message>
+    <message><source>拖拽片段边缘 = 修剪</source><translation>Kéo mép đoạn = Cắt</translation></message>
+    <message><source>拖拽右上角 = 调整淡出</source><translation>Kéo góc trên bên phải = Điều chỉnh mờ dần</translation></message>
+    <message><source>双击音量线 = 添加控制点</source><translation>Nhấp đúp đường âm lượng = Thêm điểm điều khiển</translation></message>
+    <message><source>停止并保存录音</source><translation>Dừng và lưu bản ghi</translation></message>
 </context>
 <context>
     <name>AudioPreviewController</name>
@@ -816,6 +842,7 @@
     <message><source>拖出片段 WAV</source><translation>Kéo đoạn WAV ra</translation></message>
     <message><source>按住准备 WAV</source><translation>Giữ để chuẩn bị WAV</translation></message>
     <message><source>Ctrl+滚轮缩放 · Shift+滚轮平移</source><translation>Ctrl+con lăn để thu phóng · Shift+con lăn để cuộn</translation></message>
+    <message><source>拖出片段</source><translation>Kéo đoạn ra ngoài</translation></message>
 </context>
 <context>
     <name>EmptyLibrary</name>
@@ -919,6 +946,12 @@
         <source>Rock</source>
         <translation>Rock</translation>
     </message>
+    <message><source>Bass</source><translation>Âm trầm</translation></message>
+    <message><source>Classical</source><translation>Cổ điển</translation></message>
+    <message><source>Pop</source><translation>Pop</translation></message>
+    <message><source>Vocal</source><translation>Giọng hát</translation></message>
+    <message><source>EDM</source><translation>EDM</translation></message>
+    <message><source>Jazz</source><translation>Jazz</translation></message>
 </context>
 <context>
     <name>EqualizerWindow</name>
@@ -1028,6 +1061,18 @@
         <source>删除</source>
         <translation>Xóa</translation>
     </message>
+    <message><source>保护中</source><translation>Đang bảo vệ</translation></message>
+    <message><source>关闭</source><translation>Đóng</translation></message>
+    <message><source>均衡器预设</source><translation>Cài đặt sẵn bộ cân bằng</translation></message>
+    <message><source>旁路均衡器</source><translation>Bỏ qua bộ cân bằng</translation></message>
+    <message><source>启用均衡器</source><translation>Bật bộ cân bằng</translation></message>
+    <message><source>全部归零</source><translation>Đưa tất cả về 0</translation></message>
+    <message><source>十八段图形均衡器</source><translation>Bộ cân bằng đồ họa 18 băng tần</translation></message>
+    <message><source>双击滑杆归零 · 滚轮或方向键微调</source><translation>Nhấp đúp thanh trượt để đặt về 0 · Tinh chỉnh bằng con lăn hoặc phím mũi tên</translation></message>
+    <message><source>余量</source><translation>Dư địa</translation></message>
+    <message><source>最大化</source><translation>Phóng to</translation></message>
+    <message><source>最小化</source><translation>Thu nhỏ</translation></message>
+    <message><source>Custom</source><translation>Tùy chỉnh</translation></message>
 </context>
 <context>
     <name>FileAssociationController</name>
@@ -2860,6 +2905,7 @@
         <source>Previous track</source>
         <translation>Bản nhạc trước</translation>
     </message>
+    <message><source>十八段图形均衡器</source><translation>Bộ cân bằng đồ họa 18 băng tần</translation></message>
 </context>
 <context>
     <name>PlayerPane</name>
@@ -3662,6 +3708,9 @@
     <message><source>RGB 显示区域</source><translation>Vùng hiển thị RGB</translation></message>
     <message><source>已播放区域为 RGB</source><translation>Vùng đã phát dùng RGB</translation></message>
     <message><source>未播放区域为 RGB</source><translation>Vùng chưa phát dùng RGB</translation></message>
+    <message><source>窗口主题</source><translation>Giao diện cửa sổ</translation></message>
+    <message><source>双窗口主题</source><translation>Giao diện hai cửa sổ</translation></message>
+    <message><source>单窗口主题</source><translation>Giao diện một cửa sổ</translation></message>
 </context>
 <context>
     <name>SettingsWindow</name>

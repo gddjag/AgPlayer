@@ -24,6 +24,10 @@ void TranslationManagerTest::normalizesUnsupportedLanguageToChinese()
              QStringLiteral("en"));
     QCOMPARE(TranslationManager::normalizedLanguage(QStringLiteral("ko")),
              QStringLiteral("zh"));
+    QCOMPARE(TranslationManager::normalizedLanguage(QStringLiteral("th")),
+             QStringLiteral("th"));
+    QCOMPARE(TranslationManager::normalizedLanguage(QStringLiteral("vi")),
+             QStringLiteral("vi"));
     QCOMPARE(TranslationManager::normalizedLanguage(QString()),
              QStringLiteral("zh"));
 }

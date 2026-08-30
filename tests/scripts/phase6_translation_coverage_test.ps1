@@ -14,6 +14,7 @@ $phase6Qml = @(
     'app/qml/AgPlayer/components/tools/ToolSidebar.qml'
 )
 $expected = @{}
+$extractedSourceCount = 0
 foreach ($relativePath in $phase6Qml) {
     $path = Join-Path $SourceRoot $relativePath
     $context = [IO.Path]::GetFileNameWithoutExtension($path)
@@ -26,6 +27,10 @@ foreach ($relativePath in $phase6Qml) {
         throw "No qsTr sources extracted from $relativePath."
     }
     $expected[$context] = $sources
+    $extractedSourceCount += $sources.Count
+}
+if ($extractedSourceCount -ne 134) {
+    throw "Expected exactly 134 context-scoped Phase 6 sources, got $extractedSourceCount."
 }
 
 $settingsSources = @(
@@ -38,7 +43,10 @@ $settingsSources = @(
     '5bqV6ImyIC8gUkdCIOa4kOWPmA==',
     'UkdCIOaYvuekuuWMuuWfnw==',
     '5bey5pKt5pS+5Yy65Z+f5Li6IFJHQg==',
-    '5pyq5pKt5pS+5Yy65Z+f5Li6IFJHQg=='
+    '5pyq5pKt5pS+5Yy65Z+f5Li6IFJHQg==',
+    '56qX5Y+j5Li76aKY',
+    '5Y+M56qX5Y+j5Li76aKY',
+    '5Y2V56qX5Y+j5Li76aKY'
 ) | ForEach-Object {
     [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_))
 }
@@ -66,6 +74,36 @@ $expected['SideNavigation'] = @(
 }
 $expected['SearchFilter'] = @(
     '5q2M5puyIMK3IOiJuuacr+WutiDCtyDkuJPovpEgwrcg5qCH562+'
+) | ForEach-Object {
+    [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_))
+}
+
+$expected['EqualizerController'] = @(
+    'Bass',
+    'Classical',
+    'Pop',
+    'Vocal',
+    'EDM',
+    'Jazz'
+)
+$expected['EqualizerWindow'] = @(
+    '5L+d5oqk5Lit',
+    '5YWz6Zet',
+    '5Z2H6KGh5Zmo6aKE6K6+',
+    '5peB6Lev5Z2H6KGh5Zmo',
+    '5ZCv55So5Z2H6KGh5Zmo',
+    '5YWo6YOo5b2S6Zu2',
+    '5Y2B5YWr5q615Zu+5b2i5Z2H6KGh5Zmo',
+    '5Y+M5Ye75ruR5p2G5b2S6Zu2IMK3IOa7mui9ruaIluaWueWQkemUruW+ruiwgw==',
+    '5L2Z6YeP',
+    '5pyA5aSn5YyW',
+    '5pyA5bCP5YyW'
+) | ForEach-Object {
+    [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_))
+}
+$expected['EqualizerWindow'] += 'Custom'
+$expected['PlayerControls'] = @(
+    '5Y2B5YWr5q615Zu+5b2i5Z2H6KGh5Zmo'
 ) | ForEach-Object {
     [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_))
 }

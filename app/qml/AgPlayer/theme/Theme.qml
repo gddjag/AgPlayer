@@ -21,6 +21,9 @@ QtObject {
     readonly property color opaqueBorder: ThemeManager.border
     readonly property color borderStrong: ThemeManager.borderStrong
     readonly property color opaqueDivider: ThemeManager.divider
+    readonly property color controlSubtleBorder: ThemeManager.controlSubtleBorder
+    readonly property color controlHandle: ThemeManager.accentText
+    readonly property color controlHandleShadow: ThemeManager.controlHandleShadow
     readonly property color disabled: ThemeManager.disabled
     readonly property color accent: ThemeManager.accent
     readonly property color accentHover: ThemeManager.accentHover
@@ -35,6 +38,21 @@ QtObject {
     readonly property color highlightSoft: ThemeManager.highlightSoft
     readonly property color highlightText: ThemeManager.highlightText
     readonly property color highlightBorder: ThemeManager.highlight
+    // Compatibility tokens used by the integrated shell. Adaptive values stay
+    // owned by ThemeManager; this QML facade never derives runtime colors.
+    readonly property color selectionGlassFill: ThemeManager.selectionGlassFill
+    readonly property color selectionGlassHover: ThemeManager.selectionGlassHover
+    readonly property color selectionGlassPressed: ThemeManager.selectionGlassPressed
+    readonly property color selectionGlassBorder: ThemeManager.selectionGlassBorder
+    readonly property color subtleGlassFill: ThemeManager.subtleGlassFill
+    readonly property color subtleGlassHover: ThemeManager.subtleGlassHover
+    readonly property color subtleGlassActive: ThemeManager.subtleGlassActive
+    readonly property color subtleGlassBorder: ThemeManager.subtleGlassBorder
+    readonly property color integratedSoftOutline: ThemeManager.integratedSoftOutline
+    readonly property color integratedSliderHandle: ThemeManager.accentText
+    readonly property color integratedGlassHighlight: ThemeManager.integratedGlassHighlight
+    readonly property color navigatorGlassTrack: ThemeManager.navigatorGlassTrack
+    readonly property color navigatorGlassThumb: ThemeManager.navigatorGlassThumb
     readonly property color success: ThemeManager.success
     readonly property color warning: ThemeManager.warning
     readonly property color error: ThemeManager.error
@@ -101,6 +119,8 @@ QtObject {
     readonly property color editorOverviewWaveform: isLight ? "#2B9692" : "#297E7B"
     readonly property color editorSelection: isLight ? "#26169B97" : "#2639C7C0"
     readonly property color editorOverviewSelection: isLight ? "#122B9692" : "#12297E7B"
+    readonly property color editorSelectionLabel: "#FF8A00"
+    readonly property color editorPlayhead: "#FFAF00"
     readonly property color playRingPlaying: generatedSkin ? accent : waveformGreen
     readonly property color playRingPaused: generatedSkin ? accent : "#FFB020"
 

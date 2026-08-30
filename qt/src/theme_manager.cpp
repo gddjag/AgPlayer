@@ -408,6 +408,30 @@ ThemePalette calculatePalette(const ThemeManager::Preferences& preferences,
     palette.highlightPressed = stateTone(
         palette.highlight, palette.highlightText, 28);
     palette.highlightSoft = softTone(palette.highlight, dark ? 0.20 : 0.10);
+
+    // Compact integrated-shell glass materials are part of the generated
+    // palette as well.  Keeping their alpha decisions here prevents QML from
+    // becoming a second color engine while preserving the translucent shell
+    // in both Default and generated skins.
+    palette.controlSubtleBorder = alphaColor(
+        palette.border, dark ? 0.65 : 0.55);
+    palette.controlHandleShadow = QColor(0, 0, 0, 41);
+    palette.selectionGlassFill = alphaColor(palette.highlight, 0.68);
+    palette.selectionGlassHover = alphaColor(palette.highlightHover, 0.68);
+    palette.selectionGlassPressed = alphaColor(palette.highlightPressed, 0.68);
+    palette.selectionGlassBorder = QColor(255, 255, 255, 71);
+    palette.subtleGlassFill = QColor(255, 255, 255, dark ? 13 : 71);
+    palette.subtleGlassHover = QColor(255, 255, 255, dark ? 23 : 107);
+    palette.subtleGlassActive = alphaColor(
+        palette.highlight, dark ? 0.18 : 0.38);
+    palette.subtleGlassBorder = dark
+        ? QColor(255, 255, 255, 51) : QColor(0, 0, 0, 41);
+    palette.integratedSoftOutline = dark
+        ? QColor(255, 255, 255, 26) : QColor(0, 0, 0, 26);
+    palette.integratedGlassHighlight = QColor(255, 255, 255, 41);
+    palette.navigatorGlassTrack = dark
+        ? QColor(255, 255, 255, 20) : QColor(0, 0, 0, 18);
+    palette.navigatorGlassThumb = alphaColor(palette.highlight, 0.28);
     return palette;
 }
 
@@ -423,8 +447,15 @@ bool ThemePalette::operator==(const ThemePalette& other) const
                     highlightHover, highlightPressed, highlightSoft,
                     highlightText, focus, currentTrackSurface, glassSurface,
                     glassSurfaceElevated, glassSurfaceHover, glassSurfacePressed,
-                    glassBorder, glassDivider, glassInnerHighlight, success,
-                    warning, error, danger, recording, critical)
+                    glassBorder, glassDivider, glassInnerHighlight,
+                    controlSubtleBorder, controlHandleShadow,
+                    selectionGlassFill,
+                    selectionGlassHover, selectionGlassPressed,
+                    selectionGlassBorder, subtleGlassFill, subtleGlassHover,
+                    subtleGlassActive, subtleGlassBorder,
+                    integratedSoftOutline, integratedGlassHighlight,
+                    navigatorGlassTrack, navigatorGlassThumb, success, warning,
+                    error, danger, recording, critical)
         == std::tie(other.background, other.backdropStart, other.backdropMiddle,
                     other.backdropEnd, other.surface, other.surfaceElevated,
                     other.surfaceHover, other.surfacePressed, other.textPrimary,
@@ -437,9 +468,16 @@ bool ThemePalette::operator==(const ThemePalette& other) const
                     other.currentTrackSurface, other.glassSurface,
                     other.glassSurfaceElevated, other.glassSurfaceHover,
                     other.glassSurfacePressed, other.glassBorder,
-                    other.glassDivider, other.glassInnerHighlight, other.success,
-                    other.warning, other.error, other.danger, other.recording,
-                    other.critical);
+                    other.glassDivider, other.glassInnerHighlight,
+                    other.controlSubtleBorder, other.controlHandleShadow,
+                    other.selectionGlassFill,
+                    other.selectionGlassHover, other.selectionGlassPressed,
+                    other.selectionGlassBorder, other.subtleGlassFill,
+                    other.subtleGlassHover, other.subtleGlassActive,
+                    other.subtleGlassBorder, other.integratedSoftOutline,
+                    other.integratedGlassHighlight, other.navigatorGlassTrack,
+                    other.navigatorGlassThumb, other.success, other.warning,
+                    other.error, other.danger, other.recording, other.critical);
 }
 
 ThemeManager::ThemeManager(QGuiApplication& application, QObject* parent)

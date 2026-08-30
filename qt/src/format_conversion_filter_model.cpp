@@ -12,6 +12,8 @@ FormatConversionFilterModel::FormatConversionFilterModel(QObject* parent)
             &FormatConversionFilterModel::visibleCountsChanged);
     connect(this, &QAbstractItemModel::modelReset, this,
             &FormatConversionFilterModel::visibleCountsChanged);
+    connect(this, &QAbstractItemModel::dataChanged, this,
+            &FormatConversionFilterModel::visibleCountsChanged);
 }
 
 QString FormatConversionFilterModel::query() const { return query_; }

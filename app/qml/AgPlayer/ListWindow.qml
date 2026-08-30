@@ -13,7 +13,7 @@ Window {
     readonly property int defaultVisibleTrackCount: 10
     readonly property int filterBarHeight: 54
     readonly property int defaultTrackRowHeight:
-        SettingsController.listWaveformThumbnailEnabled ? 62 : 42
+        SettingsController.listWaveformThumbnailEnabled ? 50 : 42
     readonly property int defaultListHeight:
         titleBarHeight + trackHeaderHeight
         + defaultVisibleTrackCount * defaultTrackRowHeight + filterBarHeight
@@ -38,6 +38,7 @@ Window {
 
     property var windows: WindowController
     property var filterModel: null
+    property alias tagSearchText: tagManagementPanel.searchText
     property var playlistModel: PlaylistModel
     property string importTargetPlaylistId: ""
     property var activeImportDialog: null
@@ -553,6 +554,8 @@ Window {
                                                       ? filterModel.category : "all"
                                     tagFilterActive: filterModel
                                                      && filterModel.tagKey !== ""
+                                    activeTagKey: filterModel
+                                                  ? filterModel.tagKey : ""
                                     searchText: filterModel
                                                 ? filterModel.searchText : ""
                                 }
@@ -626,6 +629,7 @@ Window {
                     }
 
                     TagManagementPanel {
+                        id: tagManagementPanel
                         objectName: "tagManagementPanel"
                         Layout.preferredWidth: listWorkspace.rightColumnWidth
                         Layout.minimumWidth: listWorkspace.rightColumnWidth

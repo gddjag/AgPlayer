@@ -25,6 +25,8 @@ private slots:
     void classifiesEverySupportedAudioExtension();
     void removesPersistedRootWithoutDeletingFiles();
     void persistsRootsAndImportsNewAudioRecursively();
+    void removedLibraryTrackStaysExcludedUntilManualImport();
+    void failedExclusionPersistenceKeepsTrackInLibrary();
     void exposesNonDestructiveLibrarySummary();
     void scanRunsAsCancelableBackgroundTask();
     void filtersTenThousandRowsWithoutQmlDelegateChurn();
@@ -264,6 +266,113 @@ void LibraryManagerControllerTest::persistsRootsAndImportsNewAudioRecursively()
     LibraryManagerController restored;
     restored.setStoragePath(settingsPath);
     QCOMPARE(restored.monitoredFolders(), QStringList({musicRoot}));
+}
+
+void LibraryManagerControllerTest::removedLibraryTrackStaysExcludedUntilManualImport()
+{
+    // Catches monitored-folder rescans immediately resurrecting a track that
+    // the user explicitly removed from the all-library view.
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString musicRoot = directory.filePath(QStringLiteral("music"));
+    QVERIFY(QDir().mkpath(musicRoot));
+    const QString audioPath = writeFile(
+        QDir(musicRoot).filePath(QStringLiteral("removed-track.mp3")), "audio");
+    const QString settingsPath = directory.filePath(QStringLiteral("manager.json"));
+
+    LibraryModel library;
+    ImportController importer(&library, [](const QString& path) {
+        TrackRecord track;
+        track.path = path;
+        track.title = QFileInfo(path).completeBaseName();
+        track.available = true;
+        return ProbeResult{AG_OK, track, {}};
+    });
+    QSignalSpy imported(&importer, &ImportController::finished);
+    {
+        LibraryManagerController manager;
+        manager.setStoragePath(settingsPath);
+        manager.setImportController(&importer);
+        manager.setLibraryModel(&library);
+        QVERIFY(manager.addMonitoredFolder(musicRoot));
+
+        manager.rescan();
+        QVERIFY(imported.wait(3'000));
+        QCOMPARE(library.count(), 1);
+        const QString trackId = library.tracks().constFirst().trackId;
+
+        QVERIFY(manager.removeTrackFromLibrary(trackId));
+        QCOMPARE(library.count(), 0);
+        QSignalSpy scanFinished(&manager,
+                                &LibraryManagerController::scanFinished);
+        manager.rescan();
+        QVERIFY(scanFinished.wait(3'000));
+        QTest::qWait(500);
+        QCOMPARE(library.count(), 0);
+    }
+
+    {
+        LibraryManagerController restored;
+        restored.setStoragePath(settingsPath);
+        restored.setImportController(&importer);
+        restored.setLibraryModel(&library);
+        QSignalSpy restoredScanFinished(&restored,
+                                        &LibraryManagerController::scanFinished);
+        restored.rescan();
+        QVERIFY(restoredScanFinished.wait(3'000));
+        QTest::qWait(500);
+        QCOMPARE(library.count(), 0);
+
+        // Keep a controller connected while importing so the manual action
+        // clears and persists the tombstone before reconstruction.
+        imported.clear();
+        importer.importPaths({audioPath});
+        QVERIFY(imported.wait(3'000));
+        QCOMPARE(library.count(), 1);
+    }
+
+    // A manual import clears the tombstone durably, not merely in the live
+    // controller.  Reconstructing the controller and rescanning must retain it.
+    {
+        LibraryManagerController afterManualImport;
+        afterManualImport.setStoragePath(settingsPath);
+        afterManualImport.setImportController(&importer);
+        afterManualImport.setLibraryModel(&library);
+        QSignalSpy scanFinished(&afterManualImport,
+                                &LibraryManagerController::scanFinished);
+        afterManualImport.rescan();
+        QVERIFY(scanFinished.wait(3'000));
+        QTest::qWait(500);
+        QCOMPARE(library.count(), 1);
+
+        // Keep the re-delete assertion independent and last so it cannot make
+        // the manual-import persistence assertion pass accidentally.
+        QVERIFY(afterManualImport.removeTrackFromLibrary(
+            library.tracks().constFirst().trackId));
+        QCOMPARE(library.count(), 0);
+    }
+}
+
+void LibraryManagerControllerTest::failedExclusionPersistenceKeepsTrackInLibrary()
+{
+    // Catches an exclusion write failure being reported as success after the
+    // in-memory model was already mutated.
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString audioPath = writeFile(
+        directory.filePath(QStringLiteral("kept.mp3")), "audio");
+    LibraryModel library;
+    library.replaceAll({record(QStringLiteral("kept"), audioPath,
+                               QStringLiteral("Kept"))});
+    LibraryManagerController manager;
+    manager.setLibraryModel(&library);
+    manager.setStoragePath(directory.path()); // A directory cannot be QSaveFile output.
+
+    QVERIFY(!manager.removeTrackFromLibrary(QStringLiteral("kept")));
+    QCOMPARE(library.count(), 1);
+    QCOMPARE(library.trackForId(QStringLiteral("kept"))
+                 .value(QStringLiteral("path")).toString(), audioPath);
+    QVERIFY(!manager.lastPersistenceError().isEmpty());
 }
 
 void LibraryManagerControllerTest::exposesNonDestructiveLibrarySummary()

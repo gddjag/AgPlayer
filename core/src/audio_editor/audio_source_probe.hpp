@@ -2,6 +2,7 @@
 
 #include "audio_event.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <string>
@@ -25,7 +26,8 @@ public:
         const std::filesystem::path& path) noexcept;
     [[nodiscard]] static AudioSourceProbeResult probe(
         const std::filesystem::path& path,
-        std::chrono::steady_clock::time_point deadline) noexcept;
+        std::chrono::steady_clock::time_point deadline,
+        const std::atomic_bool* cancelled = nullptr) noexcept;
 };
 
 } // namespace agplayer::editor

@@ -153,6 +153,7 @@ private slots:
     void generatedSeedsMeetContract();
     void generatedGlassPalettesMeetContract_data();
     void generatedGlassPalettesMeetContract();
+    void integratedGlassTokensStaySoftAndAdaptive();
     void solidBackdropExpandsSeedHue();
     void generatedStopsDriveCompletePalette();
     void generatedSeedChangesCompleteOrdinaryPalette();
@@ -375,6 +376,51 @@ void ThemeManagerTest::generatedGlassPalettesMeetContract()
         QCOMPARE(palette.surfacePressed,
                  composite(palette.glassSurfacePressed,
                            palette.backdropMiddle));
+    }
+}
+
+void ThemeManagerTest::integratedGlassTokensStaySoftAndAdaptive()
+{
+    for (const auto appearance : {ThemeManager::AppearanceMode::Light,
+                                  ThemeManager::AppearanceMode::Dark}) {
+        ThemeManager manager(*qApp);
+        manager.applyPreferences({
+            appearance, ThemeManager::SkinMode::Default,
+            ThemeManager::SkinKind::Solid,
+            {ThemeManager::defaultSeed(), ThemeManager::defaultSeed(),
+             ThemeManager::defaultSeed()}});
+        const ThemePalette defaultPalette = manager.palette();
+        QCOMPARE(defaultPalette.selectionGlassFill.alpha(), 173);
+        QCOMPARE(defaultPalette.controlHandleShadow, QColor(0, 0, 0, 41));
+        QCOMPARE(defaultPalette.selectionGlassHover.alpha(), 173);
+        QCOMPARE(defaultPalette.selectionGlassPressed.alpha(), 173);
+        QCOMPARE(defaultPalette.selectionGlassBorder.alpha(), 71);
+        QCOMPARE(defaultPalette.subtleGlassFill.alpha(),
+                 appearance == ThemeManager::AppearanceMode::Dark ? 13 : 71);
+        QCOMPARE(defaultPalette.subtleGlassHover.alpha(),
+                 appearance == ThemeManager::AppearanceMode::Dark ? 23 : 107);
+        QCOMPARE(defaultPalette.subtleGlassActive.alpha(),
+                 appearance == ThemeManager::AppearanceMode::Dark ? 46 : 97);
+        QCOMPARE(defaultPalette.subtleGlassBorder.alpha(),
+                 appearance == ThemeManager::AppearanceMode::Dark ? 51 : 41);
+        QCOMPARE(defaultPalette.integratedSoftOutline.alpha(), 26);
+        QCOMPARE(defaultPalette.integratedGlassHighlight.alpha(), 41);
+        QCOMPARE(defaultPalette.navigatorGlassTrack.alpha(),
+                 appearance == ThemeManager::AppearanceMode::Dark ? 20 : 18);
+        QCOMPARE(defaultPalette.navigatorGlassThumb.alpha(), 71);
+
+        const QColor seed(QStringLiteral("#D948B1"));
+        manager.applyPreferences(generated(
+            appearance, ThemeManager::SkinKind::Solid, {seed, seed, seed}));
+        const ThemePalette generatedPalette = manager.palette();
+        QCOMPARE(generatedPalette.integratedSoftOutline.alpha(), 26);
+        QCOMPARE(generatedPalette.navigatorGlassTrack.alpha(),
+                 defaultPalette.navigatorGlassTrack.alpha());
+        QCOMPARE(generatedPalette.navigatorGlassThumb.alpha(), 71);
+        QVERIFY(generatedPalette.selectionGlassFill.rgb()
+                != defaultPalette.selectionGlassFill.rgb());
+        QVERIFY(generatedPalette.navigatorGlassThumb.rgb()
+                != defaultPalette.navigatorGlassThumb.rgb());
     }
 }
 

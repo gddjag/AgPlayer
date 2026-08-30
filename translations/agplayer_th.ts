@@ -126,7 +126,7 @@
     <message>
         <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="16"/>
         <source>音频文件 (*.wav *.flac *.mp3 *.aac *.m4a *.ogg *.opus *.wma)</source>
-        <translation>音频文件 (*.wav *.flac *.mp3 *.aac *.m4a *.ogg *.opus *.wma)</translation>
+        <translation>ไฟล์เสียง (*.wav *.flac *.mp3 *.aac *.m4a *.ogg *.opus *.wma)</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/tools/AudioEditorPage.qml" line="23"/>
@@ -530,6 +530,32 @@
     <message><source>正在处理音频…</source><translation>กำลังประมวลผลเสียง…</translation></message>
     <message><source>已导出到：</source><translation>ส่งออกไปยัง:</translation></message>
     <message><source>WAV (24-bit, %1 kHz)</source><translation>WAV (24 บิต, %1 kHz)</translation></message>
+    <message><source>音频源不可用：</source><translation>แหล่งเสียงไม่พร้อมใช้งาน:</translation></message>
+    <message><source>重新定位文件</source><translation>ค้นหาตำแหน่งไฟล์ใหม่</translation></message>
+    <message><source>（单声道）</source><translation>(โมโน)</translation></message>
+    <message><source>（立体声）</source><translation>(สเตอริโอ)</translation></message>
+    <message><source>选择录音设备（Alt+R）</source><translation>เลือกอุปกรณ์บันทึกเสียง (Alt+R)</translation></message>
+    <message><source>暂停 / 继续录音（Shift+R）</source><translation>หยุดชั่วคราว / บันทึกต่อ (Shift+R)</translation></message>
+    <message><source>开始 / 继续录音（R）</source><translation>เริ่ม / บันทึกต่อ (R)</translation></message>
+    <message><source>停止并保存录音（Ctrl+R）</source><translation>หยุดและบันทึกเสียง (Ctrl+R)</translation></message>
+    <message><source>跳到开头（Home）</source><translation>ไปยังจุดเริ่มต้น (Home)</translation></message>
+    <message><source>后退 5 秒（←）</source><translation>ย้อนกลับ 5 วินาที (←)</translation></message>
+    <message><source>播放 / 暂停（Space）</source><translation>เล่น / หยุดชั่วคราว (Space)</translation></message>
+    <message><source>前进 5 秒（→）</source><translation>เดินหน้า 5 วินาที (→)</translation></message>
+    <message><source>快进 5 秒</source><translation>เดินหน้า 5 วินาที</translation></message>
+    <message><source>停止（Ctrl+Space）</source><translation>หยุด (Ctrl+Space)</translation></message>
+    <message><source>空格 = 播放 / 暂停</source><translation>Space = เล่น / หยุดชั่วคราว</translation></message>
+    <message><source>S = 在播放头处分割</source><translation>S = แยกที่หัวอ่าน</translation></message>
+    <message><source>Delete = 删除片段</source><translation>Delete = ลบคลิป</translation></message>
+    <message><source>Ctrl+C / X / V = 复制 / 剪切 / 粘贴</source><translation>Ctrl+C / X / V = คัดลอก / ตัด / วาง</translation></message>
+    <message><source>Ctrl+Z / Y = 撤销 / 重做</source><translation>Ctrl+Z / Y = เลิกทำ / ทำซ้ำ</translation></message>
+    <message><source>Ctrl+拖动 = 快速复制片段</source><translation>Ctrl+ลาก = ทำสำเนาคลิป</translation></message>
+    <message><source>Ctrl+鼠标滚轮 = 放大 / 缩小时间线</source><translation>Ctrl+ล้อเมาส์ = ซูมไทม์ไลน์</translation></message>
+    <message><source>Shift+鼠标滚轮 = 横向滚动</source><translation>Shift+ล้อเมาส์ = เลื่อนแนวนอน</translation></message>
+    <message><source>拖拽片段边缘 = 修剪</source><translation>ลากขอบคลิป = ตัดแต่ง</translation></message>
+    <message><source>拖拽右上角 = 调整淡出</source><translation>ลากมุมขวาบน = ปรับเฟดออก</translation></message>
+    <message><source>双击音量线 = 添加控制点</source><translation>ดับเบิลคลิกเส้นระดับเสียง = เพิ่มจุดควบคุม</translation></message>
+    <message><source>停止并保存录音</source><translation>หยุดและบันทึกเสียง</translation></message>
 </context>
 <context>
     <name>AudioPreviewController</name>
@@ -816,6 +842,7 @@
     <message><source>拖出片段 WAV</source><translation>ลากคลิป WAV ออก</translation></message>
     <message><source>按住准备 WAV</source><translation>กดค้างเพื่อเตรียม WAV</translation></message>
     <message><source>Ctrl+滚轮缩放 · Shift+滚轮平移</source><translation>Ctrl+ล้อเมาส์เพื่อซูม · Shift+ล้อเมาส์เพื่อเลื่อน</translation></message>
+    <message><source>拖出片段</source><translation>ลากคลิปออก</translation></message>
 </context>
 <context>
     <name>EmptyLibrary</name>
@@ -919,6 +946,12 @@
         <source>Rock</source>
         <translation>ร็อก</translation>
     </message>
+    <message><source>Bass</source><translation>เบส</translation></message>
+    <message><source>Classical</source><translation>คลาสสิก</translation></message>
+    <message><source>Pop</source><translation>ป๊อป</translation></message>
+    <message><source>Vocal</source><translation>เสียงร้อง</translation></message>
+    <message><source>EDM</source><translation>EDM</translation></message>
+    <message><source>Jazz</source><translation>แจ๊ส</translation></message>
 </context>
 <context>
     <name>EqualizerWindow</name>
@@ -1028,6 +1061,18 @@
         <source>删除</source>
         <translation>ลบ</translation>
     </message>
+    <message><source>保护中</source><translation>กำลังป้องกัน</translation></message>
+    <message><source>关闭</source><translation>ปิด</translation></message>
+    <message><source>均衡器预设</source><translation>พรีเซ็ตอีควอไลเซอร์</translation></message>
+    <message><source>旁路均衡器</source><translation>บายพาสอีควอไลเซอร์</translation></message>
+    <message><source>启用均衡器</source><translation>เปิดใช้อีควอไลเซอร์</translation></message>
+    <message><source>全部归零</source><translation>ตั้งทั้งหมดเป็นศูนย์</translation></message>
+    <message><source>十八段图形均衡器</source><translation>อีควอไลเซอร์กราฟิก 18 แบนด์</translation></message>
+    <message><source>双击滑杆归零 · 滚轮或方向键微调</source><translation>ดับเบิลคลิกแถบเลื่อนเพื่อรีเซ็ต · ปรับละเอียดด้วยล้อเมาส์หรือปุ่มลูกศร</translation></message>
+    <message><source>余量</source><translation>ระยะเผื่อ</translation></message>
+    <message><source>最大化</source><translation>ขยายใหญ่สุด</translation></message>
+    <message><source>最小化</source><translation>ย่อเล็กสุด</translation></message>
+    <message><source>Custom</source><translation>กำหนดเอง</translation></message>
 </context>
 <context>
     <name>FileAssociationController</name>
@@ -2860,6 +2905,7 @@
         <source>Previous track</source>
         <translation>เพลงก่อนหน้า</translation>
     </message>
+    <message><source>十八段图形均衡器</source><translation>อีควอไลเซอร์กราฟิก 18 แบนด์</translation></message>
 </context>
 <context>
     <name>PlayerPane</name>
@@ -3662,6 +3708,9 @@
     <message><source>RGB 显示区域</source><translation>พื้นที่แสดง RGB</translation></message>
     <message><source>已播放区域为 RGB</source><translation>พื้นที่ที่เล่นแล้วใช้ RGB</translation></message>
     <message><source>未播放区域为 RGB</source><translation>พื้นที่ที่ยังไม่เล่นใช้ RGB</translation></message>
+    <message><source>窗口主题</source><translation>ธีมหน้าต่าง</translation></message>
+    <message><source>双窗口主题</source><translation>ธีมสองหน้าต่าง</translation></message>
+    <message><source>单窗口主题</source><translation>ธีมหน้าต่างเดียว</translation></message>
 </context>
 <context>
     <name>SettingsWindow</name>

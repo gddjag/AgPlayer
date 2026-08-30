@@ -528,37 +528,41 @@ Rectangle {
             objectName: "metadataToolbar"
             Layout.fillWidth: true
             Layout.preferredHeight: 40
-            Layout.leftMargin: 12
             spacing: 14
 
             ToolbarAction {
-                Layout.preferredWidth: 136
+                Layout.preferredWidth: page.compactLayout ? 104 : 136
+                Layout.minimumWidth: page.compactLayout ? 92 : 110
                 text: qsTr("添加文件")
                 icon.source: Theme.icon("add-line")
                 onClicked: audioDialog.open()
             }
             ToolbarAction {
-                Layout.preferredWidth: 151
+                Layout.preferredWidth: page.compactLayout ? 112 : 151
+                Layout.minimumWidth: page.compactLayout ? 100 : 120
                 text: qsTr("添加文件夹")
                 icon.source: Theme.icon("folder-add-line")
                 onClicked: folderDialog.open()
             }
             ToolbarAction {
-                Layout.preferredWidth: 184
+                Layout.preferredWidth: page.compactLayout ? 134 : 184
+                Layout.minimumWidth: page.compactLayout ? 118 : 145
                 text: qsTr("从播放列表添加")
                 icon.source: Theme.icon("music-2-line")
                 enabled: !MetadataEditor.busy && PlaybackController.currentTrackId.length > 0
                 onClicked: page.addCurrentPlayerTrack()
             }
             ToolbarAction {
-                Layout.preferredWidth: 142
+                Layout.preferredWidth: page.compactLayout ? 104 : 142
+                Layout.minimumWidth: page.compactLayout ? 92 : 112
                 text: qsTr("移除选中")
                 icon.source: Theme.icon("delete-bin-line")
                 enabled: selectedIndices.length > 0 && !MetadataEditor.busy
                 onClicked: page.deleteSelection()
             }
             ToolbarAction {
-                Layout.preferredWidth: 140
+                Layout.preferredWidth: page.compactLayout ? 104 : 140
+                Layout.minimumWidth: page.compactLayout ? 92 : 112
                 text: qsTr("清空列表")
                 icon.source: Theme.icon("delete-bin-line")
                 enabled: MetadataEditor.fileCount > 0 && !MetadataEditor.busy
@@ -590,8 +594,8 @@ Rectangle {
             }
             ComboBox {
                 objectName: "metadataStatusFilter"
-                visible: false
-                Layout.preferredWidth: 110
+                Layout.preferredWidth: page.compactLayout ? 96 : 110
+                Layout.minimumWidth: page.compactLayout ? 86 : 100
                 Layout.preferredHeight: 38
                 textRole: "text"
                 valueRole: "value"
@@ -641,10 +645,10 @@ Rectangle {
                     id: filePanel
                     objectName: "metadataFilePanel"
                     visible: !page.compactLayout || compactMetadataTabs.currentIndex === 0
-                    Layout.fillWidth: true
+                    Layout.fillWidth: page.compactLayout ? visible : true
                     Layout.fillHeight: true
                     Layout.preferredWidth: page.compactLayout
-                                           ? (visible ? workbench.width - 18 : 0)
+                                           ? 0
                                            : workbench.width - 26
                                              - (page.width * page.inspectorRatio - 12)
                     Layout.minimumWidth: page.compactLayout ? 0 : 560
@@ -912,9 +916,10 @@ Rectangle {
                     id: inspectorPanel
                     objectName: "metadataInspectorPanel"
                     visible: !page.compactLayout || compactMetadataTabs.currentIndex === 1
+                    Layout.fillWidth: page.compactLayout && visible
                     Layout.fillHeight: true
                     Layout.preferredWidth: page.compactLayout
-                                           ? (visible ? workbench.width - 18 : 0)
+                                           ? 0
                                            : page.width * page.inspectorRatio - 12
                     Layout.minimumWidth: page.compactLayout ? 0 : 620
                     color: page.panelColor

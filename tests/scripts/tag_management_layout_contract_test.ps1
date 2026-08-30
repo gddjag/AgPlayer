@@ -50,10 +50,12 @@ Assert-Matches $tagPanel '(?s)Flow\s*\{.*id:\s*tagFlow' `
     'Tag panel must lay capsules out with Flow'
 Assert-Matches $tagPanel 'contentHeight:\s*tagFlow\.height' `
     'Tag Flickable content height must follow the natural Flow height'
-Assert-Matches $tagPanel '(?s)id:\s*tagPill.*implicitWidth:.*implicitHeight:\s*26.*height:\s*implicitHeight.*radius:\s*13' `
-    'Tag capsules must preserve natural width in compact rounded pills'
+Assert-Matches $tagPanel '(?s)id:\s*tagPill.*implicitWidth:\s*Math\.min\(tagFlow\.width,.*tagNameMeasure\.implicitWidth.*tagCount\.implicitWidth.*implicitHeight:\s*24.*height:\s*implicitHeight.*radius:\s*12' `
+    'Tag capsules must preserve natural width in 24 px rounded pills'
 Assert-Matches $tagPanel 'selectedVisual|hoveredVisual|tagDropTarget\.containsDrag' `
     'Tag capsules must expose selected, hover and drop visual states'
+Assert-Matches $tagPanel '(?s)Flickable\s*\{.*contentHeight:\s*tagFlow\.height.*Flow\s*\{.*width:\s*tagFlickable\.width.*height:\s*childrenRect\.height' `
+    'Tag capsules must wrap naturally and expose their full height to scrolling'
 if ($tagPanel -match 'Keys\.onSpacePressed') {
     throw 'Tag pills must leave Space for global playback shortcuts'
 }
@@ -98,8 +100,8 @@ Assert-Matches $trackList 'reuseItems:\s*true' `
     'TrackList must reuse delegates'
 Assert-Matches $trackList 'cacheBuffer:\s*0' `
     'TrackList must not retain off-screen waveform delegates'
-Assert-Matches $trackList 'listWaveformThumbnailEnabled\s*\?\s*62\s*:\s*42' `
-    'Track rows must switch directly between 62 px and 42 px'
+Assert-Matches $trackList 'listWaveformThumbnailEnabled\s*\?\s*50\s*:\s*42' `
+    'Track rows must switch directly between 50 px and 42 px'
 Assert-Matches $trackList '(?s)trackHeaderIndex.*trackHeaderTitle.*trackHeaderFavorite.*trackHeaderArtist.*trackHeaderAlbum.*trackHeaderRating.*trackHeaderBpm.*trackHeaderDuration' `
     'Track header order must match the reference table'
 Assert-Matches $trackList '(?s)active:\s*SettingsController\.listWaveformThumbnailEnabled\s*&&\s*root\s*&&\s*root\.thumbnailHostVisible\s*&&\s*rowItem\.inViewport' `

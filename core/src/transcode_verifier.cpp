@@ -149,7 +149,10 @@ ag_result verify_transcoded_output(
         const std::int64_t tolerance = plan.lossless ? 40 : 250;
         if (std::llabs(result.decoded_duration_ms
                        - plan.expected_duration_ms) > tolerance) {
-            error = "Verification failed: decoded duration is incomplete";
+            error = "Verification failed: decoded duration is incomplete"
+                " (actual=" + std::to_string(result.decoded_duration_ms)
+                + "ms, expected=" + std::to_string(plan.expected_duration_ms)
+                + "ms)";
             return AG_DECODE_ERROR;
         }
     }

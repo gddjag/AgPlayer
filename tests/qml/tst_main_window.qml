@@ -586,7 +586,7 @@ TestCase {
         verify(findChild(mainWindow, "settingsButton"), "settingsButton should exist in Phase 2 settings task")
         verify(findChild(mainWindow, "audioToolsButton"), "audioToolsButton should exist in Phase 2.1")
         verify(findChild(mainWindow, "equalizerButton"),
-               "equalizerButton should expose the real ten-band EQ")
+               "equalizerButton should expose the real eighteen-control EQ")
         verify(findChild(mainWindow, "listWindowButton"), "listWindowButton should exist")
         verify(findChild(mainWindow, "playerCover"), "player cover should exist")
         verify(findChild(mainWindow, "playerCoverImage").source.toString().length > 0,
@@ -624,16 +624,16 @@ TestCase {
         item.destroy()
     }
 
-    function test_equalizer_opens_compact_real_control_window() {
+    function test_equalizer_opens_apple_style_eighteen_control_window() {
         var button = findChild(mainWindow, "equalizerButton")
         verify(button)
         mouseClick(button)
         var window = findChild(mainWindow, "equalizerWindow")
         tryVerify(function() { return window && window.visible }, 1000)
-        compare(window.width, 520)
-        compare(window.height, 307)
-        compare(window.minimumWidth, 520)
-        compare(window.minimumHeight, 307)
+        verify(window.width >= 1180)
+        verify(window.height >= 680)
+        compare(window.minimumWidth, 960)
+        compare(window.minimumHeight, 580)
         var equalizerTitle = findChild(window, "equalizerTitle")
         var equalizerContent = findChild(window, "equalizerContent")
         verify(equalizerTitle,
@@ -641,8 +641,9 @@ TestCase {
         verify(equalizerContent,
                "EQ must lay out at native size instead of shrinking a large canvas")
         compare(equalizerContent.scale, 1)
-        verify(equalizerTitle.font.pixelSize >= 14)
-        compare(findChild(window, "equalizerHeaderPanel").height, 38)
+        compare(equalizerTitle.text, qsTr("十八段图形均衡器"))
+        verify(equalizerTitle.font.pixelSize >= 18)
+        verify(findChild(window, "equalizerHeaderPanel").height >= 64)
         compare(findChild(window, "equalizerMinimizeButton").width, 30)
         verify(findChild(window, "equalizerEnabledSwitch"))
         compare(button.contentItem.rotation, 90)
@@ -668,7 +669,7 @@ TestCase {
         SettingsController.themeMode = previousThemeMode
         var bands = findChild(window, "equalizerBandRepeater")
         verify(bands)
-        compare(bands.count, 10)
+        compare(bands.count, 17)
         verify(findChild(window, "equalizerPreampSlider"))
         verify(findChild(window, "equalizerAutoProtection"))
         verify(findChild(window, "equalizerBypassButton"))
@@ -679,6 +680,8 @@ TestCase {
         firstBand.setGain(3.2)
         tryCompare(firstBand, "gainDb", 3.2)
         compare(EqualizerController.bandGain(0), 3.2)
+        compare(EqualizerController.currentPresetId, "custom")
+        compare(presetBox.displayText, qsTr("Custom"))
         var firstBandControl = findChild(firstBand, "eqBandSlider-0-control")
         verify(firstBandControl)
         firstBand.setGain(12)
@@ -697,6 +700,16 @@ TestCase {
                 "double-clicking an EQ band must reset it to 0 dB")
         firstBand.setGain(6)
         tryCompare(firstBand, "gainDb", 6)
+        firstBandControl.forceActiveFocus()
+        keyPress(Qt.Key_Up)
+        tryCompare(firstBand, "gainDb", 6.1)
+        keyPress(Qt.Key_PageUp)
+        tryCompare(firstBand, "gainDb", 7.1)
+        keyPress(Qt.Key_PageDown)
+        tryCompare(firstBand, "gainDb", 6.1)
+        mouseWheel(firstBandControl, firstBandControl.width / 2,
+                   firstBandControl.height / 2, 0, -120)
+        tryCompare(firstBand, "gainDb", 6.0)
         var firstBandLabel = findChild(firstBand, "eqBandSlider-0-frequency")
         verify(firstBandLabel)
         mouseDoubleClickSequence(firstBandLabel, firstBandLabel.width / 2,
@@ -795,10 +808,17 @@ TestCase {
         var miniButton = findChild(mainWindow, "miniPlayerButton")
         verify(brand && brand.visible, "brand must remain visible after loading a track")
         verify(center && listButton && miniButton)
-        compare(Math.round(center.y + center.height / 2),
-                Math.round(listButton.y + listButton.height / 2))
-        compare(Math.round(center.y + center.height / 2),
-                Math.round(miniButton.y + miniButton.height / 2))
+        var centerPoint = center.mapToItem(mainWindow.contentItem,
+                                           center.width / 2,
+                                           center.height / 2)
+        var listPoint = listButton.mapToItem(mainWindow.contentItem,
+                                             listButton.width / 2,
+                                             listButton.height / 2)
+        var miniPoint = miniButton.mapToItem(mainWindow.contentItem,
+                                             miniButton.width / 2,
+                                             miniButton.height / 2)
+        compare(Math.round(centerPoint.y), Math.round(listPoint.y))
+        compare(Math.round(centerPoint.y), Math.round(miniPoint.y))
     }
 
     function test_native_qt_drop_reaches_the_real_import_controller() {
@@ -923,12 +943,11 @@ TestCase {
             ["trackMenuShowFolder", "在文件夹中显示"],
             ["trackMenuCopyPath", "复制文件路径"],
             ["trackMenuTag", "打标签"],
-            ["trackMenuRename", "重命名"],
             ["trackMenuMoveFile", "移动到指定文件夹"],
             ["trackMenuCopyFile", "复制到指定文件夹"],
             ["trackMenuRemove", "从列表删除"],
             ["trackMenuTrash", "彻底删除至回收站"],
-            ["trackMenuRelocate", "重新定位文件"]
+            ["trackMenuDetails", "查看音频文件信息"]
         ]
         for (var index = 0; index < expected.length; ++index) {
             var action = findChild(menu, expected[index][0])
@@ -936,6 +955,8 @@ TestCase {
             compare(action.text !== undefined ? action.text : action.title,
                     expected[index][1])
         }
+        verify(!findChild(menu, "trackMenuRename"))
+        verify(!findChild(menu, "trackMenuRelocate"))
         menu.close()
         list.destroy()
     }
@@ -987,7 +1008,7 @@ TestCase {
             var trackList = findChild(listWindow, "sharedTrackList")
             var filter = findChild(listWindow, "librarySearchFilter")
             verify(trackList && filter)
-            var expectedRowHeight = enabled ? 62 : 42
+            var expectedRowHeight = enabled ? 50 : 42
             var expectedHeight = 38 + 56 + 10 * expectedRowHeight + 54
             compare(listWindow.height, expectedHeight)
             compare(filter.height, 54)
@@ -1937,6 +1958,25 @@ TestCase {
                         LibraryModel.index(row, 0), LibraryModel.FavoriteRole)
         }, 500)
 
+        verify(LibraryModel.setTags(ids[0], ["Focus", "Night"]))
+        list.selectedCategory = "all"
+        list.tagFilterActive = true
+        list.activeTagKey = ""
+        compare(list.canRemoveFromCurrentView, false,
+                "an incomplete tag filter must never fall through to library deletion")
+        list.activeTagKey = "focus"
+        list.selectOnly(ids[0], LibraryModel.indexForTrackId(ids[0]))
+        list.removeSelectedFromCurrentView()
+        verify(LibraryModel.indexForTrackId(ids[0]) >= 0,
+               "tag-filter removal must keep the library record")
+        compare(LibraryModel.trackForId(ids[0]).tags, ["Night"])
+
+        list.tagFilterActive = false
+        list.activeTagKey = ""
+        list.selectedCategory = "recentAdded"
+        compare(list.canRemoveFromCurrentView, false,
+                "read-only virtual views must disable list removal")
+
         var thirdIndex = LibraryModel.indexForTrackId(ids[2])
         list.selectedCategory = "all"
         list.positionViewAtIndex(thirdIndex, ListView.Center)
@@ -1957,7 +1997,7 @@ TestCase {
 
     function test_waveform_click_seeks_real_playback_controller() {
         var waveform = findChild(mainWindow, "mainWaveform")
-        var seekSurface = waveform
+        var seekSurface = findChild(mainWindow, "waveformInteractionSurface")
         verify(waveform, "main waveform should exist after importing audio")
         verify(seekSurface, "visible waveform surface should own seeking")
 
@@ -2101,6 +2141,25 @@ TestCase {
         compare(hoverGuide.color.toString(), "#54ff84")
         verify(findChild(mainWindow, "mainWaveform"),
                "the C++ waveform item must own hover and seek input")
+    }
+
+    function test_main_waveform_masks_the_clipped_first_peak_at_the_left_edge() {
+        var waveform = findChild(mainWindow, "mainWaveform")
+        var playedClip = findChild(mainWindow, "waveformPlayedClip")
+        var playedWaveform = findChild(mainWindow, "playedWaveform")
+        var mask = findChild(mainWindow, "waveformLeftEdgeMask")
+        verify(waveform && playedClip && playedWaveform && mask)
+        compare(mask.x, 0)
+        compare(mask.width, 1)
+        compare(mask.height, waveform.height)
+        compare(mask.color.toString(), Theme.background.toString())
+        compare(playedWaveform.progressColor.toString(),
+                waveform.progressColor.toString(),
+                "the edge fix must preserve the configured played-progress colour")
+        compare(playedWaveform.position, playedWaveform.duration,
+                "the played overlay must remain a fully coloured waveform pass")
+        compare(playedClip.x, 0,
+                "the played overlay must still start at the waveform origin")
     }
 
     function test_waveform_hover_surface_covers_played_and_unplayed_regions() {
@@ -2367,14 +2426,25 @@ TestCase {
     function test_search_filter_uses_editable_bpm_bounds_and_compact_modules() {
         var filter = searchFilterComponent.createObject(mainWindow.contentItem)
         verify(filter)
+        compare(filter.implicitHeight, 48)
         compare(findChild(filter, "keywordModule").width, 184)
         compare(findChild(filter, "librarySearchField").placeholderText,
                 "歌曲 · 艺术家 · 专辑 · 标签")
         verify(findChild(filter, "librarySearchIcon"))
         compare(findChild(filter, "bpmModule").width, 216)
+        compare(findChild(filter, "keywordModule").border.color.toString(),
+                Theme.controlSubtleBorder.toString())
         var bpmRange = findChild(filter, "bpmRange")
-        compare(bpmRange.first.handle.width, 14)
-        compare(bpmRange.second.handle.width, 14)
+        compare(bpmRange.background.height, 3)
+        compare(bpmRange.first.handle.width, 12)
+        compare(bpmRange.second.handle.width, 12)
+        var clearButton = findChild(filter, "clearFiltersButton")
+        var bpmModule = findChild(filter, "bpmModule")
+        verify(clearButton && bpmModule)
+        verify(clearButton.x > bpmModule.x + bpmModule.width,
+               "clear must follow BPM")
+        verify(clearButton.x < bpmModule.x + bpmModule.width + 30,
+               "clear must remain beside BPM instead of at the far edge")
         bpmRange.first.value = 72
         bpmRange.second.value = 155
         tryVerify(function() {
@@ -2397,6 +2467,18 @@ TestCase {
         compare(filter.pendingMinBpm, 72)
         compare(filter.pendingMaxBpm, 155)
         filter.destroy()
+    }
+
+    function test_track_header_is_compact_and_emphasized() {
+        var list = trackListComponent.createObject(mainWindow.contentItem, {
+            "width": 960,
+            "height": 360
+        })
+        verify(list)
+        compare(list.headerItem.height, 46)
+        compare(findChild(list, "trackHeaderTitle").font.weight,
+                Font.DemiBold)
+        list.destroy()
     }
 
     function test_fractional_bpm_is_not_rounded_away_in_visible_surfaces() {
@@ -2637,9 +2719,13 @@ TestCase {
         verify(panel)
         window.requestActivate()
         tryVerify(function() { return window.active }, 1000)
+        tryCompare(findChild(panel, "tagSearchField"), "height", 34)
+        tryCompare(findChild(panel, "addTagButton"), "height", 34)
 
         var names = ["好", "中文", "好听", "音乐", "摇滚", "流行",
-                     "民谣", "电子", "古典", "爵士", "轻音乐",
+                     "民谣", "电子", "古典", "爵士", "轻音乐", "现场",
+                     "通勤", "夜晚", "晨间", "运动", "专注", "旅行",
+                     "怀旧", "派对",
                      "long Chinese English natural-width capsule"]
         var keys = []
         var createdKeys = []
@@ -2702,13 +2788,17 @@ TestCase {
 
         var pointer = findChild(firstPill, "tagPillPointerArea-" + keys[0])
         verify(pointer)
-        panel.selectTag(keys[0])
+        if (firstPill.selectedVisual)
+            panel.selectTag(keys[0])
         tryVerify(function() { return !firstPill.selectedVisual }, 500)
-        mouseClick(pointer, pointer.width / 2, pointer.height / 2)
-        tryVerify(function() { return pointer.activeFocus }, 500,
-                  "clicking a tag pill must give it focus")
-        panel.selectTag(keys[0])
-        tryVerify(function() { return !firstPill.selectedVisual }, 500)
+        flickable.contentY = Math.max(0, Math.min(firstPill.parent.y,
+                                                  flickable.contentHeight
+                                                  - flickable.height))
+        wait(0)
+        // Move away first so HoverHandler receives a real enter transition
+        // both in isolation and after the full suite.
+        mouseMove(window.contentItem, window.width - 2, window.height - 2)
+        tryVerify(function() { return !firstPill.hoveredVisual }, 500)
         mouseMove(pointer, pointer.width / 2, pointer.height / 2)
         tryVerify(function() { return firstPill.hoveredVisual }, 500)
         verify(firstPill.resolvedSurface.toString()
@@ -2979,13 +3069,13 @@ TestCase {
         tryVerify(function() { return menu.visible }, 500)
         var colorAction = findChild(menu, "tagMenuColor")
         verify(colorAction && colorAction.enabled)
-        var colorDialog = findChild(panel, "tagColorDialog")
-        verify(colorDialog)
-        ignoreWarning("qrc:/qt-project.org/imports/QtQuick/Dialogs/quickimpl/qml/ColorDialog.qml:12:1: QML ColorDialog: Binding loop detected for property \"implicitWidth\"")
+        var colorPicker = findChild(panel, "tagColorPicker")
+        verify(colorPicker)
         mouseClick(colorAction, colorAction.width / 2,
                    colorAction.height / 2)
-        colorDialog.selectedColor = "#123456"
-        colorDialog.reject()
+        tryCompare(colorPicker, "visible", true)
+        colorPicker.setWorkingHex("#123456")
+        colorPicker.cancelPicker()
         compare(TagModel.data(TagModel.index(renamedRow, 0),
                               TagModel.ColorRole).toString(), beforeColor)
         compare(colorRequested.count, 0,
@@ -2996,8 +3086,9 @@ TestCase {
         tryVerify(function() { return menu.visible }, 500)
         mouseClick(colorAction, colorAction.width / 2,
                    colorAction.height / 2)
-        colorDialog.selectedColor = "#123456"
-        colorDialog.accept()
+        tryCompare(colorPicker, "visible", true)
+        colorPicker.setWorkingHex("#123456")
+        colorPicker.applyWorkingColor()
         compare(TagModel.data(TagModel.index(renamedRow, 0),
                               TagModel.ColorRole).toString(), "#123456")
         compare(colorRequested.count, 1)
@@ -3856,7 +3947,7 @@ TestCase {
         TrackWaveformThumbnailProvider.refresh()
         var readsBefore = TrackWaveformThumbnailProvider.diagnostics().cacheReadAttempts
         SettingsController.listWaveformThumbnailEnabled = true
-        tryCompare(list, "rowHeight", 62)
+        tryCompare(list, "rowHeight", 50)
         tryVerify(function() { return list.thumbnailItemCount > 0 })
         verify(findChild(list.itemAtIndex(0), "trackWaveformThumbnail"))
         compare(findChild(list.itemAtIndex(0), "trackCover").width, 34)
@@ -4180,7 +4271,7 @@ TestCase {
                 tagPill = findChild(tagPanel, "tagPill-" + tagKey)
                 return tagPill !== null
             }, 1000)
-            compare(tagPill.height, 26)
+            compare(tagPill.height, 24)
 
             emptyNavigation = emptyLibraryNavigationComponent.createObject(
                         mainWindow.contentItem)
@@ -4541,6 +4632,9 @@ TestCase {
         verify(!findChild(mainWindow, "settingsPage"),
                "settings page should not increase empty-startup cost")
 
+        // A prior test failure must not leave the singleton edit transaction
+        // active and change what this test snapshots on open.
+        SettingsController.cancelEdit()
         SettingsController.themeMode = 1
         findChild(mainWindow, "settingsButton").clicked()
         tryVerify(function() {
@@ -4669,11 +4763,11 @@ TestCase {
         compare(combo.valueModel.length, 4)
         compare(combo.valueModel[0].text, "🇨🇳 中文")
         compare(combo.valueModel[1].text, "🇺🇸 English")
-        compare(combo.valueModel[2].text, "🇹🇭 ภาษาไทย")
+        compare(combo.valueModel[2].text, "🇹🇭 ไทย")
         compare(combo.valueModel[3].text, "🇻🇳 Tiếng Việt")
-        SettingsController.language = "vi"
-        tryCompare(combo, "currentIndex", 3)
-        tryVerify(function() { return combo.contentItem.text === "🇻🇳 Tiếng Việt" })
+        SettingsController.language = "en"
+        tryCompare(combo, "currentIndex", 1)
+        tryVerify(function() { return combo.contentItem.text === "🇺🇸 English" })
         SettingsController.language = "zh"
         if (ownsPage) {
             page.saveAndClose()
@@ -4783,7 +4877,9 @@ TestCase {
         verify(page)
         page.open()
         page.selectedSection = 2
-        wait(250)
+        wait(0)
+        tryCompare(page, "programmaticScroll", false, 1000)
+        wait(50)
 
         var heightStepper = findChild(page, "waveformHeightStepper")
         var densityStepper = findChild(page, "waveformDensityStepper")
@@ -4840,6 +4936,86 @@ TestCase {
         tryCompare(SettingsController, "listWaveformThumbnailEnabled", true)
         tryCompare(SettingsController, "listWaveformThumbnailMode", "Color36")
         page.close()
+    }
+
+    function test_settings_exposes_dual_window_as_the_default_layout_skin() {
+        var page = findChild(mainWindow, "settingsPage")
+        var ownsPage = false
+        if (!page) {
+            page = settingsPageComponent.createObject(mainWindow.contentItem)
+            ownsPage = true
+        }
+        verify(page)
+        page.open()
+        page.selectedSection = 2
+        wait(150)
+        var selector = findChild(page, "windowLayoutThemeCombo")
+        verify(selector)
+        compare(selector.valueModel.length, 2)
+        compare(selector.valueModel[0].value, "dual-window")
+        compare(selector.valueModel[1].value, "single-window")
+        compare(selector.currentValue, "dual-window")
+        compare(SettingsController.windowLayoutTheme, "dual-window")
+        if (ownsPage) {
+            page.saveAndClose()
+            page.destroy()
+        } else {
+            page.close()
+        }
+    }
+
+    function test_settings_theme_buttons_apply_only_the_final_palette_once() {
+        var page = findChild(mainWindow, "settingsPage")
+        var ownsPage = false
+        if (!page) {
+            page = settingsPageComponent.createObject(mainWindow.contentItem)
+            ownsPage = true
+        }
+        verify(page)
+        SettingsController.themeMode = 0
+        SettingsController.skinColorMode = 0
+        SettingsController.skinCustomColor = "#D27722"
+        page.open()
+        page.selectedSection = 2
+        wait(250)
+
+        var systemButton = findChild(page, "themeModeSystem")
+        var lightButton = findChild(page, "themeModeLight")
+        var darkButton = findChild(page, "themeModeDark")
+        verify(systemButton && lightButton && darkButton)
+        verify(!findChild(page, "themeModeCustom"),
+               "skin selection must remain separate from appearance mode")
+        var paletteSpy = signalSpyComponent.createObject(page, {
+            "target": ThemeManager,
+            "signalName": "paletteChanged"
+        })
+        verify(paletteSpy)
+
+        var cases = [
+            { "button": systemButton, "beforeTheme": 0,
+              "theme": 2, "skin": 0 },
+            { "button": lightButton, "beforeTheme": 0,
+              "theme": 1, "skin": 0 },
+            { "button": darkButton, "beforeTheme": 1,
+              "theme": 0, "skin": 0 }
+        ]
+        for (var index = 0; index < cases.length; ++index) {
+            SettingsController.themeMode = cases[index].beforeTheme
+            SettingsController.skinColorMode = 0
+            wait(0)
+            paletteSpy.clear()
+            cases[index].button.clicked()
+            tryCompare(SettingsController, "themeMode", cases[index].theme)
+            tryCompare(SettingsController, "skinColorMode", cases[index].skin)
+            verify(paletteSpy.count <= 1,
+                   "one click must never publish an intermediate palette")
+            verify(cases[index].button.checked)
+        }
+
+        paletteSpy.destroy()
+        page.cancelAndClose()
+        if (ownsPage)
+            page.destroy()
     }
 
     function test_settings_y_feedback_entry_is_removed() {

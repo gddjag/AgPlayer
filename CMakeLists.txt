@@ -38,6 +38,7 @@ find_package(Qt6 6.7 REQUIRED COMPONENTS
     Gui
     Quick
     Qml
+    QmlWorkerScript
     QuickControls2
     Concurrent
     Test

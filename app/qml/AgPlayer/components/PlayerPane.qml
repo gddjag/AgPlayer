@@ -7,6 +7,7 @@ Rectangle {
     id: root
     objectName: "playerPane"
     color: "transparent"
+    property var waveformSession: null
     property var rawWaveformLayers: ({})
     property var spectrumVisual: []
     property real waveformDurationMs: 0
@@ -169,6 +170,12 @@ Rectangle {
     }
 
     function loadWaveform() {
+        if (root.waveformSession) {
+            root.rawWaveformLayers = root.waveformSession.layers || ({})
+            root.waveformDurationMs = root.waveformSession.durationMs || 0
+            root.applyWaveformMode()
+            return
+        }
         var path = root.currentTrackValue(LibraryModel.PathRole)
         var row = root.currentRow()
         var neighbors = []
@@ -545,6 +552,22 @@ Rectangle {
                 }
             }
 
+            // The renderer samples the first bucket exactly on x=0.  A loud
+            // first bucket is clipped against the container edge and reads as
+            // a solid border instead of waveform content.  Mask only that
+            // clipped pixel; time/pixel mapping and the analysed peaks remain
+            // unchanged.
+            Rectangle {
+                id: waveformLeftEdgeMask
+                objectName: "waveformLeftEdgeMask"
+                x: 0
+                width: 1
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                color: Theme.background
+                z: 4
+            }
+
             MouseArea {
                 id: waveformInteractionSurface
                 objectName: "waveformInteractionSurface"
@@ -649,7 +672,10 @@ Rectangle {
 
     Connections {
         target: PlaybackController
-        function onCurrentTrackIdChanged() { root.loadWaveform() }
+        function onCurrentTrackIdChanged() {
+            if (!root.waveformSession)
+                root.loadWaveform()
+        }
         function onSpectrumChanged() {
             if (SettingsController.waveformMode === 2)
                 root.applyWaveformMode()
@@ -664,6 +690,7 @@ Rectangle {
 
     Connections {
         target: WaveformProvider
+        enabled: !root.waveformSession
         function onWaveformReady(path, layers) {
             var responseTrack = String(layers._trackId || "")
             var responseGeneration = Number(layers._generation || 0)
@@ -687,9 +714,18 @@ Rectangle {
     }
 
     Connections {
+        target: root.waveformSession
+        function onLayersChanged() { root.loadWaveform() }
+        function onDurationMsChanged() { root.loadWaveform() }
+    }
+
+    Connections {
         target: SettingsController
         function onWaveformModeChanged() { root.applyWaveformMode() }
-        function onWaveformPeakAlgorithmChanged() { root.loadWaveform() }
+        function onWaveformPeakAlgorithmChanged() {
+            if (!root.waveformSession)
+                root.loadWaveform()
+        }
     }
 
     Component.onCompleted: {

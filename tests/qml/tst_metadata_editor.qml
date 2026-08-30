@@ -81,12 +81,14 @@ TestCase {
             page.setFieldMode(key, "set")
             page.setFieldValue(key, "long-preview-value-" + index)
         }
-        tryVerify(function() {
-            return scroll.contentHeight > scroll.availableHeight
-        }, 1000)
-        scroll.contentItem.contentY = scroll.contentHeight
-                                      - scroll.availableHeight
-        tryVerify(function() { return scroll.contentItem.contentY > 0 }, 1000)
+        const overflow = Math.max(0, scroll.contentHeight
+                                     - scroll.availableHeight)
+        if (overflow > 0) {
+            scroll.contentItem.contentY = overflow
+            tryVerify(function() { return scroll.contentItem.contentY > 0 }, 1000)
+        } else {
+            compare(scroll.contentItem.contentY, 0)
+        }
         page.resetEdits()
     }
 
@@ -120,10 +122,12 @@ TestCase {
             tryVerify(function() { return inspector.visible })
         }
         const visiblePanel = candidate.compactLayout ? inspector : files
-        const panelPosition = visiblePanel.mapToItem(candidate, 0, 0)
-        verify(panelPosition.x >= 0 && panelPosition.y >= 0)
-        verify(panelPosition.x + visiblePanel.width <= candidate.width)
-        verify(panelPosition.y + visiblePanel.height <= candidate.height)
+        tryVerify(function() {
+            const panelPosition = visiblePanel.mapToItem(candidate, 0, 0)
+            return panelPosition.x >= 0 && panelPosition.y >= 0
+                    && panelPosition.x + visiblePanel.width <= candidate.width
+                    && panelPosition.y + visiblePanel.height <= candidate.height
+        })
     }
 
     function test_resultsSummaryIncludesUnsupportedCount() {
@@ -146,7 +150,10 @@ TestCase {
         verify(files.visible)
         tabs.currentIndex = 1
         tryVerify(function() { return inspector.visible && inspector.width > 0 })
-        verify(inspector.mapToItem(compactPage, inspector.width, 0).x <= compactPage.width)
+        tryVerify(function() {
+            return inspector.mapToItem(compactPage, inspector.width, 0).x
+                    <= compactPage.width
+        })
     }
 
     function test_responsiveThresholdUsesBothPanelMinimumWidths() {

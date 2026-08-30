@@ -24,6 +24,7 @@ $trackList = Read-RequiredFile 'app/qml/AgPlayer/components/TrackList.qml'
 $navigation = Read-RequiredFile 'app/qml/AgPlayer/components/SideNavigation.qml'
 $tagPanel = Read-RequiredFile 'app/qml/AgPlayer/components/TagManagementPanel.qml'
 $mini = Read-RequiredFile 'app/qml/AgPlayer/components/MiniPlayerControls.qml'
+$managerPage = Read-RequiredFile 'app/qml/AgPlayer/components/LibraryManagerPage.qml'
 
 Assert-Matches $window '(?s)id:\s*centerColumn.*id:\s*centerTrackFooter.*objectName:\s*"centerTrackFooter".*Layout\.fillWidth:\s*true' `
     'Search/rating/BPM footer must remain inside and fill the center track column'
@@ -43,12 +44,24 @@ Assert-Matches $navigation '(?s)objectName:\s*"navigationExpandButton".*nodeRow\
 Assert-Matches $navigation 'anchors\.leftMargin:\s*6 \+ nodeRow\.depth \* 12' `
     'Sidebar indentation must remain compact'
 
-Assert-Matches $tagPanel '(?s)id:\s*tagPill.*implicitHeight:\s*26.*height:\s*implicitHeight.*radius:\s*13' `
-    'Tag capsules must be 26 px high and vertically centered'
+Assert-Matches $tagPanel '(?s)id:\s*tagPill.*implicitHeight:\s*24.*height:\s*implicitHeight.*radius:\s*12' `
+    'Tag capsules must be 24 px high and vertically centered'
 Assert-Matches $tagPanel '(?s)TagFilterModel\s*\{.*sourceModel:\s*root\.tagModel.*query:\s*root\.searchText' `
     'Tag panel must retain the quantity-descending stable-name proxy sorting'
 
 Assert-Matches $mini '(?s)objectName:\s*"miniMetadataRow".*Layout\.preferredHeight:\s*26.*objectName:\s*"miniArtist".*wrapMode:\s*Text\.NoWrap.*objectName:\s*"miniAlbum".*wrapMode:\s*Text\.NoWrap.*objectName:\s*"miniTagSeparator".*visible:\s*miniTags\.visible.*objectName:\s*"miniRating".*objectName:\s*"miniFavoriteButton".*Layout\.preferredWidth:\s*16.*Layout\.preferredHeight:\s*16' `
     'Mini metadata must be one non-wrapping artist/album/tag/rating/favorite row'
+
+Assert-Matches $managerPage '(?s)function\s+removeTracksFromLibrary\(trackIds\).*manager\.removeTrackFromLibrary.*objectName:\s*"libraryTrackRemove".*removeTracksFromLibrary' `
+    'Library manager menu removal must persist a controller tombstone'
+Assert-Matches $managerPage '(?s)Keys\.onDeletePressed:.*removeTracksFromLibrary' `
+    'Library manager Delete key removal must persist a controller tombstone'
+if ($managerPage -match 'libraryTrackRename|renameTrackDialog|libraryTrackRelocate|relocateTrackDialog') {
+    throw 'Library manager must not expose rename or relocate actions'
+}
+Assert-Matches $managerPage '(?s)function\s+openFileDetails\(trackId\).*fileOps\.trackDetails.*objectName:\s*"libraryTrackDetails".*text:\s*qsTr\("查看音频文件信息"\).*openFileDetails' `
+    'Library manager menu must end with the shared audio file details action'
+Assert-Matches $managerPage 'lastPersistenceError' `
+    'Library manager must surface tombstone persistence errors'
 
 Write-Output 'Library/list layout contract passed.'
