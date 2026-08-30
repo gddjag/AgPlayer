@@ -51,6 +51,24 @@ struct DecodedAudioBlock final {
     bool end_of_stream = false;
 };
 
+enum class DecoderDownmix {
+    Preserve,
+    AnalysisMono,
+};
+
+struct DecoderOpenOptions final {
+    int output_sample_rate = 0;
+    int output_channels = 0;
+    DecoderDownmix downmix = DecoderDownmix::Preserve;
+};
+
+struct DecodedAudioFormat final {
+    int sample_rate = 0;
+    int channels = 0;
+    std::uint64_t timeline_frames = 0;
+    bool has_timeline = false;
+};
+
 // Reads container/stream metadata without allocating or opening a decoder.
 [[nodiscard]] ag_result probe_media_metadata(const std::string& utf8_path,
                                              MediaMetadata& metadata,
@@ -69,12 +87,15 @@ public:
     [[nodiscard]] ag_result open(const std::string& utf8_path,
                                  int output_sample_rate,
                                  int output_channels) noexcept;
+    [[nodiscard]] ag_result open(const std::string& utf8_path,
+                                 const DecoderOpenOptions& options) noexcept;
     void close() noexcept;
     [[nodiscard]] bool is_open() const noexcept;
     [[nodiscard]] ag_result read(DecodedAudioBlock& block) noexcept;
     [[nodiscard]] ag_result seek(std::int64_t target_ms) noexcept;
     [[nodiscard]] ag_result seekFrame(std::int64_t target_frame) noexcept;
     [[nodiscard]] const MediaMetadata& metadata() const noexcept;
+    [[nodiscard]] const DecodedAudioFormat& output_format() const noexcept;
 
 private:
     class Impl;

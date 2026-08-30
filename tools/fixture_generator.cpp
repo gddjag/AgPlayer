@@ -3,8 +3,16 @@
 #include <fstream>
 #include <limits>
 #include <string>
+#include <string_view>
 
 namespace {
+
+enum class FixtureLayout {
+    Mono,
+    StereoIndependent,
+    StereoAntiphase,
+    Surround51Independent,
+};
 
 void write_u16(std::ofstream& output, const std::uint16_t value)
 {
@@ -26,20 +34,88 @@ void write_u32(std::ofstream& output, const std::uint32_t value)
     output.write(bytes, sizeof(bytes));
 }
 
+void write_pcm_sample(std::ofstream& output, const float sample)
+{
+    const auto pcm = static_cast<std::int16_t>(std::lround(sample * 32'767.0F));
+    write_u16(output, static_cast<std::uint16_t>(pcm));
+}
+
+bool write_wave_header(std::ofstream& output,
+                       const std::uint32_t sample_rate,
+                       const std::uint16_t channels,
+                       const std::uint32_t frame_count,
+                       const bool extensible)
+{
+    constexpr std::uint16_t bits_per_sample = 16U;
+    const std::uint32_t bytes_per_frame =
+        static_cast<std::uint32_t>(channels) * (bits_per_sample / 8U);
+    const std::uint64_t data_size_wide =
+        static_cast<std::uint64_t>(frame_count) * bytes_per_frame;
+    if (data_size_wide > std::numeric_limits<std::uint32_t>::max()) return false;
+    const std::uint32_t data_size = static_cast<std::uint32_t>(data_size_wide);
+    const std::uint32_t fmt_size = extensible ? 40U : 16U;
+
+    output.write("RIFF", 4);
+    write_u32(output, 4U + 8U + fmt_size + 8U + data_size);
+    output.write("WAVE", 4);
+    output.write("fmt ", 4);
+    write_u32(output, fmt_size);
+    write_u16(output, extensible ? 0xfffeU : 1U);
+    write_u16(output, channels);
+    write_u32(output, sample_rate);
+    write_u32(output, sample_rate * bytes_per_frame);
+    write_u16(output, static_cast<std::uint16_t>(bytes_per_frame));
+    write_u16(output, bits_per_sample);
+    if (extensible) {
+        write_u16(output, 22U);
+        write_u16(output, bits_per_sample);
+        write_u32(output, 0x3fU);
+        write_u16(output, 1U);
+        write_u16(output, 0U);
+        write_u16(output, 0U);
+        write_u16(output, 0x0010U);
+        output.put(static_cast<char>(0x80));
+        output.put(static_cast<char>(0x00));
+        output.put(static_cast<char>(0x00));
+        output.put(static_cast<char>(0xaa));
+        output.put(static_cast<char>(0x00));
+        output.put(static_cast<char>(0x38));
+        output.put(static_cast<char>(0x9b));
+        output.put(static_cast<char>(0x71));
+    }
+    output.write("data", 4);
+    write_u32(output, data_size);
+    return static_cast<bool>(output);
+}
+
 } // namespace
 
 int main(const int argc, char** argv)
 {
-    if (argc != 2 && argc != 4 && argc != 6) {
+    if (argc != 2 && argc != 3 && argc != 4 && argc != 6) {
         return 1;
     }
 
     std::uint32_t sample_rate = 44'100U;
     std::uint16_t channels = 2U;
-    constexpr std::uint16_t bits_per_sample = 16U;
     std::uint32_t start_frame = 0U;
     std::uint32_t frame_count = sample_rate * 2U;
-    if (argc >= 4) {
+    FixtureLayout layout = FixtureLayout::Mono;
+    if (argc == 3) {
+        const std::string_view mode(argv[2]);
+        if (mode == "stereo-independent") {
+            layout = FixtureLayout::StereoIndependent;
+            channels = 2U;
+        } else if (mode == "stereo-antiphase") {
+            layout = FixtureLayout::StereoAntiphase;
+            channels = 2U;
+        } else if (mode == "surround-5.1-independent") {
+            layout = FixtureLayout::Surround51Independent;
+            channels = 6U;
+        } else {
+            return 1;
+        }
+    } else if (argc >= 4) {
         try {
             const unsigned long parsed_start = std::stoul(argv[2]);
             const unsigned long parsed_count = std::stoul(argv[3]);
@@ -70,14 +146,6 @@ int main(const int argc, char** argv)
             return 1;
         }
     }
-    const std::uint32_t bytes_per_frame =
-        static_cast<std::uint32_t>(channels) * (bits_per_sample / 8U);
-    const std::uint64_t data_size_wide =
-        static_cast<std::uint64_t>(frame_count) * bytes_per_frame;
-    if (data_size_wide > std::numeric_limits<std::uint32_t>::max()) {
-        return 1;
-    }
-    const std::uint32_t data_size = static_cast<std::uint32_t>(data_size_wide);
     constexpr double amplitude = 0.251188643150958;
     constexpr double frequency = 440.0;
     const double pi = std::acos(-1.0);
@@ -87,29 +155,35 @@ int main(const int argc, char** argv)
         return 2;
     }
 
-    output.write("RIFF", 4);
-    write_u32(output, 36U + data_size);
-    output.write("WAVE", 4);
-    output.write("fmt ", 4);
-    write_u32(output, 16U);
-    write_u16(output, 1U);
-    write_u16(output, channels);
-    write_u32(output, sample_rate);
-    write_u32(output, sample_rate * bytes_per_frame);
-    write_u16(output, static_cast<std::uint16_t>(bytes_per_frame));
-    write_u16(output, bits_per_sample);
-    output.write("data", 4);
-    write_u32(output, data_size);
+    if (!write_wave_header(output, sample_rate, channels, frame_count,
+                           layout == FixtureLayout::Surround51Independent)) {
+        return 3;
+    }
 
     for (std::uint32_t frame = 0; frame < frame_count; ++frame) {
+        if (layout == FixtureLayout::StereoIndependent) {
+            write_pcm_sample(output, 0.25F);
+            write_pcm_sample(output, 0.50F);
+            continue;
+        }
+        if (layout == FixtureLayout::StereoAntiphase) {
+            write_pcm_sample(output, 0.25F);
+            write_pcm_sample(output, -0.25F);
+            continue;
+        }
+        if (layout == FixtureLayout::Surround51Independent) {
+            constexpr float samples[] = {0.10F, 0.20F, 0.30F,
+                                         0.40F, 0.50F, 0.60F};
+            for (const float sample : samples) write_pcm_sample(output, sample);
+            continue;
+        }
         const double phase = 2.0 * pi * frequency
                              * static_cast<double>(start_frame + frame)
                              / static_cast<double>(sample_rate);
         const auto sample = static_cast<std::int16_t>(
             std::lround(std::sin(phase) * amplitude * 32'767.0));
-        for (std::uint16_t channel = 0U; channel < channels; ++channel) {
+        for (std::uint16_t channel = 0U; channel < channels; ++channel)
             write_u16(output, static_cast<std::uint16_t>(sample));
-        }
     }
 
     output.flush();

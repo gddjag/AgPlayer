@@ -15,11 +15,49 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <process.h>
+#include <string>
+
+namespace {
+
+void create_fixture(const std::filesystem::path& generator,
+                    const std::filesystem::path& output,
+                    const char* mode)
+{
+    const std::string generator_name = generator.string();
+    const std::string output_name = output.string();
+    const char* arguments[] = {
+        generator_name.c_str(), output_name.c_str(), mode, nullptr,
+    };
+    assert(_spawnv(_P_WAIT, generator_name.c_str(), arguments) == 0);
+}
+
+void read_first_audio_block(agplayer::Decoder& decoder,
+                            agplayer::DecodedAudioBlock& block)
+{
+    do {
+        assert(decoder.read(block) == AG_OK);
+    } while (block.frames == 0U && !block.end_of_stream);
+    assert(block.frames > 0U);
+}
+
+} // namespace
 
 int main(const int argc, char** argv)
 {
     assert(argc == 2);
     const std::filesystem::path sine_path = argv[1];
+    const std::filesystem::path fixture_generator =
+        std::filesystem::path(argv[0]).parent_path() / "fixture_generator.exe";
+    const std::filesystem::path stereo_path =
+        sine_path.parent_path() / "decoder-stereo-independent.wav";
+    const std::filesystem::path antiphase_path =
+        sine_path.parent_path() / "decoder-stereo-antiphase.wav";
+    const std::filesystem::path surround_path =
+        sine_path.parent_path() / "decoder-surround-5.1.wav";
+    create_fixture(fixture_generator, stereo_path, "stereo-independent");
+    create_fixture(fixture_generator, antiphase_path, "stereo-antiphase");
+    create_fixture(fixture_generator, surround_path, "surround-5.1-independent");
 
     ag_metadata* metadata = reinterpret_cast<ag_metadata*>(
         static_cast<std::uintptr_t>(1U));
@@ -70,6 +108,44 @@ int main(const int argc, char** argv)
     assert(decoder.read(block) == AG_OK);
     assert(block.frames > 0U);
     assert(block.samples.size() == block.frames * 2U);
+
+    // Break caught: changing a legacy open to implicit mono, or omitting the
+    // explicit normalized analysis-mono rematrix or duration contract.
+    agplayer::Decoder legacy_stereo_decoder;
+    assert(legacy_stereo_decoder.open(stereo_path.string()) == AG_OK);
+    assert(legacy_stereo_decoder.output_format().channels == 2);
+
+    agplayer::DecoderOpenOptions analysis_options;
+    analysis_options.output_sample_rate = 48'000;
+    analysis_options.downmix = agplayer::DecoderDownmix::AnalysisMono;
+    agplayer::Decoder analysis_stereo_decoder;
+    assert(analysis_stereo_decoder.open(stereo_path.string(), analysis_options)
+           == AG_OK);
+    assert(analysis_stereo_decoder.output_format().channels == 1);
+    assert(analysis_stereo_decoder.output_format().has_timeline);
+    assert(analysis_stereo_decoder.output_format().timeline_frames == 96'000U);
+    read_first_audio_block(analysis_stereo_decoder, block);
+    assert(block.samples.size() == block.frames);
+    assert(std::abs(block.samples.front() - 0.75F / std::sqrt(2.0F)) < 1.0e-4F);
+
+    agplayer::Decoder antiphase_decoder;
+    assert(antiphase_decoder.open(antiphase_path.string(), analysis_options)
+           == AG_OK);
+    read_first_audio_block(antiphase_decoder, block);
+    assert(std::abs(block.samples.front()) < 1.0e-4F);
+
+    agplayer::Decoder surround_decoder;
+    assert(surround_decoder.open(surround_path.string(), analysis_options) == AG_OK);
+    read_first_audio_block(surround_decoder, block);
+    assert(block.samples.size() == block.frames);
+    for (const float sample : block.samples) {
+        assert(std::isfinite(sample));
+        assert(sample >= -1.0F && sample <= 1.0F);
+    }
+    legacy_stereo_decoder.close();
+    analysis_stereo_decoder.close();
+    antiphase_decoder.close();
+    surround_decoder.close();
 
     constexpr std::int64_t seek_target_ms = 1'517;
     assert(decoder.seek(seek_target_ms) == AG_OK);
@@ -190,4 +266,7 @@ int main(const int argc, char** argv)
 
     std::filesystem::remove(short_flac);
     std::filesystem::remove(raw_aac);
+    std::filesystem::remove(stereo_path);
+    std::filesystem::remove(antiphase_path);
+    std::filesystem::remove(surround_path);
 }

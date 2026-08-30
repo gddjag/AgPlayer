@@ -14,6 +14,7 @@ extern "C" {
 #include <algorithm>
 #include <cerrno>
 #include <climits>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -211,6 +212,55 @@ ag_result map_open_error(const int error) noexcept
     return AG_IO_ERROR;
 }
 
+std::vector<double> equal_energy_matrix(const int channels)
+{
+    if (channels <= 0) return {};
+    return std::vector<double>(static_cast<std::size_t>(channels),
+                               1.0 / std::sqrt(static_cast<double>(channels)));
+}
+
+std::vector<double> analysis_mono_matrix(const AVChannelLayout& layout,
+                                         const bool layout_roles_known)
+{
+    const int channels = layout.nb_channels;
+    if (channels == 1) return {1.0};
+    if (channels <= 0 || !layout_roles_known) return equal_energy_matrix(channels);
+
+    std::vector<double> matrix(static_cast<std::size_t>(channels), 0.0);
+    for (int index = 0; index < channels; ++index) {
+        switch (av_channel_layout_channel_from_index(
+            &layout, static_cast<unsigned int>(index))) {
+        case AV_CHAN_FRONT_LEFT:
+        case AV_CHAN_FRONT_RIGHT:
+        case AV_CHAN_FRONT_CENTER:
+            matrix[static_cast<std::size_t>(index)] = 1.0;
+            break;
+        case AV_CHAN_LOW_FREQUENCY:
+        case AV_CHAN_LOW_FREQUENCY_2:
+            matrix[static_cast<std::size_t>(index)] = 0.5;
+            break;
+        case AV_CHAN_BACK_LEFT:
+        case AV_CHAN_BACK_RIGHT:
+        case AV_CHAN_BACK_CENTER:
+        case AV_CHAN_SIDE_LEFT:
+        case AV_CHAN_SIDE_RIGHT:
+        case AV_CHAN_FRONT_LEFT_OF_CENTER:
+        case AV_CHAN_FRONT_RIGHT_OF_CENTER:
+            matrix[static_cast<std::size_t>(index)] = 0.75;
+            break;
+        default:
+            return equal_energy_matrix(channels);
+        }
+    }
+
+    double sum_squares = 0.0;
+    for (const double coefficient : matrix) sum_squares += coefficient * coefficient;
+    if (sum_squares <= 0.0) return equal_energy_matrix(channels);
+    const double normalization = 1.0 / std::sqrt(sum_squares);
+    for (double& coefficient : matrix) coefficient *= normalization;
+    return matrix;
+}
+
 std::string read_tag(AVDictionary* preferred,
                      AVDictionary* fallback,
                      const char* key)
@@ -404,8 +454,7 @@ public:
     }
 
     ag_result open(const std::string& utf8_path,
-                   const int output_sample_rate,
-                   const int output_channels)
+                   const DecoderOpenOptions& options)
     {
         reset();
         if (utf8_path.empty()) {
@@ -448,14 +497,16 @@ public:
             return AG_UNSUPPORTED_FORMAT;
         }
 
-        output_sample_rate_ = output_sample_rate > 0
-                                  ? output_sample_rate
+        output_sample_rate_ = options.output_sample_rate > 0
+                                  ? options.output_sample_rate
                                   : codec_context_->sample_rate;
-        output_channels_ = output_channels > 0
-                               ? output_channels
+        output_channels_ = options.downmix == DecoderDownmix::AnalysisMono
+                               ? 1
+                               : options.output_channels > 0
+                               ? options.output_channels
                                : codec_context_->ch_layout.nb_channels;
 
-        result = initialize_resampler();
+        result = initialize_resampler(options);
         if (result < 0) {
             reset();
             return AG_DECODE_ERROR;
@@ -469,6 +520,7 @@ public:
         }
 
         populate_metadata(*stream);
+        set_output_timeline(*stream);
         return AG_OK;
     }
 
@@ -600,6 +652,11 @@ public:
         return metadata_;
     }
 
+    [[nodiscard]] const DecodedAudioFormat& output_format() const noexcept
+    {
+        return output_format_;
+    }
+
     void reset() noexcept
     {
         swr_free(&swr_context_);
@@ -612,6 +669,7 @@ public:
         audio_stream_index_ = -1;
         output_sample_rate_ = 0;
         output_channels_ = 0;
+        input_layout_roles_known_ = false;
         input_eof_ = false;
         drain_sent_ = false;
         resampler_drained_ = false;
@@ -621,6 +679,7 @@ public:
         fallback_frame_ = 0;
         fallback_frame_valid_ = true;
         metadata_ = {};
+        output_format_ = {};
     }
 
 private:
@@ -651,10 +710,12 @@ private:
         return AG_OK;
     }
 
-    int initialize_resampler()
+    int initialize_resampler(const DecoderOpenOptions& options)
     {
         av_channel_layout_uninit(&input_layout_);
         int result = 0;
+        input_layout_roles_known_ =
+            codec_context_->ch_layout.order != AV_CHANNEL_ORDER_UNSPEC;
         if (codec_context_->ch_layout.order == AV_CHANNEL_ORDER_UNSPEC) {
             av_channel_layout_default(
                 &input_layout_, codec_context_->ch_layout.nb_channels);
@@ -681,7 +742,37 @@ private:
         if (result < 0) {
             return result;
         }
-        return swr_init(swr_context_);
+        if (options.downmix == DecoderDownmix::AnalysisMono) {
+            const std::vector<double> matrix = analysis_mono_matrix(
+                input_layout_, input_layout_roles_known_);
+            if (matrix.size() != static_cast<std::size_t>(input_layout_.nb_channels)) {
+                return AVERROR(EINVAL);
+            }
+            result = swr_set_matrix(swr_context_, matrix.data(), input_layout_.nb_channels);
+            if (result < 0) return result;
+        }
+        result = swr_init(swr_context_);
+        if (result >= 0) {
+            output_format_.sample_rate = output_sample_rate_;
+            output_format_.channels = output_channels_;
+        }
+        return result;
+    }
+
+    void set_output_timeline(const AVStream& audio_stream) noexcept
+    {
+        output_format_.timeline_frames = 0;
+        output_format_.has_timeline = false;
+        if (audio_stream.duration == AV_NOPTS_VALUE || audio_stream.duration <= 0
+            || output_sample_rate_ <= 0) {
+            return;
+        }
+        const std::int64_t frames = av_rescale_q(
+            audio_stream.duration, audio_stream.time_base,
+            AVRational{1, output_sample_rate_});
+        if (frames == AV_NOPTS_VALUE || frames < 0) return;
+        output_format_.timeline_frames = static_cast<std::uint64_t>(frames);
+        output_format_.has_timeline = true;
     }
 
     void populate_metadata(const AVStream& audio_stream)
@@ -966,6 +1057,7 @@ private:
     int audio_stream_index_ = -1;
     int output_sample_rate_ = 0;
     int output_channels_ = 0;
+    bool input_layout_roles_known_ = false;
     bool input_eof_ = false;
     bool drain_sent_ = false;
     bool resampler_drained_ = false;
@@ -975,6 +1067,7 @@ private:
     std::int64_t fallback_frame_ = 0;
     bool fallback_frame_valid_ = true;
     MediaMetadata metadata_;
+    DecodedAudioFormat output_format_;
 };
 
 Decoder::Decoder()
@@ -986,15 +1079,24 @@ Decoder::~Decoder() = default;
 
 ag_result Decoder::open(const std::string& utf8_path) noexcept
 {
-    return open(utf8_path, 0, 0);
+    return open(utf8_path, DecoderOpenOptions{});
 }
 
 ag_result Decoder::open(const std::string& utf8_path,
                         const int output_sample_rate,
                         const int output_channels) noexcept
 {
+    DecoderOpenOptions options;
+    options.output_sample_rate = output_sample_rate;
+    options.output_channels = output_channels;
+    return open(utf8_path, options);
+}
+
+ag_result Decoder::open(const std::string& utf8_path,
+                        const DecoderOpenOptions& options) noexcept
+{
     try {
-        return impl_->open(utf8_path, output_sample_rate, output_channels);
+        return impl_->open(utf8_path, options);
     } catch (...) {
         impl_->reset();
         return AG_INTERNAL_ERROR;
@@ -1034,6 +1136,11 @@ ag_result Decoder::seekFrame(const std::int64_t target_frame) noexcept
 const MediaMetadata& Decoder::metadata() const noexcept
 {
     return impl_->metadata();
+}
+
+const DecodedAudioFormat& Decoder::output_format() const noexcept
+{
+    return impl_->output_format();
 }
 
 } // namespace agplayer
