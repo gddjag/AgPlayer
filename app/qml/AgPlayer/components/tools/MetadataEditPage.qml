@@ -792,7 +792,7 @@ Rectangle {
                                             ThemedIcon {
                                                 anchors.centerIn: parent
                                                 source: Theme.icon("music-2-fill")
-                                                tint: "white"
+                                                tint: "white" // theme-color-allow: fixed file badge icon
                                                 sourceSize.width: 14
                                                 sourceSize.height: 14
                                             }

@@ -3608,7 +3608,7 @@
         <source>打开音频工具</source>
         <translation>Mở công cụ âm thanh</translation>
     </message>
-    <message><source>主题皮肤颜色</source><translation>Màu giao diện chủ đề</translation></message>
+    <message><source>主题皮肤色</source><translation>Màu giao diện chủ đề</translation></message>
     <message><source>歌曲列表</source><translation>Danh sách bài hát</translation></message>
     <message><source>显示歌曲列表波形缩略图</source><translation>Hiện hình thu nhỏ dạng sóng trong danh sách</translation></message>
     <message><source>缩略波形颜色</source><translation>Màu dạng sóng thu nhỏ</translation></message>

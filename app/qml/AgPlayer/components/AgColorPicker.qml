@@ -544,7 +544,7 @@ Popup {
                 }
                 contentItem: Text {
                     text: qsTr("应用")
-                    color: Theme.isLight ? "#FFFFFF" : "#1B1B1B"
+                    color: Theme.accentText
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                     font.family: Theme.fontPrimary

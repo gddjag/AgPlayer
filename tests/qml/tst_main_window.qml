@@ -5130,6 +5130,7 @@ TestCase {
         compare(SettingsController.themeMode, 1)
         tryCompare(Theme, "isLight", true)
         compare(Theme.accentText.toString(), Theme.onCyanText.toString())
+        compare(Theme.accentText.toString(), Theme.onBrandGradientText.toString())
         verify(Theme.background.toString() !== darkBackground,
                "light mode should replace the dark surface")
         verify(Theme.primaryText.toString() !== darkText,

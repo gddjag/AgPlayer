@@ -20,7 +20,9 @@ AbstractButton {
     padding: 1
     focusPolicy: Qt.StrongFocus
     Accessible.role: Accessible.Button
-    Accessible.name: qsTr("Color %1").arg(root.normalized(root.colorValue))
+    Accessible.name: (root.editingLabel.length > 0
+                      ? root.editingLabel + " " : "")
+                     + qsTr("Color %1").arg(root.normalized(root.colorValue))
 
     function normalized(value) {
         var text = String(value || "").trim().toUpperCase()

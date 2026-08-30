@@ -41,6 +41,7 @@ private slots:
     void skinSettingsPersistAndNormalize();
     void solidSkinPreservesValidAuxiliaryStopsAcrossCommitAndReload();
     void migratesLegacySkinPresetToCustomSolidWithoutDeletingKey();
+    void unknownRecommendedSkinPresetFallsBackToDefaultSkin();
     void invalidCustomGradientFallsBackAsACompleteGroup();
     void skinConfigurationSignalIsAtomicAndOnlyEmitsForRealChanges();
     void skinPropertySettersPreserveTheCurrentSelectionMode();
@@ -236,6 +237,19 @@ void SettingsControllerTest::migratesLegacySkinPresetToCustomSolidWithoutDeletin
     QVERIFY(persisted.contains(QStringLiteral("appearance/skinPreset")));
     QCOMPARE(persisted.value(QStringLiteral("appearance/skinPreset")).toString(),
              QStringLiteral("purple"));
+}
+
+void SettingsControllerTest::unknownRecommendedSkinPresetFallsBackToDefaultSkin()
+{
+    QSettings persisted;
+    persisted.clear();
+    persisted.setValue(QStringLiteral("appearance/skinColorMode"), 1);
+    persisted.setValue(QStringLiteral("appearance/skinPreset"),
+                       QStringLiteral("removed-preset"));
+
+    SettingsController settings;
+    QCOMPARE(settings.skinColorMode(), 0);
+    QCOMPARE(settings.skinPreset(), QStringLiteral("aurora"));
 }
 
 void SettingsControllerTest::invalidCustomGradientFallsBackAsACompleteGroup()

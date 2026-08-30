@@ -3676,7 +3676,7 @@
         <source>打开音频工具</source>
         <translation>打开音频工具</translation>
     </message>
-    <message><source>主题皮肤颜色</source><translation>主题皮肤颜色</translation></message>
+    <message><source>主题皮肤色</source><translation>主题皮肤色</translation></message>
     <message><source>歌曲列表</source><translation>歌曲列表</translation></message>
     <message><source>显示歌曲列表波形缩略图</source><translation>显示歌曲列表波形缩略图</translation></message>
     <message><source>缩略波形颜色</source><translation>缩略波形颜色</translation></message>

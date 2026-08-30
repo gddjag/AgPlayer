@@ -289,10 +289,14 @@ TestCase {
         const previousMode = SettingsController.themeMode
         const previousSkinMode = SettingsController.skinColorMode
         const previousSkinPreset = SettingsController.skinPreset
+        const previousSkinKind = SettingsController.skinCustomKind
+        const previousSkinStart = SettingsController.skinCustomColor
+        const previousSkinMiddle = SettingsController.skinCustomColorMiddle
+        const previousSkinEnd = SettingsController.skinCustomColorEnd
 
         SettingsController.themeMode = 1
-        SettingsController.skinColorMode = 1
-        SettingsController.skinPreset = "systemBlue"
+        SettingsController.setSkinCustomConfiguration(
+                    0, "#007AFF", "#007AFF", "#007AFF")
         wait(0)
         compare(Theme.editorWaveform.toString(), "#169b97")
         compare(Theme.editorOverviewWaveform.toString(), "#2b9692")
@@ -300,7 +304,8 @@ TestCase {
         compare(Theme.editorOverviewSelection.toString(), "#122b9692")
         compare(Theme.listWaveformMono.toString(), "#6b5a70")
 
-        SettingsController.skinPreset = "red"
+        SettingsController.setSkinCustomConfiguration(
+                    0, "#FF3B30", "#FF3B30", "#FF3B30")
         wait(0)
         compare(Theme.editorWaveform.toString(), "#169b97")
         compare(Theme.editorSelection.toString(), "#26169b97")
@@ -313,9 +318,19 @@ TestCase {
         compare(Theme.editorOverviewSelection.toString(), "#12297e7b")
         compare(Theme.listWaveformMono.toString(), "#c7b8cb")
 
+        const dragLabel = findChild(page, "editorSelectionHandoffLabel")
+        verify(dragLabel)
+        compare(dragLabel.color.toString(),
+                Theme.editorSelectionLabel.toString())
+
+        SettingsController.setSkinCustomConfiguration(
+                    previousSkinKind, previousSkinStart,
+                    previousSkinMiddle, previousSkinEnd)
         SettingsController.themeMode = previousMode
-        SettingsController.skinColorMode = previousSkinMode
-        SettingsController.skinPreset = previousSkinPreset
+        if (previousSkinMode === 0)
+            SettingsController.selectDefaultSkin()
+        else if (previousSkinMode === 1)
+            SettingsController.selectSkinPreset(previousSkinPreset)
         wait(0)
     }
 
