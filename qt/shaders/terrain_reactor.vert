@@ -62,42 +62,35 @@ void main()
 
     if (type < 0.5) {
         float center = clamp(1.0 - distanceFromCore / responseRadius, 0.0, 1.0);
-        float core = pow(center, 1.42);
+        float core = pow(center, 1.18);
         float terrainField = smoothstep(responseRadius * 1.15,
                                         responseRadius * 0.45,
                                         distanceFromCore);
-        float bassField = 0.75 + 0.25
-            * sin(position.x * 0.045 - position.z * 0.035 + t * 0.24);
-        float midField = 0.55 + 0.45
-            * sin(position.z * 0.060 + position.x * 0.035 + t * 0.35);
-        float bass = bandsLow.x * core * 4.3
-                   + bandsLow.y * center * (1.9 + bassField * 1.5);
-        float mids = bandsLow.z * midField * 1.65
-                   + bandsLow.w * (0.72 + 0.28
-                       * sin(position.x * 0.055 + position.z * 0.025
-                             + t * 0.62 * motion)) * 1.75;
-        float clusterA = 0.5 + 0.5 * sin(position.x * 0.105
-            + sin(position.z * 0.055) * 1.15);
-        float clusterB = 0.5 + 0.5 * cos(position.z * 0.095
-            - cos(position.x * 0.045) * 1.10);
-        float clusteredSpire = pow(clamp(clusterA * 0.52 + clusterB * 0.48,
-                                         0.0, 1.0), 4.2);
+        float bassField = 0.78 + 0.22
+            * sin(position.x * 0.038 - position.z * 0.029 + t * 0.20);
+        float ridgeA = 0.5 + 0.5
+            * sin(position.z * 0.052 + position.x * 0.027 + t * 0.28);
+        float ridgeB = 0.5 + 0.5
+            * cos(position.x * 0.041 - position.z * 0.036 - t * 0.22);
+        float wideRidge = ridgeA * 0.56 + ridgeB * 0.44;
+        float bass = bandsLow.x * (1.65 + core * 2.75)
+                   + bandsLow.y * (1.35 + bassField * 1.70) * center;
+        float mids = bandsLow.z * (0.75 + wideRidge * 1.95)
+                   + bandsLow.w * (0.80 + (1.0 - wideRidge) * 1.65);
         float detailA = 0.5 + 0.5
-            * sin(position.x * 0.43 + position.z * 0.19);
+            * sin(position.x * 0.18 + position.z * 0.11);
         float detailB = 0.5 + 0.5
-            * cos(position.z * 0.37 - position.x * 0.23);
-        float detailBlend = detailA * 0.56 + detailB * 0.44;
-        float towerField = smoothstep(0.74, 0.93, detailBlend);
-        float randomSpire = pow(clamp(randomValue, 0.0, 1.0), 8.0);
-        float towerProfile = towerField
-            * (0.32 + 0.68 * pow(clamp(randomValue, 0.0, 1.0), 0.65));
-        float spikeField = clamp(randomSpire * 0.05
-                                 + clusteredSpire * 0.28
-                                 + towerProfile * 0.95, 0.0, 1.0);
-        terrainSpike = spikeField * center;
-        float highSpike = bandsHigh.x
-                        * mix(0.10, 18.00, spikeField)
-                        * center * mix(0.5, 1.8, ubuf.styleDynamics.y);
+            * cos(position.z * 0.16 - position.x * 0.09);
+        float coherentDetail = detailA * 0.58 + detailB * 0.42;
+        float highEnergy = clamp(bandsHigh.x * 0.38
+                               + bandsHigh.y * 0.28
+                               + bandsHigh.z * 0.20
+                               + bandsHigh.w * 0.14, 0.0, 1.0);
+        float peakControl = mix(0.42, 1.0,
+                                clamp(ubuf.styleDynamics.y, 0.0, 1.0));
+        float highDetail = highEnergy * (0.20 + coherentDetail * 1.45)
+                         * center * peakControl;
+        terrainSpike = clamp(highDetail / 1.65, 0.0, 1.0);
         float idlePhase = sin(position.x * 0.032 + position.z * 0.041) * 0.72;
         float reliefA = 0.5 + 0.5 * sin(position.x * 0.055
             + position.z * 0.032 + t * 0.18);
@@ -148,12 +141,13 @@ void main()
                        * ubuf.styleAudio.w;
         float coreLift = ubuf.parameters.x * ubuf.styleAudio.w
                        * (0.35 + bandsLow.x * 0.65) * dome * 10.8;
-        float centerSpikes = ubuf.parameters.x * ubuf.styleAudio.w * core
-                           * mix(0.16, 22.00, spikeField);
+        float centerShoulders = ubuf.parameters.x * ubuf.styleAudio.w
+                              * terrainField
+                              * (0.42 + core * 1.55 + wideRidge * 0.38);
         idle *= ubuf.styleToggles.w;
         float rawHeight = max(0.0,
-            idle + ((bass + mids + highSpike) * terrainField + ripple) * amplitude
-            + coreLift + centerSpikes
+            idle + ((bass + mids + highDetail) * terrainField + ripple) * amplitude
+            + coreLift + centerShoulders
             + impactWave + coreGlow * 7.2);
         float softCap = mix(32.0, 36.0, step(0.001, impactStrength));
         float height = max(0.035,
@@ -171,18 +165,15 @@ void main()
         opacity *= mix(1.0, 0.18 + sparseCell * 0.58, outerField);
         opacity *= 1.0 - smoothstep(79.5, 84.0, distanceFromCore);
         topSurface = smoothstep(0.72, 0.98, vertexNormal.y);
-        float highEnergy = clamp(bandsHigh.y * 0.28
-                                 + bandsHigh.z * 0.46
-                                 + bandsHigh.w * 0.62, 0.0, 1.0);
         float flowPhase = fract(t * (0.12 + highEnergy * 0.22)
                                 + randomValue * 0.83
                                 + distanceFromCore * 0.010);
-        float flowingBand = exp(-pow((flowPhase - 0.20) / 0.095, 2.0));
+        float flowingBand = exp(-pow((flowPhase - 0.20) / 0.075, 2.0));
         float sparkle = pow(0.5 + 0.5 * sin(t * (3.4 + highEnergy * 8.0)
-                                           + randomValue * 47.0), 12.0);
+                                           + randomValue * 47.0), 18.0);
         streamSheen = ubuf.styleExtra.z * topSurface
-                    * (0.03 + highEnergy * 0.62)
-                    * (flowingBand * 1.05 + sparkle * 1.45);
+                    * (0.02 + highEnergy * 0.48)
+                    * (flowingBand * 0.86 + sparkle * 1.02);
     } else if (type < 1.5) {
         position.y += sin(t * 0.74 * motion + randomValue * 18.0) * 1.95
                     + bandsLow.x * 2.2;
@@ -321,6 +312,7 @@ void main()
     gl_Position = ubuf.mvp * vec4(worldPosition, 1.0);
     light = 0.46 + 0.54 * max(dot(normalize(vertexNormal),
                                   normalize(vec3(-0.35, 0.82, 0.42))), 0.0);
+    light *= type < 0.5 ? mix(0.78, 1.08, topSurface) : 1.0;
     light *= clamp(0.66 + ubuf.stylePresentation.z * 0.34, 0.72, 1.18);
     fog = clamp(1.0 - distanceFromCore / 132.0, 0.0, 1.0);
     float focusBand = exp(-pow(distanceFromCore - responseRadius * 0.34, 2.0)

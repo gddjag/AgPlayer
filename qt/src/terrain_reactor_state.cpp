@@ -177,7 +177,7 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
             : index % 3 == 1 ? ColorZone::Warm : ColorZone::Accent;
         SceneInstance floating = makeExtra(random, 12.0F, 78.0F,
                                            6.0F, 25.0F, zone);
-        floating.scale *= 2.05F;
+        floating.scale *= 0.72F;
         result.floating.append(floating);
     }
     for (int index = 0; index < meteorCount; ++index) {
@@ -291,50 +291,39 @@ float terrainHeight(const SceneInstance& instance,
     const float distance = std::hypot(instance.position.x(),
                                       instance.position.z());
     const float center = clampUnit(1.0F - distance / dynamics.responseRadius);
-    const float core = std::pow(center, 1.42F);
+    const float core = std::pow(center, 1.18F);
     const float fieldStart = dynamics.responseRadius * 0.45F;
     const float fieldEnd = dynamics.responseRadius * 1.15F;
     const float fieldPosition = clampUnit(
         (fieldEnd - distance) / std::max(1.0F, fieldEnd - fieldStart));
     const float terrainField = fieldPosition * fieldPosition
         * (3.0F - 2.0F * fieldPosition);
-    const float bassField = 0.75F + 0.25F * std::sin(
-        instance.position.x() * 0.045F - instance.position.z() * 0.035F
-        + timeSeconds * 0.24F);
-    const float midField = 0.55F + 0.45F * std::sin(
-        instance.position.z() * 0.060F + instance.position.x() * 0.035F
-        + timeSeconds * 0.35F);
-    const float bass = parameters.bands[0] * core * 4.3F
-        + parameters.bands[1] * center * (1.9F + bassField * 1.5F);
-    const float mids = parameters.bands[2] * midField * 1.65F
-        + parameters.bands[3] * (0.72F + 0.28F * std::sin(
-              instance.position.x() * 0.055F
-              + instance.position.z() * 0.025F
-              + timeSeconds * 0.62F)) * 1.75F;
-    const float clusterA = 0.5F + 0.5F * std::sin(
-        instance.position.x() * 0.105F
-        + std::sin(instance.position.z() * 0.055F) * 1.15F);
-    const float clusterB = 0.5F + 0.5F * std::cos(
-        instance.position.z() * 0.095F
-        - std::cos(instance.position.x() * 0.045F) * 1.10F);
-    const float clusteredSpire = std::pow(clampUnit(
-        clusterA * 0.52F + clusterB * 0.48F), 4.2F);
+    const float bassField = 0.78F + 0.22F * std::sin(
+        instance.position.x() * 0.038F - instance.position.z() * 0.029F
+        + timeSeconds * 0.20F);
+    const float ridgeA = 0.5F + 0.5F * std::sin(
+        instance.position.z() * 0.052F + instance.position.x() * 0.027F
+        + timeSeconds * 0.28F);
+    const float ridgeB = 0.5F + 0.5F * std::cos(
+        instance.position.x() * 0.041F - instance.position.z() * 0.036F
+        - timeSeconds * 0.22F);
+    const float wideRidge = ridgeA * 0.56F + ridgeB * 0.44F;
+    const float bass = parameters.bands[0] * (1.65F + core * 2.75F)
+        + parameters.bands[1] * (1.35F + bassField * 1.70F) * center;
+    const float mids = parameters.bands[2] * (0.75F + wideRidge * 1.95F)
+        + parameters.bands[3] * (0.80F + (1.0F - wideRidge) * 1.65F);
     const float detailA = 0.5F + 0.5F * std::sin(
-        instance.position.x() * 0.43F + instance.position.z() * 0.19F);
+        instance.position.x() * 0.18F + instance.position.z() * 0.11F);
     const float detailB = 0.5F + 0.5F * std::cos(
-        instance.position.z() * 0.37F - instance.position.x() * 0.23F);
-    const float detailBlend = detailA * 0.56F + detailB * 0.44F;
-    const float towerPosition = clampUnit((detailBlend - 0.74F) / 0.19F);
-    const float towerField = towerPosition * towerPosition
-        * (3.0F - 2.0F * towerPosition);
-    const float randomSpire = std::pow(clampUnit(instance.random), 8.0F);
-    const float towerProfile = towerField
-        * (0.32F + 0.68F * std::pow(clampUnit(instance.random), 0.65F));
-    const float spikeField = clampUnit(randomSpire * 0.05F
-                                       + clusteredSpire * 0.28F
-                                       + towerProfile * 0.95F);
-    const float peak = parameters.bands[4]
-        * (0.10F + spikeField * (18.0F - 0.10F)) * center;
+        instance.position.z() * 0.16F - instance.position.x() * 0.09F);
+    const float coherentDetail = detailA * 0.58F + detailB * 0.42F;
+    const float highEnergy = parameters.bands[4] * 0.38F
+        + parameters.bands[5] * 0.28F
+        + parameters.bands[6] * 0.20F
+        + parameters.bands[7] * 0.14F;
+    const float peakControl = 0.42F + clampUnit(style.peakBoost) * 0.58F;
+    const float peak = highEnergy * (0.20F + coherentDetail * 1.45F)
+        * center * peakControl;
     const float idlePhase = std::sin(instance.position.x() * 0.032F
                                      + instance.position.z() * 0.041F) * 0.72F;
     const float reliefA = 0.5F + 0.5F * std::sin(
@@ -354,12 +343,13 @@ float terrainHeight(const SceneInstance& instance,
                                         96.0F);
     const float ringDistance = std::abs(distance - rippleRadius);
     const float cellModulation = 0.55F + clampUnit(instance.random) * 0.45F;
-    const float ripple = parameters.rippleStrength
+    const float rippleToggle = style.ripplesEnabled ? 1.0F : 0.0F;
+    const float ripple = parameters.rippleStrength * rippleToggle
         * std::exp(-(ringDistance * ringDistance) / 30.25F) * 3.35F
         * cellModulation;
     const float ringPhase = 0.5F + 0.5F * std::cos(
         distance * 0.29F - timeSeconds * 1.15F);
-    const float structuralRing = std::pow(ringPhase, 6.0F)
+    const float structuralRing = std::pow(ringPhase, 6.0F) * rippleToggle
         * (0.20F + parameters.energy * 0.95F) * 0.88F * terrainField
         * cellModulation;
     const float impactAge = clampUnit(parameters.impactAge);
@@ -372,8 +362,8 @@ float terrainHeight(const SceneInstance& instance,
                                       / (domeRadius * domeRadius));
     const float steadyCenter = parameters.energy * dynamics.centerHighlight
         * (0.35F + parameters.bands[0] * 0.65F) * centerDome * 10.8F;
-    const float centerSpikes = parameters.energy * dynamics.centerHighlight
-        * core * (0.16F + spikeField * (22.0F - 0.16F));
+    const float centerShoulders = parameters.energy * dynamics.centerHighlight
+        * terrainField * (0.42F + core * 1.55F + wideRidge * 0.38F);
     const float impactRadius = impactAge * dynamics.responseRadius * 1.15F;
     const float impactDistance = std::abs(distance - impactRadius);
     const float impactRing = impact * dynamics.rhythmStrength
@@ -383,7 +373,7 @@ float terrainHeight(const SceneInstance& instance,
     const float rawHeight = std::max(0.0F,
         idle + ((bass + mids + peak) * terrainField + ripple
                 + structuralRing) * amplitude
-        + steadyCenter + centerSpikes
+        + steadyCenter + centerShoulders
         + centerPulse + impactRing);
     return std::max(0.035F, maximumHeight
         * (1.0F - std::exp(-rawHeight / maximumHeight)));

@@ -31,6 +31,10 @@ private slots:
     void steadyMusicKeepsCenterVisiblyFocused();
     void nearbyRandomnessKeepsTerrainSoftWithoutThresholdSpikes();
     void finalReferenceProfileKeepsCoreBroadAndSpikesSubordinate();
+    void equalStrengthHighsRemainHeightSubordinateToLowMids();
+    void representativeGridHasBroadCoreWithoutIsolatedTowers();
+    void floatingCubesAreDeterministicAndVisuallySubordinate();
+    void continuousAndEventControlsStayDistinctBoundedAndLive();
     void idleTerrainKeepsFineVisibleReliefWithoutMusic();
     void idleTerrainFadesOutsideResponseField();
     void trackIdentityProducesStableBoundedDistinctPalette();
@@ -389,6 +393,170 @@ void TerrainReactorStateTest::finalReferenceProfileKeepsCoreBroadAndSpikesSubord
     QVERIFY2(shoulderHeight > outerHeight + 0.45F,
              "The reactor must retain a layered falloff instead of a flat noisy field");
     QVERIFY(std::max(quietCoreHeight, spikyCoreHeight) < 22.0F);
+}
+
+void TerrainReactorStateTest::equalStrengthHighsRemainHeightSubordinateToLowMids()
+{
+    AudioFeatures lowMidFeatures;
+    lowMidFeatures.bands = {0.72F, 0.72F, 0.72F, 0.72F,
+                            0.0F, 0.0F, 0.0F, 0.0F};
+    lowMidFeatures.energy = 0.72F;
+    AudioFeatures highFeatures;
+    highFeatures.bands = {0.0F, 0.0F, 0.0F, 0.0F,
+                          0.72F, 0.72F, 0.72F, 0.72F};
+    highFeatures.energy = 0.72F;
+    RenderStyleSnapshot style;
+    style.peakBoost = 1.0F;
+    const VisualParameters lowMids = mapVisualParameters(
+        lowMidFeatures, 2.25F, style);
+    const VisualParameters highs = mapVisualParameters(
+        highFeatures, 2.25F, style);
+    const SceneLayout layout = makeSceneLayout(0x4b1dU, 25, 0, 0, 0);
+
+    float tallestLowMid = 0.0F;
+    float tallestHigh = 0.0F;
+    for (const SceneInstance& instance : layout.terrain) {
+        if (std::hypot(instance.position.x(), instance.position.z()) > 56.0F) {
+            continue;
+        }
+        tallestLowMid = std::max(tallestLowMid,
+            terrainHeight(instance, lowMids, 2.25F, style));
+        tallestHigh = std::max(tallestHigh,
+            terrainHeight(instance, highs, 2.25F, style));
+    }
+    qInfo() << "equal-strength relief low/mid vs high:"
+            << tallestLowMid << tallestHigh;
+    QVERIFY2(tallestHigh <= tallestLowMid,
+             "High-frequency detail must not become taller terrain relief than low/mids");
+}
+
+void TerrainReactorStateTest::representativeGridHasBroadCoreWithoutIsolatedTowers()
+{
+    AudioFeatures features;
+    features.bands.fill(0.58F);
+    features.energy = 0.68F;
+    RenderStyleSnapshot style;
+    style.terrainAmplitude = 0.74F;
+    style.centerHighlight = 0.70F;
+    style.peakBoost = 0.82F;
+    const VisualParameters visual = mapVisualParameters(features, 1.75F, style);
+    const SceneLayout layout = makeSceneLayout(0x8a31U, 25, 0, 0, 0);
+
+    struct Sample { QVector3D position; float height; };
+    QVector<Sample> samples;
+    QVector<float> ordered;
+    for (const SceneInstance& instance : layout.terrain) {
+        if (std::hypot(instance.position.x(), instance.position.z()) > 42.0F) {
+            continue;
+        }
+        const float height = terrainHeight(instance, visual, 1.75F, style);
+        samples.append({instance.position, height});
+        ordered.append(height);
+    }
+    QVERIFY(ordered.size() > 80);
+    std::sort(ordered.begin(), ordered.end());
+    const float median = ordered.at(ordered.size() / 2);
+    const Sample peak = *std::max_element(samples.cbegin(), samples.cend(),
+        [](const Sample& left, const Sample& right) {
+            return left.height < right.height;
+        });
+    float neighbourTotal = 0.0F;
+    int neighbourCount = 0;
+    for (const Sample& sample : samples) {
+        const float separation = (sample.position - peak.position).length();
+        if (separation > 0.01F && separation < 10.0F) {
+            neighbourTotal += sample.height;
+            ++neighbourCount;
+        }
+    }
+    QVERIFY(neighbourCount >= 4);
+    const float neighbourMean = neighbourTotal / float(neighbourCount);
+    qInfo() << "representative core peak/median/neighbour:"
+            << peak.height << median << neighbourMean;
+    // Ratios are intentionally perceptual bounds: a 65% median excursion
+    // retains layered relief, while a 40% local excursion prevents a lone tower.
+    QVERIFY2(peak.height <= median * 1.65F,
+             "Representative core peak is too isolated from the field median");
+    QVERIFY2(peak.height <= neighbourMean * 1.40F,
+             "Representative core peak is too isolated from its neighbours");
+}
+
+void TerrainReactorStateTest::floatingCubesAreDeterministicAndVisuallySubordinate()
+{
+    const SceneLayout first = makeSceneLayout(0x71c3U, 25, 64, 0, 0);
+    const SceneLayout repeated = makeSceneLayout(0x71c3U, 25, 64, 0, 0);
+    QCOMPARE(first.floating, repeated.floating);
+    QCOMPARE(first.floating.size(), 64);
+
+    QVector<float> sizes;
+    for (const SceneInstance& cube : first.floating) {
+        QCOMPARE(cube.scale.x(), cube.scale.y());
+        QCOMPARE(cube.scale.x(), cube.scale.z());
+        sizes.append(cube.scale.x());
+    }
+    std::sort(sizes.begin(), sizes.end());
+    const float median = sizes.at(sizes.size() / 2);
+    qInfo() << "floating cube median/max size:" << median << sizes.back();
+    // At the 25x25 representative grid, terrain cells span 6.72 world units;
+    // sub-unit cubes remain atmosphere instead of competing terrain masses.
+    QVERIFY2(sizes.back() <= 0.85F,
+             "Floating environment cubes are too large to remain subordinate");
+    QVERIFY2(median <= 0.68F,
+             "The floating cube population is visually too heavy");
+}
+
+void TerrainReactorStateTest::continuousAndEventControlsStayDistinctBoundedAndLive()
+{
+    AudioFeatures continuous;
+    continuous.bands.fill(0.44F);
+    continuous.energy = 0.46F;
+    continuous.spectralFlux = 0.18F;
+    const VisualParameters baseline = mapVisualParameters(continuous, 1.0F);
+    AudioFeatures eventful = continuous;
+    eventful.kick = 1.0F;
+    eventful.snare = 1.0F;
+    const VisualParameters event = mapVisualParameters(eventful, 1.0F);
+    QCOMPARE(event.bands, baseline.bands);
+    QCOMPARE(event.energy, baseline.energy);
+    QVERIFY(event.rippleStrength > baseline.rippleStrength);
+    QVERIFY(event.cameraPunch > baseline.cameraPunch);
+    QVERIFY(event.rippleStrength <= 1.0F);
+    QVERIFY(event.cameraPunch <= 1.0F);
+
+    SceneInstance detail;
+    detail.position = QVector3D(9.0F, 0.0F, -6.0F);
+    detail.random = 0.92F;
+    detail.zone = ColorZone::Peak;
+    AudioFeatures highFeatures;
+    highFeatures.bands[4] = 0.72F;
+    highFeatures.energy = 0.42F;
+    RenderStyleSnapshot restrained;
+    restrained.peakBoost = 0.0F;
+    RenderStyleSnapshot emphasized = restrained;
+    emphasized.peakBoost = 1.0F;
+    const float restrainedHeight = terrainHeight(detail,
+        mapVisualParameters(highFeatures, 1.0F, restrained),
+        1.0F, restrained);
+    const float emphasizedHeight = terrainHeight(detail,
+        mapVisualParameters(highFeatures, 1.0F, emphasized),
+        1.0F, emphasized);
+    QVERIFY2(emphasizedHeight > restrainedHeight + 0.10F,
+             "Peak boost must retain a visible bounded terrain-detail effect");
+    QVERIFY2(emphasizedHeight <= restrainedHeight * 1.30F + 0.20F,
+             "Peak boost must not turn restrained detail into a tower");
+
+    VisualParameters pulse;
+    pulse.rippleStrength = 1.0F;
+    pulse.timeSeconds = 1.0F;
+    SceneInstance ring = detail;
+    ring.position = QVector3D(13.5F, 0.0F, 0.0F);
+    RenderStyleSnapshot ripplesOn;
+    ripplesOn.idleBreathingEnabled = false;
+    RenderStyleSnapshot ripplesOff = ripplesOn;
+    ripplesOff.ripplesEnabled = false;
+    QVERIFY2(terrainHeight(ring, pulse, 1.0F, ripplesOn)
+                 > terrainHeight(ring, pulse, 1.0F, ripplesOff) + 0.20F,
+             "Ripple toggle must disable discrete ring relief");
 }
 
 void TerrainReactorStateTest::idleTerrainKeepsFineVisibleReliefWithoutMusic()
