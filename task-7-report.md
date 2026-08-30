@@ -25,7 +25,11 @@ presenting the normal Shell taskbar contract.
   `SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
   SWP_FRAMECHANGED` only when either bit is missing.
 - The helper runs through the existing main platform-style path after the HWND
-  is materialized, so re-registration/native recreation reapplies the contract.
+  is materialized.
+- The main-window event filter now handles the native surface lifecycle:
+  `SurfaceAboutToBeDestroyed` invalidates the stale cached HWND, while
+  `SurfaceCreated` reads the already-created replacement HWND, refreshes the
+  tracked native-pixel size, and reapplies the existing platform style path.
 - No `WM_ACTIVATE`, `WM_SYSCOMMAND`, Qt frameless flag, geometry, DPI, z-order,
   or shutdown behavior was changed.
 
@@ -47,13 +51,28 @@ PASS taskbarCommandsToggleDockedGroupWithoutResizing
 PASS taskbarToggleEntryPointMinimizesAndRestoresWindowGroup
 PASS taskbarToggleEntryPointActivatesBackgroundGroup
 PASS taskbarActivationDoesNotCancelMinimize
-Totals: 7 passed, 0 failed, 0 skipped
+Totals: 8 passed, 0 failed, 0 skipped
 ```
 
-The style test also removes the two bits and re-registers the same main window,
-then proves that both required bits return while every other style bit remains
-unchanged. Auxiliary list/tools/settings windows remain `WS_EX_TOOLWINDOW`, do
-not gain `WS_EX_APPWINDOW`, and do not receive the main taskbar style bits.
+The first implementation review identified that `mainWindowHandle_` was only
+updated by `setWindows()`. A second strict TDD cycle destroyed and recreated the
+real native surface while retaining a placeholder HWND to prevent Windows from
+reusing the old handle value. Before the lifecycle fix, the new surface failed
+with:
+
+```text
+Actual (recreatedStyle & requiredStyle): 0
+Expected (requiredStyle): 655360
+Totals: 2 passed, 1 failed
+```
+
+After the fix, the recreation case passes and proves that the old HWND is
+destroyed, the replacement HWND is different, required `GWL_STYLE` and
+`GWL_EXSTYLE` values are restored, geometry is unchanged, and native
+`SC_MINIMIZE` / `SC_RESTORE` messages sent to the replacement HWND still hide
+and restore the docked list group. Auxiliary list/tools/settings windows remain
+`WS_EX_TOOLWINDOW`, do not gain `WS_EX_APPWINDOW`, and do not receive the main
+taskbar style bits.
 
 ## Verification
 
@@ -62,7 +81,7 @@ x64) and the `windows-msvc-release` preset.
 
 - Built `window_controller_test`: PASS.
 - Built Release `AgPlayer` and `shutdown_test`: PASS.
-- Direct Windows-QPA focused tests: 7 passed, 0 failed.
+- Direct Windows-QPA focused tests: 8 passed, 0 failed.
 - `ctest --test-dir build/release -R
   '^(window_controller_test|windows_shell_runtime_test|shutdown_test|window_mixed_dpi_transition_test|window_taskbar_native_test)$'
   --output-on-failure`: 5/5 passed.

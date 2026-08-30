@@ -3,6 +3,7 @@
 #include <QCoreApplication>
 #include <QEvent>
 #include <QGuiApplication>
+#include <QPlatformSurfaceEvent>
 #include <QScreen>
 #include <QSettings>
 #include <QWindow>
@@ -1496,7 +1497,28 @@ QPoint WindowController::computeSnapForEdge(const QString& direction) const
 bool WindowController::eventFilter(QObject* watched, QEvent* event)
 {
     if (watched == mainWindow_) {
-        if (event->type() == QEvent::Move || event->type() == QEvent::Resize) {
+        if (event->type() == QEvent::PlatformSurface) {
+#ifdef Q_OS_WIN
+            const auto* surfaceEvent =
+                static_cast<QPlatformSurfaceEvent*>(event);
+            if (surfaceEvent->surfaceEventType()
+                == QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed) {
+                mainWindowHandle_ = 0;
+            } else if (surfaceEvent->surfaceEventType()
+                       == QPlatformSurfaceEvent::SurfaceCreated
+                       && QGuiApplication::platformName().compare(
+                              QStringLiteral("windows"),
+                              Qt::CaseInsensitive) == 0) {
+                // SurfaceCreated guarantees that winId() reads an existing
+                // HWND instead of recursively creating another surface.
+                mainWindowHandle_ =
+                    static_cast<quintptr>(mainWindow_->winId());
+                rememberNativePixelSize(mainWindow_);
+                applyPlatformWindowStyle(mainWindow_);
+            }
+#endif
+        } else if (event->type() == QEvent::Move
+                   || event->type() == QEvent::Resize) {
 #ifdef Q_OS_WIN
             if (event->type() == QEvent::Resize
                 && qFuzzyCompare(mainTrackedDpr_, mainWindow_->devicePixelRatio())) {

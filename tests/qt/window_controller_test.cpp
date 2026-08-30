@@ -59,6 +59,7 @@ private slots:
 #ifdef Q_OS_WIN
     void dockedWindowsKeepNativeSizeAcrossScreens();
     void nativeTaskbarGroupUsesMainAsOnlyAppWindow();
+    void recreatedMainTaskbarSurfaceRefreshesStylesAndCommands();
     void taskbarCommandsToggleDockedGroupWithoutResizing();
     void taskbarToggleEntryPointMinimizesAndRestoresWindowGroup();
     void taskbarToggleEntryPointActivatesBackgroundGroup();
@@ -1088,18 +1089,74 @@ void WindowControllerTest::nativeTaskbarGroupUsesMainAsOnlyAppWindow()
         QVERIFY2(!(auxiliaryStyle & addedTaskbarStyles),
                  "auxiliary windows must not receive main taskbar styles");
     }
+}
 
-    const LONG_PTR styleWithoutTaskbarBits =
-        mainWindowStyle & ~addedTaskbarStyles;
-    SetWindowLongPtrW(reinterpret_cast<HWND>(mainWindow.winId()), GWL_STYLE,
-                      styleWithoutTaskbarBits);
+void WindowControllerTest::recreatedMainTaskbarSurfaceRefreshesStylesAndCommands()
+{
+    if (QGuiApplication::platformName().compare(QStringLiteral("windows"),
+                                                Qt::CaseInsensitive) != 0) {
+        QSKIP("requires the Windows native window manager");
+    }
+
+    QWindow mainWindow;
+    mainWindow.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    mainWindow.setGeometry(180, 120, 720, 280);
+    QWindow listWindow;
+    listWindow.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    listWindow.setGeometry(180, 398, 720, 420);
+
+    WindowController windows;
     windows.setWindows(&mainWindow, nullptr);
-    const LONG_PTR reappliedMainWindowStyle = GetWindowLongPtrW(
-        reinterpret_cast<HWND>(mainWindow.winId()), GWL_STYLE);
-    QCOMPARE(reappliedMainWindowStyle & addedTaskbarStyles,
-             addedTaskbarStyles);
-    QCOMPARE(reappliedMainWindowStyle & ~addedTaskbarStyles,
-             styleWithoutTaskbarBits);
+    windows.setListWindow(&listWindow);
+    windows.showListWindow();
+    windows.snapListWindow(QStringLiteral("bottom"));
+    QVERIFY(QTest::qWaitForWindowExposed(&mainWindow));
+    QVERIFY(QTest::qWaitForWindowExposed(&listWindow));
+
+    const QRect mainGeometry = mainWindow.geometry();
+    const QRect listGeometry = listWindow.geometry();
+    const HWND oldMainHandle = reinterpret_cast<HWND>(mainWindow.winId());
+    QVERIFY(IsWindow(oldMainHandle));
+
+    mainWindow.destroy();
+    QTRY_VERIFY(!IsWindow(oldMainHandle));
+
+    // Keep a native window alive while the main surface is recreated so
+    // Windows cannot satisfy the test by recycling the old HWND value.
+    QWindow handlePlaceholder;
+    handlePlaceholder.setFlags(Qt::Tool | Qt::FramelessWindowHint);
+    handlePlaceholder.create();
+    QVERIFY(handlePlaceholder.handle() != nullptr);
+
+    mainWindow.create();
+    const HWND recreatedMainHandle =
+        reinterpret_cast<HWND>(mainWindow.winId());
+    QVERIFY(IsWindow(recreatedMainHandle));
+    QVERIFY(recreatedMainHandle != oldMainHandle);
+
+    constexpr LONG_PTR requiredStyle = WS_SYSMENU | WS_MINIMIZEBOX;
+    const LONG_PTR recreatedStyle =
+        GetWindowLongPtrW(recreatedMainHandle, GWL_STYLE);
+    QCOMPARE(recreatedStyle & requiredStyle, requiredStyle);
+    const LONG_PTR recreatedExtendedStyle =
+        GetWindowLongPtrW(recreatedMainHandle, GWL_EXSTYLE);
+    QVERIFY(recreatedExtendedStyle & WS_EX_APPWINDOW);
+    QVERIFY(!(recreatedExtendedStyle & WS_EX_TOOLWINDOW));
+    QCOMPARE(mainWindow.geometry(), mainGeometry);
+    QCOMPARE(listWindow.geometry(), listGeometry);
+
+    mainWindow.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mainWindow));
+    QTRY_VERIFY(listWindow.isVisible());
+    SendMessageW(recreatedMainHandle, WM_SYSCOMMAND, SC_MINIMIZE, 0);
+    QTRY_VERIFY(mainWindow.windowState() == Qt::WindowMinimized);
+    QTRY_VERIFY(!listWindow.isVisible());
+
+    SendMessageW(recreatedMainHandle, WM_SYSCOMMAND, SC_RESTORE, 0);
+    QTRY_VERIFY(mainWindow.windowState() != Qt::WindowMinimized);
+    QTRY_VERIFY(listWindow.isVisible());
+    QCOMPARE(mainWindow.geometry(), mainGeometry);
+    QCOMPARE(listWindow.geometry(), listGeometry);
 }
 
 void WindowControllerTest::taskbarCommandsToggleDockedGroupWithoutResizing()
