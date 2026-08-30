@@ -1156,6 +1156,7 @@ bool AudioEditorController::createUntitledDocument(
     stopPlayback();
     clearViewportWaveformState();
     event_gesture_ = {};
+    clearEventSelection();
     document_ = std::move(candidate);
     source_path_.clear();
     project_path_.clear();
@@ -1597,6 +1598,31 @@ bool AudioEditorController::clearSelection()
     emit documentChanged();
     emit projectChanged();
     return true;
+}
+
+void AudioEditorController::selectEvent(const QString& id)
+{
+    const auto eventId = parseEventId(id);
+    const auto snapshot = document_.timelineSnapshot();
+    const bool exists = eventId && std::any_of(snapshot.events.cbegin(),
+        snapshot.events.cend(), [eventId](const AudioEvent& event) {
+            return event.id == *eventId;
+        });
+    if (!exists) {
+        clearEventSelection();
+        return;
+    }
+    const QString normalized = QString::number(*eventId);
+    if (selected_event_id_ == normalized) return;
+    selected_event_id_ = normalized;
+    emit selectedEventChanged();
+}
+
+void AudioEditorController::clearEventSelection()
+{
+    if (selected_event_id_.isEmpty()) return;
+    selected_event_id_.clear();
+    emit selectedEventChanged();
 }
 
 bool AudioEditorController::clearTimeline()
@@ -2707,6 +2733,7 @@ bool AudioEditorController::clearDocument()
     cancelSourcePeakCacheJob();
     stopPlayback();
     event_gesture_ = {};
+    clearEventSelection();
     document_ = AudioDocument{};
     source_path_.clear();
     project_path_.clear();
@@ -3344,6 +3371,7 @@ void AudioEditorController::applyDocumentLoadOutcome(
     stopPlayback();
     const bool replaceDocument = outcome.kind != DocumentLoadKind::Relink;
     if (replaceDocument) {
+        clearEventSelection();
         cancelBpmDetection(false);
         time_pitch_ = {};
         time_pitch_preview_active_ = false;
@@ -3874,6 +3902,7 @@ void AudioEditorController::finishTimelineMutation()
     const qint64 requestedPlayhead = playhead_frame_;
     stopPlayback();
     if (!document_.selection()) setLoopEnabled(false);
+    clearMissingEventSelection();
     syncProjectSourcesAndIssues();
     syncPrimarySourceSummary();
     const qint64 frames = std::max<qint64>(0, document_.totalFrames());
@@ -3889,6 +3918,18 @@ void AudioEditorController::finishTimelineMutation()
     emit documentChanged();
     emit projectChanged();
     if (restartPendingBpm && frames > 0) (void)detectBpm();
+}
+
+void AudioEditorController::clearMissingEventSelection()
+{
+    if (selected_event_id_.isEmpty()) return;
+    const auto eventId = parseEventId(selected_event_id_);
+    const auto snapshot = document_.timelineSnapshot();
+    const bool exists = eventId && std::any_of(snapshot.events.cbegin(),
+        snapshot.events.cend(), [eventId](const AudioEvent& event) {
+            return event.id == *eventId;
+        });
+    if (!exists) clearEventSelection();
 }
 
 void AudioEditorController::syncPrimarySourceSummary()

@@ -140,7 +140,33 @@ TestCase {
         compare(AudioEditorController.pitchCents, 200)
     }
 
-    function test_ctrlDragOnEventCreatesCopyWithNativeModifierInput() {
+    function test_bodyDragCreatesRangeSelectionWithNativePointerInput() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 192000))
+        verify(AudioEditorController.setActiveTool("select"))
+        const eventId = AudioEditorController.timelineEventViews[0].id
+        verify(AudioEditorController.moveEvent(eventId, 48000))
+        verify(AudioEditorController.trimEvent(eventId, 0, 96000, 48000))
+        const canvas = findChild(page, "editorWaveformCanvas")
+        verify(canvas)
+        AudioEditorController.viewport.setViewportWidth(canvas.width)
+        verify(AudioEditorController.viewport.setVisibleRange(0, 144000))
+        tryVerify(function() {
+            return findVisibleItem(canvas, "editorEventVisualBoundary") !== null
+        })
+        const eventVisual = findVisibleItem(canvas, "editorEventVisualBoundary")
+        verify(eventVisual)
+        const bodyPoint = eventVisual.mapToItem(canvas,
+            eventVisual.width * 0.5, 48)
+        verify(bodyPoint.y > 32)
+
+        verify(nativeDropHelper.dragItem(canvas, bodyPoint.x, bodyPoint.y,
+            canvas.width * 0.1, 0))
+
+        verify(AudioEditorController.selectionEnd
+            > AudioEditorController.selectionStart)
+    }
+
+    function test_headerDragMovesTheSelectedEventWithNativePointerInput() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 192000))
         verify(AudioEditorController.setActiveTool("select"))
         const eventId = AudioEditorController.timelineEventViews[0].id
@@ -151,22 +177,23 @@ TestCase {
         AudioEditorController.viewport.setViewportWidth(canvas.width)
         verify(AudioEditorController.viewport.setVisibleRange(0, 192000))
         tryVerify(function() {
-            return findVisibleItem(canvas, "editorEventBodyInteraction") !== null
+            return findVisibleItem(canvas, "editorEventHeaderInteraction") !== null
         })
-        const body = findVisibleItem(canvas, "editorEventBodyInteraction")
-        verify(body)
-        const startX = body.width * 0.75
-        const bodyY = body.height * 0.75
-        const pressOnCanvas = body.mapToItem(canvas, startX, bodyY)
+        const header = findVisibleItem(canvas, "editorEventHeaderInteraction")
+        verify(header)
+        const startX = header.width * 0.75
+        const pressOnCanvas = header.mapToItem(canvas, startX,
+            header.height * 0.5)
         const pressFrame = canvas.frameAtCanvasPixel(pressOnCanvas.x)
-        const destinationOnBody = canvas.mapToItem(body,
-            canvas.pixelAtFrame(pressFrame - 96000), pressOnCanvas.y)
+        const destinationOnHeader = canvas.mapToItem(header,
+            canvas.pixelAtFrame(pressFrame - 48000), pressOnCanvas.y)
 
-        verify(nativeDropHelper.dragItemWithModifiers(
-            body, startX, bodyY,
-            destinationOnBody.x - startX, 0, Qt.ControlModifier))
+        verify(nativeDropHelper.dragItem(header, startX, header.height * 0.5,
+            destinationOnHeader.x - startX, 0))
 
-        compare(AudioEditorController.timelineEventViews.length, 2)
+        compare(AudioEditorController.selectedEventId, String(eventId))
+        verify(Number(AudioEditorController.timelineEventViews[0].timelineStart)
+            < 96000)
     }
 
     function test_rightTrimHandleKeepsNativeGrabAndCommitsOneUndoStep() {

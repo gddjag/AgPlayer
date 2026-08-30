@@ -315,16 +315,30 @@ Rectangle {
             height: canvas.height - 16
             visible: width > 0 && rawEnd > 0 && rawStart < canvas.width
             color: "transparent"
-            border.color: "transparent"
-            border.width: 0
+            border.color: Theme.waveformBlue
+            border.width: 1
             z: 2
+
+            Rectangle {
+                objectName: "editorEventSelectedOverlay"
+                anchors.fill: parent
+                color: String(eventDelegate.modelData.id)
+                    === AudioEditorController.selectedEventId
+                    ? "#261688FF" : "transparent"
+                border.color: Theme.focus
+                border.width: String(eventDelegate.modelData.id)
+                    === AudioEditorController.selectedEventId ? 2 : 0
+            }
 
             MouseArea {
                 id: eventMoveArea
-                objectName: "editorEventBodyInteraction"
-                anchors.fill: parent
+                objectName: "editorEventHeaderInteraction"
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
                 anchors.leftMargin: 9
                 anchors.rightMargin: 9
+                height: 24
                 z: 5
                 cursorShape: AudioEditorController.activeTool === "scissors"
                     ? Qt.CrossCursor : Qt.ArrowCursor
@@ -344,9 +358,11 @@ Rectangle {
                     canvas.cancelSelectionPreview()
                     if (mouse.button === Qt.RightButton) {
                         AudioEditorController.clearSelection()
+                        AudioEditorController.clearEventSelection()
                         mouse.accepted = true
                         return
                     }
+                    AudioEditorController.selectEvent(String(modelData.id))
                     const point = mapToItem(canvas, mouse.x, mouse.y)
                     pressCanvasX = point.x
                     originalTimelineStart = Number(modelData.timelineStart)
@@ -356,8 +372,6 @@ Rectangle {
                     const outsideSelection = !canvas.selectionContains(frame)
                     playOnRelease = canvas.displayedSelectionEnd
                         > canvas.displayedSelectionStart && outsideSelection
-                    if (outsideSelection)
-                        AudioEditorController.clearSelection()
                     AudioEditorController.seekFrame(frame)
                     if (AudioEditorController.activeTool === "scissors") {
                         AudioEditorController.splitEvent(modelData.id, frame)

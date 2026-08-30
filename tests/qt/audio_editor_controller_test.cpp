@@ -4134,6 +4134,42 @@ private slots:
         QCOMPARE(controller.filePath(), originalPath);
     }
 
+    void selectsEventByDecimalStringId()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(48'000, 2, 96'000));
+        const QString eventId = controller.timelineEventViews().front()
+            .toMap().value(QStringLiteral("id")).toString();
+
+        QVERIFY(QMetaObject::invokeMethod(&controller, "selectEvent",
+            Q_ARG(QString, eventId)));
+
+        QCOMPARE(controller.property("selectedEventId").toString(), eventId);
+        QVERIFY(QMetaObject::invokeMethod(&controller, "clearEventSelection"));
+        QVERIFY(controller.property("selectedEventId").toString().isEmpty());
+    }
+
+    void undoClearsEventSelectionWhenTheSelectedIdNoLongerExists()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(48'000, 2, 96'000));
+        const QString originalId = controller.timelineEventViews().front()
+            .toMap().value(QStringLiteral("id")).toString();
+        QVERIFY(controller.splitEvent(originalId, 48'000));
+        const QVariantList splitEvents = controller.timelineEventViews();
+        QCOMPARE(splitEvents.size(), 2);
+        const QString rightEventId = splitEvents.back().toMap()
+            .value(QStringLiteral("id")).toString();
+        QVERIFY(rightEventId != originalId);
+
+        QVERIFY(QMetaObject::invokeMethod(&controller, "selectEvent",
+            Q_ARG(QString, rightEventId)));
+        QCOMPARE(controller.property("selectedEventId").toString(), rightEventId);
+        QVERIFY(controller.undo());
+
+        QVERIFY(controller.property("selectedEventId").toString().isEmpty());
+    }
+
     void obsoleteReplacementOperationsAreAbsent()
     {
         const QMetaObject& meta = AudioEditorController::staticMetaObject;

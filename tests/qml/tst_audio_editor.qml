@@ -689,7 +689,7 @@ TestCase {
         compare(AudioEditorController.timelineEventViews.length, 1)
     }
 
-    function test_selectToolDragOnEventMovesTheEventWithoutCreatingSelection() {
+    function test_selectToolHeaderDragMovesTheSelectedEventWithoutCreatingRange() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
         verify(AudioEditorController.setActiveTool("select"))
         const canvas = findChild(page, "editorWaveformCanvas")
@@ -697,18 +697,48 @@ TestCase {
         AudioEditorController.viewport.setViewportWidth(canvas.width)
         verify(AudioEditorController.viewport.setVisibleRange(0, 96000))
         wait(0)
-        const body = findVisibleItem(canvas, "editorEventBodyInteraction")
-        verify(body, "event body must expose the selection interaction seam")
-        const fromX = Math.round(body.width * 0.25)
-        const toX = Math.round(body.width * 0.75)
+        const header = findVisibleItem(canvas, "editorEventHeaderInteraction")
+        verify(header, "event header must expose the move interaction seam")
+        const fromX = Math.round(header.width * 0.25)
+        const toX = Math.round(header.width * 0.75)
         const originalStart = AudioEditorController.timelineEventViews[0].timelineStart
 
-        mouseDrag(body, fromX, body.height * 0.7,
+        mouseDrag(header, fromX, header.height * 0.5,
                   toX - fromX, 0, Qt.LeftButton, Qt.NoModifier, 30)
 
         compare(AudioEditorController.selectionStart, -1)
+        compare(AudioEditorController.selectedEventId,
+                String(AudioEditorController.timelineEventViews[0].id))
+        const selectedOverlay = findVisibleItem(canvas,
+            "editorEventSelectedOverlay")
+        verify(selectedOverlay)
+        compare(selectedOverlay.border.width, 2)
         verify(Number(AudioEditorController.timelineEventViews[0].timelineStart)
                > Number(originalStart))
+    }
+
+    function test_selectToolBodyDragCreatesRangeSelection() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 192000))
+        verify(AudioEditorController.setActiveTool("select"))
+        const eventId = AudioEditorController.timelineEventViews[0].id
+        verify(AudioEditorController.moveEvent(eventId, 48000))
+        verify(AudioEditorController.trimEvent(eventId, 0, 96000, 48000))
+        const canvas = findChild(page, "editorWaveformCanvas")
+        verify(canvas)
+        AudioEditorController.viewport.setViewportWidth(canvas.width)
+        verify(AudioEditorController.viewport.setVisibleRange(0, 144000))
+        wait(0)
+        const eventVisual = findVisibleItem(canvas, "editorEventVisualBoundary")
+        verify(eventVisual)
+        const bodyPoint = eventVisual.mapToItem(canvas,
+            eventVisual.width * 0.5, 48)
+        verify(bodyPoint.y > 32)
+
+        mouseDrag(canvas, bodyPoint.x, bodyPoint.y,
+                  canvas.width * 0.1, 0, Qt.LeftButton, Qt.NoModifier, 30)
+
+        verify(AudioEditorController.selectionEnd
+            > AudioEditorController.selectionStart)
     }
 
     function test_blankTrackDragCreatesSelectionAndRightClickCancelsIt() {
@@ -740,27 +770,27 @@ TestCase {
         AudioEditorController.viewport.setViewportWidth(canvas.width)
         verify(AudioEditorController.viewport.setVisibleRange(0, 192000))
         wait(0)
-        const body = findVisibleItem(canvas, "editorEventBodyInteraction")
-        verify(body)
+        const header = findVisibleItem(canvas, "editorEventHeaderInteraction")
+        verify(header)
         page.controlModifierHeld = true
         tryCompare(page, "controlModifierHeld", true)
         tryCompare(canvas, "controlModifierHeld", true)
         // The offscreen QtTest pointer helper does not preserve native keyboard
         // state.  Keep this MouseArea regression on the page's real held-key
         // state; tst_audio_editor_native_input.qml covers native Control input.
-        const bodyY = body.height * 0.75
-        mousePress(body, body.width * 0.75, bodyY,
+        const headerY = header.height * 0.5
+        mousePress(header, header.width * 0.75, headerY,
                    Qt.LeftButton, Qt.NoModifier)
         compare(page.controlModifierHeld, true)
         compare(canvas.controlModifierHeld, true)
-        compare(body.duplicateMove, true)
+        compare(header.duplicateMove, true)
         // Offscreen QtTest cancels a MouseArea grab when the pointer leaves the
         // item's bounds.  Exercise the release/atomic-commit seam here; the
         // qwindows native-input test performs the complete pointer movement.
-        body.candidateTimelineStart = 0
-        body.movedDuringPress = true
-        compare(Number(body.candidateTimelineStart), 0)
-        mouseRelease(body, body.width * 0.75, bodyY,
+        header.candidateTimelineStart = 0
+        header.movedDuringPress = true
+        compare(Number(header.candidateTimelineStart), 0)
+        mouseRelease(header, header.width * 0.75, headerY,
                      Qt.LeftButton, Qt.NoModifier)
         if (AudioEditorController.timelineEventViews.length === 1) {
             AudioEditorController.cancelEventGesture()
@@ -825,7 +855,7 @@ TestCase {
                                           "editorSelectionDurationCapsule")
         verify(border && eventBoundary && capsule && label && duration
                && durationCapsule)
-        compare(eventBoundary.border.width, 0)
+        compare(eventBoundary.border.width, 1)
         compare(label.text, "拖出片段")
         compare(duration.text, "00:00.500")
         verify(capsule.border.color.toString().indexOf("ff8a00") >= 0)

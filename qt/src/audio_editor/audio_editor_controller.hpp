@@ -71,6 +71,8 @@ class AudioEditorController final : public QObject {
                    NOTIFY waveformChanged)
     Q_PROPERTY(QVariantList timelineEventViews READ timelineEventViews
                    NOTIFY documentChanged)
+    Q_PROPERTY(QString selectedEventId READ selectedEventId
+                   NOTIFY selectedEventChanged)
     Q_PROPERTY(QString activeTool READ activeTool NOTIFY toolChanged)
     Q_PROPERTY(bool formantPreservationSupported
                    READ formantPreservationSupported NOTIFY documentChanged)
@@ -153,6 +155,7 @@ public:
     [[nodiscard]] QVariantList viewportChannelPeaks() const
     { return viewport_channel_peaks_; }
     [[nodiscard]] QVariantList timelineEventViews() const;
+    [[nodiscard]] QString selectedEventId() const { return selected_event_id_; }
     [[nodiscard]] QString activeTool() const { return active_tool_; }
     [[nodiscard]] bool formantPreservationSupported() const noexcept
     { return (!has_document_ || document_.totalFrames() > 0)
@@ -269,6 +272,8 @@ public:
     Q_INVOKABLE bool exportToConfiguredDirectory();
     Q_INVOKABLE bool setSelection(qint64 startFrame, qint64 endFrame);
     Q_INVOKABLE bool clearSelection();
+    Q_INVOKABLE void selectEvent(const QString& id);
+    Q_INVOKABLE void clearEventSelection();
     Q_INVOKABLE bool clearTimeline();
     Q_INVOKABLE void setViewportWaveformDevicePixelRatio(
         double devicePixelRatio);
@@ -371,6 +376,7 @@ signals:
     void exportResultChanged();
     void discardConfirmationRequested();
     void loadingChanged();
+    void selectedEventChanged();
 
 private:
     explicit AudioEditorController(std::optional<ag_audio_backend> backend,
@@ -453,6 +459,7 @@ private:
                                                 qint64 positionMs) noexcept;
     [[nodiscard]] bool syncModifiedFromHistory() noexcept;
     void finishTimelineMutation();
+    void clearMissingEventSelection();
     void syncProjectSourcesAndIssues();
     [[nodiscard]] std::optional<quint64> nextProjectSourceId() const;
     [[nodiscard]] static std::optional<agplayer::editor::EventId>
@@ -498,6 +505,7 @@ private:
     std::shared_ptr<const agplayer::editor::PeakPyramid> primary_peak_pyramid_;
     SourcePeakPyramids source_peak_pyramids_;
     QVariantList viewport_channel_peaks_;
+    QString selected_event_id_;
     QFutureWatcherBase* viewport_waveform_watcher_ = nullptr;
     quint64 viewport_waveform_generation_ = 0;
     std::shared_ptr<std::atomic_bool> viewport_waveform_cancel_token_;
