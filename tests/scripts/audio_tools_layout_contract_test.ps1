@@ -182,9 +182,9 @@ if ($toolsNavigation -notmatch 'visibleToolOrder:\s*\[0,\s*4,\s*1,\s*2,\s*3\]' -
 }
 $navOrder = @(
     (ConvertFrom-Utf8Base64 '6Z+z6aKR57yW6L6R'),
-    '人声伴奏分离',
+    (ConvertFrom-Utf8Base64 '5Lq65aOw5Ly05aWP5YiG56a7'),
     (ConvertFrom-Utf8Base64 '5qC85byP6L2s5o2i'),
-    (ConvertFrom-Utf8Base64 '5YWD5pWw5o2u5L+u5pS5'),
+    (ConvertFrom-Utf8Base64 '5YWD5pWw5o2u57yW6L6R'),
     (ConvertFrom-Utf8Base64 '5paH5Lu25ZCN5aSE55CG'))
 $previous = -1
 foreach ($label in $navOrder) {

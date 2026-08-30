@@ -3837,7 +3837,7 @@ Clear: Remove all known aliases for this field.</translation>
     <message>
         <location filename="../app/qml/AgPlayer/components/tools/ToolSidebar.qml" line="17"/>
         <location filename="../app/qml/AgPlayer/components/tools/ToolSidebar.qml" line="32"/>
-        <source>元数据修改</source>
+        <source>元数据编辑</source>
         <translation>Metadata Editor</translation>
     </message>
     <message>
@@ -3845,6 +3845,11 @@ Clear: Remove all known aliases for this field.</translation>
         <location filename="../app/qml/AgPlayer/components/tools/ToolSidebar.qml" line="33"/>
         <source>文件名处理</source>
         <translation>Filename Processing</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/ToolSidebar.qml" line="17"/>
+        <source>人声伴奏分离</source>
+        <translation>Vocal/Accompaniment Separation</translation>
     </message>
 </context>
 <context>

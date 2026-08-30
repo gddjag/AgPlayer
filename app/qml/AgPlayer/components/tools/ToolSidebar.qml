@@ -11,6 +11,7 @@ Rectangle {
     property bool separationWorkbench: false
     property int currentTool: 0
     property Window window
+    readonly property color activeLabelColor: Theme.primaryText
     readonly property var visibleToolOrder: [0, 4, 1, 2, 3]
     readonly property var visibleTools: [
         { toolId: 0, name: qsTr("音频编辑"), icon: "equalizer-line" },
@@ -69,7 +70,7 @@ Rectangle {
                     }
                     Text {
                         text: modelData.name
-                        color: navButton.checked ? Theme.primaryText
+                        color: navButton.checked ? navigation.activeLabelColor
                                                  : Theme.secondaryText
                         font.family: Theme.fontPrimary
                         font.pixelSize: 15

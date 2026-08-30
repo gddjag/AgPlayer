@@ -48,7 +48,7 @@ void TranslationManagerTest::switchesInstalledQtTranslation()
         return QCoreApplication::translate("ToolSidebar", "音频编辑");
     };
     const auto metadataLabel = []() {
-        return QCoreApplication::translate("ToolSidebar", "元数据修改");
+        return QCoreApplication::translate("ToolSidebar", "元数据编辑");
     };
     const auto filenameLabel = []() {
         return QCoreApplication::translate("ToolSidebar", "文件名处理");

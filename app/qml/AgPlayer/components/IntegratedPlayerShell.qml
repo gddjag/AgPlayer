@@ -18,6 +18,7 @@ Item {
     property var navigationModel: LibraryNavigationModel
     property var tagModel: TagModel
     property var playbackController: PlaybackController
+    property var lyricsService: LyricsService
     property var waveformProvider: WaveformProvider
     property var waveformLayers: ({})
     property real waveformDurationMs: 0
@@ -469,37 +470,19 @@ Item {
                                 }
                             }
 
-                            ScrollView {
+                            Item {
                                 id: lyricsContent
                                 objectName: "integratedLyricsContent"
                                 anchors.fill: parent
                                 visible: root.sidePanelPage === 1
                                 clip: true
 
-                                TextArea {
-                                    id: lyricsText
-                                    objectName: "integratedLyricsText"
-                                    width: lyricsContent.availableWidth
-                                    readOnly: true
-                                    selectByMouse: true
-                                    wrapMode: TextEdit.Wrap
-                                    padding: 8
-                                    text: root.playbackController
-                                          && root.playbackController.lyrics
-                                          && root.playbackController.lyrics.trim().length > 0
-                                          ? root.playbackController.lyrics
-                                          : qsTr("当前歌曲暂无内嵌歌词")
-                                    color: root.playbackController
-                                           && root.playbackController.lyrics
-                                           && root.playbackController.lyrics.trim().length > 0
-                                           ? Theme.primaryText
-                                           : Theme.secondaryText
-                                    font.family: Theme.fontPrimary
-                                    font.pixelSize: 13
-                                    horizontalAlignment: text === qsTr("当前歌曲暂无内嵌歌词")
-                                                         ? Text.AlignHCenter
-                                                         : Text.AlignLeft
-                                    background: null
+                                LyricsPanel {
+                                    id: integratedLyricsPanel
+                                    objectName: "integratedLyricsPanel"
+                                    anchors.fill: parent
+                                    service: root.lyricsService
+                                    spatialMode: false
                                 }
                             }
                         }

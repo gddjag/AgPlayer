@@ -3837,14 +3837,19 @@
     <message>
         <location filename="../app/qml/AgPlayer/components/tools/ToolSidebar.qml" line="17"/>
         <location filename="../app/qml/AgPlayer/components/tools/ToolSidebar.qml" line="32"/>
-        <source>元数据修改</source>
-        <translation>元数据修改</translation>
+        <source>元数据编辑</source>
+        <translation>元数据编辑</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/components/tools/ToolSidebar.qml" line="17"/>
         <location filename="../app/qml/AgPlayer/components/tools/ToolSidebar.qml" line="33"/>
         <source>文件名处理</source>
         <translation>文件名处理</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/tools/ToolSidebar.qml" line="17"/>
+        <source>人声伴奏分离</source>
+        <translation>人声伴奏分离</translation>
     </message>
 </context>
 <context>

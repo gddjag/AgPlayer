@@ -44,6 +44,9 @@ ApplicationWindow {
     property alias waveformSession: sharedWaveformSession
     readonly property bool integratedShell:
         SettingsController.playerShellMode === 1
+    readonly property bool integratedLyricsRequested:
+        integratedShell && integratedSidePanelExpanded
+        && integratedSidePanelPage === 1
     readonly property bool qaImmersive:
         Qt.application.arguments.indexOf("--qa-immersive") >= 0
     readonly property bool qaImmersiveSynthetic:
@@ -92,6 +95,7 @@ ApplicationWindow {
         target: LyricsService
         property: "enabled"
         value: PlayerExperienceController.lyricsVisible
+               || mainWindow.integratedLyricsRequested
     }
 
     Component.onCompleted: {
@@ -254,6 +258,7 @@ ApplicationWindow {
         IntegratedPlayerShell {
             filterModel: sharedFilterModel
             hostWindow: mainWindow
+            lyricsService: LyricsService
             waveformLayers: sharedWaveformSession.layers
             waveformDurationMs: sharedWaveformSession.durationMs
             sidePanelPage: mainWindow.integratedSidePanelPage
@@ -311,7 +316,7 @@ ApplicationWindow {
             objectName: "immersiveFullscreenWindow"
             visible: false
             flags: Qt.Window | Qt.FramelessWindowHint
-            color: "black"
+            color: "black" // theme-color-allow: immersive compositor clear color
             title: qsTr("AgPlayer 全屏沉浸")
             onClosing: function(close) {
                 close.accepted = false

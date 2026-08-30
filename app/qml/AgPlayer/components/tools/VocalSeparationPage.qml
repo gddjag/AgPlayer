@@ -7,7 +7,7 @@ import AgPlayer
 Rectangle {
     id: page
     objectName: "vocalSeparationPage"
-    color: "#000E1D"
+    color: Theme.background
     focus: true
 
     readonly property bool fullDesktop: width >= 1440
@@ -17,16 +17,16 @@ Rectangle {
                                          ? Math.max(336, Math.min(560,
                                                                   Math.round((width - 28) * 0.29)))
                                          : Math.max(0, width - 28)
-    readonly property color surface: "#001122"
-    readonly property color raised: "#001426"
-    readonly property color input: "#001020"
-    readonly property color border: "#123047"
-    readonly property color divider: "#0B273B"
-    readonly property color textPrimary: "#E5EEF7"
-    readonly property color muted: "#8C9DAE"
-    readonly property color cyan: "#00C7F4"
-    readonly property color primary: "#075EED"
-    readonly property color success: "#00D978"
+    readonly property color surface: Theme.surface
+    readonly property color raised: Theme.surfaceElevated
+    readonly property color input: Theme.surfacePressed
+    readonly property color border: Theme.opaqueBorder
+    readonly property color divider: Theme.opaqueDivider
+    readonly property color textPrimary: Theme.textPrimary
+    readonly property color muted: Theme.textSecondary
+    readonly property color cyan: Theme.accent
+    readonly property color primary: Theme.highlight
+    readonly property color success: Theme.success
     readonly property bool hasInput: VocalSeparationController.inputInfo.name !== undefined
                                   && VocalSeparationController.inputInfo.name.length > 0
     readonly property bool contextLocked: VocalSeparationController.jobState === VocalSeparationController.Probing
@@ -52,9 +52,11 @@ Rectangle {
             radius: 5
             color: control.primaryAction
                    ? (control.enabled ? page.primary : page.divider)
-                   : control.down ? "#123A59"
-                                  : control.checked ? "#0A3451"
-                                                    : (control.enabled ? "#06253B" : "#041725")
+                   : control.down ? Theme.surfacePressed
+                                  : control.checked ? Theme.accentSoft
+                                                    : (control.enabled
+                                                       ? Theme.surfaceElevated
+                                                       : Theme.disabled)
             border.color: control.activeFocus ? page.cyan
                                               : (control.primaryAction ? page.primary : page.border)
             border.width: control.activeFocus ? 2 : 1
@@ -238,8 +240,8 @@ Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 38
                         visible: VocalSeparationController.error.length > 0
-                        color: "#2B1220"
-                        border.color: "#8F3550"
+                        color: Theme.highlightSoft
+                        border.color: Theme.danger
                         radius: 6
                         RowLayout {
                             anchors.fill: parent
@@ -445,7 +447,7 @@ Rectangle {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
                                 color: VocalSeparationController.selectedModelId === modelData.id
-                                       ? "#062039" : page.surface
+                                       ? Theme.accentSoft : page.surface
                                 border.color: VocalSeparationController.selectedModelId === modelData.id
                                               ? page.cyan : page.border
                                 radius: 7
@@ -544,11 +546,11 @@ Rectangle {
                             Label { text: qsTr("输出音轨"); color: page.textPrimary; font.bold: true }
                             Repeater {
                                 model: [
-                                    { kind: VocalSeparationController.Vocals, text: qsTr("人声"), color: "#1688FF" },
-                                    { kind: VocalSeparationController.Accompaniment, text: qsTr("伴奏"), color: "#00C7A4" },
-                                    { kind: VocalSeparationController.Drums, text: qsTr("鼓组"), color: "#54B948" },
-                                    { kind: VocalSeparationController.Bass, text: qsTr("贝斯"), color: "#FF9400" },
-                                    { kind: VocalSeparationController.Other, text: qsTr("其他"), color: "#A960FF" }
+                                    { kind: VocalSeparationController.Vocals, text: qsTr("人声"), color: Theme.waveformBlue },
+                                    { kind: VocalSeparationController.Accompaniment, text: qsTr("伴奏"), color: Theme.editorWaveform },
+                                    { kind: VocalSeparationController.Drums, text: qsTr("鼓组"), color: Theme.waveformGreen },
+                                    { kind: VocalSeparationController.Bass, text: qsTr("贝斯"), color: Theme.ratingGold },
+                                    { kind: VocalSeparationController.Other, text: qsTr("其他"), color: Theme.waveformViolet }
                                 ]
                                 WorkbenchButton {
                                     readonly property var info: page.stemInfo(modelData.kind)
@@ -562,7 +564,7 @@ Rectangle {
                                                                       : qsTr("当前模型不支持此音轨")
                                     onClicked: VocalSeparationController.setStemSelected(modelData.kind, checked)
                                     background: Rectangle {
-                                        color: Qt.rgba(modelData.color.r, modelData.color.g, modelData.color.b,
+                                        color: Qt.rgba(modelData.color.r, modelData.color.g, modelData.color.b, // theme-color-allow: alpha variant of a Theme stem token
                                                        parent.checked ? 0.24 : 0.1)
                                         border.color: parent.activeFocus ? page.cyan : modelData.color
                                         border.width: parent.activeFocus ? 2 : 1
@@ -660,7 +662,7 @@ Rectangle {
                                                 width: stemVolume.availableWidth
                                                 height: implicitHeight
                                                 radius: 2
-                                                color: "#0B2A3B"
+                                                color: Theme.navigatorGlassTrack
                                                 Rectangle {
                                                     width: stemVolume.visualPosition * parent.width
                                                     height: parent.height

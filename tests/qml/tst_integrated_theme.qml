@@ -63,6 +63,20 @@ TestCase {
         }
     }
 
+    QtObject {
+        id: fakeLyricsService
+        property bool enabled: true
+        property int status: LyricsService.Ready
+        property string previousLine: "上一句共享歌词"
+        property string currentLine: "当前共享歌词"
+        property string nextLine: "下一句共享歌词"
+        property int offsetMs: 0
+        property int pauseCalls: 0
+        function retry() {}
+        function pauseFollow(milliseconds) { ++pauseCalls }
+        function importLrc(url) { return true }
+    }
+
     WaveSelectionOverlay {
         id: standaloneSelection
         objectName: "standaloneSelection"
@@ -187,8 +201,10 @@ TestCase {
         compare(leftVisual.width, 2)
         verify(durationBadge.color.a < 0.85)
         verify(dragBadge.color.a < 0.85)
-        compare(durationLabel.color.toString(), "#ffffff")
-        compare(dragLabel.color.toString(), "#ffffff")
+        compare(durationLabel.color.toString(),
+                Theme.onBrandGradientText.toString())
+        compare(dragLabel.color.toString(),
+                Theme.onBrandGradientText.toString())
 
         mouseMove(testCase, 850, 20)
         tryCompare(standaloneSelection, "hoverPositionMs", -1)
@@ -240,22 +256,28 @@ TestCase {
 
     function test_right_panel_tabs_collapse_and_persist() {
         var shell = enterIntegratedShell()
+        shell.lyricsService = fakeLyricsService
         var tagTab = findChild(shell, "integratedTagTabButton")
         var lyricsTab = findChild(shell, "integratedLyricsTabButton")
         var tagContent = findChild(shell, "integratedTagContent")
         var lyricsContent = findChild(shell, "integratedLyricsContent")
-        var lyricsText = findChild(shell, "integratedLyricsText")
+        var lyricsPanel = findChild(shell, "integratedLyricsPanel")
         var toggle = findChild(shell, "integratedSidePanelToggleButton")
         var column = findChild(shell, "integratedTagColumn")
         verify(tagTab && lyricsTab && tagContent && lyricsContent
-               && lyricsText && toggle && column)
+               && lyricsPanel && toggle && column)
         verify(tagContent.visible)
         verify(!lyricsContent.visible)
 
         mouseClick(lyricsTab)
         verify(!tagContent.visible)
         verify(lyricsContent.visible)
-        compare(lyricsText.text, "当前歌曲暂无内嵌歌词")
+        compare(findChild(lyricsPanel, "previousLyricLine").text,
+                "上一句共享歌词")
+        compare(findChild(lyricsPanel, "currentLyricLine").text,
+                "当前共享歌词")
+        compare(findChild(lyricsPanel, "nextLyricLine").text,
+                "下一句共享歌词")
         mouseClick(toggle)
         tryCompare(column, "width", 42)
 
@@ -270,6 +292,45 @@ TestCase {
                                           "integratedSidePanelToggleButton")
         mouseClick(toggleAfterReload)
         verify(lyricsContent.visible)
+    }
+
+    function test_lyrics_service_follows_panel_and_global_requests() {
+        const savedLyricsVisible = PlayerExperienceController.lyricsVisible
+
+        try {
+            PlayerExperienceController.lyricsVisible = false
+            SettingsController.playerShellMode = 0
+            mainWindow.integratedSidePanelPage = 0
+            mainWindow.integratedSidePanelExpanded = true
+            tryCompare(LyricsService, "enabled", false)
+
+            const shell = enterIntegratedShell()
+            const tagTab = findChild(shell, "integratedTagTabButton")
+            const lyricsTab = findChild(shell, "integratedLyricsTabButton")
+            const toggle = findChild(shell,
+                                     "integratedSidePanelToggleButton")
+            verify(tagTab && lyricsTab && toggle)
+            tryCompare(LyricsService, "enabled", false)
+
+            mouseClick(lyricsTab)
+            tryCompare(LyricsService, "enabled", true)
+            mouseClick(toggle)
+            tryCompare(LyricsService, "enabled", false)
+            mouseClick(toggle)
+            tryCompare(LyricsService, "enabled", true)
+            mouseClick(tagTab)
+            tryCompare(LyricsService, "enabled", false)
+
+            PlayerExperienceController.lyricsVisible = true
+            tryCompare(LyricsService, "enabled", true)
+            SettingsController.playerShellMode = 0
+            tryCompare(LyricsService, "enabled", true)
+            PlayerExperienceController.lyricsVisible = false
+            tryCompare(LyricsService, "enabled", false)
+        } finally {
+            PlayerExperienceController.lyricsVisible = savedLyricsVisible
+            wait(0)
+        }
     }
 
     function test_right_panel_header_and_content_fill_from_the_top() {

@@ -42,6 +42,9 @@ try {
         -Destination (Join-Path $scratch 'build\stale\CMakeCache.txt')
     Copy-Item -LiteralPath $AppPath `
         -Destination (Join-Path $scratch 'build\stale\app\AgPlayer.exe')
+    Copy-Item -LiteralPath (Join-Path (Split-Path -Parent $AppPath) `
+        'AgSeparationWorker.exe') `
+        -Destination (Join-Path $scratch 'build\stale\app\AgSeparationWorker.exe')
 
     $staleVersion = if ($currentVersion -eq '2.3.4') { '2.3.5' } else { '2.3.4' }
     & (Join-Path $scratch 'scripts\release-version.ps1') `
