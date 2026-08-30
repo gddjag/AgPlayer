@@ -53,6 +53,16 @@ void SeparationNativeBackendTest::startRequestRequiresBoundedNativeFields()
     QCOMPARE(parsed.request.modelFiles.size(), 1);
     QCOMPARE(parsed.request.stems, (QStringList{QStringLiteral("vocals")}));
 
+    QJsonObject mp3 = valid;
+    mp3.insert(QStringLiteral("extension"), QStringLiteral("mp3"));
+    QVERIFY(parseStartRequest(mp3).ok);
+
+    QJsonObject unsupportedExtension = valid;
+    unsupportedExtension.insert(QStringLiteral("extension"),
+                                QStringLiteral("executable"));
+    QCOMPARE(parseStartRequest(unsupportedExtension).code,
+             QStringLiteral("invalid_start_request"));
+
     QJsonObject tooMany = valid;
     QJsonArray files;
     for (int index = 0; index < 5; ++index) files.push_back(QString::number(index));

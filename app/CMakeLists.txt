@@ -9,6 +9,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/briefcase-4-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-blank-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-blank-circle-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/checkbox-circle-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/close-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/close-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/crop-line.svg
@@ -30,8 +31,13 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/lock-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/lock-unlock-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/merge-cells-horizontal.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/lucide-audio-lines.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/lucide-drum.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/lucide-guitar.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/lucide-mic.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/music-2-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/music-2-fill.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/more-2-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/pause-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/picture-in-picture-2-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/play-fill.svg

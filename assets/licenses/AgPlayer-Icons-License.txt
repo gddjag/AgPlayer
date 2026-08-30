@@ -1,14 +1,17 @@
 AgPlayer UI Icons License
 =========================
 
-The SVG files under assets/icons/ are original works created by the
-AgPlayer project. They are NOT copies of Remix Icon or any other
-third-party icon library. The visual style (24x24 viewBox, currentColor
-fill) is inspired by the Remix Icon layout convention but the path
-data is hand-authored for AgPlayer.
+Except for the files listed below, the SVG files under assets/icons/ are
+original works created by the AgPlayer project. Their visual style (24x24
+viewBox, currentColor fill) is inspired by the Remix Icon layout convention,
+but their path data is hand-authored for AgPlayer.
 
 License: Same license as the AgPlayer source code.
 
-Reference: Remix Icon (https://remixicon.com/) is licensed under
-Apache License 2.0. AgPlayer does not redistribute any Remix Icon
-asset; this reference is for attribution of design inspiration only.
+The following functional UI icons are redistributed from Lucide under the
+ISC License in Lucide-Icons-License.txt:
+
+- lucide-audio-lines.svg
+- lucide-drum.svg
+- lucide-guitar.svg
+- lucide-mic.svg

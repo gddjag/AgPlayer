@@ -152,10 +152,13 @@ public:
     Q_INVOKABLE bool setStemPreviewVolume(StemKind kind, double volume);
     Q_INVOKABLE bool exportStem(StemKind kind, const QUrl& destination);
     Q_INVOKABLE bool exportSelected(const QUrl& destinationDirectory);
+    Q_INVOKABLE bool exportAll(const QUrl& destinationDirectory);
     Q_INVOKABLE bool addStemToPlaylist(StemKind kind,
                                        const QString& playlistId);
     Q_INVOKABLE bool addSelectedToPlaylist(const QString& playlistId);
     Q_INVOKABLE bool openOutputDirectory();
+    Q_INVOKABLE bool selectHistoryInput(const QString& localPath);
+    Q_INVOKABLE bool openHistoryOutputDirectory(const QString& localPath);
     Q_INVOKABLE bool openModelDirectory();
 
 signals:
@@ -257,6 +260,8 @@ private:
     QString pathForStem(StemKind kind) const;
     QStringList selectedStemNames() const;
     QList<StemKind> selectedStemKinds() const;
+    bool exportKinds(const QList<StemKind>& kinds,
+                     const QUrl& destinationDirectory);
     bool addPathsToPlaylist(const QStringList& paths,
                             const QString& playlistId);
     bool playlistExists(const QString& playlistId) const;

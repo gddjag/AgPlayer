@@ -495,7 +495,8 @@ bool VocalSeparationController::selectOutputFormat(const QString& format)
 {
     if (requestInFlight()) return false;
     const QString normalized = format.trimmed().toLower();
-    if (!QStringList{QStringLiteral("wav"), QStringLiteral("flac")}
+    if (!QStringList{QStringLiteral("wav"), QStringLiteral("flac"),
+                     QStringLiteral("mp3")}
              .contains(normalized)) return false;
     outputFormat_ = normalized;
     invalidateRetry();
@@ -696,6 +697,25 @@ bool VocalSeparationController::exportStem(StemKind kind,
 
 bool VocalSeparationController::exportSelected(const QUrl& destinationDirectory)
 {
+    return exportKinds(selectedStemKinds(), destinationDirectory);
+}
+
+bool VocalSeparationController::exportAll(const QUrl& destinationDirectory)
+{
+    QList<StemKind> kinds;
+    for (const QVariant& value : stems_) {
+        const QVariantMap stem = value.toMap();
+        if (stem.value(QStringLiteral("available")).toBool()) {
+            kinds.push_back(static_cast<StemKind>(
+                stem.value(QStringLiteral("kind")).toInt()));
+        }
+    }
+    return exportKinds(kinds, destinationDirectory);
+}
+
+bool VocalSeparationController::exportKinds(
+    const QList<StemKind>& kinds, const QUrl& destinationDirectory)
+{
     const QString requestedDestination = destinationDirectory.toLocalFile();
     if (safePathKind(requestedDestination) != SafePathKind::Directory) {
         setError(tr("批量导出目录不存在或不安全"));
@@ -704,7 +724,7 @@ bool VocalSeparationController::exportSelected(const QUrl& destinationDirectory)
     const QString destination = QDir(requestedDestination).canonicalPath();
     if (destination.isEmpty()) return false;
     QList<QPair<QString, QString>> files;
-    for (const StemKind kind : selectedStemKinds()) {
+    for (const StemKind kind : kinds) {
         const QString source = pathForStem(kind);
         if (!safeExistingFileWithin(source, publishedOutputRoot_)) {
             setError(tr("批量导出失败：至少一个已选音轨不存在或不安全"));
@@ -772,6 +792,21 @@ bool VocalSeparationController::openOutputDirectory()
 {
     return QDir(outputDirectory_).exists()
         && QDesktopServices::openUrl(QUrl::fromLocalFile(outputDirectory_));
+}
+
+bool VocalSeparationController::selectHistoryInput(const QString& localPath)
+{
+    if (localPath.trimmed().isEmpty()) return false;
+    return selectInput(QUrl::fromLocalFile(localPath));
+}
+
+bool VocalSeparationController::openHistoryOutputDirectory(
+    const QString& localPath)
+{
+    if (localPath.trimmed().isEmpty()) return false;
+    const QString absolutePath = QFileInfo(localPath).absoluteFilePath();
+    return QDir(absolutePath).exists()
+        && QDesktopServices::openUrl(QUrl::fromLocalFile(absolutePath));
 }
 
 bool VocalSeparationController::openModelDirectory()
@@ -1060,6 +1095,11 @@ void VocalSeparationController::refreshModels()
             {QStringLiteral("resourceGuidance"), model.resourceGuidance},
             {QStringLiteral("name"), model.displayName.isEmpty() ? model.id : model.displayName},
             {QStringLiteral("useCase"), model.useCase},
+            {QStringLiteral("description"), model.useCase},
+            {QStringLiteral("tierLabel"), model.tierLabel},
+            {QStringLiteral("badgeLabel"), model.badgeLabel},
+            {QStringLiteral("provider"), model.provider},
+            {QStringLiteral("repositoryUrl"), model.repositoryUrl},
         });
     }
     emit modelsChanged();

@@ -53,7 +53,35 @@ final result: passed
 - The implementation screenshot and reference do not have the same product state. The reference contains installed/downloading cards, five completed stems and populated history; the current honest screenshot contains a real selected source but no installed model or completed job.
 - Production code was not given screenshot-only fake data. A final same-state comparison must be captured after installing the approved models and completing a real job through the UI.
 
-final result: blocked — reference-state visual parity and final hardware interaction remain unverified
+## UI correction iteration
+
+- Reference-size implementation: `build/qa/vocal-separation-rework/1672x941-final-v2.png` (1672 × 941, real 44.1 kHz WAV loaded through the production controller).
+- Same-image comparison input: `build/qa/vocal-separation-rework/comparison-1672x941-final-v2.png` (reference left, implementation right, identical viewport).
+- Responsive captures: `1280x720-final-v2.png`, `880x560-final-v2.png`, and `1920x1080-final-v2.png` in the same directory.
+- The top input/preview and model deck are now deliberately shorter than the reference, matching the correction request and reserving more vertical space for the five result tracks.
+- The input preview has a leading play control, shared progress position and clickable player `WaveformItem`; all five result rows use the same renderer and waveform settings instead of a page-specific waveform style.
+- Model cards expose tier/badge, name, provider, description, official repository, size and state in a horizontally scrollable deck, including a truthful safe-manifest custom-model entry.
+- Output tracks expose distinct shipped icons, descriptions, checked state and explicit unsupported state. The bottom bar now includes shared playback transport, time, export and start actions.
+- Output format, output directory, device selection, completion actions and history table/actions use local dark controls and real controller data. At 880 × 560, settings and history correctly move to page tabs while the primary action remains visible.
+- Independent review found and the implementation corrected three interaction/layout defects: history rows now open their own output path, reserved local filename characters are converted by `QUrl::fromLocalFile`, and 1100–1439px history rows use a readable stacked detail layout. Repository links are also keyboard focusable and exposed as accessible buttons.
+- The correction screenshots still represent a loaded-input/uninstalled-model state; therefore completed waveforms and populated history cannot be compared to the reference without completing a real separation job.
+
+final result: passed
+
+Release note: this result covers the requested loaded-input/uninstalled-model UI state. A completed-model state comparison and real audio-hardware interaction remain separate release gates and are not claimed here.
+
+## Final compact-workbench refinement
+
+- Final same-image comparison input: `build/qa/vocal-separation-final/comparison-1672x941-refined.png` (reference left, implementation right).
+- Final responsive captures: `build/qa/vocal-separation-final/1672x941.png`, `1280x720.png`, `880x560.png`, and `1920x1080.png`.
+- The source preview is 116px high, has no cover, keeps filename/size/duration visible, and extends the shared player `WaveformItem` across the remaining width. Input playback no longer advances result waveforms.
+- Model cards are 174px high and selected by clicking the entire card. Tier/badge and all required metadata remain visible; the horizontal scrollbar sits below the card frame.
+- Output-track selectors use distinct licensed Lucide/project icons, always-visible checked or unchecked controls, compact widths, and a reserved truthful backup-address dialog. No placeholder download URL is presented as real.
+- Each result row places volume before the shared waveform renderer and has no per-row transport. One bottom transport previews the current result source.
+- The bottom bar now contains only playback/time, re-separation, accompaniment export, vocal export, all-stem export, and start. WAV/FLAC/MP3 and Auto/CPU/GPU remain in the right settings panel.
+- At 880x560 the settings/history tab and scrolling workbench intentionally avoid simultaneous full-page display; the two-row bottom actions and primary action remain reachable.
+
+final result: passed
 
 ---
 

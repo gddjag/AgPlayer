@@ -214,6 +214,28 @@ public:
         return controller_ != nullptr && controller_->selectInput(input);
     }
 
+    Q_INVOKABLE void setHistoryRecord()
+    {
+        if (controller_ == nullptr) return;
+        controller_->history_ = {QVariantMap{
+            {QStringLiteral("id"), QStringLiteral("history-layout-test")},
+            {QStringLiteral("createdAt"), QStringLiteral("2026-08-30T20:00:00Z")},
+            {QStringLiteral("inputPath"), QStringLiteral("C:/音乐/历史输入 #100%.wav")},
+            {QStringLiteral("inputName"), QStringLiteral("历史输入 #100%.wav")},
+            {QStringLiteral("modelId"), QStringLiteral("uvr-mdxnet-kara")},
+            {QStringLiteral("status"), QStringLiteral("completed")},
+            {QStringLiteral("outputPath"), QStringLiteral("C:/音乐/分离结果")},
+        }};
+        emit controller_->historyChanged();
+    }
+
+    Q_INVOKABLE void clearHistory()
+    {
+        if (controller_ == nullptr) return;
+        controller_->history_.clear();
+        emit controller_->historyChanged();
+    }
+
     Q_INVOKABLE void markSelectedModelInstalled()
     {
         if (controller_ == nullptr) return;

@@ -44,13 +44,173 @@ TestCase {
         const history = findChild(page, "separationHistoryPanel")
         const bottom = findChild(page, "separationBottomBar")
         const primary = findChild(page, "separationPrimaryAction")
-        const playlistAction = findChild(page, "separationPlaylistAction")
+        const backupModels = findChild(page, "separationBackupModelAction")
         verify(input && waveform && models && settings && stems && timeline
-               && history && bottom && primary && playlistAction)
+               && history && bottom && primary && backupModels)
         compare(VocalSeparationController.inputInfo.name, undefined)
         verify(!primary.enabled)
-        verify(!playlistAction.enabled)
         verify(primary.Accessible.name.length > 0)
+    }
+
+    function test_referenceWorkbenchGivesResultWaveformsTheRecoveredHeight() {
+        const input = findChild(page, "separationInputPanel")
+        const models = findChild(page, "separationModelDeck")
+        const settings = findChild(page, "separationSettingsPanel")
+        const timeline = findChild(page, "separationTimeline")
+        verify(input && models && settings && timeline)
+        verify(input.height <= 124,
+               "the file and source preview row must stay compact")
+        verify(models.height <= 178,
+               "the horizontal model deck must stay compact")
+        verify(settings.height <= 160,
+               "output settings must align with the compact source row")
+        verify(timeline.height >= 276,
+               "the five result waveforms need the recovered vertical space")
+    }
+
+    function test_inputAndStemTracksUseTheSharedWaveformRenderer() {
+        separationTestDriver.reset()
+        verify(separationTestDriver.setInput(testAudioUrl))
+        const inputWaveform = findChild(page, "separationInputWaveform")
+        const inputPreview = findChild(page, "separationInputPreview")
+        const vocalsWaveform = findChild(
+            page, "separationStemWaveform-" + VocalSeparationController.Vocals)
+        verify(inputWaveform && inputPreview && vocalsWaveform)
+        compare(inputWaveform.visualMode, SettingsController.waveformMode)
+        compare(inputWaveform.density,
+                SettingsController.waveformMode === 2
+                ? 1.0 : SettingsController.waveformDensity)
+        compare(vocalsWaveform.visualMode, SettingsController.waveformMode)
+        verify(inputWaveform.pointerInteractionEnabled)
+        compare(inputWaveform.duration,
+                VocalSeparationController.inputInfo.durationMs || 0)
+        verify(inputWaveform.width >= inputPreview.width * 0.78,
+               "removing the cover must leave most of the preview width to the waveform")
+        separationTestDriver.reset()
+    }
+
+    function test_sourcePreviewAndBottomBarExposeRealTransportControls() {
+        const sourcePlay = findChild(page, "separationInputPreviewPlay")
+        const transport = findChild(page, "separationTransport")
+        const transportPlay = findChild(page, "separationTransportPlay")
+        const transportTime = findChild(page, "separationTransportTime")
+        verify(sourcePlay && transport && transportPlay && transportTime)
+        verify(sourcePlay.Accessible.name.length > 0)
+        verify(transportPlay.Accessible.name.length > 0)
+        verify(transportTime.text.indexOf(":") >= 0)
+    }
+
+    function test_modelDeckIsScrollableAndPublishesCompleteRealMetadata() {
+        const list = findChild(page, "separationModelList")
+        const scrollBar = findChild(page, "separationModelScrollBar")
+        const customEntry = findChild(page, "separationCustomModelCard")
+        const firstCard = findChild(page, "separationModelCard-uvr-mdxnet-kara")
+        verify(list && scrollBar && customEntry && firstCard)
+        compare(list.orientation, ListView.Horizontal)
+        verify(list.contentWidth > list.width,
+               "the fourth custom entry must make the deck horizontally scrollable")
+        for (let index = 0; index < VocalSeparationController.models.length; ++index) {
+            const model = VocalSeparationController.models[index]
+            verify(model.tierLabel && model.tierLabel.length > 0)
+            verify(model.provider && model.provider.length > 0)
+            verify(model.description && model.description.length > 0)
+            verify(model.repositoryUrl && model.repositoryUrl.length > 0)
+        }
+        const scrollPoint = scrollBar.mapToItem(page, 0, 0)
+        const cardPoint = firstCard.mapToItem(page, 0, 0)
+        verify(scrollPoint.y >= cardPoint.y + firstCard.height,
+               "the horizontal scrollbar must sit below the model-card frames")
+        verify(!controlWithText(firstCard, "选择"),
+               "model selection is performed by clicking the card, not a nested button")
+
+        separationTestDriver.selectModel("uvr-mdxnet-kara")
+        const secondCard = findChild(page, "separationModelCard-uvr-mdx-net-inst-hq3")
+        verify(secondCard)
+        mouseClick(secondCard, secondCard.width / 2, 18)
+        compare(VocalSeparationController.selectedModelId, "uvr-mdx-net-inst-hq3")
+        separationTestDriver.selectModel("uvr-mdxnet-kara")
+    }
+
+    function test_outputTracksShowIconsChecksAndUnavailableStates() {
+        const vocals = findChild(
+            page, "separationStemOption-" + VocalSeparationController.Vocals)
+        const vocalsIcon = findChild(
+            page, "separationStemIcon-" + VocalSeparationController.Vocals)
+        const vocalsCheck = findChild(
+            page, "separationStemCheck-" + VocalSeparationController.Vocals)
+        const drums = findChild(
+            page, "separationStemOption-" + VocalSeparationController.Drums)
+        const drumsCheck = findChild(
+            page, "separationStemCheck-" + VocalSeparationController.Drums)
+        const backupModels = findChild(page, "separationBackupModelAction")
+        verify(vocals && vocalsIcon && vocalsCheck && drums && drumsCheck
+               && backupModels)
+        verify(vocals.enabled)
+        verify(vocalsCheck.visible)
+        verify(drumsCheck.visible)
+        verify(!drums.enabled)
+        verify(vocals.width <= 180,
+               "five output-track choices must remain compact")
+        verify(backupModels.width >= 132,
+               "the reserved row space must expose the backup-download entry")
+    }
+
+    function test_sourcePlaybackDoesNotAnimateResultWaveforms() {
+        verify(separationTestDriver.setReady(testAudioUrl))
+        separationTestDriver.setCompleted()
+        const inputWaveform = findChild(page, "separationInputWaveform")
+        const vocalsWaveform = findChild(
+            page, "separationStemWaveform-" + VocalSeparationController.Vocals)
+        verify(inputWaveform && vocalsWaveform)
+        AudioPreviewController.play(testAudioUrl)
+        tryVerify(function() { return AudioPreviewController.positionMs > 0 }, 2000)
+        verify(inputWaveform.position > 0)
+        compare(vocalsWaveform.position, 0)
+        AudioPreviewController.stop()
+        separationTestDriver.reset()
+    }
+
+    function test_resultRowsUseOneTransportAndPutVolumeBeforeWaveform() {
+        separationTestDriver.reset()
+        separationTestDriver.setCompleted()
+        const vocalsVolume = findChild(
+            page, "stemPreviewVolume-" + VocalSeparationController.Vocals)
+        const vocalsWaveform = findChild(
+            page, "separationStemWaveform-" + VocalSeparationController.Vocals)
+        verify(vocalsVolume && vocalsWaveform)
+        verify(vocalsVolume.mapToItem(page, 0, 0).x
+               < vocalsWaveform.mapToItem(page, 0, 0).x)
+        verify(!controlWithAccessibleName(page, "人声试听"),
+               "result rows must not expose per-track play buttons")
+        separationTestDriver.reset()
+    }
+
+    function test_referenceSettingsAndHistoryActionsAreDiscoverable() {
+        const autoPlaylist = findChild(page, "separationAutoPlaylist")
+        const autoOpen = findChild(page, "separationAutoOpenDirectory")
+        const history = findChild(page, "separationHistoryList")
+        verify(autoPlaylist && autoOpen && history)
+        verify(autoPlaylist.Accessible.name.length > 0)
+        verify(autoOpen.Accessible.name.length > 0)
+    }
+
+    function test_narrowDesktopHistoryUsesAReadableStack() {
+        separationTestDriver.setHistoryRecord()
+        const instance = createTemporaryObject(viewportPage, testCase,
+                                               { width: 1280, height: 720 })
+        verify(instance)
+        wait(0)
+        const history = findChild(instance, "separationHistoryList")
+        const fileCell = findChild(instance, "separationHistoryFileCell")
+        const modelCell = findChild(instance, "separationHistoryModelCell")
+        const detailCell = findChild(instance, "separationHistoryDetailCell")
+        verify(history && fileCell && modelCell && detailCell)
+        compare(history.count, 1)
+        verify(fileCell.width >= 100,
+               "the filename must retain readable width at 1280")
+        verify(!modelCell.visible)
+        verify(detailCell.visible)
+        separationTestDriver.clearHistory()
     }
 
     function test_catalogStemCapabilitiesAreBoundToTheRealCatalog() {
@@ -270,7 +430,7 @@ TestCase {
     function test_keyboardFocusIsVisibleAndControlsAreAccessible() {
         verify(separationTestDriver.setReady(testAudioUrl))
         const primary = findChild(page, "separationPrimaryAction")
-        const preview = controlWithAccessibleName(page, "输入预览：试听")
+        const preview = controlWithAccessibleName(page, "输入播放或暂停")
         verify(primary)
         verify(preview)
         verify(primary.enabled)
@@ -281,7 +441,8 @@ TestCase {
         keyClick(Qt.Key_Tab)
         verify(hasActiveFocus(page))
 
-        preview.forceActiveFocus()
+        page.forceActiveFocus()
+        verify(page.activeFocus)
         keyClick(Qt.Key_Space)
         tryVerify(function() {
             return AudioPreviewController.sourcePath
@@ -293,6 +454,19 @@ TestCase {
         verify(!AudioPreviewController.playing)
         AudioPreviewController.stop()
         separationTestDriver.reset()
+    }
+
+    function test_bottomBarContainsOnlyTheRequestedActions() {
+        const bottom = findChild(page, "separationBottomBar")
+        verify(bottom)
+        compare(bottom.border.width, 0)
+        verify(controlWithText(bottom, "重新分离"))
+        verify(controlWithText(bottom, "导出伴奏"))
+        verify(controlWithText(bottom, "导出人声"))
+        verify(controlWithText(bottom, "导出所有音轨"))
+        verify(controlWithText(bottom, "开始分离"))
+        verify(!controlWithText(bottom, "导出所选轨"))
+        verify(!controlWithText(bottom, "加入播放列表"))
     }
 
     function test_responsiveViewportsKeepThePrimaryActionReachable() {

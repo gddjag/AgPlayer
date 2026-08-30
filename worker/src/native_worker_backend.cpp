@@ -692,7 +692,8 @@ StartRequestParseResult parseStartRequest(const QJsonObject& payload)
     request.inputPath = payload.value(QStringLiteral("inputPath")).toString();
     request.outputDirectory = payload.value(QStringLiteral("outputDirectory")).toString();
     request.baseName = payload.value(QStringLiteral("baseName")).toString();
-    request.extension = payload.value(QStringLiteral("extension")).toString();
+    request.extension = payload.value(QStringLiteral("extension"))
+                            .toString().trimmed().toLower();
     bool arraysValid = true;
     request.modelFiles = stringArray(payload.value(QStringLiteral("modelFiles")),
                                      32767, &arraysValid);
@@ -713,6 +714,12 @@ StartRequestParseResult parseStartRequest(const QJsonObject& payload)
         || request.baseName.size() > 240 || request.extension.size() > 16) {
         return {false, QStringLiteral("invalid_start_request"),
                 QStringLiteral("Start request is missing a required bounded field"), {}};
+    }
+    static const QSet<QString> supportedExtensions{
+        QStringLiteral("wav"), QStringLiteral("flac"), QStringLiteral("mp3")};
+    if (!supportedExtensions.contains(request.extension)) {
+        return {false, QStringLiteral("invalid_start_request"),
+                QStringLiteral("Start request uses an unsupported output format"), {}};
     }
     return {true, {}, {}, request};
 }

@@ -31,6 +31,7 @@ private slots:
     void doesNotLaunchWorkerDuringConstruction();
     void exposesOutputChoicesAndPublishesTheSelectedInputWaveform();
     void clearsTheSelectedInputWithoutLeavingStaleWaveformData();
+    void historyActionsPreserveReservedUnicodePaths();
     void downloadsMultipleArtifactsSequentiallyThroughTheController();
     void downloadProgressNeverMutatesAnActiveSeparationJob();
     void installedMappingUsesCheapDiscoveryThenExplicitAsyncHashing();
@@ -58,6 +59,7 @@ private slots:
     void localFailureForNewRequestCannotRetryThePreviousWorkerRequest();
     void exportNeverOverwritesAndPlaylistUsesTheRealImportPath();
     void batchExportPublishesOneCompleteDirectoryOrNothing();
+    void exportAllPublishesEveryAvailableStemRegardlessOfSelection();
     void selectedPlaylistActionRejectsAnUnsafeSubset();
     void unresolvedImportFailureEmitsCompletionAndRollsBackThisOperation();
     void destructionBeforeImportCompletionLeavesPlaylistUnchanged();
@@ -211,10 +213,10 @@ exposesOutputChoicesAndPublishesTheSelectedInputWaveform()
     QVERIFY(controller.selectOutputDirectory(QUrl::fromLocalFile(
         temporary.filePath(QStringLiteral("export")))));
     QVERIFY(controller.selectOutputFormat(QStringLiteral("flac")));
-    QVERIFY(!controller.selectOutputFormat(QStringLiteral("mp3")));
-    QCOMPARE(controller.outputFormat(), QStringLiteral("flac"));
+    QVERIFY(controller.selectOutputFormat(QStringLiteral("mp3")));
+    QCOMPARE(controller.outputFormat(), QStringLiteral("mp3"));
     QCOMPARE(outputDirectoryChanged.count(), 1);
-    QCOMPARE(outputFormatChanged.count(), 1);
+    QCOMPARE(outputFormatChanged.count(), 2);
 
     QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
     QCOMPARE(controller.inputInfo().value(QStringLiteral("coverUrl")).toUrl(),
@@ -260,6 +262,29 @@ clearsTheSelectedInputWithoutLeavingStaleWaveformData()
     QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
     QVERIFY(controller.clearInput());
     QVERIFY(controller.inputInfo().isEmpty());
+}
+
+void VocalSeparationControllerTest::historyActionsPreserveReservedUnicodePaths()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString specialInput = temporary.filePath(
+        QStringLiteral("历史输入 #100% 中文.wav"));
+    QVERIFY(QFile::copy(audioFixture(), specialInput));
+
+    const QByteArray modelBytes("trusted-test-model");
+    const auto options = optionsFor(
+        temporary, QStringLiteral("success"), modelBytes);
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+
+    QVERIFY(controller.selectHistoryInput(specialInput));
+    QCOMPARE(controller.inputInfo().value(QStringLiteral("path")).toString(),
+             QFileInfo(specialInput).absoluteFilePath());
+    QVERIFY(!controller.openHistoryOutputDirectory(
+        temporary.filePath(QStringLiteral("missing-output"))));
 }
 
 void VocalSeparationControllerTest::
@@ -1191,6 +1216,36 @@ batchExportPublishesOneCompleteDirectoryOrNothing()
     QVERIFY(!controller.exportSelected(QUrl::fromLocalFile(failedRoot)));
     QCOMPARE(QDir(failedRoot).entryList(
                  QDir::AllEntries | QDir::NoDotAndDotDot).size(), 0);
+}
+
+void VocalSeparationControllerTest::
+exportAllPublishesEveryAvailableStemRegardlessOfSelection()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray modelBytes("trusted-test-model");
+    auto options = optionsFor(temporary, QStringLiteral("success"), modelBytes);
+    installTestModel(options, QStringLiteral("two-stem"), modelBytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, QByteArrayLiteral("runtime")));
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
+    QVERIFY(controller.start());
+    QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(),
+                              VocalSeparationController::JobState::Completed, 5'000);
+    QVERIFY(controller.setStemSelected(
+        VocalSeparationController::StemKind::Accompaniment, false));
+
+    const QString exportRoot = temporary.filePath(QStringLiteral("全部音轨"));
+    QVERIFY(QDir().mkpath(exportRoot));
+    QVERIFY(controller.exportAll(QUrl::fromLocalFile(exportRoot)));
+    const QFileInfoList published = QDir(exportRoot).entryInfoList(
+        QDir::Dirs | QDir::NoDotAndDotDot);
+    QCOMPARE(published.size(), 1);
+    QCOMPARE(QDir(published.first().absoluteFilePath()).entryList(
+                 QDir::Files | QDir::NoDotAndDotDot).size(), 2);
 }
 
 void VocalSeparationControllerTest::selectedPlaylistActionRejectsAnUnsafeSubset()
