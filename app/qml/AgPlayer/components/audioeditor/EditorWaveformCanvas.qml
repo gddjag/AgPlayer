@@ -902,6 +902,10 @@ Rectangle {
                         combinedGainCurve.requestPaint()
                     }
                     onDoubleClicked: function(mouse) {
+                        if (mouse.button !== Qt.LeftButton) {
+                            mouse.accepted = false
+                            return
+                        }
                         const point = mapToItem(canvas, mouse.x, mouse.y)
                         const linePoint = mapToItem(
                             volumeLine, mouse.x, mouse.y)

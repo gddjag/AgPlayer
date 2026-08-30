@@ -377,6 +377,30 @@ TestCase {
         })
     }
 
+    function test_nativeRightDoubleClickOnFadeCurveDoesNotAddEnvelopePoint() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 192000))
+        const canvas = findChild(page, "editorWaveformCanvas")
+        verify(canvas)
+        AudioEditorController.viewport.setViewportWidth(canvas.width)
+        verify(AudioEditorController.viewport.setVisibleRange(0, 192000))
+        const eventId = AudioEditorController.timelineEventViews[0].id
+        verify(AudioEditorController.setEventFadeOut(eventId, 120000))
+        tryVerify(function() {
+            return findVisibleItem(canvas, "editorEventGainInteraction") !== null
+        })
+        const gain = findVisibleItem(canvas, "editorEventGainInteraction")
+        const fadeMenu = gain.fadeMenu
+        verify(gain && fadeMenu)
+
+        verify(nativeDropHelper.doubleClickItemWithButton(
+            gain, gain.width * 0.5, gain.height * 0.5, Qt.RightButton))
+        compare(AudioEditorController.timelineEventViews[0].envelope.length, 0,
+                "a right-button double click must not add an Envelope point")
+        verify(nativeDropHelper.clickItem(gain, gain.width * 0.5,
+                                          gain.height * 0.5, Qt.RightButton))
+        tryVerify(function() { return fadeMenu.visible })
+    }
+
     function test_nativeEnvelopePointAddsNearCurveAndDragsBothAxesInOneUndo() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 192000))
         const canvas = findChild(page, "editorWaveformCanvas")

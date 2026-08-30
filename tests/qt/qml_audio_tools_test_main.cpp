@@ -489,6 +489,18 @@ public:
         return true;
     }
 
+    Q_INVOKABLE bool doubleClickItemWithButton(QObject* target, qreal x,
+                                               qreal y, int button)
+    {
+        auto* item = qobject_cast<QQuickItem*>(target);
+        QQuickWindow* window = item == nullptr ? nullptr : item->window();
+        if (window == nullptr || !window->isVisible()) return false;
+        QTest::mouseDClick(window, static_cast<Qt::MouseButton>(button),
+                           Qt::NoModifier,
+                           item->mapToScene(QPointF(x, y)).toPoint(), 20);
+        return true;
+    }
+
     Q_INVOKABLE bool clickItem(QObject* target, qreal x, qreal y, int button)
     {
         auto* item = qobject_cast<QQuickItem*>(target);
