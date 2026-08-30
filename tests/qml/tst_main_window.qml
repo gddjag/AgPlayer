@@ -394,6 +394,15 @@ TestCase {
     }
 
     function verifyFileInfoPanel(panel, expectedPath) {
+        var expectedKeys = [
+            "fileName", "format", "sampleRate", "bitDepth", "channels",
+            "bitRate", "duration", "fileSize", "bpm", "modifiedAt",
+            "directory", "path", "tags"
+        ]
+        var requiredValueKeys = [
+            "format", "sampleRate", "bitDepth", "channels", "bitRate",
+            "duration", "fileSize", "path"
+        ]
         verify(panel !== null, "file information panel must exist")
         compare(panel.objectName, "audioFileInfoPanel")
         compare(panel.width, 300)
@@ -401,8 +410,21 @@ TestCase {
         compare(panel.height, Math.min(panel.parent.height - 24, 470))
         var scrollView = findChild(panel, "audioFileInfoScroll")
         verify(scrollView !== null)
-        verify(panel.rows.length >= 9,
-               "file information must retain every supported audio field")
+        compare(panel.rows.length, expectedKeys.length,
+                "file information must retain the complete shared field contract")
+        for (var rowIndex = 0; rowIndex < expectedKeys.length; ++rowIndex) {
+            var key = expectedKeys[rowIndex]
+            compare(panel.rows[rowIndex].key, key,
+                    "file information fields must remain ordered consistently")
+            var label = findChild(panel.contentItem, "audioFileInfoLabel-" + key)
+            var value = findChild(panel.contentItem, "audioFileInfoValue-" + key)
+            verify(label !== null, "missing file information label for " + key)
+            verify(value !== null, "missing file information value for " + key)
+            if (requiredValueKeys.indexOf(key) >= 0) {
+                verify(String(value.text || "").length > 0,
+                       "required file information value must not be empty: " + key)
+            }
+        }
         compare(panel.fullPath, expectedPath)
 
         var path = findChild(panel.contentItem, "audioFileInfoValue-path")
@@ -445,6 +467,30 @@ TestCase {
         compare(copySpy.count, 1)
         compare(copySpy.signalArguments[0][0], panel.fullPath)
         copySpy.destroy()
+    }
+
+    function positionMenuActionInViewport(menu, action) {
+        var menuView = menu.contentItem
+        verify(menuView !== null, "context menu must expose a content viewport")
+        verify(typeof menuView.positionViewAtIndex === "function",
+               "context menu viewport must support item positioning")
+        var actionIndex = -1
+        for (var index = 0; index < menu.count; ++index) {
+            if (menu.itemAt(index) === action) {
+                actionIndex = index
+                break
+            }
+        }
+        verify(actionIndex >= 0,
+               "file information action must be a real context menu item")
+        menuView.positionViewAtIndex(actionIndex, ListView.End)
+        wait(0)
+        var actionPosition = action.mapToItem(menuView, 0, 0)
+        verify(actionPosition.x >= 0
+               && actionPosition.x + action.width <= menuView.width
+               && actionPosition.y >= 0
+               && actionPosition.y + action.height <= menuView.height,
+               "file information action must be entirely inside the menu viewport")
     }
 
     function cleanup() {
@@ -1134,10 +1180,33 @@ TestCase {
         var list = trackListComponent.createObject(mainWindow.contentItem)
         verify(list)
         tryVerify(function() { return list.count > 0 }, 500)
+        list.positionViewAtBeginning()
+        wait(30)
 
         var panel = null
+        var menu = null
         try {
-            list.openFirstDetailsForQa()
+            var firstRow = list.itemAtIndex(0)
+            verify(firstRow, "a visible track row should exist")
+            mouseClick(firstRow, firstRow.width / 2, firstRow.height / 2,
+                       Qt.RightButton)
+            menu = findChild(list, "trackContextMenu")
+            tryVerify(function() { return menu && menu.visible }, 500)
+            var detailsAction = findChild(menu, "trackMenuDetails")
+            verify(detailsAction, "track menu must expose file information")
+            verify(detailsAction.enabled, "file information action must be enabled")
+            verify(detailsAction.visible && detailsAction.width > 20
+                   && detailsAction.height > 20,
+                   "file information action must be visibly clickable")
+            positionMenuActionInViewport(menu, detailsAction)
+            var detailsSpy = signalSpyComponent.createObject(testCase,
+                                                              { "target": detailsAction,
+                                                                "signalName": "triggered" })
+            verify(detailsSpy.valid)
+            mouseClick(detailsAction, detailsAction.width / 2,
+                       detailsAction.height / 2)
+            compare(detailsSpy.count, 1,
+                    "clicking file information must trigger its menu action")
             panel = findChild(list, "audioFileInfoPanel")
             tryVerify(function() { return panel && panel.visible }, 500)
             verifyFileInfoPanel(panel, String(panel.details.path || ""))
@@ -1154,6 +1223,8 @@ TestCase {
             keyClick(Qt.Key_Escape)
             tryVerify(function() { return !panel.visible }, 500)
         } finally {
+            if (menu)
+                menu.close()
             if (panel)
                 panel.close()
             list.destroy()
@@ -1165,10 +1236,62 @@ TestCase {
         verify(trackIds.length > 0)
         var page = libraryManagerPageComponent.createObject(mainWindow.contentItem)
         verify(page)
+        page.z = 1000
+        page.height = Math.max(page.height, page.implicitHeight)
+        wait(30)
 
         var panel = null
+        var menu = null
         try {
-            page.openFileDetails(trackIds[0])
+            var trackList = findChild(page, "libraryManagerTrackList")
+            verify(trackList, "library manager must expose its track list")
+            tryVerify(function() { return trackList.count > 0 }, 500)
+            trackList.positionViewAtBeginning()
+            wait(30)
+            mainWindow.requestActivate()
+            tryVerify(function() { return mainWindow.active }, 1000)
+            trackList.forceActiveFocus()
+            verify(trackList.activeFocus,
+                   "library manager track list must receive pointer input focus")
+            var firstRow = trackList.itemAtIndex(0)
+            verify(firstRow, "a visible library manager track row should exist")
+            verify(firstRow.width > 20 && firstRow.height > 20,
+                   "first library manager row must expose a clickable hit target")
+            var pagePosition = firstRow.mapToItem(page, 0, 0)
+            page.y = Math.round((mainWindow.contentItem.height - firstRow.height) / 2
+                                - pagePosition.y)
+            wait(0)
+            var firstRowPosition = firstRow.mapToItem(trackList, 0, 0)
+            verify(firstRowPosition.y >= 0
+                   && firstRowPosition.y + firstRow.height <= trackList.height,
+                   "first library manager row must be inside its visible viewport")
+            var windowPosition = firstRow.mapToItem(mainWindow.contentItem, 0, 0)
+            verify(windowPosition.x >= 0
+                   && windowPosition.x + firstRow.width <= mainWindow.contentItem.width
+                   && windowPosition.y >= 0
+                   && windowPosition.y + firstRow.height <= mainWindow.contentItem.height,
+                   "first library manager row must be inside the host window: y="
+                   + windowPosition.y + ", height=" + firstRow.height
+                   + ", hostHeight=" + mainWindow.contentItem.height)
+            mouseClick(firstRow, firstRow.width / 2, firstRow.height / 2,
+                       Qt.RightButton)
+            menu = findChild(page, "libraryManagerTrackMenu")
+            tryVerify(function() { return menu && menu.visible }, 500)
+            var detailsAction = findChild(menu, "libraryTrackDetails")
+            verify(detailsAction, "library manager menu must expose file information")
+            verify(detailsAction.enabled, "file information action must be enabled")
+            verify(detailsAction.visible && detailsAction.width > 20
+                   && detailsAction.height > 20,
+                   "file information action must be visibly clickable")
+            positionMenuActionInViewport(menu, detailsAction)
+            var detailsSpy = signalSpyComponent.createObject(testCase,
+                                                              { "target": detailsAction,
+                                                                "signalName": "triggered" })
+            verify(detailsSpy.valid)
+            mouseClick(detailsAction, detailsAction.width / 2,
+                       detailsAction.height / 2)
+            compare(detailsSpy.count, 1,
+                    "clicking file information must trigger its menu action")
             panel = findChild(page, "audioFileInfoPanel")
             tryVerify(function() { return panel && panel.visible }, 500)
             verifyFileInfoPanel(panel, String(panel.details.path || ""))
@@ -1185,6 +1308,8 @@ TestCase {
             keyClick(Qt.Key_Escape)
             tryVerify(function() { return !panel.visible }, 500)
         } finally {
+            if (menu)
+                menu.close()
             if (panel)
                 panel.close()
             page.destroy()
