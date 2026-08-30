@@ -5,13 +5,13 @@
 
 ## 2026-08-31 当前实施追踪（覆盖旧视觉目标）
 
-代码基础为 `d8a7386`，清洁实现计划为 `d8160f4`，最终验证 HEAD 为 `6cc4bab`。Task 1、Task 2、Task 3 的独立评审均为 Spec/Quality PASS；中心高光修复 `2b6c80f` 与度量稳定化 `6cc4bab` 的独立复审同样 PASS，未发现 P0/P1/P2。下表记录当前实现合同；旧章节仍保留其当时的验证记录，但不得反向改变本表的范围或重新把上传媒体设为验收标准。
+代码基础为 `d8a7386`，清洁实现计划为 `d8160f4`，证据文档基线为 `e97136f`，最终代码验证 HEAD 为 `8ba8be1`。Task 1、Task 2、Task 3 的独立评审均为 Spec/Quality PASS；中心高光修复 `2b6c80f`、度量稳定化 `6cc4bab` 与后端安全衰减修复 `8ba8be1` 均通过独立复审，最新两名复审者均为 PASS、无 P0/P1/P2。下表记录当前实现合同；旧章节仍保留其当时的验证记录，但不得反向改变本表的范围或重新把上传媒体设为验收标准。
 
 | 当前要求 | 已接受实现与边界 | 接受提交 / 证据 |
 |---|---|---|
 | 精确恢复播放器窗口 | `WindowController` 在进入独立沉浸展示时暂存主/迷你角色、主窗口 shell、位置和尺寸；退出时恢复原状态。首次运行缺少几何键时不因还原事件、250 ms 同步或析构凭空写入；用户后续真实移动仍可正常持久化。沉浸期间收到的最终 classic/integrated shell 请求保持权威，不把一个 shell 的几何写入另一个键。 | `334e40e`、`0cb4113`、`d48c288`；Task 1 最终独立评审 Spec/Quality PASS。 |
-| 原创柔光圆形 QRhi 反应堆 | 保留单个 renderer/resource owner、单实例缓冲和单次 `drawIndexed` 路径。低频形成宽阔中心重量与呼吸，中频形成连续宽脊，高频只提供受控细节与稀疏顶面流光；侧面更暗、更稳定，外围通过雾化/透明衰减隐藏方形网格边界。浮动方块缩小并保持确定性；冲击、粒子、流星与相机脉冲均使用有界包络。中心高光修复降低近白饱和并保留亮区颜色和顶面细节。 | `796b815`、`a713c06`、`7eaf15e`、`f65096d`、`2b6c80f`、`6cc4bab`；Task 2 与高光修复最终独立评审均 PASS。 |
-| 低中频主导、高频流光受限 | 同等输入下，高频不再制造最高塔；GPU 验收使用相对静默帧的最强 1% RGB 响应，高频必须不超过同强度低/中频的 90%。顶面流光须局部可见但不能成为全屏曝光提升；非有限音频、样式、相机和时间输入在状态、公开 API 与 uniform 上传边界均被拒绝或收敛为有限值。 | Task 2 的 D3D11 接受证据约为 31.6%–32.1%；高光 TDD 从近白 `2.20%`、P90/P95/P99 `201/231/253` 降至 `0%`、`176/190/207`。最终 GPU 完整用例 `8/8`。 |
+| 原创柔光圆形 QRhi 反应堆 | 保留单个 renderer/resource owner、单实例缓冲和单次 `drawIndexed` 路径。低频形成宽阔中心重量与呼吸，中频形成连续宽脊，高频只提供受控细节与稀疏顶面流光；侧面更暗、更稳定，外围通过雾化/透明衰减隐藏方形网格边界。浮动方块缩小并保持确定性；冲击、粒子、流星与相机脉冲均使用有界包络。中心高光修复降低近白饱和并保留亮区颜色和顶面细节；`8ba8be1` 将两处反向或在最大响应范围下可反转的 `smoothstep` 改为后端安全的升序边界。 | `796b815`、`a713c06`、`7eaf15e`、`f65096d`、`2b6c80f`、`6cc4bab`、`8ba8be1`；Task 2、高光与衰减修复独立评审均 PASS。 |
+| 低中频主导、高频流光受限 | 同等输入下，高频不再制造最高塔；GPU 验收使用相对静默帧的最强 1% RGB 响应，高频必须不超过同强度低/中频的 90%。顶面流光须局部可见但不能成为全屏曝光提升；非有限音频、样式、相机和时间输入在状态、公开 API 与 uniform 上传边界均被拒绝或收敛为有限值。 | Task 2 的 D3D11 接受证据约为 31.6%–32.1%；高光 TDD 从近白 `2.20%`、P90/P95/P99 `201/231/253` 降至 `0%`、`176/190/207`。最终 GPU QtTest `9/9`；`responseRange` `0.50→2.20` 的真实 GPU 帧可见像素为 `16316→23741`（ROI `51269`）。 |
 | 原生 QML 电影感空间歌词 | 不改变歌词服务、时间同步、行模型或持久化。当前行是唯一焦点；前/后行作为弱化景深上下文；左/右使用镜像且有界的透视角，中央保持正面。空间模式最多两行并省略超长文本；快速切行、服务替换、非 Ready 状态、隐藏或关闭时不会残留旧动画。 | `d8109f5`、`5a0e662`；Task 3 最终独立评审 Spec/Quality PASS。 |
 | 语义化且真实生效的设置分组 | 现有 9 个滑杆和 8 个开关按“地形 / 光影 / 运动 / 冲击”分组；对象名、范围、默认值、持久化属性和 renderer/controller 绑定保持不变。没有新增仅改数字、不影响画面的空壳控件。 | `ImmersiveControlPanel.qml` 与 QML 行为测试；Task 3 最终独立评审无 blocker/P1/P2。 |
 | 冻结既有共享能力 | 频彩波形继续复用 `WaveformItem`、`WaveformSession` 和已有低/中/高频峰值；队列继续复用现有 queue model；歌词继续复用现有服务、计时和模型。本轮没有修改它们的数据链，也没有增加播放器、解码器、FFT 或长期音频缓存。 | Task 2/3 范围审计与最终独立评审；生产变更不包含 waveform、queue 或 lyrics service/model/timing 文件。 |
@@ -22,22 +22,23 @@
 
 | 最终验证项 | 结果 | 严格限定的证据 |
 |---|---|---|
-| Fresh Debug 应用构建 | **PASS，有限定** | 在 `5a0e662` fresh configure/build `147/147`、exit `0`；QSB fresh 执行。最终 HEAD `6cc4bab` 在 VS DevShell 中增量构建 AgPlayer 与 GPU target exit `0`。普通 PowerShell 未加载 VS SDK 时曾因找不到 `ole32.lib` / `user32.lib` exit `1`；加载 DevShell 后同目标 exit `0`，属于命令环境要求而非隐藏为成功。 |
-| Fresh Release 应用构建 | **PASS，有限定** | 在 `5a0e662` fresh configure/build `65/65`、exit `0`；最终 HEAD 在 VS DevShell 中增量构建 AgPlayer 与 GPU target exit `0`。同样要求正确加载 MSVC/Windows SDK 环境。 |
-| 聚焦 C++ / QML 回归 | **Release PASS；Debug PARTIAL** | 最终 HEAD Release 六项 `6/6`，`15.11 s`。Debug 的 window/player/state/item/GPU 五项分别通过 `4.96/2.85/1.23/3.47/11.97 s`；`qml_immersive_integration_test` 在 CTest 中无输出失败 `12.16 s`，严格同环境隔离直跑一次 exit `0`，记录为 Debug harness 间歇不稳，不写成 `6/6`。 |
-| 离线 QSB Shader 编译 | **PASS** | Fresh Debug 构建实际生成 `terrain_reactor.vert.qsb`；高光修复后最终 HEAD 的 Debug/Release AgPlayer 与 GPU target 均重新构建成功。 |
+| Fresh Debug 应用构建 | **PASS，有限定** | 在 `5a0e662` fresh configure/build `147/147`、exit `0`；QSB fresh 执行。最终 HEAD `8ba8be1` 在 VS DevShell 中全量增量构建 exit `0`。普通 PowerShell 未加载 VS SDK 时曾因找不到 `ole32.lib` / `user32.lib` exit `1`；加载 DevShell 后同目标 exit `0`，属于命令环境要求而非隐藏为成功。 |
+| Fresh Release 应用构建 | **PASS，有限定** | 在 `5a0e662` fresh configure/build `65/65`、exit `0`；最终 HEAD `8ba8be1` 在 VS DevShell 中全量增量构建 exit `0`。同样要求正确加载 MSVC/Windows SDK 环境。 |
+| 聚焦 C++ / QML 回归 | **Release PASS；Debug PASS** | 最终 HEAD Release 六项 `6/6`，`18.99 s`；Debug 六项 `6/6`，`21.72 s`。这份最终新鲜证据取代 `6cc4bab` 时 Debug 沉浸 QML 的 PARTIAL 记录，但不覆盖下方早先完整 Debug/Release CTest 的失败。 |
+| 离线 QSB Shader 编译 | **PASS** | Fresh Debug 构建实际生成 `terrain_reactor.vert.qsb`；`8ba8be1` 后 Debug/Release 全量增量构建 exit `0`，六个 QSB 变体复审均 PASS。新增源码合同直接拒绝反向或可反转的衰减边界。 |
 | `qmllint` | **PASS** | 最终 exit `0`；只有 `Theme.qml`、`WaveformSession.qml`、`SharedWaveformView.qml` 三条既有 `unused-import` Info，无 warning/error。 |
 | 完整 `ctest` | **FAIL** | Release：`5a0e662` 为 `117/121`，`5b17b63` 为 `118/121`；后者失败 `import_controller_test` timeout `35.02 s`、`audio_editor_controller_test` timeout `30.03 s`、`qml_main_window_test` timeout `35.19 s`，相关沉浸 QML `8.33 s`、GPU `7.05 s` 通过。Debug：`102/122`，20 项失败；组合隔离仅 `2/20` 通过，不能宣称 Debug 全套通过。详情见 Task 4 验证报告。 |
-| 内部确定性视觉 / GPU smoke | **PASS，仅 Windows D3D11** | GPU 高光完整用例 `8/8`；Release follow-up repeat `5/5`，Debug 通过。60 秒专用看门狗提交 `5b17b63` 后 `10/10` 通过，最长 `13.48 s`；此前 10 秒看门狗第 4 次 `11.04 s` 超时、隔离 `4.73 s` 通过，未被改写为旧配置 `10/10`。实际 QA 使用固定合成频谱，不与上传媒体比较。 |
+| 内部确定性视觉 / GPU smoke | **PASS，仅 Windows D3D11** | 最终 GPU QtTest `9/9`；`responseRange` `0.50→2.20` 的真实 GPU 帧可见像素 `16316→23741`（ROI `51269`），证明端点改变实际地形占用而非仅更新 UI。Release GPU repeat `5/5`，最长 `11.58 s`；Debug GPU 通过。此前 60 秒看门狗 `10/10` 与旧 10 秒超时历史仍保留，不与上传媒体比较。 |
 | 实际 GUI 短时可用性 | **自动 smoke PASS；人工交互 NOT RUN** | Release QA 以合成频谱在 `1600×900` 启动并 exit `0`，无残留进程；内部检查圆形占用、方界消隐、环境密度和中心层次 PASS。未使用真实音频验证频彩波形，也未人工执行进入/返回、全屏 Esc、拖动或滚轮。 |
 | 清洁来源扫描与最终 Diff Review | **PASS，路径限定** | 在 `app/qt/core/cmake/CMakeLists.txt` 限定范围内，受限标识符 `rg` exit `1`（零匹配），依赖 diff 匹配 `0`；base→HEAD 与工作树 `git diff --check` exit `0`。未发现 WebEngine、Electron、Three.js、第二解码器、新 FFT、新依赖或第三方资产。 |
 
 ## 2026-08-31 最终证据 / 限制
 
-- 最终 HEAD 为 `6cc4bab`。GPU CTest 专用 60 秒看门狗是 `5b17b63`；中心高光修复为 `2b6c80f`，其度量稳定化为 `6cc4bab`。独立复审结论为 PASS，未发现 P0/P1/P2。
-- 高光 TDD RED：近白占比 `2.20%`，P90/P95/P99 为 `201/231/253`；GREEN：近白 `0%`，P90/P95/P99 为 `176/190/207`。最终 Release QA 截图为 `build/qa/immersive-reactor-highlight-2b6c80f/immersive-synthetic-1600x900.png`，`562598` bytes。
+- 最终代码验证 HEAD 为 `8ba8be1`，证据文档上一提交为 `e97136f`。GPU CTest 专用 60 秒看门狗是 `5b17b63`；中心高光修复为 `2b6c80f`，其度量稳定化为 `6cc4bab`；后端安全衰减与 responseRange 端点合同为 `8ba8be1`。两名最新独立复审者均为 PASS，未发现 P0/P1/P2。
+- `8ba8be1` 修复 `terrain_reactor.vert` 两处反向或可反转的 `smoothstep`，新增 Shader 源码合同，并以真实 GPU 帧覆盖 `responseRange` `0.50→2.20`：可见像素 `16316→23741`（ROI `51269`）。GPU QtTest `9/9`，Release repeat `5/5`（最长 `11.58 s`），Debug GPU 通过；六个 QSB 变体复审 PASS。
+- 高光 TDD RED：近白占比 `2.20%`，P90/P95/P99 为 `201/231/253`；GREEN：近白 `0%`，P90/P95/P99 为 `176/190/207`。最终 Release QA 截图为 `build/qa/immersive-backend-safe-8ba8be1/immersive-synthetic-1600x900.png`，`562046` bytes。
 - 旧版 AgPlayer 内部 QA 帧到最终帧（不是上传媒体对比）：可见近白 `9.41%→3.21%`，中央近白 `11.19%→3.54%`，P90 `247→224`，亮区颜色保留约 `42.09%→62.7%`。内部判定圆形轮廓、方形边界消隐、环境密度与中心层次 PASS。
-- 完整 Release 与 Debug CTest 均为 FAIL；聚焦测试结果只能证明沉浸范围的定向回归，不能覆盖整个播放器。
+- 完整 Release 与 Debug CTest 的最近全套证据仍均为 FAIL；最终 focused Release/Debug 各 `6/6` 只能证明沉浸范围的定向回归，不能覆盖整个播放器。
 - QA 模式与生产设置隔离，但 QSettings / pipeline cache 仍落在系统 `qttest` 命名空间，不能声称所有 Qt 状态都写入一次性目录。
 - CMake 的 SoundTouch 当前解析到另一工作树的路径，虽未导致本轮构建失败，仍是构建可搬移风险。
 - 没有制作安装包；不声明包体增量、真实音频体验、长期稳定性或跨平台图形后端通过。
