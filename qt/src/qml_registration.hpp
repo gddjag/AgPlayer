@@ -13,6 +13,7 @@ class LibraryNavigationModel;
 class LibraryModel;
 class LyricsService;
 class MetadataEditor;
+class AudioPreviewController;
 class PlaybackController;
 class PlayerExperienceController;
 class PlaybackClipDragAdapter;
@@ -22,6 +23,7 @@ class TagModel;
 class ThemeManager;
 class TrackWaveformThumbnailProvider;
 class WaveformProvider;
+class VocalSeparationController;
 class WindowController;
 
 struct AgPlayerQmlRuntimeModels final {
@@ -53,4 +55,6 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  const AgPlayerQmlRuntimeModels& runtime = {},
                                  PlayerExperienceController* experience = nullptr,
                                  AudioVisualFeatureController* audioFeatures = nullptr,
-                                 LyricsService* lyricsService = nullptr);
+                                 LyricsService* lyricsService = nullptr,
+                                 AudioPreviewController* audioPreview = nullptr,
+                                 VocalSeparationController* vocalSeparation = nullptr);

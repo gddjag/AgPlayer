@@ -1,0 +1,316 @@
+#pragma once
+
+#include "separation_process_client.hpp"
+#include "vocal_separation_catalog.hpp"
+#include "vocal_separation_history.hpp"
+#include "vocal_separation_installer.hpp"
+
+#include <QHash>
+#include <QFutureWatcher>
+#include <QList>
+#include <QNetworkAccessManager>
+#include <QObject>
+#include <QPointer>
+#include <QSet>
+#include <QUrl>
+#include <QVariantList>
+#include <QVariantMap>
+
+#include <memory>
+#include <optional>
+
+class AudioPreviewController;
+class ImportController;
+class LibraryModel;
+class PlaylistModel;
+class VocalSeparationDownloader;
+class VocalSeparationControllerTestDriver;
+class WaveformProvider;
+
+struct VocalSeparationControllerOptions {
+    QString workerProgram;
+    QStringList workerArguments;
+    QString dataRoot;
+    QString outputDirectory;
+    QString runtimeLibraryPath;
+    QList<VocalModelCard> catalog;
+    SeparationProcessClient::Deadlines deadlines;
+    bool verifyRuntimeIntegrity = true;
+};
+
+class VocalSeparationController final : public QObject {
+    Q_OBJECT
+    Q_PROPERTY(QVariantMap inputInfo READ inputInfo NOTIFY inputInfoChanged)
+    Q_PROPERTY(QVariantList models READ models NOTIFY modelsChanged)
+    Q_PROPERTY(QString selectedModelId READ selectedModelId
+                   NOTIFY selectedModelIdChanged)
+    Q_PROPERTY(DeviceMode deviceMode READ deviceMode NOTIFY deviceModeChanged)
+    Q_PROPERTY(QVariantList availableDevices READ availableDevices
+                   NOTIFY availableDevicesChanged)
+    Q_PROPERTY(JobState jobState READ jobState NOTIFY jobStateChanged)
+    Q_PROPERTY(QString stage READ stage NOTIFY jobStateChanged)
+    Q_PROPERTY(double progress READ progress NOTIFY progressChanged)
+    Q_PROPERTY(double downloadProgress READ downloadProgress NOTIFY downloadProgressChanged)
+    Q_PROPERTY(QString downloadingModelId READ downloadingModelId NOTIFY downloadStateChanged)
+    Q_PROPERTY(bool downloadBusy READ downloadBusy NOTIFY downloadStateChanged)
+    Q_PROPERTY(QString error READ error NOTIFY errorChanged)
+    Q_PROPERTY(QString outputFormat READ outputFormat NOTIFY outputFormatChanged)
+    Q_PROPERTY(QString outputDirectory READ outputDirectory
+                   NOTIFY outputDirectoryChanged)
+    Q_PROPERTY(bool canStart READ canStart NOTIFY startEligibilityChanged)
+    Q_PROPERTY(QString startDisabledReason READ startDisabledReason
+                   NOTIFY startEligibilityChanged)
+    Q_PROPERTY(bool canRetry READ canRetry NOTIFY jobStateChanged)
+    Q_PROPERTY(QVariantList stems READ stems NOTIFY stemsChanged)
+    Q_PROPERTY(QVariantList history READ history NOTIFY historyChanged)
+
+public:
+    enum class ModelState {
+        NotInstalled,
+        PendingVerification,
+        Downloading,
+        Paused,
+        Verifying,
+        Installed,
+        ModelFailed,
+    };
+    Q_ENUM(ModelState)
+
+    enum class JobState {
+        Idle,
+        Probing,
+        Running,
+        Cancelling,
+        Completed,
+        Cancelled,
+        JobFailed,
+    };
+    Q_ENUM(JobState)
+
+    enum class StemKind {
+        Original,
+        Vocals,
+        Accompaniment,
+        Drums,
+        Bass,
+        Other,
+    };
+    Q_ENUM(StemKind)
+
+    enum class DeviceMode { Auto, CPU, GPU };
+    Q_ENUM(DeviceMode)
+
+    explicit VocalSeparationController(
+        AudioPreviewController* preview,
+        WaveformProvider* waveformProvider,
+        LibraryModel* library,
+        ImportController* importer,
+        PlaylistModel* playlists,
+        VocalSeparationControllerOptions options = {},
+        QObject* parent = nullptr);
+    ~VocalSeparationController() override;
+
+    QVariantMap inputInfo() const;
+    QVariantList models() const;
+    QString selectedModelId() const;
+    DeviceMode deviceMode() const noexcept;
+    QVariantList availableDevices() const;
+    JobState jobState() const noexcept;
+    QString stage() const;
+    double progress() const noexcept;
+    double downloadProgress() const noexcept;
+    QString downloadingModelId() const;
+    bool downloadBusy() const noexcept;
+    QString error() const;
+    QString outputFormat() const;
+    QString outputDirectory() const;
+    bool canStart() const;
+    QString startDisabledReason() const;
+    bool canRetry() const noexcept;
+    QVariantList stems() const;
+    QVariantList history() const;
+
+    Q_INVOKABLE bool selectInput(const QUrl& url);
+    Q_INVOKABLE bool clearInput();
+    Q_INVOKABLE bool verifyInstalledModels();
+    Q_INVOKABLE bool dropInput(const QList<QUrl>& urls);
+    Q_INVOKABLE bool downloadModel(const QString& modelId);
+    Q_INVOKABLE void pauseDownload();
+    Q_INVOKABLE void resumeDownload();
+    Q_INVOKABLE bool deleteModel(const QString& modelId);
+    Q_INVOKABLE bool selectModel(const QString& modelId);
+    Q_INVOKABLE bool setStemSelected(StemKind kind, bool selected);
+    Q_INVOKABLE bool selectDevice(DeviceMode mode);
+    Q_INVOKABLE bool selectOutputFormat(const QString& format);
+    Q_INVOKABLE bool selectOutputDirectory(const QUrl& directory);
+    Q_INVOKABLE bool probeDevices();
+    Q_INVOKABLE bool start();
+    Q_INVOKABLE void cancel();
+    Q_INVOKABLE bool retry();
+    Q_INVOKABLE bool previewInput();
+    Q_INVOKABLE bool previewStem(StemKind kind);
+    Q_INVOKABLE bool setStemPreviewVolume(StemKind kind, double volume);
+    Q_INVOKABLE bool exportStem(StemKind kind, const QUrl& destination);
+    Q_INVOKABLE bool exportSelected(const QUrl& destinationDirectory);
+    Q_INVOKABLE bool addStemToPlaylist(StemKind kind,
+                                       const QString& playlistId);
+    Q_INVOKABLE bool addSelectedToPlaylist(const QString& playlistId);
+    Q_INVOKABLE bool openOutputDirectory();
+    Q_INVOKABLE bool openModelDirectory();
+
+signals:
+    void inputInfoChanged();
+    void modelsChanged();
+    void selectedModelIdChanged();
+    void deviceModeChanged();
+    void availableDevicesChanged();
+    void jobStateChanged();
+    void progressChanged();
+    void downloadProgressChanged();
+    void downloadStateChanged();
+    void errorChanged();
+    void outputFormatChanged();
+    void outputDirectoryChanged();
+    void startEligibilityChanged();
+    void stemsChanged();
+    void historyChanged();
+    void playlistOperationFinished(bool success, const QString& diagnostic);
+
+private:
+    friend class VocalSeparationControllerTestDriver;
+
+    enum class RequestKind { Probe, Separation };
+
+    struct ActiveRequestContext {
+        RequestKind kind = RequestKind::Probe;
+        QString inputPath;
+        QString modelId;
+        QString outputRoot;
+        QString outputFormat;
+        DeviceMode device = DeviceMode::Auto;
+        QList<StemKind> stemKinds;
+        QStringList stemNames;
+        quint64 resultGeneration = 0;
+    };
+
+    struct WaveformWork {
+        QString path;
+        QString trackId;
+        StemKind kind = StemKind::Original;
+        quint64 resultGeneration = 0;
+    };
+
+    struct PlaylistOperation {
+        QString playlistId;
+        QStringList paths;
+        QStringList addedTrackIds;
+    };
+
+    struct DownloadItem {
+        VocalDownloadFile file;
+        QString destination;
+        bool runtimeArchive = false;
+    };
+
+    enum class VerificationPurpose { None, Refresh, Download, Start, Probe };
+
+    struct VerificationResult {
+        QSet<QString> verifiedModels;
+        QSet<QString> verifiedFiles;
+        bool runtimeVerified = false;
+    };
+
+    const VocalModelCard* selectedModel() const;
+    const VocalModelCard* modelForId(const QString& modelId) const;
+    QString modelDirectory(const QString& modelId) const;
+    QString runtimeDirectory() const;
+    bool modelInstalled(const VocalModelCard& model) const;
+    bool modelFilesPresent(const VocalModelCard& model) const;
+    bool runtimeReady() const;
+    bool deviceAvailable(DeviceMode mode) const;
+    bool beginVerification(VerificationPurpose purpose,
+                           const VocalModelCard* model = nullptr);
+    void finishVerification(quint64 generation,
+                            const VerificationResult& result);
+    bool launchProbe();
+    bool launchSeparation(const ActiveRequestContext& context);
+    bool beginSeparationRequest(ActiveRequestContext context);
+    void failRequest(const ActiveRequestContext& context,
+                     const QString& error, const QString& stage);
+    void invalidateRetry();
+    void refreshModels();
+    void rebuildStems();
+    void setJobState(JobState state, const QString& stage = {});
+    void setError(const QString& error);
+    void startNextDownload();
+    void handleProbe(const QJsonObject& payload);
+    void handleResult(const QJsonObject& payload);
+    void analyzeNextWaveform();
+    void handleWaveform(const QString& path, const QVariantMap& layers);
+    void handleWaveformFailure(const QString& path, const QString& trackId,
+                               qulonglong generation, int errorCode);
+    void clearPublishedResult();
+    void resetInputSession();
+    void stopPreviewForCurrentInputOrResult();
+    bool togglePreviewPath(const QString& path, const QString& root = {});
+    bool requestInFlight() const noexcept;
+    QString pathForStem(StemKind kind) const;
+    QStringList selectedStemNames() const;
+    QList<StemKind> selectedStemKinds() const;
+    bool addPathsToPlaylist(const QStringList& paths,
+                            const QString& playlistId);
+    bool playlistExists(const QString& playlistId) const;
+    void finishPlaylistOperation(bool success, const QString& diagnostic);
+    static QVariantList boundedPeaks(const QVariantList& peaks);
+    static bool atomicCopyNoOverwrite(const QString& source,
+                                      const QString& sourceRoot,
+                                      const QString& destination);
+
+    QPointer<AudioPreviewController> preview_;
+    QPointer<WaveformProvider> waveformProvider_;
+    QPointer<LibraryModel> library_;
+    QPointer<ImportController> importer_;
+    QPointer<PlaylistModel> playlists_;
+    VocalSeparationControllerOptions options_;
+    VocalSeparationHistoryStore historyStore_;
+    SeparationProcessClient process_;
+    QNetworkAccessManager network_;
+    std::unique_ptr<VocalSeparationDownloader> downloader_;
+    QFutureWatcher<VerificationResult>* verificationWatcher_ = nullptr;
+    QFutureWatcher<VocalInstallResult>* runtimeInstallerWatcher_ = nullptr;
+    std::shared_ptr<std::atomic_bool> runtimeInstallCancellation_;
+    VerificationPurpose verificationPurpose_ = VerificationPurpose::None;
+    quint64 verificationGeneration_ = 0;
+    QString verifyingModelId_;
+    QSet<QString> verifiedModelIds_;
+    QSet<QString> verifiedOrRejectedModelIds_;
+    bool runtimeVerified_ = false;
+    QList<DownloadItem> downloadQueue_;
+    QString downloadingModelId_;
+    QString failedDownloadModelId_;
+    double downloadProgress_ = 0.0;
+    qint64 completedDownloadBytes_ = 0;
+    qint64 totalDownloadBytes_ = 0;
+    QHash<int, double> stemPreviewVolumes_;
+    QVariantMap inputInfo_;
+    QVariantList models_;
+    QVariantList availableDevices_;
+    QVariantList stems_;
+    QVariantList history_;
+    QString selectedModelId_;
+    QString outputFormat_ = QStringLiteral("wav");
+    QString outputDirectory_;
+    DeviceMode deviceMode_ = DeviceMode::Auto;
+    JobState jobState_ = JobState::Idle;
+    QString stage_;
+    double progress_ = 0.0;
+    QString error_;
+    std::optional<ActiveRequestContext> activeRequest_;
+    std::optional<ActiveRequestContext> failedRequest_;
+    QString publishedOutputRoot_;
+    QList<WaveformWork> waveformQueue_;
+    quint64 resultGeneration_ = 0;
+    quint64 inputWaveformGeneration_ = 0;
+    QString inputWaveformTrackId_;
+    std::optional<PlaylistOperation> playlistOperation_;
+};

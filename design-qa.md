@@ -85,3 +85,22 @@ Dark and light were exercised through the real application theme path: `design-q
 No P0 was observed in the captured states and the discovered structural/lifecycle P1 defects are fixed, but the mandatory real-window interactions, physical DPI reachability and reference-equivalent same-frame evidence are incomplete. P1/P2 acceptance findings therefore remain open.
 
 final result: blocked
+
+---
+
+# Design QA — 人声伴奏分离 — 2026-08-30
+
+## Source and current implementation
+
+- Source: `C:\Users\Administrator\Desktop\音视频播放器\AgPlayer音频播放器完整版\人声伴奏分离.png` (1672 × 941).
+- Current implementation: real 3-minute FLAC loaded through the production controller; models remain honestly uninstalled and history/results remain empty.
+- Combined comparison inputs: `build/qa/vocal-separation-final/comparison-1672x941-loaded-dpi100-v2.png`, `comparison-1672x941-loaded-dpi125-v2.png`, `comparison-1672x941-loaded-dpi150-v2.png`, and `comparison-1672x941-loaded-dpi200-v2.png`.
+
+## Findings
+
+- The deep-blue workbench, five-item top navigation, source waveform, model/custom cards, 70/30 work/history split, stem rows and fixed primary action follow the reference hierarchy.
+- 100%, 125%, 150% and 200% DPI captures have no visible clipping, overlap, displaced navigation or inaccessible primary action.
+- The implementation screenshot and reference do not have the same product state. The reference contains installed/downloading cards, five completed stems and populated history; the current honest screenshot contains a real selected source but no installed model or completed job.
+- Production code was not given screenshot-only fake data. A final same-state comparison must be captured after installing the approved models and completing a real job through the UI.
+
+final result: blocked — reference-state visual parity and final hardware interaction remain unverified

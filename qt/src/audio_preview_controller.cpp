@@ -183,6 +183,32 @@ void AudioPreviewController::seek(const qint64 positionMs)
     }
 }
 
+bool AudioPreviewController::switchSourcePreservingPosition(const QUrl& source)
+{
+    const QString path = source.toLocalFile();
+    if (player_ == nullptr || path.isEmpty() || !QFileInfo::exists(path)) {
+        setError(tr("预览文件不存在"));
+        return false;
+    }
+    if (!hasSource()) {
+        play(source);
+        return isCurrentSource(source);
+    }
+    pollSnapshot();
+    const qint64 savedPosition = positionMs_;
+    const bool wasPlaying = playing_;
+    const QString absolutePath = QFileInfo(path).absoluteFilePath();
+    if (!loadPlaybackPath(absolutePath, absolutePath, 0.0, false)) {
+        return false;
+    }
+    seek(savedPosition);
+    if (wasPlaying) resume();
+    if (!hasNeutralDspParameters()) {
+        scheduleDspPreview();
+    }
+    return isCurrentSource(source);
+}
+
 void AudioPreviewController::setVolume(const double value)
 {
     const double bounded = std::clamp(value, 0.0, 1.0);
@@ -386,6 +412,8 @@ void AudioPreviewController::scheduleDspPreview()
     emit processingChanged();
     const int revision = dspRevision_;
     const QString logicalSource = sourcePath_;
+    const qint64 resumePositionMs = positionMs_;
+    const bool resumePlaying = playing_;
     const QString outputPath = previewTempDir_->filePath(
         QStringLiteral("preview-%1.wav").arg(revision));
     const int compensationCents = keepPitch_
@@ -415,7 +443,8 @@ void AudioPreviewController::scheduleDspPreview()
     auto* watcher = new QFutureWatcher<int>(this);
     dspWatcher_ = watcher;
     connect(watcher, &QFutureWatcher<int>::finished, this,
-            [this, watcher, token, revision, logicalSource, outputPath]() {
+            [this, watcher, token, revision, logicalSource, outputPath,
+             resumePositionMs, resumePlaying]() {
         const int result = watcher->result();
         watcher->deleteLater();
         dspWatcher_.clear();
@@ -441,10 +470,10 @@ void AudioPreviewController::scheduleDspPreview()
             != QFileInfo(logicalSource).canonicalFilePath()) {
             return;
         }
-        const double fraction = durationMs_ > 0
-            ? static_cast<double>(positionMs_) / durationMs_ : 0.0;
-        loadPlaybackPath(
-            logicalSource, outputPath, fraction, playing_);
+        if (loadPlaybackPath(logicalSource, outputPath, 0.0, false)) {
+            seek(std::min(resumePositionMs, durationMs_));
+            if (resumePlaying) resume();
+        }
     });
 
     watcher->setFuture(QtConcurrent::run(

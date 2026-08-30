@@ -36,6 +36,7 @@ find_package(Qt6 6.7 REQUIRED COMPONENTS
     QmlWorkerScript
     QuickControls2
     Concurrent
+    Network
     Test
     QuickTest
     LinguistTools
@@ -47,6 +48,7 @@ find_package(SoundTouch CONFIG REQUIRED)
 
 add_subdirectory(core)
 add_subdirectory(qt)
+add_subdirectory(worker)
 add_subdirectory(app)
 add_subdirectory(tools)
 add_subdirectory(tests)

@@ -97,6 +97,14 @@ add_library(agplayer_qt STATIC
     src/metadata_text.hpp
     src/native_drop_router.cpp
     src/native_drop_router.hpp
+    src/vocal_separation_catalog.cpp
+    src/vocal_separation_catalog.hpp
+    src/vocal_separation_installer.cpp
+    src/vocal_separation_installer.hpp
+    src/vocal_separation_history.cpp
+    src/vocal_separation_history.hpp
+    src/vocal_separation_controller.cpp
+    src/vocal_separation_controller.hpp
     src/playback_controller.cpp
     src/playback_controller.hpp
     src/player_experience_controller.cpp
@@ -107,6 +115,10 @@ add_library(agplayer_qt STATIC
     src/replay_gain_scanner.hpp
     src/resource_path.cpp
     src/resource_path.hpp
+    src/separation_process_client.cpp
+    src/separation_process_client.hpp
+    ${CMAKE_SOURCE_DIR}/worker/src/separation_protocol.cpp
+    ${CMAKE_SOURCE_DIR}/worker/src/separation_protocol.hpp
     src/playlist_model.cpp
     src/playlist_model.hpp
     src/qml_registration.cpp
@@ -138,6 +150,7 @@ target_include_directories(agplayer_qt
     PRIVATE
         "${CMAKE_BINARY_DIR}/generated"
         "${CMAKE_SOURCE_DIR}/core/src"
+        "${CMAKE_SOURCE_DIR}/worker/src"
 )
 target_link_libraries(agplayer_qt
     PUBLIC

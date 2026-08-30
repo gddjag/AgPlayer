@@ -62,7 +62,7 @@ class AudioToolsEndToEndTest final : public QObject {
 
 private slots:
     void formatConverterExposesOnlyReleaseFormats();
-    void audioToolsControllerSupportsFourBuiltInTools();
+    void audioToolsControllerKeepsLegacyIdsAndSupportsSeparation();
     void toolsExpandDroppedFoldersRecursively();
     void audioFileDiscoveryExpandsFoldersOffTheGuiThread();
     void formatConverterLoadsDroppedFilesAsynchronously();
@@ -1982,7 +1982,7 @@ void AudioToolsEndToEndTest::formatConverterConvertsAcrossDistinctChinesePaths()
     verifyAudioFile(QDir(outputDirectory).filePath(QStringLiteral("伪装.wav")));
 }
 
-void AudioToolsEndToEndTest::audioToolsControllerSupportsFourBuiltInTools()
+void AudioToolsEndToEndTest::audioToolsControllerKeepsLegacyIdsAndSupportsSeparation()
 {
     AudioToolsController controller;
     QCOMPARE(controller.currentTool(), 0);
@@ -1994,7 +1994,10 @@ void AudioToolsEndToEndTest::audioToolsControllerSupportsFourBuiltInTools()
     QCOMPARE(controller.currentTool(), 3);
 
     controller.setCurrentTool(4);
-    QCOMPARE(controller.currentTool(), 3);
+    QCOMPARE(controller.currentTool(), 4);
+
+    controller.setCurrentTool(5);
+    QCOMPARE(controller.currentTool(), 4);
 }
 
 void AudioToolsEndToEndTest::toolsExpandDroppedFoldersRecursively()

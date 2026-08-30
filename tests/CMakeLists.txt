@@ -643,6 +643,8 @@ foreach(qt_test IN ITEMS
     file_association_controller_test
     native_drop_router_test
     equalizer_controller_test
+    vocal_separation_install_test
+    vocal_separation_history_test
 )
 
     add_executable(${qt_test} "qt/${qt_test}.cpp")
@@ -663,6 +665,163 @@ endforeach()
 target_include_directories(format_conversion_plan_test PRIVATE
     "${CMAKE_SOURCE_DIR}/core/src"
 )
+target_link_libraries(vocal_separation_install_test PRIVATE Qt6::Network)
+set_tests_properties(vocal_separation_install_test PROPERTIES TIMEOUT 30)
+
+foreach(separation_test IN ITEMS
+    separation_protocol_test
+    separation_dsp_test
+    separation_runtime_test
+    separation_output_transaction_test
+    separation_worker_engine_test
+    separation_native_backend_test
+    separation_real_model_test
+)
+    add_executable(${separation_test} "qt/${separation_test}.cpp")
+    set_target_properties(${separation_test} PROPERTIES AUTOMOC ON)
+    target_include_directories(${separation_test} PRIVATE
+        "${CMAKE_SOURCE_DIR}/worker/src"
+    )
+    target_link_libraries(${separation_test} PRIVATE
+        ag_separation_worker_core Qt6::Core Qt6::Test)
+    agplayer_enable_warnings(${separation_test})
+    add_test(NAME ${separation_test} COMMAND ${separation_test})
+    set_tests_properties(${separation_test} PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+    )
+endforeach()
+
+set_tests_properties(separation_real_model_test PROPERTIES TIMEOUT 3600)
+target_include_directories(separation_real_model_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+    "${CMAKE_SOURCE_DIR}/core/include"
+)
+
+add_library(separation_fake_ort SHARED
+    qt/separation_fake_ort.cpp
+)
+target_include_directories(separation_fake_ort PRIVATE
+    "${CMAKE_SOURCE_DIR}/worker/third_party/onnxruntime/include"
+)
+set_target_properties(separation_fake_ort PROPERTIES
+    PREFIX ""
+    OUTPUT_NAME "onnxruntime_test"
+    WINDOWS_EXPORT_ALL_SYMBOLS ON
+)
+agplayer_enable_warnings(separation_fake_ort)
+target_compile_definitions(separation_runtime_test PRIVATE
+    AG_SEPARATION_FAKE_ORT_PATH="$<TARGET_FILE:separation_fake_ort>"
+)
+target_include_directories(separation_runtime_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/worker/third_party/onnxruntime/include"
+    "${CMAKE_SOURCE_DIR}/qt/src"
+)
+target_link_libraries(separation_runtime_test PRIVATE agplayer_qt)
+add_dependencies(separation_runtime_test separation_fake_ort)
+target_include_directories(separation_native_backend_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+    "${CMAKE_SOURCE_DIR}/core/include"
+)
+target_include_directories(separation_native_backend_test SYSTEM PRIVATE
+    "${FFMPEG_INCLUDE_DIRS}"
+)
+
+if(TARGET AgSeparationWorker)
+add_executable(separation_controller_test_worker
+    qt/separation_controller_test_worker.cpp
+)
+set_target_properties(separation_controller_test_worker PROPERTIES AUTOMOC ON)
+target_include_directories(separation_controller_test_worker PRIVATE
+    "${CMAKE_SOURCE_DIR}/worker/src"
+)
+target_link_libraries(separation_controller_test_worker PRIVATE
+    ag_separation_worker_core Qt6::Core
+)
+agplayer_enable_warnings(separation_controller_test_worker)
+
+add_executable(separation_process_client_test
+    qt/separation_process_client_test.cpp
+)
+set_target_properties(separation_process_client_test PROPERTIES AUTOMOC ON)
+target_include_directories(separation_process_client_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+)
+target_link_libraries(separation_process_client_test PRIVATE
+    agplayer_qt Qt6::Test
+)
+target_compile_definitions(separation_process_client_test PRIVATE
+    AG_SEPARATION_CONTROLLER_TEST_WORKER_PATH="$<TARGET_FILE:separation_controller_test_worker>"
+)
+add_dependencies(separation_process_client_test separation_controller_test_worker)
+agplayer_enable_warnings(separation_process_client_test)
+add_test(NAME separation_process_client_test COMMAND separation_process_client_test)
+set_tests_properties(separation_process_client_test PROPERTIES
+    TIMEOUT 15
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+)
+
+add_executable(vocal_separation_controller_test
+    qt/vocal_separation_controller_test.cpp
+)
+set_target_properties(vocal_separation_controller_test PROPERTIES AUTOMOC ON)
+target_include_directories(vocal_separation_controller_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+)
+target_link_libraries(vocal_separation_controller_test PRIVATE
+    agplayer_qt Qt6::Test
+)
+target_compile_definitions(vocal_separation_controller_test PRIVATE
+    AG_SEPARATION_CONTROLLER_TEST_WORKER_PATH="$<TARGET_FILE:separation_controller_test_worker>"
+)
+add_dependencies(vocal_separation_controller_test
+    separation_controller_test_worker decoder_fixture)
+agplayer_enable_warnings(vocal_separation_controller_test)
+add_test(NAME vocal_separation_controller_test COMMAND vocal_separation_controller_test)
+set_tests_properties(vocal_separation_controller_test PROPERTIES
+    TIMEOUT 60
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+
+add_executable(separation_blocking_worker
+    qt/separation_blocking_worker.cpp
+)
+set_target_properties(separation_blocking_worker PROPERTIES AUTOMOC ON)
+target_include_directories(separation_blocking_worker PRIVATE
+    "${CMAKE_SOURCE_DIR}/worker/src"
+)
+target_link_libraries(separation_blocking_worker PRIVATE
+    ag_separation_worker_core Qt6::Core
+)
+agplayer_enable_warnings(separation_blocking_worker)
+
+add_executable(separation_worker_process_test
+    qt/separation_worker_process_test.cpp
+)
+set_target_properties(separation_worker_process_test PROPERTIES AUTOMOC ON)
+target_include_directories(separation_worker_process_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/worker/src"
+)
+target_link_libraries(separation_worker_process_test PRIVATE
+    ag_separation_worker_core Qt6::Core Qt6::Test
+)
+target_compile_definitions(separation_worker_process_test PRIVATE
+    AG_SEPARATION_WORKER_PATH="$<TARGET_FILE:AgSeparationWorker>"
+    AG_SEPARATION_BLOCKING_WORKER_PATH="$<TARGET_FILE:separation_blocking_worker>"
+)
+add_dependencies(separation_worker_process_test AgSeparationWorker separation_blocking_worker)
+agplayer_enable_warnings(separation_worker_process_test)
+add_test(NAME separation_worker_process_test COMMAND separation_worker_process_test)
+set_tests_properties(separation_worker_process_test PROPERTIES
+    TIMEOUT 15
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
+)
+endif()
 
 add_executable(editor_viewport_test
     qt/editor_viewport_test.cpp
@@ -792,9 +951,10 @@ set_tests_properties(audio_editor_waveform_item_test PROPERTIES
 )
 
 # WaveformItem owns a QQuickWindow.  Explicitly select offscreen for this
-# visual-unit test without changing the native-drop test's qwindows contract.
+# visual-unit test and the software scene graph so it remains independent of
+# the host GPU state without changing the native-drop test's qwindows contract.
 set_tests_properties(waveform_item_test PROPERTIES
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
 )
 set_tests_properties(native_drop_router_test PROPERTIES
     # Native drag-and-drop is a qwindows integration contract.  Pin the
@@ -1009,10 +1169,9 @@ set_tests_properties(
 
 set_tests_properties(import_controller_test PROPERTIES
     # The 10K indexing contract itself permits up to 30 seconds.  The CTest
-    # watchdog must not terminate that performance test at the old 10-second
-    # generic default.  Keep it serial as the decoder/index workload can be
-    # starved by the other CPU-heavy integration tests in a parallel run.
-    TIMEOUT 35
+    # watchdog includes process startup and Windows real-time scanning, so keep
+    # a separate margin without weakening the test's internal 30-second limit.
+    TIMEOUT 180
     RUN_SERIAL TRUE
 )
 set_tests_properties(audio_tools_end_to_end_test PROPERTIES
@@ -1273,6 +1432,18 @@ add_test(NAME qml_metadata_status_filter_test
         -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_metadata_status_filter.qml)
 set_tests_properties(qml_metadata_status_filter_test PROPERTIES
     TIMEOUT 15
+    RESOURCE_LOCK qml_audio_tools_runtime
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
+add_test(NAME qml_vocal_separation_test
+    COMMAND qml_audio_tools_test
+        -o ${CMAKE_BINARY_DIR}/qml-vocal-separation.txt,txt
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_vocal_separation.qml)
+set_tests_properties(qml_vocal_separation_test PROPERTIES
+    TIMEOUT 30
     RESOURCE_LOCK qml_audio_tools_runtime
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION

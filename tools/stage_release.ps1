@@ -1,10 +1,17 @@
 [CmdletBinding()]
 param(
-    [string]$BuildDirectory = (Join-Path $PSScriptRoot '..\build\msvc-release'),
-    [string]$PackageDirectory = (Join-Path $PSScriptRoot '..\build\package\AgPlayer')
+    [string]$BuildDirectory,
+    [string]$PackageDirectory
 )
 
 $ErrorActionPreference = 'Stop'
+$repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+if ([string]::IsNullOrWhiteSpace($BuildDirectory)) {
+    $BuildDirectory = Join-Path $repoRoot 'build\msvc-release'
+}
+if ([string]::IsNullOrWhiteSpace($PackageDirectory)) {
+    $PackageDirectory = Join-Path $repoRoot 'build\package\AgPlayer'
+}
 $BuildDirectory = [IO.Path]::GetFullPath($BuildDirectory)
 $PackageDirectory = [IO.Path]::GetFullPath($PackageDirectory)
 $appDirectory = Join-Path $BuildDirectory 'app'
@@ -26,7 +33,7 @@ New-Item -ItemType Directory -Path $PackageDirectory -Force | Out-Null
 # Keep only verified application runtime files.  A broad *.dll copy can pull
 # in Windows system DLLs during local development and makes an installer huge.
 $runtimePatterns = @(
-    'AgPlayer.exe', 'vc_redist.x64.exe',
+    'AgPlayer.exe', 'AgSeparationWorker.exe', 'vc_redist.x64.exe',
     'Qt6*.dll', 'avcodec-*.dll', 'avformat-*.dll', 'avutil-*.dll',
     'swresample-*.dll', 'libmp3lame.DLL', 'ogg.dll', 'opus.dll',
     'vorbis.dll', 'vorbisenc.dll', 'dxcompiler.dll', 'dxil.dll',
@@ -51,7 +58,7 @@ foreach ($directoryName in @(
 }
 
 foreach ($required in @(
-    'AgPlayer.exe', 'Qt6Core.dll', 'Qt6Widgets.dll', 'Qt6Quick.dll',
+    'AgPlayer.exe', 'AgSeparationWorker.exe', 'Qt6Core.dll', 'Qt6Widgets.dll', 'Qt6Quick.dll',
     'avcodec-62.dll', 'avformat-62.dll', 'platforms\qwindows.dll'
 )) {
     if (-not (Test-Path -LiteralPath (Join-Path $PackageDirectory $required))) {

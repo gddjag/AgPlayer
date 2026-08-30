@@ -27,6 +27,10 @@ $qaFinalMatrix = Get-Content -Raw -Encoding UTF8 -LiteralPath (
     Join-Path $SourceRoot 'scripts/qa-final-ui-matrix.ps1')
 $qaComparisonPath = Join-Path $SourceRoot `
     'scripts/qa-audio-editor-reference-compare.ps1'
+$separationPage = Get-Content -Raw -Encoding UTF8 -LiteralPath (
+    Join-Path $toolsRoot 'VocalSeparationPage.qml')
+$settingsPage = Get-Content -Raw -Encoding UTF8 -LiteralPath (
+    Join-Path $SourceRoot 'app/qml/AgPlayer/SettingsPage.qml')
 
 $forbidden = @('RecordingSession', 'Finalizing', 'recordingSupported', 'startRecording',
                'editor.newRecording', 'editorRecordingTransport',
@@ -105,7 +109,7 @@ $loadToolsPosition = $appMain.IndexOf(
 if ($loadToolsPosition -lt $ensureToolsPosition) {
     throw 'AudioToolsWindow is still loaded before the first-use factory.'
 }
-foreach ($toolIndex in 0..3) {
+foreach ($toolIndex in @(0, 4, 1, 2, 3)) {
     if ($toolsWindow -notmatch (
             'active:\s*AudioToolsController\.currentTool\s*===\s*' + $toolIndex)) {
         throw "Audio tool page $toolIndex must be instantiated only while selected."
@@ -129,10 +133,10 @@ foreach ($control in @(
 
 if ($toolsWindow -notmatch 'width:\s*1672' -or
     $toolsWindow -notmatch 'height:\s*941' -or
-    $toolsWindow -notmatch 'Layout\.preferredHeight:\s*60' -or
-    $toolsWindow -notmatch 'Layout\.preferredHeight:\s*59' -or
+    $toolsWindow -notmatch 'Layout\.preferredHeight:\s*window\.metadataWorkbench\s*\?\s*54\s*:\s*60' -or
+    $toolsWindow -notmatch 'Layout\.preferredHeight:\s*window\.separationWorkbench\s*\?\s*44' -or
     $toolsWindow -notmatch 'title:\s*qsTr\("AgPlayer') {
-    throw 'The tools shell must match the 1672x941 title/nav geometry and title.'
+    throw 'The tools shell must preserve 1672x941 geometry, title, and workbench navigation heights.'
 }
 if ($toolsWindow -notmatch 'objectName:\s*"audioToolsContentStack"') {
     throw 'The tools content stack must expose the Phase 6 acceptance object name.'
@@ -169,14 +173,16 @@ if ($qaFinalMatrix -match 'Width\s*=\s*1672;\s*Height\s*=\s*942') {
 if (-not (Test-Path -LiteralPath $qaComparisonPath)) {
     throw 'The Phase 6 source/candidate comparison and difference-mask script is missing.'
 }
-if ($toolsNavigation -notmatch 'anchors\.leftMargin:\s*32' -or
-    $toolsNavigation -notmatch 'height:\s*3' -or
-    $toolsNavigation -match 'radius:\s*Theme\.radiusMd' -or
-    $toolsNavigation -match 'ThemedIcon') {
-    throw 'Audio tool tabs must be left-aligned text with a blue underline, not pills.'
+if ($toolsNavigation -notmatch 'visibleToolOrder:\s*\[0,\s*4,\s*1,\s*2,\s*3\]' -or
+    $toolsNavigation -notmatch 'objectName:\s*"audioToolNav_"\s*\+\s*modelData\.toolId' -or
+    $toolsNavigation -notmatch 'RowLayout' -or
+    $toolsNavigation -notmatch 'visible:\s*navButton\.checked' -or
+    $toolsNavigation -match '#[0-9A-Fa-f]{6}') {
+    throw 'The five audio tools must retain stable IDs and use shared theme tokens.'
 }
 $navOrder = @(
     (ConvertFrom-Utf8Base64 '6Z+z6aKR57yW6L6R'),
+    '人声伴奏分离',
     (ConvertFrom-Utf8Base64 '5qC85byP6L2s5o2i'),
     (ConvertFrom-Utf8Base64 '5YWD5pWw5o2u5L+u5pS5'),
     (ConvertFrom-Utf8Base64 '5paH5Lu25ZCN5aSE55CG'))
@@ -375,6 +381,32 @@ foreach ($control in @(
 if ($filenamePage -notmatch 'id:\s*numberPositionBox' -or
     $filenamePage -notmatch 'id:\s*preserveExtensionCheck') {
     throw 'The filename rule panel lost extension or numbering controls.'
+}
+if ($filenamePage -match 'objectName:\s*"filenameValidationPanel"[\s\S]{0,180}Layout\.preferredWidth:\s*190') {
+    throw 'The filename validation panel must not squeeze the preview table.'
+}
+foreach ($control in @(
+    'vocalSeparationPage', 'separationInputPanel', 'separationInputWaveform',
+    'separationModelDeck', 'separationSettingsPanel', 'separationStemSelector',
+    'separationTimeline', 'separationHistoryPanel', 'separationBottomBar',
+    'separationPrimaryAction', 'separationErrorPanel')) {
+    if ($separationPage -notmatch ('objectName:\s*"' + $control + '"')) {
+        throw "The separation workbench is missing $control."
+    }
+}
+if ($separationPage -match 'Emoji|Segoe UI Symbol' -or
+    $separationPage -notmatch 'VocalSeparationController\.inputInfo' -or
+    $separationPage -notmatch 'VocalSeparationController\.history' -or
+    $separationPage -notmatch 'VocalSeparationController\.canStart' -or
+    $separationPage -notmatch 'VocalSeparationController\.ModelFailed' -or
+    $separationPage -notmatch 'VocalSeparationController\.JobFailed' -or
+    $separationPage -notmatch 'downloadProgress') {
+    throw 'The separation workbench must bind real controller data and shipped icons.'
+}
+if ($settingsPage -notmatch 'designRole:\s*"settingsCategoryRail"' -or
+    $settingsPage -notmatch 'designRole:\s*"settingsContentSurface"' -or
+    $settingsPage -match 'Segoe UI Symbol') {
+    throw 'Settings must retain the shared category/content layout.'
 }
 foreach ($control in @(
     'formatToolbar', 'formatStatusFilters', 'formatTaskPanel',

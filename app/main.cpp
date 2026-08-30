@@ -47,6 +47,7 @@
 #include "audio_visual_feature_controller.hpp"
 #include "audio_editor/audio_editor_controller.hpp"
 #include "audio_editor/playback_clip_drag_adapter.hpp"
+#include "audio_preview_controller.hpp"
 #include "equalizer_controller.hpp"
 #include "filename_processor.hpp"
 #include "format_converter.hpp"
@@ -72,6 +73,7 @@
 #include "track_waveform_thumbnail_provider.hpp"
 #include "translation_manager.hpp"
 #include "waveform_provider.hpp"
+#include "vocal_separation_controller.hpp"
 #include "window_controller.hpp"
 
 Q_IMPORT_PLUGIN(AgPlayerPlugin)
@@ -370,7 +372,7 @@ int main(int argc, char* argv[])
                        && i + 1 < cliArgs.size()) {
                 bool ok = false;
                 const int requestedTool = cliArgs.at(++i).toInt(&ok);
-                if (ok && requestedTool >= 0 && requestedTool <= 5) {
+                if (ok && requestedTool >= 0 && requestedTool <= 4) {
                     qaTool = requestedTool;
                 }
             } else if (arg == QStringLiteral("--qa-tools-size")
@@ -1046,6 +1048,16 @@ int main(int argc, char* argv[])
         FilenameProcessor filenameProcessor;
         filenameProcessor.setLibraryModel(&library);
         FormatConverter formatConverter;
+        AudioPreviewController audioPreview(
+            AG_AUDIO_BACKEND_DEFAULT, &playback);
+        WaveformProvider separationWaveformProvider(&settings);
+        VocalSeparationControllerOptions separationOptions;
+        separationOptions.dataRoot = QFileInfo(libraryPath).dir().filePath(
+            QStringLiteral("separation"));
+        separationOptions.outputDirectory = settings.defaultOutputDirectory();
+        VocalSeparationController vocalSeparation(
+            &audioPreview, &separationWaveformProvider, &library, &importer,
+            &playlists, separationOptions);
         if (!qaScreenshotTools.isEmpty() && !qaPlayPath.isEmpty()
             && QFileInfo::exists(qaPlayPath)) {
             const QList<QUrl> qaToolUrls{QUrl::fromLocalFile(qaPlayPath)};
@@ -1069,6 +1081,9 @@ int main(int argc, char* argv[])
                 break;
             case 3:
                 filenameProcessor.loadFiles(qaToolUrls);
+                break;
+            case 4:
+                vocalSeparation.selectInput(qaToolUrls.constFirst());
                 break;
             default:
                 break;
@@ -1095,7 +1110,8 @@ int main(int argc, char* argv[])
                                         &themeManager,
                                         &playbackClipDrag},
                                     &playerExperience, &audioVisualFeatures,
-                                    &lyricsService);
+                                    &lyricsService, &audioPreview,
+                                    &vocalSeparation);
 
         QString pendingPlayFilePath;
         int pendingPlayFinishes = 0;
@@ -1506,9 +1522,7 @@ int main(int argc, char* argv[])
                             filenameProcessor.loadFiles(urls);
                             break;
                         case 4:
-                        case 5:
-                            // Placeholder routing for plugin tools. UI layer
-                            // handles installation/execution states.
+                            vocalSeparation.dropInput(urls);
                             break;
                         default:
                             break;

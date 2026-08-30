@@ -10,6 +10,7 @@ $repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $build = Join-Path $repo $BuildDirectory
 $appDir = Join-Path $build "app"
 $exe = Join-Path $appDir "AgPlayer.exe"
+$worker = Join-Path $appDir "AgSeparationWorker.exe"
 $stage = Join-Path $repo "build/package/AgPlayer"
 $installerOutput = Join-Path $repo "build/installer"
 $cmakeCache = Join-Path $build "CMakeCache.txt"
@@ -78,6 +79,9 @@ if ($actualFileVersion -ne $expectedPeVersion -or
     $actualProductVersion -ne $expectedPeVersion) {
     throw "AgPlayer.exe PE version $actualFileVersion / $actualProductVersion does not match release version $expectedPeVersion"
 }
+if (-not (Test-Path -LiteralPath $worker)) {
+    throw "Separation Worker executable not found: $worker"
+}
 
 if (Test-Path -LiteralPath $stage) {
     Remove-Item -LiteralPath $stage -Recurse -Force
@@ -86,6 +90,7 @@ New-Item -ItemType Directory -Path $stage -Force | Out-Null
 New-Item -ItemType Directory -Path $installerOutput -Force | Out-Null
 
 Copy-Item -LiteralPath $exe -Destination $stage
+Copy-Item -LiteralPath $worker -Destination $stage
 # CMake's post-build deployment directory may contain transitive Windows
 # system DLLs. Copy only the audio libraries that are linked by AgPlayer;
 # windeployqt below supplies the Qt runtime itself.
@@ -159,6 +164,7 @@ Get-ChildItem -LiteralPath $crtDirectory -File -Filter "*.dll" |
 
 $requiredRuntime = @(
     "AgPlayer.exe",
+    "AgSeparationWorker.exe",
     "Qt6Core.dll",
     "Qt6Gui.dll",
     "Qt6Qml.dll",

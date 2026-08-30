@@ -15,6 +15,21 @@ Window {
     flags: Qt.Window | Qt.FramelessWindowHint
     color: "transparent"
     title: qsTr("AgPlayer · 音频工具")
+    readonly property bool metadataWorkbench:
+        AudioToolsController.currentTool === 2
+    readonly property bool separationWorkbench:
+        AudioToolsController.currentTool === 4
+    readonly property bool referenceWorkbench:
+        metadataWorkbench || separationWorkbench
+
+    function pageIndexForTool(toolId) {
+        if (toolId === 4) return 1
+        if (toolId === 1) return 2
+        if (toolId === 2) return 3
+        if (toolId === 3) return 4
+        return 0
+    }
+
     function editableTextHasFocus() {
         const active = window.activeFocusItem
         return active && active.readOnly !== true
@@ -117,7 +132,7 @@ Window {
                 id: titleBar
                 objectName: "audioToolsTitleBar"
                 Layout.fillWidth: true
-                Layout.preferredHeight: 60
+                Layout.preferredHeight: window.metadataWorkbench ? 54 : 60
                 color: Theme.panel
 
                 RowLayout {
@@ -223,11 +238,16 @@ Window {
 
             ToolSidebar {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 59
+                Layout.preferredHeight: window.separationWorkbench ? 44
+                                                                    : window.metadataWorkbench ? 52 : 59
+                Layout.leftMargin: window.separationWorkbench ? 14 : 0
+                Layout.rightMargin: window.separationWorkbench ? 14 : 0
                 window: window
                 currentTool: AudioToolsController.currentTool
-                onToolSelected: function(index) {
-                    AudioToolsController.selectTool(index)
+                referenceWorkbench: window.referenceWorkbench
+                separationWorkbench: window.separationWorkbench
+                onToolSelected: function(toolId) {
+                    AudioToolsController.selectTool(toolId)
                 }
             }
 
@@ -242,13 +262,22 @@ Window {
 
                 StackLayout {
                     anchors.fill: parent
-                    currentIndex: AudioToolsController.currentTool
+                    currentIndex: window.pageIndexForTool(AudioToolsController.currentTool)
 
                     Loader {
                         objectName: "audioEditorPageLoader"
                         active: AudioToolsController.currentTool === 0
                         sourceComponent: Component {
                             AudioEditorPage { objectName: "audioEditorPage" }
+                        }
+                    }
+                    Loader {
+                        objectName: "vocalSeparationPageLoader"
+                        active: AudioToolsController.currentTool === 4
+                        sourceComponent: Component {
+                            VocalSeparationPage {
+                                objectName: "vocalSeparationPage"
+                            }
                         }
                     }
                     Loader {
