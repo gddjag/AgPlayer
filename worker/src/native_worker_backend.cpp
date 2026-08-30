@@ -284,24 +284,36 @@ NativeProviderSelection selectNativeProvider(
     const QVector<DxgiAdapterInfo> adapters = probe.hardwareAdapters();
     QString gpuReason = adapters.isEmpty()
         ? QStringLiteral("No hardware DXGI adapter is available") : QString();
-    if (!adapters.isEmpty()) {
+    int lastAdapterId = 0;
+    QStringList rawGpuFailures;
+    QStringList diagnosticGpuFailures;
+    for (const DxgiAdapterInfo& adapter : adapters) {
+        lastAdapterId = adapter.deviceId;
         const BackendResult gpu = probe.prove(request, profile,
                                               ExecutionProvider::DirectMl,
-                                              adapters.front().deviceId,
+                                              adapter.deviceId,
                                               cancelled);
         if (cancelled.isCancelled()) return cancelledResult();
         if (gpu.ok) {
             return {true, ExecutionProvider::DirectMl,
-                    adapters.front().deviceId, {}, {}, {}};
+                    adapter.deviceId, {}, {}, {}};
         }
-        gpuReason = gpu.message;
-        if (request.device == DeviceMode::Gpu) {
-            return {false, ExecutionProvider::DirectMl,
-                    adapters.front().deviceId, {},
-                    QStringLiteral("gpu_probe_failed"), gpu.message};
-        }
-    } else if (request.device == DeviceMode::Gpu) {
-        return {false, ExecutionProvider::DirectMl, 0, {},
+        const QString failure = gpu.message.isEmpty() ? gpu.code : gpu.message;
+        rawGpuFailures.push_back(failure);
+        diagnosticGpuFailures.push_back(QStringLiteral("%1 (device %2): %3")
+                                            .arg(adapter.name.isEmpty()
+                                                     ? QStringLiteral("DXGI adapter")
+                                                     : adapter.name)
+                                            .arg(adapter.deviceId)
+                                            .arg(failure));
+    }
+    if (!rawGpuFailures.isEmpty()) {
+        gpuReason = rawGpuFailures.size() == 1
+            ? rawGpuFailures.front()
+            : diagnosticGpuFailures.join(QStringLiteral("; "));
+    }
+    if (request.device == DeviceMode::Gpu) {
+        return {false, ExecutionProvider::DirectMl, lastAdapterId, {},
                 QStringLiteral("gpu_probe_failed"), gpuReason};
     }
     const BackendResult cpu = probe.prove(request, profile,
@@ -679,7 +691,9 @@ StartRequestParseResult parseStartRequest(const QJsonObject& payload)
     static const QSet<QString> allowed{
         QStringLiteral("runtimePath"), QStringLiteral("inputPath"),
         QStringLiteral("modelFiles"), QStringLiteral("outputDirectory"),
-        QStringLiteral("baseName"), QStringLiteral("extension"),
+        QStringLiteral("baseName"), QStringLiteral("directoryName"),
+        QStringLiteral("modelName"),
+        QStringLiteral("extension"), QStringLiteral("stemLabels"),
         QStringLiteral("stems"), QStringLiteral("device")};
     for (auto it = payload.constBegin(); it != payload.constEnd(); ++it) {
         if (!allowed.contains(it.key())) {
@@ -692,6 +706,8 @@ StartRequestParseResult parseStartRequest(const QJsonObject& payload)
     request.inputPath = payload.value(QStringLiteral("inputPath")).toString();
     request.outputDirectory = payload.value(QStringLiteral("outputDirectory")).toString();
     request.baseName = payload.value(QStringLiteral("baseName")).toString();
+    request.directoryName = payload.value(QStringLiteral("directoryName")).toString();
+    request.modelName = payload.value(QStringLiteral("modelName")).toString();
     request.extension = payload.value(QStringLiteral("extension"))
                             .toString().trimmed().toLower();
     bool arraysValid = true;
@@ -699,6 +715,8 @@ StartRequestParseResult parseStartRequest(const QJsonObject& payload)
                                      32767, &arraysValid);
     request.stems = stringArray(payload.value(QStringLiteral("stems")), 32,
                                 &arraysValid);
+    request.stemLabels = stringArray(payload.value(QStringLiteral("stemLabels")),
+                                     240, &arraysValid);
     const QString device = payload.value(QStringLiteral("device")).toString();
     if (device == QStringLiteral("auto")) request.device = DeviceMode::Auto;
     else if (device == QStringLiteral("cpu")) request.device = DeviceMode::Cpu;
@@ -706,12 +724,17 @@ StartRequestParseResult parseStartRequest(const QJsonObject& payload)
     else arraysValid = false;
     if (!arraysValid || request.runtimePath.isEmpty() || request.inputPath.isEmpty()
         || request.outputDirectory.isEmpty() || request.baseName.isEmpty()
+        || request.directoryName.isEmpty()
+        || request.modelName.isEmpty()
         || request.extension.isEmpty() || request.modelFiles.isEmpty()
         || request.modelFiles.size() > 4 || request.stems.isEmpty()
-        || request.stems.size() > 5 || request.runtimePath.size() > 32767
+        || request.stems.size() > 5 || request.stemLabels.size() != request.stems.size()
+        || request.runtimePath.size() > 32767
         || request.inputPath.size() > 32767
         || request.outputDirectory.size() > 32767
-        || request.baseName.size() > 240 || request.extension.size() > 16) {
+        || request.baseName.size() > 240 || request.directoryName.size() > 240
+        || request.modelName.size() > 240
+        || request.extension.size() > 16) {
         return {false, QStringLiteral("invalid_start_request"),
                 QStringLiteral("Start request is missing a required bounded field"), {}};
     }
@@ -981,11 +1004,16 @@ BackendResult NativeWorkerBackend::probe(const QJsonObject& payload)
             {QStringLiteral("dedicatedVideoMemory"),
              static_cast<double>(adapter.dedicatedVideoMemory)}});
     }
+    const bool hasHardwareCandidate = !adapters.isEmpty();
     return {true, {}, {},
             {{QStringLiteral("cpu"), true},
-             {QStringLiteral("gpu"), false},
+             {QStringLiteral("gpu"), hasHardwareCandidate},
              {QStringLiteral("gpuReason"),
-              QStringLiteral("GPU is verified only by a trusted-model minimal inference at start")},
+              hasHardwareCandidate
+                  ? QStringLiteral("Hardware adapter candidate detected; "
+                                   "DirectML will be validated with a trusted "
+                                   "model when separation starts")
+                  : QStringLiteral("No hardware DXGI adapter is available")},
              {QStringLiteral("adapters"), adapters}}};
 }
 
@@ -1026,7 +1054,9 @@ BackendResult NativeWorkerBackend::separate(const QJsonObject& payload,
     }
 
     OutputTransaction transaction({request.outputDirectory, request.baseName,
-                                   request.extension, request.stems});
+                                   request.extension, request.stems,
+                                   request.modelName, request.stemLabels,
+                                   request.directoryName});
     const TransactionResult begun = transaction.begin();
     if (!begun.ok) return transactionFailure(begun);
     progress(0.0, QStringLiteral("provider_probe"));

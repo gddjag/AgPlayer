@@ -49,8 +49,12 @@ void TranslationManagerTest::switchesInstalledQtTranslation()
     const auto filenameLabel = []() {
         return QCoreApplication::translate("ToolSidebar", "文件名处理");
     };
+    const auto vocalStemLabel = []() {
+        return QCoreApplication::translate("VocalSeparationController", "Vocals");
+    };
     QVERIFY(translations.setLanguage(QStringLiteral("zh")));
     QCOMPARE(emptyLibraryTitle(), QStringLiteral("音乐库为空"));
+    QCOMPARE(vocalStemLabel(), QStringLiteral("人声"));
 
     QVERIFY(translations.setLanguage(QStringLiteral("en")));
     QCOMPARE(startupTitle(), QStringLiteral("Start playing your music"));
@@ -59,6 +63,7 @@ void TranslationManagerTest::switchesInstalledQtTranslation()
     QCOMPARE(audioEditLabel(), QStringLiteral("Audio Editor"));
     QCOMPARE(metadataLabel(), QStringLiteral("Metadata Editor"));
     QCOMPARE(filenameLabel(), QStringLiteral("Filename Processing"));
+    QCOMPARE(vocalStemLabel(), QStringLiteral("Vocals"));
 
     QVERIFY(translations.setLanguage(QStringLiteral("th")));
     QCOMPARE(startupTitle(), QStringLiteral("เริ่มเล่นเพลงของคุณ"));

@@ -48,6 +48,25 @@ QString stemName(VocalSeparationController::StemKind kind)
     return {};
 }
 
+QString localizedStemLabel(VocalSeparationController::StemKind kind)
+{
+    switch (kind) {
+    case VocalSeparationController::StemKind::Vocals:
+        return QCoreApplication::translate("VocalSeparationController", "Vocals");
+    case VocalSeparationController::StemKind::Accompaniment:
+        return QCoreApplication::translate("VocalSeparationController", "Instrumental");
+    case VocalSeparationController::StemKind::Drums:
+        return QCoreApplication::translate("VocalSeparationController", "Drums");
+    case VocalSeparationController::StemKind::Bass:
+        return QCoreApplication::translate("VocalSeparationController", "Bass");
+    case VocalSeparationController::StemKind::Other:
+        return QCoreApplication::translate("VocalSeparationController", "Other");
+    case VocalSeparationController::StemKind::Original:
+        break;
+    }
+    return {};
+}
+
 VocalSeparationController::StemKind stemKind(const QString& name)
 {
     using StemKind = VocalSeparationController::StemKind;
@@ -550,6 +569,9 @@ bool VocalSeparationController::start()
     context.device = deviceMode_;
     context.stemKinds = selectedStemKinds();
     context.stemNames = stemNames;
+    for (const QString& name : stemNames) {
+        context.stemLabels.push_back(localizedStemLabel(stemKind(name)));
+    }
     return beginSeparationRequest(std::move(context));
 }
 
@@ -649,6 +671,7 @@ bool VocalSeparationController::retry()
 bool VocalSeparationController::previewInput()
 {
     const QString path = inputInfo_.value(QStringLiteral("path")).toString();
+    if (preview_ != nullptr) preview_->setVolume(1.0);
     return togglePreviewPath(path);
 }
 
@@ -1038,16 +1061,22 @@ bool VocalSeparationController::launchSeparation(
     }
     QJsonArray requestedStems;
     for (const QString& name : context.stemNames) requestedStems.push_back(name);
+    QJsonArray stemLabels;
+    for (const QString& label : context.stemLabels) stemLabels.push_back(label);
     const QJsonObject payload{
         {QStringLiteral("runtimePath"), options_.runtimeLibraryPath},
         {QStringLiteral("inputPath"), context.inputPath},
         {QStringLiteral("modelFiles"), modelFiles},
         {QStringLiteral("outputDirectory"), context.outputRoot},
         {QStringLiteral("baseName"),
+         QFileInfo(context.inputPath).completeBaseName()},
+        {QStringLiteral("directoryName"),
          QFileInfo(context.inputPath).completeBaseName()
              + QLatin1Char('-') + context.modelId},
+        {QStringLiteral("modelName"), model->displayName},
         {QStringLiteral("extension"), context.outputFormat},
         {QStringLiteral("stems"), requestedStems},
+        {QStringLiteral("stemLabels"), stemLabels},
         {QStringLiteral("device"), deviceName(context.device)},
     };
     if (!process_.startJob(payload)) return false;
@@ -1186,16 +1215,22 @@ void VocalSeparationController::startNextDownload()
 
 void VocalSeparationController::handleProbe(const QJsonObject& payload)
 {
-    const QString reason = payload.value(QStringLiteral("gpuReason")).toString();
+    const QString workerReason =
+        payload.value(QStringLiteral("gpuReason")).toString();
     const bool cpuAvailable = payload.value(QStringLiteral("cpu")).toBool();
     const bool gpuAvailable = payload.value(QStringLiteral("gpu")).toBool();
+    const QString gpuReason = gpuAvailable
+        ? tr("已发现 DirectML 硬件候选；开始分离时将用所选模型验证")
+        : workerReason;
     availableDevices_[0] = QVariantMap{
         {QStringLiteral("mode"), int(DeviceMode::Auto)},
         {QStringLiteral("name"), QStringLiteral("Auto")},
         {QStringLiteral("available"), cpuAvailable || gpuAvailable},
-        {QStringLiteral("reason"), cpuAvailable || gpuAvailable
-             ? tr("自动选择已验证的可用设备")
-             : tr("CPU 和 GPU 均未通过设备探测")},
+        {QStringLiteral("reason"), gpuAvailable
+             ? tr("自动优先尝试 DirectML 候选，失败时安全回退 CPU")
+             : cpuAvailable
+                 ? tr("自动使用已验证的 CPU")
+                 : tr("CPU 和 GPU 均未通过设备探测")},
     };
     availableDevices_[1] = QVariantMap{
         {QStringLiteral("mode"), int(DeviceMode::CPU)},
@@ -1207,7 +1242,7 @@ void VocalSeparationController::handleProbe(const QJsonObject& payload)
         {QStringLiteral("mode"), int(DeviceMode::GPU)},
         {QStringLiteral("name"), QStringLiteral("DirectML")},
         {QStringLiteral("available"), gpuAvailable},
-        {QStringLiteral("reason"), reason},
+        {QStringLiteral("reason"), gpuReason},
     };
     emit availableDevicesChanged();
     emit startEligibilityChanged();

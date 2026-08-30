@@ -12,6 +12,7 @@ The following functional UI icons are redistributed from Lucide under the
 ISC License in Lucide-Icons-License.txt:
 
 - lucide-audio-lines.svg
+- lucide-box.svg
 - lucide-drum.svg
 - lucide-guitar.svg
 - lucide-mic.svg

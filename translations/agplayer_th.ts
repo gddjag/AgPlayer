@@ -3900,4 +3900,15 @@
         <translation>เรตติ้ง</translation>
     </message>
 </context>
+<context>
+    <name>VocalSeparationController</name>
+    <message><source>已发现 DirectML 硬件候选；开始分离时将用所选模型验证</source><translation>พบอุปกรณ์ DirectML ที่อาจใช้ได้ และจะตรวจสอบกับโมเดลที่เลือกเมื่อเริ่มแยกเสียง</translation></message>
+    <message><source>自动优先尝试 DirectML 候选，失败时安全回退 CPU</source><translation>โหมดอัตโนมัติจะลอง DirectML ก่อน และกลับไปใช้ CPU อย่างปลอดภัยหากล้มเหลว</translation></message>
+    <message><source>自动使用已验证的 CPU</source><translation>โหมดอัตโนมัติใช้ CPU ที่ตรวจสอบแล้ว</translation></message>
+    <message><source>Vocals</source><translation>เสียงร้อง</translation></message>
+    <message><source>Instrumental</source><translation>ดนตรี</translation></message>
+    <message><source>Drums</source><translation>กลอง</translation></message>
+    <message><source>Bass</source><translation>เบส</translation></message>
+    <message><source>Other</source><translation>อื่นๆ</translation></message>
+</context>
 </TS>

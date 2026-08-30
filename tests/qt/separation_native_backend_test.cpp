@@ -4,6 +4,7 @@
 
 #include <QFile>
 #include <QJsonArray>
+#include <QCoreApplication>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -15,6 +16,46 @@ extern "C" {
 }
 
 using namespace agplayer::separation;
+
+namespace {
+
+class SequencedNativeProviderProbe final : public NativeProviderProbe {
+public:
+    QVector<DxgiAdapterInfo> adapters{
+        {11, QStringLiteral("Primary GPU"), 2048},
+        {22, QStringLiteral("Secondary GPU"), 1024},
+    };
+    int successfulGpuAdapter = -1;
+    bool cpuSucceeds = true;
+    QVector<int> gpuAttempts;
+    int cpuCalls = 0;
+
+    QVector<DxgiAdapterInfo> hardwareAdapters() override
+    {
+        return adapters;
+    }
+
+    BackendResult prove(const NativeStartRequest&, const TrustedModelProfile&,
+                        ExecutionProvider provider, int adapterId,
+                        const CancellationToken&) override
+    {
+        if (provider == ExecutionProvider::DirectMl) {
+            gpuAttempts.push_back(adapterId);
+            if (adapterId == successfulGpuAdapter) {
+                return {true, {}, {}, {}};
+            }
+            return {false, QStringLiteral("gpu_probe_failed"),
+                    QStringLiteral("adapter %1 rejected").arg(adapterId), {}};
+        }
+        ++cpuCalls;
+        return cpuSucceeds
+            ? BackendResult{true, {}, {}, {}}
+            : BackendResult{false, QStringLiteral("cpu_probe_failed"),
+                            QStringLiteral("CPU rejected"), {}};
+    }
+};
+
+} // namespace
 
 class SeparationNativeBackendTest final : public QObject {
     Q_OBJECT
@@ -29,6 +70,10 @@ private slots:
     void ffmpegWaveWriterPropagatesDelayedAvioCloseErrors();
     void inferenceProgressLeavesRoomForVerificationAndCompletion();
     void readsTheActualDefaultOnnxOpset();
+    void gpuSelectionTriesEveryAdapterUntilOnePasses();
+    void gpuSelectionReportsEveryAdapterFailure();
+    void autoSelectionTriesEveryGpuBeforeCpuFallback();
+    void probeReportsHardwareGpuCandidateWithoutClaimingInferenceValidation();
 };
 
 void SeparationNativeBackendTest::startRequestRequiresBoundedNativeFields()
@@ -43,13 +88,17 @@ void SeparationNativeBackendTest::startRequestRequiresBoundedNativeFields()
         {QStringLiteral("modelFiles"), QJsonArray{QStringLiteral("C:/models/model.onnx")}},
         {QStringLiteral("outputDirectory"), QStringLiteral("C:/audio")},
         {QStringLiteral("baseName"), QStringLiteral("source")},
+        {QStringLiteral("directoryName"), QStringLiteral("source-two-stem")},
+        {QStringLiteral("modelName"), QStringLiteral("MDX Inst HQ 3")},
         {QStringLiteral("extension"), QStringLiteral("flac")},
         {QStringLiteral("stems"), QJsonArray{QStringLiteral("vocals")}},
+        {QStringLiteral("stemLabels"), QJsonArray{QStringLiteral("Vocals")}},
         {QStringLiteral("device"), QStringLiteral("auto")},
     };
     const StartRequestParseResult parsed = parseStartRequest(valid);
     QVERIFY2(parsed.ok, qPrintable(parsed.message));
     QCOMPARE(parsed.request.device, DeviceMode::Auto);
+    QCOMPARE(parsed.request.modelName, QStringLiteral("MDX Inst HQ 3"));
     QCOMPARE(parsed.request.modelFiles.size(), 1);
     QCOMPARE(parsed.request.stems, (QStringList{QStringLiteral("vocals")}));
 
@@ -82,8 +131,11 @@ void SeparationNativeBackendTest::startRequestRejectsOversizedPathsAndNames()
         {QStringLiteral("modelFiles"), QJsonArray{QStringLiteral("C:/models/model.onnx")}},
         {QStringLiteral("outputDirectory"), QStringLiteral("C:/audio")},
         {QStringLiteral("baseName"), QStringLiteral("source")},
+        {QStringLiteral("directoryName"), QStringLiteral("source-two-stem")},
+        {QStringLiteral("modelName"), QStringLiteral("model")},
         {QStringLiteral("extension"), QStringLiteral("wav")},
         {QStringLiteral("stems"), QJsonArray{QStringLiteral("vocals")}},
+        {QStringLiteral("stemLabels"), QJsonArray{QStringLiteral("Vocals")}},
         {QStringLiteral("device"), QStringLiteral("cpu")},
     };
     for (const QString& field : {QStringLiteral("runtimePath"),
@@ -102,6 +154,20 @@ void SeparationNativeBackendTest::startRequestRejectsOversizedPathsAndNames()
     QJsonObject longBase = base;
     longBase.insert(QStringLiteral("baseName"), QString(241, QLatin1Char('b')));
     QCOMPARE(parseStartRequest(longBase).code,
+             QStringLiteral("invalid_start_request"));
+    QJsonObject longModelName = base;
+    longModelName.insert(QStringLiteral("modelName"),
+                         QString(241, QLatin1Char('m')));
+    QCOMPARE(parseStartRequest(longModelName).code,
+             QStringLiteral("invalid_start_request"));
+    QJsonObject longStemLabel = base;
+    longStemLabel.insert(QStringLiteral("stemLabels"),
+                         QJsonArray{QString(241, QLatin1Char('s'))});
+    QCOMPARE(parseStartRequest(longStemLabel).code,
+             QStringLiteral("invalid_start_request"));
+    QJsonObject mismatchedStemLabels = base;
+    mismatchedStemLabels.insert(QStringLiteral("stemLabels"), QJsonArray{});
+    QCOMPARE(parseStartRequest(mismatchedStemLabels).code,
              QStringLiteral("invalid_start_request"));
     QJsonObject longExtension = base;
     longExtension.insert(QStringLiteral("extension"), QString(17, QLatin1Char('e')));
@@ -256,6 +322,94 @@ void SeparationNativeBackendTest::readsTheActualDefaultOnnxOpset()
     QFile customInput(customOnly);
     QVERIFY(customInput.open(QIODevice::ReadOnly));
     QCOMPARE(readOnnxDefaultOpset(customInput.readAll()), -1);
+}
+
+void SeparationNativeBackendTest::gpuSelectionTriesEveryAdapterUntilOnePasses()
+{
+    SequencedNativeProviderProbe probe;
+    probe.successfulGpuAdapter = 22;
+    NativeStartRequest request;
+    request.device = DeviceMode::Gpu;
+    CancellationToken cancelled;
+
+    const NativeProviderSelection selection = selectNativeProvider(
+        request, TrustedModelProfile{}, cancelled, probe);
+
+    QVERIFY(selection.ok);
+    QCOMPARE(selection.provider, ExecutionProvider::DirectMl);
+    QCOMPARE(selection.adapterId, 22);
+    QCOMPARE(probe.gpuAttempts, (QVector<int>{11, 22}));
+    QCOMPARE(probe.cpuCalls, 0);
+}
+
+void SeparationNativeBackendTest::gpuSelectionReportsEveryAdapterFailure()
+{
+    SequencedNativeProviderProbe probe;
+    NativeStartRequest request;
+    request.device = DeviceMode::Gpu;
+    CancellationToken cancelled;
+
+    const NativeProviderSelection selection = selectNativeProvider(
+        request, TrustedModelProfile{}, cancelled, probe);
+
+    QVERIFY(!selection.ok);
+    QCOMPARE(selection.provider, ExecutionProvider::DirectMl);
+    QCOMPARE(selection.code, QStringLiteral("gpu_probe_failed"));
+    QCOMPARE(probe.gpuAttempts, (QVector<int>{11, 22}));
+    QCOMPARE(probe.cpuCalls, 0);
+    QVERIFY(selection.message.contains(QStringLiteral("Primary GPU")));
+    QVERIFY(selection.message.contains(QStringLiteral("adapter 11 rejected")));
+    QVERIFY(selection.message.contains(QStringLiteral("Secondary GPU")));
+    QVERIFY(selection.message.contains(QStringLiteral("adapter 22 rejected")));
+}
+
+void SeparationNativeBackendTest::autoSelectionTriesEveryGpuBeforeCpuFallback()
+{
+    SequencedNativeProviderProbe probe;
+    NativeStartRequest request;
+    request.device = DeviceMode::Auto;
+    CancellationToken cancelled;
+
+    const NativeProviderSelection selection = selectNativeProvider(
+        request, TrustedModelProfile{}, cancelled, probe);
+
+    QVERIFY(selection.ok);
+    QCOMPARE(selection.provider, ExecutionProvider::Cpu);
+    QCOMPARE(probe.gpuAttempts, (QVector<int>{11, 22}));
+    QCOMPARE(probe.cpuCalls, 1);
+    QVERIFY(selection.fallbackReason.contains(QStringLiteral("Primary GPU")));
+    QVERIFY(selection.fallbackReason.contains(QStringLiteral("adapter 11 rejected")));
+    QVERIFY(selection.fallbackReason.contains(QStringLiteral("Secondary GPU")));
+    QVERIFY(selection.fallbackReason.contains(QStringLiteral("adapter 22 rejected")));
+}
+
+void SeparationNativeBackendTest::
+probeReportsHardwareGpuCandidateWithoutClaimingInferenceValidation()
+{
+    const QString runtimePath = QDir(QCoreApplication::applicationDirPath())
+                                    .filePath(QStringLiteral("onnxruntime_test.dll"));
+    if (!QFileInfo::exists(runtimePath))
+        QSKIP("The native-backend test runtime is not available");
+
+    NativeWorkerBackend backend;
+    const BackendResult result = backend.probe(
+        {{QStringLiteral("runtimePath"), runtimePath}});
+    QVERIFY2(result.ok, qPrintable(result.message));
+
+    const bool hasHardwareAdapter = !result.payload.value(
+        QStringLiteral("adapters")).toArray().isEmpty();
+    QCOMPARE(result.payload.value(QStringLiteral("gpu")).toBool(),
+             hasHardwareAdapter);
+    const QString reason = result.payload.value(
+        QStringLiteral("gpuReason")).toString();
+    if (hasHardwareAdapter) {
+        QCOMPARE(reason, QStringLiteral(
+            "Hardware adapter candidate detected; DirectML will be validated "
+            "with a trusted model when separation starts"));
+    } else {
+        QVERIFY(!result.payload.value(QStringLiteral("gpu")).toBool());
+        QCOMPARE(reason, QStringLiteral("No hardware DXGI adapter is available"));
+    }
 }
 
 QTEST_GUILESS_MAIN(SeparationNativeBackendTest)

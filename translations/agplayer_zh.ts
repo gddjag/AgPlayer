@@ -3957,4 +3957,15 @@
         <translation>评分</translation>
     </message>
 </context>
+<context>
+    <name>VocalSeparationController</name>
+    <message><source>已发现 DirectML 硬件候选；开始分离时将用所选模型验证</source><translation>已发现 DirectML 硬件候选；开始分离时将用所选模型验证</translation></message>
+    <message><source>自动优先尝试 DirectML 候选，失败时安全回退 CPU</source><translation>自动优先尝试 DirectML 候选，失败时安全回退 CPU</translation></message>
+    <message><source>自动使用已验证的 CPU</source><translation>自动使用已验证的 CPU</translation></message>
+    <message><source>Vocals</source><translation>人声</translation></message>
+    <message><source>Instrumental</source><translation>伴奏</translation></message>
+    <message><source>Drums</source><translation>鼓组</translation></message>
+    <message><source>Bass</source><translation>贝斯</translation></message>
+    <message><source>Other</source><translation>其他</translation></message>
+</context>
 </TS>

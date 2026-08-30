@@ -103,3 +103,71 @@ final result: passed
 - No visible P0/P1/P2 overflow, overlap, inaccessible primary action, or theme contrast defect remains in the combined comparison.
 
 final result: passed
+
+---
+
+# 人声伴奏分离界面 Design QA
+
+## Comparison target
+
+- Source visual truth: `C:\Users\ADMINI~1\AppData\Local\Temp\codex-clipboard-dc0cf0b8-60ca-4409-961a-49c192c5f6c0.png`
+- Rendered implementation: `D:\ai\AgPlayer\.worktrees\vocal-separation-native\build\qa\separation-1672x941.png`
+- Viewport: AgPlayer 音频工具窗口 `1672 × 941`，Windows x64，深色主题，中文界面。
+- Pixels and density: source `1671 × 944`，implementation `1672 × 941`；均按原始像素 1:1 放入比较画布，没有缩放。附件本身与目标窗口有 1px 宽、3px 高差异，不影响区域比例判断。
+- State: source 为“模型下载/已安装、任务已完成并存在历史”；implementation 为真实短 WAV 已载入、模型未安装、等待输入。数据状态不同，因此不把下载进度、结果波形密度和历史行数量作为视觉偏差。
+
+## Evidence
+
+- Full-view comparison: `D:\ai\AgPlayer\.worktrees\vocal-separation-native\build\qa\separation-reference-vs-implementation.png`
+- Focused model/input comparison: `D:\ai\AgPlayer\.worktrees\vocal-separation-native\build\qa\separation-model-settings-comparison.png`
+- Focused output/progress/stem comparison: `D:\ai\AgPlayer\.worktrees\vocal-separation-native\build\qa\separation-progress-tracks-comparison.png`
+- Responsive captures:
+  - `D:\ai\AgPlayer\.worktrees\vocal-separation-native\build\qa\separation-880x560.png`
+  - `D:\ai\AgPlayer\.worktrees\vocal-separation-native\build\qa\separation-1280x720.png`
+  - `D:\ai\AgPlayer\.worktrees\vocal-separation-native\build\qa\separation-1920x1080.png`
+
+Focused comparisons were required because model metadata, status copy, checkboxes, the thin progress track and per-stem volume controls are not legible enough in the full 3343px-wide comparison.
+
+## Findings
+
+No actionable P0/P1/P2 visual differences remain in the states that can be compared honestly.
+
+- Fonts and typography: small metadata labels, model headings, section headings and bottom transport time retain the existing AgPlayer font system and match the reference hierarchy. Truncation is limited to long provider/description strings and is intentional at narrower widths.
+- Spacing and layout rhythm: input preview, four-card deck, output selector row, five stem rows, 70/30 main/sidebar split and large bottom action bar follow the source composition. The 880px layout switches to page tabs and a two-row action grid without overlap.
+- Colors and visual tokens: local navy surfaces, cyan selection, orange source transport, green result transport/progress and muted unsupported stems follow the requested semantics. The empty progress outline is a low-opacity neutral gray; only completed fraction and percentage use green.
+- Image quality and assets: the screen uses the existing AgPlayer icon pipeline plus licensed Lucide assets; no emoji, text glyph substitutes, CSS drawings or placeholder image boxes are used.
+- Copy and content: model cards expose real catalog metadata. The custom card no longer promises nonexistent automatic discovery and clearly says only trusted catalog models execute. “完成后打开目录” remains visible and is unchecked by default.
+
+Expected state-only differences:
+
+- The reference has downloaded/completed model cards, populated waveforms and history. The implementation capture intentionally shows real waiting/not-downloaded state; no fake production state was injected.
+- The reference primary action is enabled blue; the implementation action is correctly disabled until a trusted model is installed.
+
+## Comparison history
+
+1. Earlier P2: compact `880 × 560` bottom controls overlapped their allocated cells. Fix: replaced the overflowing compact row with an explicit two-row grid and kept the transport at least 44px high. Post-fix evidence: `separation-880x560.png`.
+2. Earlier P2: the empty separation progress outline was visually too prominent. Fix: changed it to semi-transparent neutral gray while retaining green fill/percentage. Post-fix evidence: `separation-1672x941.png` and `separation-progress-tracks-comparison.png`.
+3. Earlier P1 copy issue: the custom model card claimed automatic manifest discovery that production does not provide. Fix: retained the reference-specific custom card treatment but replaced the promise with truthful trusted-model/manual-directory copy. Post-fix evidence: `separation-model-settings-comparison.png`.
+4. Earlier P2 requirement misunderstanding: “完成后打开目录” was removed instead of merely unchecked. Fix: restored the checkbox and completion behavior with default `false`. Post-fix evidence: `separation-1672x941.png` and the QML interaction test.
+
+## Interaction and responsive checks
+
+- Input and result transports use separate sources, colors, positions and volume state; Space controls the result transport.
+- Model deck supports horizontal movement; card selection uses the full card.
+- Stem volume supports click, drag, wheel and keyboard changes.
+- GPU candidate selection remains available after hardware probe, with trusted-model validation deferred to job start and CPU fallback in Auto.
+- QML separation checks and all four responsive captures completed successfully; the final full Release test run passed 88/88.
+
+## Follow-up polish
+
+- P3: repeat the same-state visual comparison after a real trusted model is installed and a real separation finishes, so populated result waveforms and history density can be compared directly. This is evidence work, not a remaining code/UI defect.
+
+## Implementation checklist
+
+- [x] Preserve source/reference layout and local design tokens.
+- [x] Restore auto-open checkbox as visible and unchecked by default.
+- [x] Verify compact and desktop breakpoints.
+- [x] Verify focused model, progress and stem regions.
+- [x] Keep real data states; do not inject fake production completion history.
+
+final result: passed

@@ -3957,4 +3957,15 @@ Clear: Remove all known aliases for this field.</translation>
         <translation>Rating</translation>
     </message>
 </context>
+<context>
+    <name>VocalSeparationController</name>
+    <message><source>已发现 DirectML 硬件候选；开始分离时将用所选模型验证</source><translation>A DirectML hardware candidate was found; it will be validated with the selected model when separation starts</translation></message>
+    <message><source>自动优先尝试 DirectML 候选，失败时安全回退 CPU</source><translation>Auto tries the DirectML candidate first and safely falls back to CPU on failure</translation></message>
+    <message><source>自动使用已验证的 CPU</source><translation>Auto uses the verified CPU</translation></message>
+    <message><source>Vocals</source><translation>Vocals</translation></message>
+    <message><source>Instrumental</source><translation>Instrumental</translation></message>
+    <message><source>Drums</source><translation>Drums</translation></message>
+    <message><source>Bass</source><translation>Bass</translation></message>
+    <message><source>Other</source><translation>Other</translation></message>
+</context>
 </TS>

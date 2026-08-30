@@ -23,8 +23,11 @@ struct NativeStartRequest {
     QStringList modelFiles;
     QString outputDirectory;
     QString baseName;
+    QString directoryName;
+    QString modelName;
     QString extension;
     QStringList stems;
+    QStringList stemLabels;
     DeviceMode device = DeviceMode::Auto;
 };
 

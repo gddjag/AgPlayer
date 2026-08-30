@@ -4,6 +4,7 @@
 #include <QDir>
 #include <QFile>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QTimer>
 
@@ -44,7 +45,7 @@ int main(int argc, char* argv[])
                     std::this_thread::sleep_for(std::chrono::milliseconds(200));
                 }
                 send(ProtocolType::Hello, message.requestId,
-                     {{QStringLiteral("protocol"), 1},
+                     {{QStringLiteral("protocol"), kSeparationProtocolVersion},
                       {QStringLiteral("worker"), QStringLiteral("test")}});
                 if (scenario == QStringLiteral("crash")) {
                     std::exit(7);
@@ -61,6 +62,14 @@ int main(int argc, char* argv[])
                       {QStringLiteral("gpu"), false},
                       {QStringLiteral("gpuReason"), QStringLiteral("No tested GPU")}});
             } else if (message.type == ProtocolType::Start) {
+                if (scenario == QStringLiteral("capture-payload")
+                    && !markerPath.isEmpty()) {
+                    QFile marker(markerPath);
+                    if (marker.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                        marker.write(QJsonDocument(message.payload).toJson(
+                            QJsonDocument::Compact));
+                    }
+                }
                 if (scenario == QStringLiteral("delayed-hello")
                     && !markerPath.isEmpty()) {
                     QFile marker(markerPath);
@@ -76,7 +85,9 @@ int main(int argc, char* argv[])
                 }
                 if (scenario == QStringLiteral("wrong-version")) {
                     const QByteArray invalid = QByteArrayLiteral(
-                        "{\"protocol\":2,\"requestId\":\"")
+                        "{\"protocol\":")
+                        + QByteArray::number(kSeparationProtocolVersion + 1)
+                        + QByteArrayLiteral(",\"requestId\":\"")
                         + message.requestId.toUtf8()
                         + QByteArrayLiteral(
                             "\",\"type\":\"progress\",\"payload\":{}}\n");

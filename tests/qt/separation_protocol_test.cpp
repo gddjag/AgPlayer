@@ -10,13 +10,13 @@ class SeparationProtocolTest final : public QObject {
     Q_OBJECT
 
 private slots:
-    void parsesEveryVersionOneMessage();
+    void parsesEveryVersionTwoMessage();
     void rejectsMalformedUnknownAndIncompatibleMessages();
     void rejectsOversizedNdjsonLines();
     void serializesEveryMessageWithVersionAndRequestId();
 };
 
-void SeparationProtocolTest::parsesEveryVersionOneMessage()
+void SeparationProtocolTest::parsesEveryVersionTwoMessage()
 {
     const QStringList types{QStringLiteral("hello"), QStringLiteral("probe"),
                             QStringLiteral("start"), QStringLiteral("progress"),
@@ -25,7 +25,7 @@ void SeparationProtocolTest::parsesEveryVersionOneMessage()
 
     for (const QString& type : types) {
         const QByteArray line = QJsonDocument(QJsonObject{
-            {QStringLiteral("protocol"), 1},
+            {QStringLiteral("protocol"), 2},
             {QStringLiteral("requestId"), QStringLiteral("request-7")},
             {QStringLiteral("type"), type},
             {QStringLiteral("payload"), QJsonObject{{QStringLiteral("value"), 7}}},
@@ -33,7 +33,7 @@ void SeparationProtocolTest::parsesEveryVersionOneMessage()
         const ProtocolParseResult parsed = parseProtocolMessage(line);
         QVERIFY2(parsed.ok, qPrintable(parsed.error.message));
         QCOMPARE(protocolTypeName(parsed.message.type), type);
-        QCOMPARE(parsed.message.protocol, 1);
+        QCOMPARE(parsed.message.protocol, 2);
         QCOMPARE(parsed.message.requestId, QStringLiteral("request-7"));
         QCOMPARE(parsed.message.payload.value(QStringLiteral("value")).toInt(), 7);
     }
@@ -48,17 +48,19 @@ void SeparationProtocolTest::rejectsMalformedUnknownAndIncompatibleMessages()
     const QList<Case> cases{
         {QByteArrayLiteral("{bad"), QStringLiteral("malformed_json")},
         {QByteArrayLiteral("[]"), QStringLiteral("malformed_message")},
-        {QByteArrayLiteral(R"({"protocol":2,"requestId":"r","type":"hello"})"),
+        {QByteArrayLiteral(R"({"protocol":1,"requestId":"r","type":"hello"})"),
          QStringLiteral("incompatible_protocol")},
-        {QByteArrayLiteral(R"({"protocol":1,"requestId":"r","type":"surprise"})"),
+        {QByteArrayLiteral(R"({"protocol":3,"requestId":"r","type":"hello"})"),
+         QStringLiteral("incompatible_protocol")},
+        {QByteArrayLiteral(R"({"protocol":2,"requestId":"r","type":"surprise"})"),
          QStringLiteral("unknown_message")},
-        {QByteArrayLiteral(R"({"protocol":1,"requestId":"","type":"hello"})"),
+        {QByteArrayLiteral(R"({"protocol":2,"requestId":"","type":"hello"})"),
          QStringLiteral("invalid_request_id")},
-        {QByteArrayLiteral(R"({"protocol":1,"requestId":7,"type":"hello"})"),
+        {QByteArrayLiteral(R"({"protocol":2,"requestId":7,"type":"hello"})"),
          QStringLiteral("invalid_request_id")},
-        {QByteArrayLiteral(R"({"protocol":1,"requestId":"r","type":"hello","payload":[]})"),
+        {QByteArrayLiteral(R"({"protocol":2,"requestId":"r","type":"hello","payload":[]})"),
          QStringLiteral("malformed_message")},
-        {QByteArrayLiteral(R"({"protocol":1,"requestId":"r","type":"hello","extra":true})"),
+        {QByteArrayLiteral(R"({"protocol":2,"requestId":"r","type":"hello","extra":true})"),
          QStringLiteral("malformed_message")},
     };
 
@@ -66,6 +68,10 @@ void SeparationProtocolTest::rejectsMalformedUnknownAndIncompatibleMessages()
         const ProtocolParseResult parsed = parseProtocolMessage(testCase.line);
         QVERIFY(!parsed.ok);
         QCOMPARE(parsed.error.code, testCase.code);
+        if (testCase.code == QStringLiteral("incompatible_protocol")) {
+            QCOMPARE(parsed.error.message,
+                     QStringLiteral("Only separation protocol version 2 is supported"));
+        }
     }
 }
 
@@ -85,7 +91,7 @@ void SeparationProtocolTest::serializesEveryMessageWithVersionAndRequestId()
     QVERIFY(encoded.endsWith('\n'));
 
     const QJsonObject object = QJsonDocument::fromJson(encoded.trimmed()).object();
-    QCOMPARE(object.value(QStringLiteral("protocol")).toInt(), 1);
+    QCOMPARE(object.value(QStringLiteral("protocol")).toInt(), 2);
     QCOMPARE(object.value(QStringLiteral("requestId")).toString(), QStringLiteral("job-12"));
     QCOMPARE(object.value(QStringLiteral("type")).toString(), QStringLiteral("progress"));
     QCOMPARE(object.value(QStringLiteral("payload")).toObject()

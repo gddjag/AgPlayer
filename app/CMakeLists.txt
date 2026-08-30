@@ -32,6 +32,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/lock-unlock-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/merge-cells-horizontal.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/lucide-audio-lines.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/lucide-box.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/lucide-drum.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/lucide-guitar.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/lucide-mic.svg

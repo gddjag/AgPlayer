@@ -90,6 +90,8 @@ TestCase {
     }
 
     function test_sourcePreviewAndBottomBarExposeRealTransportControls() {
+        separationTestDriver.reset()
+        AudioPreviewController.stop()
         const sourcePlay = findChild(page, "separationInputPreviewPlay")
         const transport = findChild(page, "separationTransport")
         const transportPlay = findChild(page, "separationTransportPlay")
@@ -98,6 +100,10 @@ TestCase {
         verify(sourcePlay.Accessible.name.length > 0)
         verify(transportPlay.Accessible.name.length > 0)
         verify(transportTime.text.indexOf(":") >= 0)
+        compare(sourcePlay.iconTint, "#ffb020")
+        compare(transportPlay.iconTint, page.success)
+        verify(!transportPlay.enabled,
+               "the result transport must stay disabled before stems exist")
     }
 
     function test_modelDeckIsScrollableAndPublishesCompleteRealMetadata() {
@@ -122,6 +128,27 @@ TestCase {
                "the horizontal scrollbar must sit below the model-card frames")
         verify(!controlWithText(firstCard, "选择"),
                "model selection is performed by clicking the card, not a nested button")
+
+        const customIcon = findChild(customEntry, "separationCustomModelIcon")
+        const customCopy = findChild(customEntry, "separationCustomModelCopy")
+        const customDetails = findChild(customEntry, "separationCustomModelDetails")
+        verify(customIcon && customCopy && customDetails,
+               "custom mode must use the dedicated reference-card treatment")
+        verify(customCopy.text.indexOf("受信模型") >= 0,
+               "custom card must state the currently executable scope truthfully")
+        verify(customDetails.text.indexOf("自动识别") < 0)
+        verify(customDetails.text.indexOf("不会执行") >= 0)
+        const firstAction = findChild(firstCard, "separationModelAction-uvr-mdxnet-kara")
+        verify(firstAction && firstAction.height <= 26,
+               "model download controls must stay compact")
+        verify(firstCard.height - (firstAction.mapToItem(firstCard, 0, 0).y
+                                   + firstAction.height) >= 5,
+               "model controls need breathing room above the card edge")
+
+        list.contentX = 0
+        page.scrollModelDeckBy(120)
+        verify(list.contentX > 0,
+               "vertical mouse-wheel input must move the model deck horizontally")
 
         separationTestDriver.selectModel("uvr-mdxnet-kara")
         const secondCard = findChild(page, "separationModelCard-uvr-mdx-net-inst-hq3")
@@ -170,6 +197,82 @@ TestCase {
         separationTestDriver.reset()
     }
 
+    function test_sourceAndResultTransportsOwnSeparateSources() {
+        verify(separationTestDriver.setReady(testAudioUrl))
+        verify(separationTestDriver.setCompletedWithAudio(testAudioUrl))
+        const sourcePlay = findChild(page, "separationInputPreviewPlay")
+        const resultPlay = findChild(page, "separationTransportPlay")
+        verify(sourcePlay && resultPlay && resultPlay.enabled)
+
+        mouseClick(sourcePlay)
+        tryVerify(function() {
+            return AudioPreviewController.sourcePath
+                   === VocalSeparationController.inputInfo.path
+        }, 2000)
+        verify(page.inputPreviewCurrent)
+        verify(!page.resultPreviewCurrent)
+        compare(resultPlay.iconName, "play-fill")
+        tryVerify(function() { return page.inputPreviewPositionMs > 0 }, 2000)
+
+        const accompanimentPath = page.stemInfo(
+            VocalSeparationController.Accompaniment).path
+        verify(accompanimentPath.length > 0
+               && accompanimentPath !== VocalSeparationController.inputInfo.path)
+        mouseClick(resultPlay)
+        tryVerify(function() {
+            return AudioPreviewController.sourcePath === accompanimentPath
+        }, 2000)
+        verify(!page.inputPreviewCurrent)
+        verify(page.resultPreviewCurrent)
+        compare(sourcePlay.iconName, "play-fill")
+
+        const inputWaveform = findChild(page, "separationInputWaveform")
+        const vocalsWaveform = findChild(
+            page, "separationStemWaveform-" + VocalSeparationController.Vocals)
+        const accompanimentWaveform = findChild(
+            page, "separationStemWaveform-" + VocalSeparationController.Accompaniment)
+        verify(inputWaveform && vocalsWaveform && accompanimentWaveform)
+        tryVerify(function() { return page.resultPreviewPositionMs > 0 }, 2000)
+        verify(page.inputPreviewPositionMs > 0)
+        compare(inputWaveform.position, page.inputPreviewPositionMs)
+        compare(vocalsWaveform.position, page.resultPreviewPositionMs)
+        compare(accompanimentWaveform.position, page.resultPreviewPositionMs)
+
+        AudioPreviewController.stop()
+        separationTestDriver.reset()
+    }
+
+    function test_sourceAndResultTransportsRestoreTheirOwnPositions() {
+        verify(separationTestDriver.setReady(testAudioUrl))
+        verify(separationTestDriver.setCompletedWithAudio(testAudioUrl))
+        const sourcePlay = findChild(page, "separationInputPreviewPlay")
+        const resultPlay = findChild(page, "separationTransportPlay")
+        verify(sourcePlay && resultPlay && resultPlay.enabled)
+
+        mouseClick(sourcePlay)
+        tryVerify(function() { return AudioPreviewController.positionMs > 100 }, 2000)
+        const sourcePosition = AudioPreviewController.positionMs
+
+        mouseClick(resultPlay)
+        tryVerify(function() {
+            return page.resultPreviewCurrent && AudioPreviewController.positionMs > 100
+        }, 2000)
+        const resultPosition = AudioPreviewController.positionMs
+
+        mouseClick(sourcePlay)
+        tryVerify(function() { return page.inputPreviewCurrent }, 2000)
+        verify(AudioPreviewController.positionMs >= sourcePosition - 100,
+               "source preview must resume near its stored position")
+
+        mouseClick(resultPlay)
+        tryVerify(function() { return page.resultPreviewCurrent }, 2000)
+        verify(AudioPreviewController.positionMs >= resultPosition - 100,
+               "result preview must resume near its stored position")
+
+        AudioPreviewController.stop()
+        separationTestDriver.reset()
+    }
+
     function test_resultRowsUseOneTransportAndPutVolumeBeforeWaveform() {
         separationTestDriver.reset()
         separationTestDriver.setCompleted()
@@ -185,6 +288,47 @@ TestCase {
         separationTestDriver.reset()
     }
 
+    function test_stemVolumeKeyboardChangesReachTheController() {
+        separationTestDriver.reset()
+        separationTestDriver.setCompleted()
+        const vocalsVolume = findChild(
+            page, "stemPreviewVolume-" + VocalSeparationController.Vocals)
+        verify(vocalsVolume && vocalsVolume.enabled)
+        const before = page.stemInfo(
+            VocalSeparationController.Vocals).previewVolume
+        vocalsVolume.forceActiveFocus()
+        verify(vocalsVolume.activeFocus)
+        keyClick(Qt.Key_Left)
+        tryVerify(function() {
+            return page.stemInfo(VocalSeparationController.Vocals).previewVolume
+                   < before
+        }, 1000)
+        separationTestDriver.reset()
+    }
+
+    function test_stemVolumeSupportsPointerDragAndMouseWheel() {
+        separationTestDriver.reset()
+        separationTestDriver.setCompleted()
+        const kind = VocalSeparationController.Vocals
+        const volume = findChild(page, "stemPreviewVolume-" + kind)
+        const pointer = findChild(page, "stemPreviewVolumePointer-" + kind)
+        verify(volume && pointer && volume.enabled)
+
+        page.setStemVolumeFromPointer(kind, pointer.width * 0.3, pointer.width)
+        page.setStemVolumeFromPointer(kind, pointer.width * 0.7, pointer.width)
+        tryVerify(function() {
+            return page.stemInfo(kind).previewVolume >= 0.65
+                   && page.stemInfo(kind).previewVolume <= 0.75
+        })
+
+        const beforeWheel = page.stemInfo(kind).previewVolume
+        page.adjustStemVolume(kind, 120)
+        tryVerify(function() {
+            return page.stemInfo(kind).previewVolume > beforeWheel
+        })
+        separationTestDriver.reset()
+    }
+
     function test_referenceSettingsAndHistoryActionsAreDiscoverable() {
         const autoPlaylist = findChild(page, "separationAutoPlaylist")
         const autoOpen = findChild(page, "separationAutoOpenDirectory")
@@ -192,6 +336,61 @@ TestCase {
         verify(autoPlaylist && autoOpen && history)
         verify(autoPlaylist.Accessible.name.length > 0)
         verify(autoOpen.Accessible.name.length > 0)
+        compare(autoOpen.checked, false,
+                "the auto-open option remains available but is unchecked by default")
+        mouseClick(autoOpen)
+        verify(page.autoOpenOutputDirectory)
+        mouseClick(autoOpen)
+        verify(!page.autoOpenOutputDirectory)
+
+        separationTestDriver.setHistoryRecord()
+        wait(0)
+        verify(controlWithAccessibleName(page, "打开该记录输出目录"))
+        verify(!controlWithAccessibleName(page, "记录操作"),
+               "history rows must not expose the unused ellipsis menu")
+        separationTestDriver.clearHistory()
+    }
+
+    function test_progressBarAndBottomControlsUseTheRecoveredSpace() {
+        separationTestDriver.reset()
+        const progress = findChild(page, "separationJobProgress")
+        const progressBackground = findChild(
+            page, "separationJobProgressBackground")
+        const percentage = findChild(page, "separationJobPercentage")
+        const bottom = findChild(page, "separationBottomBar")
+        const play = findChild(page, "separationTransportPlay")
+        const time = findChild(page, "separationTransportTime")
+        verify(progress && progressBackground && percentage && bottom && play && time)
+        verify(progressBackground.border.color.a <= 0.4)
+        verify(Math.abs(progressBackground.border.color.r
+                        - progressBackground.border.color.g) <= 0.08)
+        verify(Math.abs(progressBackground.border.color.g
+                        - progressBackground.border.color.b) <= 0.08)
+        compare(progress.value, 0)
+        compare(percentage.text, "0%")
+        compare(percentage.color, page.success)
+
+        separationTestDriver.setJobProgress(0.64, "separating")
+        compare(progress.value, 0.64)
+        compare(percentage.text, "64%")
+        verify(bottom.height >= 78)
+        verify(play.width >= 44)
+        verify(time.font.pixelSize >= 20)
+        const reSeparate = controlWithText(bottom, "重新分离")
+        verify(reSeparate && reSeparate.height >= 36)
+        separationTestDriver.reset()
+    }
+
+    function test_gpuCandidateCanBeSelectedAfterProbe() {
+        separationTestDriver.reset()
+        separationTestDriver.setDevices("candidate")
+        const gpu = findChild(page, "separationDevice-GPU")
+        verify(gpu && gpu.enabled)
+        verify(gpu.deviceReason.indexOf("NVIDIA GeForce RTX 4070 Ti SUPER") >= 0)
+        mouseClick(gpu)
+        compare(VocalSeparationController.deviceMode,
+                VocalSeparationController.GPU)
+        separationTestDriver.reset()
     }
 
     function test_narrowDesktopHistoryUsesAReadableStack() {
@@ -429,6 +628,7 @@ TestCase {
 
     function test_keyboardFocusIsVisibleAndControlsAreAccessible() {
         verify(separationTestDriver.setReady(testAudioUrl))
+        verify(separationTestDriver.setCompletedWithAudio(testAudioUrl))
         const primary = findChild(page, "separationPrimaryAction")
         const preview = controlWithAccessibleName(page, "输入播放或暂停")
         verify(primary)
@@ -444,13 +644,15 @@ TestCase {
         page.forceActiveFocus()
         verify(page.activeFocus)
         keyClick(Qt.Key_Space)
+        const accompanimentPath = page.stemInfo(
+            VocalSeparationController.Accompaniment).path
         tryVerify(function() {
             return AudioPreviewController.sourcePath
-                   === VocalSeparationController.inputInfo.path
+                   === accompanimentPath
         }, 2000)
         keyClick(Qt.Key_Space)
         verify(AudioPreviewController.sourcePath
-               === VocalSeparationController.inputInfo.path)
+               === accompanimentPath)
         verify(!AudioPreviewController.playing)
         AudioPreviewController.stop()
         separationTestDriver.reset()
@@ -492,6 +694,34 @@ TestCase {
             if (viewports[index][0] < 1100)
                 verify(bottom.height >= 96 && actionPoint.y >= bottomPoint.y + bottom.height / 2,
                        "compact actions use two rows at " + viewports[index])
+            if (viewports[index][0] < 1100) {
+                const controls = [
+                    findChild(instance, "separationTransport"),
+                    controlWithText(bottom, "重新分离"),
+                    controlWithText(bottom, "导出伴奏"),
+                    controlWithText(bottom, "导出人声"),
+                    controlWithText(bottom, "导出所有音轨"),
+                    primary
+                ]
+                for (let first = 0; first < controls.length; ++first) {
+                    verify(controls[first])
+                    const firstPoint = controls[first].mapToItem(bottom, 0, 0)
+                    if (first === 0)
+                        verify(controls[first].height >= 44,
+                               "compact transport must contain its buttons at "
+                               + viewports[index])
+                    for (let second = first + 1; second < controls.length; ++second) {
+                        const secondPoint = controls[second].mapToItem(bottom, 0, 0)
+                        const separated = firstPoint.x + controls[first].width <= secondPoint.x
+                            || secondPoint.x + controls[second].width <= firstPoint.x
+                            || firstPoint.y + controls[first].height <= secondPoint.y
+                            || secondPoint.y + controls[second].height <= firstPoint.y
+                        verify(separated,
+                               "compact bottom controls overlap at " + viewports[index]
+                               + ": " + first + " and " + second)
+                    }
+                }
+            }
         }
     }
 

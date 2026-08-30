@@ -10,11 +10,15 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <QMetaEnum>
 #include <QProcess>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTranslator>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -40,6 +44,7 @@ private slots:
     void destructionWaitsForOwnedVerificationWork();
     void exposesTypedCatalogAndStemAvailabilityFromTheInstalledCatalog();
     void exposesStartEligibilityAndAnAlwaysSelectableAutoDevice();
+    void workerPayloadUsesCurrentLanguageStemLabelsAndCatalogDisplayName();
     void successfulWorkerResultPublishesExistingOutputsWaveformsAndFallbackReason();
     void stemPreviewVolumesRemainIndependentAndDriveTheSharedPreview();
     void startingANewResultGenerationClearsPreviouslyPublishedStems();
@@ -143,6 +148,23 @@ QString audioFixture()
 {
     return qEnvironmentVariable("AGPLAYER_TEST_AUDIO");
 }
+
+class ChineseStemLabelTranslator final : public QTranslator {
+public:
+    bool isEmpty() const override { return false; }
+
+    QString translate(const char* context, const char* sourceText,
+                      const char*, int) const override
+    {
+        if (qstrcmp(context, "VocalSeparationController") != 0) return {};
+        if (qstrcmp(sourceText, "Vocals") == 0) return QStringLiteral("人声");
+        if (qstrcmp(sourceText, "Instrumental") == 0) return QStringLiteral("伴奏");
+        if (qstrcmp(sourceText, "Drums") == 0) return QStringLiteral("鼓组");
+        if (qstrcmp(sourceText, "Bass") == 0) return QStringLiteral("贝斯");
+        if (qstrcmp(sourceText, "Other") == 0) return QStringLiteral("其他");
+        return {};
+    }
+};
 
 QVariantMap stemFor(const QVariantList& stems,
                     VocalSeparationController::StemKind kind)
@@ -583,6 +605,58 @@ exposesStartEligibilityAndAnAlwaysSelectableAutoDevice()
 }
 
 void VocalSeparationControllerTest::
+workerPayloadUsesCurrentLanguageStemLabelsAndCatalogDisplayName()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray modelBytes("trusted-test-model");
+    const QString marker = temporary.filePath(QStringLiteral("request.json"));
+    auto options = optionsFor(temporary, QStringLiteral("capture-payload"),
+                              modelBytes, marker);
+    installTestModel(options, QStringLiteral("two-stem"), modelBytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, QByteArrayLiteral("runtime")));
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
+    QVERIFY(controller.start());
+    QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(),
+                              VocalSeparationController::JobState::Completed, 5'000);
+    QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(marker), 5'000);
+    QFile englishMarker(marker);
+    QVERIFY(englishMarker.open(QIODevice::ReadOnly));
+    const QJsonObject english = QJsonDocument::fromJson(englishMarker.readAll()).object();
+    englishMarker.close();
+    QCOMPARE(english.value(QStringLiteral("baseName")).toString(),
+             QFileInfo(audioFixture()).completeBaseName());
+    QCOMPARE(english.value(QStringLiteral("directoryName")).toString(),
+             QFileInfo(audioFixture()).completeBaseName()
+                 + QStringLiteral("-two-stem"));
+    QCOMPARE(english.value(QStringLiteral("modelName")).toString(),
+             QStringLiteral("Two stem test"));
+    QCOMPARE(english.value(QStringLiteral("stemLabels")).toArray(),
+             QJsonArray({QStringLiteral("Vocals"), QStringLiteral("Instrumental")}));
+
+    QVERIFY(QFile::remove(marker));
+    ChineseStemLabelTranslator chineseTranslator;
+    QCoreApplication::installTranslator(&chineseTranslator);
+    QVERIFY(controller.start());
+    // The output names must follow the UI language at the moment the user
+    // starts the job, even if the language changes while model verification
+    // is still running asynchronously.
+    QCoreApplication::removeTranslator(&chineseTranslator);
+    QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(),
+                              VocalSeparationController::JobState::Completed, 5'000);
+    QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(marker), 5'000);
+    QFile chineseMarker(marker);
+    QVERIFY(chineseMarker.open(QIODevice::ReadOnly));
+    const QJsonObject chinese = QJsonDocument::fromJson(chineseMarker.readAll()).object();
+    QCOMPARE(chinese.value(QStringLiteral("stemLabels")).toArray(),
+             QJsonArray({QStringLiteral("人声"), QStringLiteral("伴奏")}));
+}
+
+void VocalSeparationControllerTest::
 successfulWorkerResultPublishesExistingOutputsWaveformsAndFallbackReason()
 {
     QTemporaryDir temporary;
@@ -662,6 +736,8 @@ stemPreviewVolumesRemainIndependentAndDriveTheSharedPreview()
     QVERIFY(controller.previewStem(
         VocalSeparationController::StemKind::Accompaniment));
     QCOMPARE(preview.volume(), 0.75);
+    QVERIFY(controller.previewInput());
+    QCOMPARE(preview.volume(), 1.0);
 }
 
 void VocalSeparationControllerTest::

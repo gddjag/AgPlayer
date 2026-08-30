@@ -27,6 +27,7 @@ Rectangle {
     readonly property color cyan: "#00C7F4"
     readonly property color primary: "#075EED"
     readonly property color success: "#00D978"
+    readonly property color sourcePreviewAccent: "#FFB020"
     readonly property bool hasInput: VocalSeparationController.inputInfo.name !== undefined
                                   && VocalSeparationController.inputInfo.name.length > 0
     readonly property bool contextLocked: VocalSeparationController.jobState === VocalSeparationController.Probing
@@ -37,8 +38,24 @@ Rectangle {
                                              : qsTr("分离任务进行中，暂不能更改输入或设置")
     property int compactTab: 0
     property bool autoAddToPlaylist: false
-    property bool autoOpenOutputDirectory: true
+    property bool autoOpenOutputDirectory: false
     property int previousJobState: VocalSeparationController.jobState
+    property int activeResultStemKind: VocalSeparationController.Accompaniment
+    property real inputPreviewPositionMs: 0
+    property real resultPreviewPositionMs: 0
+    property string rememberedInputPath: ""
+    readonly property string inputPreviewPath:
+        VocalSeparationController.inputInfo.path || ""
+    readonly property string resultPreviewPath: {
+        const stem = page.stemInfo(page.activeResultStemKind)
+        return stem.available ? (stem.path || "") : ""
+    }
+    readonly property bool inputPreviewCurrent:
+        page.inputPreviewPath.length > 0
+        && AudioPreviewController.sourcePath === page.inputPreviewPath
+    readonly property bool resultPreviewCurrent:
+        page.resultPreviewPath.length > 0
+        && AudioPreviewController.sourcePath === page.resultPreviewPath
 
     component WorkbenchButton: Button {
         id: control
@@ -276,16 +293,140 @@ Rectangle {
         return qsTr("试听")
     }
 
-    function toggleSharedPreview() {
-        if (!page.hasInput && !AudioPreviewController.hasSource)
-            return
-        if (!AudioPreviewController.hasSource) {
-            VocalSeparationController.previewInput()
-        } else if (AudioPreviewController.playing) {
-            AudioPreviewController.pause()
-        } else {
-            AudioPreviewController.resume()
+    function resultStemKindForPath(path) {
+        if (!path || path.length === 0)
+            return -1
+        for (let index = 0; index < VocalSeparationController.stems.length; ++index) {
+            const stem = VocalSeparationController.stems[index]
+            if (stem.available && stem.path === path)
+                return stem.kind
         }
+        return -1
+    }
+
+    function availableResultStemKind() {
+        const preferred = [page.activeResultStemKind,
+                           VocalSeparationController.Accompaniment,
+                           VocalSeparationController.Vocals,
+                           VocalSeparationController.Drums,
+                           VocalSeparationController.Bass,
+                           VocalSeparationController.Other]
+        for (let preferredIndex = 0; preferredIndex < preferred.length; ++preferredIndex) {
+            const kind = preferred[preferredIndex]
+            for (let stemIndex = 0; stemIndex < VocalSeparationController.stems.length; ++stemIndex) {
+                const stem = VocalSeparationController.stems[stemIndex]
+                if (stem.kind === kind && stem.available)
+                    return kind
+            }
+        }
+        return -1
+    }
+
+    function hasAvailableResultStem() {
+        return page.availableResultStemKind() >= 0
+    }
+
+    function rememberCurrentPreviewPosition() {
+        if (page.inputPreviewCurrent) {
+            page.inputPreviewPositionMs = AudioPreviewController.positionMs
+        } else if (page.resultStemKindForPath(AudioPreviewController.sourcePath) >= 0) {
+            page.resultPreviewPositionMs = AudioPreviewController.positionMs
+        }
+    }
+
+    function toggleInputPreview() {
+        if (!page.hasInput)
+            return
+        if (page.inputPreviewCurrent) {
+            page.inputPreviewPositionMs = AudioPreviewController.positionMs
+            if (AudioPreviewController.playing)
+                AudioPreviewController.pause()
+            else
+                AudioPreviewController.resume()
+            return
+        }
+        page.rememberCurrentPreviewPosition()
+        const targetPosition = page.inputPreviewPositionMs
+        VocalSeparationController.previewInput()
+        if (targetPosition > 0)
+            AudioPreviewController.seek(targetPosition)
+    }
+
+    function seekInputPreview(positionMs) {
+        if (!page.inputPreviewCurrent) {
+            page.rememberCurrentPreviewPosition()
+            VocalSeparationController.previewInput()
+        }
+        page.inputPreviewPositionMs = positionMs
+        AudioPreviewController.seek(positionMs)
+    }
+
+    function toggleResultPreview() {
+        const kind = page.availableResultStemKind()
+        if (kind < 0)
+            return
+        const stem = page.stemInfo(kind)
+        if (page.activeResultStemKind === kind
+                && AudioPreviewController.sourcePath === stem.path) {
+            page.resultPreviewPositionMs = AudioPreviewController.positionMs
+            if (AudioPreviewController.playing)
+                AudioPreviewController.pause()
+            else
+                AudioPreviewController.resume()
+            return
+        }
+        page.rememberCurrentPreviewPosition()
+        const targetPosition = page.resultPreviewPositionMs
+        page.activeResultStemKind = kind
+        VocalSeparationController.previewStem(kind)
+        if (targetPosition > 0)
+            AudioPreviewController.seek(targetPosition)
+    }
+
+    function seekResultPreview(kind, positionMs) {
+        const stem = page.stemInfo(kind)
+        if (!stem.available)
+            return
+        if (AudioPreviewController.sourcePath !== stem.path) {
+            page.rememberCurrentPreviewPosition()
+            page.activeResultStemKind = kind
+            VocalSeparationController.previewStem(kind)
+        } else {
+            page.activeResultStemKind = kind
+        }
+        page.resultPreviewPositionMs = positionMs
+        AudioPreviewController.seek(positionMs)
+    }
+
+    function rewindResultPreview() {
+        page.resultPreviewPositionMs = 0
+        if (page.resultStemKindForPath(AudioPreviewController.sourcePath) >= 0)
+            AudioPreviewController.seek(0)
+    }
+
+    function scrollModelDeckBy(delta) {
+        const maximum = Math.max(0, modelList.contentWidth - modelList.width)
+        modelList.contentX = Math.max(0, Math.min(maximum,
+                                                 modelList.contentX + delta))
+    }
+
+    function setStemVolumeFromPointer(kind, position, extent) {
+        if (extent <= 0)
+            return
+        const normalized = Math.max(0, Math.min(1, position / extent))
+        const stepped = Math.round(normalized * 20) / 20
+        VocalSeparationController.setStemPreviewVolume(kind, stepped)
+    }
+
+    function adjustStemVolume(kind, wheelDelta) {
+        const stem = page.stemInfo(kind)
+        if (!stem.supported || wheelDelta === 0)
+            return
+        const current = Number(stem.previewVolume === undefined
+                               ? 0.8 : stem.previewVolume)
+        const next = Math.max(0, Math.min(1,
+                                         current + (wheelDelta > 0 ? 0.05 : -0.05)))
+        VocalSeparationController.setStemPreviewVolume(kind, next)
     }
 
     function allSelectedStemsAvailable(stems) {
@@ -405,8 +546,8 @@ Rectangle {
     Shortcut {
         sequence: "Space"
         context: Qt.WindowShortcut
-        enabled: page.visible && (page.hasInput || AudioPreviewController.hasSource)
-        onActivated: page.toggleSharedPreview()
+        enabled: page.visible && page.hasAvailableResultStem()
+        onActivated: page.toggleResultPreview()
     }
 
     Dialog {
@@ -469,6 +610,9 @@ Rectangle {
         target: VocalSeparationController
         function onJobStateChanged() {
             const current = VocalSeparationController.jobState
+            if (current === VocalSeparationController.Running
+                    && page.previousJobState !== VocalSeparationController.Running)
+                page.resultPreviewPositionMs = 0
             if (current === VocalSeparationController.Completed
                     && page.previousJobState !== VocalSeparationController.Completed) {
                 if (page.autoAddToPlaylist && PlaylistModel.count > 0
@@ -478,6 +622,26 @@ Rectangle {
                     VocalSeparationController.openOutputDirectory()
             }
             page.previousJobState = current
+        }
+        function onInputInfoChanged() {
+            const currentPath = VocalSeparationController.inputInfo.path || ""
+            if (currentPath !== page.rememberedInputPath) {
+                page.rememberedInputPath = currentPath
+                page.inputPreviewPositionMs = 0
+                page.resultPreviewPositionMs = 0
+            }
+        }
+    }
+
+    Connections {
+        target: AudioPreviewController
+        function onPositionMsChanged() {
+            if (page.inputPreviewCurrent) {
+                page.inputPreviewPositionMs = AudioPreviewController.positionMs
+            } else if (page.resultStemKindForPath(
+                           AudioPreviewController.sourcePath) >= 0) {
+                page.resultPreviewPositionMs = AudioPreviewController.positionMs
+            }
         }
     }
 
@@ -685,17 +849,23 @@ Rectangle {
                                             Layout.preferredWidth: 34
                                             Layout.preferredHeight: 34
                                             enabled: page.hasInput
-                                            iconName: AudioPreviewController.sourcePath
-                                                      === (VocalSeparationController.inputInfo.path || "")
+                                            iconName: page.inputPreviewCurrent
                                                       && AudioPreviewController.playing
                                                       ? "pause-fill" : "play-fill"
-                                            iconTint: page.cyan
+                                            iconTint: page.sourcePreviewAccent
+                                            background: Rectangle {
+                                                radius: width / 2
+                                                color: inputPreviewPlay.down ? "#4A3208" : "#251F10"
+                                                border.color: page.sourcePreviewAccent
+                                                border.width: inputPreviewPlay.activeFocus ? 2 : 1
+                                                opacity: inputPreviewPlay.enabled ? 1 : 0.5
+                                            }
                                             Accessible.name: qsTr("输入播放或暂停")
                                             Accessible.role: Accessible.Button
                                             ToolTip.visible: hovered
                                             ToolTip.text: enabled ? qsTr("播放或暂停输入音频")
                                                                       : qsTr("请先选择输入文件")
-                                            onClicked: VocalSeparationController.previewInput()
+                                            onClicked: page.toggleInputPreview()
                                         }
                                         Item {
                                             Layout.fillWidth: true
@@ -706,16 +876,11 @@ Rectangle {
                                                 objectName: "separationInputWaveform"
                                                 anchors.fill: parent
                                                 peaks: VocalSeparationController.inputInfo.waveform || []
-                                                position: AudioPreviewController.sourcePath
-                                                          === (VocalSeparationController.inputInfo.path || "")
-                                                          ? AudioPreviewController.positionMs : 0
+                                                position: page.inputPreviewPositionMs
                                                 duration: VocalSeparationController.inputInfo.durationMs || 0
                                                 pointerInteractionEnabled: page.hasInput
                                                 onSeekRequested: function(positionMs) {
-                                                    if (AudioPreviewController.sourcePath
-                                                            !== (VocalSeparationController.inputInfo.path || ""))
-                                                        VocalSeparationController.previewInput()
-                                                    AudioPreviewController.seek(positionMs)
+                                                    page.seekInputPreview(positionMs)
                                                 }
                                             }
                                             Label {
@@ -756,12 +921,12 @@ Rectangle {
                                 required property int index
                                 readonly property bool customEntry:
                                     index === VocalSeparationController.models.length
-                                readonly property var cardData: customEntry
-                                    ? ({ id: "custom", tierLabel: qsTr("自定义模型"),
-                                         badgeLabel: qsTr("安全清单"),
+                                 readonly property var cardData: customEntry
+                                    ? ({ id: "custom", tierLabel: qsTr("自定义模式"),
+                                         badgeLabel: "",
                                          name: qsTr("兼容 ONNX 模型"),
-                                         provider: qsTr("本地安全 manifest"),
-                                         description: qsTr("仅接受通过校验的 MDX / Demucs ONNX 模型"),
+                                         provider: qsTr("手动目录管理"),
+                                         description: qsTr("当前仅加载目录中的受信模型"),
                                          repositoryUrl: "", bytes: 0, stems: [] })
                                     : VocalSeparationController.models[index]
                                 width: page.fullDesktop ? 304 : 286
@@ -784,10 +949,11 @@ Rectangle {
                                                : VocalSeparationController.selectModel(cardData.id)
                                 }
 
-                                ColumnLayout {
-                                    z: 1
-                                    anchors.fill: parent
-                                    anchors.margins: 9
+                                 ColumnLayout {
+                                     z: 1
+                                     visible: !customEntry
+                                     anchors.fill: parent
+                                     anchors.margins: 9
                                     spacing: 2
                                     RowLayout {
                                         Layout.fillWidth: true
@@ -899,22 +1065,30 @@ Rectangle {
                                         Layout.preferredHeight: 4
                                     }
                                     Item { Layout.fillHeight: true }
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        Item { Layout.fillWidth: true }
-                                        WorkbenchButton {
-                                            visible: !customEntry
-                                                     && (cardData.state === VocalSeparationController.Installed
-                                                         || cardData.state === VocalSeparationController.ModelFailed)
-                                            text: qsTr("删除")
+                                     RowLayout {
+                                         objectName: "separationModelAction-" + cardData.id
+                                         Layout.fillWidth: true
+                                         Layout.bottomMargin: 4
+                                         Item { Layout.fillWidth: true }
+                                         WorkbenchButton {
+                                             visible: !customEntry
+                                                      && (cardData.state === VocalSeparationController.Installed
+                                                          || cardData.state === VocalSeparationController.ModelFailed)
+                                             implicitHeight: 24
+                                             topPadding: 3
+                                             bottomPadding: 3
+                                             text: qsTr("删除")
                                             enabled: !page.contextLocked && !VocalSeparationController.downloadBusy
                                             Accessible.name: qsTr("删除模型")
                                             Accessible.role: Accessible.Button
                                             onClicked: VocalSeparationController.deleteModel(cardData.id)
-                                        }
-                                        WorkbenchButton {
-                                            visible: !customEntry
-                                                     && cardData.state !== VocalSeparationController.Installed
+                                         }
+                                         WorkbenchButton {
+                                             visible: !customEntry
+                                                      && cardData.state !== VocalSeparationController.Installed
+                                             implicitHeight: 24
+                                             topPadding: 3
+                                             bottomPadding: 3
                                             text: cardData.state === VocalSeparationController.Verifying ? qsTr("校验中")
                                                 : cardData.state === VocalSeparationController.Downloading ? qsTr("暂停")
                                                 : cardData.state === VocalSeparationController.Paused ? qsTr("继续")
@@ -937,11 +1111,87 @@ Rectangle {
                                                 else
                                                     VocalSeparationController.downloadModel(cardData.id)
                                             }
-                                        }
-                                    }
+                                         }
+                                     }
+                                 }
+
+                                 ColumnLayout {
+                                     z: 1
+                                     visible: customEntry
+                                     anchors.fill: parent
+                                     anchors.margins: 12
+                                     spacing: 4
+                                     RowLayout {
+                                         Layout.fillWidth: true
+                                         spacing: 8
+                                         ThemedIcon {
+                                             id: customModelIcon
+                                             objectName: "separationCustomModelIcon"
+                                             source: Theme.icon("lucide-box")
+                                             tint: "#00DFC7"
+                                             sourceSize.width: 30
+                                             sourceSize.height: 30
+                                             Layout.preferredWidth: 30
+                                             Layout.preferredHeight: 30
+                                         }
+                                         Label {
+                                             Layout.fillWidth: true
+                                             text: qsTr("自定义模式")
+                                             color: "#00DFC7"
+                                             font.bold: true
+                                             font.pixelSize: 15
+                                         }
+                                     }
+                                     Label {
+                                         objectName: "separationCustomModelCopy"
+                                         Layout.fillWidth: true
+                                         text: qsTr("当前仅加载受信模型")
+                                         color: page.textPrimary
+                                         font.pixelSize: 11
+                                     }
+                                     Label {
+                                         Layout.fillWidth: true
+                                         text: qsTr("打开目录，手动管理")
+                                         color: page.textPrimary
+                                         font.pixelSize: 11
+                                     }
+                                     Label {
+                                         objectName: "separationCustomModelDetails"
+                                         Layout.fillWidth: true
+                                         text: qsTr("当前版本仅加载上方列出的受信模型；其他文件不会执行。")
+                                         color: page.muted
+                                         font.pixelSize: 10
+                                         wrapMode: Text.Wrap
+                                         maximumLineCount: 3
+                                         elide: Text.ElideRight
+                                     }
+                                     Item { Layout.fillHeight: true }
+                                     WorkbenchButton {
+                                         Layout.fillWidth: true
+                                         Layout.bottomMargin: 4
+                                         implicitHeight: 26
+                                         text: qsTr("打开模型目录")
+                                         Accessible.name: text
+                                         Accessible.role: Accessible.Button
+                                         onClicked: VocalSeparationController.openModelDirectory()
+                                     }
+                                 }
+                             }
+
+                            MouseArea {
+                                id: modelWheelArea
+                                objectName: "separationModelWheelArea"
+                                anchors.fill: parent
+                                z: 2
+                                acceptedButtons: Qt.NoButton
+                                onWheel: function(wheel) {
+                                    const delta = wheel.angleDelta.y !== 0
+                                                  ? -wheel.angleDelta.y
+                                                  : -wheel.angleDelta.x
+                                    page.scrollModelDeckBy(delta)
+                                    wheel.accepted = true
                                 }
                             }
-
                         }
                         ScrollBar {
                             id: modelScrollBar
@@ -1097,19 +1347,51 @@ Rectangle {
                             RowLayout {
                                 Layout.fillWidth: true
                                 Label { text: page.jobStateText(); color: VocalSeparationController.jobState === VocalSeparationController.Completed ? page.success : page.textPrimary; font.bold: true }
-                                Label {
-                                    text: VocalSeparationController.stage.length > 0
-                                          ? " · " + VocalSeparationController.stage : ""
-                                    color: page.muted
-                                    font.pixelSize: 10
-                                }
-                                Item { Layout.fillWidth: true }
-                                Label {
-                                    visible: VocalSeparationController.jobState === VocalSeparationController.Running
-                                             || VocalSeparationController.jobState === VocalSeparationController.Cancelling
-                                    text: Math.round(VocalSeparationController.progress * 100) + "%"
-                                    color: page.muted
-                                }
+                                 Label {
+                                     text: VocalSeparationController.stage.length > 0
+                                           ? " · " + VocalSeparationController.stage : ""
+                                     color: page.muted
+                                     font.pixelSize: 10
+                                 }
+                                 ProgressBar {
+                                     id: jobProgress
+                                     objectName: "separationJobProgress"
+                                     Layout.fillWidth: true
+                                     Layout.leftMargin: 10
+                                     Layout.rightMargin: 6
+                                     Layout.preferredHeight: 8
+                                     from: 0
+                                     to: 1
+                                     value: VocalSeparationController.jobState
+                                            === VocalSeparationController.Completed
+                                            ? 1 : VocalSeparationController.progress
+                                     background: Rectangle {
+                                         objectName: "separationJobProgressBackground"
+                                         implicitHeight: 6
+                                         radius: 3
+                                         color: "transparent"
+                                         border.color: Qt.rgba(0.58, 0.62, 0.67, 0.28)
+                                         border.width: 1
+                                     }
+                                     contentItem: Item {
+                                         implicitHeight: 6
+                                         Rectangle {
+                                             width: parent.width * jobProgress.visualPosition
+                                             height: parent.height
+                                             radius: 3
+                                             color: page.success
+                                         }
+                                     }
+                                 }
+                                 Label {
+                                     id: jobPercentage
+                                     objectName: "separationJobPercentage"
+                                     Layout.preferredWidth: 38
+                                     text: Math.round(VocalSeparationController.progress * 100) + "%"
+                                     color: page.success
+                                     font.bold: true
+                                     horizontalAlignment: Text.AlignRight
+                                 }
                             }
                             RowLayout {
                                 Layout.fillWidth: true
@@ -1179,6 +1461,8 @@ Rectangle {
                                                           ? 0.8 : modelData.previewVolume)
                                             enabled: modelData.supported && !page.contextLocked
                                             focusPolicy: Qt.StrongFocus
+                                            onMoved: VocalSeparationController.setStemPreviewVolume(
+                                                         modelData.kind, value)
                                             Accessible.name: page.stemLabel(modelData.kind) + qsTr("预览音量")
                                             Accessible.role: Accessible.Slider
                                             ToolTip.visible: hovered
@@ -1214,11 +1498,34 @@ Rectangle {
                                                 color: stemVolume.enabled ? page.cyan : page.muted
                                                 border.color: stemVolume.activeFocus
                                                               ? page.textPrimary : "transparent"
-                                                border.width: stemVolume.activeFocus ? 2 : 0
-                                            }
-                                            onMoved: VocalSeparationController.setStemPreviewVolume(
-                                                         modelData.kind, value)
-                                        }
+                                                 border.width: stemVolume.activeFocus ? 2 : 0
+                                             }
+                                             MouseArea {
+                                                 id: stemVolumePointer
+                                                 objectName: "stemPreviewVolumePointer-" + modelData.kind
+                                                 anchors.fill: parent
+                                                 z: 3
+                                                 enabled: stemVolume.enabled
+                                                 acceptedButtons: Qt.LeftButton
+                                                 preventStealing: true
+                                                 hoverEnabled: true
+                                                 cursorShape: Qt.PointingHandCursor
+                                                 onPressed: function(mouse) {
+                                                     page.setStemVolumeFromPointer(
+                                                         modelData.kind, mouse.x, width)
+                                                 }
+                                                 onPositionChanged: function(mouse) {
+                                                     if (pressed)
+                                                         page.setStemVolumeFromPointer(
+                                                             modelData.kind, mouse.x, width)
+                                                 }
+                                                 onWheel: function(wheel) {
+                                                     page.adjustStemVolume(
+                                                         modelData.kind, wheel.angleDelta.y)
+                                                     wheel.accepted = true
+                                                 }
+                                             }
+                                         }
                                         Item {
                                             id: waveformTrack
                                             Layout.fillWidth: true; Layout.fillHeight: true
@@ -1229,19 +1536,16 @@ Rectangle {
                                                 objectName: "separationStemWaveform-" + modelData.kind
                                                 anchors.fill: parent
                                                 peaks: modelData.waveform || []
-                                                position: AudioPreviewController.sourcePath
-                                                          === (modelData.path || "")
-                                                          ? AudioPreviewController.positionMs : 0
+                                                position: modelData.available
+                                                          ? page.resultPreviewPositionMs : 0
                                                 duration: VocalSeparationController.inputInfo.durationMs || 0
                                                 pointerInteractionEnabled: modelData.available
                                                 useTrackAccent: true
-                                                trackAccent: accent
-                                                onSeekRequested: function(positionMs) {
-                                                    if (AudioPreviewController.sourcePath
-                                                            !== (modelData.path || ""))
-                                                        VocalSeparationController.previewStem(modelData.kind)
-                                                    AudioPreviewController.seek(positionMs)
-                                                }
+                                                 trackAccent: accent
+                                                 onSeekRequested: function(positionMs) {
+                                                     page.seekResultPreview(modelData.kind,
+                                                                            positionMs)
+                                                 }
                                             }
                                             Rectangle {
                                                 visible: stemWaveform.duration > 0
@@ -1327,20 +1631,30 @@ Rectangle {
                                 Layout.fillWidth: true
                                 Label { text: qsTr("处理设备"); color: page.muted; Layout.preferredWidth: 68; font.pixelSize: 11 }
                                 Repeater {
-                                    model: VocalSeparationController.availableDevices
-                                    WorkbenchButton {
-                                        required property var modelData
-                                        implicitHeight: 24
+                                     model: VocalSeparationController.availableDevices
+                                     WorkbenchButton {
+                                         required property var modelData
+                                         readonly property string deviceKey:
+                                             modelData.mode === VocalSeparationController.Auto
+                                             ? "Auto"
+                                             : modelData.mode === VocalSeparationController.GPU
+                                               ? "GPU" : "CPU"
+                                         readonly property string deviceReason:
+                                             page.contextLocked ? page.contextLockReason
+                                                                : (modelData.reason || "")
+                                         objectName: "separationDevice-" + deviceKey
+                                         implicitHeight: 24
                                         text: modelData.mode === VocalSeparationController.Auto
                                               ? qsTr("自动")
                                               : modelData.mode === VocalSeparationController.GPU
                                                 ? qsTr("GPU") : qsTr("CPU")
                                         checkable: true
                                         checked: VocalSeparationController.deviceMode === modelData.mode
-                                        enabled: !page.contextLocked && modelData.available
-                                        Accessible.name: qsTr("处理设备：") + text; Accessible.role: Accessible.RadioButton
-                                        ToolTip.visible: hovered && !enabled
-                                        ToolTip.text: page.contextLocked ? page.contextLockReason : modelData.reason
+                                         enabled: !page.contextLocked && modelData.available
+                                         Accessible.name: qsTr("处理设备：") + text; Accessible.role: Accessible.RadioButton
+                                         ToolTip.visible: hovered
+                                                          && deviceReason.length > 0
+                                         ToolTip.text: deviceReason
                                         onClicked: VocalSeparationController.selectDevice(modelData.mode)
                                     }
                                 }
@@ -1357,7 +1671,7 @@ Rectangle {
                             }
                             RowLayout {
                                 Layout.fillWidth: true
-                                WorkbenchCheckBox {
+                                 WorkbenchCheckBox {
                                     id: autoPlaylistCheck
                                     objectName: "separationAutoPlaylist"
                                     text: qsTr("导出后加入播放列表")
@@ -1370,21 +1684,24 @@ Rectangle {
                                     ToolTip.visible: hovered && !enabled
                                     ToolTip.text: page.contextLocked ? page.contextLockReason
                                                   : qsTr("请先创建播放列表")
-                                    onToggled: page.autoAddToPlaylist = checked
-                                }
-                                WorkbenchCheckBox {
-                                    id: autoOpenDirectoryCheck
-                                    objectName: "separationAutoOpenDirectory"
-                                    text: qsTr("完成后打开目录")
-                                    implicitHeight: 22
-                                    checked: page.autoOpenOutputDirectory
-                                    enabled: !page.contextLocked
-                                    focusPolicy: Qt.StrongFocus
-                                    Accessible.name: text
-                                    Accessible.role: Accessible.CheckBox
-                                    onToggled: page.autoOpenOutputDirectory = checked
-                                }
-                            }
+                                     onToggled: page.autoAddToPlaylist = checked
+                                 }
+                                 WorkbenchCheckBox {
+                                     id: autoOpenDirectoryCheck
+                                     objectName: "separationAutoOpenDirectory"
+                                     text: qsTr("完成后打开目录")
+                                     implicitHeight: 22
+                                     checked: page.autoOpenOutputDirectory
+                                     enabled: !page.contextLocked
+                                     focusPolicy: Qt.StrongFocus
+                                     Accessible.name: text
+                                     Accessible.role: Accessible.CheckBox
+                                     ToolTip.visible: hovered && !enabled
+                                     ToolTip.text: page.contextLockReason
+                                     onToggled: page.autoOpenOutputDirectory = checked
+                                 }
+                                 Item { Layout.fillWidth: true }
+                             }
                         }
                     }
                     Rectangle {
@@ -1448,7 +1765,7 @@ Rectangle {
                                     font.pixelSize: 10
                                     visible: page.fullDesktop
                                 }
-                                Label { Layout.preferredWidth: 62; text: qsTr("操作"); color: page.muted; font.pixelSize: 10; horizontalAlignment: Text.AlignHCenter }
+                                 Label { Layout.preferredWidth: 34; text: qsTr("目录"); color: page.muted; font.pixelSize: 10; horizontalAlignment: Text.AlignHCenter }
                             }
                             ListView {
                                 id: historyList
@@ -1520,11 +1837,11 @@ Rectangle {
                                             font.pixelSize: 9
                                         }
                                     }
-                                    RowLayout {
-                                        Layout.preferredWidth: 62
-                                        spacing: 4
-                                        TransportIconButton {
-                                            implicitWidth: 26
+                                     RowLayout {
+                                         Layout.preferredWidth: 34
+                                         TransportIconButton {
+                                             objectName: "separationHistoryOpenDirectory"
+                                             implicitWidth: 26
                                             implicitHeight: 26
                                             Layout.preferredWidth: 26
                                             Layout.preferredHeight: 26
@@ -1532,36 +1849,10 @@ Rectangle {
                                             iconTint: page.cyan
                                             Accessible.name: qsTr("打开该记录输出目录")
                                             Accessible.role: Accessible.Button
-                                            onClicked: VocalSeparationController.openHistoryOutputDirectory(
-                                                           modelData.outputPath || "")
-                                        }
-                                        TransportIconButton {
-                                            implicitWidth: 26
-                                            implicitHeight: 26
-                                            Layout.preferredWidth: 26
-                                            Layout.preferredHeight: 26
-                                            iconName: "more-2-line"
-                                            iconTint: page.textPrimary
-                                            enabled: !page.contextLocked
-                                                     && (modelData.inputPath || "").length > 0
-                                            Accessible.name: qsTr("记录操作")
-                                            Accessible.role: Accessible.Button
-                                            onClicked: historyMenu.popup()
-                                            Menu {
-                                                id: historyMenu
-                                                MenuItem {
-                                                    text: qsTr("重新使用此输入")
-                                                    onTriggered: VocalSeparationController.selectHistoryInput(
-                                                                     modelData.inputPath || "")
-                                                }
-                                                MenuItem {
-                                                    text: qsTr("打开输出目录")
-                                                    onTriggered: VocalSeparationController.openHistoryOutputDirectory(
-                                                                     modelData.outputPath || "")
-                                                }
-                                            }
-                                        }
-                                    }
+                                             onClicked: VocalSeparationController.openHistoryOutputDirectory(
+                                                            modelData.outputPath || "")
+                                         }
+                                     }
                                 }
                                 Label { anchors.centerIn: parent; visible: parent.count === 0; text: qsTr("暂无真实分离记录"); color: page.muted }
                             }
@@ -1572,93 +1863,128 @@ Rectangle {
         }
 
         Rectangle {
-            id: bottomBar
-            objectName: "separationBottomBar"
-            Layout.fillWidth: true
-            Layout.preferredHeight: page.compact ? 96 : 66
+             id: bottomBar
+             objectName: "separationBottomBar"
+             Layout.fillWidth: true
+             Layout.preferredHeight: page.compact ? 124 : 82
             Layout.leftMargin: 14
             Layout.rightMargin: 14
             Layout.bottomMargin: 10
             color: "transparent"
             border.width: 0
-            GridLayout {
-                anchors.fill: parent; anchors.margins: 10; rowSpacing: 8; columnSpacing: 8
+             GridLayout {
+                 anchors.fill: parent; anchors.margins: 6; rowSpacing: 8; columnSpacing: 8
                 columns: page.compact ? 4 : 14
                 Rectangle {
                     id: transport
-                    objectName: "separationTransport"
-                    Layout.columnSpan: page.compact ? 4 : 3
-                    Layout.preferredWidth: page.compact ? bottomBar.width * 0.58 : 310
+                     objectName: "separationTransport"
+                     Layout.row: 0
+                     Layout.column: 0
+                     Layout.columnSpan: page.compact ? 2 : 3
+                     Layout.fillWidth: page.compact
+                     Layout.preferredWidth: page.compact ? 0 : 330
+                     Layout.preferredHeight: 56
                     Layout.fillHeight: true
                     color: "transparent"
                     border.width: 0
                     radius: 6
                     RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 7
-                        spacing: 8
-                        TransportIconButton {
-                            implicitWidth: 32
-                            implicitHeight: 32
-                            Layout.preferredWidth: 32
-                            Layout.preferredHeight: 32
-                            enabled: AudioPreviewController.hasSource
-                            iconName: "skip-back-fill"
-                            iconTint: page.textPrimary
-                            Accessible.name: qsTr("返回预览起点")
-                            Accessible.role: Accessible.Button
-                            onClicked: AudioPreviewController.seek(0)
-                        }
-                        TransportIconButton {
-                            id: transportPlay
-                            objectName: "separationTransportPlay"
-                            implicitWidth: 38
-                            implicitHeight: 38
-                            Layout.preferredWidth: 38
-                            Layout.preferredHeight: 38
-                            enabled: page.hasInput || AudioPreviewController.hasSource
-                            iconName: AudioPreviewController.playing ? "pause-fill" : "play-fill"
-                            iconTint: AudioPreviewController.playing ? page.success : page.textPrimary
-                            Accessible.name: AudioPreviewController.playing
-                                             ? qsTr("暂停预览") : qsTr("播放预览")
-                            Accessible.role: Accessible.Button
-                            onClicked: page.toggleSharedPreview()
-                        }
+                         anchors.fill: parent
+                         anchors.margins: 5
+                         spacing: 10
+                         TransportIconButton {
+                             implicitWidth: 38
+                             implicitHeight: 38
+                             Layout.preferredWidth: 38
+                             Layout.preferredHeight: 38
+                             enabled: page.hasAvailableResultStem()
+                             iconName: "skip-back-fill"
+                             iconTint: page.success
+                             Accessible.name: qsTr("返回结果音轨起点")
+                             Accessible.role: Accessible.Button
+                             onClicked: page.rewindResultPreview()
+                         }
+                         TransportIconButton {
+                             id: transportPlay
+                             objectName: "separationTransportPlay"
+                             implicitWidth: 46
+                             implicitHeight: 46
+                             Layout.preferredWidth: 46
+                             Layout.preferredHeight: 46
+                             enabled: page.hasAvailableResultStem()
+                             iconName: page.resultPreviewCurrent
+                                       && AudioPreviewController.playing
+                                       ? "pause-fill" : "play-fill"
+                             iconTint: page.success
+                             background: Rectangle {
+                                 radius: width / 2
+                                 color: transportPlay.down ? "#07512F" : "#063522"
+                                 border.color: page.success
+                                 border.width: transportPlay.activeFocus ? 2 : 1
+                                 opacity: transportPlay.enabled ? 1 : 0.5
+                             }
+                             Accessible.name: page.resultPreviewCurrent
+                                              && AudioPreviewController.playing
+                                              ? qsTr("暂停结果音轨") : qsTr("播放结果音轨")
+                             Accessible.role: Accessible.Button
+                             onClicked: page.toggleResultPreview()
+                         }
                         Label {
                             id: transportTime
-                            objectName: "separationTransportTime"
-                            Layout.fillWidth: true
-                            text: page.formatTime(AudioPreviewController.positionMs)
-                                  + " / "
-                                  + page.formatTime(AudioPreviewController.durationMs
-                                                    || VocalSeparationController.inputInfo.durationMs)
-                            color: page.textPrimary
-                            font.pixelSize: page.compact ? 14 : 18
+                             objectName: "separationTransportTime"
+                             Layout.fillWidth: true
+                             text: page.formatTime(page.resultPreviewCurrent
+                                                   ? AudioPreviewController.positionMs
+                                                   : page.resultPreviewPositionMs)
+                                   + " / "
+                                   + page.formatTime(page.resultPreviewCurrent
+                                                     ? (AudioPreviewController.durationMs
+                                                        || VocalSeparationController.inputInfo.durationMs)
+                                                     : VocalSeparationController.inputInfo.durationMs)
+                             color: page.textPrimary
+                             font.pixelSize: page.compact ? 18 : 21
+                             font.weight: Font.Medium
                             horizontalAlignment: Text.AlignHCenter
                             elide: Text.ElideRight
                         }
                     }
                 }
-                WorkbenchButton {
-                    text: qsTr("重新分离"); enabled: !page.contextLocked && VocalSeparationController.jobState === VocalSeparationController.Completed
+                 WorkbenchButton {
+                     Layout.row: 0
+                     Layout.column: page.compact ? 2 : 3
+                     Layout.fillWidth: page.compact
+                     implicitHeight: 38; font.pixelSize: 13
+                     text: qsTr("重新分离"); enabled: !page.contextLocked && VocalSeparationController.jobState === VocalSeparationController.Completed
                     Accessible.name: text; Accessible.role: Accessible.Button
                     ToolTip.visible: hovered && !enabled; ToolTip.text: page.contextLocked ? page.contextLockReason : qsTr("分离完成后可重新开始")
                     onClicked: VocalSeparationController.start()
                 }
-                WorkbenchButton {
-                    text: qsTr("导出伴奏"); enabled: !page.contextLocked && page.stemInfo(VocalSeparationController.Accompaniment).available
+                 WorkbenchButton {
+                     Layout.row: 0
+                     Layout.column: page.compact ? 3 : 4
+                     Layout.fillWidth: page.compact
+                     implicitHeight: 38; font.pixelSize: 13
+                     text: qsTr("导出伴奏"); enabled: !page.contextLocked && page.stemInfo(VocalSeparationController.Accompaniment).available
                     Accessible.name: text; Accessible.role: Accessible.Button
                     ToolTip.visible: hovered && !enabled; ToolTip.text: page.contextLocked ? page.contextLockReason : qsTr("伴奏输出尚不可用")
                     onClicked: { exportDialog.kind = VocalSeparationController.Accompaniment; exportDialog.open() }
                 }
-                WorkbenchButton {
-                    text: qsTr("导出人声"); enabled: !page.contextLocked && page.stemInfo(VocalSeparationController.Vocals).available
+                 WorkbenchButton {
+                     Layout.row: page.compact ? 1 : 0
+                     Layout.column: page.compact ? 0 : 5
+                     Layout.fillWidth: page.compact
+                     implicitHeight: 38; font.pixelSize: 13
+                     text: qsTr("导出人声"); enabled: !page.contextLocked && page.stemInfo(VocalSeparationController.Vocals).available
                     Accessible.name: text; Accessible.role: Accessible.Button
                     ToolTip.visible: hovered && !enabled; ToolTip.text: page.contextLocked ? page.contextLockReason : qsTr("人声输出尚不可用")
                     onClicked: { exportDialog.kind = VocalSeparationController.Vocals; exportDialog.open() }
                 }
-                WorkbenchButton {
-                    text: qsTr("导出所有音轨")
+                 WorkbenchButton {
+                     Layout.row: page.compact ? 1 : 0
+                     Layout.column: page.compact ? 1 : 6
+                     Layout.fillWidth: page.compact
+                     implicitHeight: 38; font.pixelSize: 13
+                     text: qsTr("导出所有音轨")
                     enabled: !page.contextLocked
                              && VocalSeparationController.jobState === VocalSeparationController.Completed
                     Accessible.name: text; Accessible.role: Accessible.Button
@@ -1666,15 +1992,22 @@ Rectangle {
                     onClicked: exportSelectedDialog.open()
                 }
                 Item {
+                    Layout.row: 0
+                    Layout.column: 7
                     Layout.fillWidth: true
-                    Layout.columnSpan: page.compact ? 2 : 1
-                    visible: true
+                    Layout.columnSpan: 3
+                    visible: !page.compact
                 }
                 WorkbenchButton {
                     id: primaryAction
                     objectName: "separationPrimaryAction"
-                    Layout.columnSpan: page.compact ? 2 : 4
-                    Layout.preferredWidth: page.compact ? -1 : bottomBar.width * 0.30
+                     Layout.row: page.compact ? 1 : 0
+                     Layout.column: page.compact ? 2 : 10
+                     Layout.columnSpan: page.compact ? 2 : 4
+                     Layout.fillWidth: true
+                     Layout.preferredWidth: page.compact ? 0 : bottomBar.width * 0.30
+                     implicitHeight: 42
+                     font.pixelSize: 14
                     text: VocalSeparationController.jobState === VocalSeparationController.Running
                           ? qsTr("取消分离")
                           : VocalSeparationController.jobState === VocalSeparationController.Cancelling

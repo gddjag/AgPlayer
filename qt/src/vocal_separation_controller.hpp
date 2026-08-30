@@ -193,6 +193,7 @@ private:
         DeviceMode device = DeviceMode::Auto;
         QList<StemKind> stemKinds;
         QStringList stemNames;
+        QStringList stemLabels;
         quint64 resultGeneration = 0;
     };
 
