@@ -216,6 +216,67 @@ Rectangle {
         return result
     }
 
+    function resultStageLabel(stage) {
+        switch (String(stage || "")) {
+        case "preflight": return qsTr("预检")
+        case "prepare": return qsTr("准备")
+        case "write": return qsTr("写入")
+        case "verified": return qsTr("回读验证")
+        case "cancelled": return qsTr("取消")
+        default: return qsTr("处理")
+        }
+    }
+
+    function metadataErrorInfo(errorCode) {
+        switch (Number(errorCode)) {
+        case 1: return { name: "InvalidEditPlan", cause: qsTr("修改内容无效或字段值不符合要求。"), action: qsTr("检查输入内容后重试。") }
+        case 2: return { name: "PhysicalTagConflict", cause: qsTr("多个字段映射到同一个物理标签，无法同时写入。"), action: qsTr("只保留其中一个冲突字段后重试。") }
+        case 3: return { name: "PermissionDenied", cause: qsTr("目标目录没有写入权限。"), action: qsTr("更换可写目录，或为当前用户授予写入权限。") }
+        case 4: return { name: "ReadOnlyFile", cause: qsTr("音频文件是只读文件。"), action: qsTr("取消文件的只读属性后重试。") }
+        case 5: return { name: "FileInUse", cause: qsTr("文件正在被占用，无法安全替换。"), action: qsTr("关闭正在播放该文件的播放器或其他占用程序后重试。") }
+        case 6: return { name: "InsufficientDiskSpace", cause: qsTr("磁盘空间不足，无法创建安全临时副本。"), action: qsTr("释放目标磁盘空间后重试。") }
+        case 7: return { name: "UnsupportedContainer", cause: qsTr("当前音频容器不支持所选元数据修改。"), action: qsTr("减少不支持的字段，或先转换为 MP3、FLAC 等受支持格式。") }
+        case 8: return { name: "UnsupportedMuxer", cause: qsTr("当前格式没有可用的安全写入器。"), action: qsTr("转换为受支持格式后再修改。") }
+        case 9: return { name: "UnsupportedField", cause: qsTr("当前格式不支持至少一个所选字段。"), action: qsTr("根据预检提示取消不支持的字段后重试。") }
+        case 10: return { name: "UnsupportedCover", cause: qsTr("当前格式或封面类型不支持写入。"), action: qsTr("改用 JPG/PNG 封面，或转换为支持封面的格式。") }
+        case 11: return { name: "UnsupportedStructure", cause: qsTr("文件包含暂不支持安全保留的流或结构。"), action: qsTr("先备份文件，再转换为标准音频结构后修改。") }
+        case 12: return { name: "InputOpenFailed", cause: qsTr("无法读取音频文件或其元数据。"), action: qsTr("确认文件存在、可读取且未损坏。") }
+        case 13: return { name: "OutputCreateFailed", cause: qsTr("无法在目标目录创建临时输出文件。"), action: qsTr("检查目录权限、文件占用和可用空间。") }
+        case 14: return { name: "HeaderWriteFailed", cause: qsTr("写入容器头或标签头失败。"), action: qsTr("检查文件是否损坏，或改用受支持格式。") }
+        case 15: return { name: "PacketReadFailed", cause: qsTr("读取原音频数据包失败。"), action: qsTr("文件可能损坏；请先确认它能完整播放。") }
+        case 16: return { name: "PacketWriteFailed", cause: qsTr("复制音频数据包到临时文件时失败。"), action: qsTr("检查磁盘、文件系统和剩余空间后重试。") }
+        case 17: return { name: "TrailerWriteFailed", cause: qsTr("完成临时文件封装时失败。"), action: qsTr("检查磁盘状态，或转换为标准格式后重试。") }
+        case 18: return { name: "VerificationFailed", cause: qsTr("写入后的元数据或音频流回读验证失败，原文件已尽量恢复。"), action: qsTr("不要继续批量处理；检查该文件后单独重试。") }
+        case 19: return { name: "SourceChanged", cause: qsTr("源文件在预检后发生变化。"), action: qsTr("重新加载文件后再试。") }
+        case 20: return { name: "AtomicReplaceFailed", cause: qsTr("临时文件验证通过，但无法安全替换原文件。"), action: qsTr("关闭文件占用程序并检查目录权限后重试。") }
+        case 21: return { name: "Cancelled", cause: qsTr("操作已被取消。"), action: qsTr("需要时重新应用修改。") }
+        case 22: return { name: "InternalError", cause: qsTr("元数据处理发生内部错误。"), action: qsTr("保留此错误信息并重新启动 AgPlayer 后重试。") }
+        default: return { name: "Unknown", cause: qsTr("未返回可识别的失败原因。"), action: qsTr("请保留文件名、阶段和错误码用于排查。") }
+        }
+    }
+
+    function resultDetailText(result) {
+        if (!result)
+            return qsTr("原因：未返回处理结果。")
+        if (result.success)
+            return result.message || qsTr("处理完成。")
+
+        const info = metadataErrorInfo(result.errorCode)
+        const backendReason = String(result.preflightReason
+                                     || result.message || "").trim()
+        const reason = info.name === "Unknown" && backendReason.length > 0
+                     ? backendReason : info.cause
+        const numericCode = Number(result.errorCode)
+        const codeText = isNaN(numericCode)
+                       ? info.name : info.name + " (" + numericCode + ")"
+        let details = qsTr("失败阶段：%1").arg(resultStageLabel(result.stage))
+                + "\n" + qsTr("原因：%1").arg(reason)
+        if (backendReason.length > 0 && backendReason !== reason)
+            details += "\n" + qsTr("技术详情：%1").arg(backendReason)
+        return details + "\n" + qsTr("错误码：%1").arg(codeText)
+                + "\n" + qsTr("建议：%1").arg(info.action)
+    }
+
     function setFieldValue(key, value) {
         const row = rowForField(key)
         if (row)
@@ -1336,17 +1397,45 @@ Rectangle {
                                     }
                                     Repeater {
                                         model: MetadataEditor.results
-                                        delegate: Label {
+                                        delegate: Rectangle {
                                             required property var modelData
                                             Layout.fillWidth: true
-                                            text: modelData.fileName + qsTr("：")
-                                                  + (modelData.success
-                                                     ? (modelData.message || modelData.stage || qsTr("完成"))
-                                                     : (modelData.preflightReason || modelData.message
-                                                        || modelData.errorCode || qsTr("失败")))
-                                            color: modelData.success ? Theme.success : Theme.error
-                                            font.pixelSize: 11
-                                            elide: Text.ElideMiddle
+                                            implicitHeight: resultColumn.implicitHeight + 16
+                                            radius: 4
+                                            color: modelData.success
+                                                   ? Qt.rgba(0.10, 0.62, 0.39, 0.08)
+                                                   : Qt.rgba(0.91, 0.25, 0.28, 0.10)
+                                            border.width: 1
+                                            border.color: modelData.success
+                                                          ? Qt.rgba(0.10, 0.62, 0.39, 0.35)
+                                                          : Qt.rgba(0.91, 0.25, 0.28, 0.45)
+
+                                            ColumnLayout {
+                                                id: resultColumn
+                                                anchors.fill: parent
+                                                anchors.margins: 8
+                                                spacing: 3
+
+                                                Label {
+                                                    Layout.fillWidth: true
+                                                    text: (modelData.fileName || qsTr("未知文件"))
+                                                          + (modelData.success
+                                                             ? qsTr(" · 成功") : qsTr(" · 失败"))
+                                                    color: modelData.success
+                                                           ? Theme.success : Theme.error
+                                                    font.pixelSize: 12
+                                                    font.weight: Font.DemiBold
+                                                    elide: Text.ElideMiddle
+                                                }
+                                                Label {
+                                                    Layout.fillWidth: true
+                                                    text: page.resultDetailText(modelData)
+                                                    color: modelData.success
+                                                           ? page.mutedColor : Theme.primaryText
+                                                    font.pixelSize: 11
+                                                    wrapMode: Text.Wrap
+                                                }
+                                            }
                                         }
                                     }
                                     Item { Layout.fillHeight: true }

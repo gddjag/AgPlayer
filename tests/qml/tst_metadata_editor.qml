@@ -139,6 +139,33 @@ TestCase {
                "result summary must expose unsupported rows: " + summary.text)
     }
 
+    function test_failureResultExplainsCauseStageCodeAndRecovery() {
+        const details = page.resultDetailText({
+            fileName: "locked.mp3",
+            success: false,
+            stage: "write",
+            errorCode: 5,
+            message: ""
+        })
+        verify(details.indexOf("文件正在被占用") >= 0, details)
+        verify(details.indexOf("写入") >= 0, details)
+        verify(details.indexOf("FileInUse") >= 0, details)
+        verify(details.indexOf("关闭正在播放") >= 0, details)
+    }
+
+    function test_failureResultPreservesBackendSpecificReason() {
+        const details = page.resultDetailText({
+            fileName: "changed.mp3",
+            success: false,
+            stage: "write",
+            errorCode: 19,
+            message: "源文件在预检后发生变化，请重新预检"
+        })
+        verify(details.indexOf("源文件在预检后发生变化") >= 0, details)
+        verify(details.indexOf("SourceChanged") >= 0, details)
+        verify(details.indexOf("重新加载文件后再试") >= 0, details)
+    }
+
     function test_compactLayoutKeepsBothWorkspacesReachable() {
         const compactPage = createTemporaryObject(compactPageComponent, testCase)
         verify(compactPage)
@@ -361,10 +388,12 @@ TestCase {
     }
 
     function test_realChinesePathsRetainOverwriteAndClearFieldsInBatch() {
+        const sourceText = testAudioUrl.toString()
+        const suffix = sourceText.substring(sourceText.lastIndexOf(".") + 1)
         const first = nativeDropHelper.copyForNativeDropWithFileName(
-                          testAudioUrl, "歌曲一号.wav")
+                          testAudioUrl, "歌曲一号." + suffix)
         const second = nativeDropHelper.copyForNativeDropWithFileName(
-                           testAudioUrl, "歌曲二号.wav")
+                           testAudioUrl, "歌曲二号." + suffix)
         verify(first.toString().length > 0)
         verify(second.toString().length > 0)
 
