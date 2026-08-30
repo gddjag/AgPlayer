@@ -511,6 +511,8 @@ void TerrainReactorGpuSmokeTest::nonFiniteCameraControlsRemainRenderable()
         item.orbitBy(invalid, 0.0, invalid);
         item.orbitBy(0.0, invalid, invalid);
         item.zoomBy(invalid, invalid);
+        item.orbitBy(0.1, -0.02, invalid);
+        item.zoomBy(-20.0, invalid);
     }
     QVERIFY(std::isfinite(double(item.cameraYaw())));
     QVERIFY(std::isfinite(double(item.cameraPitch())));

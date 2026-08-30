@@ -223,8 +223,10 @@ delta and NaN time, the state test failed because the existing valid camera was
 mutated. This proves `nowSeconds`/manual-window safety independently instead of
 passing only because a bad spatial delta was rejected.
 
-The scoped fix uses no-op semantics for non-finite public deltas and times, so
-an existing valid user camera is retained. `CameraMotion::synchronize` uses the
+The scoped fix uses no-op semantics for non-finite `CameraMotion` deltas and
+times, so an existing valid user camera is retained. Item invokables rejected
+non-finite spatial deltas at this stage; their independent time boundary is
+covered by the final follow-up below. `CameraMotion::synchronize` uses the
 current finite camera as the fallback for invalid incoming fields, falling back
 to defaults only if the current field was already invalid. Manual deltas are
 applied only when previous/next values, derived deltas, and time are finite.
@@ -245,6 +247,39 @@ Latest focused Release verification passed `4/4` in `4.69 s`. The complete GPU
 executable then passed `5/5` consecutive executions on Direct3D 11; every run
 reported `7 passed, 0 failed`. No shader, QML, frame-loop, pass, or unrelated
 module was changed for this follow-up.
+
+## Final public-time boundary follow-up
+
+The final review isolated the remaining item-level contract: the existing item
+and GPU loops passed the same invalid value as both spatial delta and time, so
+the delta rejection masked the discarded `nowSeconds`. Before production was
+changed, each loop was extended with valid orbit/zoom input paired separately
+with NaN, positive infinity, and negative infinity time.
+
+Both tests produced the intended RED against `7eaf15e`:
+
+- item: `cameraYaw` changed from `2.80752205849` to `2.90752196312`
+  (`2 passed, 1 failed`, exit `1`);
+- active GPU: the three calls accumulated yaw from `2.6075220108` to
+  `2.9075217247` (`2 passed, 1 failed`, exit `1`).
+
+The minimal fix removes `Q_UNUSED(nowSeconds)` and rejects a non-finite public
+time before camera mutation, revision increment, signal emission, or render
+scheduling. Normal finite time/delta behavior and the lower-level CameraMotion
+logic are unchanged. A `cameraChanged` spy verifies rejected calls do not emit
+a mutation signal, the public observable corresponding to the internal camera
+revision remaining unchanged.
+
+Final GREEN and regression evidence:
+
+- independent item-time case: `3/3`, `50 ms`;
+- active GPU time/continuity case: `3/3`, `949 ms`;
+- focused Release suite: `4/4`, `4.71 s`;
+- complete GPU executable: `3/3` consecutive runs on Direct3D 11, each with
+  `7 passed, 0 failed`.
+
+This final follow-up changes only `TerrainReactorItem` public validation, the
+two corresponding tests, and this report.
 
 ## Remaining risks
 

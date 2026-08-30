@@ -1006,10 +1006,10 @@ void TerrainReactorItem::setSyntheticFeatures(const QVariantList& bands,
 void TerrainReactorItem::orbitBy(qreal yawDelta, qreal pitchDelta,
                                   qreal nowSeconds)
 {
-    Q_UNUSED(nowSeconds)
     const float safeYawDelta = float(yawDelta);
     const float safePitchDelta = float(pitchDelta);
-    if (!std::isfinite(double(yawDelta)) || !std::isfinite(safeYawDelta)
+    if (!std::isfinite(double(nowSeconds))
+        || !std::isfinite(double(yawDelta)) || !std::isfinite(safeYawDelta)
         || !std::isfinite(double(pitchDelta))
         || !std::isfinite(safePitchDelta)) return;
     camera_.orbitBy(safeYawDelta, safePitchDelta,
@@ -1020,9 +1020,9 @@ void TerrainReactorItem::orbitBy(qreal yawDelta, qreal pitchDelta,
 }
 void TerrainReactorItem::zoomBy(qreal wheelDelta, qreal nowSeconds)
 {
-    Q_UNUSED(nowSeconds)
     const float safeWheelDelta = float(wheelDelta);
-    if (!std::isfinite(double(wheelDelta))
+    if (!std::isfinite(double(nowSeconds))
+        || !std::isfinite(double(wheelDelta))
         || !std::isfinite(safeWheelDelta)) return;
     camera_.zoomBy(safeWheelDelta, double(clock_.elapsed()) / 1000.0);
     ++cameraRevision_;
