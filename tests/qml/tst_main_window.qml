@@ -30,6 +30,14 @@ TestCase {
     }
 
     Component {
+        id: libraryManagerPageComponent
+        LibraryManagerPage {
+            width: 900
+            height: 600
+        }
+    }
+
+    Component {
         id: listWindowComponent
         ListWindow {
             visible: true
@@ -385,6 +393,60 @@ TestCase {
         }
     }
 
+    function verifyFileInfoPanel(panel, expectedPath) {
+        verify(panel !== null, "file information panel must exist")
+        compare(panel.objectName, "audioFileInfoPanel")
+        compare(panel.width, 300)
+        verify(panel.height > 0, "file information panel must have a usable height")
+        compare(panel.height, Math.min(panel.parent.height - 24, 470))
+        var scrollView = findChild(panel, "audioFileInfoScroll")
+        verify(scrollView !== null)
+        verify(panel.rows.length >= 9,
+               "file information must retain every supported audio field")
+        compare(panel.fullPath, expectedPath)
+
+        var path = findChild(panel.contentItem, "audioFileInfoValue-path")
+        verify(path !== null, "full path value must be addressable")
+        compare(path.elide, Text.ElideMiddle)
+        compare(path.Accessible.name, panel.fullPath)
+
+        var copySpy = signalSpyComponent.createObject(testCase,
+                                                      { "target": panel,
+                                                        "signalName": "copyRequested" })
+        verify(copySpy.valid)
+        var copyTarget = findChild(panel.contentItem, "audioFileInfoCopy-path")
+        verify(copyTarget !== null, "full path must expose a copy target")
+        compare(copyTarget.enabled, true)
+        verify(copyTarget.visible && copyTarget.width > 0 && copyTarget.height > 0,
+               "full path copy target must be visible and sized: visible="
+               + copyTarget.visible + ", width=" + copyTarget.width
+               + ", height=" + copyTarget.height)
+        var targetPosition = copyTarget.mapToItem(scrollView, 0, 0)
+        if (targetPosition.y < 0
+                || targetPosition.y + copyTarget.height > scrollView.height) {
+            var flickable = scrollView.contentItem
+            verify(flickable && flickable.contentY !== undefined,
+                   "file information scroll view must expose its flickable viewport")
+            flickable.contentY += targetPosition.y
+                            - (scrollView.height - copyTarget.height) / 2
+            wait(0)
+            targetPosition = copyTarget.mapToItem(scrollView, 0, 0)
+        }
+        verify(targetPosition.x >= 0
+               && targetPosition.x + copyTarget.width <= scrollView.width
+               && targetPosition.y >= 0
+               && targetPosition.y + copyTarget.height <= scrollView.height,
+               "full path copy target must be inside the scroll viewport: x="
+               + targetPosition.x + ", y=" + targetPosition.y
+               + ", width=" + copyTarget.width + ", height=" + copyTarget.height
+               + ", viewportWidth=" + scrollView.width
+               + ", viewportHeight=" + scrollView.height)
+        mouseClick(copyTarget, copyTarget.width / 2, copyTarget.height / 2)
+        compare(copySpy.count, 1)
+        compare(copySpy.signalArguments[0][0], panel.fullPath)
+        copySpy.destroy()
+    }
+
     function cleanup() {
         for (var index = 0; index < task4TemporaryTagKeys.length; ++index)
             TagModel.removeTag(task4TemporaryTagKeys[index])
@@ -594,10 +656,10 @@ TestCase {
         mouseClick(button)
         var window = findChild(mainWindow, "equalizerWindow")
         tryVerify(function() { return window && window.visible }, 1000)
-        verify(window.width >= 1000)
-        verify(window.height >= 600)
-        compare(window.minimumWidth, 880)
-        compare(window.minimumHeight, 520)
+        compare(window.width, 860)
+        compare(window.height, 520)
+        compare(window.minimumWidth, 760)
+        compare(window.minimumHeight, 480)
         var equalizerTitle = findChild(window, "equalizerTitle")
         var equalizerContent = findChild(window, "equalizerContent")
         verify(equalizerTitle,
@@ -634,7 +696,7 @@ TestCase {
         var bands = findChild(window, "equalizerBandRepeater")
         verify(bands)
         compare(bands.count, 17)
-        verify(findChild(window, "equalizerPreampSlider"))
+        verify(findChild(window, "equalizerBand-17"))
         verify(findChild(window, "equalizerAutoProtection"))
         verify(findChild(window, "equalizerBypassButton"))
         verify(findChild(window, "equalizerResetButton"))
@@ -646,7 +708,7 @@ TestCase {
         compare(EqualizerController.bandGain(0), 3.2)
         compare(EqualizerController.currentPresetId, "custom")
         compare(presetBox.displayText, qsTr("Custom"))
-        var firstBandControl = findChild(firstBand, "eqBandSlider-0-control")
+        var firstBandControl = findChild(firstBand, "equalizerBand-0-control")
         verify(firstBandControl)
         firstBand.setGain(12)
         tryCompare(firstBandControl, "value", 12)
@@ -674,7 +736,7 @@ TestCase {
         mouseWheel(firstBandControl, firstBandControl.width / 2,
                    firstBandControl.height / 2, 0, -120)
         tryCompare(firstBand, "gainDb", 6.0)
-        var firstBandLabel = findChild(firstBand, "eqBandSlider-0-frequency")
+        var firstBandLabel = findChild(firstBand, "equalizerBand-0-frequency")
         verify(firstBandLabel)
         mouseDoubleClickSequence(firstBandLabel, firstBandLabel.width / 2,
                                  firstBandLabel.height / 2)
@@ -1014,7 +1076,7 @@ TestCase {
 
         trackList.openFirstDetailsForQa()
 
-        var detailsPanel = findChild(trackList, "trackDetailsPanel")
+        var detailsPanel = findChild(trackList, "audioFileInfoPanel")
         verify(detailsPanel,
                "QA capture must expose the real track-details popup")
         tryVerify(function() { return detailsPanel.visible }, 500)
@@ -1026,17 +1088,17 @@ TestCase {
                "the opened popup must contain a real track format")
 
         var sampleRateLabel = findChild(detailsPanel.contentItem,
-                                        "trackDetailsLabel-sampleRate")
+                                        "audioFileInfoLabel-sampleRate")
         var sampleRateValue = findChild(detailsPanel.contentItem,
-                                        "trackDetailsValue-sampleRate")
+                                        "audioFileInfoValue-sampleRate")
         var directoryLabel = findChild(detailsPanel.contentItem,
-                                       "trackDetailsLabel-directory")
+                                       "audioFileInfoLabel-directory")
         var directoryValue = findChild(detailsPanel.contentItem,
-                                       "trackDetailsValue-directory")
+                                       "audioFileInfoValue-directory")
         var pathLabel = findChild(detailsPanel.contentItem,
-                                  "trackDetailsLabel-path")
+                                  "audioFileInfoLabel-path")
         var pathValue = findChild(detailsPanel.contentItem,
-                                  "trackDetailsValue-path")
+                                  "audioFileInfoValue-path")
         verify(sampleRateLabel && sampleRateValue)
         verify(directoryLabel && directoryValue)
         verify(pathLabel && pathValue)
@@ -1064,6 +1126,69 @@ TestCase {
         }
         detailsPanel.close()
         listWindow.destroy()
+    }
+
+    function test_track_list_file_information_uses_shared_panel_contract() {
+        var trackIds = nativeDropHelper.ensureSortableTracks()
+        verify(trackIds.length > 0)
+        var list = trackListComponent.createObject(mainWindow.contentItem)
+        verify(list)
+        tryVerify(function() { return list.count > 0 }, 500)
+
+        var panel = null
+        try {
+            list.openFirstDetailsForQa()
+            panel = findChild(list, "audioFileInfoPanel")
+            tryVerify(function() { return panel && panel.visible }, 500)
+            verifyFileInfoPanel(panel, String(panel.details.path || ""))
+            mainWindow.requestActivate()
+            tryVerify(function() { return mainWindow.active }, 1000)
+            var trackListClose = findChild(panel, "audioFileInfoClose")
+            trackListClose.forceActiveFocus()
+            verify(trackListClose.activeFocus,
+                   "close button focus failed; active=" + mainWindow.active
+                   + ", visible=" + mainWindow.visible
+                   + ", activeFocusItem="
+                   + (mainWindow.activeFocusItem
+                      ? mainWindow.activeFocusItem.objectName : "null"))
+            keyClick(Qt.Key_Escape)
+            tryVerify(function() { return !panel.visible }, 500)
+        } finally {
+            if (panel)
+                panel.close()
+            list.destroy()
+        }
+    }
+
+    function test_library_manager_file_information_uses_shared_panel_contract() {
+        var trackIds = nativeDropHelper.ensureSortableTracks()
+        verify(trackIds.length > 0)
+        var page = libraryManagerPageComponent.createObject(mainWindow.contentItem)
+        verify(page)
+
+        var panel = null
+        try {
+            page.openFileDetails(trackIds[0])
+            panel = findChild(page, "audioFileInfoPanel")
+            tryVerify(function() { return panel && panel.visible }, 500)
+            verifyFileInfoPanel(panel, String(panel.details.path || ""))
+            mainWindow.requestActivate()
+            tryVerify(function() { return mainWindow.active }, 1000)
+            var libraryManagerClose = findChild(panel, "audioFileInfoClose")
+            libraryManagerClose.forceActiveFocus()
+            verify(libraryManagerClose.activeFocus,
+                   "close button focus failed; active=" + mainWindow.active
+                   + ", visible=" + mainWindow.visible
+                   + ", activeFocusItem="
+                   + (mainWindow.activeFocusItem
+                      ? mainWindow.activeFocusItem.objectName : "null"))
+            keyClick(Qt.Key_Escape)
+            tryVerify(function() { return !panel.visible }, 500)
+        } finally {
+            if (panel)
+                panel.close()
+            page.destroy()
+        }
     }
 
     function test_sidebar_exposes_required_top_level_nodes_and_linear_icons() {
