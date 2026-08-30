@@ -24,9 +24,38 @@ QString normalizedPath(const QString& path)
     return normalized;
 }
 
-bool isSupportedSource(const QString& source)
+bool isLegacySource(const QString& source)
 {
     return source == QStringLiteral("manual") || source == QStringLiteral("lrclib");
+}
+
+LyricsProvider::Source legacySource(const QString& source)
+{
+    if (source == QStringLiteral("manual")) {
+        return {QStringLiteral("manual"), QStringLiteral("Manual"), {}, {}, true};
+    }
+    return {QStringLiteral("lrclib"), QStringLiteral("LRCLIB"),
+            QUrl(QStringLiteral("https://lrclib.net")), {}, true};
+}
+
+bool isLocalSource(const QString& providerId)
+{
+    return providerId == QStringLiteral("manual")
+        || providerId == QStringLiteral("embedded")
+        || providerId == QStringLiteral("sidecar")
+        || providerId == QStringLiteral("local");
+}
+
+bool isValidSource(const LyricsProvider::Source& source)
+{
+    if (source.providerId.trimmed().isEmpty() || source.providerName.trimmed().isEmpty()) {
+        return false;
+    }
+    if (source.sourceUrl.isEmpty()) return isLocalSource(source.providerId);
+    const QString scheme = source.sourceUrl.scheme().toCaseFolded();
+    return source.sourceUrl.isValid() && !source.sourceUrl.isRelative()
+        && (scheme == QStringLiteral("https") || scheme == QStringLiteral("http"))
+        && !source.sourceUrl.host().isEmpty();
 }
 
 bool isInteger(const QJsonValue& value)
@@ -73,22 +102,19 @@ std::optional<LyricsCache::Entry> LyricsCache::load(const TrackRecord& track) co
     const QJsonObject object = json.object();
     const QJsonValue version = object.value(QStringLiteral("version"));
     const QJsonValue key = object.value(QStringLiteral("key"));
-    const QJsonValue source = object.value(QStringLiteral("source"));
     const QJsonValue instrumental = object.value(QStringLiteral("instrumental"));
     const QJsonValue offsetMs = object.value(QStringLiteral("offsetMs"));
     const QJsonValue untimedText = object.value(QStringLiteral("untimedText"));
     const QJsonValue lines = object.value(QStringLiteral("lines"));
     const QJsonValue metadata = object.value(QStringLiteral("metadata"));
-    if (!isInteger(version) || version.toInteger() != 1
+    if (!isInteger(version)
         || !key.isString() || key.toString() != keyFor(track)
-        || !source.isString() || !isSupportedSource(source.toString())
         || !instrumental.isBool() || !isInteger(offsetMs)
         || !untimedText.isString() || !lines.isArray() || !metadata.isObject()) {
         return std::nullopt;
     }
 
     Entry entry;
-    entry.source = source.toString();
     entry.instrumental = instrumental.toBool();
     entry.document.offsetMs = offsetMs.toInteger();
     entry.document.untimedText = untimedText.toString();
@@ -109,12 +135,42 @@ std::optional<LyricsCache::Entry> LyricsCache::load(const TrackRecord& track) co
     }
     if (!entry.instrumental && entry.document.lines.isEmpty()
         && entry.document.untimedText.isEmpty()) return std::nullopt;
+
+    if (version.toInteger() == 1) {
+        const QJsonValue source = object.value(QStringLiteral("source"));
+        if (!source.isString() || !isLegacySource(source.toString())) return std::nullopt;
+        entry.source = legacySource(source.toString());
+        entry.synchronized = !entry.document.lines.isEmpty();
+        return entry;
+    }
+    if (version.toInteger() != 2) return std::nullopt;
+
+    const QJsonValue providerId = object.value(QStringLiteral("providerId"));
+    const QJsonValue providerName = object.value(QStringLiteral("providerName"));
+    const QJsonValue sourceUrl = object.value(QStringLiteral("sourceUrl"));
+    const QJsonValue attribution = object.value(QStringLiteral("attribution"));
+    const QJsonValue supportsSyncedLyrics = object.value(QStringLiteral("supportsSyncedLyrics"));
+    const QJsonValue synchronized = object.value(QStringLiteral("synchronized"));
+    if (!providerId.isString() || !providerName.isString() || !sourceUrl.isString()
+        || !attribution.isString() || !supportsSyncedLyrics.isBool()
+        || !synchronized.isBool()) {
+        return std::nullopt;
+    }
+    const QUrl parsedUrl(sourceUrl.toString(), QUrl::StrictMode);
+    entry.source = {providerId.toString(), providerName.toString(), parsedUrl,
+                    attribution.toString(), supportsSyncedLyrics.toBool()};
+    entry.synchronized = synchronized.toBool();
+    if (!isValidSource(entry.source)
+        || entry.synchronized != !entry.document.lines.isEmpty()) {
+        return std::nullopt;
+    }
     return entry;
 }
 
 bool LyricsCache::save(const TrackRecord& track, const Entry& entry) const
 {
-    if (!isSupportedSource(entry.source)
+    if (!isValidSource(entry.source)
+        || entry.synchronized != !entry.document.lines.isEmpty()
         || (!entry.instrumental && entry.document.lines.isEmpty()
             && entry.document.untimedText.isEmpty())) {
         return false;
@@ -130,9 +186,15 @@ bool LyricsCache::save(const TrackRecord& track, const Entry& entry) const
     for (auto it = entry.document.metadata.cbegin(); it != entry.document.metadata.cend(); ++it) {
         metadata.insert(it.key(), it.value());
     }
-    const QJsonObject object{{QStringLiteral("version"), 1},
+    const QJsonObject object{{QStringLiteral("version"), 2},
                              {QStringLiteral("key"), keyFor(track)},
-                             {QStringLiteral("source"), entry.source},
+                             {QStringLiteral("providerId"), entry.source.providerId},
+                             {QStringLiteral("providerName"), entry.source.providerName},
+                             {QStringLiteral("sourceUrl"), entry.source.sourceUrl.toString()},
+                             {QStringLiteral("attribution"), entry.source.attribution},
+                             {QStringLiteral("supportsSyncedLyrics"),
+                              entry.source.supportsSyncedLyrics},
+                             {QStringLiteral("synchronized"), entry.synchronized},
                              {QStringLiteral("instrumental"), entry.instrumental},
                              {QStringLiteral("offsetMs"), QJsonValue(entry.document.offsetMs)},
                              {QStringLiteral("untimedText"), entry.document.untimedText},

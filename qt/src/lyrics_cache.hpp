@@ -2,6 +2,7 @@
 
 #include "library_model.hpp"
 #include "lyrics_line_model.hpp"
+#include "lyrics_provider.hpp"
 
 #include <optional>
 
@@ -9,8 +10,9 @@ class LyricsCache final {
 public:
     struct Entry final {
         LyricsDocument document;
-        QString source;
+        LyricsProvider::Source source;
         bool instrumental = false;
+        bool synchronized = false;
     };
 
     explicit LyricsCache(QString cacheDirectory = {});

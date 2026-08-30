@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QHash>
 #include <QList>
+#include <QUrl>
 
 class QNetworkAccessManager;
 class QNetworkReply;
@@ -11,6 +12,21 @@ class LyricsProvider : public QObject {
     Q_OBJECT
 
 public:
+    struct Source final {
+        QString providerId;
+        QString providerName;
+        QUrl sourceUrl;
+        QString attribution;
+        bool supportsSyncedLyrics = false;
+    };
+    struct RouteAttempt final {
+        QString providerId;
+        QString providerName;
+        QString diagnostic;
+        int httpStatus = 0;
+        qint64 retryAfterMs = 0;
+        bool offline = false;
+    };
     struct Track final {
         QString title;
         QString artist;
@@ -19,6 +35,7 @@ public:
         bool lowPriority = false;
     };
     struct Candidate final {
+        Source source;
         QString title;
         QString artist;
         QString album;
@@ -31,6 +48,7 @@ public:
         enum Kind { Found, NotFound, TechnicalError, RateLimited, SearchResults } kind = NotFound;
         Candidate candidate;
         QList<Candidate> candidates;
+        QList<RouteAttempt> attempts;
         int httpStatus = 0;
         qint64 retryAfterMs = 0;
         bool offline = false;

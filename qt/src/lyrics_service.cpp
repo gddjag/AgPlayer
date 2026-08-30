@@ -25,6 +25,11 @@ QString lyricsCacheDirectory(SettingsController* settings)
     return base;
 }
 
+LyricsProvider::Source localSource(const QString& providerId, const QString& providerName)
+{
+    return {providerId, providerName, {}, {}, true};
+}
+
 } // namespace
 
 LyricsService::LyricsService(LibraryModel* library, PlaybackController* playback,
@@ -92,7 +97,7 @@ QVariantMap LyricsService::diagnostics() const
 {
     // This boundary intentionally exports only aggregate provider health.  It
     // must never expose local paths, request URLs, metadata, or lyrics text.
-    return {{QStringLiteral("provider"), QStringLiteral("lrclib")},
+    return {{QStringLiteral("provider"), source_},
             {QStringLiteral("source"), source_},
             {QStringLiteral("lastHttpStatus"), lastHttpStatus_},
             {QStringLiteral("failureCount"), consecutiveTechnicalFailures_},
@@ -158,7 +163,10 @@ void LyricsService::resolveLocal(const TrackRecord& track, const QString& embedd
     if (!embeddedLyrics.trimmed().isEmpty()) {
         const LyricsDocument document = LyricsLineModel::parseLrc(embeddedLyrics.toUtf8());
         if (hasUsableLyrics(document)) {
-            applyDocument(track, {document, QStringLiteral("embedded"), false});
+            applyDocument(track, {document,
+                                  localSource(QStringLiteral("embedded"),
+                                              QStringLiteral("Embedded")),
+                                  false, !document.lines.isEmpty()});
             return;
         }
     }
@@ -168,7 +176,10 @@ void LyricsService::resolveLocal(const TrackRecord& track, const QString& embedd
     if (file.open(QIODevice::ReadOnly)) {
         const LyricsDocument document = LyricsLineModel::parseLrc(file.readAll());
         if (!document.lines.isEmpty() || !document.untimedText.isEmpty()) {
-            applyDocument(track, {document, QStringLiteral("sidecar"), false});
+            applyDocument(track, {document,
+                                  localSource(QStringLiteral("sidecar"),
+                                              QStringLiteral("Sidecar")),
+                                  false, !document.lines.isEmpty()});
             return;
         }
     }
@@ -299,21 +310,23 @@ void LyricsService::onProviderFinished(const quint64 requestId,
     }
     if (pending.prefetch) {
         static_cast<void>(cache_.save(pending.track,
-            {document, QStringLiteral("lrclib"), candidate->instrumental}));
+            {document, candidate->source, candidate->instrumental, !document.lines.isEmpty()}));
         return;
     }
-    applyDocument(pending.track, {document, QStringLiteral("lrclib"), candidate->instrumental});
+    applyDocument(pending.track,
+                  {document, candidate->source, candidate->instrumental,
+                   !document.lines.isEmpty()});
 }
 
 void LyricsService::applyDocument(const TrackRecord& track, LyricsCache::Entry entry)
 {
-    if (entry.source != QStringLiteral("embedded")
-        && entry.source != QStringLiteral("sidecar")) {
+    if (entry.source.providerId != QStringLiteral("embedded")
+        && entry.source.providerId != QStringLiteral("sidecar")) {
         static_cast<void>(cache_.save(track, entry));
     }
     documentOffsetMs_ = entry.document.offsetMs;
     instrumental_ = entry.instrumental;
-    source_ = std::move(entry.source);
+    source_ = std::move(entry.source.providerId);
     lineModel_.setLines(entry.document.lines);
     setStatus(Ready);
     emit instrumentalChanged();
@@ -415,7 +428,10 @@ bool LyricsService::importLrc(const QUrl& fileUrl)
     const LyricsDocument document = LyricsLineModel::parseLrc(file.readAll());
     if (document.lines.isEmpty() && document.untimedText.isEmpty()) return false;
     cancelPending();
-    applyDocument(currentTrack_, {document, QStringLiteral("manual"), false});
+    applyDocument(currentTrack_,
+                  {document,
+                   localSource(QStringLiteral("manual"), QStringLiteral("Manual")),
+                   false, !document.lines.isEmpty()});
     return true;
 }
 

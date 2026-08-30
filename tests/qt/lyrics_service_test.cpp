@@ -9,6 +9,8 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QCoreApplication>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -19,6 +21,28 @@
 
 #include <algorithm>
 #include <cstring>
+
+namespace {
+
+LyricsProvider::Source manualSource()
+{
+    return {QStringLiteral("manual"), QStringLiteral("Manual"), {}, {}, true};
+}
+
+LyricsProvider::Source lrclibSource()
+{
+    return {QStringLiteral("lrclib"), QStringLiteral("LRCLIB"),
+            QUrl(QStringLiteral("https://lrclib.net")), {}, true};
+}
+
+LyricsProvider::Source unisonSource()
+{
+    return {QStringLiteral("unison"), QStringLiteral("Unison"),
+            QUrl(QStringLiteral("https://unison.boidu.dev")),
+            QStringLiteral("Lyrics from Unison (https://unison.boidu.dev)"), true};
+}
+
+} // namespace
 
 class FakeNetworkReply final : public QNetworkReply {
 public:
@@ -114,6 +138,8 @@ class LyricsServiceTest final : public QObject {
 private slots:
     void parseLrcPreservesTimingMetadataAndUntimedText();
     void cacheUsesTrackIdentityAndRejectsStaleEntry();
+    void cacheRoundTripsTypedSourceAndWritesVersionTwoMetadata();
+    void cacheReadsLegacyVersionOneSourcesAndInfersSynchronization();
     void onlineResultWritesReusableCacheWithTimedLines();
     void modelSelectsCurrentLineWithOffsetAndFollowPause();
     void providerFallsBackFromExactToSearchAndRejectsMismatches();
@@ -123,10 +149,15 @@ private slots:
     void confirmedNotFoundResetsTechnicalFailureStreak();
     void disabledServiceDoesNotPublishPositionDrivenLineChanges();
     void emptyEmbeddedLyricsFallsThroughToProvider();
+    void embeddedLyricsRetainLocalSourceWithoutProviderRequest();
+    void sidecarLyricsRetainLocalSourceWithoutProviderRequest();
+    void instrumentalResultIsCachedWithoutAFalseTimeline();
     void cacheRejectsCorruptAndWrongSchemaEntries();
+    void cacheRejectsMalformedVersionTwoMetadata();
     void pauseFollowDefaultsToFiveSecondsAndNotifies();
     void injectedProviderRemainsBorrowed();
     void lrclibTransportBuildsRequestsAndHandlesCancelTimeoutAndRetryAfter();
+    void lrclibCandidatesCarryStableSourceMetadata();
     void malformedLrclibResponsesAreTechnicalErrors();
     void threeInvalidProviderResponsesDegradeService();
 };
@@ -162,8 +193,9 @@ void LyricsServiceTest::cacheUsesTrackIdentityAndRejectsStaleEntry()
 
     LyricsCache cache(directory.path());
     LyricsCache::Entry entry;
-    entry.source = QStringLiteral("manual");
+    entry.source = manualSource();
     entry.document.lines = {{1250, QStringLiteral("first")}};
+    entry.synchronized = true;
     QVERIFY(cache.save(track, entry));
     QVERIFY(QFileInfo::exists(cache.pathFor(track)));
 
@@ -173,6 +205,106 @@ void LyricsServiceTest::cacheUsesTrackIdentityAndRejectsStaleEntry()
 
     track.durationMs++;
     QVERIFY(!cache.load(track).has_value());
+}
+
+void LyricsServiceTest::cacheRoundTripsTypedSourceAndWritesVersionTwoMetadata()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    TrackRecord track;
+    track.trackId = QStringLiteral("unison-cache");
+    track.path = directory.filePath(QStringLiteral("unison.flac"));
+    { QFile file(track.path); QVERIFY(file.open(QIODevice::WriteOnly)); file.write("x"); }
+
+    LyricsProvider::Candidate candidate;
+    candidate.source = unisonSource();
+    candidate.syncedLyrics = QStringLiteral("[00:01.00]line");
+    LyricsCache cache(directory.path());
+    const LyricsCache::Entry entry{LyricsLineModel::parseLrc(candidate.syncedLyrics.toUtf8()),
+                                   candidate.source, false, true};
+    QVERIFY(cache.save(track, entry));
+
+    const auto loaded = cache.load(track);
+    QVERIFY(loaded.has_value());
+    QCOMPARE(loaded->source.providerId, QStringLiteral("unison"));
+    QCOMPARE(loaded->source.providerName, QStringLiteral("Unison"));
+    QCOMPARE(loaded->source.sourceUrl, QUrl(QStringLiteral("https://unison.boidu.dev")));
+    QCOMPARE(loaded->source.attribution,
+             QStringLiteral("Lyrics from Unison (https://unison.boidu.dev)"));
+    QVERIFY(loaded->source.supportsSyncedLyrics);
+    QVERIFY(loaded->synchronized);
+
+    QFile file(cache.pathFor(track));
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const QJsonObject json = QJsonDocument::fromJson(file.readAll()).object();
+    QCOMPARE(json.value(QStringLiteral("version")).toInt(), 2);
+    QCOMPARE(json.value(QStringLiteral("providerId")).toString(), QStringLiteral("unison"));
+    QCOMPARE(json.value(QStringLiteral("providerName")).toString(), QStringLiteral("Unison"));
+    QCOMPARE(json.value(QStringLiteral("sourceUrl")).toString(),
+             QStringLiteral("https://unison.boidu.dev"));
+    QCOMPARE(json.value(QStringLiteral("attribution")).toString(),
+             QStringLiteral("Lyrics from Unison (https://unison.boidu.dev)"));
+    QCOMPARE(json.value(QStringLiteral("supportsSyncedLyrics")).toBool(), true);
+    QCOMPARE(json.value(QStringLiteral("synchronized")).toBool(), true);
+
+    LyricsProvider::RouteAttempt attempt{QStringLiteral("lrclib"), QStringLiteral("LRCLIB"),
+                                         QStringLiteral("timeout"), 0, 0, true};
+    LyricsProvider::Result result = LyricsProvider::Result::found(candidate);
+    result.attempts.append(attempt);
+    QCOMPARE(result.attempts.constFirst().providerId, QStringLiteral("lrclib"));
+    QCOMPARE(result.attempts.constFirst().diagnostic, QStringLiteral("timeout"));
+    QVERIFY(result.attempts.constFirst().offline);
+}
+
+void LyricsServiceTest::cacheReadsLegacyVersionOneSourcesAndInfersSynchronization()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    LyricsCache cache(directory.path());
+
+    const auto writeLegacy = [&cache](const TrackRecord& track, const QByteArray& source,
+                                      const QByteArray& untimedText,
+                                      const QByteArray& lines) {
+        const QString path = cache.pathFor(track);
+        QVERIFY(QDir().mkpath(QFileInfo(path).absolutePath()));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        const QByteArray payload = QByteArrayLiteral("{\"version\":1,\"key\":\"")
+            + LyricsCache::keyFor(track).toUtf8()
+            + QByteArrayLiteral("\",\"source\":\"") + source
+            + QByteArrayLiteral("\",\"instrumental\":false,\"offsetMs\":0,"
+                                "\"untimedText\":\"") + untimedText
+            + QByteArrayLiteral("\",\"lines\":") + lines
+            + QByteArrayLiteral(",\"metadata\":{\"ar\":\"Legacy Artist\"}}");
+        QCOMPARE(file.write(payload), static_cast<qint64>(payload.size()));
+    };
+
+    TrackRecord manual;
+    manual.trackId = QStringLiteral("legacy-manual");
+    manual.path = directory.filePath(QStringLiteral("legacy-manual.flac"));
+    { QFile file(manual.path); QVERIFY(file.open(QIODevice::WriteOnly)); file.write("x"); }
+    writeLegacy(manual, QByteArrayLiteral("manual"), QByteArrayLiteral("plain legacy"),
+                QByteArrayLiteral("[]"));
+    const auto loadedManual = cache.load(manual);
+    QVERIFY(loadedManual.has_value());
+    QCOMPARE(loadedManual->source.providerId, QStringLiteral("manual"));
+    QCOMPARE(loadedManual->source.providerName, QStringLiteral("Manual"));
+    QVERIFY(loadedManual->source.sourceUrl.isEmpty());
+    QVERIFY(!loadedManual->synchronized);
+
+    TrackRecord lrclib;
+    lrclib.trackId = QStringLiteral("legacy-lrclib");
+    lrclib.path = directory.filePath(QStringLiteral("legacy-lrclib.flac"));
+    { QFile file(lrclib.path); QVERIFY(file.open(QIODevice::WriteOnly)); file.write("x"); }
+    writeLegacy(lrclib, QByteArrayLiteral("lrclib"), QByteArray(),
+                QByteArrayLiteral("[{\"timeMs\":1000,\"text\":\"timed legacy\"}]"));
+    const auto loadedLrclib = cache.load(lrclib);
+    QVERIFY(loadedLrclib.has_value());
+    QCOMPARE(loadedLrclib->source.providerId, QStringLiteral("lrclib"));
+    QCOMPARE(loadedLrclib->source.providerName, QStringLiteral("LRCLIB"));
+    QCOMPARE(loadedLrclib->source.sourceUrl, QUrl(QStringLiteral("https://lrclib.net")));
+    QVERIFY(loadedLrclib->source.supportsSyncedLyrics);
+    QVERIFY(loadedLrclib->synchronized);
 }
 
 void LyricsServiceTest::onlineResultWritesReusableCacheWithTimedLines()
@@ -193,10 +325,18 @@ void LyricsServiceTest::onlineResultWritesReusableCacheWithTimedLines()
     fetched.requestTrack(track);
     LyricsProvider::Candidate candidate;
     candidate.title = track.title;
+    candidate.source = unisonSource();
     candidate.syncedLyrics = QStringLiteral("[00:01.00]Persisted");
     online->complete(online->exactRequests.constFirst().requestId,
                      LyricsProvider::Result::found(candidate));
     QCOMPARE(qobject_cast<LyricsLineModel*>(fetched.lines())->rowCount(), 1);
+    LyricsCache cache(settings.cacheDirectory());
+    const auto persisted = cache.load(track);
+    QVERIFY(persisted.has_value());
+    QCOMPARE(persisted->source.providerId, QStringLiteral("unison"));
+    QCOMPARE(persisted->source.attribution,
+             QStringLiteral("Lyrics from Unison (https://unison.boidu.dev)"));
+    QVERIFY(persisted->synchronized);
 
     auto* offline = new FakeLyricsProvider;
     LyricsService reused(nullptr, nullptr, &settings, offline);
@@ -204,6 +344,8 @@ void LyricsServiceTest::onlineResultWritesReusableCacheWithTimedLines()
     reused.requestTrack(track);
     QCOMPARE(reused.status(), LyricsService::Ready);
     QCOMPARE(qobject_cast<LyricsLineModel*>(reused.lines())->rowCount(), 1);
+    QCOMPARE(reused.diagnostics().value(QStringLiteral("source")).toString(),
+             QStringLiteral("unison"));
     QVERIFY(offline->exactRequests.isEmpty());
 }
 
@@ -360,6 +502,73 @@ void LyricsServiceTest::emptyEmbeddedLyricsFallsThroughToProvider()
     QCOMPARE(service.status(), LyricsService::Loading);
 }
 
+void LyricsServiceTest::embeddedLyricsRetainLocalSourceWithoutProviderRequest()
+{
+    auto* provider = new FakeLyricsProvider;
+    LyricsService service(nullptr, nullptr, nullptr, provider);
+    service.setEnabled(true);
+    TrackRecord track;
+    track.trackId = QStringLiteral("embedded");
+    track.title = QStringLiteral("Embedded");
+    service.requestTrack(track, QStringLiteral("[00:01.00]Embedded line"));
+    QCOMPARE(service.status(), LyricsService::Ready);
+    QCOMPARE(service.diagnostics().value(QStringLiteral("source")).toString(),
+             QStringLiteral("embedded"));
+    QVERIFY(provider->exactRequests.isEmpty());
+}
+
+void LyricsServiceTest::sidecarLyricsRetainLocalSourceWithoutProviderRequest()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    TrackRecord track;
+    track.trackId = QStringLiteral("sidecar");
+    track.title = QStringLiteral("Sidecar");
+    track.path = directory.filePath(QStringLiteral("sidecar.flac"));
+    { QFile audio(track.path); QVERIFY(audio.open(QIODevice::WriteOnly)); audio.write("x"); }
+    { QFile lrc(directory.filePath(QStringLiteral("sidecar.lrc")));
+      QVERIFY(lrc.open(QIODevice::WriteOnly)); lrc.write("[00:01.00]Sidecar line"); }
+    auto* provider = new FakeLyricsProvider;
+    LyricsService service(nullptr, nullptr, nullptr, provider);
+    service.setEnabled(true);
+    service.requestTrack(track);
+    QCOMPARE(service.status(), LyricsService::Ready);
+    QCOMPARE(service.diagnostics().value(QStringLiteral("source")).toString(),
+             QStringLiteral("sidecar"));
+    QVERIFY(provider->exactRequests.isEmpty());
+}
+
+void LyricsServiceTest::instrumentalResultIsCachedWithoutAFalseTimeline()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    TrackRecord track;
+    track.trackId = QStringLiteral("instrumental");
+    track.title = QStringLiteral("Instrumental");
+    track.path = directory.filePath(QStringLiteral("instrumental.flac"));
+    { QFile audio(track.path); QVERIFY(audio.open(QIODevice::WriteOnly)); audio.write("x"); }
+    SettingsController settings;
+    settings.setCacheDirectory(directory.filePath(QStringLiteral("cache")));
+    auto* provider = new FakeLyricsProvider;
+    LyricsService service(nullptr, nullptr, &settings, provider);
+    service.setEnabled(true);
+    service.requestTrack(track);
+    LyricsProvider::Candidate candidate;
+    candidate.title = track.title;
+    candidate.source = lrclibSource();
+    candidate.instrumental = true;
+    provider->complete(provider->exactRequests.constFirst().requestId,
+                       LyricsProvider::Result::found(candidate));
+    QCOMPARE(service.status(), LyricsService::Ready);
+    QVERIFY(service.instrumental());
+    QCOMPARE(qobject_cast<LyricsLineModel*>(service.lines())->rowCount(), 0);
+    const auto cached = LyricsCache(settings.cacheDirectory()).load(track);
+    QVERIFY(cached.has_value());
+    QCOMPARE(cached->source.providerId, QStringLiteral("lrclib"));
+    QVERIFY(cached->instrumental);
+    QVERIFY(!cached->synchronized);
+}
+
 void LyricsServiceTest::cacheRejectsCorruptAndWrongSchemaEntries()
 {
     QTemporaryDir directory;
@@ -368,8 +577,9 @@ void LyricsServiceTest::cacheRejectsCorruptAndWrongSchemaEntries()
     track.path = directory.filePath(QStringLiteral("schema.flac"));
     { QFile source(track.path); QVERIFY(source.open(QIODevice::WriteOnly)); source.write("x"); }
     LyricsCache cache(directory.path());
-    LyricsCache::Entry entry; entry.source = QStringLiteral("manual");
+    LyricsCache::Entry entry; entry.source = manualSource();
     entry.document.lines = {{1000, QStringLiteral("ok")}};
+    entry.synchronized = true;
     QVERIFY(cache.save(track, entry));
 
     const auto writeInvalid = [&cache, &track](const QByteArray& payload) {
@@ -386,6 +596,86 @@ void LyricsServiceTest::cacheRejectsCorruptAndWrongSchemaEntries()
                                      "\"offsetMs\":0,\"untimedText\":\"\",\"lines\":\"bad\","
                                      "\"metadata\":{}}"));
     QVERIFY(!cache.load(track).has_value());
+}
+
+void LyricsServiceTest::cacheRejectsMalformedVersionTwoMetadata()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    TrackRecord track;
+    track.trackId = QStringLiteral("invalid-v2");
+    track.path = directory.filePath(QStringLiteral("invalid-v2.flac"));
+    { QFile source(track.path); QVERIFY(source.open(QIODevice::WriteOnly)); source.write("x"); }
+    LyricsCache cache(directory.path());
+
+    const auto validObject = [&track] {
+        return QJsonObject{{QStringLiteral("version"), 2},
+                           {QStringLiteral("key"), LyricsCache::keyFor(track)},
+                           {QStringLiteral("providerId"), QStringLiteral("unison")},
+                           {QStringLiteral("providerName"), QStringLiteral("Unison")},
+                           {QStringLiteral("sourceUrl"), QStringLiteral("https://unison.boidu.dev")},
+                           {QStringLiteral("attribution"),
+                            QStringLiteral("Lyrics from Unison (https://unison.boidu.dev)")},
+                           {QStringLiteral("supportsSyncedLyrics"), true},
+                           {QStringLiteral("synchronized"), true},
+                           {QStringLiteral("instrumental"), false},
+                           {QStringLiteral("offsetMs"), 0},
+                           {QStringLiteral("untimedText"), QString()},
+                           {QStringLiteral("lines"), QJsonArray{
+                                QJsonObject{{QStringLiteral("timeMs"), 1000},
+                                            {QStringLiteral("text"), QStringLiteral("line")}}}},
+                           {QStringLiteral("metadata"), QJsonObject{}}};
+    };
+    const auto reject = [&cache, &track](const QJsonObject& object) {
+        const QString path = cache.pathFor(track);
+        QVERIFY(QDir().mkpath(QFileInfo(path).absolutePath()));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        const QByteArray payload = QJsonDocument(object).toJson(QJsonDocument::Compact);
+        QCOMPARE(file.write(payload), static_cast<qint64>(payload.size()));
+        file.close();
+        QVERIFY(!cache.load(track).has_value());
+    };
+
+    QJsonObject invalid = validObject();
+    invalid.remove(QStringLiteral("providerId"));
+    reject(invalid);
+    invalid = validObject();
+    invalid.insert(QStringLiteral("providerId"), QString());
+    reject(invalid);
+    invalid = validObject();
+    invalid.insert(QStringLiteral("providerName"), 7);
+    reject(invalid);
+    invalid = validObject();
+    invalid.insert(QStringLiteral("sourceUrl"), QJsonArray{});
+    reject(invalid);
+    invalid = validObject();
+    invalid.insert(QStringLiteral("sourceUrl"), QStringLiteral("http://[invalid"));
+    reject(invalid);
+    invalid = validObject();
+    invalid.insert(QStringLiteral("sourceUrl"), QString());
+    reject(invalid);
+    invalid = validObject();
+    invalid.insert(QStringLiteral("attribution"), false);
+    reject(invalid);
+    invalid = validObject();
+    invalid.insert(QStringLiteral("supportsSyncedLyrics"), QStringLiteral("true"));
+    reject(invalid);
+    invalid = validObject();
+    invalid.insert(QStringLiteral("synchronized"), 1);
+    reject(invalid);
+    invalid = validObject();
+    invalid.insert(QStringLiteral("metadata"), QJsonArray{});
+    reject(invalid);
+
+    LyricsCache::Entry invalidEntry;
+    invalidEntry.document.lines = {{1000, QStringLiteral("line")}};
+    invalidEntry.source = {QStringLiteral("unison"), QString(),
+                           QUrl(QStringLiteral("https://unison.boidu.dev")), {}, true};
+    invalidEntry.synchronized = true;
+    QVERIFY(!cache.save(track, invalidEntry));
+    invalidEntry.source = {QStringLiteral("unison"), QStringLiteral("Unison"), {}, {}, true};
+    QVERIFY(!cache.save(track, invalidEntry));
 }
 
 void LyricsServiceTest::pauseFollowDefaultsToFiveSecondsAndNotifies()
@@ -452,6 +742,27 @@ void LyricsServiceTest::lrclibTransportBuildsRequestsAndHandlesCancelTimeoutAndR
     QTRY_VERIFY(manager.requests.constLast().reply->aborted);
     QTRY_VERIFY(!results.isEmpty());
     QCOMPARE(results.constLast().diagnostic, QStringLiteral("timeout"));
+}
+
+void LyricsServiceTest::lrclibCandidatesCarryStableSourceMetadata()
+{
+    FakeNetworkAccessManager manager;
+    LrclibProvider provider(&manager, nullptr, 1000);
+    QList<LyricsProvider::Result> results;
+    connect(&provider, &LyricsProvider::finished, this,
+            [&results](quint64, const LyricsProvider::Result& result) { results.append(result); });
+    const LyricsProvider::Track track{QStringLiteral("Song"), QStringLiteral("Artist")};
+    provider.requestExact(1, track);
+    manager.requests.constLast().reply->respond(200, QByteArrayLiteral(
+        R"({"trackName":"Song","artistName":"Artist","albumName":"Album","duration":201,"instrumental":false,"syncedLyrics":"[00:01.00]line","plainLyrics":"line"})"));
+    QCOMPARE(results.size(), 1);
+    QCOMPARE(results.constFirst().kind, LyricsProvider::Result::Found);
+    const LyricsProvider::Source source = results.constFirst().candidate.source;
+    QCOMPARE(source.providerId, QStringLiteral("lrclib"));
+    QCOMPARE(source.providerName, QStringLiteral("LRCLIB"));
+    QCOMPARE(source.sourceUrl, QUrl(QStringLiteral("https://lrclib.net")));
+    QVERIFY(source.attribution.isEmpty());
+    QVERIFY(source.supportsSyncedLyrics);
 }
 
 void LyricsServiceTest::malformedLrclibResponsesAreTechnicalErrors()
