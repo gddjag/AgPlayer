@@ -12,8 +12,6 @@ QStringList TranslationManager::supportedLanguages()
     return {
         QStringLiteral("zh"),
         QStringLiteral("en"),
-        QStringLiteral("th"),
-        QStringLiteral("vi"),
     };
 }
 

@@ -129,7 +129,15 @@ $expected['PlayerControls'] = @(
     [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_))
 }
 
-foreach ($locale in @('zh', 'en', 'th', 'vi')) {
+$catalogDirectory = Join-Path $SourceRoot 'translations'
+$actualCatalogNames = @(Get-ChildItem -LiteralPath $catalogDirectory -Filter 'agplayer_*.ts' |
+    ForEach-Object Name | Sort-Object)
+$expectedCatalogNames = @('agplayer_en.ts', 'agplayer_zh.ts')
+if (@(Compare-Object $expectedCatalogNames $actualCatalogNames).Count -ne 0) {
+    throw "Application translation catalogs must be exactly agplayer_zh.ts and agplayer_en.ts"
+}
+
+foreach ($locale in @('zh', 'en')) {
     $catalogPath = Join-Path $SourceRoot "translations/agplayer_$locale.ts"
     [xml]$catalog = Get-Content -Raw -Encoding UTF8 -LiteralPath $catalogPath
     foreach ($context in $expected.Keys) {

@@ -3647,8 +3647,8 @@
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="1576"/>
-        <source>深色（默认）</source>
-        <translation>深色（默认）</translation>
+        <source>深色</source>
+        <translation>深色</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="240"/>

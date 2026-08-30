@@ -41,7 +41,7 @@ private slots:
     void appearanceDefaultResetDoesNotTouchMediaSettingsOutsideEdit();
     void retiresLegacySmartPlaylists();
     void autoCleanCacheRemovesOldestFilesWhenOverLimit();
-    void supportsOnlyFourLanguages();
+    void supportsOnlyChineseAndEnglish();
     void editSessionCanCommitOrCancel();
     void rebindFileAssociationsEnablesRegistrationDuringEdit();
     void testModeDoesNotTouchStartupRegistry();
@@ -800,31 +800,37 @@ void SettingsControllerTest::autoCleanCacheRemovesOldestFilesWhenOverLimit()
     QDir(cacheDir).removeRecursively();
 }
 
-void SettingsControllerTest::supportsOnlyFourLanguages()
+void SettingsControllerTest::supportsOnlyChineseAndEnglish()
 {
-    SettingsController settings;
+    QSettings persisted;
+    persisted.clear();
 
     const QStringList supported = {
         QStringLiteral("zh"),
         QStringLiteral("en"),
-        QStringLiteral("th"),
-        QStringLiteral("vi"),
     };
     for (const QString& language : supported) {
+        SettingsController settings;
         settings.setLanguage(language);
         QCOMPARE(settings.language(), language);
     }
 
     const QStringList unsupported = {
+        QStringLiteral("th"),
+        QStringLiteral("vi"),
         QStringLiteral("ko"),
         QStringLiteral("my"),
         QStringLiteral("lo"),
         QStringLiteral("fr"),
     };
     for (const QString& language : unsupported) {
-        settings.setLanguage(language);
-        QCOMPARE(settings.language(), QStringLiteral("zh"));
+        persisted.setValue(QStringLiteral("general/language"), language);
+        SettingsController loaded;
+        QCOMPARE(loaded.language(), QStringLiteral("zh"));
+        loaded.setLanguage(language);
+        QCOMPARE(loaded.language(), QStringLiteral("zh"));
     }
+    persisted.clear();
 }
 
 void SettingsControllerTest::editSessionCanCommitOrCancel()
@@ -865,7 +871,7 @@ void SettingsControllerTest::editSessionCanCommitOrCancel()
 
     settings.beginEdit();
     settings.setThemeMode(2);
-    settings.setLanguage(QStringLiteral("vi"));
+    settings.setLanguage(QStringLiteral("zh"));
     persisted.sync();
     QCOMPARE(persisted.value(QStringLiteral("appearance/themeMode")).toInt(), 1);
     QCOMPARE(persisted.value(QStringLiteral("general/language")).toString(),
@@ -874,7 +880,7 @@ void SettingsControllerTest::editSessionCanCommitOrCancel()
 
     SettingsController committed;
     QCOMPARE(committed.themeMode(), 2);
-    QCOMPARE(committed.language(), QStringLiteral("vi"));
+    QCOMPARE(committed.language(), QStringLiteral("zh"));
 }
 
 void SettingsControllerTest::testModeDoesNotTouchStartupRegistry()

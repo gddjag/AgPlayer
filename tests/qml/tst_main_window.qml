@@ -4922,7 +4922,7 @@ TestCase {
         page.close()
     }
 
-    function test_settings_language_combo_renders_flag_and_language() {
+    function test_settings_language_combo_lists_only_plain_chinese_and_english() {
         var page = findChild(mainWindow, "settingsPage")
         var ownsPage = false
         if (!page) {
@@ -4935,14 +4935,14 @@ TestCase {
         wait(150)
         var combo = findChild(page, "languageCombo")
         verify(combo)
-        compare(combo.valueModel.length, 4)
-        compare(combo.valueModel[0].text, "🇨🇳 中文")
-        compare(combo.valueModel[1].text, "🇺🇸 English")
-        compare(combo.valueModel[2].text, "🇹🇭 ไทย")
-        compare(combo.valueModel[3].text, "🇻🇳 Tiếng Việt")
+        compare(combo.valueModel.length, 2)
+        compare(combo.valueModel[0].text, "中文")
+        compare(combo.valueModel[1].text, "English")
+        const labels = combo.valueModel.map(function(entry) { return entry.text }).join("|")
+        verify(!/CN|US|🇨🇳|🇺🇸|ไทย|Tiếng Việt/.test(labels))
         SettingsController.language = "en"
         tryCompare(combo, "currentIndex", 1)
-        tryVerify(function() { return combo.contentItem.text === "🇺🇸 English" })
+        tryVerify(function() { return combo.contentItem.text === "English" })
         SettingsController.language = "zh"
         if (ownsPage) {
             page.saveAndClose()
@@ -5185,6 +5185,7 @@ TestCase {
         var lightButton = findChild(page, "themeModeLight")
         var darkButton = findChild(page, "themeModeDark")
         verify(systemButton && lightButton && darkButton)
+        compare(darkButton.text, "深色")
         verify(!findChild(page, "themeModeCustom"))
         verify(!findChild(page, "themeColorSelector"))
 

@@ -17,13 +17,13 @@ if ($packageScript -notmatch '\.VersionInfo' -or
     throw "Packaging must reject an executable whose PE version differs from the release version"
 }
 
-if ($installer -notmatch '(?m)^ShowLanguageDialog=yes\r?$' -or
+if ($installer -notmatch '(?m)^ShowLanguageDialog=no\r?$' -or
     $installer -notmatch '(?m)^LanguageDetectionMethod=none\r?$' -or
     $installer -notmatch 'Name:\s*"chinesesimplified"' -or
     $installer -notmatch 'Name:\s*"english"' -or
     $installer -notmatch 'Name:\s*"thai"' -or
     $installer -notmatch 'Name:\s*"vietnamese"') {
-    throw "Installer must show a language selector with Simplified Chinese as the default"
+    throw "Installer must start in Chinese without a language dialog"
 }
 if ($installer.IndexOf('Name: "chinesesimplified"') -gt
     $installer.IndexOf('Name: "english"')) {

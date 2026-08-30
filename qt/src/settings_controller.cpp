@@ -1899,8 +1899,7 @@ QString SettingsController::defaultExportDir()
 QString SettingsController::validatedLanguage(const QString& value)
 {
     static const QStringList supported = {
-        QStringLiteral("zh"), QStringLiteral("en"),
-        QStringLiteral("th"), QStringLiteral("vi")};
+        QStringLiteral("zh"), QStringLiteral("en")};
     const QString lower = value.toLower();
     if (supported.contains(lower)) {
         return lower;
