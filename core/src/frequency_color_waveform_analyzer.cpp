@@ -26,6 +26,29 @@ void clear_output(FrequencyColorWaveformData& output) noexcept
     output = {};
 }
 
+class DecoderOpenDiagnosticScope final {
+public:
+    explicit DecoderOpenDiagnosticScope(
+        FrequencyColorAnalysisDiagnostics* const diagnostics) noexcept
+        : diagnostics_(diagnostics),
+          opens_before_(Decoder::threadOpenCount())
+    {
+    }
+
+    ~DecoderOpenDiagnosticScope()
+    {
+        if (diagnostics_ == nullptr) return;
+        const std::uint64_t count = Decoder::threadOpenCount() - opens_before_;
+        diagnostics_->decoder_open_count = static_cast<std::uint32_t>(
+            std::min<std::uint64_t>(
+                count, std::numeric_limits<std::uint32_t>::max()));
+    }
+
+private:
+    FrequencyColorAnalysisDiagnostics* diagnostics_ = nullptr;
+    std::uint64_t opens_before_ = 0U;
+};
+
 float envelope(const detail::BucketStats& stats) noexcept
 {
     if (stats.count == 0U || !std::isfinite(stats.peak)
@@ -102,6 +125,66 @@ void display_map(std::vector<float>& values,
 } // namespace
 
 namespace detail {
+
+FrequencyTimelineCursor::FrequencyTimelineCursor(
+    const std::uint64_t timestamp_quantization_frames,
+    const std::uint64_t leading_padding_frames) noexcept
+    : timestamp_quantization_frames_(
+          std::max<std::uint64_t>(1U, timestamp_quantization_frames)),
+      leading_padding_frames_(leading_padding_frames)
+{
+}
+
+ag_result FrequencyTimelineCursor::mapBlock(
+    const std::int64_t timestamp_frame,
+    const std::size_t frame_count,
+    FrequencyTimelineBlock& output) noexcept
+{
+    output = {};
+    if (failed_) return AG_DECODE_ERROR;
+
+    std::uint64_t candidate = 0U;
+    if (timestamp_frame < 0) {
+        const std::uint64_t magnitude = timestamp_frame
+            == std::numeric_limits<std::int64_t>::min()
+            ? std::uint64_t{1U} << 63U
+            : static_cast<std::uint64_t>(-timestamp_frame);
+        if (timeline_started_ || magnitude > leading_padding_frames_) {
+            failed_ = true;
+            return AG_DECODE_ERROR;
+        }
+        output.skip_frames = static_cast<std::size_t>(
+            std::min<std::uint64_t>(magnitude, frame_count));
+        if (output.skip_frames == frame_count) return AG_OK;
+        candidate = 0U;
+    } else {
+        candidate = static_cast<std::uint64_t>(timestamp_frame);
+    }
+
+    output.frame_count = frame_count - output.skip_frames;
+    if (timeline_started_ && timestamp_quantization_frames_ > 1U) {
+        const std::uint64_t difference = candidate > expected_frame_
+            ? candidate - expected_frame_ : expected_frame_ - candidate;
+        if (difference < timestamp_quantization_frames_) {
+            candidate = expected_frame_;
+        }
+    }
+    if (timeline_started_ && candidate < expected_frame_) {
+        failed_ = true;
+        output = {};
+        return AG_DECODE_ERROR;
+    }
+    if (output.frame_count
+        > std::numeric_limits<std::uint64_t>::max() - candidate) {
+        failed_ = true;
+        output = {};
+        return AG_DECODE_ERROR;
+    }
+    output.begin_frame = candidate;
+    expected_frame_ = candidate + output.frame_count;
+    timeline_started_ = true;
+    return AG_OK;
+}
 
 FrequencyColorAccumulator::FrequencyColorAccumulator(
     const std::uint64_t timeline_frames,
@@ -234,6 +317,7 @@ ag_result FrequencyColorWaveformAnalyzer::analyze(
 {
     clear_output(output);
     if (diagnostics != nullptr) *diagnostics = {};
+    const DecoderOpenDiagnosticScope decoder_open_diagnostics(diagnostics);
     if (utf8_path.empty() || point_count == 0U) return AG_INVALID_ARGUMENT;
     if (is_cancelled(cancelled)) return AG_CANCELLED;
 
@@ -244,7 +328,6 @@ ag_result FrequencyColorWaveformAnalyzer::analyze(
         Decoder decoder;
         DecoderOpenOptions options;
         options.downmix = DecoderDownmix::AnalysisMono;
-        if (diagnostics != nullptr) diagnostics->decoder_open_count = 1U;
         const ag_result open_result = decoder.open(utf8_path, options);
         if (open_result != AG_OK) return open_result;
 
@@ -255,9 +338,17 @@ ag_result FrequencyColorWaveformAnalyzer::analyze(
         if (format.channels != 1 || format.sample_rate <= 0) {
             return AG_UNSUPPORTED_FORMAT;
         }
+        const float high_frequency_limit = std::min(
+            20'000.0F, static_cast<float>(format.sample_rate) * 0.45F);
+        if (high_frequency_limit <= 2'800.0F) {
+            return AG_UNSUPPORTED_FORMAT;
+        }
 
         detail::FrequencyBandSplitter splitter(
             static_cast<float>(format.sample_rate));
+        detail::FrequencyTimelineCursor timeline_cursor(
+            format.timestamp_quantization_frames,
+            format.leading_padding_frames);
         detail::FrequencyColorAccumulator accumulator(
             format.timeline_frames, point_count);
         if (diagnostics != nullptr) {
@@ -265,11 +356,6 @@ ag_result FrequencyColorWaveformAnalyzer::analyze(
         }
 
         std::uint64_t decoded_frames = 0U;
-        bool timeline_started = false;
-        std::uint64_t expected_timeline_frame = 0U;
-        const std::uint64_t timestamp_rounding_tolerance =
-            std::max<std::uint64_t>(1U,
-                static_cast<std::uint64_t>(format.sample_rate) / 1'000U);
         DecodedAudioBlock block;
         do {
             if (is_cancelled(cancelled)) return AG_CANCELLED;
@@ -277,49 +363,25 @@ ag_result FrequencyColorWaveformAnalyzer::analyze(
             if (read_result != AG_OK) return read_result;
             if (block.samples.size() != block.frames) return AG_DECODE_ERROR;
             if (block.frames > 0U) {
-                std::size_t leading_preroll = 0U;
-                if (block.timestamp_frame < 0) {
-                    if (timeline_started) return AG_DECODE_ERROR;
-                    const std::uint64_t magnitude = block.timestamp_frame
-                        == std::numeric_limits<std::int64_t>::min()
-                        ? std::uint64_t{1U} << 63U
-                        : static_cast<std::uint64_t>(-block.timestamp_frame);
-                    leading_preroll = static_cast<std::size_t>(
-                        std::min<std::uint64_t>(magnitude, block.frames));
-                }
-                const std::size_t timeline_frame_count =
-                    block.frames - leading_preroll;
-                std::int64_t adjusted_begin = block.timestamp_frame
-                    + static_cast<std::int64_t>(leading_preroll);
-                if (timeline_frame_count > 0U) {
-                    if (timeline_started) {
-                        const std::uint64_t candidate =
-                            static_cast<std::uint64_t>(adjusted_begin);
-                        const std::uint64_t difference = candidate
-                            > expected_timeline_frame
-                            ? candidate - expected_timeline_frame
-                            : expected_timeline_frame - candidate;
-                        if (difference <= timestamp_rounding_tolerance) {
-                            adjusted_begin = static_cast<std::int64_t>(
-                                expected_timeline_frame);
-                        }
-                    }
+                detail::FrequencyTimelineBlock timeline_block;
+                const ag_result timeline_result = timeline_cursor.mapBlock(
+                    block.timestamp_frame, block.frames, timeline_block);
+                if (timeline_result != AG_OK) return timeline_result;
+                if (timeline_block.frame_count > 0U) {
                     const ag_result begin_result = accumulator.beginBlock(
-                        adjusted_begin, timeline_frame_count);
+                        static_cast<std::int64_t>(timeline_block.begin_frame),
+                        timeline_block.frame_count);
                     if (begin_result != AG_OK) return begin_result;
-                    timeline_started = true;
-                    expected_timeline_frame = static_cast<std::uint64_t>(
-                        adjusted_begin) + timeline_frame_count;
                 }
                 for (std::size_t index = 0U; index < block.frames; ++index) {
                     const float sample = block.samples[index];
                     if (!std::isfinite(sample)) return AG_DECODE_ERROR;
                     const detail::FrequencyBandValues bands =
                         splitter.process(sample);
-                    if (index < leading_preroll) continue;
+                    if (index < timeline_block.skip_frames) continue;
                     const ag_result add_result = accumulator.addFrame(
-                        static_cast<std::uint64_t>(adjusted_begin)
-                            + index - leading_preroll,
+                        timeline_block.begin_frame + index
+                            - timeline_block.skip_frames,
                         {sample, bands.low, bands.mid, bands.high});
                     if (add_result != AG_OK) return add_result;
                 }
@@ -331,12 +393,8 @@ ag_result FrequencyColorWaveformAnalyzer::analyze(
                 decoded_frames += static_cast<std::uint64_t>(block.frames);
                 if (diagnostics != nullptr) ++diagnostics->decoded_block_count;
                 if (progress != nullptr) {
-                    const std::uint64_t block_end = block.timestamp_frame >= 0
-                        ? static_cast<std::uint64_t>(block.timestamp_frame)
-                              + static_cast<std::uint64_t>(block.frames)
-                        : timeline_frame_count > 0U
-                        ? static_cast<std::uint64_t>(timeline_frame_count)
-                        : 0U;
+                    const std::uint64_t block_end = timeline_block.begin_frame
+                        + timeline_block.frame_count;
                     const long double ratio = std::min<long double>(
                         static_cast<long double>(block_end)
                             / static_cast<long double>(format.timeline_frames),

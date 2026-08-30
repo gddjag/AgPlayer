@@ -89,6 +89,14 @@ int main(const int argc, char** argv)
                           "surround-5.1-unknown"));
     assert(create_fixture(fixture_generator, durationless_path, "durationless"));
 
+    const std::uint64_t open_count_before = agplayer::Decoder::threadOpenCount();
+    agplayer::Decoder counted_decoder;
+    assert(counted_decoder.open(sine_path.string()) == AG_OK);
+    assert(agplayer::Decoder::threadOpenCount() == open_count_before + 1U);
+    assert(counted_decoder.open(sine_path.string()) == AG_OK);
+    assert(agplayer::Decoder::threadOpenCount() == open_count_before + 2U);
+    counted_decoder.close();
+
     ag_metadata* metadata = reinterpret_cast<ag_metadata*>(
         static_cast<std::uintptr_t>(1U));
     assert(ag_metadata_open(nullptr, &metadata) == AG_INVALID_ARGUMENT);
@@ -165,6 +173,9 @@ int main(const int argc, char** argv)
     assert(analysis_stereo_decoder.output_format().channels == 1);
     assert(analysis_stereo_decoder.output_format().has_timeline);
     assert(analysis_stereo_decoder.output_format().timeline_frames == 96'000U);
+    assert(analysis_stereo_decoder.output_format().timestamp_quantization_frames
+           == 2U);
+    assert(analysis_stereo_decoder.output_format().leading_padding_frames == 0U);
     read_first_audio_block(analysis_stereo_decoder, block);
     assert(block.samples.size() == block.frames);
     // Mutation caught: replacing the L2-normalized stereo matrix with a

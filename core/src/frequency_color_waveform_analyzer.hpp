@@ -42,6 +42,30 @@ struct FrequencyFrameValues final {
     float high = 0.0F;
 };
 
+struct FrequencyTimelineBlock final {
+    std::uint64_t begin_frame = 0U;
+    std::size_t skip_frames = 0U;
+    std::size_t frame_count = 0U;
+};
+
+class FrequencyTimelineCursor final {
+public:
+    FrequencyTimelineCursor(std::uint64_t timestamp_quantization_frames,
+                            std::uint64_t leading_padding_frames) noexcept;
+
+    [[nodiscard]] ag_result mapBlock(
+        std::int64_t timestamp_frame,
+        std::size_t frame_count,
+        FrequencyTimelineBlock& output) noexcept;
+
+private:
+    std::uint64_t timestamp_quantization_frames_ = 1U;
+    std::uint64_t leading_padding_frames_ = 0U;
+    std::uint64_t expected_frame_ = 0U;
+    bool timeline_started_ = false;
+    bool failed_ = false;
+};
+
 class FrequencyColorAccumulator final {
 public:
     FrequencyColorAccumulator(std::uint64_t timeline_frames,

@@ -66,6 +66,8 @@ struct DecodedAudioFormat final {
     int sample_rate = 0;
     int channels = 0;
     std::uint64_t timeline_frames = 0;
+    std::uint64_t timestamp_quantization_frames = 1U;
+    std::uint64_t leading_padding_frames = 0U;
     bool has_timeline = false;
 };
 
@@ -96,6 +98,7 @@ public:
     [[nodiscard]] ag_result seekFrame(std::int64_t target_frame) noexcept;
     [[nodiscard]] const MediaMetadata& metadata() const noexcept;
     [[nodiscard]] const DecodedAudioFormat& output_format() const noexcept;
+    [[nodiscard]] static std::uint64_t threadOpenCount() noexcept;
 
 private:
     class Impl;

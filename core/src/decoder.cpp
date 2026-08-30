@@ -26,6 +26,8 @@ extern "C" {
 namespace agplayer {
 namespace {
 
+thread_local std::uint64_t decoder_thread_open_count = 0U;
+
 constexpr std::size_t kMaxProbeTagBytes = 4U * 1024U * 1024U;
 constexpr std::size_t kMaxProbeCoverBytes = 32U * 1024U * 1024U;
 constexpr int kMaxMetadataProbePackets = 32;
@@ -777,9 +779,48 @@ private:
     void set_output_timeline(const AVStream& audio_stream) noexcept
     {
         output_format_.timeline_frames = 0;
+        output_format_.timestamp_quantization_frames = 1U;
+        output_format_.leading_padding_frames = 0U;
         output_format_.has_timeline = false;
-        if (audio_stream.duration == AV_NOPTS_VALUE || audio_stream.duration <= 0
-            || output_sample_rate_ <= 0) {
+        if (output_sample_rate_ <= 0) {
+            return;
+        }
+
+        if (audio_stream.time_base.num > 0 && audio_stream.time_base.den > 0) {
+            const std::int64_t timestamp_quantization = av_rescale_q_rnd(
+                1, audio_stream.time_base,
+                AVRational{1, output_sample_rate_}, AV_ROUND_UP);
+            if (timestamp_quantization > 0) {
+                output_format_.timestamp_quantization_frames =
+                    static_cast<std::uint64_t>(timestamp_quantization);
+            }
+        }
+
+        const AVCodecParameters* const parameters = audio_stream.codecpar;
+        if (parameters != nullptr && parameters->initial_padding > 0
+            && parameters->sample_rate > 0) {
+            const std::int64_t codec_padding = av_rescale_rnd(
+                parameters->initial_padding, output_sample_rate_,
+                parameters->sample_rate, AV_ROUND_UP);
+            if (codec_padding > 0) {
+                output_format_.leading_padding_frames =
+                    static_cast<std::uint64_t>(codec_padding);
+            }
+        }
+        if (audio_stream.start_time != AV_NOPTS_VALUE
+            && audio_stream.start_time > 0) {
+            const std::int64_t stream_preroll = av_rescale_q_rnd(
+                audio_stream.start_time, audio_stream.time_base,
+                AVRational{1, output_sample_rate_}, AV_ROUND_UP);
+            if (stream_preroll > 0) {
+                output_format_.leading_padding_frames = std::max(
+                    output_format_.leading_padding_frames,
+                    static_cast<std::uint64_t>(stream_preroll));
+            }
+        }
+
+        if (audio_stream.duration == AV_NOPTS_VALUE
+            || audio_stream.duration <= 0) {
             return;
         }
         const std::int64_t frames = av_rescale_q(
@@ -1109,6 +1150,7 @@ ag_result Decoder::open(const std::string& utf8_path,
 ag_result Decoder::open(const std::string& utf8_path,
                         const DecoderOpenOptions& options) noexcept
 {
+    ++decoder_thread_open_count;
     try {
         return impl_->open(utf8_path, options);
     } catch (...) {
@@ -1155,6 +1197,11 @@ const MediaMetadata& Decoder::metadata() const noexcept
 const DecodedAudioFormat& Decoder::output_format() const noexcept
 {
     return impl_->output_format();
+}
+
+std::uint64_t Decoder::threadOpenCount() noexcept
+{
+    return decoder_thread_open_count;
 }
 
 } // namespace agplayer
