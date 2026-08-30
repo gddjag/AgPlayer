@@ -31,6 +31,8 @@ private slots:
     void immersivePresentationRestoresMainShellAndGeometryWithoutPersistingTemporaryState();
     void immersivePresentationRestoresMiniGeometry();
     void immersivePresentationRestoresFirstRunIntegratedGeometryWithoutCreatingASetting();
+    void immersivePresentationRestoresFirstRunMiniGeometryWithoutCreatingASetting();
+    void immersivePresentationFirstRunGeometryPersistsAfterLaterUserMove();
     void updatesExistingWindowObjectsAndFlags();
     void visibilityWaitsForDestinationReadiness();
     void shutdownIsOrderedAndIdempotent();
@@ -285,6 +287,67 @@ void WindowControllerTest::immersivePresentationRestoresFirstRunIntegratedGeomet
     const QRect firstRunGeometry(126, 88, 580, 360);
     const QRect temporaryGeometry(210, 140, 320, 220);
     QWindow mainWindow;
+    {
+        WindowController windows;
+        windows.setWindows(&mainWindow, nullptr);
+        windows.setMainWindowShellMode(1);
+        mainWindow.setGeometry(firstRunGeometry);
+
+        QSettings settings;
+        settings.remove(QStringLiteral("windows/integratedMainGeometry"));
+        settings.sync();
+        QVERIFY(!settings.contains(QStringLiteral("windows/integratedMainGeometry")));
+
+        windows.enterImmersivePresentation();
+        mainWindow.setGeometry(temporaryGeometry);
+        windows.leaveImmersivePresentation();
+
+        QCOMPARE(mainWindow.geometry(), firstRunGeometry);
+        QTest::qWait(300);
+        settings.sync();
+        QVERIFY(!settings.contains(QStringLiteral("windows/integratedMainGeometry")));
+    }
+    QSettings persistedSettings;
+    persistedSettings.sync();
+    QVERIFY(!persistedSettings.contains(
+        QStringLiteral("windows/integratedMainGeometry")));
+}
+
+void WindowControllerTest::immersivePresentationRestoresFirstRunMiniGeometryWithoutCreatingASetting()
+{
+    const QRect firstRunGeometry(118, 96, 360, 208);
+    const QRect temporaryGeometry(230, 170, 280, 180);
+    QWindow mainWindow;
+    QWindow miniWindow;
+    {
+        WindowController windows;
+        windows.setWindows(&mainWindow, &miniWindow);
+        miniWindow.setGeometry(firstRunGeometry);
+
+        QSettings settings;
+        settings.remove(QStringLiteral("windows/miniGeometry"));
+        settings.sync();
+        QVERIFY(!settings.contains(QStringLiteral("windows/miniGeometry")));
+
+        windows.enterImmersivePresentation();
+        miniWindow.setGeometry(temporaryGeometry);
+        windows.leaveImmersivePresentation();
+
+        QCOMPARE(miniWindow.geometry(), firstRunGeometry);
+        QTest::qWait(300);
+        settings.sync();
+        QVERIFY(!settings.contains(QStringLiteral("windows/miniGeometry")));
+    }
+    QSettings persistedSettings;
+    persistedSettings.sync();
+    QVERIFY(!persistedSettings.contains(QStringLiteral("windows/miniGeometry")));
+}
+
+void WindowControllerTest::immersivePresentationFirstRunGeometryPersistsAfterLaterUserMove()
+{
+    const QRect firstRunGeometry(126, 88, 580, 360);
+    const QRect userGeometry(164, 112, 600, 380);
+    QWindow mainWindow;
     WindowController windows;
     windows.setWindows(&mainWindow, nullptr);
     windows.setMainWindowShellMode(1);
@@ -293,14 +356,18 @@ void WindowControllerTest::immersivePresentationRestoresFirstRunIntegratedGeomet
     QSettings settings;
     settings.remove(QStringLiteral("windows/integratedMainGeometry"));
     settings.sync();
-    QVERIFY(!settings.contains(QStringLiteral("windows/integratedMainGeometry")));
 
     windows.enterImmersivePresentation();
-    mainWindow.setGeometry(temporaryGeometry);
     windows.leaveImmersivePresentation();
-
-    QCOMPARE(mainWindow.geometry(), firstRunGeometry);
+    QTest::qWait(300);
+    settings.sync();
     QVERIFY(!settings.contains(QStringLiteral("windows/integratedMainGeometry")));
+
+    mainWindow.setGeometry(userGeometry);
+    QTest::qWait(300);
+    settings.sync();
+    QCOMPARE(settings.value(QStringLiteral("windows/integratedMainGeometry")).toRect(),
+             userGeometry);
 }
 
 void WindowControllerTest::shellModesPersistIndependentMainWindowGeometry()

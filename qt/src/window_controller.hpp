@@ -195,6 +195,9 @@ private:
     int immersiveRestoreMainWindowShellMode_ = 0;
     QRect immersiveRestoreMainGeometry_;
     QRect immersiveRestoreMiniGeometry_;
+    QString immersiveRestoreMainGeometryKey_;
+    bool immersiveRestoreMainGeometryWasPersisted_ = true;
+    bool immersiveRestoreMiniGeometryWasPersisted_ = true;
     bool audioToolsVisible_ = false;
     bool alwaysOnTop_ = false;
     bool magneticSnapEnabled_ = true;
