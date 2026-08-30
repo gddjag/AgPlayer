@@ -121,6 +121,8 @@ void UnisonLyricsProvider::request(const quint64 requestId, const Track& track, 
         return;
     }
 
+    cancel(requestId);
+
     QUrl url(QStringLiteral("https://unison.boidu.dev")
              + (exact ? QStringLiteral("/lyrics") : QStringLiteral("/lyrics/search")));
     QUrlQuery query;
@@ -159,10 +161,11 @@ void UnisonLyricsProvider::request(const quint64 requestId, const Track& track, 
 void UnisonLyricsProvider::handleReply(QNetworkReply* reply, const bool exact)
 {
     const quint64 requestId = reply->property("lyricsRequestId").toULongLong();
-    if (replies_.take(requestId) != reply) {
+    if (replies_.value(requestId) != reply) {
         reply->deleteLater();
         return;
     }
+    replies_.remove(requestId);
     if (reply->property("lyricsTimedOut").toBool()) {
         complete(requestId, Result::technicalError(0, false, QStringLiteral("timeout")));
         reply->deleteLater();

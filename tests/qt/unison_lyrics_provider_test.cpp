@@ -103,6 +103,8 @@ private slots:
     void classifiesTimeoutAndNetworkFailures();
     void rejectsServerAndInvalidResponseShapes();
     void cancellationSuppressesFinishedIncludingLateReplies();
+    void repeatedExactRequestIdSupersedesOldReply();
+    void repeatedSearchRequestIdKeepsCancellationIsolated();
 };
 
 void UnisonLyricsProviderTest::requestsUseOnlyOfficialReadOnlyRoutesAndMetadata()
@@ -330,6 +332,75 @@ void UnisonLyricsProviderTest::cancellationSuppressesFinishedIncludingLateReplie
     reply->respond(200, QByteArrayLiteral(
         R"({"success":true,"data":{"id":7,"song":"Song","artist":"Artist","lyrics":"x","format":"plain","syncType":"unsynced"}})"));
     QCOMPARE(results.size(), 0);
+}
+
+void UnisonLyricsProviderTest::repeatedExactRequestIdSupersedesOldReply()
+{
+    FakeNetworkAccessManager manager;
+    UnisonLyricsProvider provider(&manager, nullptr, 5);
+    QList<quint64> requestIds;
+    QList<LyricsProvider::Result> results;
+    connect(&provider, &LyricsProvider::finished, this,
+            [&requestIds, &results](quint64 requestId, const LyricsProvider::Result& result) {
+                requestIds.append(requestId);
+                results.append(result);
+            });
+    const LyricsProvider::Track track{QStringLiteral("Song"), QStringLiteral("Artist")};
+
+    provider.requestExact(42, track);
+    FakeNetworkReply* oldReply = manager.requests.constLast().reply;
+    provider.requestExact(42, track);
+    FakeNetworkReply* currentReply = manager.requests.constLast().reply;
+
+    QVERIFY(oldReply->aborted);
+    QCOMPARE(results.size(), 0);
+    oldReply->respond(200, QByteArrayLiteral(
+        R"({"success":true,"data":{"id":6,"song":"Old","artist":"Artist","lyrics":"old","format":"plain","syncType":"unsynced"}})"));
+    QCOMPARE(results.size(), 0);
+
+    currentReply->respond(200, QByteArrayLiteral(
+        R"({"success":true,"data":{"id":7,"song":"Song","artist":"Artist","lyrics":"new","format":"plain","syncType":"unsynced"}})"));
+    QCOMPARE(requestIds, QList<quint64>{42});
+    QCOMPARE(results.size(), 1);
+    QCOMPARE(results.constFirst().kind, LyricsProvider::Result::Found);
+    QCOMPARE(results.constFirst().candidate.plainLyrics, QStringLiteral("new"));
+
+    QTest::qWait(10);
+    QCOMPARE(results.size(), 1);
+}
+
+void UnisonLyricsProviderTest::repeatedSearchRequestIdKeepsCancellationIsolated()
+{
+    FakeNetworkAccessManager manager;
+    UnisonLyricsProvider provider(&manager);
+    QList<quint64> requestIds;
+    QList<LyricsProvider::Result> results;
+    connect(&provider, &LyricsProvider::finished, this,
+            [&requestIds, &results](quint64 requestId, const LyricsProvider::Result& result) {
+                requestIds.append(requestId);
+                results.append(result);
+            });
+    const LyricsProvider::Track track{QStringLiteral("Song"), QStringLiteral("Artist")};
+
+    provider.requestSearch(73, track);
+    FakeNetworkReply* oldReply = manager.requests.constLast().reply;
+    provider.requestSearch(73, track);
+    FakeNetworkReply* cancelledReply = manager.requests.constLast().reply;
+
+    QVERIFY(oldReply->aborted);
+    provider.cancel(73);
+    QVERIFY(cancelledReply->aborted);
+    oldReply->respond(200, QByteArrayLiteral(R"({"success":true,"data":[]})"));
+    cancelledReply->respond(200, QByteArrayLiteral(R"({"success":true,"data":[]})"));
+    QCOMPARE(results.size(), 0);
+
+    provider.requestSearch(73, track);
+    manager.requests.constLast().reply->respond(200, QByteArrayLiteral(
+        R"({"success":true,"data":[{"id":8,"song":"Song","artist":"Artist","lyrics":"plain line","format":"plain","syncType":"unsynced"}]})"));
+    QCOMPARE(requestIds, QList<quint64>{73});
+    QCOMPARE(results.size(), 1);
+    QCOMPARE(results.constFirst().kind, LyricsProvider::Result::SearchResults);
+    QCOMPARE(results.constFirst().candidates.size(), 1);
 }
 
 QTEST_MAIN(UnisonLyricsProviderTest)

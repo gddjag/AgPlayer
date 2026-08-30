@@ -28,6 +28,16 @@
   — 2/2 passed in 1.05 s.
 - `git diff --check` — passed before commit.
 
+## Independent-review correction
+
+- Independent review found that replacing an in-flight request with the same
+  `requestId` could let the stale reply remove the current reply's map entry.
+- Added exact and search regressions that first failed on the stale-reply race,
+  then changed replacement to cancel the old request and changed completion to
+  compare the mapped reply before removing it.
+- Rebuilt `unison_lyrics_provider_test` and `lyrics_service_test`; 2/2 passed in
+  1.33 s after the correction, then both passed three consecutive runs (6/6).
+
 ## Remaining scope
 
 Provider-chain failover and LyricsService/QML integration remain owned by later
