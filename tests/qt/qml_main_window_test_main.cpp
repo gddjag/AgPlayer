@@ -12,7 +12,6 @@
 #include "qml_registration.hpp"
 #include "settings_controller.hpp"
 #include "tag_model.hpp"
-#include "theme_manager.hpp"
 #include "track_waveform_thumbnail_provider.hpp"
 #include "waveform_provider.hpp"
 #include "window_controller.hpp"
@@ -444,9 +443,6 @@ public slots:
         filenameProcessor_->setLibraryModel(library_.get());
         formatConverter_ = std::make_unique<FormatConverter>();
         settings_ = std::make_unique<SettingsController>();
-        themeManager_ = std::make_unique<ThemeManager>(*qGuiApp);
-        themeSettings_ = std::make_unique<ThemeSettingsSynchronizer>(
-            *themeManager_, *settings_);
         waveformProvider_ = std::make_unique<WaveformProvider>(settings_.get());
         thumbnailProvider_ = std::make_unique<TrackWaveformThumbnailProvider>(
             settings_->cacheDirectory());
@@ -477,8 +473,7 @@ public slots:
                                         tagModel_.get(),
                                         libraryNavigation_.get(),
                                         libraryManager_.get(),
-                                        thumbnailProvider_.get(),
-                                        themeManager_.get()});
+                                        thumbnailProvider_.get()});
     }
 
     void qmlEngineAvailable(QQmlEngine* engine)
@@ -559,8 +554,6 @@ private:
     std::unique_ptr<FilenameProcessor> filenameProcessor_;
     std::unique_ptr<FormatConverter> formatConverter_;
     std::unique_ptr<SettingsController> settings_;
-    std::unique_ptr<ThemeManager> themeManager_;
-    std::unique_ptr<ThemeSettingsSynchronizer> themeSettings_;
     std::unique_ptr<WaveformProvider> waveformProvider_;
     std::unique_ptr<TrackWaveformThumbnailProvider> thumbnailProvider_;
     std::unique_ptr<LibraryManagerController> libraryManager_;

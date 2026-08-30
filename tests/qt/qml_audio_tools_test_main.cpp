@@ -10,7 +10,6 @@
 #include "playlist_model.hpp"
 #include "qml_registration.hpp"
 #include "settings_controller.hpp"
-#include "theme_manager.hpp"
 #include "audio_preview_controller.hpp"
 #include "vocal_separation_controller.hpp"
 #include "waveform_provider.hpp"
@@ -762,8 +761,6 @@ public:
         // processes cannot race their teardown against an already freed core.
         visualFormatTaskModel_.reset();
         waveformProvider_.reset();
-        themeSettings_.reset();
-        themeManager_.reset();
         settings_.reset();
         audioEditor_.reset();
         formatConverter_.reset();
@@ -804,9 +801,6 @@ public slots:
         audioEditor_ = std::make_unique<AudioEditorController>();
         audioEditor_->setPlaybackController(playback_.get());
         settings_ = std::make_unique<SettingsController>();
-        themeManager_ = std::make_unique<ThemeManager>(*qGuiApp);
-        themeSettings_ = std::make_unique<ThemeSettingsSynchronizer>(
-            *themeManager_, *settings_);
         waveformProvider_ = std::make_unique<WaveformProvider>(settings_.get());
         visualFormatTaskModel_ = std::make_unique<VisualFormatTaskModel>();
         playlists_ = std::make_unique<PlaylistModel>();
@@ -831,9 +825,7 @@ public slots:
                                      formatConverter_.get(), filenameProcessor_.get(),
                                      settings_.get(), waveformProvider_.get(),
                                      playlists_.get(), nullptr, audioEditor_.get(),
-                                     AgPlayerQmlRuntimeModels{
-                                         nullptr, nullptr, nullptr, nullptr,
-                                         themeManager_.get(), nullptr},
+                                     AgPlayerQmlRuntimeModels{},
                                      nullptr, nullptr, nullptr,
                                      audioPreview_.get(),
                                      vocalSeparation_.get());
@@ -869,8 +861,6 @@ private:
     std::unique_ptr<FormatConverter> formatConverter_;
     std::unique_ptr<AudioEditorController> audioEditor_;
     std::unique_ptr<SettingsController> settings_;
-    std::unique_ptr<ThemeManager> themeManager_;
-    std::unique_ptr<ThemeSettingsSynchronizer> themeSettings_;
     std::unique_ptr<WaveformProvider> waveformProvider_;
     std::unique_ptr<VisualFormatTaskModel> visualFormatTaskModel_;
     std::unique_ptr<PlaylistModel> playlists_;

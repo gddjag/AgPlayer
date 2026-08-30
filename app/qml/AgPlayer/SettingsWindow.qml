@@ -44,15 +44,9 @@ Window {
         settingsPage.cancelAndClose()
     }
 
-    SkinBackdrop {
-        anchors.fill: parent
-        radius: settingsWindow.visibility === Window.Maximized
-                ? 0 : Theme.windowRadius
-    }
-
     Rectangle {
         anchors.fill: parent
-        color: "transparent"
+        color: Theme.background
         radius: settingsWindow.visibility === Window.Maximized
                 ? 0 : Theme.windowRadius
         border.color: Theme.border

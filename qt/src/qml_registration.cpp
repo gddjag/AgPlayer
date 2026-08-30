@@ -25,7 +25,6 @@
 #include "tag_model.hpp"
 #include "tag_filter_model.hpp"
 #include "terrain_reactor_item.hpp"
-#include "theme_manager.hpp"
 #include "track_waveform_thumbnail_item.hpp"
 #include "track_waveform_thumbnail_provider.hpp"
 #include "waveform_item.hpp"
@@ -34,8 +33,6 @@
 #include "window_controller.hpp"
 
 #include <qqml.h>
-
-#include <QGuiApplication>
 
 void register_agplayer_qml_types(LibraryModel* library,
                                  PlaybackController* playback,
@@ -59,11 +56,6 @@ void register_agplayer_qml_types(LibraryModel* library,
 {
     static PlaylistModel fallbackPlaylistModel;
     static EqualizerController fallbackEqualizer(nullptr);
-    ThemeManager* themeManager = runtime.themeManager;
-    if (themeManager == nullptr) {
-        static ThemeManager fallbackThemeManager(*qGuiApp);
-        themeManager = &fallbackThemeManager;
-    }
     PlaylistModel* const playlists = playlistModel != nullptr
         ? playlistModel : &fallbackPlaylistModel;
     if (audioPreview != nullptr) {
@@ -137,7 +129,6 @@ void register_agplayer_qml_types(LibraryModel* library,
                 return new PlaybackClipDragAdapter(library);
             });
     }
-    qmlRegisterSingletonInstance("AgPlayer", 1, 0, "ThemeManager", themeManager);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PlaybackController", playback);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "ImportController", importer);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "WindowController", windows);

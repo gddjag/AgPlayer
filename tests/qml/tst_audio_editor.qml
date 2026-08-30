@@ -202,21 +202,12 @@ TestCase {
         compare(shortcutText.indexOf("Phase"), -1)
     }
 
-    function test_composedToolsShellUsesLightPaletteAndGeneratedBackdrop() {
+    function test_composedToolsShellUsesLightPalette() {
         const previousMode = SettingsController.themeMode
-        const previousSkinMode = SettingsController.skinColorMode
-        const previousSkinPreset = SettingsController.skinPreset
-        const previousSkinKind = SettingsController.skinCustomKind
-        const previousSkinStart = SettingsController.skinCustomColor
-        const previousSkinMiddle = SettingsController.skinCustomColorMiddle
-        const previousSkinEnd = SettingsController.skinCustomColorEnd
-        const generatedPreset = previousSkinPreset === "aurora"
-                                ? "sunset" : "aurora"
         var shell = null
 
         try {
             SettingsController.themeMode = 1
-            SettingsController.selectDefaultSkin()
             wait(0)
             shell = createTemporaryObject(shellComponent, testCase)
             verify(shell)
@@ -229,86 +220,35 @@ TestCase {
             const close = findChild(shell, "audioToolsCloseButton")
             const topNav = findChild(shell, "audioToolsTopNav")
             verify(titleBar && titleText && contentStack
-                   && minimize && maximize && close,
-                   "the themed tools shell objects must exist")
-            verify(topNav, "the top navigation surface must exist")
+                   && minimize && maximize && close)
+            verify(topNav)
             compare(titleBar.color.toString(), Theme.panel.toString())
             compare(titleText.color.toString(), Theme.primaryText.toString())
             compare(contentStack.color.toString(), Theme.panel.toString())
             compare(minimize.icon.color.toString(), Theme.iconPrimary.toString())
             compare(maximize.icon.color.toString(), Theme.iconPrimary.toString())
             compare(close.icon.color.toString(), Theme.iconPrimary.toString())
-            verify(titleText.color.toString() !== titleBar.color.toString())
-            verify(minimize.icon.color.toString() !== titleBar.color.toString())
-            verify(close.icon.color.toString() !== titleBar.color.toString())
             compare(topNav.activeLabelColor.toString(),
                     Theme.primaryText.toString())
-            verify(topNav.activeLabelColor.toString()
-                   !== titleBar.color.toString())
-
-            SettingsController.selectSkinPreset(generatedPreset)
-            wait(0)
-            compare(contentStack.color.toString(), Theme.panel.toString())
-            verify(Theme.panel.a < 1.0,
-                   "generated Audio Tools panel must remain translucent")
-            verify(Theme.panel.toString() !== Theme.background.toString(),
-                   "generated panel must not collapse to the opaque background")
-
-            const backdrop = findChild(shell, "skinBackdrop")
-            verify(backdrop, "Audio Tools root SkinBackdrop must exist")
-            const gradientPaint = findChild(backdrop, "skinBackdropGradient")
-            verify(gradientPaint, "Audio Tools root gradient must exist")
-            compare(gradientPaint.gradient.stops[0].color.toString(),
-                    ThemeManager.backdropStart.toString())
-            compare(gradientPaint.gradient.stops[1].color.toString(),
-                    ThemeManager.backdropMiddle.toString())
-            compare(gradientPaint.gradient.stops[2].color.toString(),
-                    ThemeManager.backdropEnd.toString())
+            compare(findChild(shell, "skinBackdrop"), null)
         } finally {
             if (shell)
                 shell.destroy()
-            SettingsController.setSkinCustomConfiguration(
-                        previousSkinKind, previousSkinStart,
-                        previousSkinMiddle, previousSkinEnd)
-            SettingsController.skinPreset = previousSkinPreset
-            SettingsController.skinColorMode = previousSkinMode
             SettingsController.themeMode = previousMode
             wait(0)
-            compare(SettingsController.skinPreset, previousSkinPreset)
-            compare(SettingsController.skinColorMode, previousSkinMode)
-            compare(SettingsController.skinCustomKind, previousSkinKind)
-            compare(SettingsController.skinCustomColor, previousSkinStart)
-            compare(SettingsController.skinCustomColorMiddle,
-                    previousSkinMiddle)
-            compare(SettingsController.skinCustomColorEnd, previousSkinEnd)
-            compare(SettingsController.themeMode, previousMode)
         }
     }
 
-    function test_editor_media_colors_stay_exact_and_ignore_theme_seeds() {
+    function test_editor_media_colors_stay_exact_across_themes() {
         const previousMode = SettingsController.themeMode
-        const previousSkinMode = SettingsController.skinColorMode
-        const previousSkinPreset = SettingsController.skinPreset
-        const previousSkinKind = SettingsController.skinCustomKind
-        const previousSkinStart = SettingsController.skinCustomColor
-        const previousSkinMiddle = SettingsController.skinCustomColorMiddle
-        const previousSkinEnd = SettingsController.skinCustomColorEnd
 
         SettingsController.themeMode = 1
-        SettingsController.setSkinCustomConfiguration(
-                    0, "#007AFF", "#007AFF", "#007AFF")
         wait(0)
         compare(Theme.editorWaveform.toString(), "#169b97")
         compare(Theme.editorOverviewWaveform.toString(), "#2b9692")
         compare(Theme.editorSelection.toString(), "#26169b97")
         compare(Theme.editorOverviewSelection.toString(), "#122b9692")
         compare(Theme.listWaveformMono.toString(), "#6b5a70")
-
-        SettingsController.setSkinCustomConfiguration(
-                    0, "#FF3B30", "#FF3B30", "#FF3B30")
-        wait(0)
-        compare(Theme.editorWaveform.toString(), "#169b97")
-        compare(Theme.editorSelection.toString(), "#26169b97")
 
         SettingsController.themeMode = 0
         wait(0)
@@ -323,14 +263,7 @@ TestCase {
         compare(dragLabel.color.toString(),
                 Theme.editorSelectionLabel.toString())
 
-        SettingsController.setSkinCustomConfiguration(
-                    previousSkinKind, previousSkinStart,
-                    previousSkinMiddle, previousSkinEnd)
         SettingsController.themeMode = previousMode
-        if (previousSkinMode === 0)
-            SettingsController.selectDefaultSkin()
-        else if (previousSkinMode === 1)
-            SettingsController.selectSkinPreset(previousSkinPreset)
         wait(0)
     }
 

@@ -2,7 +2,6 @@
 #include "audio_editor/audio_editor_waveform_item.hpp"
 #include "audio_tools_controller.hpp"
 #include "settings_controller.hpp"
-#include "theme_manager.hpp"
 
 #include <QCoreApplication>
 #include <QQuickStyle>
@@ -26,13 +25,8 @@ public slots:
         QCoreApplication::setApplicationName(
             QStringLiteral("AgPlayer-test-audio-editor"));
         settings_ = std::make_unique<SettingsController>();
-        themeManager_ = std::make_unique<ThemeManager>(*qGuiApp);
-        themeSettings_ = std::make_unique<ThemeSettingsSynchronizer>(
-            *themeManager_, *settings_);
         qmlRegisterSingletonInstance("AgPlayer", 1, 0, "SettingsController",
                                      settings_.get());
-        qmlRegisterSingletonInstance("AgPlayer", 1, 0, "ThemeManager",
-                                     themeManager_.get());
         qmlRegisterSingletonType<AudioEditorController>(
             "AgPlayer", 1, 0, "AudioEditorController",
             [](QQmlEngine*, QJSEngine*) -> QObject* {
@@ -49,8 +43,6 @@ public slots:
 
 private:
     std::unique_ptr<SettingsController> settings_;
-    std::unique_ptr<ThemeManager> themeManager_;
-    std::unique_ptr<ThemeSettingsSynchronizer> themeSettings_;
 };
 
 QUICK_TEST_MAIN_WITH_SETUP(qml_audio_editor, QmlAudioEditorSetup)

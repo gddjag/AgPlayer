@@ -56,18 +56,6 @@ class SettingsController final : public QObject {
                    WRITE setWindowLayoutTheme NOTIFY windowLayoutThemeChanged)
     Q_PROPERTY(int playerShellMode READ playerShellMode WRITE setPlayerShellMode
                    NOTIFY playerShellModeChanged)
-    Q_PROPERTY(int skinColorMode READ skinColorMode WRITE setSkinColorMode
-                   NOTIFY skinColorModeChanged)
-    Q_PROPERTY(QString skinPreset READ skinPreset WRITE setSkinPreset
-                   NOTIFY skinPresetChanged)
-    Q_PROPERTY(int skinCustomKind READ skinCustomKind WRITE setSkinCustomKind
-                   NOTIFY skinCustomKindChanged)
-    Q_PROPERTY(QString skinCustomColor READ skinCustomColor WRITE setSkinCustomColor
-                   NOTIFY skinCustomColorChanged)
-    Q_PROPERTY(QString skinCustomColorMiddle READ skinCustomColorMiddle
-                   WRITE setSkinCustomColorMiddle NOTIFY skinCustomColorMiddleChanged)
-    Q_PROPERTY(QString skinCustomColorEnd READ skinCustomColorEnd
-                   WRITE setSkinCustomColorEnd NOTIFY skinCustomColorEndChanged)
     Q_PROPERTY(int waveformMode READ waveformMode WRITE setWaveformMode NOTIFY waveformModeChanged)
     Q_PROPERTY(double waveformHeight READ waveformHeight WRITE setWaveformHeight
                    NOTIFY waveformHeightChanged)
@@ -216,12 +204,6 @@ public:
     int themeMode() const noexcept;
     QString windowLayoutTheme() const;
     int playerShellMode() const noexcept;
-    int skinColorMode() const noexcept;
-    QString skinPreset() const;
-    int skinCustomKind() const noexcept;
-    QString skinCustomColor() const;
-    QString skinCustomColorMiddle() const;
-    QString skinCustomColorEnd() const;
     int waveformMode() const noexcept;
     double waveformHeight() const noexcept;
     double waveformDensity() const noexcept;
@@ -310,12 +292,6 @@ public:
     void setThemeMode(int value);
     void setWindowLayoutTheme(const QString& value);
     void setPlayerShellMode(int value);
-    void setSkinColorMode(int value);
-    void setSkinPreset(const QString& value);
-    void setSkinCustomKind(int value);
-    void setSkinCustomColor(const QString& value);
-    void setSkinCustomColorMiddle(const QString& value);
-    void setSkinCustomColorEnd(const QString& value);
     void setWaveformMode(int value);
     void setWaveformHeight(double value);
     void setWaveformDensity(double value);
@@ -375,11 +351,6 @@ public:
     void setCleanTempOnExit(bool value);
     void setCacheSizeLimitMB(int value);
 
-    Q_INVOKABLE void selectDefaultSkin();
-    Q_INVOKABLE void selectSkinPreset(const QString& id);
-    Q_INVOKABLE void setSkinCustomConfiguration(
-        int kind, const QString& start, const QString& middle,
-        const QString& end);
     Q_INVOKABLE void resetToDefaults();
     Q_INVOKABLE void resetWaveformDefaults();
     Q_INVOKABLE void resetWaveformFrequencyColors();
@@ -420,13 +391,6 @@ signals:
     void themeModeChanged();
     void windowLayoutThemeChanged();
     void playerShellModeChanged();
-    void skinColorModeChanged();
-    void skinPresetChanged();
-    void skinCustomKindChanged();
-    void skinCustomColorChanged();
-    void skinCustomColorMiddleChanged();
-    void skinCustomColorEndChanged();
-    void skinConfigurationChanged();
     void waveformModeChanged();
     void waveformHeightChanged();
     void waveformDensityChanged();
@@ -492,14 +456,6 @@ private:
     void saveAll(bool includeMediaSettings = true);
     void restoreDefaults(bool includeMediaSettings = true);
     void emitAllChanged(bool includeMediaSettings = true);
-    void applySkinFields(int colorMode, const QString& preset, int customKind,
-                         const QString& customStart,
-                         const QString& customMiddle,
-                         const QString& customEnd);
-    void applySkinCustomConfiguration(int colorMode, int kind,
-                                      const QString& start,
-                                      const QString& middle,
-                                      const QString& end);
     void persistValue(const QString& key, const QVariant& value);
     void applyAutoStartWithWindows();
     void applyCommittedEffects();
@@ -541,15 +497,9 @@ private:
     bool autoReadRating_ = true;
 
     // Appearance & Visualizer
-    int themeMode_ = 2;
+    int themeMode_ = 0;
     QString windowLayoutTheme_ = QStringLiteral("dual-window");
     int playerShellMode_ = 0;
-    int skinColorMode_ = 0;
-    QString skinPreset_ = QStringLiteral("aurora");
-    int skinCustomKind_ = 0;
-    QString skinCustomColor_ = QStringLiteral("#D27722");
-    QString skinCustomColorMiddle_ = QStringLiteral("#D27722");
-    QString skinCustomColorEnd_ = QStringLiteral("#D27722");
     int waveformMode_ = 0;
     double waveformHeight_ = 0.8;
     double waveformDensity_ = 2.0;

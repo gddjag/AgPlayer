@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import AgPlayer
 
@@ -156,7 +157,10 @@ Item {
         TagMenuItem {
             objectName: "tagMenuColor"
             text: qsTr("修改颜色")
-            onTriggered: tagColorPicker.openForColor(root.contextTagColor)
+            onTriggered: {
+                tagColorPicker.selectedColor = root.contextTagColor
+                tagColorPicker.open()
+            }
         }
         MenuSeparator {}
         TagMenuItem {
@@ -208,10 +212,11 @@ Item {
         }
     }
 
-    AgColorPicker {
+    ColorDialog {
         id: tagColorPicker
         objectName: "tagColorPicker"
-        onApplied: function(selectedColor) {
+        title: qsTr("选择标签颜色")
+        onAccepted: function() {
             if (root.tagModel.setTagColor(root.contextTagKey,
                                           selectedColor.toString())) {
                 root.changeTagColorRequested(root.contextTagKey,

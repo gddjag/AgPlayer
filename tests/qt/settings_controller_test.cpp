@@ -37,17 +37,8 @@ private slots:
     void glassFeatureIsAbsentFromSettingsContract();
     void playerShellModeDefaultsPersistsAndNormalizes();
     void windowLayoutThemeDefaultsAndNormalizesToDualWindow();
-    void skinSettingsDefaultToSystemAppearanceAndDefaultSkin();
-    void skinSettingsPersistAndNormalize();
-    void solidSkinPreservesValidAuxiliaryStopsAcrossCommitAndReload();
-    void migratesLegacySkinPresetToCustomSolidWithoutDeletingKey();
-    void unknownRecommendedSkinPresetFallsBackToDefaultSkin();
-    void invalidCustomGradientFallsBackAsACompleteGroup();
-    void skinConfigurationSignalIsAtomicAndOnlyEmitsForRealChanges();
-    void skinPropertySettersPreserveTheCurrentSelectionMode();
-    void skinSettingsIgnoreLegacyAccentAndHighlightKeys();
-    void skinEditTransactionPreviewsCommitsCancelsAndPreservesMediaSettings();
-    void skinDefaultResetDoesNotTouchMediaSettingsOutsideEdit();
+    void appearanceDefaultsToDarkAndPreservesLegacyModes();
+    void appearanceDefaultResetDoesNotTouchMediaSettingsOutsideEdit();
     void retiresLegacySmartPlaylists();
     void autoCleanCacheRemovesOldestFilesWhenOverLimit();
     void supportsOnlyFourLanguages();
@@ -127,351 +118,32 @@ void SettingsControllerTest::windowLayoutThemeDefaultsAndNormalizesToDualWindow(
              QStringLiteral("dual-window"));
 }
 
-void SettingsControllerTest::skinSettingsDefaultToSystemAppearanceAndDefaultSkin()
+void SettingsControllerTest::appearanceDefaultsToDarkAndPreservesLegacyModes()
 {
     QSettings persisted;
     persisted.clear();
 
-    SettingsController settings;
-    QCOMPARE(settings.themeMode(), 2);
-    QCOMPARE(settings.skinColorMode(), 0);
-    QCOMPARE(settings.skinPreset(), QStringLiteral("aurora"));
-    QCOMPARE(settings.skinCustomKind(), 0);
-    QCOMPARE(settings.skinCustomColor(), QStringLiteral("#D27722"));
-    QCOMPARE(settings.skinCustomColorMiddle(), QStringLiteral("#D27722"));
-    QCOMPARE(settings.skinCustomColorEnd(), QStringLiteral("#D27722"));
-}
+    SettingsController defaults;
+    QCOMPARE(defaults.themeMode(), 0);
+    QCOMPARE(defaults.metaObject()->indexOfProperty("skinColorMode"), -1);
+    QCOMPARE(defaults.metaObject()->indexOfProperty("skinPreset"), -1);
+    QCOMPARE(defaults.metaObject()->indexOfProperty("skinCustomColor"), -1);
 
-void SettingsControllerTest::skinSettingsPersistAndNormalize()
-{
-    QSettings persisted;
-    persisted.clear();
-    {
-        SettingsController settings;
-        QSignalSpy configurationChanged(
-            &settings, &SettingsController::skinConfigurationChanged);
-        settings.setSkinCustomConfiguration(
-            1, QStringLiteral("#73a6ff"), QStringLiteral("#a98bff"),
-            QStringLiteral("#f0a8d8"));
-        QCOMPARE(configurationChanged.count(), 1);
-    }
-
-    SettingsController reloaded;
-    QCOMPARE(reloaded.skinColorMode(), 2);
-    QCOMPARE(reloaded.skinCustomKind(), 1);
-    QCOMPARE(reloaded.skinCustomColor(), QStringLiteral("#73A6FF"));
-    QCOMPARE(reloaded.skinCustomColorMiddle(), QStringLiteral("#A98BFF"));
-    QCOMPARE(reloaded.skinCustomColorEnd(), QStringLiteral("#F0A8D8"));
-    QCOMPARE(persisted.value(QStringLiteral("appearance/skinCustomKind")).toInt(),
-             1);
-    QCOMPARE(persisted.value(QStringLiteral("appearance/skinCustomColor")).toString(),
-             QStringLiteral("#73A6FF"));
-    QCOMPARE(persisted.value(
-                 QStringLiteral("appearance/skinCustomColorMiddle")).toString(),
-             QStringLiteral("#A98BFF"));
-    QCOMPARE(persisted.value(
-                 QStringLiteral("appearance/skinCustomColorEnd")).toString(),
-             QStringLiteral("#F0A8D8"));
-}
-
-void SettingsControllerTest::solidSkinPreservesValidAuxiliaryStopsAcrossCommitAndReload()
-{
-    QSettings persisted;
-    persisted.clear();
-    {
-        SettingsController settings;
-        settings.beginEdit();
-        settings.setSkinCustomConfiguration(
-            1, QStringLiteral("#73a6ff"), QStringLiteral("#a98bff"),
-            QStringLiteral("#f0a8d8"));
-        settings.setSkinCustomConfiguration(
-            0, QStringLiteral("#123456"), QStringLiteral("#a98bff"),
-            QStringLiteral("#f0a8d8"));
-
-        QCOMPARE(settings.skinCustomKind(), 0);
-        QCOMPARE(settings.skinCustomColor(), QStringLiteral("#123456"));
-        QCOMPARE(settings.skinCustomColorMiddle(), QStringLiteral("#A98BFF"));
-        QCOMPARE(settings.skinCustomColorEnd(), QStringLiteral("#F0A8D8"));
-        settings.commitEdit();
-    }
-
-    SettingsController reloaded;
-    QCOMPARE(reloaded.skinColorMode(), 2);
-    QCOMPARE(reloaded.skinCustomKind(), 0);
-    QCOMPARE(reloaded.skinCustomColor(), QStringLiteral("#123456"));
-    QCOMPARE(reloaded.skinCustomColorMiddle(), QStringLiteral("#A98BFF"));
-    QCOMPARE(reloaded.skinCustomColorEnd(), QStringLiteral("#F0A8D8"));
-    QCOMPARE(persisted.value(
-                 QStringLiteral("appearance/skinCustomColorMiddle")).toString(),
-             QStringLiteral("#A98BFF"));
-    QCOMPARE(persisted.value(
-                 QStringLiteral("appearance/skinCustomColorEnd")).toString(),
-             QStringLiteral("#F0A8D8"));
-
-    reloaded.setSkinCustomConfiguration(
-        0, QStringLiteral("#abcdef"), QStringLiteral("invalid"), QString());
-    QCOMPARE(reloaded.skinCustomColor(), QStringLiteral("#ABCDEF"));
-    QCOMPARE(reloaded.skinCustomColorMiddle(), QStringLiteral("#D27722"));
-    QCOMPARE(reloaded.skinCustomColorEnd(), QStringLiteral("#D27722"));
-    SettingsController sanitized;
-    QCOMPARE(sanitized.skinCustomColor(), QStringLiteral("#ABCDEF"));
-    QCOMPARE(sanitized.skinCustomColorMiddle(), QStringLiteral("#D27722"));
-    QCOMPARE(sanitized.skinCustomColorEnd(), QStringLiteral("#D27722"));
-}
-
-void SettingsControllerTest::migratesLegacySkinPresetToCustomSolidWithoutDeletingKey()
-{
-    QSettings persisted;
-    persisted.clear();
-    persisted.setValue(QStringLiteral("appearance/skinColorMode"), 1);
-    persisted.setValue(QStringLiteral("appearance/skinPreset"),
-                       QStringLiteral("purple"));
-
-    SettingsController settings;
-    QCOMPARE(settings.skinColorMode(), 2);
-    QCOMPARE(settings.skinPreset(), QStringLiteral("purple"));
-    QCOMPARE(settings.skinCustomKind(), 0);
-    QCOMPARE(settings.skinCustomColor(), QStringLiteral("#AF52DE"));
-    QCOMPARE(settings.skinCustomColorMiddle(), QStringLiteral("#D27722"));
-    QCOMPARE(settings.skinCustomColorEnd(), QStringLiteral("#D27722"));
-    QVERIFY(persisted.contains(QStringLiteral("appearance/skinPreset")));
-    QCOMPARE(persisted.value(QStringLiteral("appearance/skinPreset")).toString(),
-             QStringLiteral("purple"));
-}
-
-void SettingsControllerTest::unknownRecommendedSkinPresetFallsBackToDefaultSkin()
-{
-    QSettings persisted;
-    persisted.clear();
-    persisted.setValue(QStringLiteral("appearance/skinColorMode"), 1);
-    persisted.setValue(QStringLiteral("appearance/skinPreset"),
-                       QStringLiteral("removed-preset"));
-
-    SettingsController settings;
-    QCOMPARE(settings.skinColorMode(), 0);
-    QCOMPARE(settings.skinPreset(), QStringLiteral("aurora"));
-}
-
-void SettingsControllerTest::invalidCustomGradientFallsBackAsACompleteGroup()
-{
-    struct InvalidStops {
-        QString start;
-        QString middle;
-        QString end;
-        bool storeEnd;
-    };
-    const QList<InvalidStops> cases{
-        {QStringLiteral("not-a-color"), QStringLiteral("#A98BFF"),
-         QStringLiteral("#F0A8D8"), true},
-        {QStringLiteral("#73A6FF"), QStringLiteral("#80A98BFF"),
-         QStringLiteral("#F0A8D8"), true},
-        {QStringLiteral("#73A6FF"), QStringLiteral("#A98BFF"), QString(),
-         false},
-    };
-
-    QSettings persisted;
-    for (const InvalidStops& values : cases) {
+    for (const int mode : {0, 1, 2}) {
         persisted.clear();
-        const QVariant waveformValue = QByteArray("waveform-bytes\0kept", 19);
-        const QVariant spectrumValue = QStringLiteral("#12abEF");
-        persisted.setValue(QStringLiteral("appearance/waveformRgbMiddleColor"),
-                           waveformValue);
-        persisted.setValue(QStringLiteral("appearance/spectrumRgbEndColor"),
-                           spectrumValue);
-        persisted.setValue(QStringLiteral("appearance/skinColorMode"), 2);
-        persisted.setValue(QStringLiteral("appearance/skinCustomKind"), 1);
-        persisted.setValue(QStringLiteral("appearance/skinCustomColor"),
-                           values.start);
-        persisted.setValue(QStringLiteral("appearance/skinCustomColorMiddle"),
-                           values.middle);
-        if (values.storeEnd) {
-            persisted.setValue(QStringLiteral("appearance/skinCustomColorEnd"),
-                               values.end);
-        }
-
-        SettingsController settings;
-        QCOMPARE(settings.skinColorMode(), 2);
-        QCOMPARE(settings.skinCustomKind(), 1);
-        QCOMPARE(settings.skinCustomColor(), QStringLiteral("#D27722"));
-        QCOMPARE(settings.skinCustomColorMiddle(), QStringLiteral("#D27722"));
-        QCOMPARE(settings.skinCustomColorEnd(), QStringLiteral("#D27722"));
-        QCOMPARE(persisted.value(
-                     QStringLiteral("appearance/waveformRgbMiddleColor")),
-                 waveformValue);
-        QCOMPARE(persisted.value(
-                     QStringLiteral("appearance/spectrumRgbEndColor")),
-                 spectrumValue);
-    }
-}
-
-void SettingsControllerTest::skinConfigurationSignalIsAtomicAndOnlyEmitsForRealChanges()
-{
-    QSettings persisted;
-    persisted.clear();
-    SettingsController settings;
-    QSignalSpy modeChanged(&settings, &SettingsController::skinColorModeChanged);
-    QSignalSpy kindChanged(&settings, &SettingsController::skinCustomKindChanged);
-    QSignalSpy startChanged(&settings, &SettingsController::skinCustomColorChanged);
-    QSignalSpy middleChanged(
-        &settings, &SettingsController::skinCustomColorMiddleChanged);
-    QSignalSpy endChanged(&settings,
-                          &SettingsController::skinCustomColorEndChanged);
-    QSignalSpy configurationChanged(
-        &settings, &SettingsController::skinConfigurationChanged);
-
-    settings.setSkinCustomConfiguration(
-        1, QStringLiteral("#73a6ff"), QStringLiteral("#a98bff"),
-        QStringLiteral("#f0a8d8"));
-    QCOMPARE(modeChanged.count(), 1);
-    QCOMPARE(kindChanged.count(), 1);
-    QCOMPARE(startChanged.count(), 1);
-    QCOMPARE(middleChanged.count(), 1);
-    QCOMPARE(endChanged.count(), 1);
-    QCOMPARE(configurationChanged.count(), 1);
-
-    settings.setSkinCustomConfiguration(
-        1, QStringLiteral("#73A6FF"), QStringLiteral("#A98BFF"),
-        QStringLiteral("#F0A8D8"));
-    QCOMPARE(configurationChanged.count(), 1);
-
-    settings.selectSkinPreset(QStringLiteral("aurora"));
-    QCOMPARE(settings.skinColorMode(), 1);
-    QCOMPARE(configurationChanged.count(), 2);
-    settings.selectSkinPreset(QStringLiteral("aurora"));
-    QCOMPARE(configurationChanged.count(), 2);
-
-    settings.selectSkinPreset(QStringLiteral("unknown-new-preset"));
-    QCOMPARE(settings.skinColorMode(), 0);
-    QCOMPARE(configurationChanged.count(), 3);
-    settings.selectDefaultSkin();
-    QCOMPARE(configurationChanged.count(), 3);
-}
-
-void SettingsControllerTest::skinPropertySettersPreserveTheCurrentSelectionMode()
-{
-    QSettings persisted;
-    persisted.clear();
-    SettingsController settings;
-
-    settings.selectDefaultSkin();
-    settings.setSkinCustomColor(QStringLiteral("#123456"));
-    QCOMPARE(settings.skinColorMode(), 0);
-    QCOMPARE(settings.skinCustomColor(), QStringLiteral("#123456"));
-
-    settings.selectSkinPreset(QStringLiteral("aurora"));
-    settings.setSkinCustomColorMiddle(QStringLiteral("#654321"));
-    QCOMPARE(settings.skinColorMode(), 1);
-}
-
-void SettingsControllerTest::skinSettingsIgnoreLegacyAccentAndHighlightKeys()
-{
-    QSettings persisted;
-    persisted.clear();
-    for (const int legacyMode : {0, 1, 2}) {
-        persisted.clear();
-        persisted.setValue(QStringLiteral("appearance/themeMode"), legacyMode);
-        SettingsController legacy;
-        QCOMPARE(legacy.themeMode(), legacyMode);
+        persisted.setValue(QStringLiteral("appearance/themeMode"), mode);
+        SettingsController stored;
+        QCOMPARE(stored.themeMode(), mode);
     }
 
     persisted.clear();
     persisted.setValue(QStringLiteral("appearance/themeMode"), 99);
-    persisted.setValue(QStringLiteral("appearance/accentMode"), 1);
-    persisted.setValue(QStringLiteral("appearance/accentPreset"), QStringLiteral("purple"));
-    persisted.setValue(QStringLiteral("appearance/accentCustomColor"),
-                       QStringLiteral("#80112233"));
-    persisted.setValue(QStringLiteral("appearance/highlightMode"), 2);
-    persisted.setValue(QStringLiteral("appearance/highlightPreset"), QStringLiteral("green"));
-    persisted.setValue(QStringLiteral("appearance/highlightCustomColor"),
-                       QStringLiteral("not-a-color"));
-    {
-        SettingsController invalid;
-        QCOMPARE(invalid.themeMode(), 2);
-        QCOMPARE(invalid.skinColorMode(), 0);
-        QCOMPARE(invalid.skinPreset(), QStringLiteral("aurora"));
-        QCOMPARE(invalid.skinCustomKind(), 0);
-        QCOMPARE(invalid.skinCustomColor(), QStringLiteral("#D27722"));
-        QCOMPARE(invalid.skinCustomColorMiddle(), QStringLiteral("#D27722"));
-        QCOMPARE(invalid.skinCustomColorEnd(), QStringLiteral("#D27722"));
-        QVERIFY(invalid.metaObject()->indexOfProperty("accentMode") < 0);
-        QVERIFY(invalid.metaObject()->indexOfProperty("highlightMode") < 0);
-    }
-    QCOMPARE(persisted.value(QStringLiteral("appearance/accentMode")).toInt(), 1);
-    QCOMPARE(persisted.value(QStringLiteral("appearance/highlightMode")).toInt(), 2);
-
-    persisted.clear();
-    persisted.setValue(QStringLiteral("appearance/themeMode"),
-                       QStringLiteral("not-a-mode"));
-    persisted.setValue(QStringLiteral("appearance/skinColorMode"), 99);
-    persisted.setValue(QStringLiteral("appearance/skinPreset"), QStringLiteral("unknown"));
-    persisted.setValue(QStringLiteral("appearance/skinCustomColor"), QStringLiteral("#80112233"));
-    {
-        SettingsController malformed;
-        QCOMPARE(malformed.themeMode(), 2);
-        QCOMPARE(malformed.skinColorMode(), 0);
-        QCOMPARE(malformed.skinCustomKind(), 0);
-        QCOMPARE(malformed.skinCustomColor(), QStringLiteral("#D27722"));
-        QCOMPARE(malformed.skinCustomColorMiddle(), QStringLiteral("#D27722"));
-        QCOMPARE(malformed.skinCustomColorEnd(), QStringLiteral("#D27722"));
-    }
-    QCOMPARE(persisted.value(QStringLiteral("appearance/themeMode")).toInt(), 2);
+    SettingsController invalid;
+    QCOMPARE(invalid.themeMode(), 0);
+    QCOMPARE(persisted.value(QStringLiteral("appearance/themeMode")).toInt(), 0);
 }
 
-void SettingsControllerTest::skinEditTransactionPreviewsCommitsCancelsAndPreservesMediaSettings()
-{
-    QSettings persisted;
-    persisted.clear();
-    SettingsController settings;
-    settings.setWaveformHeight(1.3);
-    settings.setSpectrumRgbMiddleColor(QStringLiteral("#123456"));
-    const double waveformHeight = settings.waveformHeight();
-    const QString spectrumMiddleColor = settings.spectrumRgbMiddleColor();
-
-    settings.beginEdit();
-    QSignalSpy skinChanged(&settings,
-                           &SettingsController::skinConfigurationChanged);
-    settings.setSkinCustomConfiguration(
-        1, QStringLiteral("#73a6ff"), QStringLiteral("#a98bff"),
-        QStringLiteral("#f0a8d8"));
-    QCOMPARE(settings.skinColorMode(), 2);
-    QCOMPARE(settings.skinCustomKind(), 1);
-    QCOMPARE(settings.skinCustomColor(), QStringLiteral("#73A6FF"));
-    QCOMPARE(settings.skinCustomColorMiddle(), QStringLiteral("#A98BFF"));
-    QCOMPARE(settings.skinCustomColorEnd(), QStringLiteral("#F0A8D8"));
-    QCOMPARE(skinChanged.count(), 1);
-    QCOMPARE(persisted.value(QStringLiteral("appearance/skinCustomColor")).toString(),
-             QStringLiteral("#D27722"));
-    settings.resetToDefaults();
-    QCOMPARE(settings.themeMode(), 2);
-    QCOMPARE(settings.skinColorMode(), 0);
-    QCOMPARE(settings.waveformHeight(), waveformHeight);
-    QCOMPARE(settings.spectrumRgbMiddleColor(), spectrumMiddleColor);
-    settings.cancelEdit();
-    QCOMPARE(settings.skinColorMode(), 0);
-    QCOMPARE(settings.skinCustomKind(), 0);
-    QCOMPARE(settings.skinCustomColor(), QStringLiteral("#D27722"));
-    QCOMPARE(settings.skinCustomColorMiddle(), QStringLiteral("#D27722"));
-    QCOMPARE(settings.skinCustomColorEnd(), QStringLiteral("#D27722"));
-    QCOMPARE(settings.waveformHeight(), waveformHeight);
-    QCOMPARE(settings.spectrumRgbMiddleColor(), spectrumMiddleColor);
-
-    settings.beginEdit();
-    settings.setSkinCustomConfiguration(
-        1, QStringLiteral("#73a6ff"), QStringLiteral("#a98bff"),
-        QStringLiteral("#f0a8d8"));
-    settings.commitEdit();
-
-    SettingsController committed;
-    QCOMPARE(committed.skinColorMode(), 2);
-    QCOMPARE(committed.skinCustomKind(), 1);
-    QCOMPARE(committed.skinCustomColor(), QStringLiteral("#73A6FF"));
-    QCOMPARE(committed.skinCustomColorMiddle(), QStringLiteral("#A98BFF"));
-    QCOMPARE(committed.skinCustomColorEnd(), QStringLiteral("#F0A8D8"));
-    QCOMPARE(committed.waveformHeight(), waveformHeight);
-    QCOMPARE(committed.spectrumRgbMiddleColor(), spectrumMiddleColor);
-}
-
-void SettingsControllerTest::skinDefaultResetDoesNotTouchMediaSettingsOutsideEdit()
+void SettingsControllerTest::appearanceDefaultResetDoesNotTouchMediaSettingsOutsideEdit()
 {
     QSettings persisted;
     persisted.clear();
@@ -509,8 +181,7 @@ void SettingsControllerTest::skinDefaultResetDoesNotTouchMediaSettingsOutsideEdi
     for (const QString& key : mediaKeys) {
         QVERIFY2(!persisted.contains(key), qPrintable(key));
     }
-    settings.setThemeMode(0);
-    settings.setSkinColorMode(1);
+    settings.setThemeMode(1);
     QSignalSpy waveformChanged(&settings, &SettingsController::waveformModeChanged);
     QSignalSpy spectrumChanged(&settings, &SettingsController::spectrumColorModeChanged);
     QSignalSpy thumbnailChanged(
@@ -518,8 +189,7 @@ void SettingsControllerTest::skinDefaultResetDoesNotTouchMediaSettingsOutsideEdi
 
     settings.resetToDefaults();
 
-    QCOMPARE(settings.themeMode(), 2);
-    QCOMPARE(settings.skinColorMode(), 0);
+    QCOMPARE(settings.themeMode(), 0);
     QCOMPARE(waveformChanged.count(), 0);
     QCOMPARE(spectrumChanged.count(), 0);
     QCOMPARE(thumbnailChanged.count(), 0);
@@ -1251,21 +921,9 @@ void SettingsControllerTest::iniThemeSettingsPreserveStrictLegacyStrings()
         persisted.clear();
         persisted.setValue(QStringLiteral("appearance/themeMode"),
                            QString::number(legacyMode));
-        persisted.setValue(QStringLiteral("appearance/skinColorMode"),
-                           QStringLiteral("1"));
-        persisted.setValue(QStringLiteral("appearance/skinPreset"),
-                           QStringLiteral("purple"));
         persisted.sync();
         SettingsController settings;
         QCOMPARE(settings.themeMode(), legacyMode);
-        QCOMPARE(settings.skinColorMode(), 2);
-        QCOMPARE(settings.skinPreset(), QStringLiteral("purple"));
-        QCOMPARE(settings.skinCustomKind(), 0);
-        QCOMPARE(settings.skinCustomColor(), QStringLiteral("#AF52DE"));
-        QCOMPARE(settings.skinCustomColorMiddle(), QStringLiteral("#D27722"));
-        QCOMPARE(settings.skinCustomColorEnd(), QStringLiteral("#D27722"));
-        QCOMPARE(persisted.value(QStringLiteral("appearance/skinPreset")).toString(),
-                 QStringLiteral("purple"));
     }
 
     for (const QString& malformed : {
@@ -1277,7 +935,7 @@ void SettingsControllerTest::iniThemeSettingsPreserveStrictLegacyStrings()
         persisted.setValue(QStringLiteral("appearance/themeMode"), malformed);
         persisted.sync();
         SettingsController settings;
-        QCOMPARE(settings.themeMode(), 2);
+        QCOMPARE(settings.themeMode(), 0);
     }
     QSettings::setDefaultFormat(originalFormat);
 }

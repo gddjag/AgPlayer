@@ -348,26 +348,6 @@ TestCase {
         }
     }
 
-    Component {
-        id: recursiveBackdropDecoyComponent
-        Item {
-            width: 8
-            height: 8
-            SkinBackdrop { anchors.fill: parent }
-        }
-    }
-
-    Component {
-        id: nonFillMainFrameSiblingComponent
-        DockedWindowFrame {
-            width: 8
-            height: 8
-            windowRole: "main"
-            showBorders: false
-            showFill: false
-        }
-    }
-
     function initTestCase() {
         verify(typeof testMainWindow !== "undefined", "testMainWindow context property should exist")
         mainWindow = testMainWindow
@@ -424,34 +404,6 @@ TestCase {
         for (var index = 0; index < childItems.length; ++index)
             total += countObjectsNamed(childItems[index], expectedName)
         return total
-    }
-
-    function mainBackdropFrame() {
-        var childItems = mainWindow.contentItem.children || []
-        for (var index = 0; index < childItems.length; ++index) {
-            var child = childItems[index]
-            if (typeof child.windowRole !== "undefined"
-                    && child.windowRole === "main"
-                    && typeof child.showBorders !== "undefined"
-                    && !child.showBorders
-                    && typeof child.showFill !== "undefined"
-                    && child.showFill === true)
-                return child
-        }
-        return null
-    }
-
-    function backdropForFrame(frame) {
-        if (!frame)
-            return null
-        var childItems = frame.children || []
-        for (var index = 0; index < childItems.length; ++index) {
-            var child = childItems[index]
-            if (typeof child.item !== "undefined" && child.item
-                    && child.item.objectName === "skinBackdrop")
-                return child.item
-        }
-        return null
     }
 
     function trackRowForId(parentObject, trackId) {
@@ -2223,106 +2175,6 @@ TestCase {
         compare(typeof SettingsController.playButtonRgbGlow, "undefined")
     }
 
-    function test_generated_skin_routes_shared_backdrop_and_play_ring() {
-        var savedMode = SettingsController.skinColorMode
-        var savedPreset = SettingsController.skinPreset
-        var savedKind = SettingsController.skinCustomKind
-        var savedStart = SettingsController.skinCustomColor
-        var savedMiddle = SettingsController.skinCustomColorMiddle
-        var savedEnd = SettingsController.skinCustomColorEnd
-
-        try {
-            SettingsController.selectDefaultSkin()
-            wait(0)
-            compare(ThemeManager.backdropStart.toString(),
-                    ThemeManager.backdropMiddle.toString())
-            compare(ThemeManager.backdropMiddle.toString(),
-                    ThemeManager.backdropEnd.toString())
-            compare(Theme.playRingPlaying.toString(), "#00e676")
-            compare(Theme.playRingPaused.toString(), "#ffb020")
-
-            var frame = mainBackdropFrame()
-            verify(frame, "main fill DockedWindowFrame must exist")
-            var backdrop = backdropForFrame(frame)
-            verify(backdrop, "main window must render one shared SkinBackdrop")
-
-            SettingsController.selectSkinPreset("aurora")
-            wait(0)
-            verify(ThemeManager.backdropStart.toString()
-                   !== ThemeManager.backdropMiddle.toString())
-            verify(ThemeManager.backdropMiddle.toString()
-                   !== ThemeManager.backdropEnd.toString())
-            var gradientPaint = findChild(backdrop, "skinBackdropGradient")
-            verify(gradientPaint, "SkinBackdrop must expose its rendered gradient")
-            compare(gradientPaint.gradient.stops[0].color.toString(),
-                    ThemeManager.backdropStart.toString())
-            compare(gradientPaint.gradient.stops[1].color.toString(),
-                    ThemeManager.backdropMiddle.toString())
-            compare(gradientPaint.gradient.stops[2].color.toString(),
-                    ThemeManager.backdropEnd.toString())
-            compare(Theme.playRingPlaying.toString(), Theme.accent.toString())
-            compare(Theme.playRingPaused.toString(), Theme.accent.toString())
-            compare(findChild(mainWindow, "playButtonBody").border.color.toString(),
-                    Theme.accent.toString())
-        } finally {
-            SettingsController.setSkinCustomConfiguration(
-                        savedKind, savedStart, savedMiddle, savedEnd)
-            if (savedMode === 0)
-                SettingsController.selectDefaultSkin()
-            else if (savedMode === 1)
-                SettingsController.selectSkinPreset(savedPreset)
-        }
-    }
-
-    function test_main_skin_lookup_rejects_recursive_decoy() {
-        var frame = mainBackdropFrame()
-        verify(frame, "main fill DockedWindowFrame must exist")
-        var decoy = null
-
-        try {
-            frame.showFill = false
-            wait(0)
-            compare(backdropForFrame(frame), null)
-
-            decoy = recursiveBackdropDecoyComponent.createObject(
-                        mainWindow.contentItem)
-            verify(decoy, "recursive backdrop decoy must be created")
-            verify(findChild(mainWindow, "skinBackdrop"),
-                   "fixture must prove broad recursive lookup accepts the decoy")
-            compare(backdropForFrame(frame), null,
-                    "scoped lookup must reject a backdrop outside Main fill frame")
-        } finally {
-            if (decoy)
-                decoy.destroy()
-            frame.showFill = true
-            wait(0)
-        }
-    }
-
-    function test_main_skin_lookup_requires_fill_frame() {
-        var frame = mainBackdropFrame()
-        verify(frame, "main fill DockedWindowFrame must exist")
-        var sibling = null
-
-        try {
-            frame.showFill = false
-            wait(0)
-            sibling = nonFillMainFrameSiblingComponent.createObject(
-                        mainWindow.contentItem)
-            verify(sibling, "non-fill Main frame sibling must be created")
-            compare(sibling.windowRole, "main")
-            compare(sibling.showBorders, false)
-            compare(sibling.showFill, false)
-            compare(mainBackdropFrame(), null,
-                    "selector must reject every non-fill Main frame")
-        } finally {
-            if (sibling)
-                sibling.destroy()
-            frame.showFill = true
-            wait(0)
-        }
-    }
-
     function test_volume_control_uses_compact_white_handle_and_percentage() {
         var mute = findChild(mainWindow, "muteButton")
         var slider = findChild(mainWindow, "volumeSlider")
@@ -3088,11 +2940,16 @@ TestCase {
         verify(colorAction && colorAction.enabled)
         var colorPicker = findChild(panel, "tagColorPicker")
         verify(colorPicker)
+        // Qt 6.7's offscreen quick-dialog fallback reports one internal
+        // implicit-width loop when the same ColorDialog is reopened. Native
+        // Windows dialogs do not use this fallback.
+        ignoreWarning(new RegExp(
+            "QML ColorDialog: Binding loop detected for property .*implicitWidth.*"))
         mouseClick(colorAction, colorAction.width / 2,
                    colorAction.height / 2)
         tryCompare(colorPicker, "visible", true)
-        colorPicker.setWorkingHex("#123456")
-        colorPicker.cancelPicker()
+        colorPicker.selectedColor = "#123456"
+        colorPicker.reject()
         compare(TagModel.data(TagModel.index(renamedRow, 0),
                               TagModel.ColorRole).toString(), beforeColor)
         compare(colorRequested.count, 0,
@@ -3104,8 +2961,8 @@ TestCase {
         mouseClick(colorAction, colorAction.width / 2,
                    colorAction.height / 2)
         tryCompare(colorPicker, "visible", true)
-        colorPicker.setWorkingHex("#123456")
-        colorPicker.applyWorkingColor()
+        colorPicker.selectedColor = "#123456"
+        colorPicker.accept()
         compare(TagModel.data(TagModel.index(renamedRow, 0),
                               TagModel.ColorRole).toString(), "#123456")
         compare(colorRequested.count, 1)
@@ -5020,7 +4877,7 @@ TestCase {
         }
     }
 
-    function test_settings_theme_buttons_apply_only_the_final_palette_once() {
+    function test_settings_theme_buttons_select_system_light_and_dark() {
         var page = findChild(mainWindow, "settingsPage")
         var ownsPage = false
         if (!page) {
@@ -5029,8 +4886,6 @@ TestCase {
         }
         verify(page)
         SettingsController.themeMode = 0
-        SettingsController.skinColorMode = 0
-        SettingsController.skinCustomColor = "#D27722"
         page.open()
         page.selectedSection = 2
         wait(250)
@@ -5039,36 +4894,25 @@ TestCase {
         var lightButton = findChild(page, "themeModeLight")
         var darkButton = findChild(page, "themeModeDark")
         verify(systemButton && lightButton && darkButton)
-        verify(!findChild(page, "themeModeCustom"),
-               "skin selection must remain separate from appearance mode")
-        var paletteSpy = signalSpyComponent.createObject(page, {
-            "target": ThemeManager,
-            "signalName": "paletteChanged"
-        })
-        verify(paletteSpy)
+        verify(!findChild(page, "themeModeCustom"))
+        verify(!findChild(page, "themeColorSelector"))
 
         var cases = [
             { "button": systemButton, "beforeTheme": 0,
-              "theme": 2, "skin": 0 },
+              "theme": 2 },
             { "button": lightButton, "beforeTheme": 0,
-              "theme": 1, "skin": 0 },
+              "theme": 1 },
             { "button": darkButton, "beforeTheme": 1,
-              "theme": 0, "skin": 0 }
+              "theme": 0 }
         ]
         for (var index = 0; index < cases.length; ++index) {
             SettingsController.themeMode = cases[index].beforeTheme
-            SettingsController.skinColorMode = 0
             wait(0)
-            paletteSpy.clear()
             cases[index].button.clicked()
             tryCompare(SettingsController, "themeMode", cases[index].theme)
-            tryCompare(SettingsController, "skinColorMode", cases[index].skin)
-            verify(paletteSpy.count <= 1,
-                   "one click must never publish an intermediate palette")
             verify(cases[index].button.checked)
         }
 
-        paletteSpy.destroy()
         page.cancelAndClose()
         if (ownsPage)
             page.destroy()
@@ -5123,7 +4967,7 @@ TestCase {
         tryCompare(Theme, "isLight", false)
         var darkBackground = Theme.background.toString()
         var darkText = Theme.primaryText.toString()
-        compare(darkBackground, "#101114")
+        compare(darkBackground, "#071018")
         compare(findChild(mainWindow, "playButtonBody").border.color.toString(),
                 (PlaybackController.state === PlaybackController.Playing
                  ? Theme.playRingPlaying : Theme.playRingPaused).toString())
@@ -5148,7 +4992,7 @@ TestCase {
         compare(Theme.requestedMode, 2)
         compare(Theme.effectiveMode, Theme.systemIsLight ? 1 : 0)
         compare(Theme.background.toString(),
-                Theme.systemIsLight ? "#f5f5f7" : "#101114")
+                Theme.systemIsLight ? "#f3f3f3" : "#071018")
         compare(Theme.cyan.toString(), Theme.accent.toString())
         compare(Theme.waveformCyan.toString(), "#00d4ff")
 

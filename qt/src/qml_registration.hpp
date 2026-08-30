@@ -20,7 +20,6 @@ class PlaybackClipDragAdapter;
 class PlaylistModel;
 class SettingsController;
 class TagModel;
-class ThemeManager;
 class TrackWaveformThumbnailProvider;
 class WaveformProvider;
 class VocalSeparationController;
@@ -31,7 +30,6 @@ struct AgPlayerQmlRuntimeModels final {
     LibraryNavigationModel* libraryNavigationModel = nullptr;
     LibraryManagerController* libraryManagerController = nullptr;
     TrackWaveformThumbnailProvider* trackWaveformThumbnailProvider = nullptr;
-    ThemeManager* themeManager = nullptr;
     PlaybackClipDragAdapter* playbackClipDragAdapter = nullptr;
 };
 

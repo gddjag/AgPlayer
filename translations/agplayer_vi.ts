@@ -3579,8 +3579,8 @@
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="1576"/>
-        <source>深色</source>
-        <translation>Tối</translation>
+        <source>深色（默认）</source>
+        <translation>Tối (Mặc định)</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="240"/>
@@ -3608,7 +3608,6 @@
         <source>打开音频工具</source>
         <translation>Mở công cụ âm thanh</translation>
     </message>
-    <message><source>主题皮肤色</source><translation>Màu giao diện chủ đề</translation></message>
     <message><source>歌曲列表</source><translation>Danh sách bài hát</translation></message>
     <message><source>显示歌曲列表波形缩略图</source><translation>Hiện hình thu nhỏ dạng sóng trong danh sách</translation></message>
     <message><source>缩略波形颜色</source><translation>Màu dạng sóng thu nhỏ</translation></message>
@@ -3980,53 +3979,6 @@
         <source>评分</source>
         <translation>Đánh giá</translation>
     </message>
-</context>
-<context>
-    <name>ThemeColorSelector</name>
-    <message><source>默认</source><translation>Mặc định</translation></message>
-    <message><source>，已选择</source><translation>, đã chọn</translation></message>
-    <message><source>自定义</source><translation>Tùy chỉnh</translation></message>
-    <message><source>自定义颜色 %1</source><translation>Màu tùy chỉnh %1</translation></message>
-    <message><source>系统蓝</source><translation>Xanh hệ thống</translation></message>
-    <message><source>靛蓝</source><translation>Chàm</translation></message>
-    <message><source>紫色</source><translation>Tím</translation></message>
-    <message><source>粉色</source><translation>Hồng</translation></message>
-    <message><source>红色</source><translation>Đỏ</translation></message>
-    <message><source>橙色</source><translation>Cam</translation></message>
-    <message><source>金色</source><translation>Vàng kim</translation></message>
-    <message><source>绿色</source><translation>Xanh lá</translation></message>
-    <message><source>蓝绿色</source><translation>Xanh mòng két</translation></message>
-    <message><source>青色</source><translation>Xanh lơ</translation></message>
-    <message><source>Aurora</source><translation>Cực quang</translation></message>
-    <message><source>Sea Glass</source><translation>Thủy tinh biển</translation></message>
-    <message><source>Sunset</source><translation>Hoàng hôn</translation></message>
-    <message><source>Lavender Mist</source><translation>Sương oải hương</translation></message>
-    <message><source>Morning Glow</source><translation>Ánh ban mai</translation></message>
-    <message><source>Solid</source><translation>Một màu</translation></message>
-    <message><source>Gradient</source><translation>Chuyển sắc 3 màu</translation></message>
-    <message><source>Preview</source><translation>Xem trước</translation></message>
-    <message><source>Start</source><translation>Màu bắt đầu</translation></message>
-    <message><source>Middle</source><translation>Màu giữa</translation></message>
-    <message><source>End</source><translation>Màu kết thúc</translation></message>
-</context>
-<context>
-    <name>AgColorPicker</name>
-    <message><source>十六进制颜色</source><translation>Màu hệ thập lục phân</translation></message>
-    <message><source>关闭颜色选择器</source><translation>Đóng bộ chọn màu</translation></message>
-    <message><source>红色通道</source><translation>Kênh đỏ</translation></message>
-    <message><source>绿色通道</source><translation>Kênh lục</translation></message>
-    <message><source>蓝色通道</source><translation>Kênh lam</translation></message>
-    <message><source>红色通道滑块</source><translation>Thanh trượt kênh đỏ</translation></message>
-    <message><source>绿色通道滑块</source><translation>Thanh trượt kênh lục</translation></message>
-    <message><source>蓝色通道滑块</source><translation>Thanh trượt kênh lam</translation></message>
-    <message><source>候选颜色 %1</source><translation>Màu ứng viên %1</translation></message>
-    <message><source>色相饱和度和明度</source><translation>Sắc độ, độ bão hòa và độ sáng</translation></message>
-    <message><source>色相</source><translation>Sắc độ</translation></message>
-    <message><source>当前颜色 %1</source><translation>Màu hiện tại %1</translation></message>
-    <message><source>取消颜色更改</source><translation>Hủy thay đổi màu</translation></message>
-    <message><source>取消</source><translation>Hủy</translation></message>
-    <message><source>应用颜色</source><translation>Áp dụng màu</translation></message>
-    <message><source>应用</source><translation>Áp dụng</translation></message>
 </context>
 <context>
     <name>LibraryNavigationModel</name>

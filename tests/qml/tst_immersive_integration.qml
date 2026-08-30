@@ -283,7 +283,8 @@ TestCase {
         colorSwatch.clicked()
         compare(panel.editingColorProperty, "coolColor")
         verify(colorPicker.visible)
-        colorPicker.applied("#123456")
+        colorPicker.selectedColor = "#123456"
+        colorPicker.accept()
         compare(PlayerExperienceController.coolColor.toLowerCase(), "#123456")
         compare(PlayerExperienceController.songAdaptiveColorEnabled, false)
         colorPicker.close()

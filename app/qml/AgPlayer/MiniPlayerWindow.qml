@@ -53,12 +53,6 @@ Window {
         border.width: 1
         clip: true
 
-        SkinBackdrop {
-            anchors.fill: parent
-            anchors.margins: surface.border.width
-            radius: Math.max(0, surface.radius - surface.border.width)
-        }
-
         ColumnLayout {
             anchors.fill: parent
             spacing: 0

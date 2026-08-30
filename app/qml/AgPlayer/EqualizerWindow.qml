@@ -58,15 +58,10 @@ Window {
         function onBandGainChanged() { ++window.gainRevision }
     }
 
-    SkinBackdrop {
-        anchors.fill: parent
-        radius: window.visibility === Window.Maximized ? 0 : Theme.windowRadius
-    }
-
     Rectangle {
         anchors.fill: parent
         radius: window.visibility === Window.Maximized ? 0 : Theme.windowRadius
-        color: "transparent"
+        color: Theme.background
         border.color: Theme.border
         border.width: 1
     }

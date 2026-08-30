@@ -627,7 +627,6 @@ foreach(qt_test IN ITEMS
     shutdown_test
     runtime_log_test
     settings_controller_test
-    theme_manager_test
     replay_gain_scanner_test
     translation_manager_test
     audio_preview_controller_test
@@ -982,190 +981,12 @@ add_test(
 set_tests_properties(source_encoding_test PROPERTIES TIMEOUT 10)
 
 add_test(
-    NAME qml_theme_color_contract_test
+    NAME removed_custom_theme_contract_test
     COMMAND "${CMAKE_COMMAND}"
         "-DROOT=${CMAKE_SOURCE_DIR}"
-        -P "${CMAKE_SOURCE_DIR}/cmake/CheckQmlThemeColors.cmake"
+        -P "${CMAKE_SOURCE_DIR}/cmake/CheckRemovedCustomTheme.cmake"
 )
-set_tests_properties(qml_theme_color_contract_test PROPERTIES TIMEOUT 10)
-
-function(prepare_theme_contract_fixture fixture_name output_variable)
-    set(fixture_root
-        "${CMAKE_CURRENT_BINARY_DIR}/theme_contract/${fixture_name}")
-    file(REMOVE_RECURSE "${fixture_root}")
-    file(MAKE_DIRECTORY
-        "${fixture_root}/app/qml"
-        "${fixture_root}/app"
-        "${fixture_root}/scripts")
-    file(COPY "${CMAKE_SOURCE_DIR}/app/qml/AgPlayer"
-        DESTINATION "${fixture_root}/app/qml")
-    file(COPY
-        "${CMAKE_SOURCE_DIR}/app/CMakeLists.txt"
-        "${CMAKE_SOURCE_DIR}/app/main.cpp"
-        DESTINATION "${fixture_root}/app")
-    file(COPY "${CMAKE_SOURCE_DIR}/translations"
-        DESTINATION "${fixture_root}")
-    file(COPY "${CMAKE_SOURCE_DIR}/scripts/qa-final-ui-matrix.ps1"
-        DESTINATION "${fixture_root}/scripts")
-    set(${output_variable} "${fixture_root}" PARENT_SCOPE)
-endfunction()
-
-set(rejected_theme_contract_runner
-    "${CMAKE_CURRENT_BINARY_DIR}/RunRejectedThemeContract.cmake")
-file(WRITE "${rejected_theme_contract_runner}" [=[
-foreach(required_argument IN ITEMS CHECKER ROOT EXPECTED_PRIMARY)
-    if(NOT DEFINED ${required_argument})
-        message(FATAL_ERROR "${required_argument} is required")
-    endif()
-endforeach()
-
-execute_process(
-    COMMAND "${CMAKE_COMMAND}" "-DROOT=${ROOT}" -P "${CHECKER}"
-    RESULT_VARIABLE checker_result
-    OUTPUT_VARIABLE checker_stdout
-    ERROR_VARIABLE checker_stderr
-)
-string(CONCAT checker_output "${checker_stdout}" "\n" "${checker_stderr}")
-if(checker_result EQUAL 0)
-    message(FATAL_ERROR
-        "Theme contract unexpectedly accepted ${ROOT}:\n${checker_output}")
-endif()
-
-foreach(expected_text IN ITEMS "${EXPECTED_PRIMARY}" "${EXPECTED_SECONDARY}")
-    if(NOT expected_text STREQUAL "")
-        string(FIND "${checker_output}" "${expected_text}" expected_offset)
-        if(expected_offset EQUAL -1)
-            message(FATAL_ERROR
-                "Theme contract failed for an unrelated reason. Expected '${expected_text}':\n${checker_output}")
-        endif()
-    endif()
-endforeach()
-
-message(STATUS
-    "Theme contract rejected for the expected reason: ${EXPECTED_PRIMARY}")
-]=])
-
-function(add_rejected_theme_contract_test test_name fixture_root
-         expected_primary expected_secondary)
-    add_test(
-        NAME "${test_name}"
-        COMMAND "${CMAKE_COMMAND}"
-            "-DCHECKER=${CMAKE_SOURCE_DIR}/cmake/CheckQmlThemeColors.cmake"
-            "-DROOT=${fixture_root}"
-            "-DEXPECTED_PRIMARY=${expected_primary}"
-            "-DEXPECTED_SECONDARY=${expected_secondary}"
-            -P "${rejected_theme_contract_runner}"
-    )
-    set_tests_properties("${test_name}" PROPERTIES TIMEOUT 10)
-endfunction()
-
-foreach(forbidden_picker_function IN ITEMS lighter darker hsla)
-    prepare_theme_contract_fixture(
-        "picker-${forbidden_picker_function}"
-        picker_fixture_root)
-    file(APPEND
-        "${picker_fixture_root}/app/qml/AgPlayer/components/AgColorPicker.qml"
-        "\nItem { property color derived: Qt.${forbidden_picker_function}(baseColor) } // theme-color-allow: negative fixture\n")
-    add_rejected_theme_contract_test(
-        "qml_theme_picker_${forbidden_picker_function}_rejected_test"
-        "${picker_fixture_root}"
-        "app/qml/AgPlayer/components/AgColorPicker.qml:"
-        "page-local color derivation")
-endforeach()
-
-prepare_theme_contract_fixture("ordinary-hsva" ordinary_hsva_fixture_root)
-file(WRITE
-    "${ordinary_hsva_fixture_root}/app/qml/AgPlayer/HsvaAllowFixture.qml"
-    "Item { property color derived: Qt.hsva(0.1, 0.2, 0.3, 1.0) } // theme-color-allow: negative fixture\n")
-add_rejected_theme_contract_test(
-    qml_theme_ordinary_hsva_rejected_test
-    "${ordinary_hsva_fixture_root}"
-    "app/qml/AgPlayer/HsvaAllowFixture.qml:1:"
-    "page-local color derivation")
-
-prepare_theme_contract_fixture(
-    "translation-wrong-context" translation_context_fixture_root)
-set(translation_context_catalog
-    "${translation_context_fixture_root}/translations/agplayer_zh.ts")
-file(READ "${translation_context_catalog}" translation_context_source
-    ENCODING UTF-8)
-set(aurora_message
-    "<message><source>Aurora</source><translation>极光</translation></message>")
-string(REPLACE "${aurora_message}" ""
-    translation_context_source "${translation_context_source}")
-string(REPLACE "</TS>"
-    "<context><name>WrongContext</name>${aurora_message}</context>\n</TS>"
-    translation_context_source "${translation_context_source}")
-file(WRITE "${translation_context_catalog}" "${translation_context_source}")
-add_rejected_theme_contract_test(
-    translation_theme_selector_context_required_test
-    "${translation_context_fixture_root}"
-    "translations/agplayer_zh.ts: missing valid ThemeColorSelector::Aurora =>"
-    "")
-
-function(add_invalid_required_translation_test case_name translation_markup)
-    prepare_theme_contract_fixture(
-        "translation-${case_name}" invalid_translation_fixture_root)
-    set(invalid_translation_catalog
-        "${invalid_translation_fixture_root}/translations/agplayer_zh.ts")
-    file(READ "${invalid_translation_catalog}" invalid_translation_source
-        ENCODING UTF-8)
-    set(valid_solid_message
-        "<message><source>Solid</source><translation>单色</translation></message>")
-    set(invalid_solid_message
-        "<message><source>Solid</source>${translation_markup}</message>")
-    string(REPLACE "${valid_solid_message}" "${invalid_solid_message}"
-        mutated_translation_source "${invalid_translation_source}")
-    if(mutated_translation_source STREQUAL invalid_translation_source)
-        message(FATAL_ERROR
-            "Failed to prepare invalid translation fixture ${case_name}")
-    endif()
-    file(WRITE "${invalid_translation_catalog}"
-        "${mutated_translation_source}")
-
-    set(test_name "translation_required_entry_${case_name}_test")
-    add_rejected_theme_contract_test(
-        "${test_name}"
-        "${invalid_translation_fixture_root}"
-        "translations/agplayer_zh.ts: missing valid ThemeColorSelector::Solid =>"
-        "")
-endfunction()
-
-set(invalid_required_translation_cases
-    "obsolete|<translation type=\"obsolete\">单色</translation>"
-    "vanished|<translation type=\"vanished\">单色</translation>"
-    "unfinished|<translation type=\"unfinished\">单色</translation>"
-    "empty|<translation></translation>"
-    "wrong_text|<translation>错误非空翻译</translation>"
-)
-foreach(invalid_required_translation_case
-        IN LISTS invalid_required_translation_cases)
-    string(REPLACE "|" ";" invalid_translation_values
-        "${invalid_required_translation_case}")
-    list(GET invalid_translation_values 0 invalid_translation_case_name)
-    list(GET invalid_translation_values 1 invalid_translation_markup)
-    add_invalid_required_translation_test(
-        "${invalid_translation_case_name}" "${invalid_translation_markup}")
-endforeach()
-
-add_test(
-    NAME qa_skin_incomplete_gradient_rejected_test
-    COMMAND powershell -NoProfile -Command
-        "$process = Start-Process -FilePath '$<TARGET_FILE:AgPlayer>' -ArgumentList '--qa-test-mode','--qa-skin-kind','gradient','--qa-skin-start','#73A6FF' -Wait -PassThru; if ($process.ExitCode -ne 6) { Write-Error ('Expected exit 6, got ' + $process.ExitCode); exit 1 }"
-)
-add_test(
-    NAME qa_skin_invalid_gradient_rejected_test
-    COMMAND powershell -NoProfile -Command
-        "$process = Start-Process -FilePath '$<TARGET_FILE:AgPlayer>' -ArgumentList '--qa-test-mode','--qa-skin-kind','gradient','--qa-skin-start','#73A6FF','--qa-skin-middle','not-a-color','--qa-skin-end','#F0A8D8' -Wait -PassThru; if ($process.ExitCode -ne 6) { Write-Error ('Expected exit 6, got ' + $process.ExitCode); exit 1 }"
-)
-set_tests_properties(
-    qa_skin_incomplete_gradient_rejected_test
-    qa_skin_invalid_gradient_rejected_test
-    PROPERTIES
-        TIMEOUT 10
-        ENVIRONMENT_MODIFICATION
-            "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
-)
+set_tests_properties(removed_custom_theme_contract_test PROPERTIES TIMEOUT 10)
 
 set_tests_properties(import_controller_test PROPERTIES
     # The 10K indexing contract itself permits up to 30 seconds.  The CTest
@@ -1259,14 +1080,6 @@ add_test(NAME qml_integrated_theme_test
         -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_integrated_theme.qml)
 set_tests_properties(qml_integrated_theme_test PROPERTIES
     TIMEOUT 25
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
-    ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
-)
-add_test(NAME qml_color_picker_test
-    COMMAND qml_main_window_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_color_picker.qml)
-set_tests_properties(qml_color_picker_test PROPERTIES
-    TIMEOUT 20
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
@@ -1497,7 +1310,7 @@ set_tests_properties(window_controller_test PROPERTIES
 )
 set_tests_properties(playback_controller_test qml_main_window_test
     qml_integrated_theme_test
-    qml_color_picker_test qml_waveform_test
+    qml_waveform_test
     PROPERTIES
     # Qt/FFmpeg global process state and the shared generated fixtures make
     # these integration tests deterministic only when they do not overlap.

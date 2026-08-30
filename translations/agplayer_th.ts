@@ -3579,8 +3579,8 @@
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="1576"/>
-        <source>深色</source>
-        <translation>มืด</translation>
+        <source>深色（默认）</source>
+        <translation>มืด (ค่าเริ่มต้น)</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="240"/>
@@ -3608,7 +3608,6 @@
         <source>打开音频工具</source>
         <translation>เปิดเครื่องมือเสียง</translation>
     </message>
-    <message><source>主题皮肤色</source><translation>สีสกินธีม</translation></message>
     <message><source>歌曲列表</source><translation>รายการเพลง</translation></message>
     <message><source>显示歌曲列表波形缩略图</source><translation>แสดงภาพย่อรูปคลื่นในรายการเพลง</translation></message>
     <message><source>缩略波形颜色</source><translation>สีรูปคลื่นขนาดย่อ</translation></message>
@@ -3980,53 +3979,6 @@
         <source>评分</source>
         <translation>เรตติ้ง</translation>
     </message>
-</context>
-<context>
-    <name>ThemeColorSelector</name>
-    <message><source>默认</source><translation>ค่าเริ่มต้น</translation></message>
-    <message><source>，已选择</source><translation>, เลือกอยู่</translation></message>
-    <message><source>自定义</source><translation>กำหนดเอง</translation></message>
-    <message><source>自定义颜色 %1</source><translation>สีกำหนดเอง %1</translation></message>
-    <message><source>系统蓝</source><translation>น้ำเงินระบบ</translation></message>
-    <message><source>靛蓝</source><translation>คราม</translation></message>
-    <message><source>紫色</source><translation>ม่วง</translation></message>
-    <message><source>粉色</source><translation>ชมพู</translation></message>
-    <message><source>红色</source><translation>แดง</translation></message>
-    <message><source>橙色</source><translation>ส้ม</translation></message>
-    <message><source>金色</source><translation>ทอง</translation></message>
-    <message><source>绿色</source><translation>เขียว</translation></message>
-    <message><source>蓝绿色</source><translation>เขียวอมฟ้า</translation></message>
-    <message><source>青色</source><translation>ฟ้า</translation></message>
-    <message><source>Aurora</source><translation>แสงออโรรา</translation></message>
-    <message><source>Sea Glass</source><translation>แก้วทะเล</translation></message>
-    <message><source>Sunset</source><translation>ยามอาทิตย์อัสดง</translation></message>
-    <message><source>Lavender Mist</source><translation>หมอกลาเวนเดอร์</translation></message>
-    <message><source>Morning Glow</source><translation>แสงรุ่งอรุณ</translation></message>
-    <message><source>Solid</source><translation>สีเดียว</translation></message>
-    <message><source>Gradient</source><translation>การไล่สี 3 สี</translation></message>
-    <message><source>Preview</source><translation>ตัวอย่าง</translation></message>
-    <message><source>Start</source><translation>สีเริ่มต้น</translation></message>
-    <message><source>Middle</source><translation>สีกลาง</translation></message>
-    <message><source>End</source><translation>สีสิ้นสุด</translation></message>
-</context>
-<context>
-    <name>AgColorPicker</name>
-    <message><source>十六进制颜色</source><translation>สีเลขฐานสิบหก</translation></message>
-    <message><source>关闭颜色选择器</source><translation>ปิดตัวเลือกสี</translation></message>
-    <message><source>红色通道</source><translation>ช่องสีแดง</translation></message>
-    <message><source>绿色通道</source><translation>ช่องสีเขียว</translation></message>
-    <message><source>蓝色通道</source><translation>ช่องสีน้ำเงิน</translation></message>
-    <message><source>红色通道滑块</source><translation>แถบเลื่อนช่องสีแดง</translation></message>
-    <message><source>绿色通道滑块</source><translation>แถบเลื่อนช่องสีเขียว</translation></message>
-    <message><source>蓝色通道滑块</source><translation>แถบเลื่อนช่องสีน้ำเงิน</translation></message>
-    <message><source>候选颜色 %1</source><translation>สีตัวเลือก %1</translation></message>
-    <message><source>色相饱和度和明度</source><translation>เฉดสี ความอิ่มตัว และความสว่าง</translation></message>
-    <message><source>色相</source><translation>เฉดสี</translation></message>
-    <message><source>当前颜色 %1</source><translation>สีปัจจุบัน %1</translation></message>
-    <message><source>取消颜色更改</source><translation>ยกเลิกการเปลี่ยนสี</translation></message>
-    <message><source>取消</source><translation>ยกเลิก</translation></message>
-    <message><source>应用颜色</source><translation>ใช้สีนี้</translation></message>
-    <message><source>应用</source><translation>นำไปใช้</translation></message>
 </context>
 <context>
     <name>LibraryNavigationModel</name>

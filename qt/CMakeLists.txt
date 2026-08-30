@@ -89,8 +89,6 @@ add_library(agplayer_qt STATIC
     src/terrain_reactor_item.hpp
     src/terrain_reactor_state.cpp
     src/terrain_reactor_state.hpp
-    src/theme_manager.cpp
-    src/theme_manager.hpp
     src/metadata_editor.cpp
     src/metadata_editor.hpp
     src/metadata_text.cpp

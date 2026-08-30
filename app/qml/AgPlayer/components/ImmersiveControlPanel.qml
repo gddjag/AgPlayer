@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import AgPlayer
 
@@ -271,8 +272,9 @@ Rectangle {
                             Accessible.name: qsTr("调整沉浸视觉颜色 %1").arg(index + 1)
                             onClicked: {
                                 root.editingColorProperty = modelData
-                                immersiveColorPicker.openForColor(
-                                            PlayerExperienceController[modelData])
+                                immersiveColorPicker.selectedColor =
+                                        PlayerExperienceController[modelData]
+                                immersiveColorPicker.open()
                             }
                             background: Rectangle {
                                 radius: 8
@@ -286,18 +288,19 @@ Rectangle {
                     }
                 }
 
-                AgColorPicker {
+                ColorDialog {
                     id: immersiveColorPicker
                     objectName: "immersiveColorPicker"
-                    onApplied: function(color) {
+                    title: qsTr("选择沉浸视觉颜色")
+                    onAccepted: function() {
                         if (root.editingColorProperty.length === 0)
                             return
                         PlayerExperienceController[root.editingColorProperty]
-                                = color.toString()
+                                = selectedColor.toString()
                         PlayerExperienceController.songAdaptiveColorEnabled = false
                         root.editingColorProperty = ""
                     }
-                    onCancelled: root.editingColorProperty = ""
+                    onRejected: root.editingColorProperty = ""
                 }
                 Text { text: qsTr("显示宿主与性能"); color: Theme.textSecondary; font.pixelSize: 9 }
                 RowLayout {
