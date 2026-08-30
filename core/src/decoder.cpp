@@ -212,6 +212,15 @@ ag_result map_open_error(const int error) noexcept
     return AG_IO_ERROR;
 }
 
+ag_result map_resampler_error(const int error) noexcept
+{
+    if (error == AVERROR(ENOMEM)) return AG_INTERNAL_ERROR;
+    if (error == AVERROR(EINVAL) || error == AVERROR(ENOSYS)) {
+        return AG_UNSUPPORTED_FORMAT;
+    }
+    return AG_DECODE_ERROR;
+}
+
 std::vector<double> equal_energy_matrix(const int channels)
 {
     if (channels <= 0) return {};
@@ -669,7 +678,6 @@ public:
         audio_stream_index_ = -1;
         output_sample_rate_ = 0;
         output_channels_ = 0;
-        input_layout_roles_known_ = false;
         input_eof_ = false;
         drain_sent_ = false;
         resampler_drained_ = false;
@@ -714,12 +722,7 @@ private:
     {
         av_channel_layout_uninit(&input_layout_);
         int result = 0;
-        const AVChannelLayout& stream_layout = format_context_->streams[
-            audio_stream_index_]->codecpar->ch_layout;
-        const AVChannelLayout& source_layout = stream_layout.nb_channels > 0
-            ? stream_layout : codec_context_->ch_layout;
-        input_layout_roles_known_ =
-            source_layout.order != AV_CHANNEL_ORDER_UNSPEC;
+        const AVChannelLayout& source_layout = codec_context_->ch_layout;
         if (source_layout.order == AV_CHANNEL_ORDER_UNSPEC) {
             av_channel_layout_default(
                 &input_layout_, source_layout.nb_channels);
@@ -727,7 +730,7 @@ private:
             result = av_channel_layout_copy(&input_layout_,
                                             &source_layout);
             if (result < 0) {
-                return AG_DECODE_ERROR;
+                return map_resampler_error(result);
             }
         }
 
@@ -744,12 +747,20 @@ private:
                                      0,
                                      nullptr);
         if (result < 0) {
-            return options.downmix == DecoderDownmix::AnalysisMono
-                ? AG_UNSUPPORTED_FORMAT : AG_DECODE_ERROR;
+            return map_resampler_error(result);
         }
         if (options.downmix == DecoderDownmix::AnalysisMono) {
+            const AVChannelLayout& stream_layout = format_context_->streams[
+                audio_stream_index_]->codecpar->ch_layout;
+            const bool stream_layout_available = stream_layout.nb_channels
+                                                 == input_layout_.nb_channels;
+            const bool matrix_roles_known = stream_layout_available
+                ? stream_layout.order != AV_CHANNEL_ORDER_UNSPEC
+                : source_layout.order != AV_CHANNEL_ORDER_UNSPEC;
+            const AVChannelLayout& matrix_layout = stream_layout_available
+                ? stream_layout : input_layout_;
             const std::vector<double> matrix = analysis_mono_matrix(
-                input_layout_, input_layout_roles_known_);
+                matrix_layout, matrix_roles_known);
             if (matrix.size() != static_cast<std::size_t>(input_layout_.nb_channels)) {
                 return AG_UNSUPPORTED_FORMAT;
             }
@@ -758,8 +769,7 @@ private:
         }
         result = swr_init(swr_context_);
         if (result < 0) {
-            return options.downmix == DecoderDownmix::AnalysisMono
-                ? AG_UNSUPPORTED_FORMAT : AG_DECODE_ERROR;
+            return map_resampler_error(result);
         }
         output_format_.sample_rate = output_sample_rate_;
         output_format_.channels = output_channels_;
@@ -1064,7 +1074,6 @@ private:
     int audio_stream_index_ = -1;
     int output_sample_rate_ = 0;
     int output_channels_ = 0;
-    bool input_layout_roles_known_ = false;
     bool input_eof_ = false;
     bool drain_sent_ = false;
     bool resampler_drained_ = false;

@@ -209,11 +209,11 @@ int main(const int argc, char** argv)
     agplayer::Decoder unsupported_analysis_decoder;
     agplayer::DecoderOpenOptions invalid_analysis_options = analysis_options;
     invalid_analysis_options.output_sample_rate = std::numeric_limits<int>::max();
-    // Mutation caught: collapsing an AnalysisMono resampler/matrix setup failure
-    // into AG_DECODE_ERROR instead of the public unsupported-format category.
+    // Mutation caught: mapping FFmpeg's deterministic resampler allocation
+    // failure to unsupported/decode instead of AG_INTERNAL_ERROR.
     assert(unsupported_analysis_decoder.open(stereo_path.string(),
                                              invalid_analysis_options)
-           == AG_UNSUPPORTED_FORMAT);
+           == AG_INTERNAL_ERROR);
     legacy_stereo_decoder.close();
     legacy_resampled_decoder.close();
     analysis_stereo_decoder.close();
