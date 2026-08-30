@@ -62,9 +62,9 @@ double measured_sine_gain_db(std::size_t band, double gain_db,
 
 void test_fixed_band_frequencies()
 {
-    constexpr std::array<double, 17> expected{
+    constexpr std::array<double, 18> expected{
         20.0, 31.5, 50.0, 80.0, 125.0, 200.0, 315.0, 500.0, 800.0,
-        1'250.0, 2'000.0, 3'150.0, 5'000.0, 8'000.0, 12'500.0,
+        1'250.0, 2'000.0, 3'150.0, 5'000.0, 8'000.0, 10'000.0, 12'500.0,
         16'000.0, 20'000.0};
     static_assert(agplayer::kGraphicEqBandCount == expected.size());
     for (std::size_t index = 0; index < expected.size(); ++index) {
@@ -86,12 +86,22 @@ void test_supported_sample_rates_and_boundaries()
     }
 
     agplayer::GraphicEqSettings invalid;
-    invalid.preamp_db = 12.1;
+    invalid.preamp_db = 18.1;
     assert(!agplayer::prepare_graphic_eq(invalid, 48'000, 1).has_value());
 
     invalid = {};
-    invalid.band_gain_db[3] = -12.1;
+    invalid.band_gain_db[3] = -18.1;
     assert(!agplayer::prepare_graphic_eq(invalid, 48'000, 1).has_value());
+
+    invalid = {};
+    invalid.band_gain_db[3] = 18.1;
+    assert(!agplayer::prepare_graphic_eq(invalid, 48'000, 1).has_value());
+
+    agplayer::GraphicEqSettings boundary;
+    boundary.band_gain_db[3] = -18.0;
+    assert(agplayer::prepare_graphic_eq(boundary, 48'000, 1).has_value());
+    boundary.band_gain_db[3] = 18.0;
+    assert(agplayer::prepare_graphic_eq(boundary, 48'000, 1).has_value());
 
     invalid = {};
     invalid.q = std::numeric_limits<double>::quiet_NaN();
@@ -139,6 +149,14 @@ void test_pcm_sine_response_matches_every_band()
                         gain_db, kToleranceDb));
         }
     }
+}
+
+void test_ten_kilohertz_band_changes_steady_state_sine_rms()
+{
+    constexpr std::size_t ten_kilohertz_band = 14;
+    assert(agplayer::kGraphicEqBandFrequenciesHz[ten_kilohertz_band]
+           == 10'000.0);
+    assert(measured_sine_gain_db(ten_kilohertz_band, 6.0) > 0.0);
 }
 
 void write_measurement_evidence_if_requested()
@@ -386,6 +404,7 @@ int main()
     test_center_frequency_response();
     test_twenty_kilohertz_band_at_cd_sample_rate();
     test_pcm_sine_response_matches_every_band();
+    test_ten_kilohertz_band_changes_steady_state_sine_rms();
     test_flat_and_automatic_protection();
     test_flat_processing_is_transparent();
     test_channel_state_is_independent();
