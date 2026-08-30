@@ -52,6 +52,7 @@ struct TrackRecord {
 struct MetadataProbeClaim {
     QString trackId;
     QString path;
+    quint64 generation = 0;
 };
 
 QString canonicalLibraryPath(const QString& path);
@@ -184,5 +185,8 @@ private:
     QSet<QString> pathKeys_;
     QHash<QString, int> pathRows_;
     QHash<QString, int> trackRows_;
-    QHash<QString, QString> metadataProbeInFlight_;
+    QHash<QString, quint64> metadataProbeInFlight_;
+    // Zero is an exhaustion sentinel. Never wrap and reuse a live-process
+    // generation: failing closed after 2^64-1 claims is safer than ABA reuse.
+    quint64 nextMetadataProbeGeneration_ = 1;
 };

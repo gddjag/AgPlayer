@@ -784,8 +784,13 @@ std::optional<MetadataProbeClaim> LibraryModel::beginMetadataProbe(
         || metadataProbeInFlight_.contains(trackId)) {
         return std::nullopt;
     }
-    metadataProbeInFlight_.insert(trackId, tracks_.at(row).path);
-    return MetadataProbeClaim{trackId, tracks_.at(row).path};
+    if (nextMetadataProbeGeneration_ == 0) return std::nullopt;
+    const quint64 generation = nextMetadataProbeGeneration_;
+    nextMetadataProbeGeneration_ = generation
+            == std::numeric_limits<quint64>::max()
+        ? 0 : generation + 1;
+    metadataProbeInFlight_.insert(trackId, generation);
+    return MetadataProbeClaim{trackId, tracks_.at(row).path, generation};
 }
 
 bool LibraryModel::completeMetadataProbe(const MetadataProbeClaim& claim,
@@ -797,7 +802,7 @@ bool LibraryModel::completeMetadataProbe(const MetadataProbeClaim& claim,
     }
     const auto inFlight = metadataProbeInFlight_.constFind(claim.trackId);
     if (inFlight == metadataProbeInFlight_.cend()
-        || pathKey(inFlight.value()) != pathKey(claim.path)) {
+        || inFlight.value() != claim.generation) {
         return false;
     }
     metadataProbeInFlight_.remove(claim.trackId);

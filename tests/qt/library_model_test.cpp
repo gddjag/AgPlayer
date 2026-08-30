@@ -30,7 +30,58 @@ private slots:
     void exposesLiveRecentAndNeverPlayedCounts();
     void missingLocalCoverFallsBackToPackagedArtwork();
     void staleMetadataProbeCannotOverwriteRelocatedTrack();
+    void staleMetadataProbeCannotStealRecreatedTrackClaim();
 };
+
+void LibraryModelTest::staleMetadataProbeCannotStealRecreatedTrackClaim()
+{
+    TrackRecord original;
+    original.trackId = QStringLiteral("recreated-probe");
+    original.path = QStringLiteral("C:/same/location.wav");
+    original.available = true;
+    LibraryModel model;
+    model.replaceAll({original});
+
+    const auto oldClaim = model.beginMetadataProbe(original.trackId);
+    QVERIFY(oldClaim.has_value());
+    QVERIFY(oldClaim->generation != 0);
+    QVERIFY(model.removeTrack(original.trackId));
+    QVERIFY(model.append(original));
+    const auto newClaim = model.beginMetadataProbe(original.trackId);
+    QVERIFY(newClaim.has_value());
+    QVERIFY(newClaim->generation > oldClaim->generation);
+
+    TrackRecord oldResult;
+    oldResult.path = oldClaim->path;
+    oldResult.format = QStringLiteral("wav");
+    oldResult.sampleRate = 44100;
+    oldResult.bitDepth = 16;
+    oldResult.channels = 2;
+    oldResult.bitRate = 1411200;
+    oldResult.durationMs = 5000;
+    oldResult.fileSize = 882000;
+    QVERIFY(!model.completeMetadataProbe(*oldClaim, true, oldResult));
+
+    TrackRecord newResult = oldResult;
+    newResult.path = newClaim->path;
+    newResult.sampleRate = 96000;
+    newResult.bitDepth = 24;
+    newResult.channels = 6;
+    newResult.bitRate = 13824000;
+    newResult.durationMs = 7000;
+    newResult.fileSize = 12096000;
+    QVERIFY(model.completeMetadataProbe(*newClaim, true, newResult));
+
+    const TrackRecord* current = model.recordForId(original.trackId);
+    QVERIFY(current != nullptr);
+    QCOMPARE(current->sampleRate, 96000);
+    QCOMPARE(current->bitDepth, 24);
+    QCOMPARE(current->channels, 6);
+    QCOMPARE(current->bitRate, qint64{13824000});
+    QCOMPARE(current->durationMs, qint64{7000});
+    QCOMPARE(current->fileSize, qint64{12096000});
+    QVERIFY(current->metadataProbeAttempted);
+}
 
 void LibraryModelTest::staleMetadataProbeCannotOverwriteRelocatedTrack()
 {

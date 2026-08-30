@@ -7,31 +7,33 @@
 - Both entry points now open the panel immediately from the real right-click menu and then request missing technical metadata asynchronously. A visible panel refreshes only when `trackDetailsChanged(trackId)` matches the track it is still displaying.
 - `LibraryFileOperations::trackDetails()` is now a pure getter. It does not parse media, mutate the library model, emit `dataChanged`, or request a synchronous store flush.
 - Added a persisted `metadataProbeAttempted` flag and completed the real channel-count chain through import, explicit refresh, model roles, and JSON save/load. Legacy JSON without the flag loads as `false` and is eligible for one on-demand probe.
-- `LibraryModel` is the single in-flight arbiter shared by every `LibraryFileOperations` instance. It grants at most one claim for an unattempted track, records the expected canonical path, and accepts completion only for the same `trackId` and path generation.
+- `LibraryModel` is the single in-flight arbiter shared by every `LibraryFileOperations` instance. It grants at most one claim for an unattempted track and records both the expected canonical path and a monotonically unique process-lifetime generation token. Completion must match `trackId + generation` before it can remove the in-flight claim, then must also match the expected path before applying data.
 - The on-demand probe runs on the Qt thread pool. Completion is queued back to the model thread through a `QPointer<LibraryModel>`. Matching success writes only real probed technical fields; matching failure, including a successful probe reporting zero channels, still persists `metadataProbeAttempted=true` so repeated right-clicks do not re-probe forever. Async completion emits `dataChanged` only and relies on the existing deferred `LibraryStore` save path; it never emits `flushRequested`.
-- Removing, replacing, or relocating records clears stale in-flight state. A relocated record resets `metadataProbeAttempted=false`; an old completion cannot overwrite the new path or remove a newer claim.
+- Removing, replacing, or relocating records clears stale in-flight state without resetting the generation counter. A relocated record resets `metadataProbeAttempted=false`; an old completion cannot overwrite a new path, steal a recreated same-ID/same-path claim, or remove a newer claim. Token `0` is never issued; after the theoretical `quint64` maximum is issued, allocation fails closed instead of wrapping and reusing a generation.
 - Preserved the shared popup's Escape handling, outside-press closing, fixed label column, scrolling, and real path-copy behavior.
 
 ## Red evidence
 
 - Raw-row QML assertions failed before the metadata chain was implemented: both real right-click entry tests failed at the missing `sampleRate` value. Evidence: `build/release/task4-raw-red-track.txt` and `build/release/task4-raw-red-library.txt`.
 - The second-round C++ tests were added before the async production API. The MSVC build failed at the expected missing contracts: `TrackRecord::metadataProbeAttempted`, `LibraryModel::beginMetadataProbe`, `LibraryModel::completeMetadataProbe`, the injectable `LibraryFileOperations(ProbeFunction, ...)` constructor, and `trackDetailsChanged`.
+- Third-round ABA regression evidence: with path-only in-flight identity, deleting a track and recreating the same `trackId` at the same path allowed the old completion to return `true` and steal the new claim. The new test failed at `!model.completeMetadataProbe(*oldClaim, ...)` with 2 passed / 1 failed. Evidence: `build/release/task4-aba-red-library-model.txt`.
 
 ## Green verification
 
 - MSVC Release build of `library_model_test`, `library_store_test`, `library_file_operations_test`, `import_controller_test`, and `qml_main_window_test`: passed and linked.
 - Direct C++ tests:
-  - `library_model_test`: 22 passed, 0 failed. Includes stale-path completion rejection and verifies that an old completion cannot steal the new path's claim. Evidence: `build/release/task4-async-library_model_test.txt`.
+  - `library_model_test`: 23 passed, 0 failed. Includes stale-path rejection and the same-ID/same-path recreation ABA case; the old generation is rejected while the newer claim still completes and supplies the final record. Evidence: `build/release/task4-aba-green-library-model.txt`.
   - `library_store_test`: 8 passed, 0 failed. Covers `metadataProbeAttempted` JSON round-trip and legacy JSON defaulting to `false`. Evidence: `build/release/task4-async-library_store_test.txt`.
-  - `library_file_operations_test`: 7 passed, 0 failed. Covers pure `trackDetails()`, non-blocking slow-probe dispatch, model-level in-flight deduplication across two operations instances, successful hydration, failed hydration, zero-channel hydration, retry suppression, and no `flushRequested`. Evidence: `build/release/task4-async-library_file_operations_test.txt`.
+  - `library_file_operations_test`: 7 passed, 0 failed. Covers pure `trackDetails()`, non-blocking slow-probe dispatch, model-level in-flight deduplication across two operations instances, successful hydration, failed hydration, zero-channel hydration, retry suppression, and no `flushRequested`. Evidence: `build/release/task4-aba-green-file-operations.txt`.
   - `import_controller_test`: 24 passed, 0 failed. Covers successful import marking the metadata probe as attempted. Evidence: `build/release/task4-async-import_controller_test.txt`.
 - Real right-click QML entry tests wait for background hydration and then inspect `panel.rows[rowIndex].value` directly, not the rendered `—` fallback:
-  - TrackList: 3 passed, 0 failed. Evidence: `build/release/task4-async-green-track.txt`.
-  - LibraryManager: 3 passed, 0 failed. Evidence: `build/release/task4-async-green-library.txt`.
-- Fresh complete `tst_main_window.qml` direct run: 114 passed, 0 failed, 1 expected offscreen `WM_DROPFILES` skip in 34.22 s. Evidence: `build/release/task4-async-full-main-window.txt`.
+  - TrackList: 3 passed, 0 failed. Evidence: `build/release/task4-aba-green-track.txt`.
+  - LibraryManager: 3 passed, 0 failed. Evidence: `build/release/task4-aba-green-library.txt`.
+- Third-round complete `tst_main_window.qml` direct run after relinking the generation-token implementation: 114 passed, 0 failed, 1 expected offscreen `WM_DROPFILES` skip in 30.99 s. Evidence: `build/release/task4-aba-full-main-window.txt`.
 - Fresh related CTest command:
   - `ctest --test-dir build/release -R '^(library_model_test|library_store_test|library_file_operations_test|import_controller_test|qml_main_window_test)$' --output-on-failure`
   - Result: 5/5 passed in 61.81 s (`library_model_test` 1.23 s, `library_store_test` 0.85 s, `library_file_operations_test` 1.36 s, `import_controller_test` 29.40 s, `qml_main_window_test` 28.85 s).
+- Third-round focused CTest after the ABA correction: `library_model_test` and `library_file_operations_test` passed 2/2 in 5.95 s.
 
 ## Remaining risk
 
