@@ -24,6 +24,29 @@ float clampUnit(float value, float fallback = 0.0F) noexcept
     return clampRange(value, 0.0F, 1.0F, fallback);
 }
 
+CameraSnapshot sanitizedCameraSnapshot(
+    const CameraSnapshot& candidate,
+    const CameraSnapshot& fallback = CameraSnapshot{}) noexcept
+{
+    const CameraSnapshot defaults;
+    CameraSnapshot safeFallback;
+    safeFallback.yaw = finiteOr(fallback.yaw, defaults.yaw);
+    safeFallback.pitch = clampRange(fallback.pitch, 0.12F, 1.15F,
+                                    defaults.pitch);
+    safeFallback.distance = clampRange(fallback.distance, 42.0F, 220.0F,
+                                       defaults.distance);
+    safeFallback.punch = clampUnit(fallback.punch, defaults.punch);
+
+    CameraSnapshot result;
+    result.yaw = finiteOr(candidate.yaw, safeFallback.yaw);
+    result.pitch = clampRange(candidate.pitch, 0.12F, 1.15F,
+                              safeFallback.pitch);
+    result.distance = clampRange(candidate.distance, 42.0F, 220.0F,
+                                 safeFallback.distance);
+    result.punch = clampUnit(candidate.punch, safeFallback.punch);
+    return result;
+}
+
 class DeterministicRandom final {
 public:
     explicit DeterministicRandom(quint32 seed) : state_(seed == 0 ? 1U : seed) {}
@@ -620,12 +643,17 @@ bool FramePacer::shouldRender(double nowSeconds,
 void CameraMotion::orbitBy(float yawDelta, float pitchDelta,
                            double nowSeconds) noexcept
 {
+    snapshot_ = sanitizedCameraSnapshot(snapshot_);
+    if (!std::isfinite(yawDelta) || !std::isfinite(pitchDelta)
+        || !std::isfinite(nowSeconds)) return;
     snapshot_.yaw += yawDelta;
     snapshot_.pitch = std::clamp(snapshot_.pitch + pitchDelta, 0.12F, 1.15F);
     markManual(nowSeconds);
 }
 void CameraMotion::zoomBy(float wheelDelta, double nowSeconds) noexcept
 {
+    snapshot_ = sanitizedCameraSnapshot(snapshot_);
+    if (!std::isfinite(wheelDelta) || !std::isfinite(nowSeconds)) return;
     snapshot_.distance = std::clamp(snapshot_.distance + wheelDelta * 0.04F,
                                      42.0F, 220.0F);
     markManual(nowSeconds);
@@ -652,18 +680,31 @@ double CameraMotion::manualUntilSeconds() const noexcept
 void CameraMotion::synchronize(CameraSnapshot snapshot,
                                double manualUntilSeconds) noexcept
 {
-    snapshot_ = snapshot;
-    manualUntilSeconds_ = std::max(0.0, manualUntilSeconds);
+    const CameraSnapshot fallback = sanitizedCameraSnapshot(snapshot_);
+    snapshot_ = sanitizedCameraSnapshot(snapshot, fallback);
+    const double safeManualUntil = std::isfinite(manualUntilSeconds_)
+        ? manualUntilSeconds_ : 0.0;
+    manualUntilSeconds_ = std::max(
+        0.0, std::isfinite(manualUntilSeconds)
+            ? manualUntilSeconds : safeManualUntil);
 }
 void CameraMotion::applyManualDelta(const CameraSnapshot& previous,
                                     const CameraSnapshot& next,
                                     double nowSeconds) noexcept
 {
+    snapshot_ = sanitizedCameraSnapshot(snapshot_);
+    if (!std::isfinite(previous.yaw) || !std::isfinite(previous.pitch)
+        || !std::isfinite(previous.distance) || !std::isfinite(next.yaw)
+        || !std::isfinite(next.pitch) || !std::isfinite(next.distance)
+        || !std::isfinite(nowSeconds)) return;
     const float yawDelta = next.yaw - previous.yaw;
     const float pitchDelta = next.pitch - previous.pitch;
+    const float distanceDelta = next.distance - previous.distance;
+    if (!std::isfinite(yawDelta) || !std::isfinite(pitchDelta)
+        || !std::isfinite(distanceDelta)) return;
     const bool manuallyMoved = std::abs(yawDelta) > 0.000001F
         || std::abs(pitchDelta) > 0.000001F
-        || std::abs(next.distance - previous.distance) > 0.000001F;
+        || std::abs(distanceDelta) > 0.000001F;
     snapshot_.yaw += yawDelta;
     snapshot_.pitch = std::clamp(snapshot_.pitch + pitchDelta, 0.12F, 1.15F);
     snapshot_.distance = std::clamp(next.distance, 42.0F, 220.0F);
@@ -671,6 +712,7 @@ void CameraMotion::applyManualDelta(const CameraSnapshot& previous,
 }
 void CameraMotion::markManual(double nowSeconds) noexcept
 {
+    if (!std::isfinite(nowSeconds)) return;
     manualUntilSeconds_ = std::max(0.0, nowSeconds) + 4.0;
 }
 

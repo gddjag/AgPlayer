@@ -478,18 +478,23 @@ private:
         const QSize size = renderTarget()->pixelSize();
         const float aspect = size.height() > 0
             ? float(size.width()) / float(size.height()) : 1.0F;
-        projection.perspective(48.0F - camera.punch * 2.15F,
+        const CameraSnapshot defaults;
+        const float yaw = finiteOr(camera.yaw, defaults.yaw);
+        const float pitch = std::clamp(
+            finiteOr(camera.pitch, defaults.pitch), 0.12F, 1.15F);
+        const float distance = std::clamp(
+            finiteOr(camera.distance, defaults.distance), 42.0F, 220.0F);
+        const float punch = finiteUnit(camera.punch);
+        projection.perspective(48.0F - punch * 2.15F,
                                aspect, 0.1F, 400.0F);
-        const float yaw = camera.yaw;
-        const float pitch = camera.pitch;
-        const float radius = camera.distance - camera.punch * 0.6F;
+        const float radius = distance - punch * 0.6F;
         const RenderDynamics dynamics = mapRenderDynamics(snapshot_.style);
         const float lowAngleLift = 0.52F + dynamics.depthOfField * 0.12F;
         QVector3D eye(radius * std::cos(pitch) * std::sin(yaw),
                       9.0F + radius * std::sin(pitch) * lowAngleLift,
                       radius * std::cos(pitch) * std::cos(yaw));
         const float shake = snapshot_.style.cinemaShake
-            * (visual.spectralFlux * 0.22F + camera.punch * 0.12F);
+            * (visual.spectralFlux * 0.22F + punch * 0.12F);
         eye += QVector3D(std::sin(visual.timeSeconds * 21.0F) * shake,
                         std::cos(visual.timeSeconds * 17.0F) * shake * 0.55F,
                         std::sin(visual.timeSeconds * 13.0F) * shake * 0.7F);
@@ -519,7 +524,7 @@ private:
         result.parameters[3] = visual.timeSeconds;
         result.effects[0] = visual.particleActivity;
         result.effects[1] = visual.meteorActivity;
-        result.effects[2] = camera.punch;
+        result.effects[2] = punch;
         result.effects[3] = float(currentRippleCount_);
         result.styleParameters[0] = snapshot_.style.terrainAmplitude;
         result.styleParameters[1] = snapshot_.style.motionResponse;
@@ -1002,7 +1007,12 @@ void TerrainReactorItem::orbitBy(qreal yawDelta, qreal pitchDelta,
                                   qreal nowSeconds)
 {
     Q_UNUSED(nowSeconds)
-    camera_.orbitBy(float(yawDelta), float(pitchDelta),
+    const float safeYawDelta = float(yawDelta);
+    const float safePitchDelta = float(pitchDelta);
+    if (!std::isfinite(double(yawDelta)) || !std::isfinite(safeYawDelta)
+        || !std::isfinite(double(pitchDelta))
+        || !std::isfinite(safePitchDelta)) return;
+    camera_.orbitBy(safeYawDelta, safePitchDelta,
                     double(clock_.elapsed()) / 1000.0);
     ++cameraRevision_;
     emit cameraChanged();
@@ -1011,7 +1021,10 @@ void TerrainReactorItem::orbitBy(qreal yawDelta, qreal pitchDelta,
 void TerrainReactorItem::zoomBy(qreal wheelDelta, qreal nowSeconds)
 {
     Q_UNUSED(nowSeconds)
-    camera_.zoomBy(float(wheelDelta), double(clock_.elapsed()) / 1000.0);
+    const float safeWheelDelta = float(wheelDelta);
+    if (!std::isfinite(double(wheelDelta))
+        || !std::isfinite(safeWheelDelta)) return;
+    camera_.zoomBy(safeWheelDelta, double(clock_.elapsed()) / 1000.0);
     ++cameraRevision_;
     emit cameraChanged();
     scheduleIfRunnable();

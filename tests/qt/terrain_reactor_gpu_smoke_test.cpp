@@ -21,6 +21,7 @@ private slots:
     void explicitImpactBrightensAStableTerrainFrame();
     void highFrequencySheenStaysLocalizedAndHeightSubordinate();
     void nonFiniteFeatureInputsAreSanitizedBeforeExposure();
+    void nonFiniteCameraControlsRemainRenderable();
 };
 
 class MutableFeatureSource final : public QObject {
@@ -457,6 +458,92 @@ void TerrainReactorGpuSmokeTest::nonFiniteFeatureInputsAreSanitizedBeforeExposur
         source.publish(invalid);
         verifyExposed(item);
     }
+}
+
+void TerrainReactorGpuSmokeTest::nonFiniteCameraControlsRemainRenderable()
+{
+    const std::array nonFinite{
+        std::numeric_limits<qreal>::quiet_NaN(),
+        std::numeric_limits<qreal>::infinity(),
+        -std::numeric_limits<qreal>::infinity(),
+    };
+    QQuickWindow window;
+    window.resize(480, 270);
+    window.setColor(QColor(4, 6, 11));
+    PlayerExperienceController style;
+    style.setAutoRotate(0);
+    style.setAutoRotateSpeed(0);
+    style.setMotionResponse(0);
+    style.setCinemaShake(0.0);
+    style.setIdleBreathingEnabled(false);
+    style.setRipplesEnabled(false);
+    style.setFloatingCubesEnabled(false);
+    style.setMeteorsEnabled(false);
+    style.setBurstEnabled(false);
+    TerrainReactorItem item(window.contentItem());
+    item.setSize(QSizeF(480, 270));
+    item.setStyleSource(&style);
+    item.setUseSyntheticFeatures(true);
+    item.setSyntheticFeatures({0.65, 0.55, 0.35, 0.25,
+                               0.0, 0.0, 0.0, 0.0},
+                              0.0, 0.0, false, false);
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    const auto api = window.rendererInterface()->graphicsApi();
+    if (api != QSGRendererInterface::Direct3D11
+        && api != QSGRendererInterface::OpenGL
+        && api != QSGRendererInterface::Vulkan
+        && api != QSGRendererInterface::Metal) {
+        QSKIP("No accelerated Qt Quick backend is available");
+    }
+    item.setActive(true);
+    QTRY_COMPARE_WITH_TIMEOUT(item.renderStatus(),
+                              TerrainReactorItem::RenderStatus::Ready, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() > 0, 5000);
+    const QImage baseline = window.grabWindow().convertToFormat(
+        QImage::Format_RGBA8888);
+    QVERIFY(!baseline.isNull());
+    const qreal yaw = item.cameraYaw();
+    const qreal pitch = item.cameraPitch();
+    const qreal distance = item.cameraDistance();
+
+    for (const qreal invalid : nonFinite) {
+        item.orbitBy(invalid, 0.0, invalid);
+        item.orbitBy(0.0, invalid, invalid);
+        item.zoomBy(invalid, invalid);
+    }
+    QVERIFY(std::isfinite(double(item.cameraYaw())));
+    QVERIFY(std::isfinite(double(item.cameraPitch())));
+    QVERIFY(std::isfinite(double(item.cameraDistance())));
+    QVERIFY(item.cameraPitch() >= 0.12 && item.cameraPitch() <= 1.15);
+    QVERIFY(item.cameraDistance() >= 42.0 && item.cameraDistance() <= 220.0);
+    QCOMPARE(item.cameraYaw(), yaw);
+    QCOMPARE(item.cameraPitch(), pitch);
+    QCOMPARE(item.cameraDistance(), distance);
+
+    const quint64 before = item.frameCount();
+    item.update();
+    QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() > before, 5000);
+    QCOMPARE(item.renderStatus(), TerrainReactorItem::RenderStatus::Ready);
+    const QImage after = window.grabWindow().convertToFormat(
+        QImage::Format_RGBA8888);
+    QCOMPARE(after.size(), baseline.size());
+    quint64 baselineLight = 0;
+    quint64 afterLight = 0;
+    for (int y = 0; y < baseline.height(); ++y) {
+        for (int x = 0; x < baseline.width(); ++x) {
+            const QColor beforeColor = baseline.pixelColor(x, y);
+            const QColor afterColor = after.pixelColor(x, y);
+            baselineLight += quint64(beforeColor.red() + beforeColor.green()
+                                     + beforeColor.blue());
+            afterLight += quint64(afterColor.red() + afterColor.green()
+                                  + afterColor.blue());
+        }
+    }
+    QVERIFY2(afterLight * 100 >= baselineLight * 90,
+             "Non-finite camera input removed the finite rendered scene");
+    item.setActive(false);
+    QTest::qWait(100);
 }
 
 int main(int argc, char** argv)

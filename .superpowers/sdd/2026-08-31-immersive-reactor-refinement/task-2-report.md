@@ -196,6 +196,56 @@ accelerated GPU smoke, and the unchanged six-preset snapshots.
 `git diff --check` returned no whitespace errors (only the repository's
 existing LF-to-CRLF checkout warnings).
 
+## Second-review camera boundary follow-up
+
+The second review identified one remaining public non-finite path through
+`CameraMotion` and the item's `orbitBy`/`zoomBy` invokables. Tests were added
+before production edits and run directly against `a713c06`:
+
+```powershell
+build/release/tests/terrain_reactor_state_test.exe `
+  nonFiniteCameraInputsPreserveFiniteBoundedState
+build/release/tests/terrain_reactor_item_test.exe `
+  nonFiniteCameraInvokablesPreserveExposedState
+build/release/tests/terrain_reactor_gpu_smoke_test.exe `
+  nonFiniteCameraControlsRemainRenderable
+```
+
+All three produced the intended RED (`2 passed, 1 failed`, exit `1` each):
+
+- state failed because a NaN yaw made `CameraMotion::snapshot()` non-finite;
+- item failed because `cameraYaw` became non-finite after the Q_INVOKABLE;
+- the active accelerated GPU case failed at the same exposed property before
+  it could prove that rendering remained healthy.
+
+A second isolated RED separated time from delta validation: with a valid orbit
+delta and NaN time, the state test failed because the existing valid camera was
+mutated. This proves `nowSeconds`/manual-window safety independently instead of
+passing only because a bad spatial delta was rejected.
+
+The scoped fix uses no-op semantics for non-finite public deltas and times, so
+an existing valid user camera is retained. `CameraMotion::synchronize` uses the
+current finite camera as the fallback for invalid incoming fields, falling back
+to defaults only if the current field was already invalid. Manual deltas are
+applied only when previous/next values, derived deltas, and time are finite.
+Pitch remains `0.12..1.15`, distance `42..220`, and punch `[0,1]`; finite normal
+input behavior is unchanged. Immediately before trigonometry and uniform
+copying, `buildUniforms` independently sanitizes yaw, pitch, distance, and
+punch and writes the sanitized punch to the effects uniform.
+
+Targeted GREEN after the fix:
+
+- non-finite CameraMotion state case: `3/3`, `8 ms`;
+- non-finite item Q_INVOKABLE case: `3/3`, `6 ms`;
+- non-finite active GPU/render-continuity case: `3/3`, `1.209 s`;
+- existing finite manual-delta/recovery state cases: `4/4`;
+- existing finite item camera-control case: `3/3`.
+
+Latest focused Release verification passed `4/4` in `4.69 s`. The complete GPU
+executable then passed `5/5` consecutive executions on Direct3D 11; every run
+reported `7 passed, 0 failed`. No shader, QML, frame-loop, pass, or unrelated
+module was changed for this follow-up.
+
 ## Remaining risks
 
 - The accelerated image assertion was exercised on Windows Direct3D 11.

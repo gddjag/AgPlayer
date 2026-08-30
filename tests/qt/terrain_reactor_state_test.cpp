@@ -24,6 +24,7 @@ private slots:
     void rendererOwnershipHasOneLiveResourceGeneration();
     void manualCameraControlRecoversAfterFourSeconds();
     void manualCameraDeltaPreservesRendererMotion();
+    void nonFiniteCameraInputsPreserveFiniteBoundedState();
     void punchEventsAreConsumedOnceByRevision();
     void punchRevisionClaimSurvivesRendererRebuild();
     void immersiveStyleControlsMapToBoundedDistinctDynamics();
@@ -842,6 +843,109 @@ void TerrainReactorStateTest::manualCameraDeltaPreservesRendererMotion()
     QCOMPARE(renderer.snapshot().yaw, automaticallyRotated + 0.25F);
     renderer.advance(9.01, 1.0F, 1.0F);
     QVERIFY(renderer.snapshot().yaw > automaticallyRotated + 0.25F);
+}
+
+void TerrainReactorStateTest::nonFiniteCameraInputsPreserveFiniteBoundedState()
+{
+    const std::array nonFinite{
+        std::numeric_limits<float>::quiet_NaN(),
+        std::numeric_limits<float>::infinity(),
+        -std::numeric_limits<float>::infinity(),
+    };
+    CameraMotion validCamera;
+    validCamera.orbitBy(0.25F, -0.08F, 1.0);
+    validCamera.zoomBy(-900.0F, 1.0);
+    validCamera.applyBeatPunch(0.4F);
+    const CameraSnapshot valid = validCamera.snapshot();
+    const double validManualUntil = validCamera.manualUntilSeconds();
+    const auto isFiniteBounded = [](const CameraSnapshot& snapshot) {
+        return std::isfinite(snapshot.yaw)
+            && std::isfinite(snapshot.pitch)
+            && snapshot.pitch >= 0.12F && snapshot.pitch <= 1.15F
+            && std::isfinite(snapshot.distance)
+            && snapshot.distance >= 42.0F && snapshot.distance <= 220.0F
+            && std::isfinite(snapshot.punch)
+            && snapshot.punch >= 0.0F && snapshot.punch <= 1.0F;
+    };
+    const auto preservesValid = [&valid](const CameraSnapshot& snapshot) {
+        return snapshot.yaw == valid.yaw
+            && snapshot.pitch == valid.pitch
+            && snapshot.distance == valid.distance
+            && snapshot.punch == valid.punch;
+    };
+
+    for (const float invalid : nonFinite) {
+        CameraMotion orbitYaw = validCamera;
+        orbitYaw.orbitBy(invalid, 0.0F, 2.0);
+        QVERIFY(isFiniteBounded(orbitYaw.snapshot()));
+        QVERIFY(preservesValid(orbitYaw.snapshot()));
+        QCOMPARE(orbitYaw.manualUntilSeconds(), validManualUntil);
+
+        CameraMotion orbitPitch = validCamera;
+        orbitPitch.orbitBy(0.0F, invalid, 2.0);
+        QVERIFY(isFiniteBounded(orbitPitch.snapshot()));
+        QVERIFY(preservesValid(orbitPitch.snapshot()));
+        QCOMPARE(orbitPitch.manualUntilSeconds(), validManualUntil);
+
+        CameraMotion zoom = validCamera;
+        zoom.zoomBy(invalid, 2.0);
+        QVERIFY(isFiniteBounded(zoom.snapshot()));
+        QVERIFY(preservesValid(zoom.snapshot()));
+        QCOMPARE(zoom.manualUntilSeconds(), validManualUntil);
+
+        CameraMotion orbitTime = validCamera;
+        orbitTime.orbitBy(0.1F, -0.02F, double(invalid));
+        QVERIFY(isFiniteBounded(orbitTime.snapshot()));
+        QVERIFY(preservesValid(orbitTime.snapshot()));
+        QCOMPARE(orbitTime.manualUntilSeconds(), validManualUntil);
+
+        CameraMotion zoomTime = validCamera;
+        zoomTime.zoomBy(-20.0F, double(invalid));
+        QVERIFY(isFiniteBounded(zoomTime.snapshot()));
+        QVERIFY(preservesValid(zoomTime.snapshot()));
+        QCOMPARE(zoomTime.manualUntilSeconds(), validManualUntil);
+
+        CameraMotion synchronized = validCamera;
+        CameraSnapshot poisoned = valid;
+        poisoned.yaw = invalid;
+        poisoned.pitch = invalid;
+        poisoned.distance = invalid;
+        poisoned.punch = invalid;
+        synchronized.synchronize(poisoned, double(invalid));
+        QVERIFY(isFiniteBounded(synchronized.snapshot()));
+        QVERIFY(preservesValid(synchronized.snapshot()));
+        QCOMPARE(synchronized.manualUntilSeconds(), validManualUntil);
+
+        CameraMotion manualDelta = validCamera;
+        CameraSnapshot next = valid;
+        next.yaw = invalid;
+        next.pitch = invalid;
+        next.distance = invalid;
+        manualDelta.applyManualDelta(valid, next, double(invalid));
+        QVERIFY(isFiniteBounded(manualDelta.snapshot()));
+        QVERIFY(preservesValid(manualDelta.snapshot()));
+        QCOMPARE(manualDelta.manualUntilSeconds(), validManualUntil);
+
+        CameraMotion poisonedPrevious = validCamera;
+        CameraSnapshot previous = valid;
+        previous.yaw = invalid;
+        previous.pitch = invalid;
+        previous.distance = invalid;
+        poisonedPrevious.applyManualDelta(previous, valid, double(invalid));
+        QVERIFY(isFiniteBounded(poisonedPrevious.snapshot()));
+        QVERIFY(preservesValid(poisonedPrevious.snapshot()));
+        QCOMPARE(poisonedPrevious.manualUntilSeconds(), validManualUntil);
+
+        CameraMotion manualTime = validCamera;
+        CameraSnapshot moved = valid;
+        moved.yaw += 0.1F;
+        moved.pitch += 0.02F;
+        moved.distance += 1.0F;
+        manualTime.applyManualDelta(valid, moved, double(invalid));
+        QVERIFY(isFiniteBounded(manualTime.snapshot()));
+        QVERIFY(preservesValid(manualTime.snapshot()));
+        QCOMPARE(manualTime.manualUntilSeconds(), validManualUntil);
+    }
 }
 
 void TerrainReactorStateTest::punchEventsAreConsumedOnceByRevision()
