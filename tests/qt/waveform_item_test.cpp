@@ -49,8 +49,9 @@ private slots:
     void frequencyModeFallsBackToBandEnvelopeWhenMixMissing();
     void densityAndLineWidthAffectRenderedGeometry();
     void waveformStrokesStayInsideContainerEdges();
+    void onePixelWaveformLeavesTheCanvasEdgeClear();
     void visualModesUseConfiguredProgressAndBaseColors();
-    void frequencyColorModeMapsBandEnergyToConfiguredColors();
+    void frequencyColorModeOverlaysMixAndThreeBandsOnOneCenterAxis();
     void spectrumUsesBottomBaselineAndCenterEnvelope();
     void spectrumUpsamplesSparseInputToDenseBars();
     void spectrumContractUsesFixedBarsWithPeakCaps();
@@ -237,7 +238,7 @@ void WaveformItemTest::visualModesUseConfiguredProgressAndBaseColors()
     delete node;
 }
 
-void WaveformItemTest::frequencyColorModeMapsBandEnergyToConfiguredColors()
+void WaveformItemTest::frequencyColorModeOverlaysMixAndThreeBandsOnOneCenterAxis()
 {
     TestableWaveformItem item;
     item.setWidth(4);
@@ -262,13 +263,38 @@ void WaveformItemTest::frequencyColorModeMapsBandEnergyToConfiguredColors()
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
     const auto* data = vertices(node);
-    compareColor(data[0], 0xFF, 0x64, 0x7C, 0xFF);
-    compareColor(data[2], 0x3E, 0xD6, 0xAE, 0xFF);
-    compareColor(data[4], 0x8A, 0x7C, 0xFF, 0xFF);
-    // Equal band activity produces the hand-derived average of the three
-    // semantic colours instead of a track-random or horizontal gradient.
-    compareColor(data[6], 0x98, 0x92, 0xB8, 0xFF);
-    QCOMPARE(renderedPeakCount(node, item), 4);
+    const int peaksPerLayer = renderedPeakCount(node, item, 4);
+    QCOMPARE(peaksPerLayer, 4);
+    const int verticesPerLayer = peaksPerLayer * 2;
+
+    // Mix, low, mid and high share the same timeline and mirrored centre axis.
+    for (int layer = 1; layer < 4; ++layer) {
+        QCOMPARE(data[layer * verticesPerLayer].x, data[0].x);
+        QCOMPARE(data[layer * verticesPerLayer].y
+                 + data[layer * verticesPerLayer + 1].y,
+                 item.height());
+    }
+    compareColor(data[verticesPerLayer], 0xFF, 0x64, 0x7C, 0x9A);
+    compareColor(data[verticesPerLayer * 2 + 2], 0x3E, 0xD6, 0xAE, 0x9A);
+    compareColor(data[verticesPerLayer * 3 + 4], 0x8A, 0x7C, 0xFF, 0x9A);
+    delete node;
+}
+
+void WaveformItemTest::onePixelWaveformLeavesTheCanvasEdgeClear()
+{
+    TestableWaveformItem item;
+    item.setWidth(80);
+    item.setHeight(40);
+    item.setDensity(2.0);
+    item.setLineWidth(1.0);
+    item.setPeaks(peaks({1.0, 0.8, 0.7, 0.6}));
+
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node != nullptr);
+    const auto* data = vertices(node);
+    QVERIFY2(data[0].x >= 1.0F,
+             "the first waveform column must not rasterize as a canvas border");
+    QCOMPARE(data[0].y + data[1].y, item.height());
     delete node;
 }
 
@@ -786,12 +812,12 @@ void WaveformItemTest::frequencyModeFallsBackToBandEnvelopeWhenMixMissing()
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
     const auto* geometryNode = static_cast<const QSGGeometryNode*>(node);
-    // Frequency colour is semantic input for one mix-shaped waveform rather
-    // than extra overlaid geometry.
-    QCOMPARE(geometryNode->geometry()->vertexCount(), 200);
+    // Missing Mix is synthesized while the available low/mid envelopes remain
+    // separate, co-timed overlays.
+    QCOMPARE(geometryNode->geometry()->vertexCount(), 600);
 
     const auto* data = vertices(node);
-    QCOMPARE(data[0].x, 0.5F);
+    QCOMPARE(data[0].x, 1.0F);
     QCOMPARE(data[198].x, 99.5F);
 
     delete node;

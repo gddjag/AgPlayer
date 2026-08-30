@@ -69,6 +69,7 @@ private slots:
     void geometryDockAndPinStatePersist();
     void legacyMiniGeometryMigratesToReferenceDefault();
     void shellModesPersistIndependentMainWindowGeometry();
+    void switchingBackWithoutClassicGeometryUsesCompactDefault();
     void persistedDockEdgeSurvivesInitialPreferenceWiring();
     void restoredGeometryBalancesMinimumAndAvailableScreen();
     void offscreenGeometryRestoresInsideAvailableScreen();
@@ -224,6 +225,23 @@ void WindowControllerTest::shellModesPersistIndependentMainWindowGeometry()
     QCOMPARE(QSettings().value(
                  QStringLiteral("windows/integratedMainGeometry")).toRect(),
              QRect(20, 40, 760, 700));
+}
+
+void WindowControllerTest::switchingBackWithoutClassicGeometryUsesCompactDefault()
+{
+    WindowController windows;
+    windows.setMainWindowShellMode(1);
+
+    QWindow mainWindow;
+    mainWindow.setGeometry(20, 30, 1672, 941);
+    windows.setWindows(&mainWindow, nullptr);
+    QSettings().remove(QStringLiteral("windows/mainGeometry"));
+
+    windows.setMainWindowShellMode(0);
+
+    QCOMPARE(mainWindow.size(),
+             QSize(960, 298).boundedTo(
+                 mainWindow.screen()->availableGeometry().size()));
 }
 
 void WindowControllerTest::updatesExistingWindowObjectsAndFlags()

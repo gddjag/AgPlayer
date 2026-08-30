@@ -119,10 +119,13 @@ Rectangle {
             objectName: "miniCover"
             Layout.preferredWidth: 128; Layout.preferredHeight: 128
             radius: Theme.radiusSm; color: Theme.panel; clip: true
-            Image {
+            FallbackCoverImage {
+                id: miniCoverImage
+                requestedSource: root.coverSource()
                 anchors.fill: parent
-                anchors.margins: root.currentRow() >= 0 ? 0 : 16
-                source: root.coverSource(); fillMode: Image.PreserveAspectFit; smooth: true
+                anchors.margins: usingFallback ? 16 : 0
+                fillMode: Image.PreserveAspectFit
+                smooth: true
             }
         }
 
@@ -377,6 +380,7 @@ Rectangle {
                 ExperienceActions {
                     objectName: "miniExperienceActions"
                     compact: true
+                    showImmersive: false
                 }
                 Item {
                     id: volumeControl

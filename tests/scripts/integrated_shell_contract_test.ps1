@@ -19,6 +19,7 @@ function Assert-Match {
 $main = Get-Content -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/Main.qml') -Raw
 $shell = Get-Content -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/IntegratedPlayerShell.qml') -Raw
 $controls = Get-Content -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/PlayerControls.qml') -Raw
+$experience = Get-Content -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/ExperienceActions.qml') -Raw
 $selection = Get-Content -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/WaveSelectionOverlay.qml') -Raw
 
 Assert-Match $main 'id:\s*shellLoader[\s\S]*sourceComponent:\s*mainWindow\.integratedShell' 'Main.qml must switch one shell through Loader.'
@@ -43,7 +44,11 @@ Assert-Match $shell 'onZoomRequested:\s*function\(x, factor\)[\s\S]*waveform\.zo
 Assert-Match $shell 'function\s+applyWaveformMode\(\)[\s\S]*waveform\.peaks\s*=\s*spectrum[\s\S]*waveform\.layers\s*=\s*layers' 'Integrated must restore exactly one waveform data source when switching display modes.'
 Assert-Match $shell 'objectName:\s*"integratedWaveformNavigator"[\s\S]*waveform\.setVisibleRange' 'Integrated must provide a draggable zoom-position navigator.'
 Assert-Match $main 'showListWindowButton:\s*false' 'Integrated controls must not expose the Classic list-window button.'
-Assert-Match $controls 'objectName:\s*"playerSecondaryActions"[\s\S]*objectName:\s*"playerShellModeButton"[\s\S]*Theme\.icon\("player-shell-mode"\)' 'Both shells must share the uploaded theme-switch icon in the right action group.'
-Assert-Match $controls 'objectName:\s*"modeButton"[\s\S]*ExperienceActions\s*\{' 'Shared experience actions must follow the playback-mode button.'
+Assert-Match $controls 'objectName:\s*"playerSecondaryActions"[\s\S]*ExperienceActions\s*\{' 'Shared experience actions must remain in the right action group.'
+if ($controls -match 'playerShellModeButton|player-shell-mode') {
+    throw 'Playback controls must not expose the shell-mode switch.'
+}
+Assert-Match $experience 'Theme\.icon\("immersive-visual-mode"\)' 'Immersive mode must use the supplied icon asset.'
+Assert-Match $experience 'Theme\.icon\("lyrics"\)' 'Lyrics must use the supplied icon asset.'
 
 Write-Host 'Integrated shell source contract passed.'

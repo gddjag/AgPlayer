@@ -156,7 +156,8 @@ private:
     void scheduleWindowStateSync();
     void flushWindowState();
     QString mainWindowGeometryKey() const;
-    bool restoreMainWindowGeometry(QWindow* window);
+    bool restoreMainWindowGeometry(QWindow* window,
+                                   bool applyClassicDefault = false);
     static QString edgeForPreference(int edge);
     void updateListWindowPosition();
     QPoint computeSnappedPosition(int x, int y) const;

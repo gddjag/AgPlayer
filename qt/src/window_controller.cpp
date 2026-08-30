@@ -200,7 +200,7 @@ void WindowController::setMainWindowShellMode(int mode)
     persistGeometry(mainWindow_, mainWindowGeometryKey());
     mainWindowShellMode_ = mode;
     if (mainWindow_ != nullptr) {
-        restoreMainWindowGeometry(mainWindow_);
+        restoreMainWindowGeometry(mainWindow_, true);
         rememberNativePixelSize(mainWindow_);
         persistGeometry(mainWindow_, mainWindowGeometryKey());
     }
@@ -966,6 +966,22 @@ bool WindowController::nativeEventFilter(const QByteArray& eventType, void* mess
     if (eventType == QByteArrayLiteral("windows_generic_MSG")
         || eventType == QByteArrayLiteral("windows_dispatcher_MSG")) {
         const auto* msg = static_cast<MSG*>(message);
+        if (msg != nullptr
+            && msg->hwnd == reinterpret_cast<HWND>(mainWindowHandle_)
+            && msg->message == WM_SYSCOMMAND) {
+            const UINT command = static_cast<UINT>(msg->wParam) & 0xFFF0U;
+            if (command == SC_MINIMIZE) {
+                QTimer::singleShot(0, this, [this] {
+                    applyListWindowVisible(false);
+                });
+            } else if (command == SC_RESTORE) {
+                QTimer::singleShot(0, this, [this] {
+                    applyMainVisible(true);
+                    applyListWindowVisible(shouldShowListWindow());
+                    raiseDockedGroup();
+                });
+            }
+        }
         if (msg != nullptr && msg->message == WM_DPICHANGED
             && (msg->hwnd == reinterpret_cast<HWND>(mainWindowHandle_)
                 || msg->hwnd == reinterpret_cast<HWND>(listWindowHandle_)
@@ -1267,12 +1283,16 @@ QString WindowController::mainWindowGeometryKey() const
         : QStringLiteral("windows/mainGeometry");
 }
 
-bool WindowController::restoreMainWindowGeometry(QWindow* window)
+bool WindowController::restoreMainWindowGeometry(QWindow* window,
+                                                 bool applyClassicDefault)
 {
     if (restoreGeometry(window, mainWindowGeometryKey())) {
         return true;
     }
-    if (window == nullptr || mainWindowShellMode_ != 1) {
+    if (window == nullptr) {
+        return false;
+    }
+    if (mainWindowShellMode_ == 0 && !applyClassicDefault) {
         return false;
     }
     QScreen* screen = window->screen();
@@ -1283,7 +1303,9 @@ bool WindowController::restoreMainWindowGeometry(QWindow* window)
         return false;
     }
     const QRect available = screen->availableGeometry();
-    const QSize size = QSize(1672, 941).boundedTo(available.size());
+    const QSize preferred = mainWindowShellMode_ == 1
+        ? QSize(1672, 941) : QSize(960, 298);
+    const QSize size = preferred.boundedTo(available.size());
     QRect geometry(QPoint(), size);
     geometry.moveCenter(available.center());
     window->setGeometry(geometry);

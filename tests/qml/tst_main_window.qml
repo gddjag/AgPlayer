@@ -630,10 +630,10 @@ TestCase {
         mouseClick(button)
         var window = findChild(mainWindow, "equalizerWindow")
         tryVerify(function() { return window && window.visible }, 1000)
-        verify(window.width >= 1180)
-        verify(window.height >= 680)
-        compare(window.minimumWidth, 960)
-        compare(window.minimumHeight, 580)
+        verify(window.width >= 1000)
+        verify(window.height >= 600)
+        compare(window.minimumWidth, 880)
+        compare(window.minimumHeight, 520)
         var equalizerTitle = findChild(window, "equalizerTitle")
         var equalizerContent = findChild(window, "equalizerContent")
         verify(equalizerTitle,
@@ -1054,6 +1054,8 @@ TestCase {
         verify(detailsPanel,
                "QA capture must expose the real track-details popup")
         tryVerify(function() { return detailsPanel.visible }, 500)
+        compare(detailsPanel.parent, trackList.popupOverlay,
+                "file details must not be clipped by the scrolling track list")
         verify(String(detailsPanel.details.fileName || "").length > 0,
                "the opened popup must contain a real track filename")
         verify(String(detailsPanel.details.format || "").length > 0,
@@ -4630,7 +4632,7 @@ TestCase {
         verify(volumeRight <= secondaryLeft + 0.5,
                "compact volume control must not overlap the right actions")
         compare(findChild(mainWindow, "experienceActions").compact, true)
-        compare(findChild(mainWindow, "playerShellModeButton").visible, false)
+        compare(findChild(mainWindow, "playerShellModeButton"), null)
         compare(findChild(mainWindow, "miniPlayerButton").visible, false)
         var artist = findChild(mainWindow, "trackArtistAlbum")
         var rating = findChild(mainWindow, "trackRating")

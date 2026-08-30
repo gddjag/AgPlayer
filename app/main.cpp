@@ -456,7 +456,7 @@ int main(int argc, char* argv[])
                 bool heightOk = false;
                 const int width = cliArgs.at(++i).toInt(&widthOk);
                 const int height = cliArgs.at(++i).toInt(&heightOk);
-                if (widthOk && heightOk && width >= 960 && height >= 580) {
+                if (widthOk && heightOk && width >= 880 && height >= 520) {
                     qaEqualizerSize = QSize(width, height);
                 }
             } else if (arg == QStringLiteral("--qa-library")

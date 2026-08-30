@@ -194,10 +194,6 @@ Rectangle {
             background: null
         }
 
-        ExperienceActions {
-            objectName: "experienceActions"
-            compact: root.compactTransport
-        }
     }
 
     Item {
@@ -365,20 +361,9 @@ Rectangle {
             background: null
         }
 
-        ToolButton {
-            id: playerShellModeButton
-            objectName: "playerShellModeButton"
-            visible: !root.compactTransport
-            flat: true
-            icon.source: Theme.icon("player-shell-mode")
-            icon.color: Theme.iconPrimary
-            icon.width: 20
-            icon.height: 20
-            Accessible.name: qsTr("选择播放器皮肤模式")
-            onClicked: playerExperienceModeMenu.open()
-            ToolTip.text: Accessible.name
-            ToolTip.visible: hovered
-            background: null
+        ExperienceActions {
+            objectName: "experienceActions"
+            compact: root.compactTransport
         }
 
         ToolButton {
@@ -397,33 +382,4 @@ Rectangle {
         }
     }
 
-    Menu {
-        id: playerExperienceModeMenu
-        objectName: "playerExperienceModeMenu"
-        parent: root
-        x: Math.max(8, root.width - implicitWidth - 56)
-        y: -implicitHeight - 6
-        width: 188
-
-        MenuItem {
-            objectName: "classicShellModeMenuItem"
-            text: qsTr("双窗口模式")
-            checkable: true
-            checked: SettingsController.playerShellMode === 0
-            onClicked: SettingsController.playerShellMode = 0
-        }
-        MenuItem {
-            objectName: "integratedShellModeMenuItem"
-            text: qsTr("单窗口模式")
-            checkable: true
-            checked: SettingsController.playerShellMode === 1
-            onClicked: SettingsController.playerShellMode = 1
-        }
-        background: Rectangle {
-            color: Theme.elevated
-            border.color: Theme.subtleGlassBorder
-            border.width: 1
-            radius: Theme.radiusSm
-        }
-    }
 }

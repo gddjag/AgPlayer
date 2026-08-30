@@ -7,38 +7,22 @@ RowLayout {
     id: root
     objectName: "experienceActions"
     property bool compact: false
+    property bool showImmersive: true
+    property bool showLyrics: true
     spacing: compact ? 0 : 2
 
     function buttonSize() { return compact ? 26 : 32 }
 
     ToolButton {
-        objectName: "themeActionButton"
-        Layout.preferredWidth: root.buttonSize()
-        Layout.preferredHeight: root.buttonSize()
-        flat: true
-        icon.source: Theme.icon(SettingsController.playerShellMode === 0
-                                ? "merge-cells-horizontal"
-                                : "split-cells-horizontal")
-        icon.color: Theme.iconPrimary
-        icon.width: root.compact ? 15 : 18
-        icon.height: root.compact ? 15 : 18
-        Accessible.name: SettingsController.playerShellMode === 0
-                         ? qsTr("切换到集成单窗口") : qsTr("切换到经典双窗口")
-        onClicked: PlayerExperienceController.togglePlayerShellMode()
-        ToolTip.text: Accessible.name
-        ToolTip.visible: hovered
-        background: null
-    }
-
-    ToolButton {
         objectName: "immersiveActionButton"
+        visible: root.showImmersive
         Layout.preferredWidth: root.buttonSize()
         Layout.preferredHeight: root.buttonSize()
         flat: true
         checkable: true
         checked: PlayerExperienceController.immersiveMode
                  !== PlayerExperienceController.Off
-        icon.source: Theme.icon("pulse-line")
+        icon.source: Theme.icon("immersive-visual-mode")
         icon.color: checked ? Theme.iconAccent : Theme.iconPrimary
         icon.width: root.compact ? 15 : 18
         icon.height: root.compact ? 15 : 18
@@ -51,12 +35,13 @@ RowLayout {
 
     ToolButton {
         objectName: "lyricsActionButton"
+        visible: root.showLyrics
         Layout.preferredWidth: root.buttonSize()
         Layout.preferredHeight: root.buttonSize()
         flat: true
         checkable: true
         checked: PlayerExperienceController.lyricsVisible
-        icon.source: Theme.icon("music-2-line")
+        icon.source: Theme.icon("lyrics")
         icon.color: checked ? Theme.iconAccent : Theme.iconPrimary
         icon.width: root.compact ? 15 : 18
         icon.height: root.compact ? 15 : 18

@@ -6,6 +6,7 @@ import AgPlayer
 
 ListView {
     id: root
+    readonly property Item popupOverlay: Overlay.overlay
     objectName: "trackList"
     clip: true
     focus: true
@@ -1042,9 +1043,12 @@ ListView {
     Popup {
         id: detailsPanel
         objectName: "trackDetailsPanel"
+        parent: Overlay.overlay
         property var details: ({})
-        width: 340; height: Math.min(root.height - 24, 470)
-        x: root.width - width - 12; y: root.contentY + 12
+        width: Math.min(420, Math.max(340, parent ? parent.width - 24 : 340))
+        height: Math.min(470, Math.max(320, parent ? parent.height - 24 : 470))
+        x: parent ? Math.max(12, parent.width - width - 12) : 12
+        y: parent ? Math.max(12, (parent.height - height) / 2) : 12
         modal: false; focus: true; closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         background: Rectangle { color: Theme.elevated; border.color: Theme.border; radius: Theme.radiusMd }
         contentItem: ColumnLayout {

@@ -8,10 +8,10 @@ Window {
     id: window
     objectName: "equalizerWindow"
     visible: false
-    width: 1180
-    height: 680
-    minimumWidth: 960
-    minimumHeight: 580
+    width: 1000
+    height: 600
+    minimumWidth: 880
+    minimumHeight: 520
     flags: Qt.FramelessWindowHint
     color: "transparent"
     title: qsTr("十八段图形均衡器")

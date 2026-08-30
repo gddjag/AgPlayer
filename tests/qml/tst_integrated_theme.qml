@@ -345,27 +345,21 @@ TestCase {
         }, 1000)
     }
 
-    function test_bottom_actions_share_uploaded_theme_icon() {
+    function test_bottom_actions_use_uploaded_immersive_and_lyrics_icons() {
         var shell = enterIntegratedShell()
         var actions = findChild(shell, "playerSecondaryActions")
-        var themeButton = findChild(shell, "playerShellModeButton")
         var audioTools = findChild(shell, "audioToolsButton")
         var miniPlayer = findChild(shell, "miniPlayerButton")
-        verify(actions && themeButton && audioTools && miniPlayer)
-        compare(themeButton.parent, actions)
+        var immersive = findChild(shell, "immersiveActionButton")
+        var lyrics = findChild(shell, "lyricsActionButton")
+        verify(actions && audioTools && miniPlayer && immersive && lyrics)
+        compare(findChild(shell, "playerShellModeButton"), null)
+        compare(findChild(shell, "themeActionButton"), null)
         compare(audioTools.parent, actions)
         compare(miniPlayer.parent, actions)
-        verify(themeButton.icon.source.toString().endsWith(
-                   "/player-shell-mode.svg"))
-
-        SettingsController.playerShellMode = 0
-        tryVerify(function() {
-            return findChild(mainWindow, "classicPlayerShell") !== null
-        }, 1500)
-        themeButton = findChild(mainWindow, "playerShellModeButton")
-        verify(themeButton)
-        verify(themeButton.icon.source.toString().endsWith(
-                   "/player-shell-mode.svg"))
+        verify(immersive.icon.source.toString().endsWith(
+                   "/immersive-visual-mode.svg"))
+        verify(lyrics.icon.source.toString().endsWith("/lyrics.svg"))
     }
 
     function test_right_panel_uses_outlined_glass_controls() {
@@ -554,40 +548,11 @@ TestCase {
                 "progress colour must come from the main canvas, not a clipped duplicate")
     }
 
-    function test_shell_button_opens_real_mode_menu() {
+    function test_shell_switch_is_removed_from_transport() {
         var shell = enterIntegratedShell()
-        var button = findChild(shell, "playerShellModeButton")
-        var menu = findChild(shell, "playerExperienceModeMenu")
-        var classic = findChild(shell, "classicShellModeMenuItem")
-        var integrated = findChild(shell, "integratedShellModeMenuItem")
-        verify(button && menu && classic && integrated)
-        compare(findChild(shell, "immersiveVisualModeMenuItem"), null,
-                "the shell menu must not advertise an obsolete pending feature")
-
-        button.clicked()
-        tryCompare(menu, "opened", true)
-
-        integrated.clicked()
-        compare(SettingsController.playerShellMode, 1)
-
-        button.clicked()
-        tryCompare(menu, "opened", true)
-        classic.clicked()
-        tryCompare(SettingsController, "playerShellMode", 0)
-
-        var classicShell = null
-        tryVerify(function() {
-            classicShell = findChild(mainWindow, "classicPlayerShell")
-            return classicShell !== null
-        }, 1500)
-        var classicButton = findChild(classicShell, "playerShellModeButton")
-        var classicMenu = findChild(classicShell,
-                                    "playerExperienceModeMenu")
-        var switchToIntegrated = findChild(
-                    classicShell, "integratedShellModeMenuItem")
-        verify(classicButton && classicMenu && switchToIntegrated)
-        compare(switchToIntegrated.text, "单窗口模式")
-        SettingsController.playerShellMode = 1
+        compare(findChild(shell, "playerShellModeButton"), null)
+        compare(findChild(shell, "playerExperienceModeMenu"), null)
+        compare(findChild(shell, "themeActionButton"), null)
     }
 
     function test_zoom_navigator_tracks_and_moves_visible_window() {

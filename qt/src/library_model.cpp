@@ -16,6 +16,17 @@
 #include <utility>
 
 namespace {
+const QUrl kPackagedCover(
+    QStringLiteral("qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"));
+
+QUrl displayCoverUrl(const QUrl& coverUrl)
+{
+    if (coverUrl.isLocalFile() && !QFileInfo::exists(coverUrl.toLocalFile())) {
+        return kPackagedCover;
+    }
+    return coverUrl;
+}
+
 QString normalizedCanonicalKey(const QString& canonicalPath)
 {
 #ifdef Q_OS_WIN
@@ -189,7 +200,7 @@ QVariant LibraryModel::data(const QModelIndex& index, int role) const
     case FileSizeRole:
         return track.fileSize;
     case CoverUrlRole:
-        return track.coverUrl;
+        return displayCoverUrl(track.coverUrl);
     case FavoriteRole:
         return track.favorite;
     case RatingRole:

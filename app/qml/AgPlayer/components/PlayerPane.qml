@@ -219,12 +219,12 @@ Rectangle {
                 border.width: 1
                 clip: true
 
-                Image {
+                FallbackCoverImage {
+                    id: playerCoverImage
                     objectName: "playerCoverImage"
+                    requestedSource: root.coverSource()
                     anchors.fill: parent
-                    anchors.margins: root.coverUrlText().length > 0
-                                     ? 0 : Theme.spacingMd
-                    source: root.coverSource()
+                    anchors.margins: usingFallback ? Theme.spacingMd : 0
                     sourceSize.width: 180
                     sourceSize.height: 180
                     fillMode: Image.PreserveAspectFit

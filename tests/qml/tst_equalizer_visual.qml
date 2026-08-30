@@ -31,6 +31,10 @@ TestCase {
         SettingsController.themeMode = 0
         equalizer = equalizerComponent.createObject(null)
         verify(equalizer)
+        compare(equalizer.width, 1000)
+        compare(equalizer.height, 600)
+        compare(equalizer.minimumWidth, 880)
+        compare(equalizer.minimumHeight, 520)
 
         equalizer.width = 1675
         equalizer.height = 943
@@ -47,12 +51,12 @@ TestCase {
         compare(equalizer.height, 680)
         capture(temp + "/AgPlayer-equalizer-1180x680.png", Qt.size(1180, 680))
 
-        equalizer.width = 960
-        equalizer.height = 580
+        equalizer.width = 880
+        equalizer.height = 520
         wait(100)
-        compare(equalizer.width, 960)
-        compare(equalizer.height, 580)
-        capture(temp + "/AgPlayer-equalizer-960x580.png", Qt.size(960, 580))
+        compare(equalizer.width, 880)
+        compare(equalizer.height, 520)
+        capture(temp + "/AgPlayer-equalizer-880x520.png", Qt.size(880, 520))
         equalizer.destroy()
         equalizer = null
         SettingsController.themeMode = previousThemeMode

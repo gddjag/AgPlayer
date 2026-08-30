@@ -1126,8 +1126,8 @@ void SettingsController::resetWaveformDefaults()
     setWaveformPlaybackGuide(false);
     setWaveformCanvasHeight(78);
     setWaveformCanvasLocked(true);
-    setSpectrumColorMode(0);
-    setSpectrumSolidColor(QStringLiteral("#0078d4"));
+    setSpectrumColorMode(1);
+    setSpectrumSolidColor(QStringLiteral("#7b2ff7"));
     setSpectrumRgbStartColor(QStringLiteral("#00d4ff"));
     setSpectrumRgbMiddleColor(QStringLiteral("#7b2ff7"));
     setSpectrumRgbEndColor(QStringLiteral("#e62e9b"));
@@ -1852,7 +1852,7 @@ void SettingsController::load()
         waveformFrequencyMidColor_, QStringLiteral("#3ed6ae"));
     waveformFrequencyHighColor_ = validOr(
         waveformFrequencyHighColor_, QStringLiteral("#8a7cff"));
-    spectrumSolidColor_ = validOr(spectrumSolidColor_, QStringLiteral("#0078d4"));
+    spectrumSolidColor_ = validOr(spectrumSolidColor_, QStringLiteral("#7b2ff7"));
     spectrumRgbStartColor_ = validOr(spectrumRgbStartColor_, QStringLiteral("#00d4ff"));
     spectrumRgbMiddleColor_ = validOr(spectrumRgbMiddleColor_, QStringLiteral("#7b2ff7"));
     spectrumRgbEndColor_ = validOr(spectrumRgbEndColor_, QStringLiteral("#e62e9b"));
@@ -2055,8 +2055,8 @@ void SettingsController::restoreDefaults(const bool includeMediaSettings)
         waveformCanvasLocked_ = true;
         listWaveformThumbnailEnabled_ = true;
         listWaveformThumbnailMode_ = QStringLiteral("Color36");
-        spectrumColorMode_ = 0;
-        spectrumSolidColor_ = QStringLiteral("#0078d4");
+        spectrumColorMode_ = 1;
+        spectrumSolidColor_ = QStringLiteral("#7b2ff7");
         spectrumRgbStartColor_ = QStringLiteral("#00d4ff");
         spectrumRgbMiddleColor_ = QStringLiteral("#7b2ff7");
         spectrumRgbEndColor_ = QStringLiteral("#e62e9b");

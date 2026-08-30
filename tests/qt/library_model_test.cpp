@@ -28,7 +28,30 @@ private slots:
     void appliesMaintenanceResultsWithSingleModelNotification();
     void stampsNewImportsWithoutOverwritingExistingTimestamps();
     void exposesLiveRecentAndNeverPlayedCounts();
+    void missingLocalCoverFallsBackToPackagedArtwork();
 };
+
+void LibraryModelTest::missingLocalCoverFallsBackToPackagedArtwork()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    TrackRecord track;
+    track.trackId = QStringLiteral("missing-cover");
+    track.path = dir.filePath(QStringLiteral("track.mp3"));
+    track.coverUrl = QUrl::fromLocalFile(
+        dir.filePath(QStringLiteral("deleted-cover.jpg")));
+
+    LibraryModel model;
+    model.replaceAll({track});
+
+    const QUrl expected(QStringLiteral(
+        "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"));
+    QCOMPARE(model.data(model.index(0, 0), LibraryModel::CoverUrlRole).toUrl(),
+             expected);
+    QCOMPARE(model.trackForId(track.trackId)
+                 .value(QStringLiteral("coverUrl")).toUrl(),
+             expected);
+}
 
 void LibraryModelTest::exposesLiveRecentAndNeverPlayedCounts()
 {

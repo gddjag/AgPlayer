@@ -997,6 +997,8 @@ void SettingsControllerTest::listWaveformThumbnailSettingsPersistFallbackAndRese
     reloaded.resetWaveformDefaults();
     QCOMPARE(reloaded.listWaveformThumbnailEnabled(), true);
     QCOMPARE(reloaded.listWaveformThumbnailMode(), QStringLiteral("Color36"));
+    QCOMPARE(reloaded.spectrumColorMode(), 1);
+    QCOMPARE(reloaded.spectrumSolidColor(), QStringLiteral("#7b2ff7"));
 
     reloaded.setListWaveformThumbnailEnabled(false);
     reloaded.setListWaveformThumbnailMode(QStringLiteral("Mono"));
@@ -1028,8 +1030,8 @@ void SettingsControllerTest::visualizerCanvasAndReplayGainSettingsPersist()
         SettingsController settings;
         QCOMPARE(settings.waveformCanvasHeight(), 78);
         QCOMPARE(settings.waveformCanvasLocked(), true);
-        QCOMPARE(settings.spectrumColorMode(), 0);
-        QCOMPARE(settings.spectrumSolidColor(), QStringLiteral("#0078d4"));
+        QCOMPARE(settings.spectrumColorMode(), 1);
+        QCOMPARE(settings.spectrumSolidColor(), QStringLiteral("#7b2ff7"));
         QCOMPARE(settings.spectrumRgbStartColor(), QStringLiteral("#00d4ff"));
         QCOMPARE(settings.spectrumRgbMiddleColor(), QStringLiteral("#7b2ff7"));
         QCOMPARE(settings.spectrumRgbEndColor(), QStringLiteral("#e62e9b"));
@@ -1038,7 +1040,7 @@ void SettingsControllerTest::visualizerCanvasAndReplayGainSettingsPersist()
 
         settings.setWaveformCanvasHeight(120);
         settings.setWaveformCanvasLocked(false);
-        settings.setSpectrumColorMode(1);
+        settings.setSpectrumColorMode(0);
         settings.setSpectrumSolidColor(QStringLiteral("#112233"));
         settings.setSpectrumRgbMiddleColor(QStringLiteral("#445566"));
         settings.setReplayGainMode(2);
@@ -1050,7 +1052,7 @@ void SettingsControllerTest::visualizerCanvasAndReplayGainSettingsPersist()
     SettingsController reloaded;
     QCOMPARE(reloaded.waveformCanvasHeight(), 84);
     QCOMPARE(reloaded.waveformCanvasLocked(), false);
-    QCOMPARE(reloaded.spectrumColorMode(), 1);
+    QCOMPARE(reloaded.spectrumColorMode(), 0);
     QCOMPARE(reloaded.spectrumSolidColor(), QStringLiteral("#112233"));
     QCOMPARE(reloaded.spectrumRgbMiddleColor(), QStringLiteral("#445566"));
     QCOMPARE(reloaded.replayGainMode(), 2);

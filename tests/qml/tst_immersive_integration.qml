@@ -114,17 +114,9 @@ TestCase {
         var mainActions = findChild(mainWindow, "experienceActions")
         var miniActions = findChild(miniWindow, "miniExperienceActions")
         verify(mainActions && miniActions)
-
-        var beforeShell = SettingsController.playerShellMode
-        var oldMainActions = mainActions
-        findChild(mainActions, "themeActionButton").clicked()
-        compare(SettingsController.playerShellMode, beforeShell === 0 ? 1 : 0)
-        tryVerify(function() {
-            var candidate = findChild(mainWindow, "experienceActions")
-            return candidate && candidate !== oldMainActions
-        }, 1000)
-        mainActions = findChild(mainWindow, "experienceActions")
-        verify(mainActions)
+        compare(findChild(mainActions, "themeActionButton"), null)
+        compare(findChild(miniActions, "themeActionButton"), null)
+        compare(findChild(miniActions, "immersiveActionButton").visible, false)
 
         PlayerExperienceController.lyricsVisible = false
         findChild(mainActions, "lyricsActionButton").clicked()
@@ -132,7 +124,7 @@ TestCase {
         compare(findChild(miniActions, "lyricsActionButton").checked, true)
 
         PlayerExperienceController.immersiveMode = PlayerExperienceController.Off
-        findChild(miniActions, "immersiveActionButton").clicked()
+        findChild(mainActions, "immersiveActionButton").clicked()
         compare(PlayerExperienceController.immersiveMode,
                 PlayerExperienceController.TerrainReactor)
         compare(findChild(mainActions, "immersiveActionButton").checked, true)

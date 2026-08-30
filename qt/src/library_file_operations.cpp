@@ -167,6 +167,9 @@ QVariantMap LibraryFileOperations::trackDetails(const QString& trackId) const
     details.insert(QStringLiteral("directory"), info.absolutePath());
     details.insert(QStringLiteral("modifiedAt"), info.lastModified());
     details.insert(QStringLiteral("fileName"), info.fileName());
+    if (details.value(QStringLiteral("format")).toString().trimmed().isEmpty()) {
+        details.insert(QStringLiteral("format"), info.suffix().toUpper());
+    }
     return details;
 }
 

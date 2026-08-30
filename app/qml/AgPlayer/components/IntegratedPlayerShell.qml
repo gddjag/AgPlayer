@@ -524,13 +524,27 @@ Item {
                 analysisProgress: root.waveformProvider
                                   ? root.waveformProvider.analysisProgress : 0
                 visualMode: SettingsController.waveformMode
-                baseColor: SettingsController.waveformMode === 0
-                           ? SettingsController.waveformSolidBaseColor
-                           : SettingsController.waveformRgbBaseColor
+                baseColor: SettingsController.waveformMode === 2
+                           ? SettingsController.spectrumSolidColor
+                           : SettingsController.waveformMode === 0
+                             ? SettingsController.waveformSolidBaseColor
+                             : SettingsController.waveformRgbBaseColor
                 progressColor: SettingsController.waveformSolidProgressColor
-                gradientStartColor: SettingsController.waveformRgbStartColor
-                gradientMiddleColor: SettingsController.waveformRgbMiddleColor
-                gradientEndColor: SettingsController.waveformRgbEndColor
+                gradientStartColor: SettingsController.waveformMode === 2
+                                    ? (SettingsController.spectrumColorMode === 0
+                                       ? SettingsController.spectrumSolidColor
+                                       : SettingsController.spectrumRgbStartColor)
+                                    : SettingsController.waveformRgbStartColor
+                gradientMiddleColor: SettingsController.waveformMode === 2
+                                     ? (SettingsController.spectrumColorMode === 0
+                                        ? SettingsController.spectrumSolidColor
+                                        : SettingsController.spectrumRgbMiddleColor)
+                                     : SettingsController.waveformRgbMiddleColor
+                gradientEndColor: SettingsController.waveformMode === 2
+                                  ? (SettingsController.spectrumColorMode === 0
+                                     ? SettingsController.spectrumSolidColor
+                                     : SettingsController.spectrumRgbEndColor)
+                                  : SettingsController.waveformRgbEndColor
                 frequencyLowColor: SettingsController.waveformFrequencyLowColor
                 frequencyMidColor: SettingsController.waveformFrequencyMidColor
                 frequencyHighColor: SettingsController.waveformFrequencyHighColor
@@ -805,19 +819,15 @@ Item {
                         radius: Theme.radiusSm
                         clip: true
 
-                        Image {
+                        FallbackCoverImage {
+                            id: integratedTrackCoverImage
+                            requestedSource: trackSummary.track
+                                             ? trackSummary.track.coverUrl : ""
                             anchors.fill: parent
-                            source: trackSummary.track
-                                    && trackSummary.track.coverUrl
-                                    ? trackSummary.track.coverUrl
-                                    : "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
-                            fillMode: trackSummary.track
-                                      && trackSummary.track.coverUrl
+                            fillMode: !usingFallback
                                       ? Image.PreserveAspectCrop
                                       : Image.PreserveAspectFit
-                            anchors.margins: trackSummary.track
-                                             && trackSummary.track.coverUrl
-                                             ? 0 : 8
+                            anchors.margins: usingFallback ? 8 : 0
                         }
                     }
                     ColumnLayout {
