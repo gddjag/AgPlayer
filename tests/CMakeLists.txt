@@ -686,6 +686,11 @@ foreach(qt_test IN ITEMS
     )
 endforeach()
 
+# This GPU suite runs five serialized rendering cases, each with its own
+# discriminating QTRY deadline. Give only the outer CTest watchdog enough time
+# to let those condition-based failures report their real assertion.
+set_tests_properties(terrain_reactor_gpu_smoke_test PROPERTIES TIMEOUT 60)
+
 target_include_directories(format_conversion_plan_test PRIVATE
     "${CMAKE_SOURCE_DIR}/core/src"
 )
