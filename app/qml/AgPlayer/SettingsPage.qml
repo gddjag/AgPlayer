@@ -30,6 +30,10 @@ Item {
     function open() {
         if (visible)
             return
+        if (hostWindow && !hostWindow.visible) {
+            hostWindow.openSettings()
+            return
+        }
         visible = true
         forceActiveFocus()
         opened()
@@ -902,7 +906,10 @@ Item {
         id: thumb
         property int mode: 0
         property bool selected: false
-        property string modeLabel: mode === 0 ? qsTr("纯色波形") : (mode === 1 ? qsTr("自定义波形") : qsTr("频谱波形"))
+        property string modeLabel: mode === 0 ? qsTr("纯色波形")
+                                   : mode === 3 ? qsTr("频彩波形")
+                                   : mode === 1 ? qsTr("RGB波形")
+                                                : qsTr("柱状频谱")
         signal clicked()
 
         width: 96
@@ -935,7 +942,27 @@ Item {
                     ctx.lineTo(width, cy)
                     ctx.stroke()
 
-                    if (mode === 1) {
+                    if (mode === 3) {
+                        ctx.lineWidth = Math.max(
+                            1, SettingsController.waveformThickness)
+                        for (var fx = 0; fx <= width; fx += 2) {
+                            var ft = fx / Math.max(1, width)
+                            var low = 0.28 + 0.72 * Math.abs(Math.sin(ft * 9.0))
+                            var mid = 0.22 + 0.78 * Math.abs(Math.sin(ft * 17.0 + 1.1))
+                            var high = 0.16 + 0.84 * Math.abs(Math.sin(ft * 31.0 + 2.3))
+                            ctx.strokeStyle = low >= mid && low >= high
+                                    ? SettingsController.waveformFrequencyLowColor
+                                    : mid >= high
+                                      ? SettingsController.waveformFrequencyMidColor
+                                      : SettingsController.waveformFrequencyHighColor
+                            var frequencyAmp = (0.18 + Math.max(low, mid, high) * 0.72)
+                                    * cy * SettingsController.waveformHeight
+                            ctx.beginPath()
+                            ctx.moveTo(fx, cy - frequencyAmp)
+                            ctx.lineTo(fx, cy + frequencyAmp)
+                            ctx.stroke()
+                        }
+                    } else if (mode === 1) {
                         var waveformGradient = ctx.createLinearGradient(0, 0, width, 0)
                         waveformGradient.addColorStop(0, SettingsController.waveformRgbStartColor)
                         waveformGradient.addColorStop(0.5, SettingsController.waveformRgbMiddleColor)
@@ -1614,6 +1641,12 @@ Item {
                         }
 
                         WaveformThumbnail {
+                            mode: 3
+                            selected: SettingsController.waveformMode === 3
+                            onClicked: SettingsController.waveformMode = 3
+                        }
+
+                        WaveformThumbnail {
                             mode: 1
                             selected: SettingsController.waveformMode === 1
                             onClicked: SettingsController.waveformMode = 1
@@ -1720,7 +1753,10 @@ Item {
                 SettingRow {
                     visible: SettingsController.waveformMode !== 2
                     label: SettingsController.waveformMode === 0
-                           ? qsTr("底色 / 进度色") : qsTr("底色 / RGB 渐变")
+                           ? qsTr("底色 / 进度色")
+                           : SettingsController.waveformMode === 3
+                             ? qsTr("低频 / 中频 / 高频")
+                             : qsTr("底色 / RGB 渐变")
                     RowLayout {
                         anchors.fill: parent
                         spacing: Theme.spacingSm
@@ -1730,7 +1766,17 @@ Item {
                         ColorField { objectName: "waveformRgbStartColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbStartColor; targetProperty: "waveformRgbStartColor" }
                         ColorField { objectName: "waveformRgbMiddleColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbMiddleColor; targetProperty: "waveformRgbMiddleColor" }
                         ColorField { objectName: "waveformRgbEndColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbEndColor; targetProperty: "waveformRgbEndColor" }
+                        ColorField { objectName: "waveformFrequencyLowColorField"; visible: SettingsController.waveformMode === 3; colorValue: SettingsController.waveformFrequencyLowColor; targetProperty: "waveformFrequencyLowColor" }
+                        ColorField { objectName: "waveformFrequencyMidColorField"; visible: SettingsController.waveformMode === 3; colorValue: SettingsController.waveformFrequencyMidColor; targetProperty: "waveformFrequencyMidColor" }
+                        ColorField { objectName: "waveformFrequencyHighColorField"; visible: SettingsController.waveformMode === 3; colorValue: SettingsController.waveformFrequencyHighColor; targetProperty: "waveformFrequencyHighColor" }
                     }
+                }
+
+                Button {
+                    objectName: "waveformFrequencyResetButton"
+                    visible: SettingsController.waveformMode === 3
+                    text: qsTr("恢复默认颜色")
+                    onClicked: SettingsController.resetWaveformFrequencyColors()
                 }
 
                 SettingRow {

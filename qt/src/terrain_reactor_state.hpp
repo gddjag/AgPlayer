@@ -1,0 +1,323 @@
+#pragma once
+
+#include <QVector>
+#include <QVector3D>
+#include <QVector4D>
+#include <QStringView>
+
+#include <array>
+#include <atomic>
+
+namespace agplayer::terrain {
+
+enum class ColorZone : quint8 {
+    Dark,
+    Cool,
+    Warm,
+    Accent,
+    Peak,
+};
+
+struct SceneInstance {
+    QVector3D position;
+    QVector3D scale{1.0F, 1.0F, 1.0F};
+    float random = 0.0F;
+    float aux = 0.0F;
+    ColorZone zone = ColorZone::Dark;
+
+    friend bool operator==(const SceneInstance& lhs,
+                           const SceneInstance& rhs) noexcept
+    {
+        return lhs.position == rhs.position && lhs.scale == rhs.scale
+            && lhs.random == rhs.random && lhs.aux == rhs.aux
+            && lhs.zone == rhs.zone;
+    }
+};
+
+struct SceneLayout {
+    QVector<SceneInstance> terrain;
+    QVector<SceneInstance> floating;
+    QVector<SceneInstance> meteors;
+    QVector<SceneInstance> meteorTrails;
+    QVector<SceneInstance> collisionRipples;
+    QVector<SceneInstance> collisionParticles;
+    QVector<SceneInstance> particles;
+};
+
+SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
+                            int meteorCount, int particleCount);
+
+struct MeteorPhase {
+    float normalizedAge = 0.0F;
+    float fallDistance = 0.0F;
+    float collisionProgress = 0.0F;
+    bool flightActive = false;
+    bool collisionActive = false;
+
+    friend bool operator==(const MeteorPhase& lhs,
+                           const MeteorPhase& rhs) noexcept
+    {
+        return lhs.normalizedAge == rhs.normalizedAge
+            && lhs.fallDistance == rhs.fallDistance
+            && lhs.collisionProgress == rhs.collisionProgress
+            && lhs.flightActive == rhs.flightActive
+            && lhs.collisionActive == rhs.collisionActive;
+    }
+};
+
+MeteorPhase meteorPhase(float random, float timeSeconds) noexcept;
+
+enum class RenderColorMode : quint8 { MultiRegion, Custom, RgbSweep };
+
+using TrackPalette = std::array<QVector4D, 5>;
+
+quint32 stableTrackPaletteSeed(QStringView trackIdentity) noexcept;
+TrackPalette trackPalette(quint32 seed) noexcept;
+TrackPalette blendTrackPalettes(const TrackPalette& from,
+                                const TrackPalette& to,
+                                float progress) noexcept;
+
+struct RenderStyleSnapshot {
+    TrackPalette colors{
+        QVector4D(0.031F, 0.024F, 0.086F, 1.0F),
+        QVector4D(0.31F, 0.435F, 1.0F, 1.0F),
+        QVector4D(1.0F, 0.278F, 0.471F, 1.0F),
+        QVector4D(0.467F, 0.918F, 1.0F, 1.0F),
+        QVector4D(0.843F, 1.0F, 0.345F, 1.0F),
+    };
+    std::array<float, 8> visualEqGains{0.9F, 0.92F, 0.5F, 0.5F,
+                                       0.5F, 0.5F, 0.5F, 0.48F};
+    RenderColorMode colorMode = RenderColorMode::MultiRegion;
+    float terrainAmplitude = 0.62F;
+    float motionResponse = 0.56F;
+    float gradientLayers = 0.74F;
+    float glowIntensity = 0.38F;
+    float cinemaShake = 0.4F;
+    float autoRotate = 0.54F;
+    float peakBoost = 0.58F;
+    float inputCompression = 0.82F;
+    float audioResponse = 1.28F;
+    float responseRange = 1.0F;
+    float centerHighlight = 0.58F;
+    float rhythmStrength = 0.30F;
+    float depthOfField = 0.86F;
+    float subjectClarity = 1.10F;
+    float autoRotateSpeed = 0.42F;
+    float rhythmSensitivity = 0.78F;
+    bool ripplesEnabled = true;
+    bool floatingCubesEnabled = true;
+    bool meteorsEnabled = true;
+    bool idleBreathingEnabled = true;
+    bool themeCycleEnabled = false;
+};
+
+struct AudioFeatures {
+    std::array<float, 8> bands{};
+    float energy = 0.0F;
+    float spectralFlux = 0.0F;
+    float kick = 0.0F;
+    float snare = 0.0F;
+};
+
+struct VisualParameters {
+    std::array<float, 8> bands{};
+    float energy = 0.0F;
+    float spectralFlux = 0.0F;
+    float rippleStrength = 0.0F;
+    float particleActivity = 0.0F;
+    float meteorActivity = 0.0F;
+    float cameraPunch = 0.0F;
+    float impactStrength = 0.0F;
+    float impactAge = 0.0F;
+    float timeSeconds = 0.0F;
+};
+
+struct RenderDynamics {
+    float inputCompression = 0.82F;
+    float audioResponse = 1.28F;
+    float responseRadius = 72.0F;
+    float centerHighlight = 0.58F;
+    float rhythmStrength = 0.30F;
+    float depthOfField = 0.86F;
+    float subjectClarity = 1.10F;
+    float autoRotateSpeed = 0.0F;
+    float rhythmSensitivity = 0.78F;
+};
+
+RenderDynamics mapRenderDynamics(const RenderStyleSnapshot& style) noexcept;
+VisualParameters mapVisualParameters(const AudioFeatures& features,
+                                     float timeSeconds,
+                                     const RenderStyleSnapshot& style = {}) noexcept;
+float terrainHeight(const SceneInstance& instance,
+                    const VisualParameters& parameters,
+                    float timeSeconds,
+                    const RenderStyleSnapshot& style = {}) noexcept;
+
+enum class DegradationStage : quint8 {
+    Full,
+    ReducedParticles,
+    ReducedMeteors,
+    ReducedRipples,
+    ReducedGrid,
+    ReducedResolution,
+};
+
+struct QualityConfiguration {
+    int gridSize = 160;
+    int floatingCount = 80;
+    int particleCount = 140;
+    int meteorCount = 20;
+    int rippleCount = 10;
+    float internalScale = 1.0F;
+};
+
+class AutomaticQualityController final {
+public:
+    void observeWorkSample(double workMilliseconds) noexcept;
+    void advanceWallClock(double elapsedSeconds) noexcept;
+    DegradationStage stage() const noexcept;
+    QualityConfiguration configuration() const noexcept;
+
+private:
+    static constexpr double frameBudgetMilliseconds_ = 33.333;
+    static constexpr double downgradeSeconds_ = 2.0;
+    static constexpr double upgradeSeconds_ = 8.0;
+    static constexpr double cooldownSeconds_ = 5.0;
+
+    DegradationStage stage_ = DegradationStage::Full;
+    enum class LoadSample : quint8 { Neutral, OverBudget, UnderBudget };
+    LoadSample loadSample_ = LoadSample::Neutral;
+    double overBudgetSeconds_ = 0.0;
+    double underBudgetSeconds_ = 0.0;
+    double cooldownRemainingSeconds_ = 0.0;
+};
+
+struct WorkCounters {
+    quint64 frames = 0;
+    quint64 animations = 0;
+    quint64 uploads = 0;
+
+    friend bool operator==(const WorkCounters& lhs,
+                           const WorkCounters& rhs) noexcept
+    {
+        return lhs.frames == rhs.frames && lhs.animations == rhs.animations
+            && lhs.uploads == rhs.uploads;
+    }
+};
+
+class RenderWorkGate final {
+public:
+    void setActive(bool active) noexcept;
+    void setVisible(bool visible) noexcept;
+    void setExposed(bool exposed) noexcept;
+    bool canRun() const noexcept;
+    bool advance(bool uploaded) noexcept;
+    WorkCounters counters() const noexcept;
+
+private:
+    bool active_ = false;
+    bool visible_ = false;
+    bool exposed_ = false;
+    WorkCounters counters_;
+};
+
+class RendererResourceState final {
+public:
+    bool acquireRenderer(quint64 rendererId) noexcept;
+    void releaseRenderer(quint64 rendererId) noexcept;
+    quint64 initializeResources() noexcept;
+    void invalidateResources() noexcept;
+    bool resourcesReady() const noexcept;
+    int liveRendererCount() const noexcept;
+    quint64 generation() const noexcept;
+    bool claimPunchRevision(quint64 revision) noexcept;
+    bool claimImpactRevision(quint64 revision) noexcept;
+
+private:
+    static std::atomic<quint64> globalGeneration_;
+    std::atomic<quint64> rendererId_{0};
+    std::atomic<quint64> generation_{0};
+    std::atomic<quint64> consumedPunchRevision_{0};
+    std::atomic<quint64> consumedImpactRevision_{0};
+    std::atomic_bool resourcesReady_{false};
+};
+
+class FramePacer final {
+public:
+    bool shouldRender(double nowSeconds, double targetFramesPerSecond) noexcept;
+
+private:
+    double nextFrameSeconds_ = 0.0;
+    bool initialized_ = false;
+};
+
+struct CameraSnapshot {
+    float yaw = 2.6075219F;
+    float pitch = 0.38F;
+    float distance = 120.0F;
+    float punch = 0.0F;
+};
+
+class CameraMotion final {
+public:
+    void orbitBy(float yawDelta, float pitchDelta,
+                 double nowSeconds) noexcept;
+    void zoomBy(float wheelDelta, double nowSeconds) noexcept;
+    void applyBeatPunch(float strength) noexcept;
+    void advance(double nowSeconds, float elapsedSeconds,
+                 float autoRotateSpeed) noexcept;
+    CameraSnapshot snapshot() const noexcept;
+    double manualUntilSeconds() const noexcept;
+    void synchronize(CameraSnapshot snapshot,
+                     double manualUntilSeconds) noexcept;
+    void applyManualDelta(const CameraSnapshot& previous,
+                          const CameraSnapshot& next,
+                          double nowSeconds) noexcept;
+
+private:
+    void markManual(double nowSeconds) noexcept;
+
+    CameraSnapshot snapshot_;
+    double manualUntilSeconds_ = 0.0;
+};
+
+struct PunchEvent {
+    float strength = 0.0F;
+    quint64 revision = 0;
+};
+
+class PunchEventConsumer final {
+public:
+    explicit PunchEventConsumer(RendererResourceState& lifecycle) noexcept;
+    bool consume(const PunchEvent& event, CameraMotion& camera) noexcept;
+
+private:
+    RendererResourceState& lifecycle_;
+};
+
+struct ImpactEvent {
+    float strength = 0.0F;
+    quint64 revision = 0;
+};
+
+struct ImpactPulseSnapshot {
+    float strength = 0.0F;
+    float age = 0.0F;
+    bool active = false;
+};
+
+class ImpactEventConsumer final {
+public:
+    explicit ImpactEventConsumer(RendererResourceState& lifecycle) noexcept;
+    bool consume(const ImpactEvent& event, float nowSeconds) noexcept;
+    ImpactPulseSnapshot snapshot(float nowSeconds) const noexcept;
+
+private:
+    static constexpr float durationSeconds_ = 1.2F;
+    RendererResourceState& lifecycle_;
+    float startSeconds_ = 0.0F;
+    float baseStrength_ = 0.0F;
+    bool active_ = false;
+};
+
+} // namespace agplayer::terrain

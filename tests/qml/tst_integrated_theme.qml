@@ -499,13 +499,12 @@ TestCase {
         var menu = findChild(shell, "playerExperienceModeMenu")
         var classic = findChild(shell, "classicShellModeMenuItem")
         var integrated = findChild(shell, "integratedShellModeMenuItem")
-        var immersive = findChild(shell, "immersiveVisualModeMenuItem")
-        verify(button && menu && classic && integrated && immersive)
+        verify(button && menu && classic && integrated)
+        compare(findChild(shell, "immersiveVisualModeMenuItem"), null,
+                "the shell menu must not advertise an obsolete pending feature")
 
         button.clicked()
         tryCompare(menu, "opened", true)
-        compare(immersive.enabled, false)
-        verify(immersive.text.indexOf("待集成") >= 0)
 
         integrated.clicked()
         compare(SettingsController.playerShellMode, 1)

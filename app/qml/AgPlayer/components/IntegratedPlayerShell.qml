@@ -44,13 +44,7 @@ Item {
     readonly property var displayedWaveformLayers: {
         if (SettingsController.waveformMode === 2)
             return ({})
-        var source = waveformLayers || ({})
-        return {
-            mix: source.mix || [],
-            _sampleRate: Number(source._sampleRate) || 0,
-            _totalSamples: Number(source._totalSamples) || 0,
-            _peakCount: Number(source._peakCount) || 0
-        }
+        return waveformLayers || ({})
     }
     readonly property var displayedSpectrumPeaks:
         SettingsController.waveformMode === 2
@@ -554,6 +548,9 @@ Item {
                 gradientStartColor: SettingsController.waveformRgbStartColor
                 gradientMiddleColor: SettingsController.waveformRgbMiddleColor
                 gradientEndColor: SettingsController.waveformRgbEndColor
+                frequencyLowColor: SettingsController.waveformFrequencyLowColor
+                frequencyMidColor: SettingsController.waveformFrequencyMidColor
+                frequencyHighColor: SettingsController.waveformFrequencyHighColor
                 rgbProgress: SettingsController.waveformMode === 1
                              && SettingsController.waveformRgbProgress
                 amplitudeScale: SettingsController.waveformHeight

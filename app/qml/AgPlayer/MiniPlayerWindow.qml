@@ -28,6 +28,7 @@ Window {
 
     property var playback: PlaybackController
     property var windows: WindowController
+    property var waveformSession: null
     property int positionMs: playback ? playback.positionMs : 0
 
     property alias playPauseButton: controls.playPauseButton
@@ -175,6 +176,7 @@ Window {
                 Layout.fillHeight: true
                 playback: miniWindow.playback
                 windows: miniWindow.windows
+                waveformSession: miniWindow.waveformSession
             }
         }
     }

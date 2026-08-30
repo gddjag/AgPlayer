@@ -604,6 +604,7 @@ foreach(qt_test IN ITEMS
     filename_processing_test
     rename_transaction_test
     library_model_test
+    lyrics_service_test
     tag_model_test
     tag_filter_model_test
     library_store_test
@@ -630,6 +631,11 @@ foreach(qt_test IN ITEMS
     replay_gain_scanner_test
     translation_manager_test
     audio_preview_controller_test
+    audio_visual_feature_controller_test
+    player_experience_controller_test
+    terrain_reactor_state_test
+    terrain_reactor_item_test
+    terrain_reactor_gpu_smoke_test
     editor_timeline_math_test
     audio_tools_end_to_end_test
     format_conversion_plan_test
@@ -1041,6 +1047,15 @@ set_tests_properties(qml_waveform_test PROPERTIES
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
+add_test(NAME qml_audio_visual_impact_test
+    COMMAND qml_waveform_test
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_audio_visual_impact.qml)
+set_tests_properties(qml_audio_visual_impact_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
 
 add_executable(qml_main_window_test
     qt/qml_main_window_test_main.cpp
@@ -1128,7 +1143,16 @@ agplayer_enable_warnings(qml_mini_player_test)
 add_test(NAME qml_mini_player_test COMMAND qml_mini_player_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_mini_player.qml)
 set_tests_properties(qml_mini_player_test PROPERTIES
     TIMEOUT 10
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;QT_QUICK_BACKEND=software"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+add_test(NAME qml_immersive_integration_test
+    COMMAND qml_mini_player_test
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_immersive_integration.qml)
+set_tests_properties(qml_immersive_integration_test PROPERTIES
+    TIMEOUT 25
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;QT_QUICK_BACKEND=software"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
@@ -1280,6 +1304,7 @@ target_include_directories(track_waveform_thumbnail_provider_test PRIVATE
 
 add_dependencies(import_controller_test decoder_fixture)
 add_dependencies(playback_controller_test decoder_fixture)
+add_dependencies(player_experience_controller_test decoder_fixture)
 add_dependencies(waveform_provider_test decoder_fixture)
 set_tests_properties(import_controller_test PROPERTIES
     ENVIRONMENT "AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
@@ -1288,6 +1313,9 @@ set_tests_properties(playback_controller_test PROPERTIES
     ENVIRONMENT "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/bin"
+)
+set_tests_properties(player_experience_controller_test PROPERTIES
+    ENVIRONMENT "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE}"
 )
 set_tests_properties(waveform_provider_test PROPERTIES
     TIMEOUT 30
@@ -1306,6 +1334,9 @@ set_tests_properties(playback_controller_test qml_main_window_test
 )
 set_tests_properties(settings_controller_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+set_tests_properties(terrain_reactor_item_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
 )
 set_tests_properties(track_waveform_thumbnail_item_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"

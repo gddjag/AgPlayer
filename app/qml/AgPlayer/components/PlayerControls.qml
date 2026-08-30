@@ -9,6 +9,7 @@ Rectangle {
     property bool emptyMode: false
     property bool showListWindowButton: true
     property bool volumeExpanded: false
+    readonly property bool compactTransport: width < 760
     signal openEqualizerRequested()
 
     function playbackModeName() {
@@ -73,6 +74,7 @@ Rectangle {
 
         ToolButton {
             objectName: "equalizerButton"
+            visible: !root.compactTransport
             flat: true
             icon.source: Theme.icon("equalizer-line")
             icon.color: Theme.iconPrimary
@@ -88,14 +90,14 @@ Rectangle {
 
         ToolButton {
             objectName: "waveformModeButton"
+            visible: !root.compactTransport
             flat: true
             icon.source: Theme.icon("waveform-switch")
             icon.color: Theme.iconPrimary
             icon.width: 20
             icon.height: 20
             Accessible.name: qsTr("Change waveform mode")
-            onClicked: SettingsController.waveformMode =
-                       (SettingsController.waveformMode + 1) % 3
+            onClicked: SettingsController.cycleWaveformMode()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
             background: null
@@ -192,6 +194,10 @@ Rectangle {
             background: null
         }
 
+        ExperienceActions {
+            objectName: "experienceActions"
+            compact: root.compactTransport
+        }
     }
 
     Item {
@@ -343,7 +349,7 @@ Rectangle {
         anchors.rightMargin: 24
         anchors.verticalCenter: parent.verticalCenter
         anchors.verticalCenterOffset: 0
-        spacing: 14
+        spacing: root.compactTransport ? 4 : 14
 
         ToolButton {
             objectName: "audioToolsButton"
@@ -362,6 +368,7 @@ Rectangle {
         ToolButton {
             id: playerShellModeButton
             objectName: "playerShellModeButton"
+            visible: !root.compactTransport
             flat: true
             icon.source: Theme.icon("player-shell-mode")
             icon.color: Theme.iconPrimary
@@ -376,7 +383,7 @@ Rectangle {
 
         ToolButton {
             objectName: "miniPlayerButton"
-            visible: !root.emptyMode
+            visible: !root.emptyMode && !root.compactTransport
             flat: true
             icon.source: Theme.icon("picture-in-picture-2-line")
             icon.color: Theme.iconPrimary
@@ -412,13 +419,6 @@ Rectangle {
             checked: SettingsController.playerShellMode === 1
             onClicked: SettingsController.playerShellMode = 1
         }
-        MenuSeparator {}
-        MenuItem {
-            objectName: "immersiveVisualModeMenuItem"
-            text: qsTr("沉浸视觉模式（待集成）")
-            enabled: false
-        }
-
         background: Rectangle {
             color: Theme.elevated
             border.color: Theme.subtleGlassBorder

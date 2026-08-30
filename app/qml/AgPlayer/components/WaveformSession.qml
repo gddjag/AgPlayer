@@ -9,6 +9,16 @@ QtObject {
     property real durationMs: 0
     property real generation: 0
     property int libraryRevision: 0
+    readonly property string trackId:
+        String(PlaybackController.currentTrackId || "")
+
+    function publishVisualTiming() {
+        AudioVisualFeatureController.setWaveformTiming(
+                    trackId,
+                    Number(layers._bpm) || 0,
+                    Math.max(0, Number(layers._durationMs) || durationMs || 0),
+                    layers.mix || [])
+    }
 
     function currentRow() {
         return LibraryModel.indexForTrackId(PlaybackController.currentTrackId)
@@ -34,6 +44,7 @@ QtObject {
                                LibraryModel.PathRole))
         layers = ({})
         durationMs = 0
+        publishVisualTiming()
         if (!path || path.length === 0)
             return
         generation = WaveformProvider.loadForTrack(
@@ -67,6 +78,7 @@ QtObject {
                 root.layers = resultLayers
                 root.durationMs = Math.max(
                             0, Number(resultLayers._durationMs) || 0)
+                root.publishVisualTiming()
             }
         }
     }

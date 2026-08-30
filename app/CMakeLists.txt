@@ -144,8 +144,14 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/IntegratedPlayerShell.qml
         qml/AgPlayer/components/WaveSelectionOverlay.qml
         qml/AgPlayer/components/WaveformSession.qml
+        qml/AgPlayer/components/SharedWaveformView.qml
         qml/AgPlayer/components/PlayerPane.qml
         qml/AgPlayer/components/PlayerControls.qml
+        qml/AgPlayer/components/ExperienceActions.qml
+        qml/AgPlayer/components/ImmersiveSurface.qml
+        qml/AgPlayer/components/ImmersiveControlPanel.qml
+        qml/AgPlayer/components/ImmersiveQueueDrawer.qml
+        qml/AgPlayer/components/LyricsPanel.qml
         qml/AgPlayer/components/EqualizerBandSlider.qml
         qml/AgPlayer/components/EqualizerResponseCurve.qml
         qml/AgPlayer/components/TrackList.qml

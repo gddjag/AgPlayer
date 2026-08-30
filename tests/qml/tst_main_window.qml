@@ -2094,7 +2094,7 @@ TestCase {
         var previousMode = SettingsController.waveformMode
         SettingsController.waveformMode = 0
         button.clicked()
-        tryCompare(SettingsController, "waveformMode", 1)
+        tryCompare(SettingsController, "waveformMode", 3)
         SettingsController.waveformMode = previousMode
     }
 
@@ -2513,6 +2513,21 @@ TestCase {
                 SettingsController.waveformSolidBaseColor)
         compare(waveform.progressColor.toString(),
                 SettingsController.waveformSolidProgressColor)
+
+        SettingsController.waveformMode = 3
+        tryVerify(function() {
+            return waveform.layers.mix.length > 0
+                    && waveform.layers.bass.length > 0
+                    && waveform.layers.mid.length > 0
+                    && waveform.layers.high.length > 0
+        })
+        compare(waveform.visualMode, 3)
+        compare(waveform.frequencyLowColor.toString(),
+                SettingsController.waveformFrequencyLowColor)
+        compare(waveform.frequencyMidColor.toString(),
+                SettingsController.waveformFrequencyMidColor)
+        compare(waveform.frequencyHighColor.toString(),
+                SettingsController.waveformFrequencyHighColor)
 
         SettingsController.waveformMode = 1
         tryVerify(function() {
@@ -4592,14 +4607,31 @@ TestCase {
 
         var pane = findChild(mainWindow, "playerPane")
         var controls = findChild(mainWindow, "playerControls")
+        var centerControls = findChild(mainWindow, "centerPlaybackControls")
+        var volumeControl = findChild(mainWindow, "mainVolumeControl")
+        var secondaryActions = findChild(mainWindow, "playerSecondaryActions")
         var cover = findChild(mainWindow, "playerCover")
         var waveform = findChild(mainWindow, "mainWaveform")
-        verify(pane && controls && cover && waveform)
+        verify(pane && controls && centerControls && volumeControl
+               && secondaryActions && cover && waveform)
         tryVerify(function() { return pane.visible }, 1000)
         verify(pane.y + pane.height <= controls.y + 1,
                "player metadata/waveform must not cover playback controls")
         verify(controls.y + controls.height <= mainWindow.contentItem.height + 1,
                "playback controls must remain inside the small window")
+        var centerRight = centerControls.mapToItem(
+                    controls, centerControls.width, 0).x
+        var volumeLeft = volumeControl.mapToItem(controls, 0, 0).x
+        var volumeRight = volumeControl.mapToItem(
+                    controls, volumeControl.width, 0).x
+        var secondaryLeft = secondaryActions.mapToItem(controls, 0, 0).x
+        verify(centerRight <= volumeLeft + 0.5,
+               "compact playback actions must not overlap the volume control")
+        verify(volumeRight <= secondaryLeft + 0.5,
+               "compact volume control must not overlap the right actions")
+        compare(findChild(mainWindow, "experienceActions").compact, true)
+        compare(findChild(mainWindow, "playerShellModeButton").visible, false)
+        compare(findChild(mainWindow, "miniPlayerButton").visible, false)
         var artist = findChild(mainWindow, "trackArtistAlbum")
         var rating = findChild(mainWindow, "trackRating")
         var metadata = findChild(mainWindow, "trackMetadataBadges")
@@ -4886,6 +4918,14 @@ TestCase {
         var thicknessStepper = findChild(page, "waveformThicknessStepper")
         var aggregationCombo = findChild(page, "waveformAggregationCombo")
         var resetButton = findChild(page, "waveformResetButton")
+        var frequencyResetButton = findChild(
+                    page, "waveformFrequencyResetButton")
+        var frequencyLowField = findChild(
+                    page, "waveformFrequencyLowColorField")
+        var frequencyMidField = findChild(
+                    page, "waveformFrequencyMidColorField")
+        var frequencyHighField = findChild(
+                    page, "waveformFrequencyHighColorField")
         var listThumbnailSwitch = findChild(
                     page, "listWaveformThumbnailEnabledControl")
         var listThumbnailMode = findChild(
@@ -4895,6 +4935,10 @@ TestCase {
         verify(thicknessStepper)
         verify(aggregationCombo)
         verify(resetButton)
+        verify(frequencyResetButton)
+        verify(frequencyLowField)
+        verify(frequencyMidField)
+        verify(frequencyHighField)
         verify(listThumbnailSwitch)
         verify(listThumbnailMode)
 
@@ -4914,6 +4958,16 @@ TestCase {
 
         SettingsController.waveformHeight = 1.2
         SettingsController.waveformDensity = 3.5
+        var previousWaveformMode = SettingsController.waveformMode
+        SettingsController.waveformMode = 3
+        SettingsController.waveformFrequencyLowColor = "#112233"
+        SettingsController.waveformFrequencyMidColor = "#445566"
+        SettingsController.waveformFrequencyHighColor = "#778899"
+        frequencyResetButton.clicked()
+        compare(SettingsController.waveformFrequencyLowColor, "#ff647c")
+        compare(SettingsController.waveformFrequencyMidColor, "#3ed6ae")
+        compare(SettingsController.waveformFrequencyHighColor, "#8a7cff")
+        SettingsController.waveformMode = previousWaveformMode
         SettingsController.waveformThickness = 2.2
         SettingsController.waveformPeakAlgorithm = 1
         tryCompare(heightStepper, "value", 1.2)

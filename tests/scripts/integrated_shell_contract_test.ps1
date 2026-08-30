@@ -44,5 +44,6 @@ Assert-Match $shell 'function\s+applyWaveformMode\(\)[\s\S]*waveform\.peaks\s*=\
 Assert-Match $shell 'objectName:\s*"integratedWaveformNavigator"[\s\S]*waveform\.setVisibleRange' 'Integrated must provide a draggable zoom-position navigator.'
 Assert-Match $main 'showListWindowButton:\s*false' 'Integrated controls must not expose the Classic list-window button.'
 Assert-Match $controls 'objectName:\s*"playerSecondaryActions"[\s\S]*objectName:\s*"playerShellModeButton"[\s\S]*Theme\.icon\("player-shell-mode"\)' 'Both shells must share the uploaded theme-switch icon in the right action group.'
+Assert-Match $controls 'objectName:\s*"modeButton"[\s\S]*ExperienceActions\s*\{' 'Shared experience actions must follow the playback-mode button.'
 
 Write-Host 'Integrated shell source contract passed.'

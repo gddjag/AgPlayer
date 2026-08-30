@@ -10,6 +10,7 @@ Rectangle {
 
     property var playback: PlaybackController
     property var windows: WindowController
+    property var waveformSession: null
     property var rawWaveformLayers: ({})
     property real waveformDurationMs: 0
     property int libraryRevision: 0
@@ -83,22 +84,15 @@ Rectangle {
             waveform.peaks = root.shapeSpectrum(playback ? playback.spectrum : [])
             playedWaveform.peaks = waveform.peaks
         } else {
-            var source = rawWaveformLayers || {}
-            waveform.layers = {
-                mix: source.mix || [],
-                _sampleRate: Number(source._sampleRate) || 0,
-                _totalSamples: Number(source._totalSamples) || 0,
-                _peakCount: Number(source._peakCount) || 0
-            }
-            playedWaveform.layers = waveform.layers
+            waveform.layers = rawWaveformLayers || ({})
+            playedWaveform.layers = rawWaveformLayers || ({})
         }
     }
     function loadWaveform() {
-        var path = currentTrackValue(LibraryModel.PathRole)
-        rawWaveformLayers = ({}); waveformDurationMs = 0
-        waveform.layers = ({}); waveform.peaks = []
-        playedWaveform.layers = ({}); playedWaveform.peaks = []
-        if (path && playback) WaveformProvider.loadForTrack(playback.currentTrackId, path)
+        rawWaveformLayers = waveformSession ? waveformSession.layers : ({})
+        waveformDurationMs = waveformSession
+                ? Number(waveformSession.durationMs || 0) : 0
+        applyWaveformMode()
     }
     function modeName(): string {
         switch (playback ? playback.mode : PlaybackController.Sequential) {
@@ -262,6 +256,9 @@ Rectangle {
                                          ? SettingsController.spectrumSolidColor
                                          : SettingsController.spectrumRgbEndColor)
                                       : SettingsController.waveformRgbEndColor
+                    frequencyLowColor: SettingsController.waveformFrequencyLowColor
+                    frequencyMidColor: SettingsController.waveformFrequencyMidColor
+                    frequencyHighColor: SettingsController.waveformFrequencyHighColor
                     rgbProgress: SettingsController.waveformMode === 1
                                  && SettingsController.waveformRgbProgress
                     amplitudeScale: SettingsController.waveformMode === 2
@@ -291,6 +288,9 @@ Rectangle {
                         gradientStartColor: waveform.gradientStartColor
                         gradientMiddleColor: waveform.gradientMiddleColor
                         gradientEndColor: waveform.gradientEndColor
+                        frequencyLowColor: waveform.frequencyLowColor
+                        frequencyMidColor: waveform.frequencyMidColor
+                        frequencyHighColor: waveform.frequencyHighColor
                         rgbProgress: waveform.rgbProgress
                         amplitudeScale: waveform.amplitudeScale
                         density: waveform.density
@@ -338,8 +338,7 @@ Rectangle {
                     Accessible.name: qsTr("切换波形样式")
                     ToolTip.text: Accessible.name
                     ToolTip.visible: hovered
-                    onClicked: SettingsController.waveformMode =
-                               (SettingsController.waveformMode + 1) % 3
+                    onClicked: SettingsController.cycleWaveformMode()
                     background: null
                 }
                 ToolButton {
@@ -374,6 +373,10 @@ Rectangle {
                     id: nextButton; Layout.preferredWidth: 28; Layout.preferredHeight: 28
                     icon.source: Theme.icon("skip-forward-fill"); icon.color: Theme.primaryText
                     icon.width: 19; icon.height: 19; onClicked: if (playback) playback.next(); background: null
+                }
+                ExperienceActions {
+                    objectName: "miniExperienceActions"
+                    compact: true
                 }
                 Item {
                     id: volumeControl
@@ -504,16 +507,15 @@ Rectangle {
         function onSpectrumChanged() { if (SettingsController.waveformMode === 2) root.applyWaveformMode() }
     }
     Connections {
-        target: WaveformProvider
-        function onWaveformReady(path, layers) {
-            if (path === root.currentTrackValue(LibraryModel.PathRole)) {
-                root.rawWaveformLayers = layers
-                root.waveformDurationMs = Math.max(
-                    0, Number(layers._durationMs) || 0)
-                root.applyWaveformMode()
-            }
-        }
+        target: root.waveformSession
+        ignoreUnknownSignals: true
+        function onLayersChanged() { root.loadWaveform() }
+        function onDurationMsChanged() { root.loadWaveform() }
     }
-    Connections { target: SettingsController; function onWaveformModeChanged() { root.applyWaveformMode() } }
+    Connections {
+        target: SettingsController
+        function onWaveformModeChanged() { root.applyWaveformMode() }
+    }
+    onWaveformSessionChanged: root.loadWaveform()
     Component.onCompleted: root.loadWaveform()
 }

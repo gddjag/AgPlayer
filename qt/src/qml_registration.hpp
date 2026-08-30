@@ -1,6 +1,7 @@
 #pragma once
 
 class AudioToolsController;
+class AudioVisualFeatureController;
 class AudioEditorController;
 class EqualizerController;
 class FormatConverter;
@@ -10,8 +11,10 @@ class LibraryFilterModel;
 class LibraryManagerController;
 class LibraryNavigationModel;
 class LibraryModel;
+class LyricsService;
 class MetadataEditor;
 class PlaybackController;
+class PlayerExperienceController;
 class PlaybackClipDragAdapter;
 class PlaylistModel;
 class SettingsController;
@@ -47,4 +50,7 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  PlaylistModel* playlistModel = nullptr,
                                  EqualizerController* equalizer = nullptr,
                                  AudioEditorController* audioEditor = nullptr,
-                                 const AgPlayerQmlRuntimeModels& runtime = {});
+                                 const AgPlayerQmlRuntimeModels& runtime = {},
+                                 PlayerExperienceController* experience = nullptr,
+                                 AudioVisualFeatureController* audioFeatures = nullptr,
+                                 LyricsService* lyricsService = nullptr);

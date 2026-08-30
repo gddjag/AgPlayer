@@ -44,6 +44,7 @@
 #endif
 
 #include "audio_tools_controller.hpp"
+#include "audio_visual_feature_controller.hpp"
 #include "audio_editor/audio_editor_controller.hpp"
 #include "audio_editor/playback_clip_drag_adapter.hpp"
 #include "equalizer_controller.hpp"
@@ -52,12 +53,14 @@
 #include "global_hotkey_manager.hpp"
 #include "import_controller.hpp"
 #include "library_model.hpp"
+#include "lyrics_service.hpp"
 #include "library_manager_controller.hpp"
 #include "library_navigation_model.hpp"
 #include "library_store.hpp"
 #include "metadata_editor.hpp"
 #include "native_drop_router.hpp"
 #include "playback_controller.hpp"
+#include "player_experience_controller.hpp"
 #include "playback_state_store.hpp"
 #include "playlist_model.hpp"
 #include "qml_registration.hpp"
@@ -788,6 +791,9 @@ int main(int argc, char* argv[])
         QObject::connect(&playback, &PlaybackController::stateChanged,
                          &equalizer, &EqualizerController::refreshStatus);
         SettingsController settings;
+        PlayerExperienceController playerExperience(&settings);
+        AudioVisualFeatureController audioVisualFeatures(&playback);
+        LyricsService lyricsService(&library, &playback, &settings);
         if (qaPlayerShell == QStringLiteral("integrated")) {
             settings.setPlayerShellMode(1);
         } else if (qaPlayerShell == QStringLiteral("classic")) {
@@ -1087,7 +1093,9 @@ int main(int argc, char* argv[])
                                         &libraryManager,
                                         &trackWaveformThumbnailProvider,
                                         &themeManager,
-                                        &playbackClipDrag});
+                                        &playbackClipDrag},
+                                    &playerExperience, &audioVisualFeatures,
+                                    &lyricsService);
 
         QString pendingPlayFilePath;
         int pendingPlayFinishes = 0;
@@ -1331,6 +1339,10 @@ int main(int argc, char* argv[])
                 qWarning().noquote()
                     << "Mini player QML failed:"
                     << miniComponent.errorString();
+            } else {
+                miniWindow->setProperty(
+                    "waveformSession",
+                    mainWindow->property("waveformSession"));
             }
 
             // The audio-tools window is loaded on first use.  Keeping only the
