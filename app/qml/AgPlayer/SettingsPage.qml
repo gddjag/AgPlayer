@@ -1591,10 +1591,13 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         valueModel: [
                             { text: qsTr("双窗口主题"), value: "dual-window" },
-                            { text: qsTr("单窗口主题"), value: "single-window" }
+                            { text: qsTr("单窗口主题"), value: "single-window" },
+                            { text: qsTr("滚动播放模式"), value: "rolling-player" }
                         ]
-                        currentIndex: SettingsController.windowLayoutTheme === "single-window"
-                                      ? 1 : 0
+                        currentIndex:
+                            SettingsController.windowLayoutTheme === "rolling-player"
+                            ? 2 : SettingsController.windowLayoutTheme === "single-window"
+                                  ? 1 : 0
                         onActivated: SettingsController.windowLayoutTheme = currentValue
                     }
                 }

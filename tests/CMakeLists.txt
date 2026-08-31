@@ -75,6 +75,50 @@ agplayer_enable_warnings(pcm_ring_buffer_test)
 
 add_test(NAME pcm_ring_buffer_test COMMAND pcm_ring_buffer_test)
 
+add_executable(scratch_pcm_window_test
+    core/scratch_pcm_window_test.cpp
+)
+target_include_directories(scratch_pcm_window_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(scratch_pcm_window_test PRIVATE agplayer_core)
+agplayer_enable_warnings(scratch_pcm_window_test)
+add_test(NAME scratch_pcm_window_test COMMAND scratch_pcm_window_test)
+
+add_executable(scratch_command_mailbox_test
+    core/scratch_command_mailbox_test.cpp
+)
+target_include_directories(scratch_command_mailbox_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(scratch_command_mailbox_test PRIVATE agplayer_core)
+agplayer_enable_warnings(scratch_command_mailbox_test)
+add_test(NAME scratch_command_mailbox_test COMMAND scratch_command_mailbox_test)
+
+add_executable(scratch_renderer_test
+    core/scratch_renderer_test.cpp
+)
+target_include_directories(scratch_renderer_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(scratch_renderer_test PRIVATE agplayer_core)
+agplayer_enable_warnings(scratch_renderer_test)
+add_test(NAME scratch_renderer_test COMMAND scratch_renderer_test)
+
+add_executable(scratch_stress_test
+    core/scratch_stress_test.cpp
+)
+target_include_directories(scratch_stress_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(scratch_stress_test PRIVATE agplayer_core)
+agplayer_enable_warnings(scratch_stress_test)
+add_test(NAME scratch_stress_test COMMAND scratch_stress_test)
+set_tests_properties(scratch_stress_test PROPERTIES
+    TIMEOUT 75
+    LABELS stress
+)
+
 add_executable(audio_document_test
     core/audio_document_test.cpp
 )
@@ -357,6 +401,89 @@ add_custom_command(
 add_custom_target(decoder_fixture DEPENDS "${SINE_WAV_FIXTURE}")
 add_dependencies(format_matrix_test decoder_fixture)
 
+add_executable(scratch_backfill_worker_test
+    core/scratch_backfill_worker_test.cpp
+)
+add_dependencies(scratch_backfill_worker_test decoder_fixture)
+target_include_directories(scratch_backfill_worker_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(scratch_backfill_worker_test PRIVATE agplayer_core)
+agplayer_enable_warnings(scratch_backfill_worker_test)
+add_test(NAME scratch_backfill_worker_test
+    COMMAND scratch_backfill_worker_test "${SINE_WAV_FIXTURE}"
+)
+set_tests_properties(scratch_backfill_worker_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
+set(SCRATCH_LONG_WAV_FIXTURE
+    "${DECODER_FIXTURE_DIR}/scratch-long.wav"
+)
+add_custom_command(
+    OUTPUT "${SCRATCH_LONG_WAV_FIXTURE}"
+    COMMAND $<TARGET_FILE:fixture_generator>
+        "${SCRATCH_LONG_WAV_FIXTURE}" 0 1764000 44100 2
+    DEPENDS fixture_generator
+    VERBATIM
+)
+add_custom_target(scratch_long_fixture DEPENDS "${SCRATCH_LONG_WAV_FIXTURE}")
+
+add_executable(scratch_audio_engine_test
+    core/scratch_audio_engine_test.cpp
+)
+add_dependencies(scratch_audio_engine_test decoder_fixture scratch_long_fixture)
+target_include_directories(scratch_audio_engine_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(scratch_audio_engine_test PRIVATE agplayer_core)
+agplayer_enable_warnings(scratch_audio_engine_test)
+add_test(NAME scratch_audio_engine_test
+    COMMAND scratch_audio_engine_test
+        "${SINE_WAV_FIXTURE}"
+        "${SCRATCH_LONG_WAV_FIXTURE}"
+)
+set_tests_properties(scratch_audio_engine_test PROPERTIES
+    TIMEOUT 20
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
+add_executable(scratch_audio_callback_test
+    core/scratch_audio_callback_test.cpp
+)
+add_dependencies(scratch_audio_callback_test scratch_long_fixture)
+target_include_directories(scratch_audio_callback_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(scratch_audio_callback_test PRIVATE agplayer_core)
+agplayer_enable_warnings(scratch_audio_callback_test)
+add_test(NAME scratch_audio_callback_test
+    COMMAND scratch_audio_callback_test "${SCRATCH_LONG_WAV_FIXTURE}"
+)
+set_tests_properties(scratch_audio_callback_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
+add_executable(scratch_c_api_test
+    core/scratch_c_api_test.cpp
+)
+add_dependencies(scratch_c_api_test decoder_fixture)
+target_link_libraries(scratch_c_api_test PRIVATE agplayer_core)
+agplayer_enable_warnings(scratch_c_api_test)
+add_test(NAME scratch_c_api_test
+    COMMAND scratch_c_api_test "${SINE_WAV_FIXTURE}"
+)
+set_tests_properties(scratch_c_api_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
 add_custom_command(
     OUTPUT "${GAPLESS_A_FIXTURE}" "${GAPLESS_B_FIXTURE}"
     COMMAND "${CMAKE_COMMAND}" -E make_directory "${DECODER_FIXTURE_DIR}"
@@ -390,6 +517,19 @@ set_tests_properties(decoder_test PROPERTIES
 add_executable(waveform_analyzer_test
     core/waveform_analyzer_test.cpp
 )
+
+add_executable(playback_time_pitch_test
+    core/playback_time_pitch_test.cpp
+)
+add_dependencies(playback_time_pitch_test decoder_fixture)
+target_include_directories(playback_time_pitch_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(playback_time_pitch_test PRIVATE agplayer_core)
+agplayer_enable_warnings(playback_time_pitch_test)
+add_test(NAME playback_time_pitch_test
+         COMMAND playback_time_pitch_test "${SINE_WAV_FIXTURE}")
+set_tests_properties(playback_time_pitch_test PROPERTIES TIMEOUT 20)
 add_dependencies(waveform_analyzer_test decoder_fixture)
 target_include_directories(waveform_analyzer_test PRIVATE
     "${CMAKE_SOURCE_DIR}/core/src"
@@ -499,6 +639,29 @@ agplayer_enable_warnings(audio_engine_test)
 
 add_test(NAME audio_engine_test COMMAND audio_engine_test "${SINE_WAV_FIXTURE}")
 set_tests_properties(audio_engine_test PROPERTIES TIMEOUT 10)
+
+add_executable(output_level_meter_test
+    core/output_level_meter_test.cpp
+)
+target_link_libraries(output_level_meter_test PRIVATE agplayer_core)
+agplayer_enable_warnings(output_level_meter_test)
+add_test(NAME output_level_meter_test COMMAND output_level_meter_test)
+set_tests_properties(output_level_meter_test PROPERTIES TIMEOUT 10)
+
+add_executable(output_level_c_api_test
+    core/output_level_c_api_test.cpp
+)
+add_dependencies(output_level_c_api_test decoder_fixture)
+target_link_libraries(output_level_c_api_test PRIVATE agplayer_core)
+agplayer_enable_warnings(output_level_c_api_test)
+add_test(NAME output_level_c_api_test
+    COMMAND output_level_c_api_test "${SINE_WAV_FIXTURE}"
+)
+set_tests_properties(output_level_c_api_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
 
 add_executable(graphic_equalizer_test
     core/graphic_equalizer_test.cpp
@@ -730,6 +893,10 @@ endforeach()
 
 target_include_directories(format_conversion_plan_test PRIVATE
     "${CMAKE_SOURCE_DIR}/core/src"
+)
+add_dependencies(audio_visual_feature_controller_test decoder_fixture)
+set_tests_properties(audio_visual_feature_controller_test PROPERTIES
+    ENVIRONMENT "AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
 )
 target_link_libraries(vocal_separation_install_test PRIVATE Qt6::Network)
 set_tests_properties(vocal_separation_install_test PROPERTIES TIMEOUT 30)
@@ -1361,6 +1528,7 @@ set_tests_properties(import_controller_test PROPERTIES
     ENVIRONMENT "AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
 )
 set_tests_properties(playback_controller_test PROPERTIES
+    TIMEOUT 30
     ENVIRONMENT "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/bin"
@@ -1436,6 +1604,26 @@ set_tests_properties(track_waveform_thumbnail_stress_test PROPERTIES
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
+add_test(NAME qml_rolling_theme_test
+    COMMAND qml_main_window_test
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_rolling_theme.qml)
+set_tests_properties(qml_rolling_theme_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
+add_test(NAME qml_player_controls_layout_test
+    COMMAND qml_main_window_test
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_player_controls.qml)
+set_tests_properties(qml_player_controls_layout_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
 add_executable(frequency_color_waveform_stress_test
     stress/frequency_color_waveform_stress_test.cpp
 )

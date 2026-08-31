@@ -3,6 +3,7 @@
 #include "audio_editor/editor_player_bridge.hpp"
 #include "audio_editor/automation_time_mapper.hpp"
 #include "formant_preserver.hpp"
+#include "time_pitch_engine.hpp"
 
 #include <agplayer/c_api.h>
 
@@ -19,6 +20,32 @@
 #include <vector>
 
 namespace {
+
+class FailOnPutEngine final : public agplayer::ITimePitchEngine {
+public:
+    bool configure(int, int) override { return true; }
+    bool setTempoRatio(double) override { return true; }
+    bool setPitchCents(double) override { return true; }
+    bool setRateRatio(double) override { return true; }
+    bool setFormantPreservation(bool) override { return true; }
+    void put(const float*, std::size_t) override { failed_ = true; }
+    std::size_t receive(float*, std::size_t) override { return 0U; }
+    void flush() override {}
+    void reset() override { failed_ = false; }
+    bool failed() const noexcept override { return failed_; }
+    agplayer::TimePitchEngineKind kind() const noexcept override
+    {
+        return agplayer::TimePitchEngineKind::None;
+    }
+
+private:
+    bool failed_{};
+};
+
+std::unique_ptr<agplayer::ITimePitchEngine> createFailOnPutEngine()
+{
+    return std::make_unique<FailOnPutEngine>();
+}
 
 [[noreturn]] void fail(const char* message)
 {
@@ -447,6 +474,31 @@ int main(int argc, char** argv)
     const auto originalSamples = readAll(*original);
     require(!originalSamples.empty(), "neutral editor stream returned no audio");
 
+    auto timestamped = EditorPlaybackStream::create(snapshot, neutral, error);
+    require(timestamped != nullptr,
+            "timestamp editor stream creation failed");
+    agplayer::DecodedAudioBlock firstTimestamped;
+    agplayer::DecodedAudioBlock secondTimestamped;
+    require(timestamped->read(firstTimestamped) == AG_OK
+                && firstTimestamped.frames > 0
+                && timestamped->read(secondTimestamped) == AG_OK
+                && secondTimestamped.frames > 0,
+            "timestamp editor stream reads failed");
+    require(firstTimestamped.timestamp_frame == 0
+                && secondTimestamped.timestamp_frame
+                    == static_cast<std::int64_t>(firstTimestamped.frames),
+            "editor stream frame timestamps were not continuous");
+
+    EditorPlaybackParameters failingParameters;
+    failingParameters.speed_ratio = 0.75;
+    auto failingStream = EditorPlaybackStream::create(
+        snapshot, failingParameters, error, &createFailOnPutEngine);
+    require(failingStream != nullptr,
+            "injected-failure editor stream creation failed");
+    agplayer::DecodedAudioBlock failingBlock;
+    require(failingStream->read(failingBlock) == AG_INTERNAL_ERROR,
+            "editor time/pitch failure was silently treated as EOS");
+
     EditorPlaybackParameters pitched;
     pitched.pitch_cents = 700;
     auto shifted = EditorPlaybackStream::create(snapshot, pitched, error);
@@ -498,6 +550,10 @@ int main(int argc, char** argv)
     agplayer::DecodedAudioBlock afterSeek;
     require(spedUp->read(afterSeek) == AG_OK && afterSeek.frames > 0,
             "editor stream did not resume after seek");
+    require(afterSeek.timestamp_frame
+                == static_cast<std::int64_t>(
+                    spedUp->metadata().sample_rate / 4),
+            "editor stream seek did not publish its output-frame timestamp");
 
     ag_player_config config{};
     config.backend = AG_AUDIO_BACKEND_NULL;

@@ -2,13 +2,37 @@
 
 #include "playback_controller.hpp"
 
+#include <agplayer/c_api.h>
+
 #include <algorithm>
 #include <cmath>
+
+namespace {
+
+double normalizedLevel(const double value) noexcept
+{
+    return std::isfinite(value) ? std::clamp(value, 0.0, 1.0) : 0.0;
+}
+
+double smoothedLevel(const double current, const double target) noexcept
+{
+    if (target >= current) return target;
+    constexpr double DecayRetention = 0.82;
+    const double next = current * DecayRetention
+        + target * (1.0 - DecayRetention);
+    return next < 0.001 ? 0.0 : next;
+}
+
+} // namespace
 
 AudioVisualFeatureController::AudioVisualFeatureController(
     PlaybackController* playback, QObject* parent)
     : QObject(parent), playback_(playback)
 {
+    outputLevelTimer_.setInterval(PlaybackController::PollIntervalMs);
+    outputLevelTimer_.setTimerType(Qt::PreciseTimer);
+    connect(&outputLevelTimer_, &QTimer::timeout,
+            this, &AudioVisualFeatureController::pollOutputLevels);
 }
 
 bool AudioVisualFeatureController::active() const noexcept { return active_; }
@@ -33,14 +57,20 @@ quint64 AudioVisualFeatureController::derivedUpdateCount() const noexcept
 {
     return derivedUpdateCount_;
 }
+double AudioVisualFeatureController::leftPeak() const noexcept { return leftPeak_; }
+double AudioVisualFeatureController::rightPeak() const noexcept { return rightPeak_; }
+double AudioVisualFeatureController::leftRms() const noexcept { return leftRms_; }
+double AudioVisualFeatureController::rightRms() const noexcept { return rightRms_; }
 
 void AudioVisualFeatureController::setPlaybackController(PlaybackController* playback)
 {
     if (playback_ == playback) return;
     disconnectPlaybackSignals();
+    resetOutputLevels();
     playback_ = playback;
     resetBeatPosition();
     if (active_) connectPlaybackSignals();
+    updateOutputLevelPolling();
 }
 
 void AudioVisualFeatureController::setActive(bool active)
@@ -52,7 +82,9 @@ void AudioVisualFeatureController::setActive(bool active)
         connectPlaybackSignals();
     } else {
         disconnectPlaybackSignals();
+        resetOutputLevels();
     }
+    updateOutputLevelPolling();
     emit activeChanged();
 }
 
@@ -169,6 +201,17 @@ void AudioVisualFeatureController::processSpectrum(const QVariantList& spectrum)
 void AudioVisualFeatureController::connectPlaybackSignals()
 {
     if (playback_ == nullptr) return;
+    if (!playbackDestroyedConnection_) {
+        playbackDestroyedConnection_ = connect(
+            playback_, &QObject::destroyed, this, [this] {
+                spectrumConnection_ = {};
+                positionConnection_ = {};
+                trackConnection_ = {};
+                playbackDestroyedConnection_ = {};
+                playback_ = nullptr;
+                updateOutputLevelPolling();
+            });
+    }
     if (!spectrumConnection_) {
         spectrumConnection_ = connect(
             playback_, &PlaybackController::spectrumChanged, this, [this] {
@@ -212,6 +255,71 @@ void AudioVisualFeatureController::disconnectPlaybackSignals()
         disconnect(trackConnection_);
         trackConnection_ = {};
     }
+    if (playbackDestroyedConnection_) {
+        disconnect(playbackDestroyedConnection_);
+        playbackDestroyedConnection_ = {};
+    }
+}
+
+void AudioVisualFeatureController::updateOutputLevelPolling()
+{
+    if (active_ && playback_ != nullptr) {
+        if (!outputLevelTimer_.isActive()) outputLevelTimer_.start();
+        pollOutputLevels();
+        return;
+    }
+    outputLevelTimer_.stop();
+    if (active_) resetOutputLevels();
+}
+
+void AudioVisualFeatureController::pollOutputLevels()
+{
+    ag_output_levels levels{};
+    if (active_ && playback_ != nullptr
+        && playback_->playerHandle() != nullptr
+        && ag_player_output_levels(playback_->playerHandle(), &levels)
+            == AG_OK) {
+        applyOutputLevels(levels.left_peak, levels.right_peak,
+                          levels.left_rms, levels.right_rms);
+        return;
+    }
+    applyOutputLevels(0.0, 0.0, 0.0, 0.0);
+}
+
+void AudioVisualFeatureController::applyOutputLevels(
+    const double leftPeak, const double rightPeak,
+    const double leftRms, const double rightRms)
+{
+    const double nextLeftPeak = smoothedLevel(
+        leftPeak_, normalizedLevel(leftPeak));
+    const double nextRightPeak = smoothedLevel(
+        rightPeak_, normalizedLevel(rightPeak));
+    const double nextLeftRms = smoothedLevel(
+        leftRms_, normalizedLevel(leftRms));
+    const double nextRightRms = smoothedLevel(
+        rightRms_, normalizedLevel(rightRms));
+    if (nextLeftPeak == leftPeak_ && nextRightPeak == rightPeak_
+        && nextLeftRms == leftRms_ && nextRightRms == rightRms_) {
+        return;
+    }
+    leftPeak_ = nextLeftPeak;
+    rightPeak_ = nextRightPeak;
+    leftRms_ = nextLeftRms;
+    rightRms_ = nextRightRms;
+    emit outputLevelsChanged();
+}
+
+void AudioVisualFeatureController::resetOutputLevels()
+{
+    if (leftPeak_ == 0.0 && rightPeak_ == 0.0
+        && leftRms_ == 0.0 && rightRms_ == 0.0) {
+        return;
+    }
+    leftPeak_ = 0.0;
+    rightPeak_ = 0.0;
+    leftRms_ = 0.0;
+    rightRms_ = 0.0;
+    emit outputLevelsChanged();
 }
 
 void AudioVisualFeatureController::resetBeatPosition() noexcept

@@ -142,28 +142,73 @@ bool PlaybackController::selectionLoopEnabled() const noexcept
     return selectionLoopEnabled_;
 }
 
+double PlaybackController::speedRatio() const noexcept { return speedRatio_; }
+double PlaybackController::sourceBpm() const noexcept { return sourceBpm_; }
+double PlaybackController::targetBpm() const noexcept
+{
+    return sourceBpm_ > 0.0 ? sourceBpm_ * speedRatio_ : 0.0;
+}
+bool PlaybackController::keepPitch() const noexcept { return keepPitch_; }
+bool PlaybackController::scratchActive() const noexcept
+{
+    return scratchActive_;
+}
+bool PlaybackController::scratchReady() const noexcept
+{
+    return scratchReady_;
+}
+bool PlaybackController::scratchBuffering() const noexcept
+{
+    return scratchBuffering_;
+}
+
 void PlaybackController::setLibraryModel(LibraryModel* library)
 {
     disconnect(playRequestedConnection_);
+    disconnect(libraryDataChangedConnection_);
+    disconnect(libraryResetConnection_);
     library_ = library;
     if (library_ != nullptr) {
         playRequestedConnection_ = connect(
             library_, &LibraryModel::playRequested, this, &PlaybackController::playRow);
+        libraryDataChangedConnection_ = connect(
+            library_, &QAbstractItemModel::dataChanged, this,
+            [this](const QModelIndex& first, const QModelIndex& last,
+                   const QList<int>& roles) {
+                if (!roles.isEmpty() && !roles.contains(LibraryModel::BpmRole)) {
+                    return;
+                }
+                const int row = library_ != nullptr
+                    ? library_->indexForTrackId(currentTrackId_) : -1;
+                if (row >= first.row() && row <= last.row()) {
+                    refreshSourceBpm();
+                }
+            });
+        libraryResetConnection_ = connect(
+            library_, &QAbstractItemModel::modelReset, this,
+            &PlaybackController::refreshSourceBpm);
     }
+    refreshSourceBpm();
 }
 
 void PlaybackController::setPlayer(ag_player* player)
 {
     editorOutputOwned_ = false;
+    editorRestorePending_ = false;
     editorSessionSnapshot_.reset();
+    editorOutputFailureStepForTesting_.reset();
+    editorOutputSecondFailureStepForTesting_.reset();
     player_ = player;
     refreshOutputDevices();
+    syncTimePitchFromCore();
 }
 
 bool PlaybackController::acquireEditorOutput() noexcept
 {
     if (player_ == nullptr) return false;
-    if (editorOutputOwned_) return editorSessionSnapshot_.has_value();
+    if (editorOutputOwned_) {
+        return editorSessionSnapshot_.has_value() && !editorRestorePending_;
+    }
     try {
         ag_playback_snapshot snapshot{};
         if (ag_player_snapshot(player_, &snapshot) != AG_OK) return false;
@@ -182,17 +227,71 @@ bool PlaybackController::acquireEditorOutput() noexcept
         saved.scopeSize = activeScopeSize_ > 0
             ? activeScopeSize_ : queueTrackIds_.size();
         saved.allowFallback = activeScopeAllowsFallback_;
+        ag_playback_time_pitch_config activeConfig{};
+        if (ag_player_get_time_pitch(player_, &activeConfig) != AG_OK) {
+            return false;
+        }
+        saved.speedRatio = activeConfig.speed_ratio;
+        saved.keepPitch = activeConfig.keep_pitch != 0;
+        // Persist recovery credentials before the first mutating Core call.
+        // A failed acquire can then either roll back immediately or leave a
+        // retryable restore-pending lease without losing the main session.
+        editorSessionSnapshot_ = saved;
         // A fresh player and an already-stopped loaded player both report
         // AG_STOPPED.  Neither needs a stop command before the editor stream
         // replaces its source; an unloaded core rejects stop as invalid.
         // Active/error states still take the real stop path and propagate any
         // failure instead of claiming the output was acquired.
-        if (snapshot.state != AG_STOPPED
-            && ag_player_stop(player_) != AG_OK) {
+        const bool stoppedForLease = snapshot.state != AG_STOPPED;
+        if (stoppedForLease) {
+            if (shouldFailEditorOutputStep(EditorOutputStep::AcquireStop)) {
+                editorSessionSnapshot_.reset();
+                return false;
+            }
+            ag_result stopResult = ag_player_stop(player_);
+            if (stopResult == AG_OK
+                && shouldFailEditorOutputStep(
+                    EditorOutputStep::AcquireStopAfterCall)) {
+                stopResult = AG_INTERNAL_ERROR;
+            }
+            if (stopResult != AG_OK) {
+                editorOutputOwned_ = true;
+                editorRestorePending_ = true;
+                if (restoreEditorSession()) {
+                    editorOutputOwned_ = false;
+                    editorRestorePending_ = false;
+                    editorSessionSnapshot_.reset();
+                }
+                return false;
+            }
+        }
+        const ag_playback_time_pitch_config editorConfig{
+            1.0, saved.keepPitch ? 1 : 0};
+        const ag_result tempoResult =
+            shouldFailEditorOutputStep(EditorOutputStep::AcquireTimePitch)
+            ? AG_INTERNAL_ERROR
+            : ag_player_set_time_pitch(player_, &editorConfig);
+        if (tempoResult != AG_OK) {
+            if (stoppedForLease) {
+                editorOutputOwned_ = true;
+                editorRestorePending_ = true;
+                if (restoreEditorSession()) {
+                    editorOutputOwned_ = false;
+                    editorRestorePending_ = false;
+                    editorSessionSnapshot_.reset();
+                }
+            } else {
+                editorSessionSnapshot_.reset();
+            }
             return false;
         }
-        editorSessionSnapshot_ = std::move(saved);
         editorOutputOwned_ = true;
+        editorRestorePending_ = false;
+        const bool tempoChangedValue = !qFuzzyCompare(speedRatio_, 1.0)
+            || keepPitch_ != editorSessionSnapshot_->keepPitch;
+        speedRatio_ = 1.0;
+        keepPitch_ = editorSessionSnapshot_->keepPitch;
+        if (tempoChangedValue) emit tempoChanged();
         if (state_ != Stopped) {
             state_ = Stopped;
             emit stateChanged();
@@ -210,16 +309,46 @@ bool PlaybackController::acquireEditorOutput() noexcept
 void PlaybackController::releaseEditorOutput() noexcept
 {
     if (!editorOutputOwned_) return;
-    (void)ag_player_stop(player_);
-    editorOutputOwned_ = false;
-    if (!editorSessionSnapshot_ || editorSessionSnapshot_->queueTrackIds.isEmpty()
-        || library_ == nullptr) {
+    if (!editorSessionSnapshot_) {
+        editorRestorePending_ = true;
+        setErrorMessage(QStringLiteral("Unable to restore the playback session"));
+        return;
+    }
+    const bool hasMainSession =
+        !editorSessionSnapshot_->queueTrackIds.isEmpty();
+    const bool injectedStopFailure =
+        shouldFailEditorOutputStep(EditorOutputStep::RestoreStop);
+    const ag_result stopResult = injectedStopFailure
+        ? AG_INTERNAL_ERROR : ag_player_stop(player_);
+    if (stopResult != AG_OK
+        && (injectedStopFailure || hasMainSession
+            || stopResult != AG_INVALID_ARGUMENT)) {
+        editorRestorePending_ = true;
+        (void)ag_player_stop(player_);
+        runCommand(stopResult);
+        return;
+    }
+    if (!hasMainSession) {
+        editorOutputOwned_ = false;
+        editorRestorePending_ = false;
         editorSessionSnapshot_.reset();
         return;
     }
+    editorRestorePending_ = true;
+    if (!restoreEditorSession()) return;
+    editorOutputOwned_ = false;
+    editorRestorePending_ = false;
+    editorSessionSnapshot_.reset();
+}
+
+bool PlaybackController::restoreEditorSession() noexcept
+{
+    if (!editorSessionSnapshot_ || library_ == nullptr || player_ == nullptr) {
+        setErrorMessage(QStringLiteral("Unable to restore the playback session"));
+        return false;
+    }
     try {
-        const PlaybackSessionSnapshot saved = std::move(*editorSessionSnapshot_);
-        editorSessionSnapshot_.reset();
+        const PlaybackSessionSnapshot& saved = *editorSessionSnapshot_;
         std::vector<QByteArray> utf8Paths;
         std::vector<const char*> paths;
         utf8Paths.reserve(static_cast<std::size_t>(saved.queueTrackIds.size()));
@@ -230,7 +359,7 @@ void PlaybackController::releaseEditorOutput() noexcept
                 || library_->tracks().at(row).path.isEmpty()) {
                 setErrorMessage(QStringLiteral(
                     "Unable to restore the playback session"));
-                return;
+                return false;
             }
             utf8Paths.push_back(library_->tracks().at(row).path.toUtf8());
             paths.push_back(utf8Paths.back().constData());
@@ -240,32 +369,78 @@ void PlaybackController::releaseEditorOutput() noexcept
             ? static_cast<std::size_t>(current) : 0U;
         const std::size_t scopeSize = static_cast<std::size_t>(std::clamp<qsizetype>(
             saved.scopeSize, 1, saved.queueTrackIds.size()));
-        ag_result result = ag_player_set_scoped_queue(
-            player_, paths.data(), paths.size(), startIndex, scopeSize,
-            saved.allowFallback ? 1 : 0);
-        if (result == AG_OK) result = ag_player_set_mode(player_, toCoreMode(saved.mode));
+        ag_result result =
+            shouldFailEditorOutputStep(EditorOutputStep::RestoreQueue)
+            ? AG_INTERNAL_ERROR
+            : ag_player_set_scoped_queue(
+                player_, paths.data(), paths.size(), startIndex, scopeSize,
+                saved.allowFallback ? 1 : 0);
+        if (result == AG_OK) {
+            result = shouldFailEditorOutputStep(EditorOutputStep::RestoreMode)
+                ? AG_INTERNAL_ERROR
+                : ag_player_set_mode(player_, toCoreMode(saved.mode));
+        }
+        if (result == AG_OK) {
+            const ag_playback_time_pitch_config restoredConfig{
+                saved.speedRatio, saved.keepPitch ? 1 : 0};
+            result =
+                shouldFailEditorOutputStep(EditorOutputStep::RestoreTimePitch)
+                ? AG_INTERNAL_ERROR
+                : ag_player_set_time_pitch(player_, &restoredConfig);
+        }
         if (result == AG_OK && saved.positionMs > 0) {
-            result = ag_player_seek(player_, saved.positionMs);
+            result = shouldFailEditorOutputStep(EditorOutputStep::RestoreSeek)
+                ? AG_INTERNAL_ERROR
+                : ag_player_seek(player_, saved.positionMs);
         }
         if (result == AG_OK && (saved.state == Playing || saved.state == Paused)) {
-            result = ag_player_play(player_);
+            result = shouldFailEditorOutputStep(EditorOutputStep::RestorePlay)
+                ? AG_INTERNAL_ERROR : ag_player_play(player_);
         }
         if (result == AG_OK && saved.state == Paused) {
-            result = ag_player_pause(player_);
+            result = shouldFailEditorOutputStep(EditorOutputStep::RestorePause)
+                ? AG_INTERNAL_ERROR : ag_player_pause(player_);
         }
         if (result != AG_OK) {
+            (void)ag_player_stop(player_);
             runCommand(result);
-            return;
+            syncTimePitchFromCore();
+            return false;
         }
+        const bool tempoChangedValue =
+            !qFuzzyCompare(speedRatio_, saved.speedRatio)
+            || keepPitch_ != saved.keepPitch;
+        speedRatio_ = saved.speedRatio;
+        keepPitch_ = saved.keepPitch;
+        if (tempoChangedValue) emit tempoChanged();
         queueTrackIds_ = saved.queueTrackIds;
         activeScopeSize_ = saved.scopeSize;
         activeScopeAllowsFallback_ = saved.allowFallback;
         emit queueTrackIdsChanged();
+        setErrorMessage(QString());
         pollSnapshot();
+        return true;
     } catch (...) {
-        editorSessionSnapshot_.reset();
+        if (player_ != nullptr) (void)ag_player_stop(player_);
         setErrorMessage(QStringLiteral("Unable to restore the playback session"));
+        return false;
     }
+}
+
+bool PlaybackController::shouldFailEditorOutputStep(
+    const EditorOutputStep step) noexcept
+{
+    if (!editorOutputFailureStepForTesting_
+        || *editorOutputFailureStepForTesting_ != step) {
+        if (!editorOutputSecondFailureStepForTesting_
+            || *editorOutputSecondFailureStepForTesting_ != step) {
+            return false;
+        }
+        editorOutputSecondFailureStepForTesting_.reset();
+        return true;
+    }
+    editorOutputFailureStepForTesting_.reset();
+    return true;
 }
 
 void PlaybackController::play()
@@ -669,7 +844,10 @@ bool PlaybackController::prepareRow(int row)
         return false;
     }
 
-    if (editorOutputOwned_) releaseEditorOutput();
+    if (editorOutputOwned_) {
+        releaseEditorOutput();
+        if (editorOutputOwned_) return false;
+    }
     std::vector<QByteArray> utf8Paths;
     std::vector<const char*> paths;
     QStringList trackIds;
@@ -712,6 +890,142 @@ bool PlaybackController::setReplayGainSettings(const int mode,
     replayGainMode_ = mode;
     replayGainClipProtection_ = clipProtection;
     return applyReplayGainForTrack(currentTrackId_);
+}
+
+void PlaybackController::setSpeedRatio(const double ratio)
+{
+    if (!std::isfinite(ratio)) return;
+    const double clamped = std::clamp(ratio, 0.75, 1.50);
+    if (qFuzzyCompare(speedRatio_, clamped)) return;
+    if (!applyTimePitch(clamped, keepPitch_)) return;
+    speedRatio_ = clamped;
+    emit tempoChanged();
+}
+
+void PlaybackController::setTargetBpm(const double bpm)
+{
+    if (!std::isfinite(bpm) || bpm < 20.0 || bpm > 400.0
+        || sourceBpm_ <= 0.0) {
+        return;
+    }
+    setSpeedRatio(std::clamp(bpm / sourceBpm_, 0.75, 1.50));
+}
+
+void PlaybackController::resetTempo()
+{
+    setSpeedRatio(1.0);
+}
+
+void PlaybackController::setKeepPitch(const bool keepPitch)
+{
+    if (keepPitch_ == keepPitch) return;
+    if (!applyTimePitch(speedRatio_, keepPitch)) return;
+    keepPitch_ = keepPitch;
+    emit tempoChanged();
+}
+
+bool PlaybackController::beginScratch()
+{
+    if (player_ == nullptr || editorOutputOwned_) {
+        runCommand(AG_INVALID_ARGUMENT);
+        return false;
+    }
+    const ag_result result = ag_player_begin_scratch(player_);
+    runCommand(result);
+    if (result != AG_OK) return false;
+    setErrorMessage({});
+    pollSnapshot();
+    return true;
+}
+
+bool PlaybackController::updateScratch(const double signedRate)
+{
+    if (player_ == nullptr || editorOutputOwned_
+        || !std::isfinite(signedRate)
+        || std::abs(signedRate)
+               > static_cast<double>(std::numeric_limits<float>::max())) {
+        runCommand(AG_INVALID_ARGUMENT);
+        return false;
+    }
+    const ag_result result = ag_player_update_scratch(
+        player_, static_cast<float>(signedRate));
+    runCommand(result);
+    if (result != AG_OK) return false;
+    // This is the pointer-move hot path. Status is intentionally left to the
+    // existing 17 ms poll instead of adding a second Core query per gesture.
+    setErrorMessage({});
+    return true;
+}
+
+bool PlaybackController::endScratch()
+{
+    if (player_ == nullptr || editorOutputOwned_) {
+        runCommand(AG_INVALID_ARGUMENT);
+        return false;
+    }
+    const ag_result result = ag_player_end_scratch(player_);
+    runCommand(result);
+    if (result != AG_OK) return false;
+    setErrorMessage({});
+    pollSnapshot();
+    return true;
+}
+
+bool PlaybackController::cancelScratch()
+{
+    if (player_ == nullptr || editorOutputOwned_) {
+        runCommand(AG_INVALID_ARGUMENT);
+        return false;
+    }
+    const ag_result result = ag_player_cancel_scratch(player_);
+    runCommand(result);
+    if (result != AG_OK) return false;
+    setErrorMessage({});
+    pollSnapshot();
+    return true;
+}
+
+bool PlaybackController::applyTimePitch(const double ratio,
+                                        const bool keepPitch)
+{
+    if (player_ == nullptr || editorOutputOwned_) {
+        runCommand(AG_INVALID_ARGUMENT);
+        return false;
+    }
+    const ag_playback_time_pitch_config config{
+        ratio, keepPitch ? 1 : 0};
+    const ag_result result = ag_player_set_time_pitch(player_, &config);
+    runCommand(result);
+    return result == AG_OK;
+}
+
+void PlaybackController::syncTimePitchFromCore()
+{
+    if (player_ == nullptr) return;
+    ag_playback_time_pitch_config config{};
+    if (ag_player_get_time_pitch(player_, &config) != AG_OK) return;
+    if (qFuzzyCompare(speedRatio_, config.speed_ratio)
+        && keepPitch_ == (config.keep_pitch != 0)) {
+        return;
+    }
+    speedRatio_ = config.speed_ratio;
+    keepPitch_ = config.keep_pitch != 0;
+    emit tempoChanged();
+}
+
+void PlaybackController::refreshSourceBpm()
+{
+    double nextBpm = 0.0;
+    if (library_ != nullptr && !currentTrackId_.isEmpty()) {
+        const TrackRecord* const track = library_->recordForId(currentTrackId_);
+        if (track != nullptr && std::isfinite(track->bpm)
+            && track->bpm >= 20.0 && track->bpm <= 400.0) {
+            nextBpm = track->bpm;
+        }
+    }
+    if (qFuzzyCompare(sourceBpm_ + 1.0, nextBpm + 1.0)) return;
+    sourceBpm_ = nextBpm;
+    emit tempoChanged();
 }
 
 bool PlaybackController::applyReplayGainForTrack(const QString& trackId)
@@ -923,8 +1237,28 @@ void PlaybackController::pollSnapshot()
     }
 
     const State nextState = toState(snapshot.state);
+    ag_scratch_status scratch{};
+    const ag_result scratchResult = ag_player_scratch_status(player_, &scratch);
+    if (scratchResult != AG_OK) {
+        RuntimeLog::log(scratchResult, QStringLiteral("Playback"),
+                        QStringLiteral("scratch status failed"));
+        runCommand(scratchResult);
+        return;
+    }
+    const bool nextScratchActive = scratch.active != 0;
+    const bool nextScratchReady = scratch.ready != 0;
+    const bool nextScratchBuffering = scratch.buffering != 0;
+    if (scratchActive_ != nextScratchActive
+        || scratchReady_ != nextScratchReady
+        || scratchBuffering_ != nextScratchBuffering) {
+        scratchActive_ = nextScratchActive;
+        scratchReady_ = nextScratchReady;
+        scratchBuffering_ = nextScratchBuffering;
+        emit scratchStatusChanged();
+    }
     const int desiredPollInterval =
-        nextState == Playing ? PollIntervalMs : IdlePollIntervalMs;
+        nextState == Playing || nextScratchActive
+            ? PollIntervalMs : IdlePollIntervalMs;
     if (pollTimer_.interval() != desiredPollInterval) {
         pollTimer_.setInterval(desiredPollInterval);
     }
@@ -932,6 +1266,7 @@ void PlaybackController::pollSnapshot()
     const qint64 nextTrackCount = checkedSize(snapshot.track_count);
     const Mode nextMode = toMode(snapshot.mode);
     const bool nextDeviceLost = ag_player_device_lost(player_) != 0;
+    syncTimePitchFromCore();
     QString nextTrackId;
     if (nextTrackIndex >= 0 && nextTrackIndex < queueTrackIds_.size()) {
         nextTrackId = queueTrackIds_.at(nextTrackIndex);
@@ -941,6 +1276,7 @@ void PlaybackController::pollSnapshot()
         clearSelection();
     }
     if (!trackChanged && selectionLoopEnabled_ && nextState == Playing
+        && !nextScratchActive
         && snapshot.position_ms >= selectionEndMs_) {
         const ag_result loopResult = ag_player_seek(player_, selectionStartMs_);
         runCommand(loopResult);
@@ -986,6 +1322,7 @@ void PlaybackController::pollSnapshot()
     if (currentTrackId_ != nextTrackId) {
         currentTrackId_ = std::move(nextTrackId);
         applyReplayGainForTrack(currentTrackId_);
+        refreshSourceBpm();
         emit currentTrackIdChanged();
 
         QString nextLyrics;
@@ -1017,7 +1354,7 @@ void PlaybackController::pollSnapshot()
     } else {
         setErrorMessage(QString());
     }
-    if (nextState == Playing) {
+    if (nextState == Playing || nextScratchActive) {
         pollSpectrum();
     }
 }

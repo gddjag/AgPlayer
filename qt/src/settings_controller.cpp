@@ -429,9 +429,11 @@ void SettingsController::setThemeMode(int value)
 
 void SettingsController::setPlayerShellMode(int value)
 {
-    value = value == 1 ? 1 : 0;
-    const QString layout = value == 1
-        ? QStringLiteral("single-window") : QStringLiteral("dual-window");
+    value = value >= Classic && value <= Rolling ? value : Classic;
+    const QString layout = value == Integrated
+        ? QStringLiteral("single-window")
+        : value == Rolling ? QStringLiteral("rolling-player")
+                           : QStringLiteral("dual-window");
     const bool modeChanged = playerShellMode_ != value;
     const bool layoutChanged = windowLayoutTheme_ != layout;
     if (!modeChanged && !layoutChanged) {
@@ -454,8 +456,11 @@ void SettingsController::setPlayerShellMode(int value)
 void SettingsController::setWindowLayoutTheme(const QString& value)
 {
     const QString normalized = value == QStringLiteral("single-window")
-        ? QStringLiteral("single-window") : QStringLiteral("dual-window");
-    const int mode = normalized == QStringLiteral("single-window") ? 1 : 0;
+        ? QStringLiteral("single-window")
+        : value == QStringLiteral("rolling-player")
+            ? QStringLiteral("rolling-player") : QStringLiteral("dual-window");
+    const int mode = normalized == QStringLiteral("single-window") ? Integrated
+        : normalized == QStringLiteral("rolling-player") ? Rolling : Classic;
     const bool layoutChanged = windowLayoutTheme_ != normalized;
     const bool modeChanged = playerShellMode_ != mode;
     if (!layoutChanged && !modeChanged) {
@@ -1336,18 +1341,24 @@ void SettingsController::load()
     const QString storedWindowLayoutTheme = settings_.value(
         QStringLiteral("windowLayoutTheme")).toString();
     const bool validStoredLayout = storedWindowLayoutTheme == QStringLiteral("dual-window")
-        || storedWindowLayoutTheme == QStringLiteral("single-window");
+        || storedWindowLayoutTheme == QStringLiteral("single-window")
+        || storedWindowLayoutTheme == QStringLiteral("rolling-player");
     const std::optional<int> storedPlayerShellMode =
         storedInteger(settings_.value(QStringLiteral("playerShellMode")));
     const bool validStoredMode = storedPlayerShellMode.has_value()
-        && (*storedPlayerShellMode == 0 || *storedPlayerShellMode == 1);
+        && (*storedPlayerShellMode == Classic || *storedPlayerShellMode == Integrated
+            || *storedPlayerShellMode == Rolling);
     if (validStoredLayout) {
         windowLayoutTheme_ = storedWindowLayoutTheme;
-        playerShellMode_ = windowLayoutTheme_ == QStringLiteral("single-window") ? 1 : 0;
+        playerShellMode_ = windowLayoutTheme_ == QStringLiteral("single-window")
+            ? Integrated
+            : windowLayoutTheme_ == QStringLiteral("rolling-player") ? Rolling : Classic;
     } else if (validStoredMode) {
         playerShellMode_ = *storedPlayerShellMode;
-        windowLayoutTheme_ = playerShellMode_ == 1
-            ? QStringLiteral("single-window") : QStringLiteral("dual-window");
+        windowLayoutTheme_ = playerShellMode_ == Integrated
+            ? QStringLiteral("single-window")
+            : playerShellMode_ == Rolling ? QStringLiteral("rolling-player")
+                                        : QStringLiteral("dual-window");
     } else {
         windowLayoutTheme_ = QStringLiteral("dual-window");
         playerShellMode_ = 0;
@@ -1588,7 +1599,8 @@ void SettingsController::load()
     closeBehavior_ = clampValue(closeBehavior_, 0, 1);
     defaultPlaybackMode_ = clampValue(defaultPlaybackMode_, 0, 3);
     themeMode_ = themeMode_ >= 0 && themeMode_ <= 2 ? themeMode_ : 0;
-    playerShellMode_ = playerShellMode_ == 1 ? 1 : 0;
+    playerShellMode_ = playerShellMode_ >= Classic && playerShellMode_ <= Rolling
+        ? playerShellMode_ : Classic;
     waveformMode_ = clampValue(waveformMode_, 0, 3);
     waveformHeight_ = quantize(waveformHeight_, 0.3, 1.5, 0.1);
     waveformDensity_ = quantize(waveformDensity_, 0.5, 5.0, 0.5);
@@ -1773,7 +1785,7 @@ void SettingsController::restoreDefaults(const bool includeMediaSettings)
 
     themeMode_ = 0;
     windowLayoutTheme_ = QStringLiteral("dual-window");
-    playerShellMode_ = 0;
+    playerShellMode_ = Classic;
     if (includeMediaSettings) {
         waveformMode_ = 0;
         waveformHeight_ = 0.8;

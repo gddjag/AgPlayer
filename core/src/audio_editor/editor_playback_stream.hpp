@@ -2,6 +2,7 @@
 
 #include "audio_document.hpp"
 #include "../audio_stream_source.hpp"
+#include "../time_pitch_engine.hpp"
 
 #include <memory>
 #include <string>
@@ -26,7 +27,9 @@ public:
 
     [[nodiscard]] static std::shared_ptr<EditorPlaybackStream> create(
         TimelineSnapshot snapshot, const EditorPlaybackParameters& parameters,
-        std::string& error);
+        std::string& error,
+        agplayer::TimePitchEngineFactory engine_factory =
+            &agplayer::create_time_pitch_engine);
 
     [[nodiscard]] const agplayer::MediaMetadata& metadata() const noexcept override;
     [[nodiscard]] ag_result read(agplayer::DecodedAudioBlock& block) noexcept override;

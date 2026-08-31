@@ -2870,6 +2870,49 @@
         <source>Previous track</source>
         <translation>上一首</translation>
     </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="391"/>
+        <source>切换播放器皮肤</source>
+        <translation>切换播放器皮肤</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="455"/>
+        <source>经典模式</source>
+        <translation>经典模式</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="462"/>
+        <source>一体化模式</source>
+        <translation>一体化模式</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="469"/>
+        <source>滚动播放模式</source>
+        <translation>滚动播放模式</translation>
+    </message>
+</context>
+<context>
+    <name>ExperienceActions</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/ExperienceActions.qml" line="27"/>
+        <source>隐藏歌词</source>
+        <translation>隐藏歌词</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/ExperienceActions.qml" line="27"/>
+        <source>显示歌词</source>
+        <translation>显示歌词</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/ExperienceActions.qml" line="47"/>
+        <source>关闭沉浸视觉</source>
+        <translation>关闭沉浸视觉</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/ExperienceActions.qml" line="47"/>
+        <source>开启沉浸视觉</source>
+        <translation>开启沉浸视觉</translation>
+    </message>
 </context>
 <context>
     <name>PlayerPane</name>

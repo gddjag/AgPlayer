@@ -4,6 +4,7 @@
 #include <QGuiApplication>
 #include <QScreen>
 #include <QSettings>
+#include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTest>
 #include <QWindow>
@@ -69,6 +70,7 @@ private slots:
     void geometryDockAndPinStatePersist();
     void legacyMiniGeometryMigratesToReferenceDefault();
     void shellModesPersistIndependentMainWindowGeometry();
+    void classicAndRollingListWindowStateRemainIndependent();
     void switchingBackWithoutClassicGeometryUsesCompactDefault();
     void persistedDockEdgeSurvivesInitialPreferenceWiring();
     void restoredGeometryBalancesMinimumAndAvailableScreen();
@@ -220,11 +222,82 @@ void WindowControllerTest::shellModesPersistIndependentMainWindowGeometry()
 
     windows.setMainWindowShellMode(1);
     QCOMPARE(mainWindow.geometry(), QRect(20, 40, 760, 700));
+
+    windows.setMainWindowShellMode(2);
+    QCOMPARE(mainWindow.size(), QSize(1440, 480).boundedTo(
+                 mainWindow.screen()->availableGeometry().size()));
+    mainWindow.setGeometry(30, 50, 760, 460);
+
+    windows.setMainWindowShellMode(0);
+    QCOMPARE(mainWindow.geometry(), QRect(20, 30, 700, 320));
+    windows.setMainWindowShellMode(2);
+    QCOMPARE(mainWindow.geometry(), QRect(30, 50, 760, 460));
     QCOMPARE(QSettings().value(QStringLiteral("windows/mainGeometry")).toRect(),
              QRect(20, 30, 700, 320));
     QCOMPARE(QSettings().value(
                  QStringLiteral("windows/integratedMainGeometry")).toRect(),
              QRect(20, 40, 760, 700));
+    QCOMPARE(QSettings().value(
+                 QStringLiteral("windows/rollingMainGeometry")).toRect(),
+             QRect(30, 50, 760, 460));
+}
+
+void WindowControllerTest::classicAndRollingListWindowStateRemainIndependent()
+{
+    QWindow mainWindow;
+    mainWindow.setGeometry(100, 120, 640, 320);
+    QWindow listWindow;
+    listWindow.setGeometry(20, 30, 420, 240);
+
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setListWindow(&listWindow);
+    windows.moveListWindow(20, 30);
+    QVERIFY(windows.listWindowDetached());
+    listWindow.setGeometry(20, 30, 420, 240);
+    QCOMPARE(windows.listDockEdge(), QStringLiteral("none"));
+    QCOMPARE(listWindow.geometry(), QRect(20, 30, 420, 240));
+    QVERIFY(!windows.listWindowVisible());
+
+    windows.setMainWindowShellMode(2);
+    windows.showListWindow();
+    windows.snapListWindow(QStringLiteral("right"));
+    QCOMPARE(windows.listDockEdge(), QStringLiteral("right"));
+    QVERIFY(!windows.listWindowDetached());
+    QVERIFY(windows.listWindowVisible());
+
+    QSignalSpy classicDockSpy(&windows, &WindowController::listDockEdgeChanged);
+    QSignalSpy classicDetachedSpy(&windows,
+                                  &WindowController::listWindowDetachedChanged);
+    windows.setMainWindowShellMode(0);
+    QCOMPARE(windows.listDockEdge(), QStringLiteral("none"));
+    QVERIFY(windows.listWindowDetached());
+    QCOMPARE(listWindow.geometry(), QRect(20, 30, 420, 240));
+    QVERIFY(!windows.listWindowVisible());
+    QCOMPARE(classicDockSpy.count(), 1);
+    QCOMPARE(classicDetachedSpy.count(), 1);
+    QVERIFY(!QSettings().value(QStringLiteral("windows/listRequestedVisible")).toBool());
+    QCOMPARE(QSettings().value(QStringLiteral("windows/listDockEdge")).toString(),
+             QStringLiteral("none"));
+    QCOMPARE(QSettings().value(QStringLiteral("windows/listGeometry")).toRect(),
+             QRect(20, 30, 420, 240));
+
+    QSignalSpy rollingDockSpy(&windows, &WindowController::listDockEdgeChanged);
+    QSignalSpy rollingDetachedSpy(&windows,
+                                  &WindowController::listWindowDetachedChanged);
+    windows.setMainWindowShellMode(2);
+    QCOMPARE(windows.listDockEdge(), QStringLiteral("right"));
+    QVERIFY(!windows.listWindowDetached());
+    QVERIFY(windows.listWindowVisible());
+    QCOMPARE(rollingDockSpy.count(), 1);
+    QCOMPARE(rollingDetachedSpy.count(), 1);
+    QVERIFY(QSettings().value(
+                QStringLiteral("windows/rollingListRequestedVisible")).toBool());
+    QCOMPARE(QSettings().value(
+                 QStringLiteral("windows/rollingListDockEdge")).toString(),
+             QStringLiteral("right"));
+    QCOMPARE(QSettings().value(
+                 QStringLiteral("windows/rollingListGeometryVersion")).toInt(), 1);
 }
 
 void WindowControllerTest::switchingBackWithoutClassicGeometryUsesCompactDefault()

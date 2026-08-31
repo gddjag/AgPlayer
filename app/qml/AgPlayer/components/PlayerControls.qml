@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Layouts
 import AgPlayer
 
 Rectangle {
@@ -8,9 +7,17 @@ Rectangle {
     color: "transparent"
     property bool emptyMode: false
     property bool showListWindowButton: true
+    property int shellMode: SettingsController.playerShellMode
     property bool volumeExpanded: false
     readonly property bool compactTransport: width < 760
+    readonly property int transportSpacing: emptyMode ? 28 : 16
+    // Keep the transport clear of the right-aligned volume flyout.  The
+    // offset only grows after the first 60 DIP of expansion, which is the
+    // collapsed control's existing breathing room at the 1000 DIP shell.
+    readonly property real volumeExpansionTransportOffset: emptyMode ? 0
+        : Math.max(0, volumeControl.width - 104)
     signal openEqualizerRequested()
+    signal toggleEmbeddedPlaylistRequested()
 
     function playbackModeName() {
         switch (PlaybackController.mode) {
@@ -57,54 +64,44 @@ Rectangle {
         Accessible.name: WindowController.listWindowVisible
                          ? qsTr("Hide playlist window")
                          : qsTr("Show playlist window")
-        onClicked: WindowController.toggleListWindow()
+        onClicked: {
+            if (root.shellMode === 1)
+                root.toggleEmbeddedPlaylistRequested()
+            else
+                WindowController.toggleListWindow()
+        }
         ToolTip.text: Accessible.name
         ToolTip.visible: hovered
         background: null
         visible: root.showListWindowButton
     }
 
-    RowLayout {
+    Item {
         id: centerControls
         objectName: "centerPlaybackControls"
         anchors.horizontalCenter: parent.horizontalCenter
+        anchors.horizontalCenterOffset: -root.volumeExpansionTransportOffset
         anchors.verticalCenter: parent.verticalCenter
         anchors.verticalCenterOffset: 0
-        spacing: root.emptyMode ? 28 : 16
+        width: previousButton.width + root.transportSpacing
+               + playPauseButton.width + root.transportSpacing
+               + nextButton.width + root.transportSpacing
+               + modeButton.width + (waveformModeButton.visible
+                                     ? root.transportSpacing
+                                     : 0)
+               + waveformModeButton.width + (equalizerButton.visible
+                                              ? root.transportSpacing
+                                              : 0)
+               + equalizerButton.width
+        height: playPauseButton.height
 
         ToolButton {
-            objectName: "equalizerButton"
-            visible: !root.compactTransport
-            flat: true
-            icon.source: Theme.icon("equalizer-line")
-            icon.color: Theme.iconPrimary
-            icon.width: 20
-            icon.height: 20
-            contentItem.rotation: 90
-            Accessible.name: qsTr("十八段图形均衡器")
-            onClicked: root.openEqualizerRequested()
-            ToolTip.text: Accessible.name
-            ToolTip.visible: hovered
-            background: null
-        }
-
-        ToolButton {
-            objectName: "waveformModeButton"
-            visible: !root.compactTransport
-            flat: true
-            icon.source: Theme.icon("waveform-switch")
-            icon.color: Theme.iconPrimary
-            icon.width: 20
-            icon.height: 20
-            Accessible.name: qsTr("Change waveform mode")
-            onClicked: SettingsController.cycleWaveformMode()
-            ToolTip.text: Accessible.name
-            ToolTip.visible: hovered
-            background: null
-        }
-
-        ToolButton {
+            id: previousButton
             objectName: "previousButton"
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: 32
+            height: 32
             flat: true
             icon.source: Theme.icon("skip-back-fill")
             icon.color: Theme.iconPrimary
@@ -120,8 +117,11 @@ Rectangle {
         ToolButton {
             id: playPauseButton
             objectName: "playPauseButton"
-            Layout.preferredWidth: 52
-            Layout.preferredHeight: 52
+            anchors.left: previousButton.right
+            anchors.leftMargin: root.transportSpacing
+            anchors.verticalCenter: parent.verticalCenter
+            width: 52
+            height: 52
             flat: true
             icon.source: PlaybackController.state === PlaybackController.Playing
                          ? Theme.icon("pause-fill")
@@ -156,7 +156,13 @@ Rectangle {
         }
 
         ToolButton {
+            id: nextButton
             objectName: "nextButton"
+            anchors.left: playPauseButton.right
+            anchors.leftMargin: root.transportSpacing
+            anchors.verticalCenter: parent.verticalCenter
+            width: 32
+            height: 32
             flat: true
             icon.source: Theme.icon("skip-forward-fill")
             icon.color: Theme.iconPrimary
@@ -170,7 +176,13 @@ Rectangle {
         }
 
         ToolButton {
+            id: modeButton
             objectName: "modeButton"
+            anchors.left: nextButton.right
+            anchors.leftMargin: root.transportSpacing
+            anchors.verticalCenter: parent.verticalCenter
+            width: 32
+            height: 32
             flat: true
             icon.source: {
                 switch (PlaybackController.mode) {
@@ -194,14 +206,57 @@ Rectangle {
             background: null
         }
 
+        ToolButton {
+            id: waveformModeButton
+            objectName: "waveformModeButton"
+            visible: !root.compactTransport
+            anchors.left: modeButton.right
+            anchors.leftMargin: visible ? root.transportSpacing : 0
+            anchors.verticalCenter: parent.verticalCenter
+            width: visible ? 32 : 0
+            height: visible ? 32 : 0
+            flat: true
+            icon.source: Theme.icon("waveform-switch")
+            icon.color: Theme.iconPrimary
+            icon.width: 20
+            icon.height: 20
+            Accessible.name: qsTr("Change waveform mode")
+            onClicked: SettingsController.cycleWaveformMode()
+            ToolTip.text: Accessible.name
+            ToolTip.visible: hovered
+            background: null
+        }
+
+        ToolButton {
+            id: equalizerButton
+            objectName: "equalizerButton"
+            visible: !root.compactTransport
+            anchors.left: waveformModeButton.right
+            anchors.leftMargin: visible ? root.transportSpacing : 0
+            anchors.verticalCenter: parent.verticalCenter
+            width: visible ? 32 : 0
+            height: visible ? 32 : 0
+            flat: true
+            icon.source: Theme.icon("equalizer-line")
+            icon.color: Theme.iconPrimary
+            icon.width: 20
+            icon.height: 20
+            contentItem.rotation: 90
+            Accessible.name: qsTr("十八段图形均衡器")
+            onClicked: root.openEqualizerRequested()
+            ToolTip.text: Accessible.name
+            ToolTip.visible: hovered
+            background: null
+        }
+
     }
 
     Item {
         id: volumeControl
         objectName: "mainVolumeControl"
         property alias expandedForQa: root.volumeExpanded
-        anchors.left: centerControls.right
-        anchors.leftMargin: 12
+        anchors.right: parent.right
+        anchors.rightMargin: 24
         anchors.verticalCenter: centerControls.verticalCenter
         width: root.emptyMode ? 44 : 44 + volumeSlider.width
                                   + volumePercent.width
@@ -338,17 +393,23 @@ Rectangle {
             }
         }
 
-    RowLayout {
+    Item {
         id: secondaryActions
         objectName: "playerSecondaryActions"
-        anchors.right: parent.right
-        anchors.rightMargin: 24
+        anchors.right: volumeControl.left
+        anchors.rightMargin: 10
         anchors.verticalCenter: parent.verticalCenter
         anchors.verticalCenterOffset: 0
-        spacing: root.compactTransport ? 4 : 14
+        width: root.compactTransport ? 88 : 204
+        height: 44
 
         ToolButton {
+            id: audioToolsButton
             objectName: "audioToolsButton"
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: 32
+            height: 32
             flat: true
             icon.source: Theme.icon("briefcase-4-line")
             icon.color: Theme.iconPrimary
@@ -361,14 +422,45 @@ Rectangle {
             background: null
         }
 
+        ToolButton {
+            id: playerShellModeButton
+            objectName: "playerShellModeButton"
+            visible: !root.compactTransport
+            anchors.left: audioToolsButton.right
+            anchors.leftMargin: 14
+            anchors.verticalCenter: parent.verticalCenter
+            width: visible ? 32 : 0
+            height: 32
+            flat: true
+            icon.source: Theme.icon("player-shell-mode")
+            icon.color: Theme.iconPrimary
+            icon.width: 20
+            icon.height: 20
+            Accessible.name: qsTr("切换播放器皮肤")
+            onClicked: playerShellMenu.open()
+            ToolTip.text: Accessible.name
+            ToolTip.visible: hovered
+            background: null
+        }
+
         ExperienceActions {
+            id: experienceActions
             objectName: "experienceActions"
+            anchors.left: playerShellModeButton.visible
+                          ? playerShellModeButton.right : audioToolsButton.right
+            anchors.leftMargin: root.compactTransport ? 4 : 14
+            anchors.verticalCenter: parent.verticalCenter
             compact: root.compactTransport
         }
 
         ToolButton {
             objectName: "miniPlayerButton"
             visible: !root.emptyMode && !root.compactTransport
+            anchors.left: experienceActions.right
+            anchors.leftMargin: 14
+            anchors.verticalCenter: parent.verticalCenter
+            width: visible ? 32 : 0
+            height: 32
             flat: true
             icon.source: Theme.icon("picture-in-picture-2-line")
             icon.color: Theme.iconPrimary
@@ -379,6 +471,35 @@ Rectangle {
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
             background: null
+        }
+
+    }
+
+    Menu {
+        id: playerShellMenu
+        objectName: "playerShellMenu"
+        y: Math.max(0, playerShellModeButton.y - height)
+
+        MenuItem {
+            objectName: "classicShellMenuItem"
+            text: qsTr("经典模式")
+            checkable: true
+            checked: SettingsController.playerShellMode === 0
+            onTriggered: SettingsController.playerShellMode = 0
+        }
+        MenuItem {
+            objectName: "integratedShellMenuItem"
+            text: qsTr("一体化模式")
+            checkable: true
+            checked: SettingsController.playerShellMode === 1
+            onTriggered: SettingsController.playerShellMode = 1
+        }
+        MenuItem {
+            objectName: "rollingShellMenuItem"
+            text: qsTr("滚动播放模式")
+            checkable: true
+            checked: SettingsController.playerShellMode === 2
+            onTriggered: SettingsController.playerShellMode = 2
         }
     }
 

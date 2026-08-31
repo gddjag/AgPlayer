@@ -44,7 +44,16 @@ add_library(agplayer_core STATIC
     src/graphic_equalizer.hpp
     src/metadata_writer.cpp
     src/pitch_shifter.cpp
+    src/playback_time_pitch_stage.cpp
+    src/playback_time_pitch_stage.hpp
     src/playback_session.cpp
+    src/scratch_command_mailbox.hpp
+    src/scratch_backfill_worker.cpp
+    src/scratch_backfill_worker.hpp
+    src/scratch_pcm_window.cpp
+    src/scratch_pcm_window.hpp
+    src/scratch_renderer.cpp
+    src/scratch_renderer.hpp
     src/transcoder.cpp
     src/transcode_capability.cpp
     src/transcode_capability.hpp
@@ -54,6 +63,7 @@ add_library(agplayer_core STATIC
     src/transcode_verifier.hpp
     src/time_pitch_engine.cpp
     src/time_pitch_engine.hpp
+    src/signalsmith_time_pitch_engine.cpp
     src/waveform_analyzer.cpp
     src/bpm_analyzer.cpp
     src/bpm_analyzer.hpp
@@ -69,6 +79,15 @@ target_include_directories(agplayer_core SYSTEM
         "${FFMPEG_INCLUDE_DIRS}"
         "${MINIAUDIO_INCLUDE_DIRS}"
 )
-target_link_libraries(agplayer_core PRIVATE ${FFMPEG_LIBRARIES} SoundTouch::SoundTouch)
+target_link_libraries(agplayer_core PRIVATE
+    ${FFMPEG_LIBRARIES}
+    SoundTouch::SoundTouch
+    signalsmith-stretch
+)
+
+if(MSVC)
+    set_source_files_properties(src/signalsmith_time_pitch_engine.cpp
+        PROPERTIES COMPILE_OPTIONS "/wd4244;/wd4267;/wd4305;/wd4127;/wd4456")
+endif()
 
 agplayer_enable_warnings(agplayer_core)

@@ -9,6 +9,7 @@
 #include <atomic>
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
 #include <stdexcept>
 #include <thread>
 
@@ -40,6 +41,20 @@ int main()
     assert((wrapped_output == std::array<float, 8>{5, 6, 7, 8, 9, 10, 11, 12}));
     assert(buffer.read(wrapped_output.data(), 1) == 0);
     assert(buffer.write(nullptr, 1) == 0);
+
+    const std::array<float, 6> mapped_input{13, 14, 15, 16, 17, 18};
+    const std::array<std::int64_t, 3> source_frames{101, 103, 108};
+    assert(buffer.write(mapped_input.data(), source_frames.data(), 3, 7U) == 3);
+    std::int64_t last_source_frame = -1;
+    std::uint64_t last_generation = 0U;
+    assert(buffer.read(first_output.data(), 2, &last_source_frame,
+                       &last_generation) == 2);
+    assert(last_source_frame == 103);
+    assert(last_generation == 7U);
+    assert(buffer.read(first_output.data(), 1, &last_source_frame,
+                       &last_generation) == 1);
+    assert(last_source_frame == 108);
+    assert(last_generation == 7U);
 
     assert(buffer.write(input.data(), 3) == 3);
     buffer.clear();

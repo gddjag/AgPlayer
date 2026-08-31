@@ -37,6 +37,14 @@ public:
     ag_result set_volume(float volume) noexcept;
     ag_result set_replay_gain(float gain_db, float peak,
                               bool clip_protection) noexcept;
+    ag_result set_time_pitch(const PlaybackTimePitchConfig& config) noexcept;
+    [[nodiscard]] PlaybackTimePitchConfig time_pitch_config() const noexcept;
+    ag_result begin_scratch() noexcept;
+    ag_result update_scratch(float signed_rate) noexcept;
+    ag_result end_scratch() noexcept;
+    ag_result cancel_scratch() noexcept;
+    [[nodiscard]] ScratchStatus scratch_status() const noexcept;
+    [[nodiscard]] OutputLevels output_levels() const noexcept;
     ag_result set_equalizer(const GraphicEqSettings& settings,
                             std::uint64_t revision) noexcept;
     [[nodiscard]] EqualizerStatus equalizer_status() const noexcept;

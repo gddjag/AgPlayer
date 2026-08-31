@@ -12,6 +12,7 @@
 
 struct ag_player;
 class LibraryModel;
+class PlaybackControllerTest;
 
 class PlaybackController final : public QObject {
     Q_OBJECT
@@ -43,6 +44,16 @@ class PlaybackController final : public QObject {
                    NOTIFY selectionEndMsChanged)
     Q_PROPERTY(bool selectionLoopEnabled READ selectionLoopEnabled
                    NOTIFY selectionLoopEnabledChanged)
+    Q_PROPERTY(double speedRatio READ speedRatio NOTIFY tempoChanged)
+    Q_PROPERTY(double sourceBpm READ sourceBpm NOTIFY tempoChanged)
+    Q_PROPERTY(double targetBpm READ targetBpm NOTIFY tempoChanged)
+    Q_PROPERTY(bool keepPitch READ keepPitch NOTIFY tempoChanged)
+    Q_PROPERTY(bool scratchActive READ scratchActive
+                   NOTIFY scratchStatusChanged)
+    Q_PROPERTY(bool scratchReady READ scratchReady
+                   NOTIFY scratchStatusChanged)
+    Q_PROPERTY(bool scratchBuffering READ scratchBuffering
+                   NOTIFY scratchStatusChanged)
 
 public:
     static constexpr int PollIntervalMs = 17;
@@ -79,6 +90,13 @@ public:
     qint64 selectionStartMs() const noexcept;
     qint64 selectionEndMs() const noexcept;
     bool selectionLoopEnabled() const noexcept;
+    double speedRatio() const noexcept;
+    double sourceBpm() const noexcept;
+    double targetBpm() const noexcept;
+    bool keepPitch() const noexcept;
+    bool scratchActive() const noexcept;
+    bool scratchReady() const noexcept;
+    bool scratchBuffering() const noexcept;
 
     void setLibraryModel(LibraryModel* library);
     void setPlayer(ag_player* player);
@@ -123,6 +141,14 @@ public:
     Q_INVOKABLE bool setTransitionFadeMs(int milliseconds);
     Q_INVOKABLE bool setMatchTrackSampleRate(bool enabled);
     Q_INVOKABLE bool setReplayGainSettings(int mode, bool clipProtection);
+    Q_INVOKABLE void setSpeedRatio(double ratio);
+    Q_INVOKABLE void setTargetBpm(double bpm);
+    Q_INVOKABLE void resetTempo();
+    Q_INVOKABLE void setKeepPitch(bool keepPitch);
+    Q_INVOKABLE bool beginScratch();
+    Q_INVOKABLE bool updateScratch(double signedRate);
+    Q_INVOKABLE bool endScratch();
+    Q_INVOKABLE bool cancelScratch();
 
 signals:
     void stateChanged();
@@ -145,8 +171,25 @@ signals:
     void selectionStartMsChanged();
     void selectionEndMsChanged();
     void selectionLoopEnabledChanged();
+    void tempoChanged();
+    void scratchStatusChanged();
 
 private:
+    friend class PlaybackControllerTest;
+
+    enum class EditorOutputStep {
+        AcquireStop,
+        AcquireStopAfterCall,
+        AcquireTimePitch,
+        RestoreStop,
+        RestoreQueue,
+        RestoreMode,
+        RestoreTimePitch,
+        RestoreSeek,
+        RestorePlay,
+        RestorePause,
+    };
+
     struct PlaybackSessionSnapshot final {
         QStringList queueTrackIds;
         QString currentTrackId;
@@ -155,12 +198,19 @@ private:
         Mode mode{Sequential};
         qsizetype scopeSize{};
         bool allowFallback{};
+        double speedRatio{1.0};
+        bool keepPitch{true};
     };
 
     void pollSnapshot();
     void pollSpectrum();
     bool prepareRow(int row);
     bool applyReplayGainForTrack(const QString& trackId);
+    bool applyTimePitch(double ratio, bool keepPitch);
+    bool restoreEditorSession() noexcept;
+    bool shouldFailEditorOutputStep(EditorOutputStep step) noexcept;
+    void syncTimePitchFromCore();
+    void refreshSourceBpm();
     bool setSelection(qint64 startMs, qint64 endMs, bool loopEnabled);
     void setErrorMessage(QString message);
     void runCommand(int result);
@@ -168,6 +218,8 @@ private:
     ag_player* player_ = nullptr;
     QPointer<LibraryModel> library_;
     QMetaObject::Connection playRequestedConnection_;
+    QMetaObject::Connection libraryDataChangedConnection_;
+    QMetaObject::Connection libraryResetConnection_;
     QTimer pollTimer_;
     State state_ = Stopped;
     qint64 positionMs_ = 0;
@@ -193,8 +245,17 @@ private:
     qint64 selectionStartMs_ = 0;
     qint64 selectionEndMs_ = 0;
     bool selectionLoopEnabled_ = false;
+    double speedRatio_ = 1.0;
+    double sourceBpm_ = 0.0;
+    bool keepPitch_ = true;
+    bool scratchActive_ = false;
+    bool scratchReady_ = false;
+    bool scratchBuffering_ = false;
     bool editorOutputOwned_ = false;
+    bool editorRestorePending_ = false;
     qsizetype activeScopeSize_{};
     bool activeScopeAllowsFallback_{};
     std::optional<PlaybackSessionSnapshot> editorSessionSnapshot_;
+    std::optional<EditorOutputStep> editorOutputFailureStepForTesting_;
+    std::optional<EditorOutputStep> editorOutputSecondFailureStepForTesting_;
 };

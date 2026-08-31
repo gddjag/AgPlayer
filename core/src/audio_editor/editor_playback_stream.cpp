@@ -77,9 +77,11 @@ bool validateSnapshot(const TimelineSnapshot& snapshot,
 
 class EditorPlaybackStream::Impl final {
 public:
-    Impl(TimelineSnapshot value, EditorPlaybackParameters settings)
+    Impl(TimelineSnapshot value, EditorPlaybackParameters settings,
+         agplayer::TimePitchEngineFactory factory)
         : snapshot(std::move(value)), parameters(settings),
-          automation_time(0, snapshot.totalFrames, parameters.speed_ratio)
+          automation_time(0, snapshot.totalFrames, parameters.speed_ratio),
+          engine_factory(factory)
     {
         metadata_value.sample_rate = static_cast<int>(
             snapshot.events.front().source->sample_rate);
@@ -105,7 +107,7 @@ public:
         processing = std::abs(parameters.speed_ratio - 1.0) > 0.000001
             || effective_pitch != 0;
         if (processing) {
-            processor = agplayer::create_time_pitch_engine();
+            processor = engine_factory != nullptr ? engine_factory() : nullptr;
             const double tempo = parameters.keep_pitch
                 ? parameters.speed_ratio
                 : parameters.speed_ratio / effectivePitchRatio;
@@ -313,6 +315,7 @@ public:
                     / static_cast<std::size_t>(metadata_value.channels);
                 applyFormant(block.samples, block.frames);
                 applyAutomation(block.samples, block.frames);
+                block.timestamp_frame = emitted_frames;
                 block.timestamp_ms = emitted_frames * 1'000
                     / metadata_value.sample_rate;
                 emitted_frames += static_cast<SampleFrame>(block.frames);
@@ -324,24 +327,31 @@ public:
                 metadata_value.channels));
             std::size_t received = processor->receive(block.samples.data(),
                                                        kReadFrames);
+            if (processor->failed()) return AG_INTERNAL_ERROR;
             while (received == 0 && !flushed) {
                 std::vector<float> raw;
                 const ag_result result = readRaw(raw, kReadFrames);
                 if (result != AG_OK) return result;
                 const std::size_t frames = raw.size()
                     / static_cast<std::size_t>(metadata_value.channels);
-                if (frames > 0) processor->put(raw.data(), frames);
+                if (frames > 0) {
+                    processor->put(raw.data(), frames);
+                    if (processor->failed()) return AG_INTERNAL_ERROR;
+                }
                 if (raw_eof) {
                     processor->flush();
+                    if (processor->failed()) return AG_INTERNAL_ERROR;
                     flushed = true;
                 }
                 received = processor->receive(block.samples.data(), kReadFrames);
+                if (processor->failed()) return AG_INTERNAL_ERROR;
             }
             block.samples.resize(received * static_cast<std::size_t>(
                 metadata_value.channels));
             applyFormant(block.samples, received);
             applyAutomation(block.samples, received);
             block.frames = received;
+            block.timestamp_frame = emitted_frames;
             block.timestamp_ms = emitted_frames * 1'000 / metadata_value.sample_rate;
             emitted_frames += static_cast<SampleFrame>(received);
             block.end_of_stream = flushed && received == 0;
@@ -400,6 +410,7 @@ public:
     int effective_pitch{};
     std::unique_ptr<agplayer::ITimePitchEngine> processor;
     std::unique_ptr<agplayer::FormantPreserver> formant_preserver;
+    agplayer::TimePitchEngineFactory engine_factory{};
 };
 
 EditorPlaybackStream::EditorPlaybackStream(std::unique_ptr<Impl> impl) noexcept
@@ -411,11 +422,12 @@ EditorPlaybackStream::~EditorPlaybackStream() = default;
 
 std::shared_ptr<EditorPlaybackStream> EditorPlaybackStream::create(
     TimelineSnapshot snapshot, const EditorPlaybackParameters& parameters,
-    std::string& error)
+    std::string& error, agplayer::TimePitchEngineFactory engine_factory)
 {
     if (!validateSnapshot(snapshot, parameters, error)) return {};
     try {
-        auto impl = std::make_unique<Impl>(std::move(snapshot), parameters);
+        auto impl = std::make_unique<Impl>(
+            std::move(snapshot), parameters, engine_factory);
         if (!impl->processor_ready) {
             error = "cannot configure editor time/pitch processing";
             return {};

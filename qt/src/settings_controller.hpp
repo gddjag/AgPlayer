@@ -183,6 +183,13 @@ class SettingsController final : public QObject {
     Q_PROPERTY(QString releaseDate READ releaseDate CONSTANT)
 
 public:
+    enum PlayerShellMode {
+        Classic = 0,
+        Integrated = 1,
+        Rolling = 2,
+    };
+    Q_ENUM(PlayerShellMode)
+
     explicit SettingsController(QObject* parent = nullptr);
     ~SettingsController();
 
@@ -511,7 +518,7 @@ private:
     // Appearance & Visualizer
     int themeMode_ = 0;
     QString windowLayoutTheme_ = QStringLiteral("dual-window");
-    int playerShellMode_ = 0;
+    int playerShellMode_ = Classic;
     int waveformMode_ = 0;
     double waveformHeight_ = 0.8;
     double waveformDensity_ = 2.0;

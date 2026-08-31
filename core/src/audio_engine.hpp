@@ -2,6 +2,7 @@
 
 #include "playback_session.hpp"
 #include "graphic_equalizer.hpp"
+#include "time_pitch_engine.hpp"
 
 #include <agplayer/c_api.h>
 
@@ -14,6 +15,8 @@
 namespace agplayer {
 
 class IAudioStreamSource;
+class AudioEngineTestAccess;
+struct PlaybackTimePitchConfig;
 
 enum class AudioBackend {
     Default,
@@ -56,16 +59,31 @@ struct EqualizerStatus {
     double protection_db = 0.0;
 };
 
+struct ScratchStatus {
+    bool active = false;
+    bool ready = false;
+    bool buffering = false;
+};
+
+struct OutputLevels {
+    float left_peak = 0.0F;
+    float right_peak = 0.0F;
+    float left_rms = 0.0F;
+    float right_rms = 0.0F;
+};
+
 class AudioEngine final {
 public:
-    AudioEngine(AudioBackend backend, std::size_t buffer_frames);
+    AudioEngine(AudioBackend backend, std::size_t buffer_frames,
+                TimePitchEngineFactory factory = &create_time_pitch_engine);
     ~AudioEngine();
 
     AudioEngine(const AudioEngine&) = delete;
     AudioEngine& operator=(const AudioEngine&) = delete;
 
     ag_result load(const std::string& utf8_path) noexcept;
-    ag_result load_stream(std::shared_ptr<IAudioStreamSource> stream) noexcept;
+    ag_result load_stream(std::shared_ptr<IAudioStreamSource> stream,
+                          bool bypass_time_pitch = false) noexcept;
     ag_result replace_stream(std::shared_ptr<IAudioStreamSource> stream) noexcept;
     ag_result set_queue(std::vector<std::string> utf8_paths,
                         std::size_t start_index) noexcept;
@@ -83,6 +101,14 @@ public:
     ag_result set_mode(PlaybackMode mode) noexcept;
     ag_result set_volume(float volume) noexcept;
     ag_result set_replay_gain(float gain_db, float peak, bool clip_protection) noexcept;
+    ag_result set_time_pitch(const PlaybackTimePitchConfig& config) noexcept;
+    [[nodiscard]] PlaybackTimePitchConfig time_pitch_config() const noexcept;
+    ag_result begin_scratch() noexcept;
+    ag_result update_scratch(float signed_rate) noexcept;
+    ag_result end_scratch() noexcept;
+    ag_result cancel_scratch() noexcept;
+    [[nodiscard]] ScratchStatus scratch_status() const noexcept;
+    [[nodiscard]] OutputLevels output_levels() const noexcept;
     ag_result set_equalizer(const GraphicEqSettings& settings,
                             std::uint64_t revision) noexcept;
     [[nodiscard]] EqualizerStatus equalizer_status() const noexcept;
@@ -103,6 +129,46 @@ public:
     ag_result set_match_track_sample_rate(bool enabled) noexcept;
 
 private:
+    friend class AudioEngineTestAccess;
+    using TimelineTestHook = void (*)(void*, bool) noexcept;
+    using TimePitchTestHook = void (*)(void*, std::uint64_t, int) noexcept;
+    using ScratchCommitTestHook = void (*)(void*, int) noexcept;
+    void set_timeline_test_hook(TimelineTestHook hook,
+                                void* context) noexcept;
+    void set_time_pitch_test_hook(TimePitchTestHook hook,
+                                  void* context) noexcept;
+    void set_scratch_commit_test_hook(ScratchCommitTestHook hook,
+                                      void* context) noexcept;
+    [[nodiscard]] std::int64_t pending_boundary_for_testing() const noexcept;
+    [[nodiscard]] std::uint64_t
+    published_mapper_generation_for_testing() const noexcept;
+    [[nodiscard]] std::uint64_t
+    pending_mapper_generation_for_testing() const noexcept;
+    [[nodiscard]] std::int64_t
+    consumed_source_frame_for_testing() const noexcept;
+    [[nodiscard]] std::int64_t
+    scratch_source_frame_for_testing() const noexcept;
+    [[nodiscard]] std::uint64_t
+    scratch_physical_seek_count_for_testing() const noexcept;
+    [[nodiscard]] bool decode_running_for_testing() const noexcept;
+    [[nodiscard]] bool time_pitch_cancel_requested_for_testing() const noexcept;
+    [[nodiscard]] bool time_pitch_request_idle_for_testing() const noexcept;
+    [[nodiscard]] std::uint64_t
+    requested_time_pitch_generation_for_testing() const noexcept;
+    [[nodiscard]] std::uint64_t
+    completed_time_pitch_generation_for_testing() const noexcept;
+    [[nodiscard]] bool
+    has_retired_time_pitch_decoder_for_testing() const noexcept;
+    [[nodiscard]] bool time_pitch_mailbox_clear_for_testing() const noexcept;
+    void stop_decode_thread_for_testing() noexcept;
+    void request_decode_exit_for_testing() noexcept;
+    void mark_device_lost_for_testing() noexcept;
+    void notify_device_lost_from_backend_for_testing() noexcept;
+    ag_result enter_error_for_testing(ag_result result) noexcept;
+    void publish_output_levels_for_testing(const float* output,
+                                           std::size_t frames,
+                                           std::size_t channels) noexcept;
+
     class Impl;
     std::unique_ptr<Impl> impl_;
 };

@@ -151,11 +151,15 @@ void SettingsControllerTest::playerShellModeDefaultsPersistsAndNormalizes()
         QCOMPARE(settings.themeMode(), 1);
         QCOMPARE(settings.windowLayoutTheme(), QStringLiteral("single-window"));
         QCOMPARE(persisted.value(QStringLiteral("appearance/playerShellMode")).toInt(), 1);
+        settings.setPlayerShellMode(2);
+        QCOMPARE(settings.playerShellMode(), 2);
+        QCOMPARE(settings.windowLayoutTheme(), QStringLiteral("rolling-player"));
+        QCOMPARE(persisted.value(QStringLiteral("appearance/playerShellMode")).toInt(), 2);
     }
 
     SettingsController reloaded;
-    QCOMPARE(reloaded.playerShellMode(), 1);
-    QCOMPARE(reloaded.windowLayoutTheme(), QStringLiteral("single-window"));
+    QCOMPARE(reloaded.playerShellMode(), 2);
+    QCOMPARE(reloaded.windowLayoutTheme(), QStringLiteral("rolling-player"));
 
     persisted.setValue(QStringLiteral("appearance/playerShellMode"), 99);
     persisted.setValue(QStringLiteral("appearance/windowLayoutTheme"),
@@ -164,6 +168,17 @@ void SettingsControllerTest::playerShellModeDefaultsPersistsAndNormalizes()
     QCOMPARE(malformed.playerShellMode(), 0);
     QCOMPARE(malformed.windowLayoutTheme(), QStringLiteral("dual-window"));
     QCOMPARE(persisted.value(QStringLiteral("appearance/playerShellMode")).toInt(), 0);
+
+    persisted.clear();
+    persisted.setValue(QStringLiteral("appearance/windowLayoutTheme"),
+                       QStringLiteral("rolling-player"));
+    SettingsController migratedLayout;
+    QCOMPARE(migratedLayout.playerShellMode(), 2);
+    QCOMPARE(persisted.value(QStringLiteral("appearance/playerShellMode")).toInt(), 2);
+
+    migratedLayout.resetToDefaults();
+    QCOMPARE(migratedLayout.playerShellMode(), 0);
+    QCOMPARE(migratedLayout.windowLayoutTheme(), QStringLiteral("dual-window"));
 }
 
 void SettingsControllerTest::windowLayoutThemeDefaultsAndNormalizesToDualWindow()
@@ -178,6 +193,10 @@ void SettingsControllerTest::windowLayoutThemeDefaultsAndNormalizesToDualWindow(
     settings.setWindowLayoutTheme(QStringLiteral("single-window"));
     QCOMPARE(settings.windowLayoutTheme(), QStringLiteral("single-window"));
     QCOMPARE(settings.playerShellMode(), 1);
+
+    settings.setWindowLayoutTheme(QStringLiteral("rolling-player"));
+    QCOMPARE(settings.windowLayoutTheme(), QStringLiteral("rolling-player"));
+    QCOMPARE(settings.playerShellMode(), 2);
 
     settings.setPlayerShellMode(0);
     QCOMPARE(settings.windowLayoutTheme(), QStringLiteral("dual-window"));

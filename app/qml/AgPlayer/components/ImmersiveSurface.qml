@@ -179,19 +179,6 @@ Item {
         }
     }
 
-    function synchronizeAudioFeatures() {
-        AudioVisualFeatureController.setActive(
-                    root.terrainItem
-                    ? root.terrainItem.renderingRequested : false)
-    }
-
-    Connections {
-        target: root.terrainItem
-        function onRenderingRequestedChanged() {
-            root.synchronizeAudioFeatures()
-        }
-    }
-
     Rectangle {
         id: renderFallbackMessage
         objectName: "immersiveRenderFallbackMessage"
@@ -428,6 +415,4 @@ Item {
 
     onHostModeChanged: notePointerActivity()
     onAttachedChanged: if (attached) notePointerActivity()
-    Component.onCompleted: synchronizeAudioFeatures()
-    Component.onDestruction: AudioVisualFeatureController.setActive(false)
 }

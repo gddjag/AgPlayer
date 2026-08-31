@@ -5,9 +5,11 @@
 #include <QMetaObject>
 #include <QPointer>
 #include <QString>
+#include <QTimer>
 #include <QVariantList>
 
 class PlaybackController;
+class AudioVisualFeatureControllerTest;
 
 class AudioVisualFeatureController final : public QObject {
     Q_OBJECT
@@ -23,6 +25,10 @@ class AudioVisualFeatureController final : public QObject {
     Q_PROPERTY(bool beatReliable READ beatReliable NOTIFY beatReliableChanged)
     Q_PROPERTY(quint64 derivedUpdateCount READ derivedUpdateCount
                    NOTIFY derivedUpdateCountChanged)
+    Q_PROPERTY(double leftPeak READ leftPeak NOTIFY outputLevelsChanged)
+    Q_PROPERTY(double rightPeak READ rightPeak NOTIFY outputLevelsChanged)
+    Q_PROPERTY(double leftRms READ leftRms NOTIFY outputLevelsChanged)
+    Q_PROPERTY(double rightRms READ rightRms NOTIFY outputLevelsChanged)
 
 public:
     explicit AudioVisualFeatureController(PlaybackController* playback = nullptr,
@@ -38,6 +44,10 @@ public:
     double impactStrength() const noexcept;
     bool beatReliable() const noexcept;
     quint64 derivedUpdateCount() const noexcept;
+    double leftPeak() const noexcept;
+    double rightPeak() const noexcept;
+    double leftRms() const noexcept;
+    double rightRms() const noexcept;
 
     void setPlaybackController(PlaybackController* playback);
     Q_INVOKABLE void setActive(bool active);
@@ -52,10 +62,17 @@ signals:
     void featuresChanged();
     void beatReliableChanged();
     void derivedUpdateCountChanged();
+    void outputLevelsChanged();
 
 private:
+    friend class AudioVisualFeatureControllerTest;
     void connectPlaybackSignals();
     void disconnectPlaybackSignals();
+    void updateOutputLevelPolling();
+    void pollOutputLevels();
+    void applyOutputLevels(double leftPeak, double rightPeak,
+                           double leftRms, double rightRms);
+    void resetOutputLevels();
     void resetBeatPosition() noexcept;
     void triggerImpact(double strength, bool notify = true);
     static double normalizedValue(const QVariant& value) noexcept;
@@ -64,6 +81,7 @@ private:
     QMetaObject::Connection spectrumConnection_;
     QMetaObject::Connection positionConnection_;
     QMetaObject::Connection trackConnection_;
+    QMetaObject::Connection playbackDestroyedConnection_;
     bool active_ = false;
     QVariantList bands_{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     QVariantList previousSpectrum_;
@@ -81,4 +99,9 @@ private:
     quint64 impactRevision_ = 0;
     double impactStrength_ = 0.0;
     quint64 derivedUpdateCount_ = 0;
+    QTimer outputLevelTimer_;
+    double leftPeak_ = 0.0;
+    double rightPeak_ = 0.0;
+    double leftRms_ = 0.0;
+    double rightRms_ = 0.0;
 };

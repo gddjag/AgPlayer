@@ -62,6 +62,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/picture-in-picture-2-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/play-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/play-order-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/player-shell-mode.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/price-tag-3-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/pulse-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/playlist-2-fill.svg
@@ -144,6 +145,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/theme/Theme.qml
         qml/AgPlayer/components/TitleBar.qml
         qml/AgPlayer/components/IntegratedPlayerShell.qml
+        qml/AgPlayer/components/RollingPlayerShell.qml
         qml/AgPlayer/components/WaveSelectionOverlay.qml
         qml/AgPlayer/components/WaveformSession.qml
         qml/AgPlayer/components/SharedWaveformView.qml

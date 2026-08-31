@@ -2870,6 +2870,49 @@ Clear: Remove all known aliases for this field.</translation>
         <source>Previous track</source>
         <translation>Previous track</translation>
     </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="391"/>
+        <source>切换播放器皮肤</source>
+        <translation>Switch player skin</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="455"/>
+        <source>经典模式</source>
+        <translation>Classic mode</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="462"/>
+        <source>一体化模式</source>
+        <translation>Integrated mode</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="469"/>
+        <source>滚动播放模式</source>
+        <translation>Rolling playback mode</translation>
+    </message>
+</context>
+<context>
+    <name>ExperienceActions</name>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/ExperienceActions.qml" line="27"/>
+        <source>隐藏歌词</source>
+        <translation>Hide lyrics</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/ExperienceActions.qml" line="27"/>
+        <source>显示歌词</source>
+        <translation>Show lyrics</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/ExperienceActions.qml" line="47"/>
+        <source>关闭沉浸视觉</source>
+        <translation>Turn off immersive visual</translation>
+    </message>
+    <message>
+        <location filename="../app/qml/AgPlayer/components/ExperienceActions.qml" line="47"/>
+        <source>开启沉浸视觉</source>
+        <translation>Turn on immersive visual</translation>
+    </message>
 </context>
 <context>
     <name>PlayerPane</name>

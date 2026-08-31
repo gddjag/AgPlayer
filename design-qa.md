@@ -104,3 +104,93 @@ final result: blocked
 - Production code was not given screenshot-only fake data. A final same-state comparison must be captured after installing the approved models and completing a real job through the UI.
 
 final result: blocked — reference-state visual parity and final hardware interaction remain unverified
+
+---
+
+# Design QA — 频彩波形中心高亮与播放进度 — 2026-08-31
+
+## Source visual truth and scope
+
+- Source reference: `E:\Administrator\下载\微信图片_20260829202539_118_10.png` (1644 × 203 px).
+- The source is a palette/layer-separation reference from another layout, not a pixel-identical AgPlayer screen. The scoped target is the low/mid/high transparent overlay, restrained center focus, and subtle played/unplayed transition; source typography, wallpaper, timing labels, and overall geometry are intentionally out of scope.
+- Required AgPlayer state: frequency mode (`visualMode = 3`), real waveform analysis, playback active, and both dark and light themes.
+
+## Implementation evidence
+
+- Exact executable: `build/frequency-clean-release/app/AgPlayer.exe`.
+- Dark native capture: `build/qa/frequency-waveform-subtle-progress-20260831/isolated-dark-frequency.png` (960 × 298 logical px).
+- Light native capture: `build/qa/frequency-waveform-subtle-progress-20260831/isolated-light-frequency.png` (960 × 298 logical px).
+- Combined source + focused waveform + full-view comparison opened and inspected: `build/qa/frequency-waveform-subtle-progress-20260831/comparison-frequency-waveform.png` (1280 × 850 px).
+- Both captures used `multiband-qa.wav`, a deterministic 16-second PCM signal containing independently varying low, mid, and high components. AgPlayer loaded, analyzed, and rendered this signal through the production waveform path; the image does not contain hand-painted waveform data.
+- QA processes ran with isolated settings on a non-interactive Windows desktop. The user’s open AgPlayer window and production settings were not clicked, closed, or overwritten.
+
+## Density, viewport, and state normalization
+
+- Both implementation captures use the same 960 × 298 logical window and the same 100% logical capture normalization.
+- Both are captured around 00:01 / 00:16 with playback active and the same analyzed audio.
+- The focused comparison crops the waveform band from each AgPlayer capture without altering its colors. Source and implementation widths differ, so each crop is scaled only for side-by-side visual judgment; no claim of pixel-perfect geometric equivalence is made.
+
+## Visual fidelity rubric
+
+| Surface | Result | Evidence |
+| --- | --- | --- |
+| Typography | Passed for scoped regression | Player title, metadata, time labels, and controls remain readable in both themes; typography was not changed by this task. |
+| Spacing and layout | Passed | The complete waveform occupies the available width in both captures with no clipping, missing tail, overlap, or displaced controls. |
+| Colors and tokens | Passed | Mint low, warm cream mid, and coral high remain separately legible as transparent layers on both backgrounds. Dark and light captures keep the same user-facing band colors; only theme-aware focus/progress treatment changes. |
+| Center focus | Passed | Dark uses `#C8CDD2` at 0.58 opacity; light uses `#56616A` at 0.72 opacity. The existing 1 px guide and 5 px focus point remain restrained and do not turn into a bright white seam. |
+| Playback progress | Passed | Played remains 1.00; unplayed is 0.90 dark / 0.92 light, with the existing ±12 logical-pixel feather. The transition is visible on inspection but no longer reads as a second saturated color block. |
+| Image quality | Passed | Low/mid/high peaks remain crisp at the native logical viewport; transparency does not erase the waveform or introduce visible clipping/banding. |
+| Copy and fixture data | Passed with QA qualification | `multiband-qa` and unknown metadata are explicit deterministic QA data, not production copy or a parity target. |
+
+## Comparison history and findings
+
+- An earlier interactive capture used a 440 Hz sine wave. It confirmed the center/progress treatment but could not prove three-band separation, so it was not used as final color evidence.
+- The final deterministic multiband captures make all three layers visible. Against the source, AgPlayer keeps the same fresh green/warm cream/coral family while deliberately using lower chroma and alpha, matching the user’s request to avoid glare in dark and light themes.
+- The light center guide is darker rather than white-gray because a white line would disappear into the light player surface. The dark guide remains a soft neutral light gray.
+- No second waveform geometry was introduced; theme/progress changes operate on the existing single frequency waveform render path.
+
+## Verification boundary
+
+- This pass accepts the scoped frequency-waveform appearance and cross-theme behavior.
+- It does not claim acoustic output quality, arbitrary user color combinations, physical high-DPI monitor reachability, or whole-product pixel parity with the external reference image.
+
+final result: passed
+
+---
+
+# Design QA — 频彩波形 Open Color 跨主题配色 — 2026-08-31
+
+## 标准与范围
+
+- 本轮颜色标准独立采用 Open Color 开源色板（MIT）：低频 `#1098AD`、中频 `#F59F00`、高频 `#AE3EC9`。
+- 本轮只调整颜色令牌、主题派生锚点、Mix 中性底层与中心高亮；频段提取、共享波形数据、单几何四层绘制和播放进度算法均保持不变。
+- 用户仍只维护一套自定义颜色。浅色主题继续通过现有 OKLCH 感知差值映射自动派生，不新增第二套设置。
+- 本节是当前配色结论；前一节记录的是已被后续反馈淘汰的历史方案。
+
+## 原生证据
+
+- 精确构建：`build/frequency-clean-release/app/AgPlayer.exe`。
+- 深色截图：`build/qa/frequency-waveform-open-color-20260831/open-color-dark.png`（960 × 298）。
+- 浅色截图：`build/qa/frequency-waveform-open-color-20260831/open-color-light.png`（960 × 298）。
+- 两张截图使用相同的 `multiband-qa.wav`。音频经生产波形分析路径生成 Mix/Low/Mid/High 数据，未手绘、未合成第二套波形。
+- QA 进程使用隔离设置和非交互 Windows 桌面；没有修改或关闭用户现有播放器状态。
+
+## 视觉检查
+
+| 检查项 | 结果 | 证据 |
+| --- | --- | --- |
+| 完整轮廓 | Passed | 深浅截图均完整覆盖 00:01–00:16 可视时间轴，无头尾裁切或局部缺失。 |
+| 三频辨识 | Passed | 青蓝低频尖峰、琥珀中频主体、紫色高频细节在两种表面上保持不同色相；透明叠加处没有过曝。 |
+| 深浅主题一致性 | Passed | 深色使用 Open Color 7 级令牌；浅色使用对应 8 级锚点，既不荧光刺眼，也未淡化为不可辨识。 |
+| 中性底层 | Passed | 深色 `#868E96`/22%，浅色 `#495057`/24%，负责连续 Mix 轮廓而不抢三频层级。 |
+| 中心焦点 | Passed | 深色 `#CED4DA`/54%，浅色 `#495057`/66%；1 px 引导线和 5 px 焦点保持可见但不形成高亮切割。 |
+| 播放进度 | Passed | 仍为已播放 1.00、未播放深色 0.90/浅色 0.92，并保留 ±12 逻辑像素羽化；截图中只呈现轻微透明度差。 |
+| 单一渲染路径 | Passed | C++ 测试验证节点/几何复用、顶点位置不变，仅更新四层预乘颜色；QML 测试验证主/迷你播放器不启用重复裁剪层。 |
+
+## 验证边界
+
+- Release 构建成功；频彩相关 13 项 C++/QML/生命周期测试全部通过。
+- 已独立检查深色与浅色原生截图。用户最终审美接受仍以实际打开后的主观确认为准。
+- 未声称覆盖任意自定义颜色组合、物理高 DPI 显示器可达性或声学输出质量。
+
+final result: passed — implementation and internal cross-theme visual QA; pending user visual acceptance

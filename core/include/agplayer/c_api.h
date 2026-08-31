@@ -61,6 +61,24 @@ typedef struct ag_playback_snapshot {
     ag_playback_mode mode;
 } ag_playback_snapshot;
 
+typedef struct ag_playback_time_pitch_config {
+    double speed_ratio;
+    int keep_pitch;
+} ag_playback_time_pitch_config;
+
+typedef struct ag_scratch_status {
+    int active;
+    int ready;
+    int buffering;
+} ag_scratch_status;
+
+typedef struct ag_output_levels {
+    float left_peak;
+    float right_peak;
+    float left_rms;
+    float right_rms;
+} ag_output_levels;
+
 #define AG_EQUALIZER_BAND_COUNT 17
 
 typedef struct ag_equalizer_settings {
@@ -114,6 +132,20 @@ ag_result ag_player_set_mode(ag_player* player, ag_playback_mode mode);
 ag_result ag_player_set_volume(ag_player* player, float volume);
 ag_result ag_player_set_replay_gain(ag_player* player, float gain_db,
                                     float peak, int clip_protection);
+ag_result ag_player_set_time_pitch(
+    ag_player* player,
+    const ag_playback_time_pitch_config* config);
+ag_result ag_player_get_time_pitch(
+    const ag_player* player,
+    ag_playback_time_pitch_config* config);
+ag_result ag_player_begin_scratch(ag_player* player);
+ag_result ag_player_update_scratch(ag_player* player, float signed_rate);
+ag_result ag_player_end_scratch(ag_player* player);
+ag_result ag_player_cancel_scratch(ag_player* player);
+ag_result ag_player_scratch_status(const ag_player* player,
+                                   ag_scratch_status* status);
+ag_result ag_player_output_levels(const ag_player* player,
+                                  ag_output_levels* levels);
 ag_result ag_player_set_equalizer(ag_player* player,
                                   const ag_equalizer_settings* settings);
 ag_result ag_player_equalizer_status(const ag_player* player,

@@ -56,10 +56,14 @@ enum class DecoderDownmix {
     AnalysisMono,
 };
 
+using DecoderInterruptCallback = bool (*)(void*) noexcept;
+
 struct DecoderOpenOptions final {
     int output_sample_rate = 0;
     int output_channels = 0;
     DecoderDownmix downmix = DecoderDownmix::Preserve;
+    DecoderInterruptCallback interrupt_callback = nullptr;
+    void* interrupt_context = nullptr;
 };
 
 struct DecodedAudioFormat final {
@@ -96,9 +100,14 @@ public:
     [[nodiscard]] ag_result read(DecodedAudioBlock& block) noexcept;
     [[nodiscard]] ag_result seek(std::int64_t target_ms) noexcept;
     [[nodiscard]] ag_result seekFrame(std::int64_t target_frame) noexcept;
+    void clearInterruptCallback() noexcept;
     [[nodiscard]] const MediaMetadata& metadata() const noexcept;
     [[nodiscard]] const DecodedAudioFormat& output_format() const noexcept;
     [[nodiscard]] static std::uint64_t threadOpenCount() noexcept;
+    // Test-only, per-thread observation seam for the expensive source
+    // timeline derivation performed during open().
+    static void resetThreadTimelineDerivationCount() noexcept;
+    [[nodiscard]] static std::uint64_t threadTimelineDerivationCount() noexcept;
 
 private:
     class Impl;

@@ -6,6 +6,7 @@
 #include "frequency_color_waveform_analyzer.hpp"
 #include "metadata_writer.hpp"
 #include "pitch_shifter.hpp"
+#include "playback_time_pitch_stage.hpp"
 #include "transcoder.hpp"
 
 #include <algorithm>
@@ -468,6 +469,99 @@ ag_result ag_player_set_replay_gain(ag_player* player,
     return guard_result([&] {
         return player->context.set_replay_gain(gain_db, peak,
                                                clip_protection != 0);
+    });
+}
+
+ag_result ag_player_set_time_pitch(
+    ag_player* player,
+    const ag_playback_time_pitch_config* config)
+{
+    if (player == nullptr || config == nullptr
+        || (config->keep_pitch != 0 && config->keep_pitch != 1)) {
+        return AG_INVALID_ARGUMENT;
+    }
+    return guard_result([&] {
+        return player->context.set_time_pitch(
+            {config->speed_ratio, config->keep_pitch != 0});
+    });
+}
+
+ag_result ag_player_get_time_pitch(
+    const ag_player* player,
+    ag_playback_time_pitch_config* config)
+{
+    if (player == nullptr || config == nullptr) {
+        return AG_INVALID_ARGUMENT;
+    }
+    return guard_result([&] {
+        const agplayer::PlaybackTimePitchConfig value =
+            player->context.time_pitch_config();
+        config->speed_ratio = value.speed_ratio;
+        config->keep_pitch = value.keep_pitch ? 1 : 0;
+        return AG_OK;
+    });
+}
+
+ag_result ag_player_begin_scratch(ag_player* player)
+{
+    return player == nullptr
+        ? AG_INVALID_ARGUMENT
+        : guard_result([&] { return player->context.begin_scratch(); });
+}
+
+ag_result ag_player_update_scratch(ag_player* player,
+                                   const float signed_rate)
+{
+    return player == nullptr
+        ? AG_INVALID_ARGUMENT
+        : guard_result([&] {
+            return player->context.update_scratch(signed_rate);
+        });
+}
+
+ag_result ag_player_end_scratch(ag_player* player)
+{
+    return player == nullptr
+        ? AG_INVALID_ARGUMENT
+        : guard_result([&] { return player->context.end_scratch(); });
+}
+
+ag_result ag_player_cancel_scratch(ag_player* player)
+{
+    return player == nullptr
+        ? AG_INVALID_ARGUMENT
+        : guard_result([&] { return player->context.cancel_scratch(); });
+}
+
+ag_result ag_player_scratch_status(const ag_player* player,
+                                   ag_scratch_status* status)
+{
+    if (player == nullptr || status == nullptr) {
+        return AG_INVALID_ARGUMENT;
+    }
+    return guard_result([&] {
+        const agplayer::ScratchStatus value =
+            player->context.scratch_status();
+        status->active = value.active ? 1 : 0;
+        status->ready = value.ready ? 1 : 0;
+        status->buffering = value.buffering ? 1 : 0;
+        return AG_OK;
+    });
+}
+
+ag_result ag_player_output_levels(const ag_player* player,
+                                  ag_output_levels* levels)
+{
+    if (player == nullptr || levels == nullptr) {
+        return AG_INVALID_ARGUMENT;
+    }
+    return guard_result([&] {
+        const agplayer::OutputLevels value = player->context.output_levels();
+        levels->left_peak = value.left_peak;
+        levels->right_peak = value.right_peak;
+        levels->left_rms = value.left_rms;
+        levels->right_rms = value.right_rms;
+        return AG_OK;
     });
 }
 

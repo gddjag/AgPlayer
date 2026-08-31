@@ -27,6 +27,7 @@ namespace agplayer {
 namespace {
 
 thread_local std::uint64_t decoder_thread_open_count = 0U;
+thread_local std::uint64_t decoder_thread_timeline_derivation_count = 0U;
 
 constexpr std::size_t kMaxProbeTagBytes = 4U * 1024U * 1024U;
 constexpr std::size_t kMaxProbeCoverBytes = 32U * 1024U * 1024U;
@@ -472,15 +473,31 @@ public:
             return AG_INVALID_ARGUMENT;
         }
 
+        interrupt_handler_ = options.interrupt_callback;
+        interrupt_context_ = options.interrupt_context;
+        interrupt_triggered_ = false;
+        if (interrupt_handler_ != nullptr) {
+            format_context_ = avformat_alloc_context();
+            if (format_context_ == nullptr) {
+                reset();
+                return AG_INTERNAL_ERROR;
+            }
+            format_context_->interrupt_callback.callback =
+                &Impl::ffmpeg_interrupt_callback;
+            format_context_->interrupt_callback.opaque = this;
+        }
+
         int result = avformat_open_input(&format_context_, utf8_path.c_str(), nullptr, nullptr);
         if (result < 0) {
+            const bool interrupted = interrupt_triggered_;
             reset();
-            return map_open_error(result);
+            return interrupted ? AG_CANCELLED : map_open_error(result);
         }
         result = avformat_find_stream_info(format_context_, nullptr);
         if (result < 0) {
+            const bool interrupted = interrupt_triggered_;
             reset();
-            return AG_UNSUPPORTED_FORMAT;
+            return interrupted ? AG_CANCELLED : AG_UNSUPPORTED_FORMAT;
         }
 
         const AVCodec* codec = nullptr;
@@ -531,7 +548,13 @@ public:
         }
 
         populate_metadata(*stream);
-        set_output_timeline(*stream);
+        // Preserve-mode callers consume decoded PCM only.  The detailed
+        // source timeline is required solely by the frequency analyser's
+        // AnalysisMono cursor, so avoid deriving it for ordinary waveforms,
+        // playback, and scratch backfill opens.
+        if (options.downmix == DecoderDownmix::AnalysisMono) {
+            set_output_timeline(*stream);
+        }
         return AG_OK;
     }
 
@@ -668,6 +691,16 @@ public:
         return output_format_;
     }
 
+    void clear_interrupt_callback() noexcept
+    {
+        if (format_context_ != nullptr) {
+            format_context_->interrupt_callback = {};
+        }
+        interrupt_handler_ = nullptr;
+        interrupt_context_ = nullptr;
+        interrupt_triggered_ = false;
+    }
+
     void reset() noexcept
     {
         swr_free(&swr_context_);
@@ -677,6 +710,9 @@ public:
         av_packet_free(&packet_);
         avcodec_free_context(&codec_context_);
         avformat_close_input(&format_context_);
+        interrupt_handler_ = nullptr;
+        interrupt_context_ = nullptr;
+        interrupt_triggered_ = false;
         audio_stream_index_ = -1;
         output_sample_rate_ = 0;
         output_channels_ = 0;
@@ -693,17 +729,29 @@ public:
     }
 
 private:
+    static int ffmpeg_interrupt_callback(void* const opaque) noexcept
+    {
+        auto* const self = static_cast<Impl*>(opaque);
+        if (self == nullptr || self->interrupt_handler_ == nullptr) return 0;
+        if (!self->interrupt_handler_(self->interrupt_context_)) return 0;
+        self->interrupt_triggered_ = true;
+        return 1;
+    }
+
     ag_result seek_to(const std::int64_t target_timestamp,
                       const std::int64_t target_frame,
                       const std::int64_t target_ms)
     {
+        interrupt_triggered_ = false;
         const int result = avformat_seek_file(format_context_,
                                               audio_stream_index_,
                                               std::numeric_limits<std::int64_t>::min(),
                                               target_timestamp,
                                               target_timestamp,
                                               AVSEEK_FLAG_BACKWARD);
-        if (result < 0) return AG_DECODE_ERROR;
+        if (result < 0) {
+            return interrupt_triggered_ ? AG_CANCELLED : AG_DECODE_ERROR;
+        }
 
         avcodec_flush_buffers(codec_context_);
         av_packet_unref(packet_);
@@ -778,6 +826,7 @@ private:
 
     void set_output_timeline(const AVStream& audio_stream) noexcept
     {
+        ++decoder_thread_timeline_derivation_count;
         output_format_.timeline_frames = 0;
         output_format_.timestamp_quantization_frames = 1U;
         output_format_.leading_padding_frames = 0U;
@@ -1121,6 +1170,9 @@ private:
     std::int64_t block_start_frame_ = 0;
     std::int64_t fallback_frame_ = 0;
     bool fallback_frame_valid_ = true;
+    DecoderInterruptCallback interrupt_handler_ = nullptr;
+    void* interrupt_context_ = nullptr;
+    bool interrupt_triggered_ = false;
     MediaMetadata metadata_;
     DecodedAudioFormat output_format_;
 };
@@ -1194,6 +1246,11 @@ const MediaMetadata& Decoder::metadata() const noexcept
     return impl_->metadata();
 }
 
+void Decoder::clearInterruptCallback() noexcept
+{
+    impl_->clear_interrupt_callback();
+}
+
 const DecodedAudioFormat& Decoder::output_format() const noexcept
 {
     return impl_->output_format();
@@ -1202,6 +1259,16 @@ const DecodedAudioFormat& Decoder::output_format() const noexcept
 std::uint64_t Decoder::threadOpenCount() noexcept
 {
     return decoder_thread_open_count;
+}
+
+void Decoder::resetThreadTimelineDerivationCount() noexcept
+{
+    decoder_thread_timeline_derivation_count = 0U;
+}
+
+std::uint64_t Decoder::threadTimelineDerivationCount() noexcept
+{
+    return decoder_thread_timeline_derivation_count;
 }
 
 } // namespace agplayer

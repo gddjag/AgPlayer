@@ -857,8 +857,9 @@ Item {
 
                         FallbackCoverImage {
                             id: integratedTrackCoverImage
-                            requestedSource: trackSummary.track
-                                             ? trackSummary.track.coverUrl : ""
+                            requestedSource: String(trackSummary.track
+                                                    && trackSummary.track.coverUrl
+                                                    ? trackSummary.track.coverUrl : "")
                             anchors.fill: parent
                             fillMode: !usingFallback
                                       ? Image.PreserveAspectCrop

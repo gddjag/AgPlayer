@@ -1,4 +1,5 @@
 #include "core_context.hpp"
+#include "playback_time_pitch_stage.hpp"
 
 #include <utility>
 
@@ -32,7 +33,7 @@ ag_result CoreContext::load(const std::string& utf8_path) noexcept
 ag_result CoreContext::load_stream(
     std::shared_ptr<IAudioStreamSource> stream) noexcept
 {
-    return record(audio_engine_.load_stream(std::move(stream)),
+    return record(audio_engine_.load_stream(std::move(stream), true),
                   "editor stream load failed");
 }
 
@@ -114,6 +115,49 @@ ag_result CoreContext::set_replay_gain(const float gain_db,
     return record(
         audio_engine_.set_replay_gain(gain_db, peak, clip_protection),
         "replay gain change failed");
+}
+
+ag_result CoreContext::set_time_pitch(
+    const PlaybackTimePitchConfig& config) noexcept
+{
+    return record(audio_engine_.set_time_pitch(config),
+                  "time/pitch change failed");
+}
+
+PlaybackTimePitchConfig CoreContext::time_pitch_config() const noexcept
+{
+    return audio_engine_.time_pitch_config();
+}
+
+ag_result CoreContext::begin_scratch() noexcept
+{
+    return record(audio_engine_.begin_scratch(), "scratch begin failed");
+}
+
+ag_result CoreContext::update_scratch(const float signed_rate) noexcept
+{
+    return record(audio_engine_.update_scratch(signed_rate),
+                  "scratch update failed");
+}
+
+ag_result CoreContext::end_scratch() noexcept
+{
+    return record(audio_engine_.end_scratch(), "scratch end failed");
+}
+
+ag_result CoreContext::cancel_scratch() noexcept
+{
+    return record(audio_engine_.cancel_scratch(), "scratch cancel failed");
+}
+
+ScratchStatus CoreContext::scratch_status() const noexcept
+{
+    return audio_engine_.scratch_status();
+}
+
+OutputLevels CoreContext::output_levels() const noexcept
+{
+    return audio_engine_.output_levels();
 }
 
 ag_result CoreContext::set_equalizer(const GraphicEqSettings& settings,

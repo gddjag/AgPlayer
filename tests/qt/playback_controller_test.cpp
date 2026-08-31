@@ -1,5 +1,6 @@
 #include "library_model.hpp"
 #include "playback_controller.hpp"
+#include "settings_controller.hpp"
 #include "window_controller.hpp"
 #include "../../core/src/audio_editor/audio_file_analyzer.hpp"
 #include "../../core/src/audio_editor/editor_playback_stream.hpp"
@@ -33,6 +34,7 @@ private slots:
     void startsPlaybackFromVisibleListScope();
     void freshCoreCanBeAcquiredForEditorOutput();
     void editorOutputRestoresExactScopedPlaybackSession();
+    void editorOutputLeaseFailuresAreRetryable();
     void exactWaveformDurationAlignsPlaybackTimeline();
     void selectionCommitAdjustAndExternalSeekFollowContract();
     void exactDurationShrinkReclampsActiveSelection();
@@ -40,10 +42,171 @@ private slots:
     void trackChangeClearsSelection();
     void loadsRowWithoutStartingPlayback();
     void nullCoreReportsStableErrors();
+    void scratchBridgePublishesPausedStatusAndValidatesCommands();
     void survivesLibraryModelDestruction();
     void libraryRequestsShareQueueAndFavoriteState();
+    void tempoAndBpmShareOneClampedRatio();
+    void bpmUpdatesAndTrackChangesResetTempo();
+    void keepPitchSettingInitializesAndTracksRuntimeChanges();
     void playbackControllerIsAnAgPlayerQmlSingleton();
 };
+
+void PlaybackControllerTest::keepPitchSettingInitializesAndTracksRuntimeChanges()
+{
+    const QString oldOrganization = QCoreApplication::organizationName();
+    const QString oldApplication = QCoreApplication::applicationName();
+    QCoreApplication::setOrganizationName(QStringLiteral("AgPlayer"));
+    QCoreApplication::setApplicationName(
+        QStringLiteral("AgPlayer-playback-tempo-test"));
+    QSettings().clear();
+    {
+        QSettings persistedSettings;
+        persistedSettings.setValue(
+            QStringLiteral("audioTools/keepPitchWhileSpeedChange"), false);
+        persistedSettings.sync();
+        QCOMPARE(persistedSettings.status(), QSettings::NoError);
+    }
+
+    SettingsController settings;
+    QVERIFY(!settings.keepPitchWhileSpeedChange());
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2'048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core);
+        const auto applyKeepPitch = [&settings, &controller] {
+            controller.setKeepPitch(
+                settings.keepPitchWhileSpeedChange());
+        };
+        applyKeepPitch();
+        const QMetaObject::Connection connection = connect(
+            &settings,
+            &SettingsController::keepPitchWhileSpeedChangeChanged,
+            &controller, applyKeepPitch);
+        QVERIFY(!controller.keepPitch());
+        ag_playback_time_pitch_config coreConfig{};
+        QCOMPARE(ag_player_get_time_pitch(core, &coreConfig), AG_OK);
+        QVERIFY(!coreConfig.keep_pitch);
+
+        settings.setKeepPitchWhileSpeedChange(true);
+        QVERIFY(controller.keepPitch());
+        QCOMPARE(ag_player_get_time_pitch(core, &coreConfig), AG_OK);
+        QVERIFY(coreConfig.keep_pitch);
+
+        controller.setPlayer(nullptr);
+        settings.setKeepPitchWhileSpeedChange(false);
+        QVERIFY(controller.keepPitch());
+        disconnect(connection);
+    }
+    ag_player_destroy(core);
+    settings.setKeepPitchWhileSpeedChange(true);
+    QSettings().clear();
+    QCoreApplication::setOrganizationName(oldOrganization);
+    QCoreApplication::setApplicationName(oldApplication);
+}
+
+void PlaybackControllerTest::tempoAndBpmShareOneClampedRatio()
+{
+    const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(!fixture.isEmpty());
+    LibraryModel model;
+    TrackRecord known;
+    known.trackId = QStringLiteral("known-bpm");
+    known.path = fixture;
+    known.available = true;
+    known.bpm = 100.0;
+    QVERIFY(model.append(known));
+
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2'048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core, &model);
+        controller.loadRow(0);
+        QTRY_COMPARE(controller.currentTrackId(), known.trackId);
+        QCOMPARE(controller.speedRatio(), 1.0);
+        QCOMPARE(controller.sourceBpm(), 100.0);
+        QCOMPARE(controller.targetBpm(), 100.0);
+        QVERIFY(controller.keepPitch());
+
+        controller.setSpeedRatio(1.25);
+        QCOMPARE(controller.speedRatio(), 1.25);
+        QCOMPARE(controller.targetBpm(), 125.0);
+
+        controller.setTargetBpm(80.0);
+        QCOMPARE(controller.speedRatio(), 0.8);
+        QCOMPARE(controller.targetBpm(), 80.0);
+
+        controller.setTargetBpm(400.0);
+        QCOMPARE(controller.speedRatio(), 1.5);
+        QCOMPARE(controller.targetBpm(), 150.0);
+
+        controller.setSpeedRatio(0.1);
+        QCOMPARE(controller.speedRatio(), 0.75);
+        QCOMPARE(controller.targetBpm(), 75.0);
+        controller.setSpeedRatio(9.0);
+        QCOMPARE(controller.speedRatio(), 1.5);
+        QCOMPARE(controller.targetBpm(), 150.0);
+
+        controller.setTargetBpm(19.0);
+        QCOMPARE(controller.speedRatio(), 1.5);
+        controller.setTargetBpm(401.0);
+        QCOMPARE(controller.speedRatio(), 1.5);
+
+        controller.setKeepPitch(false);
+        QVERIFY(!controller.keepPitch());
+        controller.resetTempo();
+        QCOMPARE(controller.speedRatio(), 1.0);
+        QCOMPARE(controller.targetBpm(), 100.0);
+    }
+    ag_player_destroy(core);
+}
+
+void PlaybackControllerTest::bpmUpdatesAndTrackChangesResetTempo()
+{
+    const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(!fixture.isEmpty());
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    LibraryModel model;
+    const QList<double> bpms{120.0, 0.0};
+    for (int index = 0; index < bpms.size(); ++index) {
+        TrackRecord track;
+        track.trackId = QStringLiteral("tempo-%1").arg(index);
+        track.path = directory.filePath(track.trackId + QStringLiteral(".wav"));
+        QVERIFY(QFile::copy(fixture, track.path));
+        track.available = true;
+        track.bpm = bpms.at(index);
+        QVERIFY(model.append(track));
+    }
+
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2'048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core, &model);
+        controller.loadRow(0);
+        QTRY_COMPARE(controller.currentTrackId(), QStringLiteral("tempo-0"));
+        controller.setSpeedRatio(1.25);
+        QCOMPARE(controller.targetBpm(), 150.0);
+        QVERIFY(model.setBpm(QStringLiteral("tempo-0"), 128.0));
+        QCOMPARE(controller.sourceBpm(), 128.0);
+        QCOMPARE(controller.targetBpm(), 160.0);
+
+        controller.playRow(1);
+        QTRY_COMPARE(controller.currentTrackId(), QStringLiteral("tempo-1"));
+        QCOMPARE(controller.speedRatio(), 1.0);
+        QCOMPARE(controller.sourceBpm(), 0.0);
+        QCOMPARE(controller.targetBpm(), 0.0);
+        controller.setTargetBpm(120.0);
+        QCOMPARE(controller.speedRatio(), 1.0);
+        QCOMPARE(controller.targetBpm(), 0.0);
+        controller.setSpeedRatio(1.25);
+        QCOMPARE(controller.speedRatio(), 1.25);
+        QCOMPARE(controller.targetBpm(), 0.0);
+    }
+    ag_player_destroy(core);
+}
 
 void PlaybackControllerTest::seekImmediatelyAfterPauseKeepsCommittedPosition()
 {
@@ -434,11 +597,14 @@ void PlaybackControllerTest::selectionLoopReturnsToStartAndPausePreservesSelecti
 
         controller.adjustSelection(100, 250);
         QVERIFY(controller.selectionLoopEnabled());
+        controller.setSpeedRatio(1.5);
+        QCOMPARE(controller.speedRatio(), 1.5);
         controller.seek(100);
         controller.play();
         QTRY_COMPARE(controller.state(), PlaybackController::Playing);
         QTest::qWait(400);
         QTRY_VERIFY(controller.positionMs() >= 100 && controller.positionMs() < 250);
+        QCOMPARE(controller.speedRatio(), 1.5);
 
         controller.pause();
         QTRY_COMPARE(controller.state(), PlaybackController::Paused);
@@ -697,12 +863,21 @@ void PlaybackControllerTest::editorOutputRestoresExactScopedPlaybackSession()
         controller.setMode(PlaybackController::RepeatAll);
         controller.seek(750);
         controller.pause();
+        controller.setSpeedRatio(1.25);
+        controller.setKeepPitch(false);
         QTRY_COMPARE(controller.state(), PlaybackController::Paused);
         QTRY_VERIFY(qAbs(controller.positionMs() - 750) <= 2);
         const QStringList expectedQueue = controller.queueTrackIds();
         const QString expectedTrack = controller.currentTrackId();
 
         QVERIFY(controller.acquireEditorOutput());
+        ag_playback_time_pitch_config editorConfig{};
+        QCOMPARE(ag_player_get_time_pitch(core, &editorConfig), AG_OK);
+        QCOMPARE(editorConfig.speed_ratio, 1.0);
+        QVERIFY(!editorConfig.keep_pitch);
+        controller.setSpeedRatio(0.75);
+        QCOMPARE(ag_player_get_time_pitch(core, &editorConfig), AG_OK);
+        QCOMPARE(editorConfig.speed_ratio, 1.0);
         const auto analysis = agplayer::editor::AudioFileAnalyzer::analyze(
             std::filesystem::path(fixture.toStdWString()), 64U);
         QVERIFY(analysis.success);
@@ -725,6 +900,113 @@ void PlaybackControllerTest::editorOutputRestoresExactScopedPlaybackSession()
         QTRY_COMPARE(controller.state(), PlaybackController::Paused);
         QTRY_VERIFY(qAbs(controller.positionMs() - 750) <= 2);
         QCOMPARE(controller.trackCount(), qint64{5});
+        QCOMPARE(controller.speedRatio(), 1.25);
+        QVERIFY(!controller.keepPitch());
+        ag_playback_time_pitch_config restoredConfig{};
+        QCOMPARE(ag_player_get_time_pitch(core, &restoredConfig), AG_OK);
+        QCOMPARE(restoredConfig.speed_ratio, 1.25);
+        QVERIFY(!restoredConfig.keep_pitch);
+    }
+    ag_player_destroy(core);
+}
+
+void PlaybackControllerTest::editorOutputLeaseFailuresAreRetryable()
+{
+    const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(!fixture.isEmpty());
+    LibraryModel model;
+    TrackRecord track;
+    track.trackId = QStringLiteral("editor-retry");
+    track.path = fixture;
+    track.available = true;
+    QVERIFY(model.append(track));
+
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2'048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core, &model);
+        controller.playRow(0);
+        controller.seek(500);
+        controller.pause();
+        controller.setSpeedRatio(1.25);
+        controller.setKeepPitch(false);
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        QTRY_VERIFY(qAbs(controller.positionMs() - 500) <= 2);
+
+        controller.editorOutputFailureStepForTesting_ =
+            PlaybackController::EditorOutputStep::AcquireStop;
+        QVERIFY(!controller.acquireEditorOutput());
+        QVERIFY(!controller.editorOutputOwned_);
+        QVERIFY(!controller.editorSessionSnapshot_.has_value());
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        QTRY_VERIFY(qAbs(controller.positionMs() - 500) <= 2);
+
+        controller.editorOutputFailureStepForTesting_ =
+            PlaybackController::EditorOutputStep::AcquireStopAfterCall;
+        QVERIFY(!controller.acquireEditorOutput());
+        QVERIFY(!controller.editorOutputOwned_);
+        QVERIFY(!controller.editorSessionSnapshot_.has_value());
+        ag_playback_snapshot coreSnapshot{};
+        QCOMPARE(ag_player_snapshot(core, &coreSnapshot), AG_OK);
+        QCOMPARE(coreSnapshot.state, AG_PAUSED);
+        QVERIFY(qAbs(coreSnapshot.position_ms - 500) <= 2);
+
+        controller.editorOutputFailureStepForTesting_ =
+            PlaybackController::EditorOutputStep::AcquireStopAfterCall;
+        controller.editorOutputSecondFailureStepForTesting_ =
+            PlaybackController::EditorOutputStep::RestoreQueue;
+        QVERIFY(!controller.acquireEditorOutput());
+        QVERIFY(controller.editorOutputOwned_);
+        QVERIFY(controller.editorSessionSnapshot_.has_value());
+        QCOMPARE(ag_player_snapshot(core, &coreSnapshot), AG_OK);
+        QVERIFY(coreSnapshot.state != AG_PLAYING);
+        controller.releaseEditorOutput();
+        QVERIFY(!controller.editorOutputOwned_);
+        QVERIFY(!controller.editorSessionSnapshot_.has_value());
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        QTRY_VERIFY(qAbs(controller.positionMs() - 500) <= 2);
+
+        controller.editorOutputFailureStepForTesting_ =
+            PlaybackController::EditorOutputStep::AcquireTimePitch;
+        QVERIFY(!controller.acquireEditorOutput());
+        QVERIFY(!controller.editorOutputOwned_);
+        QVERIFY(!controller.editorSessionSnapshot_.has_value());
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        QTRY_VERIFY(qAbs(controller.positionMs() - 500) <= 2);
+        QCOMPARE(controller.speedRatio(), 1.25);
+        QVERIFY(!controller.keepPitch());
+
+        for (const PlaybackController::EditorOutputStep step : {
+                 PlaybackController::EditorOutputStep::RestoreStop,
+                 PlaybackController::EditorOutputStep::RestoreQueue,
+                 PlaybackController::EditorOutputStep::RestoreMode,
+                 PlaybackController::EditorOutputStep::RestoreTimePitch,
+                 PlaybackController::EditorOutputStep::RestoreSeek,
+                 PlaybackController::EditorOutputStep::RestorePlay,
+                 PlaybackController::EditorOutputStep::RestorePause}) {
+            QVERIFY(controller.acquireEditorOutput());
+            controller.editorOutputFailureStepForTesting_ = step;
+            controller.releaseEditorOutput();
+            QVERIFY(controller.editorOutputOwned_);
+            QVERIFY(controller.editorSessionSnapshot_.has_value());
+            QCOMPARE(ag_player_snapshot(core, &coreSnapshot), AG_OK);
+            QVERIFY(coreSnapshot.state != AG_PLAYING);
+            const std::int64_t failedPosition = coreSnapshot.position_ms;
+            QTest::qWait(50);
+            QCOMPARE(ag_player_snapshot(core, &coreSnapshot), AG_OK);
+            QVERIFY(coreSnapshot.state != AG_PLAYING);
+            QCOMPARE(coreSnapshot.position_ms, failedPosition);
+
+            controller.releaseEditorOutput();
+            QVERIFY(!controller.editorOutputOwned_);
+            QVERIFY(!controller.editorSessionSnapshot_.has_value());
+            QTRY_COMPARE(controller.currentTrackId(), track.trackId);
+            QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+            QTRY_VERIFY(qAbs(controller.positionMs() - 500) <= 2);
+            QCOMPARE(controller.speedRatio(), 1.25);
+            QVERIFY(!controller.keepPitch());
+        }
     }
     ag_player_destroy(core);
 }
@@ -738,7 +1020,12 @@ void PlaybackControllerTest::freshCoreCanBeAcquiredForEditorOutput()
         PlaybackController controller(core);
         QVERIFY(controller.acquireEditorOutput());
         QVERIFY(controller.acquireEditorOutput());
+        controller.editorOutputFailureStepForTesting_ =
+            PlaybackController::EditorOutputStep::RestoreStop;
         controller.releaseEditorOutput();
+        QVERIFY(controller.editorOutputOwned_);
+        controller.releaseEditorOutput();
+        QVERIFY(!controller.editorOutputOwned_);
         QVERIFY(controller.acquireEditorOutput());
         controller.releaseEditorOutput();
     }
@@ -794,6 +1081,63 @@ void PlaybackControllerTest::nullCoreReportsStableErrors()
     controller.cycleMode();
     QCOMPARE(controller.errorMessage(), QStringLiteral("Playback core is unavailable"));
     QCOMPARE(errorChanged.count(), 1);
+}
+
+void PlaybackControllerTest::scratchBridgePublishesPausedStatusAndValidatesCommands()
+{
+    const QByteArray path = qgetenv("AGPLAYER_TEST_WAV");
+    QVERIFY(!path.isEmpty());
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2'048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core);
+        QCOMPARE(ag_player_load(core, path.constData()), AG_OK);
+        controller.play();
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+        controller.pause();
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+
+        QSignalSpy statusChanged(
+            &controller, &PlaybackController::scratchStatusChanged);
+        QVERIFY(controller.beginScratch());
+        QTRY_VERIFY(controller.scratchActive());
+        QCOMPARE(controller.state(), PlaybackController::Paused);
+        QCOMPARE(controller.pollTimer_.interval(),
+                 PlaybackController::PollIntervalMs);
+        QVERIFY(statusChanged.count() > 0);
+
+        QVERIFY(!controller.updateScratch(
+            std::numeric_limits<double>::quiet_NaN()));
+        QVERIFY(!controller.errorMessage().isEmpty());
+
+        // No status query is allowed on the high-frequency update path.  This
+        // impossible public-state combination is replaced only by polling.
+        controller.pollTimer_.stop();
+        controller.scratchReady_ = true;
+        controller.scratchBuffering_ = true;
+        QVERIFY(controller.updateScratch(1.0));
+        QVERIFY(controller.scratchReady());
+        QVERIFY(controller.scratchBuffering());
+        controller.pollSnapshot();
+        QVERIFY(!(controller.scratchReady()
+                  && controller.scratchBuffering()));
+        controller.pollTimer_.start();
+
+        QVERIFY(controller.cancelScratch());
+        QTRY_VERIFY(!controller.scratchActive());
+        QCOMPARE(controller.pollTimer_.interval(),
+                 PlaybackController::IdlePollIntervalMs);
+    }
+    ag_player_destroy(core);
+
+    PlaybackController unavailable;
+    QVERIFY(!unavailable.beginScratch());
+    QVERIFY(!unavailable.updateScratch(1.0));
+    QVERIFY(!unavailable.endScratch());
+    QVERIFY(!unavailable.cancelScratch());
+    QCOMPARE(unavailable.errorMessage(),
+             QStringLiteral("Playback core is unavailable"));
 }
 
 void PlaybackControllerTest::survivesLibraryModelDestruction()

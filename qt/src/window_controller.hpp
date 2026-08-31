@@ -151,11 +151,17 @@ private:
     void setListDockEdge(const QString& edge);
     QString snapEdgeForPosition(int x, int y) const;
     void loadPersistedWindowState();
+    void loadPersistedListWindowState();
+    void persistListWindowState();
     bool restoreGeometry(QWindow* window, const QString& key);
     void persistGeometry(QWindow* window, const QString& key);
     void scheduleWindowStateSync();
     void flushWindowState();
     QString mainWindowGeometryKey() const;
+    QString listWindowGeometryKey() const;
+    QString listWindowGeometryVersionKey() const;
+    QString listWindowRequestedVisibleKey() const;
+    QString listWindowDockEdgeKey() const;
     bool restoreMainWindowGeometry(QWindow* window,
                                    bool applyClassicDefault = false);
     static QString edgeForPreference(int edge);

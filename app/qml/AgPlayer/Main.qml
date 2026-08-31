@@ -10,8 +10,10 @@ ApplicationWindow {
     visible: true
     width: 960
     height: 298
-    minimumWidth: SettingsController.playerShellMode === 1 ? 1180 : 612
-    minimumHeight: SettingsController.playerShellMode === 1 ? 720 : 228
+    minimumWidth: SettingsController.playerShellMode === 1 ? 1180
+                  : SettingsController.playerShellMode === 2 ? 1000 : 612
+    minimumHeight: SettingsController.playerShellMode === 1 ? 720
+                   : SettingsController.playerShellMode === 2 ? 420 : 228
     onClosing: function(close) {
         close.accepted = false
         WindowController.requestClose()
@@ -41,9 +43,14 @@ ApplicationWindow {
     property int integratedSidePanelPage: 0
     property bool integratedSidePanelExpanded: true
     property bool immersiveRenderingEnabled: true
+    property int previousShellMode: SettingsController.playerShellMode
     property alias waveformSession: sharedWaveformSession
     readonly property bool integratedShell:
         SettingsController.playerShellMode === 1
+    readonly property bool rollingShell:
+        SettingsController.playerShellMode === 2
+    readonly property bool immersiveActuallyRendering:
+        immersiveRenderingEnabled && PlayerExperienceController.panelVisible
     readonly property bool integratedLyricsRequested:
         integratedShell && integratedSidePanelExpanded
         && integratedSidePanelPage === 1
@@ -103,6 +110,13 @@ ApplicationWindow {
         id: sharedWaveformSession
     }
 
+    // `active` is intentionally invokable-only. Keep one writer here so the
+    // rolling shell and immersive surface cannot race each other's teardown.
+    function synchronizeAudioVisualConsumer() {
+        AudioVisualFeatureController.setActive(
+                    rollingShell || immersiveActuallyRendering)
+    }
+
     Binding {
         target: LyricsService
         property: "enabled"
@@ -110,7 +124,31 @@ ApplicationWindow {
                || mainWindow.integratedLyricsRequested
     }
 
+    Connections {
+        target: SettingsController
+        function onPlayerShellModeChanged() {
+            var nextMode = SettingsController.playerShellMode
+            if (mainWindow.previousShellMode === 2 && nextMode !== 2
+                    && mainWindow.playback) {
+                if (mainWindow.playback.cancelScratch !== undefined)
+                    mainWindow.playback.cancelScratch()
+                if (mainWindow.playback.resetTempo !== undefined)
+                    mainWindow.playback.resetTempo()
+            }
+            mainWindow.previousShellMode = nextMode
+            mainWindow.synchronizeAudioVisualConsumer()
+        }
+    }
+
+    Connections {
+        target: PlayerExperienceController
+        function onPanelVisibleChanged() {
+            mainWindow.synchronizeAudioVisualConsumer()
+        }
+    }
+
     Component.onCompleted: {
+        synchronizeAudioVisualConsumer()
         if (qaImmersive) {
             PlayerExperienceController.hostMode =
                     qaImmersiveFullscreen
@@ -195,8 +233,9 @@ ApplicationWindow {
         objectName: "playerShellLoader"
         anchors.fill: parent
         visible: true
-        sourceComponent: mainWindow.integratedShell
-                         ? integratedShellComponent : classicShellComponent
+        sourceComponent: mainWindow.rollingShell ? rollingShellComponent
+                         : mainWindow.integratedShell
+                           ? integratedShellComponent : classicShellComponent
         onLoaded: {
             if (item && item.tagSearchText !== undefined)
                 item.tagSearchText = mainWindow.tagSearchText
@@ -250,6 +289,7 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     Layout.preferredHeight: LibraryModel.count === 0 ? 72 : 64
                     emptyMode: LibraryModel.count === 0
+                    shellMode: 0
                     onOpenEqualizerRequested: mainWindow.openEqualizer()
                 }
             }
@@ -261,7 +301,14 @@ ApplicationWindow {
         PlayerControls {
             objectName: "playerControls"
             emptyMode: LibraryModel.count === 0
-            showListWindowButton: false
+            shellMode: 1
+            showListWindowButton: true
+            onToggleEmbeddedPlaylistRequested: {
+                if (shellLoader.item
+                        && shellLoader.item.listPanelExpanded !== undefined)
+                    shellLoader.item.listPanelExpanded =
+                            !shellLoader.item.listPanelExpanded
+            }
             onOpenEqualizerRequested: mainWindow.openEqualizer()
         }
     }
@@ -285,6 +332,17 @@ ApplicationWindow {
             onSidePanelExpandedChanged: {
                 mainWindow.integratedSidePanelExpanded = sidePanelExpanded
             }
+        }
+    }
+
+    Component {
+        id: rollingShellComponent
+        RollingPlayerShell {
+            hostWindow: mainWindow
+            playback: mainWindow.playback
+            waveformSession: sharedWaveformSession
+            onOpenSettingsRequested: mainWindow.openSettingsPage()
+            onOpenEqualizerRequested: mainWindow.openEqualizer()
         }
     }
 
