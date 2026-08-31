@@ -2376,6 +2376,8 @@ TestCase {
                 SettingsController.waveformSolidBaseColor)
         compare(waveform.progressColor.toString(),
                 SettingsController.waveformSolidProgressColor)
+        SettingsController.waveformPlaybackGuide = true
+        tryCompare(playbackGuide, "visible", true)
 
         SettingsController.waveformMode = 3
         tryVerify(function() {
@@ -2415,9 +2417,8 @@ TestCase {
         compare(waveform.frequencyDarkSurface, !Theme.isLight)
         compare(playedClip.visible, false,
                 "frequency overlays must not be drawn twice in the played region")
-        SettingsController.waveformPlaybackGuide = false
         compare(playbackGuide.visible, false,
-                "native focus must not force the legacy QML guide visible")
+                "frequency mode must hide the legacy QML guide even when enabled")
         session.frequencyReady = false
         tryCompare(waveform, "frequencyBandFade", 0, 350)
         session.frequencyReady = true
@@ -2432,6 +2433,7 @@ TestCase {
         })
         compare(waveform.visualMode, 1)
         compare(playedClip.visible, true)
+        tryCompare(playbackGuide, "visible", true)
 
         PlaybackController.play()
         SettingsController.waveformMode = 2

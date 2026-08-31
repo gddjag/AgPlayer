@@ -181,15 +181,19 @@ TestCase {
                 Theme.isLight ? "#26313a" : "#f2e7d4")
         compare(clip.visible, false,
                 "frequency overlays must not be drawn twice in the played region")
-        SettingsController.waveformPlaybackGuide = false
-        compare(guide.visible, false)
+        SettingsController.waveformPlaybackGuide = true
+        compare(guide.visible, false,
+                "frequency mode must hide the legacy QML guide even when enabled")
         session.frequencyReady = false
         tryCompare(waveform, "frequencyBandFade", 0, 350)
         session.frequencyReady = true
         tryCompare(waveform, "frequencyBandFade", 1, 350)
 
+        SettingsController.waveformMode = 1
+        tryCompare(guide, "visible", true)
         SettingsController.waveformMode = 0
         tryCompare(clip, "visible", true)
+        tryCompare(guide, "visible", true)
         SettingsController.waveformMode = previousMode
         SettingsController.waveformPlaybackGuide = previousGuide
         session.frequencyReady = false
