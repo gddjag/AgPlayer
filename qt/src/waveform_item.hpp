@@ -5,26 +5,9 @@
 #include <QQuickItem>
 #include <QVariantList>
 
-#include <array>
-#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <vector>
-
-struct FrequencyFramePressure final {
-    int slow_frames = 0;
-    int stable_frames = 0;
-    int quality_penalty = 0;
-
-    void record(std::chrono::milliseconds interval) noexcept;
-
-private:
-    std::array<unsigned char, 60> slow_window_{};
-    int window_samples_ = 0;
-    int window_cursor_ = 0;
-
-    void resetWindow() noexcept;
-};
 
 class WaveformItem : public QQuickItem {
     Q_OBJECT
@@ -168,8 +151,6 @@ public:
     QColor frequencyFocusColor() const;
     void setFrequencyFocusColor(const QColor& color);
     int effectiveFrequencyQuality() const noexcept;
-    std::uint64_t frequencyGeometryRevision() const noexcept;
-    std::uint64_t frequencyMaterialRevision() const noexcept;
     bool rgbProgress() const noexcept;
     void setRgbProgress(bool value);
     qreal amplitudeScale() const noexcept;
@@ -278,8 +259,6 @@ private:
     void normalizeLayerInput(QVariantList& normalized,
                              const QVariantList& input,
                              std::shared_ptr<LayerSnapshot>& snapshot);
-    void recordFrequencyFrameInterval();
-    void updateEffectiveFrequencyQuality();
 
     QVariantList peaks_;
     QVariantMap layers_;
@@ -310,12 +289,7 @@ private:
     double frequencyBandFade_ = 1.0;
     bool frequencyPlayFocus_ = true;
     QColor frequencyFocusColor_ = QColor(QStringLiteral("#f2e7d4"));
-    int baseFrequencyQuality_ = 0;
     int effectiveFrequencyQuality_ = 0;
-    FrequencyFramePressure frequencyFramePressure_;
-    QElapsedTimer frequencyFrameTimer_;
-    std::uint64_t frequencyGeometryRevision_ = 0;
-    std::uint64_t frequencyMaterialRevision_ = 0;
     bool rgbProgress_ = true;
     qreal amplitudeScale_ = 1.0;
     qint64 hoverPosition_ = -1;
