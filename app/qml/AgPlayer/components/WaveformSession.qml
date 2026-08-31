@@ -8,6 +8,8 @@ QtObject {
     property var layers: ({})
     property real durationMs: 0
     property real generation: 0
+    property bool active: true
+    property bool frequencyReady: false
     property int libraryRevision: 0
     readonly property string trackId:
         String(PlaybackController.currentTrackId || "")
@@ -66,11 +68,18 @@ QtObject {
                                LibraryModel.PathRole))
         layers = ({})
         durationMs = 0
+        frequencyReady = false
         publishVisualTiming()
+        if (!active) {
+            if (path && path.length > 0)
+                WaveformProvider.cancelFrequencyForTrack(path)
+            return
+        }
         if (!path || path.length === 0)
             return
         generation = WaveformProvider.loadForTrack(
-                    PlaybackController.currentTrackId, path)
+                    PlaybackController.currentTrackId, path,
+                    SettingsController.waveformMode === 3 && active)
         WaveformProvider.prefetchTracks(neighbors)
     }
 
@@ -89,6 +98,9 @@ QtObject {
 
     property Connections waveformConnection: Connections {
         target: WaveformProvider
+        function onActiveGenerationChanged() {
+            root.frequencyReady = false
+        }
         function onWaveformReady(path, resultLayers) {
             var responseTrack = String(resultLayers._trackId || "")
             var responseGeneration = Number(resultLayers._generation || 0)
@@ -96,8 +108,10 @@ QtObject {
                     || responseTrack === String(PlaybackController.currentTrackId)
             var sameGeneration = responseGeneration === 0
                     || responseGeneration === Number(WaveformProvider.activeGeneration)
-            if (sameTrack && sameGeneration && path === root.currentPath()) {
+            if (root.active && sameTrack && sameGeneration
+                    && path === root.currentPath()) {
                 root.layers = resultLayers
+                root.frequencyReady = Boolean(resultLayers._frequencyReady)
                 root.durationMs = Math.max(
                             0, Number(resultLayers._durationMs) || 0)
                 root.publishVisualTiming()
@@ -108,5 +122,17 @@ QtObject {
     property Connections settingsConnection: Connections {
         target: SettingsController
         function onWaveformPeakAlgorithmChanged() { root.loadWaveform() }
+        function onWaveformModeChanged() { root.loadWaveform() }
+    }
+
+    onActiveChanged: {
+        if (active) {
+            loadWaveform()
+        } else {
+            var path = currentPath()
+            if (path && path.length > 0)
+                WaveformProvider.cancelFrequencyForTrack(path)
+            frequencyReady = false
+        }
     }
 }

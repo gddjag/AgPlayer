@@ -1,9 +1,12 @@
 #include "waveform_provider.hpp"
 #include "runtime_log.hpp"
 #include "settings_controller.hpp"
+#include "frequency_color_waveform_analyzer.hpp"
+#include "frequency_color_waveform_cache.hpp"
 #include "waveform_cache.hpp"
 
 #include <QDir>
+#include <QDateTime>
 #include <QTimer>
 #include <QtConcurrent/QtConcurrentRun>
 
@@ -13,7 +16,49 @@
 #include <string>
 #include <vector>
 
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 namespace {
+
+struct ProviderCounters final {
+    std::atomic<std::uint64_t> frequencyCacheLoads{0U};
+    std::atomic<std::uint64_t> frequencyJobsStarted{0U};
+    std::atomic<std::uint64_t> mixJobsStarted{0U};
+    std::atomic<std::uint64_t> activeFrequencyJobs{0U};
+    std::atomic<std::uint64_t> maxFrequencyJobs{0U};
+    std::atomic<std::uint64_t> frequencyProgressCallbacks{0U};
+    std::atomic<std::uint64_t> powerQueries{0U};
+};
+
+ProviderCounters providerCounters;
+
+void noteFrequencyJobStarted() noexcept
+{
+    providerCounters.frequencyJobsStarted.fetch_add(1U, std::memory_order_relaxed);
+    const std::uint64_t active = providerCounters.activeFrequencyJobs.fetch_add(
+        1U, std::memory_order_relaxed) + 1U;
+    std::uint64_t maximum = providerCounters.maxFrequencyJobs.load(
+        std::memory_order_relaxed);
+    while (maximum < active
+           && !providerCounters.maxFrequencyJobs.compare_exchange_weak(
+               maximum, active, std::memory_order_relaxed)) {
+    }
+}
+
+class FrequencyJobCounter final {
+public:
+    FrequencyJobCounter() noexcept { noteFrequencyJobStarted(); }
+    ~FrequencyJobCounter()
+    {
+        providerCounters.activeFrequencyJobs.fetch_sub(
+            1U, std::memory_order_relaxed);
+    }
+};
 
 std::filesystem::path filesystemPath(const QString& path)
 {
@@ -68,6 +113,29 @@ QString cacheFilePathFor(SettingsController* settings,
                : QString();
 }
 
+QString frequencyCacheFilePathForDirectory(const QString& directory,
+                                           const QString& sourcePath)
+{
+    if (directory.isEmpty() || sourcePath.isEmpty() || !QDir().mkpath(directory)) {
+        return {};
+    }
+    const std::string key =
+        agplayer::WaveformCache::key_for(filesystemPath(sourcePath));
+    return key.empty()
+        ? QString()
+        : QDir(directory).filePath(QString::fromStdString(key)
+                                   + QStringLiteral(".fcw1"));
+}
+
+QString frequencyCacheFilePathFor(SettingsController* settings,
+                                  const QString& sourcePath)
+{
+    return settings == nullptr
+        ? QString()
+        : frequencyCacheFilePathForDirectory(settings->cacheDirectory(),
+                                             sourcePath);
+}
+
 QVariantList peaksFromVector(const std::vector<float>& peaks)
 {
     QVariantList result;
@@ -106,6 +174,59 @@ QVariantMap layersFromWaveform(const ag_waveform* waveform)
     return layers;
 }
 
+QVariantMap layersFromCache(const agplayer::WaveformCacheData& data,
+                            const bool includeLegacyBands)
+{
+    QVariantMap layers;
+    layers[QStringLiteral("mix")] = peaksFromVector(data.mix);
+    layers[QStringLiteral("bass")] = includeLegacyBands
+        ? peaksFromVector(data.bass) : QVariantList{};
+    layers[QStringLiteral("mid")] = includeLegacyBands
+        ? peaksFromVector(data.mid) : QVariantList{};
+    layers[QStringLiteral("high")] = includeLegacyBands
+        ? peaksFromVector(data.high) : QVariantList{};
+    layers[QStringLiteral("_durationMs")] =
+        static_cast<qlonglong>(data.duration_ms);
+    layers[QStringLiteral("_bpm")] = data.bpm;
+    return layers;
+}
+
+QVariantList peaksFromBytes(const std::vector<std::uint8_t>& peaks)
+{
+    QVariantList result;
+    result.reserve(static_cast<int>(peaks.size()));
+    for (const std::uint8_t value : peaks) {
+        result.append(static_cast<double>(value) * 0.98 / 255.0);
+    }
+    return result;
+}
+
+void addFrequencyLayers(QVariantMap& layers,
+                        const std::vector<std::uint8_t>& low,
+                        const std::vector<std::uint8_t>& mid,
+                        const std::vector<std::uint8_t>& high)
+{
+    layers[QStringLiteral("bass")] = peaksFromBytes(low);
+    layers[QStringLiteral("mid")] = peaksFromBytes(mid);
+    layers[QStringLiteral("high")] = peaksFromBytes(high);
+    layers[QStringLiteral("_frequencyRequested")] = true;
+    layers[QStringLiteral("_frequencyReady")] = true;
+    layers[QStringLiteral("_frequencyCacheVersion")] = 1;
+}
+
+void addRequestMetadata(QVariantMap& layers,
+                        const QString& trackId,
+                        const quint64 generation,
+                        const bool frequencyRequested,
+                        const bool frequencyReady)
+{
+    layers[QStringLiteral("_trackId")] = trackId;
+    layers[QStringLiteral("_generation")] = generation;
+    layers[QStringLiteral("_frequencyRequested")] = frequencyRequested;
+    layers[QStringLiteral("_frequencyReady")] = frequencyReady;
+    layers[QStringLiteral("_frequencyCacheVersion")] = frequencyReady ? 1 : 0;
+}
+
 void addTimelineMetadata(QVariantMap& layers,
                          std::uint64_t totalSamples,
                          int sampleRate)
@@ -122,7 +243,8 @@ void addTimelineMetadata(QVariantMap& layers,
 
 bool saveWaveformCache(const QString& cachePath,
                        const QString& sourcePath,
-                       const ag_waveform* waveform)
+                       const ag_waveform* waveform,
+                       const bool mixOnly = false)
 {
     if (waveform == nullptr || cachePath.isEmpty() || sourcePath.isEmpty()) {
         return false;
@@ -133,15 +255,21 @@ bool saveWaveformCache(const QString& cachePath,
     for (std::size_t index = 0; index < count; ++index) {
         data.mix[index] = ag_waveform_peak(waveform, index);
     }
-    data.bass.resize(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_BASS));
+    data.bass.resize(mixOnly ? 0U
+                             : ag_waveform_layer_count(
+                                   waveform, AG_WAVEFORM_LAYER_BASS));
     for (std::size_t index = 0; index < data.bass.size(); ++index) {
         data.bass[index] = ag_waveform_layer_peak(waveform, AG_WAVEFORM_LAYER_BASS, index);
     }
-    data.mid.resize(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_MID));
+    data.mid.resize(mixOnly ? 0U
+                            : ag_waveform_layer_count(
+                                  waveform, AG_WAVEFORM_LAYER_MID));
     for (std::size_t index = 0; index < data.mid.size(); ++index) {
         data.mid[index] = ag_waveform_layer_peak(waveform, AG_WAVEFORM_LAYER_MID, index);
     }
-    data.high.resize(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_HIGH));
+    data.high.resize(mixOnly ? 0U
+                             : ag_waveform_layer_count(
+                                   waveform, AG_WAVEFORM_LAYER_HIGH));
     for (std::size_t index = 0; index < data.high.size(); ++index) {
         data.high[index] = ag_waveform_layer_peak(waveform, AG_WAVEFORM_LAYER_HIGH, index);
     }
@@ -160,25 +288,90 @@ bool saveWaveformCache(const QString& cachePath,
     return true;
 }
 
+agplayer::FrequencyColorCacheData frequencyCacheFromWaveform(
+    const ag_waveform* waveform)
+{
+    agplayer::FrequencyColorCacheData data;
+    if (waveform == nullptr) return data;
+    const auto quantizedLayer = [waveform](const ag_waveform_layer layer) {
+        const std::size_t count = ag_waveform_layer_count(waveform, layer);
+        std::vector<std::uint8_t> result(count);
+        for (std::size_t index = 0; index < count; ++index) {
+            result[index] = agplayer::quantize_frequency_color_peak(
+                ag_waveform_layer_peak(waveform, layer, index));
+        }
+        return result;
+    };
+    data.low = quantizedLayer(AG_WAVEFORM_LAYER_BASS);
+    data.mid = quantizedLayer(AG_WAVEFORM_LAYER_MID);
+    data.high = quantizedLayer(AG_WAVEFORM_LAYER_HIGH);
+    data.point_count = static_cast<std::uint32_t>(data.low.size());
+    data.sample_rate = static_cast<std::uint32_t>(
+        std::max(0, ag_waveform_sample_rate(waveform)));
+    data.timeline_frames = ag_waveform_total_samples(waveform);
+    data.algorithm_version =
+        agplayer::FrequencyColorWaveformAnalyzer::kAlgorithmVersion;
+    return data;
+}
+
 } // namespace
+
+namespace agplayer::testing {
+
+void reset_waveform_provider_counters() noexcept
+{
+    providerCounters.frequencyCacheLoads.store(0U, std::memory_order_relaxed);
+    providerCounters.frequencyJobsStarted.store(0U, std::memory_order_relaxed);
+    providerCounters.mixJobsStarted.store(0U, std::memory_order_relaxed);
+    providerCounters.maxFrequencyJobs.store(0U, std::memory_order_relaxed);
+    providerCounters.frequencyProgressCallbacks.store(0U,
+                                                       std::memory_order_relaxed);
+    providerCounters.powerQueries.store(0U, std::memory_order_relaxed);
+}
+
+std::uint64_t waveform_provider_frequency_cache_loads() noexcept
+{
+    return providerCounters.frequencyCacheLoads.load(std::memory_order_relaxed);
+}
+
+std::uint64_t waveform_provider_frequency_jobs_started() noexcept
+{
+    return providerCounters.frequencyJobsStarted.load(std::memory_order_relaxed);
+}
+
+std::uint64_t waveform_provider_mix_jobs_started() noexcept
+{
+    return providerCounters.mixJobsStarted.load(std::memory_order_relaxed);
+}
+
+std::uint64_t waveform_provider_max_frequency_jobs() noexcept
+{
+    return providerCounters.maxFrequencyJobs.load(std::memory_order_relaxed);
+}
+
+std::uint64_t waveform_provider_frequency_progress_callbacks() noexcept
+{
+    return providerCounters.frequencyProgressCallbacks.load(
+        std::memory_order_relaxed);
+}
+
+std::uint64_t waveform_provider_power_queries() noexcept
+{
+    return providerCounters.powerQueries.load(std::memory_order_relaxed);
+}
+
+} // namespace agplayer::testing
 
 WaveformProvider::WaveformProvider(SettingsController* settings, QObject* parent)
     : QObject(parent)
     , settings_(settings)
 {
     currentAnalysisPool_.setMaxThreadCount(1);
-    currentAnalysisPool_.setThreadPriority(QThread::HighPriority);
-    prefetchPool_.setMaxThreadCount(1);
-    prefetchPool_.setThreadPriority(QThread::LowPriority);
+    currentAnalysisPool_.setThreadPriority(QThread::LowestPriority);
     progressTimer_ = new QTimer(this);
     progressTimer_->setInterval(100);
-    connect(progressTimer_, &QTimer::timeout, this, [this] {
-        if (activeProgress_ == nullptr) {
-            return;
-        }
-        setAnalysisProgress(
-            activeProgress_->load(std::memory_order_relaxed));
-    });
+    connect(progressTimer_, &QTimer::timeout,
+            this, &WaveformProvider::onProgressTimer);
 }
 
 WaveformProvider::AnalysisResources::~AnalysisResources()
@@ -192,15 +385,23 @@ void WaveformProvider::AnalysisResources::cancel() const
     if (cancelToken != nullptr) ag_cancel_token_cancel(cancelToken);
 }
 
+void WaveformProvider::AnalysisResources::setPaused(const bool paused) const
+{
+    if (cancelToken != nullptr) {
+        ag_cancel_token_set_paused(cancelToken, paused ? 1 : 0);
+    }
+}
+
 WaveformProvider::~WaveformProvider()
 {
     if (activeResources_ != nullptr) activeResources_->cancel();
-    activeResources_.reset();
+    currentAnalysisPool_.waitForDone();
     if (watcher_ != nullptr) {
         watcher_->disconnect(this);
         delete watcher_;
         watcher_ = nullptr;
     }
+    activeResources_.reset();
     activeProgress_.reset();
 }
 
@@ -225,19 +426,78 @@ void WaveformProvider::setAnalysisProgress(double progress)
     emit analysisProgressChanged();
 }
 
+void WaveformProvider::onProgressTimer()
+{
+    if (activeProgress_ != nullptr) {
+        setAnalysisProgress(activeProgress_->load(std::memory_order_relaxed));
+    }
+    if (watcher_ != nullptr && activeJobKind_ == JobKind::FrequencyColor) {
+        updateFrequencyPause(true);
+    }
+}
+
+void WaveformProvider::updateFrequencyPause(const bool queryPowerState)
+{
+    if (activeResources_ == nullptr
+        || activeJobKind_ != JobKind::FrequencyColor) {
+        return;
+    }
+    if (queryPowerState) {
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        if (lastPowerQueryMs_ == 0 || now - lastPowerQueryMs_ >= 5'000) {
+            lastPowerQueryMs_ = now;
+#ifdef Q_OS_WIN
+            SYSTEM_POWER_STATUS status{};
+            providerCounters.powerQueries.fetch_add(
+                1U, std::memory_order_relaxed);
+            if (GetSystemPowerStatus(&status) != FALSE) {
+                energySaverActive_ = status.SystemStatusFlag != 0;
+            }
+#else
+            energySaverActive_ = false;
+#endif
+        }
+    }
+    activeResources_->setPaused(audioResourcePressure_ || energySaverActive_);
+}
+
+void WaveformProvider::setAudioResourcePressure(const bool pressured)
+{
+    if (audioResourcePressure_ == pressured) return;
+    audioResourcePressure_ = pressured;
+    updateFrequencyPause(false);
+}
+
+void WaveformProvider::cancelActiveJob()
+{
+    if (activeResources_ != nullptr) activeResources_->cancel();
+    if (watcher_ != nullptr) {
+        watcher_->disconnect(this);
+        delete watcher_;
+        watcher_ = nullptr;
+    }
+    activeResources_.reset();
+    activeProgress_.reset();
+    progressTimer_->stop();
+    energySaverActive_ = false;
+    lastPowerQueryMs_ = 0;
+}
+
 void WaveformProvider::loadForTrack(const QString& path)
 {
     loadForTrack(path, path);
 }
 
 qulonglong WaveformProvider::loadForTrack(const QString& trackId,
-                                          const QString& path)
+                                          const QString& path,
+                                          const bool frequencyColor)
 {
     const ag_waveform_aggregation requestedAggregation =
         aggregationForSettings(settings_);
     if (!path.isEmpty() && path == currentPath_
         && trackId == currentTrackId_
-        && requestedAggregation == currentAggregation_) {
+        && requestedAggregation == currentAggregation_
+        && frequencyColor == currentFrequencyRequested_) {
         if (watcher_ != nullptr) {
             return activeGeneration_;
         }
@@ -248,25 +508,16 @@ qulonglong WaveformProvider::loadForTrack(const QString& trackId,
         }
     }
 
-    // Cancel and discard any running analysis. The background task keeps its
-    // own copy of the cancel token, so we only cancel here and let it destroy
-    // the token when it finishes.
-    if (watcher_ != nullptr) {
-        if (activeResources_ != nullptr) activeResources_->cancel();
-        activeResources_.reset();
-        watcher_->disconnect(this);
-        delete watcher_;
-        watcher_ = nullptr;
-    }
-    activeProgress_.reset();
-    progressTimer_->stop();
+    cancelActiveJob();
 
     currentPath_ = path;
     currentTrackId_ = trackId;
     currentLayers_.clear();
+    currentMixLayers_.clear();
     ++activeGeneration_;
     emit activeGenerationChanged();
     currentAggregation_ = requestedAggregation;
+    currentFrequencyRequested_ = frequencyColor;
     setAnalysisProgress(path.isEmpty() ? 1.0 : 0.0);
 
     if (path.isEmpty()) {
@@ -274,7 +525,7 @@ qulonglong WaveformProvider::loadForTrack(const QString& trackId,
         return activeGeneration_;
     }
 
-    // Try cache first: v2 multi-layer format, then v1 legacy format.
+    bool mixCacheHit = false;
     const QString cachePath =
         cacheFilePathFor(settings_, path, currentAggregation_);
     if (!cachePath.isEmpty()) {
@@ -282,38 +533,92 @@ qulonglong WaveformProvider::loadForTrack(const QString& trackId,
         const std::filesystem::path cache = filesystemPath(cachePath);
         agplayer::WaveformCacheData data;
         if (agplayer::WaveformCache::load_v2(cache, source, data)) {
-            QVariantMap layers;
-            layers[QStringLiteral("mix")] = peaksFromVector(data.mix);
-            layers[QStringLiteral("bass")] = peaksFromVector(data.bass);
-            layers[QStringLiteral("mid")] = peaksFromVector(data.mid);
-            layers[QStringLiteral("high")] = peaksFromVector(data.high);
-            layers[QStringLiteral("_trackId")] = currentTrackId_;
-            layers[QStringLiteral("_generation")] = activeGeneration_;
-            layers[QStringLiteral("_cacheVersion")] = 2;
             if (data.duration_ms > 0U && data.total_samples > 0U
-                && data.sample_rate > 0U) {
-                layers[QStringLiteral("_durationMs")] =
-                    static_cast<qlonglong>(data.duration_ms);
+                && data.sample_rate > 0U && !data.mix.empty()) {
+                QVariantMap layers = layersFromCache(data, !frequencyColor);
                 addTimelineMetadata(layers, data.total_samples,
                                     static_cast<int>(data.sample_rate));
+                layers[QStringLiteral("_cacheVersion")] = 2;
+                addRequestMetadata(layers, currentTrackId_, activeGeneration_,
+                                   frequencyColor, false);
+                currentMixLayers_ = layers;
                 currentLayers_ = layers;
-                setAnalysisProgress(1.0);
+                mixCacheHit = true;
                 emit waveformReady(path, layers);
-                return activeGeneration_;
+                if (!frequencyColor) {
+                    setAnalysisProgress(1.0);
+                    return activeGeneration_;
+                }
             }
         }
-        // Legacy caches do not carry a decoded duration. Rebuild once so
-        // drawing, progress and seek share the same exact timeline.
     }
 
-    // Start background analysis.
+    if (frequencyColor) {
+        agplayer::FrequencyColorCacheData frequency;
+        const QString frequencyPath = frequencyCacheFilePathFor(settings_, path);
+        bool frequencyHit = false;
+        if (!frequencyPath.isEmpty()) {
+            providerCounters.frequencyCacheLoads.fetch_add(
+                1U, std::memory_order_relaxed);
+            frequencyHit = agplayer::FrequencyColorWaveformCache::load(
+                filesystemPath(frequencyPath), filesystemPath(path),
+                agplayer::FrequencyColorWaveformAnalyzer::kAlgorithmVersion,
+                frequency);
+        }
+        if (frequencyHit && mixCacheHit) {
+            const int mixCount = currentMixLayers_
+                .value(QStringLiteral("mix")).toList().size();
+            frequencyHit = mixCount > 0
+                && static_cast<std::size_t>(mixCount) == frequency.low.size()
+                && frequency.low.size() == frequency.mid.size()
+                && frequency.mid.size() == frequency.high.size()
+                && frequency.sample_rate
+                    == currentMixLayers_.value(
+                        QStringLiteral("_sampleRate")).toUInt()
+                && frequency.timeline_frames
+                    == currentMixLayers_.value(
+                        QStringLiteral("_totalSamples")).toULongLong();
+        }
+        if (frequencyHit && mixCacheHit) {
+            QVariantMap complete = currentMixLayers_;
+            addFrequencyLayers(complete, frequency.low, frequency.mid,
+                               frequency.high);
+            currentLayers_ = complete;
+            setAnalysisProgress(1.0);
+            emit waveformReady(path, complete);
+            return activeGeneration_;
+        }
+        if (frequencyHit) {
+            startAnalysis(false, std::move(frequency.low),
+                          std::move(frequency.mid),
+                          std::move(frequency.high));
+        } else {
+            startAnalysis(true);
+        }
+        return activeGeneration_;
+    }
+
+    startAnalysis(false);
+    return activeGeneration_;
+}
+
+void WaveformProvider::startAnalysis(
+    const bool frequencyColor,
+    std::vector<std::uint8_t> cachedLow,
+    std::vector<std::uint8_t> cachedMid,
+    std::vector<std::uint8_t> cachedHigh)
+{
     const auto progress = std::make_shared<std::atomic<double>>(0.0);
     activeProgress_ = progress;
     const auto resources = std::make_shared<AnalysisResources>();
     resources->cancelToken = ag_cancel_token_create();
     activeResources_ = resources;
+    activeJobKind_ = frequencyColor ? JobKind::FrequencyColor
+                                    : JobKind::MixOnly;
+    if (frequencyColor) updateFrequencyPause(false);
 
-    const std::string source = path.toUtf8().toStdString();
+    const QByteArray source = currentPath_.toUtf8();
+    const QString sourcePath = currentPath_;
     const QString sourceTrackId = currentTrackId_;
     const quint64 sourceGeneration = activeGeneration_;
     constexpr std::size_t targetPoints = 2000;
@@ -323,34 +628,50 @@ qulonglong WaveformProvider::loadForTrack(const QString& trackId,
             this, &WaveformProvider::onAnalysisFinished);
     QFuture<Job> future = QtConcurrent::run(
         &currentAnalysisPool_,
-        [source, sourceTrackId, sourceGeneration, targetPoints, resources, progress,
-         aggregation = currentAggregation_]() mutable {
+        [source, sourcePath, sourceTrackId, sourceGeneration, targetPoints,
+         resources, progress, aggregation = currentAggregation_,
+         kind = activeJobKind_,
+         frequencyRequested = currentFrequencyRequested_,
+         cachedLow = std::move(cachedLow),
+         cachedMid = std::move(cachedMid),
+         cachedHigh = std::move(cachedHigh)]() mutable {
             Job job;
-            job.path = QString::fromStdString(source);
+            job.path = sourcePath;
             job.trackId = sourceTrackId;
             job.generation = sourceGeneration;
+            job.kind = kind;
+            job.frequencyRequested = frequencyRequested;
             job.aggregation = aggregation;
             job.resources = resources;
             job.progress = progress;
-            job.result = ag_track_analysis_with_aggregation(
-                source.c_str(),
-                targetPoints,
-                aggregation,
-                resources->cancelToken,
-                [](float p, void* userData) {
-                    auto* atomicProgress =
-                        static_cast<std::atomic<double>*>(userData);
-                    atomicProgress->store(static_cast<double>(p),
-                                          std::memory_order_relaxed);
-                },
-                progress.get(),
-                &resources->waveform,
-                nullptr);
+            job.cachedLow = std::move(cachedLow);
+            job.cachedMid = std::move(cachedMid);
+            job.cachedHigh = std::move(cachedHigh);
+            if (kind == JobKind::FrequencyColor) {
+                FrequencyJobCounter counter;
+                job.result = ag_track_frequency_color_analysis(
+                    source.constData(), targetPoints, resources->cancelToken,
+                    [](const float p, void* userData) {
+                        providerCounters.frequencyProgressCallbacks.fetch_add(
+                            1U, std::memory_order_relaxed);
+                        static_cast<std::atomic<double>*>(userData)->store(
+                            static_cast<double>(p), std::memory_order_relaxed);
+                    }, progress.get(), &resources->waveform);
+            } else {
+                providerCounters.mixJobsStarted.fetch_add(
+                    1U, std::memory_order_relaxed);
+                job.result = ag_track_analysis_with_aggregation(
+                    source.constData(), targetPoints, aggregation,
+                    resources->cancelToken,
+                    [](const float p, void* userData) {
+                        static_cast<std::atomic<double>*>(userData)->store(
+                            static_cast<double>(p), std::memory_order_relaxed);
+                    }, progress.get(), &resources->waveform, nullptr);
+            }
             return job;
         });
     watcher_->setFuture(future);
     progressTimer_->start();
-    return activeGeneration_;
 }
 
 void WaveformProvider::prefetchTracks(const QStringList& paths)
@@ -364,7 +685,7 @@ void WaveformProvider::prefetchTracks(const QStringList& paths)
     }
 
     (void)QtConcurrent::run(
-        &prefetchPool_,
+        &currentAnalysisPool_,
         [paths, cacheDirectory, aggregation] {
             constexpr std::size_t targetPoints = 2000;
             for (const QString& path : paths) {
@@ -415,20 +736,41 @@ void WaveformProvider::cancelForTrack(const QString& path)
     if (path != currentPath_) {
         return;
     }
-    if (activeResources_ != nullptr) activeResources_->cancel();
-    activeResources_.reset();
+    cancelActiveJob();
+    currentPath_.clear();
+    currentTrackId_.clear();
+    currentLayers_.clear();
+    currentMixLayers_.clear();
+    currentFrequencyRequested_ = false;
+    ++activeGeneration_;
+    emit activeGenerationChanged();
+    setAnalysisProgress(0.0);
+}
+
+void WaveformProvider::cancelFrequencyForTrack(const QString& path)
+{
+    if (path != currentPath_ || !currentFrequencyRequested_) return;
+    if (watcher_ != nullptr && activeJobKind_ == JobKind::FrequencyColor
+        && activeResources_ != nullptr) {
+        activeResources_->cancel();
+    }
     if (watcher_ != nullptr) {
         watcher_->disconnect(this);
         delete watcher_;
         watcher_ = nullptr;
     }
+    activeResources_.reset();
     activeProgress_.reset();
     progressTimer_->stop();
-    currentPath_.clear();
-    currentTrackId_.clear();
+    currentFrequencyRequested_ = false;
     ++activeGeneration_;
     emit activeGenerationChanged();
-    setAnalysisProgress(0.0);
+    if (!currentMixLayers_.isEmpty()) {
+        addRequestMetadata(currentMixLayers_, currentTrackId_,
+                           activeGeneration_, false, false);
+        currentLayers_ = currentMixLayers_;
+        emit waveformReady(currentPath_, currentLayers_);
+    }
 }
 
 void WaveformProvider::onAnalysisFinished()
@@ -451,20 +793,27 @@ void WaveformProvider::onAnalysisFinished()
         || job.path != currentPath_
         || job.trackId != currentTrackId_
         || job.generation != activeGeneration_
-        || job.aggregation != currentAggregation_) {
+        || job.aggregation != currentAggregation_
+        || job.kind != activeJobKind_
+        || job.frequencyRequested != currentFrequencyRequested_) {
         if (job.path == currentPath_ && job.trackId == currentTrackId_
-            && job.generation == activeGeneration_) {
-            setAnalysisProgress(0.0);
+            && job.generation == activeGeneration_
+            && currentMixLayers_.isEmpty()) {
             emit waveformFailed(job.path, job.trackId, job.generation,
                                 static_cast<int>(job.result));
+        } else if (!currentMixLayers_.isEmpty()) {
+            setAnalysisProgress(1.0);
         }
         return;
     }
 
-    const QString cachePath =
-        cacheFilePathFor(settings_, currentPath_, job.aggregation);
-    if (!cachePath.isEmpty()) {
-        if (saveWaveformCache(cachePath, currentPath_, waveform)) {
+    const QString cachePath = cacheFilePathFor(
+        settings_, currentPath_, job.aggregation);
+    if (!cachePath.isEmpty()
+        && (job.kind != JobKind::FrequencyColor
+            || currentMixLayers_.isEmpty())) {
+        if (saveWaveformCache(cachePath, currentPath_, waveform,
+                              job.kind == JobKind::FrequencyColor)) {
             if (settings_ != nullptr) {
                 settings_->onWaveformCacheSaved();
             }
@@ -472,16 +821,61 @@ void WaveformProvider::onAnalysisFinished()
         }
     }
 
+    QVariantMap result = currentMixLayers_;
+    if (result.isEmpty()) {
+        result = waveformToVariantMap(waveform);
+        if (job.frequencyRequested) {
+            result[QStringLiteral("bass")] = QVariantList{};
+            result[QStringLiteral("mid")] = QVariantList{};
+            result[QStringLiteral("high")] = QVariantList{};
+        }
+        addTimelineMetadata(result,
+                            ag_waveform_total_samples(waveform),
+                            ag_waveform_sample_rate(waveform));
+        result[QStringLiteral("_cacheVersion")] = 2;
+        addRequestMetadata(result, currentTrackId_, activeGeneration_,
+                           job.frequencyRequested, false);
+        currentMixLayers_ = result;
+        currentLayers_ = result;
+        emit waveformReady(currentPath_, result);
+    }
+
+    if (!job.frequencyRequested) {
+        setAnalysisProgress(1.0);
+        return;
+    }
+
+    std::vector<std::uint8_t> low = job.cachedLow;
+    std::vector<std::uint8_t> mid = job.cachedMid;
+    std::vector<std::uint8_t> high = job.cachedHigh;
+    if (job.kind == JobKind::FrequencyColor) {
+        agplayer::FrequencyColorCacheData frequency =
+            frequencyCacheFromWaveform(waveform);
+        low = frequency.low;
+        mid = frequency.mid;
+        high = frequency.high;
+        const QString frequencyPath =
+            frequencyCacheFilePathFor(settings_, currentPath_);
+        if (!frequencyPath.isEmpty()
+            && agplayer::FrequencyColorWaveformCache::save_atomic(
+                filesystemPath(frequencyPath), filesystemPath(currentPath_),
+                frequency)
+            && settings_ != nullptr) {
+            settings_->onWaveformCacheSaved();
+        }
+    }
+    const std::size_t mixCount = static_cast<std::size_t>(
+        result.value(QStringLiteral("mix")).toList().size());
+    if (mixCount == 0U || low.size() != mixCount || mid.size() != mixCount
+        || high.size() != mixCount) {
+        setAnalysisProgress(1.0);
+        return;
+    }
+    QVariantMap complete = result;
+    addFrequencyLayers(complete, low, mid, high);
+    currentLayers_ = complete;
     setAnalysisProgress(1.0);
-    QVariantMap result = waveformToVariantMap(waveform);
-    result[QStringLiteral("_trackId")] = currentTrackId_;
-    result[QStringLiteral("_generation")] = activeGeneration_;
-    addTimelineMetadata(result,
-                        ag_waveform_total_samples(waveform),
-                        ag_waveform_sample_rate(waveform));
-    result[QStringLiteral("_cacheVersion")] = 2;
-    currentLayers_ = result;
-    emit waveformReady(currentPath_, result);
+    emit waveformReady(currentPath_, complete);
 }
 
 QVariantMap WaveformProvider::waveformToVariantMap(

@@ -1333,7 +1333,7 @@ set_tests_properties(player_experience_controller_test PROPERTIES
     ENVIRONMENT "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE}"
 )
 set_tests_properties(waveform_provider_test PROPERTIES
-    TIMEOUT 30
+    TIMEOUT 120
     ENVIRONMENT "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE}"
 )
 set_tests_properties(window_controller_test PROPERTIES

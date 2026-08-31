@@ -796,6 +796,13 @@ int main(int argc, char* argv[])
             }
         });
         WaveformProvider waveformProvider(&settings);
+        waveformProvider.setAudioResourcePressure(playback.deviceLost());
+        QObject::connect(
+            &playback, &PlaybackController::deviceLostChanged,
+            &waveformProvider, [&playback, &waveformProvider]() {
+                waveformProvider.setAudioResourcePressure(
+                    playback.deviceLost());
+            });
         TrackWaveformThumbnailProvider trackWaveformThumbnailProvider(
             settings.cacheDirectory());
         QObject::connect(
