@@ -229,7 +229,6 @@ TestCase {
         verify(percentage)
         compare(percentage.color.toString(), Theme.success.toString())
     }
-
     function test_inputChooserAdvertisesAudioAndVideoContainers() {
         const dialog = findChild(page, "separationInputDialog")
         verify(dialog)
