@@ -504,6 +504,56 @@ bool outputMeterUsesRequestedFramesForPartialUnderrun()
     return usesRequestedFrames && emptyReadFloors;
 }
 
+bool equalizerSubmitFailureKeepsPublishedState()
+{
+    agplayer::AudioEngine engine(agplayer::AudioBackend::Manual, 128U);
+    assert(engine.load_stream(std::make_shared<SilentEditorStream>(3'000))
+           == AG_OK);
+
+    agplayer::GraphicEqSettings accepted;
+    accepted.enabled = true;
+    accepted.auto_clip_protection = true;
+    accepted.preamp_db = -1.5;
+    accepted.band_gain_db[0] = 4.0;
+    assert(engine.set_equalizer(accepted, 41U) == AG_OK);
+    const agplayer::EqualizerStatus before = engine.equalizer_status();
+
+    agplayer::GraphicEqSettings rejected = accepted;
+    rejected.enabled = false;
+    rejected.bypassed = true;
+    rejected.auto_clip_protection = false;
+    rejected.preamp_db = 3.0;
+    rejected.band_gain_db[0] = -6.0;
+    engine.fail_next_equalizer_submit_for_test();
+    const ag_result rejectedResult = engine.set_equalizer(rejected, 42U);
+    const agplayer::EqualizerStatus afterFailure = engine.equalizer_status();
+
+    const bool failurePreservedState =
+        rejectedResult == AG_INTERNAL_ERROR
+        && afterFailure.revision == before.revision
+        && afterFailure.enabled == before.enabled
+        && afterFailure.bypassed == before.bypassed
+        && afterFailure.auto_clip_protection == before.auto_clip_protection
+        && afterFailure.sample_rate == before.sample_rate
+        && afterFailure.active == before.active
+        && afterFailure.protection_db == before.protection_db;
+
+    const bool nextSubmissionSucceeds =
+        engine.set_equalizer(rejected, 43U) == AG_OK
+        && engine.equalizer_status().revision == 43U
+        && !engine.equalizer_status().enabled
+        && engine.equalizer_status().bypassed
+        && !engine.equalizer_status().auto_clip_protection;
+    if (!failurePreservedState) {
+        std::fprintf(stderr,
+                     "failed EQ submission changed published engine state\n");
+    }
+    if (!nextSubmissionSucceeds) {
+        std::fprintf(stderr, "EQ failure seam was not one-shot\n");
+    }
+    return failurePreservedState && nextSubmissionSucceeds;
+}
+
 } // namespace
 
 int main(const int argc, char** argv)
@@ -711,9 +761,12 @@ int main(const int argc, char** argv)
         outputDeviceSnapshotExceptionRejectsInFlightOldCallback();
     const bool partialUnderrunRegression =
         outputMeterUsesRequestedFramesForPartialUnderrun();
+    const bool equalizerSubmitFailureRegression =
+        equalizerSubmitFailureKeepsPublishedState();
     assert(boundaryRegression);
     assert(deviceSwitchRegression);
     assert(deviceStopFailureRegression);
     assert(deviceSnapshotExceptionRegression);
     assert(partialUnderrunRegression);
+    assert(equalizerSubmitFailureRegression);
 }

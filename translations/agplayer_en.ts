@@ -874,6 +874,22 @@
     <message><source>关闭</source><translation>Close</translation></message>
     <message><source>启用均衡器</source><translation>Enable Equalizer</translation></message>
     <message><source>Custom</source><translation>Custom</translation></message>
+    <message><source>预设：</source><translation>Preset:</translation></message>
+    <message><source>自定义</source><translation>Custom</translation></message>
+    <message><source>保存预设</source><translation>Save</translation></message>
+    <message><source>管理预设</source><translation>Manage</translation></message>
+    <message><source>重置</source><translation>Reset</translation></message>
+    <message><source>范围：</source><translation>Range:</translation></message>
+    <message><source>±6 dB</source><translation>±6 dB</translation></message>
+    <message><source>±12 dB</source><translation>±12 dB</translation></message>
+    <message><source>±18 dB</source><translation>±18 dB</translation></message>
+    <message><source>精度：</source><translation>Precision:</translation></message>
+    <message><source>高</source><translation>High</translation></message>
+    <message><source>中</source><translation>Medium</translation></message>
+    <message><source>低</source><translation>Low</translation></message>
+    <message><source>输出电平：</source><translation>Output Level:</translation></message>
+    <message><source>取消</source><translation>Cancel</translation></message>
+    <message><source>高级</source><translation>Advanced</translation></message>
     <message><source>均衡器预设</source><translation>Equalizer Preset</translation></message>
     <message><source>旁路均衡器</source><translation>Bypass Equalizer</translation></message>
     <message><source>全部归零</source><translation>Reset All</translation></message>

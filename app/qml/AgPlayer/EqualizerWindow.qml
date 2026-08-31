@@ -808,7 +808,7 @@ Window {
         objectName: "equalizerManagePopup"
         x: Math.round((window.width - width) / 2)
         y: 94
-        width: 480
+        width: Math.min(640, window.width - 48)
         height: 390
         padding: 18
         modal: true

@@ -9,6 +9,9 @@
 #include <array>
 #include <optional>
 
+using EqualizerSubmitFunction = ag_result (*)(
+    ag_player*, const ag_equalizer_settings*);
+
 class EqualizerController final : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(bool enabled READ enabled WRITE setEnabled NOTIFY enabledChanged)
@@ -40,7 +43,9 @@ public:
     };
     Q_ENUM(Role)
 
-    explicit EqualizerController(ag_player* player, QObject* parent = nullptr);
+    explicit EqualizerController(
+        ag_player* player, QObject* parent = nullptr,
+        EqualizerSubmitFunction submitFunction = &ag_player_set_equalizer);
 
     [[nodiscard]] int rowCount(
         const QModelIndex& parent = QModelIndex()) const override;
@@ -104,6 +109,19 @@ private:
         bool builtIn = false;
     };
 
+    struct SubmittedState {
+        // AudioEngine starts with this same EQ default before the controller's
+        // first submission, so it is a valid rollback baseline.
+        bool valid = true;
+        bool enabled = true;
+        bool bypassed = false;
+        bool autoClipProtection = true;
+        double preampDb = 0.0;
+        double gainRangeDb = 12.0;
+        std::array<double, AG_EQUALIZER_BAND_COUNT> gains{};
+        QString currentPresetId = QStringLiteral("flat");
+    };
+
     static double normalizedGain(double value) noexcept;
     [[nodiscard]] double quantizedGain(double value) const noexcept;
     [[nodiscard]] QList<Preset> builtInPresets() const;
@@ -111,9 +129,13 @@ private:
     void load();
     void persist() const;
     bool submit();
+    void rememberSubmittedState();
+    void restoreSubmittedState();
+    void synchronizeSubmittedMetadata();
     void setCurrentPresetId(const QString& id);
 
     ag_player* player_ = nullptr;
+    EqualizerSubmitFunction submitFunction_ = &ag_player_set_equalizer;
     bool enabled_ = false;
     bool bypassed_ = false;
     bool autoClipProtection_ = true;
@@ -126,4 +148,5 @@ private:
     QString currentPresetId_ = QStringLiteral("flat");
     QList<Preset> customPresets_;
     quint64 revision_ = 0;
+    SubmittedState submittedState_;
 };

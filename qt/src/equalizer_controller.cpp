@@ -135,9 +135,13 @@ std::array<double, AG_EQUALIZER_BAND_COUNT> gainsFromVariant(
 
 } // namespace
 
-EqualizerController::EqualizerController(ag_player* player, QObject* parent)
+EqualizerController::EqualizerController(
+    ag_player* player, QObject* parent,
+    const EqualizerSubmitFunction submitFunction)
     : QAbstractListModel(parent)
     , player_(player)
+    , submitFunction_(submitFunction != nullptr ? submitFunction
+                                                : &ag_player_set_equalizer)
 {
     load();
     (void)submit();
@@ -298,6 +302,7 @@ bool EqualizerController::setGainRangeDb(const double value)
         setCurrentPresetId(QStringLiteral("custom"));
         return submit();
     }
+    synchronizeSubmittedMetadata();
     persist();
     return true;
 }
@@ -442,6 +447,7 @@ QString EqualizerController::saveCustomPreset(const QString& name)
     preset.gains = gains_;
     customPresets_.push_back(preset);
     setCurrentPresetId(preset.id);
+    synchronizeSubmittedMetadata();
     persist();
     emit presetsChanged();
     return preset.id;
@@ -477,6 +483,7 @@ bool EqualizerController::deleteCustomPreset(const QString& id)
     if (currentPresetId_ == id) {
         setCurrentPresetId(QStringLiteral("custom"));
     }
+    synchronizeSubmittedMetadata();
     persist();
     emit presetsChanged();
     return true;
@@ -617,7 +624,13 @@ void EqualizerController::load()
         settings.value(QStringLiteral("autoClipProtection"), true).toBool();
     preampDb_ = storedDspValue(
         settings.value(QStringLiteral("preampDb"), 0.0).toDouble());
-    gains_ = gainsFromVariant(settings.value(QStringLiteral("bandGains")));
+    const QVariant storedGains = settings.value(QStringLiteral("bandGains"));
+    const int storedGainCount = storedGains.toList().size();
+    const bool storedGainCountIsSupported =
+        storedGainCount == static_cast<int>(kLegacyFrequencies.size())
+        || storedGainCount == static_cast<int>(kSchemaTwoFrequencies.size())
+        || storedGainCount == AG_EQUALIZER_BAND_COUNT;
+    gains_ = gainsFromVariant(storedGains);
     const double storedRange =
         settings.value(QStringLiteral("gainRangeDb"), 12.0).toDouble();
     gainRangeDb_ = (storedRange == 6.0 || storedRange == 12.0
@@ -650,8 +663,17 @@ void EqualizerController::load()
         }
     }
     settings.endArray();
-    const int storedSchema = settings.value(QStringLiteral("schemaVersion"), 0).toInt();
-    const int storedBandCount = settings.value(QStringLiteral("bandCount"), 0).toInt();
+    const int storedSchema =
+        settings.value(QStringLiteral("schemaVersion"), 0).toInt();
+    const int storedBandCount =
+        settings.value(QStringLiteral("bandCount"), 0).toInt();
+    const bool storedGainMetadataIsValid =
+        storedGainCountIsSupported
+        && (storedBandCount <= 0 || storedBandCount == storedGainCount)
+        && (storedSchema != kSettingsSchemaVersion
+            || storedGainCount == AG_EQUALIZER_BAND_COUNT)
+        && (storedSchema != 2
+            || storedGainCount == static_cast<int>(kSchemaTwoFrequencies.size()));
     const bool requiresMigration = storedSchema != kSettingsSchemaVersion
                                    || storedBandCount != AG_EQUALIZER_BAND_COUNT;
     const bool presetExists = findPreset(currentPresetId_).has_value();
@@ -670,6 +692,8 @@ void EqualizerController::load()
     // sound as a custom state instead of mislabelling it as a built-in preset.
     if ((!selectedCustomPreset && requiresMigration && hadStoredCurve
          && !migratedCurveIsFlat)
+        || (!selectedCustomPreset && hadStoredCurve
+            && !storedGainMetadataIsValid)
         || !presetExists) {
         currentPresetId_ = QStringLiteral("custom");
     }
@@ -713,11 +737,13 @@ void EqualizerController::persist() const
 bool EqualizerController::submit()
 {
     if (player_ == nullptr) {
+        restoreSubmittedState();
         emit submissionFailed();
         return false;
     }
     ag_equalizer_settings settings{};
-    settings.revision = ++revision_;
+    const quint64 candidateRevision = revision_ + 1U;
+    settings.revision = candidateRevision;
     settings.enabled = enabled_ ? 1 : 0;
     settings.bypassed = bypassed_ ? 1 : 0;
     settings.auto_clip_protection = autoClipProtection_ ? 1 : 0;
@@ -725,15 +751,108 @@ bool EqualizerController::submit()
     std::copy(gains_.begin(), gains_.end(), settings.band_gain_db);
     settings.q = agplayer::kGraphicEqDefaultQ;
     settings.transition_ms = 25.0;
-    const ag_result result = ag_player_set_equalizer(player_, &settings);
+    const ag_result result = submitFunction_(player_, &settings);
     if (result != AG_OK) {
+        restoreSubmittedState();
         emit submissionFailed();
         return false;
     }
+    revision_ = candidateRevision;
+    rememberSubmittedState();
     refreshStatus();
     persist();
     emit responseCurveChanged();
     return true;
+}
+
+void EqualizerController::rememberSubmittedState()
+{
+    submittedState_.valid = true;
+    submittedState_.enabled = enabled_;
+    submittedState_.bypassed = bypassed_;
+    submittedState_.autoClipProtection = autoClipProtection_;
+    submittedState_.preampDb = preampDb_;
+    submittedState_.gainRangeDb = gainRangeDb_;
+    submittedState_.gains = gains_;
+    submittedState_.currentPresetId = currentPresetId_;
+}
+
+void EqualizerController::synchronizeSubmittedMetadata()
+{
+    if (!submittedState_.valid) {
+        return;
+    }
+    submittedState_.gainRangeDb = gainRangeDb_;
+    submittedState_.currentPresetId = currentPresetId_;
+}
+
+void EqualizerController::restoreSubmittedState()
+{
+    if (!submittedState_.valid) {
+        return;
+    }
+
+    const bool enabledChanged = enabled_ != submittedState_.enabled;
+    const bool bypassedChanged = bypassed_ != submittedState_.bypassed;
+    const bool protectionChanged =
+        autoClipProtection_ != submittedState_.autoClipProtection;
+    const bool preampChanged = !qFuzzyCompare(
+        preampDb_ + 19.0, submittedState_.preampDb + 19.0);
+    const bool rangeChanged = !qFuzzyCompare(
+        gainRangeDb_ + 19.0, submittedState_.gainRangeDb + 19.0);
+    const bool presetChanged =
+        currentPresetId_ != submittedState_.currentPresetId;
+    std::array<bool, AG_EQUALIZER_BAND_COUNT> changedBands{};
+    bool gainsChanged = false;
+    for (int index = 0; index < AG_EQUALIZER_BAND_COUNT; ++index) {
+        const std::size_t slot = static_cast<std::size_t>(index);
+        changedBands[slot] = !qFuzzyCompare(
+            gains_[slot] + 19.0, submittedState_.gains[slot] + 19.0);
+        gainsChanged = gainsChanged || changedBands[slot];
+    }
+
+    if (gainsChanged || rangeChanged) {
+        beginResetModel();
+    }
+    enabled_ = submittedState_.enabled;
+    bypassed_ = submittedState_.bypassed;
+    autoClipProtection_ = submittedState_.autoClipProtection;
+    preampDb_ = submittedState_.preampDb;
+    gainRangeDb_ = submittedState_.gainRangeDb;
+    gains_ = submittedState_.gains;
+    currentPresetId_ = submittedState_.currentPresetId;
+    if (gainsChanged || rangeChanged) {
+        endResetModel();
+    }
+
+    if (enabledChanged) {
+        emit this->enabledChanged();
+    }
+    if (bypassedChanged) {
+        emit this->bypassedChanged();
+    }
+    if (protectionChanged) {
+        emit autoClipProtectionChanged();
+    }
+    if (preampChanged) {
+        emit preampDbChanged();
+    }
+    if (rangeChanged) {
+        emit gainRangeDbChanged();
+    }
+    for (int index = 0; index < AG_EQUALIZER_BAND_COUNT; ++index) {
+        const std::size_t slot = static_cast<std::size_t>(index);
+        if (changedBands[slot]) {
+            emit bandGainChanged(index, gains_[slot]);
+        }
+    }
+    if (presetChanged) {
+        emit currentPresetChanged();
+    }
+    if (enabledChanged || bypassedChanged || protectionChanged || preampChanged
+        || gainsChanged) {
+        emit responseCurveChanged();
+    }
 }
 
 void EqualizerController::setCurrentPresetId(const QString& id)

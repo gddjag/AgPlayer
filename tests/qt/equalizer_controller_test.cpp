@@ -59,6 +59,23 @@ private:
     std::int64_t positionFrames_ = 0;
 };
 
+int equalizerSubmitCallCount = 0;
+
+ag_result failEqualizerSubmissionsAfterFirst(
+    ag_player* const player, const ag_equalizer_settings* const settings)
+{
+    ++equalizerSubmitCallCount;
+    return equalizerSubmitCallCount == 1
+               ? ag_player_set_equalizer(player, settings)
+               : AG_INTERNAL_ERROR;
+}
+
+ag_result failEveryEqualizerSubmission(
+    ag_player*, const ag_equalizer_settings*)
+{
+    return AG_INTERNAL_ERROR;
+}
+
 } // namespace
 
 class EqualizerControllerTest final : public QObject {
@@ -73,6 +90,9 @@ private slots:
     void migratesSchemaTwoSeventeenBandSettingsAndCustomPreset();
     void migratesLegacyTenBandSettingsByLogFrequency();
     void legacyFlatSettingsRemainFlatAfterMigration();
+    void invalidStoredBandLengthCannotMasqueradeAsBuiltInPreset();
+    void initialSubmissionFailureRestoresEngineDefaults();
+    void submissionFailureRestoresLastCompleteSnapshot();
     void retainedLegacyPresetIdBecomesCustomAfterMigration();
     void migratesLegacyCustomPresetsAndRemovedPresetId();
     void restoresStoredDspValuesWithoutApplyingEditorPrecision();
@@ -321,6 +341,131 @@ void EqualizerControllerTest::legacyFlatSettingsRemainFlatAfterMigration()
     QCOMPARE(controller.currentPresetId(), QStringLiteral("flat"));
     for (int band = 0; band < controller.rowCount(); ++band)
         QCOMPARE(controller.bandGain(band), 0.0);
+    ag_player_destroy(player);
+}
+
+void EqualizerControllerTest::invalidStoredBandLengthCannotMasqueradeAsBuiltInPreset()
+{
+    QVariantList schemaThreeSeventeenBands(17, 0.0);
+    schemaThreeSeventeenBands[0] = 4.0;
+    const QList<QVariantList> malformedGains{
+        {}, QVariantList{4.0, 3.0, 2.0}, schemaThreeSeventeenBands};
+
+    for (const QVariantList& gains : malformedGains) {
+        QSettings().clear();
+        QSettings settings;
+        settings.beginGroup(QStringLiteral("equalizer"));
+        settings.setValue(QStringLiteral("schemaVersion"), 3);
+        settings.setValue(QStringLiteral("bandCount"), 18);
+        if (!gains.isEmpty()) {
+            settings.setValue(QStringLiteral("bandGains"), gains);
+        }
+        settings.setValue(QStringLiteral("currentPresetId"),
+                          QStringLiteral("rock"));
+        settings.endGroup();
+
+        const ag_player_config config{AG_AUDIO_BACKEND_NULL, 4'096U};
+        ag_player* player = nullptr;
+        QCOMPARE(ag_player_create_with_config(&config, &player), AG_OK);
+        EqualizerController controller(player);
+        QCOMPARE(controller.currentPresetId(), QStringLiteral("custom"));
+        ag_player_destroy(player);
+    }
+}
+
+void EqualizerControllerTest::submissionFailureRestoresLastCompleteSnapshot()
+{
+    QVariantList gains(18, 0.0);
+    gains[0] = 10.0;
+    {
+        QSettings settings;
+        settings.beginGroup(QStringLiteral("equalizer"));
+        settings.setValue(QStringLiteral("schemaVersion"), 3);
+        settings.setValue(QStringLiteral("bandCount"), 18);
+        settings.setValue(QStringLiteral("gainRangeDb"), 12.0);
+        settings.setValue(QStringLiteral("preampDb"), 11.0);
+        settings.setValue(QStringLiteral("bandGains"), gains);
+        settings.setValue(QStringLiteral("currentPresetId"),
+                          QStringLiteral("custom"));
+        settings.endGroup();
+    }
+
+    const ag_player_config config{AG_AUDIO_BACKEND_NULL, 4'096U};
+    ag_player* player = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &player), AG_OK);
+    equalizerSubmitCallCount = 0;
+    EqualizerController controller(
+        player, nullptr, &failEqualizerSubmissionsAfterFirst);
+    QSignalSpy failed(&controller, &EqualizerController::submissionFailed);
+    const QString acceptedPresetId =
+        controller.saveCustomPreset(QStringLiteral("Accepted snapshot"));
+    QVERIFY(acceptedPresetId.startsWith(QStringLiteral("custom-")));
+    ag_equalizer_status acceptedStatus{};
+    QCOMPARE(ag_player_equalizer_status(player, &acceptedStatus), AG_OK);
+
+    QVERIFY(!controller.setGainRangeDb(6.0));
+    QCOMPARE(failed.count(), 1);
+    QCOMPARE(controller.gainRangeDb(), 12.0);
+    QCOMPARE(controller.bandGain(0), 10.0);
+    QCOMPARE(controller.preampDb(), 11.0);
+    QCOMPARE(controller.currentPresetId(), acceptedPresetId);
+
+    QVERIFY(!controller.setBandGain(1, 2.0));
+    QCOMPARE(failed.count(), 2);
+    QCOMPARE(controller.bandGain(1), 0.0);
+    QCOMPARE(controller.currentPresetId(), acceptedPresetId);
+
+    controller.setEnabled(true);
+    QCOMPARE(failed.count(), 3);
+    QVERIFY(!controller.enabled());
+
+    ag_equalizer_status finalStatus{};
+    QCOMPARE(ag_player_equalizer_status(player, &finalStatus), AG_OK);
+    QCOMPARE(finalStatus.revision, acceptedStatus.revision);
+    QSettings settings;
+    settings.beginGroup(QStringLiteral("equalizer"));
+    QCOMPARE(settings.value(QStringLiteral("currentPresetId")).toString(),
+             acceptedPresetId);
+    QCOMPARE(settings.value(QStringLiteral("gainRangeDb")).toDouble(), 12.0);
+    settings.endGroup();
+    ag_player_destroy(player);
+}
+
+void EqualizerControllerTest::initialSubmissionFailureRestoresEngineDefaults()
+{
+    QVariantList gains(18, 0.0);
+    gains[0] = 10.0;
+    {
+        QSettings settings;
+        settings.beginGroup(QStringLiteral("equalizer"));
+        settings.setValue(QStringLiteral("schemaVersion"), 3);
+        settings.setValue(QStringLiteral("bandCount"), 18);
+        settings.setValue(QStringLiteral("enabled"), false);
+        settings.setValue(QStringLiteral("bypassed"), true);
+        settings.setValue(QStringLiteral("autoClipProtection"), false);
+        settings.setValue(QStringLiteral("preampDb"), 11.0);
+        settings.setValue(QStringLiteral("bandGains"), gains);
+        settings.setValue(QStringLiteral("currentPresetId"),
+                          QStringLiteral("custom"));
+        settings.endGroup();
+    }
+
+    const ag_player_config config{AG_AUDIO_BACKEND_NULL, 4'096U};
+    ag_player* player = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &player), AG_OK);
+    EqualizerController controller(
+        player, nullptr, &failEveryEqualizerSubmission);
+
+    QVERIFY(controller.enabled());
+    QVERIFY(!controller.bypassed());
+    QVERIFY(controller.autoClipProtection());
+    QCOMPARE(controller.preampDb(), 0.0);
+    QCOMPARE(controller.bandGain(0), 0.0);
+    QCOMPARE(controller.currentPresetId(), QStringLiteral("flat"));
+    ag_equalizer_status status{};
+    QCOMPARE(ag_player_equalizer_status(player, &status), AG_OK);
+    QCOMPARE(status.revision, 0U);
+    QCOMPARE(status.enabled, 1);
     ag_player_destroy(player);
 }
 

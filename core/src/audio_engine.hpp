@@ -119,6 +119,8 @@ public:
     // Installs no production behavior unless a test explicitly supplies it.
     void set_output_device_switch_test_barrier(
         OutputDeviceSwitchTestBarrier* barrier) noexcept;
+    // One-shot test seam; has no effect unless a test explicitly arms it.
+    void fail_next_equalizer_submit_for_test() noexcept;
     [[nodiscard]] bool exclusive_mode_active() const noexcept;
     ag_result set_transition_fade_ms(int milliseconds) noexcept;
     ag_result set_duration_ms(std::int64_t duration_ms) noexcept;

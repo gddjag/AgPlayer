@@ -733,6 +733,13 @@ public:
         if (!program.has_value()) {
             return AG_INVALID_ARGUMENT;
         }
+        if (is_graphic_eq_sample_rate_supported(current_rate)) {
+            if (fail_next_equalizer_submit_for_test_.exchange(
+                    false, std::memory_order_acq_rel)
+                || !equalizer_.submit(*program)) {
+                return AG_INTERNAL_ERROR;
+            }
+        }
         {
             const std::lock_guard<std::mutex> lock(equalizer_settings_mutex_);
             equalizer_settings_ = settings;
@@ -751,10 +758,6 @@ public:
             settings.enabled && !settings.bypassed
                 && is_graphic_eq_sample_rate_supported(current_rate),
             std::memory_order_release);
-        if (is_graphic_eq_sample_rate_supported(current_rate)
-            && !equalizer_.submit(*program)) {
-            return AG_INTERNAL_ERROR;
-        }
         return AG_OK;
     }
 
@@ -1264,6 +1267,12 @@ public:
     {
         output_device_switch_test_barrier_.store(barrier,
                                                  std::memory_order_release);
+    }
+
+    void fail_next_equalizer_submit_for_test() noexcept
+    {
+        fail_next_equalizer_submit_for_test_.store(true,
+                                                   std::memory_order_release);
     }
 
     ag_result set_transition_fade_ms(const int milliseconds) noexcept
@@ -2211,6 +2220,7 @@ private:
     std::atomic<std::uint64_t> output_meter_valid_generation_{0U};
     std::atomic<OutputDeviceSwitchTestBarrier*>
         output_device_switch_test_barrier_{nullptr};
+    std::atomic<bool> fail_next_equalizer_submit_for_test_{false};
     std::atomic<bool> muted_{false};
     std::atomic<int> transition_fade_ms_{0};
     std::atomic<bool> match_track_sample_rate_{false};
@@ -2385,6 +2395,11 @@ void AudioEngine::set_output_device_switch_test_barrier(
     OutputDeviceSwitchTestBarrier* const barrier) noexcept
 {
     impl_->set_output_device_switch_test_barrier(barrier);
+}
+
+void AudioEngine::fail_next_equalizer_submit_for_test() noexcept
+{
+    impl_->fail_next_equalizer_submit_for_test();
 }
 
 ag_result AudioEngine::set_transition_fade_ms(
