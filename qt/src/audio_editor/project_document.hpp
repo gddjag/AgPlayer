@@ -16,7 +16,7 @@ struct ProjectExportSettings final {
     int sampleRate{};
     int bitDepth{24};
     int channels{};
-    qint64 bitRate{};
+    qint64 bitRate{320'000};
     bool keepMetadata{true};
     bool variableBitRate{true};
     int quality{80};

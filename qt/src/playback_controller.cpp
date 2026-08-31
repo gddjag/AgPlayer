@@ -267,10 +267,14 @@ bool PlaybackController::acquireEditorOutput() noexcept
         }
         const ag_playback_time_pitch_config editorConfig{
             1.0, saved.keepPitch ? 1 : 0};
-        const ag_result tempoResult =
-            shouldFailEditorOutputStep(EditorOutputStep::AcquireTimePitch)
-            ? AG_INTERNAL_ERROR
-            : ag_player_set_time_pitch(player_, &editorConfig);
+        ag_result tempoResult = AG_OK;
+        if (!qFuzzyCompare(activeConfig.speed_ratio, editorConfig.speed_ratio)
+            || activeConfig.keep_pitch != editorConfig.keep_pitch) {
+            tempoResult =
+                shouldFailEditorOutputStep(EditorOutputStep::AcquireTimePitch)
+                ? AG_INTERNAL_ERROR
+                : ag_player_set_time_pitch(player_, &editorConfig);
+        }
         if (tempoResult != AG_OK) {
             if (stoppedForLease) {
                 editorOutputOwned_ = true;

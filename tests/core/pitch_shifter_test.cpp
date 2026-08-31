@@ -218,6 +218,8 @@ int main(const int argc, char** argv)
     assert(result == AG_OK);
     assert(std::filesystem::exists(happy_output));
 
+    // A real long offline render must drain the streaming processor while it
+    // feeds it.  This is longer than the engine's fixed output FIFO.
     const auto long_input = make_long_sine_fixture();
     const auto long_output = long_input.parent_path()
         / "agplayer-pitch-shifter-long-output.wav";
@@ -230,6 +232,10 @@ int main(const int argc, char** argv)
     error.clear();
     result = agplayer::pitch_shift(long_input.string(), long_config,
                                    nullptr, nullptr, error);
+    if (result != AG_OK) {
+        std::cerr << "long pitch_shift failed: " << static_cast<int>(result)
+                  << " " << error << "\n";
+    }
     assert(result == AG_OK);
     assert(std::filesystem::exists(long_output));
     const auto long_frames = decoded_frames(long_output);

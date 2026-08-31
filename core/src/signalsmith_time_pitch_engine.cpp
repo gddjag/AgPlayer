@@ -117,7 +117,9 @@ public:
     [[nodiscard]] std::size_t receive(float* const samples,
                                       const std::size_t frames) override
     {
-        if (!configured_ || samples == nullptr || frames == 0U) return 0U;
+        if (!configured_ || samples == nullptr || frames == 0U) {
+            return 0U;
+        }
         const std::size_t count = std::min(frames, ring_frames_);
         for (std::size_t frame = 0U; frame < count; ++frame) {
             const std::size_t index = (ring_read_ + frame) % kBufferedFrames;
@@ -138,6 +140,8 @@ public:
         final_output_frames_ = static_cast<std::size_t>(std::llround(
             static_cast<long double>(input_frames_) / playbackRate()));
         if (!primed_) {
+            // startup_interleaved_ is zero-filled at configure/reset; its first
+            // startup_frames_ samples contain the short input supplied so far.
             startup_frames_ = input_latency_;
             prime();
             processSilence(input_latency_);
@@ -333,7 +337,8 @@ private:
         failed_ = true;
     }
 
-    signalsmith::stretch::SignalsmithStretch<float> stretch_;
+    // Keep independent realtime and offline sessions sample-reproducible.
+    signalsmith::stretch::SignalsmithStretch<float> stretch_{0x4147506cL};
     std::array<std::vector<float>, kMaxChannels> input_planar_;
     std::array<std::vector<float>, kMaxChannels> output_planar_;
     std::array<float*, kMaxChannels> input_ptrs_{};

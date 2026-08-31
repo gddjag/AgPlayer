@@ -12,17 +12,26 @@ Rectangle {
     focus: true
 
     readonly property bool narrowLayout: width < 1000
+    readonly property bool shortDesktopLayout: !narrowLayout && height < 660
+    readonly property bool compactNarrowLayout: narrowLayout && height < 560
     readonly property real narrowActionBandHeight: narrowLayout ? 52 : 0
     readonly property real narrowActionBandY: 124
     readonly property real inspectorWidth: narrowLayout ? 350
         : Math.max(320, Math.min(372, width - 1328))
     readonly property real mainWidth: narrowLayout ? width
         : width - inspectorWidth
-    readonly property real responsiveContentHeight: narrowLayout ? 772
-        : Math.max(height, 660)
     readonly property real roomyLayoutFactor: narrowLayout ? 0
         : Math.max(0, Math.min(1,
-            (responsiveContentHeight - 660) / 162))
+            (height - 660) / 162))
+    readonly property real timelineWorkspaceTop: compactNarrowLayout ? 140
+        : shortDesktopLayout ? 152
+        : narrowLayout ? 176 : interpolateLayout(124, 152)
+    readonly property real trackRegionTop: compactNarrowLayout ? 160
+        : shortDesktopLayout ? 196
+        : narrowLayout ? 212 : interpolateLayout(168, 188)
+    readonly property real trackRegionHeight: compactNarrowLayout ? 48
+        : shortDesktopLayout ? 162
+        : narrowLayout ? 120 : interpolateLayout(204, 387)
     property bool inspectorExpanded: false
     property bool controlModifierHeld: false
     property bool pendingExportAfterDirectory: false
@@ -36,7 +45,8 @@ Rectangle {
     readonly property var persistedExportSettings:
         AudioEditorController.projectExportSettings
     onPersistedExportSettingsChanged: Qt.callLater(function() {
-        page.ensureExportSettingsConsistent()
+        if (page)
+            page.ensureExportSettingsConsistent()
     })
 
     function textInputHasFocus() {
@@ -298,12 +308,14 @@ Rectangle {
         function onDiscardConfirmationRequested() { discardDialog.open() }
         function onProjectChanged() {
             Qt.callLater(function() {
-                page.ensureExportSettingsConsistent()
+                if (page)
+                    page.ensureExportSettingsConsistent()
             })
         }
     }
     Component.onCompleted: Qt.callLater(function() {
-        page.ensureExportSettingsConsistent()
+        if (page)
+            page.ensureExportSettingsConsistent()
     })
     DropArea {
         id: editorAudioDropArea
@@ -334,7 +346,7 @@ Rectangle {
         width: page.mainWidth
         height: page.height
         contentWidth: width
-        contentHeight: page.responsiveContentHeight
+        contentHeight: page.height
         clip: true
         interactive: contentHeight > height
         boundsBehavior: Flickable.StopAtBounds
@@ -407,10 +419,12 @@ Rectangle {
             Rectangle {
                 objectName: "editorTimelineWorkspace"
                 x: 12
-                y: page.interpolateLayout(124, 152)
-                    + page.narrowActionBandHeight
+                y: page.timelineWorkspaceTop
                 width: mainSurface.width - 24
-                height: page.interpolateLayout(276, 451)
+                height: page.compactNarrowLayout ? 83
+                    : page.shortDesktopLayout ? 226
+                    : page.narrowLayout ? 184
+                    : page.interpolateLayout(276, 451)
                 color: Theme.editorCanvas
                 border.color: Theme.divider
                 border.width: 1
@@ -421,10 +435,9 @@ Rectangle {
                 id: trackHeader
                 objectName: "editorTrackHeader"
                 x: 12
-                y: page.interpolateLayout(168, 188)
-                    + page.narrowActionBandHeight
+                y: page.trackRegionTop
                 width: page.interpolateLayout(84, 96)
-                height: page.interpolateLayout(204, 387)
+                height: page.trackRegionHeight
                 color: Theme.surfaceElevated
                 border.color: Theme.divider
                 border.width: 1
@@ -498,10 +511,12 @@ Rectangle {
                 id: ruler
                 objectName: "editorTimeRuler"
                 x: trackHeader.x + trackHeader.width + 12
-                y: page.interpolateLayout(124, 152)
-                    + page.narrowActionBandHeight
+                y: page.timelineWorkspaceTop
                 width: mainSurface.width - x - 10
-                height: page.interpolateLayout(44, 52)
+                height: page.compactNarrowLayout ? 20
+                    : page.shortDesktopLayout ? 44
+                    : page.narrowLayout ? 36
+                    : page.interpolateLayout(44, 52)
                 color: Theme.surface
                 border.color: Theme.divider
                 Repeater {
@@ -635,20 +650,21 @@ Rectangle {
                 objectName: "editorWaveformCanvas"
                 controlModifierHeld: page.controlModifierHeld
                 x: ruler.x
-                y: page.interpolateLayout(168, 188)
-                    + page.narrowActionBandHeight
+                y: page.trackRegionTop
                 width: ruler.width
-                height: page.interpolateLayout(204, 387)
+                height: page.trackRegionHeight
             }
 
             EditorSlider {
                 id: timelineScrollbar
                 objectName: "editorTimelineScrollbar"
                 x: ruler.x
-                y: page.interpolateLayout(378, 589)
-                    + page.narrowActionBandHeight
+                y: page.compactNarrowLayout ? 211
+                    : page.shortDesktopLayout ? 366
+                    : page.narrowLayout ? 340
+                    : page.interpolateLayout(378, 589)
                 width: ruler.width
-                height: 16
+                height: page.compactNarrowLayout ? 12 : 16
                 pointerHitExtent: 16
                 from: 0
                 to: Math.max(0,
@@ -666,10 +682,15 @@ Rectangle {
                 id: playbackTransport
                 objectName: "editorPlaybackTransport"
                 x: 12
-                y: page.interpolateLayout(410, 618)
-                    + page.narrowActionBandHeight
+                y: page.compactNarrowLayout ? 229
+                    : page.shortDesktopLayout ? 390
+                    : page.narrowLayout ? 372
+                    : page.interpolateLayout(410, 618)
                 width: mainSurface.width - 24
-                height: page.interpolateLayout(110, 112)
+                height: page.compactNarrowLayout ? 104
+                    : page.shortDesktopLayout ? 112
+                    : page.narrowLayout ? 80
+                    : page.interpolateLayout(110, 112)
                 color: Theme.surfaceElevated
                 border.color: Theme.divider
                 border.width: 1
@@ -963,36 +984,39 @@ Rectangle {
                 id: shortcutCard
                 objectName: "editorShortcutCard"
                 x: 12
-                y: page.interpolateLayout(532, 746)
-                    + page.narrowActionBandHeight
+                y: page.compactNarrowLayout ? 341
+                    : page.shortDesktopLayout ? 509
+                    : page.narrowLayout ? 460
+                    : page.interpolateLayout(516, 730)
                 width: mainSurface.width - 24
-                height: page.interpolateLayout(103, 67)
+                height: page.narrowLayout || page.shortDesktopLayout ? 67
+                    : page.interpolateLayout(103, 67)
                 color: Theme.surfaceElevated
                 border.color: Theme.divider
                 border.width: 1
                 radius: 6
                 ThemedIcon {
                     objectName: "editorShortcutKeyboardIcon"
-                    x: 20; y: 8
+                    x: 20; y: 2
                     width: 22; height: 22
                     source: Theme.icon("keyboard-box-line")
                     tint: Theme.textPrimary
                 }
                 Label {
-                    x: 50; y: 9
+                    objectName: "editorShortcutTitle"
+                    x: 50; y: 3
                     text: qsTr("快捷键与鼠标操作")
                     color: Theme.textPrimary
                     font.pixelSize: 14
                     font.bold: true
                 }
-                Rectangle { x: 16; y: 38; width: parent.width - 32; height: 1; color: Theme.borderStrong }
                 Flickable {
                     id: shortcutFirstRow
                     objectName: "editorShortcutFirstRow"
-                    property int groupCount: 9
-                    property int dividerCount: 8
-                    x: 18; y: 44
-                    width: parent.width - 36
+                    property int groupCount: 5
+                    property int dividerCount: 4
+                    x: 168; y: 4
+                    width: parent.width - 186
                     height: 16
                     clip: true
                     interactive: contentWidth > width
@@ -1011,16 +1035,12 @@ Rectangle {
                                 qsTr("S = 在播放头处分割"),
                                 qsTr("Delete = 删除片段"),
                                 qsTr("Ctrl+C / X / V = 复制 / 剪切 / 粘贴"),
-                                qsTr("Ctrl+Z / Y = 撤销 / 重做"),
-                                qsTr("Ctrl+鼠标滚轮 = 放大 / 缩小时间线"),
-                                qsTr("Shift+鼠标滚轮 = 横向滚动"),
-                                qsTr("拖拽片段边缘 = 修剪"),
-                                qsTr("双击音量线 = 添加控制点")
+                                qsTr("Ctrl+Z / Y = 撤销 / 重做")
                             ]
                             delegate: Item {
                                 required property int index
                                 required property string modelData
-                                width: firstGroupText.implicitWidth + 16
+                                width: firstGroupText.implicitWidth + 2
                                 height: shortcutFirstRow.height
                                 Text {
                                     id: firstGroupText
@@ -1036,25 +1056,118 @@ Rectangle {
                                         : "editorShortcutFirstDivider_" + index
                                     visible: index < shortcutFirstRow.groupCount - 1
                                     x: parent.width - width
-                                    y: 0; width: 1; height: 16
+                                    y: 0; width: 1; height: parent.height
+                                    color: Theme.borderStrong
+                                }
+                            }
+                        }
+
+                    }
+                }
+                Rectangle {
+                    objectName: "editorShortcutRowDivider"
+                    x: 16; y: 27
+                    width: parent.width - 32; height: 1
+                    color: Theme.borderStrong
+                }
+                Flickable {
+                    id: shortcutSecondRow
+                    objectName: "editorShortcutSecondRow"
+                    property int groupCount: 4
+                    property int dividerCount: 3
+                    x: 18; y: 34
+                    width: parent.width - 36
+                    height: 16
+                    clip: true
+                    interactive: contentWidth > width
+                    flickableDirection: Flickable.HorizontalFlick
+                    boundsBehavior: Flickable.StopAtBounds
+                    contentWidth: shortcutSecondRowContent.width
+                    contentHeight: height
+
+                    Row {
+                        id: shortcutSecondRowContent
+                        height: shortcutSecondRow.height
+                        spacing: 0
+                        Repeater {
+                            model: [
+                                qsTr("Ctrl+鼠标滚轮 = 放大 / 缩小时间线"),
+                                qsTr("Shift+鼠标滚轮 = 横向滚动"),
+                                qsTr("拖拽片段边缘 = 修剪"),
+                                qsTr("双击音量线 = 添加控制点")
+                            ]
+                            delegate: Item {
+                                required property int index
+                                required property string modelData
+                                width: secondGroupText.implicitWidth + 2
+                                height: shortcutSecondRow.height
+                                Text {
+                                    id: secondGroupText
+                                    objectName: "editorShortcutSecondGroup_" + index
+                                    anchors.centerIn: parent
+                                    text: modelData
+                                    color: Theme.textSecondary
+                                    font.pixelSize: 13
+                                }
+                                Rectangle {
+                                    objectName: "editorShortcutSecondDivider_" + index
+                                    visible: index < shortcutSecondRow.groupCount - 1
+                                    x: parent.width - width
+                                    y: 0; width: 1; height: parent.height
                                     color: Theme.borderStrong
                                 }
                             }
                         }
                     }
 
-                    WheelHandler {
-                        acceptedDevices: PointerDevice.Mouse
-                            | PointerDevice.TouchPad
-                        onWheel: function(event) {
-                            const delta = event.angleDelta.x !== 0
-                                ? event.angleDelta.x : event.angleDelta.y
+                }
+                Item {
+                    id: shortcutFirstRowWheelOverlay
+                    objectName: "editorShortcutFirstRowWheelOverlay"
+                    x: shortcutFirstRow.x
+                    y: shortcutFirstRow.y
+                    width: shortcutFirstRow.width
+                    height: shortcutFirstRow.height
+                    z: 1
+
+                    MouseArea {
+                        objectName: "editorShortcutFirstRowWheel"
+                        anchors.fill: parent
+                        acceptedButtons: Qt.NoButton
+                        hoverEnabled: false
+                        preventStealing: false
+                        onWheel: function(wheel) {
                             shortcutFirstRow.contentX = Math.max(0,
                                 Math.min(shortcutFirstRow.contentWidth
                                              - shortcutFirstRow.width,
                                          shortcutFirstRow.contentX
-                                             - Math.sign(delta) * 80))
-                            event.accepted = true
+                                             - wheel.angleDelta.y))
+                            wheel.accepted = true
+                        }
+                    }
+                }
+                Item {
+                    id: shortcutSecondRowWheelOverlay
+                    objectName: "editorShortcutSecondRowWheelOverlay"
+                    x: shortcutSecondRow.x
+                    y: shortcutSecondRow.y
+                    width: shortcutSecondRow.width
+                    height: shortcutSecondRow.height
+                    z: 1
+
+                    MouseArea {
+                        objectName: "editorShortcutSecondRowWheel"
+                        anchors.fill: parent
+                        acceptedButtons: Qt.NoButton
+                        hoverEnabled: false
+                        preventStealing: false
+                        onWheel: function(wheel) {
+                            shortcutSecondRow.contentX = Math.max(0,
+                                Math.min(shortcutSecondRow.contentWidth
+                                             - shortcutSecondRow.width,
+                                         shortcutSecondRow.contentX
+                                             - wheel.angleDelta.y))
+                            wheel.accepted = true
                         }
                     }
                 }

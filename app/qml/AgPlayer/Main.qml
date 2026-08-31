@@ -655,6 +655,7 @@ ApplicationWindow {
         sequence: "Space"
         context: Qt.WindowShortcut
         enabled: !mainWindow.editingText() && !WindowController.audioToolsVisible
+            && !AudioEditorController.editorPlaybackOwnsPlayer
         onActivated: PlaybackController.togglePlayback()
     }
 

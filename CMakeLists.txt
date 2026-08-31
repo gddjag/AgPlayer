@@ -47,6 +47,8 @@ find_package(FFMPEG REQUIRED)
 find_path(MINIAUDIO_INCLUDE_DIRS miniaudio.h REQUIRED)
 find_package(SoundTouch CONFIG REQUIRED)
 
+# Keep the DSP source reproducible and offline-cacheable.  Both dependencies
+# are header-only targets, so this adds no runtime DLL.
 FetchContent_Declare(signalsmith_linear
     URL https://codeload.github.com/Signalsmith-Audio/linear/zip/refs/tags/0.3.1
     URL_HASH SHA256=DC44DE0DFC3AA25BC215CDAB5467E1FEC19E3FB4938AA32BF45FC5EA7EB59C7B

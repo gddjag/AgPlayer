@@ -1,6 +1,5 @@
 #include "editor_playback_stream.hpp"
 
-#include "../formant_preserver.hpp"
 #include "../time_pitch_engine.hpp"
 #include "automation_time_mapper.hpp"
 
@@ -117,21 +116,13 @@ public:
                 && processor->setTempoRatio(tempo)
                 && (parameters.keep_pitch
                     ? processor->setPitchCents(effective_pitch)
-                    : processor->setRateRatio(effectivePitchRatio));
+                    : processor->setRateRatio(effectivePitchRatio))
+                && processor->setFormantPreservation(
+                    parameters.formant_preservation);
         } else {
             processor.reset();
             processor_ready = true;
         }
-        resetFormantPreserver();
-    }
-
-    void resetFormantPreserver()
-    {
-        formant_preserver.reset();
-        if (!parameters.formant_preservation || effective_pitch == 0) return;
-        const double ratio = std::pow(2.0, effective_pitch / 1'200.0);
-        formant_preserver = std::make_unique<agplayer::FormantPreserver>(
-            metadata_value.sample_rate, metadata_value.channels, ratio);
     }
 
     void resetRaw(const SampleFrame frame)
@@ -255,11 +246,6 @@ public:
         return AG_OK;
     }
 
-    void applyFormant(std::vector<float>& samples, const std::size_t frames)
-    {
-        if (formant_preserver) formant_preserver->process(samples.data(), frames);
-    }
-
     void resetAutomationCursor(const SampleFrame outputFrame)
     {
         const SampleFrame timelineFrame = automation_time.map(outputFrame);
@@ -313,7 +299,6 @@ public:
                 if (result != AG_OK) return result;
                 block.frames = block.samples.size()
                     / static_cast<std::size_t>(metadata_value.channels);
-                applyFormant(block.samples, block.frames);
                 applyAutomation(block.samples, block.frames);
                 block.timestamp_frame = emitted_frames;
                 block.timestamp_ms = emitted_frames * 1'000
@@ -348,7 +333,6 @@ public:
             }
             block.samples.resize(received * static_cast<std::size_t>(
                 metadata_value.channels));
-            applyFormant(block.samples, received);
             applyAutomation(block.samples, received);
             block.frames = received;
             block.timestamp_frame = emitted_frames;
@@ -381,8 +365,6 @@ public:
             if (processor) {
                 processor->reset();
                 configureProcessor();
-            } else {
-                resetFormantPreserver();
             }
             return processor_ready ? AG_OK : AG_INVALID_ARGUMENT;
         } catch (...) {
@@ -409,7 +391,6 @@ public:
     bool flushed{};
     int effective_pitch{};
     std::unique_ptr<agplayer::ITimePitchEngine> processor;
-    std::unique_ptr<agplayer::FormantPreserver> formant_preserver;
     agplayer::TimePitchEngineFactory engine_factory{};
 };
 

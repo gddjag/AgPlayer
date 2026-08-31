@@ -33,6 +33,7 @@ private slots:
     void restoresSavedQueueOrderAndFiltersUnavailableTracks();
     void startsPlaybackFromVisibleListScope();
     void freshCoreCanBeAcquiredForEditorOutput();
+    void editorOutputCanBeReacquiredAfterEmptySessionStream();
     void editorOutputRestoresExactScopedPlaybackSession();
     void editorOutputLeaseFailuresAreRetryable();
     void exactWaveformDurationAlignsPlaybackTimeline();
@@ -1027,6 +1028,48 @@ void PlaybackControllerTest::freshCoreCanBeAcquiredForEditorOutput()
         controller.releaseEditorOutput();
         QVERIFY(!controller.editorOutputOwned_);
         QVERIFY(controller.acquireEditorOutput());
+        controller.releaseEditorOutput();
+    }
+    ag_player_destroy(core);
+}
+
+void PlaybackControllerTest::editorOutputCanBeReacquiredAfterEmptySessionStream()
+{
+    const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(!fixture.isEmpty());
+
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core);
+        controller.setSpeedRatio(1.25);
+        controller.setKeepPitch(true);
+        QVERIFY(controller.acquireEditorOutput());
+
+        const auto analysis = agplayer::editor::AudioFileAnalyzer::analyze(
+            std::filesystem::path(fixture.toStdWString()), 64U);
+        QVERIFY(analysis.success);
+        agplayer::editor::EditorPlaybackParameters parameters;
+        std::string streamError;
+        auto editorStream = agplayer::editor::EditorPlaybackStream::create(
+            agplayer::editor::AudioDocument::fromSource(
+                analysis.source).timelineSnapshot(), parameters, streamError);
+        QVERIFY2(editorStream != nullptr, streamError.c_str());
+        QCOMPARE(agplayer::editor::load_editor_playback_stream(
+                     core, std::move(editorStream)), AG_OK);
+        controller.releaseEditorOutput();
+
+        ag_playback_time_pitch_config beforeReacquire{};
+        QCOMPARE(ag_player_get_time_pitch(core, &beforeReacquire), AG_OK);
+        QCOMPARE(beforeReacquire.speed_ratio, 1.0);
+        QVERIFY(beforeReacquire.keep_pitch);
+
+        QVERIFY(controller.acquireEditorOutput());
+        ag_playback_time_pitch_config afterReacquire{};
+        QCOMPARE(ag_player_get_time_pitch(core, &afterReacquire), AG_OK);
+        QCOMPARE(afterReacquire.speed_ratio, beforeReacquire.speed_ratio);
+        QCOMPARE(afterReacquire.keep_pitch, beforeReacquire.keep_pitch);
         controller.releaseEditorOutput();
     }
     ag_player_destroy(core);

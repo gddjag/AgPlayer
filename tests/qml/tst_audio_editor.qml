@@ -27,7 +27,26 @@ TestCase {
         AudioToolsWindow { visible: true }
     }
 
+    Component {
+        id: mainComponent
+        Main { visible: true }
+    }
+
     Component { id: signalSpyComponent; SignalSpy {} }
+
+    Component {
+        id: editorPlaybackHistoryComponent
+        Connections {
+            property var samples: []
+            target: AudioEditorController
+            function onPlaybackChanged() {
+                samples.push({
+                    playing: AudioEditorController.playing,
+                    error: AudioEditorController.errorMessage
+                })
+            }
+        }
+    }
 
     property var host
     property var page
@@ -106,6 +125,25 @@ TestCase {
         return null
     }
 
+    function createAudioToolsShell(width, height) {
+        const shell = createTemporaryObject(shellComponent, testCase)
+        verify(shell)
+        shell.width = width
+        shell.height = height
+        shell.requestActivate()
+        const shellPage = findChild(shell, "audioEditorPage")
+        const content = findChild(shell, "audioToolsContentStack")
+        tryVerify(function() {
+            return shellPage && content && shell.active
+                && shellPage.width > 0 && shellPage.height > 0
+        })
+        return { shell: shell, page: shellPage, content: content }
+    }
+
+    function itemPositionInPage(item, shellPage) {
+        return item.mapToItem(shellPage, 0, 0)
+    }
+
     function test_referenceGeometryAt1672x941ShellContent() {
         host.width = 1672
         host.height = 822
@@ -121,7 +159,7 @@ TestCase {
         verifyGeometry("editorWaveformCanvas", 120, 188, 1198, 387)
         verifyGeometry("editorTimelineScrollbar", 120, 589, 1198, 16)
         verifyGeometry("editorPlaybackTransport", 12, 618, 1304, 112)
-        verifyGeometry("editorShortcutCard", 12, 746, 1304, 67)
+        verifyGeometry("editorShortcutCard", 12, 730, 1304, 67)
         verifyGeometry("editorStatusBar", 0, 797, 1328, 25)
 
         compare(findChild(page, "inspectorTempoTitle").text,
@@ -290,7 +328,9 @@ TestCase {
         SettingsController.waveformThickness = originalThickness
     }
 
-    function test_spaceTransportOwnsFocusAcrossNonTextControls() {
+    function test_firstSpaceWithButtonFocusTransitionsOnlyEditorPlayback() {
+        const mainWindow = createTemporaryObject(mainComponent, testCase)
+        verify(mainWindow)
         const shell = createTemporaryObject(shellComponent, testCase)
         verify(shell)
         tryVerify(function() { return shell.visible })
@@ -299,59 +339,47 @@ TestCase {
         const shellPage = findChild(shell, "audioEditorPage")
         const spaceShortcut = findChild(shell, "audioToolsSpaceShortcut")
         verify(shellPage && spaceShortcut)
-        compare(spaceShortcut.context, Qt.ApplicationShortcut)
+        compare(spaceShortcut.context, Qt.WindowShortcut)
 
-        const controls = [
-            findChild(shellPage, "editorCommand_split"),
-            findChild(shellPage, "editorPrimaryPlayButton"),
-            findChild(shellPage, "inspectorSpeedSlider"),
-            findChild(shellPage, "editorExportCodec")
-        ]
-        for (let index = 0; index < controls.length; ++index) {
-            const control = controls[index]
-            verify(control, "missing Space focus regression control")
-            if (index === 0)
-                compare(control.focusPolicy, Qt.NoFocus)
-            else if (index === 1)
-                compare(control.focusPolicy, Qt.TabFocus)
-        }
+        const primaryPlay = findChild(shellPage, "editorPrimaryPlayButton")
+        verify(primaryPlay)
+        compare(primaryPlay.focusPolicy, Qt.TabFocus)
 
         if (AudioEditorController.hasDocument)
             verify(AudioEditorController.clearDocument())
         verify(AudioEditorController.createUntitledDocument(48000, 2, 192000))
         verify(AudioEditorController.setActiveTool("select"))
-        const previousSliderValue = controls[2].value
-        const previousComboIndex = controls[3].currentIndex
-        for (const control of controls) {
-            control.forceActiveFocus()
-            tryVerify(function() { return control.activeFocus })
-            verify(spaceShortcut.enabled,
-                   "Space shortcut disabled for " + control.objectName)
-            compare(AudioEditorController.activeTool, "select")
-            compare(controls[2].value, previousSliderValue)
-            compare(controls[3].currentIndex, previousComboIndex)
-            compare(controls[3].popup.visible, false)
-        }
+        primaryPlay.forceActiveFocus()
+        tryVerify(function() { return primaryPlay.activeFocus })
+        tryVerify(function() {
+            return AudioEditorController.editorPlaybackOwnsPlayer
+        })
+        verify(spaceShortcut.enabled)
         const activated = createTemporaryObject(signalSpyComponent, testCase,
             { target: spaceShortcut, signalName: "activated" })
+        const editorPlayback = createTemporaryObject(
+            editorPlaybackHistoryComponent, testCase)
+        const mainPlayback = createTemporaryObject(signalSpyComponent, testCase,
+            { target: PlaybackController, signalName: "stateChanged" })
         verify(activated.valid)
+        verify(editorPlayback)
+        verify(mainPlayback.valid)
         keyClick(Qt.Key_Space)
         tryCompare(activated, "count", 1)
         tryVerify(function() {
-            return AudioEditorController.playing
-                || AudioEditorController.errorMessage.length > 0
-        }, 1000)
+            return editorPlayback.samples.some(function(sample) {
+                return sample.playing
+            })
+        })
+        compare(mainPlayback.count, 0)
+        if (!AudioEditorController.playing)
+            compare(AudioEditorController.errorMessage, "编辑预览解码失败")
+        compare(activated.count, 1)
         compare(AudioEditorController.activeTool, "select")
-        compare(controls[2].value, previousSliderValue)
-        compare(controls[3].currentIndex, previousComboIndex)
-        compare(controls[3].popup.visible, false)
-        if (AudioEditorController.playing) {
-            keyClick(Qt.Key_Space)
-            tryCompare(AudioEditorController, "playing", false)
-        }
+        editorPlayback.enabled = false
+        AudioEditorController.deactivate()
         AudioEditorController.clearDocument()
         tryCompare(AudioEditorController, "hasDocument", false)
-        AudioEditorController.deactivate()
         AudioEditorController.activate()
     }
 
@@ -570,7 +598,7 @@ TestCase {
     function test_referenceTransportShortcutAndStatusCopy() {
         const playBackground = findChild(page, "editorPrimaryPlayBackground")
         const shortcutFirst = findChild(page, "editorShortcutFirstGroup_0")
-        const shortcutEnvelope = findChild(page, "editorShortcutFirstGroup_8")
+        const shortcutEnvelope = findChild(page, "editorShortcutSecondGroup_3")
         verify(playBackground && shortcutFirst && shortcutEnvelope)
         verify(shortcutFirst.text.indexOf("空格 = 播放 / 暂停") >= 0)
         compare(shortcutFirst.text.indexOf("R = 开始录音"), -1)
@@ -584,70 +612,372 @@ TestCase {
     function test_shortcutCardUsesKeyboardIconAndRealDividers() {
         const keyboard = findChild(page, "editorShortcutKeyboardIcon")
         const divider = findChild(page, "editorShortcutDivider")
-        const laterDivider = findChild(page, "editorShortcutFirstDivider_7")
+        const laterDivider = findChild(page, "editorShortcutSecondDivider_2")
         verify(keyboard, "shortcut keyboard icon is missing")
         verify(divider, "first shortcut divider is missing")
         verify(laterDivider, "last shortcut divider is missing")
         verify(keyboard.source.toString().indexOf("keyboard-box-line.svg") >= 0)
         compare(divider.width, 1)
         compare(laterDivider.width, 1)
-        verify(divider.height >= 16)
-        verify(laterDivider.height >= 16)
+        compare(divider.height, 16)
+        compare(laterDivider.height, 16)
     }
 
-    function test_shortcutCardUsesStructuredReferenceGroups() {
+    function test_shortcutCardUsesTwoStructuredReferenceRows() {
         const firstRow = findChild(page, "editorShortcutFirstRow")
-        verify(firstRow)
-        compare(firstRow.groupCount, 9)
-        compare(firstRow.dividerCount, 8)
+        const secondRow = findChild(page, "editorShortcutSecondRow")
+        const rowDivider = findChild(page, "editorShortcutRowDivider")
+        const title = findChild(page, "editorShortcutTitle")
+        verify(firstRow && secondRow && rowDivider && title)
+        compare(firstRow.groupCount, 5)
+        compare(firstRow.dividerCount, 4)
+        compare(secondRow.groupCount, 4)
+        compare(secondRow.dividerCount, 3)
+        compare(firstRow.height, 16)
+        compare(secondRow.height, 16)
+        compare(firstRow.y, 4)
+        compare(secondRow.y, 34)
+        compare(rowDivider.y, 27)
+        compare(rowDivider.height, 1)
+        verify(firstRow.x > title.x + title.width)
+        verify(firstRow.y < title.y + title.height)
         compare(findChild(page, "editorShortcutFirstGroup_0").text,
                 "空格 = 播放 / 暂停")
         compare(findChild(page, "editorShortcutFirstGroup_4").text,
                 "Ctrl+Z / Y = 撤销 / 重做")
-        compare(findChild(page, "editorShortcutFirstGroup_8").text,
+        compare(findChild(page, "editorShortcutSecondGroup_3").text,
                 "双击音量线 = 添加控制点")
     }
 
-    function test_shortcutReferenceRowsFillTheCardWithoutClippingLabels() {
+    function test_shortcutReferenceRowsExposeAllLabelsWithoutScrolling() {
         host.width = 1672
         host.height = 822
         wait(0)
         const card = findChild(page, "editorShortcutCard")
         const firstRow = findChild(page, "editorShortcutFirstRow")
-        verify(card && firstRow)
-        compare(firstRow.x, 18)
-        compare(firstRow.width, card.width - 36)
-        compare(firstRow.x + firstRow.width, card.width - 18)
-
-        const lastFirstDivider = findChild(page, "editorShortcutFirstDivider_7")
-        verify(lastFirstDivider)
-        const firstDividerPosition = lastFirstDivider.mapToItem(firstRow, 0, 0)
-        verify(firstDividerPosition.x > firstRow.width * 0.70)
-
-        for (let index = 0; index < firstRow.groupCount; ++index) {
-            const label = findChild(page, "editorShortcutFirstGroup_" + index)
-            verify(label)
-            verify(label.width >= label.implicitWidth,
-                   "first row label " + index + " is clipped")
+        const secondRow = findChild(page, "editorShortcutSecondRow")
+        const status = findChild(page, "editorStatusBar")
+        verify(card && firstRow && secondRow && status)
+        verify(card.y + card.height <= status.y,
+               "shortcut rows must not sit beneath the status overlay")
+        const rows = [[firstRow, 168, card.width - 186],
+                      [secondRow, 18, card.width - 36]]
+        for (const entry of rows) {
+            const row = entry[0]
+            compare(row.x, entry[1])
+            compare(row.width, entry[2])
+            compare(row.x + row.width, card.width - 18)
+            verify(row.contentWidth <= row.width,
+                    row.objectName + " should not need scrolling at 1672 px: "
+                    + row.contentWidth + "/" + row.width)
+            compare(row.contentX, 0)
+            for (let index = 0; index < row.groupCount; ++index) {
+                const prefix = row === firstRow
+                    ? "editorShortcutFirstGroup_" : "editorShortcutSecondGroup_"
+                const label = findChild(page, prefix + index)
+                verify(label)
+                verify(label.width >= label.implicitWidth,
+                       row.objectName + " label " + index + " is clipped")
+                verify(label.implicitHeight <= row.height,
+                       row.objectName + " label " + index
+                       + " is vertically clipped")
+            }
         }
     }
 
-    function test_compactShortcutRowScrollsInsteadOfShrinkingOrClipping() {
+    function test_shortcutRowWheelOverlaysCoverTheirFullViewports() {
+        const firstRow = findChild(page, "editorShortcutFirstRow")
+        const secondRow = findChild(page, "editorShortcutSecondRow")
+        const firstOverlay = findChild(page, "editorShortcutFirstRowWheelOverlay")
+        const secondOverlay = findChild(page, "editorShortcutSecondRowWheelOverlay")
+        const firstWheel = findChild(page, "editorShortcutFirstRowWheel")
+        const secondWheel = findChild(page, "editorShortcutSecondRowWheel")
+        verify(firstRow && secondRow && firstOverlay && secondOverlay
+               && firstWheel && secondWheel)
+        for (const pair of [[firstRow, firstOverlay, firstWheel],
+                            [secondRow, secondOverlay, secondWheel]]) {
+            const row = pair[0]
+            const overlay = pair[1]
+            const wheel = pair[2]
+            compare(overlay.x, row.x)
+            compare(overlay.y, row.y)
+            compare(overlay.width, row.width)
+            compare(overlay.height, row.height)
+            verify(overlay.z > row.z)
+            compare(wheel.parent, overlay)
+            compare(wheel.acceptedButtons, Qt.NoButton)
+            compare(wheel.hoverEnabled, false)
+            compare(wheel.preventStealing, false)
+        }
+    }
+
+    function test_shortcutWheelOverlaysReceiveWheelFromBlankWideViewport() {
+        host.width = 1672
+        host.height = 822
+        wait(0)
+        const card = findChild(page, "editorShortcutCard")
+        const pairs = [
+            [findChild(page, "editorShortcutFirstRow"),
+             findChild(page, "editorShortcutFirstRowWheelOverlay"),
+             findChild(page, "editorShortcutFirstRowWheel"),
+             findChild(page, "editorShortcutFirstGroup_4")],
+            [findChild(page, "editorShortcutSecondRow"),
+             findChild(page, "editorShortcutSecondRowWheelOverlay"),
+             findChild(page, "editorShortcutSecondRowWheel"),
+             findChild(page, "editorShortcutSecondGroup_3")]
+        ]
+        verify(card)
+        for (const pair of pairs) {
+            const row = pair[0]
+            const overlay = pair[1]
+            const wheel = pair[2]
+            const lastLabel = pair[3]
+            verify(row && overlay && wheel && lastLabel)
+            verify(row.contentWidth <= row.width)
+            const blank = lastLabel.mapToItem(card,
+                lastLabel.width + 1, lastLabel.height / 2)
+            verify(blank.x >= overlay.x && blank.x < overlay.x + overlay.width)
+            verify(blank.y >= overlay.y && blank.y < overlay.y + overlay.height)
+            const spy = createTemporaryObject(signalSpyComponent, testCase,
+                { target: wheel, signalName: "wheel" })
+            verify(spy.valid)
+            mouseWheel(card, blank.x, blank.y, 0, -120,
+                       Qt.NoButton, Qt.NoModifier)
+            tryVerify(function() { return spy.count > 0 })
+            compare(row.contentX, 0)
+        }
+    }
+
+    function test_shortcutWheelOverlayScrollsVisible1280RowToEnd() {
         host.width = 1280
-        host.height = 720
+        // AudioToolsWindow(1280x720) leaves the editor page with 601 px after
+        // its fixed chrome.  Keep this standalone wheel dispatch test on the
+        // same responsive branch as the real-shell geometry test below.
+        host.height = 601
+        wait(0)
+        const card = findChild(page, "editorShortcutCard")
+        const pairs = [
+            [findChild(page, "editorShortcutFirstRow"),
+             findChild(page, "editorShortcutFirstRowWheelOverlay"),
+             findChild(page, "editorShortcutFirstRowWheel")],
+            [findChild(page, "editorShortcutSecondRow"),
+             findChild(page, "editorShortcutSecondRowWheelOverlay"),
+             findChild(page, "editorShortcutSecondRowWheel")]
+        ]
+        verify(card)
+        const overflowed = pairs.filter(function(pair) {
+            return pair[0] && pair[1] && pair[2]
+                && pair[0].contentWidth > pair[0].width
+        })
+        verify(overflowed.length > 0,
+               "a visible 1280 px shortcut row must overflow horizontally")
+        for (const pair of overflowed) {
+            const row = pair[0]
+            const overlay = pair[1]
+            const wheel = pair[2]
+            verify(row && overlay)
+            const maximum = row.contentWidth - row.width
+            row.contentX = 0
+            wait(0)
+            verify(maximum > 0)
+            const viewportPoint = overlay.mapToItem(card,
+                overlay.width - 1, overlay.height / 2)
+            const spy = createTemporaryObject(signalSpyComponent, testCase,
+                { target: wheel, signalName: "wheel" })
+            verify(spy.valid)
+            for (let step = 0; step <= Math.ceil(maximum / 80); ++step) {
+                mouseWheel(card, viewportPoint.x, viewportPoint.y,
+                           0, -120, Qt.NoButton, Qt.NoModifier)
+            }
+            tryVerify(function() { return spy.count > 0 })
+            tryVerify(function() { return row.contentX > 0 })
+            compare(row.contentX, maximum)
+        }
+    }
+
+    function test_compactShortcutRowsKeepHorizontalAccessAndTextSize_data() {
+        return [
+            { tag: "desktop", width: 1280, height: 601 },
+            { tag: "compact", width: 880, height: 441 }
+        ]
+    }
+
+    function test_compactShortcutRowsKeepHorizontalAccessAndTextSize(data) {
+        host.width = data.width
+        host.height = data.height
         wait(0)
         const firstRow = findChild(page, "editorShortcutFirstRow")
-        const firstLabel = findChild(page, "editorShortcutFirstGroup_0")
-        const lastLabel = findChild(page, "editorShortcutFirstGroup_8")
-        verify(firstRow && firstLabel && lastLabel)
-        verify(firstRow.contentWidth > firstRow.width)
-        verify(firstLabel.font.pixelSize >= 13)
-        verify(lastLabel.font.pixelSize >= 13)
-        firstRow.contentX = firstRow.contentWidth - firstRow.width
+        const secondRow = findChild(page, "editorShortcutSecondRow")
+        verify(firstRow && secondRow)
+        for (const row of [firstRow, secondRow]) {
+            compare(row.height, 16)
+            compare(row.flickableDirection, Flickable.HorizontalFlick)
+            const prefix = row === firstRow
+                ? "editorShortcutFirstGroup_" : "editorShortcutSecondGroup_"
+            const lastLabel = findChild(page, prefix + (row.groupCount - 1))
+            verify(lastLabel)
+            compare(lastLabel.font.pixelSize, 13)
+            verify(lastLabel.implicitHeight <= row.height)
+            row.contentX = Math.max(0, row.contentWidth - row.width)
+            wait(0)
+            const lastPosition = lastLabel.mapToItem(row, 0, 0)
+            verify(lastPosition.x + lastLabel.width <= row.width + 1,
+                   row.objectName + " last label is unreachable")
+        }
+    }
+
+    function test_narrowViewportKeepsPlaybackAndBothShortcutRowsReachable() {
+        host.width = 880
+        // AudioToolsWindow(880x560) gives AudioEditorPage 441 px of content.
+        host.height = 441
         wait(0)
-        verify(firstRow.contentX > 0)
-        const lastPosition = lastLabel.mapToItem(firstRow, 0, 0)
-        verify(lastPosition.x + lastLabel.width <= firstRow.width + 1)
+
+        const main = findChild(page, "editorMainColumn")
+        const transport = findChild(page, "editorPlaybackTransport")
+        const card = findChild(page, "editorShortcutCard")
+        const status = findChild(page, "editorStatusBar")
+        const playAccess = findChild(page, "editorNarrowPlaybackAccess")
+        const firstRow = findChild(page, "editorShortcutFirstRow")
+        const secondRow = findChild(page, "editorShortcutSecondRow")
+        verify(main && transport && card && status && playAccess
+               && firstRow && secondRow)
+
+        main.contentY = 0
+        wait(0)
+        const transportPosition = transport.mapToItem(page, 0, 0)
+        const cardPosition = card.mapToItem(page, 0, 0)
+        const statusPosition = status.mapToItem(page, 0, 0)
+        verify(playAccess.visible && playAccess.enabled === false)
+        verify(transportPosition.y >= 0)
+        verify(transportPosition.y + transport.height <= cardPosition.y,
+               "shortcut card must remain below the playback panel")
+        verify(cardPosition.y >= 0)
+        verify(cardPosition.y + card.height <= page.height,
+               "both 13px shortcut rows must be visible in the 880x560 shell page")
+        verify(cardPosition.y + card.height <= statusPosition.y,
+               "shortcut card must not be covered by the status bar")
+        for (const row of [firstRow, secondRow]) {
+            verify(row.mapToItem(page, 0, 0).y >= cardPosition.y)
+            verify(row.mapToItem(page, 0, row.height).y
+                   <= cardPosition.y + card.height)
+        }
+    }
+
+    function test_realShell1280KeepsTransportAndShortcutCardSeparate() {
+        const layout = createAudioToolsShell(1280, 720)
+        compare(Math.round(layout.page.height), 601)
+        compare(Math.round(layout.content.height), 601)
+        const transport = findChild(layout.page, "editorPlaybackTransport")
+        const card = findChild(layout.page, "editorShortcutCard")
+        const status = findChild(layout.page, "editorStatusBar")
+        verify(transport && card && status)
+        const transportPosition = itemPositionInPage(transport, layout.page)
+        const cardPosition = itemPositionInPage(card, layout.page)
+        const statusPosition = itemPositionInPage(status, layout.page)
+        verify(transportPosition.y + transport.height <= cardPosition.y,
+               "1280 shell transport/card overlap")
+        verify(cardPosition.y + card.height <= statusPosition.y,
+               "1280 shell shortcut card/status overlap")
+        verify(statusPosition.y + status.height <= layout.page.height,
+               "1280 shell status is clipped")
+        layout.shell.destroy()
+    }
+
+    function test_clipOperationBandKeeps24LogicalPixels_data() {
+        return [
+            { tag: "reference", width: 1672, height: 941,
+              canvasHeight: 387 },
+            { tag: "desktop", width: 1280, height: 720,
+              canvasHeight: 162 },
+            { tag: "compact", width: 880, height: 560,
+              canvasHeight: 48 }
+        ]
+    }
+
+    function test_clipOperationBandKeeps24LogicalPixels(data) {
+        const layout = createAudioToolsShell(data.width, data.height)
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        const canvas = findChild(layout.page, "editorWaveformCanvas")
+        verify(canvas)
+        compare(Math.round(canvas.height), data.canvasHeight)
+        AudioEditorController.viewport.setViewportWidth(canvas.width)
+        verify(AudioEditorController.viewport.setVisibleRange(0, 96000))
+        tryVerify(function() {
+            return findVisibleItem(
+                canvas, "editorEventHeaderInteraction") !== null
+        })
+        const header = findVisibleItem(
+            canvas, "editorEventHeaderInteraction")
+        const eventBoundary = findVisibleItem(
+            canvas, "editorEventVisualBoundary")
+        verify(header && eventBoundary)
+        compare(Math.round(header.height), 24,
+                "clip operation band must remain 24 logical pixels at "
+                    + data.width + "x" + data.height)
+
+        const headerBottom = header.mapToItem(canvas, 0, header.height).y
+        verify(headerBottom < canvas.height,
+               "clip operation band must leave waveform body access")
+        if (data.width === 880) {
+            compare(Math.round(canvas.height - headerBottom), 16)
+            const originalStart = Number(
+                AudioEditorController.timelineEventViews[0].timelineStart)
+            mouseDrag(header, header.width * 0.15, 4,
+                      header.width * 0.1, 0,
+                      Qt.LeftButton, Qt.NoModifier, 30)
+            verify(Number(AudioEditorController.timelineEventViews[0]
+                              .timelineStart) > originalStart,
+                   "24px compact clip band must retain event movement")
+            mouseDrag(canvas, canvas.width * 0.1, canvas.height - 4,
+                      canvas.width * 0.15, 0,
+                      Qt.LeftButton, Qt.NoModifier, 30)
+            verify(AudioEditorController.selectionEnd
+                       > AudioEditorController.selectionStart,
+                   "48px waveform must retain range-selection access below "
+                       + "the fixed clip operation band")
+        }
+        layout.shell.destroy()
+    }
+
+    function test_realShell880KeepsTransportShortcutAndStatusInside441() {
+        const layout = createAudioToolsShell(880, 560)
+        compare(Math.round(layout.page.height), 441)
+        compare(Math.round(layout.content.height), 441)
+        const transport = findChild(layout.page, "editorPlaybackTransport")
+        const primaryPlay = findChild(layout.page, "editorPrimaryPlayButton")
+        const canvas = findChild(layout.page, "editorWaveformCanvas")
+        const card = findChild(layout.page, "editorShortcutCard")
+        const status = findChild(layout.page, "editorStatusBar")
+        const firstRow = findChild(layout.page, "editorShortcutFirstRow")
+        const secondRow = findChild(layout.page, "editorShortcutSecondRow")
+        verify(transport && primaryPlay && canvas && card && status
+               && firstRow && secondRow)
+        const transportPosition = itemPositionInPage(transport, layout.page)
+        const primaryPosition = itemPositionInPage(primaryPlay, layout.page)
+        const cardPosition = itemPositionInPage(card, layout.page)
+        const statusPosition = itemPositionInPage(status, layout.page)
+        verify(transportPosition.y >= 0
+               && transportPosition.y + transport.height <= layout.page.height,
+               "880 shell transport is clipped")
+        verify(primaryPosition.y >= transportPosition.y
+               && primaryPosition.y + primaryPlay.height
+                    <= transportPosition.y + transport.height,
+               "880 shell primary playback button is clipped")
+        verify(canvas.height >= 48,
+               "880 shell waveform must retain a real pointer-edit surface")
+        verify(transportPosition.y + transport.height <= cardPosition.y,
+               "880 shell transport/card overlap")
+        verify(cardPosition.y + card.height <= statusPosition.y,
+               "880 shell shortcut card/status overlap")
+        verify(statusPosition.y + status.height <= layout.page.height,
+               "880 shell status is clipped")
+        for (const row of [firstRow, secondRow]) {
+            const rowPosition = itemPositionInPage(row, layout.page)
+            verify(rowPosition.y >= cardPosition.y
+                   && rowPosition.y + row.height <= cardPosition.y + card.height,
+                   row.objectName + " is clipped at 880 shell height")
+        }
+        layout.shell.destroy()
     }
 
     function test_referenceTransportUsesFineControlsAndHoverShortcuts() {
@@ -787,7 +1117,7 @@ TestCase {
         compare(AudioEditorController.timelineEventViews.length, 1)
     }
 
-    function test_selectToolDragOnEventMovesTheEventWithoutCreatingSelection() {
+    function test_selectToolHeaderDragMovesTheSelectedEventWithoutCreatingRange() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
         verify(AudioEditorController.setActiveTool("select"))
         const canvas = findChild(page, "editorWaveformCanvas")
@@ -795,18 +1125,48 @@ TestCase {
         AudioEditorController.viewport.setViewportWidth(canvas.width)
         verify(AudioEditorController.viewport.setVisibleRange(0, 96000))
         wait(0)
-        const body = findVisibleItem(canvas, "editorEventBodyInteraction")
-        verify(body, "event body must expose the selection interaction seam")
-        const fromX = Math.round(body.width * 0.25)
-        const toX = Math.round(body.width * 0.75)
+        const header = findVisibleItem(canvas, "editorEventHeaderInteraction")
+        verify(header, "event header must expose the move interaction seam")
+        const fromX = Math.round(header.width * 0.25)
+        const toX = Math.round(header.width * 0.75)
         const originalStart = AudioEditorController.timelineEventViews[0].timelineStart
 
-        mouseDrag(body, fromX, body.height * 0.7,
+        mouseDrag(header, fromX, header.height * 0.5,
                   toX - fromX, 0, Qt.LeftButton, Qt.NoModifier, 30)
 
         compare(AudioEditorController.selectionStart, -1)
+        compare(AudioEditorController.selectedEventId,
+                String(AudioEditorController.timelineEventViews[0].id))
+        const selectedOverlay = findVisibleItem(canvas,
+            "editorEventSelectedOverlay")
+        verify(selectedOverlay)
+        compare(selectedOverlay.border.width, 2)
         verify(Number(AudioEditorController.timelineEventViews[0].timelineStart)
                > Number(originalStart))
+    }
+
+    function test_selectToolBodyDragCreatesRangeSelection() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 192000))
+        verify(AudioEditorController.setActiveTool("select"))
+        const eventId = AudioEditorController.timelineEventViews[0].id
+        verify(AudioEditorController.moveEvent(eventId, 48000))
+        verify(AudioEditorController.trimEvent(eventId, 0, 96000, 48000))
+        const canvas = findChild(page, "editorWaveformCanvas")
+        verify(canvas)
+        AudioEditorController.viewport.setViewportWidth(canvas.width)
+        verify(AudioEditorController.viewport.setVisibleRange(0, 144000))
+        wait(0)
+        const eventVisual = findVisibleItem(canvas, "editorEventVisualBoundary")
+        verify(eventVisual)
+        const bodyPoint = eventVisual.mapToItem(canvas,
+            eventVisual.width * 0.5, 48)
+        verify(bodyPoint.y > 32)
+
+        mouseDrag(canvas, bodyPoint.x, bodyPoint.y,
+                  canvas.width * 0.1, 0, Qt.LeftButton, Qt.NoModifier, 30)
+
+        verify(AudioEditorController.selectionEnd
+            > AudioEditorController.selectionStart)
     }
 
     function test_blankTrackDragCreatesSelectionAndRightClickCancelsIt() {
@@ -838,27 +1198,27 @@ TestCase {
         AudioEditorController.viewport.setViewportWidth(canvas.width)
         verify(AudioEditorController.viewport.setVisibleRange(0, 192000))
         wait(0)
-        const body = findVisibleItem(canvas, "editorEventBodyInteraction")
-        verify(body)
+        const header = findVisibleItem(canvas, "editorEventHeaderInteraction")
+        verify(header)
         page.controlModifierHeld = true
         tryCompare(page, "controlModifierHeld", true)
         tryCompare(canvas, "controlModifierHeld", true)
         // The offscreen QtTest pointer helper does not preserve native keyboard
         // state.  Keep this MouseArea regression on the page's real held-key
         // state; tst_audio_editor_native_input.qml covers native Control input.
-        const bodyY = body.height * 0.75
-        mousePress(body, body.width * 0.75, bodyY,
+        const headerY = header.height * 0.5
+        mousePress(header, header.width * 0.75, headerY,
                    Qt.LeftButton, Qt.NoModifier)
         compare(page.controlModifierHeld, true)
         compare(canvas.controlModifierHeld, true)
-        compare(body.duplicateMove, true)
+        compare(header.duplicateMove, true)
         // Offscreen QtTest cancels a MouseArea grab when the pointer leaves the
         // item's bounds.  Exercise the release/atomic-commit seam here; the
         // qwindows native-input test performs the complete pointer movement.
-        body.candidateTimelineStart = 0
-        body.movedDuringPress = true
-        compare(Number(body.candidateTimelineStart), 0)
-        mouseRelease(body, body.width * 0.75, bodyY,
+        header.candidateTimelineStart = 0
+        header.movedDuringPress = true
+        compare(Number(header.candidateTimelineStart), 0)
+        mouseRelease(header, header.width * 0.75, headerY,
                      Qt.LeftButton, Qt.NoModifier)
         if (AudioEditorController.timelineEventViews.length === 1) {
             AudioEditorController.cancelEventGesture()
@@ -895,7 +1255,10 @@ TestCase {
         compare(AudioEditorController.loopEnabled, false)
         verify(Math.abs(AudioEditorController.playheadFrame
                         - canvas.frameAtCanvasPixel(resolvedOutside.x)) <= 1)
-        tryCompare(AudioEditorController, "playing", true)
+        tryVerify(function() {
+            return !AudioEditorController.playing
+                && AudioEditorController.errorMessage.length > 0
+        })
         AudioEditorController.stopPlayback()
         tryCompare(AudioEditorController, "playing", false)
 
@@ -923,7 +1286,7 @@ TestCase {
                                           "editorSelectionDurationCapsule")
         verify(border && eventBoundary && capsule && label && duration
                && durationCapsule)
-        compare(eventBoundary.border.width, 0)
+        compare(eventBoundary.border.width, 1)
         compare(label.text, "拖出片段")
         compare(duration.text, "00:00.500")
         verify(capsule.border.color.toString().indexOf("ff8a00") >= 0)
@@ -1011,7 +1374,7 @@ TestCase {
         compare(visibleBaselineCount, 1)
     }
 
-    function test_centerLineOwnsCombinedGainEnvelopeAndFadeWithoutTopHandles() {
+    function test_centerLineOwnsCombinedGainEnvelopeAndFadeWithoutPointerNodes() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 480000))
         const canvas = findChild(page, "editorWaveformCanvas")
         verify(canvas)
@@ -1021,29 +1384,23 @@ TestCase {
         compare(findChild(canvas, "editorEventFadeOutHandle"), null)
         compare(findChild(canvas, "editorEventFadeOutCurve"), null)
         const combinedLine = findChild(canvas, "editorEventCombinedGainLine")
-        const fadeOutNode = findChild(canvas, "editorEventFadeOutNode")
-        verify(combinedLine && fadeOutNode)
+        verify(combinedLine)
         verify(combinedLine.visible)
-        verify(Math.abs(fadeOutNode.y + fadeOutNode.height / 2
-                        - combinedLine.y) <= 2)
+        compare(findChild(canvas, "editorEventFadeInNode"), null)
+        compare(findChild(canvas, "editorEventFadeOutNode"), null)
     }
 
-    function test_fadeNodeRightClickShowsAllCurveChoices() {
+    function test_fadeCurveDataRemainsEditableWithoutPointerNodes() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 480000))
         const canvas = findChild(page, "editorWaveformCanvas")
         AudioEditorController.viewport.setViewportWidth(canvas.width)
         verify(AudioEditorController.viewport.setVisibleRange(0, 480000))
         wait(0)
-        const fadeOutNode = findChild(canvas, "editorEventFadeOutNode")
         verify(canvas)
-        verify(fadeOutNode, "missing fade-out center-line node")
-        const fadeMenu = fadeOutNode.curveMenu
-        verify(fadeMenu, "missing fade curve menu delegate")
-        mouseClick(fadeOutNode, fadeOutNode.width / 2, fadeOutNode.height / 2,
-                   Qt.RightButton)
-        tryVerify(function() { return fadeMenu.visible })
-        compare(fadeMenu.actionCount, 3)
-        compare(fadeMenu.curveLabels.join(","), "线性,平滑,指数")
+        const eventId = AudioEditorController.timelineEventViews[0].id
+        verify(AudioEditorController.setEventFadeCurve(eventId, false, "Linear"))
+        compare(AudioEditorController.timelineEventViews[0].fadeOutCurve,
+                "linear")
     }
 
     function test_envelopePointDragPreviewsLocallyThenCommitsOnceOnRelease() {
@@ -1152,41 +1509,31 @@ TestCase {
                "gain interaction must follow the visible composite line")
     }
 
-    function test_fadeInNodePreviewsLocallyThenCommitsOneUndoStep() {
+    function test_fadeInDataStillUpdatesCombinedGainCurveWithoutPointerNode() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
         const canvas = findChild(page, "editorWaveformCanvas")
         AudioEditorController.viewport.setViewportWidth(canvas.width)
         verify(AudioEditorController.viewport.setVisibleRange(0, 96000))
         wait(0)
-        const node = findChild(canvas, "editorEventFadeInNode")
-        verify(node)
-        compare(Number(AudioEditorController.timelineEventViews[0].fadeIn), 0)
-        mousePress(node, node.width / 2, node.height / 2, Qt.LeftButton)
-        mouseMove(node, node.width / 2 + 80, node.height / 2, 0)
-        verify(node.candidateFadeIn > 0)
-        compare(Number(AudioEditorController.timelineEventViews[0].fadeIn), 0)
-        mouseRelease(node, node.width / 2 + 80, node.height / 2, Qt.LeftButton)
+        const eventId = AudioEditorController.timelineEventViews[0].id
+        verify(AudioEditorController.setEventFadeIn(eventId, 24000))
         verify(Number(AudioEditorController.timelineEventViews[0].fadeIn) > 0)
+        verify(findChild(canvas, "editorEventCombinedGainCurve").visible)
         verify(AudioEditorController.undo())
         compare(Number(AudioEditorController.timelineEventViews[0].fadeIn), 0)
         compare(AudioEditorController.undo(), false)
     }
 
-    function test_fadeOutNodePreviewsLocallyThenCommitsOneUndoStep() {
+    function test_fadeOutDataStillUpdatesCombinedGainCurveWithoutPointerNode() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
         const canvas = findChild(page, "editorWaveformCanvas")
         AudioEditorController.viewport.setViewportWidth(canvas.width)
         verify(AudioEditorController.viewport.setVisibleRange(0, 96000))
         wait(0)
-        const node = findChild(canvas, "editorEventFadeOutNode")
-        verify(node)
-        compare(Number(AudioEditorController.timelineEventViews[0].fadeOut), 0)
-        mousePress(node, node.width / 2, node.height / 2, Qt.LeftButton)
-        mouseMove(node, node.width / 2 - 80, node.height / 2, 0)
-        verify(node.candidateFadeOut > 0)
-        compare(Number(AudioEditorController.timelineEventViews[0].fadeOut), 0)
-        mouseRelease(node, node.width / 2 - 80, node.height / 2, Qt.LeftButton)
+        const eventId = AudioEditorController.timelineEventViews[0].id
+        verify(AudioEditorController.setEventFadeOut(eventId, 24000))
         verify(Number(AudioEditorController.timelineEventViews[0].fadeOut) > 0)
+        verify(findChild(canvas, "editorEventCombinedGainCurve").visible)
         verify(AudioEditorController.undo())
         compare(Number(AudioEditorController.timelineEventViews[0].fadeOut), 0)
         compare(AudioEditorController.undo(), false)

@@ -318,16 +318,32 @@ Rectangle {
             height: canvas.height - 16
             visible: width > 0 && rawEnd > 0 && rawStart < canvas.width
             color: "transparent"
-            border.color: "transparent"
-            border.width: 0
+            border.color: Theme.waveformBlue
+            border.width: 1
             z: 2
+
+            Rectangle {
+                objectName: "editorEventSelectedOverlay"
+                anchors.fill: parent
+                color: String(eventDelegate.modelData.id)
+                    === AudioEditorController.selectedEventId
+                    ? Theme.editorSelection : "transparent"
+                border.color: Theme.focus
+                border.width: String(eventDelegate.modelData.id)
+                    === AudioEditorController.selectedEventId ? 2 : 0
+            }
 
             MouseArea {
                 id: eventMoveArea
-                objectName: "editorEventBodyInteraction"
-                anchors.fill: parent
+                objectName: "editorEventHeaderInteraction"
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
                 anchors.leftMargin: 9
                 anchors.rightMargin: 9
+                // The clip move/selection seam is a fixed logical-pixel
+                // contract at every supported shell size.
+                height: 24
                 z: 5
                 cursorShape: AudioEditorController.activeTool === "scissors"
                     ? Qt.CrossCursor : Qt.ArrowCursor
@@ -347,9 +363,11 @@ Rectangle {
                     canvas.cancelSelectionPreview()
                     if (mouse.button === Qt.RightButton) {
                         AudioEditorController.clearSelection()
+                        AudioEditorController.clearEventSelection()
                         mouse.accepted = true
                         return
                     }
+                    AudioEditorController.selectEvent(String(modelData.id))
                     const point = mapToItem(canvas, mouse.x, mouse.y)
                     pressCanvasX = point.x
                     originalTimelineStart = Number(modelData.timelineStart)
@@ -359,8 +377,6 @@ Rectangle {
                     const outsideSelection = !canvas.selectionContains(frame)
                     playOnRelease = canvas.displayedSelectionEnd
                         > canvas.displayedSelectionStart && outsideSelection
-                    if (outsideSelection)
-                        AudioEditorController.clearSelection()
                     AudioEditorController.seekFrame(frame)
                     if (AudioEditorController.activeTool === "scissors") {
                         AudioEditorController.splitEvent(modelData.id, frame)
@@ -601,7 +617,10 @@ Rectangle {
                 id: volumeLine
                 objectName: "editorEventVolumeLine"
                 x: 10; width: parent.width - 20
-                y: 10; height: parent.height - 20
+                y: canvas.height < 80 ? 18 : 10
+                height: canvas.height < 80
+                    ? Math.max(12, parent.height - 18)
+                    : parent.height - 20
                 z: 9
                 property real gainCandidate: Number(eventDelegate.modelData.gain)
                 readonly property real displayedGain: gainInteraction.pressed
@@ -610,6 +629,10 @@ Rectangle {
                 property double envelopePreviewOriginalOffset: 0
                 property double envelopePreviewOffset: 0
                 property double envelopePreviewGain: 1
+                readonly property double displayedFadeIn: Math.max(0,
+                    Number(eventDelegate.modelData.fadeIn || 0))
+                readonly property double displayedFadeOut: Math.max(0,
+                    Number(eventDelegate.modelData.fadeOut || 0))
                 readonly property var displayedEnvelope: {
                     const source = eventDelegate.modelData.envelope || []
                     if (!envelopePreviewActive)
@@ -637,8 +660,8 @@ Rectangle {
                 function fadeGainAtOffset(offset) {
                     const eventFrames = Number(eventDelegate.modelData.timelineEnd)
                         - Number(eventDelegate.modelData.timelineStart)
-                    const fadeIn = fadeInNode.displayedFadeIn
-                    const fadeOut = fadeOutNode.displayedFadeOut
+                    const fadeIn = displayedFadeIn
+                    const fadeOut = displayedFadeOut
                     let fade = 1
                     if (fadeIn > 0 && offset < fadeIn)
                         fade = canvas.fadeGain(offset / Math.max(1, fadeIn - 1),
@@ -732,109 +755,6 @@ Rectangle {
                     }
                 }
 
-                MouseArea {
-                    id: fadeOutNode
-                    objectName: "editorEventFadeOutNode"
-                    width: 18; height: 18
-                    readonly property var curveMenu: fadeCurveMenu
-                    readonly property double fadeFrames: Math.max(0,
-                        Number(eventDelegate.modelData.fadeOut || 0))
-                    property bool dragging: false
-                    property double candidateFadeOut: fadeFrames
-                    readonly property double displayedFadeOut: dragging
-                        ? candidateFadeOut : fadeFrames
-                    x: Math.max(0, Math.min(parent.width - width,
-                        canvas.pixelAtFrame(Number(eventDelegate.modelData.timelineEnd)
-                            - displayedFadeOut) - eventDelegate.x - volumeLine.x - width / 2))
-                    y: (1 - volumeLine.combinedGainAtOffset(
-                            Math.max(0, eventDelegate.eventFrames
-                                - displayedFadeOut)) / 2) * volumeLine.height
-                        - height / 2
-                    z: 8
-                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                    cursorShape: Qt.SizeHorCursor
-                    Rectangle { anchors.centerIn: parent; width: 10; height: 10; radius: 5
-                        color: Theme.editorWaveform; border.color: Theme.textPrimary; border.width: 2 }
-                    onPressed: function(mouse) {
-                        if (mouse.button === Qt.RightButton) {
-                            fadeCurveMenu.eventId = eventDelegate.modelData.id
-                            fadeCurveMenu.fadeSide = "out"
-                            fadeCurveMenu.popup()
-                            return
-                        }
-                        candidateFadeOut = fadeFrames
-                        dragging = true
-                        mouse.accepted = true
-                    }
-                    onPositionChanged: function(mouse) {
-                        if (!pressed || !dragging) return
-                        const point = mapToItem(canvas, mouse.x, mouse.y)
-                        candidateFadeOut = Math.max(0, Math.min(eventDelegate.eventFrames,
-                            Math.round(Number(eventDelegate.modelData.timelineEnd)
-                                - canvas.frameAtCanvasPixel(point.x))))
-                        combinedGainCurve.requestPaint()
-                    }
-                    onReleased: function(mouse) {
-                        if (mouse.button !== Qt.LeftButton) return
-                        if (dragging)
-                            AudioEditorController.setEventFadeOut(
-                                eventDelegate.modelData.id, candidateFadeOut)
-                        dragging = false
-                        combinedGainCurve.requestPaint()
-                    }
-                    onCanceled: { dragging = false; combinedGainCurve.requestPaint() }
-                }
-                MouseArea {
-                    id: fadeInNode
-                    objectName: "editorEventFadeInNode"
-                    width: 18; height: 18
-                    readonly property double fadeFrames: Math.max(0,
-                        Number(eventDelegate.modelData.fadeIn || 0))
-                    property bool dragging: false
-                    property double candidateFadeIn: fadeFrames
-                    readonly property double displayedFadeIn: dragging
-                        ? candidateFadeIn : fadeFrames
-                    x: Math.max(0, Math.min(parent.width - width,
-                        canvas.pixelAtFrame(Number(eventDelegate.modelData.timelineStart)
-                            + displayedFadeIn) - eventDelegate.x - volumeLine.x - width / 2))
-                    y: (1 - volumeLine.combinedGainAtOffset(
-                            displayedFadeIn) / 2) * volumeLine.height
-                        - height / 2
-                    z: 8
-                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                    cursorShape: Qt.SizeHorCursor
-                    Rectangle { anchors.centerIn: parent; width: 10; height: 10; radius: 5
-                        color: Theme.editorWaveform; border.color: Theme.textPrimary; border.width: 2 }
-                    onPressed: function(mouse) {
-                        if (mouse.button === Qt.RightButton) {
-                            fadeCurveMenu.eventId = eventDelegate.modelData.id
-                            fadeCurveMenu.fadeSide = "in"
-                            fadeCurveMenu.popup()
-                            return
-                        }
-                        candidateFadeIn = fadeFrames
-                        dragging = true
-                        mouse.accepted = true
-                    }
-                    onPositionChanged: function(mouse) {
-                        if (!pressed || !dragging) return
-                        const point = mapToItem(canvas, mouse.x, mouse.y)
-                        candidateFadeIn = Math.max(0, Math.min(eventDelegate.eventFrames,
-                            Math.round(canvas.frameAtCanvasPixel(point.x)
-                                - Number(eventDelegate.modelData.timelineStart))))
-                        combinedGainCurve.requestPaint()
-                    }
-                    onReleased: function(mouse) {
-                        if (mouse.button !== Qt.LeftButton) return
-                        if (dragging && typeof AudioEditorController.setEventFadeIn === "function")
-                            AudioEditorController.setEventFadeIn(
-                                eventDelegate.modelData.id, candidateFadeIn)
-                        dragging = false
-                        combinedGainCurve.requestPaint()
-                    }
-                    onCanceled: { dragging = false; combinedGainCurve.requestPaint() }
-                }
-
                 Rectangle {
                     objectName: "editorEventGainLine"
                     anchors.left: parent.left
@@ -904,15 +824,50 @@ Rectangle {
                     }
                     y: (1 - volumeLine.combinedGainAtOffset(hoverOffset) / 2)
                         * volumeLine.height - height / 2
-                    height: 24
-                    acceptedButtons: Qt.LeftButton
+                    height: 12
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
                     cursorShape: Qt.SizeVerCursor
+                    readonly property var fadeMenu: fadeCurveMenu
                     property bool gainMoved: false
                     property bool playOnRelease: false
+                    function fadeSideAtOffset(offset) {
+                        const eventFrames = Number(
+                            eventDelegate.modelData.timelineEnd)
+                            - Number(eventDelegate.modelData.timelineStart)
+                        const fadeIn = volumeLine.displayedFadeIn
+                        const fadeOut = volumeLine.displayedFadeOut
+                        const inFade = fadeIn > 0 && offset < fadeIn
+                        const outFade = fadeOut > 0
+                            && offset >= eventFrames - fadeOut
+                        if (inFade && outFade) {
+                            const distanceToIn = offset
+                            const distanceToOut = eventFrames - 1 - offset
+                            return distanceToIn <= distanceToOut ? "in" : "out"
+                        }
+                        if (inFade) return "in"
+                        if (outFade) return "out"
+                        return ""
+                    }
                     onPressed: function(mouse) {
                         const canvasPoint = mapToItem(
                             canvas, mouse.x, mouse.y)
                         const frame = canvas.frameAtCanvasPixel(canvasPoint.x)
+                        if (mouse.button === Qt.RightButton) {
+                            const offset = Math.max(0, Math.min(
+                                Number(eventDelegate.modelData.timelineEnd)
+                                    - Number(eventDelegate.modelData.timelineStart) - 1,
+                                frame - Number(eventDelegate.modelData.timelineStart)))
+                            const fadeSide = fadeSideAtOffset(offset)
+                            if (fadeSide.length === 0) {
+                                mouse.accepted = false
+                                return
+                            }
+                            fadeCurveMenu.eventId = eventDelegate.modelData.id
+                            fadeCurveMenu.fadeSide = fadeSide
+                            fadeCurveMenu.popup()
+                            mouse.accepted = true
+                            return
+                        }
                         const outsideSelection = !canvas.selectionContains(frame)
                         playOnRelease = canvas.displayedSelectionEnd
                             > canvas.displayedSelectionStart && outsideSelection
@@ -934,7 +889,8 @@ Rectangle {
                         volumeLine.gainCandidate = nextGain
                         combinedGainCurve.requestPaint()
                     }
-                    onReleased: {
+                    onReleased: function(mouse) {
+                        if (mouse.button !== Qt.LeftButton) return
                         if (gainMoved)
                             AudioEditorController.setEventGain(
                                 eventDelegate.modelData.id,
@@ -954,6 +910,10 @@ Rectangle {
                         combinedGainCurve.requestPaint()
                     }
                     onDoubleClicked: function(mouse) {
+                        if (mouse.button !== Qt.LeftButton) {
+                            mouse.accepted = false
+                            return
+                        }
                         const point = mapToItem(canvas, mouse.x, mouse.y)
                         const linePoint = mapToItem(
                             volumeLine, mouse.x, mouse.y)

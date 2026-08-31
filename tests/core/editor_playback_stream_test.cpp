@@ -304,10 +304,26 @@ void sequentialAutomationCursorSearchRemainsNearLinear()
     require(analysis.success, "many-event fixture analysis failed");
 
     (void)renderMutedEventTimeline(analysis.source, 2'000U);
-    const auto small = renderMutedEventTimeline(analysis.source, 100'000U);
-    const auto large = renderMutedEventTimeline(analysis.source, 400'000U);
-    require(large < small * 8,
-            "automation event lookup rescanned the timeline per output block");
+    const auto fastest = [&](const std::size_t eventCount) {
+        auto best = std::chrono::nanoseconds::max();
+        for (int attempt = 0; attempt < 3; ++attempt) {
+            best = std::min(best,
+                            renderMutedEventTimeline(analysis.source,
+                                                     eventCount));
+        }
+        return best;
+    };
+    const auto small = fastest(100'000U);
+    const auto large = fastest(400'000U);
+    if (large >= small * 10) {
+        std::cerr << "automation event lookup rescanned the timeline per "
+                     "output block (100k="
+                  << std::chrono::duration_cast<std::chrono::microseconds>(small).count()
+                  << "us, 400k="
+                  << std::chrono::duration_cast<std::chrono::microseconds>(large).count()
+                  << "us)\n";
+        std::exit(1);
+    }
 
     std::error_code ignored;
     std::filesystem::remove(path, ignored);

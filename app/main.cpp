@@ -1807,6 +1807,31 @@ int main(int argc, char* argv[])
 
                 if (wantScreenshotImmersive) {
                     QTimer::singleShot(2500, captureWindow);
+                } else if (wantScreenshotTools && qaTool == 0
+                           && !qaImportFolder.isEmpty()) {
+                    // The editor waveform is generated asynchronously.  A fixed capture
+                    // delay can race the first viewport request at larger tool-window
+                    // sizes and produce a misleading empty editor QA artifact.
+                    auto* waveformReadyTimer = new QTimer(&app);
+                    waveformReadyTimer->setInterval(50);
+                    QObject::connect(waveformReadyTimer, &QTimer::timeout, &app,
+                        [&audioEditor, waveformReadyTimer, attempts = 0,
+                         captureWindow]() mutable {
+                        if (audioEditor.hasDocument()
+                            && !audioEditor.viewportChannelPeaks().isEmpty()) {
+                            waveformReadyTimer->stop();
+                            waveformReadyTimer->deleteLater();
+                            QTimer::singleShot(250, captureWindow);
+                            return;
+                        }
+                        if (++attempts > 200) { // 10s at 50ms: fail the artifact.
+                            waveformReadyTimer->stop();
+                            waveformReadyTimer->deleteLater();
+                            qWarning("Timed out waiting for editor waveform QA readiness");
+                            QCoreApplication::exit(2);
+                        }
+                    });
+                    waveformReadyTimer->start();
                 } else if (wantScreenshotTools
                            || (wantScreenshotMain && library.count() == 0)) {
                     QTimer::singleShot(1500, captureWindow);

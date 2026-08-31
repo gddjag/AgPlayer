@@ -324,6 +324,7 @@ private slots:
         QCOMPARE(offline.size(), offlineNeutral.size());
         QCOMPARE(realtime.size(), realtimeNeutral.size());
         QCOMPARE(offline.size(), realtime.size());
+        const AutomationTimeMapper automationTime(0, frames, 1.37);
         for (std::size_t frame = 0; frame < realtime.size(); ++frame) {
             if (std::abs(offlineNeutral[frame]) < 0.05F
                 || std::abs(realtimeNeutral[frame]) < 0.05F) {
@@ -333,10 +334,22 @@ private slots:
             const float realtimeGain = realtime[frame] / realtimeNeutral[frame];
             QVERIFY2(std::abs(realtimeGain - offlineGain) < 0.001F,
                      qPrintable(QStringLiteral(
-                         "automation clocks diverged at output frame %1")
-                         .arg(frame)));
+                         "automation clocks diverged at output frame %1: "
+                         "offlineGain=%2 realtimeGain=%3 offline=%4 "
+                         "offlineNeutral=%5 realtime=%6 realtimeNeutral=%7 "
+                         "offlineFrames=%8 realtimeFrames=%9 mappedFrame=%10")
+                         .arg(frame)
+                         .arg(offlineGain, 0, 'g', 9)
+                         .arg(realtimeGain, 0, 'g', 9)
+                         .arg(offline[frame], 0, 'g', 9)
+                         .arg(offlineNeutral[frame], 0, 'g', 9)
+                         .arg(realtime[frame], 0, 'g', 9)
+                         .arg(realtimeNeutral[frame], 0, 'g', 9)
+                         .arg(offline.size())
+                         .arg(realtime.size())
+                         .arg(automationTime.map(
+                             static_cast<SampleFrame>(frame)))));
         }
-        const AutomationTimeMapper automationTime(0, frames, 1.37);
         QCOMPARE(automationTime.map(
             static_cast<SampleFrame>(offline.size() + 12U)), frames - 1);
     }

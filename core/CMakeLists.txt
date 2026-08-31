@@ -85,6 +85,9 @@ target_link_libraries(agplayer_core PRIVATE
     signalsmith-stretch
 )
 
+# Stretch/Linear are header-only templates.  Keep their upstream MSVC
+# conversion/shadowing warnings from weakening this project's /WX policy for
+# any other translation unit.
 if(MSVC)
     set_source_files_properties(src/signalsmith_time_pitch_engine.cpp
         PROPERTIES COMPILE_OPTIONS "/wd4244;/wd4267;/wd4305;/wd4127;/wd4456")

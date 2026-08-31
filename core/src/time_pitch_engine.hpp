@@ -27,6 +27,8 @@ public:
                                                std::size_t frames) = 0;
     virtual void flush() = 0;
     virtual void reset() = 0;
+    // The fixed internal FIFO requires callers to interleave put()/receive().
+    // A full FIFO is a processing failure, never an end-of-stream indication.
     [[nodiscard]] virtual bool failed() const noexcept = 0;
     [[nodiscard]] virtual TimePitchEngineKind kind() const noexcept = 0;
 };
@@ -36,8 +38,13 @@ using TimePitchEngineFactory = std::unique_ptr<ITimePitchEngine> (*)();
 [[nodiscard]] std::unique_ptr<ITimePitchEngine> create_time_pitch_engine();
 [[nodiscard]] std::unique_ptr<ITimePitchEngine>
 create_preferred_time_pitch_engine(std::unique_ptr<ITimePitchEngine> primary);
+// Explicit fallback for diagnostics and for the primary factory when a
+// Signalsmith instance rejects its configuration.
 [[nodiscard]] std::unique_ptr<ITimePitchEngine>
 create_soundtouch_time_pitch_engine();
+
+// Kept separate so the primary factory can guard configuration failures while
+// callers continue to depend only on ITimePitchEngine.
 [[nodiscard]] std::unique_ptr<ITimePitchEngine>
 create_signalsmith_time_pitch_engine();
 
