@@ -34,6 +34,20 @@ TestCase {
 
     Component { id: signalSpyComponent; SignalSpy {} }
 
+    Component {
+        id: editorPlaybackHistoryComponent
+        Connections {
+            property var samples: []
+            target: AudioEditorController
+            function onPlaybackChanged() {
+                samples.push({
+                    playing: AudioEditorController.playing,
+                    error: AudioEditorController.errorMessage
+                })
+            }
+        }
+    }
+
     property var host
     property var page
 
@@ -249,32 +263,35 @@ TestCase {
         verify(AudioEditorController.setActiveTool("select"))
         primaryPlay.forceActiveFocus()
         tryVerify(function() { return primaryPlay.activeFocus })
+        tryVerify(function() {
+            return AudioEditorController.editorPlaybackOwnsPlayer
+        })
         verify(spaceShortcut.enabled)
         const activated = createTemporaryObject(signalSpyComponent, testCase,
             { target: spaceShortcut, signalName: "activated" })
-        const editorPlayback = createTemporaryObject(signalSpyComponent, testCase,
-            { target: AudioEditorController, signalName: "playbackChanged" })
+        const editorPlayback = createTemporaryObject(
+            editorPlaybackHistoryComponent, testCase)
         const mainPlayback = createTemporaryObject(signalSpyComponent, testCase,
             { target: PlaybackController, signalName: "stateChanged" })
         verify(activated.valid)
-        verify(editorPlayback.valid)
+        verify(editorPlayback)
         verify(mainPlayback.valid)
         keyClick(Qt.Key_Space)
         tryCompare(activated, "count", 1)
-        tryCompare(editorPlayback, "count", 1)
-        compare(mainPlayback.count, 0)
         tryVerify(function() {
-            return AudioEditorController.playing
-                || AudioEditorController.errorMessage.length > 0
-        }, 1000)
+            return editorPlayback.samples.some(function(sample) {
+                return sample.playing
+            })
+        })
+        compare(mainPlayback.count, 0)
+        if (!AudioEditorController.playing)
+            compare(AudioEditorController.errorMessage, "编辑预览解码失败")
+        compare(activated.count, 1)
         compare(AudioEditorController.activeTool, "select")
-        if (AudioEditorController.playing) {
-            keyClick(Qt.Key_Space)
-            tryCompare(AudioEditorController, "playing", false)
-        }
+        editorPlayback.enabled = false
+        AudioEditorController.deactivate()
         AudioEditorController.clearDocument()
         tryCompare(AudioEditorController, "hasDocument", false)
-        AudioEditorController.deactivate()
         AudioEditorController.activate()
     }
 

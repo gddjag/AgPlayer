@@ -747,7 +747,6 @@ add_test(NAME qml_audio_editor_test
     COMMAND qml_audio_editor_test
         -input "${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_audio_editor.qml"
         -o -,txt
-        -o ${CMAKE_BINARY_DIR}/qml-audio-editor.xml,junitxml
 )
 set_tests_properties(qml_audio_editor_test PROPERTIES
     TIMEOUT 120
