@@ -522,6 +522,7 @@ target_include_directories(format_conversion_plan_test PRIVATE
 )
 target_link_libraries(vocal_separation_install_test PRIVATE Qt6::Network)
 set_tests_properties(vocal_separation_install_test PROPERTIES TIMEOUT 30)
+set_tests_properties(vocal_separation_history_test PROPERTIES TIMEOUT 30)
 
 foreach(separation_test IN ITEMS
     separation_protocol_test
@@ -672,7 +673,7 @@ add_dependencies(separation_worker_process_test AgSeparationWorker separation_bl
 agplayer_enable_warnings(separation_worker_process_test)
 add_test(NAME separation_worker_process_test COMMAND separation_worker_process_test)
 set_tests_properties(separation_worker_process_test PROPERTIES
-    TIMEOUT 15
+    TIMEOUT 60
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )

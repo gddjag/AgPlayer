@@ -31,6 +31,7 @@ public:
 
     State state() const noexcept;
     bool isProcessRunning() const noexcept;
+    bool canAcceptRequest() const noexcept;
     QString activeRequestId() const;
 
     bool startProbe(const QJsonObject& payload);
@@ -39,6 +40,7 @@ public:
 
 signals:
     void stateChanged();
+    void requestAvailabilityChanged();
     void probeReceived(const QJsonObject& payload);
     void progressReceived(double fraction, const QString& stage);
     void resultReceived(const QJsonObject& payload);

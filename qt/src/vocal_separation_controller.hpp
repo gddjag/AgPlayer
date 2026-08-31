@@ -60,7 +60,7 @@ class VocalSeparationController final : public QObject {
     Q_PROPERTY(bool canStart READ canStart NOTIFY startEligibilityChanged)
     Q_PROPERTY(QString startDisabledReason READ startDisabledReason
                    NOTIFY startEligibilityChanged)
-    Q_PROPERTY(bool canRetry READ canRetry NOTIFY jobStateChanged)
+    Q_PROPERTY(bool canRetry READ canRetry NOTIFY startEligibilityChanged)
     Q_PROPERTY(QVariantList stems READ stems NOTIFY stemsChanged)
     Q_PROPERTY(QVariantList history READ history NOTIFY historyChanged)
     Q_PROPERTY(ResultPreviewMode resultPreviewMode READ resultPreviewMode
@@ -300,6 +300,7 @@ private:
     std::unique_ptr<VocalSeparationDownloader> downloader_;
     QFutureWatcher<VerificationResult>* verificationWatcher_ = nullptr;
     QFutureWatcher<VocalInstallResult>* runtimeInstallerWatcher_ = nullptr;
+    std::shared_ptr<std::atomic_bool> verificationCancellation_;
     std::shared_ptr<std::atomic_bool> runtimeInstallCancellation_;
     VerificationPurpose verificationPurpose_ = VerificationPurpose::None;
     quint64 verificationGeneration_ = 0;

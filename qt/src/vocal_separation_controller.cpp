@@ -175,6 +175,8 @@ VocalSeparationController::VocalSeparationController(
             this, &VocalSeparationController::handleProbe);
     connect(&process_, &SeparationProcessClient::resultReceived,
             this, &VocalSeparationController::handleResult);
+    connect(&process_, &SeparationProcessClient::requestAvailabilityChanged,
+            this, &VocalSeparationController::startEligibilityChanged);
     connect(&process_, &SeparationProcessClient::failed, this,
             [this](const QString& message, bool) {
         if (activeRequest_.has_value()) failedRequest_ = activeRequest_;
@@ -273,12 +275,15 @@ VocalSeparationController::~VocalSeparationController()
 {
     if (downloader_) downloader_->cancel();
     ++verificationGeneration_;
+    if (verificationCancellation_)
+        verificationCancellation_->store(true, std::memory_order_release);
     if (verificationWatcher_ != nullptr) {
         QFutureWatcher<VerificationResult>* const watcher = verificationWatcher_;
         disconnect(watcher, nullptr, this, nullptr);
         watcher->future().waitForFinished();
         verificationWatcher_ = nullptr;
     }
+    verificationCancellation_.reset();
     if (runtimeInstallCancellation_)
         runtimeInstallCancellation_->store(true, std::memory_order_release);
     if (runtimeInstallerWatcher_ != nullptr) {
@@ -306,7 +311,8 @@ bool VocalSeparationController::downloadBusy() const noexcept
 }
 bool VocalSeparationController::canRetry() const noexcept
 {
-    return jobState_ == JobState::JobFailed && failedRequest_.has_value();
+    return process_.canAcceptRequest() && jobState_ == JobState::JobFailed
+        && failedRequest_.has_value();
 }
 QString VocalSeparationController::error() const { return error_; }
 QString VocalSeparationController::outputFormat() const { return outputFormat_; }
@@ -319,6 +325,7 @@ bool VocalSeparationController::canStart() const
 QString VocalSeparationController::startDisabledReason() const
 {
     if (requestInFlight()) return tr("当前任务尚未结束");
+    if (!process_.canAcceptRequest()) return tr("当前任务尚未结束");
     if (!safeExistingFile(inputInfo_.value(QStringLiteral("path")).toString()))
         return tr("请选择有效输入音频");
     const VocalModelCard* model = selectedModel();
@@ -562,7 +569,8 @@ bool VocalSeparationController::selectOutputDirectory(const QUrl& directory)
 
 bool VocalSeparationController::probeDevices()
 {
-    if (requestInFlight() || verificationWatcher_ != nullptr) return false;
+    if (requestInFlight() || !process_.canAcceptRequest()
+        || verificationWatcher_ != nullptr) return false;
     activeRequest_ = ActiveRequestContext{RequestKind::Probe};
     setError({});
     setJobState(JobState::Probing, QStringLiteral("runtime_verification"));
@@ -574,7 +582,7 @@ bool VocalSeparationController::probeDevices()
 
 bool VocalSeparationController::start()
 {
-    if (requestInFlight()) return false;
+    if (requestInFlight() || !process_.canAcceptRequest()) return false;
     const VocalModelCard* model = selectedModel();
     const QString inputPath = inputInfo_.value(QStringLiteral("path")).toString();
     const QStringList stemNames = selectedStemNames();
@@ -653,6 +661,7 @@ void VocalSeparationController::invalidateRetry()
     if (!requestInFlight() && failedRequest_.has_value()) {
         failedRequest_.reset();
         emit jobStateChanged();
+        emit startEligibilityChanged();
     }
 }
 
@@ -662,6 +671,8 @@ void VocalSeparationController::cancel()
     if (verificationWatcher_ != nullptr
         && (verificationPurpose_ == VerificationPurpose::Start
             || verificationPurpose_ == VerificationPurpose::Probe)) {
+        if (verificationCancellation_)
+            verificationCancellation_->store(true, std::memory_order_release);
         if (!verifyingModelId_.isEmpty()) {
             verifiedModelIds_.remove(verifyingModelId_);
             verifiedOrRejectedModelIds_.insert(verifyingModelId_);
@@ -681,7 +692,8 @@ void VocalSeparationController::cancel()
 
 bool VocalSeparationController::retry()
 {
-    if (jobState_ != JobState::JobFailed || !failedRequest_.has_value()) return false;
+    if (!process_.canAcceptRequest() || jobState_ != JobState::JobFailed
+        || !failedRequest_.has_value()) return false;
     const ActiveRequestContext context = *failedRequest_;
     if (context.kind == RequestKind::Separation)
         return beginSeparationRequest(context);
@@ -973,13 +985,19 @@ bool VocalSeparationController::beginVerification(
     verificationPurpose_ = purpose;
     verifyingModelId_ = model == nullptr ? QString() : model->id;
     const quint64 generation = ++verificationGeneration_;
+    verificationCancellation_ = std::make_shared<std::atomic_bool>(false);
+    const auto cancellation = verificationCancellation_;
     verificationWatcher_ = new QFutureWatcher<VerificationResult>(this);
     QFutureWatcher<VerificationResult>* const watcher = verificationWatcher_;
     connect(watcher, &QFutureWatcher<VerificationResult>::finished,
-            this, [this, watcher, generation] {
+            this, [this, watcher, generation, cancellation] {
         const VerificationResult result = watcher->result();
         watcher->deleteLater();
-        if (verificationWatcher_ == watcher) verificationWatcher_ = nullptr;
+        if (verificationWatcher_ == watcher) {
+            verificationWatcher_ = nullptr;
+            if (verificationCancellation_ == cancellation)
+                verificationCancellation_.reset();
+        }
         if (generation != verificationGeneration_) {
             refreshModels();
             return;
@@ -988,26 +1006,36 @@ bool VocalSeparationController::beginVerification(
     });
     refreshModels();
     verificationWatcher_->setFuture(QtConcurrent::run(
-        [catalog, dataRoot, runtimePath, verifyRuntime, runtimeHash] {
+        [catalog, dataRoot, runtimePath, verifyRuntime, runtimeHash,
+         cancellation] {
             VerificationResult result;
+            const auto cancelled = [&cancellation] {
+                return cancellation->load(std::memory_order_acquire);
+            };
             for (const VocalModelCard& candidate : catalog) {
+                if (cancelled()) return result;
                 bool verified = !candidate.files.isEmpty();
                 for (const VocalDownloadFile& file : candidate.files) {
+                    if (cancelled()) return result;
                     const QString path = QDir(dataRoot).filePath(
                         QStringLiteral("models/%1/%2")
                             .arg(candidate.id, file.fileName));
-                    if (VocalSeparationInstaller::isVerifiedFile(file, path)) {
+                    if (VocalSeparationInstaller::isVerifiedFile(
+                            file, path, cancellation)) {
                         result.verifiedFiles.insert(QFileInfo(path).absoluteFilePath());
                     } else {
+                        if (cancelled()) return result;
                         verified = false;
                     }
                 }
                 if (verified) result.verifiedModels.insert(candidate.id);
             }
+            if (cancelled()) return result;
             result.runtimeVerified = QFileInfo(runtimePath).isFile()
                 && (!verifyRuntime
                     || VocalSeparationInstaller::runtimeDirectoryIsVerified(
-                        QFileInfo(runtimePath).absolutePath(), runtimeHash));
+                        QFileInfo(runtimePath).absolutePath(), runtimeHash,
+                        cancellation));
             return result;
         }));
     return true;

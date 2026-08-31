@@ -62,7 +62,7 @@ int main(int argc, char* argv[])
                       {QStringLiteral("gpu"), false},
                       {QStringLiteral("gpuReason"), QStringLiteral("No tested GPU")}});
             } else if (message.type == ProtocolType::Start) {
-                if (scenario == QStringLiteral("capture-payload")
+                if (scenario.startsWith(QStringLiteral("capture-payload"))
                     && !markerPath.isEmpty()) {
                     QFile marker(markerPath);
                     if (marker.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
@@ -172,6 +172,9 @@ int main(int argc, char* argv[])
                 send(ProtocolType::Cancel, message.requestId,
                      {{QStringLiteral("accepted"), true}});
             } else if (message.type == ProtocolType::Shutdown) {
+                if (scenario == QStringLiteral("capture-payload-delayed-shutdown")) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                }
                 send(ProtocolType::Shutdown, message.requestId,
                      {{QStringLiteral("accepted"), true}});
                 QMetaObject::invokeMethod(&app, "quit", Qt::QueuedConnection);

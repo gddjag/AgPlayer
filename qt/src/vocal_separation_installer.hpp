@@ -50,13 +50,15 @@ public:
     static qint64 resumeOffset(const QString& destination);
     static bool hasDiskSpace(const QString& destination, qint64 bytesRequired);
     static bool isVerifiedFile(const VocalDownloadFile& file,
-                               const QString& path);
+                               const QString& path,
+                               const std::shared_ptr<std::atomic_bool>& cancellation = {});
     static VocalInstallResult activateVerifiedPart(const VocalDownloadFile& file,
                                                    const QString& destination);
     static VocalInstallResult deleteModelFiles(const VocalModelCard& model,
                                                const QString& modelsRoot);
     static bool runtimeDirectoryIsVerified(const QString& runtimeDirectory,
-                                           const QString& expectedArchiveSha256);
+                                           const QString& expectedArchiveSha256,
+                                           const std::shared_ptr<std::atomic_bool>& cancellation = {});
     static VocalInstallResult installDirectMlRuntime(const QString& nupkgPath,
                                                      const QString& runtimeRoot,
                                                      const std::shared_ptr<std::atomic_bool>& cancellation = {});
