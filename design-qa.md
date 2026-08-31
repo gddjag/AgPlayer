@@ -156,7 +156,7 @@ Expected state-only differences:
 - Model deck supports horizontal movement; card selection uses the full card.
 - Stem volume supports click, drag, wheel and keyboard changes.
 - GPU candidate selection remains available after hardware probe, with trusted-model validation deferred to job start and CPU fallback in Auto.
-- QML separation checks and all four responsive captures completed successfully; the final full Release test run passed 88/88.
+- QML separation checks and all four responsive captures completed successfully; after adding synchronized result-stem preview coverage, the final full Release test run passed 89/89 (340.11 seconds).
 
 ## Follow-up polish
 
