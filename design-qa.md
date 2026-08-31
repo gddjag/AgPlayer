@@ -104,3 +104,45 @@ final result: blocked
 - Production code was not given screenshot-only fake data. A final same-state comparison must be captured after installing the approved models and completing a real job through the UI.
 
 final result: blocked — reference-state visual parity and final hardware interaction remain unverified
+
+---
+
+# Design QA — 18 段图形均衡器 — 2026-08-31
+
+## Source visual truth
+
+- Reference: `C:/Users/Administrator/Desktop/音视频播放器/AgPlayer音频播放器完整版/18段标准EQ均衡器 预设：平直、重低音、古典、流行、摇滚、人声、EDM电子、爵士 .png`.
+- Reference pixels: 1672 × 941, dark state, enabled, custom preset, ±12 dB, high precision, eighteen stated gains, preamp -1.5 dB, output -1.5 dB.
+- The reference's displayed slider/curve positions exaggerate several positive dB values. Functional truth therefore requires linear dB mapping even where that differs visibly from the reference.
+
+## Implementation evidence
+
+- Final implementation: `design-qa/eq-reference-implementation-1672x941.png` (1672 × 941).
+- Same-input comparison: `design-qa/eq-reference-comparison-1672x941.png` (3344 × 941), reference on the left and implementation on the right.
+- Responsive captures: `design-qa/eq-reference-implementation-1180x680.png` and `design-qa/eq-reference-implementation-880x520.png`.
+- Both sides of the final comparison were drawn with explicit pixel source/destination rectangles. DPI metadata (reference 72 DPI versus implementation 96 DPI) was not allowed to rescale either image.
+
+## Comparison history
+
+- Pass 1: blocked — the real DSP response line was visually separate from the band nodes; the slider scale was missing; toolbar icon/scale and narrow-window discoverability had P2 differences.
+- Pass 2: blocked — the curve now passed through real controller gains and all other P2 findings were closed, but logarithmic frequency placement compressed 8–20 kHz and broke the reference's one-to-one rhythm with the sliders.
+- Pass 3: passed — grid, nodes, labels and spline use equal band slots; the spline still uses real controller gains with linear dB mapping. No P0, P1 or P2 remained.
+
+## Accepted P3 differences
+
+- Toolbar elements retain isolated 3–5 px placement differences.
+- Slider handles have a slightly heavier shadow and the panels are flatter than the reference.
+- Footer vertical rhythm differs by roughly 2–3 px.
+- The implementation intentionally does not copy the reference's numerically incorrect vertical exaggeration.
+- At -1.5 dB the final meter blocks follow the real shared threshold mapping rather than the reference's decorative all-near-end state.
+
+## Functional evidence
+
+- All primary controls use real `EqualizerController` state; screenshot-only meter override defaults to NaN and is restricted to deterministic capture tests.
+- The output meter receives post-EQ/replay-gain/volume/fade sample peaks from the audio engine and invalidates stale values across seek, stop, mute and device-switch boundaries.
+- 1180 × 680 and 880 × 520 show persistent overflow indicators; automated bounds checks prove the output value and preamp can be fully reached.
+- No new SVG was drawn. Save, manage and circular restore use existing repository assets.
+
+No hardware listening or true-peak calibration was included in this visual acceptance.
+
+final result: passed

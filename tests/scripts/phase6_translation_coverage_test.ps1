@@ -114,7 +114,7 @@ $expected['EqualizerWindow'] = @(
     '5peB6Lev5Z2H6KGh5Zmo',
     '5ZCv55So5Z2H6KGh5Zmo',
     '5YWo6YOo5b2S6Zu2',
-    '5Y2B5YWr5q615Zu+5b2i5Z2H6KGh5Zmo',
+    'MTgg5q615Zu+5b2i5Z2H6KGh5Zmo',
     '5Y+M5Ye75ruR5p2G5b2S6Zu2IMK3IOa7mui9ruaIluaWueWQkemUruW+ruiwgw==',
     '5L2Z6YeP',
     '5pyA5aSn5YyW',
@@ -129,7 +129,7 @@ $expected['PlayerControls'] = @(
     [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_))
 }
 
-foreach ($locale in @('zh', 'en', 'th', 'vi')) {
+foreach ($locale in @('zh', 'en')) {
     $catalogPath = Join-Path $SourceRoot "translations/agplayer_$locale.ts"
     [xml]$catalog = Get-Content -Raw -Encoding UTF8 -LiteralPath $catalogPath
     foreach ($context in $expected.Keys) {

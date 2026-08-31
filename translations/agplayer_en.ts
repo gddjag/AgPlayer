@@ -866,7 +866,7 @@
     <message>
         <location filename="../app/qml/AgPlayer/EqualizerWindow.qml" line="17"/>
         <location filename="../app/qml/AgPlayer/EqualizerWindow.qml" line="82"/>
-        <source>十八段图形均衡器</source>
+        <source>18 段图形均衡器</source>
         <translation>18-Band Graphic Equalizer</translation>
     </message>
     <message><source>最小化</source><translation>Minimize</translation></message>
