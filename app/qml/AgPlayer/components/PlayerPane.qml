@@ -8,6 +8,8 @@ Rectangle {
     objectName: "playerPane"
     color: "transparent"
     property var waveformSession: null
+    readonly property var frequencyWaveformSettings:
+        SettingsController.frequencyColorWaveform
     property var rawWaveformLayers: ({})
     property var spectrumVisual: []
     property real waveformDurationMs: 0
@@ -487,8 +489,10 @@ Rectangle {
                            ? SettingsController.waveformSolidBaseColor
                            : (SettingsController.waveformMode === 2
                               ? SettingsController.spectrumSolidColor
-                              : SettingsController.waveformMode === 3
-                                ? Theme.textSecondary
+                            : SettingsController.waveformMode === 3
+                                ? (Theme.isLight
+                                   ? root.frequencyWaveformSettings.mixLightColor
+                                   : root.frequencyWaveformSettings.mixDarkColor)
                                 : SettingsController.waveformRgbBaseColor)
                 progressColor: SettingsController.waveformSolidProgressColor
                 gradientStartColor: SettingsController.waveformMode === 2
@@ -506,10 +510,39 @@ Rectangle {
                                      ? SettingsController.spectrumSolidColor
                                      : SettingsController.spectrumRgbEndColor)
                                   : SettingsController.waveformRgbEndColor
-                frequencyLowColor: SettingsController.waveformFrequencyLowColor
-                frequencyMidColor: SettingsController.waveformFrequencyMidColor
-                frequencyHighColor: SettingsController.waveformFrequencyHighColor
+                frequencyMixColor: Theme.isLight
+                                   ? root.frequencyWaveformSettings.mixLightColor
+                                   : root.frequencyWaveformSettings.mixDarkColor
+                frequencyLowColor: Theme.isLight
+                                   ? root.frequencyWaveformSettings.lowLightColor
+                                   : root.frequencyWaveformSettings.lowDarkColor
+                frequencyMidColor: Theme.isLight
+                                   ? root.frequencyWaveformSettings.midLightColor
+                                   : root.frequencyWaveformSettings.midDarkColor
+                frequencyHighColor: Theme.isLight
+                                    ? root.frequencyWaveformSettings.highLightColor
+                                    : root.frequencyWaveformSettings.highDarkColor
+                frequencyMixOpacity: Theme.isLight
+                                     ? root.frequencyWaveformSettings.mixLightOpacity
+                                     : root.frequencyWaveformSettings.mixDarkOpacity
+                frequencyLowOpacity: Theme.isLight
+                                     ? root.frequencyWaveformSettings.lowLightOpacity
+                                     : root.frequencyWaveformSettings.lowDarkOpacity
+                frequencyMidOpacity: Theme.isLight
+                                     ? root.frequencyWaveformSettings.midLightOpacity
+                                     : root.frequencyWaveformSettings.midDarkOpacity
+                frequencyHighOpacity: Theme.isLight
+                                      ? root.frequencyWaveformSettings.highLightOpacity
+                                      : root.frequencyWaveformSettings.highDarkOpacity
+                frequencyBandFade: root.waveformSession
+                                   && root.waveformSession.frequencyReady ? 1 : 0
+                frequencyPlayFocus: root.frequencyWaveformSettings.playFocus
+                frequencyFocusColor: Theme.isLight ? "#26313A" : "#F2E7D4"
                 frequencyStrength: SettingsController.waveformFrequencyStrength
+                frequencyDarkSurface: !Theme.isLight
+                Behavior on frequencyBandFade {
+                    NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+                }
                 rgbProgress: SettingsController.waveformMode === 1
                              && SettingsController.waveformRgbProgress
                 amplitudeScale: SettingsController.waveformMode === 2
@@ -524,6 +557,7 @@ Rectangle {
             Item {
                 id: playedWaveformClip
                 objectName: "waveformPlayedClip"
+                visible: waveform.visualMode !== 3
                 width: waveformFrame.playbackX
                 height: parent.height
                 clip: true
@@ -545,9 +579,18 @@ Rectangle {
                     gradientMiddleColor: waveform.gradientMiddleColor
                     gradientEndColor: waveform.gradientEndColor
                     frequencyLowColor: waveform.frequencyLowColor
+                    frequencyMixColor: waveform.frequencyMixColor
                     frequencyMidColor: waveform.frequencyMidColor
                     frequencyHighColor: waveform.frequencyHighColor
+                    frequencyMixOpacity: waveform.frequencyMixOpacity
+                    frequencyLowOpacity: waveform.frequencyLowOpacity
+                    frequencyMidOpacity: waveform.frequencyMidOpacity
+                    frequencyHighOpacity: waveform.frequencyHighOpacity
+                    frequencyBandFade: waveform.frequencyBandFade
+                    frequencyPlayFocus: false
+                    frequencyFocusColor: waveform.frequencyFocusColor
                     frequencyStrength: waveform.frequencyStrength
+                    frequencyDarkSurface: waveform.frequencyDarkSurface
                     rgbProgress: waveform.rgbProgress
                     amplitudeScale: waveform.amplitudeScale
                     density: waveform.density

@@ -7,6 +7,8 @@ Item {
     property var waveformSession: null
     property var playback: PlaybackController
     property real opacityScale: 1.0
+    readonly property var frequencyWaveformSettings:
+        SettingsController.frequencyColorWaveform
     readonly property real effectiveDurationMs:
         waveformSession && Number(waveformSession.durationMs) > 0
         ? Number(waveformSession.durationMs)
@@ -45,32 +47,32 @@ Item {
         // colours always carry frequency meaning regardless of the normal
         // player waveform preference.
         visualMode: 3
-        baseColor: Theme.textSecondary
-        frequencyLowColor: SettingsController.waveformFrequencyLowColor
-        frequencyMidColor: SettingsController.waveformFrequencyMidColor
-        frequencyHighColor: SettingsController.waveformFrequencyHighColor
+        baseColor: root.frequencyWaveformSettings.mixDarkColor
+        frequencyMixColor: root.frequencyWaveformSettings.mixDarkColor
+        frequencyLowColor: root.frequencyWaveformSettings.lowDarkColor
+        frequencyMidColor: root.frequencyWaveformSettings.midDarkColor
+        frequencyHighColor: root.frequencyWaveformSettings.highDarkColor
+        frequencyMixOpacity: root.frequencyWaveformSettings.mixDarkOpacity
+        frequencyLowOpacity: root.frequencyWaveformSettings.lowDarkOpacity
+        frequencyMidOpacity: root.frequencyWaveformSettings.midDarkOpacity
+        frequencyHighOpacity: root.frequencyWaveformSettings.highDarkOpacity
+        frequencyBandFade: root.waveformSession
+                           && root.waveformSession.frequencyReady ? 1 : 0
+        frequencyPlayFocus: root.frequencyWaveformSettings.playFocus
+        frequencyFocusColor: "#F2E7D4"
         frequencyStrength: SettingsController.waveformFrequencyStrength
+        frequencyDarkSurface: true
         amplitudeScale: SettingsController.waveformHeight
         density: SettingsController.waveformDensity
         lineWidth: SettingsController.waveformThickness
         opacity: 0.58 * root.opacityScale
-        Behavior on frequencyLowColor { ColorAnimation { duration: 220 } }
-        Behavior on frequencyMidColor { ColorAnimation { duration: 220 } }
-        Behavior on frequencyHighColor { ColorAnimation { duration: 220 } }
+        Behavior on frequencyBandFade {
+            NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+        }
         onSeekRequested: function(positionMs) {
             if (root.playback)
                 root.playback.seek(positionMs)
         }
-    }
-
-    Rectangle {
-        visible: SettingsController.waveformPlaybackGuide
-        x: waveform.x + waveform.waveformCursorX
-        anchors.verticalCenter: waveform.verticalCenter
-        width: 1
-        height: waveform.height - 8
-        color: "#FFFFFF" // theme-color-allow: immersive waveform playback guide
-        opacity: 0.82 * root.opacityScale
     }
 
     Text {

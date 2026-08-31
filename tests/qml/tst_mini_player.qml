@@ -136,6 +136,65 @@ TestCase {
         })
     }
 
+    function test_frequency_waveform_uses_one_theme_aware_render_pass() {
+        var previousMode = SettingsController.waveformMode
+        var previousGuide = SettingsController.waveformPlaybackGuide
+        var waveform = findChild(miniPlayer, "miniWaveform")
+        var clip = findChild(miniPlayer, "miniWaveformPlayedClip")
+        var guide = findChild(miniPlayer, "miniWaveformPlaybackGuide")
+        var controls = findChild(miniPlayer, "miniPlayerControls")
+        var session = controls ? controls.waveformSession : null
+        var frequencySettings = SettingsController.frequencyColorWaveform
+        verify(waveform && clip && guide && session)
+        compare(findChild(miniPlayer, "miniWaveformPlaybackFocusDot"), null,
+                "frequency focus must be rendered by the native canvas")
+
+        SettingsController.waveformMode = 3
+        tryCompare(waveform, "visualMode", 3)
+        compare(waveform.frequencyDarkSurface, !Theme.isLight)
+        compare(waveform.frequencyMixColor.toString(), Theme.isLight
+                ? frequencySettings.mixLightColor
+                : frequencySettings.mixDarkColor)
+        compare(waveform.frequencyLowColor.toString(), Theme.isLight
+                ? frequencySettings.lowLightColor
+                : frequencySettings.lowDarkColor)
+        compare(waveform.frequencyMidColor.toString(), Theme.isLight
+                ? frequencySettings.midLightColor
+                : frequencySettings.midDarkColor)
+        compare(waveform.frequencyHighColor.toString(), Theme.isLight
+                ? frequencySettings.highLightColor
+                : frequencySettings.highDarkColor)
+        compare(waveform.frequencyMixOpacity, Theme.isLight
+                ? frequencySettings.mixLightOpacity
+                : frequencySettings.mixDarkOpacity)
+        compare(waveform.frequencyLowOpacity, Theme.isLight
+                ? frequencySettings.lowLightOpacity
+                : frequencySettings.lowDarkOpacity)
+        compare(waveform.frequencyMidOpacity, Theme.isLight
+                ? frequencySettings.midLightOpacity
+                : frequencySettings.midDarkOpacity)
+        compare(waveform.frequencyHighOpacity, Theme.isLight
+                ? frequencySettings.highLightOpacity
+                : frequencySettings.highDarkOpacity)
+        compare(waveform.frequencyPlayFocus, frequencySettings.playFocus)
+        compare(waveform.frequencyFocusColor.toString(),
+                Theme.isLight ? "#26313a" : "#f2e7d4")
+        compare(clip.visible, false,
+                "frequency overlays must not be drawn twice in the played region")
+        SettingsController.waveformPlaybackGuide = false
+        compare(guide.visible, false)
+        session.frequencyReady = false
+        tryCompare(waveform, "frequencyBandFade", 0, 350)
+        session.frequencyReady = true
+        tryCompare(waveform, "frequencyBandFade", 1, 350)
+
+        SettingsController.waveformMode = 0
+        tryCompare(clip, "visible", true)
+        SettingsController.waveformMode = previousMode
+        SettingsController.waveformPlaybackGuide = previousGuide
+        session.frequencyReady = false
+    }
+
     function test_mini_player_can_cycle_the_shared_waveform_mode() {
         var button = findChild(miniPlayer, "miniWaveformModeButton")
         verify(button)

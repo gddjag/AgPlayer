@@ -274,6 +274,7 @@ ApplicationWindow {
             lyricsService: LyricsService
             waveformLayers: sharedWaveformSession.layers
             waveformDurationMs: sharedWaveformSession.durationMs
+            waveformFrequencyReady: sharedWaveformSession.frequencyReady
             sidePanelPage: mainWindow.integratedSidePanelPage
             sidePanelExpanded: mainWindow.integratedSidePanelExpanded
             bottomBarComponent: integratedBottomBarComponent

@@ -537,15 +537,53 @@ TestCase {
 
     function test_integrated_waveform_keeps_progress_color_on_one_canvas() {
         var shell = enterIntegratedShell()
+        var previousMode = SettingsController.waveformMode
+        SettingsController.waveformMode = 3
         shell.playbackController = fakePlayback
         shell.waveformDurationMs = 100000
         fakePlayback.positionMs = 25000
         var waveform = findChild(shell, "integratedWaveform")
+        var frequencySettings = SettingsController.frequencyColorWaveform
         verify(waveform)
         tryCompare(waveform, "position", 25000)
         tryCompare(waveform, "cursorPosition", 25000)
+        compare(waveform.frequencyDarkSurface, !Theme.isLight)
+        compare(waveform.frequencyMixColor.toString(), Theme.isLight
+                ? frequencySettings.mixLightColor
+                : frequencySettings.mixDarkColor)
+        compare(waveform.frequencyLowColor.toString(), Theme.isLight
+                ? frequencySettings.lowLightColor
+                : frequencySettings.lowDarkColor)
+        compare(waveform.frequencyMidColor.toString(), Theme.isLight
+                ? frequencySettings.midLightColor
+                : frequencySettings.midDarkColor)
+        compare(waveform.frequencyHighColor.toString(), Theme.isLight
+                ? frequencySettings.highLightColor
+                : frequencySettings.highDarkColor)
+        compare(waveform.frequencyMixOpacity, Theme.isLight
+                ? frequencySettings.mixLightOpacity
+                : frequencySettings.mixDarkOpacity)
+        compare(waveform.frequencyLowOpacity, Theme.isLight
+                ? frequencySettings.lowLightOpacity
+                : frequencySettings.lowDarkOpacity)
+        compare(waveform.frequencyMidOpacity, Theme.isLight
+                ? frequencySettings.midLightOpacity
+                : frequencySettings.midDarkOpacity)
+        compare(waveform.frequencyHighOpacity, Theme.isLight
+                ? frequencySettings.highLightOpacity
+                : frequencySettings.highDarkOpacity)
+        compare(waveform.frequencyPlayFocus, frequencySettings.playFocus)
+        compare(waveform.frequencyFocusColor.toString(),
+                Theme.isLight ? "#26313a" : "#f2e7d4")
+        compare(findChild(shell, "integratedWaveformPlaybackGuide"), null)
+        compare(findChild(shell, "integratedWaveformPlaybackFocusDot"), null)
         compare(findChild(shell, "integratedPlayedWaveform"), null,
                 "progress colour must come from the main canvas, not a clipped duplicate")
+        shell.waveformFrequencyReady = false
+        tryCompare(waveform, "frequencyBandFade", 0, 350)
+        shell.waveformFrequencyReady = true
+        tryCompare(waveform, "frequencyBandFade", 1, 350)
+        SettingsController.waveformMode = previousMode
     }
 
     function test_shell_switch_is_removed_from_transport() {

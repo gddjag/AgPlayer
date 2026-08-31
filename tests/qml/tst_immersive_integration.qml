@@ -311,10 +311,31 @@ TestCase {
         var surface = coordinator ? coordinator.surface : null
         var immersiveWaveform = surface
                 ? findChild(surface, "immersiveWaveformHost") : null
-        verify(session && miniControls && immersiveWaveform)
+        var nativeWaveform = immersiveWaveform
+                ? findChild(immersiveWaveform, "immersiveWaveform") : null
+        var playbackGuide = immersiveWaveform
+                ? findChild(immersiveWaveform,
+                            "immersiveWaveformPlaybackGuide") : null
+        var playbackFocus = immersiveWaveform
+                ? findChild(immersiveWaveform,
+                            "immersiveWaveformPlaybackFocusDot") : null
+        verify(session && miniControls && immersiveWaveform && nativeWaveform)
+        compare(playbackGuide, null)
+        compare(playbackFocus, null)
         compare(miniWindow.waveformSession, session)
         compare(miniControls.waveformSession, session)
         compare(immersiveWaveform.waveformSession, session)
+        compare(nativeWaveform.frequencyDarkSurface, true,
+                "immersive waveform always renders on a dark surface")
+        compare(nativeWaveform.frequencyMixColor.toString(), "#7a8490")
+        compare(nativeWaveform.frequencyLowColor.toString(), "#269a8e")
+        compare(nativeWaveform.frequencyMidColor.toString(), "#c66b55")
+        compare(nativeWaveform.frequencyHighColor.toString(), "#b5a4c6")
+        compare(nativeWaveform.frequencyMixOpacity, 0.18)
+        compare(nativeWaveform.frequencyLowOpacity, 0.44)
+        compare(nativeWaveform.frequencyMidOpacity, 0.38)
+        compare(nativeWaveform.frequencyHighOpacity, 0.46)
+        compare(nativeWaveform.frequencyFocusColor.toString(), "#f2e7d4")
     }
 
     function test_three_line_spatial_lyrics_support_position_and_scale() {
