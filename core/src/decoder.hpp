@@ -70,8 +70,6 @@ struct DecodedAudioFormat final {
     int sample_rate = 0;
     int channels = 0;
     std::uint64_t timeline_frames = 0;
-    std::uint64_t timestamp_quantization_frames = 1U;
-    std::uint64_t leading_padding_frames = 0U;
     bool has_timeline = false;
 };
 
@@ -103,12 +101,6 @@ public:
     void clearInterruptCallback() noexcept;
     [[nodiscard]] const MediaMetadata& metadata() const noexcept;
     [[nodiscard]] const DecodedAudioFormat& output_format() const noexcept;
-    [[nodiscard]] static std::uint64_t threadOpenCount() noexcept;
-    // Test-only, per-thread observation seam for the expensive source
-    // timeline derivation performed during open().
-    static void resetThreadTimelineDerivationCount() noexcept;
-    [[nodiscard]] static std::uint64_t threadTimelineDerivationCount() noexcept;
-
 private:
     class Impl;
     std::unique_ptr<Impl> impl_;

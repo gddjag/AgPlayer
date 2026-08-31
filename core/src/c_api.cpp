@@ -3,7 +3,6 @@
 #include "core_context.hpp"
 #include "audio_editor/editor_player_bridge.hpp"
 #include "decoder.hpp"
-#include "frequency_color_waveform_analyzer.hpp"
 #include "metadata_writer.hpp"
 #include "pitch_shifter.hpp"
 #include "playback_time_pitch_stage.hpp"
@@ -14,11 +13,9 @@
 #include "waveform_analyzer.hpp"
 
 #include <atomic>
-#include <condition_variable>
 #include <cstring>
 #include <functional>
 #include <mutex>
-#include <memory>
 #include <new>
 #include <string>
 #include <utility>
@@ -103,147 +100,9 @@ struct ag_waveform {
     int sample_rate_ = 0;
 };
 
-struct ag_cancel_state final {
-    std::atomic_bool cancelled{false};
-    std::mutex pause_mutex;
-    std::condition_variable pause_condition;
-    bool paused = false;
-};
-
 struct ag_cancel_token {
-    std::shared_ptr<ag_cancel_state> state;
-};
-
-namespace {
-
-using FrequencyWaitTestHook = void (*)(int phase, void* user_data);
-constexpr int wait_before_callback = 0;
-constexpr int wait_after_callback = 1;
-constexpr int cancel_before_lock = 2;
-struct FrequencyWaitHookRegistration final {
-    FrequencyWaitTestHook hook = nullptr;
-    void* user_data = nullptr;
-};
-std::shared_ptr<const FrequencyWaitHookRegistration>
-    frequency_wait_test_hook_registration;
-
-void invoke_frequency_wait_test_hook(const int phase) noexcept
-{
-    try {
-        const std::shared_ptr<const FrequencyWaitHookRegistration> registration =
-            std::atomic_load_explicit(
-                &frequency_wait_test_hook_registration,
-                std::memory_order_acquire);
-        if (registration != nullptr && registration->hook != nullptr) {
-            registration->hook(phase, registration->user_data);
-        }
-    } catch (...) {
-    }
-}
-
-std::shared_ptr<ag_cancel_state> retain_cancel_state(
-    const ag_cancel_token* const token) noexcept
-{
-    return token == nullptr ? nullptr : token->state;
-}
-
-const std::atomic_bool* cancelled_flag(
-    const std::shared_ptr<ag_cancel_state>& state) noexcept
-{
-    return state == nullptr ? nullptr : &state->cancelled;
-}
-
-struct FrequencyProgressBridge final {
-    std::shared_ptr<ag_cancel_state> state;
-    ag_progress_callback callback = nullptr;
-    void* user_data = nullptr;
     std::atomic_bool cancelled{false};
-    bool callback_failed = false;
-    bool bridge_failed = false;
 };
-
-bool wait_until_runnable(FrequencyProgressBridge& bridge,
-                         const int wait_phase) noexcept
-{
-    if (bridge.state == nullptr) {
-        return !bridge.cancelled.load(std::memory_order_relaxed);
-    }
-    try {
-        std::unique_lock<std::mutex> lock(bridge.state->pause_mutex);
-        while (bridge.state->paused
-               && !bridge.state->cancelled.load(std::memory_order_relaxed)) {
-            invoke_frequency_wait_test_hook(wait_phase);
-            bridge.state->pause_condition.wait(lock);
-        }
-        if (bridge.state->cancelled.load(std::memory_order_relaxed)) {
-            bridge.cancelled.store(true, std::memory_order_relaxed);
-            return false;
-        }
-        return true;
-    } catch (...) {
-        bridge.bridge_failed = true;
-        bridge.cancelled.store(true, std::memory_order_relaxed);
-        return false;
-    }
-}
-
-void request_cancel_noexcept(
-    const std::shared_ptr<ag_cancel_state>& state) noexcept
-{
-    if (state == nullptr) {
-        return;
-    }
-    invoke_frequency_wait_test_hook(cancel_before_lock);
-    try {
-        std::lock_guard<std::mutex> lock(state->pause_mutex);
-        state->cancelled.store(true, std::memory_order_relaxed);
-    } catch (...) {
-        state->cancelled.store(true, std::memory_order_relaxed);
-    }
-    state->pause_condition.notify_all();
-}
-
-void bridge_frequency_progress(const float progress, void* const user_data) noexcept
-{
-    auto& bridge = *static_cast<FrequencyProgressBridge*>(user_data);
-    if (!wait_until_runnable(bridge, wait_before_callback)) {
-        return;
-    }
-
-    if (bridge.callback == nullptr) {
-        return;
-    }
-    try {
-        bridge.callback(progress, bridge.user_data);
-    } catch (...) {
-        bridge.callback_failed = true;
-        bridge.cancelled.store(true, std::memory_order_relaxed);
-        return;
-    }
-    (void)wait_until_runnable(bridge, wait_after_callback);
-}
-
-} // namespace
-
-namespace agplayer::testing {
-
-void set_frequency_wait_test_hook(FrequencyWaitTestHook hook,
-                                  void* user_data) noexcept
-{
-    try {
-        std::shared_ptr<const FrequencyWaitHookRegistration> registration;
-        if (hook != nullptr) {
-            registration = std::make_shared<FrequencyWaitHookRegistration>(
-                FrequencyWaitHookRegistration{hook, user_data});
-        }
-        std::atomic_store_explicit(
-            &frequency_wait_test_hook_registration, std::move(registration),
-            std::memory_order_release);
-    } catch (...) {
-    }
-}
-
-} // namespace agplayer::testing
 
 ag_result agplayer::editor::load_editor_playback_stream(
     ag_player* const player,
@@ -1093,48 +952,18 @@ ag_result ag_metadata_write_extended(const char* utf8_path,
 
 ag_cancel_token* ag_cancel_token_create(void)
 {
-    try {
-        auto state = std::make_shared<ag_cancel_state>();
-        return new (std::nothrow) ag_cancel_token{std::move(state)};
-    } catch (...) {
-        return nullptr;
-    }
+    return new (std::nothrow) ag_cancel_token;
 }
 
 void ag_cancel_token_cancel(ag_cancel_token* token)
 {
     if (token != nullptr) {
-        const std::shared_ptr<ag_cancel_state> state = retain_cancel_state(token);
-        request_cancel_noexcept(state);
-    }
-}
-
-void ag_cancel_token_set_paused(ag_cancel_token* token, const int paused)
-{
-    if (token == nullptr) {
-        return;
-    }
-    std::shared_ptr<ag_cancel_state> state;
-    try {
-        state = retain_cancel_state(token);
-        {
-            std::lock_guard<std::mutex> lock(state->pause_mutex);
-            state->paused = paused != 0;
-        }
-    } catch (...) {
-        return;
-    }
-    if (paused == 0) {
-        state->pause_condition.notify_all();
+        token->cancelled.store(true, std::memory_order_relaxed);
     }
 }
 
 void ag_cancel_token_destroy(ag_cancel_token* token)
 {
-    if (token != nullptr) {
-        const std::shared_ptr<ag_cancel_state> state = retain_cancel_state(token);
-        request_cancel_noexcept(state);
-    }
     delete token;
 }
 
@@ -1170,9 +999,8 @@ ag_result ag_transcode_ex(const char* input_path,
             config.quality = std::clamp(options->quality, 0, 100);
         }
 
-        const std::shared_ptr<ag_cancel_state> cancel_state =
-            retain_cancel_state(cancel_token);
-        const std::atomic_bool* cancelled = cancelled_flag(cancel_state);
+        const std::atomic_bool* cancelled =
+            cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
 
         std::function<void(float)> cb;
         if (progress_callback != nullptr) {
@@ -1342,9 +1170,8 @@ ag_result ag_transcode_v2(const char* input_path,
             }
         }
 
-        const std::shared_ptr<ag_cancel_state> cancel_state =
-            retain_cancel_state(cancel_token);
-        const std::atomic_bool* cancelled = cancelled_flag(cancel_state);
+        const std::atomic_bool* cancelled = cancel_token == nullptr
+            ? nullptr : &cancel_token->cancelled;
         std::function<void(float)> callback;
         if (progress_callback != nullptr) {
             callback = [progress_callback, user_data](const float progress) {
@@ -1402,9 +1229,8 @@ ag_result ag_pitch_shift_ex(const char* input_path,
             config.output_sample_rate = options->output_sample_rate;
         }
 
-        const std::shared_ptr<ag_cancel_state> cancel_state =
-            retain_cancel_state(cancel_token);
-        const std::atomic_bool* cancelled = cancelled_flag(cancel_state);
+        const std::atomic_bool* cancelled =
+            cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
 
         std::function<void(float)> cb;
         if (progress_callback != nullptr) {
@@ -1456,9 +1282,8 @@ ag_result ag_waveform_analyze(const char* utf8_path,
         std::vector<float> bass;
         std::vector<float> mid;
         std::vector<float> high;
-        const std::shared_ptr<ag_cancel_state> cancel_state =
-            retain_cancel_state(cancel_token);
-        const std::atomic_bool* cancelled = cancelled_flag(cancel_state);
+        const std::atomic_bool* cancelled =
+            cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
         std::uint64_t duration_ms = 0U;
         std::uint64_t total_samples = 0U;
         int sample_rate = 0;
@@ -1609,9 +1434,8 @@ ag_result ag_track_analysis_with_aggregation(
     }
 
     return guard_result([&] {
-        const std::shared_ptr<ag_cancel_state> cancel_state =
-            retain_cancel_state(cancel_token);
-        const std::atomic_bool* cancelled = cancelled_flag(cancel_state);
+        const std::atomic_bool* cancelled =
+            cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
 
         std::vector<float> peaks;
         std::vector<float> bass;
@@ -1660,62 +1484,6 @@ ag_result ag_track_analysis_with_aggregation(
         // leave *out_bpm at 0.
 
         *out_waveform = waveform;
-        return AG_OK;
-    });
-}
-
-ag_result ag_track_frequency_color_analysis(
-    const char* utf8_path,
-    const size_t target_points,
-    const ag_cancel_token* cancel_token,
-    const ag_progress_callback progress_callback,
-    void* const user_data,
-    ag_waveform** out_waveform)
-{
-    if (out_waveform == nullptr) {
-        return AG_INVALID_ARGUMENT;
-    }
-    *out_waveform = nullptr;
-    if (utf8_path == nullptr || utf8_path[0] == '\0'
-        || target_points == 0U) {
-        return AG_INVALID_ARGUMENT;
-    }
-
-    return guard_result([&] {
-        FrequencyProgressBridge bridge;
-        bridge.state = retain_cancel_state(cancel_token);
-        bridge.callback = progress_callback;
-        bridge.user_data = user_data;
-        if (bridge.state != nullptr
-            && bridge.state->cancelled.load(std::memory_order_relaxed)) {
-            bridge.cancelled.store(true, std::memory_order_relaxed);
-        }
-
-        agplayer::FrequencyColorWaveformData data;
-        const ag_result result =
-            agplayer::FrequencyColorWaveformAnalyzer::analyze(
-                utf8_path, target_points, &bridge.cancelled,
-                bridge_frequency_progress, &bridge, data);
-        if (bridge.callback_failed || bridge.bridge_failed) {
-            return AG_INTERNAL_ERROR;
-        }
-        if (result != AG_OK) {
-            return result;
-        }
-
-        auto waveform = std::unique_ptr<ag_waveform>(
-            new (std::nothrow) ag_waveform{});
-        if (waveform == nullptr) {
-            return AG_INTERNAL_ERROR;
-        }
-        waveform->peaks = std::move(data.mix);
-        waveform->bass_ = std::move(data.low);
-        waveform->mid_ = std::move(data.mid);
-        waveform->high_ = std::move(data.high);
-        waveform->duration_ms_ = data.duration_ms;
-        waveform->total_samples_ = data.timeline_frames;
-        waveform->sample_rate_ = static_cast<int>(data.sample_rate);
-        *out_waveform = waveform.release();
         return AG_OK;
     });
 }

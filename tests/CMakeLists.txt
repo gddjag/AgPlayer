@@ -570,19 +570,6 @@ target_include_directories(waveform_cache_test PRIVATE
 )
 target_link_libraries(waveform_cache_test PRIVATE agplayer_core)
 
-add_executable(frequency_color_waveform_cache_test
-    core/frequency_color_waveform_cache_test.cpp
-)
-target_include_directories(frequency_color_waveform_cache_test PRIVATE
-    "${CMAKE_SOURCE_DIR}/core/src"
-)
-target_link_libraries(frequency_color_waveform_cache_test PRIVATE agplayer_core)
-agplayer_enable_warnings(frequency_color_waveform_cache_test)
-add_test(NAME frequency_color_waveform_cache_test
-    COMMAND frequency_color_waveform_cache_test
-)
-set_tests_properties(frequency_color_waveform_cache_test PROPERTIES TIMEOUT 30)
-
 agplayer_enable_warnings(waveform_cache_test)
 
 add_test(NAME waveform_cache_test

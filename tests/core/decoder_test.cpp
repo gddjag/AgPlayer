@@ -89,14 +89,6 @@ int main(const int argc, char** argv)
                           "surround-5.1-unknown"));
     assert(create_fixture(fixture_generator, durationless_path, "durationless"));
 
-    const std::uint64_t open_count_before = agplayer::Decoder::threadOpenCount();
-    agplayer::Decoder counted_decoder;
-    assert(counted_decoder.open(sine_path.string()) == AG_OK);
-    assert(agplayer::Decoder::threadOpenCount() == open_count_before + 1U);
-    assert(counted_decoder.open(sine_path.string()) == AG_OK);
-    assert(agplayer::Decoder::threadOpenCount() == open_count_before + 2U);
-    counted_decoder.close();
-
     ag_metadata* metadata = reinterpret_cast<ag_metadata*>(
         static_cast<std::uintptr_t>(1U));
     assert(ag_metadata_open(nullptr, &metadata) == AG_INVALID_ARGUMENT);
@@ -148,7 +140,6 @@ int main(const int argc, char** argv)
     assert(block.samples.size() == block.frames * 2U);
 
     // Mutation caught: applying AnalysisMono to the parameter-free legacy open.
-    agplayer::Decoder::resetThreadTimelineDerivationCount();
     agplayer::Decoder legacy_stereo_decoder;
     assert(legacy_stereo_decoder.open(stereo_path.string()) == AG_OK);
     assert(legacy_stereo_decoder.output_format().channels == 2);
@@ -156,7 +147,6 @@ int main(const int argc, char** argv)
     // and bucket PCM.  It must not pay for, or expose, frequency-analysis
     // timeline metadata.
     assert(!legacy_stereo_decoder.output_format().has_timeline);
-    assert(agplayer::Decoder::threadTimelineDerivationCount() == 0U);
 
     // Mutation caught: making the sample-rate/channel legacy overload select
     // the analysis-mono mode rather than preserving its explicit two channels.
@@ -164,7 +154,6 @@ int main(const int argc, char** argv)
     assert(legacy_resampled_decoder.open(stereo_path.string(), 48'000, 2) == AG_OK);
     assert(legacy_resampled_decoder.output_format().sample_rate == 48'000);
     assert(legacy_resampled_decoder.output_format().channels == 2);
-    assert(agplayer::Decoder::threadTimelineDerivationCount() == 0U);
     read_first_audio_block(legacy_resampled_decoder, block);
     assert(std::abs(block.samples[0] - 0.25F) < 1.0e-4F);
     assert(std::abs(block.samples[1] - 0.50F) < 1.0e-4F);
@@ -180,10 +169,6 @@ int main(const int argc, char** argv)
     assert(analysis_stereo_decoder.output_format().channels == 1);
     assert(analysis_stereo_decoder.output_format().has_timeline);
     assert(analysis_stereo_decoder.output_format().timeline_frames == 96'000U);
-    assert(analysis_stereo_decoder.output_format().timestamp_quantization_frames
-           == 2U);
-    assert(analysis_stereo_decoder.output_format().leading_padding_frames == 0U);
-    assert(agplayer::Decoder::threadTimelineDerivationCount() == 1U);
     read_first_audio_block(analysis_stereo_decoder, block);
     assert(block.samples.size() == block.frames);
     // Mutation caught: replacing the L2-normalized stereo matrix with a

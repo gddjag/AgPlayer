@@ -255,14 +255,8 @@ ag_result ag_metadata_write_extended(const char* utf8_path,
                                      size_t cover_size,
                                      const char* cover_mime_type);
 
-/* ag_cancel_token_cancel and ag_cancel_token_set_paused may be called while an
- * operation is active. Destroy only after the operation has definitely entered
- * and retained the token state; the preferred lifecycle is cancel, join the
- * operation, then destroy. Starting an operation concurrently with destroy is
- * invalid. */
 ag_cancel_token* ag_cancel_token_create(void);
 void ag_cancel_token_cancel(ag_cancel_token* token);
-void ag_cancel_token_set_paused(ag_cancel_token* token, int paused);
 void ag_cancel_token_destroy(ag_cancel_token* token);
 
 /* Transcode an audio file to a new format/path. The output container is
@@ -471,17 +465,6 @@ ag_result ag_track_analysis_with_aggregation(
     void* user_data,
     ag_waveform** out_waveform,
     double* out_bpm);
-
-/* Analyze the four frequency-color waveform layers in one decode pass.
- * The returned waveform is owned by the caller and must be released with
- * ag_waveform_destroy. This call does not run BPM analysis. */
-ag_result ag_track_frequency_color_analysis(
-    const char* utf8_path,
-    size_t target_points,
-    const ag_cancel_token* cancel_token,
-    ag_progress_callback progress_callback,
-    void* user_data,
-    ag_waveform** out_waveform);
 
 typedef struct ag_bpm_result {
     double bpm;
