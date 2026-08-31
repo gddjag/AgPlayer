@@ -85,6 +85,14 @@ TestCase {
         return null
     }
 
+    function eventViewById(eventId, events) {
+        const source = events === undefined
+            ? AudioEditorController.timelineEventViews : events
+        return source.filter(function(event) {
+            return String(event.id) === String(eventId)
+        })[0]
+    }
+
     function init() {
         AudioToolsController.selectTool(0)
         if (AudioEditorController.hasDocument && !AudioEditorController.busy) {
@@ -96,7 +104,8 @@ TestCase {
         host.requestActivate()
         page = host.editorPage
         tryVerify(function() { return page.width > 0 && page.height > 0 })
-        tryVerify(function() { return host.active })
+        tryVerify(function() { return host.active }, 5000,
+                  "native editor shell did not become the active window")
     }
 
     function cleanup() {
@@ -137,7 +146,8 @@ TestCase {
         host = createTemporaryObject(shellComponent, testCase)
         verify(host)
         host.requestActivate()
-        tryVerify(function() { return host.active })
+        tryVerify(function() { return host.active }, 5000,
+                  "880 shell did not become the active window")
         page = findChild(host, "audioEditorPage")
         const shortcut = findChild(host, "audioToolsSpaceShortcut")
         const codec = findChild(page, "editorExportCodec")
@@ -175,6 +185,83 @@ TestCase {
             reset, Qt.Key_Space, Qt.NoModifier))
         tryCompare(AudioEditorController, "playing", false)
         compare(AudioEditorController.pitchCents, 200)
+    }
+
+    function test_narrowShellFixtureKeepsRealPlaybackControlsInsideThePage() {
+        host.destroy()
+        wait(0)
+        host = createTemporaryObject(shellComponent, testCase)
+        verify(host)
+        host.width = 880
+        host.height = 560
+        host.requestActivate()
+        tryVerify(function() { return host.active })
+        page = findChild(host, "audioEditorPage")
+        verify(page && testAudioUrl && testAudioUrl.toString().length > 0)
+        compare(Math.round(page.height), 441)
+
+        verify(nativeDropHelper.sendUrls(page, [testAudioUrl]))
+        tryVerify(function() {
+            return AudioEditorController.hasDocument
+                && !AudioEditorController.busy
+        }, 5000, "880 fixture did not finish importing: "
+                 + AudioEditorController.errorMessage)
+        const transport = findChild(page, "editorPlaybackTransport")
+        const narrowPlay = findChild(page, "editorNarrowPlaybackAccess")
+        const primaryPlay = findChild(page, "editorPrimaryPlayButton")
+        const selectButton = findChild(page, "editorCommand_select")
+        verify(transport && narrowPlay && primaryPlay && selectButton)
+        const canvas = findChild(page, "editorWaveformCanvas")
+        verify(canvas)
+        verify(canvas.height >= 48,
+               "880 shell must retain enough native pointer-edit height")
+        const transportPosition = transport.mapToItem(page, 0, 0)
+        const primaryPosition = primaryPlay.mapToItem(page, 0, 0)
+        const narrowPosition = narrowPlay.mapToItem(page, 0, 0)
+        verify(transportPosition.y >= 0
+               && transportPosition.y + transport.height <= page.height)
+        verify(primaryPosition.y >= 0
+               && primaryPosition.y + primaryPlay.height <= page.height)
+        verify(narrowPosition.y >= 0
+               && narrowPosition.y + narrowPlay.height <= page.height)
+        tryVerify(function() {
+            return narrowPlay.enabled && primaryPlay.enabled
+        }, 5000, "880 playback controls did not become enabled")
+        verify(nativeDropHelper.clickItem(selectButton,
+            selectButton.width * 0.5, selectButton.height * 0.5,
+            Qt.LeftButton))
+        tryCompare(AudioEditorController, "activeTool", "select")
+
+        // The 441 px shell page deliberately leaves a very compact timeline,
+        // but its real native pointer targets must remain usable.
+        AudioEditorController.viewport.setViewportWidth(canvas.width)
+        verify(AudioEditorController.viewport.setVisibleRange(
+            0, AudioEditorController.totalFrames))
+        // The compact event header and the six-pixel gain hit target occupy
+        // the upper/middle bands. Exercise the remaining waveform body band,
+        // which is the range-selection surface at 880x560.
+        verify(nativeDropHelper.dragItem(canvas, canvas.width * 0.18,
+            canvas.height - 3, canvas.width * 0.22, 0),
+            "880 native range drag did not reach the canvas")
+        tryVerify(function() {
+            return AudioEditorController.selectionEnd
+                > AudioEditorController.selectionStart
+        }, 5000, "880 range drag did not create a selection")
+        verify(nativeDropHelper.keyClickItem(canvas, Qt.Key_Escape, Qt.NoModifier),
+               "880 native Escape did not reach the canvas")
+        tryVerify(function() {
+            return AudioEditorController.selectionEnd
+                <= AudioEditorController.selectionStart
+        }, 5000, "880 Escape did not clear the selection")
+        verify(nativeDropHelper.dragItem(narrowPlay, narrowPlay.width * 0.5,
+            narrowPlay.height * 0.5, 0, 0))
+        tryVerify(function() { return AudioEditorController.playing }, 5000,
+            AudioEditorController.errorMessage)
+        primaryPlay.forceActiveFocus()
+        tryVerify(function() { return primaryPlay.activeFocus })
+        verify(nativeDropHelper.keyClickItem(primaryPlay, Qt.Key_Space,
+            Qt.NoModifier))
+        tryCompare(AudioEditorController, "playing", false)
     }
 
     function test_realFixtureEditingJourneyUsesNativeInputEndToEnd() {
@@ -229,17 +316,38 @@ TestCase {
             return pasteButton.enabled
                 && AudioEditorController.actionEnabled("editor.paste")
         })
-        verify(nativeDropHelper.dragItem(canvas, canvas.width - 2,
+        verify(nativeDropHelper.dragItem(canvas, canvas.width * 0.8,
             canvas.height * 0.75, 0, 0))
+        const beforePasteCount = AudioEditorController.timelineEventViews.length
+        const copiedRightBeforePaste = eventViewById(rightId)
+        const pasteFrame = Number(AudioEditorController.playheadFrame)
+        verify(pasteFrame > Number(copiedRightBeforePaste.timelineStart)
+               && pasteFrame < Number(copiedRightBeforePaste.timelineEnd),
+               "paste point must force the occupied-event insertion path")
         verify(nativeDropHelper.keyClickItem(canvas, Qt.Key_V,
             Qt.ControlModifier))
-        tryVerify(function() {
-            return AudioEditorController.timelineEventViews.length >= 3
-        })
+        tryCompare(AudioEditorController.timelineEventViews, "length", 4)
         const pastedId = String(AudioEditorController.selectedEventId)
         verify(pastedId.length > 0 && pastedId !== rightId)
+        const pastedClone = eventViewById(pastedId)
+        compare(Number(pastedClone.sourceStart),
+                Number(copiedRightBeforePaste.sourceStart))
+        compare(Number(pastedClone.sourceEnd),
+                Number(copiedRightBeforePaste.sourceEnd))
+        compare(Number(pastedClone.timelineStart), pasteFrame)
+        verify(nativeDropHelper.keyClickItem(canvas, Qt.Key_Z, Qt.ControlModifier))
+        tryCompare(AudioEditorController.timelineEventViews,
+                   "length", beforePasteCount)
+        verify(nativeDropHelper.keyClickItem(canvas, Qt.Key_Y, Qt.ControlModifier))
+        tryCompare(AudioEditorController.timelineEventViews, "length", 4)
         const pastedEvent = findTimelineEventItem(canvas, pastedId)
         verify(pastedEvent)
+        const pastedHeader = findVisibleItem(pastedEvent,
+            "editorEventHeaderInteraction")
+        verify(pastedHeader)
+        verify(nativeDropHelper.dragItem(pastedHeader,
+            pastedHeader.width * 0.5, pastedHeader.height * 0.5, 0, 0))
+        tryCompare(AudioEditorController, "selectedEventId", pastedId)
         const rightTrim = findVisibleItem(pastedEvent,
             "editorEventRightTrimHandle")
         verify(rightTrim)
@@ -258,9 +366,22 @@ TestCase {
             return event && Number(event.timelineEnd) - Number(event.timelineStart)
                 < pastedFramesBeforeTrim
         })
+        const trimmedPastedEvent = findTimelineEventItem(canvas, pastedId)
+        verify(trimmedPastedEvent)
+        const trimmedPastedHeader = findVisibleItem(trimmedPastedEvent,
+            "editorEventHeaderInteraction")
+        verify(trimmedPastedHeader)
+        verify(nativeDropHelper.dragItem(trimmedPastedHeader,
+            trimmedPastedHeader.width * 0.5,
+            trimmedPastedHeader.height * 0.5, 0, 0))
+        tryCompare(AudioEditorController, "selectedEventId", pastedId)
 
         verify(nativeDropHelper.dragItem(muteButton, muteButton.width * 0.5,
             muteButton.height * 0.5, 0, 0))
+        tryVerify(function() {
+            const event = eventViewById(pastedId)
+            return event && event.mute === true
+        })
         verify(AudioEditorController.actionEnabled("editor.undo"))
         verify(nativeDropHelper.dragItem(fadeInButton,
             fadeInButton.width * 0.5, fadeInButton.height * 0.5, 0, 0))
@@ -298,29 +419,37 @@ TestCase {
     }
 
     function test_bodyDragCreatesRangeSelectionWithNativePointerInput() {
-        verify(AudioEditorController.createUntitledDocument(48000, 2, 192000))
-        verify(AudioEditorController.setActiveTool("select"))
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 192000),
+               "body-drag fixture document creation failed")
+        verify(AudioEditorController.setActiveTool("select"),
+               "body-drag fixture could not select the range tool")
         const eventId = AudioEditorController.timelineEventViews[0].id
-        verify(AudioEditorController.moveEvent(eventId, 48000))
-        verify(AudioEditorController.trimEvent(eventId, 0, 96000, 48000))
+        verify(AudioEditorController.moveEvent(eventId, 48000),
+               "body-drag fixture event move failed")
+        verify(AudioEditorController.trimEvent(eventId, 0, 96000, 48000),
+               "body-drag fixture event trim failed")
         const canvas = findChild(page, "editorWaveformCanvas")
-        verify(canvas)
+        verify(canvas, "body-drag waveform canvas is missing")
         AudioEditorController.viewport.setViewportWidth(canvas.width)
-        verify(AudioEditorController.viewport.setVisibleRange(0, 144000))
+        verify(AudioEditorController.viewport.setVisibleRange(0, 144000),
+               "body-drag viewport range setup failed")
         tryVerify(function() {
             return findVisibleItem(canvas, "editorEventVisualBoundary") !== null
-        })
+        }, 5000, "body-drag event visual did not become visible")
         const eventVisual = findVisibleItem(canvas, "editorEventVisualBoundary")
-        verify(eventVisual)
+        verify(eventVisual, "body-drag event visual disappeared before input")
         const bodyPoint = eventVisual.mapToItem(canvas,
             eventVisual.width * 0.5, 48)
-        verify(bodyPoint.y > 32)
+        verify(bodyPoint.y > 32,
+               "body-drag point overlaps the clip-header interaction band")
 
         verify(nativeDropHelper.dragItem(canvas, bodyPoint.x, bodyPoint.y,
-            canvas.width * 0.1, 0))
+            canvas.width * 0.1, 0),
+            "native body drag could not be injected")
 
         verify(AudioEditorController.selectionEnd
-            > AudioEditorController.selectionStart)
+            > AudioEditorController.selectionStart,
+            "native body drag did not publish a non-empty range selection")
     }
 
     function test_headerDragMovesTheSelectedEventWithNativePointerInput() {
@@ -385,8 +514,12 @@ TestCase {
 
         verify((modifierObserver.observedModifiers & Qt.ControlModifier) !== 0)
 
+        tryVerify(function() {
+            return AudioEditorController.timelineEventViews.length === 2
+        }, 1000, "Ctrl+drag copy was rejected; candidate start="
+                 + String(header.candidateTimelineStart)
+                 + ", error=" + AudioEditorController.errorMessage)
         const events = AudioEditorController.timelineEventViews
-        compare(events.length, 2)
         let original = null
         let copied = null
         for (let index = 0; index < events.length; ++index) {

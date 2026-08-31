@@ -111,6 +111,25 @@ TestCase {
         return null
     }
 
+    function createAudioToolsShell(width, height) {
+        const shell = createTemporaryObject(shellComponent, testCase)
+        verify(shell)
+        shell.width = width
+        shell.height = height
+        shell.requestActivate()
+        const shellPage = findChild(shell, "audioEditorPage")
+        const content = findChild(shell, "audioToolsContentStack")
+        tryVerify(function() {
+            return shellPage && content && shell.active
+                && shellPage.width > 0 && shellPage.height > 0
+        })
+        return { shell: shell, page: shellPage, content: content }
+    }
+
+    function itemPositionInPage(item, shellPage) {
+        return item.mapToItem(shellPage, 0, 0)
+    }
+
     function test_referenceGeometryAt1672x941ShellContent() {
         host.width = 1672
         host.height = 822
@@ -624,7 +643,10 @@ TestCase {
 
     function test_shortcutWheelOverlayScrollsVisible1280RowToEnd() {
         host.width = 1280
-        host.height = 720
+        // AudioToolsWindow(1280x720) leaves the editor page with 601 px after
+        // its fixed chrome.  Keep this standalone wheel dispatch test on the
+        // same responsive branch as the real-shell geometry test below.
+        host.height = 601
         wait(0)
         const card = findChild(page, "editorShortcutCard")
         const pairs = [
@@ -668,8 +690,8 @@ TestCase {
 
     function test_compactShortcutRowsKeepHorizontalAccessAndTextSize_data() {
         return [
-            { tag: "desktop", width: 1280, height: 720 },
-            { tag: "compact", width: 880, height: 560 }
+            { tag: "desktop", width: 1280, height: 601 },
+            { tag: "compact", width: 880, height: 441 }
         ]
     }
 
@@ -699,7 +721,8 @@ TestCase {
 
     function test_narrowViewportKeepsPlaybackAndBothShortcutRowsReachable() {
         host.width = 880
-        host.height = 560
+        // AudioToolsWindow(880x560) gives AudioEditorPage 441 px of content.
+        host.height = 441
         wait(0)
 
         const main = findChild(page, "editorMainColumn")
@@ -723,7 +746,7 @@ TestCase {
                "shortcut card must remain below the playback panel")
         verify(cardPosition.y >= 0)
         verify(cardPosition.y + card.height <= page.height,
-               "both 13px shortcut rows must be visible at 880x560")
+               "both 13px shortcut rows must be visible in the 880x560 shell page")
         verify(cardPosition.y + card.height <= statusPosition.y,
                "shortcut card must not be covered by the status bar")
         for (const row of [firstRow, secondRow]) {
@@ -731,6 +754,67 @@ TestCase {
             verify(row.mapToItem(page, 0, row.height).y
                    <= cardPosition.y + card.height)
         }
+    }
+
+    function test_realShell1280KeepsTransportAndShortcutCardSeparate() {
+        const layout = createAudioToolsShell(1280, 720)
+        compare(Math.round(layout.page.height), 601)
+        compare(Math.round(layout.content.height), 601)
+        const transport = findChild(layout.page, "editorPlaybackTransport")
+        const card = findChild(layout.page, "editorShortcutCard")
+        const status = findChild(layout.page, "editorStatusBar")
+        verify(transport && card && status)
+        const transportPosition = itemPositionInPage(transport, layout.page)
+        const cardPosition = itemPositionInPage(card, layout.page)
+        const statusPosition = itemPositionInPage(status, layout.page)
+        verify(transportPosition.y + transport.height <= cardPosition.y,
+               "1280 shell transport/card overlap")
+        verify(cardPosition.y + card.height <= statusPosition.y,
+               "1280 shell shortcut card/status overlap")
+        verify(statusPosition.y + status.height <= layout.page.height,
+               "1280 shell status is clipped")
+        layout.shell.destroy()
+    }
+
+    function test_realShell880KeepsTransportShortcutAndStatusInside441() {
+        const layout = createAudioToolsShell(880, 560)
+        compare(Math.round(layout.page.height), 441)
+        compare(Math.round(layout.content.height), 441)
+        const transport = findChild(layout.page, "editorPlaybackTransport")
+        const primaryPlay = findChild(layout.page, "editorPrimaryPlayButton")
+        const canvas = findChild(layout.page, "editorWaveformCanvas")
+        const card = findChild(layout.page, "editorShortcutCard")
+        const status = findChild(layout.page, "editorStatusBar")
+        const firstRow = findChild(layout.page, "editorShortcutFirstRow")
+        const secondRow = findChild(layout.page, "editorShortcutSecondRow")
+        verify(transport && primaryPlay && canvas && card && status
+               && firstRow && secondRow)
+        const transportPosition = itemPositionInPage(transport, layout.page)
+        const primaryPosition = itemPositionInPage(primaryPlay, layout.page)
+        const cardPosition = itemPositionInPage(card, layout.page)
+        const statusPosition = itemPositionInPage(status, layout.page)
+        verify(transportPosition.y >= 0
+               && transportPosition.y + transport.height <= layout.page.height,
+               "880 shell transport is clipped")
+        verify(primaryPosition.y >= transportPosition.y
+               && primaryPosition.y + primaryPlay.height
+                    <= transportPosition.y + transport.height,
+               "880 shell primary playback button is clipped")
+        verify(canvas.height >= 48,
+               "880 shell waveform must retain a real pointer-edit surface")
+        verify(transportPosition.y + transport.height <= cardPosition.y,
+               "880 shell transport/card overlap")
+        verify(cardPosition.y + card.height <= statusPosition.y,
+               "880 shell shortcut card/status overlap")
+        verify(statusPosition.y + status.height <= layout.page.height,
+               "880 shell status is clipped")
+        for (const row of [firstRow, secondRow]) {
+            const rowPosition = itemPositionInPage(row, layout.page)
+            verify(rowPosition.y >= cardPosition.y
+                   && rowPosition.y + row.height <= cardPosition.y + card.height,
+                   row.objectName + " is clipped at 880 shell height")
+        }
+        layout.shell.destroy()
     }
 
     function test_referenceTransportUsesFineControlsAndHoverShortcuts() {

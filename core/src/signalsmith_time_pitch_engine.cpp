@@ -331,7 +331,8 @@ private:
         failed_ = true;
     }
 
-    signalsmith::stretch::SignalsmithStretch<float> stretch_;
+    // Keep independent realtime and offline sessions sample-reproducible.
+    signalsmith::stretch::SignalsmithStretch<float> stretch_{0x4147506cL};
     std::array<std::vector<float>, kMaxChannels> input_planar_;
     std::array<std::vector<float>, kMaxChannels> output_planar_;
     std::array<float*, kMaxChannels> input_ptrs_{};

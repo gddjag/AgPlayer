@@ -1530,7 +1530,28 @@ int main(int argc, char* argv[])
                     QTimer::singleShot(250, QCoreApplication::quit);
                 };
 
-                if (wantScreenshotTools || (wantScreenshotMain && library.count() == 0)) {
+                if (wantScreenshotTools && qaTool == 0 && !qaImportFolder.isEmpty()) {
+                    // The editor waveform is generated asynchronously.  A fixed capture
+                    // delay can race the first viewport request at larger tool-window
+                    // sizes and produce a misleading empty editor QA artifact.
+                    auto attempts = std::make_shared<int>(0);
+                    auto pollFunc = std::make_shared<std::function<void()>>();
+                    *pollFunc = [&audioEditor, attempts, pollFunc, captureWindow]() {
+                        if (audioEditor.hasDocument()
+                            && !audioEditor.viewportChannelPeaks().isEmpty()) {
+                            QTimer::singleShot(250, captureWindow);
+                            return;
+                        }
+                        if (++(*attempts) > 200) { // 10s at 50ms: fail the artifact.
+                            qWarning("Timed out waiting for editor waveform QA readiness");
+                            QCoreApplication::exit(2);
+                            return;
+                        }
+                        QTimer::singleShot(50, *pollFunc);
+                    };
+                    QTimer::singleShot(50, *pollFunc);
+                } else if (wantScreenshotTools
+                           || (wantScreenshotMain && library.count() == 0)) {
                     QTimer::singleShot(1500, captureWindow);
                 } else if (wantScreenshotList
                            && qaListCategory == QStringLiteral("tags")) {

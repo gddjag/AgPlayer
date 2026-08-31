@@ -934,6 +934,7 @@ QVariantList AudioEditorController::timelineEventViews() const
             {QStringLiteral("fadeInCurve"), fade_curve_name(visible.fadeInCurve)},
             {QStringLiteral("fadeOutCurve"), fade_curve_name(visible.fadeOutCurve)},
             {QStringLiteral("gain"), visible.gain},
+            {QStringLiteral("mute"), visible.mute},
             {QStringLiteral("envelope"), envelope}});
     }
     return result;

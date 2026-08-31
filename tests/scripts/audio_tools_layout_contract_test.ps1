@@ -149,7 +149,7 @@ if ($toolsWindow -notmatch ('title:\s*qsTr\("' + $audioToolsTitle + '"\)') -or
 }
 if ($toolsWindow -notmatch 'objectName:\s*"audioToolsSpaceShortcut"' -or
     $toolsWindow -notmatch 'sequence:\s*"Space"' -or
-    $toolsWindow -notmatch 'context:\s*Qt\.ApplicationShortcut' -or
+    $toolsWindow -notmatch 'context:\s*Qt\.WindowShortcut' -or
     $audioEditor -match 'objectName:\s*"editorSpaceShortcut"') {
     throw 'The tools shell must own the only global Space playback shortcut.'
 }
@@ -291,7 +291,8 @@ foreach ($shortcut in @('Ctrl\+1', 'Ctrl\+2', 'Ctrl\+B', 'Ctrl\+C', 'Ctrl\+X', '
     }
 }
 foreach ($responsiveHook in @('inspectorWidth', 'mainWidth',
-    'responsiveContentHeight', 'narrowLayout', 'editorInspectorScroller',
+    'timelineWorkspaceTop', 'trackRegionTop', 'trackRegionHeight',
+    'narrowLayout', 'editorInspectorScroller',
     'editorInspectorAccess')) {
     if ($audioEditor -notmatch $responsiveHook) {
         throw "The responsive editor is missing $responsiveHook."

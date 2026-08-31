@@ -324,7 +324,7 @@ Rectangle {
                 anchors.fill: parent
                 color: String(eventDelegate.modelData.id)
                     === AudioEditorController.selectedEventId
-                    ? "#261688FF" : "transparent"
+                    ? Theme.editorSelection : "transparent"
                 border.color: Theme.focus
                 border.width: String(eventDelegate.modelData.id)
                     === AudioEditorController.selectedEventId ? 2 : 0
@@ -338,7 +338,9 @@ Rectangle {
                 anchors.right: parent.right
                 anchors.leftMargin: 9
                 anchors.rightMargin: 9
-                height: 24
+                // At the 48px compact canvas height, keep this native clip
+                // selection target above (not behind) the gain interaction.
+                height: canvas.height < 80 ? 16 : 24
                 z: 5
                 cursorShape: AudioEditorController.activeTool === "scissors"
                     ? Qt.CrossCursor : Qt.ArrowCursor
@@ -612,7 +614,10 @@ Rectangle {
                 id: volumeLine
                 objectName: "editorEventVolumeLine"
                 x: 10; width: parent.width - 20
-                y: 10; height: parent.height - 20
+                y: canvas.height < 80 ? 18 : 10
+                height: canvas.height < 80
+                    ? Math.max(12, parent.height - 18)
+                    : parent.height - 20
                 z: 9
                 property real gainCandidate: Number(eventDelegate.modelData.gain)
                 readonly property real displayedGain: gainInteraction.pressed

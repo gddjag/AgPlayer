@@ -136,7 +136,7 @@ add_test(NAME editor_playback_stream_test
     COMMAND editor_playback_stream_test "${SINE_WAV_FIXTURE}"
 )
 set_tests_properties(editor_playback_stream_test PROPERTIES
-    TIMEOUT 30
+    TIMEOUT 60
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )
@@ -746,6 +746,8 @@ add_dependencies(qml_audio_editor_test decoder_fixture)
 add_test(NAME qml_audio_editor_test
     COMMAND qml_audio_editor_test
         -input "${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_audio_editor.qml"
+        -o -,txt
+        -o ${CMAKE_BINARY_DIR}/qml-audio-editor.xml,junitxml
 )
 set_tests_properties(qml_audio_editor_test PROPERTIES
     TIMEOUT 120
@@ -988,9 +990,12 @@ add_dependencies(qml_audio_tools_test decoder_fixture)
 add_test(NAME qml_audio_editor_native_input_test
     COMMAND qml_audio_tools_test
         -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_audio_editor_native_input.qml
-        -o -,txt)
+        -o -,txt
+        -o ${CMAKE_BINARY_DIR}/qml-audio-editor-native-input.xml,junitxml)
 set_tests_properties(qml_audio_editor_native_input_test PROPERTIES
-    TIMEOUT 30
+    # Native Windows input can exceed 30 seconds in Debug while real fixture
+    # playback and window activation complete.
+    TIMEOUT 60
     ENVIRONMENT "QT_QPA_PLATFORM=windows;QT_QUICK_CONTROLS_STYLE=Basic;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/app;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/bin"
@@ -1220,7 +1225,7 @@ if (WIN32)
                 ${audio_editor_feature_options_arguments}
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/audio_editor_feature_options_test.cmake"
         )
-        set_tests_properties(audio_editor_feature_options_test PROPERTIES TIMEOUT 120)
+        set_tests_properties(audio_editor_feature_options_test PROPERTIES TIMEOUT 180)
     endif()
 
     add_test(

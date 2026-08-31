@@ -1625,6 +1625,18 @@ private slots:
                  qint64{1'400});
     }
 
+    void timelineEventViewsExposeClipMuteState()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(48'000, 2, 1'000));
+        controller.selectEvent(QStringLiteral("1"));
+        QVERIFY(controller.triggerAction(QStringLiteral("editor.silenceSelection")));
+
+        const QVariantList events = controller.timelineEventViews();
+        QCOMPARE(events.size(), 1);
+        QVERIFY(events.front().toMap().value(QStringLiteral("mute")).toBool());
+    }
+
     void unselectedEventCommandsFallBackToTheTimeRangeWhileCropStaysRangeOnly()
     {
         AudioEditorController fallback(AG_AUDIO_BACKEND_NULL);

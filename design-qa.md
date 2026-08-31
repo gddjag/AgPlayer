@@ -96,22 +96,26 @@ final result: blocked
 - The production QuickTest measures the 1672×941 shell-content reference at
   1672×822: timeline workspace `(12,152,1304,451)`, playback `(12,618,1304,112)`,
   shortcut card `(12,730,1304,67)`, and status `(0,797,1328,25)`.
-- At 1280×720, the two 13px shortcut rows remain horizontally reachable by wheel
-  input when content overflows; no copy was hidden or reduced.
+- At 1280×720, the workspace is `y=152,h=226`, ruler `y=152,h=44`, track
+  `y=196,h=162`, scrollbar `y=366,h=16`, transport `390..502`, shortcut card
+  `509..576`, and status `576..601`.  The two 13px shortcut rows remain
+  horizontally reachable by wheel input when content overflows.
 - At 880×560, the former card `(y=568,h=103)` overlapped the playback panel and
   extended to `y=671`, 111px below the clipped page.  The narrow production
-  geometry is now playback `(y=372,h=80)`, shortcut card `(y=460,h=67)`, and
-  status `(y=535,h=25)`.  Both 16px rows, their horizontal divider and the
-  narrow playback entry are fully above the status overlay; the card does not
-  cover transport.
+  geometry is now workspace `y=140,h=83`, ruler `y=140,h=20`, track
+  `y=160,h=48`, scrollbar `y=211,h=12`, playback `229..333`, shortcut card
+  `341..408`, and status `416..441`.  Both shortcut rows, their horizontal
+  divider and the narrow playback entry are above the status overlay; the card
+  does not cover transport.
 
 ## Functional evidence
 
-- A native-window QML journey uses the real generated WAV fixture through the
-  production drop route, then performs mouse/key input for split, right-clip
-  selection, copy/paste, trim, mute, fade, delete, undo, body-range loop and
-  first focused Space playback.  It does not call a controller import/edit API
-  in place of these interactions.
+- A desktop native-window QML journey uses the real generated WAV fixture
+  through the production drop route, then performs mouse/key input for split,
+  right-clip selection, copy/paste, trim, mute, fade, delete, undo,
+  body-range loop and first focused Space playback.  The 880×560 smoke is
+  deliberately smaller: real import, page bounds, waveform-body selection,
+  Escape cancellation, click playback and Space stop.
 - Clearing a document now clears a stale failed-playback error, so the status
   bar no longer survives a successful clear as an obsolete visible error.
 - A paste colliding with occupied timeline space inserts its clipboard span in
@@ -135,3 +139,64 @@ final result: blocked
   performed.
 - No external desktop screenshot capture was taken for this gate; the geometry
   evidence is production QML test measurement, not a visual pixel-diff.
+
+## Audio editor review fix round 1 — 2026-08-31
+
+### Corrected shell evidence
+
+- The earlier `b0dc59f` capture set at
+  `build/qa/audio-editor/task7-final` is **not** acceptance evidence.  It
+  captured the pre-fix shell with the 880 transport/shortcut content clipped,
+  and the 1280 transport/card boundary overlapping by four pixels.
+- The real `AudioToolsWindow` shell, measured in production QML tests, leaves
+  editor-page heights of 822px (1672×941 window), 601px (1280×720), and 441px
+  (880×560).  These are shell content dimensions, not a bare 560px page.
+- At 1280 shell content, the compact desktop layout is transport `390..502`,
+  shortcut `509..576`, status `576..601`.  At 880 shell content it is transport
+  `229..333`, shortcut `341..408`, status `416..441`; the 13px two-row card
+  and main playback entry are contained without overlaying each other.
+
+### Functional and visual evidence
+
+- Production-shell QML checks cover the 1280 non-overlap and all 880 page
+  bounds, including both shortcut rows and the status region.  The real-WAV
+  compact smoke verifies narrow playback-entry/primary-button bounds and real
+  mouse/Space playback plus selection; it does not duplicate the desktop
+  envelope/edit chain.
+- The native edit journey observes `mute` through the existing
+  `timelineEventViews` map and verifies the paste route, new clone selection,
+  event-count growth and Undo/Redo.  Exact automatic split, ripple and source
+  ranges are asserted by C++ core/controller tests.
+- QA screenshot capture for audio-editor import now waits on existing
+  `hasDocument` and `viewportChannelPeaks` readiness rather than guessing with
+  a fixed delay.  A missing waveform becomes an invalid artifact, not a false
+  successful capture.
+
+### Acceptance boundary
+
+- New real-WAV screenshots are written under
+  `build/qa/audio-editor/task7-final-verified` at 1672×941, 1280×720 and
+  880×560.  They show the compact 880 transport and both shortcut rows, and
+  1280 no longer overlaps the card.  They are engineering evidence only: the
+  1672 implementation still differs materially from the reference in palette,
+  cyan-vs-blue waveform colour, typography/density, control borders and
+  inspector styling.  Pixel-level acceptance therefore remains blocked.
+- Hardware-device routing, audible quality, latency and subjective listening
+  remain unverified.
+
+### Final gate evidence
+
+- Release and Debug builds pass.  All 13 audio-editor-focused tests pass in
+  both full CTest runs, including production-window native input and the
+  1672/1280/880 layout contract.
+- Application-owned Release and Debug startup smokes import the real WAV and
+  produce non-empty 880×560 captures at
+  `build/qa/audio-editor/final-smoke-release-postreview-20260831.png` and
+  `build/qa/audio-editor/final-smoke-debug-postreview-20260831.png`.
+- The broader repository is not all green: full Release is 108/112 and full
+  Debug is 105/113.  Diagnosed failures live in unchanged import/library,
+  thumbnail, tag-theme, main-window, deployment or Windows-shell baselines;
+  they are not counted as editor visual acceptance.
+- Visual result remains **blocked**, not passed.  The three target-size
+  captures prove reachability and non-overlap, but still do not match the
+  supplied 1672×941 reference pixel-for-pixel.
