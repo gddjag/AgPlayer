@@ -3,6 +3,7 @@
 #include "waveform_provider_test_access.hpp"
 #include "bpm_fixture.hpp"
 #include "cache_janitor.hpp"
+#include "../../core/src/frequency_color_waveform_cache.hpp"
 #include "../../core/src/waveform_cache.hpp"
 
 #include <QFile>
@@ -17,8 +18,11 @@
 #include <agplayer/c_api.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdint>
+#include <mutex>
 #include <vector>
 
 namespace agplayer::testing {
@@ -30,8 +34,33 @@ std::uint64_t waveform_provider_mix_jobs_started() noexcept;
 std::uint64_t waveform_provider_max_frequency_jobs() noexcept;
 std::uint64_t waveform_provider_frequency_progress_callbacks() noexcept;
 std::uint64_t waveform_provider_power_queries() noexcept;
+std::uint64_t waveform_provider_decoder_opens() noexcept;
+std::uint64_t waveform_provider_max_worker_tasks() noexcept;
+using WaveformProviderTaskHook = void (*)(bool prefetch,
+                                          const char* utf8Path,
+                                          void* context);
+void set_waveform_provider_task_hook(WaveformProviderTaskHook hook,
+                                     void* context) noexcept;
 
 } // namespace agplayer::testing
+
+struct FrequencyPowerStateTestAccess final {
+    static void forceEnergySaverActive(WaveformProvider& provider)
+    {
+        provider.energySaverActive_ = true;
+        provider.lastPowerQueryElapsedMs_ = provider.powerQueryClock_.elapsed();
+    }
+
+    static bool energySaverActive(const WaveformProvider& provider)
+    {
+        return provider.energySaverActive_;
+    }
+
+    static qint64 lastPowerQueryElapsedMs(const WaveformProvider& provider)
+    {
+        return provider.lastPowerQueryElapsedMs_;
+    }
+};
 
 namespace {
 
@@ -40,6 +69,43 @@ void finishProviderAnalysis(WaveformProvider& provider)
     WaveformProviderTestAccess::waitForAnalysis(provider);
     QCoreApplication::processEvents();
 }
+
+struct SchedulingBarrier {
+    std::mutex mutex;
+    std::condition_variable condition;
+    QString firstPrefetchPath;
+    bool firstPrefetchStarted = false;
+    bool releaseFirstPrefetch = false;
+    std::vector<QString> startOrder;
+};
+
+void schedulingHook(const bool prefetch, const char* utf8Path, void* context)
+{
+    auto& barrier = *static_cast<SchedulingBarrier*>(context);
+    const QString path = QString::fromUtf8(utf8Path);
+    std::unique_lock lock(barrier.mutex);
+    barrier.startOrder.push_back(path);
+    if (prefetch && path == barrier.firstPrefetchPath) {
+        barrier.firstPrefetchStarted = true;
+        barrier.condition.notify_all();
+        barrier.condition.wait(lock, [&barrier] {
+            return barrier.releaseFirstPrefetch;
+        });
+    }
+}
+
+class SchedulingHookGuard final {
+public:
+    explicit SchedulingHookGuard(SchedulingBarrier& barrier)
+    {
+        agplayer::testing::set_waveform_provider_task_hook(
+            schedulingHook, &barrier);
+    }
+    ~SchedulingHookGuard()
+    {
+        agplayer::testing::set_waveform_provider_task_hook(nullptr, nullptr);
+    }
+};
 
 } // namespace
 
@@ -58,6 +124,7 @@ private slots:
     void newerTrackSuppressesStaleAnalysisResult();
     void resultCarriesTrackIdentityAndGeneration();
     void prefetchTracksWarmsCacheWithoutChangingCurrentTrack();
+    void currentAnalysisPreemptsQueuedPrefetchOnTheSingleWorker();
     void successfulAnalysisAnnouncesWrittenCache();
     void failedAnalysisEmitsATerminalSignalWithIdentity();
     void cancellingAnalysisReleasesNativeResourcesWithoutTerminal();
@@ -65,10 +132,12 @@ private slots:
     void destroyingProviderReleasesInFlightNativeResources();
     void nonFrequencyLoadsAndPrefetchNeverTouchFrequencyColor();
     void frequencyRequestPublishesMixBeforeBandsAndReusesBothCaches();
-    void frequencyCacheHitWithoutAgwfRunsMixOnlyOnce();
+    void frequencyCacheHitWithoutAgwfRebuildsBothCachesInOneFrequencyJob();
+    void frequencyCacheSaveFailureKeepsMixAndExistingFilesSafe();
     void corruptFrequencyCacheIsRebuilt();
     void switchingToMixOnlyCancelsFrequencyWithoutStaleBands();
     void frequencyPauseResumesWithoutBusyProgress();
+    void cancellingFrequencyResetsPowerStateAndRestarts();
     void frequencyJobsAreSerializedAndDestructionJoins();
     void cacheCleanupBudgetsAgwfAndFcwWithoutCollateralDeletion();
 
@@ -445,6 +514,60 @@ void WaveformProviderTest::successfulAnalysisAnnouncesWrittenCache()
     QCOMPARE(cacheHitAnnouncementSpy.count(), 0);
 }
 
+void WaveformProviderTest::
+currentAnalysisPreemptsQueuedPrefetchOnTheSingleWorker()
+{
+    if (fixturePath_.isEmpty()) QSKIP("AGPLAYER_TEST_WAV not set");
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString prefetchOne = temporary.filePath(QStringLiteral("prefetch-1.wav"));
+    const QString current = temporary.filePath(QStringLiteral("current.wav"));
+    const QString prefetchTwo = temporary.filePath(QStringLiteral("prefetch-2.wav"));
+    QVERIFY(QFile::copy(fixturePath_, prefetchOne));
+    QVERIFY(QFile::copy(fixturePath_, current));
+    QVERIFY(QFile::copy(fixturePath_, prefetchTwo));
+
+    SettingsController settings;
+    const QString cacheDirectory = temporary.filePath(QStringLiteral("cache"));
+    settings.setCacheDirectory(cacheDirectory);
+    SchedulingBarrier barrier;
+    barrier.firstPrefetchPath = prefetchOne;
+    SchedulingHookGuard hookGuard(barrier);
+    WaveformProvider provider(&settings);
+    agplayer::testing::reset_waveform_provider_counters();
+
+    provider.prefetchTracks({prefetchOne, prefetchTwo});
+    {
+        std::unique_lock lock(barrier.mutex);
+        const bool started = barrier.condition.wait_for(
+            lock, std::chrono::seconds(5), [&barrier] {
+                return barrier.firstPrefetchStarted;
+            });
+        if (!started) {
+            barrier.releaseFirstPrefetch = true;
+            lock.unlock();
+            barrier.condition.notify_all();
+            QFAIL("first prefetch task did not reach the scheduling barrier");
+        }
+    }
+    provider.loadForTrack(QStringLiteral("current"), current, false);
+    provider.prefetchTracks({prefetchTwo});
+    {
+        std::lock_guard lock(barrier.mutex);
+        barrier.releaseFirstPrefetch = true;
+    }
+    barrier.condition.notify_all();
+    finishProviderAnalysis(provider);
+
+    const std::vector<QString> expected{prefetchOne, current, prefetchTwo};
+    QCOMPARE(barrier.startOrder, expected);
+    QCOMPARE(agplayer::testing::waveform_provider_max_worker_tasks(), 1U);
+    QCOMPARE(agplayer::testing::waveform_provider_frequency_jobs_started(), 0U);
+    QCOMPARE(agplayer::testing::waveform_provider_frequency_cache_loads(), 0U);
+    QCOMPARE(QDir(cacheDirectory).entryList(
+                 {QStringLiteral("*.agwf")}, QDir::Files).size(), 3);
+}
+
 void WaveformProviderTest::failedAnalysisEmitsATerminalSignalWithIdentity()
 {
     QTemporaryDir temporary;
@@ -612,7 +735,8 @@ void WaveformProviderTest::frequencyRequestPublishesMixBeforeBandsAndReusesBothC
     QCOMPARE(agplayer::testing::waveform_provider_frequency_jobs_started(), 0U);
 }
 
-void WaveformProviderTest::frequencyCacheHitWithoutAgwfRunsMixOnlyOnce()
+void WaveformProviderTest::
+frequencyCacheHitWithoutAgwfRebuildsBothCachesInOneFrequencyJob()
 {
     if (fixturePath_.isEmpty()) QSKIP("AGPLAYER_TEST_WAV not set");
     QTemporaryDir directory;
@@ -641,10 +765,94 @@ void WaveformProviderTest::frequencyCacheHitWithoutAgwfRunsMixOnlyOnce()
     QCOMPARE(ready.count(), 2);
     QVERIFY(!ready.first().at(1).toMap()
                  .value(QStringLiteral("_frequencyReady")).toBool());
-    QVERIFY(ready.last().at(1).toMap()
+    const QVariantMap complete = ready.last().at(1).toMap();
+    QVERIFY(complete.value(QStringLiteral("_frequencyReady")).toBool());
+    const int mixCount = complete.value(QStringLiteral("mix")).toList().size();
+    QVERIFY(mixCount > 0);
+    QCOMPARE(complete.value(QStringLiteral("bass")).toList().size(), mixCount);
+    QCOMPARE(complete.value(QStringLiteral("mid")).toList().size(), mixCount);
+    QCOMPARE(complete.value(QStringLiteral("high")).toList().size(), mixCount);
+    QCOMPARE(agplayer::testing::waveform_provider_frequency_jobs_started(), 1U);
+    QCOMPARE(agplayer::testing::waveform_provider_mix_jobs_started(), 0U);
+    QCOMPARE(agplayer::testing::waveform_provider_decoder_opens(), 1U);
+
+    agplayer::testing::reset_waveform_provider_counters();
+    WaveformProvider cached(&settings);
+    QSignalSpy cachedReady(&cached, &WaveformProvider::waveformReady);
+    cached.loadForTrack(QStringLiteral("rebuilt-cache-hit"), fixturePath_, true);
+    QCOMPARE(cachedReady.count(), 2);
+    QVERIFY(cachedReady.last().at(1).toMap()
                 .value(QStringLiteral("_frequencyReady")).toBool());
     QCOMPARE(agplayer::testing::waveform_provider_frequency_jobs_started(), 0U);
-    QCOMPARE(agplayer::testing::waveform_provider_mix_jobs_started(), 1U);
+    QCOMPARE(agplayer::testing::waveform_provider_mix_jobs_started(), 0U);
+    QCOMPARE(agplayer::testing::waveform_provider_decoder_opens(), 0U);
+}
+
+void WaveformProviderTest::
+frequencyCacheSaveFailureKeepsMixAndExistingFilesSafe()
+{
+    if (fixturePath_.isEmpty()) QSKIP("AGPLAYER_TEST_WAV not set");
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString source = directory.filePath(QStringLiteral("source.wav"));
+    QVERIFY(QFile::copy(fixturePath_, source));
+    SettingsController settings;
+    const QString cacheDirectory = directory.filePath(QStringLiteral("cache"));
+    settings.setCacheDirectory(cacheDirectory);
+
+    {
+        WaveformProvider warm(&settings);
+        QSignalSpy ready(&warm, &WaveformProvider::waveformReady);
+        warm.loadForTrack(QStringLiteral("warm-frequency"), source, true);
+        finishProviderAnalysis(warm);
+        QCOMPARE(ready.count(), 2);
+    }
+    QDir cache(cacheDirectory);
+    const QStringList agwfFiles = cache.entryList(
+        {QStringLiteral("*.agwf")}, QDir::Files);
+    const QStringList fcwFiles = cache.entryList(
+        {QStringLiteral("*.fcw1")}, QDir::Files);
+    QCOMPARE(agwfFiles.size(), 1);
+    QCOMPARE(fcwFiles.size(), 1);
+    const QString agwfPath = cache.filePath(agwfFiles.first());
+    const QString fcwPath = cache.filePath(fcwFiles.first());
+    QFile sourceFile(source);
+    QVERIFY(sourceFile.open(QIODevice::ReadOnly));
+    const QByteArray sourceBefore = sourceFile.readAll();
+    QFile fcwFile(fcwPath);
+    QVERIFY(fcwFile.open(QIODevice::ReadOnly));
+    const QByteArray fcwBefore = fcwFile.readAll();
+    QVERIFY(!fcwBefore.isEmpty());
+    QVERIFY(QFile::remove(agwfPath));
+
+    agplayer::testing::fail_next_frequency_color_cache_replace();
+    WaveformProvider provider(&settings);
+    QSignalSpy ready(&provider, &WaveformProvider::waveformReady);
+    provider.loadForTrack(QStringLiteral("save-failure"), source, true);
+    finishProviderAnalysis(provider);
+
+    QCOMPARE(ready.count(), 1);
+    const QVariantMap mixOnly = ready.first().at(1).toMap();
+    QVERIFY(!mixOnly.value(QStringLiteral("mix")).toList().isEmpty());
+    QVERIFY(!mixOnly.value(QStringLiteral("_frequencyReady")).toBool());
+    QCOMPARE(provider.analysisProgress(), 1.0);
+    QVERIFY(QFileInfo::exists(agwfPath));
+    QFile preservedFcw(fcwPath);
+    QVERIFY(preservedFcw.open(QIODevice::ReadOnly));
+    QCOMPARE(preservedFcw.readAll(), fcwBefore);
+    QFile preservedSource(source);
+    QVERIFY(preservedSource.open(QIODevice::ReadOnly));
+    QCOMPARE(preservedSource.readAll(), sourceBefore);
+    QVERIFY(cache.entryList(
+        {QStringLiteral("*.tmp-*"), QStringLiteral("*.tmp")},
+        QDir::Files).isEmpty());
+
+    WaveformProvider cached(&settings);
+    QSignalSpy cachedReady(&cached, &WaveformProvider::waveformReady);
+    cached.loadForTrack(QStringLiteral("preserved-cache"), source, true);
+    QCOMPARE(cachedReady.count(), 2);
+    QVERIFY(cachedReady.last().at(1).toMap()
+                .value(QStringLiteral("_frequencyReady")).toBool());
 }
 
 void WaveformProviderTest::corruptFrequencyCacheIsRebuilt()
@@ -735,6 +943,41 @@ void WaveformProviderTest::frequencyPauseResumesWithoutBusyProgress()
     finishProviderAnalysis(provider);
     QCOMPARE(ready.count(), 2);
     QVERIFY(agplayer::testing::waveform_provider_frequency_progress_callbacks() > 0U);
+}
+
+void WaveformProviderTest::cancellingFrequencyResetsPowerStateAndRestarts()
+{
+#ifndef Q_OS_WIN
+    QSKIP("native power-state polling is Windows-only");
+#else
+    if (fixturePath_.isEmpty()) QSKIP("AGPLAYER_TEST_WAV not set");
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    SettingsController settings;
+    settings.setCacheDirectory(directory.filePath(QStringLiteral("cache")));
+    WaveformProvider provider(&settings);
+
+    agplayer::testing::reset_waveform_provider_counters();
+    provider.setAudioResourcePressure(true);
+    provider.loadForTrack(QStringLiteral("first"), fixturePath_, true);
+    QTRY_COMPARE_WITH_TIMEOUT(
+        agplayer::testing::waveform_provider_power_queries(), 1U, 1'000);
+    FrequencyPowerStateTestAccess::forceEnergySaverActive(provider);
+    provider.cancelFrequencyForTrack(fixturePath_);
+    QVERIFY(!FrequencyPowerStateTestAccess::energySaverActive(provider));
+    QCOMPARE(FrequencyPowerStateTestAccess::lastPowerQueryElapsedMs(provider),
+             qint64(-1));
+
+    provider.setAudioResourcePressure(false);
+    QSignalSpy restartedReady(&provider, &WaveformProvider::waveformReady);
+    provider.loadForTrack(QStringLiteral("second"), fixturePath_, true);
+    finishProviderAnalysis(provider);
+    QCOMPARE(restartedReady.count(), 2);
+    QVERIFY(!restartedReady.first().at(1).toMap()
+                 .value(QStringLiteral("_frequencyReady")).toBool());
+    QVERIFY(restartedReady.last().at(1).toMap()
+                .value(QStringLiteral("_frequencyReady")).toBool());
+#endif
 }
 
 void WaveformProviderTest::frequencyJobsAreSerializedAndDestructionJoins()

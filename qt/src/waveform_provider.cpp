@@ -3,16 +3,18 @@
 #include "settings_controller.hpp"
 #include "frequency_color_waveform_analyzer.hpp"
 #include "frequency_color_waveform_cache.hpp"
+#include "decoder.hpp"
 #include "waveform_cache.hpp"
 
 #include <QDir>
-#include <QDateTime>
+#include <QSet>
 #include <QTimer>
-#include <QtConcurrent/QtConcurrentRun>
+#include <QtConcurrent/QtConcurrent>
 
 #include <algorithm>
 #include <cstddef>
 #include <filesystem>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -33,9 +35,57 @@ struct ProviderCounters final {
     std::atomic<std::uint64_t> maxFrequencyJobs{0U};
     std::atomic<std::uint64_t> frequencyProgressCallbacks{0U};
     std::atomic<std::uint64_t> powerQueries{0U};
+    std::atomic<std::uint64_t> decoderOpens{0U};
+    std::atomic<std::uint64_t> activeWorkerTasks{0U};
+    std::atomic<std::uint64_t> maxWorkerTasks{0U};
 };
 
 ProviderCounters providerCounters;
+
+using ProviderTaskHook = void (*)(bool, const char*, void*);
+
+struct ProviderTaskHookRegistration final {
+    ProviderTaskHook hook = nullptr;
+    void* context = nullptr;
+};
+
+std::mutex providerTaskHookMutex;
+ProviderTaskHookRegistration providerTaskHook;
+
+void invokeProviderTaskHook(const bool prefetch, const QString& path)
+{
+    ProviderTaskHookRegistration registration;
+    {
+        std::lock_guard lock(providerTaskHookMutex);
+        registration = providerTaskHook;
+    }
+    if (registration.hook != nullptr) {
+        const QByteArray encoded = path.toUtf8();
+        registration.hook(prefetch, encoded.constData(), registration.context);
+    }
+}
+
+void noteWorkerTaskStarted() noexcept
+{
+    const std::uint64_t active = providerCounters.activeWorkerTasks.fetch_add(
+        1U, std::memory_order_relaxed) + 1U;
+    std::uint64_t maximum = providerCounters.maxWorkerTasks.load(
+        std::memory_order_relaxed);
+    while (maximum < active
+           && !providerCounters.maxWorkerTasks.compare_exchange_weak(
+               maximum, active, std::memory_order_relaxed)) {
+    }
+}
+
+class WorkerTaskCounter final {
+public:
+    WorkerTaskCounter() noexcept { noteWorkerTaskStarted(); }
+    ~WorkerTaskCounter()
+    {
+        providerCounters.activeWorkerTasks.fetch_sub(
+            1U, std::memory_order_relaxed);
+    }
+};
 
 void noteFrequencyJobStarted() noexcept
 {
@@ -327,6 +377,8 @@ void reset_waveform_provider_counters() noexcept
     providerCounters.frequencyProgressCallbacks.store(0U,
                                                        std::memory_order_relaxed);
     providerCounters.powerQueries.store(0U, std::memory_order_relaxed);
+    providerCounters.decoderOpens.store(0U, std::memory_order_relaxed);
+    providerCounters.maxWorkerTasks.store(0U, std::memory_order_relaxed);
 }
 
 std::uint64_t waveform_provider_frequency_cache_loads() noexcept
@@ -360,6 +412,27 @@ std::uint64_t waveform_provider_power_queries() noexcept
     return providerCounters.powerQueries.load(std::memory_order_relaxed);
 }
 
+std::uint64_t waveform_provider_decoder_opens() noexcept
+{
+    return providerCounters.decoderOpens.load(std::memory_order_relaxed);
+}
+
+std::uint64_t waveform_provider_max_worker_tasks() noexcept
+{
+    return providerCounters.maxWorkerTasks.load(std::memory_order_relaxed);
+}
+
+void set_waveform_provider_task_hook(
+    void (*hook)(bool, const char*, void*),
+    void* context) noexcept
+{
+    try {
+        std::lock_guard lock(providerTaskHookMutex);
+        providerTaskHook = {hook, context};
+    } catch (...) {
+    }
+}
+
 } // namespace agplayer::testing
 
 WaveformProvider::WaveformProvider(SettingsController* settings, QObject* parent)
@@ -368,6 +441,7 @@ WaveformProvider::WaveformProvider(SettingsController* settings, QObject* parent
 {
     currentAnalysisPool_.setMaxThreadCount(1);
     currentAnalysisPool_.setThreadPriority(QThread::LowestPriority);
+    powerQueryClock_.start();
     progressTimer_ = new QTimer(this);
     progressTimer_->setInterval(100);
     connect(progressTimer_, &QTimer::timeout,
@@ -443,9 +517,10 @@ void WaveformProvider::updateFrequencyPause(const bool queryPowerState)
         return;
     }
     if (queryPowerState) {
-        const qint64 now = QDateTime::currentMSecsSinceEpoch();
-        if (lastPowerQueryMs_ == 0 || now - lastPowerQueryMs_ >= 5'000) {
-            lastPowerQueryMs_ = now;
+        const qint64 now = powerQueryClock_.elapsed();
+        if (lastPowerQueryElapsedMs_ < 0
+            || now - lastPowerQueryElapsedMs_ >= 5'000) {
+            lastPowerQueryElapsedMs_ = now;
 #ifdef Q_OS_WIN
             SYSTEM_POWER_STATUS status{};
             providerCounters.powerQueries.fetch_add(
@@ -480,7 +555,7 @@ void WaveformProvider::cancelActiveJob()
     activeProgress_.reset();
     progressTimer_->stop();
     energySaverActive_ = false;
-    lastPowerQueryMs_ = 0;
+    lastPowerQueryElapsedMs_ = -1;
 }
 
 void WaveformProvider::loadForTrack(const QString& path)
@@ -509,6 +584,7 @@ qulonglong WaveformProvider::loadForTrack(const QString& trackId,
     }
 
     cancelActiveJob();
+    currentAnalysisPool_.clear();
 
     currentPath_ = path;
     currentTrackId_ = trackId;
@@ -588,13 +664,7 @@ qulonglong WaveformProvider::loadForTrack(const QString& trackId,
             emit waveformReady(path, complete);
             return activeGeneration_;
         }
-        if (frequencyHit) {
-            startAnalysis(false, std::move(frequency.low),
-                          std::move(frequency.mid),
-                          std::move(frequency.high));
-        } else {
-            startAnalysis(true);
-        }
+        startAnalysis(true);
         return activeGeneration_;
     }
 
@@ -626,8 +696,7 @@ void WaveformProvider::startAnalysis(
     watcher_ = new QFutureWatcher<Job>(this);
     connect(watcher_, &QFutureWatcher<Job>::finished,
             this, &WaveformProvider::onAnalysisFinished);
-    QFuture<Job> future = QtConcurrent::run(
-        &currentAnalysisPool_,
+    QFuture<Job> future = QtConcurrent::task(
         [source, sourcePath, sourceTrackId, sourceGeneration, targetPoints,
          resources, progress, aggregation = currentAggregation_,
          kind = activeJobKind_,
@@ -635,6 +704,8 @@ void WaveformProvider::startAnalysis(
          cachedLow = std::move(cachedLow),
          cachedMid = std::move(cachedMid),
          cachedHigh = std::move(cachedHigh)]() mutable {
+            WorkerTaskCounter workerCounter;
+            invokeProviderTaskHook(false, sourcePath);
             Job job;
             job.path = sourcePath;
             job.trackId = sourceTrackId;
@@ -647,6 +718,8 @@ void WaveformProvider::startAnalysis(
             job.cachedLow = std::move(cachedLow);
             job.cachedMid = std::move(cachedMid);
             job.cachedHigh = std::move(cachedHigh);
+            const std::uint64_t decoderOpensBefore =
+                agplayer::Decoder::threadOpenCount();
             if (kind == JobKind::FrequencyColor) {
                 FrequencyJobCounter counter;
                 job.result = ag_track_frequency_color_analysis(
@@ -668,8 +741,16 @@ void WaveformProvider::startAnalysis(
                             static_cast<double>(p), std::memory_order_relaxed);
                     }, progress.get(), &resources->waveform, nullptr);
             }
+            const std::uint64_t decoderOpensAfter =
+                agplayer::Decoder::threadOpenCount();
+            providerCounters.decoderOpens.fetch_add(
+                decoderOpensAfter - decoderOpensBefore,
+                std::memory_order_relaxed);
             return job;
-        });
+        })
+        .onThreadPool(currentAnalysisPool_)
+        .withPriority(1)
+        .spawn();
     watcher_->setFuture(future);
     progressTimer_->start();
 }
@@ -684,51 +765,47 @@ void WaveformProvider::prefetchTracks(const QStringList& paths)
         return;
     }
 
-    (void)QtConcurrent::run(
-        &currentAnalysisPool_,
-        [paths, cacheDirectory, aggregation] {
+    QSet<QString> queuedPaths;
+    for (const QString& path : paths) {
+        if (path.isEmpty() || queuedPaths.contains(path)) {
+            continue;
+        }
+        queuedPaths.insert(path);
+        QtConcurrent::task([path, cacheDirectory, aggregation] {
+            WorkerTaskCounter workerCounter;
+            invokeProviderTaskHook(true, path);
             constexpr std::size_t targetPoints = 2000;
-            for (const QString& path : paths) {
-                if (path.isEmpty()) {
-                    continue;
-                }
-                const QString cachePath =
-                    cacheFilePathForDirectory(
-                        cacheDirectory, path, aggregation);
-                if (cachePath.isEmpty()) {
-                    continue;
-                }
-                const std::filesystem::path sourcePath = filesystemPath(path);
-                const std::filesystem::path cacheFile =
-                    filesystemPath(cachePath);
-                agplayer::WaveformCacheData cached;
-                std::vector<float> legacy;
-                if (agplayer::WaveformCache::load_v2(
-                        cacheFile, sourcePath, cached)
-                    || agplayer::WaveformCache::load(
-                        cacheFile, sourcePath, legacy)) {
-                    continue;
-                }
-
-                ag_waveform* waveform = nullptr;
-                const QByteArray encodedPath = path.toUtf8();
-                const ag_result result = ag_track_analysis_with_aggregation(
-                    encodedPath.constData(),
-                    targetPoints,
-                    aggregation,
-                    nullptr,
-                    nullptr,
-                    nullptr,
-                    &waveform,
-                    nullptr);
-                if (result == AG_OK && waveform != nullptr) {
-                    saveWaveformCache(cachePath, path, waveform);
-                }
-                if (waveform != nullptr) {
-                    ag_waveform_destroy(waveform);
-                }
+            const QString cachePath = cacheFilePathForDirectory(
+                cacheDirectory, path, aggregation);
+            if (cachePath.isEmpty()) {
+                return;
             }
-        });
+            const std::filesystem::path sourcePath = filesystemPath(path);
+            const std::filesystem::path cacheFile = filesystemPath(cachePath);
+            agplayer::WaveformCacheData cached;
+            std::vector<float> legacy;
+            if (agplayer::WaveformCache::load_v2(cacheFile, sourcePath, cached)
+                || agplayer::WaveformCache::load(
+                    cacheFile, sourcePath, legacy)) {
+                return;
+            }
+
+            ag_waveform* waveform = nullptr;
+            const QByteArray encodedPath = path.toUtf8();
+            const ag_result result = ag_track_analysis_with_aggregation(
+                encodedPath.constData(), targetPoints, aggregation, nullptr,
+                nullptr, nullptr, &waveform, nullptr);
+            if (result == AG_OK && waveform != nullptr) {
+                saveWaveformCache(cachePath, path, waveform);
+            }
+            if (waveform != nullptr) {
+                ag_waveform_destroy(waveform);
+            }
+        })
+            .onThreadPool(currentAnalysisPool_)
+            .withPriority(-1)
+            .spawn(QtConcurrent::FutureResult::Ignore);
+    }
 }
 
 void WaveformProvider::cancelForTrack(const QString& path)
@@ -762,6 +839,8 @@ void WaveformProvider::cancelFrequencyForTrack(const QString& path)
     activeResources_.reset();
     activeProgress_.reset();
     progressTimer_->stop();
+    energySaverActive_ = false;
+    lastPowerQueryElapsedMs_ = -1;
     currentFrequencyRequested_ = false;
     ++activeGeneration_;
     emit activeGenerationChanged();
@@ -856,12 +935,19 @@ void WaveformProvider::onAnalysisFinished()
         high = frequency.high;
         const QString frequencyPath =
             frequencyCacheFilePathFor(settings_, currentPath_);
-        if (!frequencyPath.isEmpty()
-            && agplayer::FrequencyColorWaveformCache::save_atomic(
-                filesystemPath(frequencyPath), filesystemPath(currentPath_),
-                frequency)
-            && settings_ != nullptr) {
-            settings_->onWaveformCacheSaved();
+        if (!frequencyPath.isEmpty()) {
+            if (!agplayer::FrequencyColorWaveformCache::save_atomic(
+                    filesystemPath(frequencyPath),
+                    filesystemPath(currentPath_), frequency)) {
+                RuntimeLog::log(
+                    AG_IO_ERROR, QStringLiteral("WaveformProvider"),
+                    QStringLiteral("Failed to save frequency waveform cache"));
+                setAnalysisProgress(1.0);
+                return;
+            }
+            if (settings_ != nullptr) {
+                settings_->onWaveformCacheSaved();
+            }
         }
     }
     const std::size_t mixCount = static_cast<std::size_t>(

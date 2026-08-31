@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QElapsedTimer>
 #include <QFutureWatcher>
 #include <QObject>
 #include <QString>
@@ -18,6 +19,7 @@
 class QTimer;
 class SettingsController;
 struct WaveformProviderTestAccess;
+struct FrequencyPowerStateTestAccess;
 
 class WaveformProvider : public QObject {
     Q_OBJECT
@@ -53,6 +55,7 @@ signals:
 
 private:
     friend struct WaveformProviderTestAccess;
+    friend struct FrequencyPowerStateTestAccess;
 
     void onAnalysisFinished();
     void onProgressTimer();
@@ -112,6 +115,7 @@ private:
     bool currentFrequencyRequested_ = false;
     bool audioResourcePressure_ = false;
     bool energySaverActive_ = false;
-    qint64 lastPowerQueryMs_ = 0;
+    QElapsedTimer powerQueryClock_;
+    qint64 lastPowerQueryElapsedMs_ = -1;
     QThreadPool currentAnalysisPool_;
 };
