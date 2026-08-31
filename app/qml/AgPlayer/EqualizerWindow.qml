@@ -180,7 +180,7 @@ Window {
                 x: 0
                 y: 0
                 width: parent.width
-                height: 72
+                height: window.spacious ? 72 : 56
 
                 DragHandler {
                     target: null
@@ -194,7 +194,7 @@ Window {
                     text: qsTr("18 段图形均衡器")
                     color: Theme.textPrimary
                     font.family: "Microsoft YaHei UI"
-                    font.pixelSize: 28
+                    font.pixelSize: window.spacious ? 28 : 22
                     font.weight: Font.Normal
                     renderType: Text.NativeRendering
                 }
@@ -263,9 +263,9 @@ Window {
                 id: contentScroller
                 objectName: "equalizerContentScroller"
                 x: 0
-                y: 72
+                y: titleBar.height
                 width: parent.width
-                height: parent.height - 72
+                height: parent.height - titleBar.height
                 contentWidth: width
                 contentHeight: body.height
                 clip: true
@@ -280,7 +280,7 @@ Window {
                 Item {
                     id: body
                     width: contentScroller.width
-                    height: 857
+                    height: window.spacious ? 857 : contentScroller.height
 
                     Rectangle {
                         id: headerPanel
@@ -288,7 +288,7 @@ Window {
                         x: 0
                         y: 0
                         width: parent.width
-                        height: 86
+                        height: window.spacious ? 86 : 58
                         gradient: Gradient {
                             orientation: Gradient.Vertical
                             GradientStop { position: 0; color: Theme.surface }
@@ -297,9 +297,9 @@ Window {
 
                         RowLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: window.compactToolbar ? 18 : 30
-                            anchors.rightMargin: window.compactToolbar ? 18 : 29
-                            spacing: window.compactToolbar ? 8 : 14
+                            anchors.leftMargin: window.compactToolbar ? 12 : 30
+                            anchors.rightMargin: window.compactToolbar ? 12 : 29
+                            spacing: window.compactToolbar ? 6 : 14
 
                             ThemedSwitch {
                                 objectName: "equalizerEnabledSwitch"
@@ -313,8 +313,8 @@ Window {
                             }
                             Rectangle {
                                 objectName: "equalizerHeaderDivider"
-                                Layout.leftMargin: window.compactToolbar ? 4 : 28
-                                Layout.rightMargin: window.compactToolbar ? 4 : 18
+                                Layout.leftMargin: window.compactToolbar ? 2 : 28
+                                Layout.rightMargin: window.compactToolbar ? 2 : 18
                                 Layout.preferredWidth: 1
                                 Layout.preferredHeight: 48
                                 color: Theme.opaqueDivider
@@ -329,7 +329,7 @@ Window {
                             ThemedComboBox {
                                 id: presetBox
                                 objectName: "equalizerPresetBox"
-                                Layout.preferredWidth: window.compactToolbar ? 170 : 239
+                                Layout.preferredWidth: window.compactToolbar ? 150 : 239
                                 Layout.preferredHeight: 48
                                 model: EqualizerController.presetNames
                                 currentIndex: EqualizerController.presetIds.indexOf(
@@ -346,7 +346,7 @@ Window {
                             Item { Layout.fillWidth: true }
                             ToolbarButton {
                                 objectName: "equalizerSaveButton"
-                                implicitWidth: window.compactToolbar ? 116 : 157
+                                implicitWidth: window.compactToolbar ? 105 : 157
                                 text: qsTr("保存预设")
                                 iconSource: Theme.icon("save-3-line")
                                 Accessible.name: qsTr("保存自定义预设")
@@ -354,7 +354,7 @@ Window {
                             }
                             ToolbarButton {
                                 objectName: "equalizerManageButton"
-                                implicitWidth: window.compactToolbar ? 122 : 162
+                                implicitWidth: window.compactToolbar ? 110 : 162
                                 text: qsTr("管理预设")
                                 iconSource: Theme.icon("list-unordered")
                                 Accessible.name: qsTr("管理自定义预设")
@@ -362,7 +362,7 @@ Window {
                             }
                             ToolbarButton {
                                 objectName: "equalizerResetButton"
-                                implicitWidth: window.compactToolbar ? 94 : 122
+                                implicitWidth: window.compactToolbar ? 84 : 122
                                 text: qsTr("重置")
                                 iconSource: Theme.icon("restore-line")
                                 Accessible.name: qsTr("全部归零")
@@ -374,11 +374,13 @@ Window {
                     Rectangle {
                         id: responsePanel
                         objectName: "equalizerResponsePanel"
-                        x: 22
-                        y: 86
-                        width: parent.width - 44
-                        height: 291
-                        radius: 20
+                        x: window.spacious ? 22 : 8
+                        y: headerPanel.height
+                        width: parent.width - x * 2
+                        height: window.spacious ? 291
+                                                 : Math.max(104, Math.min(120,
+                                                     body.height * 0.27))
+                        radius: window.spacious ? 20 : 12
                         gradient: Gradient {
                             orientation: Gradient.Vertical
                             GradientStop { position: 0; color: Theme.surfaceElevated }
@@ -395,11 +397,12 @@ Window {
                     Rectangle {
                         id: bandsPanel
                         objectName: "equalizerBandsPanel"
-                        x: 22
-                        y: 391
-                        width: parent.width - 44
-                        height: 375
-                        radius: 20
+                        x: window.spacious ? 22 : 8
+                        y: responsePanel.y + responsePanel.height
+                           + (window.spacious ? 14 : 0)
+                        width: parent.width - x * 2
+                        height: window.spacious ? 375 : footerPanel.y - y
+                        radius: window.spacious ? 20 : 12
                         clip: true
                         gradient: Gradient {
                             orientation: Gradient.Vertical
@@ -414,7 +417,8 @@ Window {
                             anchors.fill: parent
                             clip: true
                             boundsBehavior: Flickable.StopAtBounds
-                            contentWidth: Math.max(width, 1616)
+                            contentWidth: window.spacious ? Math.max(width, 1616)
+                                                          : Math.max(width, 806)
                             contentHeight: height
                             ScrollBar.horizontal: ScrollBar {
                                 objectName: "equalizerBandScrollBar"
@@ -428,9 +432,9 @@ Window {
 
                                 Row {
                                     id: bandRow
-                                    x: 30
+                                    x: window.spacious ? 30 : 26
                                     y: 0
-                                    height: 375
+                                    height: bandFlickable.height
                                     spacing: 0
 
                                     Repeater {
@@ -440,8 +444,10 @@ Window {
 
                                         EqualizerBandSlider {
                                             required property int index
-                                            width: 79
-                                            height: 375
+                                            width: window.spacious ? 79
+                                                                   : (bandFlickable.contentWidth
+                                                                      - bandRow.x - 14) / 19
+                                            height: bandFlickable.height
                                             bandIndex: index
                                             frequencyLabel: window.bandLabels[index]
                                             gainDb: {
@@ -454,18 +460,22 @@ Window {
                                         }
                                     }
 
-                                    Item { width: 22; height: 1 }
+                                    Item { width: window.spacious ? 22 : 6; height: 1 }
                                     Rectangle {
                                         width: 1
-                                        height: 341
-                                        y: 16
+                                        height: window.spacious ? 341
+                                                                : Math.max(0,
+                                                                    bandFlickable.height - 24)
+                                        y: window.spacious ? 16 : 12
                                         color: Theme.opaqueDivider
                                     }
-                                    Item { width: 23; height: 1 }
+                                    Item { width: window.spacious ? 23 : 7; height: 1 }
 
                                     EqualizerBandSlider {
-                                        width: 79
-                                        height: 375
+                                        width: window.spacious ? 79
+                                                               : (bandFlickable.contentWidth
+                                                                  - bandRow.x - 14) / 19
+                                        height: bandFlickable.height
                                         bandIndex: -1
                                         frequencyLabel: qsTr("前级")
                                         accessibleLabel: qsTr("前级增益")
@@ -480,7 +490,7 @@ Window {
                         Label {
                             objectName: "equalizerBandsMaxLabel"
                             x: 4
-                            y: 38
+                            y: window.spacious ? 38 : 21
                             width: 34
                             height: 22
                             z: 2
@@ -495,7 +505,9 @@ Window {
                         Label {
                             objectName: "equalizerBandsZeroLabel"
                             x: 4
-                            y: 157
+                            y: window.spacious ? 157
+                                               : 32 + Math.max(86,
+                                                   bandsPanel.height - 92) / 2 - 11
                             width: 34
                             height: 22
                             z: 2
@@ -510,7 +522,9 @@ Window {
                         Label {
                             objectName: "equalizerBandsMinLabel"
                             x: 4
-                            y: 276
+                            y: window.spacious ? 276
+                                               : 32 + Math.max(86,
+                                                   bandsPanel.height - 92) - 11
                             width: 34
                             height: 22
                             z: 2
@@ -527,9 +541,9 @@ Window {
                         id: footerPanel
                         objectName: "equalizerFooterPanel"
                         x: 0
-                        y: 780
+                        y: body.height - height
                         width: parent.width
-                        height: 77
+                        height: window.spacious ? 77 : 64
                         color: Theme.surface
                         border.color: Theme.opaqueBorder
                         border.width: 1
@@ -540,7 +554,8 @@ Window {
                             anchors.fill: parent
                             clip: true
                             boundsBehavior: Flickable.StopAtBounds
-                            contentWidth: Math.max(width, 1662)
+                            contentWidth: window.spacious ? Math.max(width, 1662)
+                                                          : Math.max(width, 816)
                             contentHeight: height
                             ScrollBar.horizontal: ScrollBar {
                                 objectName: "equalizerFooterScrollBar"
@@ -553,22 +568,23 @@ Window {
                                 height: footerScroller.height
 
                                 Label {
-                                    x: 40
-                                    y: 24
+                                    x: window.spacious ? 40 : 16
+                                    y: window.spacious ? 24 : 11
+                                    width: window.spacious ? contentWidth : 42
                                     height: 42
                                     text: qsTr("范围：")
                                     color: Theme.textPrimary
                                     font.family: "Microsoft YaHei UI"
-                                    font.pixelSize: 18
+                                    font.pixelSize: window.spacious ? 18 : 14
                                     verticalAlignment: Text.AlignVCenter
                                 }
 
                                 Rectangle {
                                     id: rangeControl
                                     objectName: "equalizerRangeControl"
-                                    x: 105
-                                    y: 15
-                                    width: 332
+                                    x: window.spacious ? 105 : 62
+                                    y: window.spacious ? 15 : 11
+                                    width: window.spacious ? 332 : 216
                                     height: 42
                                     radius: 12
                                     color: Theme.surfaceElevated
@@ -578,7 +594,7 @@ Window {
                                         anchors.fill: parent
                                         SegmentButton {
                                             objectName: "equalizerRange6Button"
-                                            width: 109
+                                            width: window.spacious ? 109 : 72
                                             height: parent.height
                                             text: qsTr("±6 dB")
                                             selected: EqualizerController.gainRangeDb === 6
@@ -586,7 +602,7 @@ Window {
                                         }
                                         SegmentButton {
                                             objectName: "equalizerRange12Button"
-                                            width: 110
+                                            width: window.spacious ? 110 : 72
                                             height: parent.height
                                             text: qsTr("±12 dB")
                                             selected: EqualizerController.gainRangeDb === 12
@@ -594,7 +610,7 @@ Window {
                                         }
                                         SegmentButton {
                                             objectName: "equalizerRange18Button"
-                                            width: 112
+                                            width: window.spacious ? 112 : 72
                                             height: parent.height
                                             text: qsTr("±18 dB")
                                             selected: EqualizerController.gainRangeDb === 18
@@ -604,22 +620,23 @@ Window {
                                 }
 
                                 Label {
-                                    x: 557
-                                    y: 24
+                                    x: window.spacious ? 557 : 294
+                                    y: window.spacious ? 24 : 11
+                                    width: window.spacious ? contentWidth : 42
                                     height: 42
                                     text: qsTr("精度：")
                                     color: Theme.textPrimary
                                     font.family: "Microsoft YaHei UI"
-                                    font.pixelSize: 18
+                                    font.pixelSize: window.spacious ? 18 : 14
                                     verticalAlignment: Text.AlignVCenter
                                 }
 
                                 Rectangle {
                                     id: precisionControl
                                     objectName: "equalizerPrecisionControl"
-                                    x: 626
-                                    y: 15
-                                    width: 243
+                                    x: window.spacious ? 626 : 345
+                                    y: window.spacious ? 15 : 11
+                                    width: window.spacious ? 243 : 150
                                     height: 42
                                     radius: 12
                                     color: Theme.surfaceElevated
@@ -629,7 +646,7 @@ Window {
                                         anchors.fill: parent
                                         SegmentButton {
                                             objectName: "equalizerPrecisionHighButton"
-                                            width: 81
+                                            width: window.spacious ? 81 : 50
                                             height: parent.height
                                             text: qsTr("高")
                                             selected: EqualizerController.precisionMode
@@ -639,7 +656,7 @@ Window {
                                         }
                                         SegmentButton {
                                             objectName: "equalizerPrecisionMediumButton"
-                                            width: 81
+                                            width: window.spacious ? 81 : 50
                                             height: parent.height
                                             text: qsTr("中")
                                             selected: EqualizerController.precisionMode
@@ -649,7 +666,7 @@ Window {
                                         }
                                         SegmentButton {
                                             objectName: "equalizerPrecisionLowButton"
-                                            width: 81
+                                            width: window.spacious ? 81 : 50
                                             height: parent.height
                                             text: qsTr("低")
                                             selected: EqualizerController.precisionMode
@@ -661,22 +678,23 @@ Window {
                                 }
 
                                 Label {
-                                    x: 1011
-                                    y: 24
+                                    x: window.spacious ? 1011 : 510
+                                    y: window.spacious ? 24 : 11
+                                    width: window.spacious ? contentWidth : 70
                                     height: 42
                                     text: qsTr("输出电平：")
                                     color: Theme.textPrimary
                                     font.family: "Microsoft YaHei UI"
-                                    font.pixelSize: 18
+                                    font.pixelSize: window.spacious ? 18 : 14
                                     verticalAlignment: Text.AlignVCenter
                                 }
 
                                 Item {
                                     id: outputMeter
                                     objectName: "equalizerOutputMeter"
-                                    x: 1137
-                                    y: 25
-                                    width: 407
+                                    x: window.spacious ? 1137 : 586
+                                    y: window.spacious ? 25 : 15
+                                    width: window.spacious ? 407 : 150
                                     height: 32
 
                                     Row {
@@ -690,7 +708,7 @@ Window {
                                             model: 18
                                             Rectangle {
                                                 required property int index
-                                                width: (407 - 17 * 4) / 18
+                                                width: (outputMeter.width - 17 * 4) / 18
                                                 height: 10
                                                 radius: 1
                                                 color: window.meterColor(index)
@@ -731,14 +749,14 @@ Window {
 
                                 Label {
                                     objectName: "equalizerOutputLevelText"
-                                    x: 1565
-                                    y: 24
-                                    width: 78
+                                    x: window.spacious ? 1565 : 744
+                                    y: window.spacious ? 24 : 11
+                                    width: window.spacious ? 78 : 70
                                     height: 42
                                     text: window.displayedOutputPeakDb.toFixed(1) + " dB"
                                     color: Theme.textPrimary
                                     font.family: "Microsoft YaHei UI"
-                                    font.pixelSize: 18
+                                    font.pixelSize: window.spacious ? 18 : 14
                                     horizontalAlignment: Text.AlignRight
                                     verticalAlignment: Text.AlignVCenter
                                 }
@@ -838,8 +856,8 @@ Window {
                 Item { Layout.fillWidth: true }
                 ToolButton {
                     objectName: "equalizerManageCloseButton"
-                    width: 32
-                    height: 32
+                    Layout.preferredWidth: 32
+                    Layout.preferredHeight: 32
                     icon.source: Theme.icon("close-fill")
                     icon.color: Theme.textPrimary
                     onClicked: managePopup.close()

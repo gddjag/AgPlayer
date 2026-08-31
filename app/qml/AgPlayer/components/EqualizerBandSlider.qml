@@ -4,13 +4,19 @@ import AgPlayer
 
 Item {
     id: root
-    objectName: preamp ? "equalizerPreampSlider" : "eqBandSlider-" + bandIndex
+    objectName: preamp ? "equalizerPreampSlider" : "equalizerBand-" + bandIndex
     required property int bandIndex
     required property string frequencyLabel
     required property real gainDb
     property bool preamp: false
     property bool spacious: false
     property string accessibleLabel: frequencyLabel
+    readonly property string controlObjectPrefix: preamp
+                                                  ? "equalizerPreampSlider"
+                                                  : "eqBandSlider-" + bandIndex
+    readonly property bool compact: height < 300
+    readonly property real sliderTop: compact ? 32 : 49
+    readonly property real sliderHeight: compact ? Math.max(86, height - 92) : 239
     readonly property real gainRangeDb: EqualizerController.gainRangeDb
     readonly property real gainStepDb: EqualizerController.gainStepDb
     implicitWidth: 79
@@ -44,15 +50,15 @@ Item {
 
     Label {
         id: frequencyLabelItem
-        objectName: root.objectName + "-frequency"
+        objectName: root.controlObjectPrefix + "-frequency"
         x: 0
-        y: 8
+        y: root.compact ? 2 : 8
         width: parent.width
         height: 30
         text: root.frequencyLabel
         color: Theme.textPrimary
         font.family: "Microsoft YaHei UI"
-        font.pixelSize: 18
+        font.pixelSize: root.compact ? 16 : 18
         font.weight: Font.Normal
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
@@ -67,11 +73,11 @@ Item {
 
     Item {
         id: slider
-        objectName: root.objectName + "-control"
+        objectName: root.controlObjectPrefix + "-control"
         x: 5
-        y: 49
+        y: root.sliderTop
         width: parent.width - 10
-        height: 239
+        height: root.sliderHeight
         property real value: root.gainDb
         property bool lastWheelAccepted: false
         readonly property real visualPosition: (root.gainRangeDb - value)
@@ -222,11 +228,11 @@ Item {
 
     Rectangle {
         id: valueChip
-        objectName: root.objectName + "-valueChip"
+        objectName: root.controlObjectPrefix + "-valueChip"
         x: Math.round((parent.width - width) / 2)
-        y: 303
-        width: 61
-        height: 56
+        y: root.compact ? root.sliderTop + root.sliderHeight + 6 : 303
+        width: root.compact ? Math.max(34, parent.width - 4) : 61
+        height: root.compact ? 50 : 56
         radius: 10
         gradient: Gradient {
             orientation: Gradient.Vertical
@@ -236,7 +242,7 @@ Item {
         border.color: Theme.opaqueBorder
 
         Label {
-            objectName: root.objectName + "-value"
+            objectName: root.controlObjectPrefix + "-value"
             anchors.fill: parent
             anchors.topMargin: 3
             text: (root.gainDb > 0 ? "+" : "")

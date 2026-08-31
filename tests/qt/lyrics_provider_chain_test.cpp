@@ -46,7 +46,8 @@ private slots:
     void circuitBlocksOnlyFailingRouteAndAllowsOneProbe();
     void stopsOnFirstFoundIncludingInstrumental();
     void cancellationAndReusedExternalIdsIsolateLateResults();
-    void aggregatesNoMatchAndPartialOutages();
+    void partialOutageWithNormalNoMatchReturnsNotFound();
+    void allTechnicalFailuresReturnTechnicalError();
     void ignoresPreviousProviderResultsAfterAdvance();
 };
 
@@ -291,7 +292,7 @@ void LyricsProviderChainTest::cancellationAndReusedExternalIdsIsolateLateResults
     QCOMPARE(finished.size(), 1);
 }
 
-void LyricsProviderChainTest::aggregatesNoMatchAndPartialOutages()
+void LyricsProviderChainTest::partialOutageWithNormalNoMatchReturnsNotFound()
 {
     FakeProvider first, second;
     LyricsProviderChain chain({{QStringLiteral("first"), QStringLiteral("First"), &first},
@@ -303,21 +304,37 @@ void LyricsProviderChainTest::aggregatesNoMatchAndPartialOutages()
     const LyricsProvider::Track track{QStringLiteral("Song"), QStringLiteral("Artist")};
 
     chain.requestExact(1, track);
-    first.respond(first.requests.constLast().id, LyricsProvider::Result::notFound());
-    second.respond(second.requests.constLast().id, LyricsProvider::Result::notFound());
-    QCOMPARE(finished.constLast().kind, LyricsProvider::Result::TechnicalError);
-    QCOMPARE(finished.constLast().diagnostic, QStringLiteral("all-routes-failed"));
-    QCOMPARE(finished.constLast().attempts.size(), 3);
-    QCOMPARE(attemptAt(finished.constLast(), 2).diagnostic, QStringLiteral("provider-unavailable"));
-
-    LyricsProviderChain normal({{QStringLiteral("first"), QStringLiteral("First"), &first},
-                                {QStringLiteral("second"), QStringLiteral("Second"), &second}});
-    connect(&normal, &LyricsProvider::finished, this,
-            [&finished](quint64, const LyricsProvider::Result& result) { finished.append(result); });
-    normal.requestExact(2, track);
-    first.respond(first.requests.constLast().id, LyricsProvider::Result::notFound());
+    first.respond(first.requests.constLast().id,
+                  LyricsProvider::Result::technicalError(
+                      503, false, QStringLiteral("provider-error")));
     second.respond(second.requests.constLast().id, LyricsProvider::Result::notFound());
     QCOMPARE(finished.constLast().kind, LyricsProvider::Result::NotFound);
+    QCOMPARE(finished.constLast().attempts.size(), 3);
+    QCOMPARE(attemptAt(finished.constLast(), 0).diagnostic,
+             QStringLiteral("provider-error"));
+    QCOMPARE(attemptAt(finished.constLast(), 1).diagnostic, QStringLiteral("not-found"));
+    QCOMPARE(attemptAt(finished.constLast(), 2).diagnostic, QStringLiteral("provider-unavailable"));
+}
+
+void LyricsProviderChainTest::allTechnicalFailuresReturnTechnicalError()
+{
+    FakeProvider first, second;
+    LyricsProviderChain chain({{QStringLiteral("first"), QStringLiteral("First"), &first},
+                               {QStringLiteral("second"), QStringLiteral("Second"), &second}});
+    QList<LyricsProvider::Result> finished;
+    connect(&chain, &LyricsProvider::finished, this,
+            [&finished](quint64, const LyricsProvider::Result& result) { finished.append(result); });
+    const LyricsProvider::Track track{QStringLiteral("Song"), QStringLiteral("Artist")};
+
+    chain.requestExact(2, track);
+    first.respond(first.requests.constLast().id,
+                  LyricsProvider::Result::technicalError(
+                      503, false, QStringLiteral("server-error")));
+    second.respond(second.requests.constLast().id,
+                   LyricsProvider::Result::technicalError(
+                       0, true, QStringLiteral("network-unavailable")));
+    QCOMPARE(finished.constLast().kind, LyricsProvider::Result::TechnicalError);
+    QCOMPARE(finished.constLast().diagnostic, QStringLiteral("all-routes-failed"));
     QCOMPARE(finished.constLast().attempts.size(), 2);
 }
 

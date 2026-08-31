@@ -62,11 +62,11 @@ endif()
 file(READ "${ROOT}/app/qml/AgPlayer/SettingsPage.qml" settings_page)
 string(FIND "${settings_page}" "qsTr(\"跟随系统\")" system_offset)
 string(FIND "${settings_page}" "qsTr(\"浅色\")" light_offset)
-string(FIND "${settings_page}" "qsTr(\"深色（默认）\")" dark_offset)
+string(FIND "${settings_page}" "qsTr(\"深色\")" dark_offset)
 if(system_offset EQUAL -1 OR light_offset EQUAL -1 OR dark_offset EQUAL -1
    OR NOT system_offset LESS light_offset OR NOT light_offset LESS dark_offset)
     message(FATAL_ERROR
-        "SettingsPage.qml must show System, Light, Dark (Default) in that order")
+        "SettingsPage.qml must show System, Light, Dark in that order")
 endif()
 
 file(READ "${ROOT}/app/qml/AgPlayer/theme/Theme.qml" theme_source)

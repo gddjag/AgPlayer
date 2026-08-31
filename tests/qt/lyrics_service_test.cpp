@@ -181,6 +181,7 @@ private slots:
     void serviceIgnoresAttemptResultWithoutPendingRequest();
     void finalNotFoundKeepsCollapsedSafeRouteAttempts();
     void providerChainPreservesChildRouteAttempts();
+    void partialExactOutageStillFallsBackToSearch();
     void chainRouteFailureIsForegroundOnlyAndSuccessPreservesSource();
 };
 
@@ -1311,6 +1312,49 @@ void LyricsServiceTest::providerChainPreservesChildRouteAttempts()
              QStringLiteral("first-transport"));
     QCOMPARE(results.constFirst().attempts.at(2).providerId,
              QStringLiteral("second-transport"));
+}
+
+void LyricsServiceTest::partialExactOutageStillFallsBackToSearch()
+{
+    QTemporaryDir trackDirectory;
+    QVERIFY(trackDirectory.isValid());
+    FakeLyricsProvider first;
+    FakeLyricsProvider second;
+    LyricsProviderChain chain({{QStringLiteral("first"), QStringLiteral("First"), &first},
+                               {QStringLiteral("second"), QStringLiteral("Second"), &second}});
+    LyricsService service(nullptr, nullptr, nullptr, &chain);
+    service.setEnabled(true);
+    TrackRecord track;
+    track.trackId = QStringLiteral("partial-exact-outage");
+    track.title = QStringLiteral("Fallback Search");
+    track.artist = QStringLiteral("Artist");
+    track.durationMs = 180000;
+    track.path = trackDirectory.filePath(QStringLiteral("partial-exact-outage.flac"));
+
+    service.requestTrack(track);
+    QCOMPARE(first.exactRequests.size(), 1);
+    first.complete(first.exactRequests.constFirst().requestId,
+                   LyricsProvider::Result::technicalError(
+                       503, false, QStringLiteral("provider-error")));
+    QCOMPARE(service.status(), LyricsService::Loading);
+    QCOMPARE(service.routeNotice().value(QStringLiteral("providerId")).toString(),
+             QStringLiteral("first"));
+    QCOMPARE(second.exactRequests.size(), 1);
+
+    second.complete(second.exactRequests.constFirst().requestId,
+                    LyricsProvider::Result::notFound());
+    QCOMPARE(first.searchRequests.size(), 1);
+
+    LyricsProvider::Candidate value;
+    value.source = unisonSource();
+    value.title = track.title;
+    value.artist = track.artist;
+    value.durationSeconds = 180;
+    value.syncedLyrics = QStringLiteral("[00:01.00]Found by broad search");
+    first.complete(first.searchRequests.constFirst().requestId,
+                   LyricsProvider::Result::search({value}));
+    QCOMPARE(service.status(), LyricsService::Ready);
+    QCOMPARE(service.sourceProvider(), QStringLiteral("Unison"));
 }
 
 void LyricsServiceTest::chainRouteFailureIsForegroundOnlyAndSuccessPreservesSource()

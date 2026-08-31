@@ -21,33 +21,62 @@ TestCase {
         EqualizerWindow { visible: true }
     }
 
-    function findChildrenByPrefix(parent, prefix) {
+    function childObjects(parent) {
+        var result = []
+        function append(values) {
+            if (!values)
+                return
+            for (var index = 0; index < values.length; ++index) {
+                if (values[index] && result.indexOf(values[index]) < 0)
+                    result.push(values[index])
+            }
+        }
+        append(parent.children)
+        append(parent.data)
+        if (parent.contentItem && result.indexOf(parent.contentItem) < 0)
+            result.push(parent.contentItem)
+        return result
+    }
+
+    function findChildrenByPrefix(parent, prefix, visited) {
         var matches = []
-        var children = parent.contentItem ? parent.contentItem.children : parent.children
-        if (!children)
+        if (!parent)
             return matches
+        visited = visited || []
+        if (visited.indexOf(parent) >= 0)
+            return matches
+        visited.push(parent)
+        var children = childObjects(parent)
         for (var i = 0; i < children.length; ++i) {
             var child = children[i]
             if (child.objectName
                     && child.objectName.indexOf(prefix) === 0
                     && /^equalizerBand-\d+$/.test(child.objectName))
                 matches.push(child)
-            matches = matches.concat(findChildrenByPrefix(child, prefix))
+            matches = matches.concat(findChildrenByPrefix(child, prefix,
+                                                           visited))
         }
         return matches
     }
 
-    function findChild(parent, objectName) {
-        var children = parent.contentItem ? parent.contentItem.children : parent.children
-        if (!children)
+    function findChild(parent, objectName, visited) {
+        if (!parent)
             return null
+        visited = visited || []
+        if (visited.indexOf(parent) >= 0)
+            return null
+        visited.push(parent)
         var legacyObjectName = objectName.replace(/^equalizerBand-(\d+)(-.+)$/,
                                                    "eqBandSlider-$1$2")
+        if (parent.objectName === objectName
+                || parent.objectName === legacyObjectName)
+            return parent
+        var children = childObjects(parent)
         for (var i = 0; i < children.length; ++i) {
             var child = children[i]
             if (child.objectName === objectName || child.objectName === legacyObjectName)
                 return child
-            var match = findChild(child, objectName)
+            var match = findChild(child, objectName, visited)
             if (match)
                 return match
         }
@@ -354,6 +383,26 @@ TestCase {
         verify(findChild(equalizer, "equalizerBand-0-frequency").font.pixelSize >= 16)
         verify(findChild(equalizer, "equalizerBand-0-value").font.pixelSize >= 16)
 
+        var firstBand = findChild(equalizer, "equalizerBand-0")
+        var lastBand = findChild(equalizer, "equalizerBand-17")
+        var footer = findChild(equalizer, "equalizerFooterPanel")
+        var outputMeter = findChild(equalizer, "equalizerOutputMeter")
+        var firstPoint = firstBand.mapToItem(equalizer.contentItem, 0, 0)
+        var lastPoint = lastBand.mapToItem(equalizer.contentItem, 0, 0)
+        var footerPoint = footer.mapToItem(equalizer.contentItem, 0, 0)
+        var outputPoint = outputMeter.mapToItem(equalizer.contentItem, 0, 0)
+        verify(firstPoint.x >= 0 && firstPoint.y >= 0)
+        verify(lastPoint.x + lastBand.width <= equalizer.width)
+        verify(lastPoint.y + lastBand.height <= equalizer.height)
+        verify(footerPoint.y + footer.height <= equalizer.height)
+        verify(outputPoint.x + outputMeter.width <= equalizer.width)
+        var contentScroller = findChild(equalizer, "equalizerContentScroller")
+        var bandScroller = findChild(equalizer, "equalizerBandScroller")
+        var footerScroller = findChild(equalizer, "equalizerFooterScroller")
+        verify(contentScroller.contentHeight <= contentScroller.height + 0.5)
+        verify(bandScroller.contentWidth <= bandScroller.width + 0.5)
+        verify(footerScroller.contentWidth <= footerScroller.width + 0.5)
+
         var gains = [2, 1.5, 0, -1, 0.5, -0.5, -1.5, -0.5,
                      0.5, 1.5, 2, 1, 2, 1.5, 1, 0, -1, -2]
         verify(EqualizerController.setGainRangeDb(12))
@@ -412,15 +461,14 @@ TestCase {
         compare(equalizer.width, 1180)
         compare(equalizer.height, 680)
         compare(findChild(equalizer, "equalizerContentScrollBar").policy,
-                ScrollBar.AlwaysOn)
+                ScrollBar.AlwaysOff)
         compare(findChild(equalizer, "equalizerBandScrollBar").policy,
-                ScrollBar.AlwaysOn)
+                ScrollBar.AlwaysOff)
         compare(findChild(equalizer, "equalizerFooterScrollBar").policy,
-                ScrollBar.AlwaysOn)
-        verify(findChild(equalizer, "equalizerContentScrollBar").visible)
-        verify(findChild(equalizer, "equalizerBandScrollBar").visible)
-        verify(findChild(equalizer, "equalizerFooterScrollBar").visible)
-        verifyFooterOutputReachable(1180, 680)
+                ScrollBar.AlwaysOff)
+        verify(!findChild(equalizer, "equalizerContentScrollBar").visible)
+        verify(!findChild(equalizer, "equalizerBandScrollBar").visible)
+        verify(!findChild(equalizer, "equalizerFooterScrollBar").visible)
         capture(temp + "/AgPlayer-equalizer-1180x680.png",
                 Qt.size(1180, 680))
 
@@ -430,12 +478,12 @@ TestCase {
         compare(equalizer.width, 760)
         compare(equalizer.height, 480)
         compare(findChild(equalizer, "equalizerContentScrollBar").policy,
-                ScrollBar.AlwaysOn)
+                ScrollBar.AlwaysOff)
         compare(findChild(equalizer, "equalizerBandScrollBar").policy,
                 ScrollBar.AlwaysOn)
         compare(findChild(equalizer, "equalizerFooterScrollBar").policy,
                 ScrollBar.AlwaysOn)
-        verify(findChild(equalizer, "equalizerContentScrollBar").visible)
+        verify(!findChild(equalizer, "equalizerContentScrollBar").visible)
         verify(findChild(equalizer, "equalizerBandScrollBar").visible)
         verify(findChild(equalizer, "equalizerFooterScrollBar").visible)
         verifyFooterOutputReachable(760, 480)
@@ -476,14 +524,12 @@ TestCase {
         }
         var contentScroller = findChild(equalizer,
                                         "equalizerContentScroller")
-        verify(contentScroller.contentHeight > contentScroller.height)
-        contentScroller.contentY = contentScroller.contentHeight
-                                   - contentScroller.height
-        wait(50)
+        verify(contentScroller.contentHeight <= contentScroller.height + 0.5)
         var footer = findChild(equalizer, "equalizerFooterPanel")
         var footerPoint = footer.mapToItem(contentScroller, 0, 0)
-        verify(footerPoint.y >= 0 && footerPoint.y < contentScroller.height,
-               "footer controls must be vertically reachable at minimum size")
+        verify(footerPoint.y >= 0
+               && footerPoint.y + footer.height <= contentScroller.height + 0.5,
+               "footer controls must remain fully visible at minimum size")
         var bandScroller = findChild(equalizer, "equalizerBandScroller")
         verify(bandScroller.contentWidth > bandScroller.width)
         bandScroller.contentX = bandScroller.contentWidth - bandScroller.width
@@ -493,7 +539,6 @@ TestCase {
         verify(preampPoint.x + preamp.width > 0
                && preampPoint.x < bandScroller.width,
                "preamp must be horizontally reachable at minimum size")
-        contentScroller.contentY = 0
         bandScroller.contentX = 0
         capture(temp + "/AgPlayer-equalizer-760x480.png",
                 Qt.size(760, 480))

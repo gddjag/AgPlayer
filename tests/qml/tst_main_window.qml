@@ -732,8 +732,8 @@ TestCase {
         compare(equalizerContent.scale, 1)
         compare(equalizerTitle.text, qsTr("18 段图形均衡器"))
         verify(equalizerTitle.font.pixelSize >= 18)
-        compare(findChild(window, "equalizerTitleBar").height, 72)
-        verify(findChild(window, "equalizerHeaderPanel").height >= 64)
+        compare(findChild(window, "equalizerTitleBar").height, 56)
+        compare(findChild(window, "equalizerHeaderPanel").height, 58)
         compare(findChild(window, "equalizerMinimizeButton").width, 30)
         verify(findChild(window, "equalizerEnabledSwitch"))
         compare(button.contentItem.rotation, 90)
@@ -785,11 +785,11 @@ TestCase {
         verify(resetButton.iconSource.toString().indexOf("restore-line.svg") >= 0)
         var contentScroller = findChild(window, "equalizerContentScroller")
         compare(findChild(window, "equalizerContentScrollBar").policy,
-                ScrollBar.AlwaysOn)
+                ScrollBar.AlwaysOff)
         compare(findChild(window, "equalizerBandScrollBar").policy,
-                ScrollBar.AlwaysOn)
+                ScrollBar.AlwaysOff)
         compare(findChild(window, "equalizerFooterScrollBar").policy,
-                ScrollBar.AlwaysOn)
+                ScrollBar.AlwaysOff)
         contentScroller.contentY = Math.min(300,
                     contentScroller.contentHeight - contentScroller.height)
         wait(50)

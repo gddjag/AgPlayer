@@ -17,17 +17,22 @@ $scratch = Join-Path ([IO.Path]::GetTempPath()) `
     ('agplayer-package-version-' + [guid]::NewGuid().ToString('N'))
 try {
     foreach ($directory in @(
-        'app', 'cmake', 'installer', 'qt\src', 'scripts', 'build\stale\app'
+        'app', 'assets\licenses', 'cmake', 'installer', 'qt\src', 'scripts',
+        'build\stale\app'
     )) {
         New-Item -ItemType Directory -Path (Join-Path $scratch $directory) `
             -Force | Out-Null
     }
     foreach ($relativePath in @(
         'CMakeLists.txt',
+        'THIRD-PARTY-NOTICES.md',
         'app\CMakeLists.txt',
         'app\agplayer.manifest.in',
         'app\agplayer.rc.in',
         'app\main.cpp',
+        'assets\licenses\AgPlayer-Icons-License.txt',
+        'assets\licenses\Lucide-Icons-License.txt',
+        'assets\licenses\RemixIcon-Apache-2.0.txt',
         'cmake\AgPlayerVersion.cmake',
         'installer\AgPlayer.iss',
         'qt\src\settings_controller.cpp',

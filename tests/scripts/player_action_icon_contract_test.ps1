@@ -12,7 +12,13 @@ $icons = @{
 
 foreach ($entry in $icons.GetEnumerator()) {
     $path = Join-Path $SourceRoot $entry.Key
-    $actualHash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    try {
+        $actualHash = ([BitConverter]::ToString(
+            $sha256.ComputeHash([IO.File]::ReadAllBytes($path)))).Replace('-', '')
+    } finally {
+        $sha256.Dispose()
+    }
     if ($actualHash -ne $entry.Value) {
         throw "$($entry.Key) does not match the approved canonical SVG."
     }

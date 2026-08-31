@@ -97,7 +97,7 @@ Root: HKCU; Subkey: "Software\AgPlayer\Capabilities\FileAssociations"; ValueType
 #undef AudioExt
 #define AudioExt "ogg"
 Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\SupportedTypes"; ValueType: string; ValueName: ".{#AudioExt}"; ValueData: ""
-Root: HKCU; Subkey: "Software\Classes\.{#AudioExt}\OpenWithProgids"; ValueType: string; ValueName: "AgPlayer.Audio"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Classes\.{#AudioExt}\OpenWithProgids"; ValueType: string; ValueName: "AgPlayer.Audio"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associateaudio
 Root: HKCU; Subkey: "Software\AgPlayer\Capabilities\FileAssociations"; ValueType: string; ValueName: ".{#AudioExt}"; ValueData: "AgPlayer.Audio"
 #undef AudioExt
 

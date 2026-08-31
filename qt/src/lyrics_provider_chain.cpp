@@ -77,7 +77,7 @@ void LyricsProviderChain::advance(const quint64 requestId)
     while (pending_.contains(requestId)) {
         Pending& pending = pending_[requestId];
         if (pending.nextRouteIndex >= routes_.size()) {
-            Result result = pending.encounteredUnavailableRoute
+            Result result = pending.encounteredUnavailableRoute && !pending.encounteredNoMatch
                 ? Result::technicalError(0, false, QStringLiteral("all-routes-failed"))
                 : Result::notFound();
             finish(requestId, std::move(result));
@@ -162,6 +162,7 @@ void LyricsProviderChain::handleProviderFinished(const quint64 internalId, const
         if (searchResultMatcher_
             && !searchResultMatcher_(pending.track, {result.candidate})) {
             resetHealth();
+            pending.encounteredNoMatch = true;
             appendAttempt(pending, route, QStringLiteral("no-acceptable-match"));
             appendProviderAttempts();
             advance(requestId);
@@ -175,6 +176,7 @@ void LyricsProviderChain::handleProviderFinished(const quint64 internalId, const
     if (result.kind == Result::SearchResults) {
         if (result.candidates.isEmpty()) {
             resetHealth();
+            pending.encounteredNoMatch = true;
             appendAttempt(pending, route, QStringLiteral("empty-search"));
             appendProviderAttempts();
             advance(requestId);
@@ -182,6 +184,7 @@ void LyricsProviderChain::handleProviderFinished(const quint64 internalId, const
         }
         if (searchResultMatcher_ && !searchResultMatcher_(pending.track, result.candidates)) {
             resetHealth();
+            pending.encounteredNoMatch = true;
             appendAttempt(pending, route, QStringLiteral("no-acceptable-match"));
             appendProviderAttempts();
             advance(requestId);
@@ -194,6 +197,7 @@ void LyricsProviderChain::handleProviderFinished(const quint64 internalId, const
     }
     if (result.kind == Result::NotFound) {
         resetHealth();
+        pending.encounteredNoMatch = true;
         appendAttempt(pending, route, QStringLiteral("not-found"));
         appendProviderAttempts();
         advance(requestId);
