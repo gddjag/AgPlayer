@@ -83,9 +83,9 @@ TestCase {
         const primary = findChild(page, "separationPrimaryAction")
         verify(input && waveform && models && settings && stems && timeline
                && history && bottom && primary)
-        verify(!findChild(page, "separationBackupModelAction"))
-        verify(!findChild(page, "separationBackupModelDialog"))
-        verify(!findChild(page, "separationCustomModelCard"))
+        verify(findChild(page, "separationBackupModelAction"))
+        verify(findChild(page, "separationBackupModelDialog"))
+        verify(findChild(page, "separationCustomModelCard"))
         compare(VocalSeparationController.inputInfo.name, undefined)
         verify(!primary.enabled)
         verify(primary.Accessible.name.length > 0)
@@ -145,15 +145,15 @@ TestCase {
                "the result transport must stay disabled before stems exist")
     }
 
-    function test_modelDeckPublishesOnlyCompleteRealModels() {
+    function test_modelDeckIsScrollableAndPublishesCompleteRealMetadata() {
         const list = findChild(page, "separationModelList")
         const scrollBar = findChild(page, "separationModelScrollBar")
+        const customEntry = findChild(page, "separationCustomModelCard")
         const firstCard = findChild(page, "separationModelCard-uvr-mdxnet-kara")
-        verify(list && scrollBar && firstCard)
+        verify(list && scrollBar && customEntry && firstCard)
         compare(list.orientation, ListView.Horizontal)
-        compare(list.count, VocalSeparationController.models.length)
-        verify(!findChild(page, "separationCustomModelCard"),
-               "unimplemented custom-model workflows must not be exposed")
+        verify(list.contentWidth > list.width,
+               "the fourth custom entry must make the deck horizontally scrollable")
         for (let index = 0; index < VocalSeparationController.models.length; ++index) {
             const model = VocalSeparationController.models[index]
             verify(model.tierLabel && model.tierLabel.length > 0)
@@ -168,6 +168,15 @@ TestCase {
         verify(!controlWithText(firstCard, "选择"),
                "model selection is performed by clicking the card, not a nested button")
 
+        const customIcon = findChild(customEntry, "separationCustomModelIcon")
+        const customCopy = findChild(customEntry, "separationCustomModelCopy")
+        const customDetails = findChild(customEntry, "separationCustomModelDetails")
+        verify(customIcon && customCopy && customDetails,
+               "custom mode must use the dedicated reference-card treatment")
+        verify(customCopy.text.indexOf("受信模型") >= 0,
+               "custom card must state the currently executable scope truthfully")
+        verify(customDetails.text.indexOf("自动识别") >= 0)
+        verify(customDetails.text.indexOf("不会执行") >= 0)
         const firstAction = findChild(firstCard, "separationModelAction-uvr-mdxnet-kara")
         verify(firstAction && firstAction.height <= 26,
                "model download controls must stay compact")
@@ -175,12 +184,44 @@ TestCase {
                                    + firstAction.height) >= 5,
                "model controls need breathing room above the card edge")
 
+        list.contentX = 0
+        page.scrollModelDeckBy(120)
+        verify(list.contentX > 0,
+               "vertical mouse-wheel input must move the model deck horizontally")
+
         separationTestDriver.selectModel("uvr-mdxnet-kara")
         const secondCard = findChild(page, "separationModelCard-uvr-mdx-net-inst-hq3")
         verify(secondCard)
         mouseClick(secondCard, secondCard.width / 2, 18)
         compare(VocalSeparationController.selectedModelId, "uvr-mdx-net-inst-hq3")
         separationTestDriver.selectModel("uvr-mdxnet-kara")
+    }
+
+    function test_customModelDirectoryAndBackupDownloadControlsAreComplete() {
+        const list = findChild(page, "separationModelList")
+        const customCard = findChild(page, "separationCustomModelCard")
+        const openDirectory = findChild(page, "separationOpenModelDirectory")
+        const changeDirectory = findChild(page, "separationChangeModelDirectory")
+        const backupText = findChild(page, "separationBackupModelText")
+        verify(list && customCard && openDirectory && changeDirectory && backupText)
+        const customRight = customCard.mapToItem(list, customCard.width, 0).x
+        verify(customRight <= list.width + 1,
+               "both custom model directory actions must be visible at the reference width")
+        compare(openDirectory.text, "打开模型目录")
+        compare(changeDirectory.text, "更改目录")
+        verify(backupText.text.indexOf("如果点击模型下载太慢或者下载不了") >= 0)
+        verify(backupText.text.indexOf("https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888") >= 0)
+        verify(backupText.text.indexOf("提取码: 8888") >= 0)
+    }
+
+    function test_inputChooserAdvertisesAudioAndVideoContainers() {
+        const dialog = findChild(page, "separationInputDialog")
+        verify(dialog)
+        const filters = dialog.nameFilters.join(" ").toLowerCase()
+        verify(filters.indexOf("*.mp4") >= 0)
+        verify(filters.indexOf("*.mkv") >= 0)
+        verify(filters.indexOf("*.mov") >= 0)
+        verify(filters.indexOf("*.webm") >= 0)
     }
 
     function test_outputTracksShowIconsChecksAndUnavailableStates() {
@@ -201,8 +242,8 @@ TestCase {
         verify(!drums.enabled)
         verify(vocals.width <= 180,
                "five output-track choices must remain compact")
-        verify(!findChild(page, "separationBackupModelAction"),
-               "unverified backup downloads must not be presented as actions")
+        verify(findChild(page, "separationBackupModelAction"),
+               "the free backup model location must remain available")
     }
 
     function test_sourcePlaybackDoesNotAnimateResultWaveforms() {

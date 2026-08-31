@@ -7,11 +7,13 @@
 
 #include <QHash>
 #include <QFutureWatcher>
+#include <QFileSystemWatcher>
 #include <QList>
 #include <QNetworkAccessManager>
 #include <QObject>
 #include <QPointer>
 #include <QSet>
+#include <QTimer>
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
@@ -57,6 +59,8 @@ class VocalSeparationController final : public QObject {
     Q_PROPERTY(QString outputFormat READ outputFormat NOTIFY outputFormatChanged)
     Q_PROPERTY(QString outputDirectory READ outputDirectory
                    NOTIFY outputDirectoryChanged)
+    Q_PROPERTY(QString modelStorageDirectory READ modelStorageDirectory
+                   NOTIFY modelStorageDirectoryChanged)
     Q_PROPERTY(bool canStart READ canStart NOTIFY startEligibilityChanged)
     Q_PROPERTY(QString startDisabledReason READ startDisabledReason
                    NOTIFY startEligibilityChanged)
@@ -131,6 +135,7 @@ public:
     QString error() const;
     QString outputFormat() const;
     QString outputDirectory() const;
+    QString modelStorageDirectory() const;
     bool canStart() const;
     QString startDisabledReason() const;
     bool canRetry() const noexcept;
@@ -171,6 +176,7 @@ public:
     Q_INVOKABLE bool selectHistoryInput(const QString& localPath);
     Q_INVOKABLE bool openHistoryOutputDirectory(const QString& localPath);
     Q_INVOKABLE bool openModelDirectory();
+    Q_INVOKABLE bool selectModelDirectory(const QUrl& directory);
 
 signals:
     void inputInfoChanged();
@@ -185,6 +191,7 @@ signals:
     void errorChanged();
     void outputFormatChanged();
     void outputDirectoryChanged();
+    void modelStorageDirectoryChanged();
     void startEligibilityChanged();
     void stemsChanged();
     void historyChanged();
@@ -239,6 +246,7 @@ private:
     const VocalModelCard* selectedModel() const;
     const VocalModelCard* modelForId(const QString& modelId) const;
     QString modelDirectory(const QString& modelId) const;
+    QStringList modelFilePaths(const VocalModelCard& model) const;
     QString runtimeDirectory() const;
     bool modelInstalled(const VocalModelCard& model) const;
     bool modelFilesPresent(const VocalModelCard& model) const;
@@ -259,6 +267,9 @@ private:
     void setJobState(JobState state, const QString& stage = {});
     void setError(const QString& error);
     void startNextDownload();
+    void rebuildModelDirectoryWatcher();
+    void scheduleModelDirectoryScan();
+    void scanModelDirectory();
     void handleProbe(const QJsonObject& payload);
     void handleResult(const QJsonObject& payload);
     void analyzeNextWaveform();
@@ -298,6 +309,8 @@ private:
     SeparationProcessClient process_;
     QNetworkAccessManager network_;
     std::unique_ptr<VocalSeparationDownloader> downloader_;
+    QFileSystemWatcher modelDirectoryWatcher_;
+    QTimer modelDirectoryScanTimer_;
     QFutureWatcher<VerificationResult>* verificationWatcher_ = nullptr;
     QFutureWatcher<VocalInstallResult>* runtimeInstallerWatcher_ = nullptr;
     std::shared_ptr<std::atomic_bool> verificationCancellation_;
@@ -324,6 +337,8 @@ private:
     QString selectedModelId_;
     QString outputFormat_ = QStringLiteral("wav");
     QString outputDirectory_;
+    QString modelStorageDirectory_;
+    bool modelDirectoryRescanPending_ = false;
     DeviceMode deviceMode_ = DeviceMode::Auto;
     JobState jobState_ = JobState::Idle;
     QString stage_;

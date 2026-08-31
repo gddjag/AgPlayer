@@ -498,9 +498,10 @@ Rectangle {
 
     FileDialog {
         id: inputDialog
-        title: qsTr("选择音频文件")
+        objectName: "separationInputDialog"
+        title: qsTr("选择音频或视频文件")
         fileMode: FileDialog.OpenFile
-        nameFilters: [qsTr("音频文件 (*.wav *.flac *.m4a *.aac *.mp3 *.ogg *.opus)")]
+        nameFilters: [qsTr("音频和视频文件 (*.wav *.flac *.m4a *.aac *.mp3 *.ogg *.opus *.mp4 *.mkv *.mov *.webm *.avi *.m4v *.mpeg *.mpg *.ts)")]
         onAccepted: VocalSeparationController.selectInput(selectedFile)
     }
 
@@ -508,6 +509,13 @@ Rectangle {
         id: outputDialog
         title: qsTr("选择输出目录")
         onAccepted: VocalSeparationController.selectOutputDirectory(selectedFolder)
+    }
+
+    FolderDialog {
+        id: modelDirectoryDialog
+        objectName: "separationModelDirectoryDialog"
+        title: qsTr("选择模型存放目录")
+        onAccepted: VocalSeparationController.selectModelDirectory(selectedFolder)
     }
 
     WorkbenchComboBox {
@@ -523,6 +531,62 @@ Rectangle {
         context: Qt.WindowShortcut
         enabled: page.visible && page.hasAvailableResultStem()
         onActivated: page.toggleResultPreview()
+    }
+
+    Dialog {
+        id: backupModelDialog
+        objectName: "separationBackupModelDialog"
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        width: Math.min(520, page.width - 48)
+        title: qsTr("备用模型下载地址")
+        padding: 14
+        background: Rectangle {
+            color: page.surface
+            border.color: page.border
+            radius: 8
+        }
+        contentItem: ColumnLayout {
+            spacing: 10
+            TextArea {
+                id: backupModelText
+                objectName: "separationBackupModelText"
+                Layout.fillWidth: true
+                Layout.preferredHeight: 168
+                readOnly: true
+                selectByMouse: true
+                wrapMode: TextEdit.Wrap
+                color: page.textPrimary
+                selectionColor: page.primary
+                selectedTextColor: "white"
+                text: qsTr("如果点击模型下载太慢或者下载不了，请用网盘下载，下载来的文件在软件打开模型存放目录放入即可\n\n备用模型下载地址：\n百度网盘：人声伴奏分离模型\n链接: https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888\n提取码: 8888")
+                background: Rectangle {
+                    color: page.input
+                    border.color: page.border
+                    radius: 5
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                WorkbenchButton {
+                    text: qsTr("复制说明")
+                    Accessible.name: text
+                    Accessible.role: Accessible.Button
+                    onClicked: {
+                        backupModelText.selectAll()
+                        backupModelText.copy()
+                        backupModelText.deselect()
+                    }
+                }
+                WorkbenchButton {
+                    text: qsTr("关闭")
+                    Accessible.name: text
+                    Accessible.role: Accessible.Button
+                    onClicked: backupModelDialog.close()
+                }
+            }
+        }
     }
 
     Connections {
@@ -658,7 +722,7 @@ Rectangle {
                                 anchors.fill: parent
                                 anchors.margins: 8
                                 enabled: !page.contextLocked
-                                Accessible.name: qsTr("音频文件拖放区域；键盘用户请使用选择文件按钮")
+                                Accessible.name: qsTr("音频或视频文件拖放区域；键盘用户请使用选择文件按钮")
                                 Accessible.role: Accessible.Pane
                                 ToolTip.visible: !enabled
                                 ToolTip.text: page.contextLockReason
@@ -682,7 +746,7 @@ Rectangle {
                                     Layout.fillWidth: true
                                     horizontalAlignment: Text.AlignHCenter
                                     text: VocalSeparationController.inputInfo.name
-                                          ? qsTr("已选择输入") : qsTr("拖拽音频文件到此处")
+                                          ? qsTr("已选择输入") : qsTr("拖拽音频或视频文件到此处")
                                     color: page.textPrimary
                                     font.pixelSize: 12
                                     wrapMode: Text.Wrap
@@ -690,7 +754,7 @@ Rectangle {
                                 Label {
                                     Layout.fillWidth: true
                                     horizontalAlignment: Text.AlignHCenter
-                                    text: qsTr("WAV / FLAC / M4A / MP3")
+                                    text: qsTr("音频 / MP4 / MKV / MOV / WebM")
                                     color: page.muted
                                     font.pixelSize: 10
                                 }
@@ -703,7 +767,7 @@ Rectangle {
                                     Accessible.role: Accessible.Button
                                     onClicked: inputDialog.open()
                                     ToolTip.visible: hovered && !enabled
-                                    ToolTip.text: page.contextLocked ? page.contextLockReason : qsTr("选择一个本地音频文件")
+                                    ToolTip.text: page.contextLocked ? page.contextLockReason : qsTr("选择一个包含音频流的本地音频或视频文件")
                                 }
                             }
                         }
@@ -837,28 +901,50 @@ Rectangle {
                             spacing: 8
                             clip: true
                             boundsBehavior: Flickable.StopAtBounds
-                            model: VocalSeparationController.models.length
+                            model: VocalSeparationController.models.length + 1
+                            footer: Item {
+                                width: 12
+                                height: 1
+                            }
                             delegate: Rectangle {
                                 required property int index
-                                readonly property var cardData:
-                                    VocalSeparationController.models[index]
-                                width: page.fullDesktop ? 304 : 286
+                                readonly property bool customEntry:
+                                    index === VocalSeparationController.models.length
+                                readonly property var cardData: customEntry
+                                    ? ({ id: "custom", tierLabel: qsTr("自定义模式"),
+                                         badgeLabel: "",
+                                         name: qsTr("兼容 ONNX 模型"),
+                                         provider: qsTr("手动目录管理"),
+                                         description: qsTr("当前仅加载目录中的受信模型"),
+                                         repositoryUrl: "", bytes: 0, stems: [] })
+                                    : VocalSeparationController.models[index]
+                                width: page.fullDesktop
+                                       ? Math.max(276,
+                                                  (modelList.width
+                                                   - modelList.spacing * 3) / 4)
+                                       : 286
                                 height: modelList.height
-                                objectName: "separationModelCard-" + cardData.id
-                                color: VocalSeparationController.selectedModelId === cardData.id
+                                objectName: customEntry ? "separationCustomModelCard"
+                                                        : "separationModelCard-" + cardData.id
+                                color: customEntry ? page.raised
+                                      : VocalSeparationController.selectedModelId === cardData.id
                                         ? Theme.accentSoft : page.surface
-                                border.color: VocalSeparationController.selectedModelId === cardData.id
+                                border.color: customEntry ? page.cyan
+                                              : VocalSeparationController.selectedModelId === cardData.id
                                                 ? page.cyan : page.border
                                 radius: 7
 
                                 MouseArea {
                                     anchors.fill: parent
                                     enabled: !page.contextLocked
-                                    onClicked: VocalSeparationController.selectModel(cardData.id)
+                                    onClicked: customEntry
+                                               ? VocalSeparationController.openModelDirectory()
+                                               : VocalSeparationController.selectModel(cardData.id)
                                 }
 
                                  ColumnLayout {
                                      z: 1
+                                     visible: !customEntry
                                      anchors.fill: parent
                                      anchors.margins: 9
                                     spacing: 2
@@ -1012,6 +1098,91 @@ Rectangle {
                                          }
                                      }
                                  }
+                                 ColumnLayout {
+                                     z: 1
+                                     visible: customEntry
+                                     anchors.fill: parent
+                                     anchors.margins: 12
+                                     spacing: 4
+                                     RowLayout {
+                                         Layout.fillWidth: true
+                                         spacing: 8
+                                         ThemedIcon {
+                                             id: customModelIcon
+                                             objectName: "separationCustomModelIcon"
+                                             source: Theme.icon("lucide-box")
+                                             tint: page.cyan
+                                             sourceSize.width: 30
+                                             sourceSize.height: 30
+                                             Layout.preferredWidth: 30
+                                             Layout.preferredHeight: 30
+                                         }
+                                         Label {
+                                             Layout.fillWidth: true
+                                             text: qsTr("自定义模式")
+                                             color: page.cyan
+                                             font.bold: true
+                                             font.pixelSize: 15
+                                         }
+                                     }
+                                     Label {
+                                         objectName: "separationCustomModelCopy"
+                                         Layout.fillWidth: true
+                                         text: qsTr("当前仅加载受信模型")
+                                         color: page.textPrimary
+                                         font.pixelSize: 11
+                                     }
+                                     Label {
+                                         Layout.fillWidth: true
+                                         text: VocalSeparationController.modelStorageDirectory
+                                         color: page.textPrimary
+                                         font.pixelSize: 11
+                                         elide: Text.ElideMiddle
+                                         ToolTip.visible: truncated && modelDirectoryPathHover.hovered
+                                         ToolTip.text: text
+                                         HoverHandler { id: modelDirectoryPathHover }
+                                     }
+                                     Label {
+                                         objectName: "separationCustomModelDetails"
+                                         Layout.fillWidth: true
+                                         text: qsTr("自动识别并校验上方三档官方模型；其他文件不会执行。")
+                                         color: page.muted
+                                         font.pixelSize: 10
+                                         wrapMode: Text.Wrap
+                                         maximumLineCount: 3
+                                         elide: Text.ElideRight
+                                     }
+                                     Item { Layout.fillHeight: true }
+                                     RowLayout {
+                                         Layout.fillWidth: true
+                                         Layout.bottomMargin: 4
+                                         spacing: 6
+                                         WorkbenchButton {
+                                             objectName: "separationOpenModelDirectory"
+                                             Layout.fillWidth: true
+                                             implicitHeight: 26
+                                             text: qsTr("打开模型目录")
+                                             Accessible.name: text
+                                             Accessible.role: Accessible.Button
+                                             onClicked: VocalSeparationController.openModelDirectory()
+                                         }
+                                         WorkbenchButton {
+                                             objectName: "separationChangeModelDirectory"
+                                             Layout.fillWidth: true
+                                             implicitHeight: 26
+                                             text: qsTr("更改目录")
+                                             Accessible.name: text
+                                             Accessible.role: Accessible.Button
+                                             enabled: !page.contextLocked
+                                                      && !VocalSeparationController.downloadBusy
+                                             onClicked: modelDirectoryDialog.open()
+                                             ToolTip.visible: hovered && !enabled
+                                             ToolTip.text: page.contextLocked
+                                                           ? page.contextLockReason
+                                                           : qsTr("模型下载或校验期间不能更改目录")
+                                         }
+                                     }
+                                 }
                              }
 
                             MouseArea {
@@ -1159,6 +1330,15 @@ Rectangle {
                                     }
                                 }
                                 Item { Layout.fillWidth: true }
+                                WorkbenchButton {
+                                    objectName: "separationBackupModelAction"
+                                    Layout.preferredWidth: page.fullDesktop ? 154 : 132
+                                    Layout.fillHeight: true
+                                    text: qsTr("备用模型下载地址")
+                                    Accessible.name: text
+                                    Accessible.role: Accessible.Button
+                                    onClicked: backupModelDialog.open()
+                                }
                             }
                         }
                     }
