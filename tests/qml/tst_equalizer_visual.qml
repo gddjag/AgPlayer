@@ -257,38 +257,57 @@ TestCase {
         }
     }
 
-    function test_response_curve_uses_log_band_positions_and_gain_envelope() {
+    function test_response_curve_uses_equal_band_slots_and_real_gain_envelope() {
         equalizer.width = 1672
         equalizer.height = 941
+        EqualizerController.setBandGain(0, -12)
+        EqualizerController.setBandGain(14, 2.3)
+        EqualizerController.setBandGain(17, 12)
         wait(80)
         var curve = findChild(equalizer, "equalizerResponseCurve")
         verify(curve)
-        verify(curve.usesBandGainEnvelope)
         var envelope = curve.envelopePoints()
         compare(envelope.length, 18)
         compare(Math.round(curve.bandX(0)), Math.round(curve.plotLeft))
         compare(Math.round(curve.bandX(17)),
                 Math.round(curve.width - curve.plotRight))
+        var slotWidth = curve.bandX(1) - curve.bandX(0)
         for (var index = 0; index < envelope.length; ++index) {
             compare(Math.round(envelope[index].x * 1000),
-                    Math.round(curve.frequencyX(
-                                   curve.bandFrequencies[index]) * 1000))
+                    Math.round(curve.bandX(index) * 1000))
             compare(Math.round(envelope[index].y * 1000),
                     Math.round(curve.gainY(
                                    EqualizerController.bandGain(index)) * 1000))
+            if (index > 0) {
+                verify(Math.abs((curve.bandX(index)
+                                 - curve.bandX(index - 1)) - slotWidth) < 0.1,
+                       "adjacent control bands must use equal visual slots")
+            }
         }
-        var x8k = curve.bandX(13)
-        var x10k = curve.bandX(14)
-        var x125k = curve.bandX(15)
-        verify(x8k < x10k && x10k < x125k)
-        verify(Math.abs((x10k - x8k) - (x125k - x10k)) < 0.1,
-               "equal 1.25 frequency ratios must occupy equal log distances")
-        for (var band = 13; band <= 15; ++band) {
+        compare(Math.round(envelope[0].y * 1000),
+                Math.round(curve.gainY(-12) * 1000))
+        compare(Math.round(envelope[14].y * 1000),
+                Math.round(curve.gainY(2.3) * 1000))
+        compare(Math.round(envelope[17].y * 1000),
+                Math.round(curve.gainY(12) * 1000))
+
+        var wideLabels = []
+        for (var band = 13; band <= 17; ++band) {
             var label = findChild(curve,
                                   "equalizerResponseFrequency-" + band)
             verify(label)
             compare(Math.round(label.x + label.width / 2),
                     Math.round(curve.bandX(band)))
+            compare(label.y, findChild(curve,
+                        "equalizerResponseFrequency-13").y)
+            wideLabels.push(label)
+        }
+        for (var labelIndex = 1; labelIndex < wideLabels.length;
+             ++labelIndex) {
+            verify(wideLabels[labelIndex - 1].x
+                   + wideLabels[labelIndex - 1].width
+                   <= wideLabels[labelIndex].x,
+                   "8k through 20k labels must remain readable on one wide row")
         }
     }
 
@@ -411,7 +430,7 @@ TestCase {
                                && a.y < b.y + b.height
                                && a.y + a.height > b.y
                 verify(!overlaps,
-                       "compact logarithmic frequency labels must remain legible: "
+                       "compact frequency labels must remain legible: "
                        + (first + 13) + " [" + a.x + "," + a.y + ","
                        + a.width + "," + a.height + "] vs "
                        + (second + 13) + " [" + b.x + "," + b.y + ","

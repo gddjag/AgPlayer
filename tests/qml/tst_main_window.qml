@@ -609,7 +609,15 @@ TestCase {
         SettingsController.themeMode = previousThemeMode
         var responseCurve = findChild(window, "equalizerResponseCurve")
         verify(responseCurve)
-        verify(responseCurve.usesBandGainEnvelope)
+        var responseEnvelope = responseCurve.envelopePoints()
+        compare(responseEnvelope.length, 18)
+        compare(Math.round(responseEnvelope[0].x),
+                Math.round(responseCurve.plotLeft))
+        compare(Math.round(responseEnvelope[17].x),
+                Math.round(responseCurve.width - responseCurve.plotRight))
+        compare(Math.round(responseEnvelope[0].y * 1000),
+                Math.round(responseCurve.gainY(
+                               EqualizerController.bandGain(0)) * 1000))
         var presetBox = findChild(window, "equalizerPresetBox")
         verify(presetBox)
         for (var themeMode = 0; themeMode <= 1; ++themeMode) {

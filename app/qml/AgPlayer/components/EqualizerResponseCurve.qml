@@ -8,7 +8,7 @@ Canvas {
     antialiasing: true
     renderTarget: Canvas.FramebufferObject
 
-    // The real 20 Hz..20 kHz plot leaves room for the dB and frequency labels.
+    // The 18-band control plot leaves room for the dB and frequency labels.
     // The wider grid bounds are decorative extensions only.
     property real plotLeft: 117
     property real plotRight: 79
@@ -17,7 +17,6 @@ Canvas {
     property real plotTop: 27
     property real plotBottom: 50
     property int gainRevision: 0
-    readonly property bool usesBandGainEnvelope: true
     readonly property real gainRangeDb: EqualizerController.gainRangeDb
     readonly property var bandFrequencies: [20, 31.5, 50, 80, 125, 200, 315,
                                             500, 800, 1250, 2000, 3150, 5000,
@@ -27,14 +26,9 @@ Canvas {
                                             "2k", "3.15k", "5k", "8k", "10k",
                                             "12.5k", "16k", "20k"]
 
-    function frequencyX(frequency) {
-        var domainRatio = 20000 / 20
-        var fraction = Math.log(frequency / 20) / Math.log(domainRatio)
-        return plotLeft + fraction * (width - plotLeft - plotRight)
-    }
-
     function bandX(index) {
-        return frequencyX(bandFrequencies[index])
+        return plotLeft + index / (bandFrequencies.length - 1)
+               * (width - plotLeft - plotRight)
     }
 
     function gainY(gain) {
