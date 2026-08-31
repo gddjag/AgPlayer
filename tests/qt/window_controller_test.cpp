@@ -28,6 +28,14 @@ private slots:
     void legacyListWidthsMigrateWithoutOverwritingIndependentSize();
     void dpiChangePreservesLogicalSizeAcrossScales();
     void switchingWindowsDoesNotRecreatePlayback();
+    void immersivePresentationTemporarilyHidesAndRestoresPlayerWindows();
+    void immersivePresentationHonorsDeferredShellRequestWithoutPersistingTemporaryState();
+    void immersivePresentationDeferredRollingShellLoadsIndependentListWindowState();
+    void immersivePresentationRestoresMiniGeometry();
+    void immersivePresentationRestoresFirstRunIntegratedGeometryWithoutCreatingASetting();
+    void immersivePresentationRestoresFirstRunMiniGeometryWithoutCreatingASetting();
+    void immersivePresentationFirstRunGeometryPersistsAfterLaterUserMove();
+    void immersivePresentationDefersClassicShellRequestWithoutOverwritingIntegratedGeometry();
     void updatesExistingWindowObjectsAndFlags();
     void visibilityWaitsForDestinationReadiness();
     void shutdownIsOrderedAndIdempotent();
@@ -201,6 +209,314 @@ void WindowControllerTest::switchingWindowsDoesNotRecreatePlayback()
     windows.showMain();
     QVERIFY(windows.mainVisible());
     QVERIFY(!windows.miniVisible());
+}
+
+void WindowControllerTest::immersivePresentationTemporarilyHidesAndRestoresPlayerWindows()
+{
+    QWindow mainWindow;
+    QWindow miniWindow;
+    QWindow listWindow;
+    WindowController windows;
+    windows.setWindows(&mainWindow, &miniWindow);
+    windows.setListWindow(&listWindow);
+    windows.showListWindow();
+
+    QVERIFY(windows.mainVisible());
+    QVERIFY(windows.listWindowVisible());
+    QVERIFY(!windows.immersivePresentationActive());
+
+    windows.enterImmersivePresentation();
+    QVERIFY(windows.immersivePresentationActive());
+    QVERIFY(!windows.mainVisible());
+    QVERIFY(!windows.miniVisible());
+    QVERIFY(!windows.listWindowVisible());
+    QVERIFY(!mainWindow.isVisible());
+    QVERIFY(!miniWindow.isVisible());
+    QVERIFY(!listWindow.isVisible());
+
+    windows.leaveImmersivePresentation();
+    QVERIFY(!windows.immersivePresentationActive());
+    QVERIFY(windows.mainVisible());
+    QVERIFY(!windows.miniVisible());
+    QVERIFY(windows.listWindowVisible());
+    QVERIFY(mainWindow.isVisible());
+    QVERIFY(listWindow.isVisible());
+
+    windows.enterImmersivePresentation();
+    windows.showMini();
+    QVERIFY(windows.immersivePresentationActive());
+    QVERIFY(!windows.mainVisible());
+    QVERIFY(!windows.miniVisible());
+    QVERIFY(!mainWindow.isVisible());
+    QVERIFY(!miniWindow.isVisible());
+    windows.leaveImmersivePresentation();
+    QVERIFY(!windows.mainVisible());
+    QVERIFY(windows.miniVisible());
+    QVERIFY(!windows.listWindowVisible());
+
+    windows.enterImmersivePresentation();
+    windows.showMain();
+    QVERIFY(windows.immersivePresentationActive());
+    QVERIFY(!windows.mainVisible());
+    QVERIFY(!windows.miniVisible());
+    QVERIFY(!mainWindow.isVisible());
+    QVERIFY(!miniWindow.isVisible());
+    windows.leaveImmersivePresentation();
+    QVERIFY(windows.mainVisible());
+    QVERIFY(!windows.miniVisible());
+    QVERIFY(windows.listWindowVisible());
+}
+
+void WindowControllerTest::immersivePresentationHonorsDeferredShellRequestWithoutPersistingTemporaryState()
+{
+    const QRect classicGeometry(24, 36, 520, 280);
+    const QRect integratedGeometry(92, 74, 640, 420);
+    const QRect temporaryGeometry(180, 160, 440, 250);
+    QSettings settings;
+    settings.setValue(QStringLiteral("windows/mainGeometry"), classicGeometry);
+    settings.setValue(QStringLiteral("windows/integratedMainGeometry"),
+                      integratedGeometry);
+    settings.sync();
+
+    QWindow mainWindow;
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setMainWindowShellMode(1);
+    QCOMPARE(mainWindow.geometry(), integratedGeometry);
+
+    windows.enterImmersivePresentation();
+    mainWindow.setGeometry(temporaryGeometry);
+    windows.setMainWindowShellMode(0);
+
+    windows.leaveImmersivePresentation();
+    QCOMPARE(mainWindow.geometry(), classicGeometry);
+    QCOMPARE(settings.value(QStringLiteral("windows/mainGeometry")).toRect(),
+             classicGeometry);
+    QCOMPARE(settings.value(QStringLiteral("windows/integratedMainGeometry")).toRect(),
+             integratedGeometry);
+}
+
+void WindowControllerTest::immersivePresentationDeferredRollingShellLoadsIndependentListWindowState()
+{
+    const QRect classicMainGeometry(100, 120, 640, 320);
+    const QRect rollingMainGeometry(60, 90, 720, 360);
+    const QRect classicListGeometry(100, 438, 640, 240);
+    const QRect rollingListGeometry(40, 50, 460, 260);
+    QSettings settings;
+    settings.setValue(QStringLiteral("windows/mainGeometry"), classicMainGeometry);
+    settings.setValue(QStringLiteral("windows/rollingMainGeometry"),
+                      rollingMainGeometry);
+    settings.setValue(QStringLiteral("windows/listGeometry"), classicListGeometry);
+    settings.setValue(QStringLiteral("windows/listGeometryVersion"), 1);
+    settings.setValue(QStringLiteral("windows/listRequestedVisible"), false);
+    settings.setValue(QStringLiteral("windows/listDockEdge"),
+                      QStringLiteral("bottom"));
+    settings.setValue(QStringLiteral("windows/rollingListGeometry"),
+                      rollingListGeometry);
+    settings.setValue(QStringLiteral("windows/rollingListGeometryVersion"), 1);
+    settings.setValue(QStringLiteral("windows/rollingListRequestedVisible"), true);
+    settings.setValue(QStringLiteral("windows/rollingListDockEdge"),
+                      QStringLiteral("none"));
+    settings.sync();
+
+    QWindow mainWindow;
+    QWindow listWindow;
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setListWindow(&listWindow);
+
+    QCOMPARE(mainWindow.geometry(), classicMainGeometry);
+    QCOMPARE(listWindow.geometry(), classicListGeometry);
+    QCOMPARE(windows.listDockEdge(), QStringLiteral("bottom"));
+    QVERIFY(!windows.listWindowDetached());
+    QVERIFY(!windows.listWindowVisible());
+
+    windows.enterImmersivePresentation();
+    windows.setMainWindowShellMode(2);
+    windows.leaveImmersivePresentation();
+
+    QCOMPARE(mainWindow.geometry(), rollingMainGeometry);
+    QCOMPARE(listWindow.geometry(), rollingListGeometry);
+    QCOMPARE(windows.listDockEdge(), QStringLiteral("none"));
+    QVERIFY(windows.listWindowDetached());
+    QVERIFY(windows.listWindowVisible());
+
+    settings.sync();
+    QCOMPARE(settings.value(QStringLiteral("windows/listGeometry")).toRect(),
+             classicListGeometry);
+    QVERIFY(!settings.value(
+                 QStringLiteral("windows/listRequestedVisible")).toBool());
+    QCOMPARE(settings.value(QStringLiteral("windows/listDockEdge")).toString(),
+             QStringLiteral("bottom"));
+    QCOMPARE(settings.value(
+                 QStringLiteral("windows/rollingListGeometry")).toRect(),
+             rollingListGeometry);
+    QVERIFY(settings.value(
+                QStringLiteral("windows/rollingListRequestedVisible")).toBool());
+    QCOMPARE(settings.value(
+                 QStringLiteral("windows/rollingListDockEdge")).toString(),
+             QStringLiteral("none"));
+}
+
+void WindowControllerTest::immersivePresentationRestoresMiniGeometry()
+{
+    const QRect miniGeometry(118, 96, 360, 208);
+    const QRect temporaryGeometry(230, 170, 280, 180);
+    QSettings settings;
+    settings.setValue(QStringLiteral("windows/miniGeometry"), miniGeometry);
+    settings.setValue(QStringLiteral("windows/miniGeometryVersion"), 4);
+    settings.sync();
+    QWindow mainWindow;
+    QWindow miniWindow;
+    WindowController windows;
+    windows.setWindows(&mainWindow, &miniWindow);
+    windows.showMini();
+    QCOMPARE(miniWindow.geometry(), miniGeometry);
+
+    windows.enterImmersivePresentation();
+    miniWindow.setGeometry(temporaryGeometry);
+    windows.leaveImmersivePresentation();
+
+    QCOMPARE(miniWindow.geometry(), miniGeometry);
+    QCOMPARE(settings.value(QStringLiteral("windows/miniGeometry")).toRect(),
+             miniGeometry);
+}
+
+void WindowControllerTest::immersivePresentationRestoresFirstRunIntegratedGeometryWithoutCreatingASetting()
+{
+    const QRect firstRunGeometry(126, 88, 580, 360);
+    const QRect temporaryGeometry(210, 140, 320, 220);
+    QWindow mainWindow;
+    {
+        WindowController windows;
+        windows.setWindows(&mainWindow, nullptr);
+        windows.setMainWindowShellMode(1);
+        mainWindow.setGeometry(firstRunGeometry);
+
+        QSettings settings;
+        settings.remove(QStringLiteral("windows/integratedMainGeometry"));
+        settings.sync();
+        QVERIFY(!settings.contains(QStringLiteral("windows/integratedMainGeometry")));
+
+        windows.enterImmersivePresentation();
+        mainWindow.setGeometry(temporaryGeometry);
+        windows.leaveImmersivePresentation();
+
+        QCOMPARE(mainWindow.geometry(), firstRunGeometry);
+        QTest::qWait(300);
+        settings.sync();
+        QVERIFY(!settings.contains(QStringLiteral("windows/integratedMainGeometry")));
+    }
+    QSettings persistedSettings;
+    persistedSettings.sync();
+    QVERIFY(!persistedSettings.contains(
+        QStringLiteral("windows/integratedMainGeometry")));
+}
+
+void WindowControllerTest::immersivePresentationRestoresFirstRunMiniGeometryWithoutCreatingASetting()
+{
+    const QRect firstRunGeometry(118, 96, 360, 208);
+    const QRect temporaryGeometry(230, 170, 280, 180);
+    QWindow mainWindow;
+    QWindow miniWindow;
+    {
+        WindowController windows;
+        windows.setWindows(&mainWindow, &miniWindow);
+        miniWindow.setGeometry(firstRunGeometry);
+
+        QSettings settings;
+        settings.remove(QStringLiteral("windows/miniGeometry"));
+        settings.sync();
+        QVERIFY(!settings.contains(QStringLiteral("windows/miniGeometry")));
+
+        windows.enterImmersivePresentation();
+        miniWindow.setGeometry(temporaryGeometry);
+        windows.leaveImmersivePresentation();
+
+        QCOMPARE(miniWindow.geometry(), firstRunGeometry);
+        QTest::qWait(300);
+        settings.sync();
+        QVERIFY(!settings.contains(QStringLiteral("windows/miniGeometry")));
+    }
+    QSettings persistedSettings;
+    persistedSettings.sync();
+    QVERIFY(!persistedSettings.contains(QStringLiteral("windows/miniGeometry")));
+}
+
+void WindowControllerTest::immersivePresentationFirstRunGeometryPersistsAfterLaterUserMove()
+{
+    const QRect firstRunGeometry(126, 88, 580, 360);
+    const QRect userGeometry(164, 112, 600, 380);
+    QWindow mainWindow;
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setMainWindowShellMode(1);
+    mainWindow.setGeometry(firstRunGeometry);
+
+    QSettings settings;
+    settings.remove(QStringLiteral("windows/integratedMainGeometry"));
+    settings.sync();
+
+    windows.enterImmersivePresentation();
+    windows.leaveImmersivePresentation();
+    QTest::qWait(300);
+    settings.sync();
+    QVERIFY(!settings.contains(QStringLiteral("windows/integratedMainGeometry")));
+
+    mainWindow.setGeometry(userGeometry);
+    QTest::qWait(300);
+    settings.sync();
+    QCOMPARE(settings.value(QStringLiteral("windows/integratedMainGeometry")).toRect(),
+             userGeometry);
+}
+
+void WindowControllerTest::immersivePresentationDefersClassicShellRequestWithoutOverwritingIntegratedGeometry()
+{
+    const QRect classicGeometry(24, 36, 520, 280);
+    const QRect integratedGeometry(92, 74, 640, 420);
+    const QRect userClassicGeometry(48, 62, 560, 300);
+    QSettings settings;
+    settings.setValue(QStringLiteral("windows/mainGeometry"), classicGeometry);
+    settings.setValue(QStringLiteral("windows/integratedMainGeometry"),
+                      integratedGeometry);
+    settings.sync();
+
+    QWindow mainWindow;
+    {
+        WindowController windows;
+        windows.setWindows(&mainWindow, nullptr);
+        windows.setMainWindowShellMode(1);
+        QCOMPARE(mainWindow.geometry(), integratedGeometry);
+
+        windows.enterImmersivePresentation();
+        windows.setMainWindowShellMode(0);
+        windows.leaveImmersivePresentation();
+
+        QCOMPARE(mainWindow.geometry(), classicGeometry);
+        QTest::qWait(300);
+        settings.sync();
+        QCOMPARE(settings.value(QStringLiteral("windows/mainGeometry")).toRect(),
+                 classicGeometry);
+        QCOMPARE(settings.value(
+                     QStringLiteral("windows/integratedMainGeometry")).toRect(),
+                 integratedGeometry);
+
+        mainWindow.setGeometry(userClassicGeometry);
+        QTest::qWait(300);
+        settings.sync();
+        QCOMPARE(settings.value(QStringLiteral("windows/mainGeometry")).toRect(),
+                 userClassicGeometry);
+        QCOMPARE(settings.value(
+                     QStringLiteral("windows/integratedMainGeometry")).toRect(),
+                 integratedGeometry);
+    }
+    QSettings persistedSettings;
+    persistedSettings.sync();
+    QCOMPARE(persistedSettings.value(QStringLiteral("windows/mainGeometry")).toRect(),
+             userClassicGeometry);
+    QCOMPARE(persistedSettings.value(
+                 QStringLiteral("windows/integratedMainGeometry")).toRect(),
+             integratedGeometry);
 }
 
 void WindowControllerTest::shellModesPersistIndependentMainWindowGeometry()

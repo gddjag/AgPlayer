@@ -10,10 +10,19 @@ Rectangle {
     property bool collapsed: false
     property int currentTab: 0
     property string editingColorProperty: ""
+    property var featureBands: []
+    property real featureEnergy: 0
+    property real featureSpectralFlux: 0
+    property bool featureKick: false
+    property real featureKickEnvelope: 0
+    readonly property real expandedHeight: currentTab === 0 ? 390
+                                                : currentTab === 1 ? 520 : 690
     signal pointerActivity()
 
     width: 356
-    height: collapsed ? 52 : Math.min(650, parent ? parent.height - 108 : 650)
+    height: collapsed ? 52 : Math.min(expandedHeight,
+                                      parent ? parent.height - 108
+                                             : expandedHeight)
     radius: 22
     color: Theme.glassSurfaceElevated
     border.width: 1
@@ -34,6 +43,52 @@ Rectangle {
         { "title": qsTr("星河"), "sub": qsTr("深空主题 · 流星冲击"),
           "from": "#442037", "to": "#91356d" } // theme-color-allow: fixed immersive media preset thumbnail palette
     ]
+    readonly property var dynamicsGroups: [
+        {
+            "key": "Terrain", "title": qsTr("地形"),
+            "sliders": [
+                { "label": qsTr("输入压制"), "key": "inputCompression", "from": 20, "to": 150 },
+                { "label": qsTr("音频响应"), "key": "audioResponse", "from": 20, "to": 200, "scale": 100, "decimals": 2 },
+                { "label": qsTr("响应范围"), "key": "responseRange", "from": 50, "to": 220, "scale": 100, "decimals": 2 },
+                { "label": qsTr("主体清晰度"), "key": "subjectClarity", "from": 20, "to": 140 }
+            ],
+            "effects": []
+        },
+        {
+            "key": "Light", "title": qsTr("光影"),
+            "sliders": [
+                { "label": qsTr("中心高光"), "key": "centerHighlight", "from": 0, "to": 100, "scale": 100, "decimals": 2 },
+                { "label": qsTr("画面景深"), "key": "depthOfField", "from": 0, "to": 150, "scale": 100, "decimals": 2 }
+            ],
+            "effects": [
+                { "label": qsTr("歌曲换色"), "key": "songAdaptiveColorEnabled" },
+                { "label": qsTr("流光高亮"), "key": "streamHighlightEnabled" }
+            ]
+        },
+        {
+            "key": "Motion", "title": qsTr("运动"),
+            "sliders": [
+                { "label": qsTr("自动旋转速度"), "key": "autoRotateSpeed", "from": 0, "to": 100, "scale": 100, "decimals": 2 },
+                { "label": qsTr("律动灵敏度"), "key": "rhythmSensitivity", "from": 0, "to": 100, "scale": 100, "decimals": 2 }
+            ],
+            "effects": [
+                { "label": qsTr("自动旋转"), "key": "autoRotate" },
+                { "label": qsTr("空闲呼吸"), "key": "idleBreathingEnabled" },
+                { "label": qsTr("漂浮晶体"), "key": "floatingCubesEnabled" }
+            ]
+        },
+        {
+            "key": "Impact", "title": qsTr("冲击"),
+            "sliders": [
+                { "label": qsTr("律动强度"), "key": "rhythmStrength", "from": 0, "to": 140, "scale": 100, "decimals": 2 }
+            ],
+            "effects": [
+                { "label": qsTr("彩色冲击波"), "key": "ripplesEnabled" },
+                { "label": qsTr("星尘喷发"), "key": "burstEnabled" },
+                { "label": qsTr("8拍流星"), "key": "meteorsEnabled" }
+            ]
+        }
+    ]
 
     function setEqGain(index, value) {
         var gains = PlayerExperienceController.visualEqGains.slice()
@@ -50,6 +105,50 @@ Rectangle {
         if (item.scale)
             return (value / item.scale).toFixed(item.decimals || 2)
         return Math.round(value).toString()
+    }
+
+    function clampFeature(value) {
+        return Math.max(0, Math.min(1, Number(value) || 0))
+    }
+
+    function band(index) {
+        return featureBands && index >= 0 && index < featureBands.length
+                ? clampFeature(featureBands[index]) : 0
+    }
+
+    function semanticFeatureValue(index) {
+        var low = band(0) + band(1) + band(2) + band(3)
+        var high = band(5) + band(6) + band(7)
+        var tonalTotal = Math.max(0.001, low + high)
+        if (index === 0)
+            return clampFeature(low / tonalTotal)
+        if (index === 1)
+            return clampFeature(high / tonalTotal)
+        if (index === 2)
+            return clampFeature(band(4) * 0.5 + band(5) * 0.3
+                                + featureKickEnvelope * 0.2)
+        if (index === 3)
+            return clampFeature(1.0 - band(6) * 0.35 - band(7) * 0.22
+                                + band(3) * 0.16)
+        return clampFeature(0.42 + band(6) * 0.3 + band(7) * 0.22
+                            + featureKickEnvelope * 0.1)
+    }
+
+    onFeatureKickChanged: {
+        if (!featureKick)
+            return
+        kickEnvelopeDecay.stop()
+        featureKickEnvelope = 1
+        kickEnvelopeDecay.restart()
+    }
+
+    NumberAnimation {
+        id: kickEnvelopeDecay
+        target: root
+        property: "featureKickEnvelope"
+        to: 0
+        duration: 520
+        easing.type: Easing.OutCubic
     }
 
     Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
@@ -424,60 +523,58 @@ Rectangle {
                 spacing: 7
                 Text { text: qsTr("声音响应"); color: Theme.textSecondary; font.pixelSize: 9 }
                 Repeater {
-                    model: [
-                        { "label": qsTr("输入压制"), "key": "inputCompression", "from": 20, "to": 150 },
-                        { "label": qsTr("音频响应"), "key": "audioResponse", "from": 20, "to": 200, "scale": 100, "decimals": 2 },
-                        { "label": qsTr("响应范围"), "key": "responseRange", "from": 50, "to": 220, "scale": 100, "decimals": 2 },
-                        { "label": qsTr("中心高光"), "key": "centerHighlight", "from": 0, "to": 100, "scale": 100, "decimals": 2 },
-                        { "label": qsTr("律动强度"), "key": "rhythmStrength", "from": 0, "to": 140, "scale": 100, "decimals": 2 },
-                        { "label": qsTr("画面景深"), "key": "depthOfField", "from": 0, "to": 150, "scale": 100, "decimals": 2 },
-                        { "label": qsTr("主体清晰度"), "key": "subjectClarity", "from": 20, "to": 140 },
-                        { "label": qsTr("自动旋转速度"), "key": "autoRotateSpeed", "from": 0, "to": 100, "scale": 100, "decimals": 2 },
-                        { "label": qsTr("律动灵敏度"), "key": "rhythmSensitivity", "from": 0, "to": 100, "scale": 100, "decimals": 2 }
-                    ]
-                    RowLayout {
+                    model: root.dynamicsGroups
+                    ColumnLayout {
                         required property var modelData
+                        property var groupData: modelData
+                        objectName: "dynamics" + groupData.key + "Group"
                         Layout.fillWidth: true
-                        spacing: 7
-                        Text { Layout.preferredWidth: 62; text: modelData.label; color: Theme.textSecondary; font.pixelSize: 9 }
-                        Slider {
-                            objectName: "dynamicSlider_" + modelData.key
-                            Layout.fillWidth: true
-                            implicitHeight: 20
-                            from: modelData.from
-                            to: modelData.to
-                            value: Number(PlayerExperienceController[modelData.key])
-                            onMoved: root.setControllerValue(modelData.key, value)
+                        spacing: 5
+                        Text {
+                            text: groupData.title
+                            color: Theme.textSecondary
+                            font.pixelSize: 9
+                            font.weight: Font.DemiBold
                         }
-                        Text { Layout.preferredWidth: 34; horizontalAlignment: Text.AlignRight; text: root.displayValue(modelData); color: Theme.textPrimary; font.pixelSize: 9 }
-                    }
-                }
-                Flow {
-                    Layout.fillWidth: true
-                    spacing: 4
-                    Repeater {
-                        model: [
-                            { "label": qsTr("彩色冲击波"), "key": "ripplesEnabled" },
-                            { "label": qsTr("星尘喷发"), "key": "burstEnabled" },
-                            { "label": qsTr("漂浮晶体"), "key": "floatingCubesEnabled" },
-                            { "label": qsTr("8拍流星"), "key": "meteorsEnabled" },
-                            { "label": qsTr("自动旋转"), "key": "autoRotate" },
-                            { "label": qsTr("空闲呼吸"), "key": "idleBreathingEnabled" },
-                            { "label": qsTr("歌曲换色"), "key": "songAdaptiveColorEnabled" },
-                            { "label": qsTr("流光高亮"), "key": "streamHighlightEnabled" }
-                        ]
-                        ThemedCheckBox {
-                            required property var modelData
-                            objectName: "effectToggle_" + modelData.key
-                            text: modelData.label
-                            checked: modelData.key === "autoRotate"
-                                     ? Number(PlayerExperienceController.autoRotate) > 0
-                                     : !!PlayerExperienceController[modelData.key]
-                            onToggled: {
-                                if (modelData.key === "autoRotate")
-                                    PlayerExperienceController.autoRotate = checked ? 54 : 0
-                                else
-                                    PlayerExperienceController[modelData.key] = checked
+                        Repeater {
+                            model: groupData.sliders
+                            RowLayout {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                spacing: 7
+                                Text { Layout.preferredWidth: 62; text: modelData.label; color: Theme.textSecondary; font.pixelSize: 9 }
+                                Slider {
+                                    objectName: "dynamicSlider_" + modelData.key
+                                    Layout.fillWidth: true
+                                    implicitHeight: 20
+                                    from: modelData.from
+                                    to: modelData.to
+                                    value: Number(PlayerExperienceController[modelData.key])
+                                    onMoved: root.setControllerValue(modelData.key, value)
+                                }
+                                Text { Layout.preferredWidth: 34; horizontalAlignment: Text.AlignRight; text: root.displayValue(modelData); color: Theme.textPrimary; font.pixelSize: 9 }
+                            }
+                        }
+                        Flow {
+                            Layout.fillWidth: true
+                            visible: groupData.effects.length > 0
+                            spacing: 4
+                            Repeater {
+                                model: groupData.effects
+                                ThemedCheckBox {
+                                    required property var modelData
+                                    objectName: "effectToggle_" + modelData.key
+                                    text: modelData.label
+                                    checked: modelData.key === "autoRotate"
+                                             ? Number(PlayerExperienceController.autoRotate) > 0
+                                             : !!PlayerExperienceController[modelData.key]
+                                    onToggled: {
+                                        if (modelData.key === "autoRotate")
+                                            PlayerExperienceController.autoRotate = checked ? 54 : 0
+                                        else
+                                            PlayerExperienceController[modelData.key] = checked
+                                }
+                            }
                             }
                         }
                     }
@@ -485,24 +582,85 @@ Rectangle {
                 Text { text: qsTr("视觉 EQ · 8 音域"); color: Theme.textSecondary; font.pixelSize: 9 }
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 2
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("音乐语义特征")
+                        color: Theme.textSecondary
+                        font.pixelSize: 9
+                    }
+                    Text {
+                        text: qsTr("自动计算")
+                        color: Theme.textTertiary
+                        font.pixelSize: 8
+                    }
+                }
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: 2
+                    rowSpacing: 6
+                    columnSpacing: 6
                     Repeater {
-                        model: ["SUB", "BASS", "LOW", "MID", "HIGH", "PRES", "BRILL", "AIR"]
-                        ColumnLayout {
+                        model: ["Warmth", "Brightness", "Sharpness",
+                                "Smoothness", "Density"]
+                        Rectangle {
                             required property int index
                             required property string modelData
+                            objectName: "semanticFeature" + index
+                            Layout.columnSpan: index === 4 ? 2 : 1
                             Layout.fillWidth: true
-                            spacing: 1
-                            Slider {
-                                orientation: Qt.Vertical
-                                Layout.alignment: Qt.AlignHCenter
-                                Layout.preferredHeight: 54
-                                from: 0
-                                to: 100
-                                value: Number(PlayerExperienceController.visualEqGains[index])
-                                onMoved: root.setEqGain(index, value)
+                            Layout.preferredHeight: 43
+                            radius: 8
+                            color: Theme.subtleGlassFill
+                            border.width: 1
+                            border.color: Theme.subtleGlassBorder
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 7
+                                spacing: 3
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: modelData
+                                        color: Theme.textSecondary
+                                        font.pixelSize: 8
+                                    }
+                                    Text {
+                                        text: root.semanticFeatureValue(index).toFixed(2)
+                                        color: Theme.textTertiary
+                                        font.pixelSize: 8
+                                    }
+                                }
+                                ProgressBar {
+                                    id: semanticBar
+                                    objectName: "semanticFeatureBar" + index
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 3
+                                    from: 0
+                                    to: 1
+                                    value: root.semanticFeatureValue(index)
+                                    background: Rectangle {
+                                        implicitHeight: 3
+                                        radius: 2
+                                        color: Theme.navigatorGlassTrack
+                                    }
+                                    contentItem: Item {
+                                        implicitHeight: 3
+                                        Rectangle {
+                                            width: parent.width
+                                                   * semanticBar.visualPosition
+                                            height: parent.height
+                                            radius: 2
+                                            gradient: Gradient {
+                                                orientation: Gradient.Horizontal
+                                                GradientStop { position: 0; color: PlayerExperienceController.warmColor }
+                                                GradientStop { position: 1; color: PlayerExperienceController.coolColor }
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                            Text { Layout.alignment: Qt.AlignHCenter; text: modelData; color: Theme.textTertiary; font.pixelSize: 7 }
                         }
                     }
                 }

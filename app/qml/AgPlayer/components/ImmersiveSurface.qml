@@ -23,6 +23,7 @@ Item {
     readonly property bool active:
         attached && PlayerExperienceController.immersiveMode
         !== PlayerExperienceController.Off
+    signal returnToWindowRequested()
 
     function notePointerActivity() {
         panelAutoHidden = false
@@ -63,8 +64,22 @@ Item {
         anchors.fill: parent
         color: "#03040a" // theme-color-allow: immersive media visual contract
         gradient: Gradient {
-            GradientStop { position: 0.0; color: "#101218" } // theme-color-allow: immersive media visual contract
-            GradientStop { position: 0.58; color: "#080a0f" } // theme-color-allow: immersive media visual contract
+            GradientStop {
+                position: 0.0
+                color: Qt.tint("#08090f", // theme-color-allow: immersive media visual contract
+                               Qt.rgba( // theme-color-allow: immersive media visual contract
+                                   PlayerExperienceController.coolColor.r,
+                                   PlayerExperienceController.coolColor.g,
+                                   PlayerExperienceController.coolColor.b, 0.075))
+            }
+            GradientStop {
+                position: 0.58
+                color: Qt.tint("#05060a", // theme-color-allow: immersive media visual contract
+                               Qt.rgba( // theme-color-allow: immersive media visual contract
+                                   PlayerExperienceController.warmColor.r,
+                                   PlayerExperienceController.warmColor.g,
+                                   PlayerExperienceController.warmColor.b, 0.045))
+            }
             GradientStop { position: 1.0; color: "#020305" } // theme-color-allow: immersive media visual contract
         }
     }
@@ -107,13 +122,13 @@ Item {
                  && root.hostMode !== PlayerExperienceController.Desktop
                  && PlayerExperienceController.glowIntensity > 4
         blurEnabled: true
-        blur: 0.52 + PlayerExperienceController.glowIntensity / 100 * 0.26
-        blurMax: 28
+        blur: 0.60 + PlayerExperienceController.glowIntensity / 100 * 0.24
+        blurMax: 32
         blurMultiplier: 0.72
         brightness: 0.48 + (root.terrainItem
                             ? Math.min(1, root.terrainItem.featureEnergy) * 0.32 : 0)
         saturation: 0.16
-        opacity: 0.18 + PlayerExperienceController.glowIntensity / 100 * 0.16
+        opacity: 0.24 + PlayerExperienceController.glowIntensity / 100 * 0.16
     }
 
     Item {
@@ -173,9 +188,26 @@ Item {
             property int liveRendererCount: 0
             property int renderStatus: TerrainReactorItem.Inactive
             property string diagnostic: ""
+            property var featureBands: []
             property real featureEnergy: 0
+            property real featureSpectralFlux: 0
+            property bool featureKick: false
+            property bool featureSnare: false
             function orbitBy(yawDelta, pitchDelta, nowSeconds) {}
             function zoomBy(wheelDelta, nowSeconds) {}
+        }
+    }
+
+    function synchronizeAudioFeatures() {
+        AudioVisualFeatureController.setActive(
+                    root.terrainItem
+                    ? root.terrainItem.renderingRequested : false)
+    }
+
+    Connections {
+        target: root.terrainItem
+        function onRenderingRequestedChanged() {
+            root.synchronizeAudioFeatures()
         }
     }
 
@@ -264,6 +296,27 @@ Item {
         z: 20
 
         ToolButton {
+            objectName: "immersiveReturnToWindowButton"
+            display: AbstractButton.IconOnly
+            implicitWidth: 32
+            implicitHeight: 32
+            text: qsTr("返回窗口主题")
+            icon.source: Theme.icon("arrow-go-back-line")
+            icon.color: "#ece8ef" // theme-color-allow: immersive media visual contract
+            icon.width: 16
+            icon.height: 16
+            Accessible.name: text
+            onClicked: root.returnToWindowRequested()
+            background: Rectangle {
+                radius: 9
+                color: parent.hovered ? Qt.rgba(1, 1, 1, 0.105) // theme-color-allow: immersive media visual contract
+                                      : Qt.rgba(0.04, 0.035, 0.05, 0.72) // theme-color-allow: immersive media visual contract
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.10) // theme-color-allow: immersive media visual contract
+            }
+        }
+
+        ToolButton {
             objectName: "immersiveFullscreenButton"
             display: AbstractButton.IconOnly
             implicitWidth: 32
@@ -304,6 +357,11 @@ Item {
         opacity: PlayerExperienceController.panelVisible && !root.panelIdle
                  && !root.panelAutoHidden ? 1 : 0
         z: 10
+        featureBands: root.terrainItem ? root.terrainItem.featureBands : []
+        featureEnergy: root.terrainItem ? root.terrainItem.featureEnergy : 0
+        featureSpectralFlux: root.terrainItem
+                             ? root.terrainItem.featureSpectralFlux : 0
+        featureKick: root.terrainItem ? root.terrainItem.featureKick : false
         onPointerActivity: root.notePointerActivity()
         Behavior on opacity { NumberAnimation { duration: 220 } }
     }
@@ -415,4 +473,6 @@ Item {
 
     onHostModeChanged: notePointerActivity()
     onAttachedChanged: if (attached) notePointerActivity()
+    Component.onCompleted: synchronizeAudioFeatures()
+    Component.onDestruction: AudioVisualFeatureController.setActive(false)
 }

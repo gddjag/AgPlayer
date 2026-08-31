@@ -18,6 +18,8 @@ class WindowController final : public QObject, public QAbstractNativeEventFilter
     Q_OBJECT
     Q_PROPERTY(bool mainVisible READ mainVisible NOTIFY mainVisibleChanged)
     Q_PROPERTY(bool miniVisible READ miniVisible NOTIFY miniVisibleChanged)
+    Q_PROPERTY(bool immersivePresentationActive READ immersivePresentationActive
+                   NOTIFY immersivePresentationActiveChanged)
     Q_PROPERTY(bool audioToolsVisible READ audioToolsVisible NOTIFY audioToolsVisibleChanged)
     Q_PROPERTY(bool alwaysOnTop READ alwaysOnTop WRITE setAlwaysOnTop NOTIFY alwaysOnTopChanged)
     Q_PROPERTY(bool magneticSnapEnabled READ magneticSnapEnabled WRITE setMagneticSnapEnabled
@@ -54,6 +56,7 @@ public:
 
     bool mainVisible() const noexcept;
     bool miniVisible() const noexcept;
+    bool immersivePresentationActive() const noexcept;
     bool audioToolsVisible() const noexcept;
     bool alwaysOnTop() const noexcept;
     bool magneticSnapEnabled() const noexcept;
@@ -98,6 +101,8 @@ public:
     Q_INVOKABLE void showMini();
     Q_INVOKABLE void showMain();
     Q_INVOKABLE void toggleMainWindowGroup();
+    Q_INVOKABLE void enterImmersivePresentation();
+    Q_INVOKABLE void leaveImmersivePresentation();
     Q_INVOKABLE void showAudioTools();
     Q_INVOKABLE void hideAudioTools();
     Q_INVOKABLE void requestClose();
@@ -117,6 +122,7 @@ public:
 signals:
     void mainVisibleChanged();
     void miniVisibleChanged();
+    void immersivePresentationActiveChanged();
     void audioToolsVisibleChanged();
     void alwaysOnTopChanged();
     void magneticSnapEnabledChanged();
@@ -196,6 +202,16 @@ private:
     bool mainVisible_ = true;
     int mainWindowShellMode_ = 0;
     bool miniVisible_ = false;
+    bool immersivePresentationActive_ = false;
+    PendingView immersiveRestoreView_ = PendingView::Main;
+    int immersiveRestoreMainWindowShellMode_ = 0;
+    int immersiveDeferredMainWindowShellMode_ = 0;
+    bool immersiveDeferredMainWindowShellModeRequested_ = false;
+    QRect immersiveRestoreMainGeometry_;
+    QRect immersiveRestoreMiniGeometry_;
+    QString immersiveRestoreMainGeometryKey_;
+    bool immersiveRestoreMainGeometryWasPersisted_ = true;
+    bool immersiveRestoreMiniGeometryWasPersisted_ = true;
     bool audioToolsVisible_ = false;
     bool alwaysOnTop_ = false;
     bool magneticSnapEnabled_ = true;

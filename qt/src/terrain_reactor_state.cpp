@@ -8,9 +8,43 @@
 namespace agplayer::terrain {
 namespace {
 
-float clampUnit(float value) noexcept
+float finiteOr(float value, float fallback) noexcept
 {
-    return std::clamp(value, 0.0F, 1.0F);
+    return std::isfinite(value) ? value : fallback;
+}
+
+float clampRange(float value, float minimum, float maximum,
+                 float fallback) noexcept
+{
+    return std::clamp(finiteOr(value, fallback), minimum, maximum);
+}
+
+float clampUnit(float value, float fallback = 0.0F) noexcept
+{
+    return clampRange(value, 0.0F, 1.0F, fallback);
+}
+
+CameraSnapshot sanitizedCameraSnapshot(
+    const CameraSnapshot& candidate,
+    const CameraSnapshot& fallback = CameraSnapshot{}) noexcept
+{
+    const CameraSnapshot defaults;
+    CameraSnapshot safeFallback;
+    safeFallback.yaw = finiteOr(fallback.yaw, defaults.yaw);
+    safeFallback.pitch = clampRange(fallback.pitch, 0.12F, 1.15F,
+                                    defaults.pitch);
+    safeFallback.distance = clampRange(fallback.distance, 42.0F, 220.0F,
+                                       defaults.distance);
+    safeFallback.punch = clampUnit(fallback.punch, defaults.punch);
+
+    CameraSnapshot result;
+    result.yaw = finiteOr(candidate.yaw, safeFallback.yaw);
+    result.pitch = clampRange(candidate.pitch, 0.12F, 1.15F,
+                              safeFallback.pitch);
+    result.distance = clampRange(candidate.distance, 42.0F, 220.0F,
+                                 safeFallback.distance);
+    result.punch = clampUnit(candidate.punch, safeFallback.punch);
+    return result;
 }
 
 class DeterministicRandom final {
@@ -150,19 +184,23 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
 
     DeterministicRandom random(seed);
     constexpr float extent = 168.0F;
+    constexpr float stageRadius = extent * 0.5F;
     const float spacing = extent / static_cast<float>(boundedGrid);
     const float center = static_cast<float>(boundedGrid - 1) * 0.5F;
-    const float maxDistance = std::sqrt(2.0F) * extent * 0.5F;
     for (int z = 0; z < boundedGrid; ++z) {
         for (int x = 0; x < boundedGrid; ++x) {
             SceneInstance instance;
             const float worldX = (static_cast<float>(x) - center) * spacing;
             const float worldZ = (static_cast<float>(z) - center) * spacing;
+            const float distance = std::hypot(worldX, worldZ);
+            if (distance > stageRadius) {
+                continue;
+            }
             instance.position = QVector3D(worldX, 0.0F, worldZ);
-            instance.scale = QVector3D(spacing * 0.988F, 1.0F,
-                                       spacing * 0.988F);
+            instance.scale = QVector3D(spacing * 0.997F, 1.0F,
+                                       spacing * 0.997F);
             instance.random = random.unit();
-            const float radius = std::hypot(worldX, worldZ) / maxDistance;
+            const float radius = distance / stageRadius;
             instance.zone = zoneFor(worldX, worldZ, radius, instance.random);
             result.terrain.append(instance);
         }
@@ -173,7 +211,7 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
             : index % 3 == 1 ? ColorZone::Warm : ColorZone::Accent;
         SceneInstance floating = makeExtra(random, 12.0F, 78.0F,
                                            6.0F, 25.0F, zone);
-        floating.scale *= 2.05F;
+        floating.scale *= 0.72F;
         result.floating.append(floating);
     }
     for (int index = 0; index < meteorCount; ++index) {
@@ -204,9 +242,10 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
         }
     }
     for (int index = 0; index < particleCount; ++index) {
-        SceneInstance particle = makeExtra(random, 0.0F, 18.0F,
-                                           0.5F, 8.0F, ColorZone::Accent);
-        particle.scale = QVector3D(0.16F, 0.16F, 0.16F);
+        SceneInstance particle = makeExtra(random, 72.0F, 168.0F,
+                                           10.0F, 82.0F, ColorZone::Accent);
+        const float starSize = 0.10F + random.unit() * 0.18F;
+        particle.scale = QVector3D(starSize, starSize, starSize);
         result.particles.append(particle);
     }
     return result;
@@ -233,17 +272,26 @@ MeteorPhase meteorPhase(float random, float timeSeconds) noexcept
 
 RenderDynamics mapRenderDynamics(const RenderStyleSnapshot& style) noexcept
 {
+    const RenderStyleSnapshot defaults;
     RenderDynamics result;
-    result.inputCompression = std::clamp(style.inputCompression, 0.2F, 1.5F);
-    result.audioResponse = std::clamp(style.audioResponse, 0.2F, 2.0F);
-    result.responseRadius = 72.0F * std::clamp(style.responseRange, 0.5F, 2.2F);
-    result.centerHighlight = clampUnit(style.centerHighlight);
-    result.rhythmStrength = std::clamp(style.rhythmStrength, 0.0F, 1.4F);
-    result.depthOfField = std::clamp(style.depthOfField, 0.0F, 1.5F);
-    result.subjectClarity = std::clamp(style.subjectClarity, 0.2F, 1.4F);
-    result.autoRotateSpeed = clampUnit(style.autoRotate)
-        * clampUnit(style.autoRotateSpeed) * 2.0F;
-    result.rhythmSensitivity = clampUnit(style.rhythmSensitivity);
+    result.inputCompression = clampRange(style.inputCompression, 0.2F, 1.5F,
+                                         defaults.inputCompression);
+    result.audioResponse = clampRange(style.audioResponse, 0.2F, 2.0F,
+                                      defaults.audioResponse);
+    result.responseRadius = 56.0F * clampRange(style.responseRange, 0.5F, 2.2F,
+                                               defaults.responseRange);
+    result.centerHighlight = clampUnit(style.centerHighlight,
+                                       defaults.centerHighlight);
+    result.rhythmStrength = clampRange(style.rhythmStrength, 0.0F, 1.4F,
+                                       defaults.rhythmStrength);
+    result.depthOfField = clampRange(style.depthOfField, 0.0F, 1.5F,
+                                     defaults.depthOfField);
+    result.subjectClarity = clampRange(style.subjectClarity, 0.2F, 1.4F,
+                                       defaults.subjectClarity);
+    result.autoRotateSpeed = clampUnit(style.autoRotate, defaults.autoRotate)
+        * clampUnit(style.autoRotateSpeed, defaults.autoRotateSpeed) * 2.0F;
+    result.rhythmSensitivity = clampUnit(style.rhythmSensitivity,
+                                         defaults.rhythmSensitivity);
     return result;
 }
 
@@ -273,63 +321,76 @@ VisualParameters mapVisualParameters(const AudioFeatures& features,
                                           * rhythmStrength);
     result.cameraPunch = clampUnit((kick * 0.78F + snare * 0.32F)
                                    * rhythmStrength);
-    result.timeSeconds = std::max(0.0F, timeSeconds);
+    result.timeSeconds = std::max(0.0F, finiteOr(timeSeconds, 0.0F));
     return result;
 }
 
-float terrainHeight(const SceneInstance& instance,
-                    const VisualParameters& parameters,
-                    float timeSeconds,
-                    const RenderStyleSnapshot& style) noexcept
+float terrainHeight(const SceneInstance& unsafeInstance,
+                    const VisualParameters& unsafeParameters,
+                    float unsafeTimeSeconds,
+                    const RenderStyleSnapshot& unsafeStyle) noexcept
 {
+    const RenderStyleSnapshot defaults;
+    RenderStyleSnapshot style = unsafeStyle;
+    style.terrainAmplitude = clampUnit(style.terrainAmplitude,
+                                       defaults.terrainAmplitude);
+    style.peakBoost = clampUnit(style.peakBoost, defaults.peakBoost);
+    VisualParameters parameters = unsafeParameters;
+    for (float& band : parameters.bands) band = clampUnit(band);
+    parameters.energy = clampUnit(parameters.energy);
+    parameters.spectralFlux = clampUnit(parameters.spectralFlux);
+    parameters.rippleStrength = clampUnit(parameters.rippleStrength);
+    parameters.particleActivity = clampUnit(parameters.particleActivity);
+    parameters.meteorActivity = clampUnit(parameters.meteorActivity);
+    parameters.cameraPunch = clampUnit(parameters.cameraPunch);
+    parameters.impactStrength = clampUnit(parameters.impactStrength);
+    parameters.impactAge = clampUnit(parameters.impactAge);
+    parameters.timeSeconds = std::max(
+        0.0F, finiteOr(parameters.timeSeconds, 0.0F));
+    const float timeSeconds = std::max(
+        0.0F, finiteOr(unsafeTimeSeconds, parameters.timeSeconds));
+    SceneInstance instance = unsafeInstance;
+    instance.position.setX(finiteOr(instance.position.x(), 0.0F));
+    instance.position.setY(finiteOr(instance.position.y(), 0.0F));
+    instance.position.setZ(finiteOr(instance.position.z(), 0.0F));
+    instance.random = clampUnit(instance.random);
     const RenderDynamics dynamics = mapRenderDynamics(style);
     const float distance = std::hypot(instance.position.x(),
                                       instance.position.z());
     const float center = clampUnit(1.0F - distance / dynamics.responseRadius);
-    const float core = std::pow(center, 1.42F);
+    const float core = std::pow(center, 1.18F);
     const float fieldStart = dynamics.responseRadius * 0.45F;
     const float fieldEnd = dynamics.responseRadius * 1.15F;
     const float fieldPosition = clampUnit(
         (fieldEnd - distance) / std::max(1.0F, fieldEnd - fieldStart));
     const float terrainField = fieldPosition * fieldPosition
         * (3.0F - 2.0F * fieldPosition);
-    const float bassField = 0.75F + 0.25F * std::sin(
-        instance.position.x() * 0.045F - instance.position.z() * 0.035F
-        + timeSeconds * 0.24F);
-    const float midField = 0.55F + 0.45F * std::sin(
-        instance.position.z() * 0.060F + instance.position.x() * 0.035F
-        + timeSeconds * 0.35F);
-    const float bass = parameters.bands[0] * core * 4.3F
-        + parameters.bands[1] * center * (1.9F + bassField * 1.5F);
-    const float mids = parameters.bands[2] * midField * 1.65F
-        + parameters.bands[3] * (0.72F + 0.28F * std::sin(
-              instance.position.x() * 0.055F
-              + instance.position.z() * 0.025F
-              + timeSeconds * 0.62F)) * 1.75F;
-    const float clusterA = 0.5F + 0.5F * std::sin(
-        instance.position.x() * 0.105F
-        + std::sin(instance.position.z() * 0.055F) * 1.15F);
-    const float clusterB = 0.5F + 0.5F * std::cos(
-        instance.position.z() * 0.095F
-        - std::cos(instance.position.x() * 0.045F) * 1.10F);
-    const float clusteredSpire = std::pow(clampUnit(
-        clusterA * 0.52F + clusterB * 0.48F), 4.2F);
+    const float bassField = 0.78F + 0.22F * std::sin(
+        instance.position.x() * 0.038F - instance.position.z() * 0.029F
+        + timeSeconds * 0.20F);
+    const float ridgeA = 0.5F + 0.5F * std::sin(
+        instance.position.z() * 0.052F + instance.position.x() * 0.027F
+        + timeSeconds * 0.28F);
+    const float ridgeB = 0.5F + 0.5F * std::cos(
+        instance.position.x() * 0.041F - instance.position.z() * 0.036F
+        - timeSeconds * 0.22F);
+    const float wideRidge = ridgeA * 0.56F + ridgeB * 0.44F;
+    const float bass = parameters.bands[0] * (1.65F + core * 2.75F)
+        + parameters.bands[1] * (1.35F + bassField * 1.70F) * center;
+    const float mids = parameters.bands[2] * (0.75F + wideRidge * 1.95F)
+        + parameters.bands[3] * (0.80F + (1.0F - wideRidge) * 1.65F);
     const float detailA = 0.5F + 0.5F * std::sin(
-        instance.position.x() * 0.43F + instance.position.z() * 0.19F);
+        instance.position.x() * 0.18F + instance.position.z() * 0.11F);
     const float detailB = 0.5F + 0.5F * std::cos(
-        instance.position.z() * 0.37F - instance.position.x() * 0.23F);
-    const float detailBlend = detailA * 0.56F + detailB * 0.44F;
-    const float towerPosition = clampUnit((detailBlend - 0.74F) / 0.19F);
-    const float towerField = towerPosition * towerPosition
-        * (3.0F - 2.0F * towerPosition);
-    const float randomSpire = std::pow(clampUnit(instance.random), 8.0F);
-    const float towerProfile = towerField
-        * (0.32F + 0.68F * std::pow(clampUnit(instance.random), 0.65F));
-    const float spikeField = clampUnit(randomSpire * 0.05F
-                                       + clusteredSpire * 0.28F
-                                       + towerProfile * 0.95F);
-    const float peak = parameters.bands[4]
-        * (0.10F + spikeField * (18.0F - 0.10F)) * center;
+        instance.position.z() * 0.16F - instance.position.x() * 0.09F);
+    const float coherentDetail = detailA * 0.58F + detailB * 0.42F;
+    const float highEnergy = parameters.bands[4] * 0.38F
+        + parameters.bands[5] * 0.28F
+        + parameters.bands[6] * 0.20F
+        + parameters.bands[7] * 0.14F;
+    const float peakControl = 0.42F + clampUnit(style.peakBoost) * 0.58F;
+    const float peak = highEnergy * (0.20F + coherentDetail * 1.45F)
+        * center * peakControl;
     const float idlePhase = std::sin(instance.position.x() * 0.032F
                                      + instance.position.z() * 0.041F) * 0.72F;
     const float reliefA = 0.5F + 0.5F * std::sin(
@@ -349,12 +410,13 @@ float terrainHeight(const SceneInstance& instance,
                                         96.0F);
     const float ringDistance = std::abs(distance - rippleRadius);
     const float cellModulation = 0.55F + clampUnit(instance.random) * 0.45F;
-    const float ripple = parameters.rippleStrength
+    const float rippleToggle = style.ripplesEnabled ? 1.0F : 0.0F;
+    const float ripple = parameters.rippleStrength * rippleToggle
         * std::exp(-(ringDistance * ringDistance) / 30.25F) * 3.35F
         * cellModulation;
     const float ringPhase = 0.5F + 0.5F * std::cos(
         distance * 0.29F - timeSeconds * 1.15F);
-    const float structuralRing = std::pow(ringPhase, 6.0F)
+    const float structuralRing = std::pow(ringPhase, 6.0F) * rippleToggle
         * (0.20F + parameters.energy * 0.95F) * 0.88F * terrainField
         * cellModulation;
     const float impactAge = clampUnit(parameters.impactAge);
@@ -367,8 +429,8 @@ float terrainHeight(const SceneInstance& instance,
                                       / (domeRadius * domeRadius));
     const float steadyCenter = parameters.energy * dynamics.centerHighlight
         * (0.35F + parameters.bands[0] * 0.65F) * centerDome * 10.8F;
-    const float centerSpikes = parameters.energy * dynamics.centerHighlight
-        * core * (0.16F + spikeField * (22.0F - 0.16F));
+    const float centerShoulders = parameters.energy * dynamics.centerHighlight
+        * terrainField * (0.42F + core * 1.55F + wideRidge * 0.38F);
     const float impactRadius = impactAge * dynamics.responseRadius * 1.15F;
     const float impactDistance = std::abs(distance - impactRadius);
     const float impactRing = impact * dynamics.rhythmStrength
@@ -378,7 +440,7 @@ float terrainHeight(const SceneInstance& instance,
     const float rawHeight = std::max(0.0F,
         idle + ((bass + mids + peak) * terrainField + ripple
                 + structuralRing) * amplitude
-        + steadyCenter + centerSpikes
+        + steadyCenter + centerShoulders
         + centerPulse + impactRing);
     return std::max(0.035F, maximumHeight
         * (1.0F - std::exp(-rawHeight / maximumHeight)));
@@ -581,14 +643,19 @@ bool FramePacer::shouldRender(double nowSeconds,
 void CameraMotion::orbitBy(float yawDelta, float pitchDelta,
                            double nowSeconds) noexcept
 {
+    snapshot_ = sanitizedCameraSnapshot(snapshot_);
+    if (!std::isfinite(yawDelta) || !std::isfinite(pitchDelta)
+        || !std::isfinite(nowSeconds)) return;
     snapshot_.yaw += yawDelta;
     snapshot_.pitch = std::clamp(snapshot_.pitch + pitchDelta, 0.12F, 1.15F);
     markManual(nowSeconds);
 }
 void CameraMotion::zoomBy(float wheelDelta, double nowSeconds) noexcept
 {
+    snapshot_ = sanitizedCameraSnapshot(snapshot_);
+    if (!std::isfinite(wheelDelta) || !std::isfinite(nowSeconds)) return;
     snapshot_.distance = std::clamp(snapshot_.distance + wheelDelta * 0.04F,
-                                    42.0F, 128.0F);
+                                     42.0F, 220.0F);
     markManual(nowSeconds);
 }
 void CameraMotion::applyBeatPunch(float strength) noexcept
@@ -613,25 +680,39 @@ double CameraMotion::manualUntilSeconds() const noexcept
 void CameraMotion::synchronize(CameraSnapshot snapshot,
                                double manualUntilSeconds) noexcept
 {
-    snapshot_ = snapshot;
-    manualUntilSeconds_ = std::max(0.0, manualUntilSeconds);
+    const CameraSnapshot fallback = sanitizedCameraSnapshot(snapshot_);
+    snapshot_ = sanitizedCameraSnapshot(snapshot, fallback);
+    const double safeManualUntil = std::isfinite(manualUntilSeconds_)
+        ? manualUntilSeconds_ : 0.0;
+    manualUntilSeconds_ = std::max(
+        0.0, std::isfinite(manualUntilSeconds)
+            ? manualUntilSeconds : safeManualUntil);
 }
 void CameraMotion::applyManualDelta(const CameraSnapshot& previous,
                                     const CameraSnapshot& next,
                                     double nowSeconds) noexcept
 {
+    snapshot_ = sanitizedCameraSnapshot(snapshot_);
+    if (!std::isfinite(previous.yaw) || !std::isfinite(previous.pitch)
+        || !std::isfinite(previous.distance) || !std::isfinite(next.yaw)
+        || !std::isfinite(next.pitch) || !std::isfinite(next.distance)
+        || !std::isfinite(nowSeconds)) return;
     const float yawDelta = next.yaw - previous.yaw;
     const float pitchDelta = next.pitch - previous.pitch;
+    const float distanceDelta = next.distance - previous.distance;
+    if (!std::isfinite(yawDelta) || !std::isfinite(pitchDelta)
+        || !std::isfinite(distanceDelta)) return;
     const bool manuallyMoved = std::abs(yawDelta) > 0.000001F
         || std::abs(pitchDelta) > 0.000001F
-        || std::abs(next.distance - previous.distance) > 0.000001F;
+        || std::abs(distanceDelta) > 0.000001F;
     snapshot_.yaw += yawDelta;
     snapshot_.pitch = std::clamp(snapshot_.pitch + pitchDelta, 0.12F, 1.15F);
-    snapshot_.distance = std::clamp(next.distance, 42.0F, 128.0F);
+    snapshot_.distance = std::clamp(next.distance, 42.0F, 220.0F);
     if (manuallyMoved) markManual(nowSeconds);
 }
 void CameraMotion::markManual(double nowSeconds) noexcept
 {
+    if (!std::isfinite(nowSeconds)) return;
     manualUntilSeconds_ = std::max(0.0, nowSeconds) + 4.0;
 }
 

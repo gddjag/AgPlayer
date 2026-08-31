@@ -14,6 +14,10 @@ TestCase {
     property int originalImmersiveMode: 0
     property int originalHostMode: 0
     property bool originalLyricsVisible: false
+    property bool originalImmersiveRenderingEnabled: false
+    property var originalLyricSettings: ({})
+    property var originalDynamicsSettings: ({})
+    property var transientLyricsPanel: null
 
     QtObject {
         id: queuePlayback
@@ -54,6 +58,32 @@ TestCase {
         function importLrc(url) { return true }
     }
 
+    QtObject {
+        id: loadingLyricsFake
+        property bool enabled: true
+        property int status: LyricsService.Loading
+        property string previousLine: ""
+        property string currentLine: ""
+        property string nextLine: ""
+        property int offsetMs: 0
+        function retry() {}
+        function pauseFollow(milliseconds) {}
+        function importLrc(url) { return true }
+    }
+
+    QtObject {
+        id: readyLyricsFake
+        property bool enabled: true
+        property int status: LyricsService.Ready
+        property string previousLine: "B 上一句"
+        property string currentLine: "B 当前句"
+        property string nextLine: "B 下一句"
+        property int offsetMs: 0
+        function retry() {}
+        function pauseFollow(milliseconds) {}
+        function importLrc(url) { return true }
+    }
+
     Component {
         id: queueDrawerComponent
         ImmersiveQueueDrawer {
@@ -73,6 +103,107 @@ TestCase {
         }
     }
 
+    Component {
+        id: immersiveControlPanelComponent
+        ImmersiveControlPanel { currentTab: 2 }
+    }
+
+    function mappedBounds(item, target) {
+        var points = [item.mapToItem(target, 0, 0),
+                      item.mapToItem(target, item.width, 0),
+                      item.mapToItem(target, 0, item.height),
+                      item.mapToItem(target, item.width, item.height)]
+        var left = points[0].x
+        var right = points[0].x
+        var top = points[0].y
+        var bottom = points[0].y
+        for (var index = 1; index < points.length; ++index) {
+            left = Math.min(left, points[index].x)
+            right = Math.max(right, points[index].x)
+            top = Math.min(top, points[index].y)
+            bottom = Math.max(bottom, points[index].y)
+        }
+        return { "left": left, "right": right,
+                 "top": top, "bottom": bottom }
+    }
+
+    function verifyMappedLyricBounds(item, surface, waveform, label) {
+        if (!item.visible)
+            return
+        var bounds = mappedBounds(item, surface)
+        var details = label + " mapped=" + bounds.left.toFixed(2) + ","
+                + bounds.top.toFixed(2) + ".." + bounds.right.toFixed(2)
+                + "," + bounds.bottom.toFixed(2)
+                + " local=" + item.x.toFixed(2) + "," + item.y.toFixed(2)
+                + " " + item.width.toFixed(2) + "x" + item.height.toFixed(2)
+                + " surface=" + surface.width + "x" + surface.height
+                + " waveformY=" + waveform.y.toFixed(2)
+        verify(bounds.left >= 20, details)
+        verify(bounds.right <= surface.width - 20, details)
+        verify(bounds.top >= 56, details)
+        verify(bounds.bottom <= waveform.y - 12, details)
+    }
+
+    function verifyMappedLyricsAtExistingExtremes(panel, surface, waveform,
+                                                   label) {
+        var previousLine = findChild(panel, "previousLyricLine")
+        var currentLine = findChild(panel, "currentLyricLine")
+        var nextLine = findChild(panel, "nextLyricLine")
+        verify(previousLine && currentLine && nextLine)
+        var endpoints = [0, 100]
+        var sizes = [60, 140]
+        for (var placement = PlayerExperienceController.Left;
+             placement <= PlayerExperienceController.Right; ++placement) {
+            PlayerExperienceController.lyricPosition = placement
+            for (var xIndex = 0; xIndex < endpoints.length; ++xIndex) {
+                PlayerExperienceController.lyricPositionX = endpoints[xIndex]
+                for (var yIndex = 0; yIndex < endpoints.length; ++yIndex) {
+                    PlayerExperienceController.lyricPositionY = endpoints[yIndex]
+                    for (var sizeIndex = 0; sizeIndex < sizes.length;
+                         ++sizeIndex) {
+                        PlayerExperienceController.lyricSize = sizes[sizeIndex]
+                        for (var depthIndex = 0; depthIndex < endpoints.length;
+                             ++depthIndex) {
+                            PlayerExperienceController.lyricDepth
+                                    = endpoints[depthIndex]
+                            var stage = currentLine.parent
+                            tryVerify(function() {
+                                stage.forceLayout()
+                                var expectedCurrentY = previousLine.visible
+                                        ? previousLine.y + previousLine.height
+                                          + stage.spacing : 0
+                                var expectedNextY = currentLine.y
+                                        + currentLine.height + stage.spacing
+                                return Math.abs(currentLine.y
+                                                - expectedCurrentY) < 0.01
+                                        && (!nextLine.visible
+                                            || Math.abs(nextLine.y
+                                                        - expectedNextY) < 0.01)
+                                        && (!nextLine.visible
+                                            || nextLine.y + nextLine.height
+                                               <= panel.height + 0.5)
+                            }, 200)
+                            var state = label + " placement=" + placement
+                                    + " x=" + endpoints[xIndex]
+                                    + " y=" + endpoints[yIndex]
+                                    + " size=" + sizes[sizeIndex]
+                                    + " depth=" + endpoints[depthIndex]
+                            verifyMappedLyricBounds(previousLine, surface,
+                                                    waveform,
+                                                    state + " previous")
+                            verifyMappedLyricBounds(currentLine, surface,
+                                                    waveform,
+                                                    state + " current")
+                            verifyMappedLyricBounds(nextLine, surface,
+                                                    waveform,
+                                                    state + " next")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     function initTestCase() {
         verify(typeof testMainWindow !== "undefined")
         verify(typeof testMiniWindow !== "undefined")
@@ -85,27 +216,115 @@ TestCase {
         originalImmersiveMode = PlayerExperienceController.immersiveMode
         originalHostMode = PlayerExperienceController.hostMode
         originalLyricsVisible = PlayerExperienceController.lyricsVisible
+        originalImmersiveRenderingEnabled = mainWindow.immersiveRenderingEnabled
+        originalLyricSettings = {
+            "lyricPosition": PlayerExperienceController.lyricPosition,
+            "lyricPositionX": PlayerExperienceController.lyricPositionX,
+            "lyricPositionY": PlayerExperienceController.lyricPositionY,
+            "lyricSize": PlayerExperienceController.lyricSize,
+            "lyricClarity": PlayerExperienceController.lyricClarity,
+            "lyricDepth": PlayerExperienceController.lyricDepth,
+            "lyricOpacity": PlayerExperienceController.lyricOpacity
+        }
+        originalDynamicsSettings = {
+            "inputCompression": PlayerExperienceController.inputCompression,
+            "audioResponse": PlayerExperienceController.audioResponse,
+            "responseRange": PlayerExperienceController.responseRange,
+            "subjectClarity": PlayerExperienceController.subjectClarity,
+            "centerHighlight": PlayerExperienceController.centerHighlight,
+            "depthOfField": PlayerExperienceController.depthOfField,
+            "autoRotateSpeed": PlayerExperienceController.autoRotateSpeed,
+            "rhythmSensitivity": PlayerExperienceController.rhythmSensitivity,
+            "rhythmStrength": PlayerExperienceController.rhythmStrength,
+            "streamHighlightEnabled": PlayerExperienceController.streamHighlightEnabled,
+            "songAdaptiveColorEnabled": PlayerExperienceController.songAdaptiveColorEnabled,
+            "autoRotate": PlayerExperienceController.autoRotate,
+            "idleBreathingEnabled": PlayerExperienceController.idleBreathingEnabled,
+            "floatingCubesEnabled": PlayerExperienceController.floatingCubesEnabled,
+            "ripplesEnabled": PlayerExperienceController.ripplesEnabled,
+            "burstEnabled": PlayerExperienceController.burstEnabled,
+            "meteorsEnabled": PlayerExperienceController.meteorsEnabled
+        }
         PlayerExperienceController.immersiveMode = PlayerExperienceController.Off
         PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
         wait(50)
     }
 
     function cleanup() {
+        if (transientLyricsPanel) {
+            transientLyricsPanel.destroy()
+            transientLyricsPanel = null
+        }
         SettingsController.playerShellMode = originalShellMode
         PlayerExperienceController.immersiveMode = PlayerExperienceController.Off
         PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
         PlayerExperienceController.lyricsVisible = false
         PlayerExperienceController.panelVisible = true
+        for (var lyricKey in originalLyricSettings)
+            PlayerExperienceController[lyricKey] = originalLyricSettings[lyricKey]
+        for (var dynamicKey in originalDynamicsSettings)
+            PlayerExperienceController[dynamicKey]
+                    = originalDynamicsSettings[dynamicKey]
+        mainWindow.immersiveRenderingEnabled = originalImmersiveRenderingEnabled
         queuePlayback.lastQueue = []
         queuePlayback.lastTrackId = ""
+        lyricsFake.enabled = true
+        lyricsFake.status = LyricsService.Ready
+        lyricsFake.previousLine = "上一句"
+        lyricsFake.currentLine = "当前句"
+        lyricsFake.nextLine = "下一句"
+        loadingLyricsFake.enabled = true
+        loadingLyricsFake.status = LyricsService.Loading
+        loadingLyricsFake.previousLine = ""
+        loadingLyricsFake.currentLine = ""
+        loadingLyricsFake.nextLine = ""
+        readyLyricsFake.enabled = true
+        readyLyricsFake.status = LyricsService.Ready
+        readyLyricsFake.previousLine = "B 上一句"
+        readyLyricsFake.currentLine = "B 当前句"
+        readyLyricsFake.nextLine = "B 下一句"
         var coordinator = findChild(mainWindow, "immersiveCoordinator")
         if (coordinator) {
+            if (coordinator.surface) {
+                var immersiveLyrics = findChild(coordinator.surface,
+                                                "immersiveLyricsPanel")
+                if (immersiveLyrics)
+                    immersiveLyrics.service = Qt.binding(function() {
+                        return LyricsService
+                    })
+            }
             tryCompare(coordinator, "handoffPhase", 0, 6000)
             if (coordinator.surface && coordinator.surface.terrainItem)
                 tryCompare(coordinator.surface.terrainItem,
                            "renderingRequested", false, 6000)
         }
         wait(50)
+    }
+
+    function test_independent_window_hides_player_group_and_return_restores_it() {
+        WindowController.showListWindow()
+        PlayerExperienceController.immersiveMode =
+                PlayerExperienceController.TerrainReactor
+        PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
+        tryCompare(WindowController, "immersivePresentationActive", true, 2000)
+        compare(WindowController.mainVisible, false)
+        compare(WindowController.miniVisible, false)
+        compare(WindowController.listWindowVisible, false)
+
+        var coordinator = findChild(mainWindow, "immersiveCoordinator")
+        tryCompare(coordinator, "attachedHostMode",
+                   PlayerExperienceController.Windowed, 2000)
+        var returnButton = findChild(coordinator.surface,
+                                     "immersiveReturnToWindowButton")
+        verify(returnButton)
+        compare(returnButton.display, AbstractButton.IconOnly)
+        returnButton.clicked()
+
+        tryCompare(PlayerExperienceController, "immersiveMode",
+                   PlayerExperienceController.Off, 1000)
+        tryCompare(WindowController, "immersivePresentationActive", false, 2000)
+        compare(WindowController.mainVisible, true)
+        compare(WindowController.listWindowVisible, true)
     }
 
     function cleanupTestCase() {
@@ -240,6 +459,8 @@ TestCase {
                 ? findChild(coordinator.surface, "immersiveControlPanelHost")
                 : null
         verify(panel)
+        compare(panel.currentTab, 0)
+        verify(panel.height < 500)
         var presetCards = []
         for (var preset = 0; preset < 6; ++preset) {
             var presetCard = findChild(panel, "immersivePresetCard" + preset)
@@ -266,6 +487,43 @@ TestCase {
         verify(findChild(panel, "dynamicSlider_rhythmStrength"))
         verify(findChild(panel, "effectToggle_burstEnabled"))
         verify(findChild(panel, "effectToggle_streamHighlightEnabled"))
+        for (var feature = 0; feature < 5; ++feature) {
+            var featureCard = findChild(panel, "semanticFeature" + feature)
+            var featureBar = findChild(panel, "semanticFeatureBar" + feature)
+            verify(featureCard)
+            verify(featureBar)
+            verify(featureBar.value >= 0 && featureBar.value <= 1)
+        }
+        mainWindow.immersiveRenderingEnabled = true
+        tryVerify(function() {
+            return coordinator.surface.terrainItem
+                    && coordinator.surface.terrainItem.useSyntheticFeatures
+                       !== undefined
+        }, 2000)
+        var terrain = coordinator.surface.terrainItem
+        terrain.useSyntheticFeatures = true
+        terrain.setSyntheticFeatures([1.0, 0.9, 0.8, 0.7,
+                                      0.6, 0.5, 0.4, 0.3],
+                                     0.72, 0.64, true, false)
+        tryVerify(function() {
+            return Math.abs(findChild(panel, "semanticFeatureBar0").value
+                            - 3.4 / 4.6) < 0.01
+        }, 1000)
+        verify(Math.abs(findChild(panel, "semanticFeatureBar1").value
+                        - 1.2 / 4.6) < 0.01)
+        verify(findChild(panel, "semanticFeatureBar2").value > 0.45)
+        verify(findChild(panel, "semanticFeatureBar2").value <= 0.651)
+        verify(Math.abs(findChild(panel, "semanticFeatureBar3").value
+                        - 0.906) < 0.01)
+        verify(findChild(panel, "semanticFeatureBar4").value > 0.606)
+        verify(findChild(panel, "semanticFeatureBar4").value <= 0.707)
+        tryVerify(function() {
+            return Math.abs(findChild(panel, "semanticFeatureBar2").value
+                            - 0.45) < 0.015
+                    && Math.abs(findChild(panel, "semanticFeatureBar4").value
+                                - 0.606) < 0.015
+        }, 1000)
+        mainWindow.immersiveRenderingEnabled = originalImmersiveRenderingEnabled
         compare(findChild(panel, "dynamicSlider_terrainAmplitude"), null)
         compare(PlayerExperienceController.responseRange, 100)
         compare(PlayerExperienceController.rhythmStrength, 30)
@@ -273,7 +531,7 @@ TestCase {
         var fallbackMessage = findChild(coordinator.surface,
                                         "immersiveRenderFallbackMessage")
         verify(fallbackMessage)
-        compare(fallbackMessage.visible, false)
+        tryCompare(fallbackMessage, "visible", false, 1000)
 
         var colorSwatch = findChild(panel, "immersiveColorSwatch0")
         var colorPicker = findChild(panel, "immersiveColorPicker")
@@ -291,6 +549,8 @@ TestCase {
         PlayerExperienceController.coolColor = originalCoolColor
 
         panel.currentTab = 2
+        tryVerify(function() { return panel.height > 590 }, 500)
+        verify(panel.height <= panel.parent.height - 108)
         var autoRotateToggle = findChild(panel, "effectToggle_autoRotate")
         verify(autoRotateToggle)
         PlayerExperienceController.autoRotate = 0
@@ -355,6 +615,333 @@ TestCase {
         compare(panel.placement, PlayerExperienceController.Left)
         compare(panel.sizeScale, 1.35)
         verify(Math.abs(panel.opacity - 0.72) < 0.001)
+        panel.destroy()
+    }
+
+    function test_spatial_lyrics_have_bounded_cinematic_hierarchy() {
+        var panel = lyricsPanelComponent.createObject(mainWindow.contentItem)
+        verify(panel)
+        panel.width = 190
+        panel.height = 220
+        panel.spatialMode = true
+        panel.depth = 100
+
+        var stage = findChild(panel, "cinematicLyricsStage")
+        var perspective = findChild(panel, "cinematicLyricsPerspective")
+        var previousLine = findChild(panel, "previousLyricLine")
+        var currentLine = findChild(panel, "currentLyricLine")
+        var nextLine = findChild(panel, "nextLyricLine")
+        verify(stage && perspective)
+        verify(previousLine && currentLine && nextLine)
+        verify(currentLine.scale > previousLine.scale)
+        verify(currentLine.scale > nextLine.scale)
+        verify(currentLine.opacity > previousLine.opacity)
+        verify(currentLine.opacity > nextLine.opacity)
+        compare(previousLine.color.toString().toLowerCase(),
+                Theme.onBrandGradientText.toString().toLowerCase())
+        compare(nextLine.color.toString().toLowerCase(),
+                Theme.onBrandGradientText.toString().toLowerCase())
+        panel.placement = PlayerExperienceController.Center
+        compare(currentLine.color.toString().toLowerCase(),
+                Theme.onBrandGradientText.toString().toLowerCase())
+        panel.placement = PlayerExperienceController.Left
+        compare(currentLine.color.toString().toLowerCase(),
+                PlayerExperienceController.warmColor.toString().toLowerCase())
+
+        lyricsFake.currentLine = "这是一段用于验证沉浸歌词在狭窄空间中最多显示两行并在末尾省略的很长歌词文本"
+        compare(currentLine.wrapMode, Text.Wrap)
+        compare(currentLine.maximumLineCount, 2)
+        compare(currentLine.elide, Text.ElideRight)
+        tryVerify(function() { return currentLine.lineCount <= 2 }, 500)
+        panel.destroy()
+    }
+
+    function test_spatial_lyric_placement_is_mirrored_and_non_spatial_stays_flat() {
+        var panel = lyricsPanelComponent.createObject(mainWindow.contentItem)
+        verify(panel)
+        panel.spatialMode = true
+        panel.depth = 100
+        var perspective = findChild(panel, "cinematicLyricsPerspective")
+        var previousLine = findChild(panel, "previousLyricLine")
+        var currentLine = findChild(panel, "currentLyricLine")
+        var nextLine = findChild(panel, "nextLyricLine")
+        verify(perspective && previousLine && currentLine && nextLine)
+
+        panel.placement = PlayerExperienceController.Left
+        var leftAngle = perspective.angle
+        compare(currentLine.horizontalAlignment, Text.AlignLeft)
+        verify(leftAngle < 0)
+        verify(Math.abs(leftAngle) <= 18)
+
+        panel.placement = PlayerExperienceController.Right
+        var rightAngle = perspective.angle
+        compare(currentLine.horizontalAlignment, Text.AlignRight)
+        verify(rightAngle > 0)
+        verify(Math.abs(rightAngle) <= 18)
+        verify(Math.abs(leftAngle + rightAngle) < 0.001)
+
+        panel.placement = PlayerExperienceController.Center
+        compare(currentLine.horizontalAlignment, Text.AlignHCenter)
+        compare(perspective.angle, 0)
+
+        panel.spatialMode = false
+        panel.placement = PlayerExperienceController.Left
+        compare(perspective.angle, 0)
+        compare(currentLine.wrapMode, Text.NoWrap)
+        compare(currentLine.maximumLineCount, 1)
+        compare(currentLine.scale, 1)
+        compare(previousLine.opacity, 1)
+        compare(currentLine.opacity, 1)
+        compare(nextLine.opacity, 1)
+        verify(Math.abs(previousLine.scale - 0.92) < 0.001)
+        verify(Math.abs(nextLine.scale - 0.86) < 0.001)
+        panel.destroy()
+    }
+
+    function test_real_immersive_surface_keeps_lyrics_in_camera_safe_zone() {
+        PlayerExperienceController.immersiveMode =
+                PlayerExperienceController.TerrainReactor
+        PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
+        PlayerExperienceController.lyricsVisible = true
+        var coordinator = findChild(mainWindow, "immersiveCoordinator")
+        tryCompare(coordinator, "attachedHostMode",
+                   PlayerExperienceController.Windowed, 2000)
+        var surface = coordinator.surface
+        var panel = findChild(surface, "immersiveLyricsPanel")
+        var waveform = findChild(surface, "immersiveWaveformHost")
+        verify(surface && panel && waveform)
+        panel.service = lyricsFake
+        lyricsFake.status = LyricsService.Ready
+        lyricsFake.previousLine = "很长的上一句歌词用于验证真实变换后的两个视觉行仍留在镜头安全区内"
+        lyricsFake.currentLine = "很长的当前歌词用于验证缩放透视后的两个视觉行不会越过安全边界"
+        lyricsFake.nextLine = "很长的下一句歌词用于验证真实变换后的两个视觉行仍位于波形上方"
+        var settle = findChild(panel, "cinematicLyricsSettleAnimation")
+        tryCompare(settle, "running", false, 400)
+        verifyMappedLyricsAtExistingExtremes(panel, surface, waveform,
+                                              "ready")
+
+        lyricsFake.previousLine = ""
+        lyricsFake.nextLine = ""
+        lyricsFake.currentLine = ""
+        lyricsFake.status = LyricsService.Loading
+        compare(findChild(panel, "currentLyricLine").text,
+                panel.statusText())
+        verifyMappedLyricsAtExistingExtremes(panel, surface, waveform,
+                                              "status")
+    }
+
+    function test_spatial_lyrics_settle_latest_line_without_residual_animation() {
+        var panel = lyricsPanelComponent.createObject(mainWindow.contentItem)
+        verify(panel)
+        panel.spatialMode = true
+        var currentLine = findChild(panel, "currentLyricLine")
+        var previousLine = findChild(panel, "previousLyricLine")
+        var nextLine = findChild(panel, "nextLyricLine")
+        var settle = findChild(panel, "cinematicLyricsSettleAnimation")
+        verify(currentLine && previousLine && nextLine && settle)
+        var stableScale = currentLine.scale
+
+        lyricsFake.currentLine = "进入的新歌词"
+        compare(currentLine.text, "进入的新歌词")
+        tryCompare(settle, "running", true, 50)
+        verify(currentLine.opacity < 1)
+        verify(currentLine.scale < stableScale)
+        tryCompare(settle, "running", false, 400)
+        verify(Math.abs(currentLine.opacity - 1) < 0.001)
+        verify(Math.abs(currentLine.scale - stableScale) < 0.001)
+
+        lyricsFake.currentLine = "快速一"
+        wait(20)
+        lyricsFake.currentLine = "快速二"
+        wait(20)
+        lyricsFake.currentLine = "最终歌词"
+        compare(currentLine.text, "最终歌词")
+        tryCompare(settle, "running", false, 400)
+        compare(currentLine.text, "最终歌词")
+        verify(Math.abs(currentLine.opacity - 1) < 0.001)
+        verify(Math.abs(currentLine.scale - stableScale) < 0.001)
+
+        lyricsFake.previousLine = ""
+        lyricsFake.nextLine = ""
+        compare(previousLine.visible, false)
+        compare(nextLine.visible, false)
+
+        lyricsFake.currentLine = ""
+        var fallbackStatuses = [LyricsService.Loading,
+                                LyricsService.NotFound,
+                                LyricsService.Offline,
+                                LyricsService.Error]
+        for (var statusIndex = 0; statusIndex < fallbackStatuses.length;
+             ++statusIndex) {
+            lyricsFake.status = fallbackStatuses[statusIndex]
+            verify(currentLine.text.length > 0)
+            compare(settle.running, false)
+            verify(Math.abs(currentLine.opacity - 1) < 0.001)
+        }
+
+        lyricsFake.status = LyricsService.Ready
+        panel.spatialMode = false
+        lyricsFake.currentLine = "普通窗口歌词"
+        compare(settle.running, false)
+        compare(currentLine.opacity, 1)
+        compare(currentLine.scale, 1)
+
+        panel.spatialMode = true
+        panel.enabled = false
+        lyricsFake.currentLine = "禁用时歌词"
+        compare(settle.running, false)
+        panel.enabled = true
+        lyricsFake.enabled = false
+        lyricsFake.currentLine = "隐藏时歌词"
+        compare(settle.running, false)
+        panel.destroy()
+    }
+
+    function test_replacing_lyrics_service_resets_and_restarts_only_eligible_text() {
+        transientLyricsPanel = lyricsPanelComponent.createObject(
+                    mainWindow.contentItem)
+        verify(transientLyricsPanel)
+        transientLyricsPanel.spatialMode = true
+        var currentLine = findChild(transientLyricsPanel, "currentLyricLine")
+        var settle = findChild(transientLyricsPanel,
+                               "cinematicLyricsSettleAnimation")
+        verify(currentLine && settle)
+        var stableScale = currentLine.scale
+
+        lyricsFake.currentLine = "A 正在进入"
+        tryCompare(settle, "running", true, 50)
+        transientLyricsPanel.service = loadingLyricsFake
+        compare(currentLine.text, transientLyricsPanel.statusText())
+        compare(settle.running, false)
+        compare(currentLine.opacity, 1)
+        verify(Math.abs(currentLine.scale - stableScale) < 0.001)
+
+        lyricsFake.currentLine = "A 的过期回调"
+        compare(settle.running, false)
+        compare(currentLine.text, transientLyricsPanel.statusText())
+
+        readyLyricsFake.enabled = false
+        transientLyricsPanel.service = readyLyricsFake
+        compare(settle.running, false)
+        readyLyricsFake.enabled = true
+        readyLyricsFake.currentLine = ""
+        transientLyricsPanel.service = loadingLyricsFake
+        transientLyricsPanel.service = readyLyricsFake
+        compare(settle.running, false)
+
+        readyLyricsFake.currentLine = "B 新服务歌词"
+        transientLyricsPanel.service = loadingLyricsFake
+        transientLyricsPanel.service = readyLyricsFake
+        compare(currentLine.text, "B 新服务歌词")
+        tryCompare(settle, "running", true, 50)
+        verify(currentLine.opacity < 1)
+        readyLyricsFake.currentLine = "B 最终歌词"
+        compare(currentLine.text, "B 最终歌词")
+        tryCompare(settle, "running", false, 400)
+        compare(currentLine.text, "B 最终歌词")
+        compare(currentLine.opacity, 1)
+        verify(Math.abs(currentLine.scale - stableScale) < 0.001)
+
+        readyLyricsFake.currentLine = "B 再次进入"
+        tryCompare(settle, "running", true, 50)
+        transientLyricsPanel.service = null
+        compare(settle.running, false)
+        compare(currentLine.text, "")
+        compare(currentLine.opacity, 1)
+        transientLyricsPanel.destroy()
+        transientLyricsPanel = null
+    }
+
+    function test_dynamics_controls_are_grouped_by_meaning_and_remain_wired() {
+        var panel = immersiveControlPanelComponent.createObject(
+                    mainWindow.contentItem)
+        verify(panel)
+        var terrainGroup = findChild(panel, "dynamicsTerrainGroup")
+        var lightGroup = findChild(panel, "dynamicsLightGroup")
+        var motionGroup = findChild(panel, "dynamicsMotionGroup")
+        var impactGroup = findChild(panel, "dynamicsImpactGroup")
+        verify(terrainGroup && lightGroup && motionGroup && impactGroup)
+
+        var terrainKeys = ["inputCompression", "audioResponse",
+                           "responseRange", "subjectClarity"]
+        var lightKeys = ["centerHighlight", "depthOfField"]
+        var motionKeys = ["autoRotateSpeed", "rhythmSensitivity"]
+        for (var terrainIndex = 0; terrainIndex < terrainKeys.length;
+             ++terrainIndex)
+            verify(findChild(terrainGroup,
+                             "dynamicSlider_" + terrainKeys[terrainIndex]))
+        for (var lightIndex = 0; lightIndex < lightKeys.length; ++lightIndex)
+            verify(findChild(lightGroup,
+                             "dynamicSlider_" + lightKeys[lightIndex]))
+        for (var motionIndex = 0; motionIndex < motionKeys.length;
+             ++motionIndex)
+            verify(findChild(motionGroup,
+                             "dynamicSlider_" + motionKeys[motionIndex]))
+        verify(findChild(impactGroup, "dynamicSlider_rhythmStrength"))
+        verify(findChild(lightGroup, "effectToggle_streamHighlightEnabled"))
+        verify(findChild(lightGroup,
+                         "effectToggle_songAdaptiveColorEnabled"))
+        verify(findChild(motionGroup, "effectToggle_autoRotate"))
+        verify(findChild(motionGroup, "effectToggle_idleBreathingEnabled"))
+        verify(findChild(motionGroup, "effectToggle_floatingCubesEnabled"))
+        verify(findChild(impactGroup, "effectToggle_ripplesEnabled"))
+        verify(findChild(impactGroup, "effectToggle_burstEnabled"))
+        verify(findChild(impactGroup, "effectToggle_meteorsEnabled"))
+
+        var terrainSlider = findChild(terrainGroup,
+                                      "dynamicSlider_inputCompression")
+        compare(terrainSlider.from, 20)
+        compare(terrainSlider.to, 150)
+        terrainSlider.value = 73
+        terrainSlider.moved()
+        compare(PlayerExperienceController.inputCompression, 73)
+
+        var lightSlider = findChild(lightGroup,
+                                    "dynamicSlider_centerHighlight")
+        compare(lightSlider.from, 0)
+        compare(lightSlider.to, 100)
+        lightSlider.value = 41
+        lightSlider.moved()
+        compare(PlayerExperienceController.centerHighlight, 41)
+
+        var motionSlider = findChild(motionGroup,
+                                     "dynamicSlider_autoRotateSpeed")
+        compare(motionSlider.from, 0)
+        compare(motionSlider.to, 100)
+        motionSlider.value = 37
+        motionSlider.moved()
+        compare(PlayerExperienceController.autoRotateSpeed, 37)
+
+        var impactSlider = findChild(impactGroup,
+                                     "dynamicSlider_rhythmStrength")
+        compare(impactSlider.from, 0)
+        compare(impactSlider.to, 140)
+        impactSlider.value = 63
+        impactSlider.moved()
+        compare(PlayerExperienceController.rhythmStrength, 63)
+
+        var lightToggle = findChild(lightGroup,
+                                    "effectToggle_streamHighlightEnabled")
+        var lightToggleValue = !PlayerExperienceController.streamHighlightEnabled
+        lightToggle.checked = lightToggleValue
+        lightToggle.toggled()
+        compare(PlayerExperienceController.streamHighlightEnabled,
+                lightToggleValue)
+
+        var motionToggle = findChild(motionGroup,
+                                     "effectToggle_idleBreathingEnabled")
+        var motionToggleValue = !PlayerExperienceController.idleBreathingEnabled
+        motionToggle.checked = motionToggleValue
+        motionToggle.toggled()
+        compare(PlayerExperienceController.idleBreathingEnabled,
+                motionToggleValue)
+
+        var impactToggle = findChild(impactGroup,
+                                     "effectToggle_burstEnabled")
+        var impactToggleValue = !PlayerExperienceController.burstEnabled
+        impactToggle.checked = impactToggleValue
+        impactToggle.toggled()
+        compare(PlayerExperienceController.burstEnabled, impactToggleValue)
         panel.destroy()
     }
 

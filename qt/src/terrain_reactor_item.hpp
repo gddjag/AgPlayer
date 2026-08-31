@@ -45,6 +45,16 @@ class TerrainReactorItem : public QQuickRhiItem {
     Q_PROPERTY(quint64 punchRevision READ punchRevision NOTIFY cameraChanged)
     Q_PROPERTY(qreal impactStrength READ impactStrength NOTIFY impactChanged)
     Q_PROPERTY(quint64 impactRevision READ impactRevision NOTIFY impactChanged)
+    Q_PROPERTY(QVariantList featureBands READ featureBands
+                   NOTIFY featureRevisionChanged)
+    Q_PROPERTY(qreal featureEnergy READ featureEnergy
+                   NOTIFY featureRevisionChanged)
+    Q_PROPERTY(qreal featureSpectralFlux READ featureSpectralFlux
+                   NOTIFY featureRevisionChanged)
+    Q_PROPERTY(bool featureKick READ featureKick
+                   NOTIFY featureRevisionChanged)
+    Q_PROPERTY(bool featureSnare READ featureSnare
+                   NOTIFY featureRevisionChanged)
     Q_PROPERTY(quint64 featureRevision READ featureRevision
                    NOTIFY featureRevisionChanged)
     Q_PROPERTY(quint64 styleRevision READ styleRevision
@@ -52,6 +62,12 @@ class TerrainReactorItem : public QQuickRhiItem {
     Q_PROPERTY(quint64 frameCount READ frameCount NOTIFY countersChanged)
     Q_PROPERTY(quint64 animationCount READ animationCount NOTIFY countersChanged)
     Q_PROPERTY(quint64 uploadCount READ uploadCount NOTIFY countersChanged)
+    Q_PROPERTY(quint64 renderedFeatureRevision READ renderedFeatureRevision
+                   NOTIFY countersChanged)
+    Q_PROPERTY(quint64 renderedStyleRevision READ renderedStyleRevision
+                   NOTIFY countersChanged)
+    Q_PROPERTY(quint64 stableRenderedFrameCount READ stableRenderedFrameCount
+                   NOTIFY countersChanged)
     Q_PROPERTY(quint64 resourceGeneration READ resourceGeneration
                    NOTIFY countersChanged)
     Q_PROPERTY(int liveRendererCount READ liveRendererCount
@@ -119,6 +135,9 @@ public:
     quint64 frameCount() const noexcept;
     quint64 animationCount() const noexcept;
     quint64 uploadCount() const noexcept;
+    quint64 renderedFeatureRevision() const noexcept;
+    quint64 renderedStyleRevision() const noexcept;
+    quint64 stableRenderedFrameCount() const noexcept;
     quint64 resourceGeneration() const noexcept;
     int liveRendererCount() const noexcept;
     RenderStatus renderStatus() const noexcept;
@@ -163,6 +182,9 @@ private:
         std::atomic<quint64> animations{0};
         std::atomic<quint64> uploads{0};
         std::atomic<quint64> resourceGeneration{0};
+        std::atomic<quint64> renderedFeatureRevision{0};
+        std::atomic<quint64> renderedStyleRevision{0};
+        std::atomic<quint64> stableRenderedFrames{0};
     };
 
     struct RenderSnapshot {

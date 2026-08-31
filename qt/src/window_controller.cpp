@@ -87,6 +87,10 @@ WindowController::~WindowController()
 
 bool WindowController::mainVisible() const noexcept { return mainVisible_; }
 bool WindowController::miniVisible() const noexcept { return miniVisible_; }
+bool WindowController::immersivePresentationActive() const noexcept
+{
+    return immersivePresentationActive_;
+}
 bool WindowController::audioToolsVisible() const noexcept { return audioToolsVisible_; }
 bool WindowController::alwaysOnTop() const noexcept { return alwaysOnTop_; }
 bool WindowController::magneticSnapEnabled() const noexcept { return magneticSnapEnabled_; }
@@ -194,6 +198,12 @@ void WindowController::setWindows(QWindow* mainWindow, QWindow* miniWindow)
 void WindowController::setMainWindowShellMode(int mode)
 {
     mode = mode >= 0 && mode <= 2 ? mode : 0;
+    if (immersivePresentationActive_) {
+        immersiveDeferredMainWindowShellMode_ = mode;
+        immersiveDeferredMainWindowShellModeRequested_ =
+            mode != immersiveRestoreMainWindowShellMode_;
+        return;
+    }
     if (mainWindowShellMode_ == mode) {
         return;
     }
@@ -560,6 +570,13 @@ void WindowController::setListWindowHeight(int height) noexcept
 void WindowController::showMini()
 {
     pendingView_ = PendingView::Mini;
+    if (immersivePresentationActive_) {
+        immersiveRestoreView_ = PendingView::Mini;
+        pendingView_ = PendingView::None;
+        applyMainVisible(false);
+        applyMiniVisible(false);
+        return;
+    }
     if (!miniReady_) {
         return;
     }
@@ -571,6 +588,13 @@ void WindowController::showMini()
 void WindowController::showMain()
 {
     pendingView_ = PendingView::Main;
+    if (immersivePresentationActive_) {
+        immersiveRestoreView_ = PendingView::Main;
+        pendingView_ = PendingView::None;
+        applyMainVisible(false);
+        applyMiniVisible(false);
+        return;
+    }
     if (!mainReady_) {
         return;
     }
@@ -585,6 +609,64 @@ void WindowController::showMain()
         raiseDockedGroup();
     }
     pendingView_ = PendingView::None;
+}
+
+void WindowController::enterImmersivePresentation()
+{
+    if (immersivePresentationActive_) {
+        return;
+    }
+    immersiveRestoreView_ = miniVisible_ ? PendingView::Mini : PendingView::Main;
+    immersiveRestoreMainWindowShellMode_ = mainWindowShellMode_;
+    immersiveDeferredMainWindowShellMode_ = mainWindowShellMode_;
+    immersiveDeferredMainWindowShellModeRequested_ = false;
+    immersiveRestoreMainGeometry_ = mainWindow_ != nullptr
+        ? mainWindow_->geometry() : QRect();
+    immersiveRestoreMiniGeometry_ = miniWindow_ != nullptr
+        ? miniWindow_->geometry() : QRect();
+    immersiveRestoreMainGeometryKey_ = mainWindowGeometryKey();
+    immersiveRestoreMainGeometryWasPersisted_ =
+        settings_.contains(immersiveRestoreMainGeometryKey_);
+    immersiveRestoreMiniGeometryWasPersisted_ = settings_.contains(
+        QStringLiteral("windows/miniGeometry"));
+    immersivePresentationActive_ = true;
+    emit immersivePresentationActiveChanged();
+    applyMainVisible(false);
+    applyMiniVisible(false);
+}
+
+void WindowController::leaveImmersivePresentation()
+{
+    if (!immersivePresentationActive_) {
+        return;
+    }
+    immersivePresentationActive_ = false;
+    emit immersivePresentationActiveChanged();
+    if (immersiveDeferredMainWindowShellModeRequested_) {
+        if (mainWindow_ != nullptr && immersiveRestoreMainGeometry_.isValid()) {
+            mainWindow_->setGeometry(immersiveRestoreMainGeometry_);
+        }
+        setMainWindowShellMode(immersiveDeferredMainWindowShellMode_);
+        immersiveRestoreMainGeometryKey_ = mainWindowGeometryKey();
+        immersiveRestoreMainGeometryWasPersisted_ =
+            settings_.contains(immersiveRestoreMainGeometryKey_);
+        if (mainWindow_ != nullptr) {
+            immersiveRestoreMainGeometry_ = mainWindow_->geometry();
+        }
+    } else {
+        mainWindowShellMode_ = immersiveRestoreMainWindowShellMode_;
+        if (mainWindow_ != nullptr && immersiveRestoreMainGeometry_.isValid()) {
+            mainWindow_->setGeometry(immersiveRestoreMainGeometry_);
+        }
+    }
+    if (miniWindow_ != nullptr && immersiveRestoreMiniGeometry_.isValid()) {
+        miniWindow_->setGeometry(immersiveRestoreMiniGeometry_);
+    }
+    if (immersiveRestoreView_ == PendingView::Mini) {
+        showMini();
+    } else {
+        showMain();
+    }
 }
 
 void WindowController::showAudioTools()
@@ -1285,8 +1367,15 @@ void WindowController::scheduleWindowStateSync()
 void WindowController::flushWindowState()
 {
     windowStateSyncTimer_.stop();
-    persistGeometry(mainWindow_, mainWindowGeometryKey());
-    persistGeometry(miniWindow_, QStringLiteral("windows/miniGeometry"));
+    if (!immersivePresentationActive_) {
+        if (immersiveRestoreMainGeometryWasPersisted_
+            || mainWindowGeometryKey() != immersiveRestoreMainGeometryKey_) {
+            persistGeometry(mainWindow_, mainWindowGeometryKey());
+        }
+        if (immersiveRestoreMiniGeometryWasPersisted_) {
+            persistGeometry(miniWindow_, QStringLiteral("windows/miniGeometry"));
+        }
+    }
     persistListWindowState();
     if (!isMinimized(audioToolsWindow_) && !isMaximized(audioToolsWindow_)) {
         persistGeometry(audioToolsWindow_, QStringLiteral("windows/audioToolsGeometry"));
@@ -1544,7 +1633,18 @@ bool WindowController::eventFilter(QObject* watched, QEvent* event)
                 rememberNativePixelSize(mainWindow_);
             }
 #endif
-            scheduleWindowStateSync();
+            const bool isDeferredImmersiveMainRestore =
+                !immersiveRestoreMainGeometryWasPersisted_
+                && !immersivePresentationActive_
+                && mainWindow_->geometry() == immersiveRestoreMainGeometry_;
+            if (!isDeferredImmersiveMainRestore) {
+                if (!immersivePresentationActive_
+                    && mainWindowGeometryKey()
+                        == immersiveRestoreMainGeometryKey_) {
+                    immersiveRestoreMainGeometryWasPersisted_ = true;
+                }
+                scheduleWindowStateSync();
+            }
             if (!updatingWindowGeometry_ && !listWindowDetached_) {
                 repositionDockedListWindow();
             }
@@ -1576,7 +1676,16 @@ bool WindowController::eventFilter(QObject* watched, QEvent* event)
         updatingWindowZOrder_ = false;
     } else if (watched == miniWindow_
                && (event->type() == QEvent::Move || event->type() == QEvent::Resize)) {
-        scheduleWindowStateSync();
+        const bool isDeferredImmersiveMiniRestore =
+            !immersiveRestoreMiniGeometryWasPersisted_
+            && !immersivePresentationActive_
+            && miniWindow_->geometry() == immersiveRestoreMiniGeometry_;
+        if (!isDeferredImmersiveMiniRestore) {
+            if (!immersivePresentationActive_) {
+                immersiveRestoreMiniGeometryWasPersisted_ = true;
+            }
+            scheduleWindowStateSync();
+        }
     } else if ((watched == audioToolsWindow_ || watched == settingsWindow_)
                && (event->type() == QEvent::Move
                    || event->type() == QEvent::Resize)) {

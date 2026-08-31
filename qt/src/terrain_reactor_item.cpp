@@ -111,6 +111,16 @@ float zoneValue(ColorZone zone) noexcept
     return static_cast<float>(zone);
 }
 
+float finiteOr(float value, float fallback) noexcept
+{
+    return std::isfinite(value) ? value : fallback;
+}
+
+float finiteUnit(float value, float fallback = 0.0F) noexcept
+{
+    return std::clamp(finiteOr(value, fallback), 0.0F, 1.0F);
+}
+
 GpuInstance toGpuInstance(const SceneInstance& source, float type)
 {
     GpuInstance result{};
@@ -313,6 +323,7 @@ protected:
         telemetry_->frames.fetch_add(1, std::memory_order_relaxed);
         telemetry_->animations.fetch_add(1, std::memory_order_relaxed);
         telemetry_->uploads.fetch_add(1, std::memory_order_relaxed);
+        publishRenderedRevisions();
         notifyCounters();
         if (snapshot_.running) update();
     }
@@ -467,18 +478,23 @@ private:
         const QSize size = renderTarget()->pixelSize();
         const float aspect = size.height() > 0
             ? float(size.width()) / float(size.height()) : 1.0F;
-        projection.perspective(48.0F - camera.punch * 2.15F,
+        const CameraSnapshot defaults;
+        const float yaw = finiteOr(camera.yaw, defaults.yaw);
+        const float pitch = std::clamp(
+            finiteOr(camera.pitch, defaults.pitch), 0.12F, 1.15F);
+        const float distance = std::clamp(
+            finiteOr(camera.distance, defaults.distance), 42.0F, 220.0F);
+        const float punch = finiteUnit(camera.punch);
+        projection.perspective(48.0F - punch * 2.15F,
                                aspect, 0.1F, 400.0F);
-        const float yaw = camera.yaw;
-        const float pitch = camera.pitch;
-        const float radius = camera.distance - camera.punch * 0.6F;
+        const float radius = distance - punch * 0.6F;
         const RenderDynamics dynamics = mapRenderDynamics(snapshot_.style);
         const float lowAngleLift = 0.52F + dynamics.depthOfField * 0.12F;
         QVector3D eye(radius * std::cos(pitch) * std::sin(yaw),
                       9.0F + radius * std::sin(pitch) * lowAngleLift,
                       radius * std::cos(pitch) * std::cos(yaw));
         const float shake = snapshot_.style.cinemaShake
-            * (visual.spectralFlux * 0.22F + camera.punch * 0.12F);
+            * (visual.spectralFlux * 0.22F + punch * 0.12F);
         eye += QVector3D(std::sin(visual.timeSeconds * 21.0F) * shake,
                         std::cos(visual.timeSeconds * 17.0F) * shake * 0.55F,
                         std::sin(visual.timeSeconds * 13.0F) * shake * 0.7F);
@@ -508,7 +524,7 @@ private:
         result.parameters[3] = visual.timeSeconds;
         result.effects[0] = visual.particleActivity;
         result.effects[1] = visual.meteorActivity;
-        result.effects[2] = camera.punch;
+        result.effects[2] = punch;
         result.effects[3] = float(currentRippleCount_);
         result.styleParameters[0] = snapshot_.style.terrainAmplitude;
         result.styleParameters[1] = snapshot_.style.motionResponse;
@@ -542,6 +558,9 @@ private:
 
     void releaseResources()
     {
+        telemetry_->stableRenderedFrames.store(0, std::memory_order_release);
+        telemetry_->renderedFeatureRevision.store(0, std::memory_order_release);
+        telemetry_->renderedStyleRevision.store(0, std::memory_order_release);
         if (pendingStaticUploads_ != nullptr) {
             pendingStaticUploads_->release();
             pendingStaticUploads_ = nullptr;
@@ -581,6 +600,29 @@ private:
         if (item_ == nullptr) return;
         QMetaObject::invokeMethod(item_, &TerrainReactorItem::countersChanged,
                                   Qt::QueuedConnection);
+    }
+
+    void publishRenderedRevisions()
+    {
+        const quint64 featureRevision = snapshot_.featureRevision;
+        const quint64 styleRevision = snapshot_.styleRevision;
+        const bool samePair = telemetry_->renderedFeatureRevision.load(
+                                  std::memory_order_acquire) == featureRevision
+            && telemetry_->renderedStyleRevision.load(
+                   std::memory_order_acquire) == styleRevision;
+        if (samePair) {
+            telemetry_->stableRenderedFrames.fetch_add(
+                1, std::memory_order_release);
+            return;
+        }
+        // Reset before publishing a new pair so readers cannot combine new
+        // revisions with the previous pair's settled-frame count.
+        telemetry_->stableRenderedFrames.store(0, std::memory_order_release);
+        telemetry_->renderedFeatureRevision.store(featureRevision,
+                                                   std::memory_order_release);
+        telemetry_->renderedStyleRevision.store(styleRevision,
+                                                 std::memory_order_release);
+        telemetry_->stableRenderedFrames.store(1, std::memory_order_release);
     }
 
     static std::atomic<quint64> nextRendererId_;
@@ -919,6 +961,18 @@ quint64 TerrainReactorItem::uploadCount() const noexcept
 {
     return telemetry_->uploads.load(std::memory_order_relaxed);
 }
+quint64 TerrainReactorItem::renderedFeatureRevision() const noexcept
+{
+    return telemetry_->renderedFeatureRevision.load(std::memory_order_acquire);
+}
+quint64 TerrainReactorItem::renderedStyleRevision() const noexcept
+{
+    return telemetry_->renderedStyleRevision.load(std::memory_order_acquire);
+}
+quint64 TerrainReactorItem::stableRenderedFrameCount() const noexcept
+{
+    return telemetry_->stableRenderedFrames.load(std::memory_order_acquire);
+}
 quint64 TerrainReactorItem::resourceGeneration() const noexcept
 {
     return resourceState_->generation();
@@ -940,10 +994,10 @@ void TerrainReactorItem::setSyntheticFeatures(const QVariantList& bands,
     AudioFeatures next;
     for (int index = 0; index < 8; ++index) {
         next.bands[std::size_t(index)] = index < bands.size()
-            ? std::clamp(float(bands.at(index).toDouble()), 0.0F, 1.0F) : 0.0F;
+            ? finiteUnit(float(bands.at(index).toDouble())) : 0.0F;
     }
-    next.energy = std::clamp(float(energy), 0.0F, 1.0F);
-    next.spectralFlux = std::clamp(float(spectralFlux), 0.0F, 1.0F);
+    next.energy = finiteUnit(float(energy));
+    next.spectralFlux = finiteUnit(float(spectralFlux));
     next.kick = kick ? 1.0F : 0.0F;
     next.snare = snare ? 1.0F : 0.0F;
     syntheticFeatures_ = next;
@@ -952,8 +1006,13 @@ void TerrainReactorItem::setSyntheticFeatures(const QVariantList& bands,
 void TerrainReactorItem::orbitBy(qreal yawDelta, qreal pitchDelta,
                                   qreal nowSeconds)
 {
-    Q_UNUSED(nowSeconds)
-    camera_.orbitBy(float(yawDelta), float(pitchDelta),
+    const float safeYawDelta = float(yawDelta);
+    const float safePitchDelta = float(pitchDelta);
+    if (!std::isfinite(double(nowSeconds))
+        || !std::isfinite(double(yawDelta)) || !std::isfinite(safeYawDelta)
+        || !std::isfinite(double(pitchDelta))
+        || !std::isfinite(safePitchDelta)) return;
+    camera_.orbitBy(safeYawDelta, safePitchDelta,
                     double(clock_.elapsed()) / 1000.0);
     ++cameraRevision_;
     emit cameraChanged();
@@ -961,15 +1020,18 @@ void TerrainReactorItem::orbitBy(qreal yawDelta, qreal pitchDelta,
 }
 void TerrainReactorItem::zoomBy(qreal wheelDelta, qreal nowSeconds)
 {
-    Q_UNUSED(nowSeconds)
-    camera_.zoomBy(float(wheelDelta), double(clock_.elapsed()) / 1000.0);
+    const float safeWheelDelta = float(wheelDelta);
+    if (!std::isfinite(double(nowSeconds))
+        || !std::isfinite(double(wheelDelta))
+        || !std::isfinite(safeWheelDelta)) return;
+    camera_.zoomBy(safeWheelDelta, double(clock_.elapsed()) / 1000.0);
     ++cameraRevision_;
     emit cameraChanged();
     scheduleIfRunnable();
 }
 void TerrainReactorItem::triggerCameraPunch(qreal strength)
 {
-    pendingPunch_.strength = std::clamp(float(strength), 0.0F, 1.0F);
+    pendingPunch_.strength = finiteUnit(float(strength));
     ++pendingPunch_.revision;
     emit cameraChanged();
     scheduleIfRunnable();
@@ -1033,14 +1095,15 @@ void TerrainReactorItem::copyStyleSource()
     const QVariantList gains = styleSource_->visualEqGains();
     for (int index = 0; index < 8; ++index) {
         next.visualEqGains[std::size_t(index)] = index < gains.size()
-            ? std::clamp(float(gains.at(index).toDouble()) / 100.0F,
-                         0.0F, 1.0F) : 0.5F;
+            ? finiteUnit(float(gains.at(index).toDouble()) / 100.0F, 0.5F)
+            : 0.5F;
     }
     next.terrainAmplitude = float(styleSource_->terrainAmplitude()) / 100.0F;
     next.motionResponse = float(styleSource_->motionResponse()) / 100.0F;
     next.gradientLayers = float(styleSource_->gradientLayers()) / 100.0F;
     next.glowIntensity = float(styleSource_->glowIntensity()) / 100.0F;
-    next.cinemaShake = float(styleSource_->cinemaShake());
+    next.cinemaShake = finiteOr(float(styleSource_->cinemaShake()),
+                                next.cinemaShake);
     next.autoRotate = float(styleSource_->autoRotate()) / 100.0F;
     next.peakBoost = float(styleSource_->peakBoost()) / 100.0F;
     next.inputCompression = float(styleSource_->inputCompression()) / 100.0F;
@@ -1072,12 +1135,11 @@ void TerrainReactorItem::copyFeatureSource()
     const QVariantList bands = featureSource_->property("bands").toList();
     for (int index = 0; index < 8; ++index) {
         next.bands[std::size_t(index)] = index < bands.size()
-            ? std::clamp(float(bands.at(index).toDouble()), 0.0F, 1.0F) : 0.0F;
+            ? finiteUnit(float(bands.at(index).toDouble())) : 0.0F;
     }
-    next.energy = std::clamp(float(featureSource_->property("energy").toDouble()),
-                             0.0F, 1.0F);
-    next.spectralFlux = std::clamp(float(featureSource_
-        ->property("spectralFlux").toDouble()), 0.0F, 1.0F);
+    next.energy = finiteUnit(float(featureSource_->property("energy").toDouble()));
+    next.spectralFlux = finiteUnit(float(featureSource_
+        ->property("spectralFlux").toDouble()));
     next.kick = featureSource_->property("kickPulse").toBool() ? 1.0F : 0.0F;
     next.snare = featureSource_->property("snarePulse").toBool() ? 1.0F : 0.0F;
     if (featureSourceProvidesImpact_) {
@@ -1085,8 +1147,8 @@ void TerrainReactorItem::copyFeatureSource()
             .toULongLong();
         if (revision > pendingImpact_.revision) {
             pendingImpact_.revision = revision;
-            pendingImpact_.strength = std::clamp(float(featureSource_
-                ->property("impactStrength").toDouble()), 0.0F, 1.0F);
+            pendingImpact_.strength = finiteUnit(float(featureSource_
+                ->property("impactStrength").toDouble()));
             emit impactChanged();
         }
     }

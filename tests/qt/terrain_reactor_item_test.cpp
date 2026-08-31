@@ -10,6 +10,7 @@
 
 #include <array>
 #include <cmath>
+#include <limits>
 
 using namespace agplayer::terrain;
 
@@ -69,6 +70,7 @@ private slots:
     void highDpiInternalScaleUsesPhysicalPixels();
     void duplicateRendererIsRejectedBySharedLifecycle();
     void cameraPropertiesSupportTaskFourInput();
+    void nonFiniteCameraInvokablesPreserveExposedState();
 };
 
 class TestableTerrainReactorItem final : public TerrainReactorItem {
@@ -359,6 +361,40 @@ void TerrainReactorItemTest::cameraPropertiesSupportTaskFourInput()
     QCOMPARE(item.cameraYaw(), originalYaw + 0.25);
     QCOMPARE(item.cameraDistance(), 42.0);
     QVERIFY(item.cameraPunch() >= 0.19);
+}
+
+void TerrainReactorItemTest::nonFiniteCameraInvokablesPreserveExposedState()
+{
+    const std::array nonFinite{
+        std::numeric_limits<qreal>::quiet_NaN(),
+        std::numeric_limits<qreal>::infinity(),
+        -std::numeric_limits<qreal>::infinity(),
+    };
+    TerrainReactorItem item;
+    item.orbitBy(0.2, -0.05, 1.0);
+    item.zoomBy(-800.0, 1.0);
+    const qreal yaw = item.cameraYaw();
+    const qreal pitch = item.cameraPitch();
+    const qreal distance = item.cameraDistance();
+    QSignalSpy cameraChanges(&item, &TerrainReactorItem::cameraChanged);
+
+    for (const qreal invalid : nonFinite) {
+        const int changesBefore = cameraChanges.count();
+        item.orbitBy(invalid, 0.0, invalid);
+        item.orbitBy(0.0, invalid, invalid);
+        item.zoomBy(invalid, invalid);
+        item.orbitBy(0.1, -0.02, invalid);
+        item.zoomBy(-20.0, invalid);
+        QVERIFY(std::isfinite(double(item.cameraYaw())));
+        QVERIFY(std::isfinite(double(item.cameraPitch())));
+        QVERIFY(item.cameraPitch() >= 0.12 && item.cameraPitch() <= 1.15);
+        QVERIFY(std::isfinite(double(item.cameraDistance())));
+        QVERIFY(item.cameraDistance() >= 42.0 && item.cameraDistance() <= 220.0);
+        QCOMPARE(item.cameraYaw(), yaw);
+        QCOMPARE(item.cameraPitch(), pitch);
+        QCOMPARE(item.cameraDistance(), distance);
+        QCOMPARE(cameraChanges.count(), changesBefore);
+    }
 }
 
 QTEST_MAIN(TerrainReactorItemTest)

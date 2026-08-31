@@ -7,10 +7,15 @@ layout(location = 3) in float opacity;
 layout(location = 4) in float glow;
 layout(location = 5) in float focus;
 layout(location = 6) in float impactLight;
+layout(location = 7) in float topSurface;
+layout(location = 8) in float streamSheen;
 layout(location = 0) out vec4 fragColor;
 
 void main()
 {
+    if (opacity < 0.012) {
+        discard;
+    }
     vec3 lit = color * mix(0.78, 1.0, light);
     lit = pow(max(lit, vec3(0.0)), vec3(0.92));
     float luminance = dot(lit, vec3(0.2126, 0.7152, 0.0722));
@@ -30,7 +35,12 @@ void main()
     finalColor = mix(finalColor, vec3(1.0, 0.965, 0.985),
                      clamp(impactLight * 0.90, 0.0, 0.90));
     finalColor += hazeTint * impactLight * 0.46;
+    vec3 topGlow = mix(color, vec3(1.0, 0.985, 0.965), 0.46);
+    finalColor += topGlow * streamSheen * (0.30 + topSurface * 0.40);
+    finalColor = mix(finalColor, topGlow,
+                     clamp(streamSheen * 0.34, 0.0, 0.68));
     finalColor *= 0.90 + focus * 0.22;
+    finalColor /= vec3(1.0) + max(finalColor - vec3(0.72), vec3(0.0));
     fragColor = vec4(finalColor,
                      opacity * clamp(0.18 + fog * 0.82, 0.0, 1.0));
 }

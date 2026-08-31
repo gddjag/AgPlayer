@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <limits>
 #include <thread>
 
 using namespace agplayer::terrain;
@@ -13,6 +14,7 @@ class TerrainReactorStateTest final : public QObject {
 
 private slots:
     void fixedSeedProducesStableLayoutAndColorZones();
+    void terrainLayoutFormsCircularStageAndStarsStayOutsideCore();
     void meteorsHaveFiniteTrailsAndCollisionEffects();
     void meteorGroupsKeepOneDeterministicPrimaryImpact();
     void audioFeaturesDriveBoundedVisualParameters();
@@ -22,6 +24,7 @@ private slots:
     void rendererOwnershipHasOneLiveResourceGeneration();
     void manualCameraControlRecoversAfterFourSeconds();
     void manualCameraDeltaPreservesRendererMotion();
+    void nonFiniteCameraInputsPreserveFiniteBoundedState();
     void punchEventsAreConsumedOnceByRevision();
     void punchRevisionClaimSurvivesRendererRebuild();
     void immersiveStyleControlsMapToBoundedDistinctDynamics();
@@ -30,6 +33,11 @@ private slots:
     void steadyMusicKeepsCenterVisiblyFocused();
     void nearbyRandomnessKeepsTerrainSoftWithoutThresholdSpikes();
     void finalReferenceProfileKeepsCoreBroadAndSpikesSubordinate();
+    void equalStrengthHighsRemainHeightSubordinateToLowMids();
+    void representativeGridHasBroadCoreWithoutIsolatedTowers();
+    void floatingCubesAreDeterministicAndVisuallySubordinate();
+    void continuousAndEventControlsStayDistinctBoundedAndLive();
+    void nonFiniteInputsUseFiniteBoundedFallbacks();
     void idleTerrainKeepsFineVisibleReliefWithoutMusic();
     void idleTerrainFadesOutsideResponseField();
     void trackIdentityProducesStableBoundedDistinctPalette();
@@ -46,7 +54,8 @@ void TerrainReactorStateTest::fixedSeedProducesStableLayoutAndColorZones()
     QCOMPARE(first.floating, repeated.floating);
     QCOMPARE(first.meteors, repeated.meteors);
     QCOMPARE(first.particles, repeated.particles);
-    QCOMPARE(first.terrain.size(), 81);
+    QVERIFY(first.terrain.size() < 81);
+    QVERIFY(first.terrain.size() > 48);
     QCOMPARE(first.floating.size(), 12);
     QCOMPARE(first.meteors.size(), 4);
     QCOMPARE(first.particles.size(), 16);
@@ -62,7 +71,32 @@ void TerrainReactorStateTest::fixedSeedProducesStableLayoutAndColorZones()
     QVERIFY(hasZone(ColorZone::Warm));
     QVERIFY(hasZone(ColorZone::Accent));
     QVERIFY(hasZone(ColorZone::Peak));
-    QCOMPARE(first.terrain.at(40).zone, ColorZone::Peak);
+    const auto center = std::find_if(first.terrain.cbegin(), first.terrain.cend(),
+                                     [](const SceneInstance& instance) {
+        return qFuzzyIsNull(instance.position.x())
+            && qFuzzyIsNull(instance.position.z());
+    });
+    QVERIFY(center != first.terrain.cend());
+    QCOMPARE(center->zone, ColorZone::Peak);
+}
+
+void TerrainReactorStateTest::terrainLayoutFormsCircularStageAndStarsStayOutsideCore()
+{
+    const SceneLayout layout = makeSceneLayout(0x5eedU, 32, 8, 4, 48);
+    QVERIFY(!layout.terrain.isEmpty());
+    QVERIFY(!layout.particles.isEmpty());
+
+    for (const SceneInstance& instance : layout.terrain) {
+        const float radius = std::hypot(instance.position.x(),
+                                        instance.position.z());
+        QVERIFY2(radius <= 84.01F, "terrain cell escaped the circular stage");
+    }
+    for (const SceneInstance& star : layout.particles) {
+        const float radius = std::hypot(star.position.x(), star.position.z());
+        QVERIFY2(radius >= 72.0F, "deep-space star leaked into the reactor core");
+        QVERIFY2(star.position.y() >= 10.0F,
+                 "deep-space star is too low to read as environment");
+    }
 }
 
 void TerrainReactorStateTest::trackIdentityProducesStableBoundedDistinctPalette()
@@ -199,8 +233,8 @@ void TerrainReactorStateTest::immersiveStyleControlsMapToBoundedDistinctDynamics
     QCOMPARE(high.inputCompression, 1.5F);
     QCOMPARE(low.audioResponse, 0.2F);
     QCOMPARE(high.audioResponse, 2.0F);
-    QCOMPARE(low.responseRadius, 36.0F);
-    QCOMPARE(high.responseRadius, 158.4F);
+    QCOMPARE(low.responseRadius, 28.0F);
+    QCOMPARE(high.responseRadius, 123.2F);
     QCOMPARE(low.centerHighlight, 0.0F);
     QCOMPARE(high.centerHighlight, 1.0F);
     QCOMPARE(low.rhythmStrength, 0.0F);
@@ -362,6 +396,269 @@ void TerrainReactorStateTest::finalReferenceProfileKeepsCoreBroadAndSpikesSubord
     QVERIFY2(shoulderHeight > outerHeight + 0.45F,
              "The reactor must retain a layered falloff instead of a flat noisy field");
     QVERIFY(std::max(quietCoreHeight, spikyCoreHeight) < 22.0F);
+}
+
+void TerrainReactorStateTest::equalStrengthHighsRemainHeightSubordinateToLowMids()
+{
+    AudioFeatures lowMidFeatures;
+    lowMidFeatures.bands = {0.72F, 0.72F, 0.72F, 0.72F,
+                            0.0F, 0.0F, 0.0F, 0.0F};
+    lowMidFeatures.energy = 0.72F;
+    AudioFeatures highFeatures;
+    highFeatures.bands = {0.0F, 0.0F, 0.0F, 0.0F,
+                          0.72F, 0.72F, 0.72F, 0.72F};
+    highFeatures.energy = 0.72F;
+    RenderStyleSnapshot style;
+    style.peakBoost = 1.0F;
+    const VisualParameters lowMids = mapVisualParameters(
+        lowMidFeatures, 2.25F, style);
+    const VisualParameters highs = mapVisualParameters(
+        highFeatures, 2.25F, style);
+    const SceneLayout layout = makeSceneLayout(0x4b1dU, 25, 0, 0, 0);
+
+    float tallestLowMid = 0.0F;
+    float tallestHigh = 0.0F;
+    for (const SceneInstance& instance : layout.terrain) {
+        if (std::hypot(instance.position.x(), instance.position.z()) > 56.0F) {
+            continue;
+        }
+        tallestLowMid = std::max(tallestLowMid,
+            terrainHeight(instance, lowMids, 2.25F, style));
+        tallestHigh = std::max(tallestHigh,
+            terrainHeight(instance, highs, 2.25F, style));
+    }
+    qInfo() << "equal-strength relief low/mid vs high:"
+            << tallestLowMid << tallestHigh;
+    QVERIFY2(tallestHigh <= tallestLowMid,
+             "High-frequency detail must not become taller terrain relief than low/mids");
+}
+
+void TerrainReactorStateTest::representativeGridHasBroadCoreWithoutIsolatedTowers()
+{
+    AudioFeatures features;
+    features.bands.fill(0.58F);
+    features.energy = 0.68F;
+    RenderStyleSnapshot style;
+    style.terrainAmplitude = 0.74F;
+    style.centerHighlight = 0.70F;
+    style.peakBoost = 0.82F;
+    const VisualParameters visual = mapVisualParameters(features, 1.75F, style);
+    const SceneLayout layout = makeSceneLayout(0x8a31U, 25, 0, 0, 0);
+
+    struct Sample { QVector3D position; float height; };
+    QVector<Sample> samples;
+    QVector<float> ordered;
+    for (const SceneInstance& instance : layout.terrain) {
+        if (std::hypot(instance.position.x(), instance.position.z()) > 42.0F) {
+            continue;
+        }
+        const float height = terrainHeight(instance, visual, 1.75F, style);
+        samples.append({instance.position, height});
+        ordered.append(height);
+    }
+    QVERIFY(ordered.size() > 80);
+    std::sort(ordered.begin(), ordered.end());
+    const float median = ordered.at(ordered.size() / 2);
+    const Sample peak = *std::max_element(samples.cbegin(), samples.cend(),
+        [](const Sample& left, const Sample& right) {
+            return left.height < right.height;
+        });
+    float neighbourTotal = 0.0F;
+    int neighbourCount = 0;
+    for (const Sample& sample : samples) {
+        const float separation = (sample.position - peak.position).length();
+        if (separation > 0.01F && separation < 10.0F) {
+            neighbourTotal += sample.height;
+            ++neighbourCount;
+        }
+    }
+    QVERIFY(neighbourCount >= 4);
+    const float neighbourMean = neighbourTotal / float(neighbourCount);
+    qInfo() << "representative core peak/median/neighbour:"
+            << peak.height << median << neighbourMean;
+    // Ratios are intentionally perceptual bounds: a 65% median excursion
+    // retains layered relief, while a 40% local excursion prevents a lone tower.
+    QVERIFY2(peak.height <= median * 1.65F,
+             "Representative core peak is too isolated from the field median");
+    QVERIFY2(peak.height <= neighbourMean * 1.40F,
+             "Representative core peak is too isolated from its neighbours");
+}
+
+void TerrainReactorStateTest::floatingCubesAreDeterministicAndVisuallySubordinate()
+{
+    const SceneLayout first = makeSceneLayout(0x71c3U, 25, 64, 0, 0);
+    const SceneLayout repeated = makeSceneLayout(0x71c3U, 25, 64, 0, 0);
+    QCOMPARE(first.floating, repeated.floating);
+    QCOMPARE(first.floating.size(), 64);
+
+    QVector<float> sizes;
+    for (const SceneInstance& cube : first.floating) {
+        QCOMPARE(cube.scale.x(), cube.scale.y());
+        QCOMPARE(cube.scale.x(), cube.scale.z());
+        sizes.append(cube.scale.x());
+    }
+    std::sort(sizes.begin(), sizes.end());
+    const float median = sizes.at(sizes.size() / 2);
+    qInfo() << "floating cube median/max size:" << median << sizes.back();
+    // At the 25x25 representative grid, terrain cells span 6.72 world units;
+    // sub-unit cubes remain atmosphere instead of competing terrain masses.
+    QVERIFY2(sizes.back() <= 0.85F,
+             "Floating environment cubes are too large to remain subordinate");
+    QVERIFY2(median <= 0.68F,
+             "The floating cube population is visually too heavy");
+}
+
+void TerrainReactorStateTest::continuousAndEventControlsStayDistinctBoundedAndLive()
+{
+    AudioFeatures continuous;
+    continuous.bands.fill(0.44F);
+    continuous.energy = 0.46F;
+    continuous.spectralFlux = 0.18F;
+    const VisualParameters baseline = mapVisualParameters(continuous, 1.0F);
+    AudioFeatures eventful = continuous;
+    eventful.kick = 1.0F;
+    eventful.snare = 1.0F;
+    const VisualParameters event = mapVisualParameters(eventful, 1.0F);
+    QCOMPARE(event.bands, baseline.bands);
+    QCOMPARE(event.energy, baseline.energy);
+    QVERIFY(event.rippleStrength > baseline.rippleStrength);
+    QVERIFY(event.cameraPunch > baseline.cameraPunch);
+    QVERIFY(event.rippleStrength <= 1.0F);
+    QVERIFY(event.cameraPunch <= 1.0F);
+
+    SceneInstance detail;
+    detail.position = QVector3D(9.0F, 0.0F, -6.0F);
+    detail.random = 0.92F;
+    detail.zone = ColorZone::Peak;
+    AudioFeatures highFeatures;
+    highFeatures.bands[4] = 0.72F;
+    highFeatures.energy = 0.42F;
+    RenderStyleSnapshot restrained;
+    restrained.peakBoost = 0.0F;
+    RenderStyleSnapshot emphasized = restrained;
+    emphasized.peakBoost = 1.0F;
+    const float restrainedHeight = terrainHeight(detail,
+        mapVisualParameters(highFeatures, 1.0F, restrained),
+        1.0F, restrained);
+    const float emphasizedHeight = terrainHeight(detail,
+        mapVisualParameters(highFeatures, 1.0F, emphasized),
+        1.0F, emphasized);
+    QVERIFY2(emphasizedHeight > restrainedHeight + 0.10F,
+             "Peak boost must retain a visible bounded terrain-detail effect");
+    QVERIFY2(emphasizedHeight <= restrainedHeight * 1.30F + 0.20F,
+             "Peak boost must not turn restrained detail into a tower");
+
+    VisualParameters pulse;
+    pulse.rippleStrength = 1.0F;
+    pulse.timeSeconds = 1.0F;
+    SceneInstance ring = detail;
+    ring.position = QVector3D(13.5F, 0.0F, 0.0F);
+    RenderStyleSnapshot ripplesOn;
+    ripplesOn.idleBreathingEnabled = false;
+    RenderStyleSnapshot ripplesOff = ripplesOn;
+    ripplesOff.ripplesEnabled = false;
+    QVERIFY2(terrainHeight(ring, pulse, 1.0F, ripplesOn)
+                 > terrainHeight(ring, pulse, 1.0F, ripplesOff) + 0.20F,
+             "Ripple toggle must disable discrete ring relief");
+}
+
+void TerrainReactorStateTest::nonFiniteInputsUseFiniteBoundedFallbacks()
+{
+    const std::array nonFinite{
+        std::numeric_limits<float>::quiet_NaN(),
+        std::numeric_limits<float>::infinity(),
+        -std::numeric_limits<float>::infinity(),
+    };
+    const auto boundedUnit = [](float value) {
+        return std::isfinite(value) && value >= 0.0F && value <= 1.0F;
+    };
+
+    for (const float invalid : nonFinite) {
+        RenderStyleSnapshot style;
+        style.terrainAmplitude = invalid;
+        style.motionResponse = invalid;
+        style.gradientLayers = invalid;
+        style.glowIntensity = invalid;
+        style.cinemaShake = invalid;
+        style.autoRotate = invalid;
+        style.peakBoost = invalid;
+        style.inputCompression = invalid;
+        style.audioResponse = invalid;
+        style.responseRange = invalid;
+        style.centerHighlight = invalid;
+        style.rhythmStrength = invalid;
+        style.depthOfField = invalid;
+        style.subjectClarity = invalid;
+        style.autoRotateSpeed = invalid;
+        style.rhythmSensitivity = invalid;
+        const RenderDynamics dynamics = mapRenderDynamics(style);
+        QVERIFY(std::isfinite(dynamics.inputCompression));
+        QVERIFY(std::isfinite(dynamics.audioResponse));
+        QVERIFY(std::isfinite(dynamics.responseRadius));
+        QVERIFY(std::isfinite(dynamics.centerHighlight));
+        QVERIFY(std::isfinite(dynamics.rhythmStrength));
+        QVERIFY(std::isfinite(dynamics.depthOfField));
+        QVERIFY(std::isfinite(dynamics.subjectClarity));
+        QVERIFY(std::isfinite(dynamics.autoRotateSpeed));
+        QVERIFY(std::isfinite(dynamics.rhythmSensitivity));
+        QVERIFY(dynamics.inputCompression >= 0.2F
+                && dynamics.inputCompression <= 1.5F);
+        QVERIFY(dynamics.audioResponse >= 0.2F
+                && dynamics.audioResponse <= 2.0F);
+        QVERIFY(dynamics.responseRadius >= 28.0F
+                && dynamics.responseRadius <= 123.2F);
+        QVERIFY(dynamics.centerHighlight >= 0.0F
+                && dynamics.centerHighlight <= 1.0F);
+        QVERIFY(dynamics.rhythmStrength >= 0.0F
+                && dynamics.rhythmStrength <= 1.4F);
+        QVERIFY(dynamics.depthOfField >= 0.0F
+                && dynamics.depthOfField <= 1.5F);
+        QVERIFY(dynamics.subjectClarity >= 0.2F
+                && dynamics.subjectClarity <= 1.4F);
+        QVERIFY(dynamics.autoRotateSpeed >= 0.0F
+                && dynamics.autoRotateSpeed <= 2.0F);
+        QVERIFY(dynamics.rhythmSensitivity >= 0.0F
+                && dynamics.rhythmSensitivity <= 1.0F);
+
+        AudioFeatures features;
+        features.bands.fill(invalid);
+        features.energy = invalid;
+        features.spectralFlux = invalid;
+        features.kick = invalid;
+        features.snare = invalid;
+        const VisualParameters visual = mapVisualParameters(
+            features, invalid, style);
+        for (const float band : visual.bands) QVERIFY(boundedUnit(band));
+        QVERIFY(boundedUnit(visual.energy));
+        QVERIFY(boundedUnit(visual.spectralFlux));
+        QVERIFY(boundedUnit(visual.rippleStrength));
+        QVERIFY(boundedUnit(visual.particleActivity));
+        QVERIFY(boundedUnit(visual.meteorActivity));
+        QVERIFY(boundedUnit(visual.cameraPunch));
+        QVERIFY(boundedUnit(visual.impactStrength));
+        QVERIFY(boundedUnit(visual.impactAge));
+        QVERIFY(std::isfinite(visual.timeSeconds));
+        QVERIFY(visual.timeSeconds >= 0.0F);
+
+        SceneInstance instance;
+        instance.position = QVector3D(invalid, 0.0F, invalid);
+        instance.random = invalid;
+        VisualParameters unsafe;
+        unsafe.bands.fill(invalid);
+        unsafe.energy = invalid;
+        unsafe.spectralFlux = invalid;
+        unsafe.rippleStrength = invalid;
+        unsafe.particleActivity = invalid;
+        unsafe.meteorActivity = invalid;
+        unsafe.cameraPunch = invalid;
+        unsafe.impactStrength = invalid;
+        unsafe.impactAge = invalid;
+        unsafe.timeSeconds = invalid;
+        const float height = terrainHeight(instance, unsafe, invalid, style);
+        QVERIFY2(std::isfinite(height),
+                 "terrainHeight must never send a non-finite scale to uniforms");
+        QVERIFY(height >= 0.035F && height <= 36.0F);
+    }
 }
 
 void TerrainReactorStateTest::idleTerrainKeepsFineVisibleReliefWithoutMusic()
@@ -548,6 +845,109 @@ void TerrainReactorStateTest::manualCameraDeltaPreservesRendererMotion()
     QVERIFY(renderer.snapshot().yaw > automaticallyRotated + 0.25F);
 }
 
+void TerrainReactorStateTest::nonFiniteCameraInputsPreserveFiniteBoundedState()
+{
+    const std::array nonFinite{
+        std::numeric_limits<float>::quiet_NaN(),
+        std::numeric_limits<float>::infinity(),
+        -std::numeric_limits<float>::infinity(),
+    };
+    CameraMotion validCamera;
+    validCamera.orbitBy(0.25F, -0.08F, 1.0);
+    validCamera.zoomBy(-900.0F, 1.0);
+    validCamera.applyBeatPunch(0.4F);
+    const CameraSnapshot valid = validCamera.snapshot();
+    const double validManualUntil = validCamera.manualUntilSeconds();
+    const auto isFiniteBounded = [](const CameraSnapshot& snapshot) {
+        return std::isfinite(snapshot.yaw)
+            && std::isfinite(snapshot.pitch)
+            && snapshot.pitch >= 0.12F && snapshot.pitch <= 1.15F
+            && std::isfinite(snapshot.distance)
+            && snapshot.distance >= 42.0F && snapshot.distance <= 220.0F
+            && std::isfinite(snapshot.punch)
+            && snapshot.punch >= 0.0F && snapshot.punch <= 1.0F;
+    };
+    const auto preservesValid = [&valid](const CameraSnapshot& snapshot) {
+        return snapshot.yaw == valid.yaw
+            && snapshot.pitch == valid.pitch
+            && snapshot.distance == valid.distance
+            && snapshot.punch == valid.punch;
+    };
+
+    for (const float invalid : nonFinite) {
+        CameraMotion orbitYaw = validCamera;
+        orbitYaw.orbitBy(invalid, 0.0F, 2.0);
+        QVERIFY(isFiniteBounded(orbitYaw.snapshot()));
+        QVERIFY(preservesValid(orbitYaw.snapshot()));
+        QCOMPARE(orbitYaw.manualUntilSeconds(), validManualUntil);
+
+        CameraMotion orbitPitch = validCamera;
+        orbitPitch.orbitBy(0.0F, invalid, 2.0);
+        QVERIFY(isFiniteBounded(orbitPitch.snapshot()));
+        QVERIFY(preservesValid(orbitPitch.snapshot()));
+        QCOMPARE(orbitPitch.manualUntilSeconds(), validManualUntil);
+
+        CameraMotion zoom = validCamera;
+        zoom.zoomBy(invalid, 2.0);
+        QVERIFY(isFiniteBounded(zoom.snapshot()));
+        QVERIFY(preservesValid(zoom.snapshot()));
+        QCOMPARE(zoom.manualUntilSeconds(), validManualUntil);
+
+        CameraMotion orbitTime = validCamera;
+        orbitTime.orbitBy(0.1F, -0.02F, double(invalid));
+        QVERIFY(isFiniteBounded(orbitTime.snapshot()));
+        QVERIFY(preservesValid(orbitTime.snapshot()));
+        QCOMPARE(orbitTime.manualUntilSeconds(), validManualUntil);
+
+        CameraMotion zoomTime = validCamera;
+        zoomTime.zoomBy(-20.0F, double(invalid));
+        QVERIFY(isFiniteBounded(zoomTime.snapshot()));
+        QVERIFY(preservesValid(zoomTime.snapshot()));
+        QCOMPARE(zoomTime.manualUntilSeconds(), validManualUntil);
+
+        CameraMotion synchronized = validCamera;
+        CameraSnapshot poisoned = valid;
+        poisoned.yaw = invalid;
+        poisoned.pitch = invalid;
+        poisoned.distance = invalid;
+        poisoned.punch = invalid;
+        synchronized.synchronize(poisoned, double(invalid));
+        QVERIFY(isFiniteBounded(synchronized.snapshot()));
+        QVERIFY(preservesValid(synchronized.snapshot()));
+        QCOMPARE(synchronized.manualUntilSeconds(), validManualUntil);
+
+        CameraMotion manualDelta = validCamera;
+        CameraSnapshot next = valid;
+        next.yaw = invalid;
+        next.pitch = invalid;
+        next.distance = invalid;
+        manualDelta.applyManualDelta(valid, next, double(invalid));
+        QVERIFY(isFiniteBounded(manualDelta.snapshot()));
+        QVERIFY(preservesValid(manualDelta.snapshot()));
+        QCOMPARE(manualDelta.manualUntilSeconds(), validManualUntil);
+
+        CameraMotion poisonedPrevious = validCamera;
+        CameraSnapshot previous = valid;
+        previous.yaw = invalid;
+        previous.pitch = invalid;
+        previous.distance = invalid;
+        poisonedPrevious.applyManualDelta(previous, valid, double(invalid));
+        QVERIFY(isFiniteBounded(poisonedPrevious.snapshot()));
+        QVERIFY(preservesValid(poisonedPrevious.snapshot()));
+        QCOMPARE(poisonedPrevious.manualUntilSeconds(), validManualUntil);
+
+        CameraMotion manualTime = validCamera;
+        CameraSnapshot moved = valid;
+        moved.yaw += 0.1F;
+        moved.pitch += 0.02F;
+        moved.distance += 1.0F;
+        manualTime.applyManualDelta(valid, moved, double(invalid));
+        QVERIFY(isFiniteBounded(manualTime.snapshot()));
+        QVERIFY(preservesValid(manualTime.snapshot()));
+        QCOMPARE(manualTime.manualUntilSeconds(), validManualUntil);
+    }
+}
+
 void TerrainReactorStateTest::punchEventsAreConsumedOnceByRevision()
 {
     RendererResourceState lifecycle;
@@ -636,6 +1036,10 @@ void TerrainReactorStateTest::manualCameraControlRecoversAfterFourSeconds()
 {
     CameraMotion camera;
     const CameraSnapshot initial = camera.snapshot();
+    QCOMPARE(initial.distance, 180.0F);
+    CameraMotion zoomedOut;
+    zoomedOut.zoomBy(10000.0F, 1.0);
+    QCOMPARE(zoomedOut.snapshot().distance, 220.0F);
     camera.orbitBy(0.4F, -0.2F, 1.0);
     camera.zoomBy(-10000.0F, 1.0);
     camera.applyBeatPunch(0.8F);
