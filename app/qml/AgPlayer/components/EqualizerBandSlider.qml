@@ -73,6 +73,7 @@ Item {
         width: parent.width - 10
         height: 239
         property real value: root.gainDb
+        property bool lastWheelAccepted: false
         readonly property real visualPosition: (root.gainRangeDb - value)
                                                / (root.gainRangeDb * 2)
         property bool pressed: dragArea.pressed
@@ -80,6 +81,16 @@ Item {
         Accessible.role: Accessible.Slider
         Accessible.name: root.accessibleLabel
         Accessible.description: qsTr("增益 %1 dB").arg(value.toFixed(1))
+
+        function applyWheelDelta(angleDeltaY, pixelDeltaY) {
+            var verticalDelta = angleDeltaY !== 0 ? angleDeltaY : pixelDeltaY
+            lastWheelAccepted = verticalDelta !== 0
+            if (!lastWheelAccepted)
+                return false
+            root.setGain(value + (verticalDelta > 0 ? root.gainStepDb
+                                                    : -root.gainStepDb))
+            return true
+        }
 
         Keys.onUpPressed: function(event) {
             root.setGain(value + root.gainStepDb
@@ -179,10 +190,8 @@ Item {
         WheelHandler {
             acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
             onWheel: function(event) {
-                root.setGain(slider.value + (event.angleDelta.y > 0
-                                             ? root.gainStepDb
-                                             : -root.gainStepDb))
-                event.accepted = true
+                event.accepted = slider.applyWheelDelta(event.angleDelta.y,
+                                                        event.pixelDelta.y)
             }
         }
 

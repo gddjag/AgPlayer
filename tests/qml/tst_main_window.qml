@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 import QtTest
 import AgPlayer
@@ -606,7 +607,9 @@ TestCase {
         SettingsController.themeMode = 1
         compare(button.icon.color.toString(), Theme.iconPrimary.toString())
         SettingsController.themeMode = previousThemeMode
-        verify(findChild(window, "equalizerResponseCurve"))
+        var responseCurve = findChild(window, "equalizerResponseCurve")
+        verify(responseCurve)
+        verify(responseCurve.usesBandGainEnvelope)
         var presetBox = findChild(window, "equalizerPresetBox")
         verify(presetBox)
         for (var themeMode = 0; themeMode <= 1; ++themeMode) {
@@ -624,14 +627,25 @@ TestCase {
         verify(bands)
         compare(bands.count, 18)
         compare(bands.itemAt(14).frequencyLabel, "10k")
+        compare(findChild(window, "equalizerBandsMaxLabel").text, "+12")
+        compare(findChild(window, "equalizerBandsZeroLabel").text, "0")
+        compare(findChild(window, "equalizerBandsMinLabel").text, "−12")
         verify(findChild(window, "equalizerPreampSlider"))
         verify(findChild(window, "equalizerRangeControl"))
         verify(findChild(window, "equalizerPrecisionControl"))
         verify(findChild(window, "equalizerOutputMeter"))
         verify(findChild(window, "equalizerSaveDialog"))
         verify(findChild(window, "equalizerManagePopup"))
-        verify(findChild(window, "equalizerResetButton"))
+        var resetButton = findChild(window, "equalizerResetButton")
+        verify(resetButton)
+        verify(resetButton.iconSource.toString().indexOf("restore-line.svg") >= 0)
         var contentScroller = findChild(window, "equalizerContentScroller")
+        compare(findChild(window, "equalizerContentScrollBar").policy,
+                ScrollBar.AlwaysOn)
+        compare(findChild(window, "equalizerBandScrollBar").policy,
+                ScrollBar.AlwaysOn)
+        compare(findChild(window, "equalizerFooterScrollBar").policy,
+                ScrollBar.AlwaysOn)
         contentScroller.contentY = Math.min(300,
                     contentScroller.contentHeight - contentScroller.height)
         wait(50)

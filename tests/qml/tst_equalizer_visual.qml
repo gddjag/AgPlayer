@@ -1,5 +1,6 @@
 import QtCore
 import QtQuick
+import QtQuick.Controls
 import QtTest
 import AgPlayer
 
@@ -26,6 +27,26 @@ TestCase {
             captureDone = result.saveToFile(path)
         }, size)
         tryVerify(function() { return captureDone }, 5000)
+    }
+
+    function verifyFooterOutputReachable(viewportWidth, viewportHeight) {
+        equalizer.width = viewportWidth
+        equalizer.height = viewportHeight
+        wait(60)
+        var footerScroller = findChild(equalizer, "equalizerFooterScroller")
+        var outputText = findChild(equalizer, "equalizerOutputLevelText")
+        verify(footerScroller && outputText)
+        verify(footerScroller.contentWidth > footerScroller.width)
+        footerScroller.contentX = footerScroller.contentWidth
+                                  - footerScroller.width
+        wait(30)
+        var point = outputText.mapToItem(footerScroller, 0, 0)
+        verify(point.x >= -0.5,
+               "output level left edge must be visible after scrolling right")
+        verify(point.x + outputText.width <= footerScroller.width + 0.5,
+               "output level right edge must be fully visible after scrolling right")
+        footerScroller.contentX = 0
+        wait(20)
     }
 
     function init() {
@@ -148,8 +169,13 @@ TestCase {
         verify(precisionHigh && precisionMedium && precisionLow)
         mouseClick(range6)
         tryCompare(EqualizerController, "gainRangeDb", 6)
+        compare(findChild(equalizer, "equalizerBandsMaxLabel").text, "+6")
+        compare(findChild(equalizer, "equalizerBandsZeroLabel").text, "0")
+        compare(findChild(equalizer, "equalizerBandsMinLabel").text, "−6")
         mouseClick(range18)
         tryCompare(EqualizerController, "gainRangeDb", 18)
+        compare(findChild(equalizer, "equalizerBandsMaxLabel").text, "+18")
+        compare(findChild(equalizer, "equalizerBandsMinLabel").text, "−18")
         mouseClick(range12)
         tryCompare(EqualizerController, "gainRangeDb", 12)
         mouseClick(precisionLow)
@@ -177,6 +203,15 @@ TestCase {
         mouseWheel(firstControl, firstControl.width / 2,
                    firstControl.height / 2, 0, -120)
         tryCompare(firstBand, "gainDb", 0)
+        firstBand.setGain(1)
+        tryCompare(firstBand, "gainDb", 1)
+        mouseWheel(firstControl, firstControl.width / 2,
+                   firstControl.height / 2, 120, 0)
+        tryCompare(firstBand, "gainDb", 1)
+        compare(firstControl.lastWheelAccepted, false)
+        verify(firstControl.applyWheelDelta(0, 12))
+        tryCompare(firstBand, "gainDb", 1.1)
+        compare(firstControl.lastWheelAccepted, true)
         mousePress(firstControl, firstControl.width / 2,
                    firstControl.height / 2, Qt.LeftButton)
         mouseMove(firstControl, firstControl.width / 2,
@@ -200,6 +235,61 @@ TestCase {
         mouseClick(resetButton)
         tryCompare(EqualizerController, "preampDb", 0)
         compare(EqualizerController.bandGain(17), 0)
+    }
+
+    function test_meter_ticks_and_fill_share_segmented_mapping() {
+        var meter = findChild(equalizer, "equalizerOutputMeter")
+        verify(meter)
+        var boundaries = [-24, -12, -6, -3, 0]
+        var fractions = [0, 0.25, 0.5, 0.75, 1]
+        var expectedBlocks = [0, 5, 9, 14, 18]
+        for (var index = 0; index < boundaries.length; ++index) {
+            var position = equalizer.meterPositionForDb(boundaries[index],
+                                                        meter.width)
+            compare(Math.round(position * 1000),
+                    Math.round(meter.width * fractions[index] * 1000))
+            var tick = findChild(meter, "equalizerMeterTick-" + index)
+            verify(tick)
+            compare(Math.round(tick.x + tick.width / 2),
+                    Math.round(position))
+            compare(equalizer.meterActiveBlockCount(boundaries[index]),
+                    expectedBlocks[index])
+        }
+    }
+
+    function test_response_curve_uses_log_band_positions_and_gain_envelope() {
+        equalizer.width = 1672
+        equalizer.height = 941
+        wait(80)
+        var curve = findChild(equalizer, "equalizerResponseCurve")
+        verify(curve)
+        verify(curve.usesBandGainEnvelope)
+        var envelope = curve.envelopePoints()
+        compare(envelope.length, 18)
+        compare(Math.round(curve.bandX(0)), Math.round(curve.plotLeft))
+        compare(Math.round(curve.bandX(17)),
+                Math.round(curve.width - curve.plotRight))
+        for (var index = 0; index < envelope.length; ++index) {
+            compare(Math.round(envelope[index].x * 1000),
+                    Math.round(curve.frequencyX(
+                                   curve.bandFrequencies[index]) * 1000))
+            compare(Math.round(envelope[index].y * 1000),
+                    Math.round(curve.gainY(
+                                   EqualizerController.bandGain(index)) * 1000))
+        }
+        var x8k = curve.bandX(13)
+        var x10k = curve.bandX(14)
+        var x125k = curve.bandX(15)
+        verify(x8k < x10k && x10k < x125k)
+        verify(Math.abs((x10k - x8k) - (x125k - x10k)) < 0.1,
+               "equal 1.25 frequency ratios must occupy equal log distances")
+        for (var band = 13; band <= 15; ++band) {
+            var label = findChild(curve,
+                                  "equalizerResponseFrequency-" + band)
+            verify(label)
+            compare(Math.round(label.x + label.width / 2),
+                    Math.round(curve.bandX(band)))
+        }
     }
 
     function test_reference_and_minimum_viewports_render() {
@@ -230,8 +320,32 @@ TestCase {
         compare(findChild(equalizer, "equalizerResponsePanel").height, 291)
         compare(findChild(equalizer, "equalizerBandsPanel").height, 375)
         compare(findChild(equalizer, "equalizerFooterPanel").height, 77)
+        compare(findChild(equalizer, "equalizerBandsMaxLabel").text, "+12")
+        compare(findChild(equalizer, "equalizerBandsZeroLabel").text, "0")
+        compare(findChild(equalizer, "equalizerBandsMinLabel").text, "−12")
         compare(findChild(equalizer, "equalizerOutputLevelText").text,
                 "-1.5 dB")
+        var resetButton = findChild(equalizer, "equalizerResetButton")
+        verify(resetButton.iconSource.toString().indexOf("restore-line.svg") >= 0)
+        compare(resetButton.icon.width, 24)
+        compare(findChild(equalizer, "equalizerMinimizeButton").icon.width, 20)
+        compare(findChild(equalizer, "equalizerMaximizeButton").icon.width, 20)
+        compare(findChild(equalizer, "equalizerCloseButton").icon.width, 20)
+        var headerDivider = findChild(equalizer, "equalizerHeaderDivider")
+        var dividerPoint = headerDivider.mapToItem(equalizer.contentItem, 0, 0)
+        verify(dividerPoint.x >= 180 && dividerPoint.x <= 196)
+        var savePoint = findChild(equalizer, "equalizerSaveButton").mapToItem(
+                    equalizer.contentItem, 0, 0)
+        verify(savePoint.x >= 1150 && savePoint.x <= 1175)
+        compare(findChild(equalizer, "equalizerContentScrollBar").policy,
+                ScrollBar.AlwaysOff)
+        compare(findChild(equalizer, "equalizerBandScrollBar").policy,
+                ScrollBar.AlwaysOff)
+        compare(findChild(equalizer, "equalizerFooterScrollBar").policy,
+                ScrollBar.AlwaysOff)
+        verify(!findChild(equalizer, "equalizerContentScrollBar").visible)
+        verify(!findChild(equalizer, "equalizerBandScrollBar").visible)
+        verify(!findChild(equalizer, "equalizerFooterScrollBar").visible)
         var temp = StandardPaths.writableLocation(StandardPaths.TempLocation)
         capture(temp + "/AgPlayer-equalizer-1672x941.png",
                 Qt.size(1672, 941))
@@ -241,6 +355,16 @@ TestCase {
         wait(100)
         compare(equalizer.width, 1180)
         compare(equalizer.height, 680)
+        compare(findChild(equalizer, "equalizerContentScrollBar").policy,
+                ScrollBar.AlwaysOn)
+        compare(findChild(equalizer, "equalizerBandScrollBar").policy,
+                ScrollBar.AlwaysOn)
+        compare(findChild(equalizer, "equalizerFooterScrollBar").policy,
+                ScrollBar.AlwaysOn)
+        verify(findChild(equalizer, "equalizerContentScrollBar").visible)
+        verify(findChild(equalizer, "equalizerBandScrollBar").visible)
+        verify(findChild(equalizer, "equalizerFooterScrollBar").visible)
+        verifyFooterOutputReachable(1180, 680)
         capture(temp + "/AgPlayer-equalizer-1180x680.png",
                 Qt.size(1180, 680))
 
@@ -249,6 +373,51 @@ TestCase {
         wait(100)
         compare(equalizer.width, 880)
         compare(equalizer.height, 520)
+        compare(findChild(equalizer, "equalizerContentScrollBar").policy,
+                ScrollBar.AlwaysOn)
+        compare(findChild(equalizer, "equalizerBandScrollBar").policy,
+                ScrollBar.AlwaysOn)
+        compare(findChild(equalizer, "equalizerFooterScrollBar").policy,
+                ScrollBar.AlwaysOn)
+        verify(findChild(equalizer, "equalizerContentScrollBar").visible)
+        verify(findChild(equalizer, "equalizerBandScrollBar").visible)
+        verify(findChild(equalizer, "equalizerFooterScrollBar").visible)
+        verifyFooterOutputReachable(880, 520)
+        var compactCurve = findChild(equalizer, "equalizerResponseCurve")
+        var highFrequencyLabels = []
+        for (var highBand = 13; highBand <= 17; ++highBand) {
+            var highLabel = findChild(
+                        compactCurve,
+                        "equalizerResponseFrequency-" + highBand)
+            verify(highLabel.x >= 0
+                   && highLabel.x + highLabel.width <= compactCurve.width,
+                   "band " + highBand + " horizontal bounds: x="
+                   + highLabel.x + " width=" + highLabel.width
+                   + " curve=" + compactCurve.width)
+            verify(highLabel.y >= 0
+                   && highLabel.y + highLabel.height <= compactCurve.height,
+                   "band " + highBand + " vertical bounds: y="
+                   + highLabel.y + " height=" + highLabel.height
+                   + " curve=" + compactCurve.height)
+            highFrequencyLabels.push(highLabel)
+        }
+        for (var first = 0; first < highFrequencyLabels.length; ++first) {
+            for (var second = first + 1;
+                 second < highFrequencyLabels.length; ++second) {
+                var a = highFrequencyLabels[first]
+                var b = highFrequencyLabels[second]
+                var overlaps = a.x < b.x + b.width
+                               && a.x + a.width > b.x
+                               && a.y < b.y + b.height
+                               && a.y + a.height > b.y
+                verify(!overlaps,
+                       "compact logarithmic frequency labels must remain legible: "
+                       + (first + 13) + " [" + a.x + "," + a.y + ","
+                       + a.width + "," + a.height + "] vs "
+                       + (second + 13) + " [" + b.x + "," + b.y + ","
+                       + b.width + "," + b.height + "]")
+            }
+        }
         var contentScroller = findChild(equalizer,
                                         "equalizerContentScroller")
         verify(contentScroller.contentHeight > contentScroller.height)
@@ -279,6 +448,9 @@ TestCase {
         var meter = findChild(equalizer, "equalizerOutputMeter")
         var levelText = findChild(equalizer, "equalizerOutputLevelText")
         verify(timer && meter && levelText)
+        verify(isNaN(equalizer.testDisplayOutputPeakDb))
+        compare(equalizer.displayedOutputPeakDb,
+                EqualizerController.outputPeakDb)
         compare(timer.interval, 33)
         verify(timer.running)
         var revision = equalizer.statusRefreshRevision

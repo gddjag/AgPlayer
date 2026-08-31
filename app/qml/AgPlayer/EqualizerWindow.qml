@@ -48,8 +48,8 @@ Window {
         font.weight: Font.Medium
         icon.source: iconSource
         icon.color: "#EFF3F7"
-        icon.width: 22
-        icon.height: 22
+        icon.width: 24
+        icon.height: 24
         spacing: 8
         display: AbstractButton.TextBesideIcon
         palette.buttonText: "#EFF3F7"
@@ -95,9 +95,32 @@ Window {
         return "#7F3431"
     }
 
+    function meterNormalizedPosition(db) {
+        var boundaries = [-24, -12, -6, -3, 0]
+        var clamped = Math.max(boundaries[0],
+                               Math.min(boundaries[boundaries.length - 1], db))
+        for (var segment = 0; segment < boundaries.length - 1; ++segment) {
+            if (clamped <= boundaries[segment + 1]) {
+                var withinSegment = (clamped - boundaries[segment])
+                                    / (boundaries[segment + 1]
+                                       - boundaries[segment])
+                return (segment + withinSegment)
+                       / (boundaries.length - 1)
+            }
+        }
+        return 1
+    }
+
+    function meterPositionForDb(db, span) {
+        return meterNormalizedPosition(db) * span
+    }
+
+    function meterActiveBlockCount(db) {
+        return Math.ceil(meterNormalizedPosition(db) * 18)
+    }
+
     function meterBlockActive(index) {
-        var clamped = Math.max(-24, Math.min(0, displayedOutputPeakDb))
-        return index < Math.ceil((clamped + 24) / 24 * 18)
+        return index < meterActiveBlockCount(displayedOutputPeakDb)
     }
 
     onClosing: function(close) {
@@ -186,6 +209,8 @@ Window {
                         flat: true
                         icon.source: Theme.icon("subtract-line")
                         icon.color: "#EFF3F7"
+                        icon.width: 20
+                        icon.height: 20
                         Accessible.name: qsTr("最小化")
                         onClicked: window.showMinimized()
                         background: null
@@ -197,6 +222,8 @@ Window {
                         flat: true
                         icon.source: Theme.icon("checkbox-blank-line")
                         icon.color: "#EFF3F7"
+                        icon.width: 20
+                        icon.height: 20
                         Accessible.name: qsTr("最大化")
                         onClicked: window.visibility === Window.Maximized
                                    ? window.showNormal() : window.showMaximized()
@@ -209,6 +236,8 @@ Window {
                         flat: true
                         icon.source: Theme.icon("close-fill")
                         icon.color: "#EFF3F7"
+                        icon.width: 20
+                        icon.height: 20
                         Accessible.name: qsTr("关闭")
                         onClicked: window.hide()
                         background: Rectangle {
@@ -240,8 +269,9 @@ Window {
                 boundsBehavior: Flickable.StopAtBounds
                 interactive: contentHeight > height
                 ScrollBar.vertical: ScrollBar {
+                    objectName: "equalizerContentScrollBar"
                     policy: contentScroller.contentHeight > contentScroller.height
-                            ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                            ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
                 }
 
                 Item {
@@ -265,7 +295,7 @@ Window {
                         RowLayout {
                             anchors.fill: parent
                             anchors.leftMargin: window.compactToolbar ? 18 : 30
-                            anchors.rightMargin: window.compactToolbar ? 18 : 24
+                            anchors.rightMargin: window.compactToolbar ? 18 : 29
                             spacing: window.compactToolbar ? 8 : 14
 
                             ThemedSwitch {
@@ -279,7 +309,8 @@ Window {
                                 onToggled: EqualizerController.enabled = checked
                             }
                             Rectangle {
-                                Layout.leftMargin: window.compactToolbar ? 4 : 18
+                                objectName: "equalizerHeaderDivider"
+                                Layout.leftMargin: window.compactToolbar ? 4 : 28
                                 Layout.rightMargin: window.compactToolbar ? 4 : 18
                                 Layout.preferredWidth: 1
                                 Layout.preferredHeight: 48
@@ -330,7 +361,7 @@ Window {
                                 objectName: "equalizerResetButton"
                                 implicitWidth: window.compactToolbar ? 94 : 122
                                 text: qsTr("重置")
-                                iconSource: Theme.icon("arrow-go-back-line")
+                                iconSource: Theme.icon("restore-line")
                                 Accessible.name: qsTr("全部归零")
                                 onClicked: EqualizerController.resetAll()
                             }
@@ -383,8 +414,9 @@ Window {
                             contentWidth: Math.max(width, 1616)
                             contentHeight: height
                             ScrollBar.horizontal: ScrollBar {
+                                objectName: "equalizerBandScrollBar"
                                 policy: bandFlickable.contentWidth > bandFlickable.width
-                                        ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                                        ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
                             }
 
                             Item {
@@ -441,6 +473,51 @@ Window {
                                 }
                             }
                         }
+
+                        Label {
+                            objectName: "equalizerBandsMaxLabel"
+                            x: 4
+                            y: 38
+                            width: 34
+                            height: 22
+                            z: 2
+                            text: "+" + EqualizerController.gainRangeDb.toFixed(0)
+                            color: "#C8D0D6"
+                            font.family: "Microsoft YaHei UI"
+                            font.pixelSize: 14
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        Label {
+                            objectName: "equalizerBandsZeroLabel"
+                            x: 4
+                            y: 157
+                            width: 34
+                            height: 22
+                            z: 2
+                            text: "0"
+                            color: "#C8D0D6"
+                            font.family: "Microsoft YaHei UI"
+                            font.pixelSize: 14
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        Label {
+                            objectName: "equalizerBandsMinLabel"
+                            x: 4
+                            y: 276
+                            width: 34
+                            height: 22
+                            z: 2
+                            text: "−" + EqualizerController.gainRangeDb.toFixed(0)
+                            color: "#C8D0D6"
+                            font.family: "Microsoft YaHei UI"
+                            font.pixelSize: 14
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
                     }
 
                     Rectangle {
@@ -460,11 +537,12 @@ Window {
                             anchors.fill: parent
                             clip: true
                             boundsBehavior: Flickable.StopAtBounds
-                            contentWidth: Math.max(width, 1615)
+                            contentWidth: Math.max(width, 1662)
                             contentHeight: height
                             ScrollBar.horizontal: ScrollBar {
+                                objectName: "equalizerFooterScrollBar"
                                 policy: footerScroller.contentWidth > footerScroller.width
-                                        ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                                        ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
                             }
 
                             Item {
@@ -620,19 +698,30 @@ Window {
                                     }
 
                                     Repeater {
-                                        model: [{"x": 0, "text": "-24"},
-                                                {"x": 94, "text": "-12"},
-                                                {"x": 196, "text": "-6"},
-                                                {"x": 294, "text": "-3"},
-                                                {"x": 382, "text": "0"}]
-                                        Label {
+                                        model: [{"db": -24, "text": "-24"},
+                                                {"db": -12, "text": "-12"},
+                                                {"db": -6, "text": "-6"},
+                                                {"db": -3, "text": "-3"},
+                                                {"db": 0, "text": "0"}]
+                                        Item {
+                                            required property int index
                                             required property var modelData
-                                            x: modelData.x
+                                            objectName: "equalizerMeterTick-" + index
+                                            x: window.meterPositionForDb(modelData.db,
+                                                                         outputMeter.width)
                                             y: 13
-                                            text: modelData.text
-                                            color: "#D6DCE1"
-                                            font.family: "Microsoft YaHei UI"
-                                            font.pixelSize: 14
+                                            width: 0
+                                            height: 19
+
+                                            Label {
+                                                x: index === 0 ? 0
+                                                   : index === 4 ? -width
+                                                   : -width / 2
+                                                text: modelData.text
+                                                color: "#D6DCE1"
+                                                font.family: "Microsoft YaHei UI"
+                                                font.pixelSize: 14
+                                            }
                                         }
                                     }
                                 }
