@@ -653,6 +653,28 @@ public:
         return controller_ != nullptr && controller_->selectInput(input);
     }
 
+    Q_INVOKABLE void setHistoryRecord()
+    {
+        if (controller_ == nullptr) return;
+        controller_->history_ = {QVariantMap{
+            {QStringLiteral("id"), QStringLiteral("history-layout-test")},
+            {QStringLiteral("createdAt"), QStringLiteral("2026-08-30T20:00:00Z")},
+            {QStringLiteral("inputPath"), QStringLiteral("C:/音乐/历史输入 #100%.wav")},
+            {QStringLiteral("inputName"), QStringLiteral("历史输入 #100%.wav")},
+            {QStringLiteral("modelId"), QStringLiteral("uvr-mdxnet-kara")},
+            {QStringLiteral("status"), QStringLiteral("completed")},
+            {QStringLiteral("outputPath"), QStringLiteral("C:/音乐/分离结果")},
+        }};
+        emit controller_->historyChanged();
+    }
+
+    Q_INVOKABLE void clearHistory()
+    {
+        if (controller_ == nullptr) return;
+        controller_->history_.clear();
+        emit controller_->historyChanged();
+    }
+
     Q_INVOKABLE void markSelectedModelInstalled()
     {
         if (controller_ == nullptr) return;
@@ -701,6 +723,14 @@ public:
                 device(VocalSeparationController::DeviceMode::CPU, "CPU", true, ""),
                 device(VocalSeparationController::DeviceMode::GPU, "DirectML", false,
                        "DirectML 提供程序不可用，已回退 CPU"),
+            };
+        } else if (scenario == QStringLiteral("candidate")) {
+            controller_->availableDevices_ = {
+                device(VocalSeparationController::DeviceMode::Auto, "Auto", true,
+                       "自动选择可用设备"),
+                device(VocalSeparationController::DeviceMode::CPU, "CPU", true, ""),
+                device(VocalSeparationController::DeviceMode::GPU, "DirectML", true,
+                       "检测到 NVIDIA GeForce RTX 4070 Ti SUPER；开始分离时验证 DirectML"),
             };
         } else if (scenario == QStringLiteral("none")) {
             controller_->availableDevices_ = {
@@ -766,9 +796,66 @@ public:
             }
             controller_->stems_[index] = stem;
         }
+        controller_->progress_ = 1.0;
         emit controller_->stemsChanged();
+        emit controller_->progressChanged();
         controller_->setJobState(VocalSeparationController::JobState::Completed,
                                  QStringLiteral("completed"));
+    }
+
+    Q_INVOKABLE QVariantList activeResultMixKinds() const
+    {
+        QVariantList kinds;
+        if (controller_ == nullptr) return kinds;
+        kinds.reserve(controller_->resultPreviewMixKinds_.size());
+        for (const VocalSeparationController::StemKind kind
+             : controller_->resultPreviewMixKinds_) {
+            kinds.push_back(int(kind));
+        }
+        return kinds;
+    }
+
+    Q_INVOKABLE bool setCompletedWithAudio(const QUrl& source)
+    {
+        if (controller_ == nullptr || !source.isLocalFile()) return false;
+        const QString sourcePath = source.toLocalFile();
+        if (!QFileInfo::exists(sourcePath)) return false;
+        const quint64 generation = ++audioResultGeneration_;
+        for (int index = 0; index < controller_->stems_.size(); ++index) {
+            QVariantMap stem = controller_->stems_.at(index).toMap();
+            if (stem.value(QStringLiteral("supported")).toBool()) {
+                const int kind = stem.value(QStringLiteral("kind")).toInt();
+                const QString suffix = QFileInfo(sourcePath).suffix();
+                const QString destination = QDir(
+                    QStandardPaths::writableLocation(QStandardPaths::TempLocation))
+                    .filePath(QStringLiteral("agplayer-qml-result-%1-%2.%3")
+                                  .arg(generation)
+                                  .arg(kind)
+                                  .arg(suffix));
+                QFile::remove(destination);
+                if (!QFile::copy(sourcePath, destination)) return false;
+                stem.insert(QStringLiteral("selected"), true);
+                stem.insert(QStringLiteral("available"), true);
+                stem.insert(QStringLiteral("path"), destination);
+                stem.insert(QStringLiteral("waveform"), QVariantList{0.2, 0.8, 0.4});
+            }
+            controller_->stems_[index] = stem;
+        }
+        controller_->progress_ = 1.0;
+        emit controller_->stemsChanged();
+        emit controller_->progressChanged();
+        controller_->setJobState(VocalSeparationController::JobState::Completed,
+                                 QStringLiteral("completed"));
+        return true;
+    }
+
+    Q_INVOKABLE void setJobProgress(double progress, const QString& stage)
+    {
+        if (controller_ == nullptr) return;
+        controller_->progress_ = qBound(0.0, progress, 1.0);
+        emit controller_->progressChanged();
+        controller_->setJobState(VocalSeparationController::JobState::Running,
+                                 stage);
     }
 
     Q_INVOKABLE void setJobFailure(const QString& error)
@@ -810,6 +897,7 @@ private:
 
     VocalSeparationController* controller_ = nullptr;
     QString runtimeLibraryPath_;
+    quint64 audioResultGeneration_ = 0;
 };
 
 class QmlAudioToolsSetup final : public QObject {

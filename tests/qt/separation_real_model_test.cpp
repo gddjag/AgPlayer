@@ -77,11 +77,14 @@ DecodedTrack decodeTrack(const QString& path, const bool retainSamples,
     return track;
 }
 
-QString stemForOutput(const QString& path, const QStringList& stems)
+QString stemForOutput(const QString& path, const QStringList& stems,
+                      const QString& modelName)
 {
     const QString name = QFileInfo(path).completeBaseName();
     for (const QString& stem : stems) {
-        if (name.endsWith(QStringLiteral("-") + stem, Qt::CaseInsensitive)) {
+        if (name.endsWith(QStringLiteral("-") + stem + QStringLiteral("-")
+                              + modelName,
+                          Qt::CaseInsensitive)) {
             return stem;
         }
     }
@@ -159,15 +162,23 @@ approvedCatalogModelRunsOnRequestedDeviceWhenExplicitlyEnabled()
                           QStringLiteral("other")}
             : QStringList{QStringLiteral("vocals"), QStringLiteral("instrumental")};
         QJsonArray requestedStems;
-        for (const QString& stem : stems) requestedStems.push_back(stem);
+        QJsonArray stemLabels;
+        for (const QString& stem : stems) {
+            requestedStems.push_back(stem);
+            stemLabels.push_back(stem);
+        }
         const BackendResult result = backend.separate(
             {{QStringLiteral("runtimePath"), runtime},
              {QStringLiteral("inputPath"), input},
              {QStringLiteral("modelFiles"), modelFiles},
              {QStringLiteral("outputDirectory"), output.path()},
              {QStringLiteral("baseName"), entry.first},
+             {QStringLiteral("directoryName"),
+              entry.first + QStringLiteral("-real-model")},
+             {QStringLiteral("modelName"), entry.first},
              {QStringLiteral("extension"), QStringLiteral("wav")},
              {QStringLiteral("stems"), requestedStems},
+             {QStringLiteral("stemLabels"), stemLabels},
              {QStringLiteral("device"), requestedDevice}},
             cancelled, [](double, const QString&) {});
         QVERIFY2(result.ok,
@@ -182,7 +193,7 @@ approvedCatalogModelRunsOnRequestedDeviceWhenExplicitlyEnabled()
         for (const QJsonValue& outputValue : outputs) {
             const QString path = outputValue.toString();
             QVERIFY2(QFileInfo::exists(path), qPrintable(path));
-            const QString stem = stemForOutput(path, stems);
+            const QString stem = stemForOutput(path, stems, entry.first);
             QVERIFY2(!stem.isEmpty(), qPrintable(QStringLiteral("Unknown output: ") + path));
             QVERIFY2(!decoded.contains(stem), qPrintable(QStringLiteral("Duplicate stem: ") + stem));
             decodeError.clear();

@@ -87,7 +87,8 @@ ProtocolParseResult parseProtocolMessage(const QByteArray& line)
     if (!versionValue.isDouble()
         || versionValue.toInt(-1) != kSeparationProtocolVersion) {
         return reject(QStringLiteral("incompatible_protocol"),
-                      QStringLiteral("Only separation protocol version 1 is supported"),
+                      QStringLiteral("Only separation protocol version %1 is supported")
+                          .arg(kSeparationProtocolVersion),
                       requestId);
     }
 

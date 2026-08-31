@@ -18,6 +18,9 @@ struct OutputPlan {
     QString baseName;
     QString extension;
     QStringList stems;
+    QString modelName;
+    QStringList stemLabels;
+    QString directoryName;
 };
 
 struct TransactionResult {

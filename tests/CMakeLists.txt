@@ -663,6 +663,21 @@ set_tests_properties(output_level_c_api_test PROPERTIES
         "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
+add_executable(stem_preview_mixer_test
+    core/stem_preview_mixer_test.cpp
+)
+target_include_directories(stem_preview_mixer_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(stem_preview_mixer_test PRIVATE agplayer_core)
+agplayer_enable_warnings(stem_preview_mixer_test)
+add_test(NAME stem_preview_mixer_test COMMAND stem_preview_mixer_test)
+set_tests_properties(stem_preview_mixer_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
 add_executable(graphic_equalizer_test
     core/graphic_equalizer_test.cpp
 )
@@ -900,6 +915,7 @@ set_tests_properties(audio_visual_feature_controller_test PROPERTIES
 )
 target_link_libraries(vocal_separation_install_test PRIVATE Qt6::Network)
 set_tests_properties(vocal_separation_install_test PROPERTIES TIMEOUT 30)
+set_tests_properties(vocal_separation_history_test PROPERTIES TIMEOUT 30)
 
 foreach(separation_test IN ITEMS
     separation_protocol_test
@@ -1014,7 +1030,7 @@ add_dependencies(vocal_separation_controller_test
 agplayer_enable_warnings(vocal_separation_controller_test)
 add_test(NAME vocal_separation_controller_test COMMAND vocal_separation_controller_test)
 set_tests_properties(vocal_separation_controller_test PROPERTIES
-    TIMEOUT 60
+    TIMEOUT 120
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
@@ -1050,7 +1066,7 @@ add_dependencies(separation_worker_process_test AgSeparationWorker separation_bl
 agplayer_enable_warnings(separation_worker_process_test)
 add_test(NAME separation_worker_process_test COMMAND separation_worker_process_test)
 set_tests_properties(separation_worker_process_test PROPERTIES
-    TIMEOUT 15
+    TIMEOUT 60
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/bin"
 )

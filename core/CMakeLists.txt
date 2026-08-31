@@ -31,6 +31,8 @@ add_library(agplayer_core STATIC
     src/audio_editor/time_pitch_session.hpp
     src/audio_engine.cpp
     src/audio_stream_source.hpp
+    src/stem_preview_mixer.cpp
+    src/stem_preview_mixer.hpp
     src/c_api.cpp
     src/core_context.cpp
     src/formant_preserver.cpp

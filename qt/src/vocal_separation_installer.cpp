@@ -182,9 +182,10 @@ bool VocalSeparationInstaller::hasDiskSpace(const QString& destination,
 }
 
 bool VocalSeparationInstaller::isVerifiedFile(const VocalDownloadFile& file,
-                                              const QString& path)
+                                              const QString& path,
+                                              const std::shared_ptr<std::atomic_bool>& cancellation)
 {
-    return fileMatches(file, path);
+    return fileMatches(file, path, cancellation);
 }
 
 VocalInstallResult VocalSeparationInstaller::activateVerifiedPart(
@@ -266,7 +267,8 @@ VocalInstallResult VocalSeparationInstaller::installDirectMlRuntime(
     const QString stagingRoot = versionedRoot + QStringLiteral(".staging");
     const auto versionKind = vocal_separation_paths::safePathKind(versionedRoot);
     if (versionKind != vocal_separation_paths::SafePathKind::Missing) {
-        if (!runtimeDirectoryIsVerified(versionedRoot, package.sha256)) {
+        if (!runtimeDirectoryIsVerified(
+                versionedRoot, package.sha256, cancellation)) {
             return fail(QStringLiteral("Existing DirectML runtime failed integrity verification"));
         }
         return {true, {}};
@@ -380,7 +382,8 @@ VocalInstallResult VocalSeparationInstaller::installDirectMlRuntime(
             versionedRoot, allowedNames);
         return cancelledResult();
     }
-    if (!runtimeDirectoryIsVerified(versionedRoot, package.sha256)) {
+    if (!runtimeDirectoryIsVerified(
+            versionedRoot, package.sha256, cancellation)) {
         vocal_separation_paths::removeKnownFlatDirectory(
             versionedRoot, allowedNames);
         return fail(QStringLiteral("Activated DirectML runtime failed final integrity verification"));
@@ -389,9 +392,10 @@ VocalInstallResult VocalSeparationInstaller::installDirectMlRuntime(
 }
 
 bool VocalSeparationInstaller::runtimeDirectoryIsVerified(
-    const QString& runtimeDirectory, const QString& expectedArchiveSha256)
+    const QString& runtimeDirectory, const QString& expectedArchiveSha256,
+    const std::shared_ptr<std::atomic_bool>& cancellation)
 {
-    if (!isSha256(expectedArchiveSha256)) {
+    if (isCancelled(cancellation) || !isSha256(expectedArchiveSha256)) {
         return false;
     }
     const QSet<QString> allowedNames = runtimeAllowedNames();
@@ -408,11 +412,14 @@ bool VocalSeparationInstaller::runtimeDirectoryIsVerified(
         return false;
     }
     for (const VocalDownloadFile& file : runtimeFiles()) {
-        if (!fileMatches(file, QDir(runtimeDirectory).filePath(file.fileName))) {
+        if (isCancelled(cancellation)
+            || !fileMatches(file,
+                            QDir(runtimeDirectory).filePath(file.fileName),
+                            cancellation)) {
             return false;
         }
     }
-    return true;
+    return !isCancelled(cancellation);
 }
 
 VocalSeparationDownloader::VocalSeparationDownloader(QNetworkAccessManager* network,

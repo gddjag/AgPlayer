@@ -27,6 +27,10 @@ struct VocalModelCard {
     QString resourceGuidance;
     QString displayName;
     QString useCase;
+    QString tierLabel;
+    QString badgeLabel;
+    QString provider;
+    QString repositoryUrl;
 };
 
 struct VocalRuntimePackage {

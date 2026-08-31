@@ -149,7 +149,7 @@ void SeparationWorkerEngineTest::helloAndProbeRouteTheirRequestIds()
     ProtocolMessage hello = decode(output.takeFirst().at(0));
     QCOMPARE(hello.type, ProtocolType::Hello);
     QCOMPARE(hello.requestId, QStringLiteral("hello-1"));
-    QCOMPARE(hello.payload.value(QStringLiteral("protocol")).toInt(), 1);
+    QCOMPARE(hello.payload.value(QStringLiteral("protocol")).toInt(), 2);
 
     engine.acceptLine(message(ProtocolType::Probe, QStringLiteral("probe-2")));
     QTRY_COMPARE_WITH_TIMEOUT(output.size(), 1, 2000);

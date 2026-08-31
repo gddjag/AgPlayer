@@ -48,6 +48,25 @@ QString stemName(VocalSeparationController::StemKind kind)
     return {};
 }
 
+QString localizedStemLabel(VocalSeparationController::StemKind kind)
+{
+    switch (kind) {
+    case VocalSeparationController::StemKind::Vocals:
+        return QCoreApplication::translate("VocalSeparationController", "Vocals");
+    case VocalSeparationController::StemKind::Accompaniment:
+        return QCoreApplication::translate("VocalSeparationController", "Instrumental");
+    case VocalSeparationController::StemKind::Drums:
+        return QCoreApplication::translate("VocalSeparationController", "Drums");
+    case VocalSeparationController::StemKind::Bass:
+        return QCoreApplication::translate("VocalSeparationController", "Bass");
+    case VocalSeparationController::StemKind::Other:
+        return QCoreApplication::translate("VocalSeparationController", "Other");
+    case VocalSeparationController::StemKind::Original:
+        break;
+    }
+    return {};
+}
+
 VocalSeparationController::StemKind stemKind(const QString& name)
 {
     using StemKind = VocalSeparationController::StemKind;
@@ -137,6 +156,14 @@ VocalSeparationController::VocalSeparationController(
     if (!options_.catalog.isEmpty()) selectedModelId_ = options_.catalog.first().id;
     rebuildStems();
 
+    if (preview_ != nullptr) {
+        connect(preview_, &AudioPreviewController::errorOccurred, this,
+                [this](const QString& message) {
+            setError(message);
+            resetResultPreviewState();
+        });
+    }
+
     connect(&process_, &SeparationProcessClient::progressReceived, this,
             [this](double fraction, const QString& stage) {
         progress_ = std::max(progress_, fraction);
@@ -148,6 +175,8 @@ VocalSeparationController::VocalSeparationController(
             this, &VocalSeparationController::handleProbe);
     connect(&process_, &SeparationProcessClient::resultReceived,
             this, &VocalSeparationController::handleResult);
+    connect(&process_, &SeparationProcessClient::requestAvailabilityChanged,
+            this, &VocalSeparationController::startEligibilityChanged);
     connect(&process_, &SeparationProcessClient::failed, this,
             [this](const QString& message, bool) {
         if (activeRequest_.has_value()) failedRequest_ = activeRequest_;
@@ -246,12 +275,15 @@ VocalSeparationController::~VocalSeparationController()
 {
     if (downloader_) downloader_->cancel();
     ++verificationGeneration_;
+    if (verificationCancellation_)
+        verificationCancellation_->store(true, std::memory_order_release);
     if (verificationWatcher_ != nullptr) {
         QFutureWatcher<VerificationResult>* const watcher = verificationWatcher_;
         disconnect(watcher, nullptr, this, nullptr);
         watcher->future().waitForFinished();
         verificationWatcher_ = nullptr;
     }
+    verificationCancellation_.reset();
     if (runtimeInstallCancellation_)
         runtimeInstallCancellation_->store(true, std::memory_order_release);
     if (runtimeInstallerWatcher_ != nullptr) {
@@ -279,7 +311,8 @@ bool VocalSeparationController::downloadBusy() const noexcept
 }
 bool VocalSeparationController::canRetry() const noexcept
 {
-    return jobState_ == JobState::JobFailed && failedRequest_.has_value();
+    return process_.canAcceptRequest() && jobState_ == JobState::JobFailed
+        && failedRequest_.has_value();
 }
 QString VocalSeparationController::error() const { return error_; }
 QString VocalSeparationController::outputFormat() const { return outputFormat_; }
@@ -292,6 +325,7 @@ bool VocalSeparationController::canStart() const
 QString VocalSeparationController::startDisabledReason() const
 {
     if (requestInFlight()) return tr("当前任务尚未结束");
+    if (!process_.canAcceptRequest()) return tr("当前任务尚未结束");
     if (!safeExistingFile(inputInfo_.value(QStringLiteral("path")).toString()))
         return tr("请选择有效输入音频");
     const VocalModelCard* model = selectedModel();
@@ -316,6 +350,17 @@ QString VocalSeparationController::startDisabledReason() const
 }
 QVariantList VocalSeparationController::stems() const { return stems_; }
 QVariantList VocalSeparationController::history() const { return history_; }
+VocalSeparationController::ResultPreviewMode
+VocalSeparationController::resultPreviewMode() const noexcept
+{
+    return resultPreviewMode_;
+}
+
+VocalSeparationController::StemKind
+VocalSeparationController::resultPreviewSoloKind() const noexcept
+{
+    return resultPreviewSoloKind_;
+}
 
 bool VocalSeparationController::selectInput(const QUrl& url)
 {
@@ -455,6 +500,13 @@ bool VocalSeparationController::selectModel(const QString& modelId)
 {
     if (modelForId(modelId) == nullptr || requestInFlight()) return false;
     if (selectedModelId_ == modelId) return true;
+    if (resultPreviewMode_ != ResultPreviewMode::None
+        || (preview_ != nullptr && preview_->mixActive())) {
+        if (preview_ != nullptr) preview_->stop();
+        resetResultPreviewState();
+    }
+    ++resultGeneration_;
+    clearPublishedResult();
     selectedModelId_ = modelId;
     invalidateRetry();
     emit selectedModelIdChanged();
@@ -495,7 +547,8 @@ bool VocalSeparationController::selectOutputFormat(const QString& format)
 {
     if (requestInFlight()) return false;
     const QString normalized = format.trimmed().toLower();
-    if (!QStringList{QStringLiteral("wav"), QStringLiteral("flac")}
+    if (!QStringList{QStringLiteral("wav"), QStringLiteral("flac"),
+                     QStringLiteral("mp3")}
              .contains(normalized)) return false;
     outputFormat_ = normalized;
     invalidateRetry();
@@ -516,7 +569,8 @@ bool VocalSeparationController::selectOutputDirectory(const QUrl& directory)
 
 bool VocalSeparationController::probeDevices()
 {
-    if (requestInFlight() || verificationWatcher_ != nullptr) return false;
+    if (requestInFlight() || !process_.canAcceptRequest()
+        || verificationWatcher_ != nullptr) return false;
     activeRequest_ = ActiveRequestContext{RequestKind::Probe};
     setError({});
     setJobState(JobState::Probing, QStringLiteral("runtime_verification"));
@@ -528,7 +582,7 @@ bool VocalSeparationController::probeDevices()
 
 bool VocalSeparationController::start()
 {
-    if (requestInFlight()) return false;
+    if (requestInFlight() || !process_.canAcceptRequest()) return false;
     const VocalModelCard* model = selectedModel();
     const QString inputPath = inputInfo_.value(QStringLiteral("path")).toString();
     const QStringList stemNames = selectedStemNames();
@@ -549,6 +603,9 @@ bool VocalSeparationController::start()
     context.device = deviceMode_;
     context.stemKinds = selectedStemKinds();
     context.stemNames = stemNames;
+    for (const QString& name : stemNames) {
+        context.stemLabels.push_back(localizedStemLabel(stemKind(name)));
+    }
     return beginSeparationRequest(std::move(context));
 }
 
@@ -556,6 +613,7 @@ bool VocalSeparationController::beginSeparationRequest(
     ActiveRequestContext context)
 {
     context.resultGeneration = ++resultGeneration_;
+    stopPreviewForCurrentInputOrResult();
     clearPublishedResult();
     if (!safeExistingFile(context.inputPath) || context.stemNames.isEmpty()) {
         failRequest(context, tr("请选择有效输入音频和至少一个输出音轨"),
@@ -603,6 +661,7 @@ void VocalSeparationController::invalidateRetry()
     if (!requestInFlight() && failedRequest_.has_value()) {
         failedRequest_.reset();
         emit jobStateChanged();
+        emit startEligibilityChanged();
     }
 }
 
@@ -612,6 +671,8 @@ void VocalSeparationController::cancel()
     if (verificationWatcher_ != nullptr
         && (verificationPurpose_ == VerificationPurpose::Start
             || verificationPurpose_ == VerificationPurpose::Probe)) {
+        if (verificationCancellation_)
+            verificationCancellation_->store(true, std::memory_order_release);
         if (!verifyingModelId_.isEmpty()) {
             verifiedModelIds_.remove(verifyingModelId_);
             verifiedOrRejectedModelIds_.insert(verifyingModelId_);
@@ -631,7 +692,8 @@ void VocalSeparationController::cancel()
 
 bool VocalSeparationController::retry()
 {
-    if (jobState_ != JobState::JobFailed || !failedRequest_.has_value()) return false;
+    if (!process_.canAcceptRequest() || jobState_ != JobState::JobFailed
+        || !failedRequest_.has_value()) return false;
     const ActiveRequestContext context = *failedRequest_;
     if (context.kind == RequestKind::Separation)
         return beginSeparationRequest(context);
@@ -648,6 +710,8 @@ bool VocalSeparationController::retry()
 bool VocalSeparationController::previewInput()
 {
     const QString path = inputInfo_.value(QStringLiteral("path")).toString();
+    if (preview_ != nullptr) preview_->setVolume(1.0);
+    resetResultPreviewState();
     return togglePreviewPath(path);
 }
 
@@ -657,7 +721,38 @@ bool VocalSeparationController::previewStem(StemKind kind)
     if (preview_ != nullptr) {
         preview_->setVolume(stemPreviewVolumes_.value(int(kind), 0.8));
     }
-    return togglePreviewPath(path, publishedOutputRoot_);
+    const bool started = togglePreviewPath(path, publishedOutputRoot_);
+    if (started) {
+        const bool changed = resultPreviewMode_ != ResultPreviewMode::Solo
+            || resultPreviewSoloKind_ != kind
+            || resultPreviewMixKinds_ != QList<StemKind>{kind};
+        resultPreviewMode_ = ResultPreviewMode::Solo;
+        resultPreviewSoloKind_ = kind;
+        resultPreviewMixKinds_ = {kind};
+        if (changed) emit resultPreviewChanged();
+    }
+    return started;
+}
+
+bool VocalSeparationController::toggleResultMix(const qint64 positionMs)
+{
+    if (preview_ == nullptr) return false;
+    if (resultPreviewMode_ == ResultPreviewMode::Mix
+        && preview_->mixActive()) {
+        if (preview_->playing()) preview_->pause();
+        else preview_->resume();
+        return true;
+    }
+    const QList<StemKind> kinds = resultMixKinds();
+    return startResultPreview(kinds, positionMs, ResultPreviewMode::Mix,
+                              StemKind::Original);
+}
+
+bool VocalSeparationController::previewStemAt(const StemKind kind,
+                                              const qint64 positionMs)
+{
+    return startResultPreview({kind}, positionMs, ResultPreviewMode::Solo,
+                              kind);
 }
 
 bool VocalSeparationController::setStemPreviewVolume(StemKind kind,
@@ -672,9 +767,12 @@ bool VocalSeparationController::setStemPreviewVolume(StemKind kind,
         stem.insert(QStringLiteral("previewVolume"), bounded);
         value = stem;
         const QString path = stem.value(QStringLiteral("path")).toString();
-        if (preview_ != nullptr && !path.isEmpty()
-            && preview_->isCurrentSource(QUrl::fromLocalFile(path))) {
-            preview_->setVolume(bounded);
+        if (preview_ != nullptr && !path.isEmpty()) {
+            if (preview_->mixSourceIds().contains(path)) {
+                (void)preview_->setMixSourceGain(path, bounded);
+            } else if (preview_->isCurrentSource(QUrl::fromLocalFile(path))) {
+                preview_->setVolume(bounded);
+            }
         }
         emit stemsChanged();
         return true;
@@ -696,6 +794,25 @@ bool VocalSeparationController::exportStem(StemKind kind,
 
 bool VocalSeparationController::exportSelected(const QUrl& destinationDirectory)
 {
+    return exportKinds(selectedStemKinds(), destinationDirectory);
+}
+
+bool VocalSeparationController::exportAll(const QUrl& destinationDirectory)
+{
+    QList<StemKind> kinds;
+    for (const QVariant& value : stems_) {
+        const QVariantMap stem = value.toMap();
+        if (stem.value(QStringLiteral("available")).toBool()) {
+            kinds.push_back(static_cast<StemKind>(
+                stem.value(QStringLiteral("kind")).toInt()));
+        }
+    }
+    return exportKinds(kinds, destinationDirectory);
+}
+
+bool VocalSeparationController::exportKinds(
+    const QList<StemKind>& kinds, const QUrl& destinationDirectory)
+{
     const QString requestedDestination = destinationDirectory.toLocalFile();
     if (safePathKind(requestedDestination) != SafePathKind::Directory) {
         setError(tr("批量导出目录不存在或不安全"));
@@ -704,7 +821,7 @@ bool VocalSeparationController::exportSelected(const QUrl& destinationDirectory)
     const QString destination = QDir(requestedDestination).canonicalPath();
     if (destination.isEmpty()) return false;
     QList<QPair<QString, QString>> files;
-    for (const StemKind kind : selectedStemKinds()) {
+    for (const StemKind kind : kinds) {
         const QString source = pathForStem(kind);
         if (!safeExistingFileWithin(source, publishedOutputRoot_)) {
             setError(tr("批量导出失败：至少一个已选音轨不存在或不安全"));
@@ -772,6 +889,21 @@ bool VocalSeparationController::openOutputDirectory()
 {
     return QDir(outputDirectory_).exists()
         && QDesktopServices::openUrl(QUrl::fromLocalFile(outputDirectory_));
+}
+
+bool VocalSeparationController::selectHistoryInput(const QString& localPath)
+{
+    if (localPath.trimmed().isEmpty()) return false;
+    return selectInput(QUrl::fromLocalFile(localPath));
+}
+
+bool VocalSeparationController::openHistoryOutputDirectory(
+    const QString& localPath)
+{
+    if (localPath.trimmed().isEmpty()) return false;
+    const QString absolutePath = QFileInfo(localPath).absoluteFilePath();
+    return QDir(absolutePath).exists()
+        && QDesktopServices::openUrl(QUrl::fromLocalFile(absolutePath));
 }
 
 bool VocalSeparationController::openModelDirectory()
@@ -853,13 +985,19 @@ bool VocalSeparationController::beginVerification(
     verificationPurpose_ = purpose;
     verifyingModelId_ = model == nullptr ? QString() : model->id;
     const quint64 generation = ++verificationGeneration_;
+    verificationCancellation_ = std::make_shared<std::atomic_bool>(false);
+    const auto cancellation = verificationCancellation_;
     verificationWatcher_ = new QFutureWatcher<VerificationResult>(this);
     QFutureWatcher<VerificationResult>* const watcher = verificationWatcher_;
     connect(watcher, &QFutureWatcher<VerificationResult>::finished,
-            this, [this, watcher, generation] {
+            this, [this, watcher, generation, cancellation] {
         const VerificationResult result = watcher->result();
         watcher->deleteLater();
-        if (verificationWatcher_ == watcher) verificationWatcher_ = nullptr;
+        if (verificationWatcher_ == watcher) {
+            verificationWatcher_ = nullptr;
+            if (verificationCancellation_ == cancellation)
+                verificationCancellation_.reset();
+        }
         if (generation != verificationGeneration_) {
             refreshModels();
             return;
@@ -868,26 +1006,36 @@ bool VocalSeparationController::beginVerification(
     });
     refreshModels();
     verificationWatcher_->setFuture(QtConcurrent::run(
-        [catalog, dataRoot, runtimePath, verifyRuntime, runtimeHash] {
+        [catalog, dataRoot, runtimePath, verifyRuntime, runtimeHash,
+         cancellation] {
             VerificationResult result;
+            const auto cancelled = [&cancellation] {
+                return cancellation->load(std::memory_order_acquire);
+            };
             for (const VocalModelCard& candidate : catalog) {
+                if (cancelled()) return result;
                 bool verified = !candidate.files.isEmpty();
                 for (const VocalDownloadFile& file : candidate.files) {
+                    if (cancelled()) return result;
                     const QString path = QDir(dataRoot).filePath(
                         QStringLiteral("models/%1/%2")
                             .arg(candidate.id, file.fileName));
-                    if (VocalSeparationInstaller::isVerifiedFile(file, path)) {
+                    if (VocalSeparationInstaller::isVerifiedFile(
+                            file, path, cancellation)) {
                         result.verifiedFiles.insert(QFileInfo(path).absoluteFilePath());
                     } else {
+                        if (cancelled()) return result;
                         verified = false;
                     }
                 }
                 if (verified) result.verifiedModels.insert(candidate.id);
             }
+            if (cancelled()) return result;
             result.runtimeVerified = QFileInfo(runtimePath).isFile()
                 && (!verifyRuntime
                     || VocalSeparationInstaller::runtimeDirectoryIsVerified(
-                        QFileInfo(runtimePath).absolutePath(), runtimeHash));
+                        QFileInfo(runtimePath).absolutePath(), runtimeHash,
+                        cancellation));
             return result;
         }));
     return true;
@@ -1003,16 +1151,22 @@ bool VocalSeparationController::launchSeparation(
     }
     QJsonArray requestedStems;
     for (const QString& name : context.stemNames) requestedStems.push_back(name);
+    QJsonArray stemLabels;
+    for (const QString& label : context.stemLabels) stemLabels.push_back(label);
     const QJsonObject payload{
         {QStringLiteral("runtimePath"), options_.runtimeLibraryPath},
         {QStringLiteral("inputPath"), context.inputPath},
         {QStringLiteral("modelFiles"), modelFiles},
         {QStringLiteral("outputDirectory"), context.outputRoot},
         {QStringLiteral("baseName"),
+         QFileInfo(context.inputPath).completeBaseName()},
+        {QStringLiteral("directoryName"),
          QFileInfo(context.inputPath).completeBaseName()
              + QLatin1Char('-') + context.modelId},
+        {QStringLiteral("modelName"), model->displayName},
         {QStringLiteral("extension"), context.outputFormat},
         {QStringLiteral("stems"), requestedStems},
+        {QStringLiteral("stemLabels"), stemLabels},
         {QStringLiteral("device"), deviceName(context.device)},
     };
     if (!process_.startJob(payload)) return false;
@@ -1060,6 +1214,11 @@ void VocalSeparationController::refreshModels()
             {QStringLiteral("resourceGuidance"), model.resourceGuidance},
             {QStringLiteral("name"), model.displayName.isEmpty() ? model.id : model.displayName},
             {QStringLiteral("useCase"), model.useCase},
+            {QStringLiteral("description"), model.useCase},
+            {QStringLiteral("tierLabel"), model.tierLabel},
+            {QStringLiteral("badgeLabel"), model.badgeLabel},
+            {QStringLiteral("provider"), model.provider},
+            {QStringLiteral("repositoryUrl"), model.repositoryUrl},
         });
     }
     emit modelsChanged();
@@ -1146,16 +1305,22 @@ void VocalSeparationController::startNextDownload()
 
 void VocalSeparationController::handleProbe(const QJsonObject& payload)
 {
-    const QString reason = payload.value(QStringLiteral("gpuReason")).toString();
+    const QString workerReason =
+        payload.value(QStringLiteral("gpuReason")).toString();
     const bool cpuAvailable = payload.value(QStringLiteral("cpu")).toBool();
     const bool gpuAvailable = payload.value(QStringLiteral("gpu")).toBool();
+    const QString gpuReason = gpuAvailable
+        ? tr("已发现 DirectML 硬件候选；开始分离时将用所选模型验证")
+        : workerReason;
     availableDevices_[0] = QVariantMap{
         {QStringLiteral("mode"), int(DeviceMode::Auto)},
         {QStringLiteral("name"), QStringLiteral("Auto")},
         {QStringLiteral("available"), cpuAvailable || gpuAvailable},
-        {QStringLiteral("reason"), cpuAvailable || gpuAvailable
-             ? tr("自动选择已验证的可用设备")
-             : tr("CPU 和 GPU 均未通过设备探测")},
+        {QStringLiteral("reason"), gpuAvailable
+             ? tr("自动优先尝试 DirectML 候选，失败时安全回退 CPU")
+             : cpuAvailable
+                 ? tr("自动使用已验证的 CPU")
+                 : tr("CPU 和 GPU 均未通过设备探测")},
     };
     availableDevices_[1] = QVariantMap{
         {QStringLiteral("mode"), int(DeviceMode::CPU)},
@@ -1167,7 +1332,7 @@ void VocalSeparationController::handleProbe(const QJsonObject& payload)
         {QStringLiteral("mode"), int(DeviceMode::GPU)},
         {QStringLiteral("name"), QStringLiteral("DirectML")},
         {QStringLiteral("available"), gpuAvailable},
-        {QStringLiteral("reason"), reason},
+        {QStringLiteral("reason"), gpuReason},
     };
     emit availableDevicesChanged();
     emit startEligibilityChanged();
@@ -1369,9 +1534,101 @@ void VocalSeparationController::resetInputSession()
     setJobState(JobState::Idle, {});
 }
 
+QList<VocalSeparationController::StemKind>
+VocalSeparationController::resultMixKinds() const
+{
+    const auto available = [this](const StemKind kind) {
+        for (const QVariant& value : stems_) {
+            const QVariantMap stem = value.toMap();
+            if (stem.value(QStringLiteral("kind")).toInt() == int(kind)) {
+                return stem.value(QStringLiteral("available")).toBool()
+                    && !stem.value(QStringLiteral("path")).toString().isEmpty();
+            }
+        }
+        return false;
+    };
+
+    QList<StemKind> result;
+    if (available(StemKind::Vocals)) result.push_back(StemKind::Vocals);
+
+    const bool completeComponents = available(StemKind::Drums)
+        && available(StemKind::Bass) && available(StemKind::Other);
+    if (completeComponents) {
+        result.push_back(StemKind::Drums);
+        result.push_back(StemKind::Bass);
+        result.push_back(StemKind::Other);
+    } else if (available(StemKind::Accompaniment)) {
+        result.push_back(StemKind::Accompaniment);
+    } else {
+        for (const StemKind kind : {StemKind::Drums, StemKind::Bass,
+                                    StemKind::Other}) {
+            if (available(kind)) result.push_back(kind);
+        }
+    }
+    return result;
+}
+
+bool VocalSeparationController::startResultPreview(
+    const QList<StemKind>& kinds, const qint64 positionMs,
+    const ResultPreviewMode mode, const StemKind soloKind)
+{
+    if (preview_ == nullptr || kinds.isEmpty()) return false;
+
+    QList<AudioPreviewController::MixSource> sources;
+    sources.reserve(kinds.size());
+    for (const StemKind kind : kinds) {
+        const QString path = pathForStem(kind);
+        const bool safe = publishedOutputRoot_.isEmpty()
+            ? safeExistingFile(path)
+            : safeExistingFileWithin(path, publishedOutputRoot_);
+        if (!safe) return false;
+        sources.push_back({path, path,
+                           stemPreviewVolumes_.value(int(kind), 0.8)});
+    }
+
+    const qint64 duration = inputInfo_
+        .value(QStringLiteral("durationMs")).toLongLong();
+    const qint64 target = qBound<qint64>(
+        0, positionMs, duration > 0 ? duration : std::max<qint64>(0, positionMs));
+    if (!preview_->playMix(sources, target)) {
+        resetResultPreviewState();
+        return false;
+    }
+
+    const bool changed = resultPreviewMode_ != mode
+        || resultPreviewSoloKind_ != soloKind
+        || resultPreviewMixKinds_ != kinds;
+    resultPreviewMode_ = mode;
+    resultPreviewSoloKind_ = soloKind;
+    resultPreviewMixKinds_ = kinds;
+    if (changed) emit resultPreviewChanged();
+    return true;
+}
+
+void VocalSeparationController::resetResultPreviewState()
+{
+    const bool changed = resultPreviewMode_ != ResultPreviewMode::None
+        || resultPreviewSoloKind_ != StemKind::Original
+        || !resultPreviewMixKinds_.isEmpty();
+    resultPreviewMode_ = ResultPreviewMode::None;
+    resultPreviewSoloKind_ = StemKind::Original;
+    resultPreviewMixKinds_.clear();
+    if (changed) emit resultPreviewChanged();
+}
+
 void VocalSeparationController::stopPreviewForCurrentInputOrResult()
 {
-    if (preview_ == nullptr || !preview_->hasSource()) return;
+    if (preview_ == nullptr) {
+        resetResultPreviewState();
+        return;
+    }
+    if (resultPreviewMode_ != ResultPreviewMode::None
+        || preview_->mixActive()) {
+        if (preview_->hasSource()) preview_->stop();
+        resetResultPreviewState();
+        return;
+    }
+    if (!preview_->hasSource()) return;
     const QString inputPath = inputInfo_.value(QStringLiteral("path")).toString();
     if (!inputPath.isEmpty()
         && preview_->isCurrentSource(QUrl::fromLocalFile(inputPath))) {

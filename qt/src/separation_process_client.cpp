@@ -42,6 +42,10 @@ SeparationProcessClient::SeparationProcessClient(
     });
     connect(&process_, &QProcess::readyReadStandardOutput,
             this, &SeparationProcessClient::readStandardOutput);
+    connect(&process_, &QProcess::stateChanged, this,
+            [this](QProcess::ProcessState) {
+        emit requestAvailabilityChanged();
+    });
     connect(&process_, &QProcess::readyReadStandardError, this, [this] {
         process_.readAllStandardError();
     });
@@ -88,6 +92,11 @@ SeparationProcessClient::State SeparationProcessClient::state() const noexcept
 bool SeparationProcessClient::isProcessRunning() const noexcept
 {
     return process_.state() != QProcess::NotRunning;
+}
+
+bool SeparationProcessClient::canAcceptRequest() const noexcept
+{
+    return (state_ == Stopped || state_ == Error) && !isProcessRunning();
 }
 
 QString SeparationProcessClient::activeRequestId() const
@@ -155,6 +164,7 @@ void SeparationProcessClient::setState(State state)
     if (state_ == state) return;
     state_ = state;
     emit stateChanged();
+    emit requestAvailabilityChanged();
 }
 
 void SeparationProcessClient::send(ProtocolType type, const QString& requestId,

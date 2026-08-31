@@ -1,6 +1,7 @@
 #include "audio_preview_controller.hpp"
 
 #include "playback_controller.hpp"
+#include "stem_preview_mixer.hpp"
 
 #include <QFileInfo>
 #include <QFutureWatcher>
@@ -9,6 +10,18 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
+
+namespace {
+
+agplayer::AudioBackend mixerBackend(const ag_audio_backend backend)
+{
+    return backend == AG_AUDIO_BACKEND_NULL
+        ? agplayer::AudioBackend::Null
+        : agplayer::AudioBackend::Default;
+}
+
+} // namespace
 
 AudioPreviewController::AudioPreviewController(
     const ag_audio_backend backend,
@@ -25,6 +38,8 @@ AudioPreviewController::AudioPreviewController(
     } else {
         ag_player_set_volume(player_, static_cast<float>(volume_));
     }
+    stemMixer_ = std::make_unique<agplayer::StemPreviewMixer>(
+        mixerBackend(backend), 0U);
     pollTimer_.setInterval(40);
     connect(&pollTimer_, &QTimer::timeout,
             this, &AudioPreviewController::pollSnapshot);
@@ -48,13 +63,14 @@ AudioPreviewController::~AudioPreviewController()
         ag_player_destroy(player_);
         player_ = nullptr;
     }
+    stemMixer_.reset();
     delete previewTempDir_;
     previewTempDir_ = nullptr;
 }
 
 bool AudioPreviewController::hasSource() const noexcept
 {
-    return !sourcePath_.isEmpty();
+    return !sourcePath_.isEmpty() || mixActive();
 }
 
 bool AudioPreviewController::playing() const noexcept
@@ -147,6 +163,13 @@ void AudioPreviewController::resume()
     if (!hasSource()) {
         return;
     }
+    if (mixActive()) {
+        if (stemMixer_ != nullptr && stemMixer_->play() == AG_OK) {
+            pollTimer_.start();
+            pollSnapshot();
+        }
+        return;
+    }
     if (player_ != nullptr && ag_player_play(player_) == AG_OK) {
         pollTimer_.start();
         pollSnapshot();
@@ -156,6 +179,12 @@ void AudioPreviewController::resume()
 void AudioPreviewController::pause()
 {
     if (!hasSource()) {
+        return;
+    }
+    if (mixActive()) {
+        if (stemMixer_ != nullptr && stemMixer_->pause() == AG_OK) {
+            pollSnapshot();
+        }
         return;
     }
     if (player_ == nullptr) {
@@ -178,6 +207,12 @@ void AudioPreviewController::seek(const qint64 positionMs)
     }
     const qint64 bounded = std::clamp<qint64>(
         positionMs, 0, std::max<qint64>(0, durationMs_));
+    if (mixActive()) {
+        if (stemMixer_ != nullptr && stemMixer_->seek(bounded) == AG_OK) {
+            pollSnapshot();
+        }
+        return;
+    }
     if (player_ != nullptr && ag_player_seek(player_, bounded) == AG_OK) {
         pollSnapshot();
     }
@@ -222,6 +257,77 @@ void AudioPreviewController::setVolume(const double value)
     emit volumeChanged();
 }
 
+bool AudioPreviewController::playMix(const QList<MixSource>& sources,
+                                     const qint64 positionMs)
+{
+    if (stemMixer_ == nullptr || sources.isEmpty()) {
+        setError(tr("预览文件不存在"));
+        return false;
+    }
+
+    std::vector<agplayer::StemPreviewSource> nativeSources;
+    nativeSources.reserve(static_cast<std::size_t>(sources.size()));
+    QStringList sourceIds;
+    sourceIds.reserve(sources.size());
+    for (const MixSource& source : sources) {
+        const QFileInfo file(source.path);
+        if (source.id.isEmpty() || !file.exists() || !file.isFile()) {
+            setError(tr("预览文件不存在"));
+            return false;
+        }
+        const QString absolutePath = file.absoluteFilePath();
+        nativeSources.push_back({source.id.toUtf8().toStdString(),
+                                 absolutePath.toUtf8().toStdString(),
+                                 static_cast<float>(std::clamp(
+                                     source.gain, 0.0, 1.0))});
+        sourceIds.push_back(source.id);
+    }
+
+    stopPlaybackAndClear();
+    if (mainPlayback_ != nullptr
+        && mainPlayback_->state() != PlaybackController::Stopped) {
+        mainPlayback_->stop();
+    }
+    if (stemMixer_->load(std::move(nativeSources), std::max<qint64>(0, positionMs))
+            != AG_OK
+        || stemMixer_->play() != AG_OK) {
+        stopPlaybackAndClear();
+        setError(tr("无法开始预览播放"));
+        return false;
+    }
+
+    mixSourceIds_ = sourceIds;
+    const auto snapshot = stemMixer_->snapshot();
+    positionMs_ = snapshot.position_ms;
+    durationMs_ = snapshot.duration_ms;
+    playing_ = snapshot.state == agplayer::EngineState::Playing;
+    emit sourceChanged();
+    emit stateChanged();
+    pollTimer_.start();
+    return true;
+}
+
+bool AudioPreviewController::setMixSourceGain(const QString& id,
+                                              const double gain)
+{
+    if (!mixActive() || stemMixer_ == nullptr || id.isEmpty()) {
+        return false;
+    }
+    return stemMixer_->set_gain(
+               id.toUtf8().toStdString(),
+               static_cast<float>(std::clamp(gain, 0.0, 1.0))) == AG_OK;
+}
+
+QStringList AudioPreviewController::mixSourceIds() const
+{
+    return mixSourceIds_;
+}
+
+bool AudioPreviewController::mixActive() const noexcept
+{
+    return !mixSourceIds_.isEmpty();
+}
+
 void AudioPreviewController::setDspParameters(
     const double speedRatio,
     const int pitchCents,
@@ -248,7 +354,7 @@ void AudioPreviewController::setDspParameters(
     smoothTransition_ = smoothTransition;
     ++dspRevision_;
     emit dspParametersChanged();
-    if (hasSource()) {
+    if (hasSource() && !mixActive()) {
         scheduleDspPreview();
     }
 }
@@ -272,6 +378,9 @@ void AudioPreviewController::stopPlaybackAndClear()
     if (player_ != nullptr) {
         ag_player_stop(player_);
     }
+    if (stemMixer_ != nullptr) {
+        (void)stemMixer_->stop();
+    }
     clearSourceState();
 }
 
@@ -282,6 +391,7 @@ void AudioPreviewController::clearSourceState()
         playing_ || positionMs_ != 0 || durationMs_ != 0;
     sourcePath_.clear();
     playbackPath_.clear();
+    mixSourceIds_.clear();
     playing_ = false;
     positionMs_ = 0;
     durationMs_ = 0;
@@ -298,16 +408,33 @@ void AudioPreviewController::pollSnapshot()
     if (!hasSource()) {
         return;
     }
-    if (player_ == nullptr) {
-        return;
+    bool nextPlaying = false;
+    qint64 nextPosition = 0;
+    qint64 nextDuration = 0;
+    bool mixReachedTerminalState = false;
+    if (mixActive()) {
+        if (stemMixer_ == nullptr) return;
+        const auto snapshot = stemMixer_->snapshot();
+        if (snapshot.state == agplayer::EngineState::Error) {
+            (void)stemMixer_->stop();
+            pollTimer_.stop();
+            clearSourceState();
+            setError(tr("实时预览处理失败"));
+            return;
+        }
+        nextPlaying = snapshot.state == agplayer::EngineState::Playing;
+        mixReachedTerminalState = playing_
+            && snapshot.state == agplayer::EngineState::Stopped;
+        nextPosition = snapshot.position_ms;
+        nextDuration = snapshot.duration_ms;
+    } else {
+        if (player_ == nullptr) return;
+        ag_playback_snapshot snapshot{};
+        if (ag_player_snapshot(player_, &snapshot) != AG_OK) return;
+        nextPlaying = snapshot.state == AG_PLAYING;
+        nextPosition = snapshot.position_ms;
+        nextDuration = snapshot.duration_ms;
     }
-    ag_playback_snapshot snapshot{};
-    if (ag_player_snapshot(player_, &snapshot) != AG_OK) {
-        return;
-    }
-    const bool nextPlaying = snapshot.state == AG_PLAYING;
-    const qint64 nextPosition = snapshot.position_ms;
-    const qint64 nextDuration = snapshot.duration_ms;
     if (playing_ == nextPlaying
         && positionMs_ == nextPosition
         && durationMs_ == nextDuration) {
@@ -317,6 +444,9 @@ void AudioPreviewController::pollSnapshot()
     positionMs_ = nextPosition;
     durationMs_ = nextDuration;
     if (!nextPlaying) {
+        if (mixReachedTerminalState && stemMixer_ != nullptr) {
+            (void)stemMixer_->stop();
+        }
         pollTimer_.stop();
     }
     emit stateChanged();
@@ -339,6 +469,10 @@ bool AudioPreviewController::loadPlaybackPath(
     }
     pollTimer_.stop();
     ag_player_stop(player_);
+    if (stemMixer_ != nullptr) {
+        (void)stemMixer_->stop();
+    }
+    mixSourceIds_.clear();
     const QByteArray utf8 = playbackPath.toUtf8();
     if (ag_player_load(player_, utf8.constData()) != AG_OK) {
         stopPlaybackAndClear();
@@ -381,7 +515,7 @@ bool AudioPreviewController::hasNeutralDspParameters() const noexcept
 
 void AudioPreviewController::scheduleDspPreview()
 {
-    if (!hasSource()) {
+    if (!hasSource() || mixActive()) {
         return;
     }
     if (dspWatcher_ != nullptr) {

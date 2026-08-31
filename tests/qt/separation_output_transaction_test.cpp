@@ -135,6 +135,8 @@ class SeparationOutputTransactionTest final : public QObject {
 
 private slots:
     void commitPublishesAllStemsWithOneDirectoryRename();
+    void commitUsesLocalizedStemLabelsAndVisibleModelName();
+    void localizedNamesRejectUnsafeWindowsComponents();
     void successiveJobsUseAutoNumberedFinalDirectories();
     void renameFailureLeavesNoPublishedDirectory();
     void rollbackFailurePreservesCauseAndOnlyExistingPaths();
@@ -190,13 +192,64 @@ void SeparationOutputTransactionTest::commitPublishesAllStemsWithOneDirectoryRen
     QVERIFY(!QFileInfo::exists(transaction.temporaryDirectory()));
 }
 
+void SeparationOutputTransactionTest::commitUsesLocalizedStemLabelsAndVisibleModelName()
+{
+    QTemporaryDir output;
+    OutputTransaction transaction(
+        {output.path(), QStringLiteral("陈百强  偏偏喜欢你"), QStringLiteral("flac"),
+         {QStringLiteral("vocals"), QStringLiteral("instrumental"),
+          QStringLiteral("drums"), QStringLiteral("bass"), QStringLiteral("other")},
+         QStringLiteral("HTDemucs FT FP16"),
+         {QStringLiteral("人声"), QStringLiteral("伴奏"), QStringLiteral("鼓组"),
+          QStringLiteral("贝斯"), QStringLiteral("其他")},
+         QStringLiteral("陈百强  偏偏喜欢你-five-stem")});
+    QVERIFY(transaction.begin().ok);
+    for (const QString& stem : {QStringLiteral("vocals"),
+                                QStringLiteral("instrumental"),
+                                QStringLiteral("drums"), QStringLiteral("bass"),
+                                QStringLiteral("other")}) {
+        QVERIFY(writePayload(transaction.temporaryPath(stem)));
+    }
+
+    CancellationToken cancellation;
+    const TransactionResult committed = transaction.commit(
+        [](const QString&) { return true; }, cancellation);
+
+    QVERIFY2(committed.ok, qPrintable(committed.message));
+    QStringList expected{
+        QStringLiteral("陈百强  偏偏喜欢你-人声-HTDemucs FT FP16.flac"),
+        QStringLiteral("陈百强  偏偏喜欢你-伴奏-HTDemucs FT FP16.flac"),
+        QStringLiteral("陈百强  偏偏喜欢你-鼓组-HTDemucs FT FP16.flac"),
+        QStringLiteral("陈百强  偏偏喜欢你-贝斯-HTDemucs FT FP16.flac"),
+        QStringLiteral("陈百强  偏偏喜欢你-其他-HTDemucs FT FP16.flac")};
+    expected.sort();
+    QCOMPARE(QFileInfo(committed.outputs.front()).absolutePath(),
+             output.filePath(QStringLiteral("陈百强  偏偏喜欢你-five-stem")));
+    QCOMPARE(QDir(QFileInfo(committed.outputs.front()).absolutePath()).entryList(
+                 QDir::Files | QDir::NoDotAndDotDot, QDir::Name),
+             expected);
+}
+
+void SeparationOutputTransactionTest::localizedNamesRejectUnsafeWindowsComponents()
+{
+    QTemporaryDir output;
+    OutputTransaction transaction(
+        {output.path(), QStringLiteral("song"), QStringLiteral("wav"),
+         {QStringLiteral("vocals")}, QStringLiteral("MDX: unsafe"),
+         {QStringLiteral("Vocals")}});
+    const TransactionResult begun = transaction.begin();
+    QVERIFY(!begun.ok);
+    QCOMPARE(begun.code, QStringLiteral("invalid_output_plan"));
+}
+
 void SeparationOutputTransactionTest::successiveJobsUseAutoNumberedFinalDirectories()
 {
     QTemporaryDir output;
     const auto run = [&](const QByteArray& payload) {
         OutputTransaction transaction(
             {output.path(), QStringLiteral("song"), QStringLiteral("wav"),
-             {QStringLiteral("vocals")}});
+             {QStringLiteral("vocals")}, QStringLiteral("MDX Inst HQ 3"),
+             {QStringLiteral("Vocals")}, QStringLiteral("song-two-stem")});
         const TransactionResult begun = transaction.begin();
         if (!begun.ok) return begun;
         if (!writePayload(transaction.temporaryPath(QStringLiteral("vocals")),
@@ -212,11 +265,11 @@ void SeparationOutputTransactionTest::successiveJobsUseAutoNumberedFinalDirector
     const TransactionResult first = run(QByteArrayLiteral("first"));
     QVERIFY2(first.ok, qPrintable(first.message));
     QCOMPARE(QFileInfo(first.outputs.front()).absolutePath(),
-             output.filePath(QStringLiteral("song")));
+             output.filePath(QStringLiteral("song-two-stem")));
     const TransactionResult second = run(QByteArrayLiteral("second"));
     QVERIFY2(second.ok, qPrintable(second.message));
     QCOMPARE(QFileInfo(second.outputs.front()).absolutePath(),
-             output.filePath(QStringLiteral("song-2")));
+             output.filePath(QStringLiteral("song-two-stem-2")));
     QVERIFY(QFileInfo::exists(first.outputs.front()));
     QVERIFY(QFileInfo::exists(second.outputs.front()));
 }

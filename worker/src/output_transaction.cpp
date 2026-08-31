@@ -38,10 +38,28 @@ struct Reservation {
 
 bool safeName(const QString& value)
 {
-    return !value.isEmpty() && value == value.trimmed()
-        && !value.contains(QLatin1Char('/'))
-        && !value.contains(QLatin1Char('\\'))
-        && value != QStringLiteral(".") && value != QStringLiteral("..");
+    if (value.isEmpty() || value != value.trimmed()
+        || value.endsWith(QLatin1Char('.'))
+        || value == QStringLiteral(".") || value == QStringLiteral("..")) {
+        return false;
+    }
+    for (const QChar character : value) {
+        if (character.unicode() < 0x20
+            || QStringView(u"<>:\"/\\|?*").contains(character)) {
+            return false;
+        }
+    }
+    const QString stem = value.section(QLatin1Char('.'), 0, 0).toCaseFolded();
+    static const QSet<QString> reserved{
+        QStringLiteral("con"), QStringLiteral("prn"), QStringLiteral("aux"),
+        QStringLiteral("nul"), QStringLiteral("com1"), QStringLiteral("com2"),
+        QStringLiteral("com3"), QStringLiteral("com4"), QStringLiteral("com5"),
+        QStringLiteral("com6"), QStringLiteral("com7"), QStringLiteral("com8"),
+        QStringLiteral("com9"), QStringLiteral("lpt1"), QStringLiteral("lpt2"),
+        QStringLiteral("lpt3"), QStringLiteral("lpt4"), QStringLiteral("lpt5"),
+        QStringLiteral("lpt6"), QStringLiteral("lpt7"), QStringLiteral("lpt8"),
+        QStringLiteral("lpt9")};
+    return !reserved.contains(stem);
 }
 
 QString absoluteCleanPath(const QString& path)
@@ -213,9 +231,11 @@ QStringList flatRemainingPaths(const Reservation& reservation,
 
 QString numberedFinalDirectory(const OutputPlan& plan, int number)
 {
+    const QString& directoryName = plan.directoryName.isEmpty()
+        ? plan.baseName : plan.directoryName;
     const QString name = number == 1
-        ? plan.baseName
-        : QStringLiteral("%1-%2").arg(plan.baseName).arg(number);
+        ? directoryName
+        : QStringLiteral("%1-%2").arg(directoryName).arg(number);
     return QDir(plan.outputDirectory).filePath(name);
 }
 
@@ -374,21 +394,41 @@ TransactionResult OutputTransaction::begin()
         return reject(QStringLiteral("unsafe_output_root"),
                       QStringLiteral("Output directory is a link or reparse point"));
     }
+    const bool hasLocalizedNames = !plan_.modelName.isEmpty()
+        || !plan_.stemLabels.isEmpty();
     if (!safeName(plan_.baseName) || !safeName(plan_.extension)
         || plan_.stems.isEmpty()
-        || plan_.baseName.startsWith(QStringLiteral(".agplayer-separation-"),
-                                     Qt::CaseInsensitive)) {
+        || (!plan_.directoryName.isEmpty() && !safeName(plan_.directoryName))
+        || (hasLocalizedNames && (!safeName(plan_.modelName)
+                                  || plan_.stemLabels.size() != plan_.stems.size()))
+        || (plan_.directoryName.isEmpty() ? plan_.baseName : plan_.directoryName)
+               .startsWith(QStringLiteral(".agplayer-separation-"),
+                           Qt::CaseInsensitive)) {
         return reject(QStringLiteral("invalid_output_plan"),
                       QStringLiteral("Output plan contains an unsafe name"));
     }
     QSet<QString> stems;
-    for (const QString& stem : plan_.stems) {
+    QSet<QString> labels;
+    for (qsizetype index = 0; index < plan_.stems.size(); ++index) {
+        const QString& stem = plan_.stems.at(index);
         const QString key = stem.toCaseFolded();
         if (!safeName(stem) || stems.contains(key)) {
             return reject(QStringLiteral("invalid_output_plan"),
                           QStringLiteral("Output plan contains an unsafe or duplicate stem"));
         }
         stems.insert(key);
+        if (hasLocalizedNames) {
+            const QString& label = plan_.stemLabels.at(index);
+            const QString labelKey = label.toCaseFolded();
+            const QString fileName = QStringLiteral("%1-%2-%3.%4").arg(
+                plan_.baseName, label, plan_.modelName, plan_.extension);
+            if (!safeName(label) || labels.contains(labelKey)
+                || fileName.size() > 255) {
+                return reject(QStringLiteral("invalid_output_plan"),
+                              QStringLiteral("Output plan contains an unsafe localized name"));
+            }
+            labels.insert(labelKey);
+        }
     }
 
     lock_ = std::make_unique<QLockFile>(QDir(plan_.outputDirectory).filePath(
@@ -433,11 +473,18 @@ TransactionResult OutputTransaction::begin()
                       QStringLiteral("Could not create a safe sibling temporary job directory"));
     }
 
-    for (const QString& stem : plan_.stems) {
+    for (qsizetype index = 0; index < plan_.stems.size(); ++index) {
+        const QString& stem = plan_.stems.at(index);
+        const QString fileName = hasLocalizedNames
+            ? QStringLiteral("%1-%2-%3.%4").arg(plan_.baseName,
+                                                   plan_.stemLabels.at(index),
+                                                   plan_.modelName,
+                                                   plan_.extension)
+            : QStringLiteral("%1-%2.%3").arg(plan_.baseName, stem,
+                                                plan_.extension);
         temporaryPaths_.insert(
             stem, QDir(temporaryDirectory_).filePath(
-                QStringLiteral("%1-%2.%3").arg(plan_.baseName, stem,
-                                                plan_.extension)));
+                fileName));
     }
     return {true, {}, {}, {}};
 }

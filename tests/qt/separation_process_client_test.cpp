@@ -204,9 +204,11 @@ rejectsAnOversizedRemainingProtocolTailImmediately()
 {
     SeparationProcessClient client(
         QString::fromUtf8(AG_SEPARATION_CONTROLLER_TEST_WORKER_PATH),
-        {QStringLiteral("tail-after-line")}, {150, 2'000, 150});
+        {QStringLiteral("tail-after-line")}, {2'000, 5'000, 150});
+    QSignalSpy progress(&client, &SeparationProcessClient::progressReceived);
     QSignalSpy failed(&client, &SeparationProcessClient::failed);
     QVERIFY(client.startJob({}));
+    QTRY_COMPARE_WITH_TIMEOUT(progress.count(), 1, 2'500);
     QTRY_COMPARE_WITH_TIMEOUT(failed.count(), 1, 500);
     QVERIFY(failed.first().at(0).toString().contains(QStringLiteral("大小")));
 }

@@ -37,6 +37,7 @@ struct EngineSnapshot {
     std::int64_t position_ms = 0;
     std::int64_t duration_ms = 0;
     int sample_rate = 0;
+    int channels = 0;
     float volume = 1.0F;
     bool muted = false;
     std::size_t track_index = 0U;
@@ -117,6 +118,7 @@ public:
     void render(float* output, std::size_t requested_frames) noexcept;
     ag_result spectrum(float* bins, std::size_t bin_count) noexcept;
     [[nodiscard]] std::size_t buffered_frames() const noexcept;
+    [[nodiscard]] bool end_of_stream() const noexcept;
     [[nodiscard]] bool device_lost() const noexcept;
     ag_result retry_device() noexcept;
     void simulate_device_loss() noexcept;

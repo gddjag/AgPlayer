@@ -3987,4 +3987,15 @@
     <message><source>标签管理</source><translation>Quản lý thẻ</translation></message>
     <message><source>资源文件夹</source><translation>Thư mục tài nguyên</translation></message>
 </context>
+<context>
+    <name>VocalSeparationController</name>
+    <message><source>已发现 DirectML 硬件候选；开始分离时将用所选模型验证</source><translation>Đã tìm thấy thiết bị DirectML tiềm năng; thiết bị sẽ được xác minh bằng mô hình đã chọn khi bắt đầu tách</translation></message>
+    <message><source>自动优先尝试 DirectML 候选，失败时安全回退 CPU</source><translation>Tự động ưu tiên thử DirectML và chuyển an toàn sang CPU nếu thất bại</translation></message>
+    <message><source>自动使用已验证的 CPU</source><translation>Tự động dùng CPU đã được xác minh</translation></message>
+    <message><source>Vocals</source><translation>Giọng hát</translation></message>
+    <message><source>Instrumental</source><translation>Nhạc đệm</translation></message>
+    <message><source>Drums</source><translation>Trống</translation></message>
+    <message><source>Bass</source><translation>Âm trầm</translation></message>
+    <message><source>Other</source><translation>Khác</translation></message>
+</context>
 </TS>
