@@ -28,6 +28,7 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QMimeData>
+#include <QPointer>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickItem>
@@ -319,19 +320,53 @@ public:
         filenames_ = nullptr;
     }
 
+    Q_INVOKABLE bool prepareItem(QObject* target) const
+    {
+        QWindow* window = windowForTarget(target);
+        if (window == nullptr) return false;
+        if (!window->isVisible()) window->show();
+        if (!QTest::qWaitForWindowExposed(window, 2'000)) return false;
+
+        if (!window->isActive()) {
+            window->raise();
+            window->requestActivate();
+#ifdef Q_OS_WIN
+            const HWND handle = reinterpret_cast<HWND>(window->winId());
+            if (handle != nullptr) {
+                ShowWindow(handle, SW_RESTORE);
+                BringWindowToTop(handle);
+                SetForegroundWindow(handle);
+                SetActiveWindow(handle);
+            }
+#endif
+        }
+        return QTest::qWaitForWindowActive(window, 2'000)
+            && window->isExposed();
+    }
+
+    Q_INVOKABLE bool destroyItem(QObject* target) const
+    {
+        if (target == nullptr) return true;
+        QPointer<QObject> guard(target);
+        target->deleteLater();
+        QElapsedTimer timer;
+        timer.start();
+        while (!guard.isNull() && timer.elapsed() < 1'000) {
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 25);
+        }
+        return guard.isNull();
+    }
+
     Q_INVOKABLE bool sendUrls(QObject* target, const QList<QUrl>& urls)
     {
         if (target == nullptr || urls.isEmpty()) {
             return false;
         }
-        QWindow* window = qobject_cast<QWindow*>(target);
-        if (window == nullptr) {
-            const auto* item = qobject_cast<QQuickItem*>(target);
-            window = item == nullptr ? nullptr : item->window();
-        }
-        if (window == nullptr || !window->isVisible()) {
+        if (!prepareItem(target)) {
             return false;
         }
+        QWindow* window = windowForTarget(target);
         delivered_ = false;
         router_.registerWindow(window, NativeDropRouter::Target::AudioTools);
 
@@ -473,7 +508,7 @@ public:
     {
         auto* item = qobject_cast<QQuickItem*>(target);
         QQuickWindow* window = item == nullptr ? nullptr : item->window();
-        if (window == nullptr || !window->isVisible()) return false;
+        if (window == nullptr || !prepareItem(target)) return false;
         QTest::keyClick(window, static_cast<Qt::Key>(key),
                         Qt::KeyboardModifiers(modifiers));
         return true;
@@ -483,7 +518,7 @@ public:
     {
         auto* item = qobject_cast<QQuickItem*>(target);
         QQuickWindow* window = item == nullptr ? nullptr : item->window();
-        if (window == nullptr || !window->isVisible()) return false;
+        if (window == nullptr || !prepareItem(target)) return false;
         QTest::mouseDClick(window, Qt::LeftButton, Qt::NoModifier,
                            item->mapToScene(QPointF(x, y)).toPoint(), 20);
         return true;
@@ -494,7 +529,7 @@ public:
     {
         auto* item = qobject_cast<QQuickItem*>(target);
         QQuickWindow* window = item == nullptr ? nullptr : item->window();
-        if (window == nullptr || !window->isVisible()) return false;
+        if (window == nullptr || !prepareItem(target)) return false;
         QTest::mouseDClick(window, static_cast<Qt::MouseButton>(button),
                            Qt::NoModifier,
                            item->mapToScene(QPointF(x, y)).toPoint(), 20);
@@ -505,7 +540,7 @@ public:
     {
         auto* item = qobject_cast<QQuickItem*>(target);
         QQuickWindow* window = item == nullptr ? nullptr : item->window();
-        if (window == nullptr || !window->isVisible()) return false;
+        if (window == nullptr || !prepareItem(target)) return false;
         QTest::mouseClick(window, static_cast<Qt::MouseButton>(button),
                           Qt::NoModifier,
                           item->mapToScene(QPointF(x, y)).toPoint(), 20);
@@ -518,7 +553,7 @@ public:
     {
         auto* item = qobject_cast<QQuickItem*>(target);
         QQuickWindow* window = item == nullptr ? nullptr : item->window();
-        if (window == nullptr || !window->isVisible()) {
+        if (window == nullptr || !prepareItem(target)) {
             return false;
         }
         const QPoint start = item->mapToScene(QPointF(x, y)).toPoint();
@@ -540,6 +575,14 @@ public:
     }
 
 private:
+    static QWindow* windowForTarget(QObject* target)
+    {
+        QWindow* window = qobject_cast<QWindow*>(target);
+        if (window != nullptr) return window;
+        const auto* item = qobject_cast<QQuickItem*>(target);
+        return item == nullptr ? nullptr : item->window();
+    }
+
     NativeDropRouter router_;
     AudioToolsController* tools_ = nullptr;
     FormatConverter* format_ = nullptr;

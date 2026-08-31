@@ -49,6 +49,15 @@ TestCase {
     property var host
     property var page
 
+    function destroyCurrentHost() {
+        if (!host) return
+        const closingHost = host
+        host = null
+        page = null
+        verify(nativeDropHelper.destroyItem(closingHost),
+               "native editor shell did not finish deterministic cleanup")
+    }
+
     function findVisibleItem(root, name, expectedWindow) {
         if (!root || !root.children)
             return null
@@ -101,11 +110,10 @@ TestCase {
         }
         host = createTemporaryObject(pageComponent, testCase)
         verify(host)
-        host.requestActivate()
         page = host.editorPage
+        verify(nativeDropHelper.prepareItem(host),
+               "native editor shell was not visible, exposed, and active")
         tryVerify(function() { return page.width > 0 && page.height > 0 })
-        tryVerify(function() { return host.active }, 5000,
-                  "native editor shell did not become the active window")
     }
 
     function cleanup() {
@@ -119,10 +127,7 @@ TestCase {
                 verify(AudioEditorController.confirmDiscardAndOpen())
         }
         if (host) {
-            host.destroy()
-            host = null
-            page = null
-            wait(0)
+            destroyCurrentHost()
         }
     }
 
@@ -141,13 +146,11 @@ TestCase {
     }
 
     function test_spaceStartsRealFixturePlaybackFromCodecFocus() {
-        host.destroy()
-        wait(0)
+        destroyCurrentHost()
         host = createTemporaryObject(shellComponent, testCase)
         verify(host)
-        host.requestActivate()
-        tryVerify(function() { return host.active }, 5000,
-                  "880 shell did not become the active window")
+        verify(nativeDropHelper.prepareItem(host),
+               "full shell was not visible, exposed, and active")
         page = findChild(host, "audioEditorPage")
         const shortcut = findChild(host, "audioToolsSpaceShortcut")
         const codec = findChild(page, "editorExportCodec")
@@ -188,14 +191,13 @@ TestCase {
     }
 
     function test_narrowShellFixtureKeepsRealPlaybackControlsInsideThePage() {
-        host.destroy()
-        wait(0)
+        destroyCurrentHost()
         host = createTemporaryObject(shellComponent, testCase)
         verify(host)
         host.width = 880
         host.height = 560
-        host.requestActivate()
-        tryVerify(function() { return host.active })
+        verify(nativeDropHelper.prepareItem(host),
+               "880 shell was not visible, exposed, and active")
         page = findChild(host, "audioEditorPage")
         verify(page && testAudioUrl && testAudioUrl.toString().length > 0)
         compare(Math.round(page.height), 441)
@@ -265,12 +267,11 @@ TestCase {
     }
 
     function test_realFixtureEditingJourneyUsesNativeInputEndToEnd() {
-        host.destroy()
-        wait(0)
+        destroyCurrentHost()
         host = createTemporaryObject(shellComponent, testCase)
         verify(host)
-        host.requestActivate()
-        tryVerify(function() { return host.active })
+        verify(nativeDropHelper.prepareItem(host),
+               "editing-journey shell was not visible, exposed, and active")
         page = findChild(host, "audioEditorPage")
         verify(page && testAudioUrl && testAudioUrl.toString().length > 0)
 

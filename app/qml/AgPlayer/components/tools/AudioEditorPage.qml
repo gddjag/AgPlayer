@@ -42,7 +42,8 @@ Rectangle {
     readonly property var persistedExportSettings:
         AudioEditorController.projectExportSettings
     onPersistedExportSettingsChanged: Qt.callLater(function() {
-        page.ensureExportSettingsConsistent()
+        if (page)
+            page.ensureExportSettingsConsistent()
     })
 
     function textInputHasFocus() {
@@ -299,12 +300,14 @@ Rectangle {
         function onDiscardConfirmationRequested() { discardDialog.open() }
         function onProjectChanged() {
             Qt.callLater(function() {
-                page.ensureExportSettingsConsistent()
+                if (page)
+                    page.ensureExportSettingsConsistent()
             })
         }
     }
     Component.onCompleted: Qt.callLater(function() {
-        page.ensureExportSettingsConsistent()
+        if (page)
+            page.ensureExportSettingsConsistent()
     })
     DropArea {
         id: editorAudioDropArea
