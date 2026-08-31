@@ -23,8 +23,6 @@ add_library(agplayer_qt STATIC
     src/audio_preview_controller.hpp
     src/file_association_controller.cpp
     src/file_association_controller.hpp
-    src/frequency_color_waveform_settings.cpp
-    src/frequency_color_waveform_settings.hpp
     src/filename_processor.cpp
     src/filename_processor.hpp
     src/filename_transform_engine.cpp
@@ -147,8 +145,6 @@ add_library(agplayer_qt STATIC
     src/window_controller.hpp
     src/waveform_item.cpp
     src/waveform_item.hpp
-    src/waveform_layer_material.cpp
-    src/waveform_layer_material.hpp
 )
 
 set_target_properties(agplayer_qt PROPERTIES AUTOMOC ON)
@@ -189,14 +185,6 @@ qt_add_shaders(agplayer_qt agplayer_terrain_reactor_shaders
     FILES
         shaders/terrain_reactor.vert
         shaders/terrain_reactor.frag
-)
-
-qt_add_shaders(agplayer_qt agplayer_waveform_layer_shaders
-    PREFIX "/agplayer/shaders"
-    BASE "shaders"
-    FILES
-        shaders/waveform_layer.vert
-        shaders/waveform_layer.frag
 )
 
 if(WIN32)

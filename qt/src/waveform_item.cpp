@@ -1,13 +1,11 @@
 #include "waveform_item.hpp"
 #include "waveform_coordinate_mapper.hpp"
-#include "waveform_layer_material.hpp"
 
 #include <QHoverEvent>
 #include <QMouseEvent>
 #include <QQuickWindow>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
-#include <QSGRendererInterface>
 #include <QSGVertexColorMaterial>
 
 #include <algorithm>
@@ -70,6 +68,44 @@ struct VertexColor {
     Rgb rgb;
     unsigned char alpha;
 };
+
+unsigned char overlayAlpha(unsigned char playedAlpha, bool played)
+{
+    if (played) return playedAlpha;
+    return static_cast<unsigned char>(
+        std::lround(double(playedAlpha) * WaveformItem::unplayedAlpha() / 255.0));
+}
+
+VertexColor frequencyColor(const QColor& baseColor,
+                           const QColor& lowColor,
+                           const QColor& midColor,
+                           const QColor& highColor,
+                           float lowWeight,
+                           float midWeight,
+                           float highWeight,
+                           qreal strength,
+                           bool played)
+{
+    lowWeight = std::max(0.0F, lowWeight);
+    midWeight = std::max(0.0F, midWeight);
+    highWeight = std::max(0.0F, highWeight);
+    const double total = static_cast<double>(lowWeight)
+        + static_cast<double>(midWeight) + static_cast<double>(highWeight);
+    const double clampedStrength = std::clamp(static_cast<double>(strength), 0.0, 1.0);
+    const auto channel = [&](int base, int low, int mid, int high) {
+        const double weighted = total > 0.0
+            ? (static_cast<double>(lowWeight) * low
+               + static_cast<double>(midWeight) * mid
+               + static_cast<double>(highWeight) * high) / total
+            : static_cast<double>(base);
+        return static_cast<int>(std::lround(
+            static_cast<double>(base) + (weighted - base) * clampedStrength));
+    };
+    return {{channel(baseColor.red(), lowColor.red(), midColor.red(), highColor.red()),
+             channel(baseColor.green(), lowColor.green(), midColor.green(), highColor.green()),
+             channel(baseColor.blue(), lowColor.blue(), midColor.blue(), highColor.blue())},
+            overlayAlpha(255U, played)};
+}
 
 VertexColor mixColor(double normalizedX,
                      bool played,
@@ -328,6 +364,10 @@ public:
     QColor gradientStartColor_;
     QColor gradientMiddleColor_;
     QColor gradientEndColor_;
+    QColor frequencyLowColor_;
+    QColor frequencyMidColor_;
+    QColor frequencyHighColor_;
+    qreal frequencyStrength_ = -1.0;
     bool rgbProgress_ = true;
     qreal amplitudeScale_ = -1.0;
     std::size_t peakCount_ = 0;
@@ -335,6 +375,9 @@ public:
     unsigned char layerMask_ = 0;
     std::vector<float> mixValues_;
     std::vector<float> heldSpectrumValues_;
+    std::vector<float> bassValues_;
+    std::vector<float> midValues_;
+    std::vector<float> highValues_;
 };
 
 } // namespace
@@ -520,9 +563,6 @@ void WaveformItem::setCursorPosition(qreal position)
     cursorPosition_ = clamped;
     emit cursorPositionChanged();
     emit waveformCursorXChanged();
-    if (visualMode_ == 3) {
-        update();
-    }
 }
 
 void WaveformItem::setPosition(qreal position)
@@ -705,108 +745,6 @@ void WaveformItem::setFrequencyStrength(qreal value)
     update();
 }
 
-bool WaveformItem::frequencyDarkSurface() const noexcept
-{
-    return frequencyDarkSurface_;
-}
-
-void WaveformItem::setFrequencyDarkSurface(bool value)
-{
-    if (frequencyDarkSurface_ == value) {
-        return;
-    }
-    frequencyDarkSurface_ = value;
-    emit frequencyDarkSurfaceChanged();
-    update();
-}
-
-QColor WaveformItem::frequencyMixColor() const { return frequencyMixColor_; }
-
-void WaveformItem::setFrequencyMixColor(const QColor& color)
-{
-    if (!color.isValid() || frequencyMixColor_ == color) {
-        return;
-    }
-    frequencyMixColor_ = color;
-    emit frequencyStyleChanged();
-    update();
-}
-
-namespace {
-
-double finiteUnitValue(double value, double fallback)
-{
-    return std::clamp(std::isfinite(value) ? value : fallback, 0.0, 1.0);
-}
-
-} // namespace
-
-#define AGPLAYER_FREQUENCY_OPACITY_ACCESSORS(Getter, Setter, Member) \
-    double WaveformItem::Getter() const noexcept { return Member; }   \
-    void WaveformItem::Setter(double value)                          \
-    {                                                                \
-        const double clamped = finiteUnitValue(value, Member);       \
-        if (qFuzzyCompare(Member + 1.0, clamped + 1.0)) {             \
-            return;                                                  \
-        }                                                            \
-        Member = clamped;                                            \
-        emit frequencyStyleChanged();                                \
-        update();                                                     \
-    }
-
-AGPLAYER_FREQUENCY_OPACITY_ACCESSORS(
-    frequencyMixOpacity, setFrequencyMixOpacity, frequencyMixOpacity_)
-AGPLAYER_FREQUENCY_OPACITY_ACCESSORS(
-    frequencyLowOpacity, setFrequencyLowOpacity, frequencyLowOpacity_)
-AGPLAYER_FREQUENCY_OPACITY_ACCESSORS(
-    frequencyMidOpacity, setFrequencyMidOpacity, frequencyMidOpacity_)
-AGPLAYER_FREQUENCY_OPACITY_ACCESSORS(
-    frequencyHighOpacity, setFrequencyHighOpacity, frequencyHighOpacity_)
-AGPLAYER_FREQUENCY_OPACITY_ACCESSORS(
-    frequencyBandFade, setFrequencyBandFade, frequencyBandFade_)
-
-#undef AGPLAYER_FREQUENCY_OPACITY_ACCESSORS
-
-bool WaveformItem::frequencyPlayFocus() const noexcept
-{
-    return frequencyPlayFocus_;
-}
-
-void WaveformItem::setFrequencyPlayFocus(bool value)
-{
-    if (frequencyPlayFocus_ == value) {
-        return;
-    }
-    frequencyPlayFocus_ = value;
-    emit frequencyStyleChanged();
-    update();
-}
-
-QColor WaveformItem::frequencyFocusColor() const
-{
-    return frequencyFocusColor_;
-}
-
-void WaveformItem::setFrequencyFocusColor(const QColor& color)
-{
-    if (!color.isValid() || frequencyFocusColor_ == color) {
-        return;
-    }
-    frequencyFocusColor_ = color;
-    emit frequencyStyleChanged();
-    update();
-}
-
-int WaveformItem::effectiveFrequencyQuality() const noexcept
-{
-    if (window() != nullptr && window()->rendererInterface() != nullptr
-        && window()->rendererInterface()->graphicsApi()
-            == QSGRendererInterface::Software) {
-        return 2;
-    }
-    return effectiveFrequencyQuality_;
-}
-
 bool WaveformItem::rgbProgress() const noexcept { return rgbProgress_; }
 
 void WaveformItem::setRgbProgress(bool value)
@@ -976,380 +914,6 @@ void WaveformItem::geometryChange(const QRectF& newGeometry,
         emit renderWidthChanged();
         emit waveformCursorXChanged();
     }
-    const int nextQuality = newGeometry.height() >= 120.0
-        ? 0 : newGeometry.height() >= 64.0 ? 1 : 2;
-    if (effectiveFrequencyQuality_ != nextQuality) {
-        effectiveFrequencyQuality_ = nextQuality;
-        emit effectiveFrequencyQualityChanged();
-    }
-}
-
-QSGNode* WaveformItem::updateFrequencyPaintNode(
-    QSGNode* oldNode,
-    const std::shared_ptr<const PeakSnapshot>& snapshot)
-{
-    if (oldNode != nullptr && oldNode->type() != QSGNode::BasicNodeType) {
-        delete oldNode;
-        oldNode = nullptr;
-    }
-    auto* root = static_cast<FrequencyWaveformRootNode*>(oldNode);
-    if (root == nullptr) {
-        root = new FrequencyWaveformRootNode();
-    }
-
-    const bool hasMix = snapshot->mix && !snapshot->mix->values.empty();
-    const bool hasLow = snapshot->bass && !snapshot->bass->values.empty();
-    const bool hasMid = snapshot->mid && !snapshot->mid->values.empty();
-    const bool hasHigh = snapshot->high && !snapshot->high->values.empty();
-    const unsigned char layerMask = (hasMix ? 1U : 0U)
-        | (hasLow ? 2U : 0U) | (hasMid ? 4U : 0U) | (hasHigh ? 8U : 0U);
-
-    const qreal dpr = std::clamp(
-        window() ? window()->effectiveDevicePixelRatio() : qreal{1.0},
-        qreal{1.0}, qreal{4.0});
-    bool software = false;
-    if (window() != nullptr && window()->rendererInterface() != nullptr) {
-        software = software
-            || window()->rendererInterface()->graphicsApi()
-                == QSGRendererInterface::Software;
-    }
-    const int quality = height() >= 120.0 ? 0 : height() >= 64.0 ? 1 : 2;
-    const bool lineFallback = software || quality == 2;
-    const double qualityScale = quality == 0 ? 1.0 : quality == 1 ? 0.75 : 0.5;
-    const std::size_t baseRequestedPoints = std::max<std::size_t>(
-        2U, static_cast<std::size_t>(std::ceil(
-                std::max(0.0, width() * dpr * density_ / 2.0))));
-    const std::size_t requestedPoints = std::max<std::size_t>(
-        2U, static_cast<std::size_t>(std::ceil(
-                static_cast<double>(baseRequestedPoints) * qualityScale)));
-    const std::size_t pointCount = lineFallback
-        ? std::min<std::size_t>(512U, baseRequestedPoints)
-        : requestedPoints;
-
-    const bool geometryChanged = root->revision_ != snapshot->revision
-        || !qFuzzyCompare(root->width_, width())
-        || !qFuzzyCompare(root->height_, height())
-        || !qFuzzyCompare(root->devicePixelRatio_, dpr)
-        || !qFuzzyCompare(root->density_, density_)
-        || !qFuzzyCompare(root->amplitudeScale_, amplitudeScale_)
-        || root->duration_ != duration_
-        || root->visibleStartMs_ != visibleStartMs_
-        || root->visibleEndMs_ != visibleEndMs_
-        || root->layerMask_ != layerMask
-        || root->quality_ != quality
-        || root->lineFallback_ != lineFallback;
-
-    std::array<const std::vector<float>*, 4> sourceValues{{
-        hasMix ? &snapshot->mix->values : nullptr,
-        hasLow ? &snapshot->bass->values : nullptr,
-        hasMid ? &snapshot->mid->values : nullptr,
-        hasHigh ? &snapshot->high->values : nullptr,
-    }};
-    const bool compactMode = height() < 32.0 && (hasLow || hasMid || hasHigh);
-    if (geometryChanged && compactMode) {
-        const std::size_t combinedSize = std::max({
-            hasLow ? snapshot->bass->values.size() : std::size_t{0},
-            hasMid ? snapshot->mid->values.size() : std::size_t{0},
-            hasHigh ? snapshot->high->values.size() : std::size_t{0},
-        });
-        root->compactBandValues_.assign(combinedSize, 0.0F);
-        const auto combine = [root](
-                                 const std::shared_ptr<const LayerSnapshot>& layer) {
-            if (!layer) {
-                return;
-            }
-            for (std::size_t index = 0; index < layer->values.size(); ++index) {
-                root->compactBandValues_[index] = std::max(
-                    root->compactBandValues_[index], layer->values[index]);
-            }
-        };
-        combine(snapshot->bass);
-        combine(snapshot->mid);
-        combine(snapshot->high);
-        ++root->compactBandBuildCount_;
-    } else if (geometryChanged) {
-        root->compactBandValues_.clear();
-    }
-    if (compactMode) {
-        sourceValues[1] = &root->compactBandValues_;
-        sourceValues[2] = nullptr;
-        sourceValues[3] = nullptr;
-    }
-
-    if (geometryChanged) {
-        auto* baselineGeometry = root->baseline()->geometry();
-        baselineGeometry->allocate(2);
-        auto* baselineVertices = baselineGeometry->vertexDataAsColoredPoint2D();
-        baselineVertices[0].x = 0.0F;
-        baselineVertices[0].y = static_cast<float>(height() * 0.5);
-        baselineVertices[1].x = static_cast<float>(width());
-        baselineVertices[1].y = static_cast<float>(height() * 0.5);
-        root->baseline()->markDirty(QSGNode::DirtyGeometry);
-
-        const float center = static_cast<float>(height() * 0.5);
-        const float outlineHalf = 0.4F;
-        for (std::size_t roleIndex = 0; roleIndex < sourceValues.size(); ++roleIndex) {
-            auto* layerNode = root->layers_[roleIndex];
-            const auto* values = sourceValues[roleIndex];
-            if (lineFallback) {
-                layerNode->useLineFallback();
-                QSGGeometry& geometry = layerNode->lineGeometry();
-                if (values == nullptr) {
-                    geometry.allocate(0);
-                    continue;
-                }
-                std::vector<float> sampled;
-                resampleVisibleValues(*values, visibleStartMs_, visibleEndMs_,
-                                      duration_, pointCount, sampled);
-                geometry.allocate(static_cast<int>(sampled.size() * 2U));
-                auto* vertices = geometry.vertexDataAsColoredPoint2D();
-                for (std::size_t index = 0; index < sampled.size(); ++index) {
-                    const float normalizedX = sampled.size() <= 1U ? 0.5F
-                        : static_cast<float>(index)
-                            / static_cast<float>(sampled.size() - 1U);
-                    const float x = normalizedX * static_cast<float>(width());
-                    const float amplitude = std::max(
-                        0.5F, sampled[index] * center
-                            * static_cast<float>(amplitudeScale_));
-                    vertices[index * 2U].x = x;
-                    vertices[index * 2U].y = center - amplitude;
-                    vertices[index * 2U + 1U].x = x;
-                    vertices[index * 2U + 1U].y = center + amplitude;
-                }
-                geometry.setLineWidth(1.0F);
-                layerNode->markDirty(QSGNode::DirtyGeometry);
-                continue;
-            }
-
-            layerNode->useTriangleMaterial();
-            QSGGeometry& geometry = layerNode->triangleGeometry();
-            if (values == nullptr) {
-                geometry.allocate(0, 0);
-                continue;
-            }
-            std::vector<float> sampled;
-            resampleVisibleValues(*values, visibleStartMs_, visibleEndMs_,
-                                  duration_, pointCount, sampled);
-            const std::size_t segmentCount = sampled.size() > 1U
-                ? sampled.size() - 1U : 0U;
-            const std::size_t vertexCount = segmentCount * 12U;
-            const std::size_t indexCount = segmentCount * 18U;
-            if (vertexCount > static_cast<std::size_t>(std::numeric_limits<int>::max())
-                || indexCount > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
-                geometry.allocate(0, 0);
-                continue;
-            }
-            geometry.allocate(static_cast<int>(vertexCount),
-                              static_cast<int>(indexCount));
-            auto* vertices = static_cast<FrequencyWaveformVertex*>(
-                geometry.vertexData());
-            auto* indices = geometry.indexDataAsUInt();
-            for (std::size_t segment = 0; segment < segmentCount; ++segment) {
-                const float x0 = static_cast<float>(segment)
-                    / static_cast<float>(segmentCount)
-                    * static_cast<float>(width());
-                const float x1 = static_cast<float>(segment + 1U)
-                    / static_cast<float>(segmentCount)
-                    * static_cast<float>(width());
-                const float a0 = std::max(0.5F, sampled[segment] * center
-                    * static_cast<float>(amplitudeScale_));
-                const float a1 = std::max(0.5F, sampled[segment + 1U] * center
-                    * static_cast<float>(amplitudeScale_));
-                const float top0 = center - a0;
-                const float top1 = center - a1;
-                const float bottom0 = center + a0;
-                const float bottom1 = center + a1;
-                const std::size_t vertex = segment * 12U;
-                vertices[vertex + 0U] = {x0, top0, 0.0F};
-                vertices[vertex + 1U] = {x0, bottom0, 0.0F};
-                vertices[vertex + 2U] = {x1, top1, 0.0F};
-                vertices[vertex + 3U] = {x1, bottom1, 0.0F};
-                vertices[vertex + 4U] = {x0, top0 - outlineHalf, 1.0F};
-                vertices[vertex + 5U] = {x0, top0 + outlineHalf, 1.0F};
-                vertices[vertex + 6U] = {x1, top1 - outlineHalf, 1.0F};
-                vertices[vertex + 7U] = {x1, top1 + outlineHalf, 1.0F};
-                vertices[vertex + 8U] = {x0, bottom0 - outlineHalf, 1.0F};
-                vertices[vertex + 9U] = {x0, bottom0 + outlineHalf, 1.0F};
-                vertices[vertex + 10U] = {x1, bottom1 - outlineHalf, 1.0F};
-                vertices[vertex + 11U] = {x1, bottom1 + outlineHalf, 1.0F};
-                const std::size_t output = segment * 18U;
-                constexpr std::array<unsigned int, 18> localIndices{{
-                    0, 1, 2, 2, 1, 3,
-                    4, 5, 6, 6, 5, 7,
-                    8, 9, 10, 10, 9, 11,
-                }};
-                for (std::size_t i = 0; i < localIndices.size(); ++i) {
-                    indices[output + i] = static_cast<unsigned int>(
-                        vertex + localIndices[i]);
-                }
-            }
-            layerNode->markDirty(QSGNode::DirtyGeometry);
-        }
-        root->revision_ = snapshot->revision;
-        root->width_ = width();
-        root->height_ = height();
-        root->devicePixelRatio_ = dpr;
-        root->density_ = density_;
-        root->amplitudeScale_ = amplitudeScale_;
-        root->duration_ = duration_;
-        root->visibleStartMs_ = visibleStartMs_;
-        root->visibleEndMs_ = visibleEndMs_;
-        root->layerMask_ = layerMask;
-        root->quality_ = quality;
-        root->lineFallback_ = lineFallback;
-    }
-
-    const bool baselineStyleChanged = geometryChanged
-        || !root->baselineStyleInitialized_
-        || root->baselineDarkSurface_ != frequencyDarkSurface_;
-    if (baselineStyleChanged) {
-        auto* baselineVertices = root->baseline()->geometry()
-            ->vertexDataAsColoredPoint2D();
-        const unsigned char baselineAlpha = frequencyDarkSurface_ ? 42U : 34U;
-        const auto baselinePremultiply = [baselineAlpha](int channel) {
-            return static_cast<unsigned char>(std::lround(
-                static_cast<double>(channel) * baselineAlpha / 255.0));
-        };
-        for (int index = 0; index < 2; ++index) {
-            baselineVertices[index].r = baselinePremultiply(128);
-            baselineVertices[index].g = baselinePremultiply(136);
-            baselineVertices[index].b = baselinePremultiply(148);
-            baselineVertices[index].a = baselineAlpha;
-        }
-        root->baseline()->markDirty(QSGNode::DirtyGeometry);
-        root->baselineStyleInitialized_ = true;
-        root->baselineDarkSurface_ = frequencyDarkSurface_;
-    }
-
-    const double legacyScale = frequencyStrength_ / 0.62;
-    const std::array<QColor, 4> colors{{
-        frequencyMixColor_, frequencyLowColor_, frequencyMidColor_,
-        frequencyHighColor_,
-    }};
-    const std::array<double, 4> opacities{{
-        frequencyMixOpacity_, frequencyLowOpacity_, frequencyMidOpacity_,
-        frequencyHighOpacity_,
-    }};
-    const std::array<double, 4> darkOutlineRatios{{
-        0.38 / 0.18, 0.82 / 0.44, 0.80 / 0.38, 0.84 / 0.46,
-    }};
-    const std::array<double, 4> lightOutlineRatios{{
-        0.36 / 0.14, 0.78 / 0.36, 0.76 / 0.32, 0.80 / 0.40,
-    }};
-    const float progressX = static_cast<float>(std::clamp(
-        pixelForTime(cursorPosition_ >= 0 ? cursorPosition_ : position_),
-        qreal{0.0}, width()));
-    const float featherWidth = static_cast<float>(std::clamp(
-        12.0 / dpr, 2.0, 12.0));
-    for (std::size_t index = 0; index < root->layers_.size(); ++index) {
-        auto* layerNode = root->layers_[index];
-        const float fill = static_cast<float>(std::clamp(
-            opacities[index] * legacyScale, 0.0, 1.0));
-        const double ratio = frequencyDarkSurface_
-            ? darkOutlineRatios[index] : lightOutlineRatios[index];
-        const float outline = static_cast<float>(std::clamp(
-            static_cast<double>(fill) * ratio, 0.0, 1.0));
-        const float fade = index == 0U ? 1.0F
-            : static_cast<float>(frequencyBandFade_);
-        if (!lineFallback) {
-            auto* material = layerNode->waveformMaterial();
-            material->setStyle(colors[index], fill, outline, fade);
-            material->setProgress(progressX, featherWidth);
-            layerNode->markDirty(QSGNode::DirtyMaterial);
-        } else if (sourceValues[index] != nullptr) {
-            auto* vertices = layerNode->lineGeometry().vertexDataAsColoredPoint2D();
-            const int vertexCount = layerNode->lineGeometry().vertexCount();
-            const float alpha = outline * fade;
-            const bool fallbackStyleChanged = geometryChanged
-                || !root->fallbackStyleInitialized_[index]
-                || root->fallbackColors_[index] != colors[index]
-                || !qFuzzyCompare(root->fallbackAlphas_[index] + 1.0F,
-                                  alpha + 1.0F);
-            if (!fallbackStyleChanged) {
-                continue;
-            }
-            const unsigned char byteAlpha = static_cast<unsigned char>(
-                std::lround(alpha * 255.0F));
-            const auto premultiply = [byteAlpha](int channel) {
-                return static_cast<unsigned char>(std::lround(
-                    static_cast<double>(channel) * byteAlpha / 255.0));
-            };
-            for (int vertex = 0; vertex < vertexCount; ++vertex) {
-                vertices[vertex].r = premultiply(colors[index].red());
-                vertices[vertex].g = premultiply(colors[index].green());
-                vertices[vertex].b = premultiply(colors[index].blue());
-                vertices[vertex].a = byteAlpha;
-            }
-            layerNode->markDirty(QSGNode::DirtyGeometry);
-            root->fallbackColors_[index] = colors[index];
-            root->fallbackAlphas_[index] = alpha;
-            root->fallbackStyleInitialized_[index] = true;
-        }
-    }
-
-    auto* focusGeometry = root->focusGeometryNode()->geometry();
-    const bool focusVisible = frequencyPlayFocus_
-        && (cursorPosition_ >= 0 ? cursorPosition_ : position_) >= visibleStartMs_
-        && (cursorPosition_ >= 0 ? cursorPosition_ : position_) <= visibleEndMs_;
-    const bool focusGeometryChanged = geometryChanged
-        || root->focusColor_ != frequencyFocusColor_
-        || root->focusVisible_ != focusVisible;
-    if (focusGeometryChanged && focusVisible) {
-            focusGeometry->allocate(16, 24);
-            auto* vertices = focusGeometry->vertexDataAsColoredPoint2D();
-            auto* indices = focusGeometry->indexDataAsUShort();
-            const std::array<float, 4> widths = quality == 0
-                ? std::array<float, 4>{{8.0F, 4.0F, 1.0F, 6.0F}}
-                : std::array<float, 4>{{4.0F, 2.0F, 1.0F, 6.0F}};
-            const std::array<unsigned char, 4> alphas{{12U, 24U, 232U, 232U}};
-            for (std::size_t quad = 0; quad < widths.size(); ++quad) {
-                const float halfWidth = widths[quad] * 0.5F;
-                const bool dot = quad == 3U;
-                const float y0 = dot
-                    ? static_cast<float>(height() * 0.5 - 3.0) : 0.0F;
-                const float y1 = dot
-                    ? static_cast<float>(height() * 0.5 + 3.0)
-                    : static_cast<float>(height());
-                const unsigned char alpha = alphas[quad];
-                const auto premultiply = [alpha](int channel) {
-                    return static_cast<unsigned char>(std::lround(
-                        static_cast<double>(channel) * alpha / 255.0));
-                };
-                const std::size_t vertex = quad * 4U;
-                vertices[vertex + 0U].set(-halfWidth, y0,
-                    premultiply(frequencyFocusColor_.red()),
-                    premultiply(frequencyFocusColor_.green()),
-                    premultiply(frequencyFocusColor_.blue()), alpha);
-                vertices[vertex + 1U] = vertices[vertex + 0U];
-                vertices[vertex + 1U].x = halfWidth;
-                vertices[vertex + 2U] = vertices[vertex + 0U];
-                vertices[vertex + 2U].y = y1;
-                vertices[vertex + 3U] = vertices[vertex + 1U];
-                vertices[vertex + 3U].y = y1;
-                const std::size_t output = quad * 6U;
-                const quint16 base = static_cast<quint16>(vertex);
-                indices[output + 0U] = base;
-                indices[output + 1U] = base + 1U;
-                indices[output + 2U] = base + 2U;
-                indices[output + 3U] = base + 2U;
-                indices[output + 4U] = base + 1U;
-                indices[output + 5U] = base + 3U;
-            }
-            root->focusGeometryNode()->markDirty(
-                QSGNode::DirtyGeometry | QSGNode::DirtyMaterial);
-    } else if (focusGeometryChanged) {
-        focusGeometry->allocate(0, 0);
-        root->focusGeometryNode()->markDirty(QSGNode::DirtyGeometry);
-    }
-    if (focusVisible) {
-        const qreal snappedX = std::round(progressX * dpr) / dpr;
-        QMatrix4x4 transform;
-        transform.translate(static_cast<float>(snappedX), 0.0F);
-        root->focusTransform()->setMatrix(transform);
-    }
-    root->focusColor_ = frequencyFocusColor_;
-    root->focusVisible_ = focusVisible;
-    return root;
 }
 
 QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
@@ -1362,19 +926,9 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
     const bool hasMid = snapshot && snapshot->mid && !snapshot->mid->values.empty();
     const bool hasHigh = snapshot && snapshot->high && !snapshot->high->values.empty();
     const bool hasAny = hasMix || hasBass || hasMid || hasHigh;
-    const bool hasRenderableLayer = visualMode_ == 3 ? hasAny : hasMix;
-    if (!hasRenderableLayer || width() <= 0.0 || height() <= 0.0) {
+    if (!hasAny || width() <= 0.0 || height() <= 0.0) {
         delete oldNode;
         return nullptr;
-    }
-
-    if (visualMode_ == 3) {
-        return updateFrequencyPaintNode(oldNode, snapshot);
-    }
-
-    if (oldNode != nullptr && oldNode->type() != QSGNode::GeometryNodeType) {
-        delete oldNode;
-        oldNode = nullptr;
     }
 
     auto* node = static_cast<WaveformNode*>(oldNode);
@@ -1398,7 +952,11 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         // and preserves extrema when several source buckets share a pixel.
         : maxPoints;
 
-    const unsigned char layerMask = hasMix ? 1U : 0U;
+    const unsigned char layerMask =
+        (hasMix ? 1U : 0U)
+        | (hasBass ? 2U : 0U)
+        | (hasMid ? 4U : 0U)
+        | (hasHigh ? 8U : 0U);
 
     const bool geometryChanged = node->revision_ != snapshot->revision
                                  || !qFuzzyCompare(node->width_, width())
@@ -1414,6 +972,11 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                                  || node->gradientStartColor_ != gradientStartColor_
                                  || node->gradientMiddleColor_ != gradientMiddleColor_
                                  || node->gradientEndColor_ != gradientEndColor_
+                                 || node->frequencyLowColor_ != frequencyLowColor_
+                                 || node->frequencyMidColor_ != frequencyMidColor_
+                                 || node->frequencyHighColor_ != frequencyHighColor_
+                                 || !qFuzzyCompare(node->frequencyStrength_,
+                                                   frequencyStrength_)
                                  || node->rgbProgress_ != rgbProgress_
                                  || !qFuzzyCompare(node->amplitudeScale_,
                                                    amplitudeScale_)
@@ -1439,6 +1002,8 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
             0.0, width() - waveformLeftInset - waveformRightInset);
         const std::size_t activeLayers = visualMode_ == 2
             ? (hasMix ? 1U : 0U)
+            : visualMode_ == 3
+                ? 1U
             : (hasMix ? 1U : 0U);
         // Spectrum bars are drawn as adjacent vertical 1 px lines plus a
         // horizontal cap. The cap makes each peak readable on dense displays
@@ -1480,8 +1045,46 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         } else {
             node->heldSpectrumValues_.clear();
         }
+        if (hasBass) {
+            resampleVisibleValues(snapshot->bass->values, visibleStartMs_,
+                                  visibleEndMs_, duration_, peakCount,
+                                  node->bassValues_);
+        } else {
+            node->bassValues_.clear();
+        }
+        if (hasMid) {
+            resampleVisibleValues(snapshot->mid->values, visibleStartMs_,
+                                  visibleEndMs_, duration_, peakCount,
+                                  node->midValues_);
+        } else {
+            node->midValues_.clear();
+        }
+        if (hasHigh) {
+            resampleVisibleValues(snapshot->high->values, visibleStartMs_,
+                                  visibleEndMs_, duration_, peakCount,
+                                  node->highValues_);
+        } else {
+            node->highValues_.clear();
+        }
+
         auto& mixValues = node->mixValues_;
         auto& heldSpectrumValues = node->heldSpectrumValues_;
+        const auto& bassValues = node->bassValues_;
+        const auto& midValues = node->midValues_;
+        const auto& highValues = node->highValues_;
+
+        if (visualMode_ == 3 && mixValues.empty()) {
+            mixValues.resize(peakCount, 0.0F);
+            for (std::size_t index = 0; index < peakCount; ++index) {
+                const float bass = index < bassValues.size()
+                    ? bassValues[index] : 0.0F;
+                const float mid = index < midValues.size()
+                    ? midValues[index] : 0.0F;
+                const float high = index < highValues.size()
+                    ? highValues[index] : 0.0F;
+                mixValues[index] = std::max({bass, mid, high});
+            }
+        }
 
         if (visualMode_ == 2 && !mixValues.empty()) {
             // Input magnitudes are already normalized by the analyser. Per-frame
@@ -1540,11 +1143,23 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                             amplitude, std::min(0.5F, center));
                     }
 
-                    const VertexColor color = mixColor(
-                        normalizedX, index < playedCount, visualMode_,
-                        waveformColor_, baseColor_, progressColor_,
-                        gradientStartColor_, gradientMiddleColor_,
-                        gradientEndColor_, rgbProgress_);
+                    VertexColor color = mixColor(
+                        normalizedX, index < playedCount,
+                        visualMode_ == 3 ? 0 : visualMode_, waveformColor_,
+                        baseColor_, progressColor_, gradientStartColor_,
+                        gradientMiddleColor_, gradientEndColor_, rgbProgress_);
+                    if (visualMode_ == 3) {
+                        const float low = index < bassValues.size()
+                            ? bassValues[index] : 0.0F;
+                        const float mid = index < midValues.size()
+                            ? midValues[index] : 0.0F;
+                        const float high = index < highValues.size()
+                            ? highValues[index] : 0.0F;
+                        color = frequencyColor(
+                            baseColor_, frequencyLowColor_, frequencyMidColor_,
+                            frequencyHighColor_, low, mid, high,
+                            frequencyStrength_, index < playedCount);
+                    }
                     const auto red = static_cast<unsigned char>(color.rgb.red);
                     const auto green = static_cast<unsigned char>(color.rgb.green);
                     const auto blue = static_cast<unsigned char>(color.rgb.blue);
@@ -1636,6 +1251,10 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         node->gradientStartColor_ = gradientStartColor_;
         node->gradientMiddleColor_ = gradientMiddleColor_;
         node->gradientEndColor_ = gradientEndColor_;
+        node->frequencyLowColor_ = frequencyLowColor_;
+        node->frequencyMidColor_ = frequencyMidColor_;
+        node->frequencyHighColor_ = frequencyHighColor_;
+        node->frequencyStrength_ = frequencyStrength_;
         node->rgbProgress_ = rgbProgress_;
         node->amplitudeScale_ = amplitudeScale_;
         node->peakCount_ = peakCount;
@@ -1658,13 +1277,44 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         ? static_cast<std::size_t>(spectrumBarWidth())
         : static_cast<std::size_t>(std::max(1.0, std::ceil(node->lineWidth_)));
     std::size_t vertexOffset = 0U;
-    if (hasMix) {
-        updateMixVertexColors(
-            vertices + vertexOffset, peakCount, newPlayedCount,
-            waveformColor_, visualMode_, baseColor_, progressColor_,
-            gradientStartColor_, gradientMiddleColor_, gradientEndColor_,
-            rgbProgress_, strokeCopies);
-        vertexOffset += peakCount * 2U * strokeCopies;
+    if (hasMix || visualMode_ == 3) {
+        if (visualMode_ == 3) {
+            for (std::size_t copy = 0; copy < strokeCopies; ++copy) {
+                for (std::size_t index = 0; index < peakCount; ++index) {
+                    const float low = index < node->bassValues_.size()
+                        ? node->bassValues_[index] : 0.0F;
+                    const float mid = index < node->midValues_.size()
+                        ? node->midValues_[index] : 0.0F;
+                    const float high = index < node->highValues_.size()
+                        ? node->highValues_[index] : 0.0F;
+                    const VertexColor color = frequencyColor(
+                        baseColor_, frequencyLowColor_, frequencyMidColor_,
+                        frequencyHighColor_, low, mid, high,
+                        frequencyStrength_, index < newPlayedCount);
+                    const std::size_t vertex =
+                        (copy * peakCount + index) * 2U;
+                    for (std::size_t pair = 0; pair < 2U; ++pair) {
+                        vertices[vertex + pair].r =
+                            static_cast<unsigned char>(color.rgb.red);
+                        vertices[vertex + pair].g =
+                            static_cast<unsigned char>(color.rgb.green);
+                        vertices[vertex + pair].b =
+                            static_cast<unsigned char>(color.rgb.blue);
+                        vertices[vertex + pair].a = color.alpha;
+                    }
+                }
+            }
+            vertexOffset += peakCount * 2U * strokeCopies;
+        } else {
+            updateMixVertexColors(
+                vertices + vertexOffset, peakCount, newPlayedCount,
+                waveformColor_, visualMode_, baseColor_, progressColor_,
+                gradientStartColor_, gradientMiddleColor_, gradientEndColor_,
+                rgbProgress_, strokeCopies);
+        }
+        if (visualMode_ != 3) {
+            vertexOffset += peakCount * 2U * strokeCopies;
+        }
         if (node->visualMode_ == 2) {
             // Peak-hold caps are a separate geometry range.  Recolor them in
             // the same update so their colour never trails the bar below.

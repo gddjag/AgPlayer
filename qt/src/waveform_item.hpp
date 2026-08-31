@@ -37,33 +37,12 @@ class WaveformItem : public QQuickItem {
                    WRITE setGradientEndColor NOTIFY gradientEndColorChanged)
     Q_PROPERTY(QColor frequencyLowColor READ frequencyLowColor
                    WRITE setFrequencyLowColor NOTIFY frequencyLowColorChanged)
-    Q_PROPERTY(QColor frequencyMixColor READ frequencyMixColor
-                   WRITE setFrequencyMixColor NOTIFY frequencyStyleChanged)
     Q_PROPERTY(QColor frequencyMidColor READ frequencyMidColor
                    WRITE setFrequencyMidColor NOTIFY frequencyMidColorChanged)
     Q_PROPERTY(QColor frequencyHighColor READ frequencyHighColor
                    WRITE setFrequencyHighColor NOTIFY frequencyHighColorChanged)
     Q_PROPERTY(qreal frequencyStrength READ frequencyStrength
                    WRITE setFrequencyStrength NOTIFY frequencyStrengthChanged)
-    Q_PROPERTY(bool frequencyDarkSurface READ frequencyDarkSurface
-                   WRITE setFrequencyDarkSurface
-                   NOTIFY frequencyDarkSurfaceChanged)
-    Q_PROPERTY(double frequencyMixOpacity READ frequencyMixOpacity
-                   WRITE setFrequencyMixOpacity NOTIFY frequencyStyleChanged)
-    Q_PROPERTY(double frequencyLowOpacity READ frequencyLowOpacity
-                   WRITE setFrequencyLowOpacity NOTIFY frequencyStyleChanged)
-    Q_PROPERTY(double frequencyMidOpacity READ frequencyMidOpacity
-                   WRITE setFrequencyMidOpacity NOTIFY frequencyStyleChanged)
-    Q_PROPERTY(double frequencyHighOpacity READ frequencyHighOpacity
-                   WRITE setFrequencyHighOpacity NOTIFY frequencyStyleChanged)
-    Q_PROPERTY(double frequencyBandFade READ frequencyBandFade
-                   WRITE setFrequencyBandFade NOTIFY frequencyStyleChanged)
-    Q_PROPERTY(bool frequencyPlayFocus READ frequencyPlayFocus
-                   WRITE setFrequencyPlayFocus NOTIFY frequencyStyleChanged)
-    Q_PROPERTY(QColor frequencyFocusColor READ frequencyFocusColor
-                   WRITE setFrequencyFocusColor NOTIFY frequencyStyleChanged)
-    Q_PROPERTY(int effectiveFrequencyQuality READ effectiveFrequencyQuality
-                   NOTIFY effectiveFrequencyQualityChanged)
     Q_PROPERTY(bool rgbProgress READ rgbProgress WRITE setRgbProgress
                    NOTIFY rgbProgressChanged)
     Q_PROPERTY(qreal amplitudeScale READ amplitudeScale WRITE setAmplitudeScale
@@ -126,31 +105,12 @@ public:
     void setGradientEndColor(const QColor& color);
     QColor frequencyLowColor() const;
     void setFrequencyLowColor(const QColor& color);
-    QColor frequencyMixColor() const;
-    void setFrequencyMixColor(const QColor& color);
     QColor frequencyMidColor() const;
     void setFrequencyMidColor(const QColor& color);
     QColor frequencyHighColor() const;
     void setFrequencyHighColor(const QColor& color);
     qreal frequencyStrength() const noexcept;
     void setFrequencyStrength(qreal value);
-    bool frequencyDarkSurface() const noexcept;
-    void setFrequencyDarkSurface(bool value);
-    double frequencyMixOpacity() const noexcept;
-    void setFrequencyMixOpacity(double value);
-    double frequencyLowOpacity() const noexcept;
-    void setFrequencyLowOpacity(double value);
-    double frequencyMidOpacity() const noexcept;
-    void setFrequencyMidOpacity(double value);
-    double frequencyHighOpacity() const noexcept;
-    void setFrequencyHighOpacity(double value);
-    double frequencyBandFade() const noexcept;
-    void setFrequencyBandFade(double value);
-    bool frequencyPlayFocus() const noexcept;
-    void setFrequencyPlayFocus(bool value);
-    QColor frequencyFocusColor() const;
-    void setFrequencyFocusColor(const QColor& color);
-    int effectiveFrequencyQuality() const noexcept;
     bool rgbProgress() const noexcept;
     void setRgbProgress(bool value);
     qreal amplitudeScale() const noexcept;
@@ -209,9 +169,6 @@ signals:
     void frequencyMidColorChanged();
     void frequencyHighColorChanged();
     void frequencyStrengthChanged();
-    void frequencyDarkSurfaceChanged();
-    void frequencyStyleChanged();
-    void effectiveFrequencyQualityChanged();
     void rgbProgressChanged();
     void amplitudeScaleChanged();
     void hoverPositionChanged();
@@ -251,10 +208,6 @@ private:
         qsizetype peakCount = 0;
     };
 
-    QSGNode* updateFrequencyPaintNode(
-        QSGNode* oldNode,
-        const std::shared_ptr<const PeakSnapshot>& snapshot);
-
     void setHoverPosition(qint64 position);
     void normalizeLayerInput(QVariantList& normalized,
                              const QVariantList& input,
@@ -276,20 +229,10 @@ private:
     QColor gradientStartColor_ = QColor(QStringLiteral("#00d4ff"));
     QColor gradientMiddleColor_ = QColor(QStringLiteral("#7b2ff7"));
     QColor gradientEndColor_ = QColor(QStringLiteral("#e62e9b"));
-    QColor frequencyLowColor_ = QColor(QStringLiteral("#269a8e"));
-    QColor frequencyMidColor_ = QColor(QStringLiteral("#c66b55"));
-    QColor frequencyHighColor_ = QColor(QStringLiteral("#b5a4c6"));
-    QColor frequencyMixColor_ = QColor(QStringLiteral("#7a8490"));
-    qreal frequencyStrength_ = 0.62;
-    bool frequencyDarkSurface_ = true;
-    double frequencyMixOpacity_ = 0.18;
-    double frequencyLowOpacity_ = 0.44;
-    double frequencyMidOpacity_ = 0.38;
-    double frequencyHighOpacity_ = 0.46;
-    double frequencyBandFade_ = 1.0;
-    bool frequencyPlayFocus_ = true;
-    QColor frequencyFocusColor_ = QColor(QStringLiteral("#f2e7d4"));
-    int effectiveFrequencyQuality_ = 0;
+    QColor frequencyLowColor_ = QColor(QStringLiteral("#c45100"));
+    QColor frequencyMidColor_ = QColor(QStringLiteral("#b04bcd"));
+    QColor frequencyHighColor_ = QColor(QStringLiteral("#0a819a"));
+    qreal frequencyStrength_ = 0.85;
     bool rgbProgress_ = true;
     qreal amplitudeScale_ = 1.0;
     qint64 hoverPosition_ = -1;

@@ -1342,7 +1342,7 @@ agplayer_enable_warnings(qml_main_window_test)
 add_dependencies(qml_main_window_test decoder_fixture)
 add_test(NAME qml_main_window_test COMMAND qml_main_window_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_main_window.qml)
 set_tests_properties(qml_main_window_test PROPERTIES
-    TIMEOUT 120
+    TIMEOUT 35
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
@@ -1596,7 +1596,7 @@ set_tests_properties(player_experience_controller_test PROPERTIES
     ENVIRONMENT "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE}"
 )
 set_tests_properties(waveform_provider_test PROPERTIES
-    TIMEOUT 120
+    TIMEOUT 30
     ENVIRONMENT "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE}"
 )
 set_tests_properties(window_controller_test PROPERTIES

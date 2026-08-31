@@ -9,7 +9,6 @@
 #include <memory>
 
 class FileAssociationController;
-class FrequencyColorWaveformSettings;
 class SettingsControllerTest;
 
 class SettingsController final : public QObject {
@@ -90,8 +89,6 @@ class SettingsController final : public QObject {
     Q_PROPERTY(double waveformFrequencyStrength READ waveformFrequencyStrength
                    WRITE setWaveformFrequencyStrength
                    NOTIFY waveformFrequencyStrengthChanged)
-    Q_PROPERTY(FrequencyColorWaveformSettings* frequencyColorWaveform
-                   READ frequencyColorWaveform CONSTANT)
     Q_PROPERTY(bool waveformRgbProgress READ waveformRgbProgress
                    WRITE setWaveformRgbProgress NOTIFY waveformRgbProgressChanged)
     Q_PROPERTY(bool waveformHoverTimePreview READ waveformHoverTimePreview
@@ -232,7 +229,6 @@ public:
     QString waveformFrequencyMidColor() const;
     QString waveformFrequencyHighColor() const;
     double waveformFrequencyStrength() const noexcept;
-    FrequencyColorWaveformSettings* frequencyColorWaveform() const noexcept;
     bool waveformRgbProgress() const noexcept;
     bool waveformHoverTimePreview() const noexcept;
     bool waveformPlaybackGuide() const noexcept;
@@ -489,9 +485,7 @@ private:
 
     QSettings settings_;
     bool editActive_ = false;
-    bool loading_ = false;
     std::unique_ptr<FileAssociationController> fileAssociationController_;
-    std::unique_ptr<FrequencyColorWaveformSettings> frequencyColorWaveform_;
 
     void applyFileAssociations();
 
@@ -530,6 +524,10 @@ private:
     QString waveformRgbStartColor_ = QStringLiteral("#00d4ff");
     QString waveformRgbMiddleColor_ = QStringLiteral("#7b2ff7");
     QString waveformRgbEndColor_ = QStringLiteral("#e62e9b");
+    QString waveformFrequencyLowColor_ = QStringLiteral("#c45100");
+    QString waveformFrequencyMidColor_ = QStringLiteral("#b04bcd");
+    QString waveformFrequencyHighColor_ = QStringLiteral("#0a819a");
+    double waveformFrequencyStrength_ = 0.85;
     bool waveformRgbProgress_ = false;
     bool waveformHoverTimePreview_ = true;
     bool waveformPlaybackGuide_ = false;

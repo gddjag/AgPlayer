@@ -8,14 +8,8 @@ QtObject {
     property var layers: ({})
     property real durationMs: 0
     property real generation: 0
-    property bool active: true
     property bool frequencyReady: false
     property int libraryRevision: 0
-    // Rolling mode always needs the shared frequency layers for its overview.
-    // Keep the request independent from the user's classic waveform style.
-    readonly property bool frequencyAnalysisRequested: active
-        && (SettingsController.waveformMode === 3
-            || SettingsController.playerShellMode === 2)
     readonly property string trackId:
         String(PlaybackController.currentTrackId || "")
     readonly property var trackPalette: paletteForTrack(trackId)
@@ -75,16 +69,10 @@ QtObject {
         durationMs = 0
         frequencyReady = false
         publishVisualTiming()
-        if (!active) {
-            if (path && path.length > 0)
-                WaveformProvider.cancelFrequencyForTrack(path)
-            return
-        }
         if (!path || path.length === 0)
             return
         generation = WaveformProvider.loadForTrack(
-                    PlaybackController.currentTrackId, path,
-                    frequencyAnalysisRequested)
+                    PlaybackController.currentTrackId, path)
         WaveformProvider.prefetchTracks(neighbors)
     }
 
@@ -103,9 +91,6 @@ QtObject {
 
     property Connections waveformConnection: Connections {
         target: WaveformProvider
-        function onActiveGenerationChanged() {
-            root.frequencyReady = false
-        }
         function onWaveformReady(path, resultLayers) {
             var responseTrack = String(resultLayers._trackId || "")
             var responseGeneration = Number(resultLayers._generation || 0)
@@ -113,10 +98,14 @@ QtObject {
                     || responseTrack === String(PlaybackController.currentTrackId)
             var sameGeneration = responseGeneration === 0
                     || responseGeneration === Number(WaveformProvider.activeGeneration)
-            if (root.active && sameTrack && sameGeneration
-                    && path === root.currentPath()) {
+            if (sameTrack && sameGeneration && path === root.currentPath()) {
                 root.layers = resultLayers
-                root.frequencyReady = Boolean(resultLayers._frequencyReady)
+                root.frequencyReady = Boolean(resultLayers.bass
+                                              && resultLayers.bass.length > 0
+                                              && resultLayers.mid
+                                              && resultLayers.mid.length > 0
+                                              && resultLayers.high
+                                              && resultLayers.high.length > 0)
                 root.durationMs = Math.max(
                             0, Number(resultLayers._durationMs) || 0)
                 root.publishVisualTiming()
@@ -127,23 +116,5 @@ QtObject {
     property Connections settingsConnection: Connections {
         target: SettingsController
         function onWaveformPeakAlgorithmChanged() { root.loadWaveform() }
-    }
-
-    onActiveChanged: {
-        if (active) {
-            loadWaveform()
-        } else {
-            var path = currentPath()
-            if (path && path.length > 0)
-                WaveformProvider.cancelFrequencyForTrack(path)
-            frequencyReady = false
-        }
-    }
-
-    onFrequencyAnalysisRequestedChanged: {
-        // Skin switches can request frequency colour without changing the
-        // classic waveform style; reload exactly once for that new contract.
-        if (active)
-            loadWaveform()
     }
 }

@@ -1,7 +1,6 @@
 import QtQuick
 import QtTest
 import AgPlayer 1.0
-import "../../app/qml/AgPlayer/components" as Components
 
 TestCase {
     id: testCase
@@ -17,11 +16,6 @@ TestCase {
         height: 40
         duration: 100000
         peaks: [0.25, 0.5, 0.75, 1.0]
-    }
-
-    Components.WaveformSession {
-        id: waveformSession
-        active: false
     }
 
     SignalSpy {
@@ -81,17 +75,5 @@ TestCase {
         wait(0)
         mouseRelease(waveform, 600, 20)
         compare(seekSpy.count, 0)
-    }
-
-    function test_frequency_readiness_is_independent_and_resets_when_inactive() {
-        waveformSession.active = true
-        waveformSession.layers = ({ mix: [0.5], _frequencyReady: true })
-        waveformSession.frequencyReady = true
-        WaveformProvider.cancelForTrack("")
-        compare(waveformSession.frequencyReady, false)
-        waveformSession.frequencyReady = true
-        waveformSession.active = false
-        compare(waveformSession.frequencyReady, false)
-        compare(waveformSession.layers.mix.length, 1)
     }
 }

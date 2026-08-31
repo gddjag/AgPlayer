@@ -5215,10 +5215,10 @@ TestCase {
         SettingsController.waveformFrequencyStrength = 0.4
         tryCompare(frequencyStrengthControl, "value", 0.4)
         frequencyResetButton.clicked()
-        compare(SettingsController.waveformFrequencyLowColor, "#269a8e")
-        compare(SettingsController.waveformFrequencyMidColor, "#c66b55")
-        compare(SettingsController.waveformFrequencyHighColor, "#b5a4c6")
-        compare(SettingsController.waveformFrequencyStrength, 0.62)
+        compare(SettingsController.waveformFrequencyLowColor, "#c45100")
+        compare(SettingsController.waveformFrequencyMidColor, "#b04bcd")
+        compare(SettingsController.waveformFrequencyHighColor, "#0a819a")
+        compare(SettingsController.waveformFrequencyStrength, 0.4)
         SettingsController.waveformMode = previousWaveformMode
         SettingsController.waveformThickness = 2.2
         SettingsController.waveformPeakAlgorithm = 1
@@ -5239,7 +5239,7 @@ TestCase {
         tryCompare(SettingsController, "waveformDensity", 2.0)
         tryCompare(SettingsController, "waveformThickness", 1.0)
         tryCompare(SettingsController, "waveformPeakAlgorithm", 0)
-        tryCompare(SettingsController, "waveformFrequencyStrength", 0.62)
+        tryCompare(SettingsController, "waveformFrequencyStrength", 0.85)
         tryCompare(SettingsController, "listWaveformThumbnailEnabled", true)
         tryCompare(SettingsController, "listWaveformThumbnailMode", "Color36")
         page.close()

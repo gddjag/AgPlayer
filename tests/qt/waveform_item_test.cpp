@@ -1,5 +1,4 @@
 #include "waveform_item.hpp"
-#include "waveform_layer_material.hpp"
 
 #include <QHoverEvent>
 #include <QMouseEvent>
@@ -9,12 +8,10 @@
 #include <QScreen>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
-#include <QSGMaterial>
 #include <QSignalSpy>
 #include <QTest>
 #include <QVariantMap>
 
-#include <array>
 #include <cmath>
 #include <limits>
 
@@ -49,17 +46,12 @@ private slots:
     void subPixelWidthDoesNotCrash();
     void setLayersPopulatesLayerProperties();
     void nonFrequencyModesIgnoreFrequencyLayers();
-    void frequencyModeKeepsBandOnlySnapshotWithoutInventingMix();
+    void frequencyModeFallsBackToBandEnvelopeWhenMixMissing();
     void densityAndLineWidthAffectRenderedGeometry();
     void waveformStrokesStayInsideContainerEdges();
     void onePixelWaveformLeavesTheCanvasEdgeClear();
     void visualModesUseConfiguredProgressAndBaseColors();
-    void frequencyModeUsesFixedLayerRootAndIndexedTriangles();
-    void frequencyThemeSwitchUpdatesBaselineAndLightTokens();
-    void frequencyStyleAndProgressDoNotRewriteGeometry();
-    void frequencyLowFallbackPositionDoesNotRewriteVertices();
-    void frequencyHeightQualityPolicyAndCompactStrategy();
-    void softwareBackendUsesBoundedLineFallback();
+    void frequencyColorModeUsesOneMixEnvelopeAndWeightedBandColor();
     void spectrumUsesBottomBaselineAndCenterEnvelope();
     void spectrumUpsamplesSparseInputToDenseBars();
     void spectrumContractUsesFixedBarsWithPeakCaps();
@@ -126,25 +118,6 @@ void compareColor(const QSGGeometry::ColoredPoint2D& vertex,
     QCOMPARE(static_cast<int>(vertex.g), green);
     QCOMPARE(static_cast<int>(vertex.b), blue);
     QCOMPARE(static_cast<int>(vertex.a), alpha);
-}
-
-FrequencyWaveformRootNode* frequencyRoot(QSGNode* node)
-{
-    return static_cast<FrequencyWaveformRootNode*>(node);
-}
-
-QVector<float> frequencyVertexSnapshot(const QSGGeometry* geometry)
-{
-    QVector<float> result;
-    const auto* data = static_cast<const FrequencyWaveformVertex*>(
-        geometry->vertexData());
-    result.reserve(geometry->vertexCount() * 3);
-    for (int index = 0; index < geometry->vertexCount(); ++index) {
-        result.append(data[index].x);
-        result.append(data[index].y);
-        result.append(data[index].alphaRole);
-    }
-    return result;
 }
 
 } // namespace
@@ -265,370 +238,42 @@ void WaveformItemTest::visualModesUseConfiguredProgressAndBaseColors()
     delete node;
 }
 
-void WaveformItemTest::frequencyModeUsesFixedLayerRootAndIndexedTriangles()
+void WaveformItemTest::frequencyColorModeUsesOneMixEnvelopeAndWeightedBandColor()
 {
     TestableWaveformItem item;
-    item.setWidth(240);
-    item.setHeight(120);
-    item.setDuration(100);
-    item.setPosition(50);
-    item.setDensity(2.0);
-    item.setVisualMode(3);
-    item.setFrequencyMixColor(QColor(QStringLiteral("#7a8490")));
-    item.setFrequencyLowColor(QColor(QStringLiteral("#269a8e")));
-    item.setFrequencyMidColor(QColor(QStringLiteral("#c66b55")));
-    item.setFrequencyHighColor(QColor(QStringLiteral("#b5a4c6")));
-    item.setFrequencyMixOpacity(0.18);
-    item.setFrequencyLowOpacity(0.44);
-    item.setFrequencyMidOpacity(0.38);
-    item.setFrequencyHighOpacity(0.46);
-    item.setFrequencyBandFade(0.75);
-    item.setLayers(makeLayers(
-        peaks({0.4, 1.0, 0.6, 0.8}),
-        peaks({0.2, 0.8, 0.3, 0.5}),
-        peaks({0.5, 0.3, 0.9, 0.4}),
-        peaks({0.8, 0.5, 0.2, 0.7})));
-
-    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
-    QVERIFY(node != nullptr);
-    auto* root = frequencyRoot(node);
-    QCOMPARE(root->childCount(), 6);
-    QVERIFY(root->baseline() != nullptr);
-    QVERIFY(root->focusTransform() != nullptr);
-    QVERIFY(!root->usesLineFallback());
-    QSGNode* child = root->firstChild();
-    QCOMPARE(child, root->baseline());
-    child = child->nextSibling();
-    QCOMPARE(child, root->layer(FrequencyWaveformNodeRole::Mix));
-    child = child->nextSibling();
-    QCOMPARE(child, root->layer(FrequencyWaveformNodeRole::Low));
-    child = child->nextSibling();
-    QCOMPARE(child, root->layer(FrequencyWaveformNodeRole::Mid));
-    child = child->nextSibling();
-    QCOMPARE(child, root->layer(FrequencyWaveformNodeRole::High));
-    child = child->nextSibling();
-    QCOMPARE(child, root->focusTransform());
-    QVERIFY(child->nextSibling() == nullptr);
-
-    struct ExpectedLayer {
-        FrequencyWaveformNodeRole role;
-        QColor color;
-        float opacity;
-        float outlineOpacity;
-        float fade;
-    };
-    const std::array<ExpectedLayer, 4> expected{{
-        {FrequencyWaveformNodeRole::Mix, QColor("#7a8490"), 0.18F, 0.38F, 1.0F},
-        {FrequencyWaveformNodeRole::Low, QColor("#269a8e"), 0.44F, 0.82F, 0.75F},
-        {FrequencyWaveformNodeRole::Mid, QColor("#c66b55"), 0.38F, 0.80F, 0.75F},
-        {FrequencyWaveformNodeRole::High, QColor("#b5a4c6"), 0.46F, 0.84F, 0.75F},
-    }};
-    for (const ExpectedLayer& entry : expected) {
-        auto* layer = root->layer(entry.role);
-        QVERIFY(layer != nullptr);
-        QVERIFY(layer->geometry()->vertexCount() > 0);
-        QCOMPARE(layer->geometry()->drawingMode(), QSGGeometry::DrawTriangles);
-        QCOMPARE(layer->geometry()->indexType(), QSGGeometry::UnsignedIntType);
-        QVERIFY(layer->geometry()->indexCount() > layer->geometry()->vertexCount());
-        QVERIFY(layer->material()->flags().testFlag(QSGMaterial::Blending));
-        const auto* material = layer->waveformMaterial();
-        QVERIFY(material != nullptr);
-        QCOMPARE(material->baseColor(), entry.color);
-        QCOMPARE(material->fillAlpha(), entry.opacity);
-        QCOMPARE(material->outlineAlpha(), entry.outlineOpacity);
-        QCOMPARE(material->layerFade(), entry.fade);
-        QCOMPARE(material->unplayedAlpha(), 0.72F);
-        QCOMPARE(material->unplayedDesaturation(), 0.08F);
-
-        const auto* layerVertices = static_cast<const FrequencyWaveformVertex*>(
-            layer->geometry()->vertexData());
-        for (int vertex = 0; vertex < 4; ++vertex) {
-            QCOMPARE(layerVertices[vertex].alphaRole, 0.0F);
-        }
-        for (int vertex = 4; vertex < 12; ++vertex) {
-            QCOMPARE(layerVertices[vertex].alphaRole, 1.0F);
-        }
-        QCOMPARE(layerVertices[0].x, layerVertices[1].x);
-        QCOMPARE(layerVertices[2].x, layerVertices[3].x);
-        QCOMPARE(layerVertices[4].x, layerVertices[0].x);
-        QCOMPARE(layerVertices[5].x, layerVertices[0].x);
-        QCOMPARE(layerVertices[8].x, layerVertices[1].x);
-        QCOMPARE(layerVertices[9].x, layerVertices[1].x);
-        QVERIFY(std::abs((layerVertices[5].y - layerVertices[4].y) - 0.8F)
-                < 0.0001F);
-        QVERIFY(std::abs((layerVertices[9].y - layerVertices[8].y) - 0.8F)
-                < 0.0001F);
-        QVERIFY(std::abs((layerVertices[4].y + layerVertices[5].y) * 0.5F
-                         - layerVertices[0].y) < 0.0001F);
-        QVERIFY(std::abs((layerVertices[8].y + layerVertices[9].y) * 0.5F
-                         - layerVertices[1].y) < 0.0001F);
-    }
-    delete node;
-}
-
-void WaveformItemTest::frequencyThemeSwitchUpdatesBaselineAndLightTokens()
-{
-    TestableWaveformItem item;
-    item.setWidth(240);
-    item.setHeight(120);
-    item.setDuration(1000);
-    item.setPosition(400);
-    item.setVisualMode(3);
-    item.setFrequencyDarkSurface(true);
-    item.setLayers(makeLayers(
-        peaks({0.4, 1.0, 0.6, 0.8}),
-        peaks({0.2, 0.8, 0.3, 0.5}),
-        peaks({0.5, 0.3, 0.9, 0.4}),
-        peaks({0.8, 0.5, 0.2, 0.7})));
-
-    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
-    auto* root = frequencyRoot(node);
-    compareColor(vertices(root->baseline())[0], 21, 22, 24, 42);
-    std::array<QSGGeometry*, 4> geometries{};
-    std::array<const void*, 4> vertexPointers{};
-    for (int index = 0; index < 4; ++index) {
-        auto* geometry = root->layer(
-            static_cast<FrequencyWaveformNodeRole>(index))->geometry();
-        geometries[static_cast<std::size_t>(index)] = geometry;
-        vertexPointers[static_cast<std::size_t>(index)] = geometry->vertexData();
-    }
-
-    item.setFrequencyDarkSurface(false);
-    item.setFrequencyMixOpacity(0.14);
-    item.setFrequencyLowOpacity(0.36);
-    item.setFrequencyMidOpacity(0.32);
-    item.setFrequencyHighOpacity(0.40);
-    node = item.updatePaintNode(node, nullptr);
-    root = frequencyRoot(node);
-    compareColor(vertices(root->baseline())[0], 17, 18, 20, 34);
-    const std::array<float, 4> expectedFill{{0.14F, 0.36F, 0.32F, 0.40F}};
-    const std::array<float, 4> expectedOutline{{0.36F, 0.78F, 0.76F, 0.80F}};
-    for (int index = 0; index < 4; ++index) {
-        auto* layer = root->layer(static_cast<FrequencyWaveformNodeRole>(index));
-        QCOMPARE(layer->geometry(), geometries[static_cast<std::size_t>(index)]);
-        QCOMPARE(layer->geometry()->vertexData(),
-                 vertexPointers[static_cast<std::size_t>(index)]);
-        QCOMPARE(layer->waveformMaterial()->fillAlpha(),
-                 expectedFill[static_cast<std::size_t>(index)]);
-        QCOMPARE(layer->waveformMaterial()->outlineAlpha(),
-                 expectedOutline[static_cast<std::size_t>(index)]);
-    }
-    delete node;
-}
-
-void WaveformItemTest::frequencyStyleAndProgressDoNotRewriteGeometry()
-{
-    TestableWaveformItem item;
-    item.setWidth(240);
-    item.setHeight(120);
-    item.setDuration(1000);
-    item.setPosition(200);
-    item.setVisualMode(3);
-    item.setLayers(makeLayers(
-        peaks({0.4, 1.0, 0.6, 0.8}),
-        peaks({0.2, 0.8, 0.3, 0.5}),
-        peaks({0.5, 0.3, 0.9, 0.4}),
-        peaks({0.8, 0.5, 0.2, 0.7})));
-
-    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
-    QVERIFY(node != nullptr);
-    auto* root = frequencyRoot(node);
-    std::array<QSGGeometry*, 4> geometries{};
-    std::array<const void*, 4> vertexPointers{};
-    std::array<const void*, 4> indexPointers{};
-    std::array<QVector<float>, 4> snapshots{};
-    for (int index = 0; index < 4; ++index) {
-        auto* layer = root->layer(static_cast<FrequencyWaveformNodeRole>(index));
-        geometries[static_cast<std::size_t>(index)] = layer->geometry();
-        vertexPointers[static_cast<std::size_t>(index)] = layer->geometry()->vertexData();
-        indexPointers[static_cast<std::size_t>(index)] = layer->geometry()->indexData();
-        snapshots[static_cast<std::size_t>(index)] =
-            frequencyVertexSnapshot(layer->geometry());
-    }
-    const QMatrix4x4 focusBefore = root->focusTransform()->matrix();
-    QCOMPARE(root->layer(FrequencyWaveformNodeRole::Mix)
-                 ->waveformMaterial()->progressX(),
-             static_cast<float>(item.pixelForTime(200)));
-
-    item.setPosition(700);
-    item.setCursorPosition(650);
-    item.setFrequencyMixColor(QColor(QStringLiteral("#112233")));
-    item.setFrequencyLowOpacity(0.27);
-    item.setFrequencyHighOpacity(0.0);
-    item.setFrequencyBandFade(0.42);
-    item.setFrequencyFocusColor(QColor(QStringLiteral("#f2e7d4")));
-    QSGNode* const updated = item.updatePaintNode(node, nullptr);
-    QCOMPARE(updated, node);
-    root = frequencyRoot(updated);
-    for (int index = 0; index < 4; ++index) {
-        auto* layer = root->layer(static_cast<FrequencyWaveformNodeRole>(index));
-        QCOMPARE(layer->geometry(), geometries[static_cast<std::size_t>(index)]);
-        QCOMPARE(layer->geometry()->vertexData(),
-                 vertexPointers[static_cast<std::size_t>(index)]);
-        QCOMPARE(layer->geometry()->indexData(),
-                 indexPointers[static_cast<std::size_t>(index)]);
-        QCOMPARE(frequencyVertexSnapshot(layer->geometry()),
-                 snapshots[static_cast<std::size_t>(index)]);
-    }
-    QCOMPARE(root->layer(FrequencyWaveformNodeRole::Mix)
-                 ->waveformMaterial()->baseColor(), QColor("#112233"));
-    QCOMPARE(root->layer(FrequencyWaveformNodeRole::Low)
-                 ->waveformMaterial()->fillAlpha(), 0.27F);
-    QCOMPARE(root->layer(FrequencyWaveformNodeRole::Mid)
-                 ->waveformMaterial()->layerFade(), 0.42F);
-    QCOMPARE(root->layer(FrequencyWaveformNodeRole::High)
-                 ->waveformMaterial()->fillAlpha(), 0.0F);
-    QCOMPARE(root->layer(FrequencyWaveformNodeRole::High)
-                 ->waveformMaterial()->outlineAlpha(), 0.0F);
-    QCOMPARE(root->layer(FrequencyWaveformNodeRole::Mix)
-                 ->waveformMaterial()->progressX(),
-             static_cast<float>(item.pixelForTime(650)));
-    QVERIFY(root->focusTransform()->matrix() != focusBefore);
-    delete updated;
-}
-
-void WaveformItemTest::frequencyLowFallbackPositionDoesNotRewriteVertices()
-{
-    TestableWaveformItem item;
-    item.setWidth(240);
-    item.setHeight(20);
-    item.setDuration(1000);
-    item.setPosition(200);
-    item.setVisualMode(3);
-    item.setLayers(makeLayers(
-        peaks({0.4, 1.0, 0.6, 0.8}),
-        peaks({0.2, 0.8, 0.3, 0.5}),
-        peaks({0.5, 0.3, 0.9, 0.4}),
-        peaks({0.8, 0.5, 0.2, 0.7})));
-
-    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
-    auto* root = frequencyRoot(node);
-    QVERIFY(root->usesLineFallback());
-    auto* lowGeometry = root->layer(FrequencyWaveformNodeRole::Low)->geometry();
-    QVERIFY(lowGeometry->vertexCount() > 0);
-    auto* lowVertices = lowGeometry->vertexDataAsColoredPoint2D();
-    const void* const lowVertexPointer = lowGeometry->vertexData();
-    const unsigned char sentinel = static_cast<unsigned char>(lowVertices[0].r ^ 0xFFU);
-    lowVertices[0].r = sentinel;
-    auto* const focusGeometry = root->focusGeometryNode()->geometry();
-    const void* const focusVertexPointer = focusGeometry->vertexData();
-    const QMatrix4x4 focusBefore = root->focusTransform()->matrix();
-    const std::uint64_t compactBuildCount = root->compactBandBuildCount();
-
-    item.setPosition(700);
-    node = item.updatePaintNode(node, nullptr);
-    root = frequencyRoot(node);
-    QCOMPARE(root->layer(FrequencyWaveformNodeRole::Low)->geometry(), lowGeometry);
-    QCOMPARE(lowGeometry->vertexData(), lowVertexPointer);
-    QCOMPARE(lowGeometry->vertexDataAsColoredPoint2D()[0].r, sentinel);
-    QCOMPARE(root->focusGeometryNode()->geometry(), focusGeometry);
-    QCOMPARE(focusGeometry->vertexData(), focusVertexPointer);
-    QCOMPARE(root->compactBandBuildCount(), compactBuildCount);
-    QVERIFY(root->focusTransform()->matrix() != focusBefore);
-
-    item.setFrequencyLowColor(QColor(Qt::black));
-    node = item.updatePaintNode(node, nullptr);
-    root = frequencyRoot(node);
-    QCOMPARE(root->layer(FrequencyWaveformNodeRole::Low)->geometry(), lowGeometry);
-    QCOMPARE(lowGeometry->vertexData(), lowVertexPointer);
-    QCOMPARE(lowGeometry->vertexDataAsColoredPoint2D()[0].r, 0U);
-    QCOMPARE(root->compactBandBuildCount(), compactBuildCount);
-
-    delete node;
-}
-
-void WaveformItemTest::frequencyHeightQualityPolicyAndCompactStrategy()
-{
-    TestableWaveformItem item;
-    item.setWidth(240);
-    item.setHeight(120);
-    item.setDuration(1000);
-    item.setPosition(200);
-    item.setVisualMode(3);
-    item.setLayers(makeLayers(
-        peaks({0.4, 1.0, 0.6, 0.8}),
-        peaks({0.2, 0.8, 0.3, 0.5}),
-        peaks({0.5, 0.3, 0.9, 0.4}),
-        peaks({0.8, 0.5, 0.2, 0.7})));
-
-    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
-    auto* root = frequencyRoot(node);
-    QCOMPARE(item.effectiveFrequencyQuality(), 0);
-    QVERIFY(!root->usesLineFallback());
-    const int fullVertexCount = root->layer(FrequencyWaveformNodeRole::Mix)
-        ->geometry()->vertexCount();
-    QVERIFY(fullVertexCount > 0);
-
-    item.setHeight(80);
-    node = item.updatePaintNode(node, nullptr);
-    root = frequencyRoot(node);
-    QCOMPARE(item.effectiveFrequencyQuality(), 1);
-    QVERIFY(!root->usesLineFallback());
-    const int balancedVertexCount = root->layer(FrequencyWaveformNodeRole::Mix)
-        ->geometry()->vertexCount();
-    QVERIFY(balancedVertexCount > 0);
-    QVERIFY(balancedVertexCount < fullVertexCount);
-
+    item.setWidth(4);
     item.setHeight(40);
-    node = item.updatePaintNode(node, nullptr);
-    root = frequencyRoot(node);
-    QCOMPARE(item.effectiveFrequencyQuality(), 2);
-    QVERIFY(root->usesLineFallback());
-    for (int index = 0; index < 4; ++index) {
-        QVERIFY(root->layer(static_cast<FrequencyWaveformNodeRole>(index))
-                    ->geometry()->vertexCount() > 0);
-    }
-    QCOMPARE(root->compactBandBuildCount(), std::uint64_t{0});
-
-    item.setHeight(20);
-    node = item.updatePaintNode(node, nullptr);
-    root = frequencyRoot(node);
-    QCOMPARE(item.effectiveFrequencyQuality(), 2);
-    QVERIFY(root->usesLineFallback());
-    QVERIFY(root->layer(FrequencyWaveformNodeRole::Mix)
-                ->geometry()->vertexCount() > 0);
-    QVERIFY(root->layer(FrequencyWaveformNodeRole::Low)
-                ->geometry()->vertexCount() > 0);
-    QCOMPARE(root->layer(FrequencyWaveformNodeRole::Mid)
-                 ->geometry()->vertexCount(), 0);
-    QCOMPARE(root->layer(FrequencyWaveformNodeRole::High)
-                 ->geometry()->vertexCount(), 0);
-    QCOMPARE(root->compactBandBuildCount(), std::uint64_t{1});
-
-    item.setPosition(700);
-    node = item.updatePaintNode(node, nullptr);
-    root = frequencyRoot(node);
-    QCOMPARE(root->compactBandBuildCount(), std::uint64_t{1});
-
-    delete node;
-}
-
-void WaveformItemTest::softwareBackendUsesBoundedLineFallback()
-{
-    QQuickWindow window;
-    TestableWaveformItem item;
-    item.setParentItem(window.contentItem());
-    item.setWidth(3840);
-    item.setHeight(120);
-    item.setDensity(5.0);
+    item.setDuration(100);
+    item.setPosition(100);
+    item.setDensity(2.0);
+    item.setLineWidth(1.0);
     item.setVisualMode(3);
-    QVariantList values;
-    values.reserve(2000);
-    for (int index = 0; index < 2000; ++index) {
-        values.append((index % 100) / 100.0);
-    }
-    item.setLayers(makeLayers(values, values, values, values));
+    item.setBaseColor(QColor(QStringLiteral("#000000")));
+    QVERIFY(item.setProperty("frequencyLowColor",
+                             QColor(QStringLiteral("#ff0000"))));
+    QVERIFY(item.setProperty("frequencyMidColor",
+                             QColor(QStringLiteral("#00ff00"))));
+    QVERIFY(item.setProperty("frequencyHighColor",
+                             QColor(QStringLiteral("#0000ff"))));
+    QVERIFY(item.setProperty("frequencyStrength", 1.0));
+    item.setLayers(makeLayers(
+        peaks({1.0, 1.0, 1.0, 1.0}),
+        peaks({1.0, 0.0, 0.0, 1.0}),
+        peaks({0.0, 1.0, 0.0, 1.0}),
+        peaks({0.0, 0.0, 1.0, 1.0})));
 
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
-    auto* root = frequencyRoot(node);
-    QVERIFY(root->usesLineFallback());
-    for (int index = 0; index < 4; ++index) {
-        auto* layer = root->layer(static_cast<FrequencyWaveformNodeRole>(index));
-        QCOMPARE(layer->geometry()->drawingMode(), QSGGeometry::DrawLines);
-        QVERIFY(layer->geometry()->vertexCount() <= 512 * 2);
-        QVERIFY(layer->waveformMaterial() == nullptr);
-    }
+    const auto* data = vertices(node);
+    QCOMPARE(renderedPeakCount(node, item), 4);
+    compareColor(data[0], 0xFF, 0x00, 0x00, 0xFF);
+    compareColor(data[2], 0x00, 0xFF, 0x00, 0xFF);
+    compareColor(data[4], 0x00, 0x00, 0xFF, 0xFF);
+    compareColor(data[6], 0x55, 0x55, 0x55, 0xFF);
+
+    QVERIFY(item.setProperty("frequencyStrength", 0.5));
+    node = item.updatePaintNode(node, nullptr);
+    compareColor(vertices(node)[0], 0x80, 0x00, 0x00, 0xFF);
     delete node;
 }
 
@@ -1149,7 +794,7 @@ void WaveformItemTest::nonFrequencyModesIgnoreFrequencyLayers()
     delete node;
 }
 
-void WaveformItemTest::frequencyModeKeepsBandOnlySnapshotWithoutInventingMix()
+void WaveformItemTest::frequencyModeFallsBackToBandEnvelopeWhenMixMissing()
 {
     TestableWaveformItem item;
     item.setWidth(100);
@@ -1163,15 +808,14 @@ void WaveformItemTest::frequencyModeKeepsBandOnlySnapshotWithoutInventingMix()
 
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
-    auto* root = frequencyRoot(node);
-    QCOMPARE(root->layer(FrequencyWaveformNodeRole::Mix)
-                 ->geometry()->vertexCount(), 0);
-    QVERIFY(root->layer(FrequencyWaveformNodeRole::Low)
-                ->geometry()->vertexCount() > 0);
-    QVERIFY(root->layer(FrequencyWaveformNodeRole::Mid)
-                ->geometry()->vertexCount() > 0);
-    QCOMPARE(root->layer(FrequencyWaveformNodeRole::High)
-                 ->geometry()->vertexCount(), 0);
+    const auto* geometryNode = static_cast<const QSGGeometryNode*>(node);
+    // Missing Mix is synthesized from the available bands, but frequency mode
+    // still renders one shared envelope instead of separate band overlays.
+    QCOMPARE(geometryNode->geometry()->vertexCount(), 200);
+
+    const auto* data = vertices(node);
+    QCOMPARE(data[0].x, 1.0F);
+    QCOMPARE(data[198].x, 99.5F);
 
     delete node;
 }
