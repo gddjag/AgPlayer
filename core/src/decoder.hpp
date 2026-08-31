@@ -51,17 +51,11 @@ struct DecodedAudioBlock final {
     bool end_of_stream = false;
 };
 
-enum class DecoderDownmix {
-    Preserve,
-    AnalysisMono,
-};
-
 using DecoderInterruptCallback = bool (*)(void*) noexcept;
 
 struct DecoderOpenOptions final {
     int output_sample_rate = 0;
     int output_channels = 0;
-    DecoderDownmix downmix = DecoderDownmix::Preserve;
     DecoderInterruptCallback interrupt_callback = nullptr;
     void* interrupt_context = nullptr;
 };
@@ -69,8 +63,6 @@ struct DecoderOpenOptions final {
 struct DecodedAudioFormat final {
     int sample_rate = 0;
     int channels = 0;
-    std::uint64_t timeline_frames = 0;
-    bool has_timeline = false;
 };
 
 // Reads container/stream metadata without allocating or opening a decoder.

@@ -14,7 +14,6 @@ extern "C" {
 #include <algorithm>
 #include <cerrno>
 #include <climits>
-#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -210,64 +209,6 @@ ag_result map_open_error(const int error) noexcept
         return AG_UNSUPPORTED_FORMAT;
     }
     return AG_IO_ERROR;
-}
-
-ag_result map_resampler_error(const int error) noexcept
-{
-    if (error == AVERROR(ENOMEM)) return AG_INTERNAL_ERROR;
-    if (error == AVERROR(EINVAL) || error == AVERROR(ENOSYS)) {
-        return AG_UNSUPPORTED_FORMAT;
-    }
-    return AG_DECODE_ERROR;
-}
-
-std::vector<double> equal_energy_matrix(const int channels)
-{
-    if (channels <= 0) return {};
-    return std::vector<double>(static_cast<std::size_t>(channels),
-                               1.0 / std::sqrt(static_cast<double>(channels)));
-}
-
-std::vector<double> analysis_mono_matrix(const AVChannelLayout& layout,
-                                         const bool layout_roles_known)
-{
-    const int channels = layout.nb_channels;
-    if (channels == 1) return {1.0};
-    if (channels <= 0 || !layout_roles_known) return equal_energy_matrix(channels);
-
-    std::vector<double> matrix(static_cast<std::size_t>(channels), 0.0);
-    for (int index = 0; index < channels; ++index) {
-        switch (av_channel_layout_channel_from_index(
-            &layout, static_cast<unsigned int>(index))) {
-        case AV_CHAN_FRONT_LEFT:
-        case AV_CHAN_FRONT_RIGHT:
-        case AV_CHAN_FRONT_CENTER:
-            matrix[static_cast<std::size_t>(index)] = 1.0;
-            break;
-        case AV_CHAN_LOW_FREQUENCY:
-        case AV_CHAN_LOW_FREQUENCY_2:
-            matrix[static_cast<std::size_t>(index)] = 0.5;
-            break;
-        case AV_CHAN_BACK_LEFT:
-        case AV_CHAN_BACK_RIGHT:
-        case AV_CHAN_BACK_CENTER:
-        case AV_CHAN_SIDE_LEFT:
-        case AV_CHAN_SIDE_RIGHT:
-        case AV_CHAN_FRONT_LEFT_OF_CENTER:
-        case AV_CHAN_FRONT_RIGHT_OF_CENTER:
-            matrix[static_cast<std::size_t>(index)] = 0.75;
-            break;
-        default:
-            return equal_energy_matrix(channels);
-        }
-    }
-
-    double sum_squares = 0.0;
-    for (const double coefficient : matrix) sum_squares += coefficient * coefficient;
-    if (sum_squares <= 0.0) return equal_energy_matrix(channels);
-    const double normalization = 1.0 / std::sqrt(sum_squares);
-    for (double& coefficient : matrix) coefficient *= normalization;
-    return matrix;
 }
 
 std::string read_tag(AVDictionary* preferred,
@@ -525,17 +466,17 @@ public:
         output_sample_rate_ = options.output_sample_rate > 0
                                   ? options.output_sample_rate
                                   : codec_context_->sample_rate;
-        output_channels_ = options.downmix == DecoderDownmix::AnalysisMono
-                               ? 1
-                               : options.output_channels > 0
+        output_channels_ = options.output_channels > 0
                                ? options.output_channels
                                : codec_context_->ch_layout.nb_channels;
 
-        const ag_result resampler_result = initialize_resampler(options);
-        if (resampler_result != AG_OK) {
+        result = initialize_resampler();
+        if (result < 0) {
             reset();
-            return resampler_result;
+            return AG_DECODE_ERROR;
         }
+        output_format_.sample_rate = output_sample_rate_;
+        output_format_.channels = output_channels_;
 
         packet_ = av_packet_alloc();
         frame_ = av_frame_alloc();
@@ -545,13 +486,6 @@ public:
         }
 
         populate_metadata(*stream);
-        // Preserve-mode callers consume decoded PCM only.  The detailed
-        // source timeline is required solely by the frequency analyser's
-        // AnalysisMono cursor, so avoid deriving it for ordinary waveforms,
-        // playback, and scratch backfill opens.
-        if (options.downmix == DecoderDownmix::AnalysisMono) {
-            set_output_timeline(*stream);
-        }
         return AG_OK;
     }
 
@@ -765,19 +699,18 @@ private:
         return AG_OK;
     }
 
-    ag_result initialize_resampler(const DecoderOpenOptions& options)
+    int initialize_resampler()
     {
         av_channel_layout_uninit(&input_layout_);
         int result = 0;
-        const AVChannelLayout& source_layout = codec_context_->ch_layout;
-        if (source_layout.order == AV_CHANNEL_ORDER_UNSPEC) {
+        if (codec_context_->ch_layout.order == AV_CHANNEL_ORDER_UNSPEC) {
             av_channel_layout_default(
-                &input_layout_, source_layout.nb_channels);
+                &input_layout_, codec_context_->ch_layout.nb_channels);
         } else {
             result = av_channel_layout_copy(&input_layout_,
-                                            &source_layout);
+                                            &codec_context_->ch_layout);
             if (result < 0) {
-                return map_resampler_error(result);
+                return result;
             }
         }
 
@@ -794,47 +727,9 @@ private:
                                      0,
                                      nullptr);
         if (result < 0) {
-            return map_resampler_error(result);
+            return result;
         }
-        if (options.downmix == DecoderDownmix::AnalysisMono) {
-            const AVChannelLayout& stream_layout = format_context_->streams[
-                audio_stream_index_]->codecpar->ch_layout;
-            const bool stream_layout_available = stream_layout.nb_channels
-                                                 == input_layout_.nb_channels;
-            const bool matrix_roles_known = stream_layout_available
-                ? stream_layout.order != AV_CHANNEL_ORDER_UNSPEC
-                : source_layout.order != AV_CHANNEL_ORDER_UNSPEC;
-            const std::vector<double> matrix = analysis_mono_matrix(
-                input_layout_, matrix_roles_known);
-            if (matrix.size() != static_cast<std::size_t>(input_layout_.nb_channels)) {
-                return AG_UNSUPPORTED_FORMAT;
-            }
-            result = swr_set_matrix(swr_context_, matrix.data(), input_layout_.nb_channels);
-            if (result < 0) return AG_UNSUPPORTED_FORMAT;
-        }
-        result = swr_init(swr_context_);
-        if (result < 0) {
-            return map_resampler_error(result);
-        }
-        output_format_.sample_rate = output_sample_rate_;
-        output_format_.channels = output_channels_;
-        return AG_OK;
-    }
-
-    void set_output_timeline(const AVStream& audio_stream) noexcept
-    {
-        output_format_.timeline_frames = 0;
-        output_format_.has_timeline = false;
-        if (audio_stream.duration == AV_NOPTS_VALUE || audio_stream.duration <= 0
-            || output_sample_rate_ <= 0) {
-            return;
-        }
-        const std::int64_t frames = av_rescale_q(
-            audio_stream.duration, audio_stream.time_base,
-            AVRational{1, output_sample_rate_});
-        if (frames == AV_NOPTS_VALUE || frames < 0) return;
-        output_format_.timeline_frames = static_cast<std::uint64_t>(frames);
-        output_format_.has_timeline = true;
+        return swr_init(swr_context_);
     }
 
     void populate_metadata(const AVStream& audio_stream)

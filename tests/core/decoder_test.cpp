@@ -15,79 +15,11 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <limits>
-#include <string>
-
-#if defined(_WIN32)
-#include <process.h>
-#else
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <unistd.h>
-#endif
-
-namespace {
-
-bool create_fixture(const std::filesystem::path& generator,
-                    const std::filesystem::path& output,
-                    const char* mode)
-{
-    const std::string generator_name = generator.string();
-    const std::string output_name = output.string();
-#if defined(_WIN32)
-    const char* arguments[] = {
-        generator_name.c_str(), output_name.c_str(), mode, nullptr,
-    };
-    return _spawnv(_P_WAIT, generator_name.c_str(), arguments) == 0;
-#else
-    const pid_t child = fork();
-    if (child < 0) return false;
-    if (child == 0) {
-        execl(generator_name.c_str(), generator_name.c_str(), output_name.c_str(),
-              mode, nullptr);
-        _exit(127);
-    }
-    int status = 0;
-    if (waitpid(child, &status, 0) < 0) return false;
-    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
-#endif
-}
-
-void read_first_audio_block(agplayer::Decoder& decoder,
-                            agplayer::DecodedAudioBlock& block)
-{
-    do {
-        assert(decoder.read(block) == AG_OK);
-    } while (block.frames == 0U && !block.end_of_stream);
-    assert(block.frames > 0U);
-}
-
-} // namespace
 
 int main(const int argc, char** argv)
 {
     assert(argc == 2);
     const std::filesystem::path sine_path = argv[1];
-    const std::filesystem::path test_executable = argv[0];
-    const std::filesystem::path fixture_generator = test_executable.parent_path()
-        / ("fixture_generator" + test_executable.extension().string());
-    const std::filesystem::path stereo_path =
-        sine_path.parent_path() / "decoder-stereo-independent.wav";
-    const std::filesystem::path antiphase_path =
-        sine_path.parent_path() / "decoder-stereo-antiphase.wav";
-    const std::filesystem::path surround_path =
-        sine_path.parent_path() / "decoder-surround-5.1.wav";
-    const std::filesystem::path unknown_surround_path =
-        sine_path.parent_path() / "decoder-surround-5.1-unknown.wav";
-    const std::filesystem::path durationless_path =
-        sine_path.parent_path() / "decoder-durationless.wav";
-    assert(create_fixture(fixture_generator, stereo_path, "stereo-independent"));
-    assert(create_fixture(fixture_generator, antiphase_path, "stereo-antiphase"));
-    assert(create_fixture(fixture_generator, surround_path,
-                          "surround-5.1-independent"));
-    assert(create_fixture(fixture_generator, unknown_surround_path,
-                          "surround-5.1-unknown"));
-    assert(create_fixture(fixture_generator, durationless_path, "durationless"));
 
     ag_metadata* metadata = reinterpret_cast<ag_metadata*>(
         static_cast<std::uintptr_t>(1U));
@@ -138,93 +70,6 @@ int main(const int argc, char** argv)
     assert(decoder.read(block) == AG_OK);
     assert(block.frames > 0U);
     assert(block.samples.size() == block.frames * 2U);
-
-    // Mutation caught: applying AnalysisMono to the parameter-free legacy open.
-    agplayer::Decoder legacy_stereo_decoder;
-    assert(legacy_stereo_decoder.open(stereo_path.string()) == AG_OK);
-    assert(legacy_stereo_decoder.output_format().channels == 2);
-    // The ordinary waveform path uses the preserving decoder only to count
-    // and bucket PCM.  It must not pay for, or expose, frequency-analysis
-    // timeline metadata.
-    assert(!legacy_stereo_decoder.output_format().has_timeline);
-
-    // Mutation caught: making the sample-rate/channel legacy overload select
-    // the analysis-mono mode rather than preserving its explicit two channels.
-    agplayer::Decoder legacy_resampled_decoder;
-    assert(legacy_resampled_decoder.open(stereo_path.string(), 48'000, 2) == AG_OK);
-    assert(legacy_resampled_decoder.output_format().sample_rate == 48'000);
-    assert(legacy_resampled_decoder.output_format().channels == 2);
-    read_first_audio_block(legacy_resampled_decoder, block);
-    assert(std::abs(block.samples[0] - 0.25F) < 1.0e-4F);
-    assert(std::abs(block.samples[1] - 0.50F) < 1.0e-4F);
-
-    agplayer::DecoderOpenOptions analysis_options;
-    analysis_options.output_sample_rate = 48'000;
-    analysis_options.downmix = agplayer::DecoderDownmix::AnalysisMono;
-    agplayer::DecoderOpenOptions matrix_options = analysis_options;
-    matrix_options.output_sample_rate = 0;
-    agplayer::Decoder analysis_stereo_decoder;
-    assert(analysis_stereo_decoder.open(stereo_path.string(), analysis_options)
-           == AG_OK);
-    assert(analysis_stereo_decoder.output_format().channels == 1);
-    assert(analysis_stereo_decoder.output_format().has_timeline);
-    assert(analysis_stereo_decoder.output_format().timeline_frames == 96'000U);
-    read_first_audio_block(analysis_stereo_decoder, block);
-    assert(block.samples.size() == block.frames);
-    // Mutation caught: replacing the L2-normalized stereo matrix with a
-    // sum, average, or a single-channel selection.
-    assert(std::abs(block.samples.front() - 0.75F / std::sqrt(2.0F)) < 1.0e-4F);
-
-    agplayer::Decoder antiphase_decoder;
-    assert(antiphase_decoder.open(antiphase_path.string(), matrix_options)
-           == AG_OK);
-    read_first_audio_block(antiphase_decoder, block);
-    // Mutation caught: losing the signed contribution of one stereo role.
-    assert(std::abs(block.samples.front()) < 1.0e-4F);
-
-    agplayer::Decoder surround_decoder;
-    assert(surround_decoder.open(surround_path.string(), matrix_options) == AG_OK);
-    read_first_audio_block(surround_decoder, block);
-    assert(block.samples.size() == block.frames);
-    // Mutation caught: changing any FL/FR/FC/LFE/BL/BR role weight or omitting
-    // the known-layout L2 normalization.
-    assert(std::abs(block.samples.front() - 0.776877F) < 1.0e-4F);
-    for (const float sample : block.samples) {
-        assert(std::isfinite(sample));
-        assert(sample >= -1.0F && sample <= 1.0F);
-    }
-
-    agplayer::Decoder unknown_surround_decoder;
-    assert(unknown_surround_decoder.open(unknown_surround_path.string(),
-                                         matrix_options)
-           == AG_OK);
-    read_first_audio_block(unknown_surround_decoder, block);
-    // Mutation caught: treating a missing channel mask as known 5.1 roles
-    // instead of applying the unknown-layout equal-energy fallback.
-    assert(std::abs(block.samples.front() - 0.857299F) < 1.0e-4F);
-
-    agplayer::Decoder durationless_decoder;
-    assert(durationless_decoder.open(durationless_path.string(), analysis_options)
-           == AG_OK);
-    // Mutation caught: inventing a time axis for an absent/non-positive stream duration.
-    assert(!durationless_decoder.output_format().has_timeline);
-    assert(durationless_decoder.output_format().timeline_frames == 0U);
-
-    agplayer::Decoder unsupported_analysis_decoder;
-    agplayer::DecoderOpenOptions invalid_analysis_options = analysis_options;
-    invalid_analysis_options.output_sample_rate = std::numeric_limits<int>::max();
-    // Mutation caught: mapping FFmpeg's deterministic resampler allocation
-    // failure to unsupported/decode instead of AG_INTERNAL_ERROR.
-    assert(unsupported_analysis_decoder.open(stereo_path.string(),
-                                             invalid_analysis_options)
-           == AG_INTERNAL_ERROR);
-    legacy_stereo_decoder.close();
-    legacy_resampled_decoder.close();
-    analysis_stereo_decoder.close();
-    antiphase_decoder.close();
-    surround_decoder.close();
-    unknown_surround_decoder.close();
-    durationless_decoder.close();
 
     constexpr std::int64_t seek_target_ms = 1'517;
     assert(decoder.seek(seek_target_ms) == AG_OK);
@@ -345,9 +190,4 @@ int main(const int argc, char** argv)
 
     std::filesystem::remove(short_flac);
     std::filesystem::remove(raw_aac);
-    std::filesystem::remove(stereo_path);
-    std::filesystem::remove(antiphase_path);
-    std::filesystem::remove(surround_path);
-    std::filesystem::remove(unknown_surround_path);
-    std::filesystem::remove(durationless_path);
 }

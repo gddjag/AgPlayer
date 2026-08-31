@@ -1,6 +1,5 @@
 #pragma once
 
-#include <algorithm>
 #include <cmath>
 
 namespace agplayer {
@@ -83,75 +82,6 @@ public:
 private:
     BiquadFilter highpass_;
     BiquadFilter lowpass_;
-};
-
-// Fourth-order Linkwitz-Riley crossover branch. Cascading two equal-Q
-// Butterworth biquads gives the required -6 dB magnitude at the crossover.
-class LinkwitzRiley4 final {
-public:
-    enum class Type { LowPass, HighPass };
-
-    LinkwitzRiley4(const Type type,
-                   const float sample_rate,
-                   const float cutoff_hz) noexcept
-        : first_(biquad_type(type), sample_rate, cutoff_hz, kButterworthQ),
-          second_(biquad_type(type), sample_rate, cutoff_hz, kButterworthQ)
-    {
-    }
-
-    float process(const float sample) noexcept
-    {
-        return second_.process(first_.process(sample));
-    }
-
-private:
-    static constexpr float kButterworthQ = 0.70710678118654752440F;
-
-    static constexpr BiquadFilter::Type biquad_type(const Type type) noexcept
-    {
-        return type == Type::LowPass ? BiquadFilter::Type::Lowpass
-                                     : BiquadFilter::Type::Highpass;
-    }
-
-    BiquadFilter first_;
-    BiquadFilter second_;
-};
-
-struct FrequencyBandValues final {
-    float low = 0.0F;
-    float mid = 0.0F;
-    float high = 0.0F;
-};
-
-class FrequencyBandSplitter final {
-public:
-    explicit FrequencyBandSplitter(const float sample_rate) noexcept
-        : low_highpass_(LinkwitzRiley4::Type::HighPass, sample_rate, 20.0F),
-          low_lowpass_(LinkwitzRiley4::Type::LowPass, sample_rate, 180.0F),
-          mid_highpass_(LinkwitzRiley4::Type::HighPass, sample_rate, 180.0F),
-          mid_lowpass_(LinkwitzRiley4::Type::LowPass, sample_rate, 2'800.0F),
-          high_highpass_(LinkwitzRiley4::Type::HighPass, sample_rate, 2'800.0F),
-          high_lowpass_(LinkwitzRiley4::Type::LowPass, sample_rate,
-                        std::min(20'000.0F, sample_rate * 0.45F))
-    {
-    }
-
-    FrequencyBandValues process(const float sample) noexcept
-    {
-        return {
-            low_lowpass_.process(low_highpass_.process(sample)),
-            mid_lowpass_.process(mid_highpass_.process(sample)),
-            high_lowpass_.process(high_highpass_.process(sample)),
-        };
-    }
-
-private:
-    LinkwitzRiley4 low_highpass_;
-    LinkwitzRiley4 low_lowpass_;
-    LinkwitzRiley4 mid_highpass_;
-    LinkwitzRiley4 mid_lowpass_;
-    LinkwitzRiley4 high_highpass_;
-    LinkwitzRiley4 high_lowpass_;
 };
 
 } // namespace detail

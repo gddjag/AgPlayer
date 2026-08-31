@@ -275,7 +275,6 @@ private:
         DecoderOpenOptions options{};
         options.output_sample_rate = static_cast<int>(sample_rate_);
         options.output_channels = static_cast<int>(channels_);
-        options.downmix = DecoderDownmix::Preserve;
         options.interrupt_callback = &interrupted;
         options.interrupt_context = &interrupt_context;
         if (decoder.open(queued.request.media_path, options) != AG_OK) {
