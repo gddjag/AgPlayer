@@ -24,6 +24,10 @@ Item {
     readonly property real sizeScale: lyricSize / 100.0
     readonly property real clarityScale: clarity / 100.0
     readonly property real depthScale: depth / 100.0
+    readonly property bool spatialUntimedFallback:
+        spatialMode && service && service.status === LyricsService.Ready
+        && !service.synchronizedLyrics && !service.instrumental
+        && service.untimedLyrics.length > 0
 
     visible: service && service.enabled
     opacity: lyricOpacity / 100.0
@@ -63,8 +67,29 @@ Item {
         currentLineSettle.start()
     }
 
+    function importSelectedFile(url) {
+        return service ? service.importLrc(url) : false
+    }
+
+    function routeReason(diagnostic) {
+        switch (diagnostic) {
+        case "not-found": return qsTr("未找到匹配歌词")
+        case "empty-search": return qsTr("没有匹配结果")
+        case "no-acceptable-match": return qsTr("匹配结果不够准确")
+        case "rate-limited": return qsTr("请求过于频繁")
+        case "network-unavailable": return qsTr("网络不可用")
+        case "timeout": return qsTr("请求超时")
+        case "network-error": return qsTr("网络请求失败")
+        case "invalid-response": return qsTr("返回内容无效")
+        case "circuit-open": return qsTr("线路暂时熔断")
+        case "provider-unavailable": return qsTr("线路不可用")
+        default: return qsTr("服务暂时不可用")
+        }
+    }
+
     Rectangle {
         id: glass
+        objectName: "lyricsPanelSurface"
         anchors.fill: parent
         anchors.margins: root.spatialMode ? -18 : 0
         radius: 16
@@ -82,6 +107,7 @@ Item {
         anchors.topMargin: root.spatialMode ? 0 : 8
         anchors.bottomMargin: root.spatialMode ? 0 : 8
         spacing: Math.max(3, 6 * root.sizeScale)
+        visible: !root.spatialUntimedFallback
         transform: Rotation {
             objectName: "cinematicLyricsPerspective"
             origin.x: root.placement === PlayerExperienceController.Right
@@ -207,6 +233,111 @@ Item {
 
     WheelHandler { onWheel: root.noteManualScroll() }
 
+    Text {
+        id: sourceText
+        objectName: "lyricsSourceText"
+        visible: root.service && root.service.sourceProvider.length > 0
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.margins: 10
+        z: 2
+        color: Theme.textSecondary
+        font.pixelSize: Math.round(11 * root.sizeScale)
+        opacity: root.spatialMode ? 0.72 : 1
+        text: root.service && root.service.sourceAttribution.length > 0
+              ? root.service.sourceAttribution
+              : qsTr("来源：%1").arg(root.service ? root.service.sourceProvider : "")
+    }
+
+    Flickable {
+        id: untimedFlickable
+        objectName: "untimedLyricsFlickable"
+        visible: root.service && root.service.status === LyricsService.Ready
+                 && !root.service.synchronizedLyrics
+                 && !root.service.instrumental
+                 && root.service.untimedLyrics.length > 0
+        anchors.fill: parent
+        anchors.leftMargin: 18
+        anchors.rightMargin: 18
+        anchors.topMargin: sourceText.visible ? 28 : 10
+        anchors.bottomMargin: 24
+        clip: true
+        contentWidth: width
+        contentHeight: untimedText.height
+        z: 1
+        Text {
+            id: untimedText
+            objectName: "untimedLyricsText"
+            width: untimedFlickable.width
+            text: root.service ? root.service.untimedLyrics : ""
+            wrapMode: Text.Wrap
+            color: root.spatialMode ? Theme.onBrandGradientText
+                                    : Theme.primaryText
+            font.pixelSize: Math.round(16 * root.sizeScale)
+            horizontalAlignment: root.lineAlignment
+        }
+    }
+
+    Text {
+        objectName: "lyricsTimingNotice"
+        visible: untimedFlickable.visible
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        anchors.margins: 10
+        z: 2
+        color: Theme.textSecondary
+        font.pixelSize: Math.round(11 * root.sizeScale)
+        text: qsTr("纯文本歌词，无时间轴")
+    }
+
+    Rectangle {
+        objectName: "lyricsRouteNotice"
+        visible: !!(root.service && root.service.routeNotice
+                    && root.service.routeNotice.providerName)
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: sourceText.visible ? 30 : 6
+        radius: 8
+        color: Theme.glassSurface
+        border.color: Theme.glassBorder
+        z: 3
+        width: Math.min(parent.width - 24, routeNoticeText.implicitWidth + 20)
+        height: routeNoticeText.implicitHeight + 10
+        Text {
+            id: routeNoticeText
+            objectName: "lyricsRouteNoticeText"
+            anchors.centerIn: parent
+            color: Theme.textSecondary
+            font.pixelSize: Math.round(11 * root.sizeScale)
+            text: root.service && root.service.routeNotice
+                  ? root.service.routeNotice.providerName + ": "
+                    + root.routeReason(root.service.routeNotice.diagnostic) : ""
+        }
+    }
+
+    Column {
+        objectName: "lyricsRouteAttempts"
+        visible: root.service && (root.service.status === LyricsService.NotFound
+                                  || root.service.status === LyricsService.Offline
+                                  || root.service.status === LyricsService.Error)
+                 && root.service.routeAttempts.length > 0
+        anchors.left: parent.left
+        anchors.leftMargin: 12
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 8
+        z: 2
+        Repeater {
+            objectName: "lyricsRouteAttemptRepeater"
+            model: root.service ? root.service.routeAttempts : []
+            delegate: Text {
+                objectName: "lyricsRouteAttemptText"
+                color: Theme.textSecondary
+                font.pixelSize: Math.round(10 * root.sizeScale)
+                text: modelData.providerName + ": " + root.routeReason(modelData.diagnostic)
+            }
+        }
+    }
+
     Row {
         visible: !root.spatialMode
         anchors.right: parent.right
@@ -215,6 +346,7 @@ Item {
         anchors.bottomMargin: 5
         spacing: 2
         ToolButton {
+            objectName: "lyricsOffsetEarlierButton"
             width: 24; height: 24; flat: true
             icon.source: Theme.icon("subtract-line")
             icon.color: Theme.iconSecondary
@@ -223,6 +355,7 @@ Item {
             background: null
         }
         ToolButton {
+            objectName: "lyricsOffsetLaterButton"
             width: 24; height: 24; flat: true
             icon.source: Theme.icon("add-line")
             icon.color: Theme.iconSecondary
@@ -231,6 +364,7 @@ Item {
             background: null
         }
         ToolButton {
+            objectName: "lyricsRetryButton"
             width: 24; height: 24; flat: true
             icon.source: Theme.icon("arrow-go-forward-line")
             icon.color: Theme.iconSecondary
@@ -239,6 +373,7 @@ Item {
             background: null
         }
         ToolButton {
+            objectName: "lyricsImportButton"
             width: 24; height: 24; flat: true
             icon.source: Theme.icon("folder-open-line")
             icon.color: Theme.iconSecondary
@@ -252,6 +387,6 @@ Item {
         id: lrcDialog
         title: qsTr("导入歌词")
         nameFilters: [qsTr("LRC 歌词 (*.lrc)"), qsTr("文本文件 (*.txt)")]
-        onAccepted: if (root.service) root.service.importLrc(selectedFile)
+        onAccepted: root.importSelectedFile(selectedFile)
     }
 }

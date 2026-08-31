@@ -31,12 +31,13 @@ Rectangle {
                                          : referenceWorkbench ? 52 : 59
 
     RowLayout {
-        anchors.fill: parent
-        anchors.leftMargin: separationWorkbench ? 0 : Theme.spacingLg
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.leftMargin: 12
         anchors.rightMargin: separationWorkbench ? 0 : Theme.spacingLg
-        spacing: referenceWorkbench ? 0 : Theme.spacingSm
-
-        Item { Layout.fillWidth: !navigation.referenceWorkbench }
+        spacing: Theme.spacingSm
 
         Repeater {
             model: navigation.visibleTools
@@ -44,9 +45,7 @@ Rectangle {
             Button {
                 id: navButton
                 objectName: "audioToolNav_" + modelData.toolId
-                Layout.fillWidth: navigation.separationWorkbench
-                Layout.preferredWidth: navigation.separationWorkbench ? 1
-                                       : navigation.referenceWorkbench ? 164 : 154
+                Layout.preferredWidth: 154
                 Layout.preferredHeight: navigation.separationWorkbench ? 44
                                         : navigation.referenceWorkbench ? 52 : 58
                 Layout.maximumHeight: Layout.preferredHeight
@@ -105,6 +104,6 @@ Rectangle {
             }
         }
 
-        Item { Layout.fillWidth: !navigation.separationWorkbench }
+        Item { Layout.fillWidth: true }
     }
 }

@@ -73,6 +73,12 @@ add_library(agplayer_qt STATIC
     src/lyrics_line_model.hpp
     src/lyrics_provider.cpp
     src/lyrics_provider.hpp
+    src/lyrics_provider_chain.cpp
+    src/lyrics_provider_chain.hpp
+    src/lyrics_ovh_provider.cpp
+    src/lyrics_ovh_provider.hpp
+    src/unison_lyrics_provider.cpp
+    src/unison_lyrics_provider.hpp
     src/lyrics_service.cpp
     src/lyrics_service.hpp
     src/library_manager_controller.cpp

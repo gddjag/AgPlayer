@@ -8,6 +8,8 @@
 #include <QStringList>
 #include <QUrl>
 
+#include <optional>
+
 struct TrackRecord {
     QString trackId;
     QString path;
@@ -22,6 +24,8 @@ struct TrackRecord {
     QString format;
     int sampleRate = 0;
     int bitDepth = 0;
+    int channels = 0;
+    bool metadataProbeAttempted = false;
     qint64 bitRate = 0;
     qint64 durationMs = 0;
     qint64 fileSize = 0;
@@ -43,6 +47,12 @@ struct TrackRecord {
     double replayGainTrackDb = 0.0;
     double replayGainAlbumDb = 0.0;
     double replayPeak = 0.0;
+};
+
+struct MetadataProbeClaim {
+    QString trackId;
+    QString path;
+    quint64 generation = 0;
 };
 
 QString canonicalLibraryPath(const QString& path);
@@ -93,7 +103,9 @@ public:
         GenreRole,
         YearRole,
         DateRole,
-        ComposerRole
+        ComposerRole,
+        ChannelsRole,
+        MetadataProbeAttemptedRole
     };
     Q_ENUM(Role)
 
@@ -136,6 +148,9 @@ public:
                                 const QString& fileStatus,
                                 const QString& contentHash);
     int applyMaintenanceResults(const QVariantList& results);
+    std::optional<MetadataProbeClaim> beginMetadataProbe(const QString& trackId);
+    bool completeMetadataProbe(const MetadataProbeClaim& claim, bool succeeded,
+                               const TrackRecord& probed);
     bool refreshMetadataForPath(const QString& path);
     int refreshMetadataForPaths(const QStringList& paths);
     bool applyReplayGainResult(const QString& trackId, double trackGainDb,
@@ -170,4 +185,8 @@ private:
     QSet<QString> pathKeys_;
     QHash<QString, int> pathRows_;
     QHash<QString, int> trackRows_;
+    QHash<QString, quint64> metadataProbeInFlight_;
+    // Zero is an exhaustion sentinel. Never wrap and reuse a live-process
+    // generation: failing closed after 2^64-1 claims is safer than ABA reuse.
+    quint64 nextMetadataProbeGeneration_ = 1;
 };

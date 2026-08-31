@@ -2,12 +2,12 @@
 param(
     [string]$BuildDirectory = "build/msvc-debug",
     [string]$OutputDirectory = "build/qa/audio-tools-matrix",
-    [ValidateSet("zh", "en", "th", "vi")]
-    [string[]]$Languages = @("zh", "en", "th", "vi"),
+    [ValidateSet("zh", "en")]
+    [string[]]$Languages = @("zh", "en"),
     [ValidateSet(0, 1, 2)]
     [int[]]$Themes = @(0, 1, 2),
-    [ValidateRange(0, 3)]
-    [int[]]$Tools = @(0, 1, 2, 3),
+    [ValidateRange(0, 4)]
+    [int[]]$Tools = @(0, 4, 1, 2, 3),
     [ValidateSet("1672x941", "1280x720", "880x560")]
     [string[]]$Sizes = @("1672x941", "1280x720", "880x560"),
     [string]$QaImportFile = "",

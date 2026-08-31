@@ -19,10 +19,11 @@ function Assert-Match {
 $main = Get-Content -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/Main.qml') -Raw
 $shell = Get-Content -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/IntegratedPlayerShell.qml') -Raw
 $controls = Get-Content -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/PlayerControls.qml') -Raw
+$integratedControls = Get-Content -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/IntegratedPlayerControls.qml') -Raw
 $experience = Get-Content -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/ExperienceActions.qml') -Raw
 $selection = Get-Content -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/WaveSelectionOverlay.qml') -Raw
 
-Assert-Match $main 'id:\s*shellLoader[\s\S]*sourceComponent:\s*mainWindow\.integratedShell' 'Main.qml must switch one shell through Loader.'
+Assert-Match $main 'id:\s*shellLoader[\s\S]*sourceComponent:\s*mainWindow\.rollingShell\s*\?\s*rollingShellComponent[\s\S]*mainWindow\.integratedShell[\s\S]*integratedShellComponent\s*:\s*classicShellComponent' 'Main.qml must switch Classic, Integrated, and Rolling through one Loader.'
 Assert-Match $main 'LibraryFilterModel\s*\{[\s\S]*id:\s*sharedFilterModel' 'Main.qml must own the shared filter model.'
 Assert-Match $main 'WaveformSession\s*\{[\s\S]*id:\s*sharedWaveformSession' 'Main.qml must own the persistent waveform session.'
 Assert-Match $shell 'property int topBarHeight:\s*52' 'Integrated top bar must be 52px.'
@@ -41,12 +42,24 @@ if ($zoomForwardCount -lt 4) {
     throw 'Every selection interaction surface must forward Ctrl+wheel zoom.'
 }
 Assert-Match $shell 'onZoomRequested:\s*function\(x, factor\)[\s\S]*waveform\.zoomAt\(x, factor\)' 'Integrated must apply zoom forwarded by the selection overlay.'
-Assert-Match $shell 'function\s+applyWaveformMode\(\)[\s\S]*waveform\.peaks\s*=\s*spectrum[\s\S]*waveform\.layers\s*=\s*layers' 'Integrated must restore exactly one waveform data source when switching display modes.'
+Assert-Match $shell 'id:\s*waveform[\s\S]*objectName:\s*"integratedWaveform"[\s\S]*position:\s*0[\s\S]*cursorPosition:\s*root\.playbackPositionMs' 'Integrated base waveform must remain unplayed while its cursor follows playback.'
+if ($shell -match 'id:\s*waveform[\s\S]*?(?<![A-Za-z])position:\s*root\.playbackPositionMs') {
+    throw 'Integrated playback progress must not be painted by a single position-coloured waveform.'
+}
+Assert-Match $shell 'objectName:\s*"integratedWaveformPlayedClip"[\s\S]*width:\s*waveform\.waveformCursorX[\s\S]*clip:\s*true[\s\S]*objectName:\s*"integratedPlayedWaveform"[\s\S]*width:\s*waveform\.width[\s\S]*position:\s*duration' 'Integrated playback progress must use a full played waveform clipped to the exact cursor pixel.'
+Assert-Match $shell 'function\s+applyWaveformMode\(\)[\s\S]*waveform\.peaks\s*=\s*spectrum[\s\S]*playedWaveform\.peaks\s*=\s*spectrum[\s\S]*waveform\.layers\s*=\s*layers[\s\S]*playedWaveform\.layers\s*=\s*layers' 'Integrated display-mode changes must assign exactly one matching data source to both waveform layers.'
 Assert-Match $shell 'objectName:\s*"integratedWaveformNavigator"[\s\S]*waveform\.setVisibleRange' 'Integrated must provide a draggable zoom-position navigator.'
-Assert-Match $main 'showListWindowButton:\s*false' 'Integrated controls must not expose the Classic list-window button.'
+Assert-Match $main 'id:\s*integratedBottomBarComponent[\s\S]*IntegratedPlayerControls\s*\{' 'Integrated shell must inject its dedicated control layout.'
+Assert-Match $shell 'item\.leftReservedWidth\s*=\s*Qt\.binding[\s\S]*return\s+trackSummary\.width' 'Integrated controls must reserve the complete track-summary region.'
+Assert-Match $integratedControls 'objectName:\s*"integratedCenterControls"[\s\S]*TransportControls[\s\S]*PlayerVolumeControl[\s\S]*objectName:\s*"integratedRightActions"' 'Integrated controls must keep transport and volume together in the centered control group.'
+Assert-Match $integratedControls 'objectName:\s*"integratedRightActions"[\s\S]*objectName:\s*"audioToolsButton"[\s\S]*ExperienceActions\s*\{\s*objectName:\s*"experienceActions"\s*showImmersive:\s*false\s*showLyrics:\s*true[\s\S]*objectName:\s*"themeModeButton"[\s\S]*ExperienceActions\s*\{\s*objectName:\s*"immersiveExperienceActions"\s*showImmersive:\s*true\s*showLyrics:\s*false[\s\S]*objectName:\s*"windowLayoutButton"' 'Integrated right actions must keep audio tools, lyrics, theme, immersive, and layout ordered as specified.'
+Assert-Match $integratedControls 'objectName:\s*"classicShellMenuItem"[\s\S]*objectName:\s*"integratedShellMenuItem"[\s\S]*objectName:\s*"rollingShellMenuItem"' 'Integrated layout selection must retain all three player shells.'
+if ($integratedControls -match 'showListWindowButton|miniPlayerButton') {
+    throw 'Integrated controls must not retain the removed Classic toggle or mini-player action.'
+}
 Assert-Match $controls 'objectName:\s*"playerSecondaryActions"[\s\S]*ExperienceActions\s*\{' 'Shared experience actions must remain in the right action group.'
-if ($controls -match 'playerShellModeButton|player-shell-mode') {
-    throw 'Playback controls must not expose the shell-mode switch.'
+if ($controls -match 'objectName:\s*"playerShellModeButton"') {
+    throw 'Playback controls must not expose the removed shell-mode button.'
 }
 Assert-Match $experience 'Theme\.icon\("immersive-visual-mode"\)' 'Immersive mode must use the supplied icon asset.'
 Assert-Match $experience 'Theme\.icon\("lyrics"\)' 'Lyrics must use the supplied icon asset.'

@@ -31,6 +31,7 @@ TestCase {
 
         function reset() {
             positionMs = 0
+            durationMs = 100000
             selectionStartMs = 0
             selectionEndMs = 0
             selectionLoopEnabled = false
@@ -61,6 +62,11 @@ TestCase {
             selectionLoopEnabled = false
             ++clearCount
         }
+    }
+
+    QtObject {
+        id: fakeWaveformProvider
+        property real analysisProgress: 0.625
     }
 
     QtObject {
@@ -212,6 +218,7 @@ TestCase {
 
     function test_waveform_returns_after_spectrum_mode() {
         var shell = enterIntegratedShell()
+        shell.playbackController = fakePlayback
         shell.waveformDurationMs = 100000
         shell.waveformLayers = {
             "mix": [0.2, 0.5, 0.8, 0.4],
@@ -222,18 +229,29 @@ TestCase {
         SettingsController.waveformMode = 0
         wait(0)
         var waveform = findChild(shell, "integratedWaveform")
-        verify(waveform)
+        var played = findChild(shell, "integratedPlayedWaveform")
+        verify(waveform && played)
         verify(waveform.layers.mix && waveform.layers.mix.length === 4,
                "source=" + JSON.stringify(shell.waveformLayers)
                + " displayed=" + JSON.stringify(shell.displayedWaveformLayers)
                + " rendered=" + JSON.stringify(waveform.layers))
+        verify(played.layers.mix && played.layers.mix.length === 4,
+               "played=" + JSON.stringify(played.layers))
 
+        fakePlayback.spectrum = [0.04, 0.16, 0.36, 0.64]
         SettingsController.waveformMode = 2
-        wait(0)
+        tryVerify(function() {
+            return waveform.peaks.length > 0 && played.peaks.length > 0
+        }, 1000)
+        compare(played.peaks.length, waveform.peaks.length)
+        compare(played.peaks[0], waveform.peaks[0])
+
         SettingsController.waveformMode = 1
         wait(0)
         verify(waveform.layers.mix && waveform.layers.mix.length === 4,
                "switching away from spectrum must restore the analysed waveform")
+        verify(played.layers.mix && played.layers.mix.length === 4,
+               "played waveform must restore analysed layers after spectrum mode")
     }
 
     function test_track_change_restores_full_waveform_viewport() {
@@ -347,16 +365,16 @@ TestCase {
 
     function test_bottom_actions_use_uploaded_immersive_and_lyrics_icons() {
         var shell = enterIntegratedShell()
-        var actions = findChild(shell, "playerSecondaryActions")
+        var controls = findChild(shell, "integratedPlayerControls")
         var audioTools = findChild(shell, "audioToolsButton")
-        var miniPlayer = findChild(shell, "miniPlayerButton")
         var immersive = findChild(shell, "immersiveActionButton")
         var lyrics = findChild(shell, "lyricsActionButton")
-        verify(actions && audioTools && miniPlayer && immersive && lyrics)
+        var rightActions = findChild(shell, "integratedRightActions")
+        verify(controls && audioTools && immersive && lyrics && rightActions)
         compare(findChild(shell, "playerShellModeButton"), null)
         compare(findChild(shell, "themeActionButton"), null)
-        compare(audioTools.parent, actions)
-        compare(miniPlayer.parent, actions)
+        compare(findChild(shell, "miniPlayerButton"), null)
+        compare(audioTools.parent, rightActions)
         verify(immersive.icon.source.toString().endsWith(
                    "/immersive-visual-mode.svg"))
         verify(lyrics.icon.source.toString().endsWith("/lyrics.svg"))
@@ -491,23 +509,54 @@ TestCase {
         tags.destroy()
     }
 
-    function test_bottom_bar_centers_track_controls_and_actions() {
+    function test_bottom_bar_hosts_the_integrated_control_layout() {
         var shell = enterIntegratedShell()
         var bottom = findChild(shell, "integratedBottomBar")
         var summary = findChild(shell, "integratedTrackSummary")
         var cover = findChild(shell, "integratedTrackCover")
         var metadata = findChild(shell, "integratedTrackMetadata")
-        var center = findChild(shell, "centerPlaybackControls")
-        var actions = findChild(shell, "playerSecondaryActions")
-        verify(bottom && summary && cover && metadata && center && actions)
+        var controls = findChild(shell, "integratedPlayerControls")
+        var listWindow = findChild(shell, "listWindowButton")
+        var centerGroup = findChild(shell, "integratedCenterControls")
+        var transport = findChild(shell, "integratedTransportControls")
+        var volume = findChild(shell, "mainVolumeControl")
+        var rightActions = findChild(shell, "integratedRightActions")
+        var playPause = findChild(shell, "playPauseButton")
+        var layout = findChild(shell, "windowLayoutButton")
+        verify(bottom && summary && cover && metadata && controls
+               && listWindow && centerGroup && transport && volume && rightActions
+               && playPause && layout)
         verify(cover.width >= 64 && cover.height >= 64)
         verify(metadata.visible)
         fuzzyCompare(summary.mapToItem(bottom, 0, 0).y
                      + summary.height / 2, bottom.height / 2, 1.0)
-        fuzzyCompare(center.y + center.height / 2,
-                     center.parent.height / 2, 1.0)
-        fuzzyCompare(actions.y + actions.height / 2,
-                     actions.parent.height / 2, 1.0)
+        fuzzyCompare(controls.y + controls.height / 2,
+                     controls.parent.height / 2, 1.0)
+        verify(listWindow.visible && playPause.visible && layout.visible)
+        var summaryRight = summary.mapToItem(bottom, summary.width, 0).x
+        var listLeft = listWindow.mapToItem(bottom, 0, 0).x
+        var listRight = listWindow.mapToItem(bottom, listWindow.width, 0).x
+        var transportLeft = transport.mapToItem(bottom, 0, 0).x
+        var transportRight = transport.mapToItem(
+                    bottom, transport.width, 0).x
+        var volumeLeft = volume.mapToItem(bottom, 0, 0).x
+        var volumeRight = volume.mapToItem(bottom, volume.width, 0).x
+        var rightActionsLeft = rightActions.mapToItem(bottom, 0, 0).x
+        verify(summaryRight <= listLeft,
+               "embedded list entry must stay outside the track summary")
+        verify(listRight <= transportLeft,
+               "embedded list entry must not overlap transport")
+        verify(transportRight <= volumeLeft,
+               "volume must follow the center transport")
+        verify(volumeRight <= rightActionsLeft,
+               "center transport/volume must not overlap right-side tools")
+        var centeredLeft = (bottom.width - centerGroup.width) / 2
+        var expectedLeft = Math.max(listRight + 12,
+                            Math.min(centeredLeft,
+                                     rightActionsLeft
+                                     - centerGroup.width - 12))
+        fuzzyCompare(centerGroup.mapToItem(bottom, 0, 0).x,
+                     expectedLeft, 2.0)
     }
 
 
@@ -535,55 +584,162 @@ TestCase {
                "transport canvas should gain height while closing the gap")
     }
 
-    function test_integrated_waveform_keeps_progress_color_on_one_canvas() {
+    function test_integrated_waveform_progress_uses_continuous_pixel_clip() {
         var shell = enterIntegratedShell()
         var previousMode = SettingsController.waveformMode
         SettingsController.waveformMode = 3
         shell.playbackController = fakePlayback
         shell.waveformDurationMs = 100000
-        fakePlayback.positionMs = 25000
-        var waveform = findChild(shell, "integratedWaveform")
-        var frequencySettings = SettingsController.frequencyColorWaveform
-        verify(waveform)
-        tryCompare(waveform, "position", 25000)
-        tryCompare(waveform, "cursorPosition", 25000)
-        compare(waveform.frequencyDarkSurface, !Theme.isLight)
-        compare(waveform.frequencyMixColor.toString(), Theme.isLight
-                ? frequencySettings.mixLightColor
-                : frequencySettings.mixDarkColor)
-        compare(waveform.frequencyLowColor.toString(), Theme.isLight
-                ? frequencySettings.lowLightColor
-                : frequencySettings.lowDarkColor)
-        compare(waveform.frequencyMidColor.toString(), Theme.isLight
-                ? frequencySettings.midLightColor
-                : frequencySettings.midDarkColor)
-        compare(waveform.frequencyHighColor.toString(), Theme.isLight
-                ? frequencySettings.highLightColor
-                : frequencySettings.highDarkColor)
-        compare(waveform.frequencyMixOpacity, Theme.isLight
-                ? frequencySettings.mixLightOpacity
-                : frequencySettings.mixDarkOpacity)
-        compare(waveform.frequencyLowOpacity, Theme.isLight
-                ? frequencySettings.lowLightOpacity
-                : frequencySettings.lowDarkOpacity)
-        compare(waveform.frequencyMidOpacity, Theme.isLight
-                ? frequencySettings.midLightOpacity
-                : frequencySettings.midDarkOpacity)
-        compare(waveform.frequencyHighOpacity, Theme.isLight
-                ? frequencySettings.highLightOpacity
-                : frequencySettings.highDarkOpacity)
-        compare(waveform.frequencyPlayFocus, frequencySettings.playFocus)
-        compare(waveform.frequencyFocusColor.toString(),
-                Theme.isLight ? "#26313a" : "#f2e7d4")
+        fakePlayback.durationMs = 100000
+        shell.waveformLayers = {
+            "mix": [0.2, 0.5, 0.8, 0.4],
+            "_peakCount": 4
+        }
+
+        var base = findChild(shell, "integratedWaveform")
+        var clip = findChild(shell, "integratedWaveformPlayedClip")
+        var played = findChild(shell, "integratedPlayedWaveform")
+        verify(base && clip && played)
+        tryVerify(function() {
+            return base.layers.mix && base.layers.mix.length === 4
+        }, 1000)
+        compare(base.position, 0)
+        compare(played.width, base.width)
+        compare(played.position, played.duration)
+
+        var fractions = [0.001, 0.0011, 0.1234, 0.5005, 0.999]
+        var previousWidth = -1
+        for (var index = 0; index < fractions.length; ++index) {
+            fakePlayback.positionMs = Math.round(fractions[index] * 100000)
+            tryVerify(function() {
+                return Math.abs(clip.width - base.waveformCursorX) < 0.001
+            }, 1000)
+            verify(clip.width > previousWidth,
+                   "pixel clip must advance for fractional progress "
+                   + fractions[index])
+            previousWidth = clip.width
+        }
+
+        var pausedCursor = base.cursorPosition
+        wait(34)
+        compare(base.cursorPosition, pausedCursor,
+                "a paused position must keep the waveform cursor stable")
+        compare(clip.width, base.waveformCursorX,
+                "a paused position must keep the clip bound to the cursor")
+
+        fakePlayback.positionMs = 0
+        tryVerify(function() { return clip.width === 0 }, 1000)
+
+        shell.waveformDurationMs = 0
+        fakePlayback.durationMs = 0
+        tryVerify(function() {
+            return base.duration === 0 && clip.width === 0
+        }, 1000)
         compare(findChild(shell, "integratedWaveformPlaybackGuide"), null)
         compare(findChild(shell, "integratedWaveformPlaybackFocusDot"), null)
-        compare(findChild(shell, "integratedPlayedWaveform"), null,
-                "progress colour must come from the main canvas, not a clipped duplicate")
-        shell.waveformFrequencyReady = false
-        tryCompare(waveform, "frequencyBandFade", 0, 350)
-        shell.waveformFrequencyReady = true
-        tryCompare(waveform, "frequencyBandFade", 1, 350)
         SettingsController.waveformMode = previousMode
+    }
+
+    function test_integrated_waveform_syncs_visible_range_and_frequency_mix() {
+        var shell = enterIntegratedShell()
+        shell.playbackController = fakePlayback
+        shell.waveformProvider = fakeWaveformProvider
+        shell.waveformDurationMs = 100000
+        fakePlayback.durationMs = 100000
+        shell.waveformLayers = {
+            "mix": [0.2, 0.5, 0.8, 0.4],
+            "bass": [0.8, 0.3, 0.6, 0.2],
+            "mid": [0.4, 0.7, 0.2, 0.9],
+            "high": [0.6, 0.1, 0.9, 0.5],
+            "_sampleRate": 48000,
+            "_totalSamples": 4800000,
+            "_peakCount": 4
+        }
+        SettingsController.waveformMode = 3
+        wait(0)
+
+        var base = findChild(shell, "integratedWaveform")
+        var played = findChild(shell, "integratedPlayedWaveform")
+        var frequencySettings = SettingsController.frequencyColorWaveform
+        verify(base && played)
+        tryVerify(function() {
+            return played.layers.mix && played.layers.mix.length === 4
+        }, 1000)
+        compare(played.layers.mix[2], 0.8)
+        compare(played.layers.bass[0], 0.8)
+        compare(played.layers.mid[1], 0.7)
+        compare(played.layers.high[2], 0.9)
+        compare(played.visualMode, base.visualMode)
+        compare(played.analysisProgress, base.analysisProgress)
+        compare(played.baseColor.toString(), base.baseColor.toString())
+        compare(played.progressColor.toString(), base.progressColor.toString())
+        compare(played.gradientStartColor.toString(), base.gradientStartColor.toString())
+        compare(played.gradientMiddleColor.toString(), base.gradientMiddleColor.toString())
+        compare(played.gradientEndColor.toString(), base.gradientEndColor.toString())
+        compare(base.frequencyDarkSurface, !Theme.isLight)
+        compare(base.frequencyMixColor.toString(), Theme.isLight
+                ? frequencySettings.mixLightColor
+                : frequencySettings.mixDarkColor)
+        compare(played.frequencyMixColor.toString(),
+                base.frequencyMixColor.toString())
+        compare(played.frequencyLowColor.toString(), base.frequencyLowColor.toString())
+        compare(played.frequencyMidColor.toString(), base.frequencyMidColor.toString())
+        compare(played.frequencyHighColor.toString(), base.frequencyHighColor.toString())
+        compare(played.frequencyMixOpacity, base.frequencyMixOpacity)
+        compare(played.frequencyLowOpacity, base.frequencyLowOpacity)
+        compare(played.frequencyMidOpacity, base.frequencyMidOpacity)
+        compare(played.frequencyHighOpacity, base.frequencyHighOpacity)
+        compare(played.frequencyPlayFocus, base.frequencyPlayFocus)
+        compare(played.frequencyFocusColor.toString(),
+                base.frequencyFocusColor.toString())
+        compare(played.frequencyDarkSurface, base.frequencyDarkSurface)
+        compare(played.frequencyStrength, base.frequencyStrength)
+        compare(played.rgbProgress, base.rgbProgress)
+        compare(played.amplitudeScale, base.amplitudeScale)
+        compare(played.density, base.density)
+        compare(played.lineWidth, base.lineWidth)
+
+        base.zoomAt(base.width / 2, 2.0)
+        tryVerify(function() {
+            return played.visibleStartMs === base.visibleStartMs
+                    && played.visibleEndMs === base.visibleEndMs
+        }, 1000)
+        shell.waveformFrequencyReady = false
+        tryCompare(base, "frequencyBandFade", 0, 350)
+        tryCompare(played, "frequencyBandFade", 0, 350)
+        shell.waveformFrequencyReady = true
+        tryCompare(base, "frequencyBandFade", 1, 350)
+        tryCompare(played, "frequencyBandFade", 1, 350)
+    }
+
+    function test_dense_bottom_bar_keeps_volume_icon_only_and_groups_separate() {
+        var shell = enterIntegratedShell()
+        var previousWidth = mainWindow.width
+        mainWindow.width = 1180
+        wait(50)
+
+        var controls = findChild(shell, "integratedPlayerControls")
+        var listWindow = findChild(shell, "listWindowButton")
+        var centerGroup = findChild(shell, "integratedCenterControls")
+        var transport = findChild(shell, "integratedTransportControls")
+        var volume = findChild(shell, "mainVolumeControl")
+        var rightActions = findChild(shell, "integratedRightActions")
+        verify(controls && listWindow && centerGroup && transport
+               && volume && rightActions)
+        compare(controls.denseLayout, true)
+        compare(volume.emptyMode, true)
+        compare(volume.width, 44)
+        verify(listWindow.mapToItem(
+                   controls, listWindow.width, 0).x
+               <= centerGroup.mapToItem(controls, 0, 0).x)
+        verify(transport.mapToItem(
+                   controls, transport.width, 0).x
+               <= volume.mapToItem(controls, 0, 0).x)
+        verify(volume.mapToItem(controls, volume.width, 0).x
+               <= rightActions.mapToItem(controls, 0, 0).x)
+
+        mainWindow.width = previousWidth
+        wait(20)
     }
 
     function test_shell_switch_is_removed_from_transport() {

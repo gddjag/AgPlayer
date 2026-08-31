@@ -31,6 +31,14 @@ TestCase {
     }
 
     Component {
+        id: libraryManagerPageComponent
+        LibraryManagerPage {
+            width: 900
+            height: 600
+        }
+    }
+
+    Component {
         id: listWindowComponent
         ListWindow {
             visible: true
@@ -374,6 +382,134 @@ TestCase {
         task4TemporaryTagKeys = []
     }
 
+    function verifyAscendingX(parent, names) {
+        var previousX = -1
+        for (var i = 0; i < names.length; ++i) {
+            var item = findChild(parent, names[i])
+            verify(item !== null, "missing " + names[i])
+            verify(item.visible, names[i] + " must be visible")
+            var x = item.mapToItem(parent, 0, 0).x
+            verify(x > previousX, names[i] + " is out of order")
+            previousX = x
+        }
+    }
+
+    function verifyFileInfoPanel(panel, expectedPath) {
+        var expectedKeys = [
+            "fileName", "format", "sampleRate", "bitDepth", "channels",
+            "bitRate", "duration", "fileSize", "bpm", "modifiedAt",
+            "directory", "path", "tags"
+        ]
+        var requiredValueKeys = [
+            "format", "sampleRate", "bitDepth", "channels", "bitRate",
+            "duration", "fileSize", "path"
+        ]
+        verify(panel !== null, "file information panel must exist")
+        compare(panel.objectName, "audioFileInfoPanel")
+        compare(panel.width, 300)
+        verify(panel.height > 0, "file information panel must have a usable height")
+        compare(panel.height, Math.min(panel.parent.height - 24, 470))
+        var scrollView = findChild(panel, "audioFileInfoScroll")
+        verify(scrollView !== null)
+        compare(panel.rows.length, expectedKeys.length,
+                "file information must retain the complete shared field contract")
+        for (var rowIndex = 0; rowIndex < expectedKeys.length; ++rowIndex) {
+            var key = expectedKeys[rowIndex]
+            compare(panel.rows[rowIndex].key, key,
+                    "file information fields must remain ordered consistently")
+            var label = findChild(panel.contentItem, "audioFileInfoLabel-" + key)
+            var value = findChild(panel.contentItem, "audioFileInfoValue-" + key)
+            verify(label !== null, "missing file information label for " + key)
+            verify(value !== null, "missing file information value for " + key)
+            if (requiredValueKeys.indexOf(key) >= 0) {
+                verify(String(panel.rows[rowIndex].value || "").length > 0,
+                       "required raw file information value must not be empty: " + key)
+            }
+        }
+        compare(panel.fullPath, expectedPath)
+
+        var path = findChild(panel.contentItem, "audioFileInfoValue-path")
+        verify(path !== null, "full path value must be addressable")
+        compare(path.elide, Text.ElideMiddle)
+        compare(path.Accessible.name, panel.fullPath)
+
+        var copySpy = signalSpyComponent.createObject(testCase,
+                                                      { "target": panel,
+                                                        "signalName": "copyRequested" })
+        verify(copySpy.valid)
+        var copyTarget = findChild(panel.contentItem, "audioFileInfoCopy-path")
+        verify(copyTarget !== null, "full path must expose a copy target")
+        compare(copyTarget.enabled, true)
+        verify(copyTarget.visible && copyTarget.width > 0 && copyTarget.height > 0,
+               "full path copy target must be visible and sized: visible="
+               + copyTarget.visible + ", width=" + copyTarget.width
+               + ", height=" + copyTarget.height)
+        var targetPosition = copyTarget.mapToItem(scrollView, 0, 0)
+        if (targetPosition.y < 0
+                || targetPosition.y + copyTarget.height > scrollView.height) {
+            var flickable = scrollView.contentItem
+            verify(flickable && flickable.contentY !== undefined,
+                   "file information scroll view must expose its flickable viewport")
+            flickable.contentY += targetPosition.y
+                            - (scrollView.height - copyTarget.height) / 2
+            wait(0)
+            targetPosition = copyTarget.mapToItem(scrollView, 0, 0)
+        }
+        verify(targetPosition.x >= 0
+               && targetPosition.x + copyTarget.width <= scrollView.width
+               && targetPosition.y >= 0
+               && targetPosition.y + copyTarget.height <= scrollView.height,
+               "full path copy target must be inside the scroll viewport: x="
+               + targetPosition.x + ", y=" + targetPosition.y
+               + ", width=" + copyTarget.width + ", height=" + copyTarget.height
+               + ", viewportWidth=" + scrollView.width
+               + ", viewportHeight=" + scrollView.height)
+        mouseClick(copyTarget, copyTarget.width / 2, copyTarget.height / 2)
+        compare(copySpy.count, 1)
+        compare(copySpy.signalArguments[0][0], panel.fullPath)
+        copySpy.destroy()
+    }
+
+    function requiredFileInfoRowsAreHydrated(panel) {
+        if (!panel || !panel.rows)
+            return false
+        var requiredValueKeys = [
+            "format", "sampleRate", "bitDepth", "channels", "bitRate",
+            "duration", "fileSize", "path"
+        ]
+        for (var rowIndex = 0; rowIndex < panel.rows.length; ++rowIndex) {
+            var row = panel.rows[rowIndex]
+            if (requiredValueKeys.indexOf(row.key) >= 0
+                    && String(row.value || "").length === 0)
+                return false
+        }
+        return true
+    }
+
+    function positionMenuActionInViewport(menu, action) {
+        var menuView = menu.contentItem
+        verify(menuView !== null, "context menu must expose a content viewport")
+        verify(typeof menuView.positionViewAtIndex === "function",
+               "context menu viewport must support item positioning")
+        var actionIndex = -1
+        for (var index = 0; index < menu.count; ++index) {
+            if (menu.itemAt(index) === action) {
+                actionIndex = index
+                break
+            }
+        }
+        verify(actionIndex >= 0,
+               "file information action must be a real context menu item")
+        menuView.positionViewAtIndex(actionIndex, ListView.End)
+        wait(0)
+        var actionPosition = action.mapToItem(menuView, 0, 0)
+        verify(actionPosition.x >= 0
+               && actionPosition.x + action.width <= menuView.width
+               && actionPosition.y >= 0
+               && actionPosition.y + action.height <= menuView.height,
+               "file information action must be entirely inside the menu viewport")
+    }
+
     function cleanup() {
         for (var index = 0; index < task4TemporaryTagKeys.length; ++index)
             TagModel.removeTag(task4TemporaryTagKeys[index])
@@ -583,10 +719,10 @@ TestCase {
         mouseClick(button)
         var window = findChild(mainWindow, "equalizerWindow")
         tryVerify(function() { return window && window.visible }, 1000)
-        verify(window.width >= 1000)
-        verify(window.height >= 600)
-        compare(window.minimumWidth, 880)
-        compare(window.minimumHeight, 520)
+        compare(window.width, 860)
+        compare(window.height, 520)
+        compare(window.minimumWidth, 760)
+        compare(window.minimumHeight, 480)
         var equalizerTitle = findChild(window, "equalizerTitle")
         var equalizerContent = findChild(window, "equalizerContent")
         verify(equalizerTitle,
@@ -1044,7 +1180,7 @@ TestCase {
 
         trackList.openFirstDetailsForQa()
 
-        var detailsPanel = findChild(trackList, "trackDetailsPanel")
+        var detailsPanel = findChild(trackList, "audioFileInfoPanel")
         verify(detailsPanel,
                "QA capture must expose the real track-details popup")
         tryVerify(function() { return detailsPanel.visible }, 500)
@@ -1056,17 +1192,17 @@ TestCase {
                "the opened popup must contain a real track format")
 
         var sampleRateLabel = findChild(detailsPanel.contentItem,
-                                        "trackDetailsLabel-sampleRate")
+                                        "audioFileInfoLabel-sampleRate")
         var sampleRateValue = findChild(detailsPanel.contentItem,
-                                        "trackDetailsValue-sampleRate")
+                                        "audioFileInfoValue-sampleRate")
         var directoryLabel = findChild(detailsPanel.contentItem,
-                                       "trackDetailsLabel-directory")
+                                       "audioFileInfoLabel-directory")
         var directoryValue = findChild(detailsPanel.contentItem,
-                                       "trackDetailsValue-directory")
+                                       "audioFileInfoValue-directory")
         var pathLabel = findChild(detailsPanel.contentItem,
-                                  "trackDetailsLabel-path")
+                                  "audioFileInfoLabel-path")
         var pathValue = findChild(detailsPanel.contentItem,
-                                  "trackDetailsValue-path")
+                                  "audioFileInfoValue-path")
         verify(sampleRateLabel && sampleRateValue)
         verify(directoryLabel && directoryValue)
         verify(pathLabel && pathValue)
@@ -1094,6 +1230,154 @@ TestCase {
         }
         detailsPanel.close()
         listWindow.destroy()
+    }
+
+    function test_track_list_file_information_uses_shared_panel_contract() {
+        var trackIds = nativeDropHelper.ensureSortableTracks()
+        verify(trackIds.length > 0)
+        var list = trackListComponent.createObject(mainWindow.contentItem)
+        verify(list)
+        tryVerify(function() { return list.count > 0 }, 500)
+        list.positionViewAtBeginning()
+        wait(30)
+
+        var panel = null
+        var menu = null
+        try {
+            var firstRow = list.itemAtIndex(0)
+            verify(firstRow, "a visible track row should exist")
+            mouseClick(firstRow, firstRow.width / 2, firstRow.height / 2,
+                       Qt.RightButton)
+            menu = findChild(list, "trackContextMenu")
+            tryVerify(function() { return menu && menu.visible }, 500)
+            var detailsAction = findChild(menu, "trackMenuDetails")
+            verify(detailsAction, "track menu must expose file information")
+            verify(detailsAction.enabled, "file information action must be enabled")
+            verify(detailsAction.visible && detailsAction.width > 20
+                   && detailsAction.height > 20,
+                   "file information action must be visibly clickable")
+            positionMenuActionInViewport(menu, detailsAction)
+            var detailsSpy = signalSpyComponent.createObject(testCase,
+                                                              { "target": detailsAction,
+                                                                "signalName": "triggered" })
+            verify(detailsSpy.valid)
+            mouseClick(detailsAction, detailsAction.width / 2,
+                       detailsAction.height / 2)
+            compare(detailsSpy.count, 1,
+                    "clicking file information must trigger its menu action")
+            panel = findChild(list, "audioFileInfoPanel")
+            tryVerify(function() { return panel && panel.visible }, 500)
+            tryVerify(function() {
+                return requiredFileInfoRowsAreHydrated(panel)
+            }, 3000)
+            verifyFileInfoPanel(panel, String(panel.details.path || ""))
+            mainWindow.requestActivate()
+            tryVerify(function() { return mainWindow.active }, 1000)
+            var trackListClose = findChild(panel, "audioFileInfoClose")
+            trackListClose.forceActiveFocus()
+            verify(trackListClose.activeFocus,
+                   "close button focus failed; active=" + mainWindow.active
+                   + ", visible=" + mainWindow.visible
+                   + ", activeFocusItem="
+                   + (mainWindow.activeFocusItem
+                      ? mainWindow.activeFocusItem.objectName : "null"))
+            keyClick(Qt.Key_Escape)
+            tryVerify(function() { return !panel.visible }, 500)
+        } finally {
+            if (menu)
+                menu.close()
+            if (panel)
+                panel.close()
+            list.destroy()
+        }
+    }
+
+    function test_library_manager_file_information_uses_shared_panel_contract() {
+        var trackIds = nativeDropHelper.ensureSortableTracks()
+        verify(trackIds.length > 0)
+        var page = libraryManagerPageComponent.createObject(mainWindow.contentItem)
+        verify(page)
+        page.z = 1000
+        page.height = Math.max(page.height, page.implicitHeight)
+        wait(30)
+
+        var panel = null
+        var menu = null
+        try {
+            var trackList = findChild(page, "libraryManagerTrackList")
+            verify(trackList, "library manager must expose its track list")
+            tryVerify(function() { return trackList.count > 0 }, 500)
+            trackList.positionViewAtBeginning()
+            wait(30)
+            mainWindow.requestActivate()
+            tryVerify(function() { return mainWindow.active }, 1000)
+            trackList.forceActiveFocus()
+            verify(trackList.activeFocus,
+                   "library manager track list must receive pointer input focus")
+            var firstRow = trackList.itemAtIndex(0)
+            verify(firstRow, "a visible library manager track row should exist")
+            verify(firstRow.width > 20 && firstRow.height > 20,
+                   "first library manager row must expose a clickable hit target")
+            var pagePosition = firstRow.mapToItem(page, 0, 0)
+            page.y = Math.round((mainWindow.contentItem.height - firstRow.height) / 2
+                                - pagePosition.y)
+            wait(0)
+            var firstRowPosition = firstRow.mapToItem(trackList, 0, 0)
+            verify(firstRowPosition.y >= 0
+                   && firstRowPosition.y + firstRow.height <= trackList.height,
+                   "first library manager row must be inside its visible viewport")
+            var windowPosition = firstRow.mapToItem(mainWindow.contentItem, 0, 0)
+            verify(windowPosition.x >= 0
+                   && windowPosition.x + firstRow.width <= mainWindow.contentItem.width
+                   && windowPosition.y >= 0
+                   && windowPosition.y + firstRow.height <= mainWindow.contentItem.height,
+                   "first library manager row must be inside the host window: y="
+                   + windowPosition.y + ", height=" + firstRow.height
+                   + ", hostHeight=" + mainWindow.contentItem.height)
+            mouseClick(firstRow, firstRow.width / 2, firstRow.height / 2,
+                       Qt.RightButton)
+            menu = findChild(page, "libraryManagerTrackMenu")
+            tryVerify(function() { return menu && menu.visible }, 500)
+            var detailsAction = findChild(menu, "libraryTrackDetails")
+            verify(detailsAction, "library manager menu must expose file information")
+            verify(detailsAction.enabled, "file information action must be enabled")
+            verify(detailsAction.visible && detailsAction.width > 20
+                   && detailsAction.height > 20,
+                   "file information action must be visibly clickable")
+            positionMenuActionInViewport(menu, detailsAction)
+            var detailsSpy = signalSpyComponent.createObject(testCase,
+                                                              { "target": detailsAction,
+                                                                "signalName": "triggered" })
+            verify(detailsSpy.valid)
+            mouseClick(detailsAction, detailsAction.width / 2,
+                       detailsAction.height / 2)
+            compare(detailsSpy.count, 1,
+                    "clicking file information must trigger its menu action")
+            panel = findChild(page, "audioFileInfoPanel")
+            tryVerify(function() { return panel && panel.visible }, 500)
+            tryVerify(function() {
+                return requiredFileInfoRowsAreHydrated(panel)
+            }, 3000)
+            verifyFileInfoPanel(panel, String(panel.details.path || ""))
+            mainWindow.requestActivate()
+            tryVerify(function() { return mainWindow.active }, 1000)
+            var libraryManagerClose = findChild(panel, "audioFileInfoClose")
+            libraryManagerClose.forceActiveFocus()
+            verify(libraryManagerClose.activeFocus,
+                   "close button focus failed; active=" + mainWindow.active
+                   + ", visible=" + mainWindow.visible
+                   + ", activeFocusItem="
+                   + (mainWindow.activeFocusItem
+                      ? mainWindow.activeFocusItem.objectName : "null"))
+            keyClick(Qt.Key_Escape)
+            tryVerify(function() { return !panel.visible }, 500)
+        } finally {
+            if (menu)
+                menu.close()
+            if (panel)
+                panel.close()
+            page.destroy()
+        }
     }
 
     function test_sidebar_exposes_required_top_level_nodes_and_linear_icons() {
@@ -2272,6 +2556,69 @@ TestCase {
         verify(volume.x >= core.x + core.width,
                "the volume control must float to the right of the centered core")
         volume.expandedForQa = false
+    }
+
+    function test_classic_default_width_keeps_control_groups_separate() {
+        if (LibraryModel.count === 0)
+            nativeDropHelper.ensureSortableTracks()
+        var previousWidth = mainWindow.width
+        mainWindow.width = 960
+        wait(50)
+
+        var controls = findChild(mainWindow, "playerControls")
+        var transport = findChild(controls, "centerPlaybackControls")
+        var volume = findChild(controls, "mainVolumeControl")
+        var rightActions = findChild(controls, "playerSecondaryActions")
+        verify(controls && transport && volume && rightActions)
+        verifyAscendingX(transport, [
+            "equalizerButton", "waveformModeButton", "previousButton",
+            "playPauseButton", "nextButton", "modeButton"
+        ])
+        verifyAscendingX(rightActions, [
+            "audioToolsButton", "lyricsActionButton", "themeModeButton",
+            "immersiveActionButton", "windowLayoutButton"
+        ])
+        var actionNames = [
+            "audioToolsButton", "lyricsActionButton", "themeModeButton",
+            "immersiveActionButton", "windowLayoutButton"
+        ]
+        for (var actionIndex = 0; actionIndex < actionNames.length;
+             ++actionIndex) {
+            compare(findChild(rightActions, actionNames[actionIndex]).icon.width,
+                    20, actionNames[actionIndex] + " icon width")
+        }
+        verify(transport.mapToItem(controls, transport.width, 0).x
+               <= volume.mapToItem(controls, 0, 0).x)
+        verify(volume.mapToItem(controls, volume.width, 0).x
+               <= rightActions.mapToItem(controls, 0, 0).x)
+        compare(findChild(controls, "miniPlayerButton").visible, true)
+
+        mainWindow.width = previousWidth
+        wait(20)
+    }
+
+    function test_classic_intermediate_width_uses_safe_compact_boundary() {
+        if (LibraryModel.count === 0)
+            nativeDropHelper.ensureSortableTracks()
+        var previousWidth = mainWindow.width
+        mainWindow.width = 800
+        wait(50)
+
+        var controls = findChild(mainWindow, "playerControls")
+        var transport = findChild(controls, "centerPlaybackControls")
+        var volume = findChild(controls, "mainVolumeControl")
+        var rightActions = findChild(controls, "playerSecondaryActions")
+        verify(controls && transport && volume && rightActions)
+        compare(controls.compactTransport, true)
+        verify(findChild(rightActions, "audioToolsButton").visible)
+        verify(findChild(rightActions, "lyricsActionButton").visible)
+        verify(transport.mapToItem(controls, transport.width, 0).x
+               <= volume.mapToItem(controls, 0, 0).x)
+        verify(volume.mapToItem(controls, volume.width, 0).x
+               <= rightActions.mapToItem(controls, 0, 0).x)
+
+        mainWindow.width = previousWidth
+        wait(20)
     }
 
     function test_main_volume_flyout_stays_open_for_two_seconds_after_leave() {
@@ -4725,7 +5072,7 @@ TestCase {
         page.close()
     }
 
-    function test_settings_language_combo_renders_flag_and_language() {
+    function test_settings_language_combo_lists_only_plain_chinese_and_english() {
         var page = findChild(mainWindow, "settingsPage")
         var ownsPage = false
         if (!page) {
@@ -4738,14 +5085,14 @@ TestCase {
         wait(150)
         var combo = findChild(page, "languageCombo")
         verify(combo)
-        compare(combo.valueModel.length, 4)
-        compare(combo.valueModel[0].text, "🇨🇳 中文")
-        compare(combo.valueModel[1].text, "🇺🇸 English")
-        compare(combo.valueModel[2].text, "🇹🇭 ไทย")
-        compare(combo.valueModel[3].text, "🇻🇳 Tiếng Việt")
+        compare(combo.valueModel.length, 2)
+        compare(combo.valueModel[0].text, "中文")
+        compare(combo.valueModel[1].text, "English")
+        const labels = combo.valueModel.map(function(entry) { return entry.text }).join("|")
+        verify(!/CN|US|🇨🇳|🇺🇸|ไทย|Tiếng Việt/.test(labels))
         SettingsController.language = "en"
         tryCompare(combo, "currentIndex", 1)
-        tryVerify(function() { return combo.contentItem.text === "🇺🇸 English" })
+        tryVerify(function() { return combo.contentItem.text === "English" })
         SettingsController.language = "zh"
         if (ownsPage) {
             page.saveAndClose()
@@ -5133,9 +5480,10 @@ TestCase {
         wait(150)
         var selector = findChild(page, "windowLayoutThemeCombo")
         verify(selector)
-        compare(selector.valueModel.length, 2)
+        compare(selector.valueModel.length, 3)
         compare(selector.valueModel[0].value, "dual-window")
         compare(selector.valueModel[1].value, "single-window")
+        compare(selector.valueModel[2].value, "rolling-player")
         compare(selector.currentValue, "dual-window")
         compare(SettingsController.windowLayoutTheme, "dual-window")
         if (ownsPage) {
@@ -5163,6 +5511,7 @@ TestCase {
         var lightButton = findChild(page, "themeModeLight")
         var darkButton = findChild(page, "themeModeDark")
         verify(systemButton && lightButton && darkButton)
+        compare(darkButton.text, "深色")
         verify(!findChild(page, "themeModeCustom"))
         verify(!findChild(page, "themeColorSelector"))
 
@@ -5318,6 +5667,64 @@ TestCase {
         compare(Theme.ratingGold.toString(), "#ff9800")
         for (var index = 0; index < 5; ++index)
             compare(Theme.ratingColor(index).toString(), "#ff9800")
+    }
+
+    function test_integrated_player_control_order() {
+        var previousLayoutTheme = SettingsController.windowLayoutTheme
+        ignoreWarning(new RegExp(
+            "This plugin does not support propagateSizeHints\\(\\)"))
+        ignoreWarning(new RegExp(
+            "This plugin does not support propagateSizeHints\\(\\)"))
+        ignoreWarning(new RegExp(
+            "This plugin does not support propagateSizeHints\\(\\)"))
+        ignoreWarning(new RegExp(
+            "This plugin does not support propagateSizeHints\\(\\)"))
+        SettingsController.playerShellMode = 1
+        SettingsController.windowLayoutTheme = "single-window"
+        try {
+            tryVerify(function() {
+                return findChild(mainWindow, "integratedPlayerShell") !== null
+            }, 1500)
+            tryVerify(function() {
+                return findChild(mainWindow, "integratedPlayerControls") !== null
+            }, 1500)
+            var controls = findChild(mainWindow, "integratedPlayerControls")
+            var summary = findChild(mainWindow, "integratedTrackSummary")
+            var listButton = findChild(controls, "listWindowButton")
+            var centerGroup = findChild(controls, "integratedCenterControls")
+            var transport = findChild(controls, "integratedTransportControls")
+            var volume = findChild(controls, "mainVolumeControl")
+            var rightActions = findChild(controls, "integratedRightActions")
+            verify(summary && listButton && centerGroup
+                   && transport && volume && rightActions)
+            verifyAscendingX(transport, [
+                "equalizerButton", "waveformModeButton", "previousButton",
+                "playPauseButton", "nextButton", "modeButton"
+            ])
+            verifyAscendingX(rightActions, [
+                "audioToolsButton", "lyricsActionButton", "themeModeButton",
+                "immersiveActionButton", "windowLayoutButton"
+            ])
+            verify(summary.mapToItem(controls, summary.width, 0).x
+                   <= listButton.mapToItem(controls, 0, 0).x)
+            verify(listButton.mapToItem(
+                       controls, listButton.width, 0).x
+                   <= transport.mapToItem(controls, 0, 0).x)
+            verify(transport.mapToItem(
+                       controls, transport.width, 0).x
+                   <= volume.mapToItem(controls, 0, 0).x)
+            verify(volume.mapToItem(
+                       controls, volume.width, 0).x
+                   <= rightActions.mapToItem(controls, 0, 0).x)
+        } finally {
+            SettingsController.playerShellMode = 0
+            SettingsController.windowLayoutTheme = previousLayoutTheme
+            tryVerify(function() {
+                var classicShell = findChild(mainWindow, "classicPlayerShell")
+                return classicShell !== null && classicShell.visible
+                        && findChild(mainWindow, "integratedPlayerControls") === null
+            }, 1500)
+        }
     }
 
     function test_title_buttons_use_compact_chinese_labels() {

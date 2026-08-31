@@ -393,23 +393,14 @@ Rectangle {
                     background: null
                 }
                 ToolButton {
-                    id: modeButton; Layout.preferredWidth: 28; Layout.preferredHeight: 28
-                    objectName: "miniModeButton"
-                    icon.source: !playback || playback.mode === PlaybackController.Sequential ? Theme.icon("play-order-line")
-                               : playback.mode === PlaybackController.Shuffle ? Theme.icon("shuffle-arrows-line")
-                               : playback.mode === PlaybackController.RepeatOne ? Theme.icon("repeat-one-line-alt")
-                               : Theme.icon("repeat-list-line")
-                    icon.color: Theme.iconPrimary; icon.width: 16; icon.height: 16
-                    Accessible.name: root.modeName(); ToolTip.text: Accessible.name; ToolTip.visible: hovered
-                    onClicked: if (playback) playback.cycleMode(); background: null
-                }
-                ToolButton {
                     id: previousButton; Layout.preferredWidth: 28; Layout.preferredHeight: 28
+                    objectName: "miniPreviousButton"
                     icon.source: Theme.icon("skip-back-fill"); icon.color: Theme.primaryText
                     icon.width: 19; icon.height: 19; onClicked: if (playback) playback.previous(); background: null
                 }
                 ToolButton {
                     id: playPauseButton; Layout.preferredWidth: 34; Layout.preferredHeight: 34
+                    objectName: "miniPlayPauseButton"
                     icon.source: playback && playback.state === PlaybackController.Playing ? Theme.icon("pause-fill") : Theme.icon("play-fill")
                     icon.color: Theme.primaryText; icon.width: 18; icon.height: 18
                     onClicked: if (playback) playback.togglePlayback()
@@ -422,13 +413,20 @@ Rectangle {
                 }
                 ToolButton {
                     id: nextButton; Layout.preferredWidth: 28; Layout.preferredHeight: 28
+                    objectName: "miniNextButton"
                     icon.source: Theme.icon("skip-forward-fill"); icon.color: Theme.primaryText
                     icon.width: 19; icon.height: 19; onClicked: if (playback) playback.next(); background: null
                 }
-                ExperienceActions {
-                    objectName: "miniExperienceActions"
-                    compact: true
-                    showImmersive: false
+                ToolButton {
+                    id: modeButton; Layout.preferredWidth: 28; Layout.preferredHeight: 28
+                    objectName: "miniModeButton"
+                    icon.source: !playback || playback.mode === PlaybackController.Sequential ? Theme.icon("play-order-line")
+                               : playback.mode === PlaybackController.Shuffle ? Theme.icon("shuffle-arrows-line")
+                               : playback.mode === PlaybackController.RepeatOne ? Theme.icon("repeat-one-line-alt")
+                               : Theme.icon("repeat-list-line")
+                    icon.color: Theme.iconPrimary; icon.width: 16; icon.height: 16
+                    Accessible.name: root.modeName(); ToolTip.text: Accessible.name; ToolTip.visible: hovered
+                    onClicked: if (playback) playback.cycleMode(); background: null
                 }
                 Item {
                     id: volumeControl

@@ -125,8 +125,33 @@ Item {
     }
 
     function openFileDetails(trackId) {
-        fileDetailsPanel.details = fileOps.trackDetails(trackId)
+        fileDetailsPanel.trackId = trackId
+        refreshFileDetailsPanel(trackId)
         fileDetailsPanel.open()
+        fileOps.requestTrackDetailsHydration(trackId)
+    }
+    function refreshFileDetailsPanel(trackId) {
+        fileDetailsPanel.details = fileOps.trackDetails(trackId)
+        fileDetailsPanel.fullPath = String(fileDetailsPanel.details.path || "")
+        fileDetailsPanel.coverUrl = fileDetailsPanel.details.coverUrl || ""
+        fileDetailsPanel.rows = fileDetailRows(fileDetailsPanel.details)
+    }
+    function fileDetailRows(details) {
+        return [
+            { key: "fileName", label: qsTr("文件名"), value: details.fileName || "", copyable: false },
+            { key: "format", label: qsTr("格式"), value: details.format || "", copyable: false },
+            { key: "sampleRate", label: qsTr("采样率"), value: details.sampleRate ? details.sampleRate + " Hz" : "", copyable: false },
+            { key: "bitDepth", label: qsTr("位深"), value: details.bitDepth ? details.bitDepth + " bit" : "", copyable: false },
+            { key: "channels", label: qsTr("声道"), value: details.channels || details.channelCount || "", copyable: false },
+            { key: "bitRate", label: qsTr("比特率"), value: details.bitRate ? Math.round(details.bitRate / 1000) + " kbps" : "", copyable: false },
+            { key: "duration", label: qsTr("时长"), value: root.formatDuration(details.durationMs || 0), copyable: false },
+            { key: "fileSize", label: qsTr("大小"), value: details.fileSize ? (details.fileSize / 1048576).toFixed(2) + " MB" : "", copyable: false },
+            { key: "bpm", label: "BPM", value: details.bpm || "", copyable: false },
+            { key: "modifiedAt", label: qsTr("修改时间"), value: details.modifiedAt ? Qt.formatDateTime(details.modifiedAt, "yyyy-MM-dd HH:mm:ss") : "", copyable: false },
+            { key: "directory", label: qsTr("目录"), value: details.directory || "", copyable: false },
+            { key: "path", label: qsTr("完整路径"), value: details.path || "", copyable: true },
+            { key: "tags", label: qsTr("标签"), value: (details.tags || []).join(", "), copyable: false }
+        ]
     }
 
     function selectedFileUrls() {
@@ -276,84 +301,19 @@ Item {
         }
     }
 
-    Popup {
+    AudioFileInfoPanel {
         id: fileDetailsPanel
-        objectName: "libraryAudioFileInfoPanel"
-        property var details: ({})
-        width: 300
-        height: Math.min(root.height - 24, 470)
+        parent: Overlay.overlay
+        property string trackId: ""
         x: root.width - width - 12
         y: 12
-        modal: false
-        focus: true
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        background: Rectangle {
-            color: Theme.elevated
-            border.color: Theme.border
-            radius: Theme.radiusMd
-        }
-        contentItem: ColumnLayout {
-            spacing: 7
-            RowLayout {
-                Layout.fillWidth: true
-                Text {
-                    text: qsTr("文件信息")
-                    color: Theme.primaryText
-                    font.pixelSize: 15
-                    font.weight: Font.DemiBold
-                    Layout.fillWidth: true
-                }
-                ToolButton {
-                    icon.source: Theme.icon("close-fill")
-                    onClicked: fileDetailsPanel.close()
-                    background: null
-                }
-            }
-            Repeater {
-                model: [
-                    [qsTr("格式"), fileDetailsPanel.details.format],
-                    [qsTr("采样率"), fileDetailsPanel.details.sampleRate
-                                      ? fileDetailsPanel.details.sampleRate + " Hz" : ""],
-                    [qsTr("比特率"), fileDetailsPanel.details.bitRate
-                                      ? Math.round(fileDetailsPanel.details.bitRate / 1000) + " kbps" : ""],
-                    [qsTr("时长"), root.formatDuration(fileDetailsPanel.details.durationMs || 0)],
-                    [qsTr("大小"), fileDetailsPanel.details.fileSize
-                                    ? (fileDetailsPanel.details.fileSize / 1048576).toFixed(2) + " MB" : ""],
-                    ["BPM", fileDetailsPanel.details.bpm || ""],
-                    [qsTr("修改时间"), fileDetailsPanel.details.modifiedAt
-                                        ? Qt.formatDateTime(fileDetailsPanel.details.modifiedAt,
-                                                            "yyyy-MM-dd HH:mm:ss") : ""],
-                    [qsTr("目录"), fileDetailsPanel.details.directory],
-                    [qsTr("完整路径"), fileDetailsPanel.details.path],
-                    [qsTr("标签"), (fileDetailsPanel.details.tags || []).join(", ")]
-                ]
-                delegate: RowLayout {
-                    required property var modelData
-                    Layout.fillWidth: true
-                    Text {
-                        text: modelData[0]
-                        color: Theme.secondaryText
-                        Layout.preferredWidth: 62
-                        font.pixelSize: 11
-                    }
-                    Text {
-                        text: modelData[1] || "—"
-                        color: Theme.primaryText
-                        elide: Text.ElideMiddle
-                        Layout.fillWidth: true
-                        font.pixelSize: 11
-                    }
-                }
-            }
-            Image {
-                visible: Boolean(fileDetailsPanel.details.coverUrl)
-                source: fileDetailsPanel.details.coverUrl || ""
-                Layout.preferredWidth: 120
-                Layout.preferredHeight: 120
-                Layout.alignment: Qt.AlignHCenter
-                fillMode: Image.PreserveAspectFit
-            }
-            Item { Layout.fillHeight: true }
+        onCopyRequested: fileOps.copyPath(trackId)
+    }
+    Connections {
+        target: fileOps
+        function onTrackDetailsChanged(trackId) {
+            if (fileDetailsPanel.visible && fileDetailsPanel.trackId === trackId)
+                root.refreshFileDetailsPanel(trackId)
         }
     }
 

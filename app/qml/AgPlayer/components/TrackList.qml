@@ -267,8 +267,33 @@ ListView {
         renameDialog.open(); renameField.forceActiveFocus(); renameField.selectAll()
     }
     function openDetails() {
-        detailsPanel.details = fileOps.trackDetails(trackMenu.targetTrackId)
+        detailsPanel.trackId = trackMenu.targetTrackId
+        refreshDetailsPanel(detailsPanel.trackId)
         detailsPanel.open()
+        fileOps.requestTrackDetailsHydration(detailsPanel.trackId)
+    }
+    function refreshDetailsPanel(trackId) {
+        detailsPanel.details = fileOps.trackDetails(trackId)
+        detailsPanel.fullPath = String(detailsPanel.details.path || "")
+        detailsPanel.coverUrl = detailsPanel.details.coverUrl || ""
+        detailsPanel.rows = fileDetailRows(detailsPanel.details)
+    }
+    function fileDetailRows(details) {
+        return [
+            { key: "fileName", label: qsTr("文件名"), value: details.fileName || "", copyable: false },
+            { key: "format", label: qsTr("格式"), value: details.format || "", copyable: false },
+            { key: "sampleRate", label: qsTr("采样率"), value: details.sampleRate ? details.sampleRate + " Hz" : "", copyable: false },
+            { key: "bitDepth", label: qsTr("位深"), value: details.bitDepth ? details.bitDepth + " bit" : "", copyable: false },
+            { key: "channels", label: qsTr("声道"), value: details.channels || details.channelCount || "", copyable: false },
+            { key: "bitRate", label: qsTr("比特率"), value: details.bitRate ? Math.round(details.bitRate / 1000) + " kbps" : "", copyable: false },
+            { key: "duration", label: qsTr("时长"), value: root.formatTime(details.durationMs || 0), copyable: false },
+            { key: "fileSize", label: qsTr("大小"), value: details.fileSize ? (details.fileSize / 1048576).toFixed(2) + " MB" : "", copyable: false },
+            { key: "bpm", label: "BPM", value: root.formatBpm(details.bpm), copyable: false },
+            { key: "modifiedAt", label: qsTr("修改时间"), value: details.modifiedAt ? Qt.formatDateTime(details.modifiedAt, "yyyy-MM-dd HH:mm:ss") : "", copyable: false },
+            { key: "directory", label: qsTr("目录"), value: details.directory || "", copyable: false },
+            { key: "path", label: qsTr("完整路径"), value: details.path || "", copyable: true },
+            { key: "tags", label: qsTr("标签"), value: (details.tags || []).join(", "), copyable: false }
+        ]
     }
     function openFirstDetailsForQa() {
         var trackId = trackIdAt(0)
@@ -1040,84 +1065,19 @@ ListView {
 
     component SystemMenuItem: ThemedMenuItem { width: 230 }
 
-    Popup {
+    AudioFileInfoPanel {
         id: detailsPanel
-        objectName: "trackDetailsPanel"
         parent: Overlay.overlay
-        property var details: ({})
-        width: Math.min(420, Math.max(340, parent ? parent.width - 24 : 340))
-        height: Math.min(470, Math.max(320, parent ? parent.height - 24 : 470))
+        property string trackId: ""
         x: parent ? Math.max(12, parent.width - width - 12) : 12
         y: parent ? Math.max(12, (parent.height - height) / 2) : 12
-        modal: false; focus: true; closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        background: Rectangle { color: Theme.elevated; border.color: Theme.border; radius: Theme.radiusMd }
-        contentItem: ColumnLayout {
-            spacing: 7
-            RowLayout {
-                Layout.fillWidth: true
-                Text {
-                    text: qsTr("文件信息")
-                    color: Theme.primaryText
-                    font.pixelSize: 15
-                    font.weight: Font.DemiBold
-                    Layout.fillWidth: true
-                }
-                ToolButton {
-                    icon.source: Theme.icon("close-fill")
-                    onClicked: detailsPanel.close()
-                    background: null
-                }
-            }
-            Repeater {
-                model: [
-                    ["fileName", qsTr("文件名"), detailsPanel.details.fileName],
-                    ["format", qsTr("格式"), detailsPanel.details.format],
-                    ["sampleRate", qsTr("采样率"), detailsPanel.details.sampleRate
-                                   ? detailsPanel.details.sampleRate + " Hz" : ""],
-                    ["bitRate", qsTr("比特率"), detailsPanel.details.bitRate
-                                ? Math.round(detailsPanel.details.bitRate / 1000) + " kbps" : ""],
-                    ["duration", qsTr("时长"), root.formatTime(detailsPanel.details.durationMs || 0)],
-                    ["fileSize", qsTr("大小"), detailsPanel.details.fileSize
-                                 ? (detailsPanel.details.fileSize / 1048576).toFixed(2) + " MB" : ""],
-                    ["bpm", "BPM", root.formatBpm(detailsPanel.details.bpm)],
-                    ["modifiedAt", qsTr("修改时间"), detailsPanel.details.modifiedAt
-                                     ? Qt.formatDateTime(detailsPanel.details.modifiedAt,
-                                                         "yyyy-MM-dd HH:mm:ss") : ""],
-                    ["directory", qsTr("目录"), detailsPanel.details.directory],
-                    ["path", qsTr("完整路径"), detailsPanel.details.path],
-                    ["tags", qsTr("标签"), (detailsPanel.details.tags || []).join(", ")]
-                ]
-                delegate: RowLayout {
-                    required property var modelData
-                    id: detailRow
-                    objectName: "trackDetailsRow-" + modelData[0]
-                    Layout.fillWidth: true
-                    Text {
-                        objectName: "trackDetailsLabel-" + detailRow.modelData[0]
-                        text: modelData[1]
-                        color: Theme.secondaryText
-                        Layout.preferredWidth: 176
-                        font.pixelSize: 11
-                    }
-                    Text {
-                        objectName: "trackDetailsValue-" + detailRow.modelData[0]
-                        text: modelData[2] || "—"
-                        color: Theme.primaryText
-                        elide: Text.ElideMiddle
-                        Layout.fillWidth: true
-                        font.pixelSize: 11
-                    }
-                }
-            }
-            Image {
-                visible: Boolean(detailsPanel.details.coverUrl)
-                source: detailsPanel.details.coverUrl || ""
-                Layout.preferredWidth: 120
-                Layout.preferredHeight: 120
-                Layout.alignment: Qt.AlignHCenter
-                fillMode: Image.PreserveAspectFit
-            }
-            Item { Layout.fillHeight: true }
+        onCopyRequested: fileOps.copyPath(trackId)
+    }
+    Connections {
+        target: fileOps
+        function onTrackDetailsChanged(trackId) {
+            if (detailsPanel.visible && detailsPanel.trackId === trackId)
+                root.refreshDetailsPanel(trackId)
         }
     }
 

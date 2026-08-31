@@ -39,6 +39,8 @@ TrackRecord makeTrack(const QString& path, const QString& title)
     track.format = QStringLiteral("flac");
     track.sampleRate = 192000;
     track.bitDepth = 24;
+    track.channels = 2;
+    track.metadataProbeAttempted = true;
     track.bitRate = 9216000;
     track.durationMs = 8642;
     track.fileSize = 4321;
@@ -87,6 +89,8 @@ void LibraryStoreTest::migratesMissingAddedTimestampFromTheAudioFile()
     const QList<TrackRecord> loaded = store.load();
 
     QCOMPARE(loaded.size(), 1);
+    QCOMPARE(loaded.front().channels, 0);
+    QVERIFY(!loaded.front().metadataProbeAttempted);
     QVERIFY(loaded.front().addedAtMs > 0);
     const QFileInfo info(audioPath);
     const qint64 fileTimestamp = info.birthTime().isValid()
@@ -127,6 +131,8 @@ void LibraryStoreTest::persistsEveryRoleAndMarksMissingFilesUnavailable()
     QCOMPARE(track.format, source.format);
     QCOMPARE(track.sampleRate, source.sampleRate);
     QCOMPARE(track.bitDepth, source.bitDepth);
+    QCOMPARE(track.channels, source.channels);
+    QCOMPARE(track.metadataProbeAttempted, source.metadataProbeAttempted);
     QCOMPARE(track.bitRate, source.bitRate);
     QCOMPARE(track.durationMs, source.durationMs);
     QCOMPARE(track.fileSize, source.fileSize);

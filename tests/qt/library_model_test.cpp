@@ -29,7 +29,100 @@ private slots:
     void stampsNewImportsWithoutOverwritingExistingTimestamps();
     void exposesLiveRecentAndNeverPlayedCounts();
     void missingLocalCoverFallsBackToPackagedArtwork();
+    void staleMetadataProbeCannotOverwriteRelocatedTrack();
+    void staleMetadataProbeCannotStealRecreatedTrackClaim();
 };
+
+void LibraryModelTest::staleMetadataProbeCannotStealRecreatedTrackClaim()
+{
+    TrackRecord original;
+    original.trackId = QStringLiteral("recreated-probe");
+    original.path = QStringLiteral("C:/same/location.wav");
+    original.available = true;
+    LibraryModel model;
+    model.replaceAll({original});
+
+    const auto oldClaim = model.beginMetadataProbe(original.trackId);
+    QVERIFY(oldClaim.has_value());
+    QVERIFY(oldClaim->generation != 0);
+    QVERIFY(model.removeTrack(original.trackId));
+    QVERIFY(model.append(original));
+    const auto newClaim = model.beginMetadataProbe(original.trackId);
+    QVERIFY(newClaim.has_value());
+    QVERIFY(newClaim->generation > oldClaim->generation);
+
+    TrackRecord oldResult;
+    oldResult.path = oldClaim->path;
+    oldResult.format = QStringLiteral("wav");
+    oldResult.sampleRate = 44100;
+    oldResult.bitDepth = 16;
+    oldResult.channels = 2;
+    oldResult.bitRate = 1411200;
+    oldResult.durationMs = 5000;
+    oldResult.fileSize = 882000;
+    QVERIFY(!model.completeMetadataProbe(*oldClaim, true, oldResult));
+
+    TrackRecord newResult = oldResult;
+    newResult.path = newClaim->path;
+    newResult.sampleRate = 96000;
+    newResult.bitDepth = 24;
+    newResult.channels = 6;
+    newResult.bitRate = 13824000;
+    newResult.durationMs = 7000;
+    newResult.fileSize = 12096000;
+    QVERIFY(model.completeMetadataProbe(*newClaim, true, newResult));
+
+    const TrackRecord* current = model.recordForId(original.trackId);
+    QVERIFY(current != nullptr);
+    QCOMPARE(current->sampleRate, 96000);
+    QCOMPARE(current->bitDepth, 24);
+    QCOMPARE(current->channels, 6);
+    QCOMPARE(current->bitRate, qint64{13824000});
+    QCOMPARE(current->durationMs, qint64{7000});
+    QCOMPARE(current->fileSize, qint64{12096000});
+    QVERIFY(current->metadataProbeAttempted);
+}
+
+void LibraryModelTest::staleMetadataProbeCannotOverwriteRelocatedTrack()
+{
+    TrackRecord legacy;
+    legacy.trackId = QStringLiteral("relocated-probe");
+    legacy.path = QStringLiteral("C:/old/location.wav");
+    legacy.available = true;
+    LibraryModel model;
+    model.replaceAll({legacy});
+
+    const auto claim = model.beginMetadataProbe(legacy.trackId);
+    QVERIFY(claim.has_value());
+    QVERIFY(model.updateTrackPath(legacy.trackId,
+                                  QStringLiteral("C:/new/location.wav")));
+    const auto relocatedClaim = model.beginMetadataProbe(legacy.trackId);
+    QVERIFY(relocatedClaim.has_value());
+    TrackRecord staleResult;
+    staleResult.path = claim->path;
+    staleResult.format = QStringLiteral("wav");
+    staleResult.sampleRate = 44100;
+    staleResult.bitDepth = 16;
+    staleResult.channels = 2;
+    staleResult.bitRate = 1411200;
+    staleResult.durationMs = 5000;
+    staleResult.fileSize = 882000;
+
+    QVERIFY(!model.completeMetadataProbe(*claim, true, staleResult));
+    const TrackRecord* current = model.recordForId(legacy.trackId);
+    QVERIFY(current != nullptr);
+    QCOMPARE(current->sampleRate, 0);
+    QCOMPARE(current->channels, 0);
+    QVERIFY(!current->metadataProbeAttempted);
+
+    TrackRecord relocatedResult = staleResult;
+    relocatedResult.path = relocatedClaim->path;
+    relocatedResult.sampleRate = 96000;
+    QVERIFY(model.completeMetadataProbe(*relocatedClaim, true, relocatedResult));
+    current = model.recordForId(legacy.trackId);
+    QCOMPARE(current->sampleRate, 96000);
+    QVERIFY(current->metadataProbeAttempted);
+}
 
 void LibraryModelTest::missingLocalCoverFallsBackToPackagedArtwork()
 {
@@ -179,6 +272,7 @@ void LibraryModelTest::exposesRolesAndUpdatesFavorite()
     track.format = QStringLiteral("wav");
     track.sampleRate = 96000;
     track.bitDepth = 24;
+    track.channels = 2;
     track.bitRate = 4608000;
     track.durationMs = 1234;
     track.fileSize = 5678;
@@ -199,6 +293,7 @@ void LibraryModelTest::exposesRolesAndUpdatesFavorite()
     QCOMPARE(model.data(index, LibraryModel::YearRole).toString(), track.year);
     QCOMPARE(model.data(index, LibraryModel::DateRole).toString(), track.date);
     QCOMPARE(model.data(index, LibraryModel::ComposerRole).toString(), track.composer);
+    QCOMPARE(model.data(index, LibraryModel::ChannelsRole).toInt(), track.channels);
     QCOMPARE(model.data(index, LibraryModel::CoverUrlRole).toUrl(), track.coverUrl);
     QCOMPARE(model.data(index, LibraryModel::FavoriteRole).toBool(), track.favorite);
     QCOMPARE(model.data(index, LibraryModel::RatingRole).toInt(), track.rating);
@@ -218,6 +313,7 @@ void LibraryModelTest::exposesRolesAndUpdatesFavorite()
     QCOMPARE(roles.value(LibraryModel::FormatRole), QByteArray("format"));
     QCOMPARE(roles.value(LibraryModel::SampleRateRole), QByteArray("sampleRate"));
     QCOMPARE(roles.value(LibraryModel::BitDepthRole), QByteArray("bitDepth"));
+    QCOMPARE(roles.value(LibraryModel::ChannelsRole), QByteArray("channels"));
     QCOMPARE(roles.value(LibraryModel::BitRateRole), QByteArray("bitRate"));
     QCOMPARE(roles.value(LibraryModel::DurationMsRole), QByteArray("durationMs"));
     QCOMPARE(roles.value(LibraryModel::FileSizeRole), QByteArray("fileSize"));

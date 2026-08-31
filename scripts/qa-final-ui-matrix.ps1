@@ -2,19 +2,19 @@
 param(
     [string]$BuildDirectory = "build/msvc-release",
     [string]$OutputDirectory = "build/qa/final-ui-matrix",
-    [ValidateSet("zh", "en", "th", "vi")]
-    [string[]]$Languages = @("zh", "en", "th", "vi"),
+    [ValidateSet("zh", "en")]
+    [string[]]$Languages = @("zh", "en"),
     [ValidateSet("dark", "light", "system")]
     [string[]]$Themes = @("dark", "light", "system"),
     [ValidateSet(
         "startup", "playback", "mini", "settings", "list",
         "details",
-        "tool-0", "tool-1", "tool-2", "tool-3"
+        "tool-0", "tool-1", "tool-2", "tool-3", "tool-4"
     )]
     [string[]]$Surfaces = @(
         "startup", "playback", "mini", "settings", "list",
         "details",
-        "tool-0", "tool-1", "tool-2", "tool-3"
+        "tool-0", "tool-1", "tool-2", "tool-3", "tool-4"
     )
 )
 
@@ -362,7 +362,7 @@ try {
                     }
                 }
             }
-            foreach ($tool in 0..3) {
+            foreach ($tool in @(0, 4, 1, 2, 3)) {
                 $toolSurface = "tool-{0}" -f $tool
                 if ($Surfaces -notcontains $toolSurface) {
                     continue

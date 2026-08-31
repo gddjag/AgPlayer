@@ -63,6 +63,18 @@ TestCase {
         compare(waveform.timeForX(400), 0)
     }
 
+    function test_cursor_position_maps_to_continuous_pixel_progress() {
+        waveform.position = 0
+        waveform.cursorPosition = 100
+        var firstPixel = waveform.waveformCursorX
+
+        waveform.cursorPosition = 110
+        verify(waveform.waveformCursorX > firstPixel,
+               "cursor progress must advance within one peak bucket")
+        verify(waveform.waveformCursorX < 1,
+               "a 110 ms cursor must remain below the first pixel at this scale")
+    }
+
     function test_z_cancelled_drag_does_not_emit_stale_seek() {
         mousePress(waveform, 100, 20)
         waveform.enabled = false

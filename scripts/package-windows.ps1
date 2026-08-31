@@ -13,6 +13,8 @@ $exe = Join-Path $appDir "AgPlayer.exe"
 $worker = Join-Path $appDir "AgSeparationWorker.exe"
 $stage = Join-Path $repo "build/package/AgPlayer"
 $installerOutput = Join-Path $repo "build/installer"
+$thirdPartyNotices = Join-Path $repo "THIRD-PARTY-NOTICES.md"
+$licenseSource = Join-Path $repo "assets/licenses"
 $cmakeCache = Join-Path $build "CMakeCache.txt"
 $versionTool = Join-Path $repo 'scripts/release-version.ps1'
 $versionOutput = (& $versionTool -SourceRoot $repo | Out-String).Trim()
@@ -57,7 +59,10 @@ $iscc = $isccCandidates | Where-Object { Test-Path -LiteralPath $_ } |
     Select-Object -First 1
 if (-not $iscc) { throw "Inno Setup compiler was not found" }
 
-foreach ($required in @($build, $windeployqt, $vsShell, $iscc)) {
+foreach ($required in @(
+    $build, $windeployqt, $vsShell, $iscc,
+    $thirdPartyNotices, $licenseSource
+)) {
     if (-not (Test-Path -LiteralPath $required)) {
         throw "Required path not found: $required"
     }
@@ -91,6 +96,8 @@ New-Item -ItemType Directory -Path $installerOutput -Force | Out-Null
 
 Copy-Item -LiteralPath $exe -Destination $stage
 Copy-Item -LiteralPath $worker -Destination $stage
+Copy-Item -LiteralPath $thirdPartyNotices -Destination $stage
+Copy-Item -LiteralPath $licenseSource -Destination $stage -Recurse
 # CMake's post-build deployment directory may contain transitive Windows
 # system DLLs. Copy only the audio libraries that are linked by AgPlayer;
 # windeployqt below supplies the Qt runtime itself.
@@ -165,6 +172,10 @@ Get-ChildItem -LiteralPath $crtDirectory -File -Filter "*.dll" |
 $requiredRuntime = @(
     "AgPlayer.exe",
     "AgSeparationWorker.exe",
+    "THIRD-PARTY-NOTICES.md",
+    "licenses/AgPlayer-Icons-License.txt",
+    "licenses/Lucide-Icons-License.txt",
+    "licenses/RemixIcon-Apache-2.0.txt",
     "Qt6Core.dll",
     "Qt6Gui.dll",
     "Qt6Qml.dll",

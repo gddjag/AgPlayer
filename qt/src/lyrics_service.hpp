@@ -4,10 +4,13 @@
 #include "lyrics_cache.hpp"
 #include "lyrics_line_model.hpp"
 #include "lyrics_provider.hpp"
+#include "lyrics_provider_chain.hpp"
 
 #include <QHash>
 #include <QObject>
 #include <QPointer>
+#include <QTimer>
+#include <QVariantList>
 
 class PlaybackController;
 class SettingsController;
@@ -25,7 +28,12 @@ class LyricsService final : public QObject {
     Q_PROPERTY(qint64 followPausedUntilMs READ followPausedUntilMs NOTIFY followPausedChanged)
     Q_PROPERTY(bool instrumental READ instrumental NOTIFY instrumentalChanged)
     Q_PROPERTY(QVariantMap diagnostics READ diagnostics NOTIFY diagnosticsChanged)
-    Q_PROPERTY(qint64 degradedUntilMs READ degradedUntilMs NOTIFY diagnosticsChanged)
+    Q_PROPERTY(QString sourceProvider READ sourceProvider NOTIFY sourceChanged)
+    Q_PROPERTY(QString sourceAttribution READ sourceAttribution NOTIFY sourceChanged)
+    Q_PROPERTY(bool synchronizedLyrics READ synchronizedLyrics NOTIFY sourceChanged)
+    Q_PROPERTY(QString untimedLyrics READ untimedLyrics NOTIFY sourceChanged)
+    Q_PROPERTY(QVariantMap routeNotice READ routeNotice NOTIFY routeNoticeChanged)
+    Q_PROPERTY(QVariantList routeAttempts READ routeAttempts NOTIFY routeAttemptsChanged)
 
 public:
     enum Status { Idle, Loading, Ready, NotFound, Offline, Error };
@@ -47,8 +55,12 @@ public:
     [[nodiscard]] qint64 followPausedUntilMs() const noexcept;
     [[nodiscard]] bool instrumental() const noexcept;
     [[nodiscard]] QVariantMap diagnostics() const;
-    [[nodiscard]] qint64 degradedUntilMs() const noexcept;
-    [[nodiscard]] int consecutiveTechnicalFailures() const noexcept;
+    [[nodiscard]] QString sourceProvider() const;
+    [[nodiscard]] QString sourceAttribution() const;
+    [[nodiscard]] bool synchronizedLyrics() const noexcept;
+    [[nodiscard]] QString untimedLyrics() const;
+    [[nodiscard]] QVariantMap routeNotice() const;
+    [[nodiscard]] QVariantList routeAttempts() const;
     [[nodiscard]] qint64 clockMs() const;
 
     void setEnabled(bool enabled);
@@ -67,6 +79,9 @@ signals:
     void followPausedChanged();
     void instrumentalChanged();
     void diagnosticsChanged();
+    void sourceChanged();
+    void routeNoticeChanged();
+    void routeAttemptsChanged();
 
 private:
     enum Stage { Exact, Search };
@@ -75,6 +90,7 @@ private:
         Stage stage = Exact;
         quint64 generation = 0;
         bool prefetch = false;
+        QList<LyricsProvider::RouteAttempt> carriedAttempts;
     };
 
     void requestCurrentTrack();
@@ -82,20 +98,25 @@ private:
     [[nodiscard]] bool hasLocalLyrics(const TrackRecord& track,
                                       const QString& embeddedLyrics) const;
     void beginExact(const TrackRecord& track, bool prefetch = false);
-    void beginSearch(const TrackRecord& track, bool prefetch = false);
+    void beginSearch(const TrackRecord& track, bool prefetch = false,
+                     QList<LyricsProvider::RouteAttempt> carriedAttempts = {});
     void prefetchNext();
     void onProviderFinished(quint64 requestId, const LyricsProvider::Result& result);
+    void onRouteFailed(quint64 requestId, const LyricsProvider::RouteAttempt& attempt);
     void applyDocument(const TrackRecord& track, LyricsCache::Entry entry);
     void updateCurrentLine();
     void setStatus(Status status);
     void cancelPending();
-    void recordTechnicalFailure(const LyricsProvider::Result& result, bool updateStatus = true);
     [[nodiscard]] LyricsProvider::Track providerTrack(const TrackRecord& track,
                                                        bool lowPriority = false) const;
     [[nodiscard]] std::optional<LyricsProvider::Candidate> bestCandidate(
-        const TrackRecord& track, const QList<LyricsProvider::Candidate>& candidates) const;
+        const LyricsProvider::Track& track,
+        const QList<LyricsProvider::Candidate>& candidates) const;
     [[nodiscard]] static QString normalizedMatch(const QString& value);
     [[nodiscard]] static bool hasUsableLyrics(const LyricsDocument& document);
+    void resetPresentationState();
+    void setRouteAttempts(const QList<LyricsProvider::RouteAttempt>& attempts);
+    [[nodiscard]] static QVariantMap safeAttempt(const LyricsProvider::RouteAttempt& attempt);
 
     LibraryModel* library_ = nullptr;
     PlaybackController* playback_ = nullptr;
@@ -114,11 +135,13 @@ private:
     qint64 userOffsetMs_ = 0;
     qint64 documentOffsetMs_ = 0;
     qint64 followPausedUntilMs_ = 0;
-    qint64 degradedUntilMs_ = 0;
-    qint64 retryNotBeforeMs_ = 0;
-    int consecutiveTechnicalFailures_ = 0;
     int lastHttpStatus_ = 0;
     bool instrumental_ = false;
-    QString source_;
+    LyricsProvider::Source sourceInfo_;
+    bool synchronizedLyrics_ = false;
+    QString untimedLyrics_;
+    QVariantMap routeNotice_;
+    QVariantList routeAttempts_;
+    quint64 routeNoticeToken_ = 0;
     QString lastDiagnostic_;
 };

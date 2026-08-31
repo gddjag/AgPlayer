@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import QtTest
 import AgPlayer
 
@@ -13,6 +14,38 @@ TestCase {
     FormatConvertPage {
         id: page
         anchors.fill: parent
+    }
+
+    Component {
+        id: navigationWindowComponent
+        Window {
+            width: testCase.width
+            height: 59
+            visible: true
+            ToolSidebar { anchors.fill: parent }
+        }
+    }
+
+    function verifyAscendingX(parent, names) {
+        let previousX = -1
+        for (let index = 0; index < names.length; ++index) {
+            const item = findChild(parent, names[index])
+            verify(item, "missing " + names[index])
+            const x = item.mapToItem(parent, 0, 0).x
+            verify(x > previousX, names[index] + " must follow its predecessor")
+            previousX = x
+        }
+    }
+
+    function test_sharedTopNavigationHasFixedLeftInsetAndOrder() {
+        var window = createTemporaryObject(navigationWindowComponent, testCase)
+        verify(window)
+        wait(0)
+        var nav = findChild(window, "audioToolsTopNav")
+        var first = findChild(nav, "audioToolNav_0")
+        compare(first.mapToItem(nav, 0, 0).x, 12)
+        verifyAscendingX(nav, ["audioToolNav_0", "audioToolNav_4", "audioToolNav_1",
+                               "audioToolNav_2", "audioToolNav_3"])
     }
 
     function init() {

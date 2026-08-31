@@ -3706,8 +3706,8 @@
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="1576"/>
-        <source>深色（默认）</source>
-        <translation>深色（默认）</translation>
+        <source>深色</source>
+        <translation>深色</translation>
     </message>
     <message>
         <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="240"/>
@@ -4121,5 +4121,16 @@
     <message><source>Drums</source><translation>鼓组</translation></message>
     <message><source>Bass</source><translation>贝斯</translation></message>
     <message><source>Other</source><translation>其他</translation></message>
+</context>
+<context>
+    <name>LyricsPanel</name>
+    <message><source>纯文本歌词，无时间轴</source><translation>纯文本歌词，无时间轴</translation></message>
+    <message><source>来源：%1</source><translation>来源：%1</translation></message>
+    <message><source>未找到匹配歌词</source><translation>未找到匹配歌词</translation></message>
+    <message><source>没有匹配结果</source><translation>没有匹配结果</translation></message>
+    <message><source>匹配结果不够准确</source><translation>匹配结果不够准确</translation></message>
+    <message><source>请求过于频繁</source><translation>请求过于频繁</translation></message>
+    <message><source>网络不可用</source><translation>网络不可用</translation></message>
+    <message><source>服务暂时不可用</source><translation>服务暂时不可用</translation></message>
 </context>
 </TS>

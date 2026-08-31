@@ -21,6 +21,39 @@ TestCase {
         EqualizerWindow { visible: true }
     }
 
+    function findChildrenByPrefix(parent, prefix) {
+        var matches = []
+        var children = parent.contentItem ? parent.contentItem.children : parent.children
+        if (!children)
+            return matches
+        for (var i = 0; i < children.length; ++i) {
+            var child = children[i]
+            if (child.objectName
+                    && child.objectName.indexOf(prefix) === 0
+                    && /^equalizerBand-\d+$/.test(child.objectName))
+                matches.push(child)
+            matches = matches.concat(findChildrenByPrefix(child, prefix))
+        }
+        return matches
+    }
+
+    function findChild(parent, objectName) {
+        var children = parent.contentItem ? parent.contentItem.children : parent.children
+        if (!children)
+            return null
+        var legacyObjectName = objectName.replace(/^equalizerBand-(\d+)(-.+)$/,
+                                                   "eqBandSlider-$1$2")
+        for (var i = 0; i < children.length; ++i) {
+            var child = children[i]
+            if (child.objectName === objectName || child.objectName === legacyObjectName)
+                return child
+            var match = findChild(child, objectName)
+            if (match)
+                return match
+        }
+        return null
+    }
+
     function capture(path, size) {
         captureDone = false
         equalizer.contentItem.grabToImage(function(result) {
@@ -312,10 +345,14 @@ TestCase {
     }
 
     function test_reference_and_minimum_viewports_render() {
-        compare(equalizer.width, 1000)
-        compare(equalizer.height, 600)
-        compare(equalizer.minimumWidth, 880)
-        compare(equalizer.minimumHeight, 520)
+        compare(equalizer.width, 860)
+        compare(equalizer.height, 520)
+        compare(equalizer.minimumWidth, 760)
+        compare(equalizer.minimumHeight, 480)
+        compare(findChildrenByPrefix(equalizer, "equalizerBand-").length, 18)
+        verify(findChild(equalizer, "equalizerTitle").font.pixelSize >= 20)
+        verify(findChild(equalizer, "equalizerBand-0-frequency").font.pixelSize >= 16)
+        verify(findChild(equalizer, "equalizerBand-0-value").font.pixelSize >= 16)
 
         var gains = [2, 1.5, 0, -1, 0.5, -0.5, -1.5, -0.5,
                      0.5, 1.5, 2, 1, 2, 1.5, 1, 0, -1, -2]
@@ -387,11 +424,11 @@ TestCase {
         capture(temp + "/AgPlayer-equalizer-1180x680.png",
                 Qt.size(1180, 680))
 
-        equalizer.width = 880
-        equalizer.height = 520
+        equalizer.width = 760
+        equalizer.height = 480
         wait(100)
-        compare(equalizer.width, 880)
-        compare(equalizer.height, 520)
+        compare(equalizer.width, 760)
+        compare(equalizer.height, 480)
         compare(findChild(equalizer, "equalizerContentScrollBar").policy,
                 ScrollBar.AlwaysOn)
         compare(findChild(equalizer, "equalizerBandScrollBar").policy,
@@ -401,7 +438,7 @@ TestCase {
         verify(findChild(equalizer, "equalizerContentScrollBar").visible)
         verify(findChild(equalizer, "equalizerBandScrollBar").visible)
         verify(findChild(equalizer, "equalizerFooterScrollBar").visible)
-        verifyFooterOutputReachable(880, 520)
+        verifyFooterOutputReachable(760, 480)
         var compactCurve = findChild(equalizer, "equalizerResponseCurve")
         var highFrequencyLabels = []
         for (var highBand = 13; highBand <= 17; ++highBand) {
@@ -458,8 +495,8 @@ TestCase {
                "preamp must be horizontally reachable at minimum size")
         contentScroller.contentY = 0
         bandScroller.contentX = 0
-        capture(temp + "/AgPlayer-equalizer-880x520.png",
-                Qt.size(880, 520))
+        capture(temp + "/AgPlayer-equalizer-760x480.png",
+                Qt.size(760, 480))
     }
 
     function test_status_meter_refreshes_only_while_visible() {

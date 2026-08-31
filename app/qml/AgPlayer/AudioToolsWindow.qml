@@ -234,8 +234,6 @@ Window {
                 Layout.fillWidth: true
                 Layout.preferredHeight: window.separationWorkbench ? 44
                                                                     : window.metadataWorkbench ? 52 : 59
-                Layout.leftMargin: window.separationWorkbench ? 14 : 0
-                Layout.rightMargin: window.separationWorkbench ? 14 : 0
                 window: window
                 currentTool: AudioToolsController.currentTool
                 referenceWorkbench: window.referenceWorkbench

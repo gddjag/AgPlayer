@@ -40,6 +40,8 @@ bool parseCandidate(const QJsonObject& object, LyricsProvider::Candidate* candid
         || (!duration.isUndefined() && !duration.isDouble() && !duration.isNull())) {
         return false;
     }
+    candidate->source = {QStringLiteral("lrclib"), QStringLiteral("LRCLIB"),
+                         QUrl(QStringLiteral("https://lrclib.net")), {}, true};
     candidate->title = trackName.toString();
     candidate->artist = artistName.toString();
     candidate->album = albumName.toString();

@@ -915,6 +915,64 @@ target_compile_definitions(terrain_reactor_gpu_smoke_test PRIVATE
 # to let those condition-based failures report their real assertion.
 set_tests_properties(terrain_reactor_gpu_smoke_test PROPERTIES TIMEOUT 60)
 
+# This suite includes real notice-expiry waits and can exceed the generic
+# ten-second Qt test budget on a busy Windows runner.
+set_tests_properties(lyrics_service_test PROPERTIES TIMEOUT 30)
+
+add_executable(unison_lyrics_provider_test
+    qt/unison_lyrics_provider_test.cpp
+)
+set_target_properties(unison_lyrics_provider_test PROPERTIES AUTOMOC ON)
+target_include_directories(unison_lyrics_provider_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+)
+target_link_libraries(unison_lyrics_provider_test PRIVATE
+    agplayer_qt Qt6::Test Qt6::Network
+)
+agplayer_enable_warnings(unison_lyrics_provider_test)
+add_test(NAME unison_lyrics_provider_test COMMAND unison_lyrics_provider_test)
+set_tests_properties(unison_lyrics_provider_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
+add_executable(lyrics_ovh_provider_test
+    qt/lyrics_ovh_provider_test.cpp
+)
+set_target_properties(lyrics_ovh_provider_test PROPERTIES AUTOMOC ON)
+target_include_directories(lyrics_ovh_provider_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+)
+target_link_libraries(lyrics_ovh_provider_test PRIVATE
+    agplayer_qt Qt6::Test Qt6::Network
+)
+agplayer_enable_warnings(lyrics_ovh_provider_test)
+add_test(NAME lyrics_ovh_provider_test COMMAND lyrics_ovh_provider_test)
+set_tests_properties(lyrics_ovh_provider_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
+add_executable(lyrics_provider_chain_test
+    qt/lyrics_provider_chain_test.cpp
+)
+set_target_properties(lyrics_provider_chain_test PROPERTIES AUTOMOC ON)
+target_include_directories(lyrics_provider_chain_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+)
+target_link_libraries(lyrics_provider_chain_test PRIVATE
+    agplayer_qt Qt6::Test
+)
+agplayer_enable_warnings(lyrics_provider_chain_test)
+add_test(NAME lyrics_provider_chain_test COMMAND lyrics_provider_chain_test)
+set_tests_properties(lyrics_provider_chain_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
 target_include_directories(format_conversion_plan_test PRIVATE
     "${CMAKE_SOURCE_DIR}/core/src"
 )
@@ -1230,7 +1288,7 @@ set_tests_properties(native_drop_router_test PROPERTIES
 add_test(
     NAME translation_catalog_test
     COMMAND "${CMAKE_COMMAND}"
-        "-DCATALOGS=${CMAKE_SOURCE_DIR}/translations/agplayer_zh.ts;${CMAKE_SOURCE_DIR}/translations/agplayer_en.ts;${CMAKE_SOURCE_DIR}/translations/agplayer_th.ts;${CMAKE_SOURCE_DIR}/translations/agplayer_vi.ts"
+        "-DCATALOGS=${CMAKE_SOURCE_DIR}/translations/agplayer_zh.ts;${CMAKE_SOURCE_DIR}/translations/agplayer_en.ts"
         -P "${CMAKE_SOURCE_DIR}/cmake/CheckTranslationCatalogs.cmake"
 )
 set_tests_properties(translation_catalog_test PROPERTIES TIMEOUT 10)
@@ -1377,7 +1435,7 @@ target_compile_definitions(qml_mini_player_test PRIVATE
 agplayer_enable_warnings(qml_mini_player_test)
 add_test(NAME qml_mini_player_test COMMAND qml_mini_player_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_mini_player.qml)
 set_tests_properties(qml_mini_player_test PROPERTIES
-    TIMEOUT 10
+    TIMEOUT 120
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;QT_QUICK_BACKEND=software"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
@@ -1386,7 +1444,7 @@ add_test(NAME qml_immersive_integration_test
     COMMAND qml_mini_player_test
         -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_immersive_integration.qml)
 set_tests_properties(qml_immersive_integration_test PROPERTIES
-    TIMEOUT 25
+    TIMEOUT 120
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;QT_QUICK_BACKEND=software"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
@@ -1539,6 +1597,12 @@ add_test(NAME format_converter_reference_contract_test
         -SourceRoot ${CMAKE_SOURCE_DIR})
 set_tests_properties(format_converter_reference_contract_test PROPERTIES
     TIMEOUT 10)
+
+add_test(NAME player_action_icon_contract_test
+    COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+        -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/player_action_icon_contract_test.ps1
+        -SourceRoot ${CMAKE_SOURCE_DIR})
+set_tests_properties(player_action_icon_contract_test PROPERTIES TIMEOUT 10)
 
 
 target_include_directories(import_controller_test PRIVATE

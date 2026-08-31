@@ -175,6 +175,9 @@ private:
     QPoint computeSnappedPosition(int x, int y) const;
     QPoint computeSnapForEdge(const QString& direction) const;
     void applyPlatformWindowStyle(QWindow* window) const;
+#ifdef Q_OS_WIN
+    void ensureTaskbarWindowStyles(QWindow* window) const;
+#endif
     void raiseDockedGroup(QWindow* topWindow = nullptr);
     void rememberNativePixelSize(QWindow* window);
 

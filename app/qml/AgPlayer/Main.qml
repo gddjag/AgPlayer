@@ -298,12 +298,9 @@ ApplicationWindow {
 
     Component {
         id: integratedBottomBarComponent
-        PlayerControls {
-            objectName: "playerControls"
+        IntegratedPlayerControls {
             emptyMode: LibraryModel.count === 0
-            shellMode: 1
-            showListWindowButton: true
-            onToggleEmbeddedPlaylistRequested: {
+            onTogglePlaylistRequested: {
                 if (shellLoader.item
                         && shellLoader.item.listPanelExpanded !== undefined)
                     shellLoader.item.listPanelExpanded =

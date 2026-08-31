@@ -158,6 +158,9 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/SharedWaveformView.qml
         qml/AgPlayer/components/PlayerPane.qml
         qml/AgPlayer/components/PlayerControls.qml
+        qml/AgPlayer/components/TransportControls.qml
+        qml/AgPlayer/components/PlayerVolumeControl.qml
+        qml/AgPlayer/components/IntegratedPlayerControls.qml
         qml/AgPlayer/components/ExperienceActions.qml
         qml/AgPlayer/components/FallbackCoverImage.qml
         qml/AgPlayer/components/ImmersiveSurface.qml
@@ -167,6 +170,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/EqualizerBandSlider.qml
         qml/AgPlayer/components/EqualizerResponseCurve.qml
         qml/AgPlayer/components/TrackList.qml
+        qml/AgPlayer/components/AudioFileInfoPanel.qml
         qml/AgPlayer/components/TrackWaveformThumbnail.qml
         qml/AgPlayer/components/TagManagementPanel.qml
         qml/AgPlayer/components/EmptyLibrary.qml

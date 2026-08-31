@@ -71,10 +71,13 @@ function verifyAscendingX(parent, names) {
 function test_integrated_player_control_order() {
     SettingsController.windowLayoutTheme = "single-window"
     var controls = findChild(mainWindow, "integratedPlayerControls")
-    verifyAscendingX(controls, [
-        "listWindowButton", "audioToolsButton", "equalizerButton",
+    verifyAscendingX(findChild(controls, "integratedCenterControls"), [
+        "equalizerButton",
         "waveformModeButton", "previousButton", "playPauseButton",
-        "nextButton", "modeButton", "lyricsActionButton", "muteButton",
+        "nextButton", "modeButton", "muteButton"
+    ])
+    verifyAscendingX(findChild(controls, "integratedRightActions"), [
+        "audioToolsButton", "lyricsActionButton",
         "themeModeButton", "immersiveActionButton", "windowLayoutButton"
     ])
 }
@@ -91,7 +94,7 @@ verify(findChild(controls, "lyricsActionButton") === null)
 verify(findChild(controls, "immersiveActionButton") === null)
 ```
 
-Change the immersive integration test so it no longer expects a lyrics action in the mini player. Require normal/compact lyrics icon dimensions `20`/`16` in the shared action tests.
+Change the immersive integration test so it no longer expects a lyrics action in the mini player. Require the lyrics icon to remain `20` px in both normal and dense layouts so it matches the adjacent actions.
 
 Add a static icon contract that locks the two repository assets to the user-supplied SVGs at `E:/Administrator/下载/歌词.svg` and `E:/Administrator/下载/沉浸视觉模式.svg`. The test stores the SHA-256 values of the committed canonical files and also parses each file as XML to require an SVG `viewBox`; register it as `player_action_icon_contract_test` in `tests/CMakeLists.txt`.
 
@@ -135,26 +138,28 @@ Make classic `PlayerControls.qml` compose the extracted controls so its centre r
 
 - [ ] **Step 4: Implement integrated and mini orders**
 
-`IntegratedPlayerControls.qml` is one `RowLayout` in this exact order:
+`IntegratedPlayerControls.qml` uses three non-overlapping regions matching the approved reference: track/list entry on the left, transport plus volume in the center, and experience actions on the right:
 
 ```qml
-RowLayout {
+Item {
     objectName: "integratedPlayerControls"
     ToolButton { objectName: "listWindowButton"; onClicked: WindowController.toggleListWindow() }
-    ToolButton { objectName: "audioToolsButton"; onClicked: WindowController.showAudioTools() }
-    TransportControls { onOpenEqualizerRequested: root.openEqualizerRequested() }
-    ExperienceActions { showImmersive: false; showLyrics: true }
-    PlayerVolumeControl { emptyMode: root.emptyMode }
-    ToolButton {
-        objectName: "themeModeButton"
-        icon.source: Theme.icon("brush-line")
-        onClicked: SettingsController.themeMode = (SettingsController.themeMode + 1) % 3
+    Item {
+        objectName: "integratedCenterControls"
+        TransportControls { onOpenEqualizerRequested: root.openEqualizerRequested() }
+        PlayerVolumeControl { emptyMode: root.emptyMode || root.denseLayout }
     }
-    ExperienceActions { showImmersive: true; showLyrics: false }
-    ToolButton {
-        objectName: "windowLayoutButton"
-        icon.source: Theme.icon("player-shell-mode")
-        onClicked: SettingsController.windowLayoutTheme = "dual-window"
+    RowLayout {
+        objectName: "integratedRightActions"
+        ToolButton { objectName: "audioToolsButton"; onClicked: WindowController.showAudioTools() }
+        ExperienceActions { showImmersive: false; showLyrics: true }
+        ToolButton {
+            objectName: "themeModeButton"
+            icon.source: Theme.icon("brush-line")
+            onClicked: SettingsController.themeMode = (SettingsController.themeMode + 1) % 3
+        }
+        ExperienceActions { showImmersive: true; showLyrics: false }
+        ToolButton { objectName: "windowLayoutButton"; icon.source: Theme.icon("player-shell-mode") }
     }
 }
 ```
@@ -163,11 +168,11 @@ Classic secondary actions become `audio tools → lyrics → theme → immersive
 
 In `MiniPlayerControls.qml`, delete `ExperienceActions`, move `miniModeButton` after `miniNextButton`, and keep it immediately before `miniVolumeControl`. Add `objectName` values `miniPreviousButton`, `miniPlayPauseButton`, and `miniNextButton` to make order testable.
 
-Set `ExperienceActions` icon size to:
+Keep `ExperienceActions` icons the same size as adjacent actions in every layout:
 
 ```qml
-icon.width: root.compact ? 16 : 20
-icon.height: root.compact ? 16 : 20
+icon.width: 20
+icon.height: 20
 ```
 
 Replace the two repository SVG payloads with the user-supplied artwork while preserving their scalable `viewBox`; do not rasterize them or recolour paths in the asset file because `ThemedIcon` supplies the runtime tint.
@@ -375,7 +380,6 @@ git commit -m "fix(library): use compact file information panel"
 - Delete: `translations/agplayer_th.ts`
 - Delete: `translations/agplayer_vi.ts`
 - Modify: `installer/AgPlayer.iss`
-- Delete: `installer/languages/Vietnamese.isl`
 - Modify: `tests/qt/translation_manager_test.cpp`
 - Modify: `tests/qt/settings_controller_test.cpp`
 - Modify: `tests/qml/tst_main_window.qml`
@@ -401,11 +405,12 @@ Update the installer script contract to require:
 ```powershell
 if ($installer -notmatch '(?m)^ShowLanguageDialog=no\r?$' -or
     $installer.IndexOf('Name: "chinesesimplified"') -gt
-    $installer.IndexOf('Name: "english"') -or
-    $installer -match 'Name:\s*"thai"|Name:\s*"vietnamese"') {
+    $installer.IndexOf('Name: "english"')) {
     throw "Installer must start in Chinese without a language dialog"
 }
 ```
+
+Keep assertions for the existing English, Thai, and Vietnamese installer resources and localized custom messages, because explicit `/LANG=<name>` compatibility is independent from the two-language application settings UI.
 
 - [ ] **Step 2: Run the focused tests and verify failure**
 
@@ -435,7 +440,7 @@ ShowLanguageDialog=no
 LanguageDetectionMethod=none
 ```
 
-Keep Simplified Chinese first and English second for explicit `/LANG=english` compatibility. Remove Thai/Vietnamese language entries and their custom-message rows; delete `Vietnamese.isl`.
+Keep Simplified Chinese first and English second, and keep every existing installer language entry and custom-message row after them. They remain available only to explicit installer command-line selection; `ShowLanguageDialog=no` makes normal double-click installation Chinese without presenting those choices.
 
 - [ ] **Step 5: Rebuild translations, rerun tests, and commit**
 
@@ -921,7 +926,7 @@ git commit -m "feat(lyrics): integrate free multi route search"
 ### Task 13: Run full regression, visual, network-failure, and Windows interaction acceptance
 
 **Files:**
-- Modify: `docs/development/player-polish-lyrics-acceptance.md`
+- Create: `docs/development/player-polish-lyrics-acceptance.md`
 - Modify only if evidence exposes a defect: files owned by Tasks 1–12 and their tests.
 
 **Interfaces:**
@@ -976,8 +981,8 @@ At 100% and 150% DPI, in dual and integrated layouts, verify actual taskbar clic
 
 ```powershell
 git status --short
-git diff --stat HEAD~12..HEAD
-git diff --check HEAD~12..HEAD
+git diff --stat 1020fd1..HEAD
+git diff --check 1020fd1..HEAD
 git log --oneline --decorate -15
 git add -- docs/development/player-polish-lyrics-acceptance.md
 git commit -m "docs(qa): record player polish acceptance"

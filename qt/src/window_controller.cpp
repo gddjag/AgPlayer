@@ -3,6 +3,7 @@
 #include <QCoreApplication>
 #include <QEvent>
 #include <QGuiApplication>
+#include <QPlatformSurfaceEvent>
 #include <QScreen>
 #include <QSettings>
 #include <QWindow>
@@ -436,6 +437,9 @@ void WindowController::applyPlatformWindowStyle(QWindow* window) const
                          SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER
                              | SWP_NOACTIVATE | SWP_FRAMECHANGED);
         }
+        if (window == mainWindow_) {
+            ensureTaskbarWindowStyles(window);
+        }
         DwmSetWindowAttribute(
             hwnd,
             static_cast<DWMWINDOWATTRIBUTE>(kCornerPreferenceAttribute),
@@ -446,6 +450,33 @@ void WindowController::applyPlatformWindowStyle(QWindow* window) const
     Q_UNUSED(window);
 #endif
 }
+
+#ifdef Q_OS_WIN
+void WindowController::ensureTaskbarWindowStyles(QWindow* window) const
+{
+    if (window == nullptr || window != mainWindow_
+        || QGuiApplication::platformName().compare(
+               QStringLiteral("windows"), Qt::CaseInsensitive) != 0) {
+        return;
+    }
+
+    const HWND hwnd = reinterpret_cast<HWND>(window->winId());
+    if (hwnd == nullptr) {
+        return;
+    }
+    const LONG_PTR originalStyle = GetWindowLongPtrW(hwnd, GWL_STYLE);
+    const LONG_PTR taskbarStyle = originalStyle
+        | static_cast<LONG_PTR>(WS_SYSMENU | WS_MINIMIZEBOX);
+    if (taskbarStyle == originalStyle) {
+        return;
+    }
+
+    SetWindowLongPtrW(hwnd, GWL_STYLE, taskbarStyle);
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
+                     | SWP_FRAMECHANGED);
+}
+#endif
 
 void WindowController::setMainReady(bool ready) noexcept
 {
@@ -1626,7 +1657,28 @@ QPoint WindowController::computeSnapForEdge(const QString& direction) const
 bool WindowController::eventFilter(QObject* watched, QEvent* event)
 {
     if (watched == mainWindow_) {
-        if (event->type() == QEvent::Move || event->type() == QEvent::Resize) {
+        if (event->type() == QEvent::PlatformSurface) {
+#ifdef Q_OS_WIN
+            const auto* surfaceEvent =
+                static_cast<QPlatformSurfaceEvent*>(event);
+            if (surfaceEvent->surfaceEventType()
+                == QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed) {
+                mainWindowHandle_ = 0;
+            } else if (surfaceEvent->surfaceEventType()
+                       == QPlatformSurfaceEvent::SurfaceCreated
+                       && QGuiApplication::platformName().compare(
+                              QStringLiteral("windows"),
+                              Qt::CaseInsensitive) == 0) {
+                // SurfaceCreated guarantees that winId() reads an existing
+                // HWND instead of recursively creating another surface.
+                mainWindowHandle_ =
+                    static_cast<quintptr>(mainWindow_->winId());
+                rememberNativePixelSize(mainWindow_);
+                applyPlatformWindowStyle(mainWindow_);
+            }
+#endif
+        } else if (event->type() == QEvent::Move
+                   || event->type() == QEvent::Resize) {
 #ifdef Q_OS_WIN
             if (event->type() == QEvent::Resize
                 && qFuzzyCompare(mainTrackedDpr_, mainWindow_->devicePixelRatio())) {

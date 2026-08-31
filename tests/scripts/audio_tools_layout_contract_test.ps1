@@ -78,8 +78,7 @@ $recordingTranslationSources = @(
     '5paw5bu65b2V6Z+z', '5omT5byA6Z+z6aKR5oiW5paw5bu65b2V6Z+z5Lul5byA5aeL57yW6L6R',
     '5pKt5pS+77yaUGhhc2UgMTIg5o6l5YWlIMK3IFLvvJpQaGFzZSA5IOaOpeWFpSDCtyBDdHJsK1NoaWZ0K0Eg5Y+W5raI6YCJ5Yy6IMK3IEN0cmwrVyDmuIXnqbo=') |
     ForEach-Object { ConvertFrom-Utf8Base64 $_ }
-$translationFiles = @('agplayer_zh.ts', 'agplayer_en.ts', 'agplayer_th.ts',
-                      'agplayer_vi.ts') | ForEach-Object {
+$translationFiles = @('agplayer_zh.ts', 'agplayer_en.ts') | ForEach-Object {
     Join-Path $SourceRoot "translations/$_"
 }
 foreach ($source in $recordingTranslationSources) {
@@ -193,6 +192,17 @@ if ($toolsNavigation -notmatch 'visibleToolOrder:\s*\[0,\s*4,\s*1,\s*2,\s*3\]' -
     $toolsNavigation -notmatch 'visible:\s*navButton\.checked' -or
     $toolsNavigation -match '#[0-9A-Fa-f]{6}') {
     throw 'The five audio tools must retain stable IDs and use shared theme tokens.'
+}
+$repeaterPosition = $toolsNavigation.IndexOf('Repeater {')
+$firstFillSpacerPosition = $toolsNavigation.IndexOf('Item { Layout.fillWidth:')
+if ($firstFillSpacerPosition -ge 0 -and $firstFillSpacerPosition -lt $repeaterPosition) {
+    throw 'The shared tool navigation must not use a leading fill spacer.'
+}
+$trailingFillSpacers = [regex]::Matches(
+    $toolsNavigation, '(?m)^        Item \{ Layout\.fillWidth: true \}\r?$')
+if ($trailingFillSpacers.Count -ne 1 -or
+    $trailingFillSpacers[0].Index -lt $repeaterPosition) {
+    throw 'The shared tool navigation must have exactly one trailing fill spacer.'
 }
 $navOrder = @(
     (ConvertFrom-Utf8Base64 '6Z+z6aKR57yW6L6R'),

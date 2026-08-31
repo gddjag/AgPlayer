@@ -27,7 +27,7 @@ OutputBaseFilename=AgPlayer-Setup-{#AppVersion}-x64
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
-ShowLanguageDialog=yes
+ShowLanguageDialog=no
 LanguageDetectionMethod=none
 CloseApplications=yes
 RestartApplications=no
@@ -41,22 +41,14 @@ WizardSmallImageFile=..\assets\brand\installer-small.png
 [Languages]
 Name: "chinesesimplified"; MessagesFile: "languages\ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
-Name: "thai"; MessagesFile: "compiler:Languages\Thai.isl"
-Name: "vietnamese"; MessagesFile: "languages\Vietnamese.isl"
 
 [CustomMessages]
 chinesesimplified.AssociateAudioTask=注册常用音频文件关联（可在 Windows 设置中更改）
 english.AssociateAudioTask=Register common audio file associations (can be changed in Windows Settings)
-thai.AssociateAudioTask=ลงทะเบียนการเชื่อมโยงไฟล์เสียงทั่วไป (เปลี่ยนได้ในการตั้งค่า Windows)
-vietnamese.AssociateAudioTask=Đăng ký liên kết tệp âm thanh thông dụng (có thể đổi trong Cài đặt Windows)
 chinesesimplified.LaunchAgPlayer=启动 {#AppName}
 english.LaunchAgPlayer=Launch {#AppName}
-thai.LaunchAgPlayer=เปิด {#AppName}
-vietnamese.LaunchAgPlayer=Khởi chạy {#AppName}
 chinesesimplified.UninstallPersonalDataPrompt=是否删除个人歌单、收藏和应用设置？选择“是”将删除 AgPlayer 的个人数据，但不会删除任何音乐文件。
 english.UninstallPersonalDataPrompt=Delete personal playlists, favorites, and app settings? Choosing Yes removes AgPlayer personal data but never deletes music files.
-thai.UninstallPersonalDataPrompt=ลบเพลย์ลิสต์ รายการโปรด และการตั้งค่าแอปหรือไม่? การเลือก ใช่ จะลบข้อมูลส่วนตัวของ AgPlayer แต่จะไม่ลบไฟล์เพลง
-vietnamese.UninstallPersonalDataPrompt=Xóa danh sách phát, mục yêu thích và cài đặt ứng dụng? Chọn Có sẽ xóa dữ liệu cá nhân của AgPlayer nhưng không xóa tệp nhạc.
 
 [Tasks]
 Name: "associateaudio"; Description: "{cm:AssociateAudioTask}"; Flags: unchecked

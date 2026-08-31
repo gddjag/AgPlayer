@@ -1239,13 +1239,11 @@ Item {
                         objectName: "languageCombo"
                         anchors.verticalCenter: parent.verticalCenter
                         valueModel: [
-                            { text: "🇨🇳 中文", value: "zh" },
-                            { text: "🇺🇸 English", value: "en" },
-                            { text: "🇹🇭 ไทย", value: "th" },
-                            { text: "🇻🇳 Tiếng Việt", value: "vi" }
+                            { text: "中文", value: "zh" },
+                            { text: "English", value: "en" }
                         ]
                         currentIndex: {
-                            const values = ["zh", "en", "th", "vi"]
+                            const values = ["zh", "en"]
                             return values.indexOf(SettingsController.language)
                         }
                         onActivated: SettingsController.language = currentValue
@@ -1614,7 +1612,7 @@ Item {
                                   objectName: "themeModeSystem" },
                                 { text: qsTr("浅色"), value: 1,
                                   objectName: "themeModeLight" },
-                                { text: qsTr("深色（默认）"), value: 0,
+                                { text: qsTr("深色"), value: 0,
                                   objectName: "themeModeDark" }
                             ]
 

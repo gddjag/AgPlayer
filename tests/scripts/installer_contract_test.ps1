@@ -17,13 +17,15 @@ if ($packageScript -notmatch '\.VersionInfo' -or
     throw "Packaging must reject an executable whose PE version differs from the release version"
 }
 
-if ($installer -notmatch '(?m)^ShowLanguageDialog=yes\r?$' -or
+if ($installer -notmatch '(?m)^ShowLanguageDialog=no\r?$' -or
     $installer -notmatch '(?m)^LanguageDetectionMethod=none\r?$' -or
     $installer -notmatch 'Name:\s*"chinesesimplified"' -or
-    $installer -notmatch 'Name:\s*"english"' -or
-    $installer -notmatch 'Name:\s*"thai"' -or
-    $installer -notmatch 'Name:\s*"vietnamese"') {
-    throw "Installer must show a language selector with Simplified Chinese as the default"
+    $installer -notmatch 'Name:\s*"english"') {
+    throw "Installer must start in Chinese without a language dialog"
+}
+if ($installer -match '(?im)^Name:\s*"(?:thai|vietnamese)"' -or
+    $installer -match '(?im)^(?:thai|vietnamese)\.') {
+    throw "Installer languages and custom messages must be limited to Simplified Chinese and English"
 }
 if ($installer.IndexOf('Name: "chinesesimplified"') -gt
     $installer.IndexOf('Name: "english"')) {
@@ -32,16 +34,10 @@ if ($installer.IndexOf('Name: "chinesesimplified"') -gt
 foreach ($localizedContract in @(
     'chinesesimplified.UninstallPersonalDataPrompt=',
     'english.UninstallPersonalDataPrompt=',
-    'thai.UninstallPersonalDataPrompt=',
-    'vietnamese.UninstallPersonalDataPrompt=',
     'chinesesimplified.AssociateAudioTask=',
     'english.AssociateAudioTask=',
-    'thai.AssociateAudioTask=',
-    'vietnamese.AssociateAudioTask=',
     'chinesesimplified.LaunchAgPlayer=',
     'english.LaunchAgPlayer=',
-    'thai.LaunchAgPlayer=',
-    'vietnamese.LaunchAgPlayer=',
     "ExpandConstant('{cm:UninstallPersonalDataPrompt}')"
 )) {
     if (-not $installer.Contains($localizedContract)) {
@@ -49,8 +45,7 @@ foreach ($localizedContract in @(
     }
 }
 foreach ($languageFile in @(
-    'installer\languages\ChineseSimplified.isl',
-    'installer\languages\Vietnamese.isl'
+    'installer\languages\ChineseSimplified.isl'
 )) {
     if (-not (Test-Path -LiteralPath (Join-Path $repo $languageFile))) {
         throw "Installer language resource is missing: $languageFile"
@@ -170,6 +165,11 @@ if ($packageScript -notmatch '\$worker\s*=\s*Join-Path\s+\$appDir\s+"AgSeparatio
     $packageScript -notmatch 'Copy-Item\s+-LiteralPath\s+\$worker\s+-Destination\s+\$stage' -or
     $packageScript -notmatch '"AgSeparationWorker\.exe"') {
     throw "Windows package must stage and validate the on-demand separation Worker"
+}
+if ($packageScript -notmatch 'Copy-Item\s+-LiteralPath\s+\$thirdPartyNotices\s+-Destination\s+\$stage' -or
+    $packageScript -notmatch 'Copy-Item\s+-LiteralPath\s+\$licenseSource\s+-Destination\s+\$stage\s+-Recurse' -or
+    $packageScript -notmatch '(?s)\$requiredRuntime\s*=\s*@\(.*?"THIRD-PARTY-NOTICES\.md".*?"licenses/AgPlayer-Icons-License\.txt".*?"licenses/Lucide-Icons-License\.txt".*?"licenses/RemixIcon-Apache-2\.0\.txt".*?\)') {
+    throw "Windows package must stage and validate third-party notices and license files"
 }
 $mainSource = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $repo 'app\main.cpp')
 if ($mainSource -notmatch 'setWindowIcon') {
