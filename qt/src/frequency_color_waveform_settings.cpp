@@ -517,7 +517,9 @@ void FrequencyColorWaveformSettings::load(QSettings& settings)
     const double rawStrength = settings.value(
         QStringLiteral("waveformFrequencyStrength"), 0.62).toDouble(&strengthConverted);
     const bool strengthValid = strengthConverted && std::isfinite(rawStrength);
-    const double strength = quantizedOpacity(rawStrength, 0.62);
+    const double clampedStrength = strengthValid
+        ? std::clamp(rawStrength, 0.0, 1.0) : 0.62;
+    const double strength = quantizedOpacity(clampedStrength, 0.62);
     bool knownDefault = !(hasLow || hasMid || hasHigh || hasStrength);
     if (hasLow && hasMid && hasHigh && hasStrength && strengthValid) {
         for (const LegacyPalette& known : kKnownLegacyPalettes) {
@@ -536,19 +538,23 @@ void FrequencyColorWaveformSettings::load(QSettings& settings)
     } else {
         resetToLuminousGlaze();
         preset_ = QStringLiteral("custom");
-        lowDarkColor_ = low.isEmpty() ? QStringLiteral("#269a8e") : low;
-        midDarkColor_ = mid.isEmpty() ? QStringLiteral("#c66b55") : mid;
-        highDarkColor_ = high.isEmpty() ? QStringLiteral("#b5a4c6") : high;
-        lowLightColor_ = adaptedColor(lowDarkColor_, false);
-        midLightColor_ = adaptedColor(midDarkColor_, false);
-        highLightColor_ = adaptedColor(highDarkColor_, false);
+        const auto migrateDarkRole = [this](Role role, bool present, const QString& value) {
+            if (present && !value.isEmpty()) {
+                color(role, Surface::Dark) = value;
+                manual(role, Surface::Dark) = true;
+                color(role, Surface::Light) = adaptedColor(value, false);
+            }
+        };
+        migrateDarkRole(Role::Low, hasLow, low);
+        migrateDarkRole(Role::Mid, hasMid, mid);
+        migrateDarkRole(Role::High, hasHigh, high);
         for (const Role role : {Role::Low, Role::Mid, Role::High}) {
             const int index = roleIndex(role);
             opacity(role, Surface::Dark) = quantizedOpacity(
-                strength * kDefaults[index].darkOpacity / 0.62,
+                clampedStrength * kDefaults[index].darkOpacity / 0.62,
                 kDefaults[index].darkOpacity);
             opacity(role, Surface::Light) = quantizedOpacity(
-                strength * kDefaults[index].lightOpacity / 0.62,
+                clampedStrength * kDefaults[index].lightOpacity / 0.62,
                 kDefaults[index].lightOpacity);
         }
     }
@@ -581,7 +587,16 @@ void FrequencyColorWaveformSettings::save(QSettings& settings) const
     settings.setValue(QStringLiteral("waveformFrequencyMidColor"), midDarkColor_);
     settings.setValue(QStringLiteral("waveformFrequencyHighColor"), highDarkColor_);
     settings.setValue(QStringLiteral("waveformFrequencyStrength"), legacyStrength());
+    if (settings.value(QStringLiteral("waveformFrequencyColorSchema"), 0).toInt()
+        >= kSchemaVersion) {
+        return;
+    }
+    settings.sync();
+    if (settings.status() != QSettings::NoError) {
+        return;
+    }
     settings.setValue(QStringLiteral("waveformFrequencyColorSchema"), kSchemaVersion);
+    settings.sync();
 }
 
 void FrequencyColorWaveformSettings::setLegacyStrength(double value)

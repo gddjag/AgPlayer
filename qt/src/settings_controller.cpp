@@ -979,9 +979,7 @@ void SettingsController::resetWaveformDefaults()
 
 void SettingsController::resetWaveformFrequencyColors()
 {
-    setWaveformFrequencyLowColor(QStringLiteral("#269a8e"));
-    setWaveformFrequencyMidColor(QStringLiteral("#c66b55"));
-    setWaveformFrequencyHighColor(QStringLiteral("#b5a4c6"));
+    frequencyColorWaveform_->resetToLuminousGlaze();
 }
 
 void SettingsController::beginEdit()

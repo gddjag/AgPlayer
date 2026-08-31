@@ -97,6 +97,7 @@ private slots:
     void frequencyColorMigratesKnownDefaults_data();
     void frequencyColorMigratesKnownDefaults();
     void frequencyColorMigrationPreservesCustomAndRunsOnce();
+    void frequencyColorMigrationWaitsForPayloadSync();
     void migratesPreviousFrequencyDefaultsWithoutOverwritingCustomValues();
     void restoresLegacyRgbColorsWithoutDeletingKeys();
     void mapsSimplifiedColorsIntoRestoredContract();
@@ -580,6 +581,12 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
     QCOMPARE(reloaded.property("waveformFrequencyStrength").toDouble(), 1.0);
     QCOMPARE(reloaded.waveformPlaybackGuide(), true);
 
+    auto* resetFrequencies = reloaded.frequencyColorWaveform();
+    resetFrequencies->setMixDarkColor(QStringLiteral("#123456"));
+    resetFrequencies->setLowLightColor(QStringLiteral("#654321"));
+    resetFrequencies->setMidDarkOpacity(0.01);
+    resetFrequencies->setHighLightOpacity(0.99);
+    resetFrequencies->setPlayFocus(false);
     QVERIFY(QMetaObject::invokeMethod(&reloaded, "resetWaveformFrequencyColors"));
     QCOMPARE(reloaded.property("waveformFrequencyLowColor").toString(),
              QStringLiteral("#269a8e"));
@@ -587,6 +594,13 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
              QStringLiteral("#c66b55"));
     QCOMPARE(reloaded.property("waveformFrequencyHighColor").toString(),
              QStringLiteral("#b5a4c6"));
+    QCOMPARE(resetFrequencies->preset(), QStringLiteral("luminousGlaze"));
+    QCOMPARE(resetFrequencies->mixDarkColor(), QStringLiteral("#7a8490"));
+    QCOMPARE(resetFrequencies->mixLightColor(), QStringLiteral("#59636d"));
+    QCOMPARE(resetFrequencies->lowLightColor(), QStringLiteral("#146b64"));
+    QCOMPARE(resetFrequencies->midDarkOpacity(), 0.38);
+    QCOMPARE(resetFrequencies->highLightOpacity(), 0.40);
+    QCOMPARE(resetFrequencies->playFocus(), true);
 
     reloaded.resetWaveformDefaults();
     QCOMPARE(reloaded.waveformHeight(), 0.8);
@@ -694,6 +708,15 @@ void SettingsControllerTest::frequencyColorDefaultsValidateAdaptAndReset()
     const TestOklch adaptedDark = testOklch(fcw->mixDarkColor());
     QVERIFY(adaptedDark.lightness >= 0.679 && adaptedDark.lightness <= 0.82);
     QVERIFY(contrastRatio(fcw->mixDarkColor(), QStringLiteral("#0b1017")) >= 3.0);
+
+    fcw->resetToLuminousGlaze();
+    fcw->setLowDarkColor(QStringLiteral("#ff0010"));
+    QVERIFY(hueDistance(testOklch(QStringLiteral("#ff0010")).hue,
+                        testOklch(fcw->lowLightColor()).hue) <= 3.0);
+    fcw->setLowDarkColor(QStringLiteral("#808080"));
+    QVERIFY(contrastRatio(fcw->lowLightColor(), QStringLiteral("#f5f3ef")) >= 3.0);
+    fcw->setLowDarkColor(QStringLiteral("#0000ff"));
+    QVERIFY(testOklch(fcw->lowLightColor()).chroma <= 0.161);
 
     fcw->setPlayFocus(false);
     const int beforeReset = changed.count();
@@ -884,6 +907,17 @@ void SettingsControllerTest::frequencyColorMigrationPreservesCustomAndRunsOnce()
         QCOMPARE(fcw->lowDarkColor(), QStringLiteral("#112233"));
     }
 
+    {
+        SettingsController reloaded;
+        auto* reloadedFcw = reloaded.frequencyColorWaveform();
+        reloadedFcw->setLowLightColor(QStringLiteral("#aabbcc"));
+        reloadedFcw->setMidLightColor(QStringLiteral("#bbccdd"));
+        reloadedFcw->setHighLightColor(QStringLiteral("#ccddee"));
+        QCOMPARE(reloadedFcw->lowDarkColor(), QStringLiteral("#112233"));
+        QCOMPARE(reloadedFcw->midDarkColor(), QStringLiteral("#9a4bc2"));
+        QCOMPARE(reloadedFcw->highDarkColor(), QStringLiteral("#2e9b61"));
+    }
+
     persisted.setValue(QStringLiteral("appearance/waveformFrequencyLowColor"),
                        QStringLiteral("#c45100"));
     persisted.setValue(QStringLiteral("appearance/waveformFrequencyMidColor"),
@@ -917,7 +951,63 @@ void SettingsControllerTest::frequencyColorMigrationPreservesCustomAndRunsOnce()
     QCOMPARE(persisted.value(
                  QStringLiteral("appearance/waveformFrequencyMidColor")).toString(),
              QStringLiteral("#c66b55"));
+
+    fcw->setLowLightColor(QStringLiteral("#aabbcc"));
+    QCOMPARE(fcw->lowDarkColor(), QStringLiteral("#123456"));
+    fcw->setMidLightColor(QStringLiteral("#bbccdd"));
+    QVERIFY(fcw->midDarkColor() != QStringLiteral("#c66b55"));
+
     persisted.clear();
+    persisted.setValue(QStringLiteral("appearance/waveformFrequencyLowColor"),
+                       QStringLiteral("#112233"));
+    persisted.setValue(QStringLiteral("appearance/waveformFrequencyMidColor"),
+                       QStringLiteral("#445566"));
+    persisted.setValue(QStringLiteral("appearance/waveformFrequencyHighColor"),
+                       QStringLiteral("#778899"));
+    persisted.setValue(QStringLiteral("appearance/waveformFrequencyStrength"), 0.625);
+    SettingsController unroundedStrength;
+    auto* unroundedFcw = unroundedStrength.frequencyColorWaveform();
+    QCOMPARE(unroundedFcw->lowDarkOpacity(), 0.44);
+    QCOMPARE(unroundedFcw->midDarkOpacity(), 0.38);
+    QCOMPARE(unroundedFcw->highDarkOpacity(), 0.46);
+    persisted.clear();
+}
+
+void SettingsControllerTest::frequencyColorMigrationWaitsForPayloadSync()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QString blockedParent = temporaryDirectory.filePath(QStringLiteral("blocked"));
+    QFile blocker(blockedParent);
+    QVERIFY(blocker.open(QIODevice::WriteOnly));
+    blocker.close();
+    const QString iniPath = blockedParent + QStringLiteral("/frequency.ini");
+
+    QSettings blocked(iniPath, QSettings::IniFormat);
+    FrequencyColorWaveformSettings waveform;
+    waveform.load(blocked);
+    blocked.sync();
+    QCOMPARE(blocked.status(), QSettings::AccessError);
+    QVERIFY(!blocked.contains(QStringLiteral("waveformFrequencyColorSchema")));
+
+    blocker.remove();
+    QVERIFY(QDir().mkpath(blockedParent));
+    QSettings recovered(iniPath, QSettings::IniFormat);
+    recovered.setValue(QStringLiteral("waveformFrequencyLowColor"),
+                       QStringLiteral("#112233"));
+    recovered.setValue(QStringLiteral("waveformFrequencyMidColor"),
+                       QStringLiteral("#445566"));
+    recovered.setValue(QStringLiteral("waveformFrequencyHighColor"),
+                       QStringLiteral("#778899"));
+    recovered.setValue(QStringLiteral("waveformFrequencyStrength"), 0.625);
+    recovered.sync();
+    QCOMPARE(recovered.status(), QSettings::NoError);
+
+    FrequencyColorWaveformSettings remigrated;
+    remigrated.load(recovered);
+    QCOMPARE(remigrated.preset(), QStringLiteral("custom"));
+    QCOMPARE(remigrated.lowDarkOpacity(), 0.44);
+    QCOMPARE(recovered.value(QStringLiteral("waveformFrequencyColorSchema")).toInt(), 1);
 }
 
 void SettingsControllerTest::migratesPreviousFrequencyDefaultsWithoutOverwritingCustomValues()

@@ -4831,7 +4831,7 @@ TestCase {
         compare(SettingsController.waveformFrequencyLowColor, "#269a8e")
         compare(SettingsController.waveformFrequencyMidColor, "#c66b55")
         compare(SettingsController.waveformFrequencyHighColor, "#b5a4c6")
-        compare(SettingsController.waveformFrequencyStrength, 0.4)
+        compare(SettingsController.waveformFrequencyStrength, 0.62)
         SettingsController.waveformMode = previousWaveformMode
         SettingsController.waveformThickness = 2.2
         SettingsController.waveformPeakAlgorithm = 1
