@@ -587,19 +587,10 @@ Item {
                     gradientStartColor: waveform.gradientStartColor
                     gradientMiddleColor: waveform.gradientMiddleColor
                     gradientEndColor: waveform.gradientEndColor
-                    frequencyMixColor: waveform.frequencyMixColor
                     frequencyLowColor: waveform.frequencyLowColor
                     frequencyMidColor: waveform.frequencyMidColor
                     frequencyHighColor: waveform.frequencyHighColor
-                    frequencyMixOpacity: waveform.frequencyMixOpacity
-                    frequencyLowOpacity: waveform.frequencyLowOpacity
-                    frequencyMidOpacity: waveform.frequencyMidOpacity
-                    frequencyHighOpacity: waveform.frequencyHighOpacity
-                    frequencyBandFade: waveform.frequencyBandFade
-                    frequencyPlayFocus: waveform.frequencyPlayFocus
-                    frequencyFocusColor: waveform.frequencyFocusColor
                     frequencyStrength: waveform.frequencyStrength
-                    frequencyDarkSurface: waveform.frequencyDarkSurface
                     rgbProgress: waveform.rgbProgress
                     amplitudeScale: waveform.amplitudeScale
                     density: waveform.density

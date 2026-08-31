@@ -41,10 +41,10 @@ ctest --test-dir build/task3b1-release -C Release \
 `qmllint`，退出码 0、无输出。该结果仅覆盖滚动主题的定向 QML 合同，不覆盖
 真实设备、格式矩阵或部署验收。
 
-最终审查又发现 `waveformModeChanged` 与派生的
-`frequencyAnalysisRequestedChanged` 会对同一次频彩切换重复加载。已移除前者的
-无条件加载，并新增回归断言：普通渲染模式之间切换复用现有层，进入频彩模式时
-频率分析恰好重载一次。修正后两个 QML 定向目标重新执行为 2/2 通过。
+共享 `WaveformProvider` 在轨道加载时一次生成 `mix/bass/mid/high` 层；各播放器外壳
+复用同一份数据，切换普通、RGB 与频彩渲染模式不会重新分析音频。回归断言覆盖
+模式切换期间 generation 保持不变，以及滚动播放器继续读取旧基线的低/中/高频
+颜色与强度设置。
 
 QA 进程均使用 `--qa-test-mode` 和独立日志/状态，不读取或覆盖用户播放器设置。默认四个缩放截图使用 `sine-440hz.wav`；为避免单一正弦导致大波形近似矩形，额外使用 `multiband-qa.wav` 进行了 100% 默认、最小和超宽截图。
 

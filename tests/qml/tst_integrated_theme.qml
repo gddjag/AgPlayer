@@ -635,7 +635,7 @@ TestCase {
         }, 1000)
     }
 
-    function test_integrated_waveform_syncs_visible_range_and_frequency_mix() {
+    function test_integrated_waveform_syncs_visible_range_and_frequency_layers() {
         var shell = enterIntegratedShell()
         shell.playbackController = fakePlayback
         shell.waveformProvider = fakeWaveformProvider
@@ -655,40 +655,40 @@ TestCase {
 
         var base = findChild(shell, "integratedWaveform")
         var played = findChild(shell, "integratedPlayedWaveform")
-        var frequencySettings = SettingsController.frequencyColorWaveform
         verify(base && played)
         tryVerify(function() {
-            return played.layers.mix && played.layers.mix.length === 4
+            return base.layers.mix && base.layers.mix.length === 4
+                    && played.layers.mix && played.layers.mix.length === 4
         }, 1000)
+        compare(base.layers.mix[2], 0.8)
+        compare(base.layers.bass[0], 0.8)
+        compare(base.layers.mid[1], 0.7)
+        compare(base.layers.high[2], 0.9)
         compare(played.layers.mix[2], 0.8)
         compare(played.layers.bass[0], 0.8)
         compare(played.layers.mid[1], 0.7)
         compare(played.layers.high[2], 0.9)
+        compare(base.visualMode, 3)
         compare(played.visualMode, base.visualMode)
         compare(played.analysisProgress, base.analysisProgress)
+        compare(base.baseColor.toString(), Theme.textSecondary.toString())
         compare(played.baseColor.toString(), base.baseColor.toString())
         compare(played.progressColor.toString(), base.progressColor.toString())
         compare(played.gradientStartColor.toString(), base.gradientStartColor.toString())
         compare(played.gradientMiddleColor.toString(), base.gradientMiddleColor.toString())
         compare(played.gradientEndColor.toString(), base.gradientEndColor.toString())
-        compare(base.frequencyDarkSurface, !Theme.isLight)
-        compare(base.frequencyMixColor.toString(), Theme.isLight
-                ? frequencySettings.mixLightColor
-                : frequencySettings.mixDarkColor)
-        compare(played.frequencyMixColor.toString(),
-                base.frequencyMixColor.toString())
+        compare(base.frequencyLowColor.toString(),
+                SettingsController.waveformFrequencyLowColor.toString())
+        compare(base.frequencyMidColor.toString(),
+                SettingsController.waveformFrequencyMidColor.toString())
+        compare(base.frequencyHighColor.toString(),
+                SettingsController.waveformFrequencyHighColor.toString())
         compare(played.frequencyLowColor.toString(), base.frequencyLowColor.toString())
         compare(played.frequencyMidColor.toString(), base.frequencyMidColor.toString())
         compare(played.frequencyHighColor.toString(), base.frequencyHighColor.toString())
-        compare(played.frequencyMixOpacity, base.frequencyMixOpacity)
-        compare(played.frequencyLowOpacity, base.frequencyLowOpacity)
-        compare(played.frequencyMidOpacity, base.frequencyMidOpacity)
-        compare(played.frequencyHighOpacity, base.frequencyHighOpacity)
-        compare(played.frequencyPlayFocus, base.frequencyPlayFocus)
-        compare(played.frequencyFocusColor.toString(),
-                base.frequencyFocusColor.toString())
-        compare(played.frequencyDarkSurface, base.frequencyDarkSurface)
         compare(played.frequencyStrength, base.frequencyStrength)
+        compare(base.frequencyStrength,
+                SettingsController.waveformFrequencyStrength)
         compare(played.rgbProgress, base.rgbProgress)
         compare(played.amplitudeScale, base.amplitudeScale)
         compare(played.density, base.density)
@@ -699,12 +699,6 @@ TestCase {
             return played.visibleStartMs === base.visibleStartMs
                     && played.visibleEndMs === base.visibleEndMs
         }, 1000)
-        shell.waveformFrequencyReady = false
-        tryCompare(base, "frequencyBandFade", 0, 350)
-        tryCompare(played, "frequencyBandFade", 0, 350)
-        shell.waveformFrequencyReady = true
-        tryCompare(base, "frequencyBandFade", 1, 350)
-        tryCompare(played, "frequencyBandFade", 1, 350)
     }
 
     function test_dense_bottom_bar_keeps_volume_icon_only_and_groups_separate() {

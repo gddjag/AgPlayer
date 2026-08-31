@@ -8,7 +8,6 @@ QtObject {
     property var layers: ({})
     property real durationMs: 0
     property real generation: 0
-    property bool frequencyReady: false
     property int libraryRevision: 0
     readonly property string trackId:
         String(PlaybackController.currentTrackId || "")
@@ -67,7 +66,6 @@ QtObject {
                                LibraryModel.PathRole))
         layers = ({})
         durationMs = 0
-        frequencyReady = false
         publishVisualTiming()
         if (!path || path.length === 0)
             return
@@ -100,12 +98,6 @@ QtObject {
                     || responseGeneration === Number(WaveformProvider.activeGeneration)
             if (sameTrack && sameGeneration && path === root.currentPath()) {
                 root.layers = resultLayers
-                root.frequencyReady = Boolean(resultLayers.bass
-                                              && resultLayers.bass.length > 0
-                                              && resultLayers.mid
-                                              && resultLayers.mid.length > 0
-                                              && resultLayers.high
-                                              && resultLayers.high.length > 0)
                 root.durationMs = Math.max(
                             0, Number(resultLayers._durationMs) || 0)
                 root.publishVisualTiming()

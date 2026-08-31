@@ -93,11 +93,10 @@ TestCase {
     QtObject {
         id: fakeWaveformSession
         property real durationMs: 120000
-        property bool frequencyReady: true
         property int libraryRevision: 0
         property var layers: ({
             "mix": [0.1, 0.6, 0.3, 0.8, 0.2],
-            "low": [0.2, 0.5, 0.1, 0.7, 0.2],
+            "bass": [0.2, 0.5, 0.1, 0.7, 0.2],
             "mid": [0.1, 0.4, 0.3, 0.6, 0.1],
             "high": [0.05, 0.3, 0.2, 0.5, 0.1],
             "_sampleRate": 48000,
@@ -202,7 +201,7 @@ TestCase {
         compare(mainWindow.minimumHeight, 420)
     }
 
-    function test_waveform_mode_reloads_frequency_analysis_exactly_once() {
+    function test_waveform_modes_reuse_loaded_frequency_layers() {
         var trackIds = nativeDropHelper.ensureSortableTracks()
         verify(trackIds.length > 0)
         PlaybackController.playRow(LibraryModel.indexForTrackId(trackIds[0]))
@@ -223,8 +222,8 @@ TestCase {
         var generationBeforeFrequencyChange = session.generation
         SettingsController.waveformMode = 3
         wait(0)
-        compare(session.generation, generationBeforeFrequencyChange + 1,
-                "frequency analysis must reload exactly once")
+        compare(session.generation, generationBeforeFrequencyChange,
+                "frequency rendering must reuse the loaded band layers")
     }
 
     function test_three_shells_share_exact_control_order_and_skin_menu() {
@@ -412,23 +411,37 @@ TestCase {
         })
     }
 
-    function test_frequency_waveform_uses_light_and_dark_theme_tokens() {
+    function test_frequency_waveform_uses_baseline_layers_and_settings() {
         var rolling = rollingWithFakes()
         var overview = findChild(rolling, "rollingOverviewWaveform")
         var mainWaveform = findChild(rolling, "rollingMainWaveform")
         verify(overview && mainWaveform)
 
-        SettingsController.themeMode = 1
-        tryCompare(overview, "frequencyMixColor",
-                   rolling.frequencyWaveformSettings.mixLightColor)
-        compare(mainWaveform.frequencyHighColor,
-                rolling.frequencyWaveformSettings.highLightColor)
-
-        SettingsController.themeMode = 0
-        tryCompare(overview, "frequencyMixColor",
-                   rolling.frequencyWaveformSettings.mixDarkColor)
-        compare(mainWaveform.frequencyHighColor,
-                rolling.frequencyWaveformSettings.highDarkColor)
+        compare(overview.visualMode, 3)
+        compare(mainWaveform.visualMode, 3)
+        compare(overview.layers.bass[1], 0.5)
+        compare(overview.layers.mid[2], 0.3)
+        compare(overview.layers.high[3], 0.5)
+        compare(mainWaveform.layers.bass[1], 0.5)
+        compare(mainWaveform.layers.mid[2], 0.3)
+        compare(mainWaveform.layers.high[3], 0.5)
+        compare(overview.baseColor.toString(), Theme.textSecondary.toString())
+        compare(mainWaveform.baseColor.toString(), Theme.textSecondary.toString())
+        compare(overview.frequencyLowColor.toString(),
+                SettingsController.waveformFrequencyLowColor.toString())
+        compare(overview.frequencyMidColor.toString(),
+                SettingsController.waveformFrequencyMidColor.toString())
+        compare(overview.frequencyHighColor.toString(),
+                SettingsController.waveformFrequencyHighColor.toString())
+        compare(mainWaveform.frequencyLowColor.toString(),
+                overview.frequencyLowColor.toString())
+        compare(mainWaveform.frequencyMidColor.toString(),
+                overview.frequencyMidColor.toString())
+        compare(mainWaveform.frequencyHighColor.toString(),
+                overview.frequencyHighColor.toString())
+        compare(overview.frequencyStrength,
+                SettingsController.waveformFrequencyStrength)
+        compare(mainWaveform.frequencyStrength, overview.frequencyStrength)
     }
 
     function test_rolling_tempo_meter_and_zoom_controls_are_live() {
