@@ -338,9 +338,9 @@ Rectangle {
                 anchors.right: parent.right
                 anchors.leftMargin: 9
                 anchors.rightMargin: 9
-                // At the 48px compact canvas height, keep this native clip
-                // selection target above (not behind) the gain interaction.
-                height: canvas.height < 80 ? 16 : 24
+                // The clip move/selection seam is a fixed logical-pixel
+                // contract at every supported shell size.
+                height: 24
                 z: 5
                 cursorShape: AudioEditorController.activeTool === "scissors"
                     ? Qt.CrossCursor : Qt.ArrowCursor

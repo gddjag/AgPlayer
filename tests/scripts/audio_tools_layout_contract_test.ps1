@@ -17,6 +17,7 @@ $toolsWindow = Get-Content -Raw -Encoding UTF8 -LiteralPath (
 $toolsNavigation = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $toolsRoot 'ToolSidebar.qml')
 $appCmake = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $SourceRoot 'app/CMakeLists.txt')
 $appMain = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $SourceRoot 'app/main.cpp')
+$testsCmake = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $SourceRoot 'tests/CMakeLists.txt')
 $controllerHeader = Get-Content -Raw -Encoding UTF8 -LiteralPath (
     Join-Path $SourceRoot 'qt/src/audio_editor/audio_editor_controller.hpp')
 $controllerSource = Get-Content -Raw -Encoding UTF8 -LiteralPath (
@@ -86,6 +87,19 @@ foreach ($source in $recordingTranslationSources) {
 
 if ($appMain -notmatch 'audioEditor\.setPlaybackController\(&playback\)') {
     throw 'The production audio editor is not wired to the shared playback controller.'
+}
+if ($appMain -match '\[&audioEditor,[^\]]*\bpollFunc\b') {
+    throw 'The editor waveform QA readiness callback must not strongly capture its own shared function.'
+}
+if ($appMain -notmatch 'waveformReadyTimer\s*=\s*new QTimer\(&app\)' -or
+    $appMain -notmatch 'QObject::connect\(waveformReadyTimer,[\s\S]{0,160}&app') {
+    throw 'The editor waveform QA readiness poll must use an application-owned timer and QObject context.'
+}
+if ($testsCmake -match 'qml_audio_editor_test[\s\S]{0,500}junitxml') {
+    throw 'qml_audio_editor_test must not write a fixed per-test JUnit file.'
+}
+if ($testsCmake -notmatch 'ctest --output-junit <run-unique-path>') {
+    throw 'The audio editor CTest registration must document run-unique JUnit output.'
 }
 if ($controllerHeader -notmatch 'Q_INVOKABLE\s+bool\s+relinkProjectSource\(const QString&amp;|Q_INVOKABLE\s+bool\s+relinkProjectSource\(const QString&') {
     throw 'Relink must expose a decimal string Source ID to QML.'

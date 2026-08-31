@@ -743,6 +743,9 @@ target_link_libraries(qml_audio_editor_test PRIVATE
 )
 agplayer_enable_warnings(qml_audio_editor_test)
 add_dependencies(qml_audio_editor_test decoder_fixture)
+# Keep JUnit output at the CTest run level. A fixed per-test QTest path is
+# shared by concurrent Windows runs and can remain exclusively locked. CI
+# should use: ctest --output-junit <run-unique-path>
 add_test(NAME qml_audio_editor_test
     COMMAND qml_audio_editor_test
         -input "${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_audio_editor.qml"

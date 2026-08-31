@@ -793,6 +793,62 @@ TestCase {
         layout.shell.destroy()
     }
 
+    function test_clipOperationBandKeeps24LogicalPixels_data() {
+        return [
+            { tag: "reference", width: 1672, height: 941,
+              canvasHeight: 387 },
+            { tag: "desktop", width: 1280, height: 720,
+              canvasHeight: 162 },
+            { tag: "compact", width: 880, height: 560,
+              canvasHeight: 48 }
+        ]
+    }
+
+    function test_clipOperationBandKeeps24LogicalPixels(data) {
+        const layout = createAudioToolsShell(data.width, data.height)
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        const canvas = findChild(layout.page, "editorWaveformCanvas")
+        verify(canvas)
+        compare(Math.round(canvas.height), data.canvasHeight)
+        AudioEditorController.viewport.setViewportWidth(canvas.width)
+        verify(AudioEditorController.viewport.setVisibleRange(0, 96000))
+        tryVerify(function() {
+            return findVisibleItem(
+                canvas, "editorEventHeaderInteraction") !== null
+        })
+        const header = findVisibleItem(
+            canvas, "editorEventHeaderInteraction")
+        const eventBoundary = findVisibleItem(
+            canvas, "editorEventVisualBoundary")
+        verify(header && eventBoundary)
+        compare(Math.round(header.height), 24,
+                "clip operation band must remain 24 logical pixels at "
+                    + data.width + "x" + data.height)
+
+        const headerBottom = header.mapToItem(canvas, 0, header.height).y
+        verify(headerBottom < canvas.height,
+               "clip operation band must leave waveform body access")
+        if (data.width === 880) {
+            compare(Math.round(canvas.height - headerBottom), 16)
+            const originalStart = Number(
+                AudioEditorController.timelineEventViews[0].timelineStart)
+            mouseDrag(header, header.width * 0.15, 4,
+                      header.width * 0.1, 0,
+                      Qt.LeftButton, Qt.NoModifier, 30)
+            verify(Number(AudioEditorController.timelineEventViews[0]
+                              .timelineStart) > originalStart,
+                   "24px compact clip band must retain event movement")
+            mouseDrag(canvas, canvas.width * 0.1, canvas.height - 4,
+                      canvas.width * 0.15, 0,
+                      Qt.LeftButton, Qt.NoModifier, 30)
+            verify(AudioEditorController.selectionEnd
+                       > AudioEditorController.selectionStart,
+                   "48px waveform must retain range-selection access below "
+                       + "the fixed clip operation band")
+        }
+        layout.shell.destroy()
+    }
+
     function test_realShell880KeepsTransportShortcutAndStatusInside441() {
         const layout = createAudioToolsShell(880, 560)
         compare(Math.round(layout.page.height), 441)
