@@ -9,6 +9,7 @@
 
 #include <array>
 #include <cstdint>
+#include <vector>
 
 class WaveformItem;
 
@@ -90,6 +91,7 @@ public:
     QSGTransformNode* focusTransform() noexcept;
     QSGGeometryNode* focusGeometryNode() noexcept;
     bool usesLineFallback() const noexcept;
+    std::uint64_t compactBandBuildCount() const noexcept;
 
 private:
     friend class WaveformItem;
@@ -113,4 +115,11 @@ private:
     int quality_ = -1;
     QColor focusColor_;
     bool focusVisible_ = false;
+    bool baselineStyleInitialized_ = false;
+    bool baselineDarkSurface_ = true;
+    std::vector<float> compactBandValues_;
+    std::uint64_t compactBandBuildCount_ = 0;
+    std::array<QColor, 4> fallbackColors_{};
+    std::array<float, 4> fallbackAlphas_{};
+    std::array<bool, 4> fallbackStyleInitialized_{};
 };

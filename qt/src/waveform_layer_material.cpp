@@ -239,3 +239,8 @@ bool FrequencyWaveformRootNode::usesLineFallback() const noexcept
 {
     return lineFallback_;
 }
+
+std::uint64_t FrequencyWaveformRootNode::compactBandBuildCount() const noexcept
+{
+    return compactBandBuildCount_;
+}

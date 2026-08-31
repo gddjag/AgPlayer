@@ -1045,28 +1045,33 @@ QSGNode* WaveformItem::updateFrequencyPaintNode(
         hasMid ? &snapshot->mid->values : nullptr,
         hasHigh ? &snapshot->high->values : nullptr,
     }};
-    std::vector<float> compactBandValues;
-    if (height() < 32.0 && (hasLow || hasMid || hasHigh)) {
+    const bool compactMode = height() < 32.0 && (hasLow || hasMid || hasHigh);
+    if (geometryChanged && compactMode) {
         const std::size_t combinedSize = std::max({
             hasLow ? snapshot->bass->values.size() : std::size_t{0},
             hasMid ? snapshot->mid->values.size() : std::size_t{0},
             hasHigh ? snapshot->high->values.size() : std::size_t{0},
         });
-        compactBandValues.assign(combinedSize, 0.0F);
-        const auto combine = [&compactBandValues](
+        root->compactBandValues_.assign(combinedSize, 0.0F);
+        const auto combine = [root](
                                  const std::shared_ptr<const LayerSnapshot>& layer) {
             if (!layer) {
                 return;
             }
             for (std::size_t index = 0; index < layer->values.size(); ++index) {
-                compactBandValues[index] = std::max(
-                    compactBandValues[index], layer->values[index]);
+                root->compactBandValues_[index] = std::max(
+                    root->compactBandValues_[index], layer->values[index]);
             }
         };
         combine(snapshot->bass);
         combine(snapshot->mid);
         combine(snapshot->high);
-        sourceValues[1] = &compactBandValues;
+        ++root->compactBandBuildCount_;
+    } else if (geometryChanged) {
+        root->compactBandValues_.clear();
+    }
+    if (compactMode) {
+        sourceValues[1] = &root->compactBandValues_;
         sourceValues[2] = nullptr;
         sourceValues[3] = nullptr;
     }
@@ -1075,20 +1080,10 @@ QSGNode* WaveformItem::updateFrequencyPaintNode(
         auto* baselineGeometry = root->baseline()->geometry();
         baselineGeometry->allocate(2);
         auto* baselineVertices = baselineGeometry->vertexDataAsColoredPoint2D();
-        const unsigned char baselineAlpha = frequencyDarkSurface_ ? 42U : 34U;
-        const auto baselinePremultiply = [baselineAlpha](int channel) {
-            return static_cast<unsigned char>(std::lround(
-                static_cast<double>(channel) * baselineAlpha / 255.0));
-        };
-        baselineVertices[0].set(0.0F, static_cast<float>(height() * 0.5),
-                                baselinePremultiply(128),
-                                baselinePremultiply(136),
-                                baselinePremultiply(148), baselineAlpha);
-        baselineVertices[1].set(static_cast<float>(width()),
-                                static_cast<float>(height() * 0.5),
-                                baselinePremultiply(128),
-                                baselinePremultiply(136),
-                                baselinePremultiply(148), baselineAlpha);
+        baselineVertices[0].x = 0.0F;
+        baselineVertices[0].y = static_cast<float>(height() * 0.5);
+        baselineVertices[1].x = static_cast<float>(width());
+        baselineVertices[1].y = static_cast<float>(height() * 0.5);
         root->baseline()->markDirty(QSGNode::DirtyGeometry);
 
         const float center = static_cast<float>(height() * 0.5);
@@ -1204,6 +1199,28 @@ QSGNode* WaveformItem::updateFrequencyPaintNode(
         root->lineFallback_ = lineFallback;
     }
 
+    const bool baselineStyleChanged = geometryChanged
+        || !root->baselineStyleInitialized_
+        || root->baselineDarkSurface_ != frequencyDarkSurface_;
+    if (baselineStyleChanged) {
+        auto* baselineVertices = root->baseline()->geometry()
+            ->vertexDataAsColoredPoint2D();
+        const unsigned char baselineAlpha = frequencyDarkSurface_ ? 42U : 34U;
+        const auto baselinePremultiply = [baselineAlpha](int channel) {
+            return static_cast<unsigned char>(std::lround(
+                static_cast<double>(channel) * baselineAlpha / 255.0));
+        };
+        for (int index = 0; index < 2; ++index) {
+            baselineVertices[index].r = baselinePremultiply(128);
+            baselineVertices[index].g = baselinePremultiply(136);
+            baselineVertices[index].b = baselinePremultiply(148);
+            baselineVertices[index].a = baselineAlpha;
+        }
+        root->baseline()->markDirty(QSGNode::DirtyGeometry);
+        root->baselineStyleInitialized_ = true;
+        root->baselineDarkSurface_ = frequencyDarkSurface_;
+    }
+
     const double legacyScale = frequencyStrength_ / 0.62;
     const std::array<QColor, 4> colors{{
         frequencyMixColor_, frequencyLowColor_, frequencyMidColor_,
@@ -1243,6 +1260,14 @@ QSGNode* WaveformItem::updateFrequencyPaintNode(
             auto* vertices = layerNode->lineGeometry().vertexDataAsColoredPoint2D();
             const int vertexCount = layerNode->lineGeometry().vertexCount();
             const float alpha = outline * fade;
+            const bool fallbackStyleChanged = geometryChanged
+                || !root->fallbackStyleInitialized_[index]
+                || root->fallbackColors_[index] != colors[index]
+                || !qFuzzyCompare(root->fallbackAlphas_[index] + 1.0F,
+                                  alpha + 1.0F);
+            if (!fallbackStyleChanged) {
+                continue;
+            }
             const unsigned char byteAlpha = static_cast<unsigned char>(
                 std::lround(alpha * 255.0F));
             const auto premultiply = [byteAlpha](int channel) {
@@ -1256,6 +1281,9 @@ QSGNode* WaveformItem::updateFrequencyPaintNode(
                 vertices[vertex].a = byteAlpha;
             }
             layerNode->markDirty(QSGNode::DirtyGeometry);
+            root->fallbackColors_[index] = colors[index];
+            root->fallbackAlphas_[index] = alpha;
+            root->fallbackStyleInitialized_[index] = true;
         }
     }
 
