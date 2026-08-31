@@ -866,8 +866,8 @@
     <message>
         <location filename="../app/qml/AgPlayer/EqualizerWindow.qml" line="17"/>
         <location filename="../app/qml/AgPlayer/EqualizerWindow.qml" line="82"/>
-        <source>十八段图形均衡器</source>
-        <translation>十八段图形均衡器</translation>
+        <source>18 段图形均衡器</source>
+        <translation>18 段图形均衡器</translation>
     </message>
     <message><source>最小化</source><translation>最小化</translation></message>
     <message><source>最大化</source><translation>最大化</translation></message>
@@ -890,6 +890,22 @@
         <source>预设</source>
         <translation>预设</translation>
     </message>
+    <message><source>预设：</source><translation>预设：</translation></message>
+    <message><source>自定义</source><translation>自定义</translation></message>
+    <message><source>保存预设</source><translation>保存预设</translation></message>
+    <message><source>管理预设</source><translation>管理预设</translation></message>
+    <message><source>重置</source><translation>重置</translation></message>
+    <message><source>范围：</source><translation>范围：</translation></message>
+    <message><source>±6 dB</source><translation>±6 dB</translation></message>
+    <message><source>±12 dB</source><translation>±12 dB</translation></message>
+    <message><source>±18 dB</source><translation>±18 dB</translation></message>
+    <message><source>精度：</source><translation>精度：</translation></message>
+    <message><source>高</source><translation>高</translation></message>
+    <message><source>中</source><translation>中</translation></message>
+    <message><source>低</source><translation>低</translation></message>
+    <message><source>输出电平：</source><translation>输出电平：</translation></message>
+    <message><source>取消</source><translation>取消</translation></message>
+    <message><source>高级</source><translation>高级</translation></message>
     <message>
         <location filename="../app/qml/AgPlayer/EqualizerWindow.qml" line="152"/>
         <source>保存</source>

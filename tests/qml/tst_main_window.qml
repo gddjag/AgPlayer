@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 import QtTest
 import AgPlayer
@@ -593,8 +594,9 @@ TestCase {
         verify(equalizerContent,
                "EQ must lay out at native size instead of shrinking a large canvas")
         compare(equalizerContent.scale, 1)
-        compare(equalizerTitle.text, qsTr("十八段图形均衡器"))
+        compare(equalizerTitle.text, qsTr("18 段图形均衡器"))
         verify(equalizerTitle.font.pixelSize >= 18)
+        compare(findChild(window, "equalizerTitleBar").height, 72)
         verify(findChild(window, "equalizerHeaderPanel").height >= 64)
         compare(findChild(window, "equalizerMinimizeButton").width, 30)
         verify(findChild(window, "equalizerEnabledSwitch"))
@@ -605,7 +607,17 @@ TestCase {
         SettingsController.themeMode = 1
         compare(button.icon.color.toString(), Theme.iconPrimary.toString())
         SettingsController.themeMode = previousThemeMode
-        verify(findChild(window, "equalizerResponseCurve"))
+        var responseCurve = findChild(window, "equalizerResponseCurve")
+        verify(responseCurve)
+        var responseEnvelope = responseCurve.envelopePoints()
+        compare(responseEnvelope.length, 18)
+        compare(Math.round(responseEnvelope[0].x),
+                Math.round(responseCurve.plotLeft))
+        compare(Math.round(responseEnvelope[17].x),
+                Math.round(responseCurve.width - responseCurve.plotRight))
+        compare(Math.round(responseEnvelope[0].y * 1000),
+                Math.round(responseCurve.gainY(
+                               EqualizerController.bandGain(0)) * 1000))
         var presetBox = findChild(window, "equalizerPresetBox")
         verify(presetBox)
         for (var themeMode = 0; themeMode <= 1; ++themeMode) {
@@ -621,11 +633,30 @@ TestCase {
         SettingsController.themeMode = previousThemeMode
         var bands = findChild(window, "equalizerBandRepeater")
         verify(bands)
-        compare(bands.count, 17)
+        compare(bands.count, 18)
+        compare(bands.itemAt(14).frequencyLabel, "10k")
+        compare(findChild(window, "equalizerBandsMaxLabel").text, "+12")
+        compare(findChild(window, "equalizerBandsZeroLabel").text, "0")
+        compare(findChild(window, "equalizerBandsMinLabel").text, "−12")
         verify(findChild(window, "equalizerPreampSlider"))
-        verify(findChild(window, "equalizerAutoProtection"))
-        verify(findChild(window, "equalizerBypassButton"))
-        verify(findChild(window, "equalizerResetButton"))
+        verify(findChild(window, "equalizerRangeControl"))
+        verify(findChild(window, "equalizerPrecisionControl"))
+        verify(findChild(window, "equalizerOutputMeter"))
+        verify(findChild(window, "equalizerSaveDialog"))
+        verify(findChild(window, "equalizerManagePopup"))
+        var resetButton = findChild(window, "equalizerResetButton")
+        verify(resetButton)
+        verify(resetButton.iconSource.toString().indexOf("restore-line.svg") >= 0)
+        var contentScroller = findChild(window, "equalizerContentScroller")
+        compare(findChild(window, "equalizerContentScrollBar").policy,
+                ScrollBar.AlwaysOn)
+        compare(findChild(window, "equalizerBandScrollBar").policy,
+                ScrollBar.AlwaysOn)
+        compare(findChild(window, "equalizerFooterScrollBar").policy,
+                ScrollBar.AlwaysOn)
+        contentScroller.contentY = Math.min(300,
+                    contentScroller.contentHeight - contentScroller.height)
+        wait(50)
         EqualizerController.resetAll()
         var firstBand = bands.itemAt(0)
         verify(firstBand)
@@ -633,7 +664,7 @@ TestCase {
         tryCompare(firstBand, "gainDb", 3.2)
         compare(EqualizerController.bandGain(0), 3.2)
         compare(EqualizerController.currentPresetId, "custom")
-        compare(presetBox.displayText, qsTr("Custom"))
+        compare(presetBox.displayText, qsTr("自定义"))
         var firstBandControl = findChild(firstBand, "eqBandSlider-0-control")
         verify(firstBandControl)
         firstBand.setGain(12)
@@ -650,15 +681,17 @@ TestCase {
         wait(80)
         compare(firstBand.gainDb, 0,
                 "double-clicking an EQ band must reset it to 0 dB")
+        verify(EqualizerController.setGainRangeDb(18))
+        verify(EqualizerController.setPrecisionMode("medium"))
         firstBand.setGain(6)
         tryCompare(firstBand, "gainDb", 6)
         firstBandControl.forceActiveFocus()
         keyPress(Qt.Key_Up)
-        tryCompare(firstBand, "gainDb", 6.1)
+        tryCompare(firstBand, "gainDb", 6.5)
         keyPress(Qt.Key_PageUp)
-        tryCompare(firstBand, "gainDb", 7.1)
+        tryCompare(firstBand, "gainDb", 11.5)
         keyPress(Qt.Key_PageDown)
-        tryCompare(firstBand, "gainDb", 6.1)
+        tryCompare(firstBand, "gainDb", 6.5)
         mouseWheel(firstBandControl, firstBandControl.width / 2,
                    firstBandControl.height / 2, 0, -120)
         tryCompare(firstBand, "gainDb", 6.0)
@@ -669,9 +702,18 @@ TestCase {
         wait(80)
         compare(firstBand.gainDb, 0,
                 "double-clicking an EQ frequency label must reset it to 0 dB")
-        EqualizerController.bypassed = true
-        tryCompare(findChild(window, "equalizerBypassButton"), "checked", true)
+        contentScroller.contentY = 0
+        wait(50)
+        var manageButton = findChild(window, "equalizerManageButton")
+        var managePopup = findChild(window, "equalizerManagePopup")
+        mouseClick(manageButton)
+        tryCompare(managePopup, "visible", true)
+        verify(findChild(managePopup, "equalizerBypassButton"))
+        verify(findChild(managePopup, "equalizerAutoProtection"))
+        managePopup.close()
         EqualizerController.resetAll()
+        EqualizerController.setGainRangeDb(12)
+        EqualizerController.setPrecisionMode("high")
         EqualizerController.bypassed = false
         window.hide()
     }

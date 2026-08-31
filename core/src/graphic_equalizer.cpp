@@ -12,8 +12,8 @@ namespace agplayer {
 namespace {
 
 constexpr double kPi = 3.141592653589793238462643383279502884;
-constexpr double kMinGainDb = -12.0;
-constexpr double kMaxGainDb = 12.0;
+constexpr double kMinGainDb = -18.0;
+constexpr double kMaxGainDb = 18.0;
 constexpr double kProtectionMarginDb = 0.5;
 constexpr std::size_t kProtectionBins = 4'096;
 constexpr std::array<int, 5> kSupportedSampleRates{

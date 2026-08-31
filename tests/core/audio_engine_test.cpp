@@ -9,10 +9,12 @@
 #include "../../core/src/audio_engine.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
+#include <cstdio>
 #include <filesystem>
 #include <iostream>
 #include <limits>
@@ -164,6 +166,100 @@ void waitForBufferedFrames(agplayer::AudioEngine& engine,
     assert(false && "decode thread did not prepare PCM");
 }
 
+constexpr double kMeterFloorDb = -120.0;
+
+bool waitForBufferedFrames(agplayer::AudioEngine& engine,
+                           const std::size_t minimumFrames,
+                           const std::chrono::milliseconds timeout)
+{
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    do {
+        if (engine.buffered_frames() >= minimumFrames) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    } while (std::chrono::steady_clock::now() < deadline);
+    return false;
+}
+
+bool waitForBarrierPhase(std::atomic<int>& phase,
+                         const int expected,
+                         const std::chrono::milliseconds timeout)
+{
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    do {
+        if (phase.load(std::memory_order_acquire) >= expected) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    } while (std::chrono::steady_clock::now() < deadline);
+    return false;
+}
+
+bool waitForFlag(std::atomic<bool>& flag,
+                 const std::chrono::milliseconds timeout)
+{
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    do {
+        if (flag.load(std::memory_order_acquire)) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    } while (std::chrono::steady_clock::now() < deadline);
+    return false;
+}
+
+bool waitForPlayerState(ag_player* const player,
+                        const ag_playback_state expected,
+                        ag_playback_snapshot& snapshot,
+                        const std::chrono::milliseconds timeout)
+{
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    do {
+        if (ag_player_snapshot(player, &snapshot) == AG_OK
+            && snapshot.state == expected) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    } while (std::chrono::steady_clock::now() < deadline);
+    return false;
+}
+
+template <typename Predicate>
+bool waitForEngineOutputPeak(agplayer::AudioEngine& engine,
+                             Predicate&& predicate,
+                             const std::chrono::milliseconds timeout)
+{
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    do {
+        if (predicate(engine.equalizer_status().output_peak_db)) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    } while (std::chrono::steady_clock::now() < deadline);
+    return false;
+}
+
+template <typename Predicate>
+double waitForOutputPeak(ag_player* const player,
+                         Predicate&& predicate,
+                         const std::chrono::milliseconds timeout)
+{
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    double peakDb = kMeterFloorDb;
+    do {
+        ag_equalizer_status status{};
+        assert(ag_player_equalizer_status(player, &status) == AG_OK);
+        peakDb = status.output_peak_db;
+        if (predicate(peakDb)) {
+            return peakDb;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    } while (std::chrono::steady_clock::now() < deadline);
+    assert(false && "timed out waiting for output peak");
+    return peakDb;
+}
+
 class SilentEditorStream final : public agplayer::IAudioStreamSource {
 public:
     explicit SilentEditorStream(const std::int64_t durationMs)
@@ -210,6 +306,393 @@ private:
     std::int64_t position_frames_{};
 };
 
+class PartialUnderrunStream final : public agplayer::IAudioStreamSource {
+public:
+    PartialUnderrunStream()
+    {
+        metadata_.sample_rate = 1'000;
+        metadata_.channels = 1;
+        metadata_.duration_ms = 10'000;
+    }
+
+    const agplayer::MediaMetadata& metadata() const noexcept override
+    {
+        return metadata_;
+    }
+
+    ag_result read(agplayer::DecodedAudioBlock& block) noexcept override
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (stage_ == 0) {
+            stage_ = 1;
+            lock.unlock();
+            block = {};
+            block.frames = 100U;
+            block.samples.assign(100U, 1.0F);
+            return AG_OK;
+        }
+        if (stage_ == 1) {
+            condition_.wait(lock, [this] { return release_second_ || finish_; });
+            if (!finish_) {
+                stage_ = 2;
+                lock.unlock();
+                block = {};
+                block.frames = 25U;
+                block.samples.assign(25U, 0.0F);
+                return AG_OK;
+            }
+        }
+        condition_.wait(lock, [this] { return finish_; });
+        lock.unlock();
+        block = {};
+        block.end_of_stream = true;
+        return AG_OK;
+    }
+
+    ag_result seek(const std::int64_t positionMs) noexcept override
+    {
+        return positionMs >= 0 && positionMs <= metadata_.duration_ms
+            ? AG_OK
+            : AG_INVALID_ARGUMENT;
+    }
+
+    void releaseSecondBlock()
+    {
+        {
+            const std::lock_guard<std::mutex> lock(mutex_);
+            release_second_ = true;
+        }
+        condition_.notify_all();
+    }
+
+    void finish()
+    {
+        {
+            const std::lock_guard<std::mutex> lock(mutex_);
+            finish_ = true;
+        }
+        condition_.notify_all();
+    }
+
+private:
+    agplayer::MediaMetadata metadata_;
+    std::mutex mutex_;
+    std::condition_variable condition_;
+    int stage_ = 0;
+    bool release_second_ = false;
+    bool finish_ = false;
+};
+
+class ContinuousAudioStream final : public agplayer::IAudioStreamSource {
+public:
+    ContinuousAudioStream()
+    {
+        metadata_.sample_rate = 48'000;
+        metadata_.channels = 2;
+        metadata_.duration_ms = 60'000;
+    }
+
+    const agplayer::MediaMetadata& metadata() const noexcept override
+    {
+        return metadata_;
+    }
+
+    ag_result read(agplayer::DecodedAudioBlock& block) noexcept override
+    {
+        constexpr std::size_t frames = 1'024U;
+        block = {};
+        block.frames = frames;
+        block.timestamp_frame = position_frames_;
+        block.timestamp_ms = position_frames_ * 1'000 / metadata_.sample_rate;
+        block.samples.assign(frames * 2U, 0.5F);
+        position_frames_ += static_cast<std::int64_t>(frames);
+        return AG_OK;
+    }
+
+    ag_result seek(const std::int64_t positionMs) noexcept override
+    {
+        if (positionMs < 0 || positionMs > metadata_.duration_ms) {
+            return AG_INVALID_ARGUMENT;
+        }
+        position_frames_ = positionMs * metadata_.sample_rate / 1'000;
+        return AG_OK;
+    }
+
+private:
+    agplayer::MediaMetadata metadata_;
+    std::int64_t position_frames_ = 0;
+};
+
+bool outputMeterInvalidatesAcrossPlaybackBoundaries()
+{
+    agplayer::AudioEngine engine(agplayer::AudioBackend::Manual, 4'096U);
+    assert(engine.load_stream(std::make_shared<ContinuousAudioStream>())
+           == AG_OK);
+    assert(waitForBufferedFrames(engine, 64U,
+                                 std::chrono::milliseconds(1'000)));
+    assert(engine.play() == AG_OK);
+    std::vector<float> output(64U * 2U);
+    engine.render(output.data(), 64U);
+    if (engine.equalizer_status().output_peak_db <= kMeterFloorDb) {
+        std::fprintf(stderr, "boundary regression setup did not publish a peak\n");
+        return false;
+    }
+
+    assert(engine.pause() == AG_OK);
+    assert(engine.play() == AG_OK);
+    bool ok = engine.equalizer_status().output_peak_db == kMeterFloorDb;
+
+    assert(waitForBufferedFrames(engine, 64U,
+                                 std::chrono::milliseconds(1'000)));
+    engine.render(output.data(), 64U);
+    engine.set_muted(true);
+    engine.set_muted(false);
+    ok = ok && engine.equalizer_status().output_peak_db == kMeterFloorDb;
+
+    assert(waitForBufferedFrames(engine, 64U,
+                                 std::chrono::milliseconds(1'000)));
+    engine.render(output.data(), 64U);
+    assert(engine.seek(500) == AG_OK);
+    ok = ok && engine.equalizer_status().output_peak_db == kMeterFloorDb;
+
+    assert(waitForBufferedFrames(engine, 64U,
+                                 std::chrono::milliseconds(1'000)));
+    engine.render(output.data(), 64U);
+    engine.simulate_device_loss();
+    assert(engine.retry_device() == AG_OK);
+    assert(engine.play() == AG_OK);
+    ok = ok && engine.equalizer_status().output_peak_db == kMeterFloorDb;
+
+    assert(engine.stop() == AG_OK);
+    assert(engine.play() == AG_OK);
+    ok = ok && engine.equalizer_status().output_peak_db == kMeterFloorDb;
+    if (!ok) {
+        std::fprintf(stderr,
+                     "output meter exposed a stale peak after a playback boundary\n");
+    }
+    return ok;
+}
+
+bool outputDeviceSwitchRejectsInFlightOldCallback()
+{
+    agplayer::OutputDeviceSwitchTestBarrier barrier;
+    agplayer::AudioEngine engine(agplayer::AudioBackend::Null, 4'096U);
+    assert(engine.load_stream(std::make_shared<ContinuousAudioStream>())
+           == AG_OK);
+    assert(waitForBufferedFrames(engine, 64U,
+                                 std::chrono::milliseconds(1'000)));
+    assert(engine.play() == AG_OK);
+
+    engine.set_output_device_switch_test_barrier(&barrier);
+    std::atomic<ag_result> switch_result{AG_INTERNAL_ERROR};
+    std::thread switch_thread([&] {
+        switch_result.store(engine.set_output_device({}, true),
+                            std::memory_order_release);
+    });
+
+    const bool old_callback_entered = waitForBarrierPhase(
+        barrier.entered_phase, 1, std::chrono::milliseconds(2'000));
+    if (!old_callback_entered) {
+        barrier.cancelled.store(true, std::memory_order_release);
+        switch_thread.join();
+        engine.set_output_device_switch_test_barrier(nullptr);
+        std::fprintf(stderr,
+                     "old output callback did not enter switch barrier\n");
+        return false;
+    }
+    barrier.release_phase.store(1, std::memory_order_release);
+
+    const bool new_callback_entered = waitForBarrierPhase(
+        barrier.entered_phase, 2, std::chrono::milliseconds(2'000));
+    const bool stale_peak_rejected =
+        engine.equalizer_status().output_peak_db == kMeterFloorDb;
+    barrier.release_phase.store(2, std::memory_order_release);
+    if (!new_callback_entered) {
+        barrier.cancelled.store(true, std::memory_order_release);
+    }
+    switch_thread.join();
+    engine.set_output_device_switch_test_barrier(nullptr);
+
+    const bool switched =
+        switch_result.load(std::memory_order_acquire) == AG_OK;
+    if (!new_callback_entered) {
+        std::fprintf(stderr,
+                     "new output callback did not enter switch barrier\n");
+    }
+    if (!stale_peak_rejected) {
+        std::fprintf(stderr,
+                     "old output callback peak survived device switch\n");
+    }
+    return switched && new_callback_entered && stale_peak_rejected;
+}
+
+bool outputDeviceSwitchFailureRejectsInFlightOldCallback(
+    const agplayer::OutputDeviceSwitchTestFailure failure,
+    const ag_result expected_result,
+    const char* const label)
+{
+    agplayer::OutputDeviceSwitchTestBarrier barrier;
+    agplayer::AudioEngine engine(agplayer::AudioBackend::Null, 4'096U);
+    assert(engine.load_stream(std::make_shared<ContinuousAudioStream>())
+           == AG_OK);
+    assert(waitForBufferedFrames(engine, 1'024U,
+                                 std::chrono::milliseconds(1'000)));
+    assert(engine.play() == AG_OK);
+    assert(waitForEngineOutputPeak(
+        engine, [](const double peak) { return peak > kMeterFloorDb; },
+        std::chrono::milliseconds(1'000)));
+
+    barrier.failure.store(failure, std::memory_order_release);
+    engine.set_output_device_switch_test_barrier(&barrier);
+    std::atomic<ag_result> switch_result{AG_OK};
+    std::atomic<bool> switch_done{false};
+    std::thread switch_thread([&] {
+        switch_result.store(engine.set_output_device({}, true),
+                            std::memory_order_release);
+        switch_done.store(true, std::memory_order_release);
+    });
+
+    const bool old_callback_entered = waitForBarrierPhase(
+        barrier.entered_phase, 1, std::chrono::milliseconds(2'000));
+    const bool failed_while_old_callback_held = old_callback_entered
+        && waitForFlag(switch_done, std::chrono::milliseconds(2'000));
+    if (!failed_while_old_callback_held) {
+        barrier.cancelled.store(true, std::memory_order_release);
+        barrier.release_phase.store(2, std::memory_order_release);
+        switch_thread.join();
+        engine.set_output_device_switch_test_barrier(nullptr);
+        std::fprintf(stderr, "%s did not fail while old callback was held\n",
+                     label);
+        return false;
+    }
+    switch_thread.join();
+
+    barrier.armed_phase.store(2, std::memory_order_release);
+    barrier.release_phase.store(1, std::memory_order_release);
+    const bool fresh_callback_held = waitForBarrierPhase(
+        barrier.entered_phase, 2, std::chrono::milliseconds(2'000));
+    const bool stale_peak_rejected = fresh_callback_held
+        && engine.equalizer_status().output_peak_db == kMeterFloorDb;
+    barrier.release_phase.store(2, std::memory_order_release);
+    if (!fresh_callback_held) {
+        barrier.cancelled.store(true, std::memory_order_release);
+    }
+    engine.set_output_device_switch_test_barrier(nullptr);
+
+    const bool result_matches =
+        switch_result.load(std::memory_order_acquire) == expected_result;
+    const bool fresh_peak_published = waitForEngineOutputPeak(
+        engine, [](const double peak) { return peak > kMeterFloorDb; },
+        std::chrono::milliseconds(1'000));
+    if (!stale_peak_rejected) {
+        std::fprintf(stderr, "%s accepted an in-flight stale peak\n", label);
+    }
+    if (!fresh_peak_published) {
+        std::fprintf(stderr, "%s did not resume fresh meter publication\n",
+                     label);
+    }
+    return result_matches && stale_peak_rejected && fresh_peak_published;
+}
+
+bool outputDeviceStopFailureRejectsInFlightOldCallback()
+{
+    return outputDeviceSwitchFailureRejectsInFlightOldCallback(
+        agplayer::OutputDeviceSwitchTestFailure::StopOutput,
+        AG_DEVICE_ERROR, "stop_output failure");
+}
+
+bool outputDeviceSnapshotExceptionRejectsInFlightOldCallback()
+{
+    return outputDeviceSwitchFailureRejectsInFlightOldCallback(
+        agplayer::OutputDeviceSwitchTestFailure::BeforeStateSnapshot,
+        AG_INTERNAL_ERROR, "pre-shutdown snapshot exception");
+}
+
+bool outputMeterUsesRequestedFramesForPartialUnderrun()
+{
+    auto stream = std::make_shared<PartialUnderrunStream>();
+    agplayer::AudioEngine engine(agplayer::AudioBackend::Manual, 128U);
+    assert(engine.load_stream(stream) == AG_OK);
+    assert(waitForBufferedFrames(engine, 100U,
+                                 std::chrono::milliseconds(1'000)));
+    assert(engine.play() == AG_OK);
+    std::vector<float> output(100U);
+    engine.render(output.data(), 100U);
+    assert(std::abs(engine.equalizer_status().output_peak_db) < 0.01);
+
+    stream->releaseSecondBlock();
+    assert(waitForBufferedFrames(engine, 25U,
+                                 std::chrono::milliseconds(1'000)));
+    engine.render(output.data(), 100U);
+    const double partialPeakDb = engine.equalizer_status().output_peak_db;
+    const bool usesRequestedFrames =
+        partialPeakDb < -1.1 && partialPeakDb > -1.3;
+
+    engine.render(output.data(), 100U);
+    const bool emptyReadFloors =
+        engine.equalizer_status().output_peak_db == kMeterFloorDb;
+    stream->finish();
+    if (!usesRequestedFrames) {
+        std::fprintf(stderr,
+                     "partial underrun release was %.3f dB, expected about -1.2 dB\n",
+                     partialPeakDb);
+    }
+    if (!emptyReadFloors) {
+        std::fprintf(stderr, "zero-frame render did not publish meter floor\n");
+    }
+    return usesRequestedFrames && emptyReadFloors;
+}
+
+bool equalizerSubmitFailureKeepsPublishedState()
+{
+    agplayer::AudioEngine engine(agplayer::AudioBackend::Manual, 128U);
+    assert(engine.load_stream(std::make_shared<SilentEditorStream>(3'000))
+           == AG_OK);
+
+    agplayer::GraphicEqSettings accepted;
+    accepted.enabled = true;
+    accepted.auto_clip_protection = true;
+    accepted.preamp_db = -1.5;
+    accepted.band_gain_db[0] = 4.0;
+    assert(engine.set_equalizer(accepted, 41U) == AG_OK);
+    const agplayer::EqualizerStatus before = engine.equalizer_status();
+
+    agplayer::GraphicEqSettings rejected = accepted;
+    rejected.enabled = false;
+    rejected.bypassed = true;
+    rejected.auto_clip_protection = false;
+    rejected.preamp_db = 3.0;
+    rejected.band_gain_db[0] = -6.0;
+    engine.fail_next_equalizer_submit_for_test();
+    const ag_result rejectedResult = engine.set_equalizer(rejected, 42U);
+    const agplayer::EqualizerStatus afterFailure = engine.equalizer_status();
+
+    const bool failurePreservedState =
+        rejectedResult == AG_INTERNAL_ERROR
+        && afterFailure.revision == before.revision
+        && afterFailure.enabled == before.enabled
+        && afterFailure.bypassed == before.bypassed
+        && afterFailure.auto_clip_protection == before.auto_clip_protection
+        && afterFailure.sample_rate == before.sample_rate
+        && afterFailure.active == before.active
+        && afterFailure.protection_db == before.protection_db;
+
+    const bool nextSubmissionSucceeds =
+        engine.set_equalizer(rejected, 43U) == AG_OK
+        && engine.equalizer_status().revision == 43U
+        && !engine.equalizer_status().enabled
+        && engine.equalizer_status().bypassed
+        && !engine.equalizer_status().auto_clip_protection;
+    if (!failurePreservedState) {
+        std::fprintf(stderr,
+                     "failed EQ submission changed published engine state\n");
+    }
+    if (!nextSubmissionSucceeds) {
+        std::fprintf(stderr, "EQ failure seam was not one-shot\n");
+    }
+    return failurePreservedState && nextSubmissionSucceeds;
+}
+
 } // namespace
 
 int main(const int argc, char** argv)
@@ -253,6 +736,11 @@ int main(const int argc, char** argv)
     assert(ag_player_set_equalizer(player, nullptr)
            == AG_INVALID_ARGUMENT);
     assert(ag_player_equalizer_status(nullptr, nullptr)
+           == AG_INVALID_ARGUMENT);
+    ag_equalizer_status null_status{};
+    assert(ag_player_equalizer_status(nullptr, &null_status)
+           == AG_INVALID_ARGUMENT);
+    assert(ag_player_equalizer_status(player, nullptr)
            == AG_INVALID_ARGUMENT);
     assert(ag_player_set_muted(nullptr, 0) == AG_INVALID_ARGUMENT);
     ag_playback_time_pitch_config time_pitch{1.0, 1};
@@ -311,6 +799,39 @@ int main(const int argc, char** argv)
     assert(snapshot.duration_ms >= 1'990);
     assert(snapshot.position_ms == 0);
 
+    ag_equalizer_status meter_status{};
+    assert(ag_player_equalizer_status(player, &meter_status) == AG_OK);
+    assert(meter_status.output_peak_db == kMeterFloorDb);
+
+    assert(ag_player_set_volume(player, 1.0F) == AG_OK);
+    assert(ag_player_set_replay_gain(player, 0.0F, 1.0F, 1) == AG_OK);
+    assert(ag_player_set_muted(player, 0) == AG_OK);
+    assert(ag_player_play(player) == AG_OK);
+    const double full_volume_peak = waitForOutputPeak(
+        player,
+        [](const double peakDb) {
+            return std::isfinite(peakDb) && peakDb > -100.0;
+        },
+        std::chrono::milliseconds(1'000));
+    assert(ag_player_set_volume(player, 0.1F) == AG_OK);
+    const double reduced_volume_peak = waitForOutputPeak(
+        player,
+        [full_volume_peak](const double peakDb) {
+            return std::isfinite(peakDb)
+                   && peakDb > kMeterFloorDb
+                   && peakDb <= full_volume_peak - 6.0;
+        },
+        std::chrono::milliseconds(1'000));
+    assert(reduced_volume_peak < full_volume_peak);
+    assert(ag_player_set_muted(player, 1) == AG_OK);
+    assert(waitForOutputPeak(
+               player,
+               [](const double peakDb) { return peakDb == kMeterFloorDb; },
+               std::chrono::milliseconds(250))
+           == kMeterFloorDb);
+    assert(ag_player_set_muted(player, 0) == AG_OK);
+    assert(ag_player_set_volume(player, 1.0F) == AG_OK);
+
     assert(ag_player_play(player) == AG_OK);
     std::this_thread::sleep_for(std::chrono::milliseconds(120));
     assert(ag_player_snapshot(player, &snapshot) == AG_OK);
@@ -350,7 +871,7 @@ int main(const int argc, char** argv)
            == AG_INVALID_ARGUMENT);
     assert(ag_player_set_replay_gain(player, 0.0F, -1.0F, 1)
            == AG_INVALID_ARGUMENT);
-    equalizer.band_gain_db[5] = 12.1;
+    equalizer.band_gain_db[5] = 18.1;
     assert(ag_player_set_equalizer(player, &equalizer)
            == AG_INVALID_ARGUMENT);
     equalizer.band_gain_db[5] = 0.0;
@@ -363,12 +884,13 @@ int main(const int argc, char** argv)
     assert(ag_player_snapshot(player, &snapshot) == AG_OK);
     assert(snapshot.state == AG_STOPPED);
     assert(snapshot.position_ms == 0);
+    assert(ag_player_equalizer_status(player, &meter_status) == AG_OK);
+    assert(meter_status.output_peak_db == kMeterFloorDb);
 
     assert(ag_player_seek(player, 1'900) == AG_OK);
     assert(ag_player_play(player) == AG_OK);
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
-    assert(ag_player_snapshot(player, &snapshot) == AG_OK);
-    assert(snapshot.state == AG_STOPPED);
+    assert(waitForPlayerState(player, AG_STOPPED, snapshot,
+                              std::chrono::milliseconds(2'000)));
 
     assert(ag_player_seek(player, 500) == AG_OK);
     std::this_thread::sleep_for(std::chrono::milliseconds(80));
@@ -506,4 +1028,23 @@ int main(const int argc, char** argv)
     }
 
     ag_player_destroy(player);
+
+    const bool boundaryRegression =
+        outputMeterInvalidatesAcrossPlaybackBoundaries();
+    const bool deviceSwitchRegression =
+        outputDeviceSwitchRejectsInFlightOldCallback();
+    const bool deviceStopFailureRegression =
+        outputDeviceStopFailureRejectsInFlightOldCallback();
+    const bool deviceSnapshotExceptionRegression =
+        outputDeviceSnapshotExceptionRejectsInFlightOldCallback();
+    const bool partialUnderrunRegression =
+        outputMeterUsesRequestedFramesForPartialUnderrun();
+    const bool equalizerSubmitFailureRegression =
+        equalizerSubmitFailureKeepsPublishedState();
+    assert(boundaryRegression);
+    assert(deviceSwitchRegression);
+    assert(deviceStopFailureRegression);
+    assert(deviceSnapshotExceptionRegression);
+    assert(partialUnderrunRegression);
+    assert(equalizerSubmitFailureRegression);
 }

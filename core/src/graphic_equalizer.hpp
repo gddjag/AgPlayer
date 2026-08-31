@@ -8,13 +8,13 @@
 
 namespace agplayer {
 
-inline constexpr std::size_t kGraphicEqBandCount = 17;
+inline constexpr std::size_t kGraphicEqBandCount = 18;
 inline constexpr std::size_t kGraphicEqMaxChannels = 8;
 inline constexpr double kGraphicEqDefaultQ = 2.145;
 inline constexpr std::array<double, kGraphicEqBandCount>
     kGraphicEqBandFrequenciesHz{
         20.0, 31.5, 50.0, 80.0, 125.0, 200.0, 315.0, 500.0, 800.0,
-        1'250.0, 2'000.0, 3'150.0, 5'000.0, 8'000.0, 12'500.0,
+        1'250.0, 2'000.0, 3'150.0, 5'000.0, 8'000.0, 10'000.0, 12'500.0,
         16'000.0, 20'000.0};
 
 struct GraphicEqSettings {

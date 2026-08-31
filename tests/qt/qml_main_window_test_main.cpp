@@ -1,4 +1,5 @@
 #include "audio_tools_controller.hpp"
+#include "equalizer_controller.hpp"
 #include "filename_processor.hpp"
 #include "format_converter.hpp"
 #include "import_controller.hpp"
@@ -435,6 +436,7 @@ public slots:
             runtimeDataDirectory_.filePath(QStringLiteral("tags.json")));
         nativeDropHelper_.setLibraryModel(library_.get());
         playback_ = std::make_unique<PlaybackController>(core_, library_.get());
+        equalizer_ = std::make_unique<EqualizerController>(core_);
         importer_ = std::make_unique<ImportController>(library_.get());
         windows_ = std::make_unique<WindowController>();
         audioTools_ = std::make_unique<AudioToolsController>();
@@ -468,7 +470,7 @@ public slots:
                                     audioTools_.get(), metadataEditor_.get(),
                                     formatConverter_.get(), filenameProcessor_.get(),
                                     settings_.get(), waveformProvider_.get(),
-                                    playlists_.get(), nullptr, nullptr,
+                                    playlists_.get(), equalizer_.get(), nullptr,
                                     AgPlayerQmlRuntimeModels{
                                         tagModel_.get(),
                                         libraryNavigation_.get(),
@@ -547,6 +549,7 @@ private:
     std::unique_ptr<PlaylistModel> playlists_;
     std::unique_ptr<TagModel> tagModel_;
     std::unique_ptr<PlaybackController> playback_;
+    std::unique_ptr<EqualizerController> equalizer_;
     std::unique_ptr<ImportController> importer_;
     std::unique_ptr<WindowController> windows_;
     std::unique_ptr<AudioToolsController> audioTools_;

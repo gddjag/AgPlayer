@@ -9,6 +9,9 @@
 #include <array>
 #include <optional>
 
+using EqualizerSubmitFunction = ag_result (*)(
+    ag_player*, const ag_equalizer_settings*);
+
 class EqualizerController final : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(bool enabled READ enabled WRITE setEnabled NOTIFY enabledChanged)
@@ -18,6 +21,12 @@ class EqualizerController final : public QAbstractListModel {
     Q_PROPERTY(double preampDb READ preampDb WRITE setPreampDb
                    NOTIFY preampDbChanged)
     Q_PROPERTY(double protectionDb READ protectionDb NOTIFY protectionDbChanged)
+    Q_PROPERTY(double outputPeakDb READ outputPeakDb NOTIFY outputPeakDbChanged)
+    Q_PROPERTY(double gainRangeDb READ gainRangeDb WRITE setGainRangeDb
+                   NOTIFY gainRangeDbChanged)
+    Q_PROPERTY(QString precisionMode READ precisionMode WRITE setPrecisionMode
+                   NOTIFY precisionModeChanged)
+    Q_PROPERTY(double gainStepDb READ gainStepDb NOTIFY gainStepDbChanged)
     Q_PROPERTY(QString currentPresetId READ currentPresetId
                    NOTIFY currentPresetChanged)
     Q_PROPERTY(QStringList presetIds READ presetIds NOTIFY presetsChanged)
@@ -34,7 +43,9 @@ public:
     };
     Q_ENUM(Role)
 
-    explicit EqualizerController(ag_player* player, QObject* parent = nullptr);
+    explicit EqualizerController(
+        ag_player* player, QObject* parent = nullptr,
+        EqualizerSubmitFunction submitFunction = &ag_player_set_equalizer);
 
     [[nodiscard]] int rowCount(
         const QModelIndex& parent = QModelIndex()) const override;
@@ -51,6 +62,12 @@ public:
     [[nodiscard]] double preampDb() const noexcept;
     void setPreampDb(double value);
     [[nodiscard]] double protectionDb() const noexcept;
+    [[nodiscard]] double outputPeakDb() const noexcept;
+    [[nodiscard]] double gainRangeDb() const noexcept;
+    Q_INVOKABLE bool setGainRangeDb(double value);
+    [[nodiscard]] QString precisionMode() const;
+    Q_INVOKABLE bool setPrecisionMode(const QString& mode);
+    [[nodiscard]] double gainStepDb() const noexcept;
     [[nodiscard]] QString currentPresetId() const;
     [[nodiscard]] QStringList presetIds() const;
     [[nodiscard]] QStringList presetNames() const;
@@ -73,6 +90,10 @@ signals:
     void autoClipProtectionChanged();
     void preampDbChanged();
     void protectionDbChanged();
+    void outputPeakDbChanged();
+    void gainRangeDbChanged();
+    void precisionModeChanged();
+    void gainStepDbChanged();
     void bandGainChanged(int index, double gainDb);
     void currentPresetChanged();
     void presetsChanged();
@@ -88,22 +109,44 @@ private:
         bool builtIn = false;
     };
 
+    struct SubmittedState {
+        // AudioEngine starts with this same EQ default before the controller's
+        // first submission, so it is a valid rollback baseline.
+        bool valid = true;
+        bool enabled = true;
+        bool bypassed = false;
+        bool autoClipProtection = true;
+        double preampDb = 0.0;
+        double gainRangeDb = 12.0;
+        std::array<double, AG_EQUALIZER_BAND_COUNT> gains{};
+        QString currentPresetId = QStringLiteral("flat");
+    };
+
     static double normalizedGain(double value) noexcept;
+    [[nodiscard]] double quantizedGain(double value) const noexcept;
     [[nodiscard]] QList<Preset> builtInPresets() const;
     [[nodiscard]] std::optional<Preset> findPreset(const QString& id) const;
     void load();
     void persist() const;
     bool submit();
+    void rememberSubmittedState();
+    void restoreSubmittedState();
+    void synchronizeSubmittedMetadata();
     void setCurrentPresetId(const QString& id);
 
     ag_player* player_ = nullptr;
+    EqualizerSubmitFunction submitFunction_ = &ag_player_set_equalizer;
     bool enabled_ = false;
     bool bypassed_ = false;
     bool autoClipProtection_ = true;
     double preampDb_ = 0.0;
     double protectionDb_ = 0.0;
+    double outputPeakDb_ = -120.0;
+    double gainRangeDb_ = 12.0;
+    QString precisionMode_ = QStringLiteral("high");
     std::array<double, AG_EQUALIZER_BAND_COUNT> gains_{};
     QString currentPresetId_ = QStringLiteral("flat");
     QList<Preset> customPresets_;
     quint64 revision_ = 0;
+    SubmittedState submittedState_;
 };

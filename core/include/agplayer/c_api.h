@@ -79,7 +79,7 @@ typedef struct ag_output_levels {
     float right_rms;
 } ag_output_levels;
 
-#define AG_EQUALIZER_BAND_COUNT 17
+#define AG_EQUALIZER_BAND_COUNT 18
 
 typedef struct ag_equalizer_settings {
     unsigned long long revision;
@@ -100,6 +100,7 @@ typedef struct ag_equalizer_status {
     int sample_rate;
     int active;
     double protection_db;
+    double output_peak_db;
 } ag_equalizer_status;
 
 ag_result ag_player_create(ag_player** out_player);

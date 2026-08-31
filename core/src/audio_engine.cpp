@@ -25,6 +25,7 @@
 #include <condition_variable>
 #include <cstdint>
 #include <mutex>
+#include <new>
 #include <random>
 #include <thread>
 #include <utility>
@@ -40,6 +41,10 @@ static_assert(std::atomic<int>::is_always_lock_free);
 static_assert(std::atomic<EngineState>::is_always_lock_free);
 static_assert(std::atomic<PlaybackMode>::is_always_lock_free);
 static_assert(std::atomic<ag_result>::is_always_lock_free);
+static_assert(
+    std::atomic<OutputDeviceSwitchTestBarrier*>::is_always_lock_free);
+static_assert(
+    std::atomic<OutputDeviceSwitchTestFailure>::is_always_lock_free);
 
 namespace {
 
@@ -47,6 +52,44 @@ constexpr std::size_t spectrum_fft_size = 512U;
 constexpr std::size_t spectrum_tap_capacity = 8'192U;
 constexpr std::size_t spectrum_max_bins = spectrum_fft_size / 2U;
 constexpr float spectrum_pi = 3.14159265358979323846F;
+constexpr float output_meter_floor_linear = 1.0e-6F;
+constexpr double output_meter_floor_db = -120.0;
+constexpr float output_meter_release_db_per_second = 12.0F;
+
+class OutputMeterAttemptGuard final {
+public:
+    explicit OutputMeterAttemptGuard(
+        std::atomic<std::uint64_t>& generation) noexcept
+        : generation_(generation)
+    {
+    }
+
+    ~OutputMeterAttemptGuard()
+    {
+        if (!succeeded_) {
+            generation_.fetch_add(1U, std::memory_order_acq_rel);
+        }
+    }
+
+    void succeed() noexcept { succeeded_ = true; }
+
+private:
+    std::atomic<std::uint64_t>& generation_;
+    bool succeeded_ = false;
+};
+
+float integer_power(float base, std::size_t exponent) noexcept
+{
+    float result = 1.0F;
+    while (exponent > 0U) {
+        if ((exponent & 1U) != 0U) {
+            result *= base;
+        }
+        base *= base;
+        exponent >>= 1U;
+    }
+    return result;
+}
 
 void fft(std::array<std::complex<float>, spectrum_fft_size>& values) noexcept
 {
@@ -936,6 +979,7 @@ public:
         if (state != EngineState::Stopped && state != EngineState::Paused) {
             return AG_INVALID_ARGUMENT;
         }
+        invalidate_output_meter();
         if (!state_.compare_exchange_strong(state,
                                             EngineState::Playing,
                                             std::memory_order_acq_rel,
@@ -980,6 +1024,7 @@ public:
         if (state != EngineState::Playing) {
             return AG_INVALID_ARGUMENT;
         }
+        invalidate_output_meter();
         if (stop_output() != AG_OK) {
             device_lock.unlock();
             return enter_error(AG_DEVICE_ERROR);
@@ -1006,6 +1051,7 @@ public:
             return AG_INVALID_ARGUMENT;
         }
         hard_invalidate_scratch();
+        invalidate_output_meter();
         state_.store(EngineState::Stopped, std::memory_order_release);
         stop_decode_thread();
         if (stop_output() != AG_OK) {
@@ -1050,6 +1096,7 @@ public:
         if (!loaded_ || position_ms < 0 || position_ms > duration) {
             return AG_INVALID_ARGUMENT;
         }
+        invalidate_output_meter();
         if (time_pitch_request_state_.load(std::memory_order_acquire)
             != TimePitchRequestState::Idle) {
             return AG_CANCELLED;
@@ -1673,6 +1720,13 @@ public:
         if (!program.has_value()) {
             return AG_INVALID_ARGUMENT;
         }
+        if (is_graphic_eq_sample_rate_supported(current_rate)) {
+            if (fail_next_equalizer_submit_for_test_.exchange(
+                    false, std::memory_order_acq_rel)
+                || !equalizer_.submit(*program)) {
+                return AG_INTERNAL_ERROR;
+            }
+        }
         {
             const std::lock_guard<std::mutex> lock(equalizer_settings_mutex_);
             equalizer_settings_ = settings;
@@ -1691,15 +1745,31 @@ public:
             settings.enabled && !settings.bypassed
                 && is_graphic_eq_sample_rate_supported(current_rate),
             std::memory_order_release);
-        if (is_graphic_eq_sample_rate_supported(current_rate)
-            && !equalizer_.submit(*program)) {
-            return AG_INTERNAL_ERROR;
-        }
         return AG_OK;
     }
 
     [[nodiscard]] EqualizerStatus equalizer_status() const noexcept
     {
+        double output_peak_db = output_meter_floor_db;
+        const std::uint64_t meter_generation =
+            output_meter_generation_.load(std::memory_order_acquire);
+        if (output_meter_valid_generation_.load(std::memory_order_acquire)
+                == meter_generation
+            && state_.load(std::memory_order_acquire) == EngineState::Playing
+            && !muted_.load(std::memory_order_acquire)
+            && !device_lost_.load(std::memory_order_acquire)
+            && !seeking_.load(std::memory_order_acquire)) {
+            const float output_peak =
+                output_peak_linear_.load(std::memory_order_acquire);
+            if (output_meter_generation_.load(std::memory_order_acquire)
+                    == meter_generation
+                && std::isfinite(output_peak)
+                && output_peak > output_meter_floor_linear) {
+                output_peak_db = (std::max)(
+                    output_meter_floor_db,
+                    20.0 * std::log10(static_cast<double>(output_peak)));
+            }
+        }
         return {
             equalizer_revision_status_.load(std::memory_order_acquire),
             equalizer_enabled_status_.load(std::memory_order_acquire),
@@ -1707,11 +1777,16 @@ public:
             equalizer_auto_protection_status_.load(std::memory_order_acquire),
             equalizer_sample_rate_status_.load(std::memory_order_acquire),
             equalizer_active_status_.load(std::memory_order_acquire),
-            equalizer_protection_status_.load(std::memory_order_acquire)};
+            equalizer_protection_status_.load(std::memory_order_acquire),
+            output_peak_db};
     }
 
     void set_muted(const bool muted) noexcept
     {
+        if (muted_.load(std::memory_order_acquire) == muted) {
+            return;
+        }
+        invalidate_output_meter();
         muted_.store(muted, std::memory_order_release);
     }
 
@@ -1826,7 +1901,13 @@ public:
 
     void render(float* output, const std::size_t requested_frames) noexcept
     {
+        const std::uint64_t meter_generation =
+            output_meter_generation_.load(std::memory_order_acquire);
+        wait_at_output_device_switch_test_barrier();
         if (output == nullptr || requested_frames == 0U) {
+            output_peak_linear_.store(0.0F, std::memory_order_release);
+            output_meter_valid_generation_.store(0U,
+                                                  std::memory_order_release);
             publish_output_levels(nullptr, 0U, 0U);
             return;
         }
@@ -1836,6 +1917,9 @@ public:
              && !scratch)
             || device_lost_.load(std::memory_order_acquire)
             || seeking_.load(std::memory_order_acquire)) {
+            output_peak_linear_.store(0.0F, std::memory_order_release);
+            output_meter_valid_generation_.store(0U,
+                                                  std::memory_order_release);
             std::fill(output, output + requested_frames * channels, 0.0F);
             publish_output_levels(output, requested_frames, channels);
             return;
@@ -1863,6 +1947,9 @@ public:
             || !transition_version_.compare_exchange_strong(
                 epoch, epoch + 1U, std::memory_order_acq_rel,
                 std::memory_order_acquire)) {
+            output_peak_linear_.store(0.0F, std::memory_order_release);
+            output_meter_valid_generation_.store(0U,
+                                                  std::memory_order_release);
             std::fill(output, output + requested_frames * channels, 0.0F);
             publish_output_levels(output, requested_frames, channels);
             return;
@@ -1907,6 +1994,7 @@ public:
                         : 0;
         const std::int64_t fade_boundary =
             fade_boundary_frame_.load(std::memory_order_acquire);
+        float block_peak = 0.0F;
         for (std::size_t frame = 0U; frame < frames; ++frame) {
             float transition_gain = 1.0F;
             if (fade_frames > 0 && fade_boundary >= 0) {
@@ -1926,8 +2014,40 @@ public:
                 }
             }
             for (std::size_t channel = 0U; channel < channels; ++channel) {
-                output[frame * channels + channel] *=
-                    gain * transition_gain;
+                float& sample = output[frame * channels + channel];
+                sample *= gain * transition_gain;
+                block_peak = (std::max)(block_peak, std::abs(sample));
+            }
+        }
+        if (frames == 0U || gain <= 0.0F) {
+            output_peak_linear_.store(0.0F, std::memory_order_release);
+            output_meter_valid_generation_.store(0U,
+                                                  std::memory_order_release);
+        } else {
+            const float previous_peak =
+                output_meter_valid_generation_.load(
+                    std::memory_order_relaxed) == meter_generation
+                ? output_peak_linear_.load(std::memory_order_relaxed)
+                : 0.0F;
+            const float release_gain = integer_power(
+                output_meter_release_per_frame_.load(
+                    std::memory_order_relaxed),
+                requested_frames);
+            if (output_meter_generation_.load(std::memory_order_acquire)
+                    == meter_generation
+                && state_.load(std::memory_order_acquire)
+                       == EngineState::Playing
+                && !muted_.load(std::memory_order_acquire)
+                && !device_lost_.load(std::memory_order_acquire)
+                && !seeking_.load(std::memory_order_acquire)) {
+                output_peak_linear_.store(
+                    (std::max)(block_peak, previous_peak * release_gain),
+                    std::memory_order_release);
+                output_meter_valid_generation_.store(
+                    meter_generation, std::memory_order_release);
+            } else {
+                output_meter_valid_generation_.store(
+                    0U, std::memory_order_release);
             }
         }
         tap_spectrum(output, frames, channels);
@@ -1991,6 +2111,7 @@ public:
         if (!device_lost_.load(std::memory_order_acquire)) {
             return AG_OK;
         }
+        invalidate_output_meter();
         if (!loaded_) {
             // No media loaded: nothing to reinitialize. Clear the stale flag
             // so callers (and tests) see the recovered state. The device will
@@ -2045,6 +2166,7 @@ public:
         const std::lock_guard<std::recursive_mutex> control_lock(
             control_mutex_);
         hard_invalidate_scratch();
+        invalidate_output_meter();
         device_lost_.store(true, std::memory_order_release);
         stop_output();
         stop_decode_thread();
@@ -2244,21 +2366,35 @@ public:
             if (!recovering && scratch_resources) {
                 hard_invalidate_scratch();
             }
+            invalidate_output_meter();
+            OutputMeterAttemptGuard meter_attempt(output_meter_generation_);
 
-            const std::string previous_id = selected_device_id_;
-            const bool previous_exclusive = exclusive_mode_;
             const EngineState previous_state =
                 state_.load(std::memory_order_acquire);
             const bool resume = previous_state == EngineState::Playing;
+            if (resume) {
+                arm_output_device_switch_test_barrier(1, true);
+            }
+            if (output_device_switch_test_failure()
+                == OutputDeviceSwitchTestFailure::BeforeStateSnapshot) {
+                throw std::bad_alloc{};
+            }
+            const std::string previous_id = selected_device_id_;
+            const bool previous_exclusive = exclusive_mode_;
+
             if (device_initialized_) {
                 if (stop_output() != AG_OK && !recovering) {
-                    return enter_error(AG_DEVICE_ERROR);
+                    return AG_DEVICE_ERROR;
                 }
                 ma_device_uninit(&device_);
                 device_initialized_ = false;
             }
             if (scratch_resources) {
                 destroy_scratch_resources_after_output_stopped();
+            }
+            invalidate_output_meter();
+            if (resume) {
+                arm_output_device_switch_test_barrier(2, false);
             }
             if (recovering) {
                 const ag_result recovery_result =
@@ -2269,6 +2405,7 @@ public:
             selected_device_id_ = std::move(utf8_id);
             exclusive_mode_ = exclusive;
             if (!loaded_) {
+                meter_attempt.succeed();
                 return AG_OK;
             }
 
@@ -2293,6 +2430,7 @@ public:
                 device_lost_.store(false, std::memory_order_release);
                 seek_cv_.notify_all();
                 if (!resume || start_output() == AG_OK) {
+                    meter_attempt.succeed();
                     return AG_OK;
                 }
             }
@@ -2341,6 +2479,19 @@ public:
     [[nodiscard]] bool exclusive_mode_active() const noexcept
     {
         return device_initialized_ && active_exclusive_mode_;
+    }
+
+    void set_output_device_switch_test_barrier(
+        OutputDeviceSwitchTestBarrier* const barrier) noexcept
+    {
+        output_device_switch_test_barrier_.store(barrier,
+                                                 std::memory_order_release);
+    }
+
+    void fail_next_equalizer_submit_for_test() noexcept
+    {
+        fail_next_equalizer_submit_for_test_.store(true,
+                                                   std::memory_order_release);
     }
 
     ag_result set_transition_fade_ms(const int milliseconds) noexcept
@@ -2398,6 +2549,7 @@ private:
         // closest equivalent and fires when the audio session is interrupted
         // (device unplugged, exclusive-mode takeover, etc.).
         if (notification->type == ma_device_notification_type_interruption_began) {
+            self->invalidate_output_meter();
             self->publish_device_loss_from_backend_callback();
         }
     }
@@ -2423,6 +2575,10 @@ private:
         const std::lock_guard<std::recursive_mutex> lock(device_mutex_);
         if (backend_ == AudioBackend::Manual || !device_initialized_) {
             return AG_OK;
+        }
+        if (output_device_switch_test_failure()
+            == OutputDeviceSwitchTestFailure::StopOutput) {
+            return AG_DEVICE_ERROR;
         }
         return ma_device_stop(&device_) == MA_SUCCESS ? AG_OK : AG_DEVICE_ERROR;
     }
@@ -3380,6 +3536,7 @@ private:
 
     void reset_timeline_locked(const std::int64_t position_frames) noexcept
     {
+        invalidate_output_meter();
         decode_mapper_generation_ = next_mapper_generation();
         published_mapper_generation_.store(decode_mapper_generation_,
                                            std::memory_order_release);
@@ -3865,6 +4022,13 @@ private:
 
     void publish_equalizer_for_rate(const int sample_rate) noexcept
     {
+        const float release_per_frame = sample_rate > 0
+            ? std::pow(10.0F,
+                       -output_meter_release_db_per_second
+                           / (20.0F * static_cast<float>(sample_rate)))
+            : 0.0F;
+        output_meter_release_per_frame_.store(release_per_frame,
+                                              std::memory_order_release);
         GraphicEqSettings settings;
         std::uint64_t revision = 0;
         {
@@ -3898,6 +4062,59 @@ private:
                                            std::memory_order_release);
         equalizer_active_status_.store(settings.enabled && !settings.bypassed,
                                        std::memory_order_release);
+    }
+
+    void invalidate_output_meter() noexcept
+    {
+        output_meter_generation_.fetch_add(1U, std::memory_order_acq_rel);
+    }
+
+    void wait_at_output_device_switch_test_barrier() noexcept
+    {
+        OutputDeviceSwitchTestBarrier* const barrier =
+            output_device_switch_test_barrier_.load(std::memory_order_acquire);
+        if (barrier == nullptr) {
+            return;
+        }
+        int phase = barrier->armed_phase.load(std::memory_order_acquire);
+        if (phase == 0
+            || !barrier->armed_phase.compare_exchange_strong(
+                phase, 0, std::memory_order_acq_rel,
+                std::memory_order_acquire)) {
+            return;
+        }
+        barrier->entered_phase.store(phase, std::memory_order_release);
+        while (barrier->release_phase.load(std::memory_order_acquire) < phase
+               && !barrier->cancelled.load(std::memory_order_acquire)) {
+            std::this_thread::yield();
+        }
+    }
+
+    void arm_output_device_switch_test_barrier(const int phase,
+                                                const bool wait) noexcept
+    {
+        OutputDeviceSwitchTestBarrier* const barrier =
+            output_device_switch_test_barrier_.load(std::memory_order_acquire);
+        if (barrier == nullptr) {
+            return;
+        }
+        barrier->armed_phase.store(phase, std::memory_order_release);
+        while (wait
+               && barrier->entered_phase.load(std::memory_order_acquire)
+                      < phase
+               && !barrier->cancelled.load(std::memory_order_acquire)) {
+            std::this_thread::yield();
+        }
+    }
+
+    [[nodiscard]] OutputDeviceSwitchTestFailure
+    output_device_switch_test_failure() const noexcept
+    {
+        OutputDeviceSwitchTestBarrier* const barrier =
+            output_device_switch_test_barrier_.load(std::memory_order_acquire);
+        return barrier == nullptr
+            ? OutputDeviceSwitchTestFailure::None
+            : barrier->failure.load(std::memory_order_acquire);
     }
 
     AudioBackend backend_;
@@ -4013,6 +4230,13 @@ private:
     std::atomic<int> equalizer_sample_rate_status_{0};
     std::atomic<bool> equalizer_active_status_{false};
     std::atomic<double> equalizer_protection_status_{0.0};
+    std::atomic<float> output_peak_linear_{0.0F};
+    std::atomic<float> output_meter_release_per_frame_{0.0F};
+    std::atomic<std::uint64_t> output_meter_generation_{1U};
+    std::atomic<std::uint64_t> output_meter_valid_generation_{0U};
+    std::atomic<OutputDeviceSwitchTestBarrier*>
+        output_device_switch_test_barrier_{nullptr};
+    std::atomic<bool> fail_next_equalizer_submit_for_test_{false};
     std::atomic<bool> muted_{false};
     std::atomic<int> transition_fade_ms_{0};
     std::atomic<bool> match_track_sample_rate_{false};
@@ -4367,6 +4591,17 @@ ag_result AudioEngine::set_output_device(std::string utf8_id,
 bool AudioEngine::exclusive_mode_active() const noexcept
 {
     return impl_->exclusive_mode_active();
+}
+
+void AudioEngine::set_output_device_switch_test_barrier(
+    OutputDeviceSwitchTestBarrier* const barrier) noexcept
+{
+    impl_->set_output_device_switch_test_barrier(barrier);
+}
+
+void AudioEngine::fail_next_equalizer_submit_for_test() noexcept
+{
+    impl_->fail_next_equalizer_submit_for_test();
 }
 
 ag_result AudioEngine::set_transition_fade_ms(

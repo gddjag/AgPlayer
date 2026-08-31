@@ -6,6 +6,7 @@
 
 #include <agplayer/c_api.h>
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -58,6 +59,24 @@ struct EqualizerStatus {
     int sample_rate = 0;
     bool active = false;
     double protection_db = 0.0;
+    double output_peak_db = -120.0;
+};
+
+enum class OutputDeviceSwitchTestFailure {
+    None,
+    StopOutput,
+    BeforeStateSnapshot,
+};
+
+// Test-only lock-free seam for deterministically holding callbacks and
+// injecting device-switch failures. Null in production.
+struct OutputDeviceSwitchTestBarrier final {
+    std::atomic<int> armed_phase{0};
+    std::atomic<int> entered_phase{0};
+    std::atomic<int> release_phase{0};
+    std::atomic<bool> cancelled{false};
+    std::atomic<OutputDeviceSwitchTestFailure> failure{
+        OutputDeviceSwitchTestFailure::None};
 };
 
 struct ScratchStatus {
@@ -125,6 +144,11 @@ public:
     [[nodiscard]] std::vector<OutputDevice> output_devices() noexcept;
     ag_result set_output_device(std::string utf8_id,
                                 bool exclusive) noexcept;
+    // Installs no production behavior unless a test explicitly supplies it.
+    void set_output_device_switch_test_barrier(
+        OutputDeviceSwitchTestBarrier* barrier) noexcept;
+    // One-shot test seam; has no effect unless a test explicitly arms it.
+    void fail_next_equalizer_submit_for_test() noexcept;
     [[nodiscard]] bool exclusive_mode_active() const noexcept;
     ag_result set_transition_fade_ms(int milliseconds) noexcept;
     ag_result set_duration_ms(std::int64_t duration_ms) noexcept;
