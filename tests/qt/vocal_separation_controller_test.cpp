@@ -60,6 +60,8 @@ private slots:
     void downloadsMultipleArtifactsSequentiallyThroughTheController();
     void downloadProgressNeverMutatesAnActiveSeparationJob();
     void installedMappingUsesCheapDiscoveryThenExplicitAsyncHashing();
+    void customModelDirectoryPersistsAndRecognizesTrustedFlatFiles();
+    void customModelDirectoryIgnoresUnknownFiles();
     void cancellingVerificationImmediatelyRestoresCheapModelStates();
     void deletingDuringRefreshVerificationCannotResurrectTheModel();
     void verificationHashHonorsCancellationBeforeReadingFile();
@@ -548,6 +550,68 @@ installedMappingUsesCheapDiscoveryThenExplicitAsyncHashing()
     QTRY_COMPARE_WITH_TIMEOUT(
         modelStateFor(controller.models(), QStringLiteral("two-stem")),
         int(VocalSeparationController::ModelState::NotInstalled), 5000);
+}
+
+void VocalSeparationControllerTest::
+customModelDirectoryPersistsAndRecognizesTrustedFlatFiles()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray modelBytes("trusted-test-model");
+    const auto options = optionsFor(
+        temporary, QStringLiteral("stale"), modelBytes);
+    const QString customRoot = temporary.filePath(
+        QStringLiteral("用户模型目录"));
+    QVERIFY(QDir().mkpath(customRoot));
+
+    {
+        AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+        WaveformProvider waveforms;
+        VocalSeparationController controller(
+            &preview, &waveforms, nullptr, nullptr, nullptr, options);
+        QVERIFY(controller.selectModelDirectory(
+            QUrl::fromLocalFile(customRoot)));
+        QCOMPARE(controller.modelStorageDirectory(),
+                 QFileInfo(customRoot).absoluteFilePath());
+        QVERIFY(writeBytes(QDir(customRoot).filePath(
+                               QStringLiteral("test.onnx")),
+                           modelBytes));
+        QTRY_COMPARE_WITH_TIMEOUT(
+            modelStateFor(controller.models(), QStringLiteral("two-stem")),
+            int(VocalSeparationController::ModelState::Installed), 5000);
+    }
+
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController restored(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+    QCOMPARE(restored.modelStorageDirectory(),
+             QFileInfo(customRoot).absoluteFilePath());
+    QTRY_COMPARE_WITH_TIMEOUT(
+        modelStateFor(restored.models(), QStringLiteral("two-stem")),
+        int(VocalSeparationController::ModelState::Installed), 5000);
+}
+
+void VocalSeparationControllerTest::customModelDirectoryIgnoresUnknownFiles()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray modelBytes("trusted-test-model");
+    const auto options = optionsFor(
+        temporary, QStringLiteral("stale"), modelBytes);
+    const QString customRoot = temporary.filePath(QStringLiteral("模型"));
+    QVERIFY(QDir().mkpath(customRoot));
+    QVERIFY(writeBytes(QDir(customRoot).filePath(
+                               QStringLiteral("unknown.onnx")),
+                           modelBytes));
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.selectModelDirectory(QUrl::fromLocalFile(customRoot)));
+    QTest::qWait(900);
+    QCOMPARE(modelStateFor(controller.models(), QStringLiteral("two-stem")),
+             int(VocalSeparationController::ModelState::NotInstalled));
 }
 
 void VocalSeparationControllerTest::
@@ -1262,6 +1326,8 @@ runningRequestRejectsMutationsThatWouldChangeItsMeaning()
     QVERIFY(!controller.selectOutputFormat(QStringLiteral("flac")));
     QVERIFY(!controller.selectOutputDirectory(QUrl::fromLocalFile(
         temporary.filePath(QStringLiteral("next-output")))));
+    QVERIFY(!controller.selectModelDirectory(QUrl::fromLocalFile(
+        temporary.filePath(QStringLiteral("next-models")))));
     QVERIFY(!controller.selectDevice(
         VocalSeparationController::DeviceMode::CPU));
     QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(),

@@ -136,7 +136,7 @@ TestCase {
                "custom mode must use the dedicated reference-card treatment")
         verify(customCopy.text.indexOf("受信模型") >= 0,
                "custom card must state the currently executable scope truthfully")
-        verify(customDetails.text.indexOf("自动识别") < 0)
+        verify(customDetails.text.indexOf("自动识别") >= 0)
         verify(customDetails.text.indexOf("不会执行") >= 0)
         const firstAction = findChild(firstCard, "separationModelAction-uvr-mdxnet-kara")
         verify(firstAction && firstAction.height <= 26,
@@ -156,6 +156,33 @@ TestCase {
         mouseClick(secondCard, secondCard.width / 2, 18)
         compare(VocalSeparationController.selectedModelId, "uvr-mdx-net-inst-hq3")
         separationTestDriver.selectModel("uvr-mdxnet-kara")
+    }
+
+    function test_customModelDirectoryAndBackupDownloadControlsAreComplete() {
+        const list = findChild(page, "separationModelList")
+        const customCard = findChild(page, "separationCustomModelCard")
+        const openDirectory = findChild(page, "separationOpenModelDirectory")
+        const changeDirectory = findChild(page, "separationChangeModelDirectory")
+        const backupText = findChild(page, "separationBackupModelText")
+        verify(list && customCard && openDirectory && changeDirectory && backupText)
+        const customRight = customCard.mapToItem(list, customCard.width, 0).x
+        verify(customRight <= list.width + 1,
+               "both custom model directory actions must be visible at the reference width")
+        compare(openDirectory.text, "打开模型目录")
+        compare(changeDirectory.text, "更改目录")
+        verify(backupText.text.indexOf("如果点击模型下载太慢或者下载不了") >= 0)
+        verify(backupText.text.indexOf("https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888") >= 0)
+        verify(backupText.text.indexOf("提取码: 8888") >= 0)
+    }
+
+    function test_inputChooserAdvertisesAudioAndVideoContainers() {
+        const dialog = findChild(page, "separationInputDialog")
+        verify(dialog)
+        const filters = dialog.nameFilters.join(" ").toLowerCase()
+        verify(filters.indexOf("*.mp4") >= 0)
+        verify(filters.indexOf("*.mkv") >= 0)
+        verify(filters.indexOf("*.mov") >= 0)
+        verify(filters.indexOf("*.webm") >= 0)
     }
 
     function test_outputTracksShowIconsChecksAndUnavailableStates() {
