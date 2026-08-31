@@ -403,6 +403,42 @@ add_test(NAME waveform_analyzer_test
 )
 set_tests_properties(waveform_analyzer_test PROPERTIES TIMEOUT 10)
 
+add_executable(normal_waveform_performance_probe
+    stress/normal_waveform_performance_probe.cpp
+)
+add_dependencies(normal_waveform_performance_probe decoder_fixture)
+target_link_libraries(normal_waveform_performance_probe PRIVATE agplayer_core)
+if(WIN32)
+    target_link_libraries(normal_waveform_performance_probe PRIVATE Psapi)
+endif()
+agplayer_enable_warnings(normal_waveform_performance_probe)
+add_test(NAME normal_waveform_performance_probe
+    COMMAND normal_waveform_performance_probe "${SINE_WAV_FIXTURE}" --cold
+)
+set_tests_properties(normal_waveform_performance_probe PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
+add_executable(decoder_timeline_contract_test
+    stress/decoder_timeline_contract_test.cpp
+)
+add_dependencies(decoder_timeline_contract_test decoder_fixture)
+target_include_directories(decoder_timeline_contract_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(decoder_timeline_contract_test PRIVATE agplayer_core)
+agplayer_enable_warnings(decoder_timeline_contract_test)
+add_test(NAME decoder_timeline_contract_test
+    COMMAND decoder_timeline_contract_test "${SINE_WAV_FIXTURE}"
+)
+set_tests_properties(decoder_timeline_contract_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
 add_executable(frequency_color_waveform_analyzer_test
     core/frequency_color_waveform_analyzer_test.cpp
 )
@@ -1397,6 +1433,30 @@ add_test(NAME track_waveform_thumbnail_stress_test
 set_tests_properties(track_waveform_thumbnail_stress_test PROPERTIES
     TIMEOUT 60
     LABELS stress
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+add_executable(frequency_color_waveform_stress_test
+    stress/frequency_color_waveform_stress_test.cpp
+)
+set_target_properties(frequency_color_waveform_stress_test PROPERTIES AUTOMOC ON)
+target_include_directories(frequency_color_waveform_stress_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src"
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(frequency_color_waveform_stress_test PRIVATE
+    agplayer_qt Qt6::Test
+)
+if (WIN32)
+    target_link_libraries(frequency_color_waveform_stress_test PRIVATE Psapi)
+endif()
+agplayer_enable_warnings(frequency_color_waveform_stress_test)
+add_test(NAME frequency_color_waveform_stress_test
+    COMMAND frequency_color_waveform_stress_test)
+set_tests_properties(frequency_color_waveform_stress_test PROPERTIES
+    TIMEOUT 120
+    LABELS stress
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=2"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )

@@ -339,6 +339,44 @@ public:
 
 } // namespace
 
+void FrequencyFramePressure::resetWindow() noexcept
+{
+    slow_frames = 0;
+    slow_window_.fill(0U);
+    window_samples_ = 0;
+    window_cursor_ = 0;
+}
+
+void FrequencyFramePressure::record(
+    const std::chrono::milliseconds interval) noexcept
+{
+    const bool slow = interval > std::chrono::milliseconds{22};
+    if (window_samples_ == static_cast<int>(slow_window_.size())) {
+        slow_frames -= slow_window_[static_cast<std::size_t>(window_cursor_)] != 0U
+            ? 1 : 0;
+    } else {
+        ++window_samples_;
+    }
+    slow_window_[static_cast<std::size_t>(window_cursor_)] = slow ? 1U : 0U;
+    slow_frames += slow ? 1 : 0;
+    window_cursor_ = (window_cursor_ + 1)
+        % static_cast<int>(slow_window_.size());
+
+    stable_frames = interval < std::chrono::milliseconds{18}
+        ? stable_frames + 1 : 0;
+    if (slow_frames >= 45 && quality_penalty < 2) {
+        ++quality_penalty;
+        stable_frames = 0;
+        resetWindow();
+        return;
+    }
+    if (stable_frames >= 240 && quality_penalty > 0) {
+        --quality_penalty;
+        stable_frames = 0;
+        resetWindow();
+    }
+}
+
 WaveformItem::WaveformItem(QQuickItem* parent)
     : QQuickItem(parent)
     , peakSnapshot_(std::make_shared<const PeakSnapshot>())
@@ -521,6 +559,7 @@ void WaveformItem::setCursorPosition(qreal position)
     emit cursorPositionChanged();
     emit waveformCursorXChanged();
     if (visualMode_ == 3) {
+        recordFrequencyFrameInterval();
         update();
     }
 }
@@ -536,6 +575,7 @@ void WaveformItem::setPosition(qreal position)
     position_ = clamped;
     emit positionChanged();
     emit waveformCursorXChanged();
+    recordFrequencyFrameInterval();
     update();
 }
 
@@ -630,6 +670,7 @@ void WaveformItem::setVisualMode(int mode)
     spectrumVisual_.clear();
     spectrumPeakHold_.clear();
     spectrumTimer_.invalidate();
+    frequencyFrameTimer_.invalidate();
     emit visualModeChanged();
     update();
 }
@@ -807,6 +848,47 @@ int WaveformItem::effectiveFrequencyQuality() const noexcept
     return effectiveFrequencyQuality_;
 }
 
+std::uint64_t WaveformItem::frequencyGeometryRevision() const noexcept
+{
+    return frequencyGeometryRevision_;
+}
+
+std::uint64_t WaveformItem::frequencyMaterialRevision() const noexcept
+{
+    return frequencyMaterialRevision_;
+}
+
+void WaveformItem::recordFrequencyFrameInterval()
+{
+    if (visualMode_ != 3 || !isVisible()) {
+        frequencyFrameTimer_.invalidate();
+        return;
+    }
+    if (!frequencyFrameTimer_.isValid()) {
+        frequencyFrameTimer_.start();
+        return;
+    }
+    const qint64 elapsed = frequencyFrameTimer_.restart();
+    const int previousPenalty = frequencyFramePressure_.quality_penalty;
+    frequencyFramePressure_.record(std::chrono::milliseconds{
+        std::max<qint64>(0, elapsed)});
+    if (frequencyFramePressure_.quality_penalty != previousPenalty) {
+        updateEffectiveFrequencyQuality();
+    }
+}
+
+void WaveformItem::updateEffectiveFrequencyQuality()
+{
+    const int nextQuality = std::min(
+        2, baseFrequencyQuality_ + frequencyFramePressure_.quality_penalty);
+    if (effectiveFrequencyQuality_ == nextQuality) {
+        return;
+    }
+    effectiveFrequencyQuality_ = nextQuality;
+    emit effectiveFrequencyQualityChanged();
+    update();
+}
+
 bool WaveformItem::rgbProgress() const noexcept { return rgbProgress_; }
 
 void WaveformItem::setRgbProgress(bool value)
@@ -976,12 +1058,9 @@ void WaveformItem::geometryChange(const QRectF& newGeometry,
         emit renderWidthChanged();
         emit waveformCursorXChanged();
     }
-    const int nextQuality = newGeometry.height() >= 120.0
+    baseFrequencyQuality_ = newGeometry.height() >= 120.0
         ? 0 : newGeometry.height() >= 64.0 ? 1 : 2;
-    if (effectiveFrequencyQuality_ != nextQuality) {
-        effectiveFrequencyQuality_ = nextQuality;
-        emit effectiveFrequencyQualityChanged();
-    }
+    updateEffectiveFrequencyQuality();
 }
 
 QSGNode* WaveformItem::updateFrequencyPaintNode(
@@ -1013,7 +1092,7 @@ QSGNode* WaveformItem::updateFrequencyPaintNode(
             || window()->rendererInterface()->graphicsApi()
                 == QSGRendererInterface::Software;
     }
-    const int quality = height() >= 120.0 ? 0 : height() >= 64.0 ? 1 : 2;
+    const int quality = effectiveFrequencyQuality();
     const bool lineFallback = software || quality == 2;
     const double qualityScale = quality == 0 ? 1.0 : quality == 1 ? 0.75 : 0.5;
     const std::size_t baseRequestedPoints = std::max<std::size_t>(
@@ -1077,6 +1156,7 @@ QSGNode* WaveformItem::updateFrequencyPaintNode(
     }
 
     if (geometryChanged) {
+        ++frequencyGeometryRevision_;
         auto* baselineGeometry = root->baseline()->geometry();
         baselineGeometry->allocate(2);
         auto* baselineVertices = baselineGeometry->vertexDataAsColoredPoint2D();
@@ -1286,6 +1366,7 @@ QSGNode* WaveformItem::updateFrequencyPaintNode(
             root->fallbackStyleInitialized_[index] = true;
         }
     }
+    ++frequencyMaterialRevision_;
 
     auto* focusGeometry = root->focusGeometryNode()->geometry();
     const bool focusVisible = frequencyPlayFocus_
