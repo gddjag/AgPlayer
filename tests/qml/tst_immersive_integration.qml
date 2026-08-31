@@ -46,12 +46,24 @@ TestCase {
         property string previousLine: "上一句"
         property string currentLine: "当前句"
         property string nextLine: "下一句"
+        property string sourceProvider: "Unison"
+        property string sourceAttribution: "Lyrics from Unison (https://unison.boidu.dev)"
+        property bool synchronizedLyrics: true
+        property string untimedLyrics: ""
+        property var routeNotice: ({})
+        property var routeAttempts: []
         property int offsetMs: 0
         property int retryCalls: 0
         property int pauseCalls: 0
+        property int importCalls: 0
+        property url lastImportUrl: ""
         function retry() { retryCalls += 1 }
         function pauseFollow(milliseconds) { pauseCalls += 1 }
-        function importLrc(url) { return true }
+        function importLrc(url) {
+            importCalls += 1
+            lastImportUrl = url
+            return true
+        }
     }
 
     Component {
@@ -139,6 +151,132 @@ TestCase {
         compare(PlayerExperienceController.immersiveMode,
                 PlayerExperienceController.TerrainReactor)
         compare(immersiveAction.checked, true)
+    }
+
+    function test_plain_text_lyrics_remain_visible_and_timed_source_is_attributed() {
+        lyricsFake.status = LyricsService.Ready
+        lyricsFake.sourceProvider = "lyrics.ovh"
+        lyricsFake.sourceAttribution = ""
+        lyricsFake.synchronizedLyrics = false
+        var longLines = []
+        for (var index = 0; index < 24; ++index)
+            longLines.push("long complete plain lyric line " + index
+                           + " wraps across the available lyrics panel width")
+        lyricsFake.untimedLyrics = longLines.join("\n")
+        var panel = lyricsPanelComponent.createObject(mainWindow.contentItem)
+        verify(panel)
+        wait(20)
+        var plainText = findChild(panel, "untimedLyricsText")
+        var timingNotice = findChild(panel, "lyricsTimingNotice")
+        var source = findChild(panel, "lyricsSourceText")
+        var flickable = findChild(panel, "untimedLyricsFlickable")
+        verify(plainText)
+        verify(timingNotice)
+        verify(source)
+        verify(flickable)
+        verify(plainText.text.indexOf("long complete plain lyric line 23") >= 0)
+        compare(plainText.wrapMode, Text.Wrap)
+        verify(flickable.contentHeight > flickable.height)
+        var originalContentY = flickable.contentY
+        flickable.flick(0, -1200)
+        tryVerify(function() { return flickable.contentY > originalContentY }, 1500)
+        verify(timingNotice.visible,
+               "plain timing notice must remain visible after scroll; panel="
+               + panel.visible + ", flickable=" + flickable.visible)
+        verify(source.text.indexOf("lyrics.ovh") >= 0)
+        lyricsFake.synchronizedLyrics = true
+        lyricsFake.untimedLyrics = ""
+        lyricsFake.sourceProvider = "Unison"
+        lyricsFake.sourceAttribution = "Lyrics from Unison (https://unison.boidu.dev)"
+        tryCompare(source, "text", lyricsFake.sourceAttribution)
+        panel.destroy()
+    }
+
+    function test_route_feedback_is_non_modal_safe_and_keeps_controls_available() {
+        lyricsFake.status = LyricsService.NotFound
+        lyricsFake.routeNotice = ({
+            providerId: "lrclib", providerName: "LRCLIB",
+            diagnostic: "provider-error", httpStatus: 503
+        })
+        lyricsFake.routeAttempts = [
+            { providerId: "lrclib", providerName: "LRCLIB",
+              diagnostic: "provider-error", httpStatus: 503,
+              query: "secret-query", path: "C:/secret/music.flac" },
+            { providerId: "unison", providerName: "Unison",
+              diagnostic: "empty-search", httpStatus: 200,
+              query: "secret-query", path: "C:/secret/music.flac" },
+            { providerId: "lyrics-ovh", providerName: "lyrics.ovh",
+              diagnostic: "not-found", httpStatus: 404,
+              query: "secret-query", path: "C:/secret/music.flac" }
+        ]
+        var panel = lyricsPanelComponent.createObject(mainWindow.contentItem)
+        verify(panel)
+        wait(20)
+        var notice = findChild(panel, "lyricsRouteNotice")
+        var attempts = findChild(panel, "lyricsRouteAttempts")
+        var attemptRepeater = findChild(panel, "lyricsRouteAttemptRepeater")
+        var retry = findChild(panel, "lyricsRetryButton")
+        var importButton = findChild(panel, "lyricsImportButton")
+        verify(notice && notice.visible,
+               "route notice must be visible; panel=" + panel.visible
+               + ", notice=" + (notice ? notice.visible : "missing")
+               + ", provider=" + lyricsFake.routeNotice.providerName)
+        verify(attempts && attempts.visible)
+        verify(attemptRepeater)
+        compare(attemptRepeater.count, 3)
+        compare(notice.modal, undefined)
+        for (var index = 0; index < attemptRepeater.count; ++index) {
+            var attempt = attemptRepeater.itemAt(index)
+            verify(attempt)
+            verify(attempt.text.indexOf("secret-query") < 0)
+            verify(attempt.text.indexOf("C:/secret") < 0)
+            verify(attempt.text.indexOf("provider-error") < 0)
+        }
+        var firstAttempt = attemptRepeater.itemAt(0)
+        verify(firstAttempt.text.indexOf("服务") >= 0
+               || firstAttempt.text.indexOf("Service") >= 0)
+        verify(retry && retry.enabled)
+        verify(importButton && importButton.enabled)
+        var retryCalls = lyricsFake.retryCalls
+        retry.clicked()
+        compare(lyricsFake.retryCalls, retryCalls + 1)
+        var importCalls = lyricsFake.importCalls
+        var importUrl = Qt.resolvedUrl("route-feedback-import.lrc")
+        verify(panel.importSelectedFile(importUrl))
+        compare(lyricsFake.importCalls, importCalls + 1)
+        compare(lyricsFake.lastImportUrl.toString(), importUrl.toString())
+        panel.destroy()
+        lyricsFake.status = LyricsService.Ready
+        lyricsFake.routeNotice = ({})
+        lyricsFake.routeAttempts = []
+    }
+
+    function test_lyrics_panel_reuses_shared_tokens_in_dark_and_light_themes() {
+        var previousThemeMode = SettingsController.themeMode
+        var panel = lyricsPanelComponent.createObject(mainWindow.contentItem)
+        verify(panel)
+        var surface = findChild(panel, "lyricsPanelSurface")
+        var currentLine = findChild(panel, "currentLyricLine")
+        var source = findChild(panel, "lyricsSourceText")
+        verify(surface && currentLine && source)
+        try {
+            SettingsController.themeMode = 0
+            tryCompare(Theme, "isLight", false)
+            compare(surface.color.toString(), Theme.glassSurface.toString())
+            compare(surface.border.color.toString(), Theme.glassBorder.toString())
+            compare(currentLine.color.toString(), Theme.primaryText.toString())
+            compare(source.color.toString(), Theme.textSecondary.toString())
+
+            SettingsController.themeMode = 1
+            tryCompare(Theme, "isLight", true)
+            compare(surface.color.toString(), Theme.glassSurface.toString())
+            compare(surface.border.color.toString(), Theme.glassBorder.toString())
+            compare(currentLine.color.toString(), Theme.primaryText.toString())
+            compare(source.color.toString(), Theme.textSecondary.toString())
+        } finally {
+            panel.destroy()
+            SettingsController.themeMode = previousThemeMode
+        }
     }
 
     function test_one_terrain_item_stays_in_independent_window_for_all_hosts() {

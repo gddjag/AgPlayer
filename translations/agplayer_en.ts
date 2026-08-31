@@ -4052,4 +4052,15 @@ Clear: Remove all known aliases for this field.</translation>
     <message><source>标签管理</source><translation>Tag Management</translation></message>
     <message><source>资源文件夹</source><translation>Resource Folders</translation></message>
 </context>
+<context>
+    <name>LyricsPanel</name>
+    <message><source>纯文本歌词，无时间轴</source><translation>Plain-text lyrics, no timeline</translation></message>
+    <message><source>来源：%1</source><translation>Source: %1</translation></message>
+    <message><source>未找到匹配歌词</source><translation>No matching lyrics found</translation></message>
+    <message><source>没有匹配结果</source><translation>No matching results</translation></message>
+    <message><source>匹配结果不够准确</source><translation>Matches were not accurate enough</translation></message>
+    <message><source>请求过于频繁</source><translation>Too many requests</translation></message>
+    <message><source>网络不可用</source><translation>Network unavailable</translation></message>
+    <message><source>服务暂时不可用</source><translation>Service temporarily unavailable</translation></message>
+</context>
 </TS>

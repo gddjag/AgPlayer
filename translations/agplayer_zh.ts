@@ -4052,4 +4052,15 @@
     <message><source>标签管理</source><translation>标签管理</translation></message>
     <message><source>资源文件夹</source><translation>资源文件夹</translation></message>
 </context>
+<context>
+    <name>LyricsPanel</name>
+    <message><source>纯文本歌词，无时间轴</source><translation>纯文本歌词，无时间轴</translation></message>
+    <message><source>来源：%1</source><translation>来源：%1</translation></message>
+    <message><source>未找到匹配歌词</source><translation>未找到匹配歌词</translation></message>
+    <message><source>没有匹配结果</source><translation>没有匹配结果</translation></message>
+    <message><source>匹配结果不够准确</source><translation>匹配结果不够准确</translation></message>
+    <message><source>请求过于频繁</source><translation>请求过于频繁</translation></message>
+    <message><source>网络不可用</source><translation>网络不可用</translation></message>
+    <message><source>服务暂时不可用</source><translation>服务暂时不可用</translation></message>
+</context>
 </TS>
