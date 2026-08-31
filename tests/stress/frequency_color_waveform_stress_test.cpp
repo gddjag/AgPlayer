@@ -340,25 +340,63 @@ class FrequencyColorWaveformStressTest final : public QObject {
     Q_OBJECT
 
 private slots:
-    void slowWindowDemotesExactlyOnce();
+    void fullSlowWindowDemotesAtMostTwice();
+    void slowWindowSlidesBeforeDemoting();
     void mixedIntervalsDoNotOscillate();
     void stableRunPromotesExactlyOnce();
     void progressKeepsFourLayerGeometryStatic();
     void resizeZoomStressSettlesResidentMemory();
 };
 
-void FrequencyColorWaveformStressTest::slowWindowDemotesExactlyOnce()
+void FrequencyColorWaveformStressTest::fullSlowWindowDemotesAtMostTwice()
+{
+    FrequencyFramePressure pressure;
+    for (int sample = 0; sample < 45; ++sample) {
+        pressure.record(std::chrono::milliseconds{25});
+    }
+    for (int sample = 0; sample < 15; ++sample) {
+        pressure.record(std::chrono::milliseconds{16});
+    }
+    // The first 45 slow samples only demote after the initial 60-sample
+    // history is complete.
+    QCOMPARE(pressure.quality_penalty, 1);
+
+    for (int sample = 0; sample < 45; ++sample) {
+        pressure.record(std::chrono::milliseconds{25});
+    }
+    for (int sample = 0; sample < 15; ++sample) {
+        pressure.record(std::chrono::milliseconds{16});
+    }
+    QCOMPARE(pressure.quality_penalty, 2);
+
+    for (int sample = 0; sample < 45; ++sample) {
+        pressure.record(std::chrono::milliseconds{25});
+    }
+    for (int sample = 0; sample < 15; ++sample) {
+        pressure.record(std::chrono::milliseconds{16});
+    }
+    QCOMPARE(pressure.quality_penalty, 2);
+}
+
+void FrequencyColorWaveformStressTest::slowWindowSlidesBeforeDemoting()
 {
     FrequencyFramePressure pressure;
     for (int sample = 0; sample < 44; ++sample) {
         pressure.record(std::chrono::milliseconds{25});
     }
+    for (int sample = 0; sample < 16; ++sample) {
+        pressure.record(std::chrono::milliseconds{16});
+    }
     QCOMPARE(pressure.quality_penalty, 0);
-    pressure.record(std::chrono::milliseconds{25});
-    QCOMPARE(pressure.quality_penalty, 1);
-    for (int sample = 45; sample < 60; ++sample) {
+
+    // The first forty-four replacements evict slow samples, so the rolling
+    // count remains 44. The next replacement evicts a fast sample, taking
+    // the *last* 60 samples to the 45-slow demotion threshold.
+    for (int sample = 0; sample < 44; ++sample) {
         pressure.record(std::chrono::milliseconds{25});
     }
+    QCOMPARE(pressure.quality_penalty, 0);
+    pressure.record(std::chrono::milliseconds{25});
     QCOMPARE(pressure.quality_penalty, 1);
 }
 
@@ -381,6 +419,9 @@ void FrequencyColorWaveformStressTest::stableRunPromotesExactlyOnce()
     FrequencyFramePressure pressure;
     for (int sample = 0; sample < 45; ++sample) {
         pressure.record(std::chrono::milliseconds{25});
+    }
+    for (int sample = 0; sample < 15; ++sample) {
+        pressure.record(std::chrono::milliseconds{16});
     }
     QCOMPARE(pressure.quality_penalty, 1);
     for (int sample = 0; sample < 239; ++sample) {

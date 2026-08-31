@@ -364,7 +364,10 @@ void FrequencyFramePressure::record(
 
     stable_frames = interval < std::chrono::milliseconds{18}
         ? stable_frames + 1 : 0;
-    if (slow_frames >= 45 && quality_penalty < 2) {
+    // A partial history is not representative: wait until the rolling window
+    // is full before treating 45 slow samples as persistent pressure.
+    if (window_samples_ == static_cast<int>(slow_window_.size())
+        && slow_frames >= 45 && quality_penalty < 2) {
         ++quality_penalty;
         stable_frames = 0;
         resetWindow();
