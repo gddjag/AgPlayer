@@ -22,9 +22,6 @@ Item {
     property var waveformProvider: WaveformProvider
     property var waveformLayers: ({})
     property real waveformDurationMs: 0
-    property bool waveformFrequencyReady: false
-    readonly property var frequencyWaveformSettings:
-        SettingsController.frequencyColorWaveform
     property Component bottomBarComponent: null
     property alias tagSearchText: tagPanel.searchText
     property var hostWindow: null
@@ -533,10 +530,8 @@ Item {
                            ? SettingsController.spectrumSolidColor
                            : SettingsController.waveformMode === 0
                              ? SettingsController.waveformSolidBaseColor
-                                : SettingsController.waveformMode === 3
-                               ? (Theme.isLight
-                                  ? root.frequencyWaveformSettings.mixLightColor
-                                  : root.frequencyWaveformSettings.mixDarkColor)
+                             : SettingsController.waveformMode === 3
+                               ? Theme.textSecondary
                                : SettingsController.waveformRgbBaseColor
                 progressColor: SettingsController.waveformSolidProgressColor
                 gradientStartColor: SettingsController.waveformMode === 2
@@ -554,38 +549,10 @@ Item {
                                      ? SettingsController.spectrumSolidColor
                                      : SettingsController.spectrumRgbEndColor)
                                   : SettingsController.waveformRgbEndColor
-                frequencyMixColor: Theme.isLight
-                                   ? root.frequencyWaveformSettings.mixLightColor
-                                   : root.frequencyWaveformSettings.mixDarkColor
-                frequencyLowColor: Theme.isLight
-                                   ? root.frequencyWaveformSettings.lowLightColor
-                                   : root.frequencyWaveformSettings.lowDarkColor
-                frequencyMidColor: Theme.isLight
-                                   ? root.frequencyWaveformSettings.midLightColor
-                                   : root.frequencyWaveformSettings.midDarkColor
-                frequencyHighColor: Theme.isLight
-                                    ? root.frequencyWaveformSettings.highLightColor
-                                    : root.frequencyWaveformSettings.highDarkColor
-                frequencyMixOpacity: Theme.isLight
-                                     ? root.frequencyWaveformSettings.mixLightOpacity
-                                     : root.frequencyWaveformSettings.mixDarkOpacity
-                frequencyLowOpacity: Theme.isLight
-                                     ? root.frequencyWaveformSettings.lowLightOpacity
-                                     : root.frequencyWaveformSettings.lowDarkOpacity
-                frequencyMidOpacity: Theme.isLight
-                                     ? root.frequencyWaveformSettings.midLightOpacity
-                                     : root.frequencyWaveformSettings.midDarkOpacity
-                frequencyHighOpacity: Theme.isLight
-                                      ? root.frequencyWaveformSettings.highLightOpacity
-                                      : root.frequencyWaveformSettings.highDarkOpacity
-                frequencyBandFade: root.waveformFrequencyReady ? 1 : 0
-                frequencyPlayFocus: root.frequencyWaveformSettings.playFocus
-                frequencyFocusColor: Theme.isLight ? "#26313A" : "#F2E7D4"
+                frequencyLowColor: SettingsController.waveformFrequencyLowColor
+                frequencyMidColor: SettingsController.waveformFrequencyMidColor
+                frequencyHighColor: SettingsController.waveformFrequencyHighColor
                 frequencyStrength: SettingsController.waveformFrequencyStrength
-                frequencyDarkSurface: !Theme.isLight
-                Behavior on frequencyBandFade {
-                    NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
-                }
                 rgbProgress: SettingsController.waveformMode === 1
                              && SettingsController.waveformRgbProgress
                 amplitudeScale: SettingsController.waveformHeight

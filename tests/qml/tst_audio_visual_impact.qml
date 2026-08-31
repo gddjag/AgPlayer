@@ -23,7 +23,6 @@ TestCase {
         })
         property real durationMs: 120000
         property string trackId: "track-a"
-        property bool frequencyReady: false
     }
 
     SharedWaveformView {
@@ -93,33 +92,16 @@ TestCase {
         compare(waveformItemCount(sharedWaveform), 1)
 
         var item = findChild(sharedWaveform, "immersiveWaveform")
-        var frequencySettings = SettingsController.frequencyColorWaveform
         verify(item)
         compare(item.layers, waveformSession.layers)
         compare(item.duration, waveformSession.durationMs)
         compare(item.visualMode, 3)
-        compare(String(item.frequencyMixColor),
-                frequencySettings.mixDarkColor)
         compare(String(item.frequencyLowColor),
-                frequencySettings.lowDarkColor)
+                SettingsController.waveformFrequencyLowColor)
         compare(String(item.frequencyMidColor),
-                frequencySettings.midDarkColor)
+                SettingsController.waveformFrequencyMidColor)
         compare(String(item.frequencyHighColor),
-                frequencySettings.highDarkColor)
-        compare(item.frequencyMixOpacity, frequencySettings.mixDarkOpacity)
-        compare(item.frequencyLowOpacity, frequencySettings.lowDarkOpacity)
-        compare(item.frequencyMidOpacity, frequencySettings.midDarkOpacity)
-        compare(item.frequencyHighOpacity, frequencySettings.highDarkOpacity)
-        compare(item.frequencyPlayFocus, frequencySettings.playFocus)
-        compare(item.frequencyFocusColor.toString(), "#f2e7d4")
-        compare(findChild(sharedWaveform,
-                          "immersiveWaveformPlaybackGuide"), null)
-        compare(findChild(sharedWaveform,
-                          "immersiveWaveformPlaybackFocusDot"), null)
-        waveformSession.frequencyReady = false
-        tryCompare(item, "frequencyBandFade", 0, 350)
-        waveformSession.frequencyReady = true
-        tryCompare(item, "frequencyBandFade", 1, 350)
+                SettingsController.waveformFrequencyHighColor)
     }
 
     function test_track_change_does_not_randomize_frequency_colors() {
