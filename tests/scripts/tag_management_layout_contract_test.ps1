@@ -106,17 +106,29 @@ Assert-Matches $trackList 'property bool thumbnailVisibilityFollowsSetting:\s*tr
     'Classic TrackList instances must follow the thumbnail visibility setting by default'
 Assert-Matches $trackList '(?s)readonly property bool waveformThumbnailsVisible:\s*!thumbnailVisibilityFollowsSetting\s*\|\|\s*SettingsController\.listWaveformThumbnailEnabled' `
     'TrackList must expose the effective thumbnail visibility policy'
-Assert-Matches $trackList 'rowHeight:\s*waveformThumbnailsVisible\s*\?\s*50\s*:\s*42' `
-    'Track rows must switch between 50 px and 42 px using effective visibility'
+Assert-Matches $trackList '(?s)rowHeight:\s*singleWindowLayout\s*\?\s*50\s*:\s*\(waveformThumbnailsVisible\s*\?\s*50\s*:\s*42\)' `
+    'Single-window rows stay 50 px while classic rows follow effective thumbnail visibility'
 Assert-Matches $integratedShell '(?s)objectName:\s*"integratedTrackList".*thumbnailVisibilityFollowsSetting:\s*false' `
     'Integrated list thumbnails must remain visible when the classic switch is off'
 Assert-Matches $rollingShell '(?s)objectName:\s*"rollingTrackList".*thumbnailVisibilityFollowsSetting:\s*false' `
     'Rolling list thumbnails must remain visible when the classic switch is off'
 Assert-Matches $window '(?s)objectName:\s*"sharedTrackList".*relaxedClassicColumns:\s*true.*tagManagementLayout:\s*listWindow\.tagManagementMode' `
     'The classic list must opt into the relaxed reference layout and its tag variant'
-Assert-Matches $trackList '(?s)trackHeaderTitle.*Layout\.column:\s*1.*trackHeaderFavorite.*Layout\.column:\s*root\.relaxedClassicColumns \? 4 : 2.*trackHeaderArtist.*visible:\s*root\.showArtistColumn.*trackHeaderAlbum.*visible:\s*root\.showAlbumColumn.*trackHeaderRating.*Layout\.column:\s*root\.relaxedClassicColumns \? 3 : 8.*trackHeaderBpm.*Layout\.column:\s*root\.relaxedClassicColumns \? 5 : 9.*trackHeaderDuration.*Layout\.column:\s*root\.relaxedClassicColumns \? 2 : 10' `
+Assert-Matches $trackList '(?s)trackHeaderTitle.*Layout\.column:\s*1.*trackHeaderFavorite.*root\.singleWindowLayout \? 5 : \(root\.relaxedClassicColumns \? 4 : 2\).*trackHeaderArtist.*visible:\s*root\.showArtistColumn.*trackHeaderAlbum.*visible:\s*root\.showAlbumColumn.*trackHeaderRating.*root\.singleWindowLayout \? 4 : \(root\.relaxedClassicColumns \? 3 : 8\).*trackHeaderBpm.*Layout\.column:\s*root\.relaxedClassicColumns \? 5 : 9.*trackHeaderDuration.*root\.singleWindowLayout \? 3 : \(root\.relaxedClassicColumns \? 2 : 10\)' `
     'Classic headers must render title, duration, rating, favorite, and BPM in reference order'
-Assert-Matches $trackList '(?s)active:\s*root\s*&&\s*root\.waveformThumbnailsVisible\s*&&\s*root\.thumbnailHostVisible\s*&&\s*rowItem\.inViewport' `
+Assert-Matches $trackList 'readonly property int ratingIconSize:\s*relaxedClassicColumns \? 15' `
+    'Classic and tag list stars must use the smaller reference size'
+Assert-Matches $trackList 'readonly property int favoriteIconSize:\s*relaxedClassicColumns \? 22' `
+    'Classic and tag favorites must remain visually stronger than row rating stars'
+Assert-Matches $trackList 'readonly property int classicTitleMaximumWidth:\s*230' `
+    'Classic title and waveform column must leave deliberate room for metadata columns'
+Assert-Matches $window 'objectName:\s*"leftWorkspaceDivider"[\s\S]*opacity:\s*0\.3' `
+    'The classic workspace divider must use 30 percent emphasis'
+Assert-Matches $window 'objectName:\s*"tagPanelDivider"[\s\S]*Layout\.bottomMargin:\s*listWindow\.filterBarHeight' `
+    'The tag divider must stop above the shared filter footer'
+Assert-Matches $window 'objectName:\s*"tagPanelBottomDivider"' `
+    'The tag pane must have a horizontal bottom boundary above the filter footer'
+Assert-Matches $trackList '(?s)active:\s*root\s*&&\s*root\.waveformThumbnailsVisible\s*&&\s*!root\.singleWindowLayout\s*&&\s*root\.thumbnailHostVisible\s*&&\s*rowItem\.inViewport' `
     'Waveform wrapper Loader must require effective visibility and a visible host'
 Assert-Matches $trackList '(?s)ListView\.onPooled:\s*\{.*pooled\s*=\s*true.*ListView\.onReused:\s*\{.*waveformGeneration.*pooled\s*=\s*false' `
     'Pooled delegates must deactivate and reused delegates must get a new generation'

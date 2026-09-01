@@ -50,7 +50,9 @@ Item {
         // colours always carry frequency meaning regardless of the normal
         // player waveform preference.
         visualMode: 3
-        baseColor: SettingsController.waveformRgbBaseColor
+        baseColor: SettingsController.waveformMode === 0
+                   ? SettingsController.waveformSolidBaseColor
+                   : SettingsController.waveformRgbBaseColor
         spectralPalette: root.frequencyWaveformSettings.palette
         spectralUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
         amplitudeScale: SettingsController.waveformHeight

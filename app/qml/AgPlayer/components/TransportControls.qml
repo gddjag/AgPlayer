@@ -9,6 +9,9 @@ RowLayout {
     property bool compact: false
     property bool dense: false
     property bool showWaveformMode: true
+    property bool rollingOrder: false
+    readonly property real playButtonCenterX:
+        playPauseButton.x + playPauseButton.width / 2
     spacing: compact ? 4 : dense ? 8 : 16
 
     function playbackModeName() {
@@ -21,8 +24,9 @@ RowLayout {
     }
 
     ToolButton {
-        objectName: "equalizerButton"
-        visible: !root.compact
+        objectName: root.rollingOrder ? "leadingEqualizerButton"
+                                      : "equalizerButton"
+        visible: !root.rollingOrder && !root.compact
         flat: true
         icon.source: Theme.icon("equalizer-line")
         icon.color: Theme.iconPrimary
@@ -109,6 +113,21 @@ RowLayout {
         Accessible.name: root.playbackModeName()
         onClicked: PlaybackController.cycleMode()
         ToolTip.text: Accessible.name; ToolTip.visible: hovered
+        background: null
+    }
+    ToolButton {
+        objectName: "equalizerButton"
+        visible: root.rollingOrder && !root.compact
+        flat: true
+        icon.source: Theme.icon("equalizer-line")
+        icon.color: Theme.iconPrimary
+        icon.width: 20
+        icon.height: 20
+        contentItem.rotation: 90
+        Accessible.name: qsTr("十八段图形均衡器")
+        onClicked: root.openEqualizerRequested()
+        ToolTip.text: Accessible.name
+        ToolTip.visible: hovered
         background: null
     }
 }

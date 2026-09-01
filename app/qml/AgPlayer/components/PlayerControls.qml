@@ -12,6 +12,7 @@ Rectangle {
     property bool centerTransport: true
     property bool showWaveformMode: true
     property int shellMode: SettingsController.playerShellMode
+    readonly property bool rollingLayout: shellMode === 2
     readonly property bool compactTransport: width < 860
     readonly property bool denseTransport: width < 1200
 
@@ -24,7 +25,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.leftMargin: 24
         anchors.verticalCenter: parent.verticalCenter
-        visible: root.showListWindowButton
+        visible: root.showListWindowButton && !root.rollingLayout
         flat: true
         icon.source: Theme.icon("list-unordered")
         icon.color: WindowController.listWindowVisible
@@ -48,68 +49,90 @@ Rectangle {
         objectName: "centerPlaybackControls"
         anchors.verticalCenter: parent.verticalCenter
         x: {
-            var centered = (root.width - width) / 2
+            var centered = root.width / 2 - playButtonCenterX
             var leftLimit = listWindowButton.visible
                     ? listWindowButton.x + listWindowButton.width + 12 : 12
-            var rightLimit = secondaryActions.x - width - 24
+            if (root.rollingLayout)
+                return leftLimit
             return root.centerTransport
-                    ? Math.max(leftLimit, Math.min(centered, rightLimit))
+                    ? Math.max(leftLimit, centered)
                     : leftLimit
         }
         compact: root.compactTransport
         dense: root.denseTransport
         showWaveformMode: root.showWaveformMode
+        rollingOrder: root.rollingLayout
         spacing: root.emptyMode && !root.denseTransport
                  ? 28 : (compact ? 4 : dense ? 8 : 16)
         onOpenEqualizerRequested: root.openEqualizerRequested()
     }
 
-    PlayerVolumeControl {
-        id: volumeControl
-        anchors.left: centerControls.right
-        anchors.leftMargin: 12
+    ToolButton {
+        id: audioToolsButton
+        objectName: "audioToolsButton"
+        anchors.left: root.rollingLayout ? centerControls.right : undefined
+        anchors.leftMargin: root.rollingLayout
+                            ? (root.denseTransport ? 4 : 10) : 0
+        anchors.right: root.rollingLayout ? undefined : centerControls.left
+        anchors.rightMargin: root.rollingLayout
+                             ? 0 : (root.denseTransport ? 4 : 10)
         anchors.verticalCenter: centerControls.verticalCenter
-        emptyMode: root.emptyMode
-        maximumExpandedWidth: Math.min(
-            196, Math.max(44, secondaryActions.x
-                          - (centerControls.x + centerControls.width + 12)))
+        width: root.denseTransport ? 32 : 40
+        height: root.denseTransport ? 32 : 40
+        flat: true
+        icon.source: Theme.icon("briefcase-4-line")
+        icon.color: Theme.iconPrimary
+        icon.width: 20
+        icon.height: 20
+        Accessible.name: qsTr("打开音频工具")
+        onClicked: WindowController.showAudioTools()
+        ToolTip.text: Accessible.name
+        ToolTip.visible: hovered
+        background: null
     }
 
-    RowLayout {
+    ExperienceActions {
+        id: lyricsActions
+        objectName: "experienceActions"
+        visible: !root.rollingLayout
+        anchors.left: root.rollingLayout ? audioToolsButton.right
+                                         : centerControls.right
+        anchors.leftMargin: root.denseTransport ? 2 : 8
+        anchors.verticalCenter: centerControls.verticalCenter
+        compact: root.denseTransport
+        width: implicitWidth
+        height: implicitHeight
+        showImmersive: false
+        showLyrics: true
+    }
+
+    PlayerVolumeControl {
+        id: volumeControl
+        anchors.left: root.rollingLayout ? secondaryActions.right
+                                         : lyricsActions.right
+        anchors.leftMargin: root.denseTransport ? 0 : 4
+        anchors.verticalCenter: centerControls.verticalCenter
+        emptyMode: root.emptyMode || root.rollingLayout
+        maximumExpandedWidth: Math.min(
+            196, Math.max(44, secondaryActions.x - x - 8))
+    }
+
+    Row {
         id: secondaryActions
         objectName: "playerSecondaryActions"
-        anchors.right: parent.right
-        anchors.rightMargin: 24
+        anchors.left: root.rollingLayout ? audioToolsButton.right : undefined
+        anchors.leftMargin: root.rollingLayout
+                            ? (root.denseTransport ? 2 : 8) : 0
+        anchors.right: root.rollingLayout ? undefined : parent.right
+        anchors.rightMargin: root.rollingLayout ? 0 : 24
         anchors.verticalCenter: parent.verticalCenter
         spacing: root.denseTransport ? 4 : 14
 
         ToolButton {
-            objectName: "audioToolsButton"
-            Layout.preferredWidth: root.denseTransport ? 32 : implicitWidth
-            Layout.preferredHeight: root.denseTransport ? 32 : implicitHeight
-            flat: true
-            icon.source: Theme.icon("briefcase-4-line")
-            icon.color: Theme.iconPrimary
-            icon.width: 20
-            icon.height: 20
-            Accessible.name: qsTr("打开音频工具")
-            onClicked: WindowController.showAudioTools()
-            ToolTip.text: Accessible.name
-            ToolTip.visible: hovered
-            background: null
-        }
-
-        ExperienceActions {
-            objectName: "experienceActions"
-            compact: root.denseTransport
-            showImmersive: false
-            showLyrics: true
-        }
-
-        ToolButton {
+            id: themeModeButton
             objectName: "themeModeButton"
-            Layout.preferredWidth: root.denseTransport ? 32 : implicitWidth
-            Layout.preferredHeight: root.denseTransport ? 32 : implicitHeight
+            width: root.denseTransport ? 32 : implicitWidth
+            height: root.denseTransport ? 32 : implicitHeight
             visible: !root.compactTransport
             flat: true
             icon.source: Theme.icon("brush-line")
@@ -117,8 +140,7 @@ Rectangle {
             icon.width: 20
             icon.height: 20
             Accessible.name: qsTr("切换主题")
-            onClicked: SettingsController.themeMode =
-                       (SettingsController.themeMode + 1) % 3
+            onClicked: playerShellMenu.open()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
             background: null
@@ -128,32 +150,16 @@ Rectangle {
             objectName: "immersiveExperienceActions"
             visible: !root.compactTransport
             compact: root.denseTransport
+            width: implicitWidth
+            height: implicitHeight
             showImmersive: true
             showLyrics: false
         }
 
         ToolButton {
-            id: windowLayoutButton
-            objectName: "windowLayoutButton"
-            Layout.preferredWidth: root.denseTransport ? 32 : implicitWidth
-            Layout.preferredHeight: root.denseTransport ? 32 : implicitHeight
-            visible: !root.compactTransport
-            flat: true
-            icon.source: Theme.icon("player-shell-mode")
-            icon.color: Theme.iconPrimary
-            icon.width: 20
-            icon.height: 20
-            Accessible.name: qsTr("切换播放器布局")
-            onClicked: playerShellMenu.open()
-            ToolTip.text: Accessible.name
-            ToolTip.visible: hovered
-            background: null
-        }
-
-        ToolButton {
             objectName: "miniPlayerButton"
-            Layout.preferredWidth: root.denseTransport ? 32 : implicitWidth
-            Layout.preferredHeight: root.denseTransport ? 32 : implicitHeight
+            width: root.denseTransport ? 32 : implicitWidth
+            height: root.denseTransport ? 32 : implicitHeight
             visible: !root.emptyMode && !root.compactTransport
             flat: true
             icon.source: Theme.icon("picture-in-picture-2-line")
@@ -171,9 +177,9 @@ Rectangle {
     Menu {
         id: playerShellMenu
         objectName: "playerShellMenu"
-        x: Math.max(0, secondaryActions.x + windowLayoutButton.x
-                    + windowLayoutButton.width / 2 - width / 2)
-        y: Math.max(0, secondaryActions.y - height)
+        x: Math.max(0, themeModeButton.mapToItem(root, 0, 0).x
+                    + themeModeButton.width / 2 - width / 2)
+        y: Math.max(0, themeModeButton.mapToItem(root, 0, 0).y - height)
 
         MenuItem {
             objectName: "classicShellMenuItem"

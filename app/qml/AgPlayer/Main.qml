@@ -310,29 +310,18 @@ ApplicationWindow {
                     onOpenSettings: mainWindow.openSettingsPage()
                 }
 
-                EmptyStartup {
-                    id: emptyStartup
-                    objectName: "emptyStartup"
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    visible: LibraryModel.count === 0 && !importStatus.active
-                    onOpenFileRequested: mainWindow.openImportDialog()
-                    onImportFolderRequested: mainWindow.openFolderDialog()
-                }
-
                 PlayerPane {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     Layout.minimumHeight: 128
-                    visible: LibraryModel.count > 0
                     waveformSession: sharedWaveformSession
                 }
 
                 PlayerControls {
                     objectName: "playerControls"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: LibraryModel.count === 0 ? 72 : 64
-                    emptyMode: LibraryModel.count === 0
+                    Layout.preferredHeight: 64
+                    emptyMode: false
                     shellMode: 0
                     onOpenEqualizerRequested: mainWindow.openEqualizer()
                 }
@@ -343,7 +332,7 @@ ApplicationWindow {
     Component {
         id: integratedBottomBarComponent
         IntegratedPlayerControls {
-            emptyMode: LibraryModel.count === 0
+            emptyMode: false
             onTogglePlaylistRequested: {
                 if (shellLoader.item
                         && shellLoader.item.listPanelExpanded !== undefined)

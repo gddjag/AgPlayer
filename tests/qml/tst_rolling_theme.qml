@@ -131,6 +131,7 @@ TestCase {
         id: fakeLibrary
         property int count: 1
         property int lookupCount: 0
+        property var trackTags: ["现场", "电子"]
         signal dataChanged()
         function trackForId(trackId) {
             ++lookupCount
@@ -138,6 +139,7 @@ TestCase {
                 "title": "光辉岁月 Psy techno DJ CHEN REMIX",
                 "artist": "测试艺术家",
                 "album": "测试专辑",
+                "tags": trackTags,
                 "coverUrl": "",
                 "favorite": true,
                 "rating": 5,
@@ -259,14 +261,17 @@ TestCase {
         mainWindow.width = 1440
         mainWindow.height = 760
         for (var mode = 0; mode < 3; ++mode) {
-            var names = ["listWindowButton", "equalizerButton"]
-            if (mode !== 2)
-                names.push("waveformModeButton")
-            names = names.concat([
-                "previousButton", "playPauseButton", "nextButton", "modeButton",
-                "mainVolumeControl", "audioToolsButton", "lyricsActionButton",
-                "themeModeButton", "immersiveActionButton", "windowLayoutButton"
-            ])
+            var names = mode === 2
+                    ? ["previousButton", "playPauseButton", "nextButton",
+                       "modeButton", "equalizerButton", "audioToolsButton",
+                       "themeModeButton", "immersiveActionButton",
+                       "miniPlayerButton", "mainVolumeControl"]
+                    : ["listWindowButton", "audioToolsButton",
+                       "equalizerButton", "waveformModeButton",
+                       "previousButton", "playPauseButton", "nextButton",
+                       "modeButton", "lyricsActionButton", "mainVolumeControl",
+                       "themeModeButton", "immersiveActionButton",
+                       "miniPlayerButton"]
             var activeShell = enterMode(mode)
             var controls = mode === 1
                     ? findChild(mainWindow, "integratedPlayerControls")
@@ -294,13 +299,18 @@ TestCase {
             verify(waveformMode)
             compare(waveformMode.visible, mode !== 2,
                     "rolling mode fixes the renderer to spectral waveform")
+            compare(findChild(controls, "listWindowButton").visible, mode !== 2,
+                    "rolling always exposes its ten-row list and needs no toggle")
+            compare(findChild(controls, "lyricsActionButton").visible,
+                    mode !== 2,
+                    "rolling already exposes lyrics in its persistent side pane")
         }
 
         var rolling = enterMode(2)
-        var skinButton = findChild(rolling, "windowLayoutButton")
+        var skinButton = findChild(rolling, "themeModeButton")
         verify(skinButton)
         verify(skinButton.icon.source.toString()
-               .endsWith("/player-shell-mode.svg"))
+               .endsWith("/brush-line.svg"))
         mouseClick(skinButton)
         var menu = findChild(rolling, "playerShellMenu")
         verify(menu)
@@ -521,6 +531,18 @@ TestCase {
         compare(rolling.waveformPixelsPerSecond, 120)
     }
 
+    function test_single_and_rolling_subtitle_joins_optional_tags() {
+        fakeLibrary.trackTags = ["现场", "电子"]
+        var rolling = rollingWithFakes()
+        var subtitle = findChild(rolling, "rollingTrackSubtitle")
+        verify(subtitle)
+        tryCompare(subtitle, "text", "测试艺术家 · 测试专辑 · 现场 · 电子")
+
+        fakeLibrary.trackTags = []
+        fakeLibrary.dataChanged()
+        tryCompare(subtitle, "text", "测试艺术家 · 测试专辑")
+    }
+
     function test_rolling_reuses_collapsible_tag_and_lyrics_side_panel() {
         var rolling = rollingWithFakes()
         rolling.lyricsService = fakeLyricsService
@@ -576,8 +598,8 @@ TestCase {
         var controls = findChild(rolling, "playerControls")
         verify(controls)
         var minimumWidthSharedActions = [
-            "equalizerButton", "windowLayoutButton",
-            "lyricsActionButton", "immersiveActionButton", "miniPlayerButton"
+            "equalizerButton", "themeModeButton",
+            "immersiveActionButton", "miniPlayerButton"
         ]
         for (var actionIndex = 0;
              actionIndex < minimumWidthSharedActions.length; ++actionIndex) {
@@ -588,6 +610,7 @@ TestCase {
                    + " stays available at the rolling minimum width")
         }
         compare(findChild(controls, "waveformModeButton").visible, false)
+        compare(findChild(controls, "listWindowButton").visible, false)
         var transport = findChild(controls, "centerPlaybackControls")
         verify(transport)
         verify(transport.mapToItem(controls, 0, 0).x < controls.width * 0.30,

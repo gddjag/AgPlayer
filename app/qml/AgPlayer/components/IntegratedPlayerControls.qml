@@ -41,7 +41,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         width: transportControls.width
         height: Math.max(transportControls.height, volumeControl.height)
-        x: (root.width - width) / 2
+        x: root.width / 2 - transportControls.playButtonCenterX
 
         TransportControls {
             id: transportControls
@@ -52,25 +52,12 @@ Item {
             onOpenEqualizerRequested: root.openEqualizerRequested()
         }
 
-        PlayerVolumeControl {
-            id: volumeControl
-            anchors.left: parent.right
-            anchors.leftMargin: 12
-            anchors.verticalCenter: parent.verticalCenter
-            emptyMode: root.emptyMode || root.denseLayout
-        }
-    }
-
-    RowLayout {
-        id: rightActions
-        objectName: "integratedRightActions"
-        anchors.right: parent.right
-        anchors.rightMargin: 24
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: root.actionSpacing
-
         ToolButton {
+            id: audioToolsButton
             objectName: "audioToolsButton"
+            anchors.right: transportControls.left
+            anchors.rightMargin: root.actionSpacing
+            anchors.verticalCenter: parent.verticalCenter
             flat: true
             icon.source: Theme.icon("briefcase-4-line")
             icon.color: Theme.iconPrimary
@@ -82,12 +69,39 @@ Item {
             ToolTip.visible: hovered
             background: null
         }
+
         ExperienceActions {
+            id: lyricsActions
             objectName: "experienceActions"
+            anchors.left: transportControls.right
+            anchors.leftMargin: root.actionSpacing
+            anchors.verticalCenter: parent.verticalCenter
+            compact: root.denseLayout
+            width: implicitWidth
+            height: implicitHeight
             showImmersive: false
             showLyrics: true
         }
+
+        PlayerVolumeControl {
+            id: volumeControl
+            anchors.left: lyricsActions.right
+            anchors.leftMargin: 2
+            anchors.verticalCenter: parent.verticalCenter
+            emptyMode: root.emptyMode || root.denseLayout
+        }
+    }
+
+    Row {
+        id: rightActions
+        objectName: "integratedRightActions"
+        anchors.right: parent.right
+        anchors.rightMargin: 24
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: root.actionSpacing
+
         ToolButton {
+            id: themeModeButton
             objectName: "themeModeButton"
             flat: true
             icon.source: Theme.icon("brush-line")
@@ -95,8 +109,7 @@ Item {
             icon.width: 20
             icon.height: 20
             Accessible.name: qsTr("Switch theme")
-            onClicked: SettingsController.themeMode =
-                       (SettingsController.themeMode + 1) % 3
+            onClicked: playerShellMenu.open()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
             background: null
@@ -107,15 +120,14 @@ Item {
             showLyrics: false
         }
         ToolButton {
-            id: windowLayoutButton
-            objectName: "windowLayoutButton"
+            objectName: "miniPlayerButton"
             flat: true
-            icon.source: Theme.icon("player-shell-mode")
+            icon.source: Theme.icon("picture-in-picture-2-line")
             icon.color: Theme.iconPrimary
             icon.width: 20
             icon.height: 20
-            Accessible.name: qsTr("切换播放器布局")
-            onClicked: playerShellMenu.open()
+            Accessible.name: qsTr("切换到迷你播放器")
+            onClicked: WindowController.showMini()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
             background: null
@@ -125,9 +137,9 @@ Item {
     Menu {
         id: playerShellMenu
         objectName: "playerShellMenu"
-        x: Math.max(0, windowLayoutButton.mapToItem(root, 0, 0).x
-                    + windowLayoutButton.width / 2 - width / 2)
-        y: Math.max(0, windowLayoutButton.mapToItem(root, 0, 0).y - height)
+        x: Math.max(0, themeModeButton.mapToItem(root, 0, 0).x
+                    + themeModeButton.width / 2 - width / 2)
+        y: Math.max(0, themeModeButton.mapToItem(root, 0, 0).y - height)
 
         MenuItem {
             objectName: "classicShellMenuItem"

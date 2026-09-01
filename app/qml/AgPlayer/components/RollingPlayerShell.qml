@@ -444,24 +444,20 @@ Item {
                     }
                 }
 
-                Text {
+                TrackSubtitle {
+                    objectName: "rollingTrackSubtitle"
                     anchors.left: parent.left
                     anchors.top: parent.top
                     anchors.topMargin: 30
                     anchors.right: meters.left
                     anchors.rightMargin: 12
-                    text: {
-                        var artist = root.currentTrack
-                                     && root.currentTrack.artist
-                                     ? root.currentTrack.artist : qsTr("未知艺术家")
-                        var album = root.currentTrack && root.currentTrack.album
-                                    ? root.currentTrack.album : qsTr("未知专辑")
-                        return artist + " · " + album
-                    }
-                    color: Theme.secondaryText
-                    font.family: Theme.fontPrimary
+                    artist: root.currentTrack && root.currentTrack.artist
+                            ? root.currentTrack.artist : ""
+                    album: root.currentTrack && root.currentTrack.album
+                           ? root.currentTrack.album : ""
+                    tags: root.currentTrack && root.currentTrack.tags
+                          ? root.currentTrack.tags : []
                     font.pixelSize: 12
-                    elide: Text.ElideRight
                 }
 
                 Column {
@@ -595,7 +591,9 @@ Item {
                     cursorPosition: -1
                     pointerInteractionEnabled: false
                     visualMode: 3
-                    baseColor: SettingsController.waveformRgbBaseColor
+                    baseColor: SettingsController.waveformMode === 0
+                               ? SettingsController.waveformSolidBaseColor
+                               : SettingsController.waveformRgbBaseColor
                     spectralPalette: root.frequencyWaveformSettings.palette
                     spectralUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
                     amplitudeScale: SettingsController.waveformHeight
@@ -745,7 +743,9 @@ Item {
                 cursorPosition: -1
                 pointerInteractionEnabled: false
                 visualMode: 3
-                baseColor: SettingsController.waveformRgbBaseColor
+                baseColor: SettingsController.waveformMode === 0
+                           ? SettingsController.waveformSolidBaseColor
+                           : SettingsController.waveformRgbBaseColor
                 spectralPalette: root.frequencyWaveformSettings.palette
                 spectralUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
                 amplitudeScale: Math.max(
@@ -1141,6 +1141,7 @@ Item {
                             activeTagKey: root.filterModel
                                           ? root.filterModel.tagKey : ""
                             integratedCompact: true
+                            singleWindowLayout: true
                             thumbnailVisibilityFollowsSetting: false
                         }
 

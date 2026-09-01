@@ -281,6 +281,7 @@ Item {
                             activeTagKey: root.filterModel
                                           ? root.filterModel.tagKey : ""
                             integratedCompact: true
+                            singleWindowLayout: true
                             thumbnailVisibilityFollowsSetting: false
                         }
 
@@ -366,7 +367,9 @@ Item {
                 analysisProgress: root.waveformProvider
                                   ? root.waveformProvider.analysisProgress : 0
                 visualMode: SettingsController.waveformMode
-                baseColor: SettingsController.waveformRgbBaseColor
+                baseColor: SettingsController.waveformMode === 0
+                           ? SettingsController.waveformSolidBaseColor
+                           : SettingsController.waveformRgbBaseColor
                 progressColor: SettingsController.waveformSolidProgressColor
                 gradientStartColor: SettingsController.waveformMode === 2
                                     ? (SettingsController.spectrumColorMode === 0
@@ -719,15 +722,18 @@ Item {
                             font.weight: Font.DemiBold
                             elide: Text.ElideRight
                         }
-                        Text {
+                        TrackSubtitle {
+                            objectName: "integratedTrackSubtitle"
                             Layout.fillWidth: true
-                            text: trackSummary.track
-                                  && trackSummary.track.artist
-                                  ? trackSummary.track.artist : ""
-                            color: Theme.secondaryText
-                            font.family: Theme.fontPrimary
+                            artist: trackSummary.track
+                                    && trackSummary.track.artist
+                                    ? trackSummary.track.artist : ""
+                            album: trackSummary.track
+                                   && trackSummary.track.album
+                                   ? trackSummary.track.album : ""
+                            tags: trackSummary.track && trackSummary.track.tags
+                                  ? trackSummary.track.tags : []
                             font.pixelSize: 12
-                            elide: Text.ElideRight
                         }
                         RowLayout {
                             id: integratedTrackMetadata

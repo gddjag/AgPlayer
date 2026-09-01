@@ -373,8 +373,9 @@ TestCase {
         verify(controls && audioTools && immersive && lyrics && rightActions)
         compare(findChild(shell, "playerShellModeButton"), null)
         compare(findChild(shell, "themeActionButton"), null)
-        compare(findChild(shell, "miniPlayerButton"), null)
-        compare(audioTools.parent, rightActions)
+        verify(findChild(shell, "miniPlayerButton"))
+        compare(audioTools.parent,
+                findChild(shell, "integratedCenterControls"))
         verify(immersive.icon.source.toString().endsWith(
                    "/immersive-visual-mode.svg"))
         verify(lyrics.icon.source.toString().endsWith("/lyrics.svg"))
@@ -536,17 +537,19 @@ TestCase {
         var volume = findChild(shell, "mainVolumeControl")
         var rightActions = findChild(shell, "integratedRightActions")
         var playPause = findChild(shell, "playPauseButton")
-        var layout = findChild(shell, "windowLayoutButton")
+        var theme = findChild(shell, "themeModeButton")
+        var mini = findChild(shell, "miniPlayerButton")
         verify(bottom && summary && cover && metadata && controls
                && listWindow && centerGroup && transport && volume && rightActions
-               && playPause && layout)
+               && playPause && theme && mini)
         verify(cover.width >= 64 && cover.height >= 64)
         verify(metadata.visible)
         fuzzyCompare(summary.mapToItem(bottom, 0, 0).y
                      + summary.height / 2, bottom.height / 2, 1.0)
         fuzzyCompare(controls.y + controls.height / 2,
                      controls.parent.height / 2, 1.0)
-        verify(listWindow.visible && playPause.visible && layout.visible)
+        verify(listWindow.visible && playPause.visible && theme.visible
+               && mini.visible)
         var summaryRight = summary.mapToItem(bottom, summary.width, 0).x
         var listLeft = listWindow.mapToItem(bottom, 0, 0).x
         var listRight = listWindow.mapToItem(bottom, listWindow.width, 0).x
@@ -564,7 +567,7 @@ TestCase {
                "volume must follow the center transport")
         verify(volumeRight <= rightActionsLeft,
                "center transport/volume must not overlap right-side tools")
-        var centeredLeft = (bottom.width - centerGroup.width) / 2
+        var centeredLeft = bottom.width / 2 - transport.playButtonCenterX
         var expectedLeft = Math.max(listRight + 12,
                             Math.min(centeredLeft,
                                      rightActionsLeft

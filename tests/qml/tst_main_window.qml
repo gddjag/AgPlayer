@@ -857,23 +857,23 @@ TestCase {
         window.hide()
     }
 
-    function test_empty_library_shows_startup_actions() {
+    function test_empty_library_opens_directly_into_the_player() {
         PlaybackController.pause()
         nativeDropHelper.clearTracks()
         tryVerify(function() { return LibraryModel.count === 0 }, 500)
-        var startup = findChild(mainWindow, "emptyStartup")
-        verify(startup, "empty startup surface should exist")
-        verify(startup.visible, "empty startup surface should be visible")
-        verify(findChild(startup, "openFileButton"), "open file action should exist")
-        verify(findChild(startup, "importFolderButton"), "import folder action should exist")
+        compare(findChild(mainWindow, "emptyStartup"), null,
+                "the standalone startup page must be removed")
+        verify(findChild(mainWindow, "playerPane").visible,
+               "the player surface must remain visible with an empty library")
+        compare(findChild(mainWindow, "playerControls").emptyMode, false)
         verify(findChild(mainWindow, "waveformModeButton"),
                "waveform mode action should exist in the bottom control bar")
         verify(findChild(mainWindow, "audioToolsButton").visible,
                "audio tools action should be visible in the bottom control bar")
         verify(findChild(mainWindow, "listWindowButton").visible,
                "playlist action should be visible in the bottom control bar")
-        verify(!findChild(mainWindow, "miniPlayerButton").visible,
-               "empty startup must not expose the mini player action")
+        verify(findChild(mainWindow, "miniPlayerButton").visible,
+               "the direct player surface retains the normal mini action")
     }
 
     function test_empty_playlist_shows_centered_import_action_and_formats() {
@@ -922,8 +922,8 @@ TestCase {
 
         verify(status.active, "import errors should activate the status panel")
         verify(status.visible, "import errors should be visible in the main window")
-        verify(!findChild(mainWindow, "emptyStartup").visible,
-               "startup actions should not cover import errors")
+        compare(findChild(mainWindow, "emptyStartup"), null,
+                "import errors must stay on the direct player surface")
     }
 
     function test_import_files_reaches_real_controller() {
@@ -2447,6 +2447,18 @@ TestCase {
                 "the played overlay must still start at the waveform origin")
     }
 
+    function test_solid_waveform_uses_the_shared_gray_unplayed_base() {
+        var previousMode = SettingsController.waveformMode
+        SettingsController.waveformMode = 0
+        var waveform = findChild(mainWindow, "mainWaveform")
+        verify(waveform)
+        tryCompare(waveform, "visualMode", 0)
+        compare(waveform.baseColor.toString(), "#9098a6")
+        compare(waveform.baseColor.toString(),
+                SettingsController.waveformSolidBaseColor.toString())
+        SettingsController.waveformMode = previousMode
+    }
+
     function test_waveform_hover_surface_covers_played_and_unplayed_regions() {
         var previousPreview = SettingsController.waveformHoverTimePreview
         SettingsController.waveformHoverTimePreview = true
@@ -2535,10 +2547,10 @@ TestCase {
         function verifyCoreCentered() {
             var controlsCenter = controls.mapToItem(
                         mainWindow.contentItem, controls.width / 2, 0).x
-            var coreCenter = core.mapToItem(
-                        mainWindow.contentItem, core.width / 2, 0).x
-            compare(Math.round(coreCenter), Math.round(controlsCenter),
-                    "the core group geometric center must equal the player center")
+            var playCenter = play.mapToItem(
+                        mainWindow.contentItem, play.width / 2, 0).x
+            compare(Math.round(playCenter), Math.round(controlsCenter),
+                    "the play button must stay centered in the player")
         }
 
         wait(300)
@@ -2586,19 +2598,23 @@ TestCase {
             "playPauseButton", "nextButton", "modeButton"
         ])
         verifyAscendingX(rightActions, [
-            "audioToolsButton", "lyricsActionButton", "themeModeButton",
-            "immersiveActionButton", "windowLayoutButton"
+            "themeModeButton", "immersiveActionButton", "miniPlayerButton"
         ])
-        var actionNames = [
-            "audioToolsButton", "lyricsActionButton", "themeModeButton",
-            "immersiveActionButton", "windowLayoutButton"
-        ]
+        var actionNames = ["themeModeButton", "immersiveActionButton",
+                           "miniPlayerButton"]
         for (var actionIndex = 0; actionIndex < actionNames.length;
              ++actionIndex) {
             compare(findChild(rightActions, actionNames[actionIndex]).icon.width,
                     20, actionNames[actionIndex] + " icon width")
         }
+        verify(findChild(controls, "audioToolsButton").mapToItem(
+                   controls, findChild(controls, "audioToolsButton").width, 0).x
+               <= transport.mapToItem(controls, 0, 0).x)
         verify(transport.mapToItem(controls, transport.width, 0).x
+               <= findChild(controls, "lyricsActionButton").mapToItem(
+                   controls, 0, 0).x)
+        verify(findChild(controls, "lyricsActionButton").mapToItem(
+                   controls, findChild(controls, "lyricsActionButton").width, 0).x
                <= volume.mapToItem(controls, 0, 0).x)
         verify(volume.mapToItem(controls, volume.width, 0).x
                <= rightActions.mapToItem(controls, 0, 0).x)
@@ -2621,12 +2637,12 @@ TestCase {
         var rightActions = findChild(controls, "playerSecondaryActions")
         verify(controls && transport && volume && rightActions)
         compare(controls.compactTransport, true)
-        verify(findChild(rightActions, "audioToolsButton").visible)
-        verify(findChild(rightActions, "lyricsActionButton").visible)
+        verify(findChild(controls, "audioToolsButton").visible)
+        verify(findChild(controls, "lyricsActionButton").visible)
         verify(transport.mapToItem(controls, transport.width, 0).x
                <= volume.mapToItem(controls, 0, 0).x)
         verify(volume.mapToItem(controls, volume.width, 0).x
-               <= rightActions.mapToItem(controls, 0, 0).x)
+               <= controls.width)
 
         mainWindow.width = previousWidth
         wait(20)
@@ -2881,7 +2897,7 @@ TestCase {
     function test_classic_player_rating_uses_reference_icon_size() {
         var rating = findChild(mainWindow, "trackRating")
         verify(rating, "the classic player must expose its rating row")
-        compare(rating.iconSize, 17)
+        compare(rating.iconSize, 19)
     }
 
     function test_z_playing_row_uses_three_independent_spectrum_bars() {
@@ -2988,10 +3004,10 @@ TestCase {
             var rowFavorite = findChild(row, "trackFavoriteCell")
             var rowStar = findChild(row, "trackRatingStar0")
             verify(rowFavorite && rowStar)
-            compare(rowFavorite.icon.width, 21)
-            compare(rowFavorite.icon.height, 21)
-            compare(rowStar.sourceSize.width, 19)
-            compare(rowStar.sourceSize.height, 19)
+            compare(rowFavorite.icon.width, 22)
+            compare(rowFavorite.icon.height, 22)
+            compare(rowStar.sourceSize.width, 15)
+            compare(rowStar.sourceSize.height, 15)
 
             var navigation = findChild(window, "referenceSideNavigation")
             verify(navigation)
@@ -4942,34 +4958,19 @@ TestCase {
         provider.destroy()
     }
 
-    function test_empty_startup_uses_compact_reference_structure() {
+    function test_empty_library_uses_the_normal_player_structure() {
         compare(mainWindow.width, 960)
         compare(mainWindow.height, 298)
 
-        var startup = findChild(mainWindow, "emptyStartup")
+        var pane = findChild(mainWindow, "playerPane")
         var controls = findChild(mainWindow, "playerControls")
-        verify(startup.visible)
-        verify(controls.emptyMode)
+        compare(findChild(mainWindow, "emptyStartup"), null)
+        verify(pane.visible)
+        compare(controls.emptyMode, false)
         verify(findChild(mainWindow, "titleBrand").visible,
-               "brand should be visible in the empty title bar")
+               "brand should be visible in the direct player title bar")
         compare(findChild(mainWindow, "titleBrandText").font.italic, false)
-        verify(findChild(startup, "startupTitle"),
-               "compact startup title should exist")
-        verify(findChild(startup, "startupActionArea"),
-               "compact startup actions should exist")
-        verify(!findChild(startup, "startupHeroArtwork"),
-               "the superseded hero artwork should not exist")
-    }
-
-    function test_empty_startup_never_overlaps_the_bottom_controls() {
-        nativeDropHelper.clearLibrary()
-        tryVerify(function() { return LibraryModel.count === 0 })
-        var startup = findChild(mainWindow, "emptyStartup")
-        var controls = findChild(mainWindow, "playerControls")
-        var actionArea = findChild(startup, "startupActionArea")
-        verify(startup && controls && actionArea)
-        verify(actionArea.y + actionArea.height <= controls.y,
-               "startup actions and format hint must stay above playback controls")
+        verify(pane.y + pane.height <= controls.y + 1)
     }
 
     function test_main_window_allows_a_smaller_responsive_native_size() {
@@ -5716,26 +5717,27 @@ TestCase {
             var listButton = findChild(controls, "listWindowButton")
             var centerGroup = findChild(controls, "integratedCenterControls")
             var transport = findChild(controls, "integratedTransportControls")
+            var playButton = findChild(controls, "playPauseButton")
             var volume = findChild(controls, "mainVolumeControl")
             var rightActions = findChild(controls, "integratedRightActions")
             verify(summary && listButton && centerGroup
-                   && transport && volume && rightActions)
+                   && transport && playButton && volume && rightActions)
             verifyAscendingX(transport, [
                 "equalizerButton", "waveformModeButton", "previousButton",
                 "playPauseButton", "nextButton", "modeButton"
             ])
             verifyAscendingX(rightActions, [
-                "audioToolsButton", "lyricsActionButton", "themeModeButton",
-                "immersiveActionButton", "windowLayoutButton"
+                "themeModeButton", "immersiveActionButton", "miniPlayerButton"
             ])
             verify(summary.mapToItem(controls, summary.width, 0).x
                    <= listButton.mapToItem(controls, 0, 0).x)
-            verify(listButton.mapToItem(
-                       controls, listButton.width, 0).x
+            verify(findChild(controls, "audioToolsButton").mapToItem(
+                       controls, findChild(controls, "audioToolsButton").width, 0).x
                    <= transport.mapToItem(controls, 0, 0).x)
             verify(transport.mapToItem(
                        controls, transport.width, 0).x
-                   <= volume.mapToItem(controls, 0, 0).x)
+                   <= findChild(controls, "lyricsActionButton").mapToItem(
+                       controls, 0, 0).x)
             verify(volume.mapToItem(
                        controls, volume.width, 0).x
                    <= rightActions.mapToItem(controls, 0, 0).x)
@@ -5744,22 +5746,22 @@ TestCase {
             wait(300)
             var controlsCenter = controls.mapToItem(
                         mainWindow.contentItem, controls.width / 2, 0).x
-            var transportCenter = transport.mapToItem(
-                        mainWindow.contentItem, transport.width / 2, 0).x
-            compare(Math.round(transportCenter), Math.round(controlsCenter))
-            var transportCenterBefore = transportCenter
+            var playCenter = playButton.mapToItem(
+                        mainWindow.contentItem, playButton.width / 2, 0).x
+            compare(Math.round(playCenter), Math.round(controlsCenter))
+            var playCenterBefore = playCenter
             volume.expandedForQa = true
             wait(220)
             var expandedControlsCenter = controls.mapToItem(
                         mainWindow.contentItem, controls.width / 2, 0).x
-            var expandedTransportCenter = transport.mapToItem(
-                        mainWindow.contentItem, transport.width / 2, 0).x
-            compare(Math.round(expandedTransportCenter),
+            var expandedPlayCenter = playButton.mapToItem(
+                        mainWindow.contentItem, playButton.width / 2, 0).x
+            compare(Math.round(expandedPlayCenter),
                     Math.round(expandedControlsCenter),
-                    "expanded integrated transport must stay centered")
+                    "expanded integrated play button must stay centered")
             if (Math.round(expandedControlsCenter) === Math.round(controlsCenter))
-                compare(Math.round(expandedTransportCenter),
-                        Math.round(transportCenterBefore))
+                compare(Math.round(expandedPlayCenter),
+                        Math.round(playCenterBefore))
             volume.expandedForQa = false
         } finally {
             SettingsController.playerShellMode = 0

@@ -378,7 +378,7 @@ Rectangle {
                             id: trackRating
                             objectName: "trackRating"
                             readonly property int iconSize:
-                                root.minimalHeight ? 12 : 17
+                                root.minimalHeight ? 12 : 19
                             anchors.left: artistAlbumClip.right
                             anchors.leftMargin: Theme.spacingMd
                             anchors.verticalCenter: parent.verticalCenter
@@ -396,8 +396,8 @@ Rectangle {
                                           ? Theme.ratingColor(index) : Theme.iconSecondary
                                     sourceSize.width: trackRating.iconSize
                                     sourceSize.height: trackRating.iconSize
-                                    width: trackRating.iconSize + 1
-                                    height: trackRating.iconSize + 1
+                                    width: trackRating.iconSize
+                                    height: trackRating.iconSize
                                 }
                             }
                         }
@@ -488,7 +488,9 @@ Rectangle {
                 duration: root.effectiveDurationMs
                 analysisProgress: WaveformProvider.analysisProgress
                 visualMode: SettingsController.waveformMode
-                baseColor: SettingsController.waveformRgbBaseColor
+                baseColor: SettingsController.waveformMode === 0
+                           ? SettingsController.waveformSolidBaseColor
+                           : SettingsController.waveformRgbBaseColor
                 progressColor: SettingsController.waveformSolidProgressColor
                 gradientStartColor: SettingsController.waveformMode === 2
                                     ? (SettingsController.spectrumColorMode === 0

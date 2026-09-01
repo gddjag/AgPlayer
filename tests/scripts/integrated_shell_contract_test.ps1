@@ -54,10 +54,14 @@ Assert-Match $shell 'objectName:\s*"integratedWaveformNavigator"[\s\S]*waveform\
 Assert-Match $main 'id:\s*integratedBottomBarComponent[\s\S]*IntegratedPlayerControls\s*\{' 'Integrated shell must inject its dedicated control layout.'
 Assert-Match $shell 'item\.leftReservedWidth\s*=\s*Qt\.binding[\s\S]*return\s+trackSummary\.width' 'Integrated controls must reserve the complete track-summary region.'
 Assert-Match $integratedControls 'objectName:\s*"integratedCenterControls"[\s\S]*TransportControls[\s\S]*PlayerVolumeControl[\s\S]*objectName:\s*"integratedRightActions"' 'Integrated controls must keep transport and volume together in the centered control group.'
-Assert-Match $integratedControls 'objectName:\s*"integratedRightActions"[\s\S]*objectName:\s*"audioToolsButton"[\s\S]*ExperienceActions\s*\{\s*objectName:\s*"experienceActions"\s*showImmersive:\s*false\s*showLyrics:\s*true[\s\S]*objectName:\s*"themeModeButton"[\s\S]*ExperienceActions\s*\{\s*objectName:\s*"immersiveExperienceActions"\s*showImmersive:\s*true\s*showLyrics:\s*false[\s\S]*objectName:\s*"windowLayoutButton"' 'Integrated right actions must keep audio tools, lyrics, theme, immersive, and layout ordered as specified.'
+Assert-Match $integratedControls '(?s)objectName:\s*"integratedCenterControls".*objectName:\s*"audioToolsButton".*objectName:\s*"experienceActions".*showLyrics:\s*true.*PlayerVolumeControl' 'Integrated center actions must keep audio tools, transport, lyrics, and volume around the centered play control.'
+Assert-Match $integratedControls '(?s)objectName:\s*"integratedRightActions".*objectName:\s*"themeModeButton".*objectName:\s*"immersiveExperienceActions".*objectName:\s*"miniPlayerButton"' 'Integrated right actions must keep theme, immersive, and mini-player ordered as specified.'
+if ($integratedControls -match 'objectName:\s*"windowLayoutButton"') {
+    throw 'Integrated controls must expose one combined theme/shell entry'
+}
 Assert-Match $integratedControls 'objectName:\s*"classicShellMenuItem"[\s\S]*objectName:\s*"integratedShellMenuItem"[\s\S]*objectName:\s*"rollingShellMenuItem"' 'Integrated layout selection must retain all three player shells.'
-if ($integratedControls -match 'showListWindowButton|miniPlayerButton') {
-    throw 'Integrated controls must not retain the removed Classic toggle or mini-player action.'
+if ($integratedControls -match 'showListWindowButton|objectName:\s*"playerShellModeButton"') {
+    throw 'Integrated controls must not retain obsolete Classic-only layout toggles.'
 }
 Assert-Match $controls 'objectName:\s*"playerSecondaryActions"[\s\S]*ExperienceActions\s*\{' 'Shared experience actions must remain in the right action group.'
 if ($controls -match 'objectName:\s*"playerShellModeButton"') {

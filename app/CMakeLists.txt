@@ -171,11 +171,11 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/EqualizerBandSlider.qml
         qml/AgPlayer/components/EqualizerResponseCurve.qml
         qml/AgPlayer/components/TrackList.qml
+        qml/AgPlayer/components/TrackSubtitle.qml
         qml/AgPlayer/components/AudioFileInfoPanel.qml
         qml/AgPlayer/components/TrackWaveformThumbnail.qml
         qml/AgPlayer/components/TagManagementPanel.qml
         qml/AgPlayer/components/EmptyLibrary.qml
-        qml/AgPlayer/components/EmptyStartup.qml
         qml/AgPlayer/components/ImportStatusPanel.qml
         qml/AgPlayer/components/FileDropArea.qml
         qml/AgPlayer/components/DockedWindowFrame.qml

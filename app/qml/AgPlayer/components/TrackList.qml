@@ -23,6 +23,7 @@ ListView {
     property bool tagFilterActive: false
     property string activeTagKey: ""
     property bool integratedCompact: false
+    property bool singleWindowLayout: false
     property bool relaxedClassicColumns: false
     property bool tagManagementLayout: false
     property bool thumbnailVisibilityFollowsSetting: true
@@ -30,37 +31,47 @@ ListView {
     property int selectionAnchor: -1
     property var lastTrashResult: ({ successCount: 0, failureCount: 0, failures: [] })
     readonly property bool windowActive: root.Window.active
-    readonly property bool showArtistColumn: !relaxedClassicColumns
-    readonly property bool showAlbumColumn: !relaxedClassicColumns
-    readonly property bool compactColumns: integratedCompact || width < 900
+    readonly property bool showArtistColumn:
+        !relaxedClassicColumns && !singleWindowLayout
+    readonly property bool showAlbumColumn:
+        !relaxedClassicColumns && !singleWindowLayout
+    readonly property bool compactColumns:
+        integratedCompact || singleWindowLayout || width < 900
     readonly property int favoriteAlbumGap: 6
     readonly property int artistAlbumGap: 6
     readonly property int albumRatingGap: 6
     readonly property int sequenceWidth: compactColumns ? 34 : 42
-    readonly property int favoriteWidth: compactColumns ? 42 : 52
+    readonly property int favoriteWidth: compactColumns ? 46 : 52
     readonly property int albumWidth: compactColumns ? 78 : 112
     readonly property int artistWidth: compactColumns ? 80 : 112
     readonly property int ratingWidth: Math.max(
                                            ratingIconSize * 5,
-                                           tagFilterActive
+                                           singleWindowLayout ? 84
+                                           : tagFilterActive
                                            ? (compactColumns ? 64 : 86)
                                            : (compactColumns ? 82 : 110))
     readonly property int bpmWidth: compactColumns ? 48 : 64
     readonly property int durationWidth: compactColumns ? 58 : 72
-    readonly property int titleMinimumWidth: compactColumns ? 150 : 180
+    readonly property int titleMinimumWidth:
+        singleWindowLayout ? 220 : (compactColumns ? 150 : 180)
+    readonly property int classicTitleMaximumWidth: 230
+    readonly property int singleWindowTitleWidth: 300
+    readonly property int singleWindowMediaHeight: 34
     readonly property bool showBpmColumn:
-        relaxedClassicColumns ? !tagManagementLayout : !tagFilterActive
+        singleWindowLayout ? false
+        : (relaxedClassicColumns ? !tagManagementLayout : !tagFilterActive)
     readonly property bool showDurationColumn:
-        relaxedClassicColumns || !tagFilterActive
+        singleWindowLayout || relaxedClassicColumns || !tagFilterActive
     readonly property int ratingIconSize:
-        relaxedClassicColumns ? 19 : (compactColumns ? 15 : 17)
-    readonly property int favoriteIconSize: relaxedClassicColumns ? 21 : 18
+        relaxedClassicColumns ? 15 : (compactColumns ? 15 : 17)
+    readonly property int favoriteIconSize: relaxedClassicColumns ? 22 : 18
     readonly property int headerHeight: integratedCompact ? 48 : 46
     readonly property int headerFontWeight: Font.DemiBold
     readonly property bool waveformThumbnailsVisible:
         !thumbnailVisibilityFollowsSetting
         || SettingsController.listWaveformThumbnailEnabled
-    readonly property int rowHeight: waveformThumbnailsVisible ? 50 : 42
+    readonly property int rowHeight:
+        singleWindowLayout ? 50 : (waveformThumbnailsVisible ? 50 : 42)
     property int thumbnailItemCount: 0
     property int nextWaveformGeneration: 0
     property int dragPreviewCreationCount: 0
@@ -474,16 +485,17 @@ ListView {
             rows: 1
             columnSpacing: 0
             HeaderText { objectName: "trackHeaderIndex"; text: "#"; Layout.column: 0; Layout.minimumWidth: root.sequenceWidth; Layout.preferredWidth: root.sequenceWidth; Layout.maximumWidth: root.sequenceWidth }
-            HeaderText { objectName: "trackHeaderTitle"; text: qsTr("歌曲"); Layout.column: 1; Layout.fillWidth: true; Layout.minimumWidth: root.titleMinimumWidth }
-            HeaderText { objectName: "trackHeaderFavorite"; text: qsTr("收藏"); Layout.column: root.relaxedClassicColumns ? 4 : 2; horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: root.favoriteWidth; Layout.preferredWidth: root.favoriteWidth; Layout.maximumWidth: root.favoriteWidth }
-            Item { objectName: "trackHeaderFavoriteAlbumGap"; visible: !root.relaxedClassicColumns; Layout.column: 3; Layout.minimumWidth: visible ? root.favoriteAlbumGap : 0; Layout.preferredWidth: visible ? root.favoriteAlbumGap : 0; Layout.maximumWidth: visible ? root.favoriteAlbumGap : 0 }
+            HeaderText { objectName: "trackHeaderTitle"; text: qsTr("歌曲"); Layout.column: 1; Layout.fillWidth: !root.singleWindowLayout; Layout.minimumWidth: root.titleMinimumWidth; Layout.preferredWidth: root.singleWindowLayout ? root.singleWindowTitleWidth : -1; Layout.maximumWidth: root.singleWindowLayout ? root.singleWindowTitleWidth : (root.relaxedClassicColumns ? root.classicTitleMaximumWidth : Number.POSITIVE_INFINITY) }
+            Item { objectName: "trackHeaderWaveform"; visible: root.singleWindowLayout; Layout.column: 2; Layout.fillWidth: visible }
+            HeaderText { objectName: "trackHeaderFavorite"; text: qsTr("收藏"); Layout.column: root.singleWindowLayout ? 5 : (root.relaxedClassicColumns ? 4 : 2); horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: root.favoriteWidth; Layout.preferredWidth: root.favoriteWidth; Layout.maximumWidth: root.favoriteWidth }
+            Item { objectName: "trackHeaderFavoriteAlbumGap"; visible: !root.relaxedClassicColumns && !root.singleWindowLayout; Layout.column: 3; Layout.minimumWidth: visible ? root.favoriteAlbumGap : 0; Layout.preferredWidth: visible ? root.favoriteAlbumGap : 0; Layout.maximumWidth: visible ? root.favoriteAlbumGap : 0 }
             HeaderText { objectName: "trackHeaderArtist"; text: qsTr("艺术家"); visible: root.showArtistColumn; Layout.column: 4; Layout.minimumWidth: visible ? root.artistWidth : 0; Layout.preferredWidth: visible ? root.artistWidth : 0; Layout.maximumWidth: visible ? root.artistWidth : 0 }
             Item { objectName: "trackHeaderArtistAlbumGap"; visible: root.showArtistColumn; Layout.column: 5; Layout.minimumWidth: visible ? root.artistAlbumGap : 0; Layout.preferredWidth: visible ? root.artistAlbumGap : 0; Layout.maximumWidth: visible ? root.artistAlbumGap : 0 }
             HeaderText { objectName: "trackHeaderAlbum"; text: qsTr("专辑"); visible: root.showAlbumColumn; Layout.column: 6; Layout.minimumWidth: visible ? root.albumWidth : 0; Layout.preferredWidth: visible ? root.albumWidth : 0; Layout.maximumWidth: visible ? root.albumWidth : 0 }
             Item { objectName: "trackHeaderAlbumRatingGap"; visible: root.showAlbumColumn; Layout.column: 7; Layout.minimumWidth: visible ? root.albumRatingGap : 0; Layout.preferredWidth: visible ? root.albumRatingGap : 0; Layout.maximumWidth: visible ? root.albumRatingGap : 0 }
-            HeaderText { objectName: "trackHeaderRating"; text: qsTr("评分"); Layout.column: root.relaxedClassicColumns ? 3 : 8; horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: root.ratingWidth; Layout.preferredWidth: root.ratingWidth; Layout.maximumWidth: root.ratingWidth }
+            HeaderText { objectName: "trackHeaderRating"; text: qsTr("评分"); Layout.column: root.singleWindowLayout ? 4 : (root.relaxedClassicColumns ? 3 : 8); Layout.leftMargin: root.relaxedClassicColumns ? 12 : 0; horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: root.ratingWidth; Layout.preferredWidth: root.ratingWidth; Layout.maximumWidth: root.ratingWidth }
             HeaderText { objectName: "trackHeaderBpm"; text: "BPM"; visible: root.showBpmColumn; Layout.column: root.relaxedClassicColumns ? 5 : 9; horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: visible ? root.bpmWidth : 0; Layout.preferredWidth: visible ? root.bpmWidth : 0; Layout.maximumWidth: visible ? root.bpmWidth : 0 }
-            HeaderText { objectName: "trackHeaderDuration"; text: qsTr("时长"); visible: root.showDurationColumn; Layout.column: root.relaxedClassicColumns ? 2 : 10; horizontalAlignment: Text.AlignRight; Layout.minimumWidth: visible ? root.durationWidth : 0; Layout.preferredWidth: visible ? root.durationWidth : 0; Layout.maximumWidth: visible ? root.durationWidth : 0 }
+            HeaderText { objectName: "trackHeaderDuration"; text: qsTr("时长"); visible: root.showDurationColumn; Layout.column: root.singleWindowLayout ? 3 : (root.relaxedClassicColumns ? 2 : 10); horizontalAlignment: Text.AlignRight; Layout.minimumWidth: visible ? root.durationWidth : 0; Layout.preferredWidth: visible ? root.durationWidth : 0; Layout.maximumWidth: visible ? root.durationWidth : 0 }
         }
     }
 
@@ -611,6 +623,9 @@ ListView {
             : (currentTrack ? Theme.currentTrackSelectionInactive
                             : Theme.selectedTrackSelectionInactive)
         readonly property color systemHighlightText: Theme.primaryText
+        readonly property var rowTags:
+            typeof model !== "undefined" && model.tags !== undefined
+            ? model.tags : []
         readonly property var dragTrackIds:
             root.isSelected(trackId) ? root.selectedTrackIds.slice() : [trackId]
         property alias dragAreaItem: titleCell
@@ -723,8 +738,15 @@ ListView {
                 id: titleCell
                 objectName: "trackRowDragArea"
                 Layout.column: 1
-                Layout.fillWidth: true
+                Layout.fillWidth: !root.singleWindowLayout
                 Layout.minimumWidth: root.titleMinimumWidth
+                Layout.preferredWidth: root.singleWindowLayout
+                                       ? root.singleWindowTitleWidth : -1
+                Layout.maximumWidth: root.singleWindowLayout
+                                     ? root.singleWindowTitleWidth
+                                     : (root.relaxedClassicColumns
+                                        ? root.classicTitleMaximumWidth
+                                        : Number.POSITIVE_INFINITY)
                 Layout.fillHeight: true
                 RowLayout {
                     anchors.fill: parent
@@ -734,10 +756,10 @@ ListView {
                         objectName: "trackCover"
                         source: rowItem.coverUrl ? rowItem.coverUrl
                                                  : Theme.icon("music-2-fill")
-                        Layout.preferredWidth: 34
-                        Layout.preferredHeight: 34
-                        sourceSize.width: 34
-                        sourceSize.height: 34
+                        Layout.preferredWidth: root.singleWindowMediaHeight
+                        Layout.preferredHeight: root.singleWindowMediaHeight
+                        sourceSize.width: root.singleWindowMediaHeight
+                        sourceSize.height: root.singleWindowMediaHeight
                         fillMode: Image.PreserveAspectFit
                     }
                     Item {
@@ -749,14 +771,29 @@ ListView {
                             objectName: "trackTitleMarquee"
                             anchors.left: parent.left
                             anchors.right: parent.right
-                            y: root && root.waveformThumbnailsVisible
-                               ? 8 : (parent.height - height) / 2
+                            y: root && root.singleWindowLayout
+                               ? 3
+                               : (root && root.waveformThumbnailsVisible
+                                  ? 8 : (parent.height - height) / 2)
                             height: implicitHeight
                             text: rowItem.title || qsTr("未知歌曲")
                             trackAvailable: rowItem.available
                             highlighted: rowItem.systemHighlighted
                             highlightText: rowItem.systemHighlightText
                             fontWeight: Font.DemiBold
+                        }
+
+                        TrackSubtitle {
+                            objectName: "singleWindowTrackSubtitle"
+                            visible: root.singleWindowLayout
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: trackTitleMarquee.bottom
+                            anchors.topMargin: 1
+                            artist: rowItem.artist
+                            album: rowItem.album
+                            tags: rowItem.rowTags
+                            font.pixelSize: 11
                         }
 
                         Loader {
@@ -767,7 +804,9 @@ ListView {
                             anchors.top: trackTitleMarquee.bottom
                             anchors.topMargin: 3
                             height: 16
+                            visible: !root.singleWindowLayout
                             active: root && root.waveformThumbnailsVisible
+                                    && !root.singleWindowLayout
                                     && root.thumbnailHostVisible
                                     && rowItem.inViewport
                             property bool counted: false
@@ -865,9 +904,30 @@ ListView {
                     }
                 }
             }
+            Loader {
+                id: singleWindowWaveformLoader
+                objectName: "singleWindowWaveformThumbnailLoader"
+                visible: root.singleWindowLayout
+                active: visible && root.waveformThumbnailsVisible
+                        && root.thumbnailHostVisible && rowItem.inViewport
+                Layout.column: 2
+                Layout.fillWidth: true
+                Layout.preferredHeight: root.singleWindowMediaHeight
+                Layout.alignment: Qt.AlignVCenter
+                sourceComponent: Component {
+                    TrackWaveformThumbnail {
+                        trackId: rowItem.trackId
+                        sourcePath: rowItem.path
+                        delegateGeneration: rowItem.waveformGeneration
+                        mode: SettingsController.listWaveformThumbnailMode
+                        provider: root.thumbnailProvider
+                    }
+                }
+            }
             ToolButton {
                 objectName: "trackFavoriteCell"
-                Layout.column: root.relaxedClassicColumns ? 4 : 2
+                Layout.column: root.singleWindowLayout
+                               ? 5 : (root.relaxedClassicColumns ? 4 : 2)
                 Layout.minimumWidth: root.favoriteWidth
                 Layout.preferredWidth: root.favoriteWidth
                 Layout.maximumWidth: root.favoriteWidth
@@ -880,7 +940,7 @@ ListView {
             }
             Item {
                 objectName: "trackFavoriteAlbumGap"
-                visible: !root.relaxedClassicColumns
+                visible: !root.relaxedClassicColumns && !root.singleWindowLayout
                 Layout.column: 3
                 Layout.minimumWidth: visible ? root.favoriteAlbumGap : 0
                 Layout.preferredWidth: visible ? root.favoriteAlbumGap : 0
@@ -938,7 +998,9 @@ ListView {
             }
             RowLayout {
                 objectName: "trackRatingCell"
-                Layout.column: root.relaxedClassicColumns ? 3 : 8
+                Layout.column: root.singleWindowLayout
+                               ? 4 : (root.relaxedClassicColumns ? 3 : 8)
+                Layout.leftMargin: root.relaxedClassicColumns ? 12 : 0
                 spacing: 0
                 Layout.minimumWidth: root.ratingWidth
                 Layout.preferredWidth: root.ratingWidth
@@ -959,7 +1021,7 @@ ListView {
                 }
             }
             BodyText { objectName: "trackBpmCell"; text: root.formatBpm(rowItem.bpm); visible: root.showBpmColumn; Layout.column: root.relaxedClassicColumns ? 5 : 9; horizontalAlignment: Text.AlignHCenter; trackAvailable: rowItem.available; highlighted: rowItem.systemHighlighted; highlightText: rowItem.systemHighlightText; Layout.minimumWidth: visible ? root.bpmWidth : 0; Layout.preferredWidth: visible ? root.bpmWidth : 0; Layout.maximumWidth: visible ? root.bpmWidth : 0 }
-            BodyText { objectName: "trackDurationCell"; text: root.formatTime(rowItem.durationMs); visible: root.showDurationColumn; Layout.column: root.relaxedClassicColumns ? 2 : 10; horizontalAlignment: Text.AlignRight; trackAvailable: rowItem.available; highlighted: rowItem.systemHighlighted; highlightText: rowItem.systemHighlightText; Layout.minimumWidth: visible ? root.durationWidth : 0; Layout.preferredWidth: visible ? root.durationWidth : 0; Layout.maximumWidth: visible ? root.durationWidth : 0 }
+            BodyText { objectName: "trackDurationCell"; text: root.formatTime(rowItem.durationMs); visible: root.showDurationColumn; Layout.column: root.singleWindowLayout ? 3 : (root.relaxedClassicColumns ? 2 : 10); horizontalAlignment: Text.AlignRight; trackAvailable: rowItem.available; highlighted: rowItem.systemHighlighted; highlightText: rowItem.systemHighlightText; Layout.minimumWidth: visible ? root.durationWidth : 0; Layout.preferredWidth: visible ? root.durationWidth : 0; Layout.maximumWidth: visible ? root.durationWidth : 0 }
         }
 
         HoverHandler { id: rowHover }

@@ -520,9 +520,11 @@ Window {
                     }
 
                     Rectangle {
+                        objectName: "leftWorkspaceDivider"
                         Layout.preferredWidth: listWorkspace.dividerWidth
                         Layout.fillHeight: true
                         color: Theme.listDivider
+                        opacity: 0.3
                     }
 
                     ColumnLayout {
@@ -605,7 +607,14 @@ Window {
                             SearchFilter {
                                 id: searchFilter
                                 objectName: "librarySearchFilter"
-                                anchors.fill: parent
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                width: parent.width
+                                       + (listWindow.tagManagementMode
+                                          ? listWorkspace.dividerWidth
+                                            + listWorkspace.rightColumnWidth : 0)
+                                z: 5
                                 searchText: filterModel ? filterModel.searchText : ""
                                 exactRating: filterModel ? filterModel.exactRating : 0
                                 minBpm: filterModel ? filterModel.minBpm : 60
@@ -626,8 +635,10 @@ Window {
                         objectName: "tagPanelDivider"
                         Layout.preferredWidth: listWorkspace.dividerWidth
                         Layout.fillHeight: true
+                        Layout.bottomMargin: listWindow.filterBarHeight
                         visible: listWindow.tagManagementMode
                         color: Theme.listDivider
+                        opacity: 0.3
                     }
 
                     TagManagementPanel {
@@ -637,10 +648,23 @@ Window {
                         Layout.minimumWidth: listWorkspace.rightColumnWidth
                         Layout.maximumWidth: listWorkspace.rightColumnWidth
                         Layout.fillHeight: true
+                        Layout.bottomMargin: listWindow.filterBarHeight
                         visible: listWindow.tagManagementMode
                         tagModel: TagModel
                         filterModel: listWindow.filterModel
                     }
+                    }
+
+                    Rectangle {
+                        objectName: "tagPanelBottomDivider"
+                        visible: listWindow.tagManagementMode
+                        x: parent.width - width
+                        y: parent.height - listWindow.filterBarHeight - height
+                        width: listWorkspace.rightColumnWidth
+                        height: 1
+                        color: Theme.listDivider
+                        opacity: 0.3
+                        z: 4
                     }
 
                 }

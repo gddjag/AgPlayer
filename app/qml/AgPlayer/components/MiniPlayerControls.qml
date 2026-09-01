@@ -240,7 +240,9 @@ Rectangle {
                     cursorPosition: playback ? playback.positionMs : 0
                     duration: root.effectiveDurationMs
                     visualMode: SettingsController.waveformMode
-                    baseColor: SettingsController.waveformRgbBaseColor
+                    baseColor: SettingsController.waveformMode === 0
+                               ? SettingsController.waveformSolidBaseColor
+                               : SettingsController.waveformRgbBaseColor
                     progressColor: SettingsController.waveformSolidProgressColor
                     gradientStartColor: SettingsController.waveformMode === 2
                                         ? (SettingsController.spectrumColorMode === 0
