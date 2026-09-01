@@ -21,6 +21,21 @@ extern "C" {
 namespace agplayer {
 namespace {
 
+#if defined(AGPLAYER_VIDEO_DECODER_TESTING)
+std::atomic<VideoDecoderTestHook> video_decoder_test_hook{nullptr};
+std::atomic<void*> video_decoder_test_hook_opaque{nullptr};
+std::atomic_int video_decoder_forced_best_stream{-1};
+
+bool invoke_test_hook(const VideoDecoderTestPoint point) noexcept
+{
+    const VideoDecoderTestHook hook = video_decoder_test_hook.load(
+        std::memory_order_acquire);
+    return hook != nullptr
+        && hook(point, video_decoder_test_hook_opaque.load(
+                           std::memory_order_acquire));
+}
+#endif
+
 ag_result map_open_error(const int error) noexcept
 {
     if (error == AVERROR(ENOMEM)) {
@@ -58,25 +73,76 @@ int normalized_rotation(const AVStream* const stream) noexcept
     return static_cast<int>(normalized * 90LL);
 }
 
-int first_playable_video_stream(const AVFormatContext* const context) noexcept
+bool is_playable_video_stream(const AVStream* const stream) noexcept
+{
+    return stream != nullptr && stream->codecpar != nullptr
+        && stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO
+        && (stream->disposition & AV_DISPOSITION_ATTACHED_PIC) == 0
+        && stream->codecpar->width > 0 && stream->codecpar->height > 0
+        && avcodec_find_decoder(stream->codecpar->codec_id) != nullptr;
+}
+
+bool is_better_video_stream(const AVStream* const candidate,
+                            const AVStream* const current) noexcept
+{
+    const bool candidate_default =
+        (candidate->disposition & AV_DISPOSITION_DEFAULT) != 0;
+    const bool current_default =
+        (current->disposition & AV_DISPOSITION_DEFAULT) != 0;
+    if (candidate_default != current_default) {
+        return candidate_default;
+    }
+
+    const std::int64_t candidate_pixels =
+        static_cast<std::int64_t>(candidate->codecpar->width)
+        * static_cast<std::int64_t>(candidate->codecpar->height);
+    const std::int64_t current_pixels =
+        static_cast<std::int64_t>(current->codecpar->width)
+        * static_cast<std::int64_t>(current->codecpar->height);
+    if (candidate_pixels != current_pixels) {
+        return candidate_pixels > current_pixels;
+    }
+    if (candidate->codecpar->bit_rate != current->codecpar->bit_rate) {
+        return candidate->codecpar->bit_rate > current->codecpar->bit_rate;
+    }
+    if (candidate->nb_frames != current->nb_frames) {
+        return candidate->nb_frames > current->nb_frames;
+    }
+    return candidate->index < current->index;
+}
+
+int best_playable_video_stream(const AVFormatContext* const context) noexcept
 {
     if (context == nullptr) {
         return -1;
     }
+    const AVStream* best = nullptr;
     for (unsigned int index = 0; index < context->nb_streams; ++index) {
         const AVStream* const stream = context->streams[index];
-        if (stream != nullptr && stream->codecpar != nullptr
-            && stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO
-            && (stream->disposition & AV_DISPOSITION_ATTACHED_PIC) == 0
-            && stream->codecpar->width > 0 && stream->codecpar->height > 0
-            && avcodec_find_decoder(stream->codecpar->codec_id) != nullptr) {
-            return static_cast<int>(index);
+        if (is_playable_video_stream(stream)
+            && (best == nullptr || is_better_video_stream(stream, best))) {
+            best = stream;
         }
     }
-    return -1;
+    return best == nullptr ? -1 : best->index;
 }
 
 } // namespace
+
+#if defined(AGPLAYER_VIDEO_DECODER_TESTING)
+void set_video_decoder_test_hook(const VideoDecoderTestHook hook,
+                                 void* const opaque) noexcept
+{
+    video_decoder_test_hook_opaque.store(opaque, std::memory_order_release);
+    video_decoder_test_hook.store(hook, std::memory_order_release);
+}
+
+void set_video_decoder_forced_best_stream(const int stream_index) noexcept
+{
+    video_decoder_forced_best_stream.store(stream_index,
+                                           std::memory_order_release);
+}
+#endif
 
 class VideoDecoder::Impl final {
 public:
@@ -84,9 +150,16 @@ public:
 
     ag_result open(const char* const utf8_path) noexcept
     {
+        invalidate_pixels();
         if (utf8_path == nullptr || utf8_path[0] == '\0') {
             return AG_INVALID_ARGUMENT;
         }
+        if (open_) {
+            return AG_INVALID_ARGUMENT;
+        }
+#if defined(AGPLAYER_VIDEO_DECODER_TESTING)
+        invoke_test_hook(VideoDecoderTestPoint::open_entered);
+#endif
         release_resources();
         if (cancelled_.load(std::memory_order_acquire)) {
             return AG_CANCELLED;
@@ -116,10 +189,18 @@ public:
 
         int selected = av_find_best_stream(format_context_, AVMEDIA_TYPE_VIDEO,
                                            -1, -1, nullptr, 0);
+#if defined(AGPLAYER_VIDEO_DECODER_TESTING)
+        const int forced_best = video_decoder_forced_best_stream.load(
+            std::memory_order_acquire);
+        if (forced_best >= 0) {
+            selected = forced_best;
+        }
+#endif
         if (selected < 0
-            || (format_context_->streams[selected]->disposition
-                & AV_DISPOSITION_ATTACHED_PIC) != 0) {
-            selected = first_playable_video_stream(format_context_);
+            || static_cast<unsigned int>(selected)
+                   >= format_context_->nb_streams
+            || !is_playable_video_stream(format_context_->streams[selected])) {
+            selected = best_playable_video_stream(format_context_);
         }
         if (selected < 0) {
             release_resources();
@@ -168,6 +249,8 @@ public:
         stream_start_time_ = stream->start_time;
         stream_sar_ = stream->sample_aspect_ratio;
         rotation_degrees_ = normalized_rotation(stream);
+        packet_pending_ = false;
+        drain_pending_ = false;
         draining_ = false;
         end_of_stream_ = false;
         open_ = true;
@@ -181,15 +264,15 @@ public:
     ag_result read(ag_video_frame& output) noexcept
     {
         const std::uint32_t supplied_size = output.struct_size;
+        invalidate_pixels();
         if (supplied_size < sizeof(ag_video_frame)) {
             return AG_INVALID_ARGUMENT;
         }
-        invalidate_pixels();
         if (!open_) {
             return AG_INVALID_ARGUMENT;
         }
         if (cancelled_.load(std::memory_order_acquire)) {
-            return AG_CANCELLED;
+            return cancel_read(output, supplied_size);
         }
         if (end_of_stream_) {
             set_end_of_stream(output, supplied_size);
@@ -199,19 +282,69 @@ public:
         try {
             for (;;) {
                 if (cancelled_.load(std::memory_order_acquire)) {
-                    return AG_CANCELLED;
+                    return cancel_read(output, supplied_size);
                 }
                 int result = avcodec_receive_frame(codec_context_, frame_);
                 if (result >= 0) {
+#if defined(AGPLAYER_VIDEO_DECODER_TESTING)
+                    invoke_test_hook(VideoDecoderTestPoint::frame_received);
+#endif
+                    if (cancelled_.load(std::memory_order_acquire)) {
+                        return cancel_read(output, supplied_size);
+                    }
                     return copy_frame(output, supplied_size);
                 }
                 if (result == AVERROR_EOF) {
+                    if (cancelled_.load(std::memory_order_acquire)) {
+                        return cancel_read(output, supplied_size);
+                    }
                     end_of_stream_ = true;
                     set_end_of_stream(output, supplied_size);
                     return AG_OK;
                 }
                 if (result != AVERROR(EAGAIN)) {
-                    return cancelled_or(result, AG_DECODE_ERROR);
+                    return read_error(result, AG_DECODE_ERROR, output,
+                                      supplied_size);
+                }
+
+                if (packet_pending_) {
+#if defined(AGPLAYER_VIDEO_DECODER_TESTING)
+                    result = invoke_test_hook(VideoDecoderTestPoint::send_packet)
+                        ? AVERROR(EAGAIN)
+                        : avcodec_send_packet(codec_context_, packet_);
+#else
+                    result = avcodec_send_packet(codec_context_, packet_);
+#endif
+                    if (result == AVERROR(EAGAIN)) {
+                        continue;
+                    }
+                    av_packet_unref(packet_);
+                    packet_pending_ = false;
+                    if (result < 0) {
+                        return read_error(result, AG_DECODE_ERROR, output,
+                                          supplied_size);
+                    }
+                    continue;
+                }
+
+                if (drain_pending_) {
+#if defined(AGPLAYER_VIDEO_DECODER_TESTING)
+                    result = invoke_test_hook(VideoDecoderTestPoint::send_drain)
+                        ? AVERROR(EAGAIN)
+                        : avcodec_send_packet(codec_context_, nullptr);
+#else
+                    result = avcodec_send_packet(codec_context_, nullptr);
+#endif
+                    if (result == AVERROR(EAGAIN)) {
+                        continue;
+                    }
+                    drain_pending_ = false;
+                    if (result < 0 && result != AVERROR_EOF) {
+                        return read_error(result, AG_DECODE_ERROR, output,
+                                          supplied_size);
+                    }
+                    draining_ = true;
+                    continue;
                 }
 
                 if (draining_) {
@@ -220,25 +353,18 @@ public:
 
                 result = av_read_frame(format_context_, packet_);
                 if (result == AVERROR_EOF) {
-                    draining_ = true;
-                    result = avcodec_send_packet(codec_context_, nullptr);
-                    if (result < 0 && result != AVERROR_EOF) {
-                        return cancelled_or(result, AG_DECODE_ERROR);
-                    }
+                    drain_pending_ = true;
                     continue;
                 }
                 if (result < 0) {
-                    return cancelled_or(result, AG_IO_ERROR);
+                    return read_error(result, AG_IO_ERROR, output,
+                                      supplied_size);
                 }
                 if (packet_->stream_index != stream_index_) {
                     av_packet_unref(packet_);
                     continue;
                 }
-                result = avcodec_send_packet(codec_context_, packet_);
-                av_packet_unref(packet_);
-                if (result < 0 && result != AVERROR(EAGAIN)) {
-                    return cancelled_or(result, AG_DECODE_ERROR);
-                }
+                packet_pending_ = true;
             }
         } catch (const std::bad_alloc&) {
             invalidate_pixels();
@@ -255,6 +381,9 @@ public:
         if (!open_ || position_ms < 0) {
             return AG_INVALID_ARGUMENT;
         }
+#if defined(AGPLAYER_VIDEO_DECODER_TESTING)
+        invoke_test_hook(VideoDecoderTestPoint::seek_entered);
+#endif
         if (cancelled_.load(std::memory_order_acquire)) {
             return AG_CANCELLED;
         }
@@ -289,6 +418,8 @@ public:
         avcodec_flush_buffers(codec_context_);
         av_packet_unref(packet_);
         av_frame_unref(frame_);
+        packet_pending_ = false;
+        drain_pending_ = false;
         draining_ = false;
         end_of_stream_ = false;
         return cancelled_.load(std::memory_order_acquire) ? AG_CANCELLED : AG_OK;
@@ -363,6 +494,12 @@ private:
             invalidate_pixels();
             return AG_DECODE_ERROR;
         }
+#if defined(AGPLAYER_VIDEO_DECODER_TESTING)
+        invoke_test_hook(VideoDecoderTestPoint::frame_converted);
+#endif
+        if (cancelled_.load(std::memory_order_acquire)) {
+            return cancel_read(output, supplied_size);
+        }
 
         AVRational sar = frame_->sample_aspect_ratio;
         if (sar.num <= 0 || sar.den <= 0) {
@@ -407,6 +544,31 @@ private:
         output = result;
     }
 
+    static void clear_output(ag_video_frame& output,
+                             const std::uint32_t supplied_size) noexcept
+    {
+        ag_video_frame result{};
+        result.struct_size = supplied_size;
+        output = result;
+    }
+
+    ag_result cancel_read(ag_video_frame& output,
+                          const std::uint32_t supplied_size) noexcept
+    {
+        av_frame_unref(frame_);
+        invalidate_pixels();
+        clear_output(output, supplied_size);
+        return AG_CANCELLED;
+    }
+
+    ag_result read_error(const int ffmpeg_result, const ag_result fallback,
+                         ag_video_frame& output,
+                         const std::uint32_t supplied_size) noexcept
+    {
+        return cancelled_or(ffmpeg_result, fallback) == AG_CANCELLED
+            ? cancel_read(output, supplied_size) : fallback;
+    }
+
     void invalidate_pixels() noexcept
     {
         pixels_.clear();
@@ -433,6 +595,8 @@ private:
         stream_start_time_ = AV_NOPTS_VALUE;
         stream_sar_ = AVRational{0, 1};
         rotation_degrees_ = 0;
+        packet_pending_ = false;
+        drain_pending_ = false;
         draining_ = false;
         end_of_stream_ = false;
         open_ = false;
@@ -450,6 +614,8 @@ private:
     std::int64_t stream_start_time_ = AV_NOPTS_VALUE;
     AVRational stream_sar_{0, 1};
     int rotation_degrees_ = 0;
+    bool packet_pending_ = false;
+    bool drain_pending_ = false;
     bool draining_ = false;
     bool end_of_stream_ = false;
     bool open_ = false;

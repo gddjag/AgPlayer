@@ -212,9 +212,30 @@ ag_result ag_player_set_duration_ms(ag_player* player, long long duration_ms);
 ag_result ag_player_set_match_track_sample_rate(ag_player* player,
                                                  int enabled);
 
-/* Synchronous software video decoding. Frame bytes are BGRA8 and remain valid
- * only until the next read, seek, close, or destroy call on the same decoder.
- * Set ag_video_frame.struct_size to sizeof(ag_video_frame) before each read. */
+/* Synchronous software video decoding with opaque handle ownership.
+ *
+ * Null contract:
+ * - create/open/read/seek return AG_INVALID_ARGUMENT for required null inputs.
+ * - cancel/close/destroy are no-ops for a null handle.
+ *
+ * Frame ABI contract:
+ * - Set struct_size to sizeof(ag_video_frame) before read. A smaller value is
+ *   rejected; a larger, future-sized value is accepted and bytes beyond the
+ *   current structure are left untouched.
+ * - Successful non-EOS frames are always BGRA8. The data pointer remains valid
+ *   only until the next open/read/seek/close/destroy call on the same handle,
+ *   whether that call succeeds or fails. Copy the bytes before that boundary.
+ *
+ * Lifecycle and concurrency contract:
+ * - open on an already-open handle returns AG_INVALID_ARGUMENT and leaves the
+ *   decode position intact (while invalidating any previously returned data).
+ * - Serialize open/read/seek/close calls for a handle. cancel and destroy may
+ *   instead be called from another thread while one of those calls is active.
+ * - destroy marks the handle as shutting down, requests cancellation, waits for
+ *   entered calls to return, then frees it. New result-returning calls admitted
+ *   during shutdown return AG_CANCELLED. Do not use a handle after destroy
+ *   returns.
+ */
 ag_result ag_video_decoder_create(ag_video_decoder** out_decoder);
 ag_result ag_video_decoder_open(ag_video_decoder* decoder,
                                 const char* utf8_path);

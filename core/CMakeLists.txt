@@ -84,6 +84,11 @@ target_link_libraries(agplayer_core PRIVATE
     SoundTouch::SoundTouch
     signalsmith-stretch
 )
+if(BUILD_TESTING)
+    target_compile_definitions(agplayer_core PRIVATE
+        AGPLAYER_VIDEO_DECODER_TESTING=1
+    )
+endif()
 
 # Stretch/Linear are header-only templates.  Keep their upstream MSVC
 # conversion/shadowing warnings from weakening this project's /WX policy for

@@ -23,14 +23,13 @@ constexpr int kAudioSampleRate = 48'000;
 constexpr int kAudioFramesPerPacket = kAudioSampleRate / kFramesPerSecond;
 struct VideoFormat {
     AVPixelFormat pixel_format;
-    int packet_size;
     unsigned int codec_tag;
 };
 
 constexpr VideoFormat kAviVideoFormat{
-    AV_PIX_FMT_YUV420P, kWidth * kHeight * 3 / 2, MKTAG('I', '4', '2', '0')};
+    AV_PIX_FMT_YUV420P, MKTAG('I', '4', '2', '0')};
 constexpr VideoFormat kMovVideoFormat{
-    AV_PIX_FMT_RGB24, kWidth * kHeight * 3, MKTAG('r', 'a', 'w', ' ')};
+    AV_PIX_FMT_RGB24, MKTAG('r', 'a', 'w', ' ')};
 
 // A complete 1x1 transparent PNG. Keeping its bytes here avoids an encoder
 // dependency for the attached-picture fixture.
@@ -49,7 +48,18 @@ bool check(const int result)
     return result >= 0;
 }
 
-AVStream* add_video_stream(AVFormatContext* context, const VideoFormat& format)
+int video_packet_size(const VideoFormat& format, const int width,
+                      const int height)
+{
+    const int pixels = width * height;
+    return format.pixel_format == AV_PIX_FMT_YUV420P ? pixels * 3 / 2
+                                                      : pixels * 3;
+}
+
+AVStream* add_video_stream(AVFormatContext* context, const VideoFormat& format,
+                           const int width = kWidth,
+                           const int height = kHeight,
+                           const AVRational sar = AVRational{1, 1})
 {
     AVStream* const stream = avformat_new_stream(context, nullptr);
     if (stream == nullptr) {
@@ -57,14 +67,17 @@ AVStream* add_video_stream(AVFormatContext* context, const VideoFormat& format)
     }
     stream->time_base = AVRational{1, kFramesPerSecond};
     stream->avg_frame_rate = AVRational{kFramesPerSecond, 1};
+    stream->sample_aspect_ratio = sar;
     AVCodecParameters* const parameters = stream->codecpar;
     parameters->codec_type = AVMEDIA_TYPE_VIDEO;
     parameters->codec_id = AV_CODEC_ID_RAWVIDEO;
     parameters->format = format.pixel_format;
     parameters->codec_tag = format.codec_tag;
-    parameters->width = kWidth;
-    parameters->height = kHeight;
-    parameters->bit_rate = static_cast<std::int64_t>(format.packet_size)
+    parameters->width = width;
+    parameters->height = height;
+    parameters->sample_aspect_ratio = sar;
+    parameters->bit_rate = static_cast<std::int64_t>(
+        video_packet_size(format, width, height))
         * kFramesPerSecond * 8;
     return stream;
 }
@@ -89,24 +102,27 @@ AVStream* add_audio_stream(AVFormatContext* context)
 }
 
 bool write_video_packet(AVFormatContext* context, const AVStream* stream,
-                        const VideoFormat& format, const int frame_index)
+                        const VideoFormat& format, const int frame_index,
+                        const int width = kWidth,
+                        const int height = kHeight)
 {
     AVPacket packet{};
-    if (!check(av_new_packet(&packet, format.packet_size))) {
+    if (!check(av_new_packet(&packet,
+                             video_packet_size(format, width, height)))) {
         return false;
     }
     if (format.pixel_format == AV_PIX_FMT_YUV420P) {
-        for (int pixel = 0; pixel < kWidth * kHeight; ++pixel) {
+        for (int pixel = 0; pixel < width * height; ++pixel) {
             packet.data[pixel] = static_cast<std::uint8_t>((pixel + frame_index) & 0xFF);
         }
-        const int chroma_offset = kWidth * kHeight;
+        const int chroma_offset = width * height;
         const int chroma_size = chroma_offset / 4;
         std::memset(packet.data + chroma_offset,
                     (frame_index * 3) & 0xFF, static_cast<std::size_t>(chroma_size));
         std::memset(packet.data + chroma_offset + chroma_size,
                     (frame_index * 7) & 0xFF, static_cast<std::size_t>(chroma_size));
     } else {
-        for (int pixel = 0; pixel < kWidth * kHeight; ++pixel) {
+        for (int pixel = 0; pixel < width * height; ++pixel) {
             const int offset = pixel * 3;
             packet.data[offset] = static_cast<std::uint8_t>((pixel + frame_index) & 0xFF);
             packet.data[offset + 1] = static_cast<std::uint8_t>((frame_index * 3) & 0xFF);
@@ -171,20 +187,23 @@ bool finish_output(AVFormatContext* context)
 }
 
 bool write_av_file(const std::filesystem::path& path, const bool with_audio,
-                   const bool rotated)
+                   const int rotation_degrees = 0,
+                   const AVRational sar = AVRational{1, 1})
 {
     AVFormatContext* context = nullptr;
     if (!open_output(path, &context)) {
         return false;
     }
-    const VideoFormat& video_format = rotated ? kMovVideoFormat : kAviVideoFormat;
-    AVStream* const video = add_video_stream(context, video_format);
+    const VideoFormat& video_format = rotation_degrees != 0 || sar.num != sar.den
+        ? kMovVideoFormat : kAviVideoFormat;
+    AVStream* const video = add_video_stream(context, video_format, kWidth,
+                                             kHeight, sar);
     AVStream* const audio = with_audio ? add_audio_stream(context) : nullptr;
     if (video == nullptr || (with_audio && audio == nullptr)) {
         avformat_free_context(context);
         return false;
     }
-    if (rotated) {
+    if (rotation_degrees != 0) {
         AVPacketSideData* const side_data = av_packet_side_data_new(
             &video->codecpar->coded_side_data,
             &video->codecpar->nb_coded_side_data,
@@ -194,7 +213,7 @@ bool write_av_file(const std::filesystem::path& path, const bool with_audio,
             return false;
         }
         av_display_rotation_set(reinterpret_cast<std::int32_t*>(side_data->data),
-                                90.0);
+                                static_cast<double>(rotation_degrees));
     }
     if (!check(avformat_write_header(context, nullptr))) {
         if ((context->oformat->flags & AVFMT_NOFILE) == 0 && context->pb != nullptr) {
@@ -209,6 +228,65 @@ bool write_av_file(const std::filesystem::path& path, const bool with_audio,
         if (success && with_audio) {
             success = write_audio_packet(context, audio, index);
         }
+    }
+    return finish_output(context) && success;
+}
+
+AVStream* add_png_attachment_stream(AVFormatContext* context)
+{
+    AVStream* const image = avformat_new_stream(context, nullptr);
+    if (image == nullptr) {
+        return nullptr;
+    }
+    image->time_base = AVRational{1, 1};
+    image->disposition = AV_DISPOSITION_ATTACHED_PIC | AV_DISPOSITION_DEFAULT;
+    image->codecpar->codec_type = AVMEDIA_TYPE_ATTACHMENT;
+    image->codecpar->codec_id = AV_CODEC_ID_PNG;
+    image->codecpar->extradata = static_cast<std::uint8_t*>(
+        av_mallocz(sizeof(kPng) + AV_INPUT_BUFFER_PADDING_SIZE));
+    if (image->codecpar->extradata == nullptr) {
+        return nullptr;
+    }
+    std::memcpy(image->codecpar->extradata, kPng, sizeof(kPng));
+    image->codecpar->extradata_size = static_cast<int>(sizeof(kPng));
+    av_dict_set(&image->metadata, "filename", "cover.png", 0);
+    av_dict_set(&image->metadata, "mimetype", "image/png", 0);
+    return image;
+}
+
+bool write_multi_video_file(const std::filesystem::path& path)
+{
+    AVFormatContext* context = nullptr;
+    if (!open_output(path, &context)) {
+        return false;
+    }
+    AVStream* const cover = add_png_attachment_stream(context);
+    AVStream* const first_real = add_video_stream(context, kAviVideoFormat,
+                                                  160, 90);
+    AVStream* const best_real = add_video_stream(context, kAviVideoFormat,
+                                                 kWidth, kHeight);
+    if (cover == nullptr || first_real == nullptr || best_real == nullptr) {
+        avformat_free_context(context);
+        return false;
+    }
+    best_real->disposition |= AV_DISPOSITION_DEFAULT;
+    AVDictionary* options = nullptr;
+    av_dict_set(&options, "allow_raw_vfw", "1", 0);
+    const int header_result = avformat_write_header(context, &options);
+    av_dict_free(&options);
+    if (!check(header_result)) {
+        if ((context->oformat->flags & AVFMT_NOFILE) == 0 && context->pb != nullptr) {
+            avio_closep(&context->pb);
+        }
+        avformat_free_context(context);
+        return false;
+    }
+    bool success = true;
+    for (int index = 0; index < kVideoFrames && success; ++index) {
+        success = write_video_packet(context, first_real, kAviVideoFormat,
+                                     index, 160, 90)
+            && write_video_packet(context, best_real, kAviVideoFormat,
+                                  index, kWidth, kHeight);
     }
     return finish_output(context) && success;
 }
@@ -259,16 +337,24 @@ bool write_attached_picture_file(const std::filesystem::path& path)
 
 int main(const int argc, char** argv)
 {
-    if (argc != 5) {
+    if (argc != 9) {
         return 1;
     }
     const std::filesystem::path video_with_audio = argv[1];
     const std::filesystem::path video_only = argv[2];
     const std::filesystem::path audio_with_picture = argv[3];
-    const std::filesystem::path rotated_video = argv[4];
-    const bool success = write_av_file(video_with_audio, true, false)
-        && write_av_file(video_only, false, false)
+    const std::filesystem::path rotated_90_video = argv[4];
+    const std::filesystem::path rotated_180_video = argv[5];
+    const std::filesystem::path rotated_270_video = argv[6];
+    const std::filesystem::path sar_video = argv[7];
+    const std::filesystem::path multi_video = argv[8];
+    const bool success = write_av_file(video_with_audio, true)
+        && write_av_file(video_only, false)
         && write_attached_picture_file(audio_with_picture)
-        && write_av_file(rotated_video, false, true);
+        && write_av_file(rotated_90_video, false, 90)
+        && write_av_file(rotated_180_video, false, 180)
+        && write_av_file(rotated_270_video, false, 270)
+        && write_av_file(sar_video, false, 0, AVRational{4, 3})
+        && write_multi_video_file(multi_video);
     return success ? 0 : 2;
 }

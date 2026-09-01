@@ -51,6 +51,10 @@ set(VIDEO_ONLY_FIXTURE "${VIDEO_FIXTURE_DIR}/video-only.avi")
 set(AUDIO_WITH_ATTACHED_PICTURE_FIXTURE
     "${VIDEO_FIXTURE_DIR}/audio-with-attached-picture.mka")
 set(ROTATED_VIDEO_FIXTURE "${VIDEO_FIXTURE_DIR}/rotated-video.mov")
+set(ROTATED_180_VIDEO_FIXTURE "${VIDEO_FIXTURE_DIR}/rotated-180-video.mov")
+set(ROTATED_270_VIDEO_FIXTURE "${VIDEO_FIXTURE_DIR}/rotated-270-video.mov")
+set(NON_SQUARE_SAR_VIDEO_FIXTURE "${VIDEO_FIXTURE_DIR}/non-square-sar.mov")
+set(MULTI_VIDEO_FIXTURE "${VIDEO_FIXTURE_DIR}/attached-and-multi-video.mkv")
 
 add_executable(format_matrix_test
     core/format_matrix_test.cpp
@@ -410,12 +414,20 @@ add_custom_command(
         "${VIDEO_ONLY_FIXTURE}"
         "${AUDIO_WITH_ATTACHED_PICTURE_FIXTURE}"
         "${ROTATED_VIDEO_FIXTURE}"
+        "${ROTATED_180_VIDEO_FIXTURE}"
+        "${ROTATED_270_VIDEO_FIXTURE}"
+        "${NON_SQUARE_SAR_VIDEO_FIXTURE}"
+        "${MULTI_VIDEO_FIXTURE}"
     COMMAND "${CMAKE_COMMAND}" -E make_directory "${VIDEO_FIXTURE_DIR}"
     COMMAND $<TARGET_FILE:video_fixture_generator>
         "${VIDEO_WITH_AUDIO_FIXTURE}"
         "${VIDEO_ONLY_FIXTURE}"
         "${AUDIO_WITH_ATTACHED_PICTURE_FIXTURE}"
         "${ROTATED_VIDEO_FIXTURE}"
+        "${ROTATED_180_VIDEO_FIXTURE}"
+        "${ROTATED_270_VIDEO_FIXTURE}"
+        "${NON_SQUARE_SAR_VIDEO_FIXTURE}"
+        "${MULTI_VIDEO_FIXTURE}"
     DEPENDS video_fixture_generator
     VERBATIM
 )
@@ -424,6 +436,10 @@ add_custom_target(video_fixtures DEPENDS
     "${VIDEO_ONLY_FIXTURE}"
     "${AUDIO_WITH_ATTACHED_PICTURE_FIXTURE}"
     "${ROTATED_VIDEO_FIXTURE}"
+    "${ROTATED_180_VIDEO_FIXTURE}"
+    "${ROTATED_270_VIDEO_FIXTURE}"
+    "${NON_SQUARE_SAR_VIDEO_FIXTURE}"
+    "${MULTI_VIDEO_FIXTURE}"
 )
 
 set(GAPLESS_A_FIXTURE "${DECODER_FIXTURE_DIR}/gapless-a.wav")
@@ -562,18 +578,36 @@ add_executable(video_decoder_test
 )
 add_dependencies(video_decoder_test video_fixtures)
 target_link_libraries(video_decoder_test PRIVATE agplayer_core)
+target_include_directories(video_decoder_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_compile_definitions(video_decoder_test PRIVATE
+    AGPLAYER_VIDEO_DECODER_TESTING=1
+)
 agplayer_enable_warnings(video_decoder_test)
 add_test(NAME video_decoder_test COMMAND video_decoder_test
     "${VIDEO_WITH_AUDIO_FIXTURE}"
     "${VIDEO_ONLY_FIXTURE}"
     "${AUDIO_WITH_ATTACHED_PICTURE_FIXTURE}"
     "${ROTATED_VIDEO_FIXTURE}"
+    "${ROTATED_180_VIDEO_FIXTURE}"
+    "${ROTATED_270_VIDEO_FIXTURE}"
+    "${NON_SQUARE_SAR_VIDEO_FIXTURE}"
+    "${MULTI_VIDEO_FIXTURE}"
 )
 set_tests_properties(video_decoder_test PROPERTIES
     TIMEOUT 30
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
+
+add_executable(c_api_header_c_test
+    core/c_api_header_c_test.c
+)
+target_include_directories(c_api_header_c_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/include"
+)
+add_test(NAME c_api_header_c_test COMMAND c_api_header_c_test)
 
 add_executable(waveform_analyzer_test
     core/waveform_analyzer_test.cpp

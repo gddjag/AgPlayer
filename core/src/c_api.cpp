@@ -94,6 +94,10 @@ struct ag_metadata {
 
 struct ag_video_decoder {
     agplayer::VideoDecoder value;
+    ag_video_decoder* registry_next = nullptr;
+    std::size_t active_calls = 0;
+    bool shutting_down = false;
+    std::condition_variable no_active_calls;
 };
 
 struct ag_waveform {
@@ -120,6 +124,107 @@ struct ag_cancel_token {
 };
 
 namespace {
+
+std::mutex video_decoder_registry_mutex;
+ag_video_decoder* video_decoder_registry_head = nullptr;
+
+bool is_registered_video_decoder(const ag_video_decoder* const decoder) noexcept
+{
+    for (const ag_video_decoder* current = video_decoder_registry_head;
+         current != nullptr; current = current->registry_next) {
+        if (current == decoder) {
+            return true;
+        }
+    }
+    return false;
+}
+
+class VideoDecoderCall final {
+public:
+    explicit VideoDecoderCall(ag_video_decoder* const decoder) noexcept
+    {
+        if (decoder == nullptr) {
+            return;
+        }
+        try {
+            std::lock_guard lock(video_decoder_registry_mutex);
+            if (!is_registered_video_decoder(decoder)) {
+                return;
+            }
+            if (decoder->shutting_down) {
+                result_ = AG_CANCELLED;
+                return;
+            }
+            ++decoder->active_calls;
+            decoder_ = decoder;
+            result_ = AG_OK;
+        } catch (...) {
+            result_ = AG_INTERNAL_ERROR;
+        }
+    }
+
+    ~VideoDecoderCall()
+    {
+        if (decoder_ == nullptr) {
+            return;
+        }
+        std::lock_guard lock(video_decoder_registry_mutex);
+        --decoder_->active_calls;
+        if (decoder_->shutting_down && decoder_->active_calls == 0) {
+            decoder_->no_active_calls.notify_all();
+        }
+    }
+
+    VideoDecoderCall(const VideoDecoderCall&) = delete;
+    VideoDecoderCall& operator=(const VideoDecoderCall&) = delete;
+
+    [[nodiscard]] ag_result result() const noexcept { return result_; }
+    [[nodiscard]] ag_video_decoder* get() const noexcept { return decoder_; }
+
+private:
+    ag_video_decoder* decoder_ = nullptr;
+    ag_result result_ = AG_INVALID_ARGUMENT;
+};
+
+void register_video_decoder(ag_video_decoder* const decoder)
+{
+    std::lock_guard lock(video_decoder_registry_mutex);
+    decoder->registry_next = video_decoder_registry_head;
+    video_decoder_registry_head = decoder;
+}
+
+void destroy_video_decoder(ag_video_decoder* const decoder) noexcept
+{
+    if (decoder == nullptr) {
+        return;
+    }
+    try {
+        std::unique_lock lock(video_decoder_registry_mutex);
+        if (!is_registered_video_decoder(decoder) || decoder->shutting_down) {
+            return;
+        }
+        decoder->shutting_down = true;
+        lock.unlock();
+        decoder->value.cancel();
+        lock.lock();
+        decoder->no_active_calls.wait(lock, [decoder] {
+            return decoder->active_calls == 0;
+        });
+
+        ag_video_decoder** link = &video_decoder_registry_head;
+        while (*link != nullptr && *link != decoder) {
+            link = &(*link)->registry_next;
+        }
+        if (*link == decoder) {
+            *link = decoder->registry_next;
+        }
+        lock.unlock();
+        delete decoder;
+    } catch (...) {
+        // Destruction is a void C boundary. If synchronization itself fails,
+        // retain the registered handle rather than freeing it under a caller.
+    }
+}
 
 std::shared_ptr<ag_cancel_state> retain_cancel_state(
     const ag_cancel_token* const token) noexcept
@@ -177,6 +282,19 @@ void pausable_progress(const float progress, void* const user_data)
 
 } // namespace
 
+#if defined(AGPLAYER_VIDEO_DECODER_TESTING)
+bool agplayer::video_decoder_is_shutting_down_for_test(
+    const ag_video_decoder* const decoder) noexcept
+{
+    try {
+        std::lock_guard lock(video_decoder_registry_mutex);
+        return is_registered_video_decoder(decoder) && decoder->shutting_down;
+    } catch (...) {
+        return false;
+    }
+}
+#endif
+
 ag_result agplayer::editor::load_editor_playback_stream(
     ag_player* const player,
     std::shared_ptr<agplayer::IAudioStreamSource> stream) noexcept
@@ -212,51 +330,63 @@ ag_result ag_video_decoder_create(ag_video_decoder** const out_decoder)
     }
     *out_decoder = nullptr;
     return guard_result([&] {
-        *out_decoder = new (std::nothrow) ag_video_decoder;
-        return *out_decoder == nullptr ? AG_INTERNAL_ERROR : AG_OK;
+        std::unique_ptr<ag_video_decoder> created{
+            new (std::nothrow) ag_video_decoder};
+        if (created == nullptr) {
+            return AG_INTERNAL_ERROR;
+        }
+        register_video_decoder(created.get());
+        *out_decoder = created.release();
+        return AG_OK;
     });
 }
 
 ag_result ag_video_decoder_open(ag_video_decoder* const decoder,
                                 const char* const utf8_path)
 {
-    return decoder == nullptr || utf8_path == nullptr
-        ? AG_INVALID_ARGUMENT
-        : decoder->value.open(utf8_path);
+    VideoDecoderCall call(decoder);
+    return call.result() == AG_OK ? call.get()->value.open(utf8_path)
+                                  : call.result();
 }
 
 ag_result ag_video_decoder_read(ag_video_decoder* const decoder,
                                 ag_video_frame* const out_frame)
 {
-    return decoder == nullptr || out_frame == nullptr
-        ? AG_INVALID_ARGUMENT
-        : decoder->value.read(*out_frame);
+    if (out_frame == nullptr) {
+        return AG_INVALID_ARGUMENT;
+    }
+    VideoDecoderCall call(decoder);
+    return call.result() == AG_OK ? call.get()->value.read(*out_frame)
+                                  : call.result();
 }
 
 ag_result ag_video_decoder_seek(ag_video_decoder* const decoder,
                                 const std::int64_t position_ms)
 {
-    return decoder == nullptr ? AG_INVALID_ARGUMENT
-                              : decoder->value.seek(position_ms);
+    VideoDecoderCall call(decoder);
+    return call.result() == AG_OK ? call.get()->value.seek(position_ms)
+                                  : call.result();
 }
 
 void ag_video_decoder_cancel(ag_video_decoder* const decoder)
 {
-    if (decoder != nullptr) {
-        decoder->value.cancel();
+    VideoDecoderCall call(decoder);
+    if (call.result() == AG_OK) {
+        call.get()->value.cancel();
     }
 }
 
 void ag_video_decoder_close(ag_video_decoder* const decoder)
 {
-    if (decoder != nullptr) {
-        decoder->value.close();
+    VideoDecoderCall call(decoder);
+    if (call.result() == AG_OK) {
+        call.get()->value.close();
     }
 }
 
 void ag_video_decoder_destroy(ag_video_decoder* const decoder)
 {
-    delete decoder;
+    destroy_video_decoder(decoder);
 }
 
 ag_result ag_player_create_with_config(const ag_player_config* config,
