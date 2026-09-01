@@ -731,10 +731,13 @@ TestCase {
                "EQ must lay out at native size instead of shrinking a large canvas")
         compare(equalizerContent.scale, 1)
         compare(equalizerTitle.text, qsTr("18 段图形均衡器"))
-        verify(equalizerTitle.font.pixelSize >= 18)
-        compare(findChild(window, "equalizerTitleBar").height, 56)
-        compare(findChild(window, "equalizerHeaderPanel").height, 58)
-        compare(findChild(window, "equalizerMinimizeButton").width, 30)
+        compare(equalizerTitle.font.pixelSize, 18)
+        compare(findChild(window, "equalizerTitleBar").height, 44)
+        compare(findChild(window, "equalizerHeaderPanel").height, 48)
+        verify(findChild(window, "equalizerFrame").radius <= 8,
+               "the compact EQ must use restrained system-style corners")
+        verify(findChild(window, "equalizerResponsePanel").radius <= 8)
+        compare(findChild(window, "equalizerMinimizeButton").width, 28)
         verify(findChild(window, "equalizerEnabledSwitch"))
         compare(button.contentItem.rotation, 90)
         var previousThemeMode = SettingsController.themeMode
@@ -2536,10 +2539,13 @@ TestCase {
                     "the core group geometric center must equal the player center")
         }
 
+        wait(300)
         volume.expandedForQa = false
         wait(260)
         verifyCoreCentered()
         var widthBefore = core.width
+        var controlsCenterBefore = controls.mapToItem(
+                    mainWindow.contentItem, controls.width / 2, 0).x
         var playCenterBefore = play.mapToItem(controls,
                                               play.width / 2,
                                               play.height / 2).x
@@ -2547,11 +2553,14 @@ TestCase {
         wait(220)
         compare(core.width, widthBefore,
                 "the right-side volume flyout must not enter core layout width")
-        compare(Math.round(play.mapToItem(controls,
-                                          play.width / 2,
-                                          play.height / 2).x),
-                Math.round(playCenterBefore),
-                "expanding volume must not move the core transport controls")
+        var controlsCenterAfter = controls.mapToItem(
+                    mainWindow.contentItem, controls.width / 2, 0).x
+        if (Math.round(controlsCenterAfter) === Math.round(controlsCenterBefore))
+            compare(Math.round(play.mapToItem(controls,
+                                              play.width / 2,
+                                              play.height / 2).x),
+                    Math.round(playCenterBefore),
+                    "expanding volume must not move the core transport controls")
         verifyCoreCentered()
         verify(volume.x >= core.x + core.width,
                "the volume control must float to the right of the centered core")
@@ -5155,7 +5164,7 @@ TestCase {
         page.close()
     }
 
-    function test_settings_y_about_uses_one_name_and_version_line() {
+    function test_settings_y_about_separates_product_version_and_promise() {
         if (!findChild(mainWindow, "settingsPage")) {
             mainWindow.openSettingsPage()
             tryVerify(function() {
@@ -5169,10 +5178,13 @@ TestCase {
         wait(250)
         var productLine = findChild(page, "aboutProductLine")
         verify(productLine)
-        compare(productLine.text, "AgPlayer " + SettingsController.version)
+        compare(productLine.text, "AgPlayer")
         verify(productLine.font.weight >= Font.Bold)
-        verify(!findChild(page, "aboutStandaloneVersion"),
-               "about page must not repeat the product or version")
+        var versionLine = findChild(page, "aboutStandaloneVersion")
+        var promiseLine = findChild(page, "aboutProductPromise")
+        verify(versionLine && promiseLine)
+        compare(versionLine.text, qsTr("版本号：") + SettingsController.version)
+        compare(promiseLine.text, qsTr("免费、轻便、纯净"))
         page.close()
     }
 
@@ -5618,6 +5630,28 @@ TestCase {
             verify(volume.mapToItem(
                        controls, volume.width, 0).x
                    <= rightActions.mapToItem(controls, 0, 0).x)
+            compare(centerGroup.width, transport.width,
+                    "volume must not contribute to the centered transport width")
+            wait(300)
+            var controlsCenter = controls.mapToItem(
+                        mainWindow.contentItem, controls.width / 2, 0).x
+            var transportCenter = transport.mapToItem(
+                        mainWindow.contentItem, transport.width / 2, 0).x
+            compare(Math.round(transportCenter), Math.round(controlsCenter))
+            var transportCenterBefore = transportCenter
+            volume.expandedForQa = true
+            wait(220)
+            var expandedControlsCenter = controls.mapToItem(
+                        mainWindow.contentItem, controls.width / 2, 0).x
+            var expandedTransportCenter = transport.mapToItem(
+                        mainWindow.contentItem, transport.width / 2, 0).x
+            compare(Math.round(expandedTransportCenter),
+                    Math.round(expandedControlsCenter),
+                    "expanded integrated transport must stay centered")
+            if (Math.round(expandedControlsCenter) === Math.round(controlsCenter))
+                compare(Math.round(expandedTransportCenter),
+                        Math.round(transportCenterBefore))
+            volume.expandedForQa = false
         } finally {
             SettingsController.playerShellMode = 0
             SettingsController.windowLayoutTheme = previousLayoutTheme

@@ -837,7 +837,7 @@ Item {
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
                     height: 66
-                    width: Math.min(520, parent.width * 0.36)
+                    width: Math.min(480, parent.width * 0.29)
                     spacing: 12
                     readonly property var track: {
                         var count = root.libraryModel ? root.libraryModel.count : 0

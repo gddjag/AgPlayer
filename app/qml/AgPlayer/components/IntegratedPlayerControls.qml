@@ -39,14 +39,9 @@ Item {
         id: centerGroup
         objectName: "integratedCenterControls"
         anchors.verticalCenter: parent.verticalCenter
-        width: transportControls.width + 12 + volumeControl.width
+        width: transportControls.width
         height: Math.max(transportControls.height, volumeControl.height)
-        x: {
-            var leftLimit = listWindowButton.x + listWindowButton.width + 12
-            var centered = (root.width - width) / 2
-            var rightLimit = rightActions.x - width - 12
-            return Math.max(leftLimit, Math.min(centered, rightLimit))
-        }
+        x: (root.width - width) / 2
 
         TransportControls {
             id: transportControls
@@ -59,7 +54,7 @@ Item {
 
         PlayerVolumeControl {
             id: volumeControl
-            anchors.left: transportControls.right
+            anchors.left: parent.right
             anchors.leftMargin: 12
             anchors.verticalCenter: parent.verticalCenter
             emptyMode: root.emptyMode || root.denseLayout

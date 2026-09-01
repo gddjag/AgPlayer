@@ -41,20 +41,20 @@ Window {
 
     component ToolbarButton: Button {
         property url iconSource: ""
-        implicitHeight: 48
-        implicitWidth: 122
+        implicitHeight: window.compactToolbar ? 36 : 48
+        implicitWidth: window.compactToolbar ? 96 : 122
         font.family: "Microsoft YaHei UI"
-        font.pixelSize: window.compactToolbar ? 15 : 19
+        font.pixelSize: window.compactToolbar ? 12 : 16
         font.weight: Font.Medium
         icon.source: iconSource
         icon.color: Theme.textPrimary
-        icon.width: 24
-        icon.height: 24
+        icon.width: window.compactToolbar ? 18 : 22
+        icon.height: window.compactToolbar ? 18 : 22
         spacing: 8
         display: AbstractButton.TextBesideIcon
         palette.buttonText: Theme.textPrimary
         background: Rectangle {
-            radius: 15
+            radius: window.compactToolbar ? 6 : 8
             color: parent.down ? Theme.surfacePressed
                                : parent.hovered ? Theme.surfaceHover
                                                 : Theme.surfaceElevated
@@ -65,14 +65,14 @@ Window {
 
     component SegmentButton: Button {
         property bool selected: false
-        implicitHeight: 42
+        implicitHeight: window.compactToolbar ? 32 : 38
         padding: 0
         font.family: "Microsoft YaHei UI"
-        font.pixelSize: 18
+        font.pixelSize: window.compactToolbar ? 12 : 15
         font.weight: Font.Normal
         palette.buttonText: selected ? Theme.highlightText : Theme.textSecondary
         background: Rectangle {
-            radius: 11
+            radius: 5
             color: parent.selected ? Theme.highlight
                                    : parent.down ? Theme.surfacePressed
                                                  : "transparent"
@@ -155,11 +155,12 @@ Window {
 
     Rectangle {
         id: frame
+        objectName: "equalizerFrame"
         x: 5
         y: 6
         width: Math.max(0, window.width - 10)
         height: Math.max(0, window.height - 11)
-        radius: window.visibility === Window.Maximized ? 0 : 29
+        radius: window.visibility === Window.Maximized ? 0 : 8
         clip: true
         gradient: Gradient {
             orientation: Gradient.Vertical
@@ -180,7 +181,7 @@ Window {
                 x: 0
                 y: 0
                 width: parent.width
-                height: window.spacious ? 72 : 56
+                height: window.spacious ? 60 : 44
 
                 DragHandler {
                     target: null
@@ -194,7 +195,7 @@ Window {
                     text: qsTr("18 段图形均衡器")
                     color: Theme.textPrimary
                     font.family: "Microsoft YaHei UI"
-                    font.pixelSize: window.spacious ? 28 : 22
+                    font.pixelSize: window.spacious ? 22 : 18
                     font.weight: Font.Normal
                     renderType: Text.NativeRendering
                 }
@@ -207,26 +208,26 @@ Window {
 
                     ToolButton {
                         objectName: "equalizerMinimizeButton"
-                        width: 30
-                        height: 30
+                        width: 28
+                        height: 28
                         flat: true
                         icon.source: Theme.icon("subtract-line")
                         icon.color: Theme.textPrimary
-                        icon.width: 20
-                        icon.height: 20
+                        icon.width: 18
+                        icon.height: 18
                         Accessible.name: qsTr("最小化")
                         onClicked: window.showMinimized()
                         background: null
                     }
                     ToolButton {
                         objectName: "equalizerMaximizeButton"
-                        width: 30
-                        height: 30
+                        width: 28
+                        height: 28
                         flat: true
                         icon.source: Theme.icon("checkbox-blank-line")
                         icon.color: Theme.textPrimary
-                        icon.width: 20
-                        icon.height: 20
+                        icon.width: 18
+                        icon.height: 18
                         Accessible.name: qsTr("最大化")
                         onClicked: window.visibility === Window.Maximized
                                    ? window.showNormal() : window.showMaximized()
@@ -234,13 +235,13 @@ Window {
                     }
                     ToolButton {
                         objectName: "equalizerCloseButton"
-                        width: 30
-                        height: 30
+                        width: 28
+                        height: 28
                         flat: true
                         icon.source: Theme.icon("close-fill")
                         icon.color: Theme.textPrimary
-                        icon.width: 20
-                        icon.height: 20
+                        icon.width: 18
+                        icon.height: 18
                         Accessible.name: qsTr("关闭")
                         onClicked: window.hide()
                         background: Rectangle {
@@ -288,7 +289,7 @@ Window {
                         x: 0
                         y: 0
                         width: parent.width
-                        height: window.spacious ? 86 : 58
+                        height: window.spacious ? 72 : 48
                         gradient: Gradient {
                             orientation: Gradient.Vertical
                             GradientStop { position: 0; color: Theme.surface }
@@ -305,9 +306,9 @@ Window {
                                 objectName: "equalizerEnabledSwitch"
                                 checked: EqualizerController.enabled
                                 text: qsTr("启用")
-                                indicatorWidth: window.compactToolbar ? 54 : 67
-                                indicatorHeight: window.compactToolbar ? 32 : 39
-                                labelPixelSize: window.compactToolbar ? 15 : 19
+                                indicatorWidth: window.compactToolbar ? 44 : 56
+                                indicatorHeight: window.compactToolbar ? 26 : 34
+                                labelPixelSize: window.compactToolbar ? 12 : 16
                                 Accessible.name: qsTr("启用均衡器")
                                 onToggled: EqualizerController.enabled = checked
                             }
@@ -316,7 +317,7 @@ Window {
                                 Layout.leftMargin: window.compactToolbar ? 2 : 28
                                 Layout.rightMargin: window.compactToolbar ? 2 : 18
                                 Layout.preferredWidth: 1
-                                Layout.preferredHeight: 48
+                                Layout.preferredHeight: window.compactToolbar ? 32 : 42
                                 color: Theme.opaqueDivider
                                 opacity: 0.65
                             }
@@ -324,13 +325,13 @@ Window {
                                 text: qsTr("预设：")
                                 color: Theme.textPrimary
                                 font.family: "Microsoft YaHei UI"
-                                font.pixelSize: window.compactToolbar ? 15 : 19
+                                font.pixelSize: window.compactToolbar ? 12 : 16
                             }
                             ThemedComboBox {
                                 id: presetBox
                                 objectName: "equalizerPresetBox"
                                 Layout.preferredWidth: window.compactToolbar ? 150 : 239
-                                Layout.preferredHeight: 48
+                                Layout.preferredHeight: window.compactToolbar ? 36 : 44
                                 model: EqualizerController.presetNames
                                 currentIndex: EqualizerController.presetIds.indexOf(
                                                   EqualizerController.currentPresetId)
@@ -380,7 +381,7 @@ Window {
                         height: window.spacious ? 291
                                                  : Math.max(104, Math.min(120,
                                                      body.height * 0.27))
-                        radius: window.spacious ? 20 : 12
+                        radius: window.spacious ? 10 : 8
                         gradient: Gradient {
                             orientation: Gradient.Vertical
                             GradientStop { position: 0; color: Theme.surfaceElevated }
@@ -402,7 +403,7 @@ Window {
                            + (window.spacious ? 14 : 0)
                         width: parent.width - x * 2
                         height: window.spacious ? 375 : footerPanel.y - y
-                        radius: window.spacious ? 20 : 12
+                        radius: window.spacious ? 10 : 8
                         clip: true
                         gradient: Gradient {
                             orientation: Gradient.Vertical

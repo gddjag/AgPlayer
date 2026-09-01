@@ -2478,7 +2478,7 @@ Item {
 
                     Text {
                         objectName: "aboutProductLine"
-                        text: "AgPlayer " + SettingsController.version
+                        text: "AgPlayer"
                         color: Theme.primaryText
                         font.family: Theme.fontPrimary
                         font.pixelSize: 22
@@ -2494,7 +2494,16 @@ Item {
                     }
 
                     Text {
-                        text: qsTr("零广告 · 零联网 · 零订阅")
+                        objectName: "aboutStandaloneVersion"
+                        text: qsTr("版本号：") + SettingsController.version
+                        color: Theme.secondaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 13
+                    }
+
+                    Text {
+                        objectName: "aboutProductPromise"
+                        text: qsTr("免费、轻便、纯净")
                         color: Theme.secondaryText
                         font.family: Theme.fontPrimary
                         font.pixelSize: 13

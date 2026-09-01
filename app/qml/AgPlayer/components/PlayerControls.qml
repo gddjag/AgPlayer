@@ -49,8 +49,7 @@ Rectangle {
             var centered = (root.width - width) / 2
             var leftLimit = listWindowButton.visible
                     ? listWindowButton.x + listWindowButton.width + 12 : 12
-            var rightLimit = secondaryActions.x - width
-                    - volumeControl.width - 24
+            var rightLimit = secondaryActions.x - width - 24
             return Math.max(leftLimit, Math.min(centered, rightLimit))
         }
         compact: root.compactTransport
