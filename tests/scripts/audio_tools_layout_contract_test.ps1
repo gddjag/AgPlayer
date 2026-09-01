@@ -136,7 +136,7 @@ if ($toolsWindow -notmatch 'onVisibleChanged:[\s\S]{0,220}AudioEditorController\
 foreach ($control in @(
     'editorMainColumn', 'editorInspector', 'editorCommandBar', 'fileSummaryBar',
     'editorTimelineWorkspace', 'editorTrackHeader', 'editorTimeRuler',
-    'editorWaveformCanvas', 'editorTimelineScrollbar',
+    'editorWaveformCanvas', 'editorTimelineZoomRange',
     'editorPlaybackTransport',
     'editorShortcutCard', 'editorStatusBar')) {
     if ($audioEditor -notmatch ('objectName:\s*"' + $control + '"')) {
@@ -293,11 +293,11 @@ foreach ($mappingCall in @(
     }
 }
 if ($audioEditor -notmatch 'frameAtPixel\(\s*index\s*\*\s*ruler\.width\s*/\s*8\)' -or
-    $audioEditor -notmatch 'timelineContentWidth\(\)' -or
-    $audioEditor -notmatch 'scrollOffsetPixels\(\)' -or
-    $audioEditor -notmatch 'onMoved:\s*AudioEditorController\.viewport\.panToScrollOffset' -or
+    $audioEditor -notmatch 'first\.onMoved:\s*AudioEditorController\.viewport\.setVisibleRange' -or
+    $audioEditor -notmatch 'second\.onMoved:\s*AudioEditorController\.viewport\.setVisibleRange' -or
+    $audioEditor -notmatch 'visibleEndFrame' -or
     $audioEditor -match 'visibleStartFrame\s*\+\s*AudioEditorController\.viewport\.visibleFrameCount') {
-    throw 'Ruler and scrollbar must use the shared viewport mapper without QML frame arithmetic.'
+    throw 'Ruler and the two-ended zoom range must use the shared viewport mapper without duplicate frame arithmetic.'
 }
 if ($waveformCanvas -notmatch 'viewportChannelPeaks' -or
     $waveformCanvas -match 'visibleStartRatio|visibleEndRatio|renderMode' -or
