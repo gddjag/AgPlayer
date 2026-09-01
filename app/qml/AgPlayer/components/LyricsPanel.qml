@@ -288,8 +288,12 @@ Item {
     Text {
         id: sourceText
         objectName: "lyricsSourceText"
+        readonly property string providerName:
+            String(root.service && root.service.sourceProvider || "")
+        readonly property string attribution:
+            String(root.service && root.service.sourceAttribution || "")
         visible: (root.spatialMode || root.chromeVisible)
-                 && root.service && root.service.sourceProvider.length > 0
+                 && providerName.length > 0
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.margins: 10
@@ -297,18 +301,19 @@ Item {
         color: Theme.textSecondary
         font.pixelSize: Math.round(11 * root.sizeScale)
         opacity: root.spatialMode ? 0.72 : 1
-        text: root.service && root.service.sourceAttribution.length > 0
-              ? root.service.sourceAttribution
-              : qsTr("来源：%1").arg(root.service ? root.service.sourceProvider : "")
+        text: attribution.length > 0
+              ? attribution : qsTr("来源：%1").arg(providerName)
     }
 
     Flickable {
         id: untimedFlickable
         objectName: "untimedLyricsFlickable"
+        readonly property string untimedTextValue:
+            String(root.service && root.service.untimedLyrics || "")
         visible: root.service && root.service.status === LyricsService.Ready
                  && !root.service.synchronizedLyrics
                  && !root.service.instrumental
-                 && root.service.untimedLyrics.length > 0
+                 && untimedTextValue.length > 0
         anchors.fill: parent
         anchors.leftMargin: 18
         anchors.rightMargin: 18
@@ -322,7 +327,7 @@ Item {
             id: untimedText
             objectName: "untimedLyricsText"
             width: untimedFlickable.width
-            text: root.service ? root.service.untimedLyrics : ""
+            text: untimedFlickable.untimedTextValue
             wrapMode: Text.Wrap
             color: root.spatialMode ? Theme.onBrandGradientText
                                     : Theme.primaryText

@@ -122,6 +122,12 @@
     <message><source>快进 5 秒</source><translation>快进 5 秒</translation></message>
     <message><source>停止（Ctrl+Space）</source><translation>停止（Ctrl+Space）</translation></message>
     <message><source>空格 = 播放 / 暂停</source><translation>空格 = 播放 / 暂停</translation></message>
+    <message><source>S = 播放头分割</source><translation>S = 播放头分割</translation></message>
+    <message><source>Ctrl+C/X/V = 复制/剪切/粘贴</source><translation>Ctrl+C/X/V = 复制/剪切/粘贴</translation></message>
+    <message><source>Ctrl+Z/Y = 撤销/重做</source><translation>Ctrl+Z/Y = 撤销/重做</translation></message>
+    <message><source>Ctrl+右键 = 选择片段</source><translation>Ctrl+右键 = 选择片段</translation></message>
+    <message><source>导出中 %1%</source><translation>导出中 %1%</translation></message>
+    <message><source>✔ 已导出</source><translation>✔ 已导出</translation></message>
     <message><source>S = 在播放头处分割</source><translation>S = 在播放头处分割</translation></message>
     <message><source>Delete = 删除片段</source><translation>Delete = 删除片段</translation></message>
     <message><source>Ctrl+C / X / V = 复制 / 剪切 / 粘贴</source><translation>Ctrl+C / X / V = 复制 / 剪切 / 粘贴</translation></message>

@@ -94,7 +94,7 @@ TestCase {
         verify(controls && equalizer && tools && mini && volume)
 
         volume.expandedForQa = true
-        tryVerify(function() { return volume.width >= 190 }, 500)
+        tryVerify(function() { return volume.width > 44 }, 500)
         verify(xInControls(equalizer, controls) + equalizer.width
                <= xInControls(tools, controls),
                "transport controls must clear the audio-tools control: equalizer="

@@ -1359,7 +1359,7 @@ set_tests_properties(qml_integrated_theme_test PROPERTIES
 add_test(NAME qml_about_version_test
     COMMAND qml_main_window_test
         -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_main_window.qml
-        MainWindowControls::test_settings_y_about_uses_one_name_and_version_line)
+        MainWindowControls::test_settings_y_about_separates_product_version_and_promise)
 set_tests_properties(qml_about_version_test PROPERTIES
     TIMEOUT 10
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"

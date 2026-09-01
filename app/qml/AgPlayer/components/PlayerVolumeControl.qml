@@ -7,8 +7,16 @@ Item {
     objectName: "mainVolumeControl"
     property bool emptyMode: false
     property bool expanded: false
+    // The host supplies the horizontal room before its right-side actions.
+    // The transport remains centered while the slider grows only to the right.
+    property real maximumExpandedWidth: 196
     property alias expandedForQa: root.expanded
     readonly property alias muteButton: muteButton
+    readonly property bool showExpandedPercent: !emptyMode && expanded
+                                                && maximumExpandedWidth >= 136
+    readonly property real expandedSliderWidth: !emptyMode && expanded
+        ? Math.max(0, Math.min(108, maximumExpandedWidth - 44
+                              - (showExpandedPercent ? 44 : 0))) : 0
     width: emptyMode ? 44 : 44 + volumeSlider.width + volumePercent.width
                        + (volumePercent.width > 0 ? 6 : 0)
     height: 44
@@ -45,7 +53,7 @@ Item {
         id: volumeSlider
         objectName: "volumeSlider"
         anchors.left: muteButton.right; anchors.verticalCenter: parent.verticalCenter
-        width: !root.emptyMode && root.expanded ? 108 : 0
+        width: root.expandedSliderWidth
         opacity: width > 0 ? 1 : 0; visible: !root.emptyMode
         from: 0; to: 1
         onPressedChanged: {
@@ -73,7 +81,7 @@ Item {
         id: volumePercent
         objectName: "volumePercentLabel"
         anchors.left: volumeSlider.right; anchors.leftMargin: width > 0 ? 6 : 0; anchors.verticalCenter: parent.verticalCenter
-        width: !root.emptyMode && root.expanded ? 38 : 0
+        width: root.showExpandedPercent ? 38 : 0
         opacity: width > 0 ? 1 : 0; visible: !root.emptyMode
         horizontalAlignment: Text.AlignRight
         text: Math.round(PlaybackController.volume * 100) + "%"

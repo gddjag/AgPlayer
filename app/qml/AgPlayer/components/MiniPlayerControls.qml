@@ -271,7 +271,10 @@ Rectangle {
                 }
                 Item {
                     objectName: "miniWaveformPlayedClip"
-                    visible: true
+                    // Spectral-centroid mode already renders played/unplayed
+                    // contrast in the native WaveformItem pass. A second
+                    // clipped pass doubles the palette in the played region.
+                    visible: SettingsController.waveformMode !== 3
                     width: waveform.waveformCursorX
                     height: waveform.height
                     clip: true
@@ -299,7 +302,8 @@ Rectangle {
                 }
                 Rectangle {
                     objectName: "miniWaveformPlaybackGuide"
-                    visible: SettingsController.waveformPlaybackGuide
+                    visible: SettingsController.waveformMode !== 3
+                             && SettingsController.waveformPlaybackGuide
                     x: waveform.waveformCursorX
                     width: 1
                     height: waveform.height

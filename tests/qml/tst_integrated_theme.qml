@@ -566,7 +566,9 @@ TestCase {
         mainWindow.width = 1672
         var summary = findChild(shell, "integratedTrackSummary")
         verify(summary)
-        tryVerify(function() { return summary.width >= 500 }, 1000)
+        tryVerify(function() { return summary.width >= 460 }, 1000)
+        verify(summary.width <= 480,
+               "track summary must leave the centered transport unobstructed")
         mainWindow.width = previousWidth
     }
 

@@ -54,9 +54,12 @@ foreach(source_path IN LISTS runtime_sources)
 endforeach()
 
 file(READ "${ROOT}/app/qml/AgPlayer/components/ColorField.qml" color_field)
-if(NOT color_field MATCHES "import QtQuick.Dialogs"
-   OR NOT color_field MATCHES "ColorDialog[ \t\r\n]*\\{")
-    message(FATAL_ERROR "ColorField.qml must use the native Qt ColorDialog")
+if(NOT color_field MATCHES "Popup[ \t\r\n]*\\{"
+   OR NOT color_field MATCHES "objectName:[ \t]*\"colorFieldPicker\""
+   OR NOT color_field MATCHES "Math.min\\(360,"
+   OR NOT color_field MATCHES "Math.min\\(430,")
+    message(FATAL_ERROR
+        "ColorField.qml must keep the compact shared color picker contract")
 endif()
 
 file(READ "${ROOT}/app/qml/AgPlayer/SettingsPage.qml" settings_page)

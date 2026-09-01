@@ -70,6 +70,9 @@ Rectangle {
         anchors.leftMargin: 12
         anchors.verticalCenter: centerControls.verticalCenter
         emptyMode: root.emptyMode
+        maximumExpandedWidth: Math.min(
+            196, Math.max(44, secondaryActions.x
+                          - (centerControls.x + centerControls.width + 12)))
     }
 
     RowLayout {
