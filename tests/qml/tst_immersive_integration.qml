@@ -701,6 +701,34 @@ TestCase {
                 PlayerExperienceController.Windowed)
     }
 
+    function test_windowed_immersive_host_exposes_native_move_region_only_before_fullscreen() {
+        PlayerExperienceController.immersiveMode =
+                PlayerExperienceController.TerrainReactor
+        PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
+        var coordinator = findChild(mainWindow, "immersiveCoordinator")
+        tryCompare(coordinator, "attachedHostMode",
+                   PlayerExperienceController.Windowed, 2000)
+        var immersiveWindow = findChild(mainWindow, "immersiveVisualWindow")
+        var moveRegion = findChild(immersiveWindow,
+                                   "immersiveWindowMoveRegion")
+        var returnButton = findChild(coordinator.surface,
+                                     "immersiveReturnToWindowButton")
+        verify(immersiveWindow && moveRegion && returnButton)
+        compare(moveRegion.enabled, true)
+        verify(moveRegion.mapToItem(coordinator.surface, moveRegion.width, 0).x
+               <= returnButton.mapToItem(coordinator.surface, 0, 0).x)
+
+        PlayerExperienceController.hostMode = PlayerExperienceController.Fullscreen
+        tryCompare(coordinator, "attachedHostMode",
+                   PlayerExperienceController.Fullscreen, 2500)
+        compare(moveRegion.enabled, false)
+
+        PlayerExperienceController.hostMode = PlayerExperienceController.Desktop
+        tryCompare(coordinator, "attachedHostMode",
+                   PlayerExperienceController.Desktop, 2500)
+        compare(moveRegion.enabled, false)
+    }
+
     function test_queue_drawer_timers_scope_and_transform_only_magnification() {
         var drawer = queueDrawerComponent.createObject(mainWindow.contentItem)
         verify(drawer)

@@ -109,5 +109,32 @@ Window {
         onMinimizeRequested: root.showMinimized()
     }
 
+    Item {
+        id: windowMoveRegion
+        objectName: "immersiveWindowMoveRegion"
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.rightMargin: 136
+        height: 48
+        z: 30
+        enabled: root.visible
+                 && PlayerExperienceController.hostMode
+                    === PlayerExperienceController.Windowed
+                 && root.visibility !== Window.FullScreen
+        visible: enabled
+
+        DragHandler {
+            objectName: "immersiveWindowMoveHandler"
+            target: null
+            acceptedButtons: Qt.LeftButton
+            enabled: windowMoveRegion.enabled
+            onActiveChanged: {
+                if (active)
+                    root.startSystemMove()
+            }
+        }
+    }
+
     Component.onCompleted: synchronizeHost()
 }
