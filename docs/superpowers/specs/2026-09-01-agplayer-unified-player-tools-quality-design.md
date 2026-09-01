@@ -71,7 +71,9 @@ window, integrated single window, mini player, and empty/startup states center
 the transport group against the full player strip, not the leftover space.
 Expanding the volume control reserves no space to the left; its flyout grows to
 the right. The rolling/DJ shell is the explicit exception required by item 13:
-its transport group is left aligned beneath the large waveform.
+its transport group is left aligned beneath the large waveform. Its waveform is
+always frequency-color mode, so its action profile omits the waveform-mode
+switch entirely; changing the global waveform mode affects other shells only.
 
 The theme chooser is anchored to the invoking theme icon and opens above it. It
 does not migrate to a window corner or another shell. Shell-specific action
@@ -291,7 +293,7 @@ added.
 | 10 | 66% default/persistence/live-update tests in every list-hosting shell |
 | 11 | About copy and build-version contract test |
 | 12 | Integrated list reference screenshot and anchored theme-popup test |
-| 13 | Rolling metadata/favorite/rating tests, density/timing checks, hover capsule, margins, height, controls, and list screenshot |
+| 13 | Rolling metadata/favorite/rating tests, fixed frequency-color mode, absent waveform-switch action, density/timing checks, hover capsule, margins, height, controls, and list screenshot |
 | 14 | Editor drag direction, wheel, two-handle zoom/pan, event selection/highlight, edit target, and shortcut tests |
 | 15 | Editor transport/panel geometry and export progress/success/failure tests |
 | 16 | Official/mirror/manual routes, failover, percentage, hash rejection, page scan, directory change, ONNX detection, per-stem preview, drag volume, and stem export tests |

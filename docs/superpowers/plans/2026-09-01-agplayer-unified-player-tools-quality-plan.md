@@ -270,7 +270,8 @@ git commit -m "perf(library): prioritize compact visible waveforms"
 
 Add QML assertions for exact reference order, equal icon size, full-strip center,
 right-growing volume, anchored theme popup, rolling-shell left alignment, startup
-actions, portrait file-info width `228`, cover width `180`, compact filter height,
+actions, a rolling action profile with no waveform-mode switch, portrait
+file-info width `228`, cover width `180`, compact filter height,
 About copy/version line, and 18-band EQ typography/radius.
 
 The transport-centering assertion must compare scene coordinates:
@@ -397,6 +398,8 @@ git commit -m "fix(lyrics): dock panel and expose provider failover"
 **Interfaces:**
 - Preserves decoded duration and cache generation metadata.
 - Uses peak density derived from physical pixels and visible time range.
+- Keeps rolling waveform `visualMode` fixed at `3` and never consumes the global
+  waveform-mode selection for this shell.
 - Adds no timer that rebuilds full waveform geometry on position updates.
 
 - [ ] **Step 1: Add failing half-waveform and rolling-density tests**
@@ -406,6 +409,8 @@ rightmost peak remains non-empty without a theme toggle, assert source/cache/DPR
 changes invalidate geometry, and prove rolling position updates only dirty color
 or translation state. Add QML assertions for metadata, favorite, rating, hover
 capsule, reduced margins/height, left transport, and shared row layout.
+Assert the rolling waveform remains in frequency-color mode after every global
+waveform-mode change and that no rolling player action exposes a waveform toggle.
 
 - [ ] **Step 2: Reproduce and record frame/geometry baseline**
 
