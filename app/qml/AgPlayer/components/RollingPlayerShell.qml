@@ -12,6 +12,7 @@ Item {
     property var waveformSession: null
     property var libraryModel: LibraryModel
     property var visualFeatures: AudioVisualFeatureController
+    property var currentTrack: null
     property real waveformPixelsPerSecond: 120
     property bool scratchGestureActive: false
     property real scratchVisualPositionMs: 0
@@ -29,6 +30,11 @@ Item {
           ? Number(playback.durationMs) : 0
     readonly property real playbackPositionMs:
         playback ? Number(playback.positionMs) || 0 : 0
+    readonly property real sourceBpmValue:
+        playback && Number(playback.sourceBpm) > 0
+        ? Number(playback.sourceBpm)
+        : currentTrack && Number(currentTrack.bpm) > 0
+          ? Number(currentTrack.bpm) : 0
     readonly property real viewportCenterMs:
         scratchGestureActive ? scratchVisualPositionMs : playbackPositionMs
     readonly property real viewportSpanMs: {
@@ -91,22 +97,24 @@ Item {
         return -Number(deltaX || 0) / waveformPixelsPerSecond * 1000
     }
 
+    function alignWaveformToPlayhead() {
+        if (!mainWaveform)
+            return
+        var sourceTime = Math.round(clamp(viewportCenterMs, 0,
+                                          effectiveDurationMs))
+        waveformContentX = mainWaveformCanvas.width / 2
+                - mainWaveform.pixelForTime(sourceTime)
+    }
+
     function syncWaveformViewport() {
         if (!mainWaveform)
             return
         mainWaveform.setVisibleRange(Math.round(waveformVisibleStartMs),
                                      Math.round(waveformVisibleEndMs))
-        var sourceTime = Math.round(clamp(viewportCenterMs, 0,
-                                          effectiveDurationMs))
-        waveformContentX = mainWaveformCanvas.width / 2
-                - mainWaveform.pixelForTime(sourceTime)
-        // WaveformItem can keep a fractional render width while QML lays out
-        // its clipped child width. Correct from the item's public mapper, so
-        // source time is exactly under the needle at both track boundaries.
-        var mappedX = mainWaveform.mapToItem(
-                    mainWaveformCanvas,
-                    mainWaveform.pixelForTime(sourceTime), 0).x
-        waveformContentX += mainWaveformCanvas.width / 2 - mappedX
+        alignWaveformToPlayhead()
+        // setVisibleRange changes the clipped waveform width through QML
+        // bindings. Re-align once after those bindings settle.
+        Qt.callLater(alignWaveformToPlayhead)
     }
 
     function adjustSpeed(delta) {

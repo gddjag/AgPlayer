@@ -3738,7 +3738,7 @@
     <message><source>歌曲列表</source><translation>歌曲列表</translation></message>
     <message><source>显示歌曲列表波形缩略图</source><translation>显示歌曲列表波形缩略图</translation></message>
     <message><source>缩略波形颜色</source><translation>缩略波形颜色</translation></message>
-    <message><source>36 色</source><translation>36 色</translation></message>
+    <message><source>频彩调色板</source><translation>频彩调色板</translation></message>
     <message><source>波形与频谱颜色</source><translation>波形与频谱颜色</translation></message>
     <message><source>自定义波形</source><translation>自定义波形</translation></message>
     <message><source>底色 / RGB 渐变</source><translation>底色 / RGB 渐变</translation></message>

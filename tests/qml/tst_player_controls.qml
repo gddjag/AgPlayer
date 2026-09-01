@@ -59,16 +59,18 @@ TestCase {
 
         verify(typeof actions.buttonSize === "function",
                "PlayerControls must instantiate the shared ExperienceActions component")
-        compare(actions.buttonSize(), 32)
+        compare(actions.buttonSize(), 26)
         verify(xInControls(lyrics, controls) + lyrics.width
                <= xInControls(immersive, controls),
                "lyrics and immersive actions must not overlap")
         verify(xInControls(immersive, controls) + immersive.width
                <= xInControls(mini, controls),
                "immersive action must not overlap the mini-player control")
-        verify(xInControls(mini, controls) + mini.width
-               <= xInControls(volume, controls),
-               "mini-player control must not overlap the volume control")
+        var tools = findChild(controls, "audioToolsButton")
+        verify(tools)
+        verify(xInControls(volume, controls) + volume.width
+               <= xInControls(tools, controls),
+               "volume control must not overlap the secondary actions")
         verify(xInControls(volume, controls) + volume.width <= controls.width,
                "volume control must remain inside a 1000 DIP player")
     }
@@ -91,16 +93,16 @@ TestCase {
         var volume = findChild(controls, "mainVolumeControl")
         verify(controls && equalizer && tools && mini && volume)
 
-        controls.volumeExpanded = true
+        volume.expandedForQa = true
         tryVerify(function() { return volume.width >= 190 }, 500)
         verify(xInControls(equalizer, controls) + equalizer.width
                <= xInControls(tools, controls),
                "transport controls must clear the audio-tools control: equalizer="
                + xInControls(equalizer, controls) + "+" + equalizer.width
                + ", tools=" + xInControls(tools, controls))
-        verify(xInControls(mini, controls) + mini.width
-               <= xInControls(volume, controls),
-               "expanded volume must not cover the mini-player control")
+        verify(xInControls(volume, controls) + volume.width
+               <= xInControls(tools, controls),
+               "expanded volume must not cover the secondary actions")
         verify(xInControls(volume, controls) + volume.width <= controls.width,
                "expanded volume must remain inside a 1000 DIP player")
     }

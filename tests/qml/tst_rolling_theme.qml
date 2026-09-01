@@ -202,7 +202,7 @@ TestCase {
         compare(mainWindow.minimumHeight, 420)
     }
 
-    function test_waveform_mode_reloads_frequency_analysis_exactly_once() {
+    function test_waveform_modes_reuse_shared_spectral_analysis() {
         var trackIds = nativeDropHelper.ensureSortableTracks()
         verify(trackIds.length > 0)
         PlaybackController.playRow(LibraryModel.indexForTrackId(trackIds[0]))
@@ -223,8 +223,8 @@ TestCase {
         var generationBeforeFrequencyChange = session.generation
         SettingsController.waveformMode = 3
         wait(0)
-        compare(session.generation, generationBeforeFrequencyChange + 1,
-                "frequency analysis must reload exactly once")
+        compare(session.generation, generationBeforeFrequencyChange,
+                "spectral indices are cached with the shared waveform analysis")
     }
 
     function test_three_shells_share_exact_control_order_and_skin_menu() {
@@ -232,17 +232,19 @@ TestCase {
         mainWindow.width = 1440
         mainWindow.height = 760
         var names = [
-            "listWindowButton", "previousButton", "playPauseButton",
-            "nextButton", "modeButton", "waveformModeButton",
-            "equalizerButton", "audioToolsButton", "playerShellModeButton",
-            "lyricsActionButton", "immersiveActionButton",
-            "miniPlayerButton", "mainVolumeControl"
+            "listWindowButton", "equalizerButton", "waveformModeButton",
+            "previousButton", "playPauseButton", "nextButton", "modeButton",
+            "mainVolumeControl", "audioToolsButton", "lyricsActionButton",
+            "themeModeButton", "immersiveActionButton", "windowLayoutButton"
         ]
 
         for (var mode = 0; mode < 3; ++mode) {
             var activeShell = enterMode(mode)
-            var controls = findChild(activeShell, "playerControls")
+            var controls = mode === 1
+                    ? findChild(mainWindow, "integratedPlayerControls")
+                    : findChild(activeShell, "playerControls")
             verify(controls, "mode " + mode + " must instantiate PlayerControls")
+            wait(50)
             var previousX = -1
             for (var index = 0; index < names.length; ++index) {
                 var control = findChild(controls, names[index])
@@ -263,7 +265,7 @@ TestCase {
         }
 
         var rolling = enterMode(2)
-        var skinButton = findChild(rolling, "playerShellModeButton")
+        var skinButton = findChild(rolling, "windowLayoutButton")
         verify(skinButton)
         verify(skinButton.icon.source.toString()
                .endsWith("/player-shell-mode.svg"))
@@ -271,8 +273,8 @@ TestCase {
         var menu = findChild(rolling, "playerShellMenu")
         verify(menu)
         compare(menu.count, 3)
-        compare(findChild(menu, "classicShellMenuItem").text, "经典模式")
-        compare(findChild(menu, "integratedShellMenuItem").text, "一体化模式")
+        compare(findChild(menu, "classicShellMenuItem").text, "经典双窗口")
+        compare(findChild(menu, "integratedShellMenuItem").text, "集成单窗口")
         compare(findChild(menu, "rollingShellMenuItem").text, "滚动播放模式")
         menu.close()
     }
@@ -383,11 +385,12 @@ TestCase {
             fakePlayback.positionMs = position
             rolling.syncWaveformViewport()
             wait(0)
-            var sourceX = waveform.mapToItem(
-                        canvas, waveform.pixelForTime(position), 0).x
-            compare(Math.round(sourceX), Math.round(canvas.width / 2),
-                    "source time " + position
-                    + " must remain beneath the fixed playhead")
+            tryVerify(function() {
+                var sourceX = waveform.mapToItem(
+                            canvas, waveform.pixelForTime(position), 0).x
+                return Math.abs(sourceX - canvas.width / 2) <= 1
+            }, 1000, "source time " + position
+                     + " must remain beneath the fixed playhead")
             if (position === 0)
                 verify(rolling.viewportStartMs < 0,
                        "track start keeps virtual lead-in padding")
@@ -481,7 +484,7 @@ TestCase {
         var controls = findChild(rolling, "playerControls")
         verify(controls)
         var minimumWidthSharedActions = [
-            "waveformModeButton", "equalizerButton", "playerShellModeButton",
+            "waveformModeButton", "equalizerButton", "windowLayoutButton",
             "lyricsActionButton", "immersiveActionButton", "miniPlayerButton"
         ]
         for (var actionIndex = 0;

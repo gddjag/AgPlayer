@@ -17,6 +17,7 @@ Rectangle {
     signal toggleEmbeddedPlaylistRequested()
 
     ToolButton {
+        id: listWindowButton
         objectName: "listWindowButton"
         anchors.left: parent.left
         anchors.leftMargin: 24
@@ -43,8 +44,15 @@ Rectangle {
     TransportControls {
         id: centerControls
         objectName: "centerPlaybackControls"
-        anchors.horizontalCenter: parent.horizontalCenter
         anchors.verticalCenter: parent.verticalCenter
+        x: {
+            var centered = (root.width - width) / 2
+            var leftLimit = listWindowButton.visible
+                    ? listWindowButton.x + listWindowButton.width + 12 : 12
+            var rightLimit = secondaryActions.x - width
+                    - volumeControl.width - 24
+            return Math.max(leftLimit, Math.min(centered, rightLimit))
+        }
         compact: root.compactTransport
         dense: root.denseTransport
         spacing: root.emptyMode && !root.denseTransport
