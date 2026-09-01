@@ -1509,6 +1509,16 @@ private slots:
         QVERIFY(controller.actionEnabled(QStringLiteral("editor.cropToSelection")));
         QVERIFY(controller.triggerAction(QStringLiteral("editor.cropToSelection")));
         QCOMPARE(controller.totalFrames(), qint64{600});
+        QCOMPARE(controller.selectionStart(), qint64{0});
+        QCOMPARE(controller.selectionEnd(), qint64{600});
+        QVERIFY(controller.loopEnabled());
+        const auto croppedEvent = controller.timelineEventViews().front().toMap();
+        const auto envelope = croppedEvent.value(QStringLiteral("envelope")).toList();
+        QCOMPARE(envelope.size(), 2);
+        QCOMPARE(envelope.front().toMap()
+                     .value(QStringLiteral("offset")).toLongLong(), qint64{0});
+        QCOMPARE(envelope.back().toMap()
+                     .value(QStringLiteral("offset")).toLongLong(), qint64{599});
     }
 
     void splitAndMergeActionsUseDeterministicPlayheadAndSelectionRules()

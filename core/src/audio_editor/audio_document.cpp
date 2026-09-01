@@ -495,10 +495,20 @@ bool AudioDocument::cropToSelection()
     if (candidate.empty()) return false;
     for (AudioEvent& event : candidate) {
         event.timelineStart -= selection_->start;
+        const SampleFrame lastOffset = audibleFrames(event) - 1;
+        const float firstGain = envelopeGainAt(event, 0);
+        const float lastGain = envelopeGainAt(event, lastOffset);
+        if (event.envelope.empty() || event.envelope.front().offset != 0) {
+            event.envelope.insert(event.envelope.begin(), {0, firstGain});
+        }
+        if (event.envelope.back().offset != lastOffset) {
+            event.envelope.push_back({lastOffset, lastGain});
+        }
+        fitEnvelopePointLimit(event.envelope);
     }
     if (!applyCandidate(std::move(candidate))) return false;
     next_event_id_ = candidateId;
-    selection_.reset();
+    selection_ = Selection{0, timeline_.totalFrames()};
     return true;
 }
 

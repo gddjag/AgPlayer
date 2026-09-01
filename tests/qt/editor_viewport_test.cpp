@@ -70,6 +70,26 @@ private slots:
         QCOMPARE(viewport.visibleEndFrame(), qint64{480'000});
     }
 
+    void timelineScrollbarMappingStaysStableAcrossTheWholeDocument()
+    {
+        EditorViewport viewport;
+        viewport.setDocumentFrames(192'000);
+        viewport.setViewportWidth(1'000.0);
+        QVERIFY(viewport.setVisibleRange(0, 48'000));
+
+        QCOMPARE(viewport.timelineContentWidth(), 4'000.0);
+        QCOMPARE(viewport.scrollOffsetPixels(), 0.0);
+
+        viewport.panToScrollOffset(3'000.0);
+        QCOMPARE(viewport.visibleStartFrame(), qint64{144'000});
+        QCOMPARE(viewport.visibleEndFrame(), qint64{192'000});
+        QCOMPARE(viewport.scrollOffsetPixels(), 3'000.0);
+
+        viewport.panToScrollOffset(-500.0);
+        QCOMPARE(viewport.visibleStartFrame(), qint64{0});
+        QCOMPARE(viewport.scrollOffsetPixels(), 0.0);
+    }
+
     void emptyDocumentNeverProducesInvalidRatios()
     {
         EditorViewport viewport;

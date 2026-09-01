@@ -34,6 +34,9 @@ public:
     Q_INVOKABLE void moveOverviewWindow(qreal startRatio) noexcept;
     Q_INVOKABLE void zoomAt(qreal factor, qreal anchorPixel) noexcept;
     Q_INVOKABLE void panByPixels(qreal pixelDelta) noexcept;
+    Q_INVOKABLE qreal timelineContentWidth() const noexcept;
+    Q_INVOKABLE qreal scrollOffsetPixels() const noexcept;
+    Q_INVOKABLE void panToScrollOffset(qreal pixelOffset) noexcept;
     Q_INVOKABLE qint64 frameAtPixel(qreal pixel) const noexcept;
     Q_INVOKABLE qreal pixelAtFrame(qint64 frame) const noexcept;
 

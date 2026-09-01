@@ -77,6 +77,7 @@ public:
 
     void begin(QPointF scenePosition, HandoffRequest request);
     void update(QPointF scenePosition);
+    void release();
     void cancel();
 
     [[nodiscard]] bool preparing() const noexcept { return preparing_; }

@@ -1828,6 +1828,11 @@ void AudioEditorController::updateSelectionHandoff(
     }
 }
 
+void AudioEditorController::releaseSelectionHandoff()
+{
+    if (selection_drag_controller_) selection_drag_controller_->release();
+}
+
 void AudioEditorController::cancelSelectionHandoff()
 {
     if (selection_drag_controller_) selection_drag_controller_->cancel();
@@ -2883,6 +2888,12 @@ bool AudioEditorController::triggerAction(const QString& id)
     if (!changed) return false;
     if (id != QStringLiteral("editor.copy")) {
         finishTimelineMutation();
+        if (id == QStringLiteral("editor.cropToSelection")) {
+            setLoopEnabled(true);
+            if (const auto croppedSelection = document_.selection()) {
+                (void)seekFrame(croppedSelection->start);
+            }
+        }
         if (pastedEvent) selectEvent(QString::number(*pastedEvent));
         return true;
     }

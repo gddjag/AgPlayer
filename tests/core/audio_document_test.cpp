@@ -157,7 +157,17 @@ private slots:
         QCOMPARE(cropped.events[1].sourceEnd, SampleFrame{500});
         QCOMPARE(cropped.events[1].timelineStart, SampleFrame{300});
         QCOMPARE(cropped.totalFrames, SampleFrame{400});
-        QVERIFY(!value.selection().has_value());
+        QVERIFY(value.selection().has_value());
+        QCOMPARE(value.selection()->start, SampleFrame{0});
+        QCOMPARE(value.selection()->end, SampleFrame{400});
+        for (const auto& event : cropped.events) {
+            QCOMPARE(event.envelope.size(), std::size_t{2});
+            QCOMPARE(event.envelope.front().offset, SampleFrame{0});
+            QCOMPARE(event.envelope.front().gain, 1.0F);
+            QCOMPARE(event.envelope.back().offset,
+                     agplayer::editor::audibleFrames(event) - 1);
+            QCOMPARE(event.envelope.back().gain, 1.0F);
+        }
 
         QVERIFY(value.undo());
         QCOMPARE(value.timelineSnapshot().events.size(), std::size_t{2});

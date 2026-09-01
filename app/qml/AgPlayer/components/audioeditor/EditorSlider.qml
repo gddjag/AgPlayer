@@ -11,6 +11,8 @@ Slider {
     property color editorAccentColor: Theme.accent
     property color editorGrooveColor: Theme.border
     property color editorThumbColor: Theme.textPrimary
+    property real wheelStep: 0
+    signal wheelAdjusted(real requestedValue)
 
     implicitWidth: orientation === Qt.Horizontal ? 120 : pointerHitExtent
     implicitHeight: orientation === Qt.Horizontal ? pointerHitExtent : 120
@@ -76,5 +78,20 @@ Slider {
         color: control.editorThumbColor
         border.color: Theme.textSecondary
         border.width: 1
+    }
+
+    MouseArea {
+        objectName: "editorSliderWheelArea"
+        anchors.fill: parent
+        enabled: control.enabled && control.wheelStep > 0
+        acceptedButtons: Qt.NoButton
+        preventStealing: false
+        onWheel: function(wheel) {
+            const direction = wheel.angleDelta.y > 0 ? 1 : -1
+            control.wheelAdjusted(Math.max(control.from,
+                Math.min(control.to,
+                    control.value + direction * control.wheelStep)))
+            wheel.accepted = true
+        }
     }
 }

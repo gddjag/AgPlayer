@@ -293,8 +293,9 @@ foreach ($mappingCall in @(
     }
 }
 if ($audioEditor -notmatch 'frameAtPixel\(\s*index\s*\*\s*ruler\.width\s*/\s*8\)' -or
-    $audioEditor -notmatch 'pixelAtFrame\(0\)' -or
-    $audioEditor -notmatch 'onMoved:\s*AudioEditorController\.viewport\.panByPixels' -or
+    $audioEditor -notmatch 'timelineContentWidth\(\)' -or
+    $audioEditor -notmatch 'scrollOffsetPixels\(\)' -or
+    $audioEditor -notmatch 'onMoved:\s*AudioEditorController\.viewport\.panToScrollOffset' -or
     $audioEditor -match 'visibleStartFrame\s*\+\s*AudioEditorController\.viewport\.visibleFrameCount') {
     throw 'Ruler and scrollbar must use the shared viewport mapper without QML frame arithmetic.'
 }
@@ -303,8 +304,9 @@ if ($waveformCanvas -notmatch 'viewportChannelPeaks' -or
     $waveformCanvas -match 'positionMs\s*\*\s*AudioEditorController\.sampleRate') {
     throw 'Waveform QML must consume visible peaks and exact playheadFrame without a second crop/time path.'
 }
-if ($waveformCanvas -notmatch 'onReleased:\s*AudioEditorController\.cancelSelectionHandoff\(\)') {
-    throw 'Selection handoff release must cancel an unfinished WAV before QDrag can fire.'
+if ($waveformCanvas -notmatch 'onReleased:\s*AudioEditorController\.releaseSelectionHandoff\(\)' -or
+    $waveformCanvas -notmatch 'onCanceled:\s*AudioEditorController\.cancelSelectionHandoff\(\)') {
+    throw 'Selection handoff release must preserve a triggered native drag while cancellation aborts it.'
 }
 if ($waveformCanvas -notmatch 'SettingsController\.waveformDensity' -or
     $waveformCanvas -notmatch 'SettingsController\.waveformThickness' -or

@@ -434,7 +434,7 @@ private slots:
         controller.update(QPointF(QApplication::startDragDistance(), 0));
         QVERIFY(started.tryAcquire(1, 3'000));
 
-        controller.cancel(); // QML MouseArea.onReleased contract
+        controller.release();
         release.release();
         QTRY_VERIFY_WITH_TIMEOUT(!controller.preparing(), 3'000);
         QCOMPARE(drags.load(), 0);

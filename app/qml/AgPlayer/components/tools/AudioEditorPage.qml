@@ -489,12 +489,17 @@ Rectangle {
                         orientation: Qt.Vertical
                         from: -60
                         to: 12
+                        stepSize: 1
+                        wheelStep: 1
                         value: AudioEditorController.trackGainDb
                         enabled: AudioEditorController.hasDocument
                             && !AudioEditorController.busy
                         Layout.fillHeight: true
                         Layout.alignment: Qt.AlignHCenter
                         onMoved: AudioEditorController.setTrackGainDb(value)
+                        onWheelAdjusted: function(requestedValue) {
+                            AudioEditorController.setTrackGainDb(requestedValue)
+                        }
                     }
                     Label {
                         objectName: "editorTrackGainLabel"
@@ -619,15 +624,18 @@ Rectangle {
                     property double pressFrame: 0
                     property bool selecting: false
                     onPressed: function(mouse) {
+                        const frame = AudioEditorController.viewport.frameAtPixel(mouse.x)
                         if (mouse.button === Qt.RightButton) {
                             waveformCanvas.cancelSelectionPreview()
-                            AudioEditorController.clearSelection()
+                            if (waveformCanvas.selectionContains(frame))
+                                AudioEditorController.clearSelection()
                             return
                         }
-                        pressFrame = AudioEditorController.viewport.frameAtPixel(mouse.x)
+                        pressFrame = frame
                         selecting = false
                         waveformCanvas.cancelSelectionPreview()
-                        AudioEditorController.clearSelection()
+                        if (!waveformCanvas.selectionContains(frame))
+                            AudioEditorController.setLoopEnabled(false)
                         AudioEditorController.seekFrame(pressFrame)
                     }
                     onPositionChanged: function(mouse) {
@@ -668,14 +676,10 @@ Rectangle {
                 pointerHitExtent: 16
                 from: 0
                 to: Math.max(0,
-                    AudioEditorController.viewport.pixelAtFrame(
-                        AudioEditorController.totalFrames) - width)
-                value: Math.max(0,
-                    -AudioEditorController.viewport.pixelAtFrame(0))
+                    AudioEditorController.viewport.timelineContentWidth() - width)
+                value: AudioEditorController.viewport.scrollOffsetPixels()
                 enabled: to > 0
-                onMoved: AudioEditorController.viewport.panByPixels(
-                    value - Math.max(0,
-                        -AudioEditorController.viewport.pixelAtFrame(0)))
+                onMoved: AudioEditorController.viewport.panToScrollOffset(value)
             }
 
             Rectangle {
@@ -688,9 +692,9 @@ Rectangle {
                     : page.interpolateLayout(410, 618)
                 width: mainSurface.width - 24
                 height: page.compactNarrowLayout ? 104
-                    : page.shortDesktopLayout ? 112
-                    : page.narrowLayout ? 80
-                    : page.interpolateLayout(110, 112)
+                    : page.shortDesktopLayout ? 104
+                    : page.narrowLayout ? 76
+                    : page.interpolateLayout(102, 104)
                 color: Theme.surfaceElevated
                 border.color: Theme.divider
                 border.width: 1
@@ -984,13 +988,11 @@ Rectangle {
                 id: shortcutCard
                 objectName: "editorShortcutCard"
                 x: 12
-                y: page.compactNarrowLayout ? 341
-                    : page.shortDesktopLayout ? 509
-                    : page.narrowLayout ? 460
-                    : page.interpolateLayout(516, 730)
+                y: playbackTransport.y + playbackTransport.height
+                    + (page.compactNarrowLayout || page.narrowLayout ? 8 : 12)
                 width: mainSurface.width - 24
-                height: page.narrowLayout || page.shortDesktopLayout ? 67
-                    : page.interpolateLayout(103, 67)
+                height: Math.min(67, Math.max(54,
+                    mainSurface.height - 25 - y))
                 color: Theme.surfaceElevated
                 border.color: Theme.divider
                 border.width: 1
@@ -1040,7 +1042,7 @@ Rectangle {
                             delegate: Item {
                                 required property int index
                                 required property string modelData
-                                width: firstGroupText.implicitWidth + 2
+                                width: firstGroupText.implicitWidth + 14
                                 height: shortcutFirstRow.height
                                 Text {
                                     id: firstGroupText
@@ -1099,7 +1101,7 @@ Rectangle {
                             delegate: Item {
                                 required property int index
                                 required property string modelData
-                                width: secondGroupText.implicitWidth + 2
+                                width: secondGroupText.implicitWidth + 14
                                 height: shortcutSecondRow.height
                                 Text {
                                     id: secondGroupText
@@ -1849,7 +1851,7 @@ Rectangle {
                             icon.source: Theme.icon("download-line")
                             enabled: AudioEditorController.exportSupported
                                 && AudioEditorController.hasDocument
-                                && AudioEditorController.actionEnabled("editor.export")
+                                && !AudioEditorController.busy
                             Accessible.name: text
                             Accessible.role: Accessible.Button
                             background: Rectangle {
