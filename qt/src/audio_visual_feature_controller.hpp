@@ -8,6 +8,8 @@
 #include <QTimer>
 #include <QVariantList>
 
+#include <array>
+
 class PlaybackController;
 class AudioVisualFeatureControllerTest;
 
@@ -74,6 +76,13 @@ private:
                            double leftRms, double rightRms);
     void resetOutputLevels();
     void resetBeatPosition() noexcept;
+    void resetTransientHistory() noexcept;
+    static double adaptiveThreshold(const std::array<double, 24>& history,
+                                    int sampleCount,
+                                    double minimum) noexcept;
+    static void appendTransientSample(std::array<double, 24>& history,
+                                      int& sampleCount, int& writeIndex,
+                                      double value) noexcept;
     void triggerImpact(double strength, bool notify = true);
     static double normalizedValue(const QVariant& value) noexcept;
 
@@ -95,6 +104,10 @@ private:
     bool beatReliable_ = false;
     qint64 lastPositionMs_ = -1;
     qint64 lastImpactGroup_ = -1;
+    std::array<double, 24> lowFluxHistory_{};
+    std::array<double, 24> highFluxHistory_{};
+    int transientSampleCount_ = 0;
+    int transientWriteIndex_ = 0;
     QElapsedTimer fallbackDebounce_;
     quint64 impactRevision_ = 0;
     double impactStrength_ = 0.0;

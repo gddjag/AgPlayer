@@ -4,6 +4,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QEvent>
+#include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
 #include <QIcon>
@@ -14,6 +15,7 @@
 #include <QLocalSocket>
 #include <QMenu>
 #include <QQuickWindow>
+#include <QQuickItem>
 #include <QQuickStyle>
 #include <QSettings>
 #include <QSaveFile>
@@ -1765,6 +1767,46 @@ int main(int argc, char* argv[])
                             << "Integrated center controls QA geometry: x="
                             << center->property("x").toReal()
                             << "width=" << center->property("width").toReal();
+                    }
+                    if (wantScreenshotImmersive) {
+                        QObject* const terrain = captureTarget->findChild<QObject*>(
+                            QStringLiteral("terrainReactor"));
+                        if (terrain != nullptr) {
+                            auto* const terrainItem = qobject_cast<QQuickItem*>(terrain);
+                            for (int attempt = 0;
+                                 attempt < 20
+                                 && terrain->property("stableRenderedFrameCount")
+                                        .toULongLong() < 3;
+                                 ++attempt) {
+                                if (terrainItem != nullptr) terrainItem->update();
+                                QEventLoop renderWait;
+                                QTimer::singleShot(25, &renderWait,
+                                                   &QEventLoop::quit);
+                                renderWait.exec();
+                            }
+                            qInfo().noquote()
+                                << "Immersive renderer QA state: status="
+                                << terrain->property("renderStatus").toInt()
+                                << "diagnostic="
+                                << terrain->property("diagnostic").toString()
+                                << "active=" << terrain->property("active").toBool()
+                                << "hostExposed="
+                                << terrain->property("hostExposed").toBool()
+                                << "frames="
+                                << terrain->property("frameCount").toULongLong()
+                                << "stableFrames="
+                                << terrain->property("stableRenderedFrameCount").toULongLong()
+                                << "resources="
+                                << terrain->property("resourceGeneration").toULongLong();
+                            if (terrain->property("stableRenderedFrameCount")
+                                    .toULongLong() < 3) {
+                                qWarning("Immersive renderer did not reach a stable QA frame");
+                                QCoreApplication::quit();
+                                return;
+                            }
+                        } else {
+                            qWarning("Immersive renderer QA item was not created");
+                        }
                     }
                     qInfo().noquote()
                         << "Playback selection QA state: startMs="

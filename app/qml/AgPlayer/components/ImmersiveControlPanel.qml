@@ -53,6 +53,7 @@ Rectangle {
         {
             "key": "Terrain", "title": qsTr("地形"),
             "sliders": [
+                { "label": qsTr("柱体跳动高度"), "key": "terrainAmplitude", "from": 0, "to": 100 },
                 { "label": qsTr("输入压制"), "key": "inputCompression", "from": 20, "to": 150 },
                 { "label": qsTr("音频响应"), "key": "audioResponse", "from": 20, "to": 200, "scale": 100, "decimals": 2 },
                 { "label": qsTr("响应范围"), "key": "responseRange", "from": 50, "to": 220, "scale": 100, "decimals": 2 },

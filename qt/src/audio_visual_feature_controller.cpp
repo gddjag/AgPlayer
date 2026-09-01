@@ -79,6 +79,7 @@ void AudioVisualFeatureController::setActive(bool active)
     active_ = active;
     if (active_) {
         previousSpectrum_.clear();
+        resetTransientHistory();
         connectPlaybackSignals();
     } else {
         disconnectPlaybackSignals();
@@ -113,6 +114,8 @@ void AudioVisualFeatureController::setWaveformTiming(
     durationMs_ = reliable ? durationMs : 0;
     beatReliable_ = reliable;
     fallbackDebounce_.invalidate();
+    previousSpectrum_.clear();
+    resetTransientHistory();
     resetBeatPosition();
     if (reliabilityChanged) emit beatReliableChanged();
 }
@@ -178,10 +181,20 @@ void AudioVisualFeatureController::processSpectrum(const QVariantList& spectrum)
     bands_ = std::move(nextBands);
     energy_ = total / 128.0;
     spectralFlux_ = flux / 128.0;
-    kickPulse_ = lowFlux / 32.0 >= 0.05
+    const double normalizedLowFlux = lowFlux / 32.0;
+    const double normalizedHighFlux = highFlux / 32.0;
+    const double kickThreshold = adaptiveThreshold(
+        lowFluxHistory_, transientSampleCount_, 0.05);
+    const double snareThreshold = adaptiveThreshold(
+        highFluxHistory_, transientSampleCount_, 0.04);
+    kickPulse_ = normalizedLowFlux >= kickThreshold
         && bands_.at(0).toDouble() + bands_.at(1).toDouble() >= 0.20;
-    snarePulse_ = highFlux / 32.0 >= 0.04
+    snarePulse_ = normalizedHighFlux >= snareThreshold
         && bands_.at(4).toDouble() + bands_.at(5).toDouble() >= 0.20;
+    appendTransientSample(lowFluxHistory_, transientSampleCount_,
+                          transientWriteIndex_, normalizedLowFlux);
+    const int highWriteIndex = (transientWriteIndex_ + 23) % 24;
+    highFluxHistory_[std::size_t(highWriteIndex)] = normalizedHighFlux;
     previousSpectrum_ = spectrum;
     ++derivedUpdateCount_;
     constexpr qint64 FallbackDebounceMs = 180;
@@ -326,6 +339,44 @@ void AudioVisualFeatureController::resetBeatPosition() noexcept
 {
     lastPositionMs_ = -1;
     lastImpactGroup_ = -1;
+}
+
+void AudioVisualFeatureController::resetTransientHistory() noexcept
+{
+    lowFluxHistory_.fill(0.0);
+    highFluxHistory_.fill(0.0);
+    transientSampleCount_ = 0;
+    transientWriteIndex_ = 0;
+}
+
+double AudioVisualFeatureController::adaptiveThreshold(
+    const std::array<double, 24>& history, const int sampleCount,
+    const double minimum) noexcept
+{
+    const int count = std::clamp(sampleCount, 0, int(history.size()));
+    if (count < 3) return minimum;
+    double sum = 0.0;
+    for (int index = 0; index < count; ++index) {
+        sum += history[std::size_t(index)];
+    }
+    const double mean = sum / double(count);
+    double variance = 0.0;
+    for (int index = 0; index < count; ++index) {
+        const double delta = history[std::size_t(index)] - mean;
+        variance += delta * delta;
+    }
+    const double deviation = std::sqrt(variance / double(count));
+    return std::clamp(mean + deviation * 1.20 + 0.008,
+                      minimum, minimum * 3.20);
+}
+
+void AudioVisualFeatureController::appendTransientSample(
+    std::array<double, 24>& history, int& sampleCount, int& writeIndex,
+    const double value) noexcept
+{
+    history[std::size_t(writeIndex)] = std::clamp(value, 0.0, 1.0);
+    writeIndex = (writeIndex + 1) % int(history.size());
+    sampleCount = std::min(sampleCount + 1, int(history.size()));
 }
 
 void AudioVisualFeatureController::triggerImpact(double strength, bool notify)

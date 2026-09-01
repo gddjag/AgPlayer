@@ -118,11 +118,11 @@ Item {
         id: reactorSoftBloom
         anchors.fill: parent
         visible: root.active && root.hostExposed
-        opacity: 0.42 + (root.terrainItem
-                         ? Math.min(1, root.terrainItem.featureEnergy) * 0.58 : 0)
+        opacity: 0.14 + (root.terrainItem
+                         ? Math.min(1, root.terrainItem.featureEnergy) * 0.18 : 0)
 
         Repeater {
-            model: 6
+            model: 4
             Rectangle {
                 required property int index
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -133,7 +133,7 @@ Item {
                 radius: Math.min(width, height) / 2
                 color: index % 2 === 0 ? PlayerExperienceController.peakColor
                                        : PlayerExperienceController.warmColor
-                opacity: 0.014
+                opacity: 0.007
             }
         }
     }
