@@ -160,6 +160,12 @@ TestCase {
                 var point = action.mapToItem(bar, 0, 0)
                 verify(point.x >= -1 && point.x + action.width <= bar.width + 1,
                        actionNames[actionIndex] + " must fit width " + view.width)
+                if (actionNames[actionIndex] === "videoSpeedControl")
+                    verify(!action.contentItem.truncated,
+                           "speed label must not be elided at width " + view.width
+                           + " (control=" + action.width
+                           + ", content=" + action.contentItem.width
+                           + ", painted=" + action.contentItem.paintedWidth + ")")
             }
             volume.expandedForQa = false
         }

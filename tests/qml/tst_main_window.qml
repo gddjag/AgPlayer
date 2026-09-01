@@ -18,6 +18,11 @@ TestCase {
             property bool visible: false
             property bool loading: false
             property string errorMessage: ""
+            property int dismissCalls: 0
+            function dismiss() {
+                ++dismissCalls
+                visible = false
+            }
         }
     }
 
@@ -32,6 +37,7 @@ TestCase {
             property bool muted: false
             property real volume: 0.5
             property int stopCalls: 0
+            property bool stopHidesVideo: true
             property var videoState: null
             property var fullscreenProbe: null
             property var stopFullscreenSamples: []
@@ -47,7 +53,7 @@ TestCase {
                                                    && fullscreenProbe.videoFullscreen))
                 ++stopCalls
                 state = 0
-                if (videoState)
+                if (videoState && stopHidesVideo)
                     videoState.visible = false
             }
         }
@@ -5894,6 +5900,7 @@ TestCase {
         verify(videoState && transport)
         mainWindow.playback = transport
         mainWindow.videoPlayback = videoState
+        transport.stopHidesVideo = false
 
         try {
             var shellLoader = findChild(mainWindow, "playerShellLoader")
@@ -5928,6 +5935,8 @@ TestCase {
             findChild(loader.item, "videoReturnButton").clicked()
             tryCompare(mainWindow, "videoFullscreen", false)
             compare(transport.stopCalls, 1)
+            compare(videoState.dismissCalls, 1,
+                    "return must dismiss video even when core stop cannot hide it")
             compare(transport.stopFullscreenSamples.length, 1)
             compare(transport.stopFullscreenSamples[0], false,
                     "stop must observe an already-windowed main window")

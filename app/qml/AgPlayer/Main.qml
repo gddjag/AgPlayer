@@ -101,6 +101,8 @@ ApplicationWindow {
             exitVideoFullscreen()
         if (playback && playback.stop !== undefined)
             playback.stop()
+        if (videoPlayback && videoPlayback.dismiss !== undefined)
+            videoPlayback.dismiss()
     }
 
     DockedWindowFrame {

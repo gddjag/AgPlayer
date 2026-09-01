@@ -63,6 +63,8 @@ public:
     quint64 frameSerial() const noexcept { return frameSerial_; }
     std::shared_ptr<const VideoFrameSnapshot> currentFrame() const;
 
+    Q_INVOKABLE void dismiss();
+
 signals:
     void visibleChanged();
     void loadingChanged();

@@ -154,6 +154,7 @@ private slots:
     void audioOnlyPlaybackAllocatesNoVideoResources();
     void frameQueueAdmissionHonorsCountByteAndOversizedRules();
     void videoPlaybackUsesOneBoundedWorkerAndStopsSynchronously();
+    void dismissStopsVideoResourcesWithoutChangingPlaybackState();
     void tempoAdjustedAudioClockAdvancesFramePtsAndSerial();
     void switchingVideosAdvancesGenerationAndReleasesOldFrame();
     void committedSeekDropsTheDisplayedGeneration();
@@ -316,6 +317,32 @@ void VideoPlaybackControllerTest::videoPlaybackUsesOneBoundedWorkerAndStopsSynch
     QCOMPARE(video.queuedFrameCount(), 0);
     QCOMPARE(video.queuedFrameBytes(), qint64{0});
     QVERIFY(!video.visible());
+}
+
+void VideoPlaybackControllerTest::dismissStopsVideoResourcesWithoutChangingPlaybackState()
+{
+    const QString videoPath = requiredFixture("AGPLAYER_TEST_VIDEO_WITH_AUDIO");
+    QVERIFY2(!videoPath.isEmpty(), "missing video-with-audio fixture");
+    NullCore core;
+    QVERIFY(core.get() != nullptr);
+    LibraryModel library;
+    QVERIFY(library.append(makeTrack(QStringLiteral("dismiss-video"), videoPath,
+                                     true, true)));
+    PlaybackController playback(core.get(), &library);
+    VideoPlaybackController video(&library, &playback);
+
+    playback.playRow(0);
+    QTRY_VERIFY(video.workerRunning());
+    QTRY_VERIFY(video.visible());
+    QTRY_VERIFY(video.frameSerial() > 0);
+
+    video.dismiss();
+
+    QVERIFY(!video.workerRunning());
+    QVERIFY(!video.visible());
+    QCOMPARE(video.queuedFrameCount(), 0);
+    QCOMPARE(video.queuedFrameBytes(), qint64{0});
+    QVERIFY(playback.state() != PlaybackController::Stopped);
 }
 
 void VideoPlaybackControllerTest::committedSeekDropsTheDisplayedGeneration()

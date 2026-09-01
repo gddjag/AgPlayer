@@ -103,6 +103,11 @@ VideoPlaybackController::currentFrame() const
     return displayedFrame_;
 }
 
+void VideoPlaybackController::dismiss()
+{
+    stopWorkerAndClear();
+}
+
 bool VideoPlaybackController::hasSupportedVideoSuffix(const QString& path)
 {
     static const QSet<QString> extensions{
@@ -116,6 +121,7 @@ void VideoPlaybackController::reevaluateCurrentTrack()
 {
     if (library_ == nullptr || playback_ == nullptr
         || playback_->state() == PlaybackController::Stopped
+        || playback_->state() == PlaybackController::Error
         || playback_->currentTrackId().isEmpty()) {
         stopWorkerAndClear();
         return;

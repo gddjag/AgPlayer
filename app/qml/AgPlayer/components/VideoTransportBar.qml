@@ -163,7 +163,8 @@ Rectangle {
             ThemedComboBox {
                 id: speedControl
                 objectName: "videoSpeedControl"
-                Layout.preferredWidth: 76
+                Layout.minimumWidth: 120
+                Layout.preferredWidth: 120
                 model: ["0.75×", "1.00×", "1.25×", "1.50×"]
                 currentIndex: root.speedIndex(
                                   root.playback ? root.playback.speedRatio : 1)
