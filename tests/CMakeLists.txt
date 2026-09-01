@@ -45,6 +45,12 @@ add_test(NAME c_api_lifecycle_test COMMAND c_api_lifecycle_test)
 set(DECODER_FIXTURE_DIR "${CMAKE_CURRENT_BINARY_DIR}/fixtures")
 set(SINE_WAV_FIXTURE "${DECODER_FIXTURE_DIR}/sine-440hz.wav")
 set(FORMAT_FIXTURE_DIR "${DECODER_FIXTURE_DIR}/formats")
+set(VIDEO_FIXTURE_DIR "${DECODER_FIXTURE_DIR}/video")
+set(VIDEO_WITH_AUDIO_FIXTURE "${VIDEO_FIXTURE_DIR}/video-with-audio.avi")
+set(VIDEO_ONLY_FIXTURE "${VIDEO_FIXTURE_DIR}/video-only.avi")
+set(AUDIO_WITH_ATTACHED_PICTURE_FIXTURE
+    "${VIDEO_FIXTURE_DIR}/audio-with-attached-picture.mka")
+set(ROTATED_VIDEO_FIXTURE "${VIDEO_FIXTURE_DIR}/rotated-video.mov")
 
 add_executable(format_matrix_test
     core/format_matrix_test.cpp
@@ -389,6 +395,37 @@ add_executable(fixture_generator
 )
 agplayer_enable_warnings(fixture_generator)
 
+add_executable(video_fixture_generator
+    "${CMAKE_SOURCE_DIR}/tools/video_fixture_generator.cpp"
+)
+target_include_directories(video_fixture_generator SYSTEM PRIVATE
+    "${FFMPEG_INCLUDE_DIRS}"
+)
+target_link_libraries(video_fixture_generator PRIVATE ${FFMPEG_LIBRARIES})
+agplayer_enable_warnings(video_fixture_generator)
+
+add_custom_command(
+    OUTPUT
+        "${VIDEO_WITH_AUDIO_FIXTURE}"
+        "${VIDEO_ONLY_FIXTURE}"
+        "${AUDIO_WITH_ATTACHED_PICTURE_FIXTURE}"
+        "${ROTATED_VIDEO_FIXTURE}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${VIDEO_FIXTURE_DIR}"
+    COMMAND $<TARGET_FILE:video_fixture_generator>
+        "${VIDEO_WITH_AUDIO_FIXTURE}"
+        "${VIDEO_ONLY_FIXTURE}"
+        "${AUDIO_WITH_ATTACHED_PICTURE_FIXTURE}"
+        "${ROTATED_VIDEO_FIXTURE}"
+    DEPENDS video_fixture_generator
+    VERBATIM
+)
+add_custom_target(video_fixtures DEPENDS
+    "${VIDEO_WITH_AUDIO_FIXTURE}"
+    "${VIDEO_ONLY_FIXTURE}"
+    "${AUDIO_WITH_ATTACHED_PICTURE_FIXTURE}"
+    "${ROTATED_VIDEO_FIXTURE}"
+)
+
 set(GAPLESS_A_FIXTURE "${DECODER_FIXTURE_DIR}/gapless-a.wav")
 set(GAPLESS_B_FIXTURE "${DECODER_FIXTURE_DIR}/gapless-b.wav")
 add_custom_command(
@@ -499,7 +536,7 @@ add_custom_target(gapless_fixtures
 add_executable(decoder_test
     core/decoder_test.cpp
 )
-add_dependencies(decoder_test decoder_fixture)
+add_dependencies(decoder_test decoder_fixture video_fixtures)
 target_include_directories(decoder_test PRIVATE
     "${CMAKE_SOURCE_DIR}/core/src"
 )
@@ -507,7 +544,13 @@ target_link_libraries(decoder_test PRIVATE agplayer_core)
 
 agplayer_enable_warnings(decoder_test)
 
-add_test(NAME decoder_test COMMAND decoder_test "${SINE_WAV_FIXTURE}")
+add_test(NAME decoder_test COMMAND decoder_test
+    "${SINE_WAV_FIXTURE}"
+    "${VIDEO_WITH_AUDIO_FIXTURE}"
+    "${VIDEO_ONLY_FIXTURE}"
+    "${AUDIO_WITH_ATTACHED_PICTURE_FIXTURE}"
+    "${ROTATED_VIDEO_FIXTURE}"
+)
 set_tests_properties(decoder_test PROPERTIES
     TIMEOUT 10
     ENVIRONMENT_MODIFICATION

@@ -885,6 +885,26 @@ long long ag_metadata_duration_ms(const ag_metadata* metadata)
     return metadata == nullptr ? 0 : metadata->value.duration_ms;
 }
 
+int ag_metadata_has_audio(const ag_metadata* metadata)
+{
+    return metadata != nullptr && metadata->value.has_audio ? 1 : 0;
+}
+
+int ag_metadata_has_video(const ag_metadata* metadata)
+{
+    return metadata != nullptr && metadata->value.has_video ? 1 : 0;
+}
+
+int ag_metadata_video_width(const ag_metadata* metadata)
+{
+    return metadata == nullptr ? 0 : metadata->value.video_width;
+}
+
+int ag_metadata_video_height(const ag_metadata* metadata)
+{
+    return metadata == nullptr ? 0 : metadata->value.video_height;
+}
+
 const unsigned char* ag_metadata_cover(const ag_metadata* metadata,
                                        size_t* size,
                                        const char** mime_type)

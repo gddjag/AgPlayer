@@ -29,6 +29,10 @@ struct MediaMetadata final {
     int bits_per_sample = 0;
     std::int64_t bit_rate = 0;
     std::int64_t duration_ms = 0;
+    bool has_audio = false;
+    bool has_video = false;
+    int video_width = 0;
+    int video_height = 0;
     std::vector<unsigned char> cover;
     std::string cover_mime_type;
     std::string year;    // canonical year (for example Vorbis YEAR)

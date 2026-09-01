@@ -303,17 +303,52 @@ ag_result probe_media_metadata(const std::string& utf8_path,
             avformat_close_input(&context);
             return result;
         };
+        if (avformat_find_stream_info(context, nullptr) < 0) {
+            return finish(AG_UNSUPPORTED_FORMAT);
+        }
+
+        int audio_index = -1;
+        const AVStream* video_stream = nullptr;
+        for (unsigned int index = 0; index < context->nb_streams; ++index) {
+            const AVStream* const stream = context->streams[index];
+            if (stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+                metadata.has_audio = true;
+                if (audio_index < 0) {
+                    audio_index = static_cast<int>(index);
+                }
+            } else if (stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO
+                       && (stream->disposition & AV_DISPOSITION_ATTACHED_PIC) == 0) {
+                metadata.has_video = true;
+                if (video_stream == nullptr) {
+                    video_stream = stream;
+                    metadata.video_width = stream->codecpar->width;
+                    metadata.video_height = stream->codecpar->height;
+                }
+            }
+        }
+        if (!metadata.has_audio && !metadata.has_video) {
+            return finish(AG_UNSUPPORTED_FORMAT);
+        }
+
         std::int64_t observed_duration_ms = 0;
-        const int audio_index = discover_audio_stream_without_codec(
-            context, observed_duration_ms);
-        if (audio_index < 0) return finish(AG_UNSUPPORTED_FORMAT);
-        const AVStream* audio_stream = context->streams[audio_index];
-        const AVCodecParameters* parameters = audio_stream->codecpar;
+        if (audio_index >= 0) {
+            const int discovered_audio_index = discover_audio_stream_without_codec(
+                context, observed_duration_ms);
+            if (discovered_audio_index >= 0) {
+                audio_index = discovered_audio_index;
+            }
+        }
+        const AVStream* const audio_stream = audio_index >= 0
+            ? context->streams[audio_index] : nullptr;
+        const AVStream* const metadata_stream = audio_stream != nullptr
+            ? audio_stream : video_stream;
+        const AVCodecParameters* const parameters = audio_stream != nullptr
+            ? audio_stream->codecpar : nullptr;
         std::size_t tag_budget = kMaxProbeTagBytes;
         bool tag_limit_exceeded = false;
-        const auto read_limited = [audio_stream, context, &tag_budget,
+        const auto read_limited = [metadata_stream, context, &tag_budget,
                                    &tag_limit_exceeded](const char* key) {
-            return read_tag_limited(audio_stream->metadata, context->metadata,
+            return read_tag_limited(metadata_stream->metadata, context->metadata,
                                     key, tag_budget, tag_limit_exceeded);
         };
         const auto read_canonical = [&read_limited, &tag_limit_exceeded](
@@ -348,22 +383,26 @@ ag_result probe_media_metadata(const std::string& utf8_path,
             metadata.date = shared;
         }
         metadata.genre = read_canonical(CanonicalField::Genre);
-        metadata.lyrics = read_lyrics_limited(audio_stream->metadata,
+        metadata.lyrics = read_lyrics_limited(metadata_stream->metadata,
                                               context->metadata, tag_budget,
                                               tag_limit_exceeded);
         if (tag_limit_exceeded) return finish(AG_UNSUPPORTED_FORMAT);
         metadata.format = context->iformat != nullptr
             && context->iformat->name != nullptr ? context->iformat->name : "";
-        metadata.sample_rate = parameters->sample_rate;
-        metadata.channels = parameters->ch_layout.nb_channels;
-        metadata.bits_per_sample = parameters->bits_per_raw_sample > 0
-            ? parameters->bits_per_raw_sample : parameters->bits_per_coded_sample;
-        metadata.bit_rate = parameters->bit_rate > 0
-            ? parameters->bit_rate : context->bit_rate;
-        if (audio_stream->duration > 0
-            && audio_stream->duration != AV_NOPTS_VALUE) {
-            metadata.duration_ms = av_rescale_q(audio_stream->duration,
-                audio_stream->time_base, AVRational{1, 1'000});
+        if (parameters != nullptr) {
+            metadata.sample_rate = parameters->sample_rate;
+            metadata.channels = parameters->ch_layout.nb_channels;
+            metadata.bits_per_sample = parameters->bits_per_raw_sample > 0
+                ? parameters->bits_per_raw_sample : parameters->bits_per_coded_sample;
+            metadata.bit_rate = parameters->bit_rate > 0
+                ? parameters->bit_rate : context->bit_rate;
+        }
+        const AVStream* const duration_stream = audio_stream != nullptr
+            ? audio_stream : video_stream;
+        if (duration_stream != nullptr && duration_stream->duration > 0
+            && duration_stream->duration != AV_NOPTS_VALUE) {
+            metadata.duration_ms = av_rescale_q(duration_stream->duration,
+                duration_stream->time_base, AVRational{1, 1'000});
         } else if (context->duration > 0
                    && context->duration != AV_NOPTS_VALUE) {
             metadata.duration_ms = av_rescale_q(context->duration,

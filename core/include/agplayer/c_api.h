@@ -212,6 +212,10 @@ int ag_metadata_channels(const ag_metadata* metadata);
 int ag_metadata_bits_per_sample(const ag_metadata* metadata);
 long long ag_metadata_bit_rate(const ag_metadata* metadata);
 long long ag_metadata_duration_ms(const ag_metadata* metadata);
+int ag_metadata_has_audio(const ag_metadata* metadata);
+int ag_metadata_has_video(const ag_metadata* metadata);
+int ag_metadata_video_width(const ag_metadata* metadata);
+int ag_metadata_video_height(const ag_metadata* metadata);
 const unsigned char* ag_metadata_cover(const ag_metadata* metadata,
                                        size_t* size,
                                        const char** mime_type);

@@ -18,8 +18,12 @@
 
 int main(const int argc, char** argv)
 {
-    assert(argc == 2);
+    assert(argc == 6);
     const std::filesystem::path sine_path = argv[1];
+    const std::filesystem::path video_with_audio_path = argv[2];
+    const std::filesystem::path video_only_path = argv[3];
+    const std::filesystem::path audio_with_attached_picture_path = argv[4];
+    const std::filesystem::path rotated_video_path = argv[5];
 
     ag_metadata* metadata = reinterpret_cast<ag_metadata*>(
         static_cast<std::uintptr_t>(1U));
@@ -53,6 +57,50 @@ int main(const int argc, char** argv)
     assert(cover_mime_type != nullptr);
     assert(std::strcmp(cover_mime_type, "") == 0);
     ag_metadata_destroy(metadata);
+
+    agplayer::MediaMetadata video_with_audio;
+    assert(agplayer::probe_media_metadata(video_with_audio_path.string(),
+                                          video_with_audio)
+           == AG_OK);
+    assert(video_with_audio.has_audio);
+    assert(video_with_audio.has_video);
+    assert(video_with_audio.video_width == 320);
+    assert(video_with_audio.video_height == 180);
+
+    agplayer::MediaMetadata video_only;
+    assert(agplayer::probe_media_metadata(video_only_path.string(), video_only)
+           == AG_OK);
+    assert(!video_only.has_audio);
+    assert(video_only.has_video);
+
+    agplayer::MediaMetadata cover_only;
+    assert(agplayer::probe_media_metadata(audio_with_attached_picture_path.string(),
+                                          cover_only)
+           == AG_OK);
+    assert(cover_only.has_audio);
+    assert(!cover_only.has_video);
+
+    agplayer::MediaMetadata rotated_video;
+    assert(agplayer::probe_media_metadata(rotated_video_path.string(), rotated_video)
+           == AG_OK);
+    assert(!rotated_video.has_audio);
+    assert(rotated_video.has_video);
+    assert(rotated_video.video_width == 320);
+    assert(rotated_video.video_height == 180);
+
+    metadata = nullptr;
+    assert(ag_metadata_open(video_with_audio_path.string().c_str(), &metadata)
+           == AG_OK);
+    assert(metadata != nullptr);
+    assert(ag_metadata_has_audio(metadata) == 1);
+    assert(ag_metadata_has_video(metadata) == 1);
+    assert(ag_metadata_video_width(metadata) == 320);
+    assert(ag_metadata_video_height(metadata) == 180);
+    ag_metadata_destroy(metadata);
+    assert(ag_metadata_has_audio(nullptr) == 0);
+    assert(ag_metadata_has_video(nullptr) == 0);
+    assert(ag_metadata_video_width(nullptr) == 0);
+    assert(ag_metadata_video_height(nullptr) == 0);
 
     const std::filesystem::path missing_path =
         sine_path.parent_path() / "does-not-exist.wav";
