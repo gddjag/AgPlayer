@@ -113,6 +113,8 @@ add_library(agplayer_qt STATIC
     src/playback_controller.hpp
     src/video_playback_controller.cpp
     src/video_playback_controller.hpp
+    src/video_frame_item.cpp
+    src/video_frame_item.hpp
     src/player_experience_controller.cpp
     src/player_experience_controller.hpp
     src/playback_state_store.cpp
@@ -152,6 +154,11 @@ add_library(agplayer_qt STATIC
 )
 
 set_target_properties(agplayer_qt PROPERTIES AUTOMOC ON)
+if(BUILD_TESTING)
+    target_compile_definitions(agplayer_qt PUBLIC
+        AGPLAYER_VIDEO_FRAME_ITEM_TESTING=1
+    )
+endif()
 target_include_directories(agplayer_qt
     PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/src"

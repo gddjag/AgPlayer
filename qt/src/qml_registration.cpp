@@ -31,6 +31,7 @@
 #include "waveform_provider.hpp"
 #include "vocal_separation_controller.hpp"
 #include "video_playback_controller.hpp"
+#include "video_frame_item.hpp"
 #include "window_controller.hpp"
 
 #include <qqml.h>
@@ -179,6 +180,7 @@ void register_agplayer_qml_types(LibraryModel* library,
         qmlRegisterSingletonInstance("AgPlayer", 1, 0, "WaveformProvider", waveformProvider);
     }
     qmlRegisterType<WaveformItem>("AgPlayer", 1, 0, "WaveformItem");
+    qmlRegisterType<VideoFrameItem>("AgPlayer", 1, 0, "VideoFrameItem");
     qmlRegisterType<TrackWaveformThumbnailItem>(
         "AgPlayer", 1, 0, "TrackWaveformThumbnailItem");
     qmlRegisterType<TerrainReactorItem>("AgPlayer", 1, 0,

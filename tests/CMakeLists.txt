@@ -909,6 +909,7 @@ foreach(qt_test IN ITEMS
     library_filter_model_test
     playback_controller_test
     video_playback_controller_test
+    video_frame_item_test
     window_controller_test
     global_hotkey_manager_test
     waveform_coordinate_mapper_test
@@ -1727,6 +1728,10 @@ set_tests_properties(terrain_reactor_item_test PROPERTIES
 )
 set_tests_properties(track_waveform_thumbnail_item_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+set_tests_properties(video_frame_item_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
 )
 add_dependencies(replay_gain_scanner_test decoder_fixture)
 set_tests_properties(replay_gain_scanner_test PROPERTIES
