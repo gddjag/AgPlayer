@@ -44,6 +44,13 @@ typedef struct ag_video_frame {
     int end_of_stream;
 } ag_video_frame;
 
+typedef struct ag_video_media_info {
+    uint32_t struct_size;
+    int valid;
+    int has_audio;
+    int has_video;
+} ag_video_media_info;
+
 typedef enum ag_audio_backend {
     AG_AUDIO_BACKEND_DEFAULT = 0,
     AG_AUDIO_BACKEND_NULL = 1
@@ -235,10 +242,25 @@ ag_result ag_player_set_match_track_sample_rate(ag_player* player,
  *   entered calls to return, then frees it. New result-returning calls admitted
  *   during shutdown return AG_CANCELLED. Do not use a handle after destroy
  *   returns.
+ *
+ * Media-info ABI contract:
+ * - open_with_media_info uses the same cancellable container open as decoding;
+ *   it does not perform a second probe. Set struct_size to
+ *   sizeof(ag_video_media_info). Smaller values are rejected; future-sized
+ *   values are accepted without changing bytes beyond the current structure.
+ * - valid is set after container stream discovery succeeds. When valid is 1,
+ *   has_audio/has_video describe real container tracks independently of the
+ *   function result. Attached pictures are not video tracks. The function may
+ *   still return AG_UNSUPPORTED_FORMAT when no video codec can be opened.
+ * - The original open entry point retains its decoder-ready return contract.
  */
 ag_result ag_video_decoder_create(ag_video_decoder** out_decoder);
 ag_result ag_video_decoder_open(ag_video_decoder* decoder,
                                 const char* utf8_path);
+ag_result ag_video_decoder_open_with_media_info(
+    ag_video_decoder* decoder,
+    const char* utf8_path,
+    ag_video_media_info* out_media_info);
 ag_result ag_video_decoder_read(ag_video_decoder* decoder,
                                 ag_video_frame* out_frame);
 ag_result ag_video_decoder_seek(ag_video_decoder* decoder,

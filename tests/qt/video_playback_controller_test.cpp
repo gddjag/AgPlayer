@@ -122,6 +122,29 @@ private:
     bool released_ = false;
 };
 
+class UnsupportedCodecOpenHook final {
+public:
+    UnsupportedCodecOpenHook()
+    {
+        agplayer::set_video_decoder_test_hook(&invoke, this);
+    }
+
+    ~UnsupportedCodecOpenHook()
+    {
+        agplayer::set_video_decoder_test_hook(nullptr, nullptr);
+    }
+
+    UnsupportedCodecOpenHook(const UnsupportedCodecOpenHook&) = delete;
+    UnsupportedCodecOpenHook& operator=(const UnsupportedCodecOpenHook&) = delete;
+
+private:
+    static bool invoke(const agplayer::VideoDecoderTestPoint point,
+                       void*) noexcept
+    {
+        return point == agplayer::VideoDecoderTestPoint::codec_open_entered;
+    }
+};
+
 } // namespace
 
 class VideoPlaybackControllerTest final : public QObject {
@@ -135,6 +158,9 @@ private slots:
     void switchingVideosAdvancesGenerationAndReleasesOldFrame();
     void committedSeekDropsTheDisplayedGeneration();
     void legacyVideoIsProbedOnceAndReused();
+    void legacyVideoWithAudioPersistsContainerKindAtomically();
+    void legacyAudioOnlyWithVideoSuffixPersistsContainerKind();
+    void legacyUnsupportedCodecPersistsVideoKindAndShowsError();
     void repeatedVideoAudioSwitchesLeaveNoResources();
     void destructionJoinsAnActiveWorker();
     void abandonedLegacyProbeCanBeClaimedAgain();
@@ -347,6 +373,121 @@ void VideoPlaybackControllerTest::legacyVideoIsProbedOnceAndReused()
     QTRY_VERIFY(video.visible());
     QTRY_VERIFY(video.frameSerial() > firstSerial);
     QVERIFY(library.recordForId(legacy.trackId)->metadataProbeAttempted);
+}
+
+void VideoPlaybackControllerTest::legacyVideoWithAudioPersistsContainerKindAtomically()
+{
+    const QString path = requiredFixture("AGPLAYER_TEST_VIDEO_WITH_AUDIO");
+    QVERIFY(!path.isEmpty());
+    NullCore core;
+    QVERIFY(core.get() != nullptr);
+    LibraryModel library;
+    const TrackRecord legacy = makeTrack(QStringLiteral("legacy-av"), path,
+                                         false, false);
+    QVERIFY(library.append(legacy));
+    QSignalSpy changed(&library, &QAbstractItemModel::dataChanged);
+    PlaybackController playback(core.get(), &library);
+    VideoPlaybackController video(&library, &playback);
+
+    playback.playRow(0);
+    QTRY_VERIFY(library.recordForId(legacy.trackId)->metadataProbeAttempted);
+    const TrackRecord* const current = library.recordForId(legacy.trackId);
+    QVERIFY(current != nullptr);
+    QVERIFY(current->hasAudio);
+    QVERIFY(current->hasVideo);
+    QTRY_VERIFY(video.currentFrame() != nullptr);
+
+    int probeChangeCount = 0;
+    QList<int> probeRoles;
+    for (const QList<QVariant>& arguments : changed) {
+        const QList<int> roles = qvariant_cast<QList<int>>(arguments.at(2));
+        if (roles.contains(LibraryModel::MetadataProbeAttemptedRole)) {
+            ++probeChangeCount;
+            probeRoles = roles;
+        }
+    }
+    QCOMPARE(probeChangeCount, 1);
+    QVERIFY(probeRoles.contains(LibraryModel::HasAudioRole));
+    QVERIFY(probeRoles.contains(LibraryModel::HasVideoRole));
+}
+
+void VideoPlaybackControllerTest::legacyAudioOnlyWithVideoSuffixPersistsContainerKind()
+{
+    const QString source = requiredFixture("AGPLAYER_TEST_WAV");
+    QVERIFY(!source.isEmpty());
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString path = temporary.filePath(QStringLiteral("audio.avi"));
+    QVERIFY(QFile::copy(source, path));
+    NullCore core;
+    QVERIFY(core.get() != nullptr);
+    LibraryModel library;
+    const TrackRecord legacy = makeTrack(QStringLiteral("legacy-audio"), path,
+                                         false, false);
+    QVERIFY(library.append(legacy));
+    PlaybackController playback(core.get(), &library);
+    VideoPlaybackController video(&library, &playback);
+
+    playback.playRow(0);
+    QTRY_VERIFY(library.recordForId(legacy.trackId)->metadataProbeAttempted);
+    QTRY_VERIFY(!video.workerRunning());
+    const TrackRecord* const current = library.recordForId(legacy.trackId);
+    QVERIFY(current != nullptr);
+    QVERIFY(current->hasAudio);
+    QVERIFY(!current->hasVideo);
+    QVERIFY(!video.visible());
+    QVERIFY(video.errorMessage().isEmpty());
+    QVERIFY(!library.beginMetadataProbe(legacy.trackId).has_value());
+
+    playback.stop();
+    playback.play();
+    QTest::qWait(100);
+    QVERIFY(!video.workerRunning());
+}
+
+void VideoPlaybackControllerTest::legacyUnsupportedCodecPersistsVideoKindAndShowsError()
+{
+    const QString path = requiredFixture("AGPLAYER_TEST_VIDEO_WITH_AUDIO");
+    QVERIFY(!path.isEmpty());
+    NullCore core;
+    QVERIFY(core.get() != nullptr);
+    LibraryModel library;
+    const TrackRecord legacy = makeTrack(QStringLiteral("unsupported-video"),
+                                         path, false, false);
+    QVERIFY(library.append(legacy));
+    QSignalSpy changed(&library, &QAbstractItemModel::dataChanged);
+    PlaybackController playback(core.get(), &library);
+    VideoPlaybackController video(&library, &playback);
+    UnsupportedCodecOpenHook hook;
+
+    playback.playRow(0);
+    QTRY_VERIFY(library.recordForId(legacy.trackId)->metadataProbeAttempted);
+    const TrackRecord* const current = library.recordForId(legacy.trackId);
+    QVERIFY(current != nullptr);
+    QVERIFY(current->hasAudio);
+    QVERIFY(current->hasVideo);
+    QTRY_VERIFY(!video.errorMessage().isEmpty());
+    QVERIFY(video.visible());
+    QTRY_VERIFY(!video.workerRunning());
+    const auto probeChangeCount = [&changed] {
+        int count = 0;
+        for (const QList<QVariant>& arguments : changed) {
+            const QList<int> roles =
+                qvariant_cast<QList<int>>(arguments.at(2));
+            if (roles.contains(LibraryModel::MetadataProbeAttemptedRole)) {
+                ++count;
+            }
+        }
+        return count;
+    };
+    QCOMPARE(probeChangeCount(), 1);
+    QVERIFY(!library.beginMetadataProbe(legacy.trackId).has_value());
+
+    playback.stop();
+    playback.play();
+    QTRY_VERIFY(!video.errorMessage().isEmpty());
+    QTRY_VERIFY(!video.workerRunning());
+    QCOMPARE(probeChangeCount(), 1);
 }
 
 void VideoPlaybackControllerTest::repeatedVideoAudioSwitchesLeaveNoResources()

@@ -594,6 +594,7 @@ add_test(NAME video_decoder_test COMMAND video_decoder_test
     "${ROTATED_270_VIDEO_FIXTURE}"
     "${NON_SQUARE_SAR_VIDEO_FIXTURE}"
     "${MULTI_VIDEO_FIXTURE}"
+    "${SINE_WAV_FIXTURE}"
 )
 set_tests_properties(video_decoder_test PROPERTIES
     TIMEOUT 30

@@ -7,9 +7,16 @@
 
 namespace agplayer {
 
+struct VideoMediaInfo final {
+    bool valid = false;
+    bool has_audio = false;
+    bool has_video = false;
+};
+
 #if defined(AGPLAYER_VIDEO_DECODER_TESTING)
 enum class VideoDecoderTestPoint {
     open_entered,
+    codec_open_entered,
     frame_received,
     frame_converted,
     seek_entered,
@@ -35,7 +42,8 @@ public:
     VideoDecoder(const VideoDecoder&) = delete;
     VideoDecoder& operator=(const VideoDecoder&) = delete;
 
-    [[nodiscard]] ag_result open(const char* utf8_path) noexcept;
+    [[nodiscard]] ag_result open(const char* utf8_path,
+                                 VideoMediaInfo& media_info) noexcept;
     [[nodiscard]] ag_result read(ag_video_frame& frame) noexcept;
     [[nodiscard]] ag_result seek(std::int64_t position_ms) noexcept;
     void cancel() noexcept;

@@ -344,9 +344,34 @@ ag_result ag_video_decoder_create(ag_video_decoder** const out_decoder)
 ag_result ag_video_decoder_open(ag_video_decoder* const decoder,
                                 const char* const utf8_path)
 {
+    ag_video_media_info ignored{};
+    ignored.struct_size = sizeof(ignored);
+    return ag_video_decoder_open_with_media_info(decoder, utf8_path, &ignored);
+}
+
+ag_result ag_video_decoder_open_with_media_info(
+    ag_video_decoder* const decoder, const char* const utf8_path,
+    ag_video_media_info* const out_media_info)
+{
+    if (out_media_info == nullptr
+        || out_media_info->struct_size < sizeof(ag_video_media_info)) {
+        return AG_INVALID_ARGUMENT;
+    }
+    const std::uint32_t supplied_size = out_media_info->struct_size;
+    ag_video_media_info cleared{};
+    cleared.struct_size = supplied_size;
+    *out_media_info = cleared;
+
     VideoDecoderCall call(decoder);
-    return call.result() == AG_OK ? call.get()->value.open(utf8_path)
-                                  : call.result();
+    if (call.result() != AG_OK) {
+        return call.result();
+    }
+    agplayer::VideoMediaInfo media_info;
+    const ag_result result = call.get()->value.open(utf8_path, media_info);
+    out_media_info->valid = media_info.valid ? 1 : 0;
+    out_media_info->has_audio = media_info.has_audio ? 1 : 0;
+    out_media_info->has_video = media_info.has_video ? 1 : 0;
+    return result;
 }
 
 ag_result ag_video_decoder_read(ag_video_decoder* const decoder,

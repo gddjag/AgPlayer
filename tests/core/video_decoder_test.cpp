@@ -101,6 +101,13 @@ ag_video_frame empty_frame()
     return frame;
 }
 
+ag_video_media_info empty_media_info()
+{
+    ag_video_media_info info{};
+    info.struct_size = sizeof(info);
+    return info;
+}
+
 std::vector<unsigned char> copy_pixels(const ag_video_frame& frame)
 {
     assert(frame.data != nullptr);
@@ -123,6 +130,16 @@ void test_null_and_state_boundaries(const char* video_path)
     assert(ag_video_decoder_open(nullptr, video_path) == AG_INVALID_ARGUMENT);
     assert(ag_video_decoder_open(decoder, nullptr) == AG_INVALID_ARGUMENT);
     assert(ag_video_decoder_open(decoder, "") == AG_INVALID_ARGUMENT);
+    ag_video_media_info info = empty_media_info();
+    assert(ag_video_decoder_open_with_media_info(nullptr, video_path, &info)
+           == AG_INVALID_ARGUMENT);
+    assert(ag_video_decoder_open_with_media_info(decoder, nullptr, &info)
+           == AG_INVALID_ARGUMENT);
+    assert(ag_video_decoder_open_with_media_info(decoder, video_path, nullptr)
+           == AG_INVALID_ARGUMENT);
+    info.struct_size = sizeof(info) - 1U;
+    assert(ag_video_decoder_open_with_media_info(decoder, video_path, &info)
+           == AG_INVALID_ARGUMENT);
     assert(ag_video_decoder_read(nullptr, nullptr) == AG_INVALID_ARGUMENT);
     assert(ag_video_decoder_read(decoder, nullptr) == AG_INVALID_ARGUMENT);
 
@@ -138,6 +155,73 @@ void test_null_and_state_boundaries(const char* video_path)
     assert(ag_video_decoder_read(decoder, &frame) == AG_INVALID_ARGUMENT);
     ag_video_decoder_close(decoder);
     ag_video_decoder_close(decoder);
+    ag_video_decoder_destroy(decoder);
+}
+
+void test_media_info_classification_and_abi(
+    const char* video_with_audio_path, const char* audio_only_path,
+    const char* attached_picture_path)
+{
+    struct FutureMediaInfo {
+        ag_video_media_info info{};
+        std::uint64_t future_field = 0x1AF01AF01AF01AF0ULL;
+    } future;
+    future.info.struct_size = sizeof(future);
+
+    ag_video_decoder* decoder = nullptr;
+    assert(ag_video_decoder_create(&decoder) == AG_OK);
+    assert(ag_video_decoder_open_with_media_info(
+               decoder, video_with_audio_path, &future.info)
+           == AG_OK);
+    assert(future.info.struct_size == sizeof(future));
+    assert(future.info.valid == 1);
+    assert(future.info.has_audio == 1);
+    assert(future.info.has_video == 1);
+    assert(future.future_field == 0x1AF01AF01AF01AF0ULL);
+    ag_video_decoder_close(decoder);
+
+    ag_video_media_info info = empty_media_info();
+    assert(ag_video_decoder_open_with_media_info(decoder, audio_only_path,
+                                                 &info)
+           == AG_UNSUPPORTED_FORMAT);
+    assert(info.valid == 1);
+    assert(info.has_audio == 1);
+    assert(info.has_video == 0);
+
+    info = empty_media_info();
+    assert(ag_video_decoder_open_with_media_info(decoder,
+                                                 attached_picture_path, &info)
+           == AG_UNSUPPORTED_FORMAT);
+    assert(info.valid == 1);
+    assert(info.has_audio == 1);
+    assert(info.has_video == 0);
+
+    // The pre-existing entry point keeps its decoder-ready return contract.
+    assert(ag_video_decoder_open(decoder, video_with_audio_path) == AG_OK);
+    ag_video_frame frame = empty_frame();
+    assert(ag_video_decoder_read(decoder, &frame) == AG_OK);
+    assert(frame.end_of_stream == 0);
+    ag_video_decoder_destroy(decoder);
+}
+
+void test_media_info_survives_unsupported_codec(const char* video_path)
+{
+    ag_video_decoder* decoder = nullptr;
+    assert(ag_video_decoder_create(&decoder) == AG_OK);
+    ag_video_media_info info = empty_media_info();
+    {
+        ControlledHook hook(VideoDecoderTestPoint::codec_open_entered,
+                            false, 1);
+        assert(ag_video_decoder_open_with_media_info(decoder, video_path,
+                                                     &info)
+               == AG_UNSUPPORTED_FORMAT);
+    }
+    assert(info.valid == 1);
+    assert(info.has_audio == 1);
+    assert(info.has_video == 1);
+
+    // A failed codec open leaves the existing handle reusable.
+    assert(ag_video_decoder_open(decoder, video_path) == AG_OK);
     ag_video_decoder_destroy(decoder);
 }
 
@@ -314,8 +398,10 @@ void test_overlapping_cancellation_and_reset(const char* video_path)
     {
         ControlledHook hook(VideoDecoderTestPoint::open_entered, true);
         std::atomic<ag_result> result{AG_INTERNAL_ERROR};
+        ag_video_media_info info = empty_media_info();
         std::thread operation([&] {
-            result.store(ag_video_decoder_open(decoder, video_path));
+            result.store(ag_video_decoder_open_with_media_info(
+                decoder, video_path, &info));
         });
         hook.wait_until_entered();
         std::thread cancellation([decoder] { ag_video_decoder_cancel(decoder); });
@@ -323,6 +409,9 @@ void test_overlapping_cancellation_and_reset(const char* video_path)
         hook.release();
         operation.join();
         assert(result.load() == AG_CANCELLED);
+        assert(info.valid == 0);
+        assert(info.has_audio == 0);
+        assert(info.has_video == 0);
     }
     assert_reopen_after_cancel(decoder, video_path);
 
@@ -444,9 +533,11 @@ void test_one_hundred_complete_lifecycles(const char* video_path)
 
 int main(const int argc, char** argv)
 {
-    assert(argc == 9);
+    assert(argc == 10);
     const std::filesystem::path video_with_audio = argv[1];
     test_null_and_state_boundaries(argv[1]);
+    test_media_info_classification_and_abi(argv[1], argv[9], argv[3]);
+    test_media_info_survives_unsupported_codec(argv[1]);
     test_open_read_and_eof(argv[1]);
     test_open_read_and_eof(argv[2]);
     test_future_sized_frame_and_open_on_open(argv[2]);

@@ -173,7 +173,7 @@ void VideoPlaybackController::startWorker(
     workerRunning_ = true;
     emit diagnosticsChanged();
     worker_ = std::thread(&VideoPlaybackController::runWorker, this,
-                          track.trackId, track.path, track.hasAudio, token,
+                          track.trackId, track.path, token,
                           std::move(probeClaim));
 }
 
@@ -207,7 +207,7 @@ void VideoPlaybackController::stopWorkerAndClear()
 }
 
 void VideoPlaybackController::runWorker(
-    QString trackId, QString path, bool hasAudio, quint64 token,
+    QString trackId, QString path, quint64 token,
     std::optional<MetadataProbeClaim> probeClaim)
 {
     bool knownVideo = !probeClaim.has_value();
@@ -221,15 +221,19 @@ void VideoPlaybackController::runWorker(
             decoder_ = decoder;
         }
     }
+    ag_video_media_info mediaInfo{};
+    mediaInfo.struct_size = sizeof(mediaInfo);
     if (result == AG_OK) {
         const QByteArray utf8 = path.toUtf8();
-        result = ag_video_decoder_open(decoder, utf8.constData());
+        result = ag_video_decoder_open_with_media_info(
+            decoder, utf8.constData(), &mediaInfo);
     }
     if (probeClaim.has_value() && result != AG_CANCELLED) {
         TrackRecord probed;
         probed.path = path;
-        probed.hasAudio = hasAudio;
-        probed.hasVideo = result == AG_OK;
+        const bool probeSucceeded = mediaInfo.valid != 0;
+        probed.hasAudio = probeSucceeded && mediaInfo.has_audio != 0;
+        probed.hasVideo = probeSucceeded && mediaInfo.has_video != 0;
         knownVideo = probed.hasVideo;
         bool publishProbe = true;
         {
@@ -239,9 +243,10 @@ void VideoPlaybackController::runWorker(
         if (publishProbe) {
             QMetaObject::invokeMethod(
                 this,
-                [this, token, trackId, claim = probeClaim, probed] {
+                [this, token, trackId, claim = probeClaim, probeSucceeded,
+                 probed] {
                     handleProbeResult(token, trackId, claim,
-                                      probed.hasVideo, probed);
+                                      probeSucceeded, probed);
                 },
                 Qt::QueuedConnection);
         }

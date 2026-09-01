@@ -148,8 +148,10 @@ class VideoDecoder::Impl final {
 public:
     ~Impl() { release_resources(); }
 
-    ag_result open(const char* const utf8_path) noexcept
+    ag_result open(const char* const utf8_path,
+                   VideoMediaInfo& media_info) noexcept
     {
+        media_info = {};
         invalidate_pixels();
         if (utf8_path == nullptr || utf8_path[0] == '\0') {
             return AG_INVALID_ARGUMENT;
@@ -157,9 +159,6 @@ public:
         if (open_) {
             return AG_INVALID_ARGUMENT;
         }
-#if defined(AGPLAYER_VIDEO_DECODER_TESTING)
-        invoke_test_hook(VideoDecoderTestPoint::open_entered);
-#endif
         release_resources();
         if (cancelled_.load(std::memory_order_acquire)) {
             return AG_CANCELLED;
@@ -172,6 +171,9 @@ public:
         format_context_->interrupt_callback.callback = &interrupt_callback;
         format_context_->interrupt_callback.opaque = this;
 
+#if defined(AGPLAYER_VIDEO_DECODER_TESTING)
+        invoke_test_hook(VideoDecoderTestPoint::open_entered);
+#endif
         int result = avformat_open_input(&format_context_, utf8_path, nullptr,
                                          nullptr);
         if (result < 0) {
@@ -185,6 +187,22 @@ public:
                                                    AG_UNSUPPORTED_FORMAT);
             release_resources();
             return mapped;
+        }
+
+        media_info.valid = true;
+        for (unsigned int index = 0; index < format_context_->nb_streams;
+             ++index) {
+            const AVStream* const candidate = format_context_->streams[index];
+            if (candidate == nullptr || candidate->codecpar == nullptr) {
+                continue;
+            }
+            if (candidate->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+                media_info.has_audio = true;
+            } else if (candidate->codecpar->codec_type == AVMEDIA_TYPE_VIDEO
+                       && (candidate->disposition
+                           & AV_DISPOSITION_ATTACHED_PIC) == 0) {
+                media_info.has_video = true;
+            }
         }
 
         int selected = av_find_best_stream(format_context_, AVMEDIA_TYPE_VIDEO,
@@ -229,6 +247,12 @@ public:
             return result == AVERROR(ENOMEM) ? AG_INTERNAL_ERROR
                                              : AG_UNSUPPORTED_FORMAT;
         }
+#if defined(AGPLAYER_VIDEO_DECODER_TESTING)
+        if (invoke_test_hook(VideoDecoderTestPoint::codec_open_entered)) {
+            release_resources();
+            return AG_UNSUPPORTED_FORMAT;
+        }
+#endif
         result = avcodec_open2(codec_context_, codec, nullptr);
         if (result < 0) {
             const ag_result mapped = cancelled_or(
@@ -624,9 +648,10 @@ private:
 VideoDecoder::VideoDecoder() : impl_(std::make_unique<Impl>()) {}
 VideoDecoder::~VideoDecoder() = default;
 
-ag_result VideoDecoder::open(const char* const utf8_path) noexcept
+ag_result VideoDecoder::open(const char* const utf8_path,
+                             VideoMediaInfo& media_info) noexcept
 {
-    return impl_->open(utf8_path);
+    return impl_->open(utf8_path, media_info);
 }
 
 ag_result VideoDecoder::read(ag_video_frame& frame) noexcept

@@ -80,7 +80,7 @@ private:
     void startWorker(const TrackRecord& track,
                      std::optional<MetadataProbeClaim> probeClaim);
     void stopWorkerAndClear();
-    void runWorker(QString trackId, QString path, bool hasAudio, quint64 token,
+    void runWorker(QString trackId, QString path, quint64 token,
                    std::optional<MetadataProbeClaim> probeClaim);
     void handleCommittedSeek(qint64 positionMs);
     void presentForCurrentClock();
