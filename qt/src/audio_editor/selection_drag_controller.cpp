@@ -221,6 +221,11 @@ void SelectionDragController::update(const QPointF scenePosition)
     startPrepare();
 }
 
+void SelectionDragController::release()
+{
+    cancel();
+}
+
 void SelectionDragController::cancel()
 {
     ++generation_;
@@ -254,19 +259,18 @@ void SelectionDragController::startPrepare()
             preparing_ = false;
             emit preparingChanged();
         }
-        if (generation == generation_
-            && !cancelToken->load(std::memory_order_acquire)
-            && result.success) {
-            emit handoffReady(result.url);
-            launchDrag(result.url);
-        } else if (generation == generation_
-                   && !cancelToken->load(std::memory_order_acquire)
-                   && !result.error.isEmpty()) {
-            emit errorOccurred(result.error);
-        }
         if (generation == generation_) {
-            active_ = false;
-        } else if (active_ && triggered_) {
+            if (!cancelToken->load(std::memory_order_acquire)
+                && result.success && triggered_ && active_) {
+                emit handoffReady(result.url);
+                launchDrag(result.url);
+                active_ = false;
+            } else if (!cancelToken->load(std::memory_order_acquire)
+                       && !result.error.isEmpty()) {
+                emit errorOccurred(result.error);
+                active_ = false;
+            }
+        } else if (active_) {
             startPrepare();
         }
     });

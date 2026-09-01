@@ -284,6 +284,7 @@ public:
     };
     Q_INVOKABLE bool beginSelectionHandoff(double sceneX, double sceneY);
     Q_INVOKABLE void updateSelectionHandoff(double sceneX, double sceneY);
+    Q_INVOKABLE void releaseSelectionHandoff();
     Q_INVOKABLE void cancelSelectionHandoff();
     bool moveEvent(quint64 id, qint64 timelineStart);
     bool trimEvent(quint64 id, qint64 sourceStart,

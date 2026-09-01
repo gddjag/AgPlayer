@@ -140,6 +140,38 @@ void EditorViewport::panByPixels(const qreal pixelDelta) noexcept
     emit viewportChanged();
 }
 
+qreal EditorViewport::timelineContentWidth() const noexcept
+{
+    const qint64 count = visibleFrameCount();
+    if (document_frames_ <= 0 || count <= 0 || viewport_width_ <= 0.0) {
+        return 0.0;
+    }
+    return static_cast<qreal>(
+        static_cast<long double>(document_frames_)
+        * static_cast<long double>(viewport_width_)
+        / static_cast<long double>(count));
+}
+
+qreal EditorViewport::scrollOffsetPixels() const noexcept
+{
+    const qint64 count = visibleFrameCount();
+    if (visible_start_ <= 0 || count <= 0 || viewport_width_ <= 0.0) {
+        return 0.0;
+    }
+    return static_cast<qreal>(
+        static_cast<long double>(visible_start_)
+        * static_cast<long double>(viewport_width_)
+        / static_cast<long double>(count));
+}
+
+void EditorViewport::panToScrollOffset(const qreal pixelOffset) noexcept
+{
+    if (!std::isfinite(pixelOffset)) {
+        return;
+    }
+    panByPixels(pixelOffset - scrollOffsetPixels());
+}
+
 qint64 EditorViewport::frameAtPixel(const qreal pixel) const noexcept
 {
     if (visibleFrameCount() <= 0 || viewport_width_ <= 0.0) {

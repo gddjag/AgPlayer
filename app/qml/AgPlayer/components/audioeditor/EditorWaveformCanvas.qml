@@ -259,7 +259,7 @@ Rectangle {
                         point.x, point.y)
                 }
                 onCanceled: AudioEditorController.cancelSelectionHandoff()
-                onReleased: AudioEditorController.cancelSelectionHandoff()
+                onReleased: AudioEditorController.releaseSelectionHandoff()
             }
         }
 
@@ -359,8 +359,12 @@ Rectangle {
                     playOnRelease = false
                     canvas.cancelSelectionPreview()
                     if (mouse.button === Qt.RightButton) {
-                        AudioEditorController.clearSelection()
-                        AudioEditorController.clearEventSelection()
+                        const point = mapToItem(canvas, mouse.x, mouse.y)
+                        const frame = canvas.frameAtCanvasPixel(point.x)
+                        if (canvas.selectionContains(frame)) {
+                            AudioEditorController.clearSelection()
+                            AudioEditorController.clearEventSelection()
+                        }
                         mouse.accepted = true
                         return
                     }
@@ -850,6 +854,11 @@ Rectangle {
                             canvas, mouse.x, mouse.y)
                         const frame = canvas.frameAtCanvasPixel(canvasPoint.x)
                         if (mouse.button === Qt.RightButton) {
+                            if (canvas.selectionContains(frame)) {
+                                AudioEditorController.clearSelection()
+                                mouse.accepted = true
+                                return
+                            }
                             const offset = Math.max(0, Math.min(
                                 Number(eventDelegate.modelData.timelineEnd)
                                     - Number(eventDelegate.modelData.timelineStart) - 1,
@@ -869,7 +878,7 @@ Rectangle {
                         playOnRelease = canvas.displayedSelectionEnd
                             > canvas.displayedSelectionStart && outsideSelection
                         if (outsideSelection)
-                            AudioEditorController.clearSelection()
+                            AudioEditorController.setLoopEnabled(false)
                         AudioEditorController.seekFrame(frame)
                         volumeLine.gainCandidate = Number(
                             eventDelegate.modelData.gain)
@@ -877,7 +886,9 @@ Rectangle {
                         mouse.accepted = true
                     }
                     onPositionChanged: function(mouse) {
-                        if (!pressed) return
+                        if (!pressed
+                                || (pressedButtons & Qt.LeftButton) === 0)
+                            return
                         const point = mapToItem(volumeLine, mouse.x, mouse.y)
                         const nextGain = canvas.gainFromY(
                             point.y, volumeLine.height)
@@ -1082,7 +1093,10 @@ Rectangle {
             }
             if (mouse.button === Qt.RightButton) {
                 canvas.cancelSelectionPreview()
-                AudioEditorController.clearSelection()
+                if (canvas.selectionContains(
+                        canvas.frameAtCanvasPixel(mouse.x))) {
+                    AudioEditorController.clearSelection()
+                }
                 return
             }
             pressFrame = canvas.frameAtCanvasPixel(mouse.x)
@@ -1092,7 +1106,7 @@ Rectangle {
             playOnRelease = canvas.displayedSelectionEnd
                 > canvas.displayedSelectionStart && outsideSelection
             if (outsideSelection)
-                AudioEditorController.clearSelection()
+                AudioEditorController.setLoopEnabled(false)
             AudioEditorController.seekFrame(pressFrame)
         }
         onPositionChanged: function(mouse) {
@@ -1102,6 +1116,8 @@ Rectangle {
                 lastPanX = mouse.x
                 return
             }
+            if ((pressedButtons & Qt.LeftButton) === 0)
+                return
             const frame = canvas.frameAtCanvasPixel(mouse.x)
             if (frame === pressFrame) return
             selecting = true
@@ -1121,8 +1137,16 @@ Rectangle {
         }
         onWheel: function(wheel) {
             if ((wheel.modifiers & Qt.ControlModifier) !== 0) {
+                let anchor = wheel.x
+                if (canvas.displayedSelectionEnd
+                        > canvas.displayedSelectionStart) {
+                    const midpoint = (canvas.displayedSelectionStart
+                        + canvas.displayedSelectionEnd) / 2
+                    anchor = Math.max(0, Math.min(canvas.width,
+                        canvas.pixelAtFrame(midpoint)))
+                }
                 AudioEditorController.viewport.zoomAt(
-                    wheel.angleDelta.y > 0 ? 1.25 : 0.8, wheel.x)
+                    wheel.angleDelta.y > 0 ? 1.25 : 0.8, anchor)
                 wheel.accepted = true
             } else if ((wheel.modifiers & Qt.ShiftModifier) !== 0) {
                 AudioEditorController.viewport.panByPixels(

@@ -158,8 +158,8 @@ TestCase {
         verifyGeometry("editorTimeRuler", 120, 152, 1198, 52)
         verifyGeometry("editorWaveformCanvas", 120, 188, 1198, 387)
         verifyGeometry("editorTimelineScrollbar", 120, 589, 1198, 16)
-        verifyGeometry("editorPlaybackTransport", 12, 618, 1304, 112)
-        verifyGeometry("editorShortcutCard", 12, 730, 1304, 67)
+        verifyGeometry("editorPlaybackTransport", 12, 618, 1304, 104)
+        verifyGeometry("editorShortcutCard", 12, 734, 1304, 63)
         verifyGeometry("editorStatusBar", 0, 797, 1328, 25)
 
         compare(findChild(page, "inspectorTempoTitle").text,
@@ -588,6 +588,9 @@ TestCase {
                 verify(label)
                 verify(label.width >= label.implicitWidth,
                        row.objectName + " label " + index + " is clipped")
+                verify(label.parent.width - label.implicitWidth >= 12,
+                       row.objectName + " group " + index
+                       + " needs readable horizontal spacing")
                 verify(label.implicitHeight <= row.height,
                        row.objectName + " label " + index
                        + " is vertically clipped")
@@ -1095,6 +1098,10 @@ TestCase {
         verify(AudioEditorController.selectionEnd > AudioEditorController.selectionStart)
         mouseClick(blank, canvas.width * 0.08, canvas.height / 2, Qt.RightButton)
         compare(AudioEditorController.selectionStart, -1)
+        mouseDrag(blank, canvas.width * 0.55, canvas.height * 0.7,
+                  canvas.width * 0.12, 0, Qt.RightButton,
+                  Qt.NoModifier, 30)
+        compare(AudioEditorController.selectionStart, -1)
     }
 
     function test_ctrlDragOnEventCreatesCopy() {
@@ -1143,11 +1150,12 @@ TestCase {
         tryCompare(AudioEditorController.timelineEventViews, "length", 2)
     }
 
-    function test_selectionEnablesLoopAndTimelineClicksClearItPrecisely() {
+    function test_onlyRightClickInsideSelectionCancelsIt() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
         verify(AudioEditorController.setActiveTool("select"))
         const canvas = findChild(page, "editorWaveformCanvas")
-        verify(canvas)
+        const ruler = findChild(page, "editorRulerSelectionInteraction")
+        verify(canvas && ruler)
         AudioEditorController.viewport.setViewportWidth(canvas.width)
         verify(AudioEditorController.viewport.setVisibleRange(0, 96000))
         const gain = findChild(canvas, "editorEventGainInteraction")
@@ -1161,16 +1169,28 @@ TestCase {
         verify(Math.abs(canvas.frameAtCanvasPixel(resolvedOutside.x) - 72000)
                <= 40)
         mouseClick(gain, outside.x, outside.y, Qt.LeftButton)
+        compare(AudioEditorController.selectionStart, 12000)
+        compare(AudioEditorController.selectionEnd, 36000)
+
+        mouseClick(gain, outside.x, outside.y, Qt.RightButton)
+        compare(AudioEditorController.selectionStart, 12000)
+        compare(AudioEditorController.selectionEnd, 36000)
+
+        mouseClick(ruler,
+                   AudioEditorController.viewport.pixelAtFrame(72000),
+                   ruler.height / 2, Qt.LeftButton)
+        compare(AudioEditorController.selectionStart, 12000)
+        compare(AudioEditorController.selectionEnd, 36000)
+        mouseClick(ruler,
+                   AudioEditorController.viewport.pixelAtFrame(72000),
+                   ruler.height / 2, Qt.RightButton)
+        compare(AudioEditorController.selectionStart, 12000)
+        compare(AudioEditorController.selectionEnd, 36000)
+
+        mouseClick(ruler,
+                   AudioEditorController.viewport.pixelAtFrame(24000),
+                   ruler.height / 2, Qt.RightButton)
         compare(AudioEditorController.selectionStart, -1)
-        compare(AudioEditorController.loopEnabled, false)
-        verify(Math.abs(AudioEditorController.playheadFrame
-                        - canvas.frameAtCanvasPixel(resolvedOutside.x)) <= 1)
-        tryVerify(function() {
-            return !AudioEditorController.playing
-                && AudioEditorController.errorMessage.length > 0
-        })
-        AudioEditorController.stopPlayback()
-        tryCompare(AudioEditorController, "playing", false)
 
         verify(AudioEditorController.setSelection(12000, 36000))
         compare(AudioEditorController.loopEnabled, true)
@@ -1181,6 +1201,76 @@ TestCase {
         compare(AudioEditorController.selectionStart, -1)
         compare(AudioEditorController.loopEnabled, false)
         compare(AudioEditorController.playheadFrame, playheadBeforeRightClick)
+    }
+
+    function test_zoomKeepsSelectionAtTheSameAnchor() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 192000))
+        const interaction = findChild(page, "editorWaveformInteraction")
+        const canvas = findChild(page, "editorWaveformCanvas")
+        verify(interaction && canvas)
+        AudioEditorController.viewport.setViewportWidth(canvas.width)
+        verify(AudioEditorController.viewport.setVisibleRange(0, 192000))
+        verify(AudioEditorController.setSelection(48000, 96000))
+        const midpoint = 72000
+        const before = AudioEditorController.viewport.pixelAtFrame(midpoint)
+
+        mouseWheel(interaction, canvas.width - 10, canvas.height / 2,
+                   0, 120, Qt.NoButton, Qt.ControlModifier)
+
+        compare(AudioEditorController.selectionStart, 48000)
+        compare(AudioEditorController.selectionEnd, 96000)
+        verify(Math.abs(AudioEditorController.viewport.pixelAtFrame(midpoint)
+                        - before) <= 1)
+    }
+
+    function test_timelineScrollbarTracksZoomAndPanRange() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 192000))
+        const scrollbar = findChild(page, "editorTimelineScrollbar")
+        const canvas = findChild(page, "editorWaveformCanvas")
+        verify(scrollbar && canvas)
+        AudioEditorController.viewport.setViewportWidth(canvas.width)
+        verify(AudioEditorController.viewport.setVisibleRange(0, 48000))
+        wait(0)
+        verify(scrollbar.to > 0)
+        compare(Math.round(scrollbar.value), 0)
+        const maximum = scrollbar.to
+        scrollbar.value = maximum
+        scrollbar.moved()
+        wait(0)
+        verify(AudioEditorController.viewport.visibleStartFrame >= 143999)
+        verify(Math.abs(scrollbar.value - scrollbar.to) <= 1)
+    }
+
+    function test_trackGainWheelUsesNaturalDirection() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        const gain = findChild(page, "editorTrackGain")
+        verify(gain)
+        compare(AudioEditorController.trackGainDb, 0)
+        mouseWheel(gain, gain.width / 2, gain.height / 2,
+                   0, 120, Qt.NoButton, Qt.NoModifier)
+        verify(AudioEditorController.trackGainDb > 0)
+        const raised = AudioEditorController.trackGainDb
+        mouseWheel(gain, gain.width / 2, gain.height / 2,
+                   0, -120, Qt.NoButton, Qt.NoModifier)
+        verify(AudioEditorController.trackGainDb < raised)
+    }
+
+    function test_trackGainDragUpRaisesAndDragDownLowersVolume() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        const gain = findChild(page, "editorTrackGain")
+        verify(gain)
+        mousePress(gain, gain.width / 2, gain.height / 2,
+                   Qt.LeftButton)
+        mouseMove(gain, gain.width / 2, 1, 0)
+        mouseRelease(gain, gain.width / 2, 1, Qt.LeftButton)
+        const raised = AudioEditorController.trackGainDb
+        verify(raised > 0)
+
+        mousePress(gain, gain.width / 2, 1, Qt.LeftButton)
+        mouseMove(gain, gain.width / 2, gain.height - 1, 0)
+        mouseRelease(gain, gain.width / 2, gain.height - 1,
+                     Qt.LeftButton)
+        verify(AudioEditorController.trackGainDb < raised)
     }
 
     function test_selectionUsesOneDashedBorderAndShowsExactLabels() {
