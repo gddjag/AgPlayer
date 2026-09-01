@@ -115,6 +115,9 @@ public:
         PureStage = 3,
         Quiet = 4,
         Galaxy = 5,
+        MultiSourceNeon = 6,
+        DeepSeaSoftWave = 7,
+        AmberCinema = 8,
     };
     Q_ENUM(VisualPreset)
     enum LyricPosition { Left = 0, Center = 1, Right = 2 };

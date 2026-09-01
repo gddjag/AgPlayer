@@ -1311,8 +1311,8 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
     node->spectralPalette_ = spectralPalette_;
     node->spectralUnplayedOpacity_ = spectralUnplayedOpacity_;
     node->playedCount_ = newPlayedCount;
-    // RGBA lives in the ColoredPoint2D vertex buffer, so the scene graph must
-    // upload geometry even when only palette/progress colours changed.
+    // RGBA and played/unplayed alpha live in the ColoredPoint2D vertex buffer,
+    // so a material-only update would leave stale colours on QRhi backends.
     node->markDirty(QSGNode::DirtyGeometry);
     return node;
 }

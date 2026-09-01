@@ -53,6 +53,7 @@ private slots:
     void waveformStrokesStayInsideContainerEdges();
     void onePixelWaveformLeavesTheCanvasEdgeClear();
     void visualModesUseConfiguredProgressAndBaseColors();
+    void frequencyModeUpdatesProgressOpacityWithoutRebuildingNode();
     void spectrumUsesBottomBaselineAndCenterEnvelope();
     void spectrumUpsamplesSparseInputToDenseBars();
     void spectrumContractUsesFixedBarsWithPeakCaps();
@@ -329,6 +330,38 @@ void WaveformItemTest::onePixelWaveformLeavesTheCanvasEdgeClear()
              "the first waveform column must not rasterize as a canvas border");
     QCOMPARE(data[0].y + data[1].y, item.height());
     delete node;
+}
+
+void WaveformItemTest::frequencyModeUpdatesProgressOpacityWithoutRebuildingNode()
+{
+    TestableWaveformItem item;
+    item.setWidth(4);
+    item.setHeight(40);
+    item.setDuration(100);
+    item.setDensity(2.0);
+    item.setLineWidth(1.0);
+    item.setVisualMode(3);
+    item.setSpectralUnplayedOpacity(0.60);
+    item.setLayers(makeLayers(
+        peaks({1.0, 1.0, 1.0, 1.0}),
+        peaks({1.0, 1.0, 1.0, 1.0}),
+        peaks({0.0, 0.0, 0.0, 0.0}),
+        peaks({0.0, 0.0, 0.0, 0.0}),
+        peaks({0, 85, 170, 255})));
+
+    item.setPosition(0);
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node != nullptr);
+    const int unplayedAlpha = static_cast<int>(vertices(node)[0].a);
+    QCOMPARE(unplayedAlpha, 153);
+
+    item.setPosition(100);
+    QSGNode* updatedNode = item.updatePaintNode(node, nullptr);
+    QCOMPARE(updatedNode, node);
+    QCOMPARE(static_cast<int>(vertices(updatedNode)[0].a), 255);
+    QCOMPARE(static_cast<int>(vertices(updatedNode)[6].a), 255);
+    QVERIFY(static_cast<int>(vertices(updatedNode)[0].a) > unplayedAlpha + 100);
+    delete updatedNode;
 }
 
 void WaveformItemTest::spectrumUsesBottomBaselineAndCenterEnvelope()

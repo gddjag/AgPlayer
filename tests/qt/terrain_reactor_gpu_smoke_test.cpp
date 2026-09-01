@@ -40,6 +40,11 @@ void TerrainReactorGpuSmokeTest::shaderFalloffsKeepSmoothstepEdgesAscending()
     QVERIFY2(!source.contains(
                  QStringLiteral("smoothstep(responseRadius * 0.84")),
              "Maximum response range can reverse the outer smoothstep edges");
+    QVERIFY2(source.contains(
+                 QStringLiteral("if (ubuf.styleToggles.x > 0.5")),
+             "Disabled ripples must bypass the multi-wave shader work");
+    QVERIFY2(source.contains(QStringLiteral("waveIndex >= waveCount")),
+             "Reduced ripple quality must reduce active wave-source work");
 }
 
 class MutableFeatureSource final : public QObject {
@@ -124,7 +129,7 @@ void TerrainReactorGpuSmokeTest::firstActiveCreatesResourcesAndRendersStaticFeat
     item.setSize(QSizeF(480, 270));
     QCOMPARE(item.liveRendererCount(), 0);
     item.setUseSyntheticFeatures(true);
-    item.setQuality(TerrainReactorItem::Quality::High);
+    item.setQuality(TerrainReactorItem::Quality::Balanced);
     QCOMPARE(item.liveRendererCount(), 0);
     item.setSyntheticFeatures({0.8, 0.7, 0.6, 0.5,
                                0.4, 0.3, 0.2, 0.1}, 0.7, 0.4, true, false);
@@ -150,6 +155,10 @@ void TerrainReactorGpuSmokeTest::firstActiveCreatesResourcesAndRendersStaticFeat
                               TerrainReactorItem::RenderStatus::Ready, 5000);
     QTRY_VERIFY_WITH_TIMEOUT(item.resourceGeneration() > 0, 5000);
     QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() > 0, 5000);
+    const int expectedBalancedWidth = qRound(
+        item.width() * window.effectiveDevicePixelRatio() * 0.90);
+    QTRY_COMPARE_WITH_TIMEOUT(item.fixedColorBufferWidth(),
+                              expectedBalancedWidth, 3000);
     QVERIFY(item.uploadCount() > 0);
     QCOMPARE(item.liveRendererCount(), 1);
 
@@ -181,6 +190,21 @@ void TerrainReactorGpuSmokeTest::firstActiveCreatesResourcesAndRendersStaticFeat
     QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() > minimizedFrames, 5000);
     QVERIFY(item.resourceGeneration() >= generation);
     QCOMPARE(item.liveRendererCount(), 1);
+
+    const quint64 stressGeneration = item.resourceGeneration();
+    const quint64 stressFrameBaseline = item.frameCount();
+    for (int cycle = 0; cycle < 50; ++cycle) {
+        item.setActive(false);
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+        QVERIFY(!item.renderingRequested());
+        item.setActive(true);
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+        QVERIFY(item.renderingRequested());
+        QCOMPARE(item.liveRendererCount(), 1);
+    }
+    QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() > stressFrameBaseline, 5000);
+    QCOMPARE(item.resourceGeneration(), stressGeneration);
+    QCOMPARE(item.liveRendererCount(), 1);
 }
 
 void TerrainReactorGpuSmokeTest::explicitImpactBrightensAStableTerrainFrame()
@@ -192,8 +216,11 @@ void TerrainReactorGpuSmokeTest::explicitImpactBrightensAStableTerrainFrame()
     style.setAutoRotateSpeed(0);
     style.setMotionResponse(0);
     style.setIdleBreathingEnabled(false);
+    style.setRipplesEnabled(false);
     style.setFloatingCubesEnabled(false);
     style.setMeteorsEnabled(false);
+    style.setBurstEnabled(false);
+    style.setStreamHighlightEnabled(false);
     StableImpactSource source;
     TerrainReactorItem item(window.contentItem());
     item.setSize(QSizeF(480, 270));
@@ -209,17 +236,48 @@ void TerrainReactorGpuSmokeTest::explicitImpactBrightensAStableTerrainFrame()
         QSKIP("No accelerated Qt Quick backend is available");
     }
 
+    const auto presentedFrames = std::make_shared<std::atomic<int>>(0);
+    QObject::connect(&window, &QQuickWindow::frameSwapped, &window,
+                     [presentedFrames] {
+        presentedFrames->fetch_add(1, std::memory_order_release);
+    }, Qt::DirectConnection);
+
     item.setActive(true);
     QTRY_COMPARE_WITH_TIMEOUT(item.renderStatus(),
                               TerrainReactorItem::RenderStatus::Ready, 5000);
-    QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() > 0, 5000);
+    const quint64 baselineFeatureRevision = item.featureRevision();
+    const quint64 baselineStyleRevision = item.styleRevision();
+    QTRY_VERIFY_WITH_TIMEOUT(([&item, baselineFeatureRevision,
+                               baselineStyleRevision] {
+        item.update();
+        return item.renderedFeatureRevision() == baselineFeatureRevision
+            && item.renderedStyleRevision() == baselineStyleRevision
+            && item.stableRenderedFrameCount() >= 3;
+    }()), 5000);
+    const int baselinePresented = presentedFrames->load(
+        std::memory_order_acquire);
+    QTRY_VERIFY_WITH_TIMEOUT(([&item, presentedFrames, baselinePresented] {
+        item.update();
+        return presentedFrames->load(std::memory_order_acquire)
+            >= baselinePresented + 2;
+    }()), 5000);
     const QImage baseline = window.grabWindow().convertToFormat(
         QImage::Format_RGBA8888);
     QVERIFY(!baseline.isNull());
 
-    const quint64 before = item.frameCount();
+    const quint64 beforeRevision = item.featureRevision();
+    const int impactPresented = presentedFrames->load(
+        std::memory_order_acquire);
     source.publishImpact(1.0);
-    QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() > before, 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(item.featureRevision() > beforeRevision, 3000);
+    const quint64 impactFeatureRevision = item.featureRevision();
+    QTRY_VERIFY_WITH_TIMEOUT(([&item, presentedFrames, impactPresented,
+                               impactFeatureRevision] {
+        item.update();
+        return item.renderedFeatureRevision() == impactFeatureRevision
+            && presentedFrames->load(std::memory_order_acquire)
+                > impactPresented;
+    }()), 3000);
     const QImage impacted = window.grabWindow().convertToFormat(
         QImage::Format_RGBA8888);
     QCOMPARE(impacted.size(), baseline.size());

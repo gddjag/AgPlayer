@@ -134,6 +134,25 @@ struct VisualParameters {
     float timeSeconds = 0.0F;
 };
 
+struct BassEnvelopeSnapshot {
+    float fast = 0.0F;
+    float slow = 0.0F;
+};
+
+class BassEnvelopeFollower final {
+public:
+    BassEnvelopeSnapshot advance(float bass, float elapsedSeconds) noexcept;
+    BassEnvelopeSnapshot snapshot() const noexcept;
+
+private:
+    BassEnvelopeSnapshot snapshot_;
+};
+
+using MultiWaveSources = std::array<QVector4D, 8>;
+
+// x/y are stage coordinates, z is the normalized cycle phase and w is strength.
+MultiWaveSources multiWaveSources(quint32 seed) noexcept;
+
 struct RenderDynamics {
     float inputCompression = 0.82F;
     float audioResponse = 1.28F;
@@ -165,17 +184,20 @@ enum class DegradationStage : quint8 {
 };
 
 struct QualityConfiguration {
-    int gridSize = 160;
-    int floatingCount = 80;
-    int particleCount = 140;
-    int meteorCount = 20;
-    int rippleCount = 10;
-    float internalScale = 1.0F;
+    int gridSize = 128;
+    int floatingCount = 52;
+    int particleCount = 96;
+    int meteorCount = 10;
+    int rippleCount = 4;
+    float internalScale = 0.90F;
 };
 
 class AutomaticQualityController final {
 public:
     void observeWorkSample(double workMilliseconds) noexcept;
+    void observeFrameSample(double workMilliseconds,
+                            double frameElapsedMilliseconds,
+                            double targetFrameMilliseconds) noexcept;
     void advanceWallClock(double elapsedSeconds) noexcept;
     DegradationStage stage() const noexcept;
     QualityConfiguration configuration() const noexcept;
@@ -192,6 +214,8 @@ private:
     double overBudgetSeconds_ = 0.0;
     double underBudgetSeconds_ = 0.0;
     double cooldownRemainingSeconds_ = 0.0;
+    double smoothedFrameElapsedMilliseconds_ = 0.0;
+    double lastTargetFrameMilliseconds_ = 0.0;
 };
 
 struct WorkCounters {
@@ -255,8 +279,8 @@ private:
 
 struct CameraSnapshot {
     float yaw = 2.6075219F;
-    float pitch = 0.38F;
-    float distance = 180.0F;
+    float pitch = 0.40F;
+    float distance = 160.0F;
     float punch = 0.0F;
 };
 

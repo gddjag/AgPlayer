@@ -18,8 +18,11 @@ private slots:
     void meteorsHaveFiniteTrailsAndCollisionEffects();
     void meteorGroupsKeepOneDeterministicPrimaryImpact();
     void audioFeaturesDriveBoundedVisualParameters();
+    void bassEnvelopeUsesFastAttackAndSlowRelease();
+    void multiWaveSourcesAreStableDistributedAndBounded();
     void automaticQualityUsesHysteresisCooldownAndEffectFirstOrder();
     void qualityFeedbackSeparatesPacerDelayFromWorkCost();
+    void presentedFrameDelayTriggersAdaptiveDowngrade();
     void inactiveOrOccludedGateFreezesAllWorkCounters();
     void rendererOwnershipHasOneLiveResourceGeneration();
     void manualCameraControlRecoversAfterFourSeconds();
@@ -42,6 +45,7 @@ private slots:
     void idleTerrainFadesOutsideResponseField();
     void trackIdentityProducesStableBoundedDistinctPalette();
     void ecoFramePacerLimitsWorkToThirtyFrames();
+    void balancedFramePacerDoesNotCollapseToThirtyOnSixtyHertz();
 };
 
 void TerrainReactorStateTest::fixedSeedProducesStableLayoutAndColorZones()
@@ -710,11 +714,11 @@ void TerrainReactorStateTest::automaticQualityUsesHysteresisCooldownAndEffectFir
     observe(40.0, 0.01);
     QCOMPARE(quality.stage(), DegradationStage::ReducedParticles);
     const QualityConfiguration particlesReduced = quality.configuration();
-    QVERIFY(particlesReduced.particleCount < 140);
-    QCOMPARE(particlesReduced.floatingCount, 80);
-    QCOMPARE(particlesReduced.meteorCount, 20);
-    QCOMPARE(particlesReduced.rippleCount, 10);
-    QCOMPARE(particlesReduced.gridSize, 160);
+    QVERIFY(particlesReduced.particleCount < 96);
+    QCOMPARE(particlesReduced.floatingCount, 52);
+    QCOMPARE(particlesReduced.meteorCount, 10);
+    QCOMPARE(particlesReduced.rippleCount, 4);
+    QCOMPARE(particlesReduced.gridSize, 128);
 
     observe(40.0, 4.99);
     QCOMPARE(quality.stage(), DegradationStage::ReducedParticles);
@@ -740,6 +744,43 @@ void TerrainReactorStateTest::automaticQualityUsesHysteresisCooldownAndEffectFir
     QCOMPARE(quality.stage(), DegradationStage::ReducedResolution);
     observe(10.0, 0.01);
     QCOMPARE(quality.stage(), DegradationStage::ReducedGrid);
+}
+
+void TerrainReactorStateTest::bassEnvelopeUsesFastAttackAndSlowRelease()
+{
+    BassEnvelopeFollower envelope;
+    const BassEnvelopeSnapshot idle = envelope.advance(0.0F, 1.0F / 60.0F);
+    QCOMPARE(idle.fast, 0.0F);
+    QCOMPARE(idle.slow, 0.0F);
+
+    const BassEnvelopeSnapshot attack = envelope.advance(1.0F, 0.033F);
+    QVERIFY(attack.fast > 0.55F);
+    QVERIFY(attack.fast > attack.slow);
+
+    const BassEnvelopeSnapshot release = envelope.advance(0.0F, 0.22F);
+    QVERIFY(release.fast < attack.fast);
+    QVERIFY(release.slow > release.fast);
+    QVERIFY(release.slow > 0.10F);
+}
+
+void TerrainReactorStateTest::multiWaveSourcesAreStableDistributedAndBounded()
+{
+    const auto first = multiWaveSources(0x5eedU);
+    const auto again = multiWaveSources(0x5eedU);
+    const auto other = multiWaveSources(0x5eeeU);
+    QCOMPARE(first, again);
+    QVERIFY(first != other);
+    QCOMPARE(first.size(), std::size_t(8));
+
+    bool hasOffCenterSource = false;
+    for (const QVector4D& source : first) {
+        QVERIFY(std::hypot(source.x(), source.y()) <= 62.0F);
+        QVERIFY(source.z() >= 0.0F && source.z() < 1.0F);
+        QVERIFY(source.w() >= 0.45F && source.w() <= 1.0F);
+        hasOffCenterSource = hasOffCenterSource
+            || std::hypot(source.x(), source.y()) > 12.0F;
+    }
+    QVERIFY(hasOffCenterSource);
 }
 
 void TerrainReactorStateTest::qualityFeedbackSeparatesPacerDelayFromWorkCost()
@@ -774,6 +815,46 @@ void TerrainReactorStateTest::qualityFeedbackSeparatesPacerDelayFromWorkCost()
     QCOMPARE(overloaded.stage(), DegradationStage::ReducedParticles);
     overloaded.advanceWallClock(0.01);
     QCOMPARE(overloaded.stage(), DegradationStage::Full);
+
+    AutomaticQualityController recoveringFromBalancedLoad;
+    recoveringFromBalancedLoad.observeFrameSample(40.0, 40.0, 22.222);
+    recoveringFromBalancedLoad.advanceWallClock(2.0);
+    QCOMPARE(recoveringFromBalancedLoad.stage(),
+             DegradationStage::ReducedParticles);
+    for (int cycle = 0; cycle < 121; ++cycle) {
+        for (const double elapsed : {33.333, 16.667, 16.667}) {
+            recoveringFromBalancedLoad.observeFrameSample(
+                2.0, elapsed, 22.222);
+            recoveringFromBalancedLoad.advanceWallClock(elapsed / 1000.0);
+        }
+    }
+    QCOMPARE(recoveringFromBalancedLoad.stage(), DegradationStage::Full);
+}
+
+void TerrainReactorStateTest::presentedFrameDelayTriggersAdaptiveDowngrade()
+{
+    AutomaticQualityController quality;
+
+    // GPU saturation can leave command submission cheap while actual frame
+    // cadence misses the budget. The adaptive controller must observe both.
+    quality.observeFrameSample(2.0, 52.0, 33.333);
+    quality.advanceWallClock(1.99);
+    QCOMPARE(quality.stage(), DegradationStage::Full);
+    quality.advanceWallClock(0.01);
+    QCOMPARE(quality.stage(), DegradationStage::ReducedParticles);
+
+    AutomaticQualityController onBudget;
+    onBudget.observeFrameSample(2.0, 33.333, 33.333);
+    onBudget.advanceWallClock(3.0);
+    QCOMPARE(onBudget.stage(), DegradationStage::Full);
+
+    AutomaticQualityController sustainedThirtyFps;
+    for (int frame = 0; frame < 70; ++frame) {
+        sustainedThirtyFps.observeFrameSample(2.0, 33.333, 22.222);
+        sustainedThirtyFps.advanceWallClock(0.033333);
+    }
+    QCOMPARE(sustainedThirtyFps.stage(),
+             DegradationStage::ReducedParticles);
 }
 
 void TerrainReactorStateTest::inactiveOrOccludedGateFreezesAllWorkCounters()
@@ -1032,11 +1113,23 @@ void TerrainReactorStateTest::ecoFramePacerLimitsWorkToThirtyFrames()
     QVERIFY(pacer.shouldRender(2.0, 60.0));
 }
 
+void TerrainReactorStateTest::balancedFramePacerDoesNotCollapseToThirtyOnSixtyHertz()
+{
+    FramePacer pacer;
+    int rendered = 0;
+    for (int tick = 0; tick <= 60; ++tick) {
+        if (pacer.shouldRender(double(tick) / 60.0, 45.0)) ++rendered;
+    }
+    QVERIFY2(rendered >= 44 && rendered <= 46,
+             qPrintable(QStringLiteral("45 FPS pacing rendered %1 frames")
+                            .arg(rendered)));
+}
+
 void TerrainReactorStateTest::manualCameraControlRecoversAfterFourSeconds()
 {
     CameraMotion camera;
     const CameraSnapshot initial = camera.snapshot();
-    QCOMPARE(initial.distance, 180.0F);
+    QCOMPARE(initial.distance, 160.0F);
     CameraMotion zoomedOut;
     zoomedOut.zoomBy(10000.0F, 1.0);
     QCOMPARE(zoomedOut.snapshot().distance, 220.0F);

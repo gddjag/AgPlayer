@@ -125,9 +125,9 @@ struct StylePreset {
     int rhythmSensitivity;
 };
 
-const std::array<StylePreset, 6>& visualPresets()
+const std::array<StylePreset, 9>& visualPresets()
 {
-    static const std::array<StylePreset, 6> presets = {{
+    static const std::array<StylePreset, 9> presets = {{
         {0, "#8BDCFF", "#EB7894", "#FFD7DF", "#FFF7FB", "#050206",
          62, 56, 74, 38, 0.30, 54, 58, true, true, true, true, true, true, true,
          {90, 92, 50, 50, 50, 50, 50, 48}, 82, 136, 100, 64, 30, 86, 112, 42, 80},
@@ -146,6 +146,15 @@ const std::array<StylePreset, 6>& visualPresets()
         {2, "#44D9FF", "#FF4FA7", "#FF8A45", "#FFF1D1", "#05030D",
          72, 68, 76, 52, 0.45, 58, 68, true, true, true, true, true, true, true,
          {96, 88, 66, 54, 58, 76, 94, 100}, 80, 140, 182, 64, 104, 96, 110, 46, 84},
+        {2, "#38D8FF", "#FF5A9D", "#8A7CFF", "#F8F4FF", "#03040B",
+         58, 62, 82, 46, 0.22, 46, 64, true, false, true, true, true, false, true,
+         {92, 86, 66, 58, 62, 76, 88, 94}, 82, 138, 168, 62, 74, 82, 118, 40, 82},
+        {1, "#174C78", "#2EC4B6", "#78DCE8", "#E9FDFF", "#02070C",
+         44, 38, 58, 28, 0.10, 30, 42, true, false, false, false, true, false, true,
+         {78, 74, 68, 60, 52, 48, 44, 40}, 88, 118, 174, 52, 58, 108, 116, 24, 70},
+        {1, "#8A3D22", "#E6813B", "#FFC66D", "#FFF1C2", "#090502",
+         56, 48, 66, 34, 0.18, 34, 52, true, false, true, true, true, false, true,
+         {88, 84, 72, 62, 54, 48, 44, 42}, 84, 126, 162, 60, 66, 94, 120, 28, 74},
     }};
     return presets;
 }
@@ -614,7 +623,7 @@ void PlayerExperienceController::setRhythmSensitivity(int value)
 
 bool PlayerExperienceController::applyPreset(int preset)
 {
-    if (preset < AudioRangeEcho || preset > Galaxy) return false;
+    if (preset < AudioRangeEcho || preset > AmberCinema) return false;
     const StylePreset& values = visualPresets().at(static_cast<size_t>(preset));
     setColorMode(values.colorMode);
     setCoolColor(QLatin1String(values.coolColor));
@@ -677,7 +686,6 @@ void PlayerExperienceController::cycleExperienceTheme()
     if (settingsController_ == nullptr) return;
     if (immersiveMode_ != Off) {
         setImmersiveMode(Off);
-        settingsController_->setPlayerShellMode(0);
         return;
     }
     if (settingsController_->playerShellMode() == 0) {

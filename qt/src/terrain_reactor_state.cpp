@@ -150,7 +150,7 @@ TrackPalette trackPalette(quint32 seed) noexcept
     const QVector4D cool = hsv(hue, 0.64F, 0.94F);
     const QVector4D warm = hsv(hue + split, 0.66F, 0.98F);
     const QVector4D accent = hsv(hue + accentOffset, 0.52F, 1.0F);
-    const QVector4D peak = hsv(hue + split * 0.45F, 0.18F, 1.0F);
+    const QVector4D peak = hsv(hue + split * 0.45F, 0.34F, 0.98F);
     const QVector4D dark = hsv(hue + 0.06F, 0.72F, 0.085F);
     return {dark, cool, warm, accent, peak};
 }
@@ -166,6 +166,50 @@ TrackPalette blendTrackPalettes(const TrackPalette& from,
         result[index].setW(1.0F);
     }
     return result;
+}
+
+MultiWaveSources multiWaveSources(quint32 seed) noexcept
+{
+    DeterministicRandom random(seed == 0U ? 1U : seed);
+    MultiWaveSources sources{};
+    // Keep the first ridge near the musical core; the remaining sources are
+    // distributed over the circular terrain so the field does not read as a
+    // mechanical stack of concentric rings.
+    sources[0] = QVector4D(0.0F, 0.0F, random.unit(), 1.0F);
+    for (std::size_t index = 1; index < sources.size(); ++index) {
+        const float angle = random.unit() * 2.0F * float(M_PI);
+        const float radius = 14.0F + random.unit() * 48.0F;
+        sources[index] = QVector4D(std::cos(angle) * radius,
+                                   std::sin(angle) * radius,
+                                   random.unit(),
+                                   0.45F + random.unit() * 0.55F);
+    }
+    return sources;
+}
+
+BassEnvelopeSnapshot BassEnvelopeFollower::advance(
+    float bass, float elapsedSeconds) noexcept
+{
+    const float input = clampUnit(bass);
+    const float elapsed = std::clamp(finiteOr(elapsedSeconds, 0.0F),
+                                     0.0F, 0.25F);
+    const auto follow = [elapsed](float current, float target,
+                                  float attackSeconds,
+                                  float releaseSeconds) noexcept {
+        const float timeConstant = target > current
+            ? attackSeconds : releaseSeconds;
+        const float amount = timeConstant <= 0.0F
+            ? 1.0F : 1.0F - std::exp(-elapsed / timeConstant);
+        return clampUnit(current + (target - current) * amount);
+    };
+    snapshot_.fast = follow(snapshot_.fast, input, 0.030F, 0.180F);
+    snapshot_.slow = follow(snapshot_.slow, input, 0.075F, 0.400F);
+    return snapshot_;
+}
+
+BassEnvelopeSnapshot BassEnvelopeFollower::snapshot() const noexcept
+{
+    return snapshot_;
 }
 
 SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
@@ -449,10 +493,38 @@ float terrainHeight(const SceneInstance& unsafeInstance,
 void AutomaticQualityController::observeWorkSample(
     double workMilliseconds) noexcept
 {
+    observeFrameSample(workMilliseconds, frameBudgetMilliseconds_,
+                       frameBudgetMilliseconds_);
+}
+
+void AutomaticQualityController::observeFrameSample(
+    double workMilliseconds, double frameElapsedMilliseconds,
+    double targetFrameMilliseconds) noexcept
+{
+    const double target = std::max(1.0, targetFrameMilliseconds);
     const double work = std::max(0.0, workMilliseconds);
-    if (work > frameBudgetMilliseconds_ * 1.05) {
+    const double elapsed = std::max(0.0, frameElapsedMilliseconds);
+    if (lastTargetFrameMilliseconds_ <= 0.0
+        || std::abs(lastTargetFrameMilliseconds_ - target) > target * 0.10) {
+        smoothedFrameElapsedMilliseconds_ = target;
+    }
+    lastTargetFrameMilliseconds_ = target;
+    constexpr double cadenceSmoothing = 0.18;
+    smoothedFrameElapsedMilliseconds_ +=
+        (elapsed - smoothedFrameElapsedMilliseconds_) * cadenceSmoothing;
+
+    // 45 FPS on a 60 Hz display naturally produces a 33/16/16 ms cadence.
+    // The smoothed cadence accepts that quantization while still detecting a
+    // sustained 33/33/33 ms (30 FPS) stream. A severe single miss remains an
+    // immediate over-budget sample.
+    const bool severeCadenceMiss = elapsed > target * 1.55;
+    const bool sustainedCadenceMiss =
+        smoothedFrameElapsedMilliseconds_ > target * 1.25;
+    const bool healthyCadence =
+        smoothedFrameElapsedMilliseconds_ <= target * 1.22;
+    if (work > target * 1.05 || severeCadenceMiss || sustainedCadenceMiss) {
         loadSample_ = LoadSample::OverBudget;
-    } else if (work < frameBudgetMilliseconds_ * 0.80) {
+    } else if (work < target * 0.80 && healthyCadence) {
         loadSample_ = LoadSample::UnderBudget;
     } else {
         loadSample_ = LoadSample::Neutral;
@@ -506,29 +578,30 @@ QualityConfiguration AutomaticQualityController::configuration() const noexcept
     case DegradationStage::Full:
         break;
     case DegradationStage::ReducedParticles:
-        result.particleCount = 80;
+        result.particleCount = 52;
         break;
     case DegradationStage::ReducedMeteors:
-        result.particleCount = 80;
-        result.meteorCount = 10;
+        result.particleCount = 52;
+        result.meteorCount = 6;
         break;
     case DegradationStage::ReducedRipples:
-        result.particleCount = 80;
-        result.meteorCount = 10;
-        result.rippleCount = 5;
+        result.particleCount = 52;
+        result.meteorCount = 6;
+        result.rippleCount = 4;
         break;
     case DegradationStage::ReducedGrid:
-        result.particleCount = 80;
-        result.meteorCount = 10;
-        result.rippleCount = 5;
-        result.gridSize = 112;
+        result.particleCount = 52;
+        result.meteorCount = 6;
+        result.rippleCount = 4;
+        result.gridSize = 96;
+        result.internalScale = 0.82F;
         break;
     case DegradationStage::ReducedResolution:
-        result.particleCount = 80;
-        result.meteorCount = 10;
-        result.rippleCount = 5;
-        result.gridSize = 112;
-        result.internalScale = 0.75F;
+        result.particleCount = 40;
+        result.meteorCount = 4;
+        result.rippleCount = 3;
+        result.gridSize = 96;
+        result.internalScale = 0.70F;
         break;
     }
     return result;
@@ -632,12 +705,20 @@ bool FramePacer::shouldRender(double nowSeconds,
     const double now = std::max(0.0, nowSeconds);
     const double framesPerSecond = std::clamp(targetFramesPerSecond, 1.0, 240.0);
     const double interval = 1.0 / framesPerSecond;
-    if (!initialized_ || now + 0.000001 >= nextFrameSeconds_) {
+    if (!initialized_) {
         initialized_ = true;
         nextFrameSeconds_ = now + interval;
         return true;
     }
-    return false;
+    if (now + 0.000001 < nextFrameSeconds_) return false;
+
+    // Advance from the ideal schedule instead of from the current v-sync.
+    // Otherwise a 45 FPS target on a 60 Hz display renders every other
+    // refresh and silently collapses to 30 FPS.
+    const double missedIntervals = std::floor(
+        std::max(0.0, now - nextFrameSeconds_) / interval);
+    nextFrameSeconds_ += (missedIntervals + 1.0) * interval;
+    return true;
 }
 
 void CameraMotion::orbitBy(float yawDelta, float pitchDelta,
