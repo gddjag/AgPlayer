@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-01
 
-**Status:** Approved architecture direction; pending written-spec approval
+**Status:** Approved on 2026-09-01
 
 ## Goal
 
