@@ -155,6 +155,7 @@ Rectangle {
             }
 
             PlayerVolumeControl {
+                playback: root.playback
                 emptyMode: false
                 maximumExpandedWidth: root.width < 860 ? 96 : 152
             }

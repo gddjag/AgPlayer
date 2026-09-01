@@ -713,6 +713,7 @@ ApplicationWindow {
             VideoPlaybackView {
                 playback: mainWindow.playback
                 videoPlayback: mainWindow.videoPlayback
+                frameController: VideoPlaybackController
                 fullscreen: mainWindow.videoFullscreen
                 onFullscreenRequested: {
                     if (mainWindow.videoFullscreen)

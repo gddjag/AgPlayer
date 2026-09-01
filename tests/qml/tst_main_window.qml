@@ -29,14 +29,22 @@ TestCase {
             property int positionMs: 0
             property int durationMs: 120000
             property real speedRatio: 1.0
+            property bool muted: false
+            property real volume: 0.5
             property int stopCalls: 0
             property var videoState: null
+            property var fullscreenProbe: null
+            property var stopFullscreenSamples: []
             function previous() {}
             function togglePlayback() {}
             function next() {}
             function seek(value) { positionMs = Math.round(value) }
             function setSpeedRatio(value) { speedRatio = value }
+            function toggleMuted() { muted = !muted }
+            function setVolume(value) { volume = value }
             function stop() {
+                stopFullscreenSamples.push(Boolean(fullscreenProbe
+                                                   && fullscreenProbe.videoFullscreen))
                 ++stopCalls
                 state = 0
                 if (videoState)
@@ -5880,7 +5888,8 @@ TestCase {
         var priorVisibility = mainWindow.visibility
         var videoState = videoPlaybackStateComponent.createObject(testCase)
         var transport = videoPlaybackTransportComponent.createObject(testCase, {
-            "videoState": videoState
+            "videoState": videoState,
+            "fullscreenProbe": mainWindow
         })
         verify(videoState && transport)
         mainWindow.playback = transport
@@ -5919,6 +5928,9 @@ TestCase {
             findChild(loader.item, "videoReturnButton").clicked()
             tryCompare(mainWindow, "videoFullscreen", false)
             compare(transport.stopCalls, 1)
+            compare(transport.stopFullscreenSamples.length, 1)
+            compare(transport.stopFullscreenSamples[0], false,
+                    "stop must observe an already-windowed main window")
             tryCompare(loader, "active", false)
             tryVerify(function() { return loader.item === null })
             compare(shellLoader.item, originalShell,

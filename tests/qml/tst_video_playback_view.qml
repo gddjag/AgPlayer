@@ -22,17 +22,31 @@ TestCase {
             property int positionMs: 18000
             property int durationMs: 125000
             property real speedRatio: 1.0
+            property bool muted: false
+            property real volume: 0.32
             property int previousCalls: 0
             property int toggleCalls: 0
             property int nextCalls: 0
             property int seekCalls: 0
             property int speedCalls: 0
+            property int toggleMutedCalls: 0
+            property int setVolumeCalls: 0
             property int lastSeekMs: -1
             property real lastSpeedRatio: 0
+            property real lastVolume: -1
             function previous() { ++previousCalls }
             function togglePlayback() { ++toggleCalls }
             function next() { ++nextCalls }
             function seek(value) { ++seekCalls; lastSeekMs = Math.round(value) }
+            function toggleMuted() {
+                ++toggleMutedCalls
+                muted = !muted
+            }
+            function setVolume(value) {
+                ++setVolumeCalls
+                lastVolume = value
+                volume = value
+            }
             function setSpeedRatio(value) {
                 ++speedCalls
                 lastSpeedRatio = value
@@ -55,6 +69,13 @@ TestCase {
         VideoPlaybackView {
             width: 960
             height: 540
+        }
+    }
+
+    Component {
+        id: defaultVolumeControlComponent
+        PlayerVolumeControl {
+            expandedForQa: true
         }
     }
 
@@ -114,7 +135,8 @@ TestCase {
         var bar = findChild(view, "videoTransportBar")
         var actionNames = [
             "previousButton", "playPauseButton", "nextButton",
-            "videoSeekSlider", "videoSpeedControl",
+            "videoSeekSlider", "muteButton", "volumeSlider",
+            "videoSpeedControl",
             "videoFullscreenButton", "videoReturnButton"
         ]
         for (var widthIndex = 0; widthIndex < 2; ++widthIndex) {
@@ -163,6 +185,41 @@ TestCase {
         compare(playback.lastSpeedRatio, 1.5)
     }
 
+    function test_shared_volume_dispatches_to_the_injected_playback_authority() {
+        var originalMuted = PlaybackController.muted
+        var originalVolume = PlaybackController.volume
+        try {
+            var mute = findChild(view, "muteButton")
+            var volume = findChild(view, "volumeSlider")
+            mute.clicked()
+            volume.value = 0.61
+            volume.moved()
+
+            compare(PlaybackController.muted, originalMuted)
+            fuzzyCompare(PlaybackController.volume, originalVolume, 0.001)
+            compare(playback.toggleMutedCalls, 1)
+            compare(playback.muted, true)
+            compare(playback.setVolumeCalls, 1)
+            compare(playback.lastVolume, 0.61)
+        } finally {
+            if (PlaybackController.muted !== originalMuted)
+                PlaybackController.toggleMuted()
+            PlaybackController.setVolume(originalVolume)
+        }
+    }
+
+    function test_default_audio_volume_control_keeps_global_bindings() {
+        var control = defaultVolumeControlComponent.createObject(testCase)
+        verify(control)
+        compare(control.playback, PlaybackController)
+        compare(findChild(control, "muteButton").Accessible.name,
+                PlaybackController.muted ? qsTr("Unmute") : qsTr("Mute"))
+        fuzzyCompare(findChild(control, "volumeSlider").value,
+                     PlaybackController.muted ? 0 : PlaybackController.volume,
+                     0.001)
+        control.destroy()
+    }
+
     function test_loading_and_error_share_the_same_minimal_surface() {
         var status = findChild(view, "videoStatusText")
         var surface = findChild(view, "videoSurface")
@@ -185,6 +242,15 @@ TestCase {
         videoState.loading = false
         videoState.errorMessage = ""
         tryCompare(status, "visible", false)
+    }
+
+    function test_status_state_and_frame_controller_sources_are_explicit() {
+        var frame = findChild(view, "videoFrameItem")
+        compare(view.videoPlayback, videoState,
+                "the injectable object is the loading/error state source")
+        compare(view.frameController, VideoPlaybackController,
+                "production frames keep the typed controller authority")
+        compare(frame.controller, view.frameController)
     }
 
     function test_fullscreen_and_return_are_forwarded_as_view_requests() {

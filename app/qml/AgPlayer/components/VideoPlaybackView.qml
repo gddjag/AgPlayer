@@ -6,7 +6,10 @@ Item {
     id: root
     objectName: "videoPlaybackView"
     property var playback: PlaybackController
+    // Loading/error state can be observed independently, while VideoFrameItem
+    // type-checks the frame authority. Both default to the production singleton.
     property var videoPlayback: VideoPlaybackController
+    property var frameController: VideoPlaybackController
     property bool fullscreen: false
     signal fullscreenRequested()
     signal returnRequested()
@@ -23,7 +26,7 @@ Item {
             anchors.right: parent.right
             anchors.top: parent.top
             anchors.bottom: transportBar.top
-            controller: VideoPlaybackController
+            controller: root.frameController
         }
 
         Label {
