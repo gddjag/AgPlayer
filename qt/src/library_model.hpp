@@ -6,6 +6,7 @@
 #include <QList>
 #include <QSet>
 #include <QStringList>
+#include <QThread>
 #include <QUrl>
 
 #include <optional>
@@ -155,6 +156,37 @@ public:
     std::optional<MetadataProbeClaim> beginMetadataProbe(const QString& trackId);
     bool completeMetadataProbe(const MetadataProbeClaim& claim, bool succeeded,
                                const TrackRecord& probed);
+    bool completeMediaKindProbe(const MetadataProbeClaim& claim,
+                                bool succeeded,
+                                const TrackRecord& probed)
+    {
+        if (!completeMetadataProbe(claim, succeeded, probed)) return false;
+        if (!succeeded) return true;
+        const int row = indexForTrackId(claim.trackId);
+        if (row < 0) return false;
+        TrackRecord& track = tracks_[row];
+        if (track.hasAudio == probed.hasAudio
+            && track.hasVideo == probed.hasVideo) {
+            return true;
+        }
+        track.hasAudio = probed.hasAudio;
+        track.hasVideo = probed.hasVideo;
+        const QModelIndex changed = index(row, 0);
+        emit dataChanged(changed, changed,
+                         {HasAudioRole, HasVideoRole});
+        return true;
+    }
+    bool abandonMetadataProbe(const MetadataProbeClaim& claim)
+    {
+        if (QThread::currentThread() != thread()) return false;
+        const auto inFlight = metadataProbeInFlight_.constFind(claim.trackId);
+        if (inFlight == metadataProbeInFlight_.cend()
+            || inFlight.value() != claim.generation) {
+            return false;
+        }
+        metadataProbeInFlight_.remove(claim.trackId);
+        return true;
+    }
     bool refreshMetadataForPath(const QString& path);
     int refreshMetadataForPaths(const QStringList& paths);
     bool applyReplayGainResult(const QString& trackId, double trackGainDb,

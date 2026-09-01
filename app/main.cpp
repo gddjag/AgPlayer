@@ -72,6 +72,7 @@
 #include "translation_manager.hpp"
 #include "waveform_provider.hpp"
 #include "vocal_separation_controller.hpp"
+#include "video_playback_controller.hpp"
 #include "window_controller.hpp"
 
 Q_IMPORT_PLUGIN(AgPlayerPlugin)
@@ -644,6 +645,7 @@ int main(int argc, char* argv[])
         }
 
         PlaybackController playback(core, &library);
+        VideoPlaybackController videoPlayback(&library, &playback);
         if (qaPlaybackSelectionStartMs >= 0
             && qaPlaybackSelectionEndMs > qaPlaybackSelectionStartMs) {
             QObject::connect(
@@ -952,7 +954,8 @@ int main(int argc, char* argv[])
                                         &libraryNavigation,
                                         &libraryManager,
                                         &trackWaveformThumbnailProvider,
-                                        &playbackClipDrag},
+                                        &playbackClipDrag,
+                                        &videoPlayback},
                                     &playerExperience, &audioVisualFeatures,
                                     &lyricsService, &audioPreview,
                                     &vocalSeparation);

@@ -23,6 +23,7 @@ class TagModel;
 class TrackWaveformThumbnailProvider;
 class WaveformProvider;
 class VocalSeparationController;
+class VideoPlaybackController;
 class WindowController;
 
 struct AgPlayerQmlRuntimeModels final {
@@ -31,6 +32,7 @@ struct AgPlayerQmlRuntimeModels final {
     LibraryManagerController* libraryManagerController = nullptr;
     TrackWaveformThumbnailProvider* trackWaveformThumbnailProvider = nullptr;
     PlaybackClipDragAdapter* playbackClipDragAdapter = nullptr;
+    VideoPlaybackController* videoPlaybackController = nullptr;
 };
 
 // Registers all AgPlayer QML singletons and the WaveformItem type into the

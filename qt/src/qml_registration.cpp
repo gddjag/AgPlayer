@@ -30,6 +30,7 @@
 #include "waveform_item.hpp"
 #include "waveform_provider.hpp"
 #include "vocal_separation_controller.hpp"
+#include "video_playback_controller.hpp"
 #include "window_controller.hpp"
 
 #include <qqml.h>
@@ -130,6 +131,11 @@ void register_agplayer_qml_types(LibraryModel* library,
             });
     }
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "PlaybackController", playback);
+    if (runtime.videoPlaybackController != nullptr) {
+        qmlRegisterSingletonInstance("AgPlayer", 1, 0,
+                                     "VideoPlaybackController",
+                                     runtime.videoPlaybackController);
+    }
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "ImportController", importer);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "WindowController", windows);
     qmlRegisterSingletonInstance("AgPlayer", 1, 0, "AudioToolsController", audioTools);

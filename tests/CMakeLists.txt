@@ -907,6 +907,7 @@ foreach(qt_test IN ITEMS
     import_controller_test
     library_filter_model_test
     playback_controller_test
+    video_playback_controller_test
     window_controller_test
     global_hotkey_manager_test
     waveform_coordinate_mapper_test
@@ -1671,6 +1672,12 @@ target_compile_definitions(import_controller_test PRIVATE
     AGPLAYER_TEST_AUDIO_WITH_ATTACHED_PICTURE="${AUDIO_WITH_ATTACHED_PICTURE_FIXTURE}"
 )
 add_dependencies(playback_controller_test decoder_fixture)
+add_dependencies(video_playback_controller_test decoder_fixture video_fixtures)
+target_compile_definitions(video_playback_controller_test PRIVATE
+    AGPLAYER_TEST_WAV="${SINE_WAV_FIXTURE}"
+    AGPLAYER_TEST_VIDEO_WITH_AUDIO="${VIDEO_WITH_AUDIO_FIXTURE}"
+    AGPLAYER_TEST_VIDEO_ONLY="${VIDEO_ONLY_FIXTURE}"
+)
 add_dependencies(player_experience_controller_test decoder_fixture)
 add_dependencies(waveform_provider_test decoder_fixture)
 set_tests_properties(import_controller_test PROPERTIES
@@ -1679,6 +1686,13 @@ set_tests_properties(import_controller_test PROPERTIES
 set_tests_properties(playback_controller_test PROPERTIES
     TIMEOUT 30
     ENVIRONMENT "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/bin"
+)
+set_tests_properties(video_playback_controller_test PROPERTIES
+    TIMEOUT 60
+    ENVIRONMENT
+        "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE};AGPLAYER_TEST_VIDEO_WITH_AUDIO=${VIDEO_WITH_AUDIO_FIXTURE};AGPLAYER_TEST_VIDEO_ONLY=${VIDEO_ONLY_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/bin"
 )

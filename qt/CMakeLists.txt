@@ -111,6 +111,8 @@ add_library(agplayer_qt STATIC
     src/vocal_separation_controller.hpp
     src/playback_controller.cpp
     src/playback_controller.hpp
+    src/video_playback_controller.cpp
+    src/video_playback_controller.hpp
     src/player_experience_controller.cpp
     src/player_experience_controller.hpp
     src/playback_state_store.cpp

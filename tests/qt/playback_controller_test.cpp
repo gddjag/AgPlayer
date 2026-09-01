@@ -283,6 +283,7 @@ void PlaybackControllerTest::commandsReflectCoreSnapshotsAndCommittedSeekImmedia
         QSignalSpy durationChanged(&controller, &PlaybackController::durationMsChanged);
         QSignalSpy stateChanged(&controller, &PlaybackController::stateChanged);
         QSignalSpy positionChanged(&controller, &PlaybackController::positionMsChanged);
+        QSignalSpy seekCommitted(&controller, &PlaybackController::seekCommitted);
 
         QCOMPARE(controller.durationMs(), 0);
         QCOMPARE(ag_player_load(core, path.constData()), AG_OK);
@@ -335,6 +336,8 @@ void PlaybackControllerTest::commandsReflectCoreSnapshotsAndCommittedSeekImmedia
         positionChanged.clear();
 
         controller.seek(seekTarget);
+        QCOMPARE(seekCommitted.count(), 1);
+        QCOMPARE(seekCommitted.constFirst().constFirst().toLongLong(), seekTarget);
         QVERIFY(qAbs(controller.positionMs() - seekTarget) <= 2);
         QCOMPARE(positionChanged.count(), 1);
         QCOMPARE(ag_player_snapshot(core, &snapshot), AG_OK);
@@ -1112,6 +1115,7 @@ void PlaybackControllerTest::nullCoreReportsStableErrors()
 {
     PlaybackController controller;
     QSignalSpy errorChanged(&controller, &PlaybackController::errorMessageChanged);
+    QSignalSpy seekCommitted(&controller, &PlaybackController::seekCommitted);
     controller.play();
     QCOMPARE(controller.errorMessage(), QStringLiteral("Playback core is unavailable"));
     QCOMPARE(errorChanged.count(), 1);
@@ -1124,6 +1128,7 @@ void PlaybackControllerTest::nullCoreReportsStableErrors()
     controller.cycleMode();
     QCOMPARE(controller.errorMessage(), QStringLiteral("Playback core is unavailable"));
     QCOMPARE(errorChanged.count(), 1);
+    QCOMPARE(seekCommitted.count(), 0);
 }
 
 void PlaybackControllerTest::scratchBridgePublishesPausedStatusAndValidatesCommands()
