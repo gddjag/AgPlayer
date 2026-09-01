@@ -178,6 +178,8 @@ ProbeResult probeMetadata(const QString& requestedPath, bool analyzeBpm)
     track.sampleRate = ag_metadata_sample_rate(metadata);
     track.bitDepth = ag_metadata_bits_per_sample(metadata);
     track.channels = ag_metadata_channels(metadata);
+    track.hasAudio = ag_metadata_has_audio(metadata);
+    track.hasVideo = ag_metadata_has_video(metadata);
     track.bitRate = ag_metadata_bit_rate(metadata);
     track.durationMs = ag_metadata_duration_ms(metadata);
     const QString embeddedBpm = decodeMetadataText(ag_metadata_bpm_tag(metadata)).trimmed();

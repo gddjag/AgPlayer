@@ -25,6 +25,8 @@ struct TrackRecord {
     int sampleRate = 0;
     int bitDepth = 0;
     int channels = 0;
+    bool hasAudio = false;
+    bool hasVideo = false;
     bool metadataProbeAttempted = false;
     qint64 bitRate = 0;
     qint64 durationMs = 0;
@@ -105,6 +107,8 @@ public:
         DateRole,
         ComposerRole,
         ChannelsRole,
+        HasAudioRole,
+        HasVideoRole,
         MetadataProbeAttemptedRole
     };
     Q_ENUM(Role)

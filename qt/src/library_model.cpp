@@ -196,6 +196,10 @@ QVariant LibraryModel::data(const QModelIndex& index, int role) const
         return track.bitDepth;
     case ChannelsRole:
         return track.channels;
+    case HasAudioRole:
+        return track.hasAudio;
+    case HasVideoRole:
+        return track.hasVideo;
     case MetadataProbeAttemptedRole:
         return track.metadataProbeAttempted;
     case BitRateRole:
@@ -261,6 +265,8 @@ QHash<int, QByteArray> LibraryModel::roleNames() const
             {SampleRateRole, "sampleRate"},
             {BitDepthRole, "bitDepth"},
             {ChannelsRole, "channels"},
+            {HasAudioRole, "hasAudio"},
+            {HasVideoRole, "hasVideo"},
             {MetadataProbeAttemptedRole, "metadataProbeAttempted"},
             {BitRateRole, "bitRate"},
             {DurationMsRole, "durationMs"},

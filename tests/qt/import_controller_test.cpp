@@ -25,6 +25,7 @@ class ImportControllerTest final : public QObject {
 private slots:
     void deduplicatesCanonicalPathsAndContinuesAfterFailure();
     void productionProbeImportsMetadataAndUsesBrandFallback();
+    void productionProbePreservesAudioAndVideoKinds();
     void modelCanBeDestroyedWhileProbeIsBlocked();
     void controllerCanBeDestroyedWhileProbeIsBlocked();
     void rejectsModelWithDifferentThreadAffinity();
@@ -140,9 +141,11 @@ void ImportControllerTest::importsSupportedAudioRecursivelyFromFolder()
     const QString rootTrack = dir.filePath(QStringLiteral("root.MP3"));
     const QString nestedTrack = dir.filePath(QStringLiteral("nested/child.flac"));
     const QString ignoredFile = dir.filePath(QStringLiteral("notes.txt"));
+    const QString ignoredVideo = dir.filePath(QStringLiteral("clip.avi"));
     createFile(rootTrack);
     createFile(nestedTrack);
     createFile(ignoredFile);
+    createFile(ignoredVideo);
 
     QStringList probedPaths;
     LibraryModel model;
@@ -164,6 +167,7 @@ void ImportControllerTest::importsSupportedAudioRecursivelyFromFolder()
     QVERIFY(probedPaths.contains(canonicalLibraryPath(rootTrack)));
     QVERIFY(probedPaths.contains(canonicalLibraryPath(nestedTrack)));
     QVERIFY(!probedPaths.contains(canonicalLibraryPath(ignoredFile)));
+    QVERIFY(!probedPaths.contains(canonicalLibraryPath(ignoredVideo)));
 }
 
 void ImportControllerTest::droppedFolderAndChinesePathAreExpanded()
@@ -376,6 +380,43 @@ void ImportControllerTest::productionProbeImportsMetadataAndUsesBrandFallback()
     QVERIFY(track.fileSize > 0);
     QCOMPARE(track.coverUrl,
              QUrl(QStringLiteral("qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png")));
+}
+
+void ImportControllerTest::productionProbePreservesAudioAndVideoKinds()
+{
+    const QString audioFixture = QString::fromUtf8(AGPLAYER_TEST_AUDIO);
+    const QString videoOnlyFixture = QString::fromUtf8(AGPLAYER_TEST_VIDEO_ONLY);
+    const QString attachedPictureFixture =
+        QString::fromUtf8(AGPLAYER_TEST_AUDIO_WITH_ATTACHED_PICTURE);
+    QVERIFY(!audioFixture.isEmpty());
+    QVERIFY(!videoOnlyFixture.isEmpty());
+    QVERIFY(!attachedPictureFixture.isEmpty());
+
+    LibraryModel model;
+    ImportController importer(&model);
+    QSignalSpy finished(&importer, &ImportController::finished);
+    importer.importUrls({QUrl::fromLocalFile(audioFixture),
+                         QUrl::fromLocalFile(videoOnlyFixture),
+                         QUrl::fromLocalFile(attachedPictureFixture)});
+
+    QVERIFY(finished.wait(5000));
+    QCOMPARE(importer.errors().size(), 0);
+    QCOMPARE(model.rowCount(), 3);
+
+    const TrackRecord* const audio = model.recordForId(trackIdForPath(audioFixture));
+    const TrackRecord* const videoOnly =
+        model.recordForId(trackIdForPath(videoOnlyFixture));
+    const TrackRecord* const attachedPicture =
+        model.recordForId(trackIdForPath(attachedPictureFixture));
+    QVERIFY(audio != nullptr);
+    QVERIFY(videoOnly != nullptr);
+    QVERIFY(attachedPicture != nullptr);
+    QVERIFY(audio->hasAudio);
+    QVERIFY(!audio->hasVideo);
+    QVERIFY(!videoOnly->hasAudio);
+    QVERIFY(videoOnly->hasVideo);
+    QVERIFY(attachedPicture->hasAudio);
+    QVERIFY(!attachedPicture->hasVideo);
 }
 
 void ImportControllerTest::modelCanBeDestroyedWhileProbeIsBlocked()

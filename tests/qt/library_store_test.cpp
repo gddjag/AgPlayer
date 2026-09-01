@@ -40,6 +40,8 @@ TrackRecord makeTrack(const QString& path, const QString& title)
     track.sampleRate = 192000;
     track.bitDepth = 24;
     track.channels = 2;
+    track.hasAudio = true;
+    track.hasVideo = true;
     track.metadataProbeAttempted = true;
     track.bitRate = 9216000;
     track.durationMs = 8642;
@@ -90,6 +92,8 @@ void LibraryStoreTest::migratesMissingAddedTimestampFromTheAudioFile()
 
     QCOMPARE(loaded.size(), 1);
     QCOMPARE(loaded.front().channels, 0);
+    QVERIFY(!loaded.front().hasAudio);
+    QVERIFY(!loaded.front().hasVideo);
     QVERIFY(!loaded.front().metadataProbeAttempted);
     QVERIFY(loaded.front().addedAtMs > 0);
     const QFileInfo info(audioPath);
@@ -132,6 +136,8 @@ void LibraryStoreTest::persistsEveryRoleAndMarksMissingFilesUnavailable()
     QCOMPARE(track.sampleRate, source.sampleRate);
     QCOMPARE(track.bitDepth, source.bitDepth);
     QCOMPARE(track.channels, source.channels);
+    QCOMPARE(track.hasAudio, source.hasAudio);
+    QCOMPARE(track.hasVideo, source.hasVideo);
     QCOMPARE(track.metadataProbeAttempted, source.metadataProbeAttempted);
     QCOMPARE(track.bitRate, source.bitRate);
     QCOMPARE(track.durationMs, source.durationMs);

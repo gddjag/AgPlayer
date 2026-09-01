@@ -1609,7 +1609,12 @@ target_include_directories(track_waveform_thumbnail_provider_test PRIVATE
     "${CMAKE_SOURCE_DIR}/core/src"
 )
 
-add_dependencies(import_controller_test decoder_fixture)
+add_dependencies(import_controller_test decoder_fixture video_fixtures)
+target_compile_definitions(import_controller_test PRIVATE
+    AGPLAYER_TEST_AUDIO="${SINE_WAV_FIXTURE}"
+    AGPLAYER_TEST_VIDEO_ONLY="${VIDEO_ONLY_FIXTURE}"
+    AGPLAYER_TEST_AUDIO_WITH_ATTACHED_PICTURE="${AUDIO_WITH_ATTACHED_PICTURE_FIXTURE}"
+)
 add_dependencies(playback_controller_test decoder_fixture)
 add_dependencies(player_experience_controller_test decoder_fixture)
 add_dependencies(waveform_provider_test decoder_fixture)
