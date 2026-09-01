@@ -35,14 +35,10 @@ class WaveformItem : public QQuickItem {
                    WRITE setGradientMiddleColor NOTIFY gradientMiddleColorChanged)
     Q_PROPERTY(QColor gradientEndColor READ gradientEndColor
                    WRITE setGradientEndColor NOTIFY gradientEndColorChanged)
-    Q_PROPERTY(QColor frequencyLowColor READ frequencyLowColor
-                   WRITE setFrequencyLowColor NOTIFY frequencyLowColorChanged)
-    Q_PROPERTY(QColor frequencyMidColor READ frequencyMidColor
-                   WRITE setFrequencyMidColor NOTIFY frequencyMidColorChanged)
-    Q_PROPERTY(QColor frequencyHighColor READ frequencyHighColor
-                   WRITE setFrequencyHighColor NOTIFY frequencyHighColorChanged)
-    Q_PROPERTY(qreal frequencyStrength READ frequencyStrength
-                   WRITE setFrequencyStrength NOTIFY frequencyStrengthChanged)
+    Q_PROPERTY(QVariantList spectralPalette READ spectralPalette
+                   WRITE setSpectralPalette NOTIFY spectralStyleChanged)
+    Q_PROPERTY(qreal spectralUnplayedOpacity READ spectralUnplayedOpacity
+                   WRITE setSpectralUnplayedOpacity NOTIFY spectralStyleChanged)
     Q_PROPERTY(bool rgbProgress READ rgbProgress WRITE setRgbProgress
                    NOTIFY rgbProgressChanged)
     Q_PROPERTY(qreal amplitudeScale READ amplitudeScale WRITE setAmplitudeScale
@@ -103,14 +99,10 @@ public:
     void setGradientMiddleColor(const QColor& color);
     QColor gradientEndColor() const;
     void setGradientEndColor(const QColor& color);
-    QColor frequencyLowColor() const;
-    void setFrequencyLowColor(const QColor& color);
-    QColor frequencyMidColor() const;
-    void setFrequencyMidColor(const QColor& color);
-    QColor frequencyHighColor() const;
-    void setFrequencyHighColor(const QColor& color);
-    qreal frequencyStrength() const noexcept;
-    void setFrequencyStrength(qreal value);
+    QVariantList spectralPalette() const;
+    void setSpectralPalette(const QVariantList& palette);
+    qreal spectralUnplayedOpacity() const noexcept;
+    void setSpectralUnplayedOpacity(qreal opacity);
     bool rgbProgress() const noexcept;
     void setRgbProgress(bool value);
     qreal amplitudeScale() const noexcept;
@@ -148,8 +140,6 @@ public:
     Q_INVOKABLE void setVisibleRange(qint64 startMs, qint64 endMs);
     Q_INVOKABLE void setHoverPositionForInteraction(qint64 position);
 
-    static constexpr int unplayedAlpha() noexcept { return 89; }
-
 signals:
     void peaksChanged();
     void layersChanged();
@@ -165,10 +155,7 @@ signals:
     void gradientStartColorChanged();
     void gradientMiddleColorChanged();
     void gradientEndColorChanged();
-    void frequencyLowColorChanged();
-    void frequencyMidColorChanged();
-    void frequencyHighColorChanged();
-    void frequencyStrengthChanged();
+    void spectralStyleChanged();
     void rgbProgressChanged();
     void amplitudeScaleChanged();
     void hoverPositionChanged();
@@ -201,6 +188,7 @@ private:
         std::shared_ptr<const LayerSnapshot> bass;
         std::shared_ptr<const LayerSnapshot> mid;
         std::shared_ptr<const LayerSnapshot> high;
+        std::vector<std::uint8_t> spectralIndex;
         std::shared_ptr<const LayerSnapshot> spectrumPeakHold;
         std::uint64_t revision = 0;
         qint64 totalSamples = 0;
@@ -229,10 +217,23 @@ private:
     QColor gradientStartColor_ = QColor(QStringLiteral("#00d4ff"));
     QColor gradientMiddleColor_ = QColor(QStringLiteral("#7b2ff7"));
     QColor gradientEndColor_ = QColor(QStringLiteral("#e62e9b"));
-    QColor frequencyLowColor_ = QColor(QStringLiteral("#c45100"));
-    QColor frequencyMidColor_ = QColor(QStringLiteral("#b04bcd"));
-    QColor frequencyHighColor_ = QColor(QStringLiteral("#0a819a"));
-    qreal frequencyStrength_ = 0.85;
+    QVariantList spectralPalette_{QStringLiteral("#123ECF"),
+                                  QStringLiteral("#00A7BA"),
+                                  QStringLiteral("#00A76F"),
+                                  QStringLiteral("#62BB39"),
+                                  QStringLiteral("#D8DC2F"),
+                                  QStringLiteral("#FFAD22"),
+                                  QStringLiteral("#FF611F"),
+                                  QStringLiteral("#E82718")};
+    std::vector<QColor> spectralColors_{QColor(QStringLiteral("#123ECF")),
+                                       QColor(QStringLiteral("#00A7BA")),
+                                       QColor(QStringLiteral("#00A76F")),
+                                       QColor(QStringLiteral("#62BB39")),
+                                       QColor(QStringLiteral("#D8DC2F")),
+                                       QColor(QStringLiteral("#FFAD22")),
+                                       QColor(QStringLiteral("#FF611F")),
+                                       QColor(QStringLiteral("#E82718"))};
+    qreal spectralUnplayedOpacity_ = 0.88;
     bool rgbProgress_ = true;
     qreal amplitudeScale_ = 1.0;
     qint64 hoverPosition_ = -1;

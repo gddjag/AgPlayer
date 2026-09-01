@@ -17,15 +17,6 @@ namespace {
 
 constexpr auto kNegativeCooldown = std::chrono::milliseconds(200);
 
-constexpr std::array<const char*, 36> kThumbnailPalette{{
-    "#E11D48", "#DC2626", "#EA580C", "#F59E0B", "#CA8A04", "#65A30D",
-    "#16A34A", "#059669", "#0D9488", "#0891B2", "#0284C7", "#2563EB",
-    "#4F46E5", "#7C3AED", "#9333EA", "#C026D3", "#DB2777", "#BE185D",
-    "#9F1239", "#B91C1C", "#C2410C", "#B45309", "#A16207", "#4D7C0F",
-    "#15803D", "#047857", "#0F766E", "#155E75", "#1E40AF", "#3730A3",
-    "#5B21B6", "#6B21A8", "#86198F", "#9D174D", "#9F2A2A", "#7C2D12",
-}};
-
 std::filesystem::path filesystemPath(const QString& path)
 {
 #ifdef Q_OS_WIN
@@ -100,25 +91,37 @@ QByteArray TrackWaveformThumbnailProvider::quantizeMixPeaks(
     return result;
 }
 
-std::uint32_t TrackWaveformThumbnailProvider::fnv1a32(
-    const QString& trackId) noexcept
+QByteArray TrackWaveformThumbnailProvider::quantizeSpectralIndex(
+    const std::vector<std::uint8_t>& spectralIndex,
+    const std::vector<float>& mix)
 {
-    constexpr std::uint32_t offsetBasis = 2166136261U;
-    constexpr std::uint32_t prime = 16777619U;
-
-    std::uint32_t hash = offsetBasis;
-    const QByteArray utf8 = trackId.toUtf8();
-    for (const char value : utf8) {
-        hash ^= static_cast<unsigned char>(value);
-        hash *= prime;
+    if (spectralIndex.empty() || spectralIndex.size() != mix.size()) {
+        return {};
     }
-    return hash;
-}
-
-QColor TrackWaveformThumbnailProvider::colorForTrackId(const QString& trackId)
-{
-    const std::size_t index = fnv1a32(trackId) % kThumbnailPalette.size();
-    return QColor(QString::fromLatin1(kThumbnailPalette[index]));
+    QByteArray result(kPeakCount, 0);
+    for (int bucket = 0; bucket < kPeakCount; ++bucket) {
+        const double sourceStart = static_cast<double>(bucket)
+            * spectralIndex.size() / kPeakCount;
+        const double sourceEnd = static_cast<double>(bucket + 1)
+            * spectralIndex.size() / kPeakCount;
+        const std::size_t first = std::min(
+            spectralIndex.size() - 1U,
+            static_cast<std::size_t>(std::floor(sourceStart)));
+        const std::size_t last = std::min(
+            spectralIndex.size(),
+            std::max(first + 1U,
+                     static_cast<std::size_t>(std::ceil(sourceEnd))));
+        double weighted = 0.0;
+        double weights = 0.0;
+        for (std::size_t index = first; index < last; ++index) {
+            const double weight = std::max(0.001,
+                static_cast<double>(std::abs(mix[index])));
+            weighted += static_cast<double>(spectralIndex[index]) * weight;
+            weights += weight;
+        }
+        result[bucket] = static_cast<char>(std::lround(weighted / weights));
+    }
+    return result;
 }
 
 void TrackWaveformThumbnailProvider::request(const QString& trackId,
@@ -129,7 +132,8 @@ void TrackWaveformThumbnailProvider::request(const QString& trackId,
     auto cached = cache_.find(trackId);
     if (cached != cache_.end() && cached->sourcePath == sourcePath) {
         touchLru(trackId);
-        emit thumbnailReady(trackId, generation, cached->peaks);
+        emit thumbnailReady(trackId, generation, cached->peaks,
+                            cached->spectralIndex);
         return;
     }
     if (cached != cache_.end()) {
@@ -163,12 +167,12 @@ void TrackWaveformThumbnailProvider::request(const QString& trackId,
     }
 
     if (sourcePath.isEmpty()) {
-        emit thumbnailReady(trackId, generation, {});
+        emit thumbnailReady(trackId, generation, {}, {});
         return;
     }
 
     if (hasNegativeCooldown(sourcePath)) {
-        emit thumbnailReady(trackId, generation, {});
+        emit thumbnailReady(trackId, generation, {}, {});
         return;
     }
 
@@ -189,7 +193,7 @@ void TrackWaveformThumbnailProvider::request(const QString& trackId,
         static_cast<int>(pending_.size())
             + static_cast<int>(activeLoads_.size()));
     if (dropped.has_value() && !dropped->canceled) {
-        emit thumbnailReady(dropped->trackId, dropped->generation, {});
+        emit thumbnailReady(dropped->trackId, dropped->generation, {}, {});
     }
 }
 
@@ -272,7 +276,8 @@ void TrackWaveformThumbnailProvider::invalidateSourceCache(
     emit sourceCacheInvalidated(sourcePath);
 }
 
-QByteArray TrackWaveformThumbnailProvider::loadFromV2CacheOnly(
+TrackWaveformThumbnailProvider::ThumbnailData
+TrackWaveformThumbnailProvider::loadFromCacheOnly(
     const QString& cacheDirectory, const QString& sourcePath)
 {
     if (cacheDirectory.isEmpty() || sourcePath.isEmpty()) {
@@ -280,23 +285,34 @@ QByteArray TrackWaveformThumbnailProvider::loadFromV2CacheOnly(
     }
 
     const std::filesystem::path source = filesystemPath(sourcePath);
-    const std::string key = agplayer::WaveformCache::key_for(source);
-    if (key.empty()) {
+    const std::array<std::string, 2> keys{{
+        agplayer::WaveformCache::key_for(source),
+        agplayer::WaveformCache::legacy_v2_key_for(source),
+    }};
+    if (keys.front().empty()) {
         return {};
     }
 
     static constexpr std::array<const char*, 3> suffixes{{
         "-average.agwf", "-rms.agwf", ".agwf",
     }};
-    for (const char* suffix : suffixes) {
-        const QString filename = QString::fromStdString(key)
-            + QString::fromLatin1(suffix);
-        agplayer::WaveformCacheData data;
-        if (agplayer::WaveformCache::load_v2(
-                filesystemPath(QDir(cacheDirectory).filePath(filename)),
-                source, data)
-            && !data.mix.empty()) {
-            return quantizeMixPeaks(data.mix);
+    for (const std::string& key : keys) {
+        if (key.empty()) continue;
+        for (const char* suffix : suffixes) {
+            const QString filename = QString::fromStdString(key)
+                + QString::fromLatin1(suffix);
+            agplayer::WaveformCacheData data;
+            const std::filesystem::path cachePath = filesystemPath(
+                QDir(cacheDirectory).filePath(filename));
+            if (agplayer::WaveformCache::load_v3(cachePath, source, data)
+                && !data.mix.empty()) {
+                return {quantizeMixPeaks(data.mix),
+                        quantizeSpectralIndex(data.spectral_index, data.mix)};
+            }
+            if (agplayer::WaveformCache::load_v2(cachePath, source, data)
+                && !data.mix.empty()) {
+                return {quantizeMixPeaks(data.mix), {}};
+            }
         }
     }
     return {};
@@ -318,7 +334,7 @@ void TrackWaveformThumbnailProvider::startNext()
         if (hasNegativeCooldown(cooled.sourcePath)) {
             if (!cooled.canceled) {
                 const QPointer<TrackWaveformThumbnailProvider> guard(this);
-                emit thumbnailReady(cooled.trackId, cooled.generation, {});
+                emit thumbnailReady(cooled.trackId, cooled.generation, {}, {});
                 if (guard.isNull()) {
                     return;
                 }
@@ -338,11 +354,14 @@ void TrackWaveformThumbnailProvider::startNext()
         watcher->setFuture(QtConcurrent::run(
             &workerPool_,
             [cacheDirectory, cacheEpoch, cooled] {
+                const ThumbnailData data = loadFromCacheOnly(
+                    cacheDirectory, cooled.sourcePath);
                 return LoadResult{
                     cooled.trackId,
                     cooled.sourcePath,
                     cacheEpoch,
-                    loadFromV2CacheOnly(cacheDirectory, cooled.sourcePath),
+                    data.peaks,
+                    data.spectralIndex,
                 };
             }));
     }
@@ -384,12 +403,20 @@ void TrackWaveformThumbnailProvider::finishActive(
     }
     if (!current.canceled) {
         if (!loaded.peaks.isEmpty()) {
-            insertCache(current.trackId, current.sourcePath, loaded.peaks);
+            insertCache(current.trackId, current.sourcePath, loaded.peaks,
+                        loaded.spectralIndex);
         }
         const QPointer<TrackWaveformThumbnailProvider> guard(this);
-        emit thumbnailReady(current.trackId, current.generation, loaded.peaks);
+        emit thumbnailReady(current.trackId, current.generation, loaded.peaks,
+                            loaded.spectralIndex);
         if (guard.isNull()) {
             return;
+        }
+        if (loaded.spectralIndex.isEmpty()) {
+            emit analysisRequested(current.sourcePath);
+            if (guard.isNull()) {
+                return;
+            }
         }
     }
     startNext();
@@ -408,7 +435,8 @@ void TrackWaveformThumbnailProvider::touchLru(const QString& trackId)
 
 void TrackWaveformThumbnailProvider::insertCache(const QString& trackId,
                                                  const QString& sourcePath,
-                                                 const QByteArray& peaks)
+                                                 const QByteArray& peaks,
+                                                 const QByteArray& spectralIndex)
 {
     auto existing = cache_.find(trackId);
     if (existing != cache_.end()) {
@@ -418,7 +446,8 @@ void TrackWaveformThumbnailProvider::insertCache(const QString& trackId,
 
     lruOrder_.push_front(trackId);
     cache_.insert(trackId,
-                  CacheEntry{sourcePath, peaks, lruOrder_.begin()});
+                  CacheEntry{sourcePath, peaks, spectralIndex,
+                             lruOrder_.begin()});
     while (cache_.size() > kMaxCacheEntries) {
         const QString evicted = lruOrder_.back();
         lruOrder_.pop_back();

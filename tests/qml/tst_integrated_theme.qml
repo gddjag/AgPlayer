@@ -586,6 +586,8 @@ TestCase {
 
     function test_integrated_waveform_progress_uses_continuous_pixel_clip() {
         var shell = enterIntegratedShell()
+        var previousMode = SettingsController.waveformMode
+        SettingsController.waveformMode = 3
         shell.playbackController = fakePlayback
         shell.waveformDurationMs = 100000
         fakePlayback.durationMs = 100000
@@ -633,9 +635,12 @@ TestCase {
         tryVerify(function() {
             return base.duration === 0 && clip.width === 0
         }, 1000)
+        compare(findChild(shell, "integratedWaveformPlaybackGuide"), null)
+        compare(findChild(shell, "integratedWaveformPlaybackFocusDot"), null)
+        SettingsController.waveformMode = previousMode
     }
 
-    function test_integrated_waveform_syncs_visible_range_and_frequency_layers() {
+    function test_integrated_waveform_syncs_visible_range_and_frequency_mix() {
         var shell = enterIntegratedShell()
         shell.playbackController = fakePlayback
         shell.waveformProvider = fakeWaveformProvider
@@ -646,6 +651,7 @@ TestCase {
             "bass": [0.8, 0.3, 0.6, 0.2],
             "mid": [0.4, 0.7, 0.2, 0.9],
             "high": [0.6, 0.1, 0.9, 0.5],
+            "spectralIndex": [12, 96, 180, 244],
             "_sampleRate": 48000,
             "_totalSamples": 4800000,
             "_peakCount": 4
@@ -655,40 +661,29 @@ TestCase {
 
         var base = findChild(shell, "integratedWaveform")
         var played = findChild(shell, "integratedPlayedWaveform")
+        var frequencySettings = SettingsController.frequencyColorWaveform
         verify(base && played)
         tryVerify(function() {
-            return base.layers.mix && base.layers.mix.length === 4
-                    && played.layers.mix && played.layers.mix.length === 4
+            return played.layers.mix && played.layers.mix.length === 4
         }, 1000)
-        compare(base.layers.mix[2], 0.8)
-        compare(base.layers.bass[0], 0.8)
-        compare(base.layers.mid[1], 0.7)
-        compare(base.layers.high[2], 0.9)
         compare(played.layers.mix[2], 0.8)
         compare(played.layers.bass[0], 0.8)
         compare(played.layers.mid[1], 0.7)
         compare(played.layers.high[2], 0.9)
-        compare(base.visualMode, 3)
         compare(played.visualMode, base.visualMode)
         compare(played.analysisProgress, base.analysisProgress)
-        compare(base.baseColor.toString(), Theme.textSecondary.toString())
         compare(played.baseColor.toString(), base.baseColor.toString())
         compare(played.progressColor.toString(), base.progressColor.toString())
         compare(played.gradientStartColor.toString(), base.gradientStartColor.toString())
         compare(played.gradientMiddleColor.toString(), base.gradientMiddleColor.toString())
         compare(played.gradientEndColor.toString(), base.gradientEndColor.toString())
-        compare(base.frequencyLowColor.toString(),
-                SettingsController.waveformFrequencyLowColor.toString())
-        compare(base.frequencyMidColor.toString(),
-                SettingsController.waveformFrequencyMidColor.toString())
-        compare(base.frequencyHighColor.toString(),
-                SettingsController.waveformFrequencyHighColor.toString())
-        compare(played.frequencyLowColor.toString(), base.frequencyLowColor.toString())
-        compare(played.frequencyMidColor.toString(), base.frequencyMidColor.toString())
-        compare(played.frequencyHighColor.toString(), base.frequencyHighColor.toString())
-        compare(played.frequencyStrength, base.frequencyStrength)
-        compare(base.frequencyStrength,
-                SettingsController.waveformFrequencyStrength)
+        compare(base.spectralPalette.length, 8)
+        compare(String(base.spectralPalette[0]),
+                String(frequencySettings.palette[0]))
+        compare(String(played.spectralPalette[7]),
+                String(base.spectralPalette[7]))
+        compare(played.spectralUnplayedOpacity,
+                base.spectralUnplayedOpacity)
         compare(played.rgbProgress, base.rgbProgress)
         compare(played.amplitudeScale, base.amplitudeScale)
         compare(played.density, base.density)

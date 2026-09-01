@@ -32,13 +32,15 @@ namespace {
 constexpr std::array<char, 4> cache_magic{'A', 'G', 'W', 'F'};
 constexpr std::uint32_t cache_version_v1 = 1U;
 constexpr std::uint32_t cache_version_v2 = 2U;
+constexpr std::uint32_t cache_version_v3 = 3U;
 constexpr std::uint64_t v1_header_size = 32U;
 constexpr std::uint64_t v2_header_size = 88U;
 constexpr std::uint64_t v2_timeline_header_size = 104U;
 constexpr std::uint64_t v2_timeline_metadata_flag = 1U;
+constexpr std::uint64_t v3_header_size = 112U;
 constexpr std::uint64_t fnv_offset = 14'695'981'039'346'656'037ULL;
 constexpr std::uint64_t fnv_prime = 1'099'511'628'211ULL;
-constexpr std::uint32_t analysis_schema_version = 2U;
+constexpr std::uint32_t analysis_schema_version = 3U;
 
 struct SourceMetadata final {
     std::uint64_t size = 0U;
@@ -263,10 +265,8 @@ bool read_layer(std::istream& stream,
     return true;
 }
 
-} // namespace
-
-std::string WaveformCache::key_for(
-    const std::filesystem::path& source_path)
+std::string key_for_schema(const std::filesystem::path& source_path,
+                           const std::uint32_t schema_version)
 {
     SourceMetadata metadata;
     if (!source_metadata(source_path, metadata)) {
@@ -281,11 +281,25 @@ std::string WaveformCache::key_for(
     hash_byte(hash, 0U);
     hash_integer(hash, metadata.size);
     hash_integer(hash, metadata.mtime_ns);
-    hash_integer(hash, analysis_schema_version);
+    hash_integer(hash, schema_version);
 
     std::ostringstream key;
     key << std::hex << std::setfill('0') << std::setw(16) << hash;
     return key.str();
+}
+
+} // namespace
+
+std::string WaveformCache::key_for(
+    const std::filesystem::path& source_path)
+{
+    return key_for_schema(source_path, analysis_schema_version);
+}
+
+std::string WaveformCache::legacy_v2_key_for(
+    const std::filesystem::path& source_path)
+{
+    return key_for_schema(source_path, cache_version_v2);
 }
 
 bool WaveformCache::load(const std::filesystem::path& cache_path,
@@ -644,6 +658,241 @@ bool WaveformCache::load_v2(const std::filesystem::path& cache_path,
             return false;
         }
 
+        data = std::move(loaded);
+        return true;
+    } catch (...) {
+        data = WaveformCacheData{};
+        return false;
+    }
+}
+
+bool WaveformCache::save_v3(const std::filesystem::path& cache_path,
+                            const std::filesystem::path& source_path,
+                            const WaveformCacheData& data) noexcept
+{
+    const std::filesystem::path temp_path = temporary_path(cache_path);
+    try {
+        std::error_code cleanup_error;
+        std::filesystem::remove(temp_path, cleanup_error);
+        SourceMetadata source;
+        if (!source_metadata(source_path, source)
+            || !validate_layer(data.mix) || !validate_layer(data.bass)
+            || !validate_layer(data.mid) || !validate_layer(data.high)
+            || (!data.spectral_index.empty()
+                && data.spectral_index.size() != data.mix.size())) {
+            return false;
+        }
+        for (const auto& cue : data.cues) {
+            if (cue.label.size() > std::numeric_limits<std::uint8_t>::max()) {
+                return false;
+            }
+        }
+
+        const std::uint64_t mix_count = data.mix.size();
+        const std::uint64_t bass_count = data.bass.size();
+        const std::uint64_t mid_count = data.mid.size();
+        const std::uint64_t high_count = data.high.size();
+        const std::uint64_t spectral_count = data.spectral_index.size();
+        const std::uint64_t cue_count = data.cues.size();
+        const std::uint64_t max_floats =
+            std::numeric_limits<std::uint64_t>::max() / sizeof(float);
+        if (mix_count > max_floats || bass_count > max_floats
+            || mid_count > max_floats || high_count > max_floats
+            || mix_count + bass_count > max_floats
+            || mix_count + bass_count + mid_count > max_floats
+            || mix_count + bass_count + mid_count + high_count > max_floats) {
+            return false;
+        }
+
+        std::ofstream output(temp_path, std::ios::binary | std::ios::trunc);
+        output.write(cache_magic.data(),
+                     static_cast<std::streamsize>(cache_magic.size()));
+        if (!output
+            || !write_little_endian(output, cache_version_v3)
+            || !write_little_endian(output, source.size)
+            || !write_little_endian(output, source.mtime_ns)
+            || !write_little_endian(output, mix_count)
+            || !write_little_endian(output, bass_count)
+            || !write_little_endian(output, mid_count)
+            || !write_little_endian(output, high_count)
+            || !write_little_endian(output, spectral_count)
+            || !write_double(output, data.bpm)
+            || !write_little_endian(output, cue_count)
+            || !write_little_endian(output, v2_timeline_metadata_flag)
+            || !write_little_endian(output, data.duration_ms)
+            || !write_little_endian(output, data.total_samples)
+            || !write_little_endian(
+                output, static_cast<std::uint64_t>(data.sample_rate))
+            || !write_layer(output, data.mix)
+            || !write_layer(output, data.bass)
+            || !write_layer(output, data.mid)
+            || !write_layer(output, data.high)) {
+            output.close();
+            std::filesystem::remove(temp_path, cleanup_error);
+            return false;
+        }
+        if (!data.spectral_index.empty()) {
+            output.write(
+                reinterpret_cast<const char*>(data.spectral_index.data()),
+                static_cast<std::streamsize>(data.spectral_index.size()));
+        }
+        for (const auto& cue : data.cues) {
+            if (!write_little_endian(output, cue.position_ms)
+                || !write_little_endian(
+                    output, static_cast<std::uint8_t>(cue.label.size()))) {
+                output.close();
+                std::filesystem::remove(temp_path, cleanup_error);
+                return false;
+            }
+            if (!cue.label.empty()) {
+                output.write(cue.label.data(),
+                             static_cast<std::streamsize>(cue.label.size()));
+            }
+        }
+        output.flush();
+        const bool write_succeeded = static_cast<bool>(output);
+        output.close();
+        if (!write_succeeded || !flush_file(temp_path)
+            || !atomic_replace(temp_path, cache_path)) {
+            std::filesystem::remove(temp_path, cleanup_error);
+            return false;
+        }
+        return true;
+    } catch (...) {
+        std::error_code cleanup_error;
+        std::filesystem::remove(temp_path, cleanup_error);
+        return false;
+    }
+}
+
+bool WaveformCache::load_v3(const std::filesystem::path& cache_path,
+                            const std::filesystem::path& source_path,
+                            WaveformCacheData& data) noexcept
+{
+    data = WaveformCacheData{};
+    try {
+        SourceMetadata source;
+        if (!source_metadata(source_path, source)) {
+            return false;
+        }
+        std::error_code error;
+        const std::uintmax_t file_size =
+            std::filesystem::file_size(cache_path, error);
+        if (error || file_size < v3_header_size) {
+            return false;
+        }
+        std::ifstream input(cache_path, std::ios::binary);
+        std::array<char, cache_magic.size()> magic{};
+        input.read(magic.data(), static_cast<std::streamsize>(magic.size()));
+        std::uint32_t version = 0U;
+        std::uint64_t source_size = 0U;
+        std::int64_t source_mtime = 0;
+        std::uint64_t mix_count = 0U;
+        std::uint64_t bass_count = 0U;
+        std::uint64_t mid_count = 0U;
+        std::uint64_t high_count = 0U;
+        std::uint64_t spectral_count = 0U;
+        double bpm = 0.0;
+        std::uint64_t cue_count = 0U;
+        std::uint64_t flags = 0U;
+        std::uint64_t duration_ms = 0U;
+        std::uint64_t total_samples = 0U;
+        std::uint64_t sample_rate = 0U;
+        if (!input || magic != cache_magic
+            || !read_little_endian(input, version)
+            || !read_little_endian(input, source_size)
+            || !read_little_endian(input, source_mtime)
+            || !read_little_endian(input, mix_count)
+            || !read_little_endian(input, bass_count)
+            || !read_little_endian(input, mid_count)
+            || !read_little_endian(input, high_count)
+            || !read_little_endian(input, spectral_count)
+            || !read_double(input, bpm)
+            || !read_little_endian(input, cue_count)
+            || !read_little_endian(input, flags)
+            || !read_little_endian(input, duration_ms)
+            || !read_little_endian(input, total_samples)
+            || !read_little_endian(input, sample_rate)
+            || version != cache_version_v3 || source_size != source.size
+            || source_mtime != source.mtime_ns
+            || flags != v2_timeline_metadata_flag
+            || !std::isfinite(bpm)
+            || sample_rate > std::numeric_limits<std::uint32_t>::max()
+            || (spectral_count != 0U && spectral_count != mix_count)) {
+            return false;
+        }
+        const std::uint64_t max_count =
+            std::numeric_limits<std::uint64_t>::max() / sizeof(float);
+        if (mix_count > max_count || bass_count > max_count
+            || mid_count > max_count || high_count > max_count
+            || mix_count + bass_count > max_count
+            || mix_count + bass_count + mid_count > max_count
+            || mix_count + bass_count + mid_count + high_count > max_count) {
+            return false;
+        }
+        const std::uint64_t float_bytes =
+            (mix_count + bass_count + mid_count + high_count) * sizeof(float);
+        if (float_bytes > std::numeric_limits<std::uint64_t>::max()
+                                - v3_header_size
+            || spectral_count > std::numeric_limits<std::uint64_t>::max()
+                                    - v3_header_size - float_bytes
+            || file_size < v3_header_size + float_bytes + spectral_count) {
+            return false;
+        }
+
+        WaveformCacheData loaded;
+        loaded.bpm = bpm;
+        loaded.duration_ms = duration_ms;
+        loaded.total_samples = total_samples;
+        loaded.sample_rate = static_cast<std::uint32_t>(sample_rate);
+        if (!read_layer(input, mix_count, loaded.mix)
+            || !read_layer(input, bass_count, loaded.bass)
+            || !read_layer(input, mid_count, loaded.mid)
+            || !read_layer(input, high_count, loaded.high)) {
+            return false;
+        }
+        loaded.spectral_index.resize(static_cast<std::size_t>(spectral_count));
+        if (spectral_count > 0U) {
+            input.read(reinterpret_cast<char*>(loaded.spectral_index.data()),
+                       static_cast<std::streamsize>(spectral_count));
+            if (!input) {
+                return false;
+            }
+        }
+        const std::uint64_t payload_bytes =
+            v3_header_size + float_bytes + spectral_count;
+        const std::uint64_t remaining =
+            static_cast<std::uint64_t>(file_size) - payload_bytes;
+        if (cue_count > remaining / 9U) {
+            return false;
+        }
+        std::uint64_t cue_consumed = 0U;
+        for (std::uint64_t index = 0U; index < cue_count; ++index) {
+            WaveformCacheCue cue;
+            std::uint8_t label_length = 0U;
+            constexpr std::uint64_t cue_header_size = 9U;
+            if (cue_consumed + cue_header_size > remaining
+                || !read_little_endian(input, cue.position_ms)
+                || !read_little_endian(input, label_length)) {
+                return false;
+            }
+            cue_consumed += cue_header_size;
+            if (cue_consumed + label_length > remaining) {
+                return false;
+            }
+            if (label_length > 0U) {
+                cue.label.resize(label_length);
+                input.read(cue.label.data(), label_length);
+                if (!input) {
+                    return false;
+                }
+            }
+            cue_consumed += label_length;
+            loaded.cues.push_back(std::move(cue));
+        }
+        if (cue_consumed != remaining) {
+            return false;
+        }
         data = std::move(loaded);
         return true;
     } catch (...) {

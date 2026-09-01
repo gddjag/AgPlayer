@@ -797,10 +797,24 @@ TestCase {
         var surface = coordinator ? coordinator.surface : null
         var immersiveWaveform = surface
                 ? findChild(surface, "immersiveWaveformHost") : null
-        verify(session && miniControls && immersiveWaveform)
+        var nativeWaveform = immersiveWaveform
+                ? findChild(immersiveWaveform, "immersiveWaveform") : null
+        var playbackGuide = immersiveWaveform
+                ? findChild(immersiveWaveform,
+                            "immersiveWaveformPlaybackGuide") : null
+        var playbackFocus = immersiveWaveform
+                ? findChild(immersiveWaveform,
+                            "immersiveWaveformPlaybackFocusDot") : null
+        verify(session && miniControls && immersiveWaveform && nativeWaveform)
+        compare(playbackGuide, null)
+        compare(playbackFocus, null)
         compare(miniWindow.waveformSession, session)
         compare(miniControls.waveformSession, session)
         compare(immersiveWaveform.waveformSession, session)
+        compare(nativeWaveform.spectralPalette.length, 8)
+        compare(String(nativeWaveform.spectralPalette[0]), "#123ecf")
+        compare(String(nativeWaveform.spectralPalette[7]), "#e82718")
+        compare(nativeWaveform.spectralUnplayedOpacity, 0.88)
     }
 
     function test_three_line_spatial_lyrics_support_position_and_scale() {

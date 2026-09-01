@@ -1,7 +1,6 @@
 #include "track_waveform_thumbnail_item.hpp"
 
 #include <QMetaProperty>
-#include <QSGFlatColorMaterial>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
 #include <QSignalSpy>
@@ -70,7 +69,7 @@ void TrackWaveformThumbnailItemTest::usesEveryCanvasPixelForContinuousEnvelope()
              QSGGeometry::DrawTriangleStrip);
 
     const auto* vertices =
-        geometryNode(node)->geometry()->vertexDataAsPoint2D();
+        geometryNode(node)->geometry()->vertexDataAsColoredPoint2D();
     QCOMPARE(vertices[0].x, 0.0F);
     QCOMPARE(vertices[0].y, 0.0F);
     QCOMPARE(vertices[1].y, 10.0F);
@@ -94,7 +93,7 @@ void TrackWaveformThumbnailItemTest::downsamplingPreservesMinimumAndMaximumEnvel
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
     const auto* vertices =
-        geometryNode(node)->geometry()->vertexDataAsPoint2D();
+        geometryNode(node)->geometry()->vertexDataAsColoredPoint2D();
     QCOMPARE(vertices[0].y, 0.0F);
     QCOMPARE(vertices[1].y, 10.0F);
     QCOMPARE(vertices[2].y, 10.0F * 128.0F / 255.0F);
@@ -163,18 +162,18 @@ void TrackWaveformThumbnailItemTest::reusesGeometryWhenOnlyColorChanges()
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
     QSGGeometry* const geometry = geometryNode(node)->geometry();
-    auto* const vertices = geometry->vertexDataAsPoint2D();
+    auto* const vertices = geometry->vertexDataAsColoredPoint2D();
     vertices[0].y = -123.0F;
 
     item.setWaveformColor(QColor(QStringLiteral("#abcdef")));
     QSGNode* const recolored = item.updatePaintNode(node, nullptr);
     QCOMPARE(recolored, node);
     QCOMPARE(geometryNode(recolored)->geometry(), geometry);
-    QCOMPARE(geometry->vertexDataAsPoint2D(), vertices);
-    QCOMPARE(vertices[0].y, -123.0F);
-    QCOMPARE(static_cast<QSGFlatColorMaterial*>(
-                 geometryNode(recolored)->material())->color(),
-             QColor(QStringLiteral("#abcdef")));
+    QCOMPARE(geometry->vertexDataAsColoredPoint2D(), vertices);
+    QVERIFY(vertices[0].y >= 0.0F);
+    QCOMPARE(vertices[0].r, 0xABU);
+    QCOMPARE(vertices[0].g, 0xCDU);
+    QCOMPARE(vertices[0].b, 0xEFU);
     delete recolored;
 }
 
@@ -190,7 +189,7 @@ void TrackWaveformThumbnailItemTest::rebuildsOnlyForPeaksOrSize()
 
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
-    auto* vertices = geometryNode(node)->geometry()->vertexDataAsPoint2D();
+    auto* vertices = geometryNode(node)->geometry()->vertexDataAsColoredPoint2D();
     vertices[0].y = -123.0F;
 
     item.setPeaks(initial);
@@ -203,12 +202,12 @@ void TrackWaveformThumbnailItemTest::rebuildsOnlyForPeaksOrSize()
 
     item.setWidth(256.0);
     node = item.updatePaintNode(node, nullptr);
-    vertices = geometryNode(node)->geometry()->vertexDataAsPoint2D();
+    vertices = geometryNode(node)->geometry()->vertexDataAsColoredPoint2D();
     QCOMPARE(vertices[510].x, 256.0F);
 
     item.setHeight(20.0);
     node = item.updatePaintNode(node, nullptr);
-    vertices = geometryNode(node)->geometry()->vertexDataAsPoint2D();
+    vertices = geometryNode(node)->geometry()->vertexDataAsColoredPoint2D();
     QCOMPARE(vertices[0].y, 20.0F * 32.0F / 255.0F);
     delete node;
 }

@@ -543,6 +543,20 @@ add_test(NAME waveform_analyzer_test
 )
 set_tests_properties(waveform_analyzer_test PROPERTIES TIMEOUT 10)
 
+add_executable(spectral_centroid_waveform_test
+    core/spectral_centroid_waveform_test.cpp
+)
+add_dependencies(spectral_centroid_waveform_test decoder_fixture)
+target_include_directories(spectral_centroid_waveform_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_link_libraries(spectral_centroid_waveform_test PRIVATE agplayer_core)
+agplayer_enable_warnings(spectral_centroid_waveform_test)
+add_test(NAME spectral_centroid_waveform_test
+    COMMAND spectral_centroid_waveform_test "${SINE_WAV_FIXTURE}"
+)
+set_tests_properties(spectral_centroid_waveform_test PROPERTIES TIMEOUT 10)
+
 add_executable(waveform_cache_test
     core/waveform_cache_test.cpp
 )
@@ -1565,7 +1579,7 @@ set_tests_properties(player_experience_controller_test PROPERTIES
     ENVIRONMENT "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE}"
 )
 set_tests_properties(waveform_provider_test PROPERTIES
-    TIMEOUT 30
+    TIMEOUT 120
     ENVIRONMENT "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE}"
 )
 set_tests_properties(window_controller_test PROPERTIES

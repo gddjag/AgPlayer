@@ -11,6 +11,8 @@ Rectangle {
     property var playback: PlaybackController
     property var windows: WindowController
     property var waveformSession: null
+    readonly property var frequencyWaveformSettings:
+        SettingsController.frequencyColorWaveform
     property var rawWaveformLayers: ({})
     property real waveformDurationMs: 0
     property int libraryRevision: 0
@@ -234,17 +236,12 @@ Rectangle {
                     anchors.right: parent.right
                     anchors.top: parent.top
                     height: 36
-                    position: 0
+                    position: root.waveformMode === 3
+                              ? (playback ? playback.positionMs : 0) : 0
                     cursorPosition: playback ? playback.positionMs : 0
                     duration: root.effectiveDurationMs
                     visualMode: SettingsController.waveformMode
-                    baseColor: SettingsController.waveformMode === 0
-                               ? SettingsController.waveformSolidBaseColor
-                               : (SettingsController.waveformMode === 2
-                                  ? SettingsController.spectrumSolidColor
-                                  : SettingsController.waveformMode === 3
-                                    ? Theme.textSecondary
-                                    : SettingsController.waveformRgbBaseColor)
+                    baseColor: SettingsController.waveformRgbBaseColor
                     progressColor: SettingsController.waveformSolidProgressColor
                     gradientStartColor: SettingsController.waveformMode === 2
                                         ? (SettingsController.spectrumColorMode === 0
@@ -261,10 +258,8 @@ Rectangle {
                                          ? SettingsController.spectrumSolidColor
                                          : SettingsController.spectrumRgbEndColor)
                                       : SettingsController.waveformRgbEndColor
-                    frequencyLowColor: SettingsController.waveformFrequencyLowColor
-                    frequencyMidColor: SettingsController.waveformFrequencyMidColor
-                    frequencyHighColor: SettingsController.waveformFrequencyHighColor
-                    frequencyStrength: SettingsController.waveformFrequencyStrength
+                    spectralPalette: root.frequencyWaveformSettings.palette
+                    spectralUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
                     rgbProgress: SettingsController.waveformMode === 1
                                  && SettingsController.waveformRgbProgress
                     amplitudeScale: SettingsController.waveformMode === 2
@@ -277,6 +272,7 @@ Rectangle {
                 }
                 Item {
                     objectName: "miniWaveformPlayedClip"
+                    visible: waveform.visualMode !== 3
                     width: waveform.waveformCursorX
                     height: waveform.height
                     clip: true
@@ -294,10 +290,8 @@ Rectangle {
                         gradientStartColor: waveform.gradientStartColor
                         gradientMiddleColor: waveform.gradientMiddleColor
                         gradientEndColor: waveform.gradientEndColor
-                        frequencyLowColor: waveform.frequencyLowColor
-                        frequencyMidColor: waveform.frequencyMidColor
-                        frequencyHighColor: waveform.frequencyHighColor
-                        frequencyStrength: waveform.frequencyStrength
+                        spectralPalette: root.frequencyWaveformSettings.palette
+                        spectralUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
                         rgbProgress: waveform.rgbProgress
                         amplitudeScale: waveform.amplitudeScale
                         density: waveform.density
@@ -307,6 +301,7 @@ Rectangle {
                 Rectangle {
                     objectName: "miniWaveformPlaybackGuide"
                     visible: SettingsController.waveformPlaybackGuide
+                             && waveform.visualMode !== 3
                     x: waveform.waveformCursorX
                     width: 1
                     height: waveform.height

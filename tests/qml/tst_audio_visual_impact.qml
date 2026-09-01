@@ -23,6 +23,7 @@ TestCase {
         })
         property real durationMs: 120000
         property string trackId: "track-a"
+        property bool frequencyReady: false
     }
 
     SharedWaveformView {
@@ -88,33 +89,37 @@ TestCase {
         compare(AudioVisualFeatureController.impactRevision, revision)
     }
 
-    function test_shared_view_uses_one_frequency_color_waveform() {
+    function test_shared_view_uses_one_spectral_centroid_waveform() {
         compare(waveformItemCount(sharedWaveform), 1)
 
         var item = findChild(sharedWaveform, "immersiveWaveform")
+        var frequencySettings = SettingsController.frequencyColorWaveform
         verify(item)
         compare(item.layers, waveformSession.layers)
         compare(item.duration, waveformSession.durationMs)
         compare(item.visualMode, 3)
-        compare(String(item.frequencyLowColor),
-                SettingsController.waveformFrequencyLowColor)
-        compare(String(item.frequencyMidColor),
-                SettingsController.waveformFrequencyMidColor)
-        compare(String(item.frequencyHighColor),
-                SettingsController.waveformFrequencyHighColor)
+        compare(item.spectralPalette.length, 8)
+        compare(String(item.spectralPalette[0]),
+                String(frequencySettings.palette[0]))
+        compare(String(item.spectralPalette[7]),
+                String(frequencySettings.palette[7]))
+        compare(item.spectralUnplayedOpacity,
+                frequencySettings.unplayedOpacity)
+        compare(findChild(sharedWaveform,
+                          "immersiveWaveformPlaybackGuide"), null)
+        compare(findChild(sharedWaveform,
+                          "immersiveWaveformPlaybackFocusDot"), null)
     }
 
-    function test_track_change_does_not_randomize_frequency_colors() {
+    function test_track_change_does_not_randomize_spectral_palette() {
         var item = findChild(sharedWaveform, "immersiveWaveform")
         verify(item)
-        var low = String(item.frequencyLowColor)
-        var mid = String(item.frequencyMidColor)
-        var high = String(item.frequencyHighColor)
+        var first = String(item.spectralPalette[0])
+        var last = String(item.spectralPalette[7])
         waveformSession.trackId = "track-a"
         waveformSession.trackId = "track-b"
-        compare(String(item.frequencyLowColor), low)
-        compare(String(item.frequencyMidColor), mid)
-        compare(String(item.frequencyHighColor), high)
+        compare(String(item.spectralPalette[0]), first)
+        compare(String(item.spectralPalette[7]), last)
     }
 
 }

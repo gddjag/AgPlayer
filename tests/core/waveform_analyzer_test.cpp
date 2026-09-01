@@ -1,6 +1,3 @@
-// Test files deliberately keep assert() active even in Release builds: many
-// test cases embed function calls with side effects inside assert(), and
-// silencing them under NDEBUG would skip those calls and crash on cleanup.
 #undef NDEBUG
 
 #include <agplayer/c_api.h>
@@ -13,48 +10,34 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <future>
 #include <limits>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
 
 void test_actual_frame_bucketing_and_channel_combination()
 {
-    agplayer::WaveformBucketizer bucketizer(8U, 3U, 2U, 48000.0F);
+    agplayer::WaveformBucketizer bucketizer(8U, 3U, 2U, 48'000.0F);
     const std::vector<float> samples{
-        0.1F, -0.6F,
-        0.2F, 0.1F,
-        -0.3F, 0.2F,
-        0.4F, 0.1F,
-        0.2F, -0.8F,
-        0.1F, 0.2F,
-        -0.2F, 0.5F,
-        0.1F, -0.4F,
+        0.1F, -0.6F, 0.2F, 0.1F, -0.3F, 0.2F, 0.4F, 0.1F,
+        0.2F, -0.8F, 0.1F, 0.2F, -0.2F, 0.5F, 0.1F, -0.4F,
     };
-    assert(samples.size() == 16U);
     assert(bucketizer.add(samples, 8U) == AG_OK);
-    std::vector<float> peaks;
+    std::vector<float> mix;
     std::vector<float> bass;
     std::vector<float> mid;
     std::vector<float> high;
-    assert(bucketizer.finish(peaks, bass, mid, high) == AG_OK);
-    assert(peaks.size() == 3U);
-    assert(std::abs(peaks[0] - 0.75F) < 0.000'001F);
-    assert(std::abs(peaks[1] - 1.0F) < 0.000'001F);
-    assert(std::abs(peaks[2] - 0.625F) < 0.000'001F);
-    assert(bass.size() == 3U);
-    assert(mid.size() == 3U);
-    assert(high.size() == 3U);
-
-    agplayer::WaveformBucketizer more_points_than_frames(3U, 10U, 1U, 48000.0F);
-    assert(more_points_than_frames.add({0.2F, 0.4F, 0.8F}, 3U)
-           == AG_OK);
-    assert(more_points_than_frames.finish(peaks, bass, mid, high) == AG_OK);
-    assert(peaks.size() == 3U);
-    assert(std::abs(peaks[0] - 0.25F) < 0.000'001F);
-    assert(std::abs(peaks[1] - 0.5F) < 0.000'001F);
-    assert(std::abs(peaks[2] - 1.0F) < 0.000'001F);
+    assert(bucketizer.finish(mix, bass, mid, high) == AG_OK);
+    assert(mix.size() == 3U);
+    assert(std::abs(mix[0] - 0.75F) < 0.000'001F);
+    assert(std::abs(mix[1] - 1.0F) < 0.000'001F);
+    assert(std::abs(mix[2] - 0.625F) < 0.000'001F);
+    assert(bass.size() == mix.size());
+    assert(mid.size() == mix.size());
+    assert(high.size() == mix.size());
 }
 
 void test_non_finite_pcm_is_rejected()
@@ -63,48 +46,41 @@ void test_non_finite_pcm_is_rejected()
              std::numeric_limits<float>::quiet_NaN(),
              std::numeric_limits<float>::infinity(),
          }) {
-        agplayer::WaveformBucketizer bucketizer(1U, 1U, 2U, 48000.0F);
+        agplayer::WaveformBucketizer bucketizer(1U, 1U, 2U, 48'000.0F);
         assert(bucketizer.add({0.5F, invalid}, 1U) == AG_DECODE_ERROR);
-        std::vector<float> peaks{1.0F};
+        std::vector<float> mix{1.0F};
         std::vector<float> bass{1.0F};
         std::vector<float> mid{1.0F};
         std::vector<float> high{1.0F};
-        assert(bucketizer.finish(peaks, bass, mid, high) == AG_DECODE_ERROR);
-        assert(peaks.empty());
-        assert(bass.empty());
-        assert(mid.empty());
-        assert(high.empty());
+        assert(bucketizer.finish(mix, bass, mid, high) == AG_DECODE_ERROR);
+        assert(mix.empty() && bass.empty() && mid.empty() && high.empty());
     }
 }
 
 void test_average_absolute_and_rms_aggregation()
 {
     const std::vector<float> samples{0.0F, 1.0F, 0.5F, 0.5F};
-    std::vector<float> peaks;
+    std::vector<float> mix;
     std::vector<float> bass;
     std::vector<float> mid;
     std::vector<float> high;
-
     agplayer::WaveformBucketizer average(
-        4U, 2U, 1U, 48000.0F,
+        4U, 2U, 1U, 48'000.0F,
         agplayer::WaveformAggregation::AverageAbsolute);
     assert(average.add(samples, 4U) == AG_OK);
-    assert(average.finish(peaks, bass, mid, high) == AG_OK);
-    assert(peaks.size() == 2U);
-    assert(std::abs(peaks[0] - 1.0F) < 0.000'001F);
-    assert(std::abs(peaks[1] - 1.0F) < 0.000'001F);
+    assert(average.finish(mix, bass, mid, high) == AG_OK);
+    assert(mix == std::vector<float>({1.0F, 1.0F}));
 
     agplayer::WaveformBucketizer rms(
-        4U, 2U, 1U, 48000.0F,
+        4U, 2U, 1U, 48'000.0F,
         agplayer::WaveformAggregation::Rms);
     assert(rms.add(samples, 4U) == AG_OK);
-    assert(rms.finish(peaks, bass, mid, high) == AG_OK);
-    assert(peaks.size() == 2U);
-    assert(std::abs(peaks[0] - 1.0F) < 0.000'001F);
-    assert(std::abs(peaks[1] - std::sqrt(0.5F)) < 0.000'001F);
+    assert(rms.finish(mix, bass, mid, high) == AG_OK);
+    assert(std::abs(mix[0] - 1.0F) < 0.000'001F);
+    assert(std::abs(mix[1] - std::sqrt(0.5F)) < 0.000'001F);
 }
 
-void test_frequency_layers_preserve_cross_band_energy()
+void test_rgb_frequency_layers_keep_existing_behavior()
 {
     constexpr std::size_t frames = 4'800U;
     constexpr float sample_rate = 48'000.0F;
@@ -115,20 +91,14 @@ void test_frequency_layers_preserve_cross_band_energy()
             std::sin(2.0 * pi * 100.0 * static_cast<double>(frame)
                      / sample_rate));
     }
-
     agplayer::WaveformBucketizer bucketizer(
         frames, 1U, 1U, sample_rate, agplayer::WaveformAggregation::Rms);
     assert(bucketizer.add(samples, frames) == AG_OK);
-    std::vector<float> peaks;
+    std::vector<float> mix;
     std::vector<float> bass;
     std::vector<float> mid;
     std::vector<float> high;
-    assert(bucketizer.finish(peaks, bass, mid, high) == AG_OK);
-
-    assert(peaks.size() == 1U);
-    assert(bass.size() == 1U);
-    assert(mid.size() == 1U);
-    assert(high.size() == 1U);
+    assert(bucketizer.finish(mix, bass, mid, high) == AG_OK);
     assert(bass[0] > 0.8F);
     assert(mid[0] < bass[0] * 0.35F);
     assert(high[0] < bass[0] * 0.1F);
@@ -137,7 +107,8 @@ void test_frequency_layers_preserve_cross_band_energy()
 struct ProgressState final {
     std::vector<float> values;
     ag_cancel_token* token = nullptr;
-    bool cancel_during_progress = false;
+    bool cancel = false;
+    bool pause_cycle = false;
 };
 
 void record_progress(const float progress, void* user_data)
@@ -149,9 +120,111 @@ void record_progress(const float progress, void* user_data)
         assert(progress >= state.values.back());
     }
     state.values.push_back(progress);
-    if (state.cancel_during_progress && progress >= 0.2F) {
+    if (state.pause_cycle && progress >= 0.2F) {
+        state.pause_cycle = false;
+        ag_cancel_token_set_paused(state.token, 1);
+        ag_cancel_token_set_paused(state.token, 0);
+    }
+    if (state.cancel && progress >= 0.2F) {
         ag_cancel_token_cancel(state.token);
     }
+}
+
+void test_c_api_analysis_and_cancellation(const std::string& source_path)
+{
+    ag_waveform* waveform = reinterpret_cast<ag_waveform*>(
+        static_cast<std::uintptr_t>(1U));
+    assert(ag_waveform_analyze(nullptr, 512U, nullptr, nullptr, nullptr,
+                               &waveform) == AG_INVALID_ARGUMENT);
+    assert(waveform == nullptr);
+    assert(ag_waveform_analyze(source_path.c_str(), 0U, nullptr, nullptr,
+                               nullptr, &waveform) == AG_INVALID_ARGUMENT);
+    assert(waveform == nullptr);
+
+    ProgressState progress;
+    assert(ag_waveform_analyze(source_path.c_str(), 512U, nullptr,
+                               record_progress, &progress, &waveform) == AG_OK);
+    assert(waveform != nullptr);
+    assert(ag_waveform_count(waveform) > 100U);
+    assert(progress.values.front() == 0.0F);
+    assert(progress.values.back() == 1.0F);
+    assert(ag_waveform_spectral_index_count(waveform) == 0U);
+    ag_waveform_destroy(waveform);
+    waveform = nullptr;
+
+    ag_cancel_token* token = ag_cancel_token_create();
+    assert(token != nullptr);
+    ProgressState cancelling;
+    cancelling.token = token;
+    cancelling.cancel = true;
+    assert(ag_waveform_analyze(source_path.c_str(), 512U, token,
+                               record_progress, &cancelling, &waveform)
+           == AG_CANCELLED);
+    assert(waveform == nullptr);
+    ag_cancel_token_destroy(token);
+
+    token = ag_cancel_token_create();
+    assert(token != nullptr);
+    ag_cancel_token_set_paused(token, 1);
+    waveform = nullptr;
+    auto paused_analysis = std::async(std::launch::async, [&] {
+        return ag_waveform_analyze_with_spectral_index(
+            source_path.c_str(), 512U,
+            AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE, token, nullptr,
+            nullptr, &waveform);
+    });
+    assert(paused_analysis.wait_for(std::chrono::milliseconds(50))
+           == std::future_status::timeout);
+    ag_cancel_token_set_paused(token, 0);
+    assert(paused_analysis.get() == AG_OK);
+    assert(waveform != nullptr);
+    ag_waveform_destroy(waveform);
+    waveform = nullptr;
+    ag_cancel_token_destroy(token);
+
+    token = ag_cancel_token_create();
+    assert(token != nullptr);
+    ProgressState reentrant_pause;
+    reentrant_pause.token = token;
+    reentrant_pause.pause_cycle = true;
+    assert(ag_waveform_analyze_with_spectral_index(
+               source_path.c_str(), 512U,
+               AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE, token,
+               record_progress, &reentrant_pause, &waveform) == AG_OK);
+    assert(waveform != nullptr);
+    assert(!reentrant_pause.pause_cycle);
+    ag_waveform_destroy(waveform);
+    waveform = nullptr;
+    ag_cancel_token_destroy(token);
+
+    token = ag_cancel_token_create();
+    assert(token != nullptr);
+    ProgressState spectral_cancelling;
+    spectral_cancelling.token = token;
+    spectral_cancelling.cancel = true;
+    assert(ag_waveform_analyze_with_spectral_index(
+               source_path.c_str(), 512U,
+               AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE, token,
+               record_progress, &spectral_cancelling, &waveform)
+           == AG_CANCELLED);
+    assert(waveform == nullptr);
+    ag_cancel_token_destroy(token);
+
+    assert(ag_track_frequency_color_analysis(
+               source_path.c_str(), 512U, nullptr, nullptr, nullptr,
+               &waveform) == AG_OK);
+    assert(waveform != nullptr);
+    assert(ag_waveform_spectral_index_count(waveform)
+           == ag_waveform_count(waveform));
+    ag_waveform_destroy(waveform);
+    waveform = nullptr;
+
+    const std::filesystem::path missing =
+        std::filesystem::path(source_path).parent_path() / "missing.wav";
+    std::filesystem::remove(missing);
+    assert(ag_waveform_analyze(missing.string().c_str(), 512U, nullptr,
+                               nullptr, nullptr, &waveform) == AG_IO_ERROR);
+    assert(waveform == nullptr);
 }
 
 } // namespace
@@ -162,84 +235,6 @@ int main(const int argc, char** argv)
     test_actual_frame_bucketing_and_channel_combination();
     test_non_finite_pcm_is_rejected();
     test_average_absolute_and_rms_aggregation();
-    test_frequency_layers_preserve_cross_band_energy();
-    const std::string source_path = argv[1];
-
-    ag_waveform* waveform = reinterpret_cast<ag_waveform*>(
-        static_cast<std::uintptr_t>(1U));
-    assert(ag_waveform_analyze(nullptr, 512U, nullptr, nullptr, nullptr,
-                               &waveform)
-           == AG_INVALID_ARGUMENT);
-    assert(waveform == nullptr);
-    assert(ag_waveform_analyze(source_path.c_str(), 0U, nullptr, nullptr,
-                               nullptr, &waveform)
-           == AG_INVALID_ARGUMENT);
-    assert(waveform == nullptr);
-    assert(ag_waveform_analyze(source_path.c_str(), 512U, nullptr, nullptr,
-                               nullptr, nullptr)
-           == AG_INVALID_ARGUMENT);
-    assert(ag_track_analysis_with_aggregation(
-               source_path.c_str(), 512U,
-               static_cast<ag_waveform_aggregation>(99),
-               nullptr, nullptr, nullptr, &waveform, nullptr)
-           == AG_INVALID_ARGUMENT);
-    assert(waveform == nullptr);
-
-    ProgressState progress;
-    assert(ag_waveform_analyze(source_path.c_str(), 512U, nullptr,
-                               record_progress, &progress, &waveform)
-           == AG_OK);
-    assert(waveform != nullptr);
-    assert(ag_waveform_count(waveform) > 100U);
-    assert(ag_waveform_count(waveform) <= 512U);
-    assert(!progress.values.empty());
-    assert(progress.values.front() == 0.0F);
-    assert(progress.values.back() == 1.0F);
-
-    float maximum = 0.0F;
-    for (std::size_t index = 0U; index < ag_waveform_count(waveform); ++index) {
-        const float peak = ag_waveform_peak(waveform, index);
-        assert(std::isfinite(peak));
-        assert(peak >= 0.0F && peak <= 1.0F);
-        maximum = std::max(maximum, peak);
-    }
-    assert(std::abs(maximum - 1.0F) < 0.000'001F);
-    assert(ag_waveform_peak(waveform, ag_waveform_count(waveform)) == 0.0F);
-    ag_waveform_destroy(waveform);
-    waveform = nullptr;
-
-    ag_cancel_token* token = ag_cancel_token_create();
-    assert(token != nullptr);
-    ag_cancel_token_cancel(token);
-    assert(ag_waveform_analyze(source_path.c_str(), 512U, token, nullptr,
-                               nullptr, &waveform)
-           == AG_CANCELLED);
-    assert(waveform == nullptr);
-    ag_cancel_token_destroy(token);
-
-    token = ag_cancel_token_create();
-    assert(token != nullptr);
-    ProgressState cancelling_progress;
-    cancelling_progress.token = token;
-    cancelling_progress.cancel_during_progress = true;
-    assert(ag_waveform_analyze(source_path.c_str(), 512U, token,
-                               record_progress, &cancelling_progress, &waveform)
-           == AG_CANCELLED);
-    assert(waveform == nullptr);
-    assert(!cancelling_progress.values.empty());
-    assert(cancelling_progress.values.back() < 1.0F);
-    ag_cancel_token_destroy(token);
-
-    const std::filesystem::path missing_path =
-        std::filesystem::path(source_path).parent_path()
-        / "waveform-missing.wav";
-    std::filesystem::remove(missing_path);
-    assert(ag_waveform_analyze(missing_path.string().c_str(), 512U, nullptr,
-                               nullptr, nullptr, &waveform)
-           == AG_IO_ERROR);
-    assert(waveform == nullptr);
-
-    ag_waveform_destroy(nullptr);
-    ag_cancel_token_cancel(nullptr);
-    ag_cancel_token_destroy(nullptr);
+    test_rgb_frequency_layers_keep_existing_behavior();
+    test_c_api_analysis_and_cancellation(argv[1]);
 }

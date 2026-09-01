@@ -13,9 +13,11 @@
 #include "waveform_analyzer.hpp"
 
 #include <atomic>
+#include <condition_variable>
 #include <cstring>
 #include <functional>
 #include <mutex>
+#include <memory>
 #include <new>
 #include <string>
 #include <utility>
@@ -94,15 +96,81 @@ struct ag_waveform {
     std::vector<float> bass_;
     std::vector<float> mid_;
     std::vector<float> high_;
+    std::vector<std::uint8_t> spectral_index_;
     double bpm_ = 0.0;
     std::uint64_t duration_ms_ = 0U;
     std::uint64_t total_samples_ = 0U;
     int sample_rate_ = 0;
 };
 
-struct ag_cancel_token {
+struct ag_cancel_state final {
     std::atomic_bool cancelled{false};
+    std::mutex pause_mutex;
+    std::condition_variable pause_condition;
+    bool paused = false;
 };
+
+struct ag_cancel_token {
+    std::shared_ptr<ag_cancel_state> state;
+};
+
+namespace {
+
+std::shared_ptr<ag_cancel_state> retain_cancel_state(
+    const ag_cancel_token* const token) noexcept
+{
+    return token == nullptr ? nullptr : token->state;
+}
+
+const std::atomic_bool* cancelled_flag(
+    const std::shared_ptr<ag_cancel_state>& state) noexcept
+{
+    return state == nullptr ? nullptr : &state->cancelled;
+}
+
+void request_cancel_noexcept(
+    const std::shared_ptr<ag_cancel_state>& state) noexcept
+{
+    if (state == nullptr) {
+        return;
+    }
+    try {
+        std::lock_guard<std::mutex> lock(state->pause_mutex);
+        state->cancelled.store(true, std::memory_order_relaxed);
+    } catch (...) {
+        state->cancelled.store(true, std::memory_order_relaxed);
+    }
+    state->pause_condition.notify_all();
+}
+
+struct PausableProgressBridge final {
+    std::shared_ptr<ag_cancel_state> state;
+    ag_progress_callback callback = nullptr;
+    void* user_data = nullptr;
+};
+
+void pausable_checkpoint(void* const user_data)
+{
+    auto& bridge = *static_cast<PausableProgressBridge*>(user_data);
+    if (bridge.state != nullptr) {
+        std::unique_lock<std::mutex> lock(bridge.state->pause_mutex);
+        bridge.state->pause_condition.wait(lock, [&bridge] {
+            return !bridge.state->paused
+                || bridge.state->cancelled.load(std::memory_order_relaxed);
+        });
+    }
+}
+
+void pausable_progress(const float progress, void* const user_data)
+{
+    auto& bridge = *static_cast<PausableProgressBridge*>(user_data);
+    pausable_checkpoint(user_data);
+    if (bridge.callback != nullptr) {
+        bridge.callback(progress, bridge.user_data);
+    }
+}
+
+} // namespace
 
 ag_result agplayer::editor::load_editor_playback_stream(
     ag_player* const player,
@@ -952,18 +1020,48 @@ ag_result ag_metadata_write_extended(const char* utf8_path,
 
 ag_cancel_token* ag_cancel_token_create(void)
 {
-    return new (std::nothrow) ag_cancel_token;
+    try {
+        auto state = std::make_shared<ag_cancel_state>();
+        return new (std::nothrow) ag_cancel_token{std::move(state)};
+    } catch (...) {
+        return nullptr;
+    }
 }
 
 void ag_cancel_token_cancel(ag_cancel_token* token)
 {
     if (token != nullptr) {
-        token->cancelled.store(true, std::memory_order_relaxed);
+        const std::shared_ptr<ag_cancel_state> state = retain_cancel_state(token);
+        request_cancel_noexcept(state);
+    }
+}
+
+void ag_cancel_token_set_paused(ag_cancel_token* token, const int paused)
+{
+    if (token == nullptr) {
+        return;
+    }
+    std::shared_ptr<ag_cancel_state> state;
+    try {
+        state = retain_cancel_state(token);
+        {
+            std::lock_guard<std::mutex> lock(state->pause_mutex);
+            state->paused = paused != 0;
+        }
+    } catch (...) {
+        return;
+    }
+    if (paused == 0) {
+        state->pause_condition.notify_all();
     }
 }
 
 void ag_cancel_token_destroy(ag_cancel_token* token)
 {
+    if (token != nullptr) {
+        const std::shared_ptr<ag_cancel_state> state = retain_cancel_state(token);
+        request_cancel_noexcept(state);
+    }
     delete token;
 }
 
@@ -999,8 +1097,9 @@ ag_result ag_transcode_ex(const char* input_path,
             config.quality = std::clamp(options->quality, 0, 100);
         }
 
-        const std::atomic_bool* cancelled =
-            cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
+        const std::shared_ptr<ag_cancel_state> cancel_state =
+            retain_cancel_state(cancel_token);
+        const std::atomic_bool* cancelled = cancelled_flag(cancel_state);
 
         std::function<void(float)> cb;
         if (progress_callback != nullptr) {
@@ -1170,8 +1269,9 @@ ag_result ag_transcode_v2(const char* input_path,
             }
         }
 
-        const std::atomic_bool* cancelled = cancel_token == nullptr
-            ? nullptr : &cancel_token->cancelled;
+        const std::shared_ptr<ag_cancel_state> cancel_state =
+            retain_cancel_state(cancel_token);
+        const std::atomic_bool* cancelled = cancelled_flag(cancel_state);
         std::function<void(float)> callback;
         if (progress_callback != nullptr) {
             callback = [progress_callback, user_data](const float progress) {
@@ -1229,8 +1329,9 @@ ag_result ag_pitch_shift_ex(const char* input_path,
             config.output_sample_rate = options->output_sample_rate;
         }
 
-        const std::atomic_bool* cancelled =
-            cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
+        const std::shared_ptr<ag_cancel_state> cancel_state =
+            retain_cancel_state(cancel_token);
+        const std::atomic_bool* cancelled = cancelled_flag(cancel_state);
 
         std::function<void(float)> cb;
         if (progress_callback != nullptr) {
@@ -1282,8 +1383,9 @@ ag_result ag_waveform_analyze(const char* utf8_path,
         std::vector<float> bass;
         std::vector<float> mid;
         std::vector<float> high;
-        const std::atomic_bool* cancelled =
-            cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
+        const std::shared_ptr<ag_cancel_state> cancel_state =
+            retain_cancel_state(cancel_token);
+        const std::atomic_bool* cancelled = cancelled_flag(cancel_state);
         std::uint64_t duration_ms = 0U;
         std::uint64_t total_samples = 0U;
         int sample_rate = 0;
@@ -1312,6 +1414,77 @@ ag_result ag_waveform_analyze(const char* utf8_path,
     }
 }
 
+ag_result ag_waveform_analyze_with_spectral_index(
+    const char* utf8_path,
+    const size_t target_points,
+    const ag_waveform_aggregation aggregation,
+    const ag_cancel_token* cancel_token,
+    const ag_progress_callback progress_callback,
+    void* const user_data,
+    ag_waveform** out_waveform)
+{
+    if (out_waveform == nullptr) {
+        return AG_INVALID_ARGUMENT;
+    }
+    *out_waveform = nullptr;
+    if (utf8_path == nullptr || utf8_path[0] == '\0' || target_points == 0U
+        || aggregation < AG_WAVEFORM_AGGREGATION_PEAK
+        || aggregation > AG_WAVEFORM_AGGREGATION_RMS) {
+        return AG_INVALID_ARGUMENT;
+    }
+    return guard_result([&] {
+        std::vector<float> peaks;
+        std::vector<float> bass;
+        std::vector<float> mid;
+        std::vector<float> high;
+        std::vector<std::uint8_t> spectral_index;
+        const std::shared_ptr<ag_cancel_state> cancel_state =
+            retain_cancel_state(cancel_token);
+        PausableProgressBridge progress_bridge{
+            cancel_state, progress_callback, user_data};
+        std::uint64_t duration_ms = 0U;
+        std::uint64_t total_samples = 0U;
+        int sample_rate = 0;
+        const ag_result result = agplayer::WaveformAnalyzer::analyze(
+            utf8_path, target_points, cancelled_flag(cancel_state),
+            pausable_progress, &progress_bridge, peaks, bass, mid, high,
+            static_cast<agplayer::WaveformAggregation>(aggregation),
+            &duration_ms, &total_samples, &sample_rate, &spectral_index,
+            pausable_checkpoint, &progress_bridge);
+        if (result != AG_OK) {
+            return result;
+        }
+        auto waveform = std::unique_ptr<ag_waveform>(
+            new (std::nothrow) ag_waveform{});
+        if (waveform == nullptr) {
+            return AG_INTERNAL_ERROR;
+        }
+        waveform->peaks = std::move(peaks);
+        waveform->bass_ = std::move(bass);
+        waveform->mid_ = std::move(mid);
+        waveform->high_ = std::move(high);
+        waveform->spectral_index_ = std::move(spectral_index);
+        waveform->duration_ms_ = duration_ms;
+        waveform->total_samples_ = total_samples;
+        waveform->sample_rate_ = sample_rate;
+        *out_waveform = waveform.release();
+        return AG_OK;
+    });
+}
+
+ag_result ag_track_frequency_color_analysis(
+    const char* utf8_path,
+    const size_t target_points,
+    const ag_cancel_token* cancel_token,
+    const ag_progress_callback progress_callback,
+    void* const user_data,
+    ag_waveform** out_waveform)
+{
+    return ag_waveform_analyze_with_spectral_index(
+        utf8_path, target_points, AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE,
+        cancel_token, progress_callback, user_data, out_waveform);
+}
+
 size_t ag_waveform_count(const ag_waveform* waveform)
 {
     return waveform == nullptr ? 0U : waveform->peaks.size();
@@ -1322,6 +1495,18 @@ float ag_waveform_peak(const ag_waveform* waveform, const size_t index)
     return waveform == nullptr || index >= waveform->peaks.size()
                ? 0.0F
                : waveform->peaks[index];
+}
+
+size_t ag_waveform_spectral_index_count(const ag_waveform* waveform)
+{
+    return waveform == nullptr ? 0U : waveform->spectral_index_.size();
+}
+
+uint8_t ag_waveform_spectral_index(const ag_waveform* waveform,
+                                   const size_t index)
+{
+    return waveform == nullptr || index >= waveform->spectral_index_.size()
+        ? 0U : waveform->spectral_index_[index];
 }
 
 void ag_waveform_destroy(ag_waveform* waveform)
@@ -1434,8 +1619,9 @@ ag_result ag_track_analysis_with_aggregation(
     }
 
     return guard_result([&] {
-        const std::atomic_bool* cancelled =
-            cancel_token == nullptr ? nullptr : &cancel_token->cancelled;
+        const std::shared_ptr<ag_cancel_state> cancel_state =
+            retain_cancel_state(cancel_token);
+        const std::atomic_bool* cancelled = cancelled_flag(cancel_state);
 
         std::vector<float> peaks;
         std::vector<float> bass;

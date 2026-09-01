@@ -26,6 +26,8 @@ Item {
     property var hostWindow
     property bool syncingSectionFromScroll: false
     property bool programmaticScroll: false
+    readonly property var frequencyWaveformSettings:
+        SettingsController.frequencyColorWaveform
 
     function open() {
         if (visible)
@@ -906,12 +908,6 @@ Item {
         id: thumb
         property int mode: 0
         property bool selected: false
-        readonly property color frequencyLowColor:
-            SettingsController.waveformFrequencyLowColor
-        readonly property color frequencyMidColor:
-            SettingsController.waveformFrequencyMidColor
-        readonly property color frequencyHighColor:
-            SettingsController.waveformFrequencyHighColor
         property string modeLabel: mode === 0 ? qsTr("纯色波形")
                                    : mode === 3 ? qsTr("频彩波形")
                                    : mode === 1 ? qsTr("RGB波形")
@@ -949,38 +945,10 @@ Item {
                     ctx.stroke()
 
                     if (mode === 3) {
-                        ctx.lineWidth = Math.max(
-                            1, SettingsController.waveformThickness)
-                        for (var fx = 0; fx <= width; fx += 2) {
-                            var ft = fx / Math.max(1, width)
-                            var low = 0.28 + 0.72 * Math.abs(Math.sin(ft * 9.0))
-                            var mid = 0.22 + 0.78 * Math.abs(Math.sin(ft * 17.0 + 1.1))
-                            var high = 0.16 + 0.84 * Math.abs(Math.sin(ft * 31.0 + 2.3))
-                            var total = low + mid + high
-                            var strength = SettingsController.waveformFrequencyStrength
-                            var mixedRed = (low * thumb.frequencyLowColor.r
-                                            + mid * thumb.frequencyMidColor.r
-                                            + high * thumb.frequencyHighColor.r) / total
-                            var mixedGreen = (low * thumb.frequencyLowColor.g
-                                              + mid * thumb.frequencyMidColor.g
-                                              + high * thumb.frequencyHighColor.g) / total
-                            var mixedBlue = (low * thumb.frequencyLowColor.b
-                                             + mid * thumb.frequencyMidColor.b
-                                             + high * thumb.frequencyHighColor.b) / total
-                            ctx.strokeStyle = Qt.rgba(
-                                Theme.textSecondary.r * (1 - strength) + mixedRed * strength,
-                                Theme.textSecondary.g * (1 - strength) + mixedGreen * strength,
-                                Theme.textSecondary.b * (1 - strength) + mixedBlue * strength,
-                                1)
-                            var mix = 0.18 + 0.82 * Math.abs(
-                                Math.sin(ft * 13.0) * Math.cos(ft * 4.0 + 0.4))
-                            var frequencyAmp = (0.18 + mix * 0.72)
-                                    * cy * SettingsController.waveformHeight
-                            ctx.beginPath()
-                            ctx.moveTo(fx, cy - frequencyAmp)
-                            ctx.lineTo(fx, cy + frequencyAmp)
-                            ctx.stroke()
-                        }
+                        // The native renderer below owns the frequency preview,
+                        // so settings shows the same four transparent layers as
+                        // the player instead of a weighted single outline.
+                        return
                     } else if (mode === 1) {
                         var waveformGradient = ctx.createLinearGradient(0, 0, width, 0)
                         waveformGradient.addColorStop(0, SettingsController.waveformRgbStartColor)
@@ -1044,6 +1012,38 @@ Item {
                         ctx.stroke()
                     }
                 }
+
+                Loader {
+                    anchors.fill: parent
+                    anchors.margins: 1
+                    active: thumb.mode === 3
+                    sourceComponent: WaveformItem {
+                        objectName: "frequencyWaveformThumbnailPreview"
+                        anchors.fill: parent
+                        enabled: false
+                        pointerInteractionEnabled: false
+                        visualMode: 3
+                        layers: ({
+                            "mix": [0.12, 0.30, 0.18, 0.66, 0.24, 0.48, 0.20, 0.78,
+                                    0.34, 0.58, 0.16, 0.72, 0.26, 0.54, 0.20, 0.82,
+                                    0.32, 0.62, 0.18, 0.74, 0.28, 0.52, 0.16, 0.68],
+                            "spectralIndex": [12, 26, 38, 52, 68, 84, 104, 126,
+                                              146, 168, 188, 208, 228, 244, 232, 214,
+                                              194, 174, 154, 132, 108, 82, 54, 28]
+                        })
+                        duration: 1000
+                        position: 0
+                        cursorPosition: 520
+                        spectralPalette: root.frequencyWaveformSettings.palette
+                        spectralUnplayedOpacity:
+                            root.frequencyWaveformSettings.unplayedOpacity
+                        amplitudeScale: Math.min(
+                                            1.0, SettingsController.waveformHeight)
+                        density: 0.5
+                        lineWidth: Math.max(
+                                       1.0, SettingsController.waveformThickness)
+                    }
+                }
             }
 
             Text {
@@ -1084,10 +1084,6 @@ Item {
             function onWaveformRgbStartColorChanged() { waveformPreviewCanvas.requestPaint() }
             function onWaveformRgbMiddleColorChanged() { waveformPreviewCanvas.requestPaint() }
             function onWaveformRgbEndColorChanged() { waveformPreviewCanvas.requestPaint() }
-            function onWaveformFrequencyLowColorChanged() { waveformPreviewCanvas.requestPaint() }
-            function onWaveformFrequencyMidColorChanged() { waveformPreviewCanvas.requestPaint() }
-            function onWaveformFrequencyHighColorChanged() { waveformPreviewCanvas.requestPaint() }
-            function onWaveformFrequencyStrengthChanged() { waveformPreviewCanvas.requestPaint() }
             function onSpectrumColorModeChanged() { waveformPreviewCanvas.requestPaint() }
             function onSpectrumSolidColorChanged() { waveformPreviewCanvas.requestPaint() }
             function onSpectrumRgbStartColorChanged() { waveformPreviewCanvas.requestPaint() }
@@ -1611,7 +1607,7 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         enabled: SettingsController.listWaveformThumbnailEnabled
                         valueModel: [
-                            { text: qsTr("36 色"), value: "Color36" },
+                            { text: qsTr("频彩"), value: "Spectral" },
                             { text: qsTr("纯色"), value: "Mono" }
                         ]
                         currentIndex: SettingsController.listWaveformThumbnailMode
@@ -1749,12 +1745,11 @@ Item {
                 }
 
                 SettingRow {
-                    visible: SettingsController.waveformMode !== 2
+                    visible: SettingsController.waveformMode === 0
+                             || SettingsController.waveformMode === 1
                     label: SettingsController.waveformMode === 0
                            ? qsTr("底色 / 进度色")
-                           : SettingsController.waveformMode === 3
-                             ? qsTr("低频 / 中频 / 高频")
-                             : qsTr("底色 / RGB 渐变")
+                           : qsTr("底色 / RGB 渐变")
                     RowLayout {
                         anchors.fill: parent
                         spacing: Theme.spacingSm
@@ -1764,33 +1759,74 @@ Item {
                         ColorField { objectName: "waveformRgbStartColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbStartColor; targetProperty: "waveformRgbStartColor" }
                         ColorField { objectName: "waveformRgbMiddleColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbMiddleColor; targetProperty: "waveformRgbMiddleColor" }
                         ColorField { objectName: "waveformRgbEndColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbEndColor; targetProperty: "waveformRgbEndColor" }
-                        ColorField { objectName: "waveformFrequencyLowColorField"; visible: SettingsController.waveformMode === 3; colorValue: SettingsController.waveformFrequencyLowColor; targetProperty: "waveformFrequencyLowColor" }
-                        ColorField { objectName: "waveformFrequencyMidColorField"; visible: SettingsController.waveformMode === 3; colorValue: SettingsController.waveformFrequencyMidColor; targetProperty: "waveformFrequencyMidColor" }
-                        ColorField { objectName: "waveformFrequencyHighColorField"; visible: SettingsController.waveformMode === 3; colorValue: SettingsController.waveformFrequencyHighColor; targetProperty: "waveformFrequencyHighColor" }
                     }
                 }
 
                 SettingRow {
                     visible: SettingsController.waveformMode === 3
-                    label: qsTr("频彩强度")
-                    SettingStepper {
-                        objectName: "waveformFrequencyStrengthControl"
-                        anchors.verticalCenter: parent.verticalCenter
-                        value: SettingsController.waveformFrequencyStrength
-                        minimumValue: 0.0
-                        maximumValue: 1.0
-                        stepSize: 0.05
-                        decimals: 2
-                        onValueEdited: nextValue =>
-                            SettingsController.waveformFrequencyStrength = nextValue
+                    label: qsTr("频彩调色板")
+                    Layout.preferredHeight: 74
+
+                    GridLayout {
+                        anchors.fill: parent
+                        columns: 4
+                        columnSpacing: 4
+                        rowSpacing: 4
+
+                        Repeater {
+                            model: 8
+                            delegate: ColorField {
+                                required property int index
+                                objectName: "spectralPaletteColor" + index
+                                Layout.fillWidth: true
+                                colorValue: root.frequencyWaveformSettings.palette[index]
+                                targetProperty: ""
+                                onColorEdited: function(value) {
+                                    root.frequencyWaveformSettings.setPaletteColor(index, value)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                SettingRow {
+                    visible: SettingsController.waveformMode === 3
+                    label: qsTr("播放进度明暗差")
+
+                    RowLayout {
+                        anchors.fill: parent
+                        spacing: Theme.spacingSm
+
+                        Slider {
+                            id: spectralProgressDifferenceSlider
+                            objectName: "spectralProgressDifferenceSlider"
+                            Layout.fillWidth: true
+                            from: 0
+                            to: 40
+                            stepSize: 1
+                            value: Math.round((1.0
+                                - root.frequencyWaveformSettings.unplayedOpacity) * 100)
+                            onMoved: root.frequencyWaveformSettings.unplayedOpacity
+                                = 1.0 - value / 100.0
+                            Accessible.name: qsTr("播放进度明暗差")
+                        }
+
+                        Text {
+                            Layout.preferredWidth: 38
+                            text: Math.round(spectralProgressDifferenceSlider.value) + "%"
+                            color: Theme.secondaryText
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: 12
+                            horizontalAlignment: Text.AlignRight
+                        }
                     }
                 }
 
                 Button {
-                    objectName: "waveformFrequencyResetButton"
+                    objectName: "spectralPaletteResetButton"
                     visible: SettingsController.waveformMode === 3
-                    text: qsTr("恢复默认颜色")
-                    onClicked: SettingsController.resetWaveformFrequencyColors()
+                    text: qsTr("恢复默认频彩")
+                    onClicked: root.frequencyWaveformSettings.resetToDefault()
                 }
 
                 SettingRow {

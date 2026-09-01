@@ -3,6 +3,7 @@
 #include <QByteArray>
 #include <QColor>
 #include <QQuickItem>
+#include <QVariantList>
 
 class QSGNode;
 
@@ -11,6 +12,10 @@ class TrackWaveformThumbnailItem : public QQuickItem {
     Q_PROPERTY(QByteArray peaks READ peaks WRITE setPeaks NOTIFY peaksChanged)
     Q_PROPERTY(QColor waveformColor READ waveformColor WRITE setWaveformColor
                    NOTIFY waveformColorChanged)
+    Q_PROPERTY(QByteArray spectralIndex READ spectralIndex WRITE setSpectralIndex
+                   NOTIFY spectralIndexChanged)
+    Q_PROPERTY(QVariantList spectralPalette READ spectralPalette
+                   WRITE setSpectralPalette NOTIFY spectralPaletteChanged)
 
 public:
     static constexpr int kPeakCount = 2048;
@@ -22,10 +27,16 @@ public:
     void setPeaks(const QByteArray& peaks);
     QColor waveformColor() const;
     void setWaveformColor(const QColor& color);
+    QByteArray spectralIndex() const;
+    void setSpectralIndex(const QByteArray& spectralIndex);
+    QVariantList spectralPalette() const;
+    void setSpectralPalette(const QVariantList& palette);
 
 signals:
     void peaksChanged();
     void waveformColorChanged();
+    void spectralIndexChanged();
+    void spectralPaletteChanged();
 
 protected:
     void geometryChange(const QRectF& newGeometry,
@@ -40,6 +51,9 @@ private:
 
     QByteArray peaks_;
     QColor waveformColor_ = Qt::white;
+    QByteArray spectralIndex_;
+    QVariantList spectralPalette_;
+    QVector<QColor> spectralColors_;
     bool geometryDirty_ = true;
     bool colorDirty_ = true;
 };

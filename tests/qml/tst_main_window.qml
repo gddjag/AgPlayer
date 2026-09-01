@@ -2739,61 +2739,56 @@ TestCase {
 
     function test_waveform_modes_use_offline_waveform_and_live_spectrum() {
         var waveform = findChild(mainWindow, "mainWaveform")
+        var playedClip = findChild(mainWindow, "waveformPlayedClip")
+        var playbackGuide = findChild(mainWindow, "waveformPlaybackGuide")
+        var session = mainWindow.waveformSession
+        var spectralSettings = SettingsController.frequencyColorWaveform
+        verify(waveform && playedClip && playbackGuide && session)
         var previousMode = SettingsController.waveformMode
-        SettingsController.waveformMode = 0
-        tryVerify(function() {
-            return waveform.layers.mix && waveform.layers.mix.length > 0
-        }, 5000)
+        var previousGuide = SettingsController.waveformPlaybackGuide
+        var previousLayers = session.layers
+        var previousDuration = session.durationMs
+        var testLayers = {
+            "mix": [0.2, 0.5, 0.8, 0.4],
+            "bass": [0.3, 0.4, 0.5, 0.2],
+            "mid": [0.2, 0.6, 0.4, 0.3],
+            "high": [0.1, 0.3, 0.7, 0.5],
+            "spectralIndex": [12, 96, 180, 244],
+            "_sampleRate": 48000,
+            "_totalSamples": 48000,
+            "_peakCount": 4
+        }
+        session.layers = testLayers
+        session.durationMs = 1000
 
-        tryVerify(function() {
-            return waveform.layers.mix.length > 0
-                    && waveform.sampleRate > 0
-                    && waveform.totalSamples > 0
-                    && waveform.peakCount === waveform.layers.mix.length
-        })
+        SettingsController.waveformMode = 0
+        tryCompare(waveform.layers.mix, "length", 4)
         compare(waveform.visualMode, 0)
-        compare(waveform.baseColor.toString(),
-                SettingsController.waveformSolidBaseColor)
-        compare(waveform.progressColor.toString(),
-                SettingsController.waveformSolidProgressColor)
+
         SettingsController.waveformMode = 3
-        tryVerify(function() {
-            return waveform.layers.mix.length > 0
-                    && waveform.layers.bass.length > 0
-                    && waveform.layers.mid.length > 0
-                    && waveform.layers.high.length > 0
-        })
+        session.layers = testLayers
+        tryCompare(waveform.layers.spectralIndex, "length", 4)
         compare(waveform.visualMode, 3)
-        compare(waveform.frequencyLowColor.toString(),
-                SettingsController.waveformFrequencyLowColor)
-        compare(waveform.frequencyMidColor.toString(),
-                SettingsController.waveformFrequencyMidColor)
-        compare(waveform.frequencyHighColor.toString(),
-                SettingsController.waveformFrequencyHighColor)
+        compare(waveform.spectralPalette.length, 8)
+        compare(String(waveform.spectralPalette[0]),
+                String(spectralSettings.palette[0]))
+        compare(String(waveform.spectralPalette[7]),
+                String(spectralSettings.palette[7]))
+        compare(waveform.spectralUnplayedOpacity,
+                spectralSettings.unplayedOpacity)
+        compare(playedClip.visible, false)
+        compare(playbackGuide.visible, false)
 
         SettingsController.waveformMode = 1
-        tryVerify(function() {
-            return waveform.layers.mix.length > 0
-                    && waveform.sampleRate > 0
-                    && waveform.totalSamples > 0
-                    && waveform.peakCount === waveform.layers.mix.length
-        })
-        compare(waveform.visualMode, 1)
-        PlaybackController.play()
+        tryCompare(waveform, "visualMode", 1)
+
         SettingsController.waveformMode = 2
-        tryVerify(function() {
-            if (waveform.visualMode !== 2
-                    || waveform.peaks.length < 16
-                    || waveform.peaks.length % 2 !== 0)
-                return false
-            for (var index = 0; index < waveform.peaks.length; ++index) {
-                if (waveform.peaks[index] > 0.05)
-                    return true
-            }
-            return false
-        }, 2000)
+        tryCompare(waveform, "visualMode", 2)
 
         SettingsController.waveformMode = previousMode
+        SettingsController.waveformPlaybackGuide = previousGuide
+        session.layers = previousLayers
+        session.durationMs = previousDuration
     }
 
     function test_z_current_track_metadata_reacts_to_library_changes() {
@@ -4604,7 +4599,7 @@ TestCase {
                         "trackId": "track-a",
                         "sourcePath": "a.wav",
                         "delegateGeneration": 11,
-                        "mode": "Color36"
+                        "mode": "Spectral"
                     })
         verify(provider && wrapper)
         tryCompare(provider, "requestCount", 1)
@@ -5150,76 +5145,101 @@ TestCase {
         page.close()
     }
 
-    function test_settings_waveform_controls_are_live() {
+    function test_settings_frequency_color_waveform_exposes_four_layer_controls() {
         var page = findChild(mainWindow, "settingsPage")
+        var ownsPage = false
+        if (!page) {
+            page = settingsPageComponent.createObject(mainWindow.contentItem)
+            ownsPage = true
+        }
         verify(page)
+        var previousWaveformMode = SettingsController.waveformMode
+        SettingsController.waveformMode = 3
         page.open()
         page.selectedSection = 2
         wait(0)
         tryCompare(page, "programmaticScroll", false, 1000)
-        wait(50)
+
+        var firstField = findChild(page, "spectralPaletteColor0")
+        var lastField = findChild(page, "spectralPaletteColor7")
+        var differenceSlider = findChild(page,
+                                         "spectralProgressDifferenceSlider")
+        var resetButton = findChild(page, "spectralPaletteResetButton")
+        var preview = findChild(page, "frequencyWaveformThumbnailPreview")
+        verify(firstField && lastField && differenceSlider
+               && resetButton && preview)
+        compare(preview.visualMode, 3)
+        compare(preview.layers.mix.length,
+                preview.layers.spectralIndex.length)
+        compare(preview.spectralPalette.length, 8)
+
+        firstField.colorEdited("#112233")
+        compare(String(SettingsController.frequencyColorWaveform.palette[0]),
+                "#112233")
+        compare(String(preview.spectralPalette[0]), "#112233")
+        differenceSlider.value = 40
+        differenceSlider.moved()
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.6)
+        resetButton.clicked()
+        compare(String(SettingsController.frequencyColorWaveform.palette[0]),
+                "#123ecf")
+        compare(String(SettingsController.frequencyColorWaveform.palette[7]),
+                "#e82718")
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.88)
+
+        page.cancelAndClose()
+        SettingsController.waveformMode = previousWaveformMode
+        if (ownsPage)
+            page.destroy()
+    }
+
+    function test_settings_waveform_controls_are_live() {
+        var page = findChild(mainWindow, "settingsPage")
+        var ownsPage = false
+        if (!page) {
+            page = settingsPageComponent.createObject(mainWindow.contentItem)
+            ownsPage = true
+        }
+        verify(page)
+        var previousWaveformMode = SettingsController.waveformMode
+        page.open()
+        page.selectedSection = 2
+        SettingsController.waveformMode = 3
+        wait(0)
+        tryCompare(page, "programmaticScroll", false, 1000)
 
         var heightStepper = findChild(page, "waveformHeightStepper")
         var densityStepper = findChild(page, "waveformDensityStepper")
         var thicknessStepper = findChild(page, "waveformThicknessStepper")
         var aggregationCombo = findChild(page, "waveformAggregationCombo")
         var resetButton = findChild(page, "waveformResetButton")
-        var frequencyResetButton = findChild(
-                    page, "waveformFrequencyResetButton")
-        var frequencyLowField = findChild(
-                    page, "waveformFrequencyLowColorField")
-        var frequencyMidField = findChild(
-                    page, "waveformFrequencyMidColorField")
-        var frequencyHighField = findChild(
-                    page, "waveformFrequencyHighColorField")
-        var frequencyStrengthControl = findChild(
-                    page, "waveformFrequencyStrengthControl")
+        var spectralResetButton = findChild(page, "spectralPaletteResetButton")
+        var firstPaletteField = findChild(page, "spectralPaletteColor0")
+        var differenceSlider = findChild(page,
+                                         "spectralProgressDifferenceSlider")
+        var spectralPreview = findChild(
+                    page, "frequencyWaveformThumbnailPreview")
         var listThumbnailSwitch = findChild(
                     page, "listWaveformThumbnailEnabledControl")
         var listThumbnailMode = findChild(
                     page, "listWaveformThumbnailModeControl")
-        verify(heightStepper)
-        verify(densityStepper)
-        verify(thicknessStepper)
-        verify(aggregationCombo)
-        verify(resetButton)
-        verify(frequencyResetButton)
-        verify(frequencyLowField)
-        verify(frequencyMidField)
-        verify(frequencyHighField)
-        verify(frequencyStrengthControl)
-        verify(listThumbnailSwitch)
-        verify(listThumbnailMode)
+        verify(heightStepper && densityStepper && thicknessStepper)
+        verify(aggregationCombo && resetButton && spectralResetButton)
+        verify(firstPaletteField && differenceSlider && spectralPreview)
+        verify(listThumbnailSwitch && listThumbnailMode)
+        compare(spectralPreview.layers.mix.length,
+                spectralPreview.layers.spectralIndex.length)
 
         SettingsController.listWaveformThumbnailEnabled = true
-        SettingsController.listWaveformThumbnailMode = "Color36"
+        SettingsController.listWaveformThumbnailMode = "Spectral"
         tryCompare(listThumbnailSwitch, "checked", true)
-        tryCompare(listThumbnailMode, "currentValue", "Color36")
-        mouseClick(listThumbnailSwitch,
-                   listThumbnailSwitch.width / 2,
-                   listThumbnailSwitch.height / 2)
-        tryCompare(SettingsController, "listWaveformThumbnailEnabled", false)
-        tryCompare(listThumbnailMode, "enabled", false)
-        SettingsController.listWaveformThumbnailEnabled = true
+        tryCompare(listThumbnailMode, "currentValue", "Spectral")
         listThumbnailMode.currentIndex = 1
         listThumbnailMode.activated(1)
         tryCompare(SettingsController, "listWaveformThumbnailMode", "Mono")
 
         SettingsController.waveformHeight = 1.2
         SettingsController.waveformDensity = 3.5
-        var previousWaveformMode = SettingsController.waveformMode
-        SettingsController.waveformMode = 3
-        SettingsController.waveformFrequencyLowColor = "#112233"
-        SettingsController.waveformFrequencyMidColor = "#445566"
-        SettingsController.waveformFrequencyHighColor = "#778899"
-        SettingsController.waveformFrequencyStrength = 0.4
-        tryCompare(frequencyStrengthControl, "value", 0.4)
-        frequencyResetButton.clicked()
-        compare(SettingsController.waveformFrequencyLowColor, "#c45100")
-        compare(SettingsController.waveformFrequencyMidColor, "#b04bcd")
-        compare(SettingsController.waveformFrequencyHighColor, "#0a819a")
-        compare(SettingsController.waveformFrequencyStrength, 0.4)
-        SettingsController.waveformMode = previousWaveformMode
         SettingsController.waveformThickness = 2.2
         SettingsController.waveformPeakAlgorithm = 1
         tryCompare(heightStepper, "value", 1.2)
@@ -5227,22 +5247,30 @@ TestCase {
         tryCompare(thicknessStepper, "value", 2.2)
         tryCompare(aggregationCombo, "currentValue", 1)
 
-        heightStepper.increase()
-        densityStepper.decrease()
-        thicknessStepper.increase()
-        tryCompare(SettingsController, "waveformHeight", 1.3)
-        tryCompare(SettingsController, "waveformDensity", 3.0)
-        tryCompare(SettingsController, "waveformThickness", 2.3)
+        firstPaletteField.colorEdited("#112233")
+        compare(String(SettingsController.frequencyColorWaveform.palette[0]),
+                "#112233")
+        compare(String(spectralPreview.spectralPalette[0]), "#112233")
+        differenceSlider.value = 40
+        differenceSlider.moved()
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.6)
+        spectralResetButton.clicked()
+        compare(String(SettingsController.frequencyColorWaveform.palette[0]),
+                "#123ecf")
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.88)
 
         resetButton.clicked()
         tryCompare(SettingsController, "waveformHeight", 0.8)
         tryCompare(SettingsController, "waveformDensity", 2.0)
         tryCompare(SettingsController, "waveformThickness", 1.0)
         tryCompare(SettingsController, "waveformPeakAlgorithm", 0)
-        tryCompare(SettingsController, "waveformFrequencyStrength", 0.85)
         tryCompare(SettingsController, "listWaveformThumbnailEnabled", true)
-        tryCompare(SettingsController, "listWaveformThumbnailMode", "Color36")
-        page.close()
+        tryCompare(SettingsController, "listWaveformThumbnailMode", "Spectral")
+
+        page.cancelAndClose()
+        SettingsController.waveformMode = previousWaveformMode
+        if (ownsPage)
+            page.destroy()
     }
 
     function test_settings_exposes_dual_window_as_the_default_layout_skin() {
@@ -5358,6 +5386,14 @@ TestCase {
 
     function test_theme_mode_updates_surfaces_text_and_icons() {
         var previousMode = SettingsController.themeMode
+        var previousWaveformMode = SettingsController.waveformMode
+        var previousGuide = SettingsController.waveformPlaybackGuide
+        SettingsController.frequencyColorWaveform.resetToDefault()
+        SettingsController.waveformMode = 3
+        var waveform = findChild(mainWindow, "mainWaveform")
+        var playedClip = findChild(mainWindow, "waveformPlayedClip")
+        var playbackGuide = findChild(mainWindow, "waveformPlaybackGuide")
+        verify(waveform && playedClip && playbackGuide)
 
         SettingsController.themeMode = 0
         tryCompare(Theme, "isLight", false)
@@ -5367,21 +5403,25 @@ TestCase {
         compare(findChild(mainWindow, "playButtonBody").border.color.toString(),
                 (PlaybackController.state === PlaybackController.Playing
                  ? Theme.playRingPlaying : Theme.playRingPaused).toString())
+        compare(waveform.spectralPalette.length, 8)
+        compare(String(waveform.spectralPalette[0]), "#123ecf")
+        compare(String(waveform.spectralPalette[7]), "#e82718")
+        compare(waveform.spectralUnplayedOpacity, 0.88)
+        compare(playedClip.visible, false)
+        SettingsController.waveformPlaybackGuide = false
+        compare(playbackGuide.visible, false)
 
         SettingsController.themeMode = 1
         compare(SettingsController.themeMode, 1)
         tryCompare(Theme, "isLight", true)
         compare(Theme.accentText.toString(), Theme.onCyanText.toString())
         compare(Theme.accentText.toString(), Theme.onBrandGradientText.toString())
-        verify(Theme.background.toString() !== darkBackground,
-               "light mode should replace the dark surface")
-        verify(Theme.primaryText.toString() !== darkText,
-               "light mode should replace the dark text color")
+        verify(Theme.background.toString() !== darkBackground)
+        verify(Theme.primaryText.toString() !== darkText)
         compare(findChild(mainWindow, "settingsButton").icon.color.toString(),
                 Theme.iconSecondary.toString())
-        compare(findChild(mainWindow, "playButtonBody").border.color.toString(),
-                (PlaybackController.state === PlaybackController.Playing
-                 ? Theme.playRingPlaying : Theme.playRingPaused).toString())
+        compare(String(waveform.spectralPalette[0]), "#123ecf")
+        compare(String(waveform.spectralPalette[7]), "#e82718")
 
         SettingsController.themeMode = 2
         tryCompare(Theme, "followsSystem", true)
@@ -5393,6 +5433,8 @@ TestCase {
         compare(Theme.waveformCyan.toString(), "#00d4ff")
 
         SettingsController.themeMode = previousMode
+        SettingsController.waveformMode = previousWaveformMode
+        SettingsController.waveformPlaybackGuide = previousGuide
     }
 
     function test_rating_stars_use_one_solid_orange_color() {

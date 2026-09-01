@@ -60,35 +60,11 @@ Item {
         viewportSpanMs > 0
         ? (waveformVisibleEndMs - waveformVisibleStartMs) / viewportSpanMs
         : 1
-    // Keep metadata as an explicit cache. Calling the model method from a
-    // declarative binding can feed back through role notifications and create a
-    // `currentTrack` binding loop in compiled QML.
-    property var currentTrack: null
-    readonly property var metadataBadges: {
-        var track = currentTrack
-        return [
-            track && track.format
-                ? String(track.format).toUpperCase() : "—",
-            track && Number(track.bitDepth) > 0
-                ? Number(track.bitDepth) + "-bit" : "—",
-            track && Number(track.sampleRate) > 0
-                ? (Number(track.sampleRate) / 1000).toFixed(
-                      Number(track.sampleRate) % 1000 === 0 ? 0 : 1)
-                      + " kHz" : "—",
-            track && Number(track.bitRate) > 0
-                ? Math.round(Number(track.bitRate) / 1000) + " kbps" : "—",
-            sourceBpmValue > 0
-                ? sourceBpmValue.toFixed(2) + " BPM" : "—",
-            track && Number(track.fileSize) > 0
-                ? (Number(track.fileSize) / 1048576).toFixed(1) + " MB" : "—"
-        ]
-    }
-    readonly property real sourceBpmValue:
-        playback && Number(playback.sourceBpm) > 0
-        ? Number(playback.sourceBpm)
-        : currentTrack && Number(currentTrack.bpm) > 0
-          ? Number(currentTrack.bpm) : 0
-
+    readonly property bool rollingLightTheme:
+        SettingsController.themeMode === 1
+        || (SettingsController.themeMode === 2 && Theme.isLight)
+    readonly property var frequencyWaveformSettings:
+        SettingsController.frequencyColorWaveform
     signal openSettingsRequested()
     signal openEqualizerRequested()
 
@@ -561,15 +537,9 @@ Item {
                     cursorPosition: -1
                     pointerInteractionEnabled: false
                     visualMode: 3
-                    baseColor: Theme.textSecondary
-                    frequencyLowColor:
-                        SettingsController.waveformFrequencyLowColor
-                    frequencyMidColor:
-                        SettingsController.waveformFrequencyMidColor
-                    frequencyHighColor:
-                        SettingsController.waveformFrequencyHighColor
-                    frequencyStrength:
-                        SettingsController.waveformFrequencyStrength
+                    baseColor: SettingsController.waveformRgbBaseColor
+                    spectralPalette: root.frequencyWaveformSettings.palette
+                    spectralUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
                     amplitudeScale: SettingsController.waveformHeight
                     density: SettingsController.waveformDensity
                     lineWidth: SettingsController.waveformThickness
@@ -648,15 +618,9 @@ Item {
                 cursorPosition: -1
                 pointerInteractionEnabled: false
                 visualMode: 3
-                baseColor: Theme.textSecondary
-                frequencyLowColor:
-                    SettingsController.waveformFrequencyLowColor
-                frequencyMidColor:
-                    SettingsController.waveformFrequencyMidColor
-                frequencyHighColor:
-                    SettingsController.waveformFrequencyHighColor
-                frequencyStrength:
-                    SettingsController.waveformFrequencyStrength
+                baseColor: SettingsController.waveformRgbBaseColor
+                spectralPalette: root.frequencyWaveformSettings.palette
+                spectralUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
                 amplitudeScale: Math.max(
                                     0.9,
                                     SettingsController.waveformHeight * 1.25)

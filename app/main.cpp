@@ -820,6 +820,13 @@ int main(int argc, char* argv[])
             &waveformProvider, &WaveformProvider::waveformCacheReady,
             &trackWaveformThumbnailProvider,
             &TrackWaveformThumbnailProvider::invalidateSourceCache);
+        QObject::connect(
+            &trackWaveformThumbnailProvider,
+            &TrackWaveformThumbnailProvider::analysisRequested,
+            &waveformProvider,
+            [&waveformProvider](const QString& sourcePath) {
+                waveformProvider.prefetchTracks({sourcePath});
+            });
         QObject::connect(&waveformProvider, &WaveformProvider::waveformReady,
                          &playback,
                          [&playback, &library, &settings](

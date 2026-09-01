@@ -18,6 +18,7 @@ struct WaveformCacheData final {
     std::vector<float> bass;
     std::vector<float> mid;
     std::vector<float> high;
+    std::vector<std::uint8_t> spectral_index;
     double bpm = 0.0;
     std::uint64_t duration_ms = 0U;
     std::uint64_t total_samples = 0U;
@@ -27,9 +28,11 @@ struct WaveformCacheData final {
 
 class WaveformCache final {
 public:
-    // Version-independent cache key based on source path metadata.
-    // The cache file's version field distinguishes v1 from v2 contents.
+    // Current cache key based on source path metadata and analysis schema.
     [[nodiscard]] static std::string key_for(
+        const std::filesystem::path& source_path);
+    // Compatibility lookup for caches written by the v2 analysis schema.
+    [[nodiscard]] static std::string legacy_v2_key_for(
         const std::filesystem::path& source_path);
 
     // v1 compatibility: read/write single-layer (mix) caches.
@@ -48,6 +51,17 @@ public:
         const std::filesystem::path& source_path,
         WaveformCacheData& data) noexcept;
     [[nodiscard]] static bool save_v2(
+        const std::filesystem::path& cache_path,
+        const std::filesystem::path& source_path,
+        const WaveformCacheData& data) noexcept;
+
+    // v3: v2 payload plus one-byte-per-point SpectralIndex. Empty spectral
+    // data is valid for plain/RGB waveform caches.
+    [[nodiscard]] static bool load_v3(
+        const std::filesystem::path& cache_path,
+        const std::filesystem::path& source_path,
+        WaveformCacheData& data) noexcept;
+    [[nodiscard]] static bool save_v3(
         const std::filesystem::path& cache_path,
         const std::filesystem::path& source_path,
         const WaveformCacheData& data) noexcept;

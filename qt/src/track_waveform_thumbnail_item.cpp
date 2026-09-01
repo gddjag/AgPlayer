@@ -1,6 +1,5 @@
 #include "track_waveform_thumbnail_item.hpp"
 
-#include <QSGFlatColorMaterial>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
 #include <QSGVertexColorMaterial>
@@ -14,7 +13,7 @@ namespace {
 class TrackWaveformThumbnailNode final : public QSGGeometryNode {
 public:
     TrackWaveformThumbnailNode()
-        : geometry(QSGGeometry::defaultAttributes_Point2D(),
+        : geometry(QSGGeometry::defaultAttributes_ColoredPoint2D(),
                    0)
     {
         geometry.setDrawingMode(QSGGeometry::DrawTriangleStrip);
@@ -22,6 +21,7 @@ public:
         geometry.setVertexDataPattern(QSGGeometry::DynamicPattern);
         setGeometry(&geometry);
         setFlag(OwnsGeometry, false);
+        material.setFlag(QSGMaterial::Blending, true);
         setMaterial(&material);
         setFlag(OwnsMaterial, false);
     }
@@ -50,15 +50,8 @@ public:
         lowerCoverage = nullptr;
     }
 
-    void setWaveformColor(const QColor& color)
-    {
-        material.setColor(color);
-        recolorCoverage(upperCoverage, color, true);
-        recolorCoverage(lowerCoverage, color, false);
-    }
-
     QSGGeometry geometry;
-    QSGFlatColorMaterial material;
+    QSGVertexColorMaterial material;
     QSGGeometryNode* upperCoverage = nullptr;
     QSGGeometryNode* lowerCoverage = nullptr;
 
@@ -79,25 +72,6 @@ private:
         return node;
     }
 
-    static void recolorCoverage(QSGGeometryNode* node, const QColor& color,
-                                const bool transparentFirst)
-    {
-        if (node == nullptr) {
-            return;
-        }
-        QSGGeometry* coverageGeometry = node->geometry();
-        auto* vertices = coverageGeometry->vertexDataAsColoredPoint2D();
-        for (int index = 0; index < coverageGeometry->vertexCount(); ++index) {
-            vertices[index].r = static_cast<uchar>(color.red());
-            vertices[index].g = static_cast<uchar>(color.green());
-            vertices[index].b = static_cast<uchar>(color.blue());
-            const bool transparent = (index % 2 == 0)
-                ? transparentFirst : !transparentFirst;
-            vertices[index].a = transparent
-                ? 0U : static_cast<uchar>(color.alpha());
-        }
-        node->markDirty(QSGNode::DirtyGeometry);
-    }
 };
 
 } // namespace
@@ -139,6 +113,47 @@ void TrackWaveformThumbnailItem::setWaveformColor(const QColor& color)
     emit waveformColorChanged();
 }
 
+QByteArray TrackWaveformThumbnailItem::spectralIndex() const
+{
+    return spectralIndex_;
+}
+
+void TrackWaveformThumbnailItem::setSpectralIndex(const QByteArray& spectralIndex)
+{
+    if (spectralIndex_ == spectralIndex) {
+        return;
+    }
+    spectralIndex_ = spectralIndex;
+    markGeometryDirty();
+    emit spectralIndexChanged();
+}
+
+QVariantList TrackWaveformThumbnailItem::spectralPalette() const
+{
+    return spectralPalette_;
+}
+
+void TrackWaveformThumbnailItem::setSpectralPalette(const QVariantList& palette)
+{
+    QVector<QColor> colors;
+    QVariantList normalized;
+    for (const QVariant& value : palette) {
+        const QColor color(value.toString());
+        if (!color.isValid()) {
+            return;
+        }
+        colors.append(color);
+        normalized.append(color.name(QColor::HexRgb));
+    }
+    if (colors.size() < 2 || normalized == spectralPalette_) {
+        return;
+    }
+    spectralPalette_ = normalized;
+    spectralColors_ = colors;
+    markColorDirty();
+    emit spectralPaletteChanged();
+}
+
 void TrackWaveformThumbnailItem::geometryChange(const QRectF& newGeometry,
                                                 const QRectF& oldGeometry)
 {
@@ -167,10 +182,11 @@ QSGNode* TrackWaveformThumbnailItem::updatePaintNode(
         rebuildGeometry(node);
         node->markDirty(QSGNode::DirtyGeometry);
         geometryDirty_ = false;
+        colorDirty_ = false;
     }
     if (colorDirty_) {
-        node->setWaveformColor(waveformColor_);
-        node->markDirty(QSGNode::DirtyMaterial);
+        rebuildGeometry(node);
+        node->markDirty(QSGNode::DirtyGeometry);
         colorDirty_ = false;
     }
     return node;
@@ -203,7 +219,7 @@ void TrackWaveformThumbnailItem::rebuildGeometry(QSGNode* sceneNode)
     }
     geometry->setDrawingMode(QSGGeometry::DrawTriangleStrip);
 
-    auto* vertices = geometry->vertexDataAsPoint2D();
+    auto* vertices = geometry->vertexDataAsColoredPoint2D();
     const auto byteAt = [this](const int bucket, const int endpoint) {
         return static_cast<unsigned char>(
             peaks_.at(bucket * 2 + endpoint));
@@ -215,7 +231,39 @@ void TrackWaveformThumbnailItem::rebuildGeometry(QSGNode* sceneNode)
     const auto yForByte = [this](const qreal value) {
         return height() * value / 255.0;
     };
-
+    const auto colorForIndex = [this](const double normalized) {
+        if (spectralIndex_.size() != kPeakCount || spectralColors_.size() < 2) {
+            return waveformColor_;
+        }
+        const double scaled = std::clamp(normalized, 0.0, 1.0)
+            * static_cast<double>(spectralColors_.size() - 1);
+        const int left = static_cast<int>(std::floor(scaled));
+        const int right = std::min(
+            left + 1, static_cast<int>(spectralColors_.size()) - 1);
+        const double fraction = scaled - left;
+        const auto mix = [fraction](int from, int to) {
+            return static_cast<int>(std::lround(from + (to - from) * fraction));
+        };
+        return QColor(mix(spectralColors_[left].red(), spectralColors_[right].red()),
+                      mix(spectralColors_[left].green(), spectralColors_[right].green()),
+                      mix(spectralColors_[left].blue(), spectralColors_[right].blue()),
+                      waveformColor_.alpha());
+    };
+    const auto spectralForColumn = [this, pixelColumns](const int column) {
+        if (spectralIndex_.size() != kPeakCount) {
+            return 0.0;
+        }
+        const double position = static_cast<double>(column)
+            * static_cast<double>(kPeakCount - 1)
+            / static_cast<double>(pixelColumns - 1);
+        const int left = static_cast<int>(std::floor(position));
+        const int right = std::min(left + 1, kPeakCount - 1);
+        const double fraction = position - left;
+        const auto byte = [this](int index) {
+            return static_cast<unsigned char>(spectralIndex_.at(index));
+        };
+        return (byte(left) + (byte(right) - byte(left)) * fraction) / 255.0;
+    };
     if (!sampledPolyline) {
         node->clearCoverageNodes();
         for (int column = 0; column < pixelColumns; ++column) {
@@ -232,10 +280,13 @@ void TrackWaveformThumbnailItem::rebuildGeometry(QSGNode* sceneNode)
                 maximum = std::max(maximum, byteAt(bucket, 1));
             }
             const float x = static_cast<float>(xForColumn(column));
+            const QColor color = colorForIndex(spectralForColumn(column));
             vertices[column * 2].set(
-                x, static_cast<float>(yForByte(minimum)));
+                x, static_cast<float>(yForByte(minimum)),
+                color.red(), color.green(), color.blue(), color.alpha());
             vertices[column * 2 + 1].set(
-                x, static_cast<float>(yForByte(maximum)));
+                x, static_cast<float>(yForByte(maximum)),
+                color.red(), color.green(), color.blue(), color.alpha());
         }
         return;
     }
@@ -264,17 +315,20 @@ void TrackWaveformThumbnailItem::rebuildGeometry(QSGNode* sceneNode)
         upperCoverage->vertexDataAsColoredPoint2D();
     auto* lowerCoverageVertices =
         lowerCoverage->vertexDataAsColoredPoint2D();
-    const uchar red = static_cast<uchar>(waveformColor_.red());
-    const uchar green = static_cast<uchar>(waveformColor_.green());
-    const uchar blue = static_cast<uchar>(waveformColor_.blue());
-    const uchar alpha = static_cast<uchar>(waveformColor_.alpha());
     const qreal coverageWidth = 1.0 / deviceScale;
     for (int column = 0; column < pixelColumns; ++column) {
         const float x = static_cast<float>(xForColumn(column));
         const qreal upperY = yForByte(interpolatedEndpoint(column, 0));
         const qreal lowerY = yForByte(interpolatedEndpoint(column, 1));
-        vertices[column * 2].set(x, static_cast<float>(upperY));
-        vertices[column * 2 + 1].set(x, static_cast<float>(lowerY));
+        const QColor color = colorForIndex(spectralForColumn(column));
+        const uchar red = static_cast<uchar>(color.red());
+        const uchar green = static_cast<uchar>(color.green());
+        const uchar blue = static_cast<uchar>(color.blue());
+        const uchar alpha = static_cast<uchar>(color.alpha());
+        vertices[column * 2].set(x, static_cast<float>(upperY),
+                                 red, green, blue, alpha);
+        vertices[column * 2 + 1].set(x, static_cast<float>(lowerY),
+                                     red, green, blue, alpha);
         upperCoverageVertices[column * 2].set(
             x, static_cast<float>(std::max<qreal>(0.0,
                                                   upperY - coverageWidth)),

@@ -8,10 +8,12 @@
 #include <QScreen>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
+#include <QSGMaterial>
 #include <QSignalSpy>
 #include <QTest>
 #include <QVariantMap>
 
+#include <array>
 #include <cmath>
 #include <limits>
 
@@ -34,7 +36,8 @@ class WaveformItemTest final : public QObject {
 private slots:
     void mapsPointerToClampedTime();
     void buildsCenteredFiniteNormalizedLinePairs();
-    void usesReferenceGradientAndPlayedOpacity();
+    void spectralModeUsesAmplitudeGeometryAndCentroidPalette();
+    void spectralPaletteChangeDoesNotReplaceGeometryNode();
     void reusesNodeAndUpdatesGeometryAfterResize();
     void clearsOldNodeForEmptyOrZeroSizedContent();
     void hoverUpdatesPreviewWithoutSeeking();
@@ -46,12 +49,10 @@ private slots:
     void subPixelWidthDoesNotCrash();
     void setLayersPopulatesLayerProperties();
     void nonFrequencyModesIgnoreFrequencyLayers();
-    void frequencyModeFallsBackToBandEnvelopeWhenMixMissing();
     void densityAndLineWidthAffectRenderedGeometry();
     void waveformStrokesStayInsideContainerEdges();
     void onePixelWaveformLeavesTheCanvasEdgeClear();
     void visualModesUseConfiguredProgressAndBaseColors();
-    void frequencyColorModeUsesOneMixEnvelopeAndWeightedBandColor();
     void spectrumUsesBottomBaselineAndCenterEnvelope();
     void spectrumUpsamplesSparseInputToDenseBars();
     void spectrumContractUsesFixedBarsWithPeakCaps();
@@ -83,13 +84,15 @@ QVariantList peaks(std::initializer_list<double> values)
 QVariantMap makeLayers(const QVariantList& mix = {},
                        const QVariantList& bass = {},
                        const QVariantList& mid = {},
-                       const QVariantList& high = {})
+                       const QVariantList& high = {},
+                       const QVariantList& spectralIndex = {})
 {
     QVariantMap map;
     map[QStringLiteral("mix")] = mix;
     map[QStringLiteral("bass")] = bass;
     map[QStringLiteral("mid")] = mid;
     map[QStringLiteral("high")] = high;
+    map[QStringLiteral("spectralIndex")] = spectralIndex;
     return map;
 }
 
@@ -238,43 +241,76 @@ void WaveformItemTest::visualModesUseConfiguredProgressAndBaseColors()
     delete node;
 }
 
-void WaveformItemTest::frequencyColorModeUsesOneMixEnvelopeAndWeightedBandColor()
+void WaveformItemTest::spectralModeUsesAmplitudeGeometryAndCentroidPalette()
+{
+    TestableWaveformItem plain;
+    plain.setWidth(100);
+    plain.setHeight(40);
+    plain.setDuration(100);
+    plain.setPosition(50);
+    plain.setDensity(2.0);
+    plain.setLineWidth(1.0);
+    plain.setVisualMode(0);
+    plain.setLayers(makeLayers(peaks({0.25, 0.5, 0.75, 1.0})));
+    QSGNode* plainNode = plain.updatePaintNode(nullptr, nullptr);
+
+    TestableWaveformItem spectral;
+    spectral.setWidth(100);
+    spectral.setHeight(40);
+    spectral.setDuration(100);
+    spectral.setPosition(50);
+    spectral.setDensity(2.0);
+    spectral.setLineWidth(1.0);
+    spectral.setVisualMode(3);
+    spectral.setSpectralPalette(
+        {QStringLiteral("#000000"), QStringLiteral("#ffffff")});
+    spectral.setSpectralUnplayedOpacity(0.88);
+    spectral.setLayers(makeLayers(
+        peaks({0.25, 0.5, 0.75, 1.0}), {}, {}, {},
+        peaks({0, 85, 170, 255})));
+    QSGNode* spectralNode = spectral.updatePaintNode(nullptr, nullptr);
+
+    QVERIFY(plainNode != nullptr);
+    QVERIFY(spectralNode != nullptr);
+    const auto* plainVertices = vertices(plainNode);
+    const auto* spectralVertices = vertices(spectralNode);
+    const int count = static_cast<QSGGeometryNode*>(plainNode)
+                          ->geometry()->vertexCount();
+    QCOMPARE(static_cast<QSGGeometryNode*>(spectralNode)
+                 ->geometry()->vertexCount(), count);
+    for (int index = 0; index < count; ++index) {
+        QCOMPARE(spectralVertices[index].x, plainVertices[index].x);
+        QCOMPARE(spectralVertices[index].y, plainVertices[index].y);
+    }
+    compareColor(spectralVertices[0], 0, 0, 0, 255);
+    const int last = count - 2;
+    compareColor(spectralVertices[last], 255, 255, 255, 224);
+    delete plainNode;
+    delete spectralNode;
+}
+
+void WaveformItemTest::spectralPaletteChangeDoesNotReplaceGeometryNode()
 {
     TestableWaveformItem item;
-    item.setWidth(4);
-    item.setHeight(40);
+    item.setWidth(120);
+    item.setHeight(48);
     item.setDuration(100);
-    item.setPosition(100);
-    item.setDensity(2.0);
-    item.setLineWidth(1.0);
     item.setVisualMode(3);
-    item.setBaseColor(QColor(QStringLiteral("#000000")));
-    QVERIFY(item.setProperty("frequencyLowColor",
-                             QColor(QStringLiteral("#ff0000"))));
-    QVERIFY(item.setProperty("frequencyMidColor",
-                             QColor(QStringLiteral("#00ff00"))));
-    QVERIFY(item.setProperty("frequencyHighColor",
-                             QColor(QStringLiteral("#0000ff"))));
-    QVERIFY(item.setProperty("frequencyStrength", 1.0));
-    item.setLayers(makeLayers(
-        peaks({1.0, 1.0, 1.0, 1.0}),
-        peaks({1.0, 0.0, 0.0, 1.0}),
-        peaks({0.0, 1.0, 0.0, 1.0}),
-        peaks({0.0, 0.0, 1.0, 1.0})));
-
+    item.setLayers(makeLayers(peaks({1.0, 0.5, 0.75, 0.25}), {}, {}, {},
+                              peaks({0, 85, 170, 255})));
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
-    const auto* data = vertices(node);
-    QCOMPARE(renderedPeakCount(node, item), 4);
-    compareColor(data[0], 0xFF, 0x00, 0x00, 0xFF);
-    compareColor(data[2], 0x00, 0xFF, 0x00, 0xFF);
-    compareColor(data[4], 0x00, 0x00, 0xFF, 0xFF);
-    compareColor(data[6], 0x55, 0x55, 0x55, 0xFF);
+    auto* geometry = static_cast<QSGGeometryNode*>(node)->geometry();
+    const void* vertexStorage = geometry->vertexData();
 
-    QVERIFY(item.setProperty("frequencyStrength", 0.5));
-    node = item.updatePaintNode(node, nullptr);
-    compareColor(vertices(node)[0], 0x80, 0x00, 0x00, 0xFF);
-    delete node;
+    item.setSpectralPalette(
+        {QStringLiteral("#ff0000"), QStringLiteral("#00ff00")});
+    QSGNode* updated = item.updatePaintNode(node, nullptr);
+    QCOMPARE(updated, node);
+    QCOMPARE(static_cast<QSGGeometryNode*>(updated)->geometry(), geometry);
+    QCOMPARE(geometry->vertexData(), vertexStorage);
+    compareColor(vertices(updated)[0], 255, 0, 0, 224);
+    delete updated;
 }
 
 void WaveformItemTest::onePixelWaveformLeavesTheCanvasEdgeClear()
@@ -506,27 +542,6 @@ void WaveformItemTest::buildsCenteredFiniteNormalizedLinePairs()
         QVERIFY(std::isfinite(data[index].x));
         QVERIFY(std::isfinite(data[index].y));
     }
-    delete node;
-}
-
-void WaveformItemTest::usesReferenceGradientAndPlayedOpacity()
-{
-    TestableWaveformItem item;
-    item.setWidth(100);
-    item.setHeight(20);
-    item.setDuration(100);
-    item.setPosition(50);
-    item.setPeaks(peaks({1.0, 1.0, 1.0, 1.0, 1.0}));
-
-    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
-    QVERIFY(node != nullptr);
-    const auto* data = vertices(node);
-    compareColor(data[0], 0x00, 0xD4, 0xFF, 0xFF);
-    QCOMPARE(static_cast<int>(data[48].a), 0xFF);
-    QCOMPARE(static_cast<int>(data[50].a),
-             static_cast<int>(WaveformItem::unplayedAlpha()));
-    compareColor(data[98], 0xFF, 0x40, 0x57,
-                 WaveformItem::unplayedAlpha());
     delete node;
 }
 
@@ -790,32 +805,6 @@ void WaveformItemTest::nonFrequencyModesIgnoreFrequencyLayers()
     // Mix layer uses the reference gradient (all played at end position).
     compareColor(data[0], 0x00, 0xD4, 0xFF, 0xFF);
     compareColor(data[98], 0xFF, 0x40, 0x57, 0xFF);
-
-    delete node;
-}
-
-void WaveformItemTest::frequencyModeFallsBackToBandEnvelopeWhenMixMissing()
-{
-    TestableWaveformItem item;
-    item.setWidth(100);
-    item.setHeight(40);
-    item.setDuration(100);
-    item.setPosition(0);
-    item.setVisualMode(3);
-
-    const QVariantMap input = makeLayers({}, peaks({1.0, 1.0}), peaks({0.5, 0.5}), {});
-    item.setLayers(input);
-
-    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
-    QVERIFY(node != nullptr);
-    const auto* geometryNode = static_cast<const QSGGeometryNode*>(node);
-    // Missing Mix is synthesized from the available bands, but frequency mode
-    // still renders one shared envelope instead of separate band overlays.
-    QCOMPARE(geometryNode->geometry()->vertexCount(), 200);
-
-    const auto* data = vertices(node);
-    QCOMPARE(data[0].x, 1.0F);
-    QCOMPARE(data[198].x, 99.5F);
 
     delete node;
 }

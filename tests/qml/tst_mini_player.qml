@@ -159,6 +159,42 @@ TestCase {
         })
     }
 
+    function test_spectral_waveform_uses_one_palette_render_pass() {
+        var previousMode = SettingsController.waveformMode
+        var previousGuide = SettingsController.waveformPlaybackGuide
+        var waveform = findChild(miniPlayer, "miniWaveform")
+        var clip = findChild(miniPlayer, "miniWaveformPlayedClip")
+        var guide = findChild(miniPlayer, "miniWaveformPlaybackGuide")
+        var controls = findChild(miniPlayer, "miniPlayerControls")
+        var session = controls ? controls.waveformSession : null
+        var frequencySettings = SettingsController.frequencyColorWaveform
+        verify(waveform && clip && guide && session)
+        compare(findChild(miniPlayer, "miniWaveformPlaybackFocusDot"), null,
+                "frequency focus must be rendered by the native canvas")
+
+        SettingsController.waveformMode = 3
+        tryCompare(waveform, "visualMode", 3)
+        compare(waveform.spectralPalette.length, 8)
+        compare(String(waveform.spectralPalette[0]),
+                String(frequencySettings.palette[0]))
+        compare(String(waveform.spectralPalette[7]),
+                String(frequencySettings.palette[7]))
+        compare(waveform.spectralUnplayedOpacity,
+                frequencySettings.unplayedOpacity)
+        compare(clip.visible, false,
+                "frequency overlays must not be drawn twice in the played region")
+        SettingsController.waveformPlaybackGuide = true
+        compare(guide.visible, false,
+                "frequency mode must hide the legacy QML guide even when enabled")
+        SettingsController.waveformMode = 1
+        tryCompare(guide, "visible", true)
+        SettingsController.waveformMode = 0
+        tryCompare(clip, "visible", true)
+        tryCompare(guide, "visible", true)
+        SettingsController.waveformMode = previousMode
+        SettingsController.waveformPlaybackGuide = previousGuide
+    }
+
     function test_mini_player_can_cycle_the_shared_waveform_mode() {
         var button = findChild(miniPlayer, "miniWaveformModeButton")
         verify(button)

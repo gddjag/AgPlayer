@@ -145,6 +145,10 @@ int main(const int argc, char** argv)
 
     const std::string first_key = agplayer::WaveformCache::key_for(source_path);
     assert(!first_key.empty());
+    const std::string legacy_v2_key =
+        agplayer::WaveformCache::legacy_v2_key_for(source_path);
+    assert(!legacy_v2_key.empty());
+    assert(legacy_v2_key != first_key);
     const std::filesystem::path equivalent_path =
         case_dir / "nested" / ".." / source_path.filename();
     assert(agplayer::WaveformCache::key_for(equivalent_path) == first_key);
@@ -301,6 +305,57 @@ int main(const int argc, char** argv)
         assert(loaded_v2.high.empty());
         assert(loaded_v2.bpm == 0.0);
         assert(loaded_v2.cues.empty());
+    }
+
+    // v3 stores one byte of SpectralIndex per amplitude bucket in the same
+    // .agwf file. Palette and progress presentation are deliberately absent.
+    {
+        agplayer::WaveformCacheData data;
+        data.mix = {0.1F, 0.4F, 0.8F, 0.2F};
+        data.bass = {0.2F, 0.3F, 0.4F, 0.5F};
+        data.mid = {0.3F, 0.4F, 0.5F, 0.6F};
+        data.high = {0.4F, 0.5F, 0.6F, 0.7F};
+        data.spectral_index = {0U, 64U, 192U, 255U};
+        data.bpm = 120.0;
+        data.duration_ms = 2'000U;
+        data.total_samples = 96'000U;
+        data.sample_rate = 48'000U;
+
+        const std::filesystem::path v3_cache = case_dir / "v3.agwf";
+        assert(agplayer::WaveformCache::save_v3(v3_cache, source_path, data));
+        const std::uintmax_t bytes_with_spectral =
+            std::filesystem::file_size(v3_cache);
+
+        agplayer::WaveformCacheData loaded_v3;
+        assert(agplayer::WaveformCache::load_v3(
+            v3_cache, source_path, loaded_v3));
+        assert(loaded_v3.mix == data.mix);
+        assert(loaded_v3.bass == data.bass);
+        assert(loaded_v3.mid == data.mid);
+        assert(loaded_v3.high == data.high);
+        assert(loaded_v3.spectral_index == data.spectral_index);
+        assert(loaded_v3.duration_ms == data.duration_ms);
+        assert(loaded_v3.total_samples == data.total_samples);
+        assert(loaded_v3.sample_rate == data.sample_rate);
+
+        data.spectral_index.clear();
+        const std::filesystem::path v3_plain = case_dir / "v3-plain.agwf";
+        assert(agplayer::WaveformCache::save_v3(v3_plain, source_path, data));
+        assert(bytes_with_spectral - std::filesystem::file_size(v3_plain)
+               == 4U);
+
+        data.spectral_index = {1U, 2U};
+        assert(!agplayer::WaveformCache::save_v3(
+            case_dir / "v3-mismatch.agwf", source_path, data));
+
+        assert(robust_copy_file(v3_cache, case_dir / "v3-truncated.agwf"));
+        robust_resize(case_dir / "v3-truncated.agwf",
+                      bytes_with_spectral - 1U);
+        loaded_v3 = {};
+        assert(!agplayer::WaveformCache::load_v3(
+            case_dir / "v3-truncated.agwf", source_path, loaded_v3));
+        assert(loaded_v3.mix.empty());
+        assert(loaded_v3.spectral_index.empty());
     }
 
     // Corrupted v2 cache is rejected.

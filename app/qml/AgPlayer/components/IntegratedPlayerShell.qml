@@ -22,6 +22,9 @@ Item {
     property var waveformProvider: WaveformProvider
     property var waveformLayers: ({})
     property real waveformDurationMs: 0
+    property bool waveformFrequencyReady: false
+    readonly property var frequencyWaveformSettings:
+        SettingsController.frequencyColorWaveform
     property Component bottomBarComponent: null
     property alias tagSearchText: tagPanel.searchText
     property var hostWindow: null
@@ -526,13 +529,7 @@ Item {
                 analysisProgress: root.waveformProvider
                                   ? root.waveformProvider.analysisProgress : 0
                 visualMode: SettingsController.waveformMode
-                baseColor: SettingsController.waveformMode === 2
-                           ? SettingsController.spectrumSolidColor
-                           : SettingsController.waveformMode === 0
-                             ? SettingsController.waveformSolidBaseColor
-                             : SettingsController.waveformMode === 3
-                               ? Theme.textSecondary
-                               : SettingsController.waveformRgbBaseColor
+                baseColor: SettingsController.waveformRgbBaseColor
                 progressColor: SettingsController.waveformSolidProgressColor
                 gradientStartColor: SettingsController.waveformMode === 2
                                     ? (SettingsController.spectrumColorMode === 0
@@ -549,10 +546,8 @@ Item {
                                      ? SettingsController.spectrumSolidColor
                                      : SettingsController.spectrumRgbEndColor)
                                   : SettingsController.waveformRgbEndColor
-                frequencyLowColor: SettingsController.waveformFrequencyLowColor
-                frequencyMidColor: SettingsController.waveformFrequencyMidColor
-                frequencyHighColor: SettingsController.waveformFrequencyHighColor
-                frequencyStrength: SettingsController.waveformFrequencyStrength
+                spectralPalette: root.frequencyWaveformSettings.palette
+                spectralUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
                 rgbProgress: SettingsController.waveformMode === 1
                              && SettingsController.waveformRgbProgress
                 amplitudeScale: SettingsController.waveformHeight
@@ -587,10 +582,8 @@ Item {
                     gradientStartColor: waveform.gradientStartColor
                     gradientMiddleColor: waveform.gradientMiddleColor
                     gradientEndColor: waveform.gradientEndColor
-                    frequencyLowColor: waveform.frequencyLowColor
-                    frequencyMidColor: waveform.frequencyMidColor
-                    frequencyHighColor: waveform.frequencyHighColor
-                    frequencyStrength: waveform.frequencyStrength
+                    spectralPalette: root.frequencyWaveformSettings.palette
+                    spectralUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
                     rgbProgress: waveform.rgbProgress
                     amplitudeScale: waveform.amplitudeScale
                     density: waveform.density
