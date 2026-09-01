@@ -1914,7 +1914,8 @@ QString SettingsController::validatedLanguage(const QString& value)
 void SettingsController::applyFileAssociations()
 {
     if (fileAssociationController_ == nullptr
-        || QStandardPaths::isTestModeEnabled()) {
+        || (QStandardPaths::isTestModeEnabled()
+            && !fileAssociationController_->hasCustomRegistryRoot())) {
         return;
     }
 

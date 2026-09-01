@@ -1,10 +1,11 @@
 #include <QCoreApplication>
 #include <QTest>
+#include <QUuid>
 
 #include <memory>
 
-#include "file_association_controller.hpp"
 #include "audio_file_discovery.hpp"
+#include "file_association_controller.hpp"
 
 #ifdef Q_OS_WIN
 #define WIN32_LEAN_AND_MEAN
@@ -12,23 +13,35 @@
 #include <windows.h>
 #endif
 
-class FileAssociationControllerTest : public QObject {
+class FileAssociationControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
     void initTestCase()
     {
-        controller_ = std::make_unique<FileAssociationController>();
-        // Clean up any leftover state from a previous run.
-        controller_->unregisterAll();
+#ifdef Q_OS_WIN
+        registryRoot_ = QStringLiteral("Software\\AgPlayer\\Tests\\%1")
+                            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
+#endif
+        controller_ = std::make_unique<FileAssociationController>(registryRoot_);
+        removeTestRoot();
     }
 
     void cleanupTestCase()
     {
-        if (controller_) {
-            controller_->unregisterAll();
-            controller_.reset();
-        }
+        controller_.reset();
+        removeTestRoot();
+    }
+
+    void registryNamespaceIsIsolated()
+    {
+#ifdef Q_OS_WIN
+        QCOMPARE(controller_->registryRootPath(), registryRoot_);
+        QVERIFY(controller_->registryRootPath().startsWith(
+            QStringLiteral("Software\\AgPlayer\\Tests\\")));
+#else
+        QVERIFY(!controller_->registerForExtensions({QStringLiteral("agptest")}));
+#endif
     }
 
     void registerAndQuery()
@@ -68,12 +81,11 @@ private slots:
         QVERIFY(agplayer::qt::isSupportedAudioExtension(extension));
         QVERIFY(agplayer::qt::isSupportedAudioExtension(
             QStringLiteral(".") + extension.toUpper()));
+        QVERIFY(!agplayer::qt::isSupportedVideoExtension(extension));
     }
 
     void supportedVideoExtensionsAreDistinctAndCaseInsensitive()
     {
-        // Catches hidden video formats leaking into the audio choice list, or
-        // a Windows association failing for an upper-case direct-path suffix.
         const QStringList expected{
             QStringLiteral("mp4"), QStringLiteral("mkv"), QStringLiteral("webm"),
             QStringLiteral("mov"), QStringLiteral("avi"), QStringLiteral("m4v")};
@@ -81,185 +93,65 @@ private slots:
         for (const QString& extension : expected) {
             QVERIFY(!FileAssociationController::supportedAudioExtensions().contains(extension));
             QVERIFY(agplayer::qt::isSupportedVideoExtension(extension.toUpper()));
+            QVERIFY(!agplayer::qt::isSupportedAudioExtension(extension));
         }
     }
 
-    void unregisterAllRemovesRegisteredVideoCapabilities()
+    void registerAndUnregisterAllPreservesSharedExtensionData()
     {
 #ifdef Q_OS_WIN
-        // Catches default-player cleanup leaving a video extension or its
-        // capability entry behind after the user disables the existing switch.
-        const QStringList extensions{
-            QStringLiteral("agptest"), QStringLiteral("MP4")};
+        const QString extensionPath = registryPath(QStringLiteral("Classes\\.mp4"));
+        QVERIFY(writeString(extensionPath, nullptr, QStringLiteral("OtherPlayer.File")));
+        QVERIFY(writeString(extensionPath, L"PerceivedType", QStringLiteral("other-video")));
+        QVERIFY(writeString(extensionPath + QStringLiteral("\\OpenWithProgids"),
+                            L"OtherPlayer.File", QString()));
+        QVERIFY(writeString(extensionPath + QStringLiteral("\\shell\\custom"), nullptr,
+                            QStringLiteral("keep")));
+        QVERIFY(writeString(registryPath(QStringLiteral("Preferences")), L"sentinel",
+                            QStringLiteral("keep-settings")));
+
+        const QStringList extensions = FileAssociationController::supportedAudioExtensions()
+            + agplayer::qt::supportedVideoExtensions();
         QVERIFY(controller_->registerForExtensions(extensions));
-        QVERIFY(controller_->isAssociated(QStringLiteral(".mp4")));
-        QVERIFY(controller_->unregisterAll());
-        QVERIFY(!controller_->isAssociated(QStringLiteral("mp4")));
 
-        const QString associationPath = QStringLiteral(
-            "Software\\AgPlayer\\Capabilities\\FileAssociations");
-        const std::wstring associationPathW = associationPath.toStdWString();
-        HKEY key = nullptr;
-        QVERIFY(RegOpenKeyExW(HKEY_CURRENT_USER, associationPathW.c_str(), 0,
-                              KEY_READ, &key) != ERROR_SUCCESS);
-#else
-        QSKIP("Windows Default Apps capabilities are Windows-only");
-#endif
-    }
-
-    void unregisterAllClearsStaleProgIdWithoutDeletingAnotherDefault()
-    {
-#ifdef Q_OS_WIN
-        // Catches cleanup deleting another player's current default, or leaving
-        // AgPlayer's stale OpenWithProgids entry after the default changes.
-        const QString extension = QStringLiteral("agpteststale");
-        QVERIFY(controller_->registerForExtensions({extension}));
-
-        const QString extensionPath =
-            QStringLiteral("Software\\Classes\\.%1").arg(extension);
-        const std::wstring extensionPathW = extensionPath.toStdWString();
-        const QString otherProgId = QStringLiteral("OtherPlayer.File");
-        const std::wstring otherProgIdW = otherProgId.toStdWString();
-        QCOMPARE(RegSetKeyValueW(HKEY_CURRENT_USER, extensionPathW.c_str(), nullptr,
-                                 REG_SZ, otherProgIdW.c_str(),
-                                 static_cast<DWORD>((otherProgIdW.size() + 1)
-                                                    * sizeof(wchar_t))),
-                 static_cast<LSTATUS>(ERROR_SUCCESS));
-
-        QVERIFY(controller_->unregisterAll());
-
-        HKEY extensionKey = nullptr;
-        QCOMPARE(RegOpenKeyExW(HKEY_CURRENT_USER, extensionPathW.c_str(), 0,
-                               KEY_READ, &extensionKey),
-                 static_cast<LSTATUS>(ERROR_SUCCESS));
-        wchar_t defaultValue[256] = {};
-        DWORD defaultValueSize = sizeof(defaultValue);
-        DWORD valueType = 0;
-        QCOMPARE(RegQueryValueExW(extensionKey, nullptr, nullptr, &valueType,
-                                  reinterpret_cast<LPBYTE>(defaultValue),
-                                  &defaultValueSize),
-                 static_cast<LSTATUS>(ERROR_SUCCESS));
-        RegCloseKey(extensionKey);
-        QCOMPARE(QString::fromWCharArray(defaultValue), otherProgId);
-
-        const QString openWithPath = extensionPath + QStringLiteral("\\OpenWithProgids");
-        const std::wstring openWithPathW = openWithPath.toStdWString();
-        HKEY openWithKey = nullptr;
-        if (RegOpenKeyExW(HKEY_CURRENT_USER, openWithPathW.c_str(), 0, KEY_READ,
-                          &openWithKey) == ERROR_SUCCESS) {
-            DWORD staleValueSize = 0;
-            QCOMPARE(RegQueryValueExW(openWithKey, L"AgPlayerAudioFile", nullptr,
-                                      &valueType, nullptr, &staleValueSize),
-                     static_cast<LSTATUS>(ERROR_FILE_NOT_FOUND));
-            RegCloseKey(openWithKey);
+        for (const QString& extension : extensions) {
+            QVERIFY(controller_->isAssociated(extension));
+            QCOMPARE(readString(registryPath(
+                         QStringLiteral("AgPlayer\\Capabilities\\FileAssociations")),
+                         QStringLiteral(".%1").arg(extension)),
+                     QStringLiteral("AgPlayerAudioFile"));
+            QCOMPARE(readString(registryPath(
+                         QStringLiteral("Classes\\.%1\\OpenWithProgids").arg(extension)),
+                         QStringLiteral("AgPlayerAudioFile")), QString());
         }
-        QCOMPARE(RegDeleteTreeW(HKEY_CURRENT_USER, extensionPathW.c_str()),
-                 static_cast<LSTATUS>(ERROR_SUCCESS));
-#else
-        QSKIP("Windows Default Apps capabilities are Windows-only");
-#endif
-    }
+        QCOMPARE(readString(extensionPath, QString()), QStringLiteral("OtherPlayer.File"));
+        QCOMPARE(readString(extensionPath, QStringLiteral("PerceivedType")),
+                 QStringLiteral("other-video"));
+        QCOMPARE(readString(extensionPath + QStringLiteral("\\OpenWithProgids"),
+                            QStringLiteral("OtherPlayer.File")), QString());
+        QCOMPARE(readString(extensionPath + QStringLiteral("\\shell\\custom"), QString()),
+                 QStringLiteral("keep"));
 
-    void registersWindowsDefaultAppsCapabilities()
-    {
-#ifdef Q_OS_WIN
-        QVERIFY(controller_->registerForExtensions({QStringLiteral("agptest")}));
-
-        const QString registeredPath =
-            QStringLiteral("Software\\RegisteredApplications");
-        const std::wstring registeredPathW = registeredPath.toStdWString();
-        HKEY registeredKey = nullptr;
-        QVERIFY(RegOpenKeyExW(HKEY_CURRENT_USER, registeredPathW.c_str(), 0,
-                             KEY_READ, &registeredKey) == ERROR_SUCCESS);
-        wchar_t capabilityPath[512] = {};
-        DWORD capabilityPathSize = sizeof(capabilityPath);
-        DWORD valueType = 0;
-        QCOMPARE(RegQueryValueExW(
-                     registeredKey, L"AgPlayer", nullptr, &valueType,
-                     reinterpret_cast<LPBYTE>(capabilityPath),
-                     &capabilityPathSize),
-                 static_cast<LSTATUS>(ERROR_SUCCESS));
-        RegCloseKey(registeredKey);
-        QCOMPARE(valueType, static_cast<DWORD>(REG_SZ));
-        QCOMPARE(QString::fromWCharArray(capabilityPath),
-                 QStringLiteral("Software\\AgPlayer\\Capabilities"));
-
-        const QString associationPath = QStringLiteral(
-            "Software\\AgPlayer\\Capabilities\\FileAssociations");
-        const std::wstring associationPathW = associationPath.toStdWString();
-        HKEY associationKey = nullptr;
-        QVERIFY(RegOpenKeyExW(HKEY_CURRENT_USER, associationPathW.c_str(), 0,
-                             KEY_READ, &associationKey) == ERROR_SUCCESS);
-        wchar_t progId[256] = {};
-        DWORD progIdSize = sizeof(progId);
-        valueType = 0;
-        QCOMPARE(RegQueryValueExW(
-                     associationKey, L".agptest", nullptr, &valueType,
-                     reinterpret_cast<LPBYTE>(progId), &progIdSize),
-                 static_cast<LSTATUS>(ERROR_SUCCESS));
-        RegCloseKey(associationKey);
-        QCOMPARE(QString::fromWCharArray(progId),
-                 QStringLiteral("AgPlayerAudioFile"));
-
-        const QString iconPath = QStringLiteral(
-            "Software\\Classes\\AgPlayerAudioFile\\DefaultIcon");
-        const std::wstring iconPathW = iconPath.toStdWString();
-        HKEY iconKey = nullptr;
-        QVERIFY(RegOpenKeyExW(HKEY_CURRENT_USER, iconPathW.c_str(), 0,
-                             KEY_READ, &iconKey) == ERROR_SUCCESS);
-        wchar_t iconValue[1024] = {};
-        DWORD iconValueSize = sizeof(iconValue);
-        valueType = 0;
-        QCOMPARE(RegQueryValueExW(
-                     iconKey, nullptr, nullptr, &valueType,
-                     reinterpret_cast<LPBYTE>(iconValue), &iconValueSize),
-                 static_cast<LSTATUS>(ERROR_SUCCESS));
-        RegCloseKey(iconKey);
-        QCOMPARE(valueType, static_cast<DWORD>(REG_SZ));
-        QCOMPARE(QString::fromWCharArray(iconValue),
-                 QCoreApplication::applicationFilePath() + QStringLiteral(",0"));
-
-        const QString commandPath = QStringLiteral(
-            "Software\\Classes\\AgPlayerAudioFile\\shell\\open\\command");
-        const std::wstring commandPathW = commandPath.toStdWString();
-        HKEY commandKey = nullptr;
-        QVERIFY(RegOpenKeyExW(HKEY_CURRENT_USER, commandPathW.c_str(), 0,
-                             KEY_READ, &commandKey) == ERROR_SUCCESS);
-        wchar_t commandValue[2048] = {};
-        DWORD commandValueSize = sizeof(commandValue);
-        valueType = 0;
-        QCOMPARE(RegQueryValueExW(
-                     commandKey, nullptr, nullptr, &valueType,
-                     reinterpret_cast<LPBYTE>(commandValue), &commandValueSize),
-                 static_cast<LSTATUS>(ERROR_SUCCESS));
-        RegCloseKey(commandKey);
-        QCOMPARE(QString::fromWCharArray(commandValue),
-                 QStringLiteral("\"%1\" \"%2\"")
-                     .arg(QCoreApplication::applicationFilePath(),
-                          QStringLiteral("%1")));
-#else
-        QSKIP("Windows Default Apps capabilities are Windows-only");
-#endif
-    }
-
-    void unregisterAllRemovesProgIdAndExtensions()
-    {
-#ifdef Q_OS_WIN
-        const QStringList extensions = {QStringLiteral("agptest")};
-        QVERIFY(controller_->registerForExtensions(extensions));
         QVERIFY(controller_->unregisterAll());
-        QVERIFY(!controller_->isAssociated(QStringLiteral("agptest")));
-
-        const QString progIdPath = QStringLiteral("Software\\Classes\\AgPlayerAudioFile");
-        const std::wstring progIdPathW = progIdPath.toStdWString();
-        HKEY key = nullptr;
-        const bool exists =
-            RegOpenKeyExW(HKEY_CURRENT_USER, progIdPathW.c_str(), 0, KEY_READ, &key)
-            == ERROR_SUCCESS;
-        if (exists) {
-            RegCloseKey(key);
+        for (const QString& extension : extensions) {
+            QVERIFY(!controller_->isAssociated(extension));
+            QVERIFY(!valueExists(registryPath(
+                         QStringLiteral("Classes\\.%1\\OpenWithProgids").arg(extension)),
+                         QStringLiteral("AgPlayerAudioFile")));
         }
-        QVERIFY(!exists);
+        QVERIFY(!keyExists(registryPath(QStringLiteral("AgPlayer\\Capabilities"))));
+        QVERIFY(!valueExists(registryPath(QStringLiteral("RegisteredApplications")),
+                             QStringLiteral("AgPlayer")));
+        QVERIFY(!keyExists(registryPath(QStringLiteral("Classes\\AgPlayerAudioFile"))));
+        QCOMPARE(readString(extensionPath, QString()), QStringLiteral("OtherPlayer.File"));
+        QCOMPARE(readString(extensionPath, QStringLiteral("PerceivedType")),
+                 QStringLiteral("other-video"));
+        QCOMPARE(readString(extensionPath + QStringLiteral("\\OpenWithProgids"),
+                            QStringLiteral("OtherPlayer.File")), QString());
+        QCOMPARE(readString(extensionPath + QStringLiteral("\\shell\\custom"), QString()),
+                 QStringLiteral("keep"));
+        QCOMPARE(readString(registryPath(QStringLiteral("Preferences")), QStringLiteral("sentinel")),
+                 QStringLiteral("keep-settings"));
 #else
         QVERIFY(!controller_->unregisterAll());
 #endif
@@ -277,6 +169,68 @@ private slots:
     }
 
 private:
+#ifdef Q_OS_WIN
+    QString registryPath(const QString& relativePath) const
+    {
+        return registryRoot_ + QLatin1Char('\\') + relativePath;
+    }
+
+    bool writeString(const QString& path, const wchar_t* valueName, const QString& value) const
+    {
+        const std::wstring pathW = path.toStdWString();
+        const std::wstring valueW = value.toStdWString();
+        return RegSetKeyValueW(HKEY_CURRENT_USER, pathW.c_str(), valueName, REG_SZ,
+                               valueW.c_str(), static_cast<DWORD>(
+                                   (valueW.size() + 1) * sizeof(wchar_t))) == ERROR_SUCCESS;
+    }
+
+    QString readString(const QString& path, const QString& valueName) const
+    {
+        const std::wstring pathW = path.toStdWString();
+        const std::wstring valueNameW = valueName.toStdWString();
+        wchar_t value[512] = {};
+        DWORD valueSize = sizeof(value);
+        if (RegGetValueW(HKEY_CURRENT_USER, pathW.c_str(),
+                         valueName.isEmpty() ? nullptr : valueNameW.c_str(),
+                         RRF_RT_REG_SZ, nullptr, value, &valueSize) != ERROR_SUCCESS) {
+            return {};
+        }
+        return QString::fromWCharArray(value);
+    }
+
+    bool keyExists(const QString& path) const
+    {
+        const std::wstring pathW = path.toStdWString();
+        HKEY key = nullptr;
+        const bool exists = RegOpenKeyExW(HKEY_CURRENT_USER, pathW.c_str(), 0,
+                                          KEY_READ, &key) == ERROR_SUCCESS;
+        if (exists) {
+            RegCloseKey(key);
+        }
+        return exists;
+    }
+
+    bool valueExists(const QString& path, const QString& valueName) const
+    {
+        const std::wstring pathW = path.toStdWString();
+        const std::wstring valueNameW = valueName.toStdWString();
+        DWORD valueSize = 0;
+        return RegGetValueW(HKEY_CURRENT_USER, pathW.c_str(), valueNameW.c_str(),
+                            RRF_RT_REG_SZ, nullptr, nullptr, &valueSize) == ERROR_SUCCESS;
+    }
+
+    void removeTestRoot() const
+    {
+        if (!registryRoot_.isEmpty()) {
+            const std::wstring rootW = registryRoot_.toStdWString();
+            RegDeleteTreeW(HKEY_CURRENT_USER, rootW.c_str());
+        }
+    }
+#else
+    void removeTestRoot() const {}
+#endif
+
+    QString registryRoot_;
     std::unique_ptr<FileAssociationController> controller_;
 };
 

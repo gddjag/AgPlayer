@@ -11,11 +11,11 @@
 #include <QFile>
 #include <QFileDevice>
 #include <QSettings>
-#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QUuid>
 
 #include <algorithm>
 #include <cmath>
@@ -1004,30 +1004,26 @@ void SettingsControllerTest::visibleAssociationChoicesRemainAudioOnly()
 void SettingsControllerTest::defaultPlayerToggleRegistersAndClearsHiddenVideoCapabilities()
 {
 #ifdef Q_OS_WIN
-    // Catches the existing default-player switch registering only the visible
-    // audio choices, or leaving hidden video associations after it is off.
-    const bool wasTestModeEnabled = QStandardPaths::isTestModeEnabled();
-    QStandardPaths::setTestModeEnabled(false);
-    const auto restoreTestMode = qScopeGuard([wasTestModeEnabled] {
-        QStandardPaths::setTestModeEnabled(wasTestModeEnabled);
-    });
-    QSettings persisted;
-    persisted.clear();
-
+    // The controller is injected into a per-test registry namespace. Keep Qt
+    // test mode enabled so settings storage and all association writes remain
+    // outside the user's production registry keys.
+    const QString registryRoot = QStringLiteral("Software\\AgPlayer\\Tests\\%1")
+                                     .arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
     {
         SettingsController settings;
+        settings.fileAssociationController_ =
+            std::make_unique<FileAssociationController>(registryRoot);
         settings.setSetAsDefaultPlayer(true);
-        QVERIFY(FileAssociationController().isAssociated(QStringLiteral(".mp4")));
+        QCOMPARE(settings.fileAssociationController_->registryRootPath(), registryRoot);
+        QVERIFY(settings.fileAssociationController_->isAssociated(QStringLiteral(".mp4")));
 
         settings.setSetAsDefaultPlayer(false);
-        QVERIFY(!FileAssociationController().isAssociated(QStringLiteral("mp4")));
+        QVERIFY(!settings.fileAssociationController_->isAssociated(QStringLiteral("mp4")));
     }
 
-    const QString capabilityPath = QStringLiteral("Software\\AgPlayer\\Capabilities");
-    const std::wstring capabilityPathW = capabilityPath.toStdWString();
-    HKEY key = nullptr;
-    QVERIFY(RegOpenKeyExW(HKEY_CURRENT_USER, capabilityPathW.c_str(), 0,
-                          KEY_READ, &key) != ERROR_SUCCESS);
+    const std::wstring registryRootW = registryRoot.toStdWString();
+    QCOMPARE(RegDeleteTreeW(HKEY_CURRENT_USER, registryRootW.c_str()),
+             static_cast<LSTATUS>(ERROR_SUCCESS));
 #else
     QSKIP("Windows Default Apps capabilities are Windows-only");
 #endif
