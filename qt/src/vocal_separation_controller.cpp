@@ -283,6 +283,18 @@ VocalSeparationController::VocalSeparationController(
     connect(downloader_.get(), &VocalSeparationDownloader::finished,
             this, [this](const VocalInstallResult& result) {
         if (!result.ok) {
+            if (!downloadQueue_.isEmpty()
+                && !downloadQueue_.first().mirrorAttempted
+                && downloadQueue_.first().mirrorUrl.isValid()) {
+                DownloadItem& retry = downloadQueue_.first();
+                retry.file.url = retry.mirrorUrl;
+                retry.mirrorAttempted = true;
+                downloadSource_ = tr("国内镜像");
+                emit downloadStateChanged();
+                setError(tr("官方线路失败，已自动切换国内镜像"));
+                startNextDownload();
+                return;
+            }
             downloadQueue_.clear();
             failedDownloadModelId_ = downloadingModelId_;
             downloadingModelId_.clear();
@@ -383,6 +395,10 @@ QString VocalSeparationController::downloadingModelId() const { return downloadi
 bool VocalSeparationController::downloadBusy() const noexcept
 {
     return !downloadingModelId_.isEmpty();
+}
+QString VocalSeparationController::downloadSource() const
+{
+    return downloadSource_;
 }
 bool VocalSeparationController::canRetry() const noexcept
 {
@@ -513,6 +529,17 @@ bool VocalSeparationController::clearInput()
 
 bool VocalSeparationController::downloadModel(const QString& modelId)
 {
+    return beginModelDownload(modelId, false);
+}
+
+bool VocalSeparationController::downloadModelFromMirror(const QString& modelId)
+{
+    return beginModelDownload(modelId, true);
+}
+
+bool VocalSeparationController::beginModelDownload(
+    const QString& modelId, const bool preferDomesticMirror)
+{
     const VocalModelCard* model = modelForId(modelId);
     if (model == nullptr || !downloadQueue_.isEmpty()
         || verificationWatcher_ != nullptr || runtimeInstallerWatcher_ != nullptr
@@ -521,6 +548,21 @@ bool VocalSeparationController::downloadModel(const QString& modelId)
         || downloader_->state() == VocalDownloadState::Verifying) {
         return false;
     }
+    if (preferDomesticMirror) {
+        bool mirrorAvailable = false;
+        for (const VocalDownloadFile& file : model->files) {
+            if (vocalDomesticMirrorUrl(file.url).isValid()) {
+                mirrorAvailable = true;
+                break;
+            }
+        }
+        if (!mirrorAvailable) {
+            setError(tr("当前模型没有可自动下载的国内镜像，请使用备用公益地址"));
+            return false;
+        }
+    }
+    preferDomesticMirror_ = preferDomesticMirror;
+    downloadSource_ = preferDomesticMirror ? tr("国内镜像") : tr("官方线路");
     downloadingModelId_ = modelId;
     failedDownloadModelId_.clear();
     downloadProgress_ = 0.0;
@@ -878,6 +920,11 @@ bool VocalSeparationController::exportStem(StemKind kind,
     return copied;
 }
 
+bool VocalSeparationController::exportStemToOutputDirectory(StemKind kind)
+{
+    return exportStem(kind, QUrl::fromLocalFile(outputDirectory_));
+}
+
 bool VocalSeparationController::exportSelected(const QUrl& destinationDirectory)
 {
     return exportKinds(selectedStemKinds(), destinationDirectory);
@@ -1230,7 +1277,12 @@ void VocalSeparationController::finishVerification(
                 .filePath(file.fileName);
             if (!flatModelVerified && !result.verifiedFiles.contains(
                     QFileInfo(destination).absoluteFilePath())) {
-                downloadQueue_.push_back({file, destination, false});
+                VocalDownloadFile selectedFile = file;
+                const QUrl mirror = vocalDomesticMirrorUrl(file.url);
+                if (preferDomesticMirror_ && mirror.isValid())
+                    selectedFile.url = mirror;
+                downloadQueue_.push_back({selectedFile, destination, false,
+                                          mirror, preferDomesticMirror_});
             }
         }
         if (!result.runtimeVerified) {
@@ -1243,7 +1295,7 @@ void VocalSeparationController::finishVerification(
                 archive,
                 QDir(options_.dataRoot).filePath(
                     QStringLiteral("downloads/runtime.nupkg")),
-                true});
+                true, {}, false});
         }
         completedDownloadBytes_ = 0;
         totalDownloadBytes_ = 0;
@@ -1346,6 +1398,13 @@ void VocalSeparationController::refreshModels()
         for (const QString& name : model.stems) kinds.push_back(int(stemKind(name)));
         qint64 totalBytes = 0;
         for (const VocalDownloadFile& file : model.files) totalBytes += file.bytes;
+        bool mirrorAvailable = false;
+        for (const VocalDownloadFile& file : model.files) {
+            if (vocalDomesticMirrorUrl(file.url).isValid()) {
+                mirrorAvailable = true;
+                break;
+            }
+        }
         models_.push_back(QVariantMap{
             {QStringLiteral("id"), model.id},
             {QStringLiteral("family"), model.family == VocalModelFamily::Mdx
@@ -1362,6 +1421,7 @@ void VocalSeparationController::refreshModels()
             {QStringLiteral("badgeLabel"), model.badgeLabel},
             {QStringLiteral("provider"), model.provider},
             {QStringLiteral("repositoryUrl"), model.repositoryUrl},
+            {QStringLiteral("domesticMirrorAvailable"), mirrorAvailable},
         });
     }
     emit modelsChanged();

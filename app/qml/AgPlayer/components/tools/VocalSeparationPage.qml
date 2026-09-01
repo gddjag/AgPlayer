@@ -53,6 +53,15 @@ Rectangle {
         VocalSeparationController.resultPreviewMode
         !== VocalSeparationController.None
 
+    onVisibleChanged: {
+        if (visible && !VocalSeparationController.downloadBusy)
+            VocalSeparationController.verifyInstalledModels()
+    }
+    Component.onCompleted: {
+        if (visible && !VocalSeparationController.downloadBusy)
+            VocalSeparationController.verifyInstalledModels()
+    }
+
     component WorkbenchButton: Button {
         id: control
         property bool primaryAction: false
@@ -373,6 +382,14 @@ Rectangle {
         VocalSeparationController.previewStemAt(kind, positionMs)
     }
 
+    function stemPreviewPosition(kind) {
+        return page.resultPreviewCurrent
+                && VocalSeparationController.resultPreviewMode
+                   === VocalSeparationController.Solo
+                && VocalSeparationController.resultPreviewSoloKind === kind
+               ? page.resultPreviewPositionMs : 0
+    }
+
     function rewindResultPreview() {
         page.resultPreviewPositionMs = 0
         if (page.resultPreviewCurrent)
@@ -559,7 +576,7 @@ Rectangle {
                 color: page.textPrimary
                 selectionColor: page.primary
                 selectedTextColor: "white"
-                text: qsTr("如果点击模型下载太慢或者下载不了，请用网盘下载，下载来的文件在软件打开模型存放目录放入即可\n\n备用模型下载地址：\n百度网盘：人声伴奏分离模型\n链接: https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888\n提取码: 8888")
+                text: qsTr("如果点击模型下载太慢或者下载不了，可切换以下纯免费线路。\n\n免费模型来源：\n1. 官方线路：模型卡的“下载”按钮。\n2. 国内公益镜像：HTDemucs 支持 HF-Mirror 自动线路，官方失败会自动切换。\n3. 第三方公益服务：百度网盘人声伴奏分离模型。\n4. 用户自行下载：放入模型目录后点击“检测”。\n\n百度网盘链接: https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888\n提取码: 8888")
                 background: Rectangle {
                     color: page.input
                     border.color: page.border
@@ -911,7 +928,7 @@ Rectangle {
                                 readonly property bool customEntry:
                                     index === VocalSeparationController.models.length
                                 readonly property var cardData: customEntry
-                                    ? ({ id: "custom", tierLabel: qsTr("自定义模式"),
+                                    ? ({ id: "custom", tierLabel: qsTr("自定义模型"),
                                          badgeLabel: "",
                                          name: qsTr("兼容 ONNX 模型"),
                                          provider: qsTr("手动目录管理"),
@@ -963,13 +980,13 @@ Rectangle {
                                             implicitWidth: badgeText.implicitWidth + 14
                                             implicitHeight: 22
                                             radius: 3
-                                            color: Theme.accentSoft
-                                            border.color: page.border
+                                            color: Qt.rgba(1.0, 0.65, 0.12, 0.22)
+                                            border.color: Qt.rgba(1.0, 0.72, 0.22, 0.65)
                                             Label {
                                                 id: badgeText
                                                 anchors.centerIn: parent
                                                 text: cardData.badgeLabel
-                                                color: page.cyan
+                                                color: Theme.warning
                                                 font.pixelSize: 10
                                             }
                                         }
@@ -1042,14 +1059,39 @@ Rectangle {
                                             font.pixelSize: 10
                                         }
                                     }
-                                    ProgressBar {
+                                     ProgressBar {
                                         visible: cardData.id === VocalSeparationController.downloadingModelId
                                         from: 0
                                         to: 1
                                         value: VocalSeparationController.downloadProgress
                                         Layout.fillWidth: true
-                                        Layout.preferredHeight: 4
-                                    }
+                                         Layout.preferredHeight: 4
+                                         background: Rectangle {
+                                             implicitHeight: 4
+                                             radius: 2
+                                             color: Theme.navigatorGlassTrack
+                                         }
+                                         contentItem: Item {
+                                             implicitHeight: 4
+                                             Rectangle {
+                                                 width: parent.width * parent.parent.visualPosition
+                                                 height: parent.height
+                                                 radius: 2
+                                                 color: page.success
+                                             }
+                                         }
+                                     }
+                                     Label {
+                                         objectName: "separationDownloadPercentage-" + cardData.id
+                                         visible: cardData.id === VocalSeparationController.downloadingModelId
+                                         Layout.fillWidth: true
+                                         text: Math.round(VocalSeparationController.downloadProgress * 100)
+                                               + "% · " + VocalSeparationController.downloadSource
+                                         color: page.success
+                                         font.pixelSize: 10
+                                         font.bold: true
+                                         horizontalAlignment: Text.AlignRight
+                                     }
                                     Item { Layout.fillHeight: true }
                                      RowLayout {
                                          objectName: "separationModelAction-" + cardData.id
@@ -1068,8 +1110,24 @@ Rectangle {
                                             Accessible.role: Accessible.Button
                                             onClicked: VocalSeparationController.deleteModel(cardData.id)
                                          }
-                                         WorkbenchButton {
-                                             visible: cardData.state !== VocalSeparationController.Installed
+                                          WorkbenchButton {
+                                              objectName: "separationDomesticMirror-" + cardData.id
+                                              visible: cardData.state !== VocalSeparationController.Installed
+                                              implicitHeight: 24
+                                              topPadding: 3
+                                              bottomPadding: 3
+                                              text: qsTr("国内镜像")
+                                              enabled: !page.contextLocked
+                                                       && !VocalSeparationController.downloadBusy
+                                              Accessible.name: text
+                                              Accessible.role: Accessible.Button
+                                              onClicked: {
+                                                  if (!VocalSeparationController.downloadModelFromMirror(cardData.id))
+                                                      backupModelDialog.open()
+                                              }
+                                          }
+                                          WorkbenchButton {
+                                              visible: cardData.state !== VocalSeparationController.Installed
                                              implicitHeight: 24
                                              topPadding: 3
                                              bottomPadding: 3
@@ -1117,24 +1175,26 @@ Rectangle {
                                              Layout.preferredWidth: 30
                                              Layout.preferredHeight: 30
                                          }
-                                         Label {
-                                             Layout.fillWidth: true
-                                             text: qsTr("自定义模式")
+                                          Label {
+                                              objectName: "separationCustomModelTitle"
+                                              Layout.fillWidth: true
+                                              text: qsTr("自定义模型")
                                              color: page.cyan
                                              font.bold: true
                                              font.pixelSize: 15
                                          }
                                      }
-                                     Label {
-                                         objectName: "separationCustomModelCopy"
-                                         Layout.fillWidth: true
-                                         text: qsTr("当前仅加载受信模型")
+                                      Label {
+                                          objectName: "separationCustomModelCopy"
+                                          Layout.fillWidth: true
+                                          text: qsTr("兼容 ONNX 模型 / 自动识别支持的模型")
                                          color: page.textPrimary
                                          font.pixelSize: 11
                                      }
-                                     Label {
+                                      Label {
                                          Layout.fillWidth: true
-                                         text: VocalSeparationController.modelStorageDirectory
+                                          text: qsTr("模型目录位置：")
+                                                + VocalSeparationController.modelStorageDirectory
                                          color: page.textPrimary
                                          font.pixelSize: 11
                                          elide: Text.ElideMiddle
@@ -1145,7 +1205,7 @@ Rectangle {
                                      Label {
                                          objectName: "separationCustomModelDetails"
                                          Layout.fillWidth: true
-                                         text: qsTr("自动识别并校验上方三档官方模型；其他文件不会执行。")
+                                          text: qsTr("将兼容模型放入模型目录，AgPlayer 将自动识别并在此处列出可用模型介绍。未知或未通过校验的文件不会执行。")
                                          color: page.muted
                                          font.pixelSize: 10
                                          wrapMode: Text.Wrap
@@ -1157,7 +1217,7 @@ Rectangle {
                                          Layout.fillWidth: true
                                          Layout.bottomMargin: 4
                                          spacing: 6
-                                         WorkbenchButton {
+                                          WorkbenchButton {
                                              objectName: "separationOpenModelDirectory"
                                              Layout.fillWidth: true
                                              implicitHeight: 26
@@ -1177,10 +1237,22 @@ Rectangle {
                                                       && !VocalSeparationController.downloadBusy
                                              onClicked: modelDirectoryDialog.open()
                                              ToolTip.visible: hovered && !enabled
-                                             ToolTip.text: page.contextLocked
+                                              ToolTip.text: page.contextLocked
                                                            ? page.contextLockReason
                                                            : qsTr("模型下载或校验期间不能更改目录")
-                                         }
+                                          }
+                                          WorkbenchButton {
+                                              objectName: "separationDetectModels"
+                                              implicitWidth: 54
+                                              implicitHeight: 26
+                                              text: qsTr("检测")
+                                              primaryAction: true
+                                              enabled: !page.contextLocked
+                                                       && !VocalSeparationController.downloadBusy
+                                              Accessible.name: qsTr("检测模型目录")
+                                              Accessible.role: Accessible.Button
+                                              onClicked: VocalSeparationController.verifyInstalledModels()
+                                          }
                                      }
                                  }
                              }
@@ -1544,7 +1616,7 @@ Rectangle {
                                                 anchors.fill: parent
                                                 peaks: modelData.waveform || []
                                                 position: modelData.available
-                                                          ? page.resultPreviewPositionMs : 0
+                                                          ? page.stemPreviewPosition(modelData.kind) : 0
                                                 duration: VocalSeparationController.inputInfo.durationMs || 0
                                                 pointerInteractionEnabled: modelData.available
                                                 useTrackAccent: true
@@ -1556,6 +1628,11 @@ Rectangle {
                                             }
                                             Rectangle {
                                                 visible: stemWaveform.duration > 0
+                                                         && page.resultPreviewCurrent
+                                                         && VocalSeparationController.resultPreviewMode
+                                                            === VocalSeparationController.Solo
+                                                         && VocalSeparationController.resultPreviewSoloKind
+                                                            === modelData.kind
                                                 x: Math.max(0, Math.min(parent.width - width,
                                                                        stemWaveform.waveformCursorX))
                                                 width: 1
@@ -1578,7 +1655,8 @@ Rectangle {
                                             Accessible.role: Accessible.Button
                                             ToolTip.visible: hovered && !enabled
                                             ToolTip.text: page.contextLocked ? page.contextLockReason : qsTr("输出尚不可用")
-                                            onClicked: { exportDialog.kind = modelData.kind; exportDialog.open() }
+                                            onClicked: VocalSeparationController
+                                                .exportStemToOutputDirectory(modelData.kind)
                                         }
                                     }
                                 }

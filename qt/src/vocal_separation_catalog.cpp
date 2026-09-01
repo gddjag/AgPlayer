@@ -117,10 +117,22 @@ QList<VocalModelCard> VocalSeparationCatalog::models()
          QStringLiteral("HTDemucs FT FP16"),
          QStringLiteral("鼓组、贝斯、其他、人声与派生伴奏五轨分离"),
          QStringLiteral("标准音质"),
-         QStringLiteral("高品质优先"),
+         QStringLiteral("高品质"),
          QStringLiteral("Meta Demucs / StemSplit ONNX conversion"),
          QStringLiteral("https://huggingface.co/StemSplitio/htdemucs-ft-onnx")},
     };
+}
+
+QUrl vocalDomesticMirrorUrl(const QUrl& source)
+{
+    if (source.scheme() != QStringLiteral("https")
+        || source.host().compare(QStringLiteral("huggingface.co"),
+                                 Qt::CaseInsensitive) != 0) {
+        return {};
+    }
+    QUrl mirror(source);
+    mirror.setHost(QStringLiteral("hf-mirror.com"));
+    return mirror;
 }
 
 VocalRuntimePackage VocalSeparationCatalog::directMlRuntime()

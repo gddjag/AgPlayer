@@ -52,3 +52,7 @@ struct CustomManifestValidationResult {
 };
 
 CustomManifestValidationResult validateCustomModelManifest(const QJsonObject& manifest);
+
+// Returns a verified, free domestic mirror URL when the source has a supported
+// mirror. An empty URL means the user must use the manual/community route.
+QUrl vocalDomesticMirrorUrl(const QUrl& source);

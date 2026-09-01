@@ -86,6 +86,7 @@ TestCase {
         verify(findChild(page, "separationBackupModelAction"))
         verify(findChild(page, "separationBackupModelDialog"))
         verify(findChild(page, "separationCustomModelCard"))
+        verify(findChild(page, "separationDetectModels"))
         compare(VocalSeparationController.inputInfo.name, undefined)
         verify(!primary.enabled)
         verify(primary.Accessible.name.length > 0)
@@ -173,8 +174,8 @@ TestCase {
         const customDetails = findChild(customEntry, "separationCustomModelDetails")
         verify(customIcon && customCopy && customDetails,
                "custom mode must use the dedicated reference-card treatment")
-        verify(customCopy.text.indexOf("受信模型") >= 0,
-               "custom card must state the currently executable scope truthfully")
+        verify(customCopy.text.indexOf("自动识别支持的模型") >= 0,
+               "custom card must describe detection without promising arbitrary execution")
         verify(customDetails.text.indexOf("自动识别") >= 0)
         verify(customDetails.text.indexOf("不会执行") >= 0)
         const firstAction = findChild(firstCard, "separationModelAction-uvr-mdxnet-kara")
@@ -202,16 +203,31 @@ TestCase {
         const customCard = findChild(page, "separationCustomModelCard")
         const openDirectory = findChild(page, "separationOpenModelDirectory")
         const changeDirectory = findChild(page, "separationChangeModelDirectory")
+        const detect = findChild(page, "separationDetectModels")
         const backupText = findChild(page, "separationBackupModelText")
-        verify(list && customCard && openDirectory && changeDirectory && backupText)
+        verify(list && customCard && openDirectory && changeDirectory && detect && backupText)
         const customRight = customCard.mapToItem(list, customCard.width, 0).x
         verify(customRight <= list.width + 1,
                "both custom model directory actions must be visible at the reference width")
         compare(openDirectory.text, "打开模型目录")
         compare(changeDirectory.text, "更改目录")
+        compare(detect.text, "检测")
+        compare(findChild(customCard, "separationCustomModelTitle").text,
+                "自定义模型")
+        verify(findChild(customCard, "separationCustomModelCopy").text
+               .indexOf("自动识别支持的模型") >= 0)
         verify(backupText.text.indexOf("如果点击模型下载太慢或者下载不了") >= 0)
         verify(backupText.text.indexOf("https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888") >= 0)
         verify(backupText.text.indexOf("提取码: 8888") >= 0)
+    }
+
+    function test_modelCardsExposeDomesticMirrorAndGreenPercentageProgress() {
+        const card = findChild(page, "separationModelCard-htdemucs-ft-fp16")
+        verify(card)
+        verify(findChild(card, "separationDomesticMirror-htdemucs-ft-fp16"))
+        const percentage = findChild(card, "separationDownloadPercentage-htdemucs-ft-fp16")
+        verify(percentage)
+        compare(percentage.color.toString(), Theme.success.toString())
     }
 
     function test_inputChooserAdvertisesAudioAndVideoContainers() {
@@ -303,8 +319,10 @@ TestCase {
         tryVerify(function() { return page.resultPreviewPositionMs > 0 }, 2000)
         verify(page.inputPreviewPositionMs > 0)
         compare(inputWaveform.position, page.inputPreviewPositionMs)
-        compare(vocalsWaveform.position, page.resultPreviewPositionMs)
-        compare(accompanimentWaveform.position, page.resultPreviewPositionMs)
+        compare(vocalsWaveform.position, 0,
+                "mix playback must not make every solo-track cursor move")
+        compare(accompanimentWaveform.position, 0,
+                "mix playback must not make every solo-track cursor move")
 
         AudioPreviewController.stop()
         separationTestDriver.reset()

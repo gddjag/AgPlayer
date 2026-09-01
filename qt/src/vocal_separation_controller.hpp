@@ -55,6 +55,7 @@ class VocalSeparationController final : public QObject {
     Q_PROPERTY(double downloadProgress READ downloadProgress NOTIFY downloadProgressChanged)
     Q_PROPERTY(QString downloadingModelId READ downloadingModelId NOTIFY downloadStateChanged)
     Q_PROPERTY(bool downloadBusy READ downloadBusy NOTIFY downloadStateChanged)
+    Q_PROPERTY(QString downloadSource READ downloadSource NOTIFY downloadStateChanged)
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
     Q_PROPERTY(QString outputFormat READ outputFormat NOTIFY outputFormatChanged)
     Q_PROPERTY(QString outputDirectory READ outputDirectory
@@ -132,6 +133,7 @@ public:
     double downloadProgress() const noexcept;
     QString downloadingModelId() const;
     bool downloadBusy() const noexcept;
+    QString downloadSource() const;
     QString error() const;
     QString outputFormat() const;
     QString outputDirectory() const;
@@ -149,6 +151,7 @@ public:
     Q_INVOKABLE bool verifyInstalledModels();
     Q_INVOKABLE bool dropInput(const QList<QUrl>& urls);
     Q_INVOKABLE bool downloadModel(const QString& modelId);
+    Q_INVOKABLE bool downloadModelFromMirror(const QString& modelId);
     Q_INVOKABLE void pauseDownload();
     Q_INVOKABLE void resumeDownload();
     Q_INVOKABLE bool deleteModel(const QString& modelId);
@@ -167,6 +170,7 @@ public:
     Q_INVOKABLE bool previewStemAt(StemKind kind, qint64 positionMs);
     Q_INVOKABLE bool setStemPreviewVolume(StemKind kind, double volume);
     Q_INVOKABLE bool exportStem(StemKind kind, const QUrl& destination);
+    Q_INVOKABLE bool exportStemToOutputDirectory(StemKind kind);
     Q_INVOKABLE bool exportSelected(const QUrl& destinationDirectory);
     Q_INVOKABLE bool exportAll(const QUrl& destinationDirectory);
     Q_INVOKABLE bool addStemToPlaylist(StemKind kind,
@@ -233,6 +237,8 @@ private:
         VocalDownloadFile file;
         QString destination;
         bool runtimeArchive = false;
+        QUrl mirrorUrl;
+        bool mirrorAttempted = false;
     };
 
     enum class VerificationPurpose { None, Refresh, Download, Start, Probe };
@@ -266,6 +272,7 @@ private:
     void rebuildStems();
     void setJobState(JobState state, const QString& stage = {});
     void setError(const QString& error);
+    bool beginModelDownload(const QString& modelId, bool preferDomesticMirror);
     void startNextDownload();
     void rebuildModelDirectoryWatcher();
     void scheduleModelDirectoryScan();
@@ -324,6 +331,8 @@ private:
     QList<DownloadItem> downloadQueue_;
     QString downloadingModelId_;
     QString failedDownloadModelId_;
+    QString downloadSource_;
+    bool preferDomesticMirror_ = false;
     double downloadProgress_ = 0.0;
     qint64 completedDownloadBytes_ = 0;
     qint64 totalDownloadBytes_ = 0;

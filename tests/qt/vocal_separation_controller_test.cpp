@@ -91,6 +91,7 @@ private slots:
     void crashCanRetryTheSameRequest();
     void localFailureForNewRequestCannotRetryThePreviousWorkerRequest();
     void exportNeverOverwritesAndPlaylistUsesTheRealImportPath();
+    void stemDownloadPublishesDirectlyToTheConfiguredOutputDirectory();
     void batchExportPublishesOneCompleteDirectoryOrNothing();
     void exportAllPublishesEveryAvailableStemRegardlessOfSelection();
     void selectedPlaylistActionRejectsAnUnsafeSubset();
@@ -1560,6 +1561,35 @@ exportNeverOverwritesAndPlaylistUsesTheRealImportPath()
     QVERIFY(!controller.addStemToPlaylist(
         VocalSeparationController::StemKind::Vocals,
         QStringLiteral("missing-playlist")));
+}
+
+void VocalSeparationControllerTest::
+stemDownloadPublishesDirectlyToTheConfiguredOutputDirectory()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray modelBytes("trusted-test-model");
+    auto options = optionsFor(temporary, QStringLiteral("success"), modelBytes);
+    options.outputDirectory = temporary.filePath(QStringLiteral("direct-output"));
+    QVERIFY(QDir().mkpath(options.outputDirectory));
+    installTestModel(options, QStringLiteral("two-stem"), modelBytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, QByteArrayLiteral("runtime")));
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
+    QVERIFY(controller.start());
+    QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(),
+                              VocalSeparationController::JobState::Completed, 5000);
+
+    const QString source = stemFor(
+        controller.stems(), VocalSeparationController::StemKind::Vocals)
+                               .value(QStringLiteral("path")).toString();
+    QVERIFY(controller.exportStemToOutputDirectory(
+        VocalSeparationController::StemKind::Vocals));
+    QVERIFY(QFileInfo::exists(QDir(options.outputDirectory)
+        .filePath(QFileInfo(source).fileName())));
 }
 
 void VocalSeparationControllerTest::

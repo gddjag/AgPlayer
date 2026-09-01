@@ -24,6 +24,7 @@ class VocalSeparationInstallTest final : public QObject {
 
 private slots:
     void exposesPinnedApprovedCatalog();
+    void domesticMirrorOnlyRewritesSupportedHuggingFaceDownloads();
     void exposesDownloadStateTransitions();
     void installerOwnsCanonicalRuntimePaths();
     void rejectsUnsafeCustomManifests();
@@ -40,6 +41,17 @@ private slots:
     void httpResumeValidatesRangeAndFallback();
     void pauseAndCancelPreventBackoffReconnect();
 };
+
+void VocalSeparationInstallTest::domesticMirrorOnlyRewritesSupportedHuggingFaceDownloads()
+{
+    const QUrl huggingFace(QStringLiteral(
+        "https://huggingface.co/StemSplitio/htdemucs-ft-onnx/resolve/main/model.onnx"));
+    const QUrl mirrored = vocalDomesticMirrorUrl(huggingFace);
+    QCOMPARE(mirrored.host(), QStringLiteral("hf-mirror.com"));
+    QCOMPARE(mirrored.path(), huggingFace.path());
+    QVERIFY(vocalDomesticMirrorUrl(QUrl(QStringLiteral(
+        "https://github.com/TRvlvr/model_repo/releases/download/model.onnx"))).isEmpty());
+}
 
 namespace {
 
