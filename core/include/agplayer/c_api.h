@@ -11,6 +11,7 @@ typedef struct ag_player ag_player;
 typedef struct ag_metadata ag_metadata;
 typedef struct ag_waveform ag_waveform;
 typedef struct ag_cancel_token ag_cancel_token;
+typedef struct ag_video_decoder ag_video_decoder;
 typedef void (*ag_progress_callback)(float progress, void* user_data);
 
 typedef enum ag_result {
@@ -23,6 +24,25 @@ typedef enum ag_result {
     AG_CANCELLED = 6,
     AG_INTERNAL_ERROR = 7
 } ag_result;
+
+typedef enum ag_video_pixel_format {
+    AG_VIDEO_PIXEL_FORMAT_BGRA8 = 1
+} ag_video_pixel_format;
+
+typedef struct ag_video_frame {
+    uint32_t struct_size;
+    const unsigned char* data;
+    size_t data_size;
+    int width;
+    int height;
+    int stride;
+    int pixel_format;
+    int64_t pts_ms;
+    int sar_num;
+    int sar_den;
+    int rotation_degrees;
+    int end_of_stream;
+} ag_video_frame;
 
 typedef enum ag_audio_backend {
     AG_AUDIO_BACKEND_DEFAULT = 0,
@@ -191,6 +211,22 @@ ag_result ag_player_set_transition_fade_ms(ag_player* player,
 ag_result ag_player_set_duration_ms(ag_player* player, long long duration_ms);
 ag_result ag_player_set_match_track_sample_rate(ag_player* player,
                                                  int enabled);
+
+/* Synchronous software video decoding. Frame bytes are BGRA8 and remain valid
+ * only until the next read, seek, close, or destroy call on the same decoder.
+ * Set ag_video_frame.struct_size to sizeof(ag_video_frame) before each read. */
+ag_result ag_video_decoder_create(ag_video_decoder** out_decoder);
+ag_result ag_video_decoder_open(ag_video_decoder* decoder,
+                                const char* utf8_path);
+ag_result ag_video_decoder_read(ag_video_decoder* decoder,
+                                ag_video_frame* out_frame);
+ag_result ag_video_decoder_seek(ag_video_decoder* decoder,
+                                int64_t position_ms);
+/* May be called from another thread to interrupt open/read/seek. */
+void ag_video_decoder_cancel(ag_video_decoder* decoder);
+/* Idempotent. Also clears cancellation so the handle can be reopened. */
+void ag_video_decoder_close(ag_video_decoder* decoder);
+void ag_video_decoder_destroy(ag_video_decoder* decoder);
 
 ag_result ag_metadata_open(const char* utf8_path, ag_metadata** out_metadata);
 void ag_metadata_destroy(ag_metadata* metadata);

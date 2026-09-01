@@ -7,6 +7,7 @@
 #include "pitch_shifter.hpp"
 #include "playback_time_pitch_stage.hpp"
 #include "transcoder.hpp"
+#include "video_decoder.hpp"
 
 #include <algorithm>
 #include "bpm_analyzer.hpp"
@@ -89,6 +90,10 @@ struct ag_player {
 
 struct ag_metadata {
     agplayer::MediaMetadata value;
+};
+
+struct ag_video_decoder {
+    agplayer::VideoDecoder value;
 };
 
 struct ag_waveform {
@@ -198,6 +203,60 @@ ag_result ag_player_create(ag_player** out_player)
 {
     const ag_player_config config{AG_AUDIO_BACKEND_DEFAULT, 0U};
     return ag_player_create_with_config(&config, out_player);
+}
+
+ag_result ag_video_decoder_create(ag_video_decoder** const out_decoder)
+{
+    if (out_decoder == nullptr) {
+        return AG_INVALID_ARGUMENT;
+    }
+    *out_decoder = nullptr;
+    return guard_result([&] {
+        *out_decoder = new (std::nothrow) ag_video_decoder;
+        return *out_decoder == nullptr ? AG_INTERNAL_ERROR : AG_OK;
+    });
+}
+
+ag_result ag_video_decoder_open(ag_video_decoder* const decoder,
+                                const char* const utf8_path)
+{
+    return decoder == nullptr || utf8_path == nullptr
+        ? AG_INVALID_ARGUMENT
+        : decoder->value.open(utf8_path);
+}
+
+ag_result ag_video_decoder_read(ag_video_decoder* const decoder,
+                                ag_video_frame* const out_frame)
+{
+    return decoder == nullptr || out_frame == nullptr
+        ? AG_INVALID_ARGUMENT
+        : decoder->value.read(*out_frame);
+}
+
+ag_result ag_video_decoder_seek(ag_video_decoder* const decoder,
+                                const std::int64_t position_ms)
+{
+    return decoder == nullptr ? AG_INVALID_ARGUMENT
+                              : decoder->value.seek(position_ms);
+}
+
+void ag_video_decoder_cancel(ag_video_decoder* const decoder)
+{
+    if (decoder != nullptr) {
+        decoder->value.cancel();
+    }
+}
+
+void ag_video_decoder_close(ag_video_decoder* const decoder)
+{
+    if (decoder != nullptr) {
+        decoder->value.close();
+    }
+}
+
+void ag_video_decoder_destroy(ag_video_decoder* const decoder)
+{
+    delete decoder;
 }
 
 ag_result ag_player_create_with_config(const ag_player_config* config,

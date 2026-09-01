@@ -16,6 +16,7 @@ foreach ($relativePath in @(
     'avformat-62.dll',
     'avutil-60.dll',
     'swresample-6.dll',
+    'swscale-9.dll',
     'platforms\qwindows.dll'
 )) {
     if (-not (Test-Path -LiteralPath (Join-Path $appDirectory $relativePath))) {

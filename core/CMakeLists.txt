@@ -38,6 +38,8 @@ add_library(agplayer_core STATIC
     src/formant_preserver.cpp
     src/formant_preserver.hpp
     src/decoder.cpp
+    src/video_decoder.cpp
+    src/video_decoder.hpp
     src/graphic_equalizer.cpp
     src/graphic_equalizer.hpp
     src/metadata_writer.cpp

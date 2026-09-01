@@ -557,6 +557,24 @@ set_tests_properties(decoder_test PROPERTIES
         "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
+add_executable(video_decoder_test
+    core/video_decoder_test.cpp
+)
+add_dependencies(video_decoder_test video_fixtures)
+target_link_libraries(video_decoder_test PRIVATE agplayer_core)
+agplayer_enable_warnings(video_decoder_test)
+add_test(NAME video_decoder_test COMMAND video_decoder_test
+    "${VIDEO_WITH_AUDIO_FIXTURE}"
+    "${VIDEO_ONLY_FIXTURE}"
+    "${AUDIO_WITH_ATTACHED_PICTURE_FIXTURE}"
+    "${ROTATED_VIDEO_FIXTURE}"
+)
+set_tests_properties(video_decoder_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
 add_executable(waveform_analyzer_test
     core/waveform_analyzer_test.cpp
 )
@@ -1760,6 +1778,19 @@ set_tests_properties(library_model_stress_test PROPERTIES
 )
 
 if (WIN32)
+    set(agplayer_swscale_runtime_dll
+        "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<IF:$<CONFIG:Debug>,debug/bin,bin>/swscale-9.dll"
+    )
+    get_target_property(agplayer_runtime_directory AgPlayer BINARY_DIR)
+    add_custom_target(agplayer_swscale_runtime
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${agplayer_swscale_runtime_dll}"
+            "${agplayer_runtime_directory}"
+        COMMENT "Deploying FFmpeg swscale runtime"
+        VERBATIM
+    )
+    add_dependencies(AgPlayer agplayer_swscale_runtime)
+
     # This contract intentionally performs a nested Ninja configure.  Do not
     # register it from ad-hoc NMake builds that do not carry the preset's
     # vcpkg toolchain context; the canonical Windows presets satisfy all three
