@@ -60,6 +60,7 @@ using DecoderInterruptCallback = bool (*)(void*) noexcept;
 struct DecoderOpenOptions final {
     int output_sample_rate = 0;
     int output_channels = 0;
+    bool allow_silent_video_clock = false;
     DecoderInterruptCallback interrupt_callback = nullptr;
     void* interrupt_context = nullptr;
 };

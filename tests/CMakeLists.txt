@@ -622,12 +622,15 @@ set_tests_properties(waveform_cache_test PROPERTIES
 add_executable(audio_engine_test
     core/audio_engine_test.cpp
 )
-add_dependencies(audio_engine_test decoder_fixture)
+add_dependencies(audio_engine_test decoder_fixture video_fixtures)
 target_link_libraries(audio_engine_test PRIVATE agplayer_core)
 
 agplayer_enable_warnings(audio_engine_test)
 
-add_test(NAME audio_engine_test COMMAND audio_engine_test "${SINE_WAV_FIXTURE}")
+add_test(NAME audio_engine_test COMMAND audio_engine_test
+    "${SINE_WAV_FIXTURE}"
+    "${VIDEO_ONLY_FIXTURE}"
+)
 set_tests_properties(audio_engine_test PROPERTIES TIMEOUT 10)
 
 add_executable(output_level_meter_test

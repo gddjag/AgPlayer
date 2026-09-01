@@ -9,6 +9,7 @@
 
 #include "decoder.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdint>
@@ -72,6 +73,7 @@ int main(const int argc, char** argv)
            == AG_OK);
     assert(!video_only.has_audio);
     assert(video_only.has_video);
+    assert(video_only.duration_ms > 0);
 
     agplayer::MediaMetadata cover_only;
     assert(agplayer::probe_media_metadata(audio_with_attached_picture_path.string(),
@@ -118,6 +120,69 @@ int main(const int argc, char** argv)
     assert(decoder.read(block) == AG_OK);
     assert(block.frames > 0U);
     assert(block.samples.size() == block.frames * 2U);
+
+    // Video-only inputs stay unsupported for normal audio callers. The
+    // playback-only opt-in instead exposes a finite, silent 48 kHz stereo
+    // clock so the player retains its existing audio timeline.
+    agplayer::Decoder strict_video_decoder;
+    assert(strict_video_decoder.open(video_only_path.string())
+           == AG_UNSUPPORTED_FORMAT);
+    assert(!strict_video_decoder.is_open());
+
+    agplayer::DecoderOpenOptions silent_clock_options;
+    silent_clock_options.allow_silent_video_clock = true;
+    agplayer::Decoder silent_video_decoder;
+    assert(silent_video_decoder.open(video_only_path.string(),
+                                     silent_clock_options)
+           == AG_OK);
+    assert(silent_video_decoder.is_open());
+    assert(silent_video_decoder.output_format().sample_rate == 48'000);
+    assert(silent_video_decoder.output_format().channels == 2);
+
+    constexpr std::int64_t silent_sample_rate = 48'000;
+    const std::int64_t silent_total_frames =
+        (video_only.duration_ms * silent_sample_rate + 999) / 1'000;
+    assert(silent_total_frames > 0);
+    std::int64_t silent_frames_read = 0;
+    std::int64_t previous_silent_end_frame = 0;
+    std::int64_t previous_silent_timestamp_ms = -1;
+    do {
+        assert(silent_video_decoder.read(block) == AG_OK);
+        if (block.frames > 0U) {
+            assert(block.timestamp_frame == previous_silent_end_frame);
+            assert(block.timestamp_ms >= previous_silent_timestamp_ms);
+            assert(block.samples.size() == block.frames * 2U);
+            assert(std::all_of(block.samples.begin(), block.samples.end(),
+                               [](const float sample) { return sample == 0.0F; }));
+            previous_silent_end_frame += static_cast<std::int64_t>(block.frames);
+            previous_silent_timestamp_ms = block.timestamp_ms;
+            silent_frames_read += static_cast<std::int64_t>(block.frames);
+        }
+    } while (!block.end_of_stream);
+    assert(silent_frames_read == silent_total_frames);
+
+    constexpr std::int64_t silent_seek_ms = 1'000;
+    assert(silent_video_decoder.seek(silent_seek_ms) == AG_OK);
+    assert(silent_video_decoder.read(block) == AG_OK);
+    assert(block.frames > 0U);
+    assert(block.timestamp_frame >= silent_seek_ms * silent_sample_rate / 1'000);
+    assert(block.timestamp_frame
+           <= silent_seek_ms * silent_sample_rate / 1'000
+              + static_cast<std::int64_t>(block.frames));
+    assert(std::all_of(block.samples.begin(), block.samples.end(),
+                       [](const float sample) { return sample == 0.0F; }));
+
+    assert(silent_video_decoder.seekFrame(silent_sample_rate) == AG_OK);
+    assert(silent_video_decoder.read(block) == AG_OK);
+    assert(block.frames > 0U);
+    assert(block.timestamp_frame == silent_sample_rate);
+
+    assert(silent_video_decoder.seekFrame(silent_total_frames + 1'024) == AG_OK);
+    assert(silent_video_decoder.read(block) == AG_OK);
+    assert(block.frames == 0U);
+    assert(block.end_of_stream);
+    silent_video_decoder.close();
+    assert(!silent_video_decoder.is_open());
 
     constexpr std::int64_t seek_target_ms = 1'517;
     assert(decoder.seek(seek_target_ms) == AG_OK);
