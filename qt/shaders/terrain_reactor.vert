@@ -22,6 +22,8 @@ layout(std140, binding = 0) uniform buf {
     vec4 styleAudio;
     vec4 stylePresentation;
     vec4 impact;
+    vec4 waveSources[8];
+    vec4 audioEnvelope;
 } ubuf;
 
 layout(location = 0) out vec3 color;
@@ -50,6 +52,8 @@ void main()
     float responseRadius = max(28.0, ubuf.styleAudio.z);
     float impactStrength = ubuf.impact.x;
     float impactAge = ubuf.impact.y;
+    float fastBass = ubuf.audioEnvelope.x;
+    float slowBass = ubuf.audioEnvelope.y;
     float impactWave = 0.0;
     float coreGlow = 0.0;
     float steadyCoreGlow = 0.0;
@@ -73,10 +77,11 @@ void main()
         float ridgeB = 0.5 + 0.5
             * cos(position.x * 0.041 - position.z * 0.036 - t * 0.22);
         float wideRidge = ridgeA * 0.56 + ridgeB * 0.44;
-        float bass = bandsLow.x * (1.65 + core * 2.75)
-                   + bandsLow.y * (1.35 + bassField * 1.70) * center;
-        float mids = bandsLow.z * (0.75 + wideRidge * 1.95)
-                   + bandsLow.w * (0.80 + (1.0 - wideRidge) * 1.65);
+        float bass = bandsLow.x * (1.25 + core * 2.15)
+                   + bandsLow.y * (1.10 + bassField * 1.45) * center
+                   + fastBass * core * 1.55 + slowBass * terrainField * 0.78;
+        float mids = bandsLow.z * (0.48 + wideRidge * 2.75)
+                   + bandsLow.w * (0.52 + (1.0 - wideRidge) * 2.30);
         float detailA = 0.5 + 0.5
             * sin(position.x * 0.18 + position.z * 0.11);
         float detailB = 0.5 + 0.5
@@ -101,16 +106,28 @@ void main()
             + core * 1.08;
         float idle = baseRelief + 0.06 + 0.10
             * sin(distanceFromCore * 0.067 - t * 0.36 + idlePhase);
-        float rippleCount = max(1.0, ubuf.effects.w);
-        float rippleSpacing = 96.0 / rippleCount;
-        float rippleRadius = mod(t * 13.5, rippleSpacing);
-        float ringDistance = abs(mod(distanceFromCore - rippleRadius
-                                   + rippleSpacing * 0.5, rippleSpacing)
-                               - rippleSpacing * 0.5);
         float cellModulation = 0.55 + randomValue * 0.45;
-        float ripple = ubuf.parameters.z * ubuf.styleToggles.x
-                     * exp(-(ringDistance * ringDistance) / 30.25) * 3.35
-                     * cellModulation;
+        float waveField = 0.0;
+        float waveEnergy = 0.07 + fastBass * 0.34
+                         + ubuf.parameters.z * 0.74;
+        int waveCount = int(clamp(ubuf.effects.w, 0.0, 8.0));
+        if (ubuf.styleToggles.x > 0.5 && waveCount > 0) {
+            for (int waveIndex = 0; waveIndex < 8; ++waveIndex) {
+                if (waveIndex >= waveCount) break;
+                vec4 source = ubuf.waveSources[waveIndex];
+                float age = fract(t / 3.45 + source.z);
+                float waveRadius = age * 72.0;
+                float sourceDistance = length(position.xz - source.xy);
+                float ridgeDistance = sourceDistance - waveRadius;
+                float ridge = exp(-(ridgeDistance * ridgeDistance) / 5.2);
+                float tail = exp(-max(0.0, waveRadius - sourceDistance) / 14.0)
+                           * step(sourceDistance, waveRadius);
+                waveField += (ridge + tail * 0.18) * (1.0 - age)
+                           * source.w;
+            }
+        }
+        float ripple = waveField * waveEnergy * ubuf.styleToggles.x
+                     * (1.55 + ubuf.effects.w * 0.08) * cellModulation;
         float ringPhase = 0.5 + 0.5 * cos(distanceFromCore * 0.29
                                        - t * 1.15 * motion);
         float structuralRing = pow(ringPhase, 6.0)
@@ -135,21 +152,22 @@ void main()
         impactLight = clamp(impactStrength * impactDome
                             * (0.62 + ubuf.styleAudio.w * 0.38)
                             + impactWave * 0.12, 0.0, 1.0);
-        steadyCoreGlow = pow(center, 2.05)
-                       * (0.16 + ubuf.parameters.x * 0.92
-                          + bandsLow.x * 0.72)
+        steadyCoreGlow = pow(center, 1.82)
+                       * (0.12 + ubuf.parameters.x * 0.62
+                          + fastBass * 0.96 + slowBass * 0.52)
                        * ubuf.styleAudio.w;
-        float coreLift = ubuf.parameters.x * ubuf.styleAudio.w
-                       * (0.35 + bandsLow.x * 0.65) * dome * 10.8;
+        float coreLift = ubuf.styleAudio.w
+                       * (ubuf.parameters.x * 0.28 + fastBass * 0.72
+                          + slowBass * 0.32) * dome * 9.4;
         float centerShoulders = ubuf.parameters.x * ubuf.styleAudio.w
                               * terrainField
-                              * (0.42 + core * 1.55 + wideRidge * 0.38);
+                              * (0.18 + core * 0.82 + wideRidge * 0.86);
         idle *= ubuf.styleToggles.w;
         float rawHeight = max(0.0,
             idle + ((bass + mids + highDetail) * terrainField + ripple) * amplitude
             + coreLift + centerShoulders
             + impactWave + coreGlow * 7.2);
-        float softCap = mix(32.0, 36.0, step(0.001, impactStrength));
+        float softCap = mix(27.0, 32.0, step(0.001, impactStrength));
         float height = max(0.035,
             softCap * (1.0 - exp(-rawHeight / softCap)));
         scale.y = height;
@@ -170,11 +188,11 @@ void main()
                                 + randomValue * 0.83
                                 + distanceFromCore * 0.010);
         float flowingBand = exp(-pow((flowPhase - 0.20) / 0.075, 2.0));
-        float sparkle = pow(0.5 + 0.5 * sin(t * (3.4 + highEnergy * 8.0)
+        float sparkle = pow(0.5 + 0.5 * sin(t * (4.2 + highEnergy * 9.0)
                                            + randomValue * 47.0), 18.0);
         streamSheen = ubuf.styleExtra.z * topSurface
-                    * (0.02 + highEnergy * 0.48)
-                    * (flowingBand * 0.86 + sparkle * 1.02);
+                    * (0.035 + highEnergy * 0.55 + fastBass * 0.16)
+                    * (flowingBand * 0.92 + sparkle * 1.18);
     } else if (type < 1.5) {
         position.y += sin(t * 0.74 * motion + randomValue * 18.0) * 1.95
                     + bandsLow.x * 2.2;
@@ -311,9 +329,9 @@ void main()
 
     vec3 worldPosition = position + vertexPosition * scale;
     gl_Position = ubuf.mvp * vec4(worldPosition, 1.0);
-    light = 0.46 + 0.54 * max(dot(normalize(vertexNormal),
+    light = 0.38 + 0.62 * max(dot(normalize(vertexNormal),
                                   normalize(vec3(-0.35, 0.82, 0.42))), 0.0);
-    light *= type < 0.5 ? mix(0.78, 1.08, topSurface) : 1.0;
+    light *= type < 0.5 ? mix(0.68, 1.14, topSurface) : 1.0;
     light *= clamp(0.66 + ubuf.stylePresentation.z * 0.34, 0.72, 1.18);
     fog = clamp(1.0 - distanceFromCore / 132.0, 0.0, 1.0);
     float focusBand = exp(-pow(distanceFromCore - responseRadius * 0.34, 2.0)

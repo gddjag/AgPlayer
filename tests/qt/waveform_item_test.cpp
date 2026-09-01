@@ -50,6 +50,7 @@ private slots:
     void densityAndLineWidthAffectRenderedGeometry();
     void visualModesUseConfiguredProgressAndBaseColors();
     void frequencyColorModeMapsBandEnergyToConfiguredColors();
+    void frequencyModeUpdatesProgressOpacityWithoutRebuildingNode();
     void spectrumUsesBottomBaselineAndCenterEnvelope();
     void spectrumUpsamplesSparseInputToDenseBars();
     void spectrumContractUsesFixedBarsWithPeakCaps();
@@ -237,6 +238,36 @@ void WaveformItemTest::frequencyColorModeMapsBandEnergyToConfiguredColors()
     compareColor(data[6], 0x98, 0x92, 0xB8, 0xFF);
     QCOMPARE(renderedPeakCount(node, item), 4);
     delete node;
+}
+
+void WaveformItemTest::frequencyModeUpdatesProgressOpacityWithoutRebuildingNode()
+{
+    TestableWaveformItem item;
+    item.setWidth(4);
+    item.setHeight(40);
+    item.setDuration(100);
+    item.setDensity(2.0);
+    item.setLineWidth(1.0);
+    item.setVisualMode(3);
+    item.setLayers(makeLayers(
+        peaks({1.0, 1.0, 1.0, 1.0}),
+        peaks({1.0, 1.0, 1.0, 1.0}),
+        peaks({0.0, 0.0, 0.0, 0.0}),
+        peaks({0.0, 0.0, 0.0, 0.0})));
+
+    item.setPosition(0);
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node != nullptr);
+    const int unplayedAlpha = static_cast<int>(vertices(node)[0].a);
+    QVERIFY(unplayedAlpha < 128);
+
+    item.setPosition(100);
+    QSGNode* updatedNode = item.updatePaintNode(node, nullptr);
+    QCOMPARE(updatedNode, node);
+    QCOMPARE(static_cast<int>(vertices(updatedNode)[0].a), 255);
+    QCOMPARE(static_cast<int>(vertices(updatedNode)[6].a), 255);
+    QVERIFY(static_cast<int>(vertices(updatedNode)[0].a) > unplayedAlpha + 100);
+    delete updatedNode;
 }
 
 void WaveformItemTest::spectrumUsesBottomBaselineAndCenterEnvelope()

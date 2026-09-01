@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Window
 import QtTest
 import AgPlayer
 
@@ -18,6 +19,20 @@ TestCase {
     property var originalLyricSettings: ({})
     property var originalDynamicsSettings: ({})
     property var transientLyricsPanel: null
+    property var transientWaveformView: null
+
+    QtObject {
+        id: waveformPlaybackFake
+        property real positionMs: 25000
+        property real durationMs: 100000
+        function seek(positionMs) { waveformPlaybackFake.positionMs = positionMs }
+    }
+
+    QtObject {
+        id: waveformSessionFake
+        property real durationMs: 100000
+        property var layers: ({ mix: [1, 1, 1, 1], bass: [1, 1, 1, 1] })
+    }
 
     QtObject {
         id: queuePlayback
@@ -106,6 +121,16 @@ TestCase {
     Component {
         id: immersiveControlPanelComponent
         ImmersiveControlPanel { currentTab: 2 }
+    }
+
+    Component {
+        id: sharedWaveformComponent
+        SharedWaveformView {
+            width: 800
+            height: 52
+            playback: waveformPlaybackFake
+            waveformSession: waveformSessionFake
+        }
     }
 
     function mappedBounds(item, target) {
@@ -255,6 +280,10 @@ TestCase {
             transientLyricsPanel.destroy()
             transientLyricsPanel = null
         }
+        if (transientWaveformView) {
+            transientWaveformView.destroy()
+            transientWaveformView = null
+        }
         SettingsController.playerShellMode = originalShellMode
         PlayerExperienceController.immersiveMode = PlayerExperienceController.Off
         PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
@@ -365,7 +394,18 @@ TestCase {
         findChild(miniActions, "themeActionButton").clicked()
         compare(PlayerExperienceController.immersiveMode,
                 PlayerExperienceController.Off)
-        compare(SettingsController.playerShellMode, 0)
+        compare(SettingsController.playerShellMode, 1)
+    }
+
+    function test_immersive_waveform_drives_rendered_progress_not_only_cursor() {
+        transientWaveformView = createTemporaryObject(sharedWaveformComponent,
+                                                       testCase)
+        verify(transientWaveformView)
+        var rendered = findChild(transientWaveformView, "immersiveWaveform")
+        verify(rendered)
+        compare(rendered.position, 25000)
+        waveformPlaybackFake.positionMs = 75000
+        compare(rendered.position, 75000)
     }
 
     function test_one_terrain_item_stays_in_independent_window_for_all_hosts() {
@@ -412,8 +452,15 @@ TestCase {
         compare(findChild(surface, "immersiveBrandTitle"), null)
         compare(findChild(surface, "immersivePanelToggleButton"), null)
         var fullscreenButton = findChild(surface, "immersiveFullscreenButton")
+        var minimizeButton = findChild(surface, "immersiveMinimizeButton")
+        var returnButton = findChild(surface, "immersiveReturnToWindowButton")
         verify(fullscreenButton)
+        verify(minimizeButton)
+        verify(returnButton)
         compare(fullscreenButton.display, AbstractButton.IconOnly)
+        compare(minimizeButton.display, AbstractButton.IconOnly)
+        verify(returnButton.x < minimizeButton.x)
+        verify(minimizeButton.x < fullscreenButton.x)
         tryCompare(AudioVisualFeatureController, "active",
                    surface.terrainItem.renderingRequested, 1000)
         compare(findChild(surface, "immersivePanelIdleTimer").interval, 3000)
@@ -423,6 +470,16 @@ TestCase {
         compare(surface.panelIdle, false)
         surface.noteManualCameraActivity()
         compare(surface.manualCameraActive, true)
+
+        var immersiveWindow = findChild(mainWindow, "immersiveVisualWindow")
+        verify(immersiveWindow)
+        minimizeButton.clicked()
+        tryCompare(immersiveWindow, "visibility", Window.Minimized, 1500)
+        tryCompare(AudioVisualFeatureController, "active", false, 1500)
+        immersiveWindow.showNormal()
+        tryCompare(immersiveWindow, "visibility", Window.Windowed, 1500)
+        tryCompare(AudioVisualFeatureController, "active",
+                   surface.terrainItem.renderingRequested, 1500)
 
         fullscreenButton.clicked()
         tryCompare(PlayerExperienceController, "hostMode",
@@ -464,7 +521,7 @@ TestCase {
         drawer.destroy()
     }
 
-    function test_v46_panel_exposes_six_presets_lyrics_and_real_dynamics() {
+    function test_v46_panel_exposes_nine_presets_lyrics_and_real_dynamics() {
         PlayerExperienceController.immersiveMode =
                 PlayerExperienceController.TerrainReactor
         PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
@@ -478,7 +535,7 @@ TestCase {
         compare(panel.currentTab, 0)
         verify(panel.height < 500)
         var presetCards = []
-        for (var preset = 0; preset < 6; ++preset) {
+        for (var preset = 0; preset < 9; ++preset) {
             var presetCard = findChild(panel, "immersivePresetCard" + preset)
             verify(presetCard)
             presetCards.push(presetCard)
@@ -489,6 +546,7 @@ TestCase {
         verify(presetCards[1].x > presetCards[0].x)
         verify(presetCards[2].x > presetCards[1].x)
         verify(presetCards[3].y > presetCards[0].y)
+        verify(presetCards[6].y > presetCards[3].y)
         var panelScroll = findChild(panel, "immersivePanelScroll")
         verify(panelScroll)
         verify(panelScroll.contentWidth <= panelScroll.width)

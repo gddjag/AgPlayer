@@ -37,8 +37,11 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         height: Math.min(44, parent.height)
         layers: root.waveformSession ? root.waveformSession.layers : ({})
-        cursorPosition: root.playback ? root.playback.positionMs : 0
+        // Duration must be established before the initial playback position:
+        // WaveformItem intentionally clamps positions to its known duration.
         duration: root.effectiveDurationMs
+        position: root.playback ? root.playback.positionMs : 0
+        cursorPosition: root.playback ? root.playback.positionMs : 0
         // Immersive mode intentionally owns one waveform presentation. It
         // still consumes the shared cached mix/bass/mid/high layers, but its
         // colours always carry frequency meaning regardless of the normal

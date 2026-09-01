@@ -29,6 +29,9 @@ TestCase {
         waveform.enabled = true
         waveform.visible = true
         waveform.duration = 100000
+        waveform.position = 0
+        waveform.visualMode = 0
+        waveform.layers = ({ mix: [0.25, 0.5, 0.75, 1.0] })
     }
 
     function test_drag_emits_one_committed_seek() {

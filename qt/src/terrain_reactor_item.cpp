@@ -58,6 +58,8 @@ struct alignas(16) UniformBlock {
     float styleAudio[4]{}; // compression, response, range, center highlight
     float stylePresentation[4]{}; // rhythm, depth, clarity, rotation speed
     float impact[4]{}; // strength, age, active, sensitivity
+    float waveSources[8][4]{}; // stage x/z, normalized phase, strength
+    float audioEnvelope[4]{}; // fast bass, slow bass, reserved
 };
 
 static_assert(alignof(UniformBlock) == 16);
@@ -154,6 +156,7 @@ public:
     {
         claimed_ = resourceState_->acquireRenderer(rendererId_);
         frameTimer_.start();
+        counterTimer_.start();
     }
 
     ~TerrainReactorRenderer() override
@@ -194,7 +197,7 @@ protected:
             return;
         }
         resourceState_->initializeResources();
-        notifyCounters();
+        notifyCounters(true);
         fail(TerrainReactorItem::RenderStatus::Ready, QString());
     }
 
@@ -205,7 +208,8 @@ protected:
         const auto next = terrainItem->snapshotForRenderer();
         if (!snapshot_.running && next.running) frameTimer_.restart();
         if (next.running || failed_) publishStatus();
-        const bool layoutChanged = next.seed != snapshot_.seed
+        const bool seedChanged = next.seed != snapshot_.seed;
+        const bool layoutChanged = seedChanged
             || next.quality != snapshot_.quality
             || next.styleRevision != snapshot_.styleRevision
             || quality_.stage() != lastStage_;
@@ -233,6 +237,10 @@ protected:
         }
         syncedCameraRevision_ = next.cameraRevision;
         snapshot_ = next;
+        if (seedChanged || !waveSourcesInitialized_) {
+            waveSources_ = multiWaveSources(snapshot_.seed);
+            waveSourcesInitialized_ = true;
+        }
         if (layoutChanged) instancesDirty_ = true;
     }
 
@@ -243,7 +251,9 @@ protected:
         }
 
         const double targetFps = snapshot_.quality == TerrainReactorItem::Quality::Eco
-            ? 30.0 : 60.0;
+            ? 30.0
+            : snapshot_.quality == TerrainReactorItem::Quality::Balanced
+                ? 45.0 : 60.0;
         if (!framePacer_.shouldRender(snapshot_.timeSeconds, targetFps)) {
             update();
             return;
@@ -269,6 +279,9 @@ protected:
         buildInstancesIfNeeded();
         VisualParameters visual = mapVisualParameters(snapshot_.features,
             snapshot_.timeSeconds, snapshot_.style);
+        bassEnvelope_.advance(visual.bands[0] * 0.72F
+                                  + visual.bands[1] * 0.28F,
+                              float(animationElapsedSeconds));
         punchEvents_.consume(snapshot_.punchEvent, camera_);
         impactEvents_.consume(snapshot_.impactEvent, snapshot_.timeSeconds);
         const ImpactPulseSnapshot impact = impactEvents_.snapshot(
@@ -313,7 +326,10 @@ protected:
 
         const double workMilliseconds = static_cast<double>(workTimer.nsecsElapsed())
             / 1'000'000.0;
-        quality_.observeWorkSample(workMilliseconds);
+        const double targetFrameMilliseconds = 1000.0 / targetFps;
+        quality_.observeFrameSample(workMilliseconds,
+                                    wallElapsedSeconds * 1000.0,
+                                    targetFrameMilliseconds);
         quality_.advanceWallClock(wallElapsedSeconds);
         if (lastStage_ != quality_.stage()) {
             lastStage_ = quality_.stage();
@@ -407,16 +423,19 @@ private:
         QualityConfiguration config = quality_.configuration();
         switch (snapshot_.quality) {
         case TerrainReactorItem::Quality::Eco:
-            config.gridSize = std::min(config.gridSize, 112);
-            config.floatingCount = std::min(config.floatingCount, 60);
-            config.meteorCount = std::min(config.meteorCount, 10);
-            config.rippleCount = std::min(config.rippleCount, 5);
+            config.gridSize = std::min(config.gridSize, 96);
+            config.floatingCount = std::min(config.floatingCount, 36);
+            config.particleCount = std::min(config.particleCount, 52);
+            config.meteorCount = std::min(config.meteorCount, 5);
+            config.rippleCount = std::min(config.rippleCount, 4);
+            config.internalScale = std::min(config.internalScale, 0.75F);
             break;
         case TerrainReactorItem::Quality::Balanced:
             break;
         case TerrainReactorItem::Quality::High:
             if (quality_.stage() < DegradationStage::ReducedGrid) {
-                config.gridSize = 192;
+                config.gridSize = 160;
+                config.internalScale = 1.0F;
             }
             break;
         }
@@ -553,6 +572,16 @@ private:
         result.impact[1] = visual.impactAge;
         result.impact[2] = visual.impactStrength > 0.001F ? 1.0F : 0.0F;
         result.impact[3] = dynamics.rhythmSensitivity;
+        for (std::size_t index = 0; index < waveSources_.size(); ++index) {
+            const QVector4D& source = waveSources_[index];
+            result.waveSources[index][0] = source.x();
+            result.waveSources[index][1] = source.y();
+            result.waveSources[index][2] = source.z();
+            result.waveSources[index][3] = source.w();
+        }
+        const BassEnvelopeSnapshot envelope = bassEnvelope_.snapshot();
+        result.audioEnvelope[0] = envelope.fast;
+        result.audioEnvelope[1] = envelope.slow;
         return result;
     }
 
@@ -595,9 +624,12 @@ private:
         }, Qt::QueuedConnection);
     }
 
-    void notifyCounters()
+    void notifyCounters(bool force = false)
     {
         if (item_ == nullptr) return;
+        if (!force && counterTimer_.isValid()
+            && counterTimer_.elapsed() < 125) return;
+        counterTimer_.restart();
         QMetaObject::invokeMethod(item_, &TerrainReactorItem::countersChanged,
                                   Qt::QueuedConnection);
     }
@@ -636,6 +668,9 @@ private:
     CameraMotion camera_;
     PunchEventConsumer punchEvents_;
     ImpactEventConsumer impactEvents_;
+    BassEnvelopeFollower bassEnvelope_;
+    MultiWaveSources waveSources_{};
+    bool waveSourcesInitialized_ = false;
     TrackPalette currentPalette_{};
     TrackPalette fromPalette_{};
     TrackPalette targetPalette_{};
@@ -646,11 +681,14 @@ private:
     quint64 syncedCameraRevision_ = std::numeric_limits<quint64>::max();
     TerrainReactorItem* item_ = nullptr;
     QElapsedTimer frameTimer_;
+    QElapsedTimer counterTimer_;
     FramePacer framePacer_;
     QVector<GpuInstance> instances_;
     bool instancesDirty_ = true;
     bool instancesDirtyUpload_ = false;
-    int currentRippleCount_ = 10;
+    int currentRippleCount_ = 8;
+    // Mirrors QQuickRhiItem's initial full-resolution buffer. The first
+    // Balanced/Auto layout must therefore schedule the 0.90 scale update.
     float currentInternalScale_ = 1.0F;
     bool failed_ = false;
     const bool softwareBackend_ = false;

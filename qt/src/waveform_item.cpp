@@ -1293,7 +1293,9 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
     node->visibleEndMs_ = visibleEndMs_;
     node->waveformColor_ = waveformColor_;
     node->playedCount_ = newPlayedCount;
-    node->markDirty(QSGNode::DirtyMaterial);
+    // Vertex alpha encodes the played/unplayed contrast. Marking only the
+    // material leaves the updated vertex buffer stale on QRhi backends.
+    node->markDirty(QSGNode::DirtyGeometry);
     return node;
 }
 

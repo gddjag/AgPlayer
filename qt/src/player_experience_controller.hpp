@@ -104,7 +104,7 @@ public:
     Q_ENUM(ImmersiveMode)
     enum HostMode { Windowed = 0, Fullscreen = 1, Desktop = 2 };
     Q_ENUM(HostMode)
-    enum QualityPreset { Auto = 0, Eco = 1, Balanced = 2, High = 3, Ultra = 4 };
+    enum QualityPreset { Auto = 0, Eco = 1, Balanced = 2, High = 3 };
     Q_ENUM(QualityPreset)
     enum ColorMode { MultiRegion = 0, Custom = 1, RgbSweep = 2 };
     Q_ENUM(ColorMode)
@@ -115,6 +115,9 @@ public:
         PureStage = 3,
         Quiet = 4,
         Galaxy = 5,
+        MultiSourceNeon = 6,
+        DeepSeaSoftWave = 7,
+        AmberCinema = 8,
     };
     Q_ENUM(VisualPreset)
     enum LyricPosition { Left = 0, Center = 1, Right = 2 };

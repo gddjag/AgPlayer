@@ -3,6 +3,30 @@
 > [!IMPORTANT]
 > **2026-08-31 覆盖性裁定（当前有效）**：用户已明确停止以此前上传的 HTML、截图、图片和视频作为最终视觉目标。它们只保留为历史输入，不再用于本轮视觉对照、相似度判断或完成声明。当前实现以 AgPlayer 自有 Qt 6 / QML / C++17 / QRhi 架构和内部可复现的产品语义为准；两个开源仓库仅登记为 study-only 来源。不得复制、翻译或改写其源码、Shader、算法、常量、参数表、布局结构或资产。
 
+## 2026-09-01 性能与稳定性修复
+
+- 移除每帧复制整张反应堆画面的全屏 `MultiEffect` 柔光层，保留低成本环境光场；渲染仍为单个 QRhi item、单个实例缓冲与单次实例化绘制，不增加播放器、解码器、FFT 或长期 PCM 缓存。
+- 自动质量不再只看 CPU 提交时间，同时观察平滑后的呈现帧间隔；严重单帧超时立即计入，持续掉帧按平滑 cadence 判定。Auto/Balanced 默认网格收敛到 128²/45 FPS，High 为 160²/60 FPS，Eco 为 96²/30 FPS；帧调度从理想时间线累进，60 Hz 上正常的 33/16/16 ms 节奏不会退化为 30 FPS，而持续 33/33/33 ms 会触发降级。质量降级先减少粒子、流星和波纹，再降低网格及内部比例；关闭波纹或降低 ripple 数量会直接跳过/缩短顶点着色器中的多波源循环。
+- GUI 计数通知节流到最多约 8 Hz，避免渲染线程每帧向 GUI 线程排队；窗口隐藏、最小化及关闭时仍停止帧、频谱派生和 GPU 上传。
+- 地形使用八个确定性波源和快/慢低频包络生成宽脊、尾波与中心呼吸；顶面流光只作用于朝上的表面。新增“多源霓虹 / 深海柔波 / 琥珀电影”三个真实参数预设，原有六个预设保持可用。
+- 沉浸右上角按“返回 / 最小化 / 全屏”排列；返回时保留进入沉浸前的播放器 shell 和窗口几何，不再强制切回经典 shell。
+- 频彩波形修复了两个真实问题：播放位置只驱动游标而未传入几何着色，以及仅标记材质脏导致 QRhi 顶点 alpha 不刷新。现在播放位置同时驱动频彩波形的已播放/未播放透明度，仍复用共享 `WaveformSession`。
+
+### 本轮验证证据
+
+| 验证项 | 结果 | 限定说明 |
+|---|---|---|
+| Debug/Release 构建 | **PASS** | MSVC DevShell 下 Debug 应用增量构建与 Release fresh configure/full build 均成功；QSB 在两种配置中离线编译。 |
+| 沉浸聚焦回归 | **PASS** | Debug 10/10、Release 10/10；包含频彩波形、音频视觉、体验控制器、地形状态、RHI item、真实 D3D11 GPU smoke、QML 波形与沉浸集成。冲击测试先隔离持续背景波纹并等待对应渲染修订真正呈现；修正后 Release D3D11 GPU smoke 连续复跑 10/10。 |
+| 50 次渲染开关 | **PASS** | D3D11 GPU smoke 连续切换 50 次；资源代次保持不变、渲染恢复、`liveRendererCount == 1`。这验证渲染开关，不等同于 50 次三宿主原生窗口切换。 |
+| QML lint | **PASS** | exit 0；只有 `Theme.qml`、`WaveformSession.qml`、`SharedWaveformView.qml` 三条 unused-import Info，无 warning/error。 |
+| 真实音频视觉截图 | **PASS，Windows 单机** | 使用用户提供视频的音轨经播放器既有解码/波形链生成 `build/qa/immersive-real-audio.png`；画面显示透明频彩波形及已播放/未播放分区，没有建立第二解码链。视频仅作动态输入，不作逐像素视觉目标。 |
+| Release 90 秒 soak | **PASS，短时** | 进程未提前退出；工作集约 148.1→150.6 MB，句柄 1025→1011，无单调句柄增长。该结果不能替代 30 分钟长期运行。 |
+| 完整 Debug `ctest` | **FAIL** | 114/122；本功能相关测试全过。失败为既有音频编辑/格式转换/元数据 QML 退出崩溃、`qml_main_window_test` timeout，以及固定部署路径检查，串行复跑仍失败，未标记为通过。 |
+| 完整 Release `ctest` | **FAIL** | 119/121；本功能相关测试全过。失败为 `audio_editor_controller_test` 和 `qml_filename_process_test`，未标记为通过。 |
+
+当前仍未执行 30 分钟沉浸 soak、设备丢失/恢复、50 次三宿主原生窗口切换、macOS/Linux 真机及完整 DPI/分辨率矩阵；不制作安装包。
+
 ## 2026-08-31 当前实施追踪（覆盖旧视觉目标）
 
 代码基础为 `d8a7386`，清洁实现计划为 `d8160f4`，证据文档基线为 `e97136f`，最终代码验证 HEAD 为 `8ba8be1`。Task 1、Task 2、Task 3 的独立评审均为 Spec/Quality PASS；中心高光修复 `2b6c80f`、度量稳定化 `6cc4bab` 与后端安全衰减修复 `8ba8be1` 均通过独立复审，最新两名复审者均为 PASS、无 P0/P1/P2。下表记录当前实现合同；旧章节仍保留其当时的验证记录，但不得反向改变本表的范围或重新把上传媒体设为验收标准。
@@ -75,11 +99,11 @@
 
 | 需求 | 实现位置 | 验证结果 |
 |---|---|---|
-| 六种预设 | `PlayerExperienceController::applyPreset`、`ImmersiveControlPanel.qml` | Debug/Release C++ 快照和 QML 集成测试通过；面板固定为 3×2 可见卡片 |
+| 九种预设 | `PlayerExperienceController::applyPreset`、`ImmersiveControlPanel.qml` | 原有六种保持可用，新增多源霓虹、深海柔波、琥珀电影；Debug/Release C++ 快照和 QML 集成测试覆盖 |
 | 响应范围默认 1.00、律动强度默认 0.30 | `PlayerExperienceController` 默认值、动态页滑杆 | Debug/Release 默认值测试通过；参数写入 `TerrainReactorState` 并改变地形半径/节奏增益 |
 | 中心随节拍发亮、彩色冲击波 | `AudioVisualFeatureController`、`TerrainReactorState`、原生 QRhi Shader | 固定频谱/BPM C++ 测试通过；真实视频音乐 Release 运行 31.14 秒稳定；最终视觉截图完成 |
 | 每 8 拍流星，缺失可靠节拍时瞬态兜底 | `AudioVisualFeatureController`、`TerrainReactorState::updateImpact` | Debug/Release 节拍与冲击集成测试通过；轨道 BPM/播放位置优先，瞬态回退受冷却限制 |
-| 高密度体素地形、分区颜色、同心波纹、漂浮体、环境层次 | `TerrainReactorItem`、`terrain_reactor.vert/.frag`、`ImmersiveSurface.qml` | QRhi GPU smoke、状态测试通过；外围静态颗粒按响应场衰减，中央使用连续簇状峰场与稳定随机峰混合；窗口/全屏增加 Qt 自带 `MultiEffect` 轻量柔光，桌面 Eco 主动关闭该层 |
+| 高密度体素地形、分区颜色、多源波纹、漂浮体、环境层次 | `TerrainReactorItem`、`terrain_reactor.vert/.frag`、`ImmersiveSurface.qml` | QRhi GPU smoke、状态测试通过；外围静态颗粒按响应场衰减，中央使用连续簇状峰场、八个确定性波源及快/慢低频包络；已移除复制整帧的 `MultiEffect`，保留低成本环境光场 |
 | 自动旋转、拖动、滚轮、4 秒恢复自动镜头 | `ImmersiveSurface.qml`、`TerrainReactorItem` | Debug/Release QML 集成与相机状态测试通过；鼠标拖动/滚轮写入真实相机参数 |
 | 歌词显示开关、左/中/右 3D 布局、位置/大小调节 | `LyricsPanel.qml`、`ImmersiveControlPanel.qml`、`PlayerExperienceController` | Debug/Release QML 集成及控制器持久化测试通过；歌词开关和空间参数独立于主题/沉浸开关 |
 | 普通窗口透明三行歌词 | `Main.qml` 的共享 `LyricsPanel` | QML 集成测试通过；未做 LRCLIB 线上服务实网验收 |
@@ -87,26 +111,27 @@
 | 全局四种波形与顺序 | `SettingsController`、`SettingsPage.qml`、双窗口/单窗口/迷你播放器共享控制 | 保留数值兼容：0 纯色、1 RGB、2 柱状频谱，新增 3 频彩；循环顺序固定 0→3→1→2→0；纯色仍为新安装默认 |
 | 频彩低/中/高颜色自定义 | `SettingsController`、`SettingsPage.qml`、`WaveformItem` | 默认 `#FF647C` / `#3ED6AE` / `#8A7CFF`；设置页可独立修改并一键恢复，持久化/回滚/非法值修复测试覆盖 |
 | 稳定逐曲配色、切歌平滑过渡、波形同步换色 | 共享波形调色板、`PlayerExperienceController`、地形调色板绑定 | Debug/Release 同曲稳定与轨道切换测试通过；520 ms 平滑过渡；手动配色会关闭歌曲自适应模式并真实写入渲染参数 |
-| 三宿主共享单渲染器 | `Main.qml` immersive coordinator | Debug/Release QML 集成及 GPU smoke 通过；未执行 50 次宿主切换泄漏循环 |
+| 三宿主共享单渲染器 | `Main.qml` immersive coordinator | Debug/Release QML 集成及 GPU smoke 通过；D3D11 已执行 50 次 active 开关并保持单 renderer/同一资源代次，尚未执行 50 次原生宿主窗口切换 |
 | 渲染关闭/失败时停止无效工作 | `TerrainReactorItem::renderingRequested`、`Main.qml` | Debug/Release fail-closed 测试通过；软件/资源后端失败会停止音频视觉派生并显示非模态降级信息 |
 | 自动质量与低资源策略 | `TerrainReactorItem`、`TerrainReactorState` | 状态与 GPU smoke 测试通过；真实音频 31.14 秒运行工作集快照约 171.3 MB；尚无 30 分钟性能曲线 |
 | 队列抽屉保持当前队列作用域 | `ImmersiveQueueDrawer.qml` | Debug/Release QML 集成测试通过；使用现有 `queueTrackIds`/`trackForId`/`playTrackIds`，不复制队列模型 |
 | 主题、沉浸视觉、歌词三项状态互不干扰 | `PlayerExperienceController`、`ExperienceActions.qml` | Debug/Release 控制器与 QML 集成测试通过；主题切换不重建播放核心 |
 | 沉浸视觉作为独立主题窗口 | `ExperienceActions.qml`、`Main.qml`、`ImmersiveWindow.qml`、`WindowController` | 主题动作按经典→单窗口→沉浸视觉循环；进入时临时隐藏播放器与歌曲列表，退出后恢复此前主/迷你窗口和列表偏好；反应堆始终由独立无边框窗口承载 |
-| 纯净顶层操作 | `ImmersiveSurface.qml`、`ImmersiveWindow.qml` | 已移除左上角品牌文字和面板文字按钮；右上角保留“返回窗口主题”和全屏图标；Esc 退出全屏的 QML 集成测试通过 |
+| 纯净顶层操作 | `ImmersiveSurface.qml`、`ImmersiveWindow.qml` | 已移除左上角品牌文字和面板文字按钮；右上角按“返回窗口主题 / 最小化 / 全屏”排列；最小化会暂停视觉派生，恢复窗口后继续，Esc 退出全屏的 QML 集成测试通过 |
 | 最终 HTML 九项动态参数与开关 | `ImmersiveControlPanel.qml`、`PlayerExperienceController`、QRhi uniform/shader | 输入压缩、音频响应、响应范围、中心高光、律动强度、景深、主体清晰、自动旋转速度、律动灵敏度及爆发/流线开关均写入真实渲染快照；旧地形振幅等重复 UI 已移除 |
 
 ## 已执行验证
 
 - Debug：从干净构建目录完成应用全量构建；功能聚焦目标在最终 Diff 后再次验证。
-- Release：应用全量构建、11 个功能聚焦测试与 QML lint 在最终 Diff 后再次验证。
-- Release 全量 `ctest` 最终复跑：119/121 通过。功能相关 GPU smoke、主题颜色分类、沉浸 QML 集成均通过；剩余失败为当前机器无录音后端的 `audio_editor_controller_test`，以及已有安装版 AgPlayer 正在运行时 Windows 前台激活受限的 `windows_shell_runtime_test`，两项均未标记通过。
+- Release：应用全量构建、10 个功能聚焦测试与 QML lint 在最终 Diff 后再次验证；Release D3D11 GPU smoke 额外连续复跑 10/10。
+- Debug 全量 `ctest` 最终复跑：114/122 通过。失败为 `audio_editor_controller_test`、`qml_main_window_test` 超时、四项格式转换/文件名/元数据 QML 退出崩溃，以及 `runtime_deployment_test` 的固定部署路径检查；本功能相关测试均通过，完整套件未标记为通过。
+- Release 全量 `ctest` 最终复跑：119/121 通过。功能相关 GPU smoke、波形和沉浸 QML 集成均通过；剩余失败为 `audio_editor_controller_test` 和 `qml_filename_process_test` 退出崩溃，两项均未标记通过。
 - 测试覆盖：设置持久化、频彩波形几何与颜色语义、音频视觉特征、体验控制器、反应堆状态、RHI item、GPU smoke、共享波形、音频冲击 QML、迷你播放器和沉浸集成。
 - GPU 冲击高光在 Debug/Release 均通过；迷你播放器测试夹具按“先销毁窗口、再派发延迟事件”的顺序清理，Release 连续三次及最终聚焦回归均通过。
 - QML lint 只有 `Theme.qml`、`WaveformSession.qml`、`SharedWaveformView.qml` 的未使用 import 信息提示，无错误。
 - Release 使用用户参考视频的真实音频连续运行 31.14 秒，无崩溃；进程在证据采集后主动结束。日志仅有一次剪贴板重试警告。
 - 2169×1131 固定视口和固定合成频谱下完成原生截图，并把最终 HTML 截图与原生实现放入同一对比输入检查。
-- 独立 Diff Review 最初发现两项 P1：失败后端未停止派生、色块只读。两项均已修复并由测试覆盖；当前 Review 无未解决 P0/P1。
+- 独立 Diff Review 的最终复审无剩余 Critical/Important 问题；自动质量 cadence、首次内部缩放同步和动态波源裁减均已按复审意见修正并由测试覆盖。
 - `git diff --check` 和受限来源标识符扫描在最终文档更新后再次执行，结果记录于本任务最终交付。
 
 ## 尚未执行与剩余风险
@@ -115,8 +140,8 @@
 - 未执行 macOS/Linux 真实运行；跨平台结论仅限同一 Qt/QRhi 核心代码路径可编译设计，不标记平台验收通过。
 - 未执行 50 次三宿主开关、设备丢失/恢复和 30 分钟沉浸 soak；31.14 秒运行不能替代长期稳定性结论。
 - 未执行 LRCLIB 线上实网查询；本地歌词服务自动测试通过，不扩大为网络服务可用性结论。
-- 未制作安装包。新增柔光只使用项目 Qt 6.7 自带 `QtQuick.Effects`，没有第三方运行时；安装包增量目标需在后续正式打包时测量，当前不声称已完成包体验收。
-- 视觉已经降低外围颗粒噪声、增加中央簇状高峰与节奏亮度、强化彩色环带并加入受质量策略控制的柔光层。参考原型/视频的多通道后期和空气雾化仍更强，不宣称逐像素一致。
+- 未制作安装包。当前柔光与环境层使用轻量 QML 图元和既有 QRhi 渲染，不引入 `QtQuick.Effects` 全屏后处理或第三方运行时；安装包增量目标需在后续正式打包时测量，当前不声称已完成包体验收。
+- 视觉已经降低外围颗粒噪声、增加多源宽脊、中心呼吸与顶面流光，并让波源数量受质量策略真实裁减。上传原型/视频不再作为视觉对照或逐像素验收目标。
 
 ## 2026-08-30 独立主题窗口与反应堆复核
 

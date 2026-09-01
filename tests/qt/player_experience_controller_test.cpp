@@ -285,6 +285,9 @@ void PlayerExperienceControllerTest::appliesDistinctCompleteVisualPresetSnapshot
         PlayerExperienceController::PureStage,
         PlayerExperienceController::Quiet,
         PlayerExperienceController::Galaxy,
+        PlayerExperienceController::MultiSourceNeon,
+        PlayerExperienceController::DeepSeaSoftWave,
+        PlayerExperienceController::AmberCinema,
     };
     QCOMPARE(PlayerExperienceController::AudioRangeEcho, 0);
     QCOMPARE(PlayerExperienceController::NeonRainNight, 1);
@@ -292,6 +295,9 @@ void PlayerExperienceControllerTest::appliesDistinctCompleteVisualPresetSnapshot
     QCOMPARE(PlayerExperienceController::PureStage, 3);
     QCOMPARE(PlayerExperienceController::Quiet, 4);
     QCOMPARE(PlayerExperienceController::Galaxy, 5);
+    QCOMPARE(PlayerExperienceController::MultiSourceNeon, 6);
+    QCOMPARE(PlayerExperienceController::DeepSeaSoftWave, 7);
+    QCOMPARE(PlayerExperienceController::AmberCinema, 8);
     QList<QVariantList> snapshots;
 
     for (const int preset : presets) {
@@ -343,6 +349,18 @@ void PlayerExperienceControllerTest::appliesDistinctCompleteVisualPresetSnapshot
          52, 0.45, 58, 68, true, true, true, true, true,
          QVariantList({96, 88, 66, 54, 58, 76, 94, 100}), 80, 140, 182, 64, 104, 96,
          110, 46, 84},
+        {2, "#38D8FF", "#FF5A9D", "#8A7CFF", "#F8F4FF", "#03040B", 58, 62, 82,
+         46, 0.22, 46, 64, true, true, true, true, false,
+         QVariantList({92, 86, 66, 58, 62, 76, 88, 94}), 82, 138, 168, 62, 74, 82,
+         118, 40, 82},
+        {1, "#174C78", "#2EC4B6", "#78DCE8", "#E9FDFF", "#02070C", 44, 38, 58,
+         28, 0.10, 30, 42, true, false, false, true, false,
+         QVariantList({78, 74, 68, 60, 52, 48, 44, 40}), 88, 118, 174, 52, 58, 108,
+         116, 24, 70},
+        {1, "#8A3D22", "#E6813B", "#FFC66D", "#FFF1C2", "#090502", 56, 48, 66,
+         34, 0.18, 34, 52, true, true, true, true, false,
+         QVariantList({88, 84, 72, 62, 54, 48, 44, 42}), 84, 126, 162, 60, 66, 94,
+         120, 28, 74},
     };
     QCOMPARE(snapshots, expected);
     QVERIFY(!experience.applyPreset(-1));
@@ -430,6 +448,13 @@ void PlayerExperienceControllerTest::strictlyParsesPersistedScalarTypes()
     QCOMPARE(canonicalStrings.qualityPreset(), 3);
     QCOMPARE(canonicalStrings.cinemaShake(), 0.5);
     QVERIFY(!canonicalStrings.panelVisible());
+
+    settings.clear();
+    settings.setValue(QStringLiteral("immersiveVisual/qualityPreset"), 4);
+    PlayerExperienceController legacyUltra;
+    QCOMPARE(legacyUltra.qualityPreset(), PlayerExperienceController::High);
+    QCOMPARE(settings.value(QStringLiteral("immersiveVisual/qualityPreset")),
+             QVariant(PlayerExperienceController::High));
 }
 
 void PlayerExperienceControllerTest::togglesOnlyTheLayoutShellSetting()
@@ -464,7 +489,10 @@ void PlayerExperienceControllerTest::cyclesClassicIntegratedAndIndependentImmers
     QCOMPARE(experience.immersiveMode(), PlayerExperienceController::TerrainReactor);
 
     experience.cycleExperienceTheme();
-    QCOMPARE(settings.playerShellMode(), 0);
+    // Returning from the independent immersive window must restore the
+    // window theme that launched it. Switching to the classic shell here
+    // loads a different persisted geometry and makes the player jump in size.
+    QCOMPARE(settings.playerShellMode(), 1);
     QCOMPARE(experience.immersiveMode(), PlayerExperienceController::Off);
 }
 

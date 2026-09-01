@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Effects
 import AgPlayer
 
 Item {
@@ -24,6 +23,7 @@ Item {
         attached && PlayerExperienceController.immersiveMode
         !== PlayerExperienceController.Off
     signal returnToWindowRequested()
+    signal minimizeRequested()
 
     function notePointerActivity() {
         panelAutoHidden = false
@@ -49,8 +49,7 @@ Item {
             return TerrainReactorItem.Eco
         switch (PlayerExperienceController.qualityPreset) {
         case PlayerExperienceController.Eco: return TerrainReactorItem.Eco
-        case PlayerExperienceController.High:
-        case PlayerExperienceController.Ultra: return TerrainReactorItem.High
+        case PlayerExperienceController.High: return TerrainReactorItem.High
         default: return TerrainReactorItem.Balanced
         }
     }
@@ -112,23 +111,6 @@ Item {
         sourceComponent: root.renderingEnabled
                          ? nativeTerrainComponent : inertTerrainComponent
         onItemChanged: root.synchronizeAudioFeatures()
-    }
-
-    MultiEffect {
-        objectName: "immersiveReactorBloom"
-        anchors.fill: terrainLoader
-        source: terrainLoader
-        visible: root.active && root.hostExposed
-                 && root.hostMode !== PlayerExperienceController.Desktop
-                 && PlayerExperienceController.glowIntensity > 4
-        blurEnabled: true
-        blur: 0.60 + PlayerExperienceController.glowIntensity / 100 * 0.24
-        blurMax: 32
-        blurMultiplier: 0.72
-        brightness: 0.48 + (root.terrainItem
-                            ? Math.min(1, root.terrainItem.featureEnergy) * 0.32 : 0)
-        saturation: 0.16
-        opacity: 0.24 + PlayerExperienceController.glowIntensity / 100 * 0.16
     }
 
     Item {
@@ -307,6 +289,27 @@ Item {
             icon.height: 16
             Accessible.name: text
             onClicked: root.returnToWindowRequested()
+            background: Rectangle {
+                radius: 9
+                color: parent.hovered ? Qt.rgba(1, 1, 1, 0.105) // theme-color-allow: immersive media visual contract
+                                      : Qt.rgba(0.04, 0.035, 0.05, 0.72) // theme-color-allow: immersive media visual contract
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.10) // theme-color-allow: immersive media visual contract
+            }
+        }
+
+        ToolButton {
+            objectName: "immersiveMinimizeButton"
+            display: AbstractButton.IconOnly
+            implicitWidth: 32
+            implicitHeight: 32
+            text: qsTr("最小化")
+            icon.source: Theme.icon("subtract-line")
+            icon.color: "#ece8ef" // theme-color-allow: immersive media visual contract
+            icon.width: 16
+            icon.height: 16
+            Accessible.name: text
+            onClicked: root.minimizeRequested()
             background: Rectangle {
                 radius: 9
                 color: parent.hovered ? Qt.rgba(1, 1, 1, 0.105) // theme-color-allow: immersive media visual contract

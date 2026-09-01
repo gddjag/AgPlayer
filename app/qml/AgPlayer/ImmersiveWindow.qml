@@ -106,6 +106,7 @@ Window {
         waveformSession: root.waveformSession
         qaSyntheticFeatures: root.qaSyntheticFeatures
         onReturnToWindowRequested: root.returnToWindowTheme()
+        onMinimizeRequested: root.showMinimized()
     }
 
     Component.onCompleted: synchronizeHost()

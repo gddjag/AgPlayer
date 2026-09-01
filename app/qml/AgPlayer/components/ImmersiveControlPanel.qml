@@ -40,7 +40,13 @@ Rectangle {
         { "title": qsTr("安静"), "sub": qsTr("低响应 · 柔和环境"),
           "from": "#17303c", "to": "#176a7b" }, // theme-color-allow: immersive media visual contract
         { "title": qsTr("星河"), "sub": qsTr("深空主题 · 流星冲击"),
-          "from": "#442037", "to": "#91356d" } // theme-color-allow: immersive media visual contract
+          "from": "#442037", "to": "#91356d" }, // theme-color-allow: immersive media visual contract
+        { "title": qsTr("多源霓虹"), "sub": qsTr("多点涟漪 · 清透流光"),
+          "from": "#123a58", "to": "#7c316d" }, // theme-color-allow: immersive media visual contract
+        { "title": qsTr("深海柔波"), "sub": qsTr("低负载 · 深蓝呼吸"),
+          "from": "#082238", "to": "#176b72" }, // theme-color-allow: immersive media visual contract
+        { "title": qsTr("琥珀电影"), "sub": qsTr("暖金顶光 · 克制旋转"),
+          "from": "#351a10", "to": "#9b5c28" } // theme-color-allow: immersive media visual contract
     ]
     readonly property var dynamicsGroups: [
         {
@@ -426,7 +432,8 @@ Rectangle {
                     objectName: "immersiveQualityCombo"
                     Layout.fillWidth: true
                     implicitHeight: 30
-                    model: ["Auto", "Eco · 112²", "Balanced · 160²", "High · 192²", "Ultra · 224²"]
+                    model: ["Auto · 自适应", "Eco · 96² / 30 FPS",
+                            "Balanced · 128² / 45 FPS", "High · 160² / 60 FPS"]
                     currentIndex: PlayerExperienceController.qualityPreset
                     onActivated: PlayerExperienceController.qualityPreset = currentIndex
                 }
