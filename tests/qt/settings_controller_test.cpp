@@ -92,13 +92,6 @@ private slots:
     void migratesLegacyPlaybackModes();
     void playbackDeviceSettingsPersistAndMigrateDefaultLabel();
     void waveformAppearanceSettingsClampPersistAndReset();
-    void frequencyColorDefaultsValidateAdaptAndReset();
-    void frequencyColorTransactionsAndLegacyAliases();
-    void frequencyColorMigratesKnownDefaults_data();
-    void frequencyColorMigratesKnownDefaults();
-    void frequencyColorMigrationPreservesCustomAndRunsOnce();
-    void frequencyColorMigrationWaitsForPayloadSync();
-    void migratesPreviousFrequencyDefaultsWithoutOverwritingCustomValues();
     void restoresLegacyRgbColorsWithoutDeletingKeys();
     void mapsSimplifiedColorsIntoRestoredContract();
     void listWaveformThumbnailSettingsPersistFallbackAndReset();
@@ -528,42 +521,24 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
         QCOMPARE(settings.waveformHeight(), 0.8);
         QCOMPARE(settings.waveformDensity(), 2.0);
         QCOMPARE(settings.waveformThickness(), 1.0);
-        QCOMPARE(settings.waveformPeakAlgorithm(), 0);
-        QCOMPARE(settings.property("waveformSolidBaseColor").toString(), QStringLiteral("#9098a6"));
-        QCOMPARE(settings.property("waveformSolidProgressColor").toString(), QStringLiteral("#d27722"));
-        QCOMPARE(settings.property("waveformRgbBaseColor").toString(), QStringLiteral("#00b4a0"));
-        QCOMPARE(settings.property("waveformRgbStartColor").toString(), QStringLiteral("#00d4ff"));
-        QCOMPARE(settings.property("waveformRgbMiddleColor").toString(), QStringLiteral("#7b2ff7"));
-        QCOMPARE(settings.property("waveformRgbEndColor").toString(), QStringLiteral("#e62e9b"));
-        QCOMPARE(settings.property("waveformFrequencyLowColor").toString(),
-                 QStringLiteral("#269a8e"));
-        QCOMPARE(settings.property("waveformFrequencyMidColor").toString(),
-                 QStringLiteral("#c66b55"));
-        QCOMPARE(settings.property("waveformFrequencyHighColor").toString(),
-                 QStringLiteral("#b5a4c6"));
-        QCOMPARE(settings.property("waveformFrequencyStrength").toDouble(), 0.62);
-        QCOMPARE(settings.property("waveformRgbProgress").toBool(), false);
         QCOMPARE(settings.waveformMode(), 0);
-        QCOMPARE(settings.waveformPlaybackGuide(), false);
+        auto* spectral = settings.frequencyColorWaveform();
+        QCOMPARE(spectral->palette().size(), 8);
+        QCOMPARE(spectral->palette().first().toString(), QStringLiteral("#123ecf"));
+        QCOMPARE(spectral->palette().last().toString(), QStringLiteral("#e82718"));
+        QCOMPARE(spectral->unplayedOpacity(), 0.88);
 
         settings.setWaveformHeight(3.0);
         settings.setWaveformDensity(0.1);
         settings.setWaveformThickness(2.34);
-        settings.setWaveformPeakAlgorithm(1);
-        QVERIFY(settings.setProperty("waveformSolidBaseColor", QStringLiteral("#112233")));
-        QVERIFY(settings.setProperty("waveformSolidProgressColor", QStringLiteral("invalid")));
-        QVERIFY(settings.setProperty("waveformRgbProgress", true));
-        QVERIFY(settings.setProperty("waveformFrequencyLowColor",
-                                     QStringLiteral("#112233")));
-        QVERIFY(settings.setProperty("waveformFrequencyMidColor",
-                                     QStringLiteral("#445566")));
-        QVERIFY(settings.setProperty("waveformFrequencyHighColor",
-                                     QStringLiteral("#778899")));
-        QVERIFY(settings.setProperty("waveformFrequencyStrength", 1.4));
-        settings.setWaveformPlaybackGuide(true);
+        spectral->setPaletteColor(0, QStringLiteral("#112233"));
+        spectral->setUnplayedOpacity(0.40);
+        QCOMPARE(settings.waveformHeight(), 1.5);
+        QCOMPARE(settings.waveformDensity(), 0.5);
+        QCOMPARE(settings.waveformThickness(), 2.3);
+        QCOMPARE(spectral->unplayedOpacity(), 0.60);
 
         settings.setWaveformMode(3);
-        QCOMPARE(settings.waveformMode(), 3);
         QVERIFY(QMetaObject::invokeMethod(&settings, "cycleWaveformMode"));
         QCOMPARE(settings.waveformMode(), 1);
         QVERIFY(QMetaObject::invokeMethod(&settings, "cycleWaveformMode"));
@@ -572,647 +547,17 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
         QCOMPARE(settings.waveformMode(), 0);
         QVERIFY(QMetaObject::invokeMethod(&settings, "cycleWaveformMode"));
         QCOMPARE(settings.waveformMode(), 3);
-
-        QCOMPARE(settings.waveformHeight(), 1.5);
-        QCOMPARE(settings.waveformDensity(), 0.5);
-        QCOMPARE(settings.waveformThickness(), 2.3);
-        QCOMPARE(settings.waveformPeakAlgorithm(), 1);
-        QCOMPARE(settings.property("waveformSolidBaseColor").toString(), QStringLiteral("#112233"));
-        QCOMPARE(settings.property("waveformSolidProgressColor").toString(), QStringLiteral("#d27722"));
-        QCOMPARE(settings.property("waveformRgbProgress").toBool(), true);
-        QCOMPARE(settings.waveformPlaybackGuide(), true);
-        QCOMPARE(settings.property("waveformFrequencyStrength").toDouble(), 1.0);
     }
 
     SettingsController reloaded;
-    QCOMPARE(reloaded.waveformHeight(), 1.5);
-    QCOMPARE(reloaded.waveformDensity(), 0.5);
-    QCOMPARE(reloaded.waveformThickness(), 2.3);
-    QCOMPARE(reloaded.waveformPeakAlgorithm(), 1);
-    QCOMPARE(reloaded.property("waveformSolidBaseColor").toString(), QStringLiteral("#112233"));
-    QCOMPARE(reloaded.property("waveformRgbProgress").toBool(), true);
-    QCOMPARE(reloaded.property("waveformFrequencyLowColor").toString(),
+    QCOMPARE(reloaded.frequencyColorWaveform()->palette().first().toString(),
              QStringLiteral("#112233"));
-    QCOMPARE(reloaded.property("waveformFrequencyMidColor").toString(),
-             QStringLiteral("#445566"));
-    QCOMPARE(reloaded.property("waveformFrequencyHighColor").toString(),
-             QStringLiteral("#778899"));
-    QCOMPARE(reloaded.property("waveformFrequencyStrength").toDouble(), 1.0);
-    QCOMPARE(reloaded.waveformPlaybackGuide(), true);
-
-    auto* resetFrequencies = reloaded.frequencyColorWaveform();
-    resetFrequencies->setMixDarkColor(QStringLiteral("#123456"));
-    resetFrequencies->setLowLightColor(QStringLiteral("#654321"));
-    resetFrequencies->setMidDarkOpacity(0.01);
-    resetFrequencies->setHighLightOpacity(0.99);
-    resetFrequencies->setPlayFocus(false);
-    QVERIFY(QMetaObject::invokeMethod(&reloaded, "resetWaveformFrequencyColors"));
-    QCOMPARE(reloaded.property("waveformFrequencyLowColor").toString(),
-             QStringLiteral("#269a8e"));
-    QCOMPARE(reloaded.property("waveformFrequencyMidColor").toString(),
-             QStringLiteral("#c66b55"));
-    QCOMPARE(reloaded.property("waveformFrequencyHighColor").toString(),
-             QStringLiteral("#b5a4c6"));
-    QCOMPARE(resetFrequencies->preset(), QStringLiteral("luminousGlaze"));
-    QCOMPARE(resetFrequencies->mixDarkColor(), QStringLiteral("#7a8490"));
-    QCOMPARE(resetFrequencies->mixLightColor(), QStringLiteral("#59636d"));
-    QCOMPARE(resetFrequencies->lowLightColor(), QStringLiteral("#146b64"));
-    QCOMPARE(resetFrequencies->midDarkOpacity(), 0.38);
-    QCOMPARE(resetFrequencies->highLightOpacity(), 0.40);
-    QCOMPARE(resetFrequencies->playFocus(), true);
-
+    QCOMPARE(reloaded.frequencyColorWaveform()->unplayedOpacity(), 0.60);
     reloaded.resetWaveformDefaults();
-    QCOMPARE(reloaded.waveformHeight(), 0.8);
-    QCOMPARE(reloaded.waveformDensity(), 2.0);
-    QCOMPARE(reloaded.waveformThickness(), 1.0);
-    QCOMPARE(reloaded.waveformPeakAlgorithm(), 0);
-    QCOMPARE(reloaded.property("waveformSolidBaseColor").toString(), QStringLiteral("#9098a6"));
-    QCOMPARE(reloaded.property("waveformSolidProgressColor").toString(), QStringLiteral("#d27722"));
-    QCOMPARE(reloaded.property("waveformRgbProgress").toBool(), false);
-    QCOMPARE(reloaded.property("waveformFrequencyLowColor").toString(),
-             QStringLiteral("#269a8e"));
-    QCOMPARE(reloaded.property("waveformFrequencyMidColor").toString(),
-             QStringLiteral("#c66b55"));
-    QCOMPARE(reloaded.property("waveformFrequencyHighColor").toString(),
-             QStringLiteral("#b5a4c6"));
-    QCOMPARE(reloaded.property("waveformFrequencyStrength").toDouble(), 0.62);
-    QCOMPARE(reloaded.waveformMode(), 0);
-    QCOMPARE(reloaded.waveformPlaybackGuide(), false);
-    persisted.clear();
-}
-
-void SettingsControllerTest::frequencyColorDefaultsValidateAdaptAndReset()
-{
-    QSettings persisted;
-    persisted.clear();
-
-    SettingsController settings;
-    auto* fcw = settings.frequencyColorWaveform();
-    QVERIFY(fcw);
-    QCOMPARE(fcw->preset(), QStringLiteral("luminousGlaze"));
-    QCOMPARE(fcw->mixDarkColor(), QStringLiteral("#7a8490"));
-    QCOMPARE(fcw->lowDarkColor(), QStringLiteral("#269a8e"));
-    QCOMPARE(fcw->midDarkColor(), QStringLiteral("#c66b55"));
-    QCOMPARE(fcw->highDarkColor(), QStringLiteral("#b5a4c6"));
-    QCOMPARE(fcw->mixLightColor(), QStringLiteral("#59636d"));
-    QCOMPARE(fcw->lowLightColor(), QStringLiteral("#146b64"));
-    QCOMPARE(fcw->midLightColor(), QStringLiteral("#9d4938"));
-    QCOMPARE(fcw->highLightColor(), QStringLiteral("#6e5a7d"));
-    QCOMPARE(fcw->mixDarkOpacity(), 0.18);
-    QCOMPARE(fcw->lowDarkOpacity(), 0.44);
-    QCOMPARE(fcw->midDarkOpacity(), 0.38);
-    QCOMPARE(fcw->highDarkOpacity(), 0.46);
-    QCOMPARE(fcw->mixLightOpacity(), 0.14);
-    QCOMPARE(fcw->lowLightOpacity(), 0.36);
-    QCOMPARE(fcw->midLightOpacity(), 0.32);
-    QCOMPARE(fcw->highLightOpacity(), 0.40);
-    QCOMPARE(fcw->playFocus(), true);
-
-    QSignalSpy changed(fcw, &FrequencyColorWaveformSettings::changed);
-    fcw->setLowDarkOpacity(0.437);
-    QCOMPARE(fcw->lowDarkOpacity(), 0.44);
-    QCOMPARE(fcw->preset(), QStringLiteral("custom"));
-    QCOMPARE(changed.count(), 1);
-    fcw->setLowDarkOpacity(0.437);
-    QCOMPARE(changed.count(), 1);
-    fcw->setLowDarkOpacity(0.0049);
-    QCOMPARE(fcw->lowDarkOpacity(), 0.0);
-    fcw->setLowDarkOpacity(0.005);
-    QCOMPARE(fcw->lowDarkOpacity(), 0.01);
-    fcw->setLowDarkOpacity(0.995);
-    QCOMPARE(fcw->lowDarkOpacity(), 1.0);
-    fcw->setLowDarkOpacity(1.4);
-    QCOMPARE(fcw->lowDarkOpacity(), 1.0);
-    QCOMPARE(changed.count(), 4);
-    fcw->setLowDarkOpacity(-0.2);
-    QCOMPARE(fcw->lowDarkOpacity(), 0.0);
-    QCOMPARE(changed.count(), 5);
-    fcw->setLowDarkOpacity(std::numeric_limits<double>::quiet_NaN());
-    QCOMPARE(fcw->lowDarkOpacity(), 0.44);
-    QCOMPARE(changed.count(), 6);
-    fcw->setLowDarkOpacity(std::numeric_limits<double>::infinity());
-    QCOMPARE(fcw->lowDarkOpacity(), 0.44);
-    QCOMPARE(changed.count(), 6);
-
-    fcw->setMidDarkColor(QStringLiteral("#ABCDEF"));
-    QCOMPARE(fcw->midDarkColor(), QStringLiteral("#abcdef"));
-    QCOMPARE(fcw->preset(), QStringLiteral("custom"));
-    const int beforeInvalid = changed.count();
-    fcw->setMidDarkColor(QStringLiteral("not-a-color"));
-    fcw->setMidDarkColor(QStringLiteral("red"));
-    fcw->setMidDarkColor(QStringLiteral("#abc"));
-    fcw->setMidDarkColor(QStringLiteral("#80112233"));
-    fcw->setMidDarkColor(QStringLiteral("transparent"));
-    QCOMPARE(fcw->midDarkColor(), QStringLiteral("#abcdef"));
-    QCOMPARE(changed.count(), beforeInvalid);
-
-    fcw->resetToLuminousGlaze();
-    const TestOklch source = testOklch(QStringLiteral("#ff00ff"));
-    fcw->setLowDarkColor(QStringLiteral("#ff00ff"));
-    const TestOklch adapted = testOklch(fcw->lowLightColor());
-    QVERIFY2(hueDistance(source.hue, adapted.hue) <= 3.0,
-             qPrintable(QStringLiteral("hue delta %1").arg(
-                 hueDistance(source.hue, adapted.hue))));
-    QVERIFY(adapted.chroma <= 0.161);
-    QVERIFY(adapted.lightness >= 0.34 && adapted.lightness <= 0.481);
-    QVERIFY(contrastRatio(fcw->lowLightColor(), QStringLiteral("#f5f3ef")) >= 3.0);
-
-    const QString manuallyChosenLight = fcw->lowLightColor();
-    fcw->setLowLightColor(manuallyChosenLight); // same value still establishes a lock
-    fcw->setLowDarkColor(QStringLiteral("#00ff00"));
-    QCOMPARE(fcw->lowLightColor(), manuallyChosenLight);
-
-    fcw->resetToLuminousGlaze();
-    fcw->setMixLightColor(QStringLiteral("#ff00ff"));
-    const TestOklch adaptedDark = testOklch(fcw->mixDarkColor());
-    QVERIFY(adaptedDark.lightness >= 0.679 && adaptedDark.lightness <= 0.82);
-    QVERIFY(contrastRatio(fcw->mixDarkColor(), QStringLiteral("#0b1017")) >= 3.0);
-
-    fcw->resetToLuminousGlaze();
-    fcw->setLowDarkColor(QStringLiteral("#ff0010"));
-    QVERIFY(hueDistance(testOklch(QStringLiteral("#ff0010")).hue,
-                        testOklch(fcw->lowLightColor()).hue) <= 3.0);
-    fcw->setLowDarkColor(QStringLiteral("#808080"));
-    QVERIFY(contrastRatio(fcw->lowLightColor(), QStringLiteral("#f5f3ef")) >= 3.0);
-    fcw->setLowDarkColor(QStringLiteral("#0000ff"));
-    QVERIFY(testOklch(fcw->lowLightColor()).chroma <= 0.161);
-
-    fcw->setPlayFocus(false);
-    const int beforeReset = changed.count();
-    fcw->resetToLuminousGlaze();
-    QCOMPARE(changed.count(), beforeReset + 1);
-    QCOMPARE(fcw->preset(), QStringLiteral("luminousGlaze"));
-    QCOMPARE(fcw->playFocus(), true);
-    QCOMPARE(fcw->lowDarkColor(), QStringLiteral("#269a8e"));
-    QCOMPARE(fcw->lowLightOpacity(), 0.36);
-
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyColorSchema"), 1);
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyMidDarkColor"),
-                       QStringLiteral("#abc"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyHighLightColor"),
-                       QStringLiteral("transparent"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyHighLightOpacity"),
-                       QStringLiteral("not-a-number"));
-    SettingsController corruptLoad;
-    QCOMPARE(corruptLoad.frequencyColorWaveform()->midDarkColor(),
-             QStringLiteral("#c66b55"));
-    QCOMPARE(corruptLoad.frequencyColorWaveform()->highLightColor(),
-             QStringLiteral("#6e5a7d"));
-    QCOMPARE(corruptLoad.frequencyColorWaveform()->highLightOpacity(), 0.40);
-    persisted.clear();
-}
-
-void SettingsControllerTest::frequencyColorTransactionsAndLegacyAliases()
-{
-    QSettings persisted;
-    persisted.clear();
-
-    SettingsController settings;
-    auto* fcw = settings.frequencyColorWaveform();
-    QCOMPARE(persisted.value(
-                 QStringLiteral("appearance/waveformFrequencyColorSchema")).toInt(),
-             1);
-
-    fcw->setLowDarkColor(QStringLiteral("#112233"));
-    QCOMPARE(persisted.value(
-                 QStringLiteral("appearance/waveformFrequencyLowDarkColor")).toString(),
-             QStringLiteral("#112233"));
-    QCOMPARE(persisted.value(
-                 QStringLiteral("appearance/waveformFrequencyLowColor")).toString(),
-             QStringLiteral("#112233"));
-
-    settings.beginEdit();
-    fcw->setLowDarkColor(QStringLiteral("#445566"));
-    QCOMPARE(fcw->lowDarkColor(), QStringLiteral("#445566"));
-    QCOMPARE(persisted.value(
-                 QStringLiteral("appearance/waveformFrequencyLowDarkColor")).toString(),
-             QStringLiteral("#112233"));
-    settings.cancelEdit();
-    QCOMPARE(fcw->lowDarkColor(), QStringLiteral("#112233"));
-
-    settings.beginEdit();
-    fcw->setLowDarkColor(QStringLiteral("#778899"));
-    settings.commitEdit();
-    QCOMPARE(persisted.value(
-                 QStringLiteral("appearance/waveformFrequencyLowDarkColor")).toString(),
-             QStringLiteral("#778899"));
-
-    settings.setWaveformFrequencyMidColor(QStringLiteral("#abcdef"));
-    QCOMPARE(fcw->midDarkColor(), QStringLiteral("#abcdef"));
-    QCOMPARE(settings.waveformFrequencyMidColor(), QStringLiteral("#abcdef"));
-
-    QSignalSpy changed(fcw, &FrequencyColorWaveformSettings::changed);
-    settings.setWaveformFrequencyStrength(0.31);
-    QCOMPARE(changed.count(), 1);
-    QCOMPARE(settings.waveformFrequencyStrength(), 0.31);
-    QCOMPARE(fcw->lowDarkOpacity(), 0.22);
-    QCOMPARE(fcw->midDarkOpacity(), 0.19);
-    QCOMPARE(fcw->highDarkOpacity(), 0.23);
-    QCOMPARE(fcw->lowLightOpacity(), 0.18);
-    QCOMPARE(fcw->midLightOpacity(), 0.16);
-    QCOMPARE(fcw->highLightOpacity(), 0.20);
-    QCOMPARE(persisted.value(
-                 QStringLiteral("appearance/waveformFrequencyStrength")).toDouble(),
-             0.31);
-
-    settings.setWaveformFrequencyStrength(1.0);
-    QCOMPARE(changed.count(), 2);
-    QCOMPARE(settings.waveformFrequencyStrength(), 1.0);
-    QCOMPARE(fcw->lowDarkOpacity(), 0.71);
-    QCOMPARE(fcw->midDarkOpacity(), 0.61);
-    QCOMPARE(fcw->highDarkOpacity(), 0.74);
-    QCOMPARE(fcw->lowLightOpacity(), 0.58);
-    QCOMPARE(fcw->midLightOpacity(), 0.52);
-    QCOMPARE(fcw->highLightOpacity(), 0.65);
-
-    fcw->resetToLuminousGlaze();
-    fcw->setLowDarkColor(QStringLiteral("#ff00ff"));
-    const QString lockedLight = fcw->lowLightColor();
-    fcw->setLowLightColor(lockedLight);
-    {
-        SettingsController reloaded;
-        auto* reloadedFcw = reloaded.frequencyColorWaveform();
-        QCOMPARE(reloadedFcw->lowLightColor(), lockedLight);
-        reloadedFcw->setLowDarkColor(QStringLiteral("#00ff00"));
-        QCOMPARE(reloadedFcw->lowLightColor(), lockedLight);
-    }
-    persisted.clear();
-}
-
-void SettingsControllerTest::frequencyColorMigratesKnownDefaults_data()
-{
-    QTest::addColumn<QString>("low");
-    QTest::addColumn<QString>("mid");
-    QTest::addColumn<QString>("high");
-    QTest::addColumn<double>("strength");
-
-    QTest::newRow("original") << QStringLiteral("#ff647c")
-        << QStringLiteral("#3ed6ae") << QStringLiteral("#8a7cff") << 0.85;
-    QTest::newRow("first-generation") << QStringLiteral("#c45100")
-        << QStringLiteral("#b04bcd") << QStringLiteral("#0a819a") << 0.85;
-    QTest::newRow("second-generation") << QStringLiteral("#c65332")
-        << QStringLiteral("#9a4bc2") << QStringLiteral("#2e9b61") << 0.70;
-    QTest::newRow("third-generation") << QStringLiteral("#c47a5e")
-        << QStringLiteral("#7787b5") << QStringLiteral("#4f9279") << 0.62;
-    QTest::newRow("klein-ember") << QStringLiteral("#315cff")
-        << QStringLiteral("#ffb02e") << QStringLiteral("#f04ca5") << 0.62;
-    QTest::newRow("mint") << QStringLiteral("#62c8a0")
-        << QStringLiteral("#f1d79a") << QStringLiteral("#e98582") << 0.62;
-    QTest::newRow("temporary-open-color") << QStringLiteral("#1098ad")
-        << QStringLiteral("#f59f00") << QStringLiteral("#ae3ec9") << 0.62;
-}
-
-void SettingsControllerTest::frequencyColorMigratesKnownDefaults()
-{
-    QFETCH(QString, low);
-    QFETCH(QString, mid);
-    QFETCH(QString, high);
-    QFETCH(double, strength);
-    QSettings persisted;
-    persisted.clear();
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyLowColor"), low);
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyMidColor"), mid);
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyHighColor"), high);
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyStrength"), strength);
-
-    SettingsController migrated;
-    auto* fcw = migrated.frequencyColorWaveform();
-    QCOMPARE(fcw->preset(), QStringLiteral("luminousGlaze"));
-    QCOMPARE(fcw->lowDarkColor(), QStringLiteral("#269a8e"));
-    QCOMPARE(fcw->midDarkColor(), QStringLiteral("#c66b55"));
-    QCOMPARE(fcw->highDarkColor(), QStringLiteral("#b5a4c6"));
-    QCOMPARE(fcw->lowLightColor(), QStringLiteral("#146b64"));
-    QCOMPARE(fcw->lowDarkOpacity(), 0.44);
-    QCOMPARE(fcw->highLightOpacity(), 0.40);
-    QCOMPARE(persisted.value(
-                 QStringLiteral("appearance/waveformFrequencyColorSchema")).toInt(),
-             1);
-    QCOMPARE(persisted.value(
-                 QStringLiteral("appearance/waveformFrequencyLowColor")).toString(),
-             QStringLiteral("#269a8e"));
-    persisted.clear();
-}
-
-void SettingsControllerTest::frequencyColorMigrationPreservesCustomAndRunsOnce()
-{
-    QSettings persisted;
-    persisted.clear();
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyLowColor"),
-                       QStringLiteral("#112233"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyMidColor"),
-                       QStringLiteral("#9a4bc2"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyHighColor"),
-                       QStringLiteral("#2e9b61"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyStrength"), 0.70);
-
-    {
-        SettingsController migrated;
-        auto* fcw = migrated.frequencyColorWaveform();
-        QCOMPARE(fcw->preset(), QStringLiteral("custom"));
-        QCOMPARE(fcw->lowDarkColor(), QStringLiteral("#112233"));
-        QCOMPARE(fcw->midDarkColor(), QStringLiteral("#9a4bc2"));
-        QCOMPARE(fcw->highDarkColor(), QStringLiteral("#2e9b61"));
-        QCOMPARE(fcw->lowDarkOpacity(), 0.50);
-        QCOMPARE(fcw->midDarkOpacity(), 0.43);
-        QCOMPARE(fcw->highDarkOpacity(), 0.52);
-        QCOMPARE(fcw->lowLightOpacity(), 0.41);
-        QCOMPARE(fcw->midLightOpacity(), 0.36);
-        QCOMPARE(fcw->highLightOpacity(), 0.45);
-        const QString generatedBeforeEdit = fcw->lowLightColor();
-        migrated.beginEdit();
-        fcw->setLowDarkColor(QStringLiteral("#654321"));
-        QVERIFY(fcw->lowLightColor() != generatedBeforeEdit);
-        migrated.cancelEdit();
-        QCOMPARE(fcw->lowDarkColor(), QStringLiteral("#112233"));
-    }
-
-    {
-        SettingsController reloaded;
-        auto* reloadedFcw = reloaded.frequencyColorWaveform();
-        reloadedFcw->setLowLightColor(QStringLiteral("#aabbcc"));
-        reloadedFcw->setMidLightColor(QStringLiteral("#bbccdd"));
-        reloadedFcw->setHighLightColor(QStringLiteral("#ccddee"));
-        QCOMPARE(reloadedFcw->lowDarkColor(), QStringLiteral("#112233"));
-        QCOMPARE(reloadedFcw->midDarkColor(), QStringLiteral("#9a4bc2"));
-        QCOMPARE(reloadedFcw->highDarkColor(), QStringLiteral("#2e9b61"));
-    }
-
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyLowColor"),
-                       QStringLiteral("#c45100"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyMidColor"),
-                       QStringLiteral("#b04bcd"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyHighColor"),
-                       QStringLiteral("#0a819a"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyStrength"), 0.85);
-    {
-        SettingsController secondLoad;
-        QCOMPARE(secondLoad.frequencyColorWaveform()->lowDarkColor(),
-                 QStringLiteral("#112233"));
-        QCOMPARE(secondLoad.frequencyColorWaveform()->midDarkColor(),
-                 QStringLiteral("#9a4bc2"));
-        QCOMPARE(secondLoad.frequencyColorWaveform()->highDarkColor(),
-                 QStringLiteral("#2e9b61"));
-    }
-
-    persisted.clear();
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyLowColor"),
-                       QStringLiteral("#123456"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyStrength"), 0.31);
-    SettingsController partial;
-    auto* fcw = partial.frequencyColorWaveform();
-    QCOMPARE(fcw->preset(), QStringLiteral("custom"));
-    QCOMPARE(fcw->lowDarkColor(), QStringLiteral("#123456"));
-    QCOMPARE(fcw->midDarkColor(), QStringLiteral("#c66b55"));
-    QCOMPARE(fcw->highDarkColor(), QStringLiteral("#b5a4c6"));
-    QCOMPARE(fcw->lowDarkOpacity(), 0.22);
-    QCOMPARE(fcw->midDarkOpacity(), 0.19);
-    QCOMPARE(fcw->highDarkOpacity(), 0.23);
-    QCOMPARE(persisted.value(
-                 QStringLiteral("appearance/waveformFrequencyMidColor")).toString(),
-             QStringLiteral("#c66b55"));
-
-    fcw->setLowLightColor(QStringLiteral("#aabbcc"));
-    QCOMPARE(fcw->lowDarkColor(), QStringLiteral("#123456"));
-    fcw->setMidLightColor(QStringLiteral("#bbccdd"));
-    QVERIFY(fcw->midDarkColor() != QStringLiteral("#c66b55"));
-
-    persisted.clear();
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyLowColor"),
-                       QStringLiteral("#112233"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyMidColor"),
-                       QStringLiteral("#445566"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyHighColor"),
-                       QStringLiteral("#778899"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyStrength"), 0.625);
-    SettingsController unroundedStrength;
-    auto* unroundedFcw = unroundedStrength.frequencyColorWaveform();
-    QCOMPARE(unroundedFcw->lowDarkOpacity(), 0.44);
-    QCOMPARE(unroundedFcw->midDarkOpacity(), 0.38);
-    QCOMPARE(unroundedFcw->highDarkOpacity(), 0.46);
-    persisted.clear();
-}
-
-void SettingsControllerTest::frequencyColorMigrationWaitsForPayloadSync()
-{
-    QTemporaryDir temporaryDirectory;
-    QVERIFY(temporaryDirectory.isValid());
-    const QString blockedParent = temporaryDirectory.filePath(QStringLiteral("blocked"));
-    QFile blocker(blockedParent);
-    QVERIFY(blocker.open(QIODevice::WriteOnly));
-    blocker.close();
-    const QString iniPath = blockedParent + QStringLiteral("/frequency.ini");
-
-    QSettings blocked(iniPath, QSettings::IniFormat);
-    FrequencyColorWaveformSettings waveform;
-    waveform.load(blocked);
-    blocked.sync();
-    QCOMPARE(blocked.status(), QSettings::AccessError);
-    QVERIFY(!blocked.contains(QStringLiteral("waveformFrequencyColorSchema")));
-
-    blocker.remove();
-    QVERIFY(QDir().mkpath(blockedParent));
-    QSettings recovered(iniPath, QSettings::IniFormat);
-    recovered.setValue(QStringLiteral("waveformFrequencyLowColor"),
-                       QStringLiteral("#112233"));
-    recovered.setValue(QStringLiteral("waveformFrequencyMidColor"),
-                       QStringLiteral("#445566"));
-    recovered.setValue(QStringLiteral("waveformFrequencyHighColor"),
-                       QStringLiteral("#778899"));
-    recovered.setValue(QStringLiteral("waveformFrequencyStrength"), 0.625);
-    recovered.sync();
-    QCOMPARE(recovered.status(), QSettings::NoError);
-
-    FrequencyColorWaveformSettings remigrated;
-    remigrated.load(recovered);
-    QCOMPARE(remigrated.preset(), QStringLiteral("custom"));
-    QCOMPARE(remigrated.lowDarkOpacity(), 0.44);
-    QCOMPARE(recovered.value(QStringLiteral("waveformFrequencyColorSchema")).toInt(), 1);
-}
-
-void SettingsControllerTest::migratesPreviousFrequencyDefaultsWithoutOverwritingCustomValues()
-{
-    QSettings persisted;
-    persisted.clear();
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyLowColor"),
-                       QStringLiteral("#ff647c"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyMidColor"),
-                       QStringLiteral("#3ed6ae"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyHighColor"),
-                       QStringLiteral("#8a7cff"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyStrength"), 0.85);
-
-    {
-        SettingsController migrated;
-        QCOMPARE(migrated.property("waveformFrequencyLowColor").toString(),
-                 QStringLiteral("#269a8e"));
-        QCOMPARE(migrated.property("waveformFrequencyMidColor").toString(),
-                 QStringLiteral("#c66b55"));
-        QCOMPARE(migrated.property("waveformFrequencyHighColor").toString(),
-                 QStringLiteral("#b5a4c6"));
-        QCOMPARE(migrated.property("waveformFrequencyStrength").toDouble(), 0.62);
-    }
-
-    persisted.clear();
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyLowColor"),
-                       QStringLiteral("#c45100"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyMidColor"),
-                       QStringLiteral("#b04bcd"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyHighColor"),
-                       QStringLiteral("#0a819a"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyStrength"), 0.85);
-
-    {
-        SettingsController migrated;
-        QCOMPARE(migrated.property("waveformFrequencyLowColor").toString(),
-                 QStringLiteral("#269a8e"));
-        QCOMPARE(migrated.property("waveformFrequencyMidColor").toString(),
-                 QStringLiteral("#c66b55"));
-        QCOMPARE(migrated.property("waveformFrequencyHighColor").toString(),
-                 QStringLiteral("#b5a4c6"));
-        QCOMPARE(migrated.property("waveformFrequencyStrength").toDouble(), 0.62);
-    }
-
-    persisted.clear();
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyLowColor"),
-                       QStringLiteral("#c65332"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyMidColor"),
-                       QStringLiteral("#9a4bc2"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyHighColor"),
-                       QStringLiteral("#2e9b61"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyStrength"), 0.7);
-
-    {
-        SettingsController migrated;
-        QCOMPARE(migrated.property("waveformFrequencyLowColor").toString(),
-                 QStringLiteral("#269a8e"));
-        QCOMPARE(migrated.property("waveformFrequencyMidColor").toString(),
-                 QStringLiteral("#c66b55"));
-        QCOMPARE(migrated.property("waveformFrequencyHighColor").toString(),
-                 QStringLiteral("#b5a4c6"));
-        QCOMPARE(migrated.property("waveformFrequencyStrength").toDouble(), 0.62);
-        QCOMPARE(persisted.value(QStringLiteral("appearance/waveformFrequencyStrength")).toDouble(),
-                 0.62);
-    }
-
-    persisted.clear();
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyLowColor"),
-                       QStringLiteral("#c47a5e"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyMidColor"),
-                       QStringLiteral("#7787b5"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyHighColor"),
-                       QStringLiteral("#4f9279"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyStrength"), 0.62);
-
-    {
-        SettingsController migrated;
-        QCOMPARE(migrated.property("waveformFrequencyLowColor").toString(),
-                 QStringLiteral("#269a8e"));
-        QCOMPARE(migrated.property("waveformFrequencyMidColor").toString(),
-                 QStringLiteral("#c66b55"));
-        QCOMPARE(migrated.property("waveformFrequencyHighColor").toString(),
-                 QStringLiteral("#b5a4c6"));
-        QCOMPARE(migrated.property("waveformFrequencyStrength").toDouble(), 0.62);
-    }
-
-    persisted.clear();
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyLowColor"),
-                       QStringLiteral("#315cff"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyMidColor"),
-                       QStringLiteral("#ffb02e"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyHighColor"),
-                       QStringLiteral("#f04ca5"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyStrength"), 0.62);
-
-    {
-        SettingsController migrated;
-        QCOMPARE(migrated.property("waveformFrequencyLowColor").toString(),
-                 QStringLiteral("#269a8e"));
-        QCOMPARE(migrated.property("waveformFrequencyMidColor").toString(),
-                 QStringLiteral("#c66b55"));
-        QCOMPARE(migrated.property("waveformFrequencyHighColor").toString(),
-                 QStringLiteral("#b5a4c6"));
-        QCOMPARE(migrated.property("waveformFrequencyStrength").toDouble(), 0.62);
-    }
-
-    persisted.clear();
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyLowColor"),
-                       QStringLiteral("#62c8a0"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyMidColor"),
-                       QStringLiteral("#f1d79a"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyHighColor"),
-                       QStringLiteral("#e98582"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyStrength"), 0.62);
-
-    {
-        SettingsController migrated;
-        QCOMPARE(migrated.property("waveformFrequencyLowColor").toString(),
-                 QStringLiteral("#269a8e"));
-        QCOMPARE(migrated.property("waveformFrequencyMidColor").toString(),
-                 QStringLiteral("#c66b55"));
-        QCOMPARE(migrated.property("waveformFrequencyHighColor").toString(),
-                 QStringLiteral("#b5a4c6"));
-        QCOMPARE(migrated.property("waveformFrequencyStrength").toDouble(), 0.62);
-    }
-
-    persisted.clear();
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyLowColor"),
-                       QStringLiteral("#112233"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyMidColor"),
-                       QStringLiteral("#9a4bc2"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyHighColor"),
-                       QStringLiteral("#2e9b61"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyStrength"), 0.7);
-
-    {
-        SettingsController customized;
-        QCOMPARE(customized.property("waveformFrequencyLowColor").toString(),
-                 QStringLiteral("#112233"));
-        QCOMPARE(customized.property("waveformFrequencyMidColor").toString(),
-                 QStringLiteral("#9a4bc2"));
-        QCOMPARE(customized.property("waveformFrequencyHighColor").toString(),
-                 QStringLiteral("#2e9b61"));
-        QCOMPARE(customized.property("waveformFrequencyStrength").toDouble(), 0.7);
-    }
-
-    persisted.clear();
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyLowColor"),
-                       QStringLiteral("#62c8a0"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyMidColor"),
-                       QStringLiteral("#f1d79a"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyHighColor"),
-                       QStringLiteral("#e98582"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyStrength"), 0.55);
-
-    {
-        SettingsController customized;
-        QCOMPARE(customized.property("waveformFrequencyLowColor").toString(),
-                 QStringLiteral("#62c8a0"));
-        QCOMPARE(customized.property("waveformFrequencyMidColor").toString(),
-                 QStringLiteral("#f1d79a"));
-        QCOMPARE(customized.property("waveformFrequencyHighColor").toString(),
-                 QStringLiteral("#e98582"));
-        QCOMPARE(customized.property("waveformFrequencyStrength").toDouble(), 0.55);
-    }
-
-    persisted.clear();
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyLowColor"),
-                       QStringLiteral("#c47a5e"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyMidColor"),
-                       QStringLiteral("#7787b5"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyHighColor"),
-                       QStringLiteral("#4f9279"));
-    persisted.setValue(QStringLiteral("appearance/waveformFrequencyStrength"), 0.55);
-
-    {
-        SettingsController customized;
-        QCOMPARE(customized.property("waveformFrequencyLowColor").toString(),
-                 QStringLiteral("#c47a5e"));
-        QCOMPARE(customized.property("waveformFrequencyMidColor").toString(),
-                 QStringLiteral("#7787b5"));
-        QCOMPARE(customized.property("waveformFrequencyHighColor").toString(),
-                 QStringLiteral("#4f9279"));
-        QCOMPARE(customized.property("waveformFrequencyStrength").toDouble(), 0.55);
-    }
+    QCOMPARE(reloaded.frequencyColorWaveform()->palette().first().toString(),
+             QStringLiteral("#123ecf"));
+    QCOMPARE(reloaded.frequencyColorWaveform()->unplayedOpacity(), 0.88);
+    QCOMPARE(reloaded.listWaveformThumbnailMode(), QStringLiteral("Spectral"));
     persisted.clear();
 }
 
@@ -1319,7 +664,7 @@ void SettingsControllerTest::listWaveformThumbnailSettingsPersistFallbackAndRese
         SettingsController settings;
         QCOMPARE(settings.listWaveformThumbnailEnabled(), true);
         QCOMPARE(settings.listWaveformThumbnailMode(),
-                 QStringLiteral("Color36"));
+                 QStringLiteral("Spectral"));
 
         settings.setListWaveformThumbnailEnabled(false);
         settings.setListWaveformThumbnailMode(QStringLiteral("Mono"));
@@ -1340,14 +685,14 @@ void SettingsControllerTest::listWaveformThumbnailSettingsPersistFallbackAndRese
     QSignalSpy modeChanged(&reloaded,
                            &SettingsController::listWaveformThumbnailModeChanged);
     reloaded.setListWaveformThumbnailMode(QStringLiteral("unsupported"));
-    QCOMPARE(reloaded.listWaveformThumbnailMode(), QStringLiteral("Color36"));
+    QCOMPARE(reloaded.listWaveformThumbnailMode(), QStringLiteral("Spectral"));
     QCOMPARE(modeChanged.count(), 1);
 
     reloaded.setListWaveformThumbnailEnabled(false);
     reloaded.setListWaveformThumbnailMode(QStringLiteral("Mono"));
     reloaded.resetWaveformDefaults();
     QCOMPARE(reloaded.listWaveformThumbnailEnabled(), true);
-    QCOMPARE(reloaded.listWaveformThumbnailMode(), QStringLiteral("Color36"));
+    QCOMPARE(reloaded.listWaveformThumbnailMode(), QStringLiteral("Spectral"));
     QCOMPARE(reloaded.spectrumColorMode(), 1);
     QCOMPARE(reloaded.spectrumSolidColor(), QStringLiteral("#7b2ff7"));
 
@@ -1369,7 +714,7 @@ void SettingsControllerTest::listWaveformThumbnailSettingsPersistFallbackAndRese
                        QStringLiteral("invalid-on-disk"));
     SettingsController invalidReload;
     QCOMPARE(invalidReload.listWaveformThumbnailMode(),
-             QStringLiteral("Color36"));
+             QStringLiteral("Spectral"));
     persisted.clear();
 }
 

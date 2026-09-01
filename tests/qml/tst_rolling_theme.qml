@@ -412,23 +412,23 @@ TestCase {
         })
     }
 
-    function test_frequency_waveform_uses_light_and_dark_theme_tokens() {
+    function test_spectral_waveform_palette_is_theme_independent() {
         var rolling = rollingWithFakes()
         var overview = findChild(rolling, "rollingOverviewWaveform")
         var mainWaveform = findChild(rolling, "rollingMainWaveform")
         verify(overview && mainWaveform)
 
-        SettingsController.themeMode = 1
-        tryCompare(overview, "frequencyMixColor",
-                   rolling.frequencyWaveformSettings.mixLightColor)
-        compare(mainWaveform.frequencyHighColor,
-                rolling.frequencyWaveformSettings.highLightColor)
+        var first = String(rolling.frequencyWaveformSettings.palette[0])
+        var last = String(rolling.frequencyWaveformSettings.palette[7])
 
+        SettingsController.themeMode = 1
+        tryCompare(overview, "spectralUnplayedOpacity",
+                   rolling.frequencyWaveformSettings.unplayedOpacity)
+        compare(String(overview.spectralPalette[0]), first)
+        compare(String(mainWaveform.spectralPalette[7]), last)
         SettingsController.themeMode = 0
-        tryCompare(overview, "frequencyMixColor",
-                   rolling.frequencyWaveformSettings.mixDarkColor)
-        compare(mainWaveform.frequencyHighColor,
-                rolling.frequencyWaveformSettings.highDarkColor)
+        compare(String(overview.spectralPalette[0]), first)
+        compare(String(mainWaveform.spectralPalette[7]), last)
     }
 
     function test_rolling_tempo_meter_and_zoom_controls_are_live() {

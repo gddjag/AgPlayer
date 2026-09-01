@@ -651,6 +651,7 @@ TestCase {
             "bass": [0.8, 0.3, 0.6, 0.2],
             "mid": [0.4, 0.7, 0.2, 0.9],
             "high": [0.6, 0.1, 0.9, 0.5],
+            "spectralIndex": [12, 96, 180, 244],
             "_sampleRate": 48000,
             "_totalSamples": 4800000,
             "_peakCount": 4
@@ -676,24 +677,13 @@ TestCase {
         compare(played.gradientStartColor.toString(), base.gradientStartColor.toString())
         compare(played.gradientMiddleColor.toString(), base.gradientMiddleColor.toString())
         compare(played.gradientEndColor.toString(), base.gradientEndColor.toString())
-        compare(base.frequencyDarkSurface, !Theme.isLight)
-        compare(base.frequencyMixColor.toString(), Theme.isLight
-                ? frequencySettings.mixLightColor
-                : frequencySettings.mixDarkColor)
-        compare(played.frequencyMixColor.toString(),
-                base.frequencyMixColor.toString())
-        compare(played.frequencyLowColor.toString(), base.frequencyLowColor.toString())
-        compare(played.frequencyMidColor.toString(), base.frequencyMidColor.toString())
-        compare(played.frequencyHighColor.toString(), base.frequencyHighColor.toString())
-        compare(played.frequencyMixOpacity, base.frequencyMixOpacity)
-        compare(played.frequencyLowOpacity, base.frequencyLowOpacity)
-        compare(played.frequencyMidOpacity, base.frequencyMidOpacity)
-        compare(played.frequencyHighOpacity, base.frequencyHighOpacity)
-        compare(played.frequencyPlayFocus, base.frequencyPlayFocus)
-        compare(played.frequencyFocusColor.toString(),
-                base.frequencyFocusColor.toString())
-        compare(played.frequencyDarkSurface, base.frequencyDarkSurface)
-        compare(played.frequencyStrength, base.frequencyStrength)
+        compare(base.spectralPalette.length, 8)
+        compare(String(base.spectralPalette[0]),
+                String(frequencySettings.palette[0]))
+        compare(String(played.spectralPalette[7]),
+                String(base.spectralPalette[7]))
+        compare(played.spectralUnplayedOpacity,
+                base.spectralUnplayedOpacity)
         compare(played.rgbProgress, base.rgbProgress)
         compare(played.amplitudeScale, base.amplitudeScale)
         compare(played.density, base.density)
@@ -704,12 +694,6 @@ TestCase {
             return played.visibleStartMs === base.visibleStartMs
                     && played.visibleEndMs === base.visibleEndMs
         }, 1000)
-        shell.waveformFrequencyReady = false
-        tryCompare(base, "frequencyBandFade", 0, 350)
-        tryCompare(played, "frequencyBandFade", 0, 350)
-        shell.waveformFrequencyReady = true
-        tryCompare(base, "frequencyBandFade", 1, 350)
-        tryCompare(played, "frequencyBandFade", 1, 350)
     }
 
     function test_dense_bottom_bar_keeps_volume_icon_only_and_groups_separate() {

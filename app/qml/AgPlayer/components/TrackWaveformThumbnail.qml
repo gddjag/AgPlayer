@@ -8,9 +8,10 @@ Item {
     property string trackId: ""
     property string sourcePath: ""
     property int delegateGeneration: 0
-    property string mode: "Color36"
+    property string mode: "Spectral"
     property var provider: TrackWaveformThumbnailProvider
     property var waveformPeaks: ""
+    property var spectralIndex: ""
 
     property string requestedTrackId: ""
     property int requestedGeneration: 0
@@ -33,6 +34,7 @@ Item {
         requestScheduled = false
         cancelRequest()
         waveformPeaks = ""
+        spectralIndex = ""
         if (!requestEligible())
             return
         requestedTrackId = trackId
@@ -66,10 +68,13 @@ Item {
 
     Connections {
         target: root.provider
-        function onThumbnailReady(readyTrackId, readyGeneration, peaks) {
+        function onThumbnailReady(readyTrackId, readyGeneration, peaks,
+                                  spectralIndex) {
             if (readyTrackId === root.requestedTrackId
-                    && readyGeneration === root.requestedGeneration)
+                    && readyGeneration === root.requestedGeneration) {
                 root.waveformPeaks = peaks
+                root.spectralIndex = spectralIndex
+            }
         }
         function onSourceCacheInvalidated(invalidatedSourcePath) {
             if (invalidatedSourcePath === root.sourcePath
@@ -87,9 +92,10 @@ Item {
             TrackWaveformThumbnailItem {
                 objectName: "trackWaveformThumbnailItem"
                 peaks: root.waveformPeaks
-                waveformColor: root.mode === "Mono"
-                               ? Theme.listWaveformMono
-                               : root.provider.colorForTrackId(root.trackId)
+                waveformColor: Theme.listWaveformMono
+                spectralIndex: root.mode === "Mono"
+                               ? "" : (root.spectralIndex || "")
+                spectralPalette: SettingsController.frequencyColorWaveform.palette
             }
         }
     }

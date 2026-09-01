@@ -65,59 +65,6 @@ Item {
         || (SettingsController.themeMode === 2 && Theme.isLight)
     readonly property var frequencyWaveformSettings:
         SettingsController.frequencyColorWaveform
-    readonly property var frequencyMixColor: rollingLightTheme
-                                              ? frequencyWaveformSettings.mixLightColor
-                                              : frequencyWaveformSettings.mixDarkColor
-    readonly property var frequencyLowColor: rollingLightTheme
-                                              ? frequencyWaveformSettings.lowLightColor
-                                              : frequencyWaveformSettings.lowDarkColor
-    readonly property var frequencyMidColor: rollingLightTheme
-                                              ? frequencyWaveformSettings.midLightColor
-                                              : frequencyWaveformSettings.midDarkColor
-    readonly property var frequencyHighColor: rollingLightTheme
-                                               ? frequencyWaveformSettings.highLightColor
-                                               : frequencyWaveformSettings.highDarkColor
-    readonly property real frequencyMixOpacity: rollingLightTheme
-                                                 ? frequencyWaveformSettings.mixLightOpacity
-                                                 : frequencyWaveformSettings.mixDarkOpacity
-    readonly property real frequencyLowOpacity: rollingLightTheme
-                                                 ? frequencyWaveformSettings.lowLightOpacity
-                                                 : frequencyWaveformSettings.lowDarkOpacity
-    readonly property real frequencyMidOpacity: rollingLightTheme
-                                                 ? frequencyWaveformSettings.midLightOpacity
-                                                 : frequencyWaveformSettings.midDarkOpacity
-    readonly property real frequencyHighOpacity: rollingLightTheme
-                                                  ? frequencyWaveformSettings.highLightOpacity
-                                                  : frequencyWaveformSettings.highDarkOpacity
-    // Keep metadata as an explicit cache. Calling the model method from a
-    // declarative binding can feed back through role notifications and create a
-    // `currentTrack` binding loop in compiled QML.
-    property var currentTrack: null
-    readonly property var metadataBadges: {
-        var track = currentTrack
-        return [
-            track && track.format
-                ? String(track.format).toUpperCase() : "—",
-            track && Number(track.bitDepth) > 0
-                ? Number(track.bitDepth) + "-bit" : "—",
-            track && Number(track.sampleRate) > 0
-                ? (Number(track.sampleRate) / 1000).toFixed(
-                      Number(track.sampleRate) % 1000 === 0 ? 0 : 1)
-                      + " kHz" : "—",
-            track && Number(track.bitRate) > 0
-                ? Math.round(Number(track.bitRate) / 1000) + " kbps" : "—",
-            sourceBpmValue > 0
-                ? sourceBpmValue.toFixed(2) + " BPM" : "—",
-            track && Number(track.fileSize) > 0
-                ? (Number(track.fileSize) / 1048576).toFixed(1) + " MB" : "—"
-        ]
-    }
-    readonly property real sourceBpmValue:
-        playback && Number(playback.sourceBpm) > 0
-        ? Number(playback.sourceBpm)
-        : currentTrack && Number(currentTrack.bpm) > 0
-          ? Number(currentTrack.bpm) : 0
-
     signal openSettingsRequested()
     signal openEqualizerRequested()
 
@@ -590,22 +537,9 @@ Item {
                     cursorPosition: -1
                     pointerInteractionEnabled: false
                     visualMode: 3
-                    baseColor: root.frequencyMixColor
-                    frequencyMixColor: root.frequencyMixColor
-                    frequencyLowColor: root.frequencyLowColor
-                    frequencyMidColor: root.frequencyMidColor
-                    frequencyHighColor: root.frequencyHighColor
-                    frequencyMixOpacity: root.frequencyMixOpacity
-                    frequencyLowOpacity: root.frequencyLowOpacity
-                    frequencyMidOpacity: root.frequencyMidOpacity
-                    frequencyHighOpacity: root.frequencyHighOpacity
-                    frequencyBandFade: root.waveformSession
-                                       && root.waveformSession.frequencyReady
-                                       ? 1 : 0
-                    frequencyPlayFocus: false
-                    frequencyStrength:
-                        SettingsController.waveformFrequencyStrength
-                    frequencyDarkSurface: !Theme.isLight
+                    baseColor: SettingsController.waveformRgbBaseColor
+                    spectralPalette: root.frequencyWaveformSettings.palette
+                    spectralUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
                     amplitudeScale: SettingsController.waveformHeight
                     density: SettingsController.waveformDensity
                     lineWidth: SettingsController.waveformThickness
@@ -684,22 +618,9 @@ Item {
                 cursorPosition: -1
                 pointerInteractionEnabled: false
                 visualMode: 3
-                baseColor: root.frequencyMixColor
-                frequencyMixColor: root.frequencyMixColor
-                frequencyLowColor: root.frequencyLowColor
-                frequencyMidColor: root.frequencyMidColor
-                frequencyHighColor: root.frequencyHighColor
-                frequencyMixOpacity: root.frequencyMixOpacity
-                frequencyLowOpacity: root.frequencyLowOpacity
-                frequencyMidOpacity: root.frequencyMidOpacity
-                frequencyHighOpacity: root.frequencyHighOpacity
-                frequencyBandFade: root.waveformSession
-                                   && root.waveformSession.frequencyReady
-                                   ? 1 : 0
-                frequencyPlayFocus: false
-                frequencyStrength:
-                    SettingsController.waveformFrequencyStrength
-                frequencyDarkSurface: !root.rollingLightTheme
+                baseColor: SettingsController.waveformRgbBaseColor
+                spectralPalette: root.frequencyWaveformSettings.palette
+                spectralUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
                 amplitudeScale: Math.max(
                                     0.9,
                                     SettingsController.waveformHeight * 1.25)

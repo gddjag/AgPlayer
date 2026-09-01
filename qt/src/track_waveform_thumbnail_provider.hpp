@@ -1,7 +1,6 @@
 #pragma once
 
 #include <QByteArray>
-#include <QColor>
 #include <QFutureWatcher>
 #include <QHash>
 #include <QObject>
@@ -34,9 +33,9 @@ public:
 
     [[nodiscard]] static QByteArray quantizeMixPeaks(
         const std::vector<float>& mix);
-    [[nodiscard]] static std::uint32_t fnv1a32(const QString& trackId) noexcept;
-    Q_INVOKABLE [[nodiscard]] static QColor colorForTrackId(
-        const QString& trackId);
+    [[nodiscard]] static QByteArray quantizeSpectralIndex(
+        const std::vector<std::uint8_t>& spectralIndex,
+        const std::vector<float>& mix);
 
     Q_INVOKABLE void request(const QString& trackId,
                              const QString& sourcePath,
@@ -52,8 +51,10 @@ public:
 signals:
     void thumbnailReady(const QString& trackId,
                         quint64 generation,
-                        const QByteArray& peaks);
+                        const QByteArray& peaks,
+                        const QByteArray& spectralIndex);
     void sourceCacheInvalidated(const QString& sourcePath);
+    void analysisRequested(const QString& sourcePath);
 
 private:
     struct Request final {
@@ -69,6 +70,7 @@ private:
         QString sourcePath;
         quint64 cacheEpoch = 0U;
         QByteArray peaks;
+        QByteArray spectralIndex;
     };
 
     struct ActiveLoad final {
@@ -80,6 +82,7 @@ private:
     struct CacheEntry final {
         QString sourcePath;
         QByteArray peaks;
+        QByteArray spectralIndex;
         std::list<QString>::iterator order;
     };
 
@@ -88,7 +91,12 @@ private:
         std::list<QString>::iterator order;
     };
 
-    [[nodiscard]] static QByteArray loadFromV2CacheOnly(
+    struct ThumbnailData final {
+        QByteArray peaks;
+        QByteArray spectralIndex;
+    };
+
+    [[nodiscard]] static ThumbnailData loadFromCacheOnly(
         const QString& cacheDirectory, const QString& sourcePath);
     [[nodiscard]] static unsigned char quantizeSigned(float amplitude);
     void startNext();
@@ -96,7 +104,8 @@ private:
     void touchLru(const QString& trackId);
     void insertCache(const QString& trackId,
                      const QString& sourcePath,
-                     const QByteArray& peaks);
+                     const QByteArray& peaks,
+                     const QByteArray& spectralIndex);
     [[nodiscard]] QString negativeKey(const QString& sourcePath) const;
     [[nodiscard]] bool hasNegativeCooldown(const QString& sourcePath);
     void insertNegativeCooldown(const QString& sourcePath);

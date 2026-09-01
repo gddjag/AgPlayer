@@ -38,10 +38,6 @@ add_library(agplayer_core STATIC
     src/formant_preserver.cpp
     src/formant_preserver.hpp
     src/decoder.cpp
-    src/frequency_color_waveform_analyzer.cpp
-    src/frequency_color_waveform_analyzer.hpp
-    src/frequency_color_waveform_cache.cpp
-    src/frequency_color_waveform_cache.hpp
     src/graphic_equalizer.cpp
     src/graphic_equalizer.hpp
     src/metadata_writer.cpp

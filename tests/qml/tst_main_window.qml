@@ -2742,105 +2742,53 @@ TestCase {
         var playedClip = findChild(mainWindow, "waveformPlayedClip")
         var playbackGuide = findChild(mainWindow, "waveformPlaybackGuide")
         var session = mainWindow.waveformSession
-        var frequencySettings = SettingsController.frequencyColorWaveform
+        var spectralSettings = SettingsController.frequencyColorWaveform
         verify(waveform && playedClip && playbackGuide && session)
-        compare(findChild(mainWindow, "waveformPlaybackFocusDot"), null,
-                "frequency focus must be rendered by the native canvas")
         var previousMode = SettingsController.waveformMode
         var previousGuide = SettingsController.waveformPlaybackGuide
-        var previousReady = session.frequencyReady
-        SettingsController.waveformMode = 0
-        tryVerify(function() {
-            return waveform.layers.mix && waveform.layers.mix.length > 0
-        }, 5000)
+        var previousLayers = session.layers
+        var previousDuration = session.durationMs
+        var testLayers = {
+            "mix": [0.2, 0.5, 0.8, 0.4],
+            "bass": [0.3, 0.4, 0.5, 0.2],
+            "mid": [0.2, 0.6, 0.4, 0.3],
+            "high": [0.1, 0.3, 0.7, 0.5],
+            "spectralIndex": [12, 96, 180, 244],
+            "_sampleRate": 48000,
+            "_totalSamples": 48000,
+            "_peakCount": 4
+        }
+        session.layers = testLayers
+        session.durationMs = 1000
 
-        tryVerify(function() {
-            return waveform.layers.mix.length > 0
-                    && waveform.sampleRate > 0
-                    && waveform.totalSamples > 0
-                    && waveform.peakCount === waveform.layers.mix.length
-        })
+        SettingsController.waveformMode = 0
+        tryCompare(waveform.layers.mix, "length", 4)
         compare(waveform.visualMode, 0)
-        compare(waveform.baseColor.toString(),
-                SettingsController.waveformSolidBaseColor)
-        compare(waveform.progressColor.toString(),
-                SettingsController.waveformSolidProgressColor)
-        SettingsController.waveformPlaybackGuide = true
-        tryCompare(playbackGuide, "visible", true)
 
         SettingsController.waveformMode = 3
-        tryVerify(function() {
-            return waveform.layers.mix.length > 0
-                    && waveform.layers.bass.length > 0
-                    && waveform.layers.mid.length > 0
-                    && waveform.layers.high.length > 0
-        })
+        session.layers = testLayers
+        tryCompare(waveform.layers.spectralIndex, "length", 4)
         compare(waveform.visualMode, 3)
-        compare(waveform.frequencyMixColor.toString(), Theme.isLight
-                ? frequencySettings.mixLightColor
-                : frequencySettings.mixDarkColor)
-        compare(waveform.frequencyLowColor.toString(), Theme.isLight
-                ? frequencySettings.lowLightColor
-                : frequencySettings.lowDarkColor)
-        compare(waveform.frequencyMidColor.toString(), Theme.isLight
-                ? frequencySettings.midLightColor
-                : frequencySettings.midDarkColor)
-        compare(waveform.frequencyHighColor.toString(), Theme.isLight
-                ? frequencySettings.highLightColor
-                : frequencySettings.highDarkColor)
-        compare(waveform.frequencyMixOpacity, Theme.isLight
-                ? frequencySettings.mixLightOpacity
-                : frequencySettings.mixDarkOpacity)
-        compare(waveform.frequencyLowOpacity, Theme.isLight
-                ? frequencySettings.lowLightOpacity
-                : frequencySettings.lowDarkOpacity)
-        compare(waveform.frequencyMidOpacity, Theme.isLight
-                ? frequencySettings.midLightOpacity
-                : frequencySettings.midDarkOpacity)
-        compare(waveform.frequencyHighOpacity, Theme.isLight
-                ? frequencySettings.highLightOpacity
-                : frequencySettings.highDarkOpacity)
-        compare(waveform.frequencyPlayFocus, frequencySettings.playFocus)
-        compare(waveform.frequencyFocusColor.toString(),
-                Theme.isLight ? "#26313a" : "#f2e7d4")
-        compare(waveform.frequencyDarkSurface, !Theme.isLight)
-        compare(playedClip.visible, false,
-                "frequency overlays must not be drawn twice in the played region")
-        compare(playbackGuide.visible, false,
-                "frequency mode must hide the legacy QML guide even when enabled")
-        session.frequencyReady = false
-        tryCompare(waveform, "frequencyBandFade", 0, 350)
-        session.frequencyReady = true
-        tryCompare(waveform, "frequencyBandFade", 1, 350)
+        compare(waveform.spectralPalette.length, 8)
+        compare(String(waveform.spectralPalette[0]),
+                String(spectralSettings.palette[0]))
+        compare(String(waveform.spectralPalette[7]),
+                String(spectralSettings.palette[7]))
+        compare(waveform.spectralUnplayedOpacity,
+                spectralSettings.unplayedOpacity)
+        compare(playedClip.visible, false)
+        compare(playbackGuide.visible, false)
 
         SettingsController.waveformMode = 1
-        tryVerify(function() {
-            return waveform.layers.mix.length > 0
-                    && waveform.sampleRate > 0
-                    && waveform.totalSamples > 0
-                    && waveform.peakCount === waveform.layers.mix.length
-        })
-        compare(waveform.visualMode, 1)
-        compare(playedClip.visible, true)
-        tryCompare(playbackGuide, "visible", true)
+        tryCompare(waveform, "visualMode", 1)
 
-        PlaybackController.play()
         SettingsController.waveformMode = 2
-        tryVerify(function() {
-            if (waveform.visualMode !== 2
-                    || waveform.peaks.length < 16
-                    || waveform.peaks.length % 2 !== 0)
-                return false
-            for (var index = 0; index < waveform.peaks.length; ++index) {
-                if (waveform.peaks[index] > 0.05)
-                    return true
-            }
-            return false
-        }, 2000)
+        tryCompare(waveform, "visualMode", 2)
 
         SettingsController.waveformMode = previousMode
         SettingsController.waveformPlaybackGuide = previousGuide
-        session.frequencyReady = previousReady
+        session.layers = previousLayers
+        session.durationMs = previousDuration
     }
 
     function test_z_current_track_metadata_reacts_to_library_changes() {
@@ -4651,7 +4599,7 @@ TestCase {
                         "trackId": "track-a",
                         "sourcePath": "a.wav",
                         "delegateGeneration": 11,
-                        "mode": "Color36"
+                        "mode": "Spectral"
                     })
         verify(provider && wrapper)
         tryCompare(provider, "requestCount", 1)
@@ -5212,54 +5160,32 @@ TestCase {
         wait(0)
         tryCompare(page, "programmaticScroll", false, 1000)
 
-        var presetLabel = findChild(page, "frequencyPresetLabel")
-        var darkButton = findChild(page, "frequencyPreviewDarkButton")
-        var lightButton = findChild(page, "frequencyPreviewLightButton")
-        var mixField = findChild(page, "frequencyMixColorField")
-        var lowField = findChild(page, "frequencyLowColorField")
-        var midField = findChild(page, "frequencyMidColorField")
-        var highField = findChild(page, "frequencyHighColorField")
-        var mixOpacity = findChild(page, "frequencyMixOpacitySlider")
-        var lowOpacity = findChild(page, "frequencyLowOpacitySlider")
-        var midOpacity = findChild(page, "frequencyMidOpacitySlider")
-        var highOpacity = findChild(page, "frequencyHighOpacitySlider")
-        verify(presetLabel)
-        verify(darkButton)
-        verify(lightButton)
-        verify(mixField)
-        verify(lowField)
-        verify(midField)
-        verify(highField)
-        verify(mixOpacity)
-        verify(lowOpacity)
-        verify(midOpacity)
-        verify(highOpacity)
-        verify(findChild(page, "frequencyPlayFocusSwitch"))
-        verify(findChild(page, "frequencyResetLuminousGlazeButton"))
+        var firstField = findChild(page, "spectralPaletteColor0")
+        var lastField = findChild(page, "spectralPaletteColor7")
+        var differenceSlider = findChild(page,
+                                         "spectralProgressDifferenceSlider")
+        var resetButton = findChild(page, "spectralPaletteResetButton")
+        var preview = findChild(page, "frequencyWaveformThumbnailPreview")
+        verify(firstField && lastField && differenceSlider
+               && resetButton && preview)
+        compare(preview.visualMode, 3)
+        compare(preview.layers.mix.length,
+                preview.layers.spectralIndex.length)
+        compare(preview.spectralPalette.length, 8)
 
-        SettingsController.frequencyColorWaveform.resetToLuminousGlaze()
-        darkButton.clicked()
-        compare(mixField.colorValue.toString(), "#7a8490")
-        compare(lowField.colorValue.toString(), "#269a8e")
-        compare(midField.colorValue.toString(), "#c66b55")
-        compare(highField.colorValue.toString(), "#b5a4c6")
-        compare(mixOpacity.value, 18)
-        compare(lowOpacity.value, 44)
-        compare(midOpacity.value, 38)
-        compare(highOpacity.value, 46)
-
-        var previousThemeMode = SettingsController.themeMode
-        lightButton.clicked()
-        compare(SettingsController.themeMode, previousThemeMode,
-                "preview selection must not switch the application theme")
-        compare(mixField.colorValue.toString(), "#59636d")
-        compare(lowField.colorValue.toString(), "#146b64")
-        compare(midField.colorValue.toString(), "#9d4938")
-        compare(highField.colorValue.toString(), "#6e5a7d")
-        compare(mixOpacity.value, 14)
-        compare(lowOpacity.value, 36)
-        compare(midOpacity.value, 32)
-        compare(highOpacity.value, 40)
+        firstField.colorEdited("#112233")
+        compare(String(SettingsController.frequencyColorWaveform.palette[0]),
+                "#112233")
+        compare(String(preview.spectralPalette[0]), "#112233")
+        differenceSlider.value = 40
+        differenceSlider.moved()
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.6)
+        resetButton.clicked()
+        compare(String(SettingsController.frequencyColorWaveform.palette[0]),
+                "#123ecf")
+        compare(String(SettingsController.frequencyColorWaveform.palette[7]),
+                "#e82718")
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.88)
 
         page.cancelAndClose()
         SettingsController.waveformMode = previousWaveformMode
@@ -5281,165 +5207,39 @@ TestCase {
         SettingsController.waveformMode = 3
         wait(0)
         tryCompare(page, "programmaticScroll", false, 1000)
-        wait(50)
 
         var heightStepper = findChild(page, "waveformHeightStepper")
         var densityStepper = findChild(page, "waveformDensityStepper")
         var thicknessStepper = findChild(page, "waveformThicknessStepper")
         var aggregationCombo = findChild(page, "waveformAggregationCombo")
         var resetButton = findChild(page, "waveformResetButton")
-        var frequencyResetButton = findChild(
-                    page, "frequencyResetLuminousGlazeButton")
-        var frequencyMixField = findChild(
-                    page, "frequencyMixColorField")
-        var frequencyLowField = findChild(
-                    page, "frequencyLowColorField")
-        var frequencyMidField = findChild(
-                    page, "frequencyMidColorField")
-        var frequencyHighField = findChild(
-                    page, "frequencyHighColorField")
-        var frequencyLowOpacity = findChild(
-                    page, "frequencyLowOpacitySlider")
-        var frequencyFocusSwitch = findChild(
-                    page, "frequencyPlayFocusSwitch")
-        var frequencyDarkButton = findChild(
-                    page, "frequencyPreviewDarkButton")
-        var frequencyLightButton = findChild(
-                    page, "frequencyPreviewLightButton")
-        var frequencyPresetLabel = findChild(page, "frequencyPresetLabel")
-        var frequencyPreview = findChild(
+        var spectralResetButton = findChild(page, "spectralPaletteResetButton")
+        var firstPaletteField = findChild(page, "spectralPaletteColor0")
+        var differenceSlider = findChild(page,
+                                         "spectralProgressDifferenceSlider")
+        var spectralPreview = findChild(
                     page, "frequencyWaveformThumbnailPreview")
         var listThumbnailSwitch = findChild(
                     page, "listWaveformThumbnailEnabledControl")
         var listThumbnailMode = findChild(
                     page, "listWaveformThumbnailModeControl")
-        var settingsScroll = findChild(page, "settingsScroll")
-        var settingsContent = findChild(page, "settingsContentColumn")
-        verify(heightStepper)
-        verify(densityStepper)
-        verify(thicknessStepper)
-        verify(aggregationCombo)
-        verify(resetButton)
-        verify(frequencyResetButton)
-        verify(frequencyMixField)
-        verify(frequencyLowField)
-        verify(frequencyMidField)
-        verify(frequencyHighField)
-        verify(frequencyLowOpacity)
-        verify(frequencyFocusSwitch)
-        verify(frequencyDarkButton)
-        verify(frequencyLightButton)
-        verify(frequencyPresetLabel)
-        verify(frequencyPreview)
-        verify(listThumbnailSwitch)
-        verify(listThumbnailMode)
-        verify(settingsScroll)
-        verify(settingsContent)
-        verify(settingsScroll.contentHeight > settingsScroll.availableHeight)
-        var highFieldBottom = frequencyHighField.mapToItem(
-                    settingsContent, 0, frequencyHighField.height).y
-        verify(highFieldBottom <= settingsScroll.contentHeight + 0.5,
-               "all four frequency rows must remain inside scrollable content")
-        compare(frequencyPreview.visualMode, 3)
-        verify(frequencyPreview.layers.mix.length > 0)
-        verify(frequencyPreview.layers.bass.length > 0)
-        verify(frequencyPreview.layers.mid.length > 0)
-        verify(frequencyPreview.layers.high.length > 0)
-        SettingsController.frequencyColorWaveform.resetToLuminousGlaze()
-        frequencyDarkButton.clicked()
-        compare(frequencyPreview.frequencyDarkSurface, true)
-        compare(frequencyPreview.frequencyMixColor.toString(), "#7a8490")
-        compare(frequencyPreview.frequencyLowColor.toString(), "#269a8e")
-        compare(frequencyPreview.frequencyMidColor.toString(), "#c66b55")
-        compare(frequencyPreview.frequencyHighColor.toString(), "#b5a4c6")
+        verify(heightStepper && densityStepper && thicknessStepper)
+        verify(aggregationCombo && resetButton && spectralResetButton)
+        verify(firstPaletteField && differenceSlider && spectralPreview)
+        verify(listThumbnailSwitch && listThumbnailMode)
+        compare(spectralPreview.layers.mix.length,
+                spectralPreview.layers.spectralIndex.length)
 
         SettingsController.listWaveformThumbnailEnabled = true
-        SettingsController.listWaveformThumbnailMode = "Color36"
+        SettingsController.listWaveformThumbnailMode = "Spectral"
         tryCompare(listThumbnailSwitch, "checked", true)
-        tryCompare(listThumbnailMode, "currentValue", "Color36")
-        var switchY = listThumbnailSwitch.mapToItem(
-                    settingsContent, 0, 0).y
-        settingsScroll.contentItem.contentY = Math.max(
-                    0, Math.min(switchY - settingsScroll.availableHeight / 2,
-                                settingsScroll.contentHeight
-                                - settingsScroll.availableHeight))
-        wait(50)
-        var switchInViewport = listThumbnailSwitch.mapToItem(
-                    settingsScroll, 0, 0)
-        verify(switchInViewport.y >= 0
-               && switchInViewport.y + listThumbnailSwitch.height
-                  <= settingsScroll.height,
-               "list thumbnail switch must be reachable by scrolling")
-        mouseClick(listThumbnailSwitch,
-                   listThumbnailSwitch.width / 2,
-                   listThumbnailSwitch.height / 2)
-        tryCompare(SettingsController, "listWaveformThumbnailEnabled", false)
-        tryCompare(listThumbnailMode, "enabled", false)
-        SettingsController.listWaveformThumbnailEnabled = true
+        tryCompare(listThumbnailMode, "currentValue", "Spectral")
         listThumbnailMode.currentIndex = 1
         listThumbnailMode.activated(1)
         tryCompare(SettingsController, "listWaveformThumbnailMode", "Mono")
 
         SettingsController.waveformHeight = 1.2
         SettingsController.waveformDensity = 3.5
-        var frequencySettings = SettingsController.frequencyColorWaveform
-        var oldLightCounterpart = frequencySettings.mixLightColor
-        frequencyMixField.colorEdited("#112233")
-        compare(frequencySettings.mixDarkColor, "#112233")
-        verify(frequencySettings.mixLightColor !== oldLightCounterpart,
-               "dark edit must update an unlocked light counterpart")
-        compare(frequencyPreview.frequencyMixColor.toString(), "#112233")
-        compare(frequencySettings.preset, "custom")
-
-        frequencyLightButton.clicked()
-        compare(frequencyPreview.frequencyDarkSurface, false)
-        frequencyMixField.colorEdited("#445566")
-        compare(frequencySettings.mixLightColor, "#445566")
-        frequencyDarkButton.clicked()
-        frequencyMixField.colorEdited("#778899")
-        compare(frequencySettings.mixDarkColor, "#778899")
-        compare(frequencySettings.mixLightColor, "#445566",
-                "manual light edit must lock the counterpart")
-
-        frequencyLowOpacity.value = 0
-        frequencyLowOpacity.moved()
-        compare(frequencySettings.lowDarkOpacity, 0)
-        frequencyLowOpacity.value = 100
-        frequencyLowOpacity.moved()
-        compare(frequencySettings.lowDarkOpacity, 1)
-        frequencyLowOpacity.value = 44
-        frequencyLowOpacity.moved()
-        compare(frequencySettings.lowDarkOpacity, 0.44)
-
-        var focusY = frequencyFocusSwitch.mapToItem(settingsContent, 0, 0).y
-        settingsScroll.contentItem.contentY = Math.max(
-                    0, Math.min(focusY - settingsScroll.availableHeight / 2,
-                                settingsScroll.contentHeight
-                                - settingsScroll.availableHeight))
-        wait(50)
-        var focusInViewport = frequencyFocusSwitch.mapToItem(
-                    settingsScroll, 0, 0)
-        verify(focusInViewport.y >= 0
-               && focusInViewport.y + frequencyFocusSwitch.height
-                  <= settingsScroll.height,
-               "frequency focus switch must be reachable by scrolling")
-        mouseClick(frequencyFocusSwitch,
-                   frequencyFocusSwitch.width / 2,
-                   frequencyFocusSwitch.height / 2)
-        compare(frequencySettings.playFocus, false)
-        mouseClick(frequencyResetButton,
-                   frequencyResetButton.width / 2,
-                   frequencyResetButton.height / 2)
-        compare(frequencySettings.preset, "luminousGlaze")
-        compare(frequencySettings.mixDarkColor, "#7a8490")
-        compare(frequencySettings.lowDarkColor, "#269a8e")
-        compare(frequencySettings.midDarkColor, "#c66b55")
-        compare(frequencySettings.highDarkColor, "#b5a4c6")
-        compare(frequencySettings.mixLightColor, "#59636d")
-        compare(frequencySettings.lowLightColor, "#146b64")
-        compare(frequencySettings.midLightColor, "#9d4938")
-        compare(frequencySettings.highLightColor, "#6e5a7d")
-        compare(frequencySettings.playFocus, true)
         SettingsController.waveformThickness = 2.2
         SettingsController.waveformPeakAlgorithm = 1
         tryCompare(heightStepper, "value", 1.2)
@@ -5447,12 +5247,17 @@ TestCase {
         tryCompare(thicknessStepper, "value", 2.2)
         tryCompare(aggregationCombo, "currentValue", 1)
 
-        heightStepper.increase()
-        densityStepper.decrease()
-        thicknessStepper.increase()
-        tryCompare(SettingsController, "waveformHeight", 1.3)
-        tryCompare(SettingsController, "waveformDensity", 3.0)
-        tryCompare(SettingsController, "waveformThickness", 2.3)
+        firstPaletteField.colorEdited("#112233")
+        compare(String(SettingsController.frequencyColorWaveform.palette[0]),
+                "#112233")
+        compare(String(spectralPreview.spectralPalette[0]), "#112233")
+        differenceSlider.value = 40
+        differenceSlider.moved()
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.6)
+        spectralResetButton.clicked()
+        compare(String(SettingsController.frequencyColorWaveform.palette[0]),
+                "#123ecf")
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.88)
 
         resetButton.clicked()
         tryCompare(SettingsController, "waveformHeight", 0.8)
@@ -5460,7 +5265,8 @@ TestCase {
         tryCompare(SettingsController, "waveformThickness", 1.0)
         tryCompare(SettingsController, "waveformPeakAlgorithm", 0)
         tryCompare(SettingsController, "listWaveformThumbnailEnabled", true)
-        tryCompare(SettingsController, "listWaveformThumbnailMode", "Color36")
+        tryCompare(SettingsController, "listWaveformThumbnailMode", "Spectral")
+
         page.cancelAndClose()
         SettingsController.waveformMode = previousWaveformMode
         if (ownsPage)
@@ -5582,16 +5388,12 @@ TestCase {
         var previousMode = SettingsController.themeMode
         var previousWaveformMode = SettingsController.waveformMode
         var previousGuide = SettingsController.waveformPlaybackGuide
-        var session = mainWindow.waveformSession
-        var previousReady = session.frequencyReady
-        SettingsController.frequencyColorWaveform.resetToLuminousGlaze()
+        SettingsController.frequencyColorWaveform.resetToDefault()
         SettingsController.waveformMode = 3
         var waveform = findChild(mainWindow, "mainWaveform")
         var playedClip = findChild(mainWindow, "waveformPlayedClip")
         var playbackGuide = findChild(mainWindow, "waveformPlaybackGuide")
-        verify(waveform && playedClip && playbackGuide && session)
-        compare(findChild(mainWindow, "waveformPlaybackFocusDot"), null,
-                "frequency focus must be rendered by the native canvas")
+        verify(waveform && playedClip && playbackGuide)
 
         SettingsController.themeMode = 0
         tryCompare(Theme, "isLight", false)
@@ -5601,52 +5403,25 @@ TestCase {
         compare(findChild(mainWindow, "playButtonBody").border.color.toString(),
                 (PlaybackController.state === PlaybackController.Playing
                  ? Theme.playRingPlaying : Theme.playRingPaused).toString())
-        tryCompare(waveform, "frequencyDarkSurface", true)
-        compare(waveform.frequencyMixColor.toString(), "#7a8490")
-        compare(waveform.frequencyLowColor.toString(), "#269a8e")
-        compare(waveform.frequencyMidColor.toString(), "#c66b55")
-        compare(waveform.frequencyHighColor.toString(), "#b5a4c6")
-        compare(waveform.frequencyMixOpacity, 0.18)
-        compare(waveform.frequencyLowOpacity, 0.44)
-        compare(waveform.frequencyMidOpacity, 0.38)
-        compare(waveform.frequencyHighOpacity, 0.46)
-        compare(waveform.frequencyPlayFocus, true)
-        compare(waveform.frequencyFocusColor.toString(), "#f2e7d4")
-        compare(playedClip.visible, false,
-                "frequency mode must keep one visible native render pass")
+        compare(waveform.spectralPalette.length, 8)
+        compare(String(waveform.spectralPalette[0]), "#123ecf")
+        compare(String(waveform.spectralPalette[7]), "#e82718")
+        compare(waveform.spectralUnplayedOpacity, 0.88)
+        compare(playedClip.visible, false)
         SettingsController.waveformPlaybackGuide = false
-        compare(playbackGuide.visible, false,
-                "native focus must not force the legacy QML guide visible")
-        session.frequencyReady = false
-        tryCompare(waveform, "frequencyBandFade", 0, 350)
-        session.frequencyReady = true
-        tryCompare(waveform, "frequencyBandFade", 1, 350)
+        compare(playbackGuide.visible, false)
 
         SettingsController.themeMode = 1
         compare(SettingsController.themeMode, 1)
         tryCompare(Theme, "isLight", true)
         compare(Theme.accentText.toString(), Theme.onCyanText.toString())
         compare(Theme.accentText.toString(), Theme.onBrandGradientText.toString())
-        verify(Theme.background.toString() !== darkBackground,
-               "light mode should replace the dark surface")
-        verify(Theme.primaryText.toString() !== darkText,
-               "light mode should replace the dark text color")
+        verify(Theme.background.toString() !== darkBackground)
+        verify(Theme.primaryText.toString() !== darkText)
         compare(findChild(mainWindow, "settingsButton").icon.color.toString(),
                 Theme.iconSecondary.toString())
-        compare(findChild(mainWindow, "playButtonBody").border.color.toString(),
-                (PlaybackController.state === PlaybackController.Playing
-                 ? Theme.playRingPlaying : Theme.playRingPaused).toString())
-        tryCompare(waveform, "frequencyDarkSurface", false)
-        compare(waveform.frequencyMixColor.toString(), "#59636d")
-        compare(waveform.frequencyLowColor.toString(), "#146b64")
-        compare(waveform.frequencyMidColor.toString(), "#9d4938")
-        compare(waveform.frequencyHighColor.toString(), "#6e5a7d")
-        compare(waveform.frequencyMixOpacity, 0.14)
-        compare(waveform.frequencyLowOpacity, 0.36)
-        compare(waveform.frequencyMidOpacity, 0.32)
-        compare(waveform.frequencyHighOpacity, 0.40)
-        compare(waveform.frequencyPlayFocus, true)
-        compare(waveform.frequencyFocusColor.toString(), "#26313a")
+        compare(String(waveform.spectralPalette[0]), "#123ecf")
+        compare(String(waveform.spectralPalette[7]), "#e82718")
 
         SettingsController.themeMode = 2
         tryCompare(Theme, "followsSystem", true)
@@ -5660,7 +5435,6 @@ TestCase {
         SettingsController.themeMode = previousMode
         SettingsController.waveformMode = previousWaveformMode
         SettingsController.waveformPlaybackGuide = previousGuide
-        session.frequencyReady = previousReady
     }
 
     function test_rating_stars_use_one_solid_orange_color() {

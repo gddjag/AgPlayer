@@ -78,18 +78,6 @@ class SettingsController final : public QObject {
                    WRITE setWaveformRgbMiddleColor NOTIFY waveformRgbMiddleColorChanged)
     Q_PROPERTY(QString waveformRgbEndColor READ waveformRgbEndColor
                    WRITE setWaveformRgbEndColor NOTIFY waveformRgbEndColorChanged)
-    Q_PROPERTY(QString waveformFrequencyLowColor READ waveformFrequencyLowColor
-                   WRITE setWaveformFrequencyLowColor
-                   NOTIFY waveformFrequencyLowColorChanged)
-    Q_PROPERTY(QString waveformFrequencyMidColor READ waveformFrequencyMidColor
-                   WRITE setWaveformFrequencyMidColor
-                   NOTIFY waveformFrequencyMidColorChanged)
-    Q_PROPERTY(QString waveformFrequencyHighColor READ waveformFrequencyHighColor
-                   WRITE setWaveformFrequencyHighColor
-                   NOTIFY waveformFrequencyHighColorChanged)
-    Q_PROPERTY(double waveformFrequencyStrength READ waveformFrequencyStrength
-                   WRITE setWaveformFrequencyStrength
-                   NOTIFY waveformFrequencyStrengthChanged)
     Q_PROPERTY(FrequencyColorWaveformSettings* frequencyColorWaveform
                    READ frequencyColorWaveform CONSTANT)
     Q_PROPERTY(bool waveformRgbProgress READ waveformRgbProgress
@@ -228,10 +216,6 @@ public:
     QString waveformRgbStartColor() const;
     QString waveformRgbMiddleColor() const;
     QString waveformRgbEndColor() const;
-    QString waveformFrequencyLowColor() const;
-    QString waveformFrequencyMidColor() const;
-    QString waveformFrequencyHighColor() const;
-    double waveformFrequencyStrength() const noexcept;
     FrequencyColorWaveformSettings* frequencyColorWaveform() const noexcept;
     bool waveformRgbProgress() const noexcept;
     bool waveformHoverTimePreview() const noexcept;
@@ -318,10 +302,6 @@ public:
     void setWaveformRgbStartColor(const QString& value);
     void setWaveformRgbMiddleColor(const QString& value);
     void setWaveformRgbEndColor(const QString& value);
-    void setWaveformFrequencyLowColor(const QString& value);
-    void setWaveformFrequencyMidColor(const QString& value);
-    void setWaveformFrequencyHighColor(const QString& value);
-    void setWaveformFrequencyStrength(double value);
     void setWaveformRgbProgress(bool value);
     void setWaveformHoverTimePreview(bool value);
     void setWaveformPlaybackGuide(bool value);
@@ -369,7 +349,6 @@ public:
 
     Q_INVOKABLE void resetToDefaults();
     Q_INVOKABLE void resetWaveformDefaults();
-    Q_INVOKABLE void resetWaveformFrequencyColors();
     Q_INVOKABLE void cycleWaveformMode();
     Q_INVOKABLE void beginEdit();
     Q_INVOKABLE void commitEdit();
@@ -418,10 +397,6 @@ signals:
     void waveformRgbStartColorChanged();
     void waveformRgbMiddleColorChanged();
     void waveformRgbEndColorChanged();
-    void waveformFrequencyLowColorChanged();
-    void waveformFrequencyMidColorChanged();
-    void waveformFrequencyHighColorChanged();
-    void waveformFrequencyStrengthChanged();
     void waveformRgbProgressChanged();
     void waveformHoverTimePreviewChanged();
     void waveformPlaybackGuideChanged();
@@ -536,7 +511,7 @@ private:
     int waveformCanvasHeight_ = 78;
     bool waveformCanvasLocked_ = true;
     bool listWaveformThumbnailEnabled_ = true;
-    QString listWaveformThumbnailMode_ = QStringLiteral("Color36");
+    QString listWaveformThumbnailMode_ = QStringLiteral("Spectral");
     int spectrumColorMode_ = 1;
     QString spectrumSolidColor_ = QStringLiteral("#7b2ff7");
     QString spectrumRgbStartColor_ = QStringLiteral("#00d4ff");

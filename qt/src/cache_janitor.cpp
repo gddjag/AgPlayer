@@ -65,8 +65,7 @@ CacheJanitor::TrimReport CacheJanitor::trimToSize(const QString& dir, qint64 lim
     std::vector<Entry> entries;
     qint64 totalSize = 0;
 
-    const QStringList filters{QStringLiteral("*.agwf"),
-                              QStringLiteral("*.fcw1")};
+    const QStringList filters{QStringLiteral("*.agwf")};
     QDirIterator it(dir, filters, QDir::Files | QDir::Hidden | QDir::NoSymLinks,
                     QDirIterator::Subdirectories);
     while (it.hasNext()) {

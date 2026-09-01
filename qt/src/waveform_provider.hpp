@@ -62,10 +62,7 @@ private:
     void setAnalysisProgress(double progress);
     QVariantMap waveformToVariantMap(const ag_waveform* waveform) const;
     void cancelActiveJob();
-    void startAnalysis(bool frequencyColor,
-                       std::vector<std::uint8_t> cachedLow = {},
-                       std::vector<std::uint8_t> cachedMid = {},
-                       std::vector<std::uint8_t> cachedHigh = {});
+    void startAnalysis(bool frequencyColor);
     void updateFrequencyPause(bool queryPowerState);
 
     enum class JobKind {
@@ -93,9 +90,6 @@ private:
             AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE;
         std::shared_ptr<AnalysisResources> resources;
         std::shared_ptr<std::atomic<double>> progress;
-        std::vector<std::uint8_t> cachedLow;
-        std::vector<std::uint8_t> cachedMid;
-        std::vector<std::uint8_t> cachedHigh;
     };
 
     SettingsController* settings_ = nullptr;

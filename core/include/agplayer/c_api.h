@@ -420,6 +420,8 @@ ag_result ag_waveform_analyze(const char* utf8_path,
                               ag_waveform** out_waveform);
 size_t ag_waveform_count(const ag_waveform* waveform);
 float ag_waveform_peak(const ag_waveform* waveform, size_t index);
+size_t ag_waveform_spectral_index_count(const ag_waveform* waveform);
+uint8_t ag_waveform_spectral_index(const ag_waveform* waveform, size_t index);
 void ag_waveform_destroy(ag_waveform* waveform);
 
 typedef enum ag_waveform_layer {
@@ -434,6 +436,25 @@ typedef enum ag_waveform_aggregation {
     AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE = 1,
     AG_WAVEFORM_AGGREGATION_RMS = 2
 } ag_waveform_aggregation;
+
+ag_result ag_waveform_analyze_with_spectral_index(
+    const char* utf8_path,
+    size_t target_points,
+    ag_waveform_aggregation aggregation,
+    const ag_cancel_token* cancel_token,
+    ag_progress_callback progress_callback,
+    void* user_data,
+    ag_waveform** out_waveform);
+
+/* Compatibility entry point retained for existing integrations. New code may
+ * use ag_waveform_analyze_with_spectral_index to choose aggregation. */
+ag_result ag_track_frequency_color_analysis(
+    const char* utf8_path,
+    size_t target_points,
+    const ag_cancel_token* cancel_token,
+    ag_progress_callback progress_callback,
+    void* user_data,
+    ag_waveform** out_waveform);
 
 size_t ag_waveform_layer_count(const ag_waveform* waveform,
                                ag_waveform_layer layer);
@@ -471,17 +492,6 @@ ag_result ag_track_analysis_with_aggregation(
     void* user_data,
     ag_waveform** out_waveform,
     double* out_bpm);
-
-/* Analyze the four frequency-color waveform layers in one decode pass.
- * The returned waveform is owned by the caller and must be released with
- * ag_waveform_destroy. This call does not run BPM analysis. */
-ag_result ag_track_frequency_color_analysis(
-    const char* utf8_path,
-    size_t target_points,
-    const ag_cancel_token* cancel_token,
-    ag_progress_callback progress_callback,
-    void* user_data,
-    ag_waveform** out_waveform);
 
 typedef struct ag_bpm_result {
     double bpm;

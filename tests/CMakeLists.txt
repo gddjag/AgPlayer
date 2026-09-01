@@ -543,23 +543,19 @@ add_test(NAME waveform_analyzer_test
 )
 set_tests_properties(waveform_analyzer_test PROPERTIES TIMEOUT 10)
 
-add_executable(frequency_color_waveform_analyzer_test
-    core/frequency_color_waveform_analyzer_test.cpp
+add_executable(spectral_centroid_waveform_test
+    core/spectral_centroid_waveform_test.cpp
 )
-add_dependencies(frequency_color_waveform_analyzer_test decoder_fixture)
-target_include_directories(frequency_color_waveform_analyzer_test PRIVATE
+add_dependencies(spectral_centroid_waveform_test decoder_fixture)
+target_include_directories(spectral_centroid_waveform_test PRIVATE
     "${CMAKE_SOURCE_DIR}/core/src"
 )
-target_link_libraries(frequency_color_waveform_analyzer_test PRIVATE agplayer_core)
-agplayer_enable_warnings(frequency_color_waveform_analyzer_test)
-add_test(NAME frequency_color_waveform_analyzer_test
-    COMMAND frequency_color_waveform_analyzer_test "${SINE_WAV_FIXTURE}"
+target_link_libraries(spectral_centroid_waveform_test PRIVATE agplayer_core)
+agplayer_enable_warnings(spectral_centroid_waveform_test)
+add_test(NAME spectral_centroid_waveform_test
+    COMMAND spectral_centroid_waveform_test "${SINE_WAV_FIXTURE}"
 )
-set_tests_properties(frequency_color_waveform_analyzer_test PROPERTIES
-    TIMEOUT 30
-    ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
-)
+set_tests_properties(spectral_centroid_waveform_test PROPERTIES TIMEOUT 10)
 
 add_executable(waveform_cache_test
     core/waveform_cache_test.cpp
@@ -569,19 +565,6 @@ target_include_directories(waveform_cache_test PRIVATE
     "${CMAKE_SOURCE_DIR}/core/src"
 )
 target_link_libraries(waveform_cache_test PRIVATE agplayer_core)
-
-add_executable(frequency_color_waveform_cache_test
-    core/frequency_color_waveform_cache_test.cpp
-)
-target_include_directories(frequency_color_waveform_cache_test PRIVATE
-    "${CMAKE_SOURCE_DIR}/core/src"
-)
-target_link_libraries(frequency_color_waveform_cache_test PRIVATE agplayer_core)
-agplayer_enable_warnings(frequency_color_waveform_cache_test)
-add_test(NAME frequency_color_waveform_cache_test
-    COMMAND frequency_color_waveform_cache_test
-)
-set_tests_properties(frequency_color_waveform_cache_test PROPERTIES TIMEOUT 30)
 
 agplayer_enable_warnings(waveform_cache_test)
 

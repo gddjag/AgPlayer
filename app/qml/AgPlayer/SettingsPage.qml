@@ -28,32 +28,6 @@ Item {
     property bool programmaticScroll: false
     readonly property var frequencyWaveformSettings:
         SettingsController.frequencyColorWaveform
-    property bool frequencyPreviewDark: true
-
-    function frequencyRoleProperty(role, suffix) {
-        return role + (frequencyPreviewDark ? "Dark" : "Light") + suffix
-    }
-
-    function frequencyRoleColor(role) {
-        return frequencyWaveformSettings[
-                    frequencyRoleProperty(role, "Color")]
-    }
-
-    function setFrequencyRoleColor(role, value) {
-        frequencyWaveformSettings[
-                    frequencyRoleProperty(role, "Color")] = value
-    }
-
-    function frequencyRoleOpacity(role) {
-        return Number(frequencyWaveformSettings[
-                          frequencyRoleProperty(role, "Opacity")])
-    }
-
-    function setFrequencyRoleOpacity(role, value) {
-        frequencyWaveformSettings[
-                    frequencyRoleProperty(role, "Opacity")] = Math.max(
-                    0, Math.min(1, Number(value)))
-    }
 
     function open() {
         if (visible)
@@ -934,14 +908,6 @@ Item {
         id: thumb
         property int mode: 0
         property bool selected: false
-        readonly property color frequencyMixColor:
-            root.frequencyRoleColor("mix")
-        readonly property color frequencyLowColor:
-            root.frequencyRoleColor("low")
-        readonly property color frequencyMidColor:
-            root.frequencyRoleColor("mid")
-        readonly property color frequencyHighColor:
-            root.frequencyRoleColor("high")
         property string modeLabel: mode === 0 ? qsTr("纯色波形")
                                    : mode === 3 ? qsTr("频彩波形")
                                    : mode === 1 ? qsTr("RGB波形")
@@ -1061,35 +1027,16 @@ Item {
                             "mix": [0.12, 0.30, 0.18, 0.66, 0.24, 0.48, 0.20, 0.78,
                                     0.34, 0.58, 0.16, 0.72, 0.26, 0.54, 0.20, 0.82,
                                     0.32, 0.62, 0.18, 0.74, 0.28, 0.52, 0.16, 0.68],
-                            "bass": [0.08, 0.26, 0.12, 0.58, 0.18, 0.42, 0.10, 0.70,
-                                     0.22, 0.48, 0.12, 0.62, 0.16, 0.44, 0.10, 0.76,
-                                     0.20, 0.50, 0.12, 0.64, 0.16, 0.40, 0.08, 0.56],
-                            "mid": [0.10, 0.34, 0.18, 0.48, 0.28, 0.66, 0.16, 0.54,
-                                    0.36, 0.72, 0.20, 0.46, 0.30, 0.62, 0.18, 0.68,
-                                    0.32, 0.76, 0.22, 0.52, 0.28, 0.64, 0.16, 0.44],
-                            "high": [0.16, 0.46, 0.28, 0.72, 0.20, 0.58, 0.34, 0.80,
-                                     0.24, 0.66, 0.38, 0.54, 0.30, 0.76, 0.22, 0.62,
-                                     0.36, 0.82, 0.26, 0.68, 0.40, 0.56, 0.24, 0.70]
+                            "spectralIndex": [12, 26, 38, 52, 68, 84, 104, 126,
+                                              146, 168, 188, 208, 228, 244, 232, 214,
+                                              194, 174, 154, 132, 108, 82, 54, 28]
                         })
                         duration: 1000
                         position: 0
                         cursorPosition: 520
-                        frequencyMixColor: thumb.frequencyMixColor
-                        frequencyLowColor: thumb.frequencyLowColor
-                        frequencyMidColor: thumb.frequencyMidColor
-                        frequencyHighColor: thumb.frequencyHighColor
-                        frequencyMixOpacity: root.frequencyRoleOpacity("mix")
-                        frequencyLowOpacity: root.frequencyRoleOpacity("low")
-                        frequencyMidOpacity: root.frequencyRoleOpacity("mid")
-                        frequencyHighOpacity: root.frequencyRoleOpacity("high")
-                        frequencyBandFade: 1
-                        frequencyPlayFocus:
-                            root.frequencyWaveformSettings.playFocus
-                        frequencyFocusColor: root.frequencyPreviewDark
-                                             ? "#F2E7D4" : "#26313A"
-                        frequencyStrength:
-                            SettingsController.waveformFrequencyStrength
-                        frequencyDarkSurface: root.frequencyPreviewDark
+                        spectralPalette: root.frequencyWaveformSettings.palette
+                        spectralUnplayedOpacity:
+                            root.frequencyWaveformSettings.unplayedOpacity
                         amplitudeScale: Math.min(
                                             1.0, SettingsController.waveformHeight)
                         density: 0.5
@@ -1137,10 +1084,6 @@ Item {
             function onWaveformRgbStartColorChanged() { waveformPreviewCanvas.requestPaint() }
             function onWaveformRgbMiddleColorChanged() { waveformPreviewCanvas.requestPaint() }
             function onWaveformRgbEndColorChanged() { waveformPreviewCanvas.requestPaint() }
-            function onWaveformFrequencyLowColorChanged() { waveformPreviewCanvas.requestPaint() }
-            function onWaveformFrequencyMidColorChanged() { waveformPreviewCanvas.requestPaint() }
-            function onWaveformFrequencyHighColorChanged() { waveformPreviewCanvas.requestPaint() }
-            function onWaveformFrequencyStrengthChanged() { waveformPreviewCanvas.requestPaint() }
             function onSpectrumColorModeChanged() { waveformPreviewCanvas.requestPaint() }
             function onSpectrumSolidColorChanged() { waveformPreviewCanvas.requestPaint() }
             function onSpectrumRgbStartColorChanged() { waveformPreviewCanvas.requestPaint() }
@@ -1664,7 +1607,7 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         enabled: SettingsController.listWaveformThumbnailEnabled
                         valueModel: [
-                            { text: qsTr("36 色"), value: "Color36" },
+                            { text: qsTr("频彩"), value: "Spectral" },
                             { text: qsTr("纯色"), value: "Mono" }
                         ]
                         currentIndex: SettingsController.listWaveformThumbnailMode
@@ -1821,114 +1764,69 @@ Item {
 
                 SettingRow {
                     visible: SettingsController.waveformMode === 3
-                    label: qsTr("曜釉配色")
+                    label: qsTr("频彩调色板")
+                    Layout.preferredHeight: 74
+
+                    GridLayout {
+                        anchors.fill: parent
+                        columns: 4
+                        columnSpacing: 4
+                        rowSpacing: 4
+
+                        Repeater {
+                            model: 8
+                            delegate: ColorField {
+                                required property int index
+                                objectName: "spectralPaletteColor" + index
+                                Layout.fillWidth: true
+                                colorValue: root.frequencyWaveformSettings.palette[index]
+                                targetProperty: ""
+                                onColorEdited: function(value) {
+                                    root.frequencyWaveformSettings.setPaletteColor(index, value)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                SettingRow {
+                    visible: SettingsController.waveformMode === 3
+                    label: qsTr("播放进度明暗差")
+
                     RowLayout {
                         anchors.fill: parent
                         spacing: Theme.spacingSm
 
+                        Slider {
+                            id: spectralProgressDifferenceSlider
+                            objectName: "spectralProgressDifferenceSlider"
+                            Layout.fillWidth: true
+                            from: 0
+                            to: 40
+                            stepSize: 1
+                            value: Math.round((1.0
+                                - root.frequencyWaveformSettings.unplayedOpacity) * 100)
+                            onMoved: root.frequencyWaveformSettings.unplayedOpacity
+                                = 1.0 - value / 100.0
+                            Accessible.name: qsTr("播放进度明暗差")
+                        }
+
                         Text {
-                            objectName: "frequencyPresetLabel"
-                            text: root.frequencyWaveformSettings.preset
-                                  === "luminousGlaze"
-                                  ? qsTr("曜釉") : qsTr("自定义")
+                            Layout.preferredWidth: 38
+                            text: Math.round(spectralProgressDifferenceSlider.value) + "%"
                             color: Theme.secondaryText
                             font.family: Theme.fontPrimary
-                            font.pixelSize: 13
-                        }
-
-                        Item { Layout.fillWidth: true }
-
-                        Button {
-                            objectName: "frequencyPreviewDarkButton"
-                            text: qsTr("深色预览")
-                            checkable: true
-                            checked: root.frequencyPreviewDark
-                            onClicked: root.frequencyPreviewDark = true
-                        }
-
-                        Button {
-                            objectName: "frequencyPreviewLightButton"
-                            text: qsTr("浅色预览")
-                            checkable: true
-                            checked: !root.frequencyPreviewDark
-                            onClicked: root.frequencyPreviewDark = false
+                            font.pixelSize: 12
+                            horizontalAlignment: Text.AlignRight
                         }
                     }
-                }
-
-                Repeater {
-                    model: [
-                        { role: "mix", name: "Mix", label: qsTr("主波形") },
-                        { role: "low", name: "Low", label: qsTr("低频") },
-                        { role: "mid", name: "Mid", label: qsTr("中频") },
-                        { role: "high", name: "High", label: qsTr("高频") }
-                    ]
-
-                    delegate: SettingRow {
-                        required property var modelData
-                        visible: SettingsController.waveformMode === 3
-                        label: modelData.label
-
-                        RowLayout {
-                            anchors.fill: parent
-                            spacing: Theme.spacingSm
-
-                            ColorField {
-                                objectName: "frequency" + modelData.name
-                                            + "ColorField"
-                                colorValue: root.frequencyRoleColor(
-                                                modelData.role)
-                                targetProperty: ""
-                                onColorEdited: function(value) {
-                                    root.setFrequencyRoleColor(
-                                                modelData.role, value)
-                                }
-                            }
-
-                            Slider {
-                                id: opacitySlider
-                                objectName: "frequency" + modelData.name
-                                            + "OpacitySlider"
-                                Layout.fillWidth: true
-                                from: 0
-                                to: 100
-                                stepSize: 1
-                                value: Math.round(root.frequencyRoleOpacity(
-                                                      modelData.role) * 100)
-                                onMoved: root.setFrequencyRoleOpacity(
-                                             modelData.role, value / 100)
-                                Accessible.name: modelData.label
-                                                 + qsTr("不透明度")
-                            }
-
-                            Text {
-                                objectName: "frequency" + modelData.name
-                                            + "OpacityValue"
-                                Layout.preferredWidth: 38
-                                text: Math.round(opacitySlider.value) + "%"
-                                color: Theme.secondaryText
-                                font.family: Theme.fontPrimary
-                                font.pixelSize: 12
-                                horizontalAlignment: Text.AlignRight
-                            }
-                        }
-                    }
-                }
-
-                SettingSwitch {
-                    objectName: "frequencyPlayFocusSwitch"
-                    visible: SettingsController.waveformMode === 3
-                    text: qsTr("显示播放焦点")
-                    checked: root.frequencyWaveformSettings.playFocus
-                    onToggled: root.frequencyWaveformSettings.playFocus = checked
                 }
 
                 Button {
-                    objectName: "frequencyResetLuminousGlazeButton"
+                    objectName: "spectralPaletteResetButton"
                     visible: SettingsController.waveformMode === 3
-                    text: qsTr("恢复曜釉默认")
-                    onClicked:
-                        root.frequencyWaveformSettings.resetToLuminousGlaze()
+                    text: qsTr("恢复默认频彩")
+                    onClicked: root.frequencyWaveformSettings.resetToDefault()
                 }
 
                 SettingRow {
