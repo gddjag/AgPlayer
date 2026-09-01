@@ -29,9 +29,41 @@ private slots:
     void stampsNewImportsWithoutOverwritingExistingTimestamps();
     void exposesLiveRecentAndNeverPlayedCounts();
     void missingLocalCoverFallsBackToPackagedArtwork();
+    void mediaKindProbePublishesOneAtomicChange();
     void staleMetadataProbeCannotOverwriteRelocatedTrack();
     void staleMetadataProbeCannotStealRecreatedTrackClaim();
 };
+
+void LibraryModelTest::mediaKindProbePublishesOneAtomicChange()
+{
+    TrackRecord legacy;
+    legacy.trackId = QStringLiteral("legacy-video");
+    legacy.path = QStringLiteral("C:/media/legacy-video.avi");
+    legacy.available = true;
+    legacy.hasAudio = true;
+    LibraryModel model;
+    model.replaceAll({legacy});
+    const auto claim = model.beginMetadataProbe(legacy.trackId);
+    QVERIFY(claim.has_value());
+    QSignalSpy changed(&model, &QAbstractItemModel::dataChanged);
+
+    TrackRecord probed;
+    probed.path = legacy.path;
+    probed.hasAudio = true;
+    probed.hasVideo = true;
+    QVERIFY(model.completeMediaKindProbe(*claim, true, probed));
+
+    QCOMPARE(changed.count(), 1);
+    const QList<int> roles = qvariant_cast<QList<int>>(changed.at(0).at(2));
+    QVERIFY(roles.contains(LibraryModel::MetadataProbeAttemptedRole));
+    QVERIFY(roles.contains(LibraryModel::HasAudioRole));
+    QVERIFY(roles.contains(LibraryModel::HasVideoRole));
+    const TrackRecord* current = model.recordForId(legacy.trackId);
+    QVERIFY(current != nullptr);
+    QVERIFY(current->metadataProbeAttempted);
+    QVERIFY(current->hasAudio);
+    QVERIFY(current->hasVideo);
+}
 
 void LibraryModelTest::staleMetadataProbeCannotStealRecreatedTrackClaim()
 {

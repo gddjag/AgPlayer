@@ -836,6 +836,39 @@ bool LibraryModel::completeMetadataProbe(const MetadataProbeClaim& claim,
     return true;
 }
 
+bool LibraryModel::completeMediaKindProbe(const MetadataProbeClaim& claim,
+                                          bool succeeded,
+                                          const TrackRecord& probed)
+{
+    if (QThread::currentThread() != thread()) {
+        return false;
+    }
+    const auto inFlight = metadataProbeInFlight_.constFind(claim.trackId);
+    if (inFlight == metadataProbeInFlight_.cend()
+        || inFlight.value() != claim.generation) {
+        return false;
+    }
+    metadataProbeInFlight_.remove(claim.trackId);
+    const int row = indexForTrackId(claim.trackId);
+    if (row < 0 || pathKey(tracks_.at(row).path) != pathKey(claim.path)) {
+        return false;
+    }
+
+    TrackRecord& track = tracks_[row];
+    track.metadataProbeAttempted = true;
+    QList<int> roles{MetadataProbeAttemptedRole};
+    if (succeeded
+        && (track.hasAudio != probed.hasAudio
+            || track.hasVideo != probed.hasVideo)) {
+        track.hasAudio = probed.hasAudio;
+        track.hasVideo = probed.hasVideo;
+        roles.append({HasAudioRole, HasVideoRole});
+    }
+    const QModelIndex changed = index(row, 0);
+    emit dataChanged(changed, changed, roles);
+    return true;
+}
+
 bool LibraryModel::refreshMetadataForPath(const QString& path)
 {
     const int row = indexForLocalFile(path);

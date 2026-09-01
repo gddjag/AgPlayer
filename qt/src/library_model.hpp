@@ -158,24 +158,7 @@ public:
                                const TrackRecord& probed);
     bool completeMediaKindProbe(const MetadataProbeClaim& claim,
                                 bool succeeded,
-                                const TrackRecord& probed)
-    {
-        if (!completeMetadataProbe(claim, succeeded, probed)) return false;
-        if (!succeeded) return true;
-        const int row = indexForTrackId(claim.trackId);
-        if (row < 0) return false;
-        TrackRecord& track = tracks_[row];
-        if (track.hasAudio == probed.hasAudio
-            && track.hasVideo == probed.hasVideo) {
-            return true;
-        }
-        track.hasAudio = probed.hasAudio;
-        track.hasVideo = probed.hasVideo;
-        const QModelIndex changed = index(row, 0);
-        emit dataChanged(changed, changed,
-                         {HasAudioRole, HasVideoRole});
-        return true;
-    }
+                                const TrackRecord& probed);
     bool abandonMetadataProbe(const MetadataProbeClaim& claim)
     {
         if (QThread::currentThread() != thread()) return false;

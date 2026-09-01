@@ -1677,6 +1677,10 @@ target_compile_definitions(video_playback_controller_test PRIVATE
     AGPLAYER_TEST_WAV="${SINE_WAV_FIXTURE}"
     AGPLAYER_TEST_VIDEO_WITH_AUDIO="${VIDEO_WITH_AUDIO_FIXTURE}"
     AGPLAYER_TEST_VIDEO_ONLY="${VIDEO_ONLY_FIXTURE}"
+    AGPLAYER_VIDEO_DECODER_TESTING=1
+)
+target_include_directories(video_playback_controller_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
 )
 add_dependencies(player_experience_controller_test decoder_fixture)
 add_dependencies(waveform_provider_test decoder_fixture)

@@ -17,39 +17,23 @@ namespace {
 
 constexpr qint64 kClockToleranceMs = 50;
 
-QString utf8String(const char* value)
-{
-    return value == nullptr ? QString{} : QString::fromUtf8(value);
-}
-
-TrackRecord probeRecord(const QString& path, bool& succeeded)
-{
-    TrackRecord record;
-    record.path = path;
-    ag_metadata* metadata = nullptr;
-    const QByteArray utf8 = path.toUtf8();
-    const ag_result result = ag_metadata_open(utf8.constData(), &metadata);
-    succeeded = result == AG_OK && metadata != nullptr;
-    if (!succeeded) {
-        RuntimeLog::log(result, QStringLiteral("Video"),
-                        QStringLiteral("legacy media-kind probe failed"));
-        ag_metadata_destroy(metadata);
-        return record;
-    }
-    record.format = utf8String(ag_metadata_format(metadata));
-    record.sampleRate = ag_metadata_sample_rate(metadata);
-    record.bitDepth = ag_metadata_bits_per_sample(metadata);
-    record.channels = ag_metadata_channels(metadata);
-    record.bitRate = ag_metadata_bit_rate(metadata);
-    record.durationMs = ag_metadata_duration_ms(metadata);
-    record.fileSize = QFileInfo(path).size();
-    record.hasAudio = ag_metadata_has_audio(metadata) != 0;
-    record.hasVideo = ag_metadata_has_video(metadata) != 0;
-    ag_metadata_destroy(metadata);
-    return record;
-}
-
 } // namespace
+
+bool videoFrameQueueCanAdmit(const int queuedFrameCount,
+                             const qint64 queuedBytes,
+                             const qint64 frameBytes) noexcept
+{
+    if (queuedFrameCount < 0 || queuedBytes < 0 || frameBytes <= 0) {
+        return false;
+    }
+    if (queuedFrameCount == 0) {
+        return queuedBytes == 0;
+    }
+    return queuedFrameCount < VideoPlaybackController::MaxQueuedFrames
+        && frameBytes <= VideoPlaybackController::MaxQueuedFrameBytes
+        && queuedBytes
+            <= VideoPlaybackController::MaxQueuedFrameBytes - frameBytes;
+}
 
 VideoPlaybackController::VideoPlaybackController(LibraryModel* library,
                                                  PlaybackController* playback,
@@ -189,7 +173,7 @@ void VideoPlaybackController::startWorker(
     workerRunning_ = true;
     emit diagnosticsChanged();
     worker_ = std::thread(&VideoPlaybackController::runWorker, this,
-                          track.trackId, track.path, token,
+                          track.trackId, track.path, track.hasAudio, token,
                           std::move(probeClaim));
 }
 
@@ -218,35 +202,15 @@ void VideoPlaybackController::stopWorkerAndClear()
     clearFrames(true);
     setLoading(false);
     setVisible(false);
+    setErrorMessage({});
     if (wasRunning) emit diagnosticsChanged();
 }
 
 void VideoPlaybackController::runWorker(
-    QString trackId, QString path, quint64 token,
+    QString trackId, QString path, bool hasAudio, quint64 token,
     std::optional<MetadataProbeClaim> probeClaim)
 {
     bool knownVideo = !probeClaim.has_value();
-    if (probeClaim.has_value()) {
-        bool probeSucceeded = false;
-        const TrackRecord probed = probeRecord(path, probeSucceeded);
-        knownVideo = probeSucceeded && probed.hasVideo;
-        QMetaObject::invokeMethod(
-            this,
-            [this, token, trackId, claim = probeClaim, probeSucceeded,
-             probed] {
-                handleProbeResult(token, trackId, claim, probeSucceeded,
-                                  probed);
-            },
-            Qt::QueuedConnection);
-        const std::lock_guard lock(mutex_);
-        if (stopRequested_ || token != workerToken_ || !knownVideo) {
-            QMetaObject::invokeMethod(
-                this, [this, token] { handleWorkerFinished(token); },
-                Qt::QueuedConnection);
-            return;
-        }
-    }
-
     ag_video_decoder* decoder = nullptr;
     ag_result result = ag_video_decoder_create(&decoder);
     if (result == AG_OK) {
@@ -260,6 +224,27 @@ void VideoPlaybackController::runWorker(
     if (result == AG_OK) {
         const QByteArray utf8 = path.toUtf8();
         result = ag_video_decoder_open(decoder, utf8.constData());
+    }
+    if (probeClaim.has_value() && result != AG_CANCELLED) {
+        TrackRecord probed;
+        probed.path = path;
+        probed.hasAudio = hasAudio;
+        probed.hasVideo = result == AG_OK;
+        knownVideo = probed.hasVideo;
+        bool publishProbe = true;
+        {
+            const std::lock_guard lock(mutex_);
+            publishProbe = !stopRequested_ && token == workerToken_;
+        }
+        if (publishProbe) {
+            QMetaObject::invokeMethod(
+                this,
+                [this, token, trackId, claim = probeClaim, probed] {
+                    handleProbeResult(token, trackId, claim,
+                                      probed.hasVideo, probed);
+                },
+                Qt::QueuedConnection);
+        }
     }
     if (result != AG_OK) {
         if (result != AG_CANCELLED) {
@@ -348,11 +333,8 @@ void VideoPlaybackController::runWorker(
                     || pendingSeek_.has_value()) {
                     return true;
                 }
-                if (queue_.empty()) return true;
-                return queue_.size()
-                           < static_cast<size_t>(MaxQueuedFrames)
-                    && frameBytes <= MaxQueuedFrameBytes
-                    && queuedBytes_ <= MaxQueuedFrameBytes - frameBytes;
+                return videoFrameQueueCanAdmit(
+                    static_cast<int>(queue_.size()), queuedBytes_, frameBytes);
             });
             if (stopRequested_ || token != workerToken_) break;
             if (pendingSeek_.has_value()) continue;

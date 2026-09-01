@@ -32,6 +32,9 @@ struct VideoFrameSnapshot final {
     quint64 serial = 0;
 };
 
+bool videoFrameQueueCanAdmit(int queuedFrameCount, qint64 queuedBytes,
+                             qint64 frameBytes) noexcept;
+
 class VideoPlaybackController final : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool visible READ visible NOTIFY visibleChanged)
@@ -77,7 +80,7 @@ private:
     void startWorker(const TrackRecord& track,
                      std::optional<MetadataProbeClaim> probeClaim);
     void stopWorkerAndClear();
-    void runWorker(QString trackId, QString path, quint64 token,
+    void runWorker(QString trackId, QString path, bool hasAudio, quint64 token,
                    std::optional<MetadataProbeClaim> probeClaim);
     void handleCommittedSeek(qint64 positionMs);
     void presentForCurrentClock();
