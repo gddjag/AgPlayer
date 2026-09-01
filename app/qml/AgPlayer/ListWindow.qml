@@ -558,6 +558,8 @@ Window {
                                                   ? filterModel.tagKey : ""
                                     searchText: filterModel
                                                 ? filterModel.searchText : ""
+                                    relaxedClassicColumns: true
+                                    tagManagementLayout: listWindow.tagManagementMode
                                 }
                             }
                             EmptyLibrary {
@@ -644,17 +646,6 @@ Window {
                 }
             }
 
-            LyricsPanel {
-                id: listLyricsPanel
-                objectName: "listLyricsPanel"
-                Layout.fillWidth: true
-                Layout.preferredHeight: visible ? 104 : 0
-                visible: PlayerExperienceController.lyricsVisible
-                         && PlayerExperienceController.immersiveMode
-                            === PlayerExperienceController.Off
-                service: LyricsService
-                spatialMode: false
-            }
         }
 
         Rectangle {
@@ -684,6 +675,62 @@ Window {
     WindowResizeHandles {
         objectName: "listResizeHandles"
         targetWindow: listWindow
+    }
+
+    function boundedLyricsWindowX(hostX, lyricsWidth, screenLeft,
+                                  screenRight) {
+        return Math.max(screenLeft,
+                        Math.min(hostX, screenRight - lyricsWidth))
+    }
+
+    function boundedLyricsWindowY(hostY, hostHeight, lyricsHeight,
+                                  screenTop, screenBottom) {
+        var spacing = Theme.spacingSm
+        var below = hostY + hostHeight + spacing
+        if (below + lyricsHeight <= screenBottom)
+            return below
+        return Math.max(screenTop, hostY - lyricsHeight - spacing)
+    }
+
+    Window {
+        id: listLyricsWindow
+        objectName: "listLyricsWindow"
+        transientParent: listWindow
+        flags: Qt.Tool | Qt.FramelessWindowHint
+        color: "transparent"
+        title: qsTr("AgPlayer · 歌词")
+        visible: listWindow.visible
+                 && PlayerExperienceController.lyricsVisible
+                 && PlayerExperienceController.immersiveMode
+                    === PlayerExperienceController.Off
+        readonly property var hostScreen: listWindow.screen
+        readonly property rect screenWorkArea:
+            hostScreen
+            ? WindowController.availableGeometryForWindow(listWindow)
+            : Qt.rect(0, 0, 0, 0)
+        readonly property rect availableGeometry:
+            screenWorkArea.width > 0 && screenWorkArea.height > 0
+            ? screenWorkArea
+            : Qt.rect(0, 0, listWindow.width,
+                      listWindow.y + listWindow.height
+                      + height + Theme.spacingSm)
+        width: Math.min(listWindow.width, availableGeometry.width)
+        height: 104
+        x: listWindow.boundedLyricsWindowX(
+               listWindow.x, width, availableGeometry.x,
+               availableGeometry.x + availableGeometry.width)
+        y: listWindow.boundedLyricsWindowY(
+               listWindow.y, listWindow.height, height,
+               availableGeometry.y,
+               availableGeometry.y + availableGeometry.height)
+
+        LyricsPanel {
+            id: listLyricsPanel
+            objectName: "listLyricsPanel"
+            anchors.fill: parent
+            service: LyricsService
+            spatialMode: false
+        }
     }
 
 }

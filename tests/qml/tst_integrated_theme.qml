@@ -439,6 +439,20 @@ TestCase {
         compare(title.font.weight, Font.DemiBold)
     }
 
+    function test_integrated_list_ignores_classic_thumbnail_switch() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        try {
+            SettingsController.listWaveformThumbnailEnabled = false
+            var shell = enterIntegratedShell()
+            var list = findChild(shell, "integratedTrackList")
+            verify(list)
+            compare(list.waveformThumbnailsVisible, true)
+            compare(list.rowHeight, 50)
+        } finally {
+            SettingsController.listWaveformThumbnailEnabled = previousEnabled
+        }
+    }
+
     function test_integrated_filter_is_soft_and_uses_apple_handle() {
         var shell = enterIntegratedShell()
         var filter = findChild(shell, "integratedSearchFilter")

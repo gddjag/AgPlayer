@@ -42,6 +42,8 @@ ApplicationWindow {
     property string tagSearchText: ""
     property int integratedSidePanelPage: 0
     property bool integratedSidePanelExpanded: true
+    property int rollingSidePanelPage: 0
+    property bool rollingSidePanelExpanded: true
     property bool immersiveRenderingEnabled: true
     property int previousShellMode: SettingsController.playerShellMode
     property alias waveformSession: sharedWaveformSession
@@ -54,6 +56,9 @@ ApplicationWindow {
     readonly property bool integratedLyricsRequested:
         integratedShell && integratedSidePanelExpanded
         && integratedSidePanelPage === 1
+    readonly property bool rollingLyricsRequested:
+        rollingShell && rollingSidePanelExpanded
+        && rollingSidePanelPage === 1
     readonly property bool qaImmersive:
         Qt.application.arguments.indexOf("--qa-immersive") >= 0
     readonly property bool qaImmersiveSynthetic:
@@ -117,11 +122,30 @@ ApplicationWindow {
                     rollingShell || immersiveActuallyRendering)
     }
 
+    function showRollingLyricsPanel() {
+        rollingSidePanelPage = 1
+        rollingSidePanelExpanded = true
+        if (rollingShell && shellLoader.item) {
+            shellLoader.item.sidePanelPage = 1
+            shellLoader.item.sidePanelExpanded = true
+        }
+    }
+
+    function showIntegratedLyricsPanel() {
+        integratedSidePanelPage = 1
+        integratedSidePanelExpanded = true
+        if (integratedShell && shellLoader.item) {
+            shellLoader.item.sidePanelPage = 1
+            shellLoader.item.sidePanelExpanded = true
+        }
+    }
+
     Binding {
         target: LyricsService
         property: "enabled"
         value: PlayerExperienceController.lyricsVisible
                || mainWindow.integratedLyricsRequested
+               || mainWindow.rollingLyricsRequested
     }
 
     Connections {
@@ -152,8 +176,9 @@ ApplicationWindow {
                     !== PlayerExperienceController.Off)
                 return
             if (mainWindow.integratedShell) {
-                mainWindow.integratedSidePanelPage = 1
-                mainWindow.integratedSidePanelExpanded = true
+                mainWindow.showIntegratedLyricsPanel()
+            } else if (mainWindow.rollingShell) {
+                mainWindow.showRollingLyricsPanel()
             } else if (!mainWindow.rollingShell) {
                 WindowController.showListWindow()
             }
@@ -252,6 +277,12 @@ ApplicationWindow {
         onLoaded: {
             if (item && item.tagSearchText !== undefined)
                 item.tagSearchText = mainWindow.tagSearchText
+            if (PlayerExperienceController.lyricsVisible) {
+                if (mainWindow.rollingShell)
+                    mainWindow.showRollingLyricsPanel()
+                else if (mainWindow.integratedShell)
+                    mainWindow.showIntegratedLyricsPanel()
+            }
         }
     }
 
@@ -351,8 +382,16 @@ ApplicationWindow {
             playback: mainWindow.playback
             waveformSession: sharedWaveformSession
             filterModel: sharedFilterModel
+            sidePanelPage: mainWindow.rollingSidePanelPage
+            sidePanelExpanded: mainWindow.rollingSidePanelExpanded
             onOpenSettingsRequested: mainWindow.openSettingsPage()
             onOpenEqualizerRequested: mainWindow.openEqualizer()
+            onSidePanelPageChanged: {
+                mainWindow.rollingSidePanelPage = sidePanelPage
+            }
+            onSidePanelExpandedChanged: {
+                mainWindow.rollingSidePanelExpanded = sidePanelExpanded
+            }
         }
     }
 

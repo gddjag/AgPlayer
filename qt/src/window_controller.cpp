@@ -110,6 +110,15 @@ int WindowController::listWindowY() const noexcept { return listWindowY_; }
 int WindowController::listWindowWidth() const noexcept { return listWindowWidth_; }
 int WindowController::listWindowHeight() const noexcept { return listWindowHeight_; }
 
+QRect WindowController::availableGeometryForWindow(QWindow* window) const
+{
+    QScreen* screen = window != nullptr ? window->screen() : nullptr;
+    if (screen == nullptr) {
+        screen = QGuiApplication::primaryScreen();
+    }
+    return screen != nullptr ? screen->availableGeometry() : QRect();
+}
+
 void WindowController::setWindows(QWindow* mainWindow, QWindow* miniWindow)
 {
     if (mainWindow_ != nullptr) {

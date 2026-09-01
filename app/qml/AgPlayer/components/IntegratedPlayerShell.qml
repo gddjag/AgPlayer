@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import AgPlayer
 
@@ -26,7 +25,7 @@ Item {
     readonly property var frequencyWaveformSettings:
         SettingsController.frequencyColorWaveform
     property Component bottomBarComponent: null
-    property alias tagSearchText: tagPanel.searchText
+    property alias tagSearchText: sidePanelColumn.tagSearchText
     property var hostWindow: null
     property int sidePanelPage: 0
     property bool sidePanelExpanded: true
@@ -282,6 +281,7 @@ Item {
                             activeTagKey: root.filterModel
                                           ? root.filterModel.tagKey : ""
                             integratedCompact: true
+                            thumbnailVisibilityFollowsSetting: false
                         }
 
                         SearchFilter {
@@ -314,183 +314,20 @@ Item {
                     }
                 }
 
-                Rectangle {
+                LibrarySidePanel {
                     id: sidePanelColumn
-                    objectName: "integratedTagColumn"
-                    Layout.preferredWidth: root.sidePanelExpanded
-                                           ? root.rightColumnWidth : 42
-                    Layout.minimumWidth: Layout.preferredWidth
-                    Layout.maximumWidth: Layout.preferredWidth
-                    Layout.fillHeight: true
-                    color: Theme.panel
-                    border.color: Theme.integratedSoftOutline
-                    border.width: 1
-                    radius: Theme.radiusSm
-
-                    Item {
-                        anchors.fill: parent
-                        anchors.margins: root.sidePanelExpanded ? 10 : 6
-
-                        RowLayout {
-                            id: sidePanelHeader
-                            objectName: "integratedSidePanelHeader"
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            height: 30
-                            spacing: 4
-
-                            Button {
-                                id: tagTabButton
-                                objectName: "integratedTagTabButton"
-                                visible: root.sidePanelExpanded
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                flat: true
-                                text: qsTr("标签管理") + " (" + (root.tagModel
-                                      ? root.tagModel.rowCount() : 0) + ")"
-                                Accessible.name: qsTr("标签管理")
-                                onClicked: root.sidePanelPage = 0
-                                contentItem: Text {
-                                    text: tagTabButton.text
-                                    color: root.sidePanelPage === 0
-                                           ? Theme.primaryText
-                                           : Theme.secondaryText
-                                    font.family: Theme.fontPrimary
-                                    font.pixelSize: 15
-                                    font.weight: root.sidePanelPage === 0
-                                                 ? Font.DemiBold : Font.Normal
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                    elide: Text.ElideRight
-                                }
-                                background: Rectangle {
-                                    objectName: "integratedTagTabOutline"
-                                    color: root.sidePanelPage === 0
-                                           ? Theme.subtleGlassActive
-                                           : tagTabButton.hovered
-                                             ? Theme.subtleGlassHover
-                                             : Theme.subtleGlassFill
-                                    border.color: root.sidePanelPage === 0
-                                                  ? Theme.accent
-                                                  : Theme.subtleGlassBorder
-                                    border.width: 1
-                                    radius: Theme.radiusSm
-                                }
-                            }
-
-                            Button {
-                                id: lyricsTabButton
-                                objectName: "integratedLyricsTabButton"
-                                visible: root.sidePanelExpanded
-                                Layout.preferredWidth: 72
-                                Layout.fillHeight: true
-                                flat: true
-                                text: qsTr("歌词")
-                                Accessible.name: text
-                                onClicked: root.sidePanelPage = 1
-                                contentItem: Text {
-                                    text: lyricsTabButton.text
-                                    color: root.sidePanelPage === 1
-                                           ? Theme.primaryText
-                                           : Theme.secondaryText
-                                    font.family: Theme.fontPrimary
-                                    font.pixelSize: 15
-                                    font.weight: root.sidePanelPage === 1
-                                                 ? Font.DemiBold : Font.Normal
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                                background: Rectangle {
-                                    objectName: "integratedLyricsTabOutline"
-                                    color: root.sidePanelPage === 1
-                                           ? Theme.subtleGlassActive
-                                           : lyricsTabButton.hovered
-                                             ? Theme.subtleGlassHover
-                                             : Theme.subtleGlassFill
-                                    border.color: root.sidePanelPage === 1
-                                                  ? Theme.accent
-                                                  : Theme.subtleGlassBorder
-                                    border.width: 1
-                                    radius: Theme.radiusSm
-                                }
-                            }
-
-                            ToolButton {
-                                id: sidePanelToggleButton
-                                objectName: "integratedSidePanelToggleButton"
-                                Layout.preferredWidth: 30
-                                Layout.preferredHeight: 30
-                                Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
-                                padding: 4
-                                flat: true
-                                Accessible.name: root.sidePanelExpanded
-                                                 ? qsTr("隐藏标签和歌词侧栏")
-                                                 : qsTr("显示标签和歌词侧栏")
-                                onClicked: root.sidePanelExpanded =
-                                           !root.sidePanelExpanded
-                                ToolTip.text: Accessible.name
-                                ToolTip.visible: hovered
-                                background: Rectangle {
-                                    color: sidePanelToggleButton.hovered
-                                           ? Theme.hoverSurface : "transparent"
-                                    radius: Theme.radiusSm
-                                }
-                                contentItem: ThemedIcon {
-                                    objectName: "integratedSidePanelToggleIcon"
-                                    source: Theme.icon("side-panel-toggle")
-                                    tint: Theme.iconPrimary
-                                    sourceSize.width: 22
-                                    sourceSize.height: 22
-                                    mirror: !root.sidePanelExpanded
-                                }
-                            }
-                        }
-
-                        Item {
-                            objectName: "integratedSidePanelContent"
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.top: sidePanelHeader.bottom
-                            anchors.topMargin: 8
-                            anchors.bottom: parent.bottom
-                            visible: root.sidePanelExpanded
-
-                            Item {
-                                id: tagContent
-                                objectName: "integratedTagContent"
-                                anchors.fill: parent
-                                visible: root.sidePanelPage === 0
-
-                                TagManagementPanel {
-                                    id: tagPanel
-                                    objectName: "integratedTagManagementPanel"
-                                    anchors.fill: parent
-                                    tagModel: root.tagModel
-                                    filterModel: root.filterModel
-                                    compact: true
-                                    collapsible: false
-                                    expanded: true
-                                    showHeader: false
-                                }
-                            }
-
-                            Item {
-                                id: lyricsContent
-                                objectName: "integratedLyricsContent"
-                                anchors.fill: parent
-                                visible: root.sidePanelPage === 1
-                                clip: true
-
-                                LyricsPanel {
-                                    id: integratedLyricsPanel
-                                    objectName: "integratedLyricsPanel"
-                                    anchors.fill: parent
-                                    service: root.lyricsService
-                                    spatialMode: false
-                                }
-                            }
-                        }
+                    objectNamePrefix: "integrated"
+                    expandedWidth: root.rightColumnWidth
+                    tagModel: root.tagModel
+                    filterModel: root.filterModel
+                    lyricsService: root.lyricsService
+                    currentPage: root.sidePanelPage
+                    expanded: root.sidePanelExpanded
+                    onPageRequested: function(page) {
+                        root.sidePanelPage = page
+                    }
+                    onExpandedRequested: function(value) {
+                        root.sidePanelExpanded = value
                     }
                 }
             }

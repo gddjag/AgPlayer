@@ -15,6 +15,7 @@ Item {
     property var playlistModel: PlaylistModel
     property var navigationModel: LibraryNavigationModel
     property var tagModel: TagModel
+    property var lyricsService: LyricsService
     property var visualFeatures: AudioVisualFeatureController
     property var currentTrack: null
     property real waveformPixelsPerSecond: 120
@@ -26,7 +27,9 @@ Item {
     // update. This keeps the source position on the fixed needle even when
     // the item has a clipped lead-in/out segment at a track boundary.
     property real waveformContentX: 1
-    property alias tagSearchText: rollingTagPanel.searchText
+    property alias tagSearchText: rollingSidePanel.tagSearchText
+    property int sidePanelPage: 0
+    property bool sidePanelExpanded: true
 
     readonly property real effectiveDurationMs:
         waveformSession && Number(waveformSession.durationMs) > 0
@@ -1138,6 +1141,7 @@ Item {
                             activeTagKey: root.filterModel
                                           ? root.filterModel.tagKey : ""
                             integratedCompact: true
+                            thumbnailVisibilityFollowsSetting: false
                         }
 
                         SearchFilter {
@@ -1165,34 +1169,22 @@ Item {
                         }
                     }
 
-                    Rectangle {
-                        Layout.preferredWidth: 1
-                        Layout.fillHeight: true
-                        color: Theme.listDivider
-                    }
-
-                    TagManagementPanel {
-                        id: rollingTagPanel
-                        objectName: "rollingTagManagementPanel"
-                        Layout.preferredWidth: 232
-                        Layout.minimumWidth: 232
-                        Layout.maximumWidth: 232
-                        Layout.fillHeight: true
+                    LibrarySidePanel {
+                        id: rollingSidePanel
+                        objectNamePrefix: "rolling"
+                        expandedWidth: 232
                         tagModel: root.tagModel
                         filterModel: root.filterModel
-                        compact: true
+                        lyricsService: root.lyricsService
+                        currentPage: root.sidePanelPage
+                        expanded: root.sidePanelExpanded
+                        onPageRequested: function(page) {
+                            root.sidePanelPage = page
+                        }
+                        onExpandedRequested: function(value) {
+                            root.sidePanelExpanded = value
+                        }
                     }
-                }
-
-                LyricsPanel {
-                    objectName: "rollingLyricsPanel"
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: visible ? 104 : 0
-                    visible: PlayerExperienceController.lyricsVisible
-                             && PlayerExperienceController.immersiveMode
-                                === PlayerExperienceController.Off
-                    service: LyricsService
-                    spatialMode: false
                 }
             }
         }

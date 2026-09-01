@@ -60,17 +60,20 @@ TestCase {
         verify(typeof actions.buttonSize === "function",
                "PlayerControls must instantiate the shared ExperienceActions component")
         compare(actions.buttonSize(), 26)
-        verify(xInControls(lyrics, controls) + lyrics.width
-               <= xInControls(immersive, controls),
-               "lyrics and immersive actions must not overlap")
-        verify(xInControls(immersive, controls) + immersive.width
-               <= xInControls(mini, controls),
-               "immersive action must not overlap the mini-player control")
+        tryVerify(function() {
+            return xInControls(lyrics, controls) + lyrics.width
+                    <= xInControls(immersive, controls)
+        }, 500, "lyrics and immersive actions must not overlap")
+        tryVerify(function() {
+            return xInControls(immersive, controls) + immersive.width
+                    <= xInControls(mini, controls)
+        }, 500, "immersive action must not overlap the mini-player control")
         var tools = findChild(controls, "audioToolsButton")
         verify(tools)
-        verify(xInControls(volume, controls) + volume.width
-               <= xInControls(tools, controls),
-               "volume control must not overlap the secondary actions")
+        tryVerify(function() {
+            return xInControls(volume, controls) + volume.width
+                    <= xInControls(tools, controls)
+        }, 500, "volume control must not overlap the secondary actions")
         verify(xInControls(volume, controls) + volume.width <= controls.width,
                "volume control must remain inside a 1000 DIP player")
     }
@@ -95,14 +98,15 @@ TestCase {
 
         volume.expandedForQa = true
         tryVerify(function() { return volume.width > 44 }, 500)
-        verify(xInControls(equalizer, controls) + equalizer.width
-               <= xInControls(tools, controls),
-               "transport controls must clear the audio-tools control: equalizer="
-               + xInControls(equalizer, controls) + "+" + equalizer.width
-               + ", tools=" + xInControls(tools, controls))
-        verify(xInControls(volume, controls) + volume.width
-               <= xInControls(tools, controls),
-               "expanded volume must not cover the secondary actions")
+        tryVerify(function() {
+            return xInControls(equalizer, controls) + equalizer.width
+                    <= xInControls(tools, controls)
+        }, 500,
+        "transport controls must clear the audio-tools control")
+        tryVerify(function() {
+            return xInControls(volume, controls) + volume.width
+                    <= xInControls(tools, controls)
+        }, 500, "expanded volume must not cover the secondary actions")
         verify(xInControls(volume, controls) + volume.width <= controls.width,
                "expanded volume must remain inside a 1000 DIP player")
     }

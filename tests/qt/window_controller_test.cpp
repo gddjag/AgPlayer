@@ -25,6 +25,7 @@ private slots:
     void init();
     void glassBackdropContractIsAbsent();
     void defaultListSizeMatchesReference();
+    void availableGeometryForWindowUsesScreenWorkArea();
     void legacyListWidthsMigrateWithoutOverwritingIndependentSize();
     void dpiChangePreservesLogicalSizeAcrossScales();
     void switchingWindowsDoesNotRecreatePlayback();
@@ -117,6 +118,20 @@ void WindowControllerTest::defaultListSizeMatchesReference()
     WindowController windows;
     QCOMPARE(windows.listWindowWidth(), 960);
     QCOMPARE(windows.listWindowHeight(), 568);
+}
+
+void WindowControllerTest::availableGeometryForWindowUsesScreenWorkArea()
+{
+    QWindow window;
+    QVERIFY(window.screen() != nullptr);
+    WindowController controller;
+    QCOMPARE(controller.availableGeometryForWindow(&window),
+             window.screen()->availableGeometry());
+
+    QScreen* const primary = QGuiApplication::primaryScreen();
+    QVERIFY(primary != nullptr);
+    QCOMPARE(controller.availableGeometryForWindow(nullptr),
+             primary->availableGeometry());
 }
 
 void WindowControllerTest::legacyListWidthsMigrateWithoutOverwritingIndependentSize()

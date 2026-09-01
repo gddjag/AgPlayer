@@ -36,8 +36,8 @@ Assert-Matches $trackList '(?s)id:\s*trackTitleMarquee.*fontWeight:\s*Font\.Demi
     'Thumbnail waveform must sit 2-4 px below the bold title'
 Assert-Matches $trackList 'readonly property int titleMinimumWidth:\s*compactColumns \? 150 : 180' `
     'Ordinary and tag lists must keep the same title-width floor'
-Assert-Matches $trackList 'readonly property bool showBpmColumn:\s*!tagFilterActive' `
-    'Tag mode must crop late columns before shrinking the title target'
+Assert-Matches $trackList '(?s)readonly property bool showBpmColumn:\s*relaxedClassicColumns \? !tagManagementLayout : !tagFilterActive.*readonly property bool showDurationColumn:\s*relaxedClassicColumns \|\| !tagFilterActive' `
+    'Classic tag mode must keep duration while hiding BPM; other lists retain their existing policy'
 
 Assert-Matches $navigation '(?s)objectName:\s*"navigationExpandButton".*nodeRow\.nodeType === "library".*Layout\.preferredWidth:\s*visible \? 28 : 0.*Layout\.preferredHeight:\s*28.*icon\.width:\s*18.*icon\.height:\s*18' `
     'Library chevron must remain visible with a 28 px hit target and 18 px icon'

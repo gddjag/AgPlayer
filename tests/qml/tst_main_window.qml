@@ -2878,6 +2878,12 @@ TestCase {
                + ratingStart + " > " + artistEnd)
     }
 
+    function test_classic_player_rating_uses_reference_icon_size() {
+        var rating = findChild(mainWindow, "trackRating")
+        verify(rating, "the classic player must expose its rating row")
+        compare(rating.iconSize, 17)
+    }
+
     function test_z_playing_row_uses_three_independent_spectrum_bars() {
         verify(PlaybackController.currentTrackId.length > 0)
         var list = trackListComponent.createObject(mainWindow.contentItem)
@@ -2921,6 +2927,96 @@ TestCase {
         filter.destroy()
     }
 
+    function test_z_classic_list_uses_relaxed_reference_columns_and_icons() {
+        var previousCategory = findChild(mainWindow, "filterModel").category
+        var previousTagKey = findChild(mainWindow, "filterModel").tagKey
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = null
+        try {
+            nativeDropHelper.ensureSortableTracks()
+            filterModel.category = "all"
+            filterModel.tagKey = ""
+            window = listWindowComponent.createObject(null, {
+                "filterModel": filterModel,
+                "width": 1400,
+                "height": 720
+            })
+            verify(window)
+            compare(window.boundedLyricsWindowY(100, 200, 104, 0, 800),
+                    308)
+            compare(window.boundedLyricsWindowY(700, 200, 104, 0, 800),
+                    588)
+            compare(window.boundedLyricsWindowX(900, 240, 0, 1000), 760)
+            var lyricsWindow = findChild(window, "listLyricsWindow")
+            verify(lyricsWindow)
+            verify(lyricsWindow.hostScreen)
+            compare(lyricsWindow.hostScreen.name, window.screen.name)
+            compare(lyricsWindow.hostScreen.width, window.screen.width)
+            compare(lyricsWindow.hostScreen.height, window.screen.height)
+            var list = findChild(window, "sharedTrackList")
+            verify(list)
+            compare(list.relaxedClassicColumns, true)
+
+            var title = findChild(list, "trackHeaderTitle")
+            var duration = findChild(list, "trackHeaderDuration")
+            var rating = findChild(list, "trackHeaderRating")
+            var favorite = findChild(list, "trackHeaderFavorite")
+            var bpm = findChild(list, "trackHeaderBpm")
+            var artist = findChild(list, "trackHeaderArtist")
+            var album = findChild(list, "trackHeaderAlbum")
+            verify(title && duration && rating && favorite && bpm
+                   && artist && album)
+            compare(artist.visible, false)
+            compare(album.visible, false)
+            verify(duration.visible && rating.visible && favorite.visible
+                   && bpm.visible)
+            verify(title.mapToItem(list, 0, 0).x
+                   < duration.mapToItem(list, 0, 0).x)
+            verify(duration.mapToItem(list, 0, 0).x
+                   < rating.mapToItem(list, 0, 0).x)
+            verify(rating.mapToItem(list, 0, 0).x
+                   < favorite.mapToItem(list, 0, 0).x)
+            verify(favorite.mapToItem(list, 0, 0).x
+                   < bpm.mapToItem(list, 0, 0).x)
+
+            list.positionViewAtBeginning()
+            var row = null
+            tryVerify(function() {
+                row = list.itemAtIndex(0)
+                return row !== null
+            })
+            var rowFavorite = findChild(row, "trackFavoriteCell")
+            var rowStar = findChild(row, "trackRatingStar0")
+            verify(rowFavorite && rowStar)
+            compare(rowFavorite.icon.width, 21)
+            compare(rowFavorite.icon.height, 21)
+            compare(rowStar.sourceSize.width, 19)
+            compare(rowStar.sourceSize.height, 19)
+
+            var navigation = findChild(window, "referenceSideNavigation")
+            verify(navigation)
+            navigation.activateNode("tags", "tags:manage", "")
+            tryCompare(window, "tagManagementMode", true)
+            compare(list.tagManagementLayout, true)
+            compare(duration.visible, true)
+            compare(bpm.visible, false)
+
+            window.width = 960
+            wait(20)
+            verify(list.ratingWidth >= list.ratingIconSize * 5)
+            var ratingCell = findChild(row, "trackRatingCell")
+            var lastStar = findChild(row, "trackRatingStar4")
+            verify(ratingCell && lastStar)
+            verify(lastStar.mapToItem(ratingCell, 0, 0).x
+                   + lastStar.width <= ratingCell.width + 0.5)
+        } finally {
+            if (window)
+                window.destroy()
+            filterModel.category = previousCategory
+            filterModel.tagKey = previousTagKey
+        }
+    }
+
     function test_z_tag_workspace_is_one_continuous_three_column_surface() {
         var previousEnabled = SettingsController.listWaveformThumbnailEnabled
         SettingsController.listWaveformThumbnailEnabled = false
@@ -2954,9 +3050,8 @@ TestCase {
         compare(findChild(trackList, "trackHeaderIndex").text, "#")
         compare(findChild(trackList, "trackHeaderTitle").text, "歌曲")
         compare(findChild(trackList, "trackHeaderFavorite").text, "收藏")
-        verify(findChild(trackList, "trackHeaderArtist").x
-               < findChild(trackList, "trackHeaderAlbum").x,
-               "艺术家列必须在专辑列之前")
+        compare(findChild(trackList, "trackHeaderArtist").visible, false)
+        compare(findChild(trackList, "trackHeaderAlbum").visible, false)
         compare(findChild(trackList, "trackHeaderDuration").text, "时长")
 
         var tagPanel = findChild(workspace, "tagManagementPanel")
@@ -5677,7 +5772,7 @@ TestCase {
         }
     }
 
-    function test_list_lyrics_panel_stays_below_track_workspace() {
+    function test_list_lyrics_panel_uses_external_window() {
         var previousVisible = PlayerExperienceController.lyricsVisible
         PlayerExperienceController.lyricsVisible = true
         var window = listWindowComponent.createObject(null, {
@@ -5685,16 +5780,14 @@ TestCase {
         })
         verify(window)
         try {
-            var workspace = findChild(window, "listWorkspace")
+            var lyricsWindow = findChild(window, "listLyricsWindow")
             var panel = findChild(window, "listLyricsPanel")
-            verify(workspace && panel)
+            verify(lyricsWindow && panel)
             tryCompare(panel, "visible", true, 500)
-            var workspaceBottom = workspace.mapToItem(window.contentItem,
-                                                       0,
-                                                       workspace.height).y
-            var panelTop = panel.mapToItem(window.contentItem, 0, 0).y
-            verify(panelTop >= workspaceBottom - 1,
-                   "lyrics must be laid out below the list workspace")
+            compare(lyricsWindow.transientParent, window)
+            compare(panel.Window.window, lyricsWindow)
+            verify(panel.Window.window !== window,
+                   "lyrics must not live inside the list window container")
         } finally {
             window.destroy()
             PlayerExperienceController.lyricsVisible = previousVisible

@@ -167,6 +167,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/ImmersiveControlPanel.qml
         qml/AgPlayer/components/ImmersiveQueueDrawer.qml
         qml/AgPlayer/components/LyricsPanel.qml
+        qml/AgPlayer/components/LibrarySidePanel.qml
         qml/AgPlayer/components/EqualizerBandSlider.qml
         qml/AgPlayer/components/EqualizerResponseCurve.qml
         qml/AgPlayer/components/TrackList.qml

@@ -1235,9 +1235,72 @@ TestCase {
         compare(rollingPanel.visible, false)
         compare(LyricsService.enabled, false)
 
+        var rollingLyricsTab = findChild(mainWindow,
+                                         "rollingLyricsTabButton")
+        var rollingToggle = findChild(mainWindow,
+                                      "rollingSidePanelToggleButton")
+        verify(rollingLyricsTab && rollingToggle)
+        mouseClick(rollingLyricsTab)
+        tryCompare(LyricsService, "enabled", true, 500)
+        tryCompare(rollingPanel, "visible", true, 500)
+
+        mouseClick(rollingToggle)
+        tryCompare(LyricsService, "enabled", false, 500)
+        mouseClick(rollingToggle)
+        tryCompare(LyricsService, "enabled", true, 500)
+
+        SettingsController.playerShellMode = 1
+        wait(20)
+        SettingsController.playerShellMode = 2
+        wait(20)
+        rollingPanel = findChild(mainWindow, "rollingLyricsPanel")
+        verify(rollingPanel)
+        tryCompare(rollingPanel, "visible", true, 500)
+        tryCompare(LyricsService, "enabled", true, 500)
+
+        var rollingTagTab = findChild(mainWindow, "rollingTagTabButton")
+        rollingToggle = findChild(mainWindow,
+                                  "rollingSidePanelToggleButton")
+        verify(rollingTagTab && rollingToggle)
+        mouseClick(rollingTagTab)
+        mouseClick(rollingToggle)
+        tryCompare(rollingPanel, "visible", false, 500)
+
         PlayerExperienceController.lyricsVisible = true
         tryCompare(LyricsService, "enabled", true, 500)
         tryCompare(rollingPanel, "visible", true, 500)
         compare(normalPanel.visible, false)
+    }
+
+    function test_integrated_lyrics_button_recovers_manually_changed_panel() {
+        SettingsController.playerShellMode = 1
+        wait(20)
+        PlayerExperienceController.immersiveMode =
+                PlayerExperienceController.Off
+        PlayerExperienceController.lyricsVisible = false
+
+        var panel = findChild(mainWindow, "integratedLyricsPanel")
+        var lyricsTab = findChild(mainWindow, "integratedLyricsTabButton")
+        var tagTab = findChild(mainWindow, "integratedTagTabButton")
+        var toggle = findChild(mainWindow,
+                               "integratedSidePanelToggleButton")
+        verify(panel && lyricsTab && tagTab && toggle)
+
+        mouseClick(lyricsTab)
+        mouseClick(tagTab)
+        if (mainWindow.integratedSidePanelExpanded)
+            mouseClick(toggle)
+        tryCompare(panel, "visible", false, 500)
+
+        PlayerExperienceController.lyricsVisible = true
+        tryCompare(panel, "visible", true, 500)
+
+        SettingsController.playerShellMode = 0
+        wait(20)
+        SettingsController.playerShellMode = 1
+        wait(20)
+        panel = findChild(mainWindow, "integratedLyricsPanel")
+        verify(panel)
+        tryCompare(panel, "visible", true, 500)
     }
 }

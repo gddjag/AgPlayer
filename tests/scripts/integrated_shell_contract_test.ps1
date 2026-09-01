@@ -18,6 +18,7 @@ function Assert-Match {
 
 $main = Get-Content -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/Main.qml') -Raw
 $shell = Get-Content -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/IntegratedPlayerShell.qml') -Raw
+$sidePanel = Get-Content -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/LibrarySidePanel.qml') -Raw
 $controls = Get-Content -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/PlayerControls.qml') -Raw
 $integratedControls = Get-Content -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/IntegratedPlayerControls.qml') -Raw
 $experience = Get-Content -LiteralPath (Join-Path $SourceRoot 'app/qml/AgPlayer/components/ExperienceActions.qml') -Raw
@@ -32,8 +33,9 @@ Assert-Match $shell 'property int rightColumnWidth:\s*312' 'Integrated right col
 Assert-Match $shell 'property int waveformHeight:\s*120' 'Integrated waveform must be 120px.'
 Assert-Match $shell 'property int bottomBarHeight:\s*91' 'Integrated bottom bar must be 91px.'
 Assert-Match $shell 'SideNavigation\s*\{[\s\S]*showTagManagementEntry:\s*false' 'Integrated navigation must hide the tag-management entry.'
-Assert-Match $shell 'TagManagementPanel\s*\{[\s\S]*compact:\s*true[\s\S]*collapsible:\s*false[\s\S]*showHeader:\s*false' 'Integrated must reuse the shared compact tag panel inside its tab container.'
-Assert-Match $shell 'objectName:\s*"integratedTagTabButton"[\s\S]*objectName:\s*"integratedLyricsTabButton"[\s\S]*objectName:\s*"integratedSidePanelToggleButton"' 'Integrated must expose tag and lyrics tabs plus the side-panel toggle.'
+Assert-Match $shell 'LibrarySidePanel\s*\{[\s\S]*objectNamePrefix:\s*"integrated"[\s\S]*expandedWidth:\s*root\.rightColumnWidth' 'Integrated must reuse the shared library side panel.'
+Assert-Match $sidePanel 'TagManagementPanel\s*\{[\s\S]*compact:\s*true[\s\S]*collapsible:\s*false[\s\S]*showHeader:\s*false' 'The shared side panel must reuse the compact tag panel.'
+Assert-Match $sidePanel 'objectName:\s*root\.objectNamePrefix \+ "TagTabButton"[\s\S]*objectName:\s*root\.objectNamePrefix \+ "LyricsTabButton"[\s\S]*objectName:\s*root\.objectNamePrefix \+ "SidePanelToggleButton"' 'The shared side panel must expose tag and lyrics tabs plus the side-panel toggle.'
 Assert-Match $shell 'WaveSelectionOverlay\s*\{[\s\S]*dragAdapter:\s*PlaybackClipDragAdapter' 'Integrated selection must use the shared drag adapter.'
 Assert-Match $selection 'function\s+forwardZoom\(wheel, source\)[\s\S]*zoomRequested' 'The top selection overlay must forward Ctrl+wheel zoom.'
 $zoomForwardCount = ([regex]::Matches(

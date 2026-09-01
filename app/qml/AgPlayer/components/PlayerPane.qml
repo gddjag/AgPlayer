@@ -377,6 +377,8 @@ Rectangle {
                         Row {
                             id: trackRating
                             objectName: "trackRating"
+                            readonly property int iconSize:
+                                root.minimalHeight ? 12 : 17
                             anchors.left: artistAlbumClip.right
                             anchors.leftMargin: Theme.spacingMd
                             anchors.verticalCenter: parent.verticalCenter
@@ -386,15 +388,16 @@ Rectangle {
                             Repeater {
                                 model: 5
                                 delegate: ThemedIcon {
+                                    objectName: "playerRatingStar" + index
                                     source: index < root.currentTrackRating()
                                             ? Theme.icon("star-fill")
                                             : Theme.icon("star-line")
                                     tint: index < root.currentTrackRating()
                                           ? Theme.ratingColor(index) : Theme.iconSecondary
-                                    sourceSize.width: root.minimalHeight ? 10 : 14
-                                    sourceSize.height: root.minimalHeight ? 10 : 14
-                                    width: root.minimalHeight ? 11 : 15
-                                    height: root.minimalHeight ? 11 : 15
+                                    sourceSize.width: trackRating.iconSize
+                                    sourceSize.height: trackRating.iconSize
+                                    width: trackRating.iconSize + 1
+                                    height: trackRating.iconSize + 1
                                 }
                             }
                         }

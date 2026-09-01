@@ -115,6 +115,19 @@ TestCase {
     }
 
     QtObject {
+        id: fakeLyricsService
+        property bool enabled: true
+        property int status: LyricsService.Ready
+        property string previousLine: "上一句共享歌词"
+        property string currentLine: "当前共享歌词"
+        property string nextLine: "下一句共享歌词"
+        property int offsetMs: 0
+        function retry() {}
+        function pauseFollow(milliseconds) {}
+        function importLrc(url) { return true }
+    }
+
+    QtObject {
         id: fakeLibrary
         property int count: 1
         property int lookupCount: 0
@@ -200,6 +213,20 @@ TestCase {
         }, 1500)
         compare(mainWindow.minimumWidth, 1000)
         compare(mainWindow.minimumHeight, 720)
+    }
+
+    function test_rolling_list_ignores_classic_thumbnail_switch() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        try {
+            SettingsController.listWaveformThumbnailEnabled = false
+            var rolling = rollingWithFakes()
+            var list = findChild(rolling, "rollingTrackList")
+            verify(list)
+            compare(list.waveformThumbnailsVisible, true)
+            compare(list.rowHeight, 50)
+        } finally {
+            SettingsController.listWaveformThumbnailEnabled = previousEnabled
+        }
     }
 
     function test_waveform_modes_reuse_shared_spectral_analysis() {
@@ -492,6 +519,37 @@ TestCase {
         compare(rolling.waveformPixelsPerSecond, 480)
         rolling.resetZoom()
         compare(rolling.waveformPixelsPerSecond, 120)
+    }
+
+    function test_rolling_reuses_collapsible_tag_and_lyrics_side_panel() {
+        var rolling = rollingWithFakes()
+        rolling.lyricsService = fakeLyricsService
+        var navigation = findChild(rolling, "rollingLibraryNavigation")
+        var column = findChild(rolling, "rollingTagColumn")
+        var tagTab = findChild(rolling, "rollingTagTabButton")
+        var lyricsTab = findChild(rolling, "rollingLyricsTabButton")
+        var tagContent = findChild(rolling, "rollingTagContent")
+        var lyricsContent = findChild(rolling, "rollingLyricsContent")
+        var lyricsPanel = findChild(rolling, "rollingLyricsPanel")
+        var toggle = findChild(rolling, "rollingSidePanelToggleButton")
+        verify(navigation && column && tagTab && lyricsTab && tagContent
+               && lyricsContent && lyricsPanel && toggle)
+        compare(navigation.showTagManagementEntry, false)
+        compare(column.width, 232)
+        verify(tagContent.visible)
+        compare(lyricsContent.visible, false)
+
+        mouseClick(lyricsTab)
+        compare(tagContent.visible, false)
+        verify(lyricsContent.visible)
+        compare(findChild(lyricsPanel, "currentLyricLine").text,
+                "当前共享歌词")
+
+        mouseClick(toggle)
+        tryCompare(column, "width", 42)
+        mouseClick(toggle)
+        tryCompare(column, "width", 232)
+        verify(lyricsContent.visible)
     }
 
     function test_rolling_layout_stays_non_overlapping_at_minimum_and_ultrawide() {
