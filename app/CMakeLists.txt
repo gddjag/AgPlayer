@@ -160,6 +160,8 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/PlayerControls.qml
         qml/AgPlayer/components/TransportControls.qml
         qml/AgPlayer/components/PlayerVolumeControl.qml
+        qml/AgPlayer/components/VideoPlaybackView.qml
+        qml/AgPlayer/components/VideoTransportBar.qml
         qml/AgPlayer/components/IntegratedPlayerControls.qml
         qml/AgPlayer/components/ExperienceActions.qml
         qml/AgPlayer/components/FallbackCoverImage.qml

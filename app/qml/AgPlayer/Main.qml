@@ -37,6 +37,7 @@ ApplicationWindow {
     // the same playback source. Defaults to the production singleton; tests
     // override this with a fake QtObject to verify shared state without audio.
     property var playback: PlaybackController
+    property var videoPlayback: VideoPlaybackController
     property int positionMs: playback ? playback.positionMs : 0
     property bool playFirstDroppedTrack: false
     property string tagSearchText: ""
@@ -46,6 +47,7 @@ ApplicationWindow {
     property bool rollingSidePanelExpanded: true
     property bool immersiveRenderingEnabled: true
     property int previousShellMode: SettingsController.playerShellMode
+    property int videoVisibilityBeforeFullscreen: Window.Windowed
     property alias waveformSession: sharedWaveformSession
     readonly property bool integratedShell:
         SettingsController.playerShellMode === 1
@@ -65,6 +67,8 @@ ApplicationWindow {
         Qt.application.arguments.indexOf("--qa-immersive-synthetic") >= 0
     readonly property bool qaImmersiveFullscreen:
         Qt.application.arguments.indexOf("--qa-immersive-fullscreen") >= 0
+    readonly property bool videoFullscreen:
+        mainWindow.visibility === Window.FullScreen
     readonly property int qaImmersiveWidth: qaArgumentNumber("--qa-width", 0)
     readonly property int qaImmersiveHeight: qaArgumentNumber("--qa-height", 0)
 
@@ -74,6 +78,29 @@ ApplicationWindow {
             return fallback
         var value = Number(Qt.application.arguments[index + 1])
         return isFinite(value) && value > 0 ? Math.round(value) : fallback
+    }
+
+    function enterVideoFullscreen() {
+        if (videoFullscreen)
+            return
+        videoVisibilityBeforeFullscreen = visibility
+        showFullScreen()
+    }
+
+    function exitVideoFullscreen() {
+        if (!videoFullscreen)
+            return
+        if (videoVisibilityBeforeFullscreen === Window.Maximized)
+            showMaximized()
+        else
+            showNormal()
+    }
+
+    function leaveVideoPlayback() {
+        if (videoFullscreen)
+            exitVideoFullscreen()
+        if (playback && playback.stop !== undefined)
+            playback.stop()
     }
 
     DockedWindowFrame {
@@ -676,6 +703,29 @@ ApplicationWindow {
     }
 
     Loader {
+        id: videoPlaybackLoader
+        objectName: "videoPlaybackLoader"
+        anchors.fill: parent
+        z: 1000
+        active: mainWindow.videoPlayback
+                && Boolean(mainWindow.videoPlayback.visible)
+        sourceComponent: Component {
+            VideoPlaybackView {
+                playback: mainWindow.playback
+                videoPlayback: mainWindow.videoPlayback
+                fullscreen: mainWindow.videoFullscreen
+                onFullscreenRequested: {
+                    if (mainWindow.videoFullscreen)
+                        mainWindow.exitVideoFullscreen()
+                    else
+                        mainWindow.enterVideoFullscreen()
+                }
+                onReturnRequested: mainWindow.leaveVideoPlayback()
+            }
+        }
+    }
+
+    Loader {
         id: settingsWindowLoader
         active: false
         sourceComponent: Component {
@@ -709,6 +759,13 @@ ApplicationWindow {
         enabled: !mainWindow.editingText() && !WindowController.audioToolsVisible
             && !AudioEditorController.editorPlaybackOwnsPlayer
         onActivated: PlaybackController.togglePlayback()
+    }
+
+    Shortcut {
+        sequence: "Escape"
+        context: Qt.WindowShortcut
+        enabled: mainWindow.videoFullscreen && videoPlaybackLoader.active
+        onActivated: mainWindow.exitVideoFullscreen()
     }
 
     Shortcut {
