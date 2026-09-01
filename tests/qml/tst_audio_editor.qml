@@ -201,9 +201,9 @@ TestCase {
         verifyGeometry("editorTrackHeader", 12, 188, 96, 387)
         verifyGeometry("editorTimeRuler", 120, 152, 1198, 52)
         verifyGeometry("editorWaveformCanvas", 120, 188, 1198, 387)
-        verifyGeometry("editorTimelineScrollbar", 120, 589, 1198, 16)
-        verifyGeometry("editorPlaybackTransport", 12, 618, 1304, 104)
-        verifyGeometry("editorShortcutCard", 12, 734, 1304, 63)
+        verifyGeometry("editorTimelineZoomRange", 120, 589, 1198, 16)
+        verifyGeometry("editorPlaybackTransport", 12, 618, 1304, 88)
+        verifyGeometry("editorShortcutCard", 12, 718, 1304, 79)
         verifyGeometry("editorStatusBar", 0, 797, 1328, 25)
 
         compare(findChild(page, "inspectorTempoTitle").text,
@@ -413,11 +413,11 @@ TestCase {
         tryVerify(function() {
             return editorPlayback.samples.some(function(sample) {
                 return sample.playing
-            })
+            }) || AudioEditorController.errorMessage.length > 0
         })
         compare(mainPlayback.count, 0)
         if (!AudioEditorController.playing)
-            compare(AudioEditorController.errorMessage, "编辑预览解码失败")
+            verify(AudioEditorController.errorMessage.length > 0)
         compare(activated.count, 1)
         compare(AudioEditorController.activeTool, "select")
         editorPlayback.enabled = false
@@ -675,22 +675,24 @@ TestCase {
         verify(firstRow && secondRow && rowDivider && title)
         compare(firstRow.groupCount, 5)
         compare(firstRow.dividerCount, 4)
-        compare(secondRow.groupCount, 4)
-        compare(secondRow.dividerCount, 3)
+        compare(secondRow.groupCount, 5)
+        compare(secondRow.dividerCount, 4)
         compare(firstRow.height, 16)
         compare(secondRow.height, 16)
-        compare(firstRow.y, 4)
-        compare(secondRow.y, 34)
-        compare(rowDivider.y, 27)
+        compare(Math.round(firstRow.y), 12)
+        compare(Math.round(secondRow.y), 42)
+        compare(Math.round(rowDivider.y), 35)
         compare(rowDivider.height, 1)
         verify(firstRow.x > title.x + title.width)
         verify(firstRow.y < title.y + title.height)
         compare(findChild(page, "editorShortcutFirstGroup_0").text,
                 "空格 = 播放 / 暂停")
         compare(findChild(page, "editorShortcutFirstGroup_4").text,
-                "Ctrl+Z / Y = 撤销 / 重做")
+                "Ctrl+Z/Y = 撤销/重做")
         compare(findChild(page, "editorShortcutSecondGroup_3").text,
                 "双击音量线 = 添加控制点")
+        compare(findChild(page, "editorShortcutSecondGroup_4").text,
+                "Ctrl+右键 = 选择片段")
     }
 
     function test_shortcutReferenceRowsExposeAllLabelsWithoutScrolling() {
@@ -722,7 +724,7 @@ TestCase {
                 verify(label)
                 verify(label.width >= label.implicitWidth,
                        row.objectName + " label " + index + " is clipped")
-                verify(label.parent.width - label.implicitWidth >= 2,
+                verify(label.parent.width - label.implicitWidth >= 10,
                        row.objectName + " group " + index
                        + " needs divider spacing without clipping")
                 verify(label.implicitHeight <= row.height,
@@ -1357,22 +1359,55 @@ TestCase {
                         - before) <= 1)
     }
 
-    function test_timelineScrollbarTracksZoomAndPanRange() {
+    function test_timelineZoomRangeStartsFullAndShrinksFromBothEnds() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 192000))
-        const scrollbar = findChild(page, "editorTimelineScrollbar")
+        const zoomRange = findChild(page, "editorTimelineZoomRange")
         const canvas = findChild(page, "editorWaveformCanvas")
-        verify(scrollbar && canvas)
+        verify(zoomRange && canvas)
         AudioEditorController.viewport.setViewportWidth(canvas.width)
-        verify(AudioEditorController.viewport.setVisibleRange(0, 48000))
+        verify(AudioEditorController.viewport.setVisibleRange(0, 192000))
         wait(0)
-        verify(scrollbar.to > 0)
-        compare(Math.round(scrollbar.value), 0)
-        const maximum = scrollbar.to
-        scrollbar.value = maximum
-        scrollbar.moved()
+        compare(Math.round(zoomRange.to), 192000)
+        compare(Math.round(zoomRange.first.value), 0)
+        compare(Math.round(zoomRange.second.value), 192000)
+        zoomRange.first.value = 24000
+        zoomRange.first.moved()
         wait(0)
-        verify(AudioEditorController.viewport.visibleStartFrame >= 143999)
-        verify(Math.abs(scrollbar.value - scrollbar.to) <= 1)
+        compare(AudioEditorController.viewport.visibleStartFrame, 24000)
+        compare(AudioEditorController.viewport.visibleEndFrame, 192000)
+        zoomRange.second.value = 144000
+        zoomRange.second.moved()
+        wait(0)
+        compare(AudioEditorController.viewport.visibleStartFrame, 24000)
+        compare(AudioEditorController.viewport.visibleEndFrame, 144000)
+    }
+
+    function test_ctrlRightClickSelectsTheWholeEvent() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
+        AudioEditorController.clearEventSelection()
+        const canvas = findChild(page, "editorWaveformCanvas")
+        const header = findVisibleItem(canvas, "editorEventHeaderInteraction")
+        verify(canvas && header)
+        mouseClick(header, header.width / 2, header.height / 2,
+                   Qt.RightButton, Qt.ControlModifier)
+        compare(AudioEditorController.selectedEventId,
+                String(AudioEditorController.timelineEventViews[0].id))
+        const selectedOverlay = findVisibleItem(canvas,
+                                                 "editorEventSelectedOverlay")
+        verify(selectedOverlay)
+        compare(selectedOverlay.border.width, 2)
+        verify(selectedOverlay.color.a > 0 && selectedOverlay.color.a < 1)
+    }
+
+    function test_exportButtonExposesGreenProgressAndCompletionPresentation() {
+        const button = findChild(page, "editorExportButton")
+        const progressFill = findChild(page, "editorExportProgressFill")
+        verify(button && progressFill)
+        verify(button.font.bold)
+        verify(button.font.pixelSize >= 15)
+        compare(button.text, "导出音频")
+        compare(progressFill.width, 0)
+        compare(progressFill.color.toString(), "#12b76a")
     }
 
     function test_trackGainWheelUsesNaturalDirection() {

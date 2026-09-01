@@ -663,9 +663,9 @@ Rectangle {
                 height: page.trackRegionHeight
             }
 
-            EditorSlider {
-                id: timelineScrollbar
-                objectName: "editorTimelineScrollbar"
+            RangeSlider {
+                id: timelineZoomRange
+                objectName: "editorTimelineZoomRange"
                 x: ruler.x
                 y: page.compactNarrowLayout ? 211
                     : page.shortDesktopLayout ? 366
@@ -673,18 +673,97 @@ Rectangle {
                     : page.interpolateLayout(378, 589)
                 width: ruler.width
                 height: page.compactNarrowLayout ? 12 : 16
-                pointerHitExtent: 16
                 from: 0
-                to: AudioEditorController.viewport.visibleFrameCount > 0
-                    ? Math.max(0,
-                        AudioEditorController.viewport.timelineContentWidth()
-                            - width)
-                    : 0
-                value: AudioEditorController.viewport.visibleStartFrame >= 0
-                    ? AudioEditorController.viewport.scrollOffsetPixels()
-                    : 0
-                enabled: to > 0
-                onMoved: AudioEditorController.viewport.panToScrollOffset(value)
+                to: Math.max(1, AudioEditorController.totalFrames)
+                stepSize: 1
+                leftPadding: 6
+                rightPadding: 6
+                enabled: AudioEditorController.hasDocument
+                    && AudioEditorController.totalFrames > 0
+                function syncHandles() {
+                    if (!AudioEditorController.hasDocument) {
+                        first.value = 0
+                        second.value = 1
+                        return
+                    }
+                    const start = Math.max(0,
+                        AudioEditorController.viewport.visibleStartFrame)
+                    const end = Math.max(start + 1,
+                        AudioEditorController.viewport.visibleEndFrame)
+                    first.value = 0
+                    second.value = end
+                    first.value = start
+                }
+                first.onMoved: AudioEditorController.viewport.setVisibleRange(
+                    Math.round(first.value), Math.round(second.value))
+                second.onMoved: AudioEditorController.viewport.setVisibleRange(
+                    Math.round(first.value), Math.round(second.value))
+                Component.onCompleted: Qt.callLater(syncHandles)
+                Connections {
+                    target: AudioEditorController.viewport
+                    function onViewportChanged() {
+                        if (!timelineZoomRange.first.pressed
+                                && !timelineZoomRange.second.pressed)
+                            timelineZoomRange.syncHandles()
+                    }
+                }
+                Connections {
+                    target: AudioEditorController
+                    function onDocumentChanged() {
+                        Qt.callLater(timelineZoomRange.syncHandles)
+                    }
+                }
+
+                background: Rectangle {
+                    x: timelineZoomRange.leftPadding
+                    y: timelineZoomRange.topPadding
+                        + timelineZoomRange.availableHeight / 2 - height / 2
+                    width: timelineZoomRange.availableWidth
+                    height: 4
+                    radius: 2
+                    color: Theme.borderStrong
+
+                    Rectangle {
+                        x: timelineZoomRange.first.visualPosition * parent.width
+                        width: Math.max(2,
+                            (timelineZoomRange.second.visualPosition
+                             - timelineZoomRange.first.visualPosition)
+                            * parent.width)
+                        height: parent.height
+                        radius: parent.radius
+                        color: Theme.accent
+                    }
+                }
+                first.handle: Rectangle {
+                    objectName: "editorTimelineZoomStartHandle"
+                    x: timelineZoomRange.leftPadding
+                        + timelineZoomRange.first.visualPosition
+                        * timelineZoomRange.availableWidth - width / 2
+                    y: timelineZoomRange.topPadding
+                        + timelineZoomRange.availableHeight / 2 - height / 2
+                    implicitWidth: 12
+                    implicitHeight: 12
+                    radius: 6
+                    color: timelineZoomRange.first.pressed
+                        ? Theme.accentPressed : Theme.surfaceElevated
+                    border.color: Theme.accent
+                    border.width: 2
+                }
+                second.handle: Rectangle {
+                    objectName: "editorTimelineZoomEndHandle"
+                    x: timelineZoomRange.leftPadding
+                        + timelineZoomRange.second.visualPosition
+                        * timelineZoomRange.availableWidth - width / 2
+                    y: timelineZoomRange.topPadding
+                        + timelineZoomRange.availableHeight / 2 - height / 2
+                    implicitWidth: 12
+                    implicitHeight: 12
+                    radius: 6
+                    color: timelineZoomRange.second.pressed
+                        ? Theme.accentPressed : Theme.surfaceElevated
+                    border.color: Theme.accent
+                    border.width: 2
+                }
             }
 
             Rectangle {
@@ -696,10 +775,9 @@ Rectangle {
                     : page.narrowLayout ? 372
                     : page.interpolateLayout(410, 618)
                 width: mainSurface.width - 24
-                height: page.compactNarrowLayout ? 104
-                    : page.shortDesktopLayout ? 104
-                    : page.narrowLayout ? 76
-                    : page.interpolateLayout(102, 104)
+                height: page.compactNarrowLayout ? 92
+                    : page.shortDesktopLayout ? 92
+                    : page.narrowLayout ? 72 : 88
                 color: Theme.surfaceElevated
                 border.color: Theme.divider
                 border.width: 1
@@ -996,22 +1074,23 @@ Rectangle {
                 y: playbackTransport.y + playbackTransport.height
                     + (page.compactNarrowLayout || page.narrowLayout ? 8 : 12)
                 width: mainSurface.width - 24
-                height: Math.min(67, Math.max(54,
-                    mainSurface.height - 25 - y))
+                height: Math.max(54, mainSurface.height - 25 - y)
+                readonly property real contentYOffset:
+                    Math.max(0, (height - 63) / 2)
                 color: Theme.surfaceElevated
                 border.color: Theme.divider
                 border.width: 1
                 radius: 6
                 ThemedIcon {
                     objectName: "editorShortcutKeyboardIcon"
-                    x: 20; y: 2
+                    x: 20; y: 2 + shortcutCard.contentYOffset
                     width: 22; height: 22
                     source: Theme.icon("keyboard-box-line")
                     tint: Theme.textPrimary
                 }
                 Label {
                     objectName: "editorShortcutTitle"
-                    x: 50; y: 3
+                    x: 50; y: 3 + shortcutCard.contentYOffset
                     text: qsTr("快捷键与鼠标操作")
                     color: Theme.textPrimary
                     font.pixelSize: 14
@@ -1022,7 +1101,7 @@ Rectangle {
                     objectName: "editorShortcutFirstRow"
                     property int groupCount: 5
                     property int dividerCount: 4
-                    x: 168; y: 4
+                    x: 168; y: 4 + shortcutCard.contentYOffset
                     width: parent.width - 186
                     height: 16
                     clip: true
@@ -1039,15 +1118,15 @@ Rectangle {
                         Repeater {
                             model: [
                                 qsTr("空格 = 播放 / 暂停"),
-                                qsTr("S = 在播放头处分割"),
+                                qsTr("S = 播放头分割"),
                                 qsTr("Delete = 删除片段"),
-                                qsTr("Ctrl+C / X / V = 复制 / 剪切 / 粘贴"),
-                                qsTr("Ctrl+Z / Y = 撤销 / 重做")
+                                qsTr("Ctrl+C/X/V = 复制/剪切/粘贴"),
+                                qsTr("Ctrl+Z/Y = 撤销/重做")
                             ]
                             delegate: Item {
                                 required property int index
                                 required property string modelData
-                                width: firstGroupText.implicitWidth + 2
+                                width: firstGroupText.implicitWidth + 12
                                 height: shortcutFirstRow.height
                                 Text {
                                     id: firstGroupText
@@ -1073,16 +1152,16 @@ Rectangle {
                 }
                 Rectangle {
                     objectName: "editorShortcutRowDivider"
-                    x: 16; y: 27
+                    x: 16; y: 27 + shortcutCard.contentYOffset
                     width: parent.width - 32; height: 1
                     color: Theme.borderStrong
                 }
                 Flickable {
                     id: shortcutSecondRow
                     objectName: "editorShortcutSecondRow"
-                    property int groupCount: 4
-                    property int dividerCount: 3
-                    x: 18; y: 34
+                    property int groupCount: 5
+                    property int dividerCount: 4
+                    x: 18; y: 34 + shortcutCard.contentYOffset
                     width: parent.width - 36
                     height: 16
                     clip: true
@@ -1101,12 +1180,13 @@ Rectangle {
                                 qsTr("Ctrl+鼠标滚轮 = 放大 / 缩小时间线"),
                                 qsTr("Shift+鼠标滚轮 = 横向滚动"),
                                 qsTr("拖拽片段边缘 = 修剪"),
-                                qsTr("双击音量线 = 添加控制点")
+                                qsTr("双击音量线 = 添加控制点"),
+                                qsTr("Ctrl+右键 = 选择片段")
                             ]
                             delegate: Item {
                                 required property int index
                                 required property string modelData
-                                width: secondGroupText.implicitWidth + 2
+                                width: secondGroupText.implicitWidth + 12
                                 height: shortcutSecondRow.height
                                 Text {
                                     id: secondGroupText
@@ -1566,6 +1646,8 @@ Rectangle {
                     objectName: "inspectorExportGroup"
                     width: parent.width
                     property bool collapsed: false
+                    property bool exportInProgress: false
+                    property bool exportCompleted: false
                     height: collapsed ? 38 : 336
                     clip: true
                     color: Theme.surfaceElevated
@@ -1852,18 +1934,78 @@ Rectangle {
                             visible: !exportGroup.collapsed
                             Layout.fillWidth: true
                             Layout.preferredHeight: 58
-                            text: qsTr("导出音频")
-                            icon.source: Theme.icon("download-line")
+                            text: exportGroup.exportInProgress
+                                ? qsTr("导出中 %1%").arg(
+                                    Math.round(AudioEditorController.progress * 100))
+                                : exportGroup.exportCompleted
+                                    ? qsTr("✔ 已导出") : qsTr("导出音频")
                             enabled: AudioEditorController.exportSupported
                                 && AudioEditorController.hasDocument
                                 && !AudioEditorController.busy
+                            font.pixelSize: 15
+                            font.bold: true
+                            contentItem: Text {
+                                text: parent.text
+                                color: Theme.textPrimary
+                                font: parent.font
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
                             Accessible.name: text
                             Accessible.role: Accessible.Button
                             background: Rectangle {
-                                color: parent.enabled ? Theme.accentPressed : Theme.disabled
+                                color: parent.enabled || exportGroup.exportInProgress
+                                    || exportGroup.exportCompleted
+                                    ? Theme.surfaceElevated : Theme.disabled
                                 radius: 5
+                                clip: true
+
+                                Rectangle {
+                                    id: exportProgressFill
+                                    objectName: "editorExportProgressFill"
+                                    x: 0
+                                    y: 0
+                                    width: exportGroup.exportInProgress
+                                        ? parent.width * Math.max(0, Math.min(1,
+                                            AudioEditorController.progress))
+                                        : exportGroup.exportCompleted
+                                            ? parent.width : 0
+                                    height: parent.height
+                                    color: "#12B76A"
+                                    radius: parent.radius
+                                    Behavior on width {
+                                        NumberAnimation {
+                                            duration: 120
+                                            easing.type: Easing.OutCubic
+                                        }
+                                    }
+                                }
                             }
-                            onClicked: AudioEditorController.exportToConfiguredDirectory()
+                            onClicked: {
+                                exportGroup.exportCompleted = false
+                                exportGroup.exportInProgress =
+                                    AudioEditorController.exportToConfiguredDirectory()
+                            }
+                        }
+                    }
+
+                    Connections {
+                        target: AudioEditorController
+                        function onStateChanged() {
+                            if (exportGroup.exportInProgress
+                                    && !AudioEditorController.busy) {
+                                exportGroup.exportInProgress = false
+                                if (AudioEditorController.lastExportPath.length === 0)
+                                    exportGroup.exportCompleted = false
+                            }
+                        }
+                        function onExportSucceeded(path) {
+                            exportGroup.exportInProgress = false
+                            exportGroup.exportCompleted = path.length > 0
+                        }
+                        function onDocumentChanged() {
+                            if (!exportGroup.exportInProgress)
+                                exportGroup.exportCompleted = false
                         }
                     }
                 }

@@ -53,6 +53,23 @@ Rectangle {
             && frame >= AudioEditorController.selectionStart
             && frame < AudioEditorController.selectionEnd
     }
+    function eventIdAtFrame(frame) {
+        const events = AudioEditorController.timelineEventViews
+        for (let index = events.length - 1; index >= 0; --index) {
+            const event = events[index]
+            if (frame >= Number(event.timelineStart)
+                    && frame < Number(event.timelineEnd))
+                return String(event.id)
+        }
+        return ""
+    }
+    function selectWholeEvent(eventId) {
+        if (!eventId || String(eventId).length === 0)
+            return false
+        AudioEditorController.clearSelection()
+        AudioEditorController.selectEvent(String(eventId))
+        return true
+    }
     function finishMoveGesture(eventId, timelineStart, moved) {
         let updated = true
         if (moved)
@@ -327,7 +344,8 @@ Rectangle {
                 anchors.fill: parent
                 color: String(eventDelegate.modelData.id)
                     === AudioEditorController.selectedEventId
-                    ? Theme.editorSelection : "transparent"
+                    ? Qt.rgba(Theme.focus.r, Theme.focus.g,
+                              Theme.focus.b, 0.22) : "transparent"
                 border.color: Theme.focus
                 border.width: String(eventDelegate.modelData.id)
                     === AudioEditorController.selectedEventId ? 2 : 0
@@ -362,6 +380,12 @@ Rectangle {
                     playOnRelease = false
                     canvas.cancelSelectionPreview()
                     if (mouse.button === Qt.RightButton) {
+                        if ((mouse.modifiers & Qt.ControlModifier) !== 0
+                                || canvas.controlModifierHeld) {
+                            canvas.selectWholeEvent(modelData.id)
+                            mouse.accepted = true
+                            return
+                        }
                         const point = mapToItem(canvas, mouse.x, mouse.y)
                         const frame = canvas.frameAtCanvasPixel(point.x)
                         if (canvas.selectionContains(frame)) {
@@ -857,6 +881,13 @@ Rectangle {
                             canvas, mouse.x, mouse.y)
                         const frame = canvas.frameAtCanvasPixel(canvasPoint.x)
                         if (mouse.button === Qt.RightButton) {
+                            if ((mouse.modifiers & Qt.ControlModifier) !== 0
+                                    || canvas.controlModifierHeld) {
+                                canvas.selectWholeEvent(
+                                    eventDelegate.modelData.id)
+                                mouse.accepted = true
+                                return
+                            }
                             if (canvas.selectionContains(frame)) {
                                 AudioEditorController.clearSelection()
                                 mouse.accepted = true
@@ -977,6 +1008,13 @@ Rectangle {
                                 originalOffset = Number(parent.modelData.offset)
                                 originalGain = Number(parent.modelData.gain)
                                 if (mouse.button === Qt.RightButton) {
+                                    if ((mouse.modifiers & Qt.ControlModifier) !== 0
+                                            || canvas.controlModifierHeld) {
+                                        canvas.selectWholeEvent(
+                                            eventDelegate.modelData.id)
+                                        mouse.accepted = true
+                                        return
+                                    }
                                     AudioEditorController.removeEnvelopePoint(
                                         eventDelegate.modelData.id,
                                         originalOffset)
@@ -1096,6 +1134,12 @@ Rectangle {
             }
             if (mouse.button === Qt.RightButton) {
                 canvas.cancelSelectionPreview()
+                if ((mouse.modifiers & Qt.ControlModifier) !== 0
+                        || canvas.controlModifierHeld) {
+                    canvas.selectWholeEvent(canvas.eventIdAtFrame(
+                        canvas.frameAtCanvasPixel(mouse.x)))
+                    return
+                }
                 if (canvas.selectionContains(
                         canvas.frameAtCanvasPixel(mouse.x))) {
                     AudioEditorController.clearSelection()
