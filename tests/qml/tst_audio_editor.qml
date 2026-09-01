@@ -722,9 +722,9 @@ TestCase {
                 verify(label)
                 verify(label.width >= label.implicitWidth,
                        row.objectName + " label " + index + " is clipped")
-                verify(label.parent.width - label.implicitWidth >= 12,
+                verify(label.parent.width - label.implicitWidth >= 2,
                        row.objectName + " group " + index
-                       + " needs readable horizontal spacing")
+                       + " needs divider spacing without clipping")
                 verify(label.implicitHeight <= row.height,
                        row.objectName + " label " + index
                        + " is vertically clipped")

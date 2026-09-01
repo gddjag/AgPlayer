@@ -624,8 +624,11 @@ TestCase {
                "native right click without fade did not reach the window")
         wait(0)
         compare(fadeMenu.visible, false,
-                "a central curve without fades must leave right click to range clearing")
-        compare(AudioEditorController.selectionStart, -1)
+                "a central curve without fades must leave right click to the canvas")
+        compare(AudioEditorController.selectionStart, 1000,
+                "right click outside the selected range must preserve its start")
+        compare(AudioEditorController.selectionEnd, 3000,
+                "right click outside the selected range must preserve its end")
 
         verify(AudioEditorController.setEventFadeOut(eventId, 120000))
         tryVerify(function() {

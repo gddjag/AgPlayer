@@ -675,9 +675,14 @@ Rectangle {
                 height: page.compactNarrowLayout ? 12 : 16
                 pointerHitExtent: 16
                 from: 0
-                to: Math.max(0,
-                    AudioEditorController.viewport.timelineContentWidth() - width)
-                value: AudioEditorController.viewport.scrollOffsetPixels()
+                to: AudioEditorController.viewport.visibleFrameCount > 0
+                    ? Math.max(0,
+                        AudioEditorController.viewport.timelineContentWidth()
+                            - width)
+                    : 0
+                value: AudioEditorController.viewport.visibleStartFrame >= 0
+                    ? AudioEditorController.viewport.scrollOffsetPixels()
+                    : 0
                 enabled: to > 0
                 onMoved: AudioEditorController.viewport.panToScrollOffset(value)
             }
@@ -1042,7 +1047,7 @@ Rectangle {
                             delegate: Item {
                                 required property int index
                                 required property string modelData
-                                width: firstGroupText.implicitWidth + 14
+                                width: firstGroupText.implicitWidth + 2
                                 height: shortcutFirstRow.height
                                 Text {
                                     id: firstGroupText
@@ -1101,7 +1106,7 @@ Rectangle {
                             delegate: Item {
                                 required property int index
                                 required property string modelData
-                                width: secondGroupText.implicitWidth + 14
+                                width: secondGroupText.implicitWidth + 2
                                 height: shortcutSecondRow.height
                                 Text {
                                     id: secondGroupText

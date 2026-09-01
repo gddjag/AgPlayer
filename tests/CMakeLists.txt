@@ -866,6 +866,10 @@ set_tests_properties(terrain_reactor_gpu_smoke_test PROPERTIES TIMEOUT 60)
 # ten-second Qt test budget on a busy Windows runner.
 set_tests_properties(lyrics_service_test PROPERTIES TIMEOUT 30)
 
+# The provider suite exercises spectral thumbnails across all render modes and
+# takes roughly 23 seconds on a clean Windows Release build.
+set_tests_properties(track_waveform_thumbnail_provider_test PROPERTIES TIMEOUT 30)
+
 add_executable(unison_lyrics_provider_test
     qt/unison_lyrics_provider_test.cpp
 )
