@@ -99,6 +99,10 @@ class SettingsController final : public QObject {
                    READ listWaveformThumbnailMode
                    WRITE setListWaveformThumbnailMode
                    NOTIFY listWaveformThumbnailModeChanged)
+    Q_PROPERTY(double trackWaveformBrightness
+                   READ trackWaveformBrightness
+                   WRITE setTrackWaveformBrightness
+                   NOTIFY trackWaveformBrightnessChanged)
     Q_PROPERTY(int spectrumColorMode READ spectrumColorMode WRITE setSpectrumColorMode
                    NOTIFY spectrumColorModeChanged)
     Q_PROPERTY(QString spectrumSolidColor READ spectrumSolidColor
@@ -225,6 +229,7 @@ public:
     bool waveformCanvasLocked() const noexcept;
     bool listWaveformThumbnailEnabled() const noexcept;
     QString listWaveformThumbnailMode() const;
+    double trackWaveformBrightness() const noexcept;
     int spectrumColorMode() const noexcept;
     QString spectrumSolidColor() const;
     QString spectrumRgbStartColor() const;
@@ -310,6 +315,7 @@ public:
     void setWaveformCanvasLocked(bool value);
     void setListWaveformThumbnailEnabled(bool value);
     void setListWaveformThumbnailMode(const QString& value);
+    void setTrackWaveformBrightness(double value);
     void setSpectrumColorMode(int value);
     void setSpectrumSolidColor(const QString& value);
     void setSpectrumRgbStartColor(const QString& value);
@@ -405,6 +411,7 @@ signals:
     void waveformCanvasLockedChanged();
     void listWaveformThumbnailEnabledChanged();
     void listWaveformThumbnailModeChanged();
+    void trackWaveformBrightnessChanged();
     void spectrumColorModeChanged();
     void spectrumSolidColorChanged();
     void spectrumRgbStartColorChanged();
@@ -513,6 +520,7 @@ private:
     bool waveformCanvasLocked_ = true;
     bool listWaveformThumbnailEnabled_ = true;
     QString listWaveformThumbnailMode_ = QStringLiteral("Spectral");
+    double trackWaveformBrightness_ = 0.66;
     int spectrumColorMode_ = 1;
     QString spectrumSolidColor_ = QStringLiteral("#7b2ff7");
     QString spectrumRgbStartColor_ = QStringLiteral("#00d4ff");

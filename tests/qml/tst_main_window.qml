@@ -5193,6 +5193,103 @@ TestCase {
             page.destroy()
     }
 
+    function test_settings_frequency_palette_uses_band_labels_and_compact_picker() {
+        var page = findChild(mainWindow, "settingsPage")
+        var ownsPage = false
+        if (!page) {
+            page = settingsPageComponent.createObject(mainWindow.contentItem)
+            ownsPage = true
+        }
+        verify(page)
+        var previousWaveformMode = SettingsController.waveformMode
+        SettingsController.waveformMode = 3
+        page.open()
+        page.selectedSection = 2
+        wait(0)
+        tryCompare(page, "programmaticScroll", false, 1000)
+
+        const expectedLabels = [
+            "最低频", "低频", "低中频", "中频",
+            "中高频", "高频", "更高频", "最高频"
+        ]
+        for (var index = 0; index < expectedLabels.length; ++index) {
+            var label = findChild(page, "spectralPaletteLabel" + index)
+            verify(label, "frequency palette must name band " + index)
+            compare(label.text, expectedLabels[index])
+        }
+
+        var firstField = findChild(page, "spectralPaletteColor0")
+        verify(firstField)
+        compare(firstField.showText, false,
+                "frequency swatches must not expose hexadecimal text")
+        var picker = findChild(firstField, "colorFieldPicker")
+        verify(picker)
+        picker.open()
+        tryCompare(picker, "visible", true, 1000)
+        verify(picker.width > 0 && picker.width <= 360,
+               "color picker must stay compact")
+        verify(picker.height > 0 && picker.height <= 430,
+               "color picker must stay compact")
+        var cancelButton = findChild(firstField, "colorPickerCancelButton")
+        var confirmButton = findChild(firstField, "colorPickerConfirmButton")
+        verify(cancelButton, "compact color picker must expose cancel action")
+        verify(confirmButton, "compact color picker must expose confirm action")
+
+        var originalColor = String(firstField.colorValue)
+        picker.workingColor = "#445566"
+        cancelButton.clicked()
+        compare(String(firstField.colorValue), originalColor,
+                "cancel must not commit the working color")
+
+        firstField.openPicker()
+        tryCompare(picker, "visible", true, 1000)
+        picker.workingColor = "#445566"
+        confirmButton.clicked()
+        compare(String(firstField.colorValue).toUpperCase(), "#445566",
+                "confirm must commit the working color")
+        firstField.colorEdited(originalColor)
+
+        page.cancelAndClose()
+        SettingsController.waveformMode = previousWaveformMode
+        if (ownsPage)
+            page.destroy()
+    }
+
+    function test_settings_list_waveform_brightness_is_live_and_defaults_to_66_percent() {
+        var page = findChild(mainWindow, "settingsPage")
+        var ownsPage = false
+        if (!page) {
+            page = settingsPageComponent.createObject(mainWindow.contentItem)
+            ownsPage = true
+        }
+        verify(page)
+        page.open()
+        page.selectedSection = 2
+        wait(0)
+        tryCompare(page, "programmaticScroll", false, 1000)
+
+        var slider = findChild(page, "trackWaveformBrightnessSlider")
+        verify(slider, "song-list waveform brightness slider must exist")
+        verify(slider.visible, "song-list waveform brightness slider must be visible")
+        verify(slider.width > 0 && slider.height > 0,
+               "song-list waveform brightness slider must have a usable size")
+        var listWaveformCard = findChild(page, "listWaveformSettingsCard")
+        verify(listWaveformCard, "song-list waveform settings card must exist")
+        var sliderBottom = slider.mapToItem(listWaveformCard, 0, slider.height).y
+        verify(sliderBottom <= listWaveformCard.height,
+               "song-list waveform brightness slider must fit inside its settings card")
+        compare(slider.from, 20)
+        compare(slider.to, 100)
+        compare(Math.round(slider.value), 66)
+        slider.value = 74
+        slider.moved()
+        compare(SettingsController.trackWaveformBrightness, 0.74)
+
+        page.cancelAndClose()
+        if (ownsPage)
+            page.destroy()
+    }
+
     function test_settings_waveform_controls_are_live() {
         var page = findChild(mainWindow, "settingsPage")
         var ownsPage = false

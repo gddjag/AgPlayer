@@ -95,6 +95,7 @@ private slots:
     void restoresLegacyRgbColorsWithoutDeletingKeys();
     void mapsSimplifiedColorsIntoRestoredContract();
     void listWaveformThumbnailSettingsPersistFallbackAndReset();
+    void trackWaveformBrightnessDefaultsClampsPersistsAndResets();
     void visualizerCanvasAndReplayGainSettingsPersist();
     void glassFeatureIsAbsentFromSettingsContract();
     void playerShellModeDefaultsPersistsAndNormalizes();
@@ -522,6 +523,8 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
         QCOMPARE(settings.waveformDensity(), 2.0);
         QCOMPARE(settings.waveformThickness(), 1.0);
         QCOMPARE(settings.waveformMode(), 0);
+        QCOMPARE(QColor(settings.waveformSolidBaseColor()),
+                 QColor(QStringLiteral("#9098A6")));
         auto* spectral = settings.frequencyColorWaveform();
         QCOMPARE(spectral->palette().size(), 8);
         QCOMPARE(spectral->palette().first().toString(), QStringLiteral("#123ecf"));
@@ -558,6 +561,42 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
              QStringLiteral("#123ecf"));
     QCOMPARE(reloaded.frequencyColorWaveform()->unplayedOpacity(), 0.88);
     QCOMPARE(reloaded.listWaveformThumbnailMode(), QStringLiteral("Spectral"));
+    persisted.clear();
+}
+
+void SettingsControllerTest::trackWaveformBrightnessDefaultsClampsPersistsAndResets()
+{
+    QSettings persisted;
+    persisted.clear();
+
+    {
+        SettingsController settings;
+        QCOMPARE(settings.trackWaveformBrightness(), 0.66);
+        QSignalSpy changed(&settings,
+                           &SettingsController::trackWaveformBrightnessChanged);
+
+        settings.setTrackWaveformBrightness(0.72);
+        QCOMPARE(settings.trackWaveformBrightness(), 0.72);
+        QCOMPARE(changed.count(), 1);
+        QCOMPARE(persisted.value(
+                     QStringLiteral("appearance/trackWaveformBrightness"))
+                     .toDouble(),
+                 0.72);
+
+        settings.setTrackWaveformBrightness(4.0);
+        QCOMPARE(settings.trackWaveformBrightness(), 1.0);
+        settings.setTrackWaveformBrightness(-3.0);
+        QCOMPARE(settings.trackWaveformBrightness(), 0.20);
+        settings.setTrackWaveformBrightness(
+            std::numeric_limits<double>::quiet_NaN());
+        QCOMPARE(settings.trackWaveformBrightness(), 0.66);
+    }
+
+    SettingsController reloaded;
+    QCOMPARE(reloaded.trackWaveformBrightness(), 0.66);
+    reloaded.setTrackWaveformBrightness(0.81);
+    reloaded.resetWaveformDefaults();
+    QCOMPARE(reloaded.trackWaveformBrightness(), 0.66);
     persisted.clear();
 }
 

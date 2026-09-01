@@ -28,6 +28,10 @@ Item {
     property bool programmaticScroll: false
     readonly property var frequencyWaveformSettings:
         SettingsController.frequencyColorWaveform
+    readonly property var spectralBandLabels: [
+        qsTr("最低频"), qsTr("低频"), qsTr("低中频"), qsTr("中频"),
+        qsTr("中高频"), qsTr("高频"), qsTr("更高频"), qsTr("最高频")
+    ]
 
     function open() {
         if (visible)
@@ -1591,6 +1595,7 @@ Item {
             }
 
             SettingCard {
+                objectName: "listWaveformSettingsCard"
                 title: qsTr("歌曲列表")
 
                 SettingSwitch {
@@ -1602,18 +1607,55 @@ Item {
 
                 SettingRow {
                     label: qsTr("缩略波形颜色")
-                    SettingCombo {
-                        objectName: "listWaveformThumbnailModeControl"
-                        anchors.verticalCenter: parent.verticalCenter
-                        enabled: SettingsController.listWaveformThumbnailEnabled
-                        valueModel: [
-                            { text: qsTr("频彩"), value: "Spectral" },
-                            { text: qsTr("纯色"), value: "Mono" }
-                        ]
-                        currentIndex: SettingsController.listWaveformThumbnailMode
-                                      === "Mono" ? 1 : 0
-                        onActivated: SettingsController.listWaveformThumbnailMode
-                                     = currentValue
+                    RowLayout {
+                        anchors.fill: parent
+                        spacing: Theme.spacingSm
+
+                        SettingCombo {
+                            objectName: "listWaveformThumbnailModeControl"
+                            Layout.preferredWidth: 150
+                            enabled: SettingsController.listWaveformThumbnailEnabled
+                            valueModel: [
+                                { text: qsTr("频彩"), value: "Spectral" },
+                                { text: qsTr("纯色"), value: "Mono" }
+                            ]
+                            currentIndex: SettingsController.listWaveformThumbnailMode
+                                          === "Mono" ? 1 : 0
+                            onActivated: SettingsController.listWaveformThumbnailMode
+                                         = currentValue
+                        }
+
+                        Text {
+                            text: qsTr("明亮度")
+                            color: Theme.secondaryText
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: 12
+                        }
+
+                        Slider {
+                            id: trackWaveformBrightnessSlider
+                            objectName: "trackWaveformBrightnessSlider"
+                            Layout.fillWidth: true
+                            from: 20
+                            to: 100
+                            stepSize: 1
+                            value: Math.round(
+                                       SettingsController.trackWaveformBrightness
+                                       * 100)
+                            onMoved: SettingsController.trackWaveformBrightness
+                                     = value / 100.0
+                            Accessible.name: qsTr("歌曲列表波形显示明亮度")
+                        }
+
+                        Text {
+                            Layout.preferredWidth: 38
+                            text: Math.round(trackWaveformBrightnessSlider.value)
+                                  + "%"
+                            color: Theme.secondaryText
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: 12
+                            horizontalAlignment: Text.AlignRight
+                        }
                     }
                 }
             }
@@ -1774,15 +1816,30 @@ Item {
                         rowSpacing: 4
 
                         Repeater {
-                            model: 8
-                            delegate: ColorField {
+                            model: root.spectralBandLabels
+                            delegate: RowLayout {
                                 required property int index
-                                objectName: "spectralPaletteColor" + index
+                                required property string modelData
                                 Layout.fillWidth: true
-                                colorValue: root.frequencyWaveformSettings.palette[index]
-                                targetProperty: ""
-                                onColorEdited: function(value) {
-                                    root.frequencyWaveformSettings.setPaletteColor(index, value)
+
+                                Text {
+                                    objectName: "spectralPaletteLabel" + index
+                                    Layout.fillWidth: true
+                                    text: modelData
+                                    color: Theme.secondaryText
+                                    font.family: Theme.fontPrimary
+                                    font.pixelSize: 11
+                                    elide: Text.ElideRight
+                                }
+
+                                ColorField {
+                                    objectName: "spectralPaletteColor" + index
+                                    showText: false
+                                    colorValue: root.frequencyWaveformSettings.palette[index]
+                                    targetProperty: ""
+                                    onColorEdited: function(value) {
+                                        root.frequencyWaveformSettings.setPaletteColor(index, value)
+                                    }
                                 }
                             }
                         }

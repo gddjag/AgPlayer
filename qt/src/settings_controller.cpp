@@ -23,6 +23,7 @@
 #include "file_association_controller.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <optional>
 
 namespace {
@@ -164,6 +165,10 @@ bool SettingsController::listWaveformThumbnailEnabled() const noexcept
 QString SettingsController::listWaveformThumbnailMode() const
 {
     return listWaveformThumbnailMode_;
+}
+double SettingsController::trackWaveformBrightness() const noexcept
+{
+    return trackWaveformBrightness_;
 }
 int SettingsController::spectrumColorMode() const noexcept { return spectrumColorMode_; }
 QString SettingsController::spectrumSolidColor() const { return spectrumSolidColor_; }
@@ -617,6 +622,19 @@ void SettingsController::setListWaveformThumbnailMode(const QString& value)
     emit listWaveformThumbnailModeChanged();
 }
 
+void SettingsController::setTrackWaveformBrightness(double value)
+{
+    const double normalized = std::isfinite(value)
+        ? clampValue(value, 0.20, 1.00) : 0.66;
+    if (trackWaveformBrightness_ == normalized) {
+        return;
+    }
+    trackWaveformBrightness_ = normalized;
+    persistValue(QStringLiteral("appearance/trackWaveformBrightness"),
+                 normalized);
+    emit trackWaveformBrightnessChanged();
+}
+
 void SettingsController::setSpectrumColorMode(int value)
 {
     value = clampValue(value, 0, 1);
@@ -940,6 +958,7 @@ void SettingsController::resetWaveformDefaults()
     setSpectrumRgbEndColor(QStringLiteral("#e62e9b"));
     setListWaveformThumbnailEnabled(true);
     setListWaveformThumbnailMode(QStringLiteral("Spectral"));
+    setTrackWaveformBrightness(0.66);
 }
 
 void SettingsController::beginEdit()
@@ -1048,6 +1067,7 @@ void SettingsController::emitAllChanged(const bool includeMediaSettings)
         emit waveformCanvasLockedChanged();
         emit listWaveformThumbnailEnabledChanged();
         emit listWaveformThumbnailModeChanged();
+        emit trackWaveformBrightnessChanged();
         emit spectrumColorModeChanged();
         emit spectrumSolidColorChanged();
         emit spectrumRgbStartColorChanged();
@@ -1385,6 +1405,19 @@ void SettingsController::load()
         settings_.setValue(QStringLiteral("listWaveformThumbnailMode"),
                            listWaveformThumbnailMode_);
     }
+    bool brightnessOk = false;
+    const double storedTrackWaveformBrightness = settings_
+        .value(QStringLiteral("trackWaveformBrightness"), 0.66)
+        .toDouble(&brightnessOk);
+    trackWaveformBrightness_ = brightnessOk
+            && std::isfinite(storedTrackWaveformBrightness)
+        ? clampValue(storedTrackWaveformBrightness, 0.20, 1.00)
+        : 0.66;
+    if (!brightnessOk || !std::isfinite(storedTrackWaveformBrightness)
+        || trackWaveformBrightness_ != storedTrackWaveformBrightness) {
+        settings_.setValue(QStringLiteral("trackWaveformBrightness"),
+                           trackWaveformBrightness_);
+    }
     for (const QString& obsoleteKey : {
              QStringLiteral("spectrumHeight"),
              QStringLiteral("spectrumDensity"),
@@ -1667,6 +1700,8 @@ void SettingsController::saveAll(const bool includeMediaSettings)
                      listWaveformThumbnailEnabled_);
         persistValue(QStringLiteral("listWaveformThumbnailMode"),
                      listWaveformThumbnailMode_);
+        persistValue(QStringLiteral("trackWaveformBrightness"),
+                     trackWaveformBrightness_);
         persistValue(QStringLiteral("spectrumColorMode"), spectrumColorMode_);
         persistValue(QStringLiteral("spectrumSolidColor"), spectrumSolidColor_);
         persistValue(QStringLiteral("spectrumRgbStartColor"), spectrumRgbStartColor_);
@@ -1757,6 +1792,7 @@ void SettingsController::restoreDefaults(const bool includeMediaSettings)
         waveformCanvasLocked_ = true;
         listWaveformThumbnailEnabled_ = true;
         listWaveformThumbnailMode_ = QStringLiteral("Spectral");
+        trackWaveformBrightness_ = 0.66;
         spectrumColorMode_ = 1;
         spectrumSolidColor_ = QStringLiteral("#7b2ff7");
         spectrumRgbStartColor_ = QStringLiteral("#00d4ff");
