@@ -480,8 +480,7 @@ Rectangle {
                 // Keep this base pass entirely unplayed. The played pass is
                 // clipped below at the exact playback pixel, avoiding the
                 // visible bucket-by-bucket progress jump of peak colouring.
-                position: root.waveformMode === 3
-                          ? root.visualPlaybackPositionMs : 0
+                position: 0
                 cursorPosition: root.visualPlaybackPositionMs
                 duration: root.effectiveDurationMs
                 analysisProgress: WaveformProvider.analysisProgress
@@ -519,7 +518,7 @@ Rectangle {
             Item {
                 id: playedWaveformClip
                 objectName: "waveformPlayedClip"
-                visible: waveform.visualMode !== 3
+                visible: true
                 width: waveformFrame.playbackX
                 height: parent.height
                 clip: true
@@ -561,7 +560,7 @@ Rectangle {
                 width: 1
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
-                color: Theme.background
+                color: Theme.isLight ? "#ffffff" : "#000000"
                 z: 4
             }
 
@@ -635,7 +634,6 @@ Rectangle {
                 id: waveformPlaybackGuide
                 objectName: "waveformPlaybackGuide"
                 visible: SettingsController.waveformPlaybackGuide
-                         && waveform.visualMode !== 3
                 x: waveform.waveformCursorX
                 width: 1
                 anchors.top: parent.top

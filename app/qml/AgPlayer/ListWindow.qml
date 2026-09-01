@@ -11,7 +11,7 @@ Window {
     readonly property int titleBarHeight: 38
     readonly property int trackHeaderHeight: 56
     readonly property int defaultVisibleTrackCount: 10
-    readonly property int filterBarHeight: 54
+    readonly property int filterBarHeight: 46
     readonly property int defaultTrackRowHeight:
         SettingsController.listWaveformThumbnailEnabled ? 50 : 42
     readonly property int defaultListHeight:

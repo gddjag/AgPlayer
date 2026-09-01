@@ -1142,9 +1142,9 @@ TestCase {
             var filter = findChild(listWindow, "librarySearchFilter")
             verify(trackList && filter)
             var expectedRowHeight = enabled ? 50 : 42
-            var expectedHeight = 38 + 56 + 10 * expectedRowHeight + 54
+            var expectedHeight = 38 + 56 + 10 * expectedRowHeight + 46
             compare(listWindow.height, expectedHeight)
-            compare(filter.height, 54)
+            compare(filter.height, 46)
             tryCompare(trackList, "height", 56 + 10 * expectedRowHeight)
             listWindow.destroy()
         }
@@ -2435,7 +2435,9 @@ TestCase {
         compare(mask.x, 0)
         compare(mask.width, 1)
         compare(mask.height, waveform.height)
-        compare(mask.color.toString(), Theme.background.toString())
+        compare(mask.color.toString(),
+                Theme.isLight ? "#ffffff" : "#000000",
+                "the one-pixel edge mask follows the requested light/dark canvas colour")
         compare(playedWaveform.progressColor.toString(),
                 waveform.progressColor.toString(),
                 "the edge fix must preserve the configured played-progress colour")
@@ -2678,7 +2680,7 @@ TestCase {
     function test_search_filter_uses_editable_bpm_bounds_and_compact_modules() {
         var filter = searchFilterComponent.createObject(mainWindow.contentItem)
         verify(filter)
-        compare(filter.implicitHeight, 48)
+        compare(filter.implicitHeight, 42)
         compare(findChild(filter, "keywordModule").width, 184)
         compare(findChild(filter, "librarySearchField").placeholderText,
                 "歌曲 · 艺术家 · 专辑 · 标签")
@@ -2693,6 +2695,7 @@ TestCase {
         var clearButton = findChild(filter, "clearFiltersButton")
         var bpmModule = findChild(filter, "bpmModule")
         verify(clearButton && bpmModule)
+        compare(clearButton.height, bpmModule.height)
         verify(clearButton.x > bpmModule.x + bpmModule.width,
                "clear must follow BPM")
         verify(clearButton.x < bpmModule.x + bpmModule.width + 30,
@@ -2775,6 +2778,7 @@ TestCase {
         compare(waveform.visualMode, 0)
 
         SettingsController.waveformMode = 3
+        SettingsController.waveformPlaybackGuide = true
         session.layers = testLayers
         tryCompare(waveform.layers.spectralIndex, "length", 4)
         compare(waveform.visualMode, 3)
@@ -2785,8 +2789,9 @@ TestCase {
                 String(spectralSettings.palette[7]))
         compare(waveform.spectralUnplayedOpacity,
                 spectralSettings.unplayedOpacity)
-        compare(playedClip.visible, false)
-        compare(playbackGuide.visible, false)
+        compare(playedClip.width, waveform.waveformCursorX)
+        compare(findChild(mainWindow, "playedWaveform").position,
+                waveform.duration)
 
         SettingsController.waveformMode = 1
         tryCompare(waveform, "visualMode", 1)
@@ -5091,6 +5096,13 @@ TestCase {
 
     function test_settings_transcode_controls_are_split_and_scroll_tracks_section() {
         var page = findChild(mainWindow, "settingsPage")
+        if (!page) {
+            findChild(mainWindow, "settingsButton").clicked()
+            tryVerify(function() {
+                return findChild(mainWindow, "settingsPage") !== null
+            })
+            page = findChild(mainWindow, "settingsPage")
+        }
         verify(page)
         page.open()
         page.selectedSection = 3
@@ -5119,6 +5131,8 @@ TestCase {
         const scroll = findChild(page, "settingsScroll")
         scroll.contentItem.contentY = Math.max(
                     0, scroll.contentHeight - scroll.availableHeight)
+        page.programmaticScroll = false
+        page.updateSectionFromScroll()
         tryCompare(page, "selectedSection", 6)
         page.close()
     }
@@ -5547,7 +5561,7 @@ TestCase {
         compare(String(waveform.spectralPalette[0]), "#123ecf")
         compare(String(waveform.spectralPalette[7]), "#e82718")
         compare(waveform.spectralUnplayedOpacity, 0.88)
-        compare(playedClip.visible, false)
+        compare(playedClip.width, waveform.waveformCursorX)
         SettingsController.waveformPlaybackGuide = false
         compare(playbackGuide.visible, false)
 

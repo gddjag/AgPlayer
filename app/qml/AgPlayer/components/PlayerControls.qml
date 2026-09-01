@@ -9,6 +9,8 @@ Rectangle {
 
     property bool emptyMode: false
     property bool showListWindowButton: true
+    property bool centerTransport: true
+    property bool showWaveformMode: true
     property int shellMode: SettingsController.playerShellMode
     readonly property bool compactTransport: width < 860
     readonly property bool denseTransport: width < 1200
@@ -50,10 +52,13 @@ Rectangle {
             var leftLimit = listWindowButton.visible
                     ? listWindowButton.x + listWindowButton.width + 12 : 12
             var rightLimit = secondaryActions.x - width - 24
-            return Math.max(leftLimit, Math.min(centered, rightLimit))
+            return root.centerTransport
+                    ? Math.max(leftLimit, Math.min(centered, rightLimit))
+                    : leftLimit
         }
         compact: root.compactTransport
         dense: root.denseTransport
+        showWaveformMode: root.showWaveformMode
         spacing: root.emptyMode && !root.denseTransport
                  ? 28 : (compact ? 4 : dense ? 8 : 16)
         onOpenEqualizerRequested: root.openEqualizerRequested()

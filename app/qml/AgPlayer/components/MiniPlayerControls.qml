@@ -236,8 +236,7 @@ Rectangle {
                     anchors.right: parent.right
                     anchors.top: parent.top
                     height: 36
-                    position: root.waveformMode === 3
-                              ? (playback ? playback.positionMs : 0) : 0
+                    position: 0
                     cursorPosition: playback ? playback.positionMs : 0
                     duration: root.effectiveDurationMs
                     visualMode: SettingsController.waveformMode
@@ -272,7 +271,7 @@ Rectangle {
                 }
                 Item {
                     objectName: "miniWaveformPlayedClip"
-                    visible: waveform.visualMode !== 3
+                    visible: true
                     width: waveform.waveformCursorX
                     height: waveform.height
                     clip: true
@@ -301,7 +300,6 @@ Rectangle {
                 Rectangle {
                     objectName: "miniWaveformPlaybackGuide"
                     visible: SettingsController.waveformPlaybackGuide
-                             && waveform.visualMode !== 3
                     x: waveform.waveformCursorX
                     width: 1
                     height: waveform.height

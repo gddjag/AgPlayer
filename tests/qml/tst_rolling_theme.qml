@@ -199,7 +199,7 @@ TestCase {
                    && shell("integratedPlayerShell") === null
         }, 1500)
         compare(mainWindow.minimumWidth, 1000)
-        compare(mainWindow.minimumHeight, 420)
+        compare(mainWindow.minimumHeight, 720)
     }
 
     function test_waveform_modes_reuse_shared_spectral_analysis() {
@@ -231,14 +231,15 @@ TestCase {
         nativeDropHelper.ensureSortableTracks()
         mainWindow.width = 1440
         mainWindow.height = 760
-        var names = [
-            "listWindowButton", "equalizerButton", "waveformModeButton",
-            "previousButton", "playPauseButton", "nextButton", "modeButton",
-            "mainVolumeControl", "audioToolsButton", "lyricsActionButton",
-            "themeModeButton", "immersiveActionButton", "windowLayoutButton"
-        ]
-
         for (var mode = 0; mode < 3; ++mode) {
+            var names = ["listWindowButton", "equalizerButton"]
+            if (mode !== 2)
+                names.push("waveformModeButton")
+            names = names.concat([
+                "previousButton", "playPauseButton", "nextButton", "modeButton",
+                "mainVolumeControl", "audioToolsButton", "lyricsActionButton",
+                "themeModeButton", "immersiveActionButton", "windowLayoutButton"
+            ])
             var activeShell = enterMode(mode)
             var controls = mode === 1
                     ? findChild(mainWindow, "integratedPlayerControls")
@@ -262,6 +263,10 @@ TestCase {
                               .mapToItem(controls, 0, 0).x : -1))
                 previousX = mapped
             }
+            var waveformMode = findChild(controls, "waveformModeButton")
+            verify(waveformMode)
+            compare(waveformMode.visible, mode !== 2,
+                    "rolling mode fixes the renderer to spectral waveform")
         }
 
         var rolling = enterMode(2)
@@ -284,10 +289,22 @@ TestCase {
         var overview = findChild(rolling, "rollingOverviewWaveform")
         var interaction = findChild(rolling, "rollingOverviewInteraction")
         var progress = findChild(rolling, "rollingOverviewProgress")
-        verify(overview && interaction && progress)
+        var playedClip = findChild(rolling, "rollingOverviewPlayedClip")
+        var hoverCapsule = findChild(rolling, "rollingOverviewHoverCapsule")
+        var hoverText = findChild(rolling, "rollingOverviewHoverText")
+        verify(overview && interaction && progress && playedClip
+               && hoverCapsule && hoverText)
         compare(overview.visibleStartMs, 0)
         compare(overview.visibleEndMs, 120000)
+        compare(overview.visualMode, 3)
+        compare(overview.position, 0)
+        compare(playedClip.width, overview.width * 0.5)
         compare(progress.color.toString(), Theme.waveformMagenta.toString())
+
+        mouseMove(interaction, interaction.width * 0.25,
+                  interaction.height / 2)
+        tryCompare(hoverCapsule, "visible", true)
+        compare(hoverText.text, "00:30")
 
         mouseClick(interaction, interaction.width * 0.25,
                    interaction.height / 2, Qt.LeftButton)
@@ -302,6 +319,8 @@ TestCase {
         var waveform = findChild(rolling, "rollingMainWaveform")
         var playhead = findChild(rolling, "rollingCenterPlayhead")
         verify(canvas && waveform && playhead)
+        compare(waveform.visualMode, 3)
+        compare(waveform.position, fakePlayback.positionMs)
         rolling.waveformPixelsPerSecond = 120
         rolling.syncWaveformViewport()
         var firstStart = waveform.visibleStartMs
@@ -312,6 +331,7 @@ TestCase {
 
         fakePlayback.positionMs = 61000
         rolling.syncWaveformViewport()
+        compare(waveform.position, 61000)
         verify(waveform.visibleStartMs > firstStart)
         verify(waveform.pixelForTime(59000) < referenceX,
                "a fixed source point must move left during playback")
@@ -402,6 +422,12 @@ TestCase {
 
     function test_track_metadata_reacts_to_waveform_and_library_revisions() {
         var rolling = rollingWithFakes()
+        verify(rolling.metadataBadges.indexOf("WAV") >= 0)
+        verify(rolling.metadataBadges.indexOf("24-bit") >= 0)
+        verify(rolling.metadataBadges.indexOf("48 kHz") >= 0)
+        verify(rolling.metadataBadges.indexOf("2116 kbps") >= 0)
+        verify(rolling.metadataBadges.indexOf("120 BPM") >= 0)
+        verify(rolling.metadataBadges.indexOf("34.5 MB") >= 0)
         var lookupsBeforeWaveformRevision = fakeLibrary.lookupCount
         ++fakeWaveformSession.libraryRevision
         tryVerify(function() {
@@ -473,18 +499,26 @@ TestCase {
         var overview = findChild(rolling, "rollingOverviewRegion")
         var waveform = findChild(rolling, "rollingMainWaveformCanvas")
         var bottom = findChild(rolling, "rollingBottomBar")
-        verify(overview && waveform && bottom)
+        var library = findChild(rolling, "rollingLibraryWorkspace")
+        var trackList = findChild(rolling, "rollingTrackList")
+        var filter = findChild(rolling, "rollingSearchFilter")
+        var tags = findChild(rolling, "rollingTagManagementPanel")
+        verify(overview && waveform && bottom && library
+               && trackList && filter && tags)
 
         mainWindow.width = 1000
-        mainWindow.height = 420
+        mainWindow.height = 720
         wait(0)
         verify(overview.y + overview.height <= waveform.y + 1)
         verify(waveform.y + waveform.height <= bottom.y + 1)
-        verify(bottom.y + bottom.height <= rolling.height + 1)
+        verify(bottom.y + bottom.height <= library.y + 1)
+        verify(library.y + library.height <= rolling.height + 1)
+        compare(trackList.trackModel, rolling.filterModel)
+        compare(trackList.playlistModel, rolling.playlistModel)
         var controls = findChild(rolling, "playerControls")
         verify(controls)
         var minimumWidthSharedActions = [
-            "waveformModeButton", "equalizerButton", "windowLayoutButton",
+            "equalizerButton", "windowLayoutButton",
             "lyricsActionButton", "immersiveActionButton", "miniPlayerButton"
         ]
         for (var actionIndex = 0;
@@ -495,6 +529,12 @@ TestCase {
                    minimumWidthSharedActions[actionIndex]
                    + " stays available at the rolling minimum width")
         }
+        compare(findChild(controls, "waveformModeButton").visible, false)
+        var transport = findChild(controls, "centerPlaybackControls")
+        verify(transport)
+        verify(transport.mapToItem(controls, 0, 0).x < controls.width * 0.30,
+               "rolling transport belongs on the left side")
+        compare(bottom.height, 64)
 
         mainWindow.width = 1800
         mainWindow.height = 600

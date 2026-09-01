@@ -11,6 +11,10 @@ Item {
     property var playback: PlaybackController
     property var waveformSession: null
     property var libraryModel: LibraryModel
+    property var filterModel: null
+    property var playlistModel: PlaylistModel
+    property var navigationModel: LibraryNavigationModel
+    property var tagModel: TagModel
     property var visualFeatures: AudioVisualFeatureController
     property var currentTrack: null
     property real waveformPixelsPerSecond: 120
@@ -22,6 +26,7 @@ Item {
     // update. This keeps the source position on the fixed needle even when
     // the item has a clipped lead-in/out segment at a track boundary.
     property real waveformContentX: 1
+    property alias tagSearchText: rollingTagPanel.searchText
 
     readonly property real effectiveDurationMs:
         waveformSession && Number(waveformSession.durationMs) > 0
@@ -71,6 +76,26 @@ Item {
         || (SettingsController.themeMode === 2 && Theme.isLight)
     readonly property var frequencyWaveformSettings:
         SettingsController.frequencyColorWaveform
+    readonly property var metadataBadges: {
+        var revision = libraryTrackRevision
+        var track = currentTrack
+        var badges = []
+        if (!track)
+            return badges
+        if (track.format)
+            badges.push(String(track.format).toUpperCase())
+        if (Number(track.bitDepth) > 0)
+            badges.push(Math.round(Number(track.bitDepth)) + "-bit")
+        if (Number(track.sampleRate) > 0)
+            badges.push((Number(track.sampleRate) / 1000) + " kHz")
+        if (Number(track.bitRate) > 0)
+            badges.push(Math.round(Number(track.bitRate) / 1000) + " kbps")
+        if (Number(track.bpm) > 0)
+            badges.push(formatMetadataNumber(Number(track.bpm)) + " BPM")
+        if (Number(track.fileSize) > 0)
+            badges.push(formatFileSize(Number(track.fileSize)))
+        return badges
+    }
     signal openSettingsRequested()
     signal openEqualizerRequested()
 
@@ -84,6 +109,27 @@ Item {
 
     function formatBpm(value) {
         return Number(value) > 0 ? Number(value).toFixed(2) : "—"
+    }
+
+    function formatTime(milliseconds) {
+        var totalSeconds = Math.max(0, Math.floor(Number(milliseconds) / 1000))
+        var minutes = Math.floor(totalSeconds / 60)
+        var seconds = totalSeconds % 60
+        return (minutes < 10 ? "0" : "") + minutes + ":"
+                + (seconds < 10 ? "0" : "") + seconds
+    }
+
+    function formatMetadataNumber(value) {
+        return Math.abs(value - Math.round(value)) < 0.01
+                ? Math.round(value).toString() : value.toFixed(1)
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes < 1024)
+            return Math.round(bytes) + " B"
+        if (bytes < 1024 * 1024)
+            return (bytes / 1024).toFixed(1) + " KB"
+        return (bytes / (1024 * 1024)).toFixed(1) + " MB"
     }
 
     function signedRateForDrag(deltaX, elapsedMs) {
@@ -291,9 +337,9 @@ Item {
             id: overviewRegion
             objectName: "rollingOverviewRegion"
             Layout.fillWidth: true
-            Layout.preferredHeight: root.height < 460 ? 112 : 128
-            Layout.leftMargin: 22
-            Layout.rightMargin: 22
+            Layout.preferredHeight: root.height < 460 ? 104 : 116
+            Layout.leftMargin: 10
+            Layout.rightMargin: 10
 
             Rectangle {
                 id: coverFrame
@@ -523,6 +569,7 @@ Item {
 
             Item {
                 id: overviewWaveformHost
+                property real hoverTimeMs: -1
                 anchors.left: coverFrame.right
                 anchors.leftMargin: 16
                 anchors.right: parent.right
@@ -553,6 +600,38 @@ Item {
                     lineWidth: SettingsController.waveformThickness
                 }
 
+                Item {
+                    id: overviewPlayedClip
+                    objectName: "rollingOverviewPlayedClip"
+                    anchors.left: overviewWaveform.left
+                    anchors.top: overviewWaveform.top
+                    width: root.effectiveDurationMs > 0
+                           ? overviewWaveform.width * root.clamp(
+                                 root.playbackPositionMs
+                                 / root.effectiveDurationMs, 0, 1) : 0
+                    height: overviewWaveform.height
+                    clip: true
+                    enabled: false
+
+                    WaveformItem {
+                        width: overviewWaveform.width
+                        height: overviewWaveform.height
+                        layers: overviewWaveform.layers
+                        duration: overviewWaveform.duration
+                        position: duration
+                        cursorPosition: -1
+                        pointerInteractionEnabled: false
+                        visualMode: 3
+                        baseColor: overviewWaveform.baseColor
+                        spectralPalette: overviewWaveform.spectralPalette
+                        spectralUnplayedOpacity:
+                            overviewWaveform.spectralUnplayedOpacity
+                        amplitudeScale: overviewWaveform.amplitudeScale
+                        density: overviewWaveform.density
+                        lineWidth: overviewWaveform.lineWidth
+                    }
+                }
+
                 Rectangle {
                     id: overviewProgressTrack
                     anchors.left: parent.left
@@ -581,7 +660,17 @@ Item {
                     id: overviewInteraction
                     objectName: "rollingOverviewInteraction"
                     anchors.fill: parent
+                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
+                    function updateHover(x) {
+                        overviewWaveformHost.hoverTimeMs =
+                                root.effectiveDurationMs > 0
+                                ? root.clamp(x / Math.max(1, width), 0, 1)
+                                  * root.effectiveDurationMs : -1
+                    }
+                    onPositionChanged: function(mouse) { updateHover(mouse.x) }
+                    onEntered: updateHover(mouseX)
+                    onExited: overviewWaveformHost.hoverTimeMs = -1
                     onClicked: function(mouse) {
                         if (!root.playback || root.effectiveDurationMs <= 0)
                             return
@@ -594,6 +683,33 @@ Item {
                             root.playback.play()
                     }
                 }
+
+                Rectangle {
+                    id: overviewHoverCapsule
+                    objectName: "rollingOverviewHoverCapsule"
+                    visible: overviewWaveformHost.hoverTimeMs >= 0
+                    x: Math.max(0, Math.min(
+                                    parent.width - width,
+                                    overviewWaveform.pixelForTime(
+                                        overviewWaveformHost.hoverTimeMs)
+                                    - width / 2))
+                    y: 0
+                    width: overviewHoverText.implicitWidth + 12
+                    height: overviewHoverText.implicitHeight + 6
+                    radius: height / 2
+                    color: Theme.panel
+                    border.color: Theme.accent
+                    z: 8
+
+                    Text {
+                        id: overviewHoverText
+                        objectName: "rollingOverviewHoverText"
+                        anchors.centerIn: parent
+                        text: root.formatTime(overviewWaveformHost.hoverTimeMs)
+                        color: Theme.primaryText
+                        font.pixelSize: 10
+                    }
+                }
             }
         }
 
@@ -601,10 +717,10 @@ Item {
             id: mainWaveformCanvas
             objectName: "rollingMainWaveformCanvas"
             Layout.fillWidth: true
-            Layout.fillHeight: true
+            Layout.preferredHeight: root.height < 800 ? 160 : 190
             Layout.minimumHeight: 140
-            Layout.leftMargin: 22
-            Layout.rightMargin: 22
+            Layout.leftMargin: 10
+            Layout.rightMargin: 10
             color: Theme.panel
             border.color: Theme.border
             border.width: 1
@@ -622,7 +738,7 @@ Item {
                 layers: root.waveformSession
                         ? root.waveformSession.layers : ({})
                 duration: root.effectiveDurationMs
-                position: 0
+                position: root.viewportCenterMs
                 cursorPosition: -1
                 pointerInteractionEnabled: false
                 visualMode: 3
@@ -754,10 +870,10 @@ Item {
             id: bottomBar
             objectName: "rollingBottomBar"
             Layout.fillWidth: true
-            Layout.preferredHeight: 72
-            Layout.leftMargin: 22
-            Layout.rightMargin: 22
-            Layout.bottomMargin: 8
+            Layout.preferredHeight: 64
+            Layout.leftMargin: 10
+            Layout.rightMargin: 10
+            Layout.bottomMargin: 6
             color: Theme.panel
             border.color: Theme.border
             border.width: 1
@@ -775,6 +891,8 @@ Item {
                     Layout.minimumWidth: 520
                     Layout.fillHeight: true
                     shellMode: 2
+                    centerTransport: false
+                    showWaveformMode: false
                     onOpenEqualizerRequested:
                         root.openEqualizerRequested()
                 }
@@ -932,6 +1050,149 @@ Item {
                             }
                         }
                     }
+                }
+            }
+        }
+
+        Rectangle {
+            id: rollingLibraryWorkspace
+            objectName: "rollingLibraryWorkspace"
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.minimumHeight: 250
+            Layout.leftMargin: 10
+            Layout.rightMargin: 10
+            Layout.bottomMargin: 8
+            color: Theme.listWorkspaceSurface
+            border.color: Theme.border
+            border.width: 1
+            radius: Theme.radiusSm
+            clip: true
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 0
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: 0
+
+                    SideNavigation {
+                        id: rollingNavigation
+                        objectName: "rollingLibraryNavigation"
+                        Layout.preferredWidth: 188
+                        Layout.minimumWidth: 188
+                        Layout.maximumWidth: 188
+                        Layout.fillHeight: true
+                        navigationModel: root.navigationModel
+                        playlistModel: root.playlistModel
+                        selectedCategory: root.filterModel
+                                          ? root.filterModel.category : "all"
+                        selectedTagKey: root.filterModel
+                                        ? root.filterModel.tagKey : ""
+                        selectedResourceFolder: root.filterModel
+                                                ? root.filterModel.resourceFolder
+                                                : ""
+                        showTagManagementEntry: false
+                        onCategorySelected: function(category) {
+                            if (!root.filterModel)
+                                return
+                            root.filterModel.category = category
+                            root.filterModel.tagKey = ""
+                            root.filterModel.resourceFolder = ""
+                        }
+                        onNavigationSelected: function(nodeType, nodeId,
+                                                       resourceFolder) {
+                            if (!root.filterModel)
+                                return
+                            root.filterModel.resourceFolder = resourceFolder || ""
+                            if (nodeType !== "tags")
+                                root.filterModel.tagKey = ""
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.preferredWidth: 1
+                        Layout.fillHeight: true
+                        color: Theme.listDivider
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.margins: 6
+                        spacing: 4
+
+                        TrackList {
+                            objectName: "rollingTrackList"
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            trackModel: root.filterModel || root.libraryModel
+                            playlistModel: root.playlistModel
+                            selectedCategory: root.filterModel
+                                              ? root.filterModel.category : "all"
+                            tagFilterActive: root.filterModel
+                                             ? root.filterModel.tagKey.length > 0
+                                             : false
+                            activeTagKey: root.filterModel
+                                          ? root.filterModel.tagKey : ""
+                            integratedCompact: true
+                        }
+
+                        SearchFilter {
+                            id: rollingSearchFilter
+                            objectName: "rollingSearchFilter"
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 42
+                            integratedStyle: true
+                            searchText: root.filterModel
+                                        ? root.filterModel.searchText : ""
+                            exactRating: root.filterModel
+                                         ? root.filterModel.exactRating : 0
+                            minBpm: root.filterModel
+                                    ? root.filterModel.minBpm : 60
+                            maxBpm: root.filterModel
+                                    ? root.filterModel.maxBpm : 160
+                            onSearchTextChanged: if (root.filterModel)
+                                root.filterModel.searchText = searchText
+                            onExactRatingChanged: if (root.filterModel)
+                                root.filterModel.exactRating = exactRating
+                            onMinBpmChanged: if (root.filterModel)
+                                root.filterModel.minBpm = minBpm
+                            onMaxBpmChanged: if (root.filterModel)
+                                root.filterModel.maxBpm = maxBpm
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.preferredWidth: 1
+                        Layout.fillHeight: true
+                        color: Theme.listDivider
+                    }
+
+                    TagManagementPanel {
+                        id: rollingTagPanel
+                        objectName: "rollingTagManagementPanel"
+                        Layout.preferredWidth: 232
+                        Layout.minimumWidth: 232
+                        Layout.maximumWidth: 232
+                        Layout.fillHeight: true
+                        tagModel: root.tagModel
+                        filterModel: root.filterModel
+                        compact: true
+                    }
+                }
+
+                LyricsPanel {
+                    objectName: "rollingLyricsPanel"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: visible ? 104 : 0
+                    visible: PlayerExperienceController.lyricsVisible
+                             && PlayerExperienceController.immersiveMode
+                                === PlayerExperienceController.Off
+                    service: LyricsService
+                    spatialMode: false
                 }
             }
         }

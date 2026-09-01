@@ -8,6 +8,7 @@ RowLayout {
     signal openEqualizerRequested()
     property bool compact: false
     property bool dense: false
+    property bool showWaveformMode: true
     spacing: compact ? 4 : dense ? 8 : 16
 
     function playbackModeName() {
@@ -34,7 +35,7 @@ RowLayout {
     }
     ToolButton {
         objectName: "waveformModeButton"
-        visible: !root.compact
+        visible: root.showWaveformMode && !root.compact
         flat: true
         icon.source: Theme.icon("waveform-switch")
         icon.color: Theme.iconPrimary

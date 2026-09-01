@@ -7,7 +7,7 @@ Rectangle {
     id: root
     color: "transparent"
     border.width: 0
-    implicitHeight: 48
+    implicitHeight: 42
 
     property string searchText: ""
     property int exactRating: 0
@@ -205,6 +205,7 @@ Rectangle {
 
         Button {
             objectName: "clearFiltersButton"
+            Layout.fillHeight: true
             text: qsTr("清空")
             onClicked: root.clearFilters()
             palette.buttonText: Theme.primaryText

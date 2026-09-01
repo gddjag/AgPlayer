@@ -13,7 +13,7 @@ ApplicationWindow {
     minimumWidth: SettingsController.playerShellMode === 1 ? 1180
                   : SettingsController.playerShellMode === 2 ? 1000 : 612
     minimumHeight: SettingsController.playerShellMode === 1 ? 720
-                   : SettingsController.playerShellMode === 2 ? 420 : 228
+                   : SettingsController.playerShellMode === 2 ? 720 : 228
     onClosing: function(close) {
         close.accepted = false
         WindowController.requestClose()
@@ -350,6 +350,7 @@ ApplicationWindow {
             hostWindow: mainWindow
             playback: mainWindow.playback
             waveformSession: sharedWaveformSession
+            filterModel: sharedFilterModel
             onOpenSettingsRequested: mainWindow.openSettingsPage()
             onOpenEqualizerRequested: mainWindow.openEqualizer()
         }
@@ -365,9 +366,9 @@ ApplicationWindow {
         visible: PlayerExperienceController.lyricsVisible
                  && PlayerExperienceController.immersiveMode
                     === PlayerExperienceController.Off
-                 && (mainWindow.rollingShell
-                     || (!mainWindow.integratedShell
-                         && !WindowController.listWindowVisible))
+                 && !mainWindow.rollingShell
+                 && !mainWindow.integratedShell
+                 && !WindowController.listWindowVisible
         spatialMode: false
         z: 70
     }
