@@ -145,6 +145,19 @@ ApplicationWindow {
         function onPanelVisibleChanged() {
             mainWindow.synchronizeAudioVisualConsumer()
         }
+        function onLyricsVisibleChanged() {
+            if (!PlayerExperienceController.lyricsVisible)
+                return
+            if (PlayerExperienceController.immersiveMode
+                    !== PlayerExperienceController.Off)
+                return
+            if (mainWindow.integratedShell) {
+                mainWindow.integratedSidePanelPage = 1
+                mainWindow.integratedSidePanelExpanded = true
+            } else if (!mainWindow.rollingShell) {
+                WindowController.showListWindow()
+            }
+        }
     }
 
     Component.onCompleted: {
@@ -352,6 +365,9 @@ ApplicationWindow {
         visible: PlayerExperienceController.lyricsVisible
                  && PlayerExperienceController.immersiveMode
                     === PlayerExperienceController.Off
+                 && (mainWindow.rollingShell
+                     || (!mainWindow.integratedShell
+                         && !WindowController.listWindowVisible))
         spatialMode: false
         z: 70
     }

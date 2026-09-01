@@ -5663,6 +5663,63 @@ TestCase {
         }
     }
 
+    function test_list_lyrics_panel_stays_below_track_workspace() {
+        var previousVisible = PlayerExperienceController.lyricsVisible
+        PlayerExperienceController.lyricsVisible = true
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": findChild(mainWindow, "filterModel")
+        })
+        verify(window)
+        try {
+            var workspace = findChild(window, "listWorkspace")
+            var panel = findChild(window, "listLyricsPanel")
+            verify(workspace && panel)
+            tryCompare(panel, "visible", true, 500)
+            var workspaceBottom = workspace.mapToItem(window.contentItem,
+                                                       0,
+                                                       workspace.height).y
+            var panelTop = panel.mapToItem(window.contentItem, 0, 0).y
+            verify(panelTop >= workspaceBottom - 1,
+                   "lyrics must be laid out below the list workspace")
+        } finally {
+            window.destroy()
+            PlayerExperienceController.lyricsVisible = previousVisible
+        }
+    }
+
+    function test_normal_lyrics_panel_hides_chrome_but_keeps_text() {
+        var previousVisible = PlayerExperienceController.lyricsVisible
+        PlayerExperienceController.lyricsVisible = true
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": findChild(mainWindow, "filterModel")
+        })
+        verify(window)
+        try {
+            var panel = findChild(window, "listLyricsPanel")
+            verify(panel)
+            tryCompare(panel, "visible", true, 500)
+            var surface = findChild(panel, "lyricsPanelSurface")
+            var controls = findChild(panel, "lyricsChromeControls")
+            var currentLine = findChild(panel, "currentLyricLine")
+            var retry = findChild(panel, "lyricsRetryButton")
+            verify(surface && controls && currentLine && retry)
+
+            panel.chromeAutoHideDelay = 20
+            panel.revealChrome()
+            compare(panel.chromeVisible, true)
+            panel.scheduleChromeHide()
+            tryCompare(panel, "chromeVisible", false, 200)
+            compare(surface.visible, false)
+            compare(controls.visible, false)
+            compare(currentLine.visible, true)
+            verify(retry.icon.source.toString().indexOf("restore-line") >= 0)
+            compare(retry.Accessible.name, qsTr("刷新歌词"))
+        } finally {
+            window.destroy()
+            PlayerExperienceController.lyricsVisible = previousVisible
+        }
+    }
+
     function test_title_buttons_use_compact_chinese_labels() {
         var settings = findChild(mainWindow, "settingsButton")
         var minimize = findChild(mainWindow, "minimizeButton")

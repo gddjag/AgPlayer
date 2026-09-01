@@ -643,6 +643,18 @@ Window {
 
                 }
             }
+
+            LyricsPanel {
+                id: listLyricsPanel
+                objectName: "listLyricsPanel"
+                Layout.fillWidth: true
+                Layout.preferredHeight: visible ? 104 : 0
+                visible: PlayerExperienceController.lyricsVisible
+                         && PlayerExperienceController.immersiveMode
+                            === PlayerExperienceController.Off
+                service: LyricsService
+                spatialMode: false
+            }
         }
 
         Rectangle {

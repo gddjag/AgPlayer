@@ -15,6 +15,8 @@ Item {
     property int depth: PlayerExperienceController.lyricDepth
     property int lyricSize: PlayerExperienceController.lyricSize
     property int lyricOpacity: PlayerExperienceController.lyricOpacity
+    property int chromeAutoHideDelay: 3000
+    property bool chromeVisible: true
     readonly property bool sidePlacement:
         placement !== PlayerExperienceController.Center
     readonly property int lineAlignment:
@@ -46,8 +48,23 @@ Item {
     }
 
     function noteManualScroll() {
+        revealChrome()
         if (service)
             service.pauseFollow(5000)
+    }
+
+    function revealChrome() {
+        if (spatialMode)
+            return
+        chromeHideTimer.stop()
+        chromeVisible = true
+    }
+
+    function scheduleChromeHide() {
+        if (spatialMode || !visible)
+            return
+        chromeVisible = true
+        chromeHideTimer.restart()
     }
 
     function stopCinematicSettle() {
@@ -96,6 +113,26 @@ Item {
         color: root.spatialMode ? "transparent" : Theme.glassSurface
         border.width: root.spatialMode ? 0 : 1
         border.color: Theme.glassBorder
+        visible: root.spatialMode || root.chromeVisible
+    }
+
+    HoverHandler {
+        id: chromeHover
+        enabled: !root.spatialMode
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+        onHoveredChanged: {
+            if (hovered)
+                root.revealChrome()
+            else
+                root.scheduleChromeHide()
+        }
+    }
+
+    Timer {
+        id: chromeHideTimer
+        interval: root.chromeAutoHideDelay
+        repeat: false
+        onTriggered: root.chromeVisible = false
     }
 
     Column {
@@ -226,17 +263,33 @@ Item {
         }
     }
 
-    onSpatialModeChanged: if (!spatialMode) stopCinematicSettle()
+    onSpatialModeChanged: {
+        if (!spatialMode) {
+            stopCinematicSettle()
+            scheduleChromeHide()
+        } else {
+            chromeHideTimer.stop()
+            chromeVisible = true
+        }
+    }
     onServiceChanged: if (currentLine && currentLineSettle) startCinematicSettle()
     onEnabledChanged: if (!enabled) stopCinematicSettle()
-    onVisibleChanged: if (!visible) stopCinematicSettle()
+    onVisibleChanged: {
+        if (!visible) {
+            chromeHideTimer.stop()
+            stopCinematicSettle()
+        } else if (!spatialMode) {
+            scheduleChromeHide()
+        }
+    }
 
     WheelHandler { onWheel: root.noteManualScroll() }
 
     Text {
         id: sourceText
         objectName: "lyricsSourceText"
-        visible: root.service && root.service.sourceProvider.length > 0
+        visible: (root.spatialMode || root.chromeVisible)
+                 && root.service && root.service.sourceProvider.length > 0
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.margins: 10
@@ -280,7 +333,8 @@ Item {
 
     Text {
         objectName: "lyricsTimingNotice"
-        visible: untimedFlickable.visible
+        visible: (root.spatialMode || root.chromeVisible)
+                 && untimedFlickable.visible
         anchors.left: parent.left
         anchors.bottom: parent.bottom
         anchors.margins: 10
@@ -292,8 +346,9 @@ Item {
 
     Rectangle {
         objectName: "lyricsRouteNotice"
-        visible: !!(root.service && root.service.routeNotice
-                    && root.service.routeNotice.providerName)
+        visible: (root.spatialMode || root.chromeVisible)
+                 && !!(root.service && root.service.routeNotice
+                     && root.service.routeNotice.providerName)
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
         anchors.topMargin: sourceText.visible ? 30 : 6
@@ -317,7 +372,9 @@ Item {
 
     Column {
         objectName: "lyricsRouteAttempts"
-        visible: root.service && (root.service.status === LyricsService.NotFound
+        visible: (root.spatialMode || root.chromeVisible)
+                 && root.service
+                 && (root.service.status === LyricsService.NotFound
                                   || root.service.status === LyricsService.Offline
                                   || root.service.status === LyricsService.Error)
                  && root.service.routeAttempts.length > 0
@@ -339,7 +396,9 @@ Item {
     }
 
     Row {
-        visible: !root.spatialMode
+        id: chromeControls
+        objectName: "lyricsChromeControls"
+        visible: !root.spatialMode && root.chromeVisible
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.rightMargin: 8
@@ -347,37 +406,49 @@ Item {
         spacing: 2
         ToolButton {
             objectName: "lyricsOffsetEarlierButton"
-            width: 24; height: 24; flat: true
+            width: 28; height: 28; flat: true
             icon.source: Theme.icon("subtract-line")
             icon.color: Theme.iconSecondary
+            icon.width: 18; icon.height: 18
             Accessible.name: qsTr("歌词提前 100 毫秒")
+            ToolTip.text: Accessible.name
+            ToolTip.visible: hovered
             onClicked: if (root.service) root.service.offsetMs -= 100
             background: null
         }
         ToolButton {
             objectName: "lyricsOffsetLaterButton"
-            width: 24; height: 24; flat: true
+            width: 28; height: 28; flat: true
             icon.source: Theme.icon("add-line")
             icon.color: Theme.iconSecondary
+            icon.width: 18; icon.height: 18
             Accessible.name: qsTr("歌词延后 100 毫秒")
+            ToolTip.text: Accessible.name
+            ToolTip.visible: hovered
             onClicked: if (root.service) root.service.offsetMs += 100
             background: null
         }
         ToolButton {
             objectName: "lyricsRetryButton"
-            width: 24; height: 24; flat: true
-            icon.source: Theme.icon("arrow-go-forward-line")
+            width: 28; height: 28; flat: true
+            icon.source: Theme.icon("restore-line")
             icon.color: Theme.iconSecondary
-            Accessible.name: qsTr("重试歌词")
+            icon.width: 18; icon.height: 18
+            Accessible.name: qsTr("刷新歌词")
+            ToolTip.text: Accessible.name
+            ToolTip.visible: hovered
             onClicked: if (root.service) root.service.retry()
             background: null
         }
         ToolButton {
             objectName: "lyricsImportButton"
-            width: 24; height: 24; flat: true
+            width: 28; height: 28; flat: true
             icon.source: Theme.icon("folder-open-line")
             icon.color: Theme.iconSecondary
+            icon.width: 18; icon.height: 18
             Accessible.name: qsTr("导入 LRC")
+            ToolTip.text: Accessible.name
+            ToolTip.visible: hovered
             onClicked: lrcDialog.open()
             background: null
         }
