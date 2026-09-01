@@ -598,7 +598,7 @@ TestCase {
                                 - 0.606) < 0.015
         }, 1000)
         mainWindow.immersiveRenderingEnabled = originalImmersiveRenderingEnabled
-        compare(findChild(panel, "dynamicSlider_terrainAmplitude"), null)
+        verify(findChild(panel, "dynamicSlider_terrainAmplitude"))
         compare(PlayerExperienceController.responseRange, 100)
         compare(PlayerExperienceController.rhythmStrength, 30)
 
@@ -904,7 +904,7 @@ TestCase {
         var impactGroup = findChild(panel, "dynamicsImpactGroup")
         verify(terrainGroup && lightGroup && motionGroup && impactGroup)
 
-        var terrainKeys = ["inputCompression", "audioResponse",
+        var terrainKeys = ["terrainAmplitude", "inputCompression", "audioResponse",
                            "responseRange", "subjectClarity"]
         var lightKeys = ["centerHighlight", "depthOfField"]
         var motionKeys = ["autoRotateSpeed", "rhythmSensitivity"]
@@ -937,6 +937,14 @@ TestCase {
         terrainSlider.value = 73
         terrainSlider.moved()
         compare(PlayerExperienceController.inputCompression, 73)
+
+        var heightSlider = findChild(terrainGroup,
+                                     "dynamicSlider_terrainAmplitude")
+        compare(heightSlider.from, 0)
+        compare(heightSlider.to, 100)
+        heightSlider.value = 84
+        heightSlider.moved()
+        compare(PlayerExperienceController.terrainAmplitude, 84)
 
         var lightSlider = findChild(lightGroup,
                                     "dynamicSlider_centerHighlight")

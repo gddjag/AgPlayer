@@ -261,13 +261,15 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
     for (int index = 0; index < meteorCount; ++index) {
         SceneInstance meteor = makeExtra(random, 18.0F, 74.0F,
                                          32.0F, 46.0F, ColorZone::Peak);
-        meteor.scale = QVector3D(0.46F, 1.05F, 0.46F);
+        meteor.scale = QVector3D(0.36F, 1.20F, 0.36F);
         meteor.aux = float(index);
         result.meteors.append(meteor);
         for (int segment = 0; segment < 3; ++segment) {
             SceneInstance trail = meteor;
             trail.aux = float(index) + float(segment + 1) / 4.0F;
-            trail.scale = QVector3D(0.30F, 0.72F, 0.30F);
+            const float thickness = 0.22F - float(segment) * 0.035F;
+            const float length = 1.10F - float(segment) * 0.24F;
+            trail.scale = QVector3D(thickness, length, thickness);
             result.meteorTrails.append(trail);
         }
         for (int segment = 0; segment < 16; ++segment) {
@@ -286,9 +288,13 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
         }
     }
     for (int index = 0; index < particleCount; ++index) {
+        const ColorZone starZone = index % 3 == 0 ? ColorZone::Cool
+            : index % 3 == 1 ? ColorZone::Warm : ColorZone::Peak;
         SceneInstance particle = makeExtra(random, 72.0F, 168.0F,
-                                           10.0F, 82.0F, ColorZone::Accent);
-        const float starSize = 0.10F + random.unit() * 0.18F;
+                                           10.0F, 82.0F, starZone);
+        const float depth = clampUnit((particle.position.y() - 10.0F) / 72.0F);
+        const float starSize = 0.08F + (1.0F - depth) * 0.18F
+            + random.unit() * 0.04F;
         particle.scale = QVector3D(starSize, starSize, starSize);
         result.particles.append(particle);
     }
@@ -421,8 +427,13 @@ float terrainHeight(const SceneInstance& unsafeInstance,
     const float wideRidge = ridgeA * 0.56F + ridgeB * 0.44F;
     const float bass = parameters.bands[0] * (1.65F + core * 2.75F)
         + parameters.bands[1] * (1.35F + bassField * 1.70F) * center;
-    const float mids = parameters.bands[2] * (0.75F + wideRidge * 1.95F)
-        + parameters.bands[3] * (0.80F + (1.0F - wideRidge) * 1.65F);
+    const float midDistance = clampUnit(distance
+        / std::max(1.0F, dynamics.responseRadius * 0.62F));
+    const float midAnnulus = 0.42F + midDistance * midDistance
+        * (3.0F - 2.0F * midDistance) * 1.05F;
+    const float mids = (parameters.bands[2] * (0.58F + wideRidge * 2.30F)
+        + parameters.bands[3] * (0.62F + (1.0F - wideRidge) * 2.05F))
+        * midAnnulus;
     const float detailA = 0.5F + 0.5F * std::sin(
         instance.position.x() * 0.18F + instance.position.z() * 0.11F);
     const float detailB = 0.5F + 0.5F * std::cos(
@@ -433,8 +444,10 @@ float terrainHeight(const SceneInstance& unsafeInstance,
         + parameters.bands[6] * 0.20F
         + parameters.bands[7] * 0.14F;
     const float peakControl = 0.42F + clampUnit(style.peakBoost) * 0.58F;
-    const float peak = highEnergy * (0.20F + coherentDetail * 1.45F)
-        * center * peakControl;
+    const float localizedHigh = 0.28F
+        + 0.92F * std::pow(clampUnit(instance.random), 1.45F);
+    const float peak = highEnergy * (0.16F + coherentDetail * 1.55F)
+        * center * peakControl * localizedHigh;
     const float idlePhase = std::sin(instance.position.x() * 0.032F
                                      + instance.position.z() * 0.041F) * 0.72F;
     const float reliefA = 0.5F + 0.5F * std::sin(
@@ -472,14 +485,14 @@ float terrainHeight(const SceneInstance& unsafeInstance,
     const float centerDome = std::exp(-(distance * distance)
                                       / (domeRadius * domeRadius));
     const float steadyCenter = parameters.energy * dynamics.centerHighlight
-        * (0.35F + parameters.bands[0] * 0.65F) * centerDome * 10.8F;
+        * (0.08F + parameters.bands[0] * 0.24F) * centerDome * 3.2F;
     const float centerShoulders = parameters.energy * dynamics.centerHighlight
-        * terrainField * (0.42F + core * 1.55F + wideRidge * 0.38F);
+        * terrainField * (0.06F + core * 0.24F + wideRidge * 0.54F);
     const float impactRadius = impactAge * dynamics.responseRadius * 1.15F;
     const float impactDistance = std::abs(distance - impactRadius);
     const float impactRing = impact * dynamics.rhythmStrength
         * std::exp(-(impactDistance * impactDistance) / 18.0F) * 5.8F;
-    const float amplitude = 0.2F + clampUnit(style.terrainAmplitude) * 1.25F;
+    const float amplitude = 0.16F + clampUnit(style.terrainAmplitude) * 2.14F;
     const float maximumHeight = impact > 0.0F ? 36.0F : 32.0F;
     const float rawHeight = std::max(0.0F,
         idle + ((bass + mids + peak) * terrainField + ripple
@@ -578,19 +591,19 @@ QualityConfiguration AutomaticQualityController::configuration() const noexcept
     case DegradationStage::Full:
         break;
     case DegradationStage::ReducedParticles:
-        result.particleCount = 52;
+        result.particleCount = 72;
         break;
     case DegradationStage::ReducedMeteors:
-        result.particleCount = 52;
+        result.particleCount = 72;
         result.meteorCount = 6;
         break;
     case DegradationStage::ReducedRipples:
-        result.particleCount = 52;
+        result.particleCount = 72;
         result.meteorCount = 6;
         result.rippleCount = 4;
         break;
     case DegradationStage::ReducedGrid:
-        result.particleCount = 52;
+        result.particleCount = 72;
         result.meteorCount = 6;
         result.rippleCount = 4;
         result.gridSize = 96;

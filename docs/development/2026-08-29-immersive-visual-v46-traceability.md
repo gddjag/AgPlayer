@@ -171,3 +171,13 @@
 - `TerrainReactorItem` 将八段频谱、能量、频谱通量和 kick/snare 作为只读 QML 属性暴露；集成回归通过真实 `TerrainReactorItem` 合成特征验证五项读数，不再由测试直接给面板赋值。`WindowController::showMain/showMini` 在沉浸展示期间只更新退出后的恢复目标，主窗口、迷你播放器和列表继续保持隐藏。
 - Debug/Release 功能聚焦回归均为 13/13，QML lint 无错误。Release 全量 `ctest` 为 118/121；`import_controller_test` 隔离复跑 24/24 通过，`windows_shell_runtime_test` 在另一工作树的 AgPlayer 进程出现前曾隔离通过、之后受前台激活冲突限制；与本功能无关的 `audio_editor_controller_test` 仍在当前机器失败，因此不报告全套全绿。
 - 最终固定频谱截图为 `design-qa/2026-08-30-immersive-revision-current-f.png`；最终 HTML 与原生实现的同输入对比为 `design-qa/2026-08-30-html-reference-vs-native-final.png`。
+
+## 2026-09-01 上帝视角、频段响应与清晰度修复
+
+- 默认相机改为高处斜视且保留足够柱体侧面，不再用接近平面的低角度，也避免过度俯视把高度压扁；现有拖动、滚轮、自动旋转和四秒恢复链路未改。
+- 直接复用已有八段频谱：低频继续控制中心重量，中频强化中半径环带，高频只形成局部峰值与稀疏顶面流光；瞬态兜底阈值改为短历史均值/标准差自适应，可靠 BPM/Beat Grid 的每八拍优先级保持不变，没有新增 FFT、解码器或 PCM 缓存。
+- 降低常亮中心白芯、柔光叠层和全场高光覆盖，增加默认柱体振幅映射、顶/侧面对比和稀疏流光遮罩；新增“柱体跳动高度”滑杆并接入原有 `terrainAmplitude` 持久化属性，所有预设仍复用同一渲染参数链。
+- 星空仍使用同一实例缓冲和单次实例化绘制：完整质量星点数由 96 提升到 144，自动质量第一级立即降到 72；星点颜色与亮度按稳定种子分层，流星头与三段尾迹改为更细的斜向渐缩形态。没有新增粒子系统或额外 draw call。
+- Release 固定合成频谱截图为 `build/qa/immersive-2026-09-01/god-view-final.png`（1600×900，816640 bytes）；内部 QA 抓图先等待 `renderStatus=Ready` 且至少 3 个稳定 QRhi 帧，避免控件已出现但渲染纹理仍为空时保存无效证据。对应日志为 `build/qa/immersive-2026-09-01/runtime-final.log`，记录 `frames=3`、`stableFrames=3`、`resources=1`。
+- Release 聚焦回归为 6/6；QML lint 无错误并保留 3 条既有未使用 import 信息提示。完整 Release `ctest` 为 115/121：本功能的音频视觉、体验控制器、地形状态、RHI item、D3D11 GPU smoke 与沉浸 QML 集成均通过；失败项为 `audio_editor_controller_test`、三个格式转换 QML 退出段错误、`qml_filename_process_test` 退出段错误和 `qml_metadata_editor_test` 超时，均保留失败结论，不用聚焦通过覆盖全套状态。
+- 本轮视觉判断以原创原生场景的层级、清晰度、节奏语义和资源边界为准，不再与用户上传图片或视频做逐像素对照。动态节奏手感仍需用户使用真实曲目试听；当前固定合成频谱证据不能替代 30 分钟运行、设备丢失/恢复或 macOS/Linux 真机验收。

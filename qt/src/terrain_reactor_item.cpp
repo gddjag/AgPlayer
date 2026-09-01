@@ -508,7 +508,7 @@ private:
                                aspect, 0.1F, 400.0F);
         const float radius = distance - punch * 0.6F;
         const RenderDynamics dynamics = mapRenderDynamics(snapshot_.style);
-        const float lowAngleLift = 0.52F + dynamics.depthOfField * 0.12F;
+        const float lowAngleLift = 0.72F + dynamics.depthOfField * 0.08F;
         QVector3D eye(radius * std::cos(pitch) * std::sin(yaw),
                       9.0F + radius * std::sin(pitch) * lowAngleLift,
                       radius * std::cos(pitch) * std::cos(yaw));
@@ -518,7 +518,7 @@ private:
                         std::cos(visual.timeSeconds * 17.0F) * shake * 0.55F,
                         std::sin(visual.timeSeconds * 13.0F) * shake * 0.7F);
         QMatrix4x4 view;
-        view.lookAt(eye, QVector3D(0.0F, -5.0F, 0.0F),
+        view.lookAt(eye, QVector3D(0.0F, -1.5F, 0.0F),
                     QVector3D(0.0F, 1.0F, 0.0F));
         const QMatrix4x4 mvp = rhi()->clipSpaceCorrMatrix() * projection * view;
 

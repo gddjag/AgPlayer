@@ -17,6 +17,7 @@ private slots:
     void terrainLayoutFormsCircularStageAndStarsStayOutsideCore();
     void meteorsHaveFiniteTrailsAndCollisionEffects();
     void meteorGroupsKeepOneDeterministicPrimaryImpact();
+    void starfieldUsesLayeredDepthAndMeteorTrailsAreTapered();
     void audioFeaturesDriveBoundedVisualParameters();
     void bassEnvelopeUsesFastAttackAndSlowRelease();
     void multiWaveSourcesAreStableDistributedAndBounded();
@@ -26,6 +27,7 @@ private slots:
     void inactiveOrOccludedGateFreezesAllWorkCounters();
     void rendererOwnershipHasOneLiveResourceGeneration();
     void manualCameraControlRecoversAfterFourSeconds();
+    void defaultCameraStartsAtHighObliqueView();
     void manualCameraDeltaPreservesRendererMotion();
     void nonFiniteCameraInputsPreserveFiniteBoundedState();
     void punchEventsAreConsumedOnceByRevision();
@@ -37,6 +39,8 @@ private slots:
     void nearbyRandomnessKeepsTerrainSoftWithoutThresholdSpikes();
     void finalReferenceProfileKeepsCoreBroadAndSpikesSubordinate();
     void equalStrengthHighsRemainHeightSubordinateToLowMids();
+    void terrainAmplitudeProducesClearlyVisibleColumnTravel();
+    void lowMidAndHighBandsOwnDistinctTerrainRegions();
     void representativeGridHasBroadCoreWithoutIsolatedTowers();
     void floatingCubesAreDeterministicAndVisuallySubordinate();
     void continuousAndEventControlsStayDistinctBoundedAndLive();
@@ -171,6 +175,43 @@ void TerrainReactorStateTest::meteorGroupsKeepOneDeterministicPrimaryImpact()
     QCOMPARE(int(std::floor(layout.meteorTrails.at(6).aux)), 2);
     QCOMPARE(int(std::floor(layout.collisionRipples.at(16).aux)), 1);
     QCOMPARE(int(std::floor(layout.collisionParticles.at(24).aux)), 2);
+}
+
+void TerrainReactorStateTest::starfieldUsesLayeredDepthAndMeteorTrailsAreTapered()
+{
+    const SceneLayout layout = makeSceneLayout(0x71b9U, 9, 0, 3, 180);
+    QVERIFY(layout.particles.size() >= 120);
+    float nearSize = 0.0F;
+    float farSize = 0.0F;
+    int nearCount = 0;
+    int farCount = 0;
+    for (const SceneInstance& star : layout.particles) {
+        if (star.position.y() < 34.0F) {
+            nearSize += star.scale.x();
+            ++nearCount;
+        } else if (star.position.y() > 60.0F) {
+            farSize += star.scale.x();
+            ++farCount;
+        }
+    }
+    QVERIFY(nearCount >= 20 && farCount >= 20);
+    const float nearMean = nearSize / float(nearCount);
+    const float farMean = farSize / float(farCount);
+    qInfo() << "star depth near/far mean size:" << nearMean << farMean;
+    QVERIFY2(nearMean > farMean * 1.35F,
+             "Near stars must read larger than the far star layer");
+
+    QCOMPARE(layout.meteorTrails.size(), 9);
+    for (int meteor = 0; meteor < 3; ++meteor) {
+        const SceneInstance& head = layout.meteors.at(meteor);
+        const SceneInstance& first = layout.meteorTrails.at(meteor * 3);
+        const SceneInstance& second = layout.meteorTrails.at(meteor * 3 + 1);
+        const SceneInstance& third = layout.meteorTrails.at(meteor * 3 + 2);
+        QVERIFY(head.scale.y() > head.scale.x() * 2.5F);
+        QVERIFY(first.scale.y() > first.scale.x() * 4.0F);
+        QVERIFY(first.scale.y() > second.scale.y());
+        QVERIFY(second.scale.y() > third.scale.y());
+    }
 }
 
 void TerrainReactorStateTest::audioFeaturesDriveBoundedVisualParameters()
@@ -435,6 +476,93 @@ void TerrainReactorStateTest::equalStrengthHighsRemainHeightSubordinateToLowMids
             << tallestLowMid << tallestHigh;
     QVERIFY2(tallestHigh <= tallestLowMid,
              "High-frequency detail must not become taller terrain relief than low/mids");
+}
+
+void TerrainReactorStateTest::defaultCameraStartsAtHighObliqueView()
+{
+    const CameraSnapshot camera;
+    QVERIFY2(camera.pitch >= 0.60F,
+             "The initial immersive camera must be a high oblique God view");
+    QVERIFY2(camera.pitch <= 0.66F,
+             "The initial view must retain enough side elevation to read column height");
+    QVERIFY(camera.distance >= 138.0F && camera.distance <= 175.0F);
+}
+
+void TerrainReactorStateTest::terrainAmplitudeProducesClearlyVisibleColumnTravel()
+{
+    AudioFeatures features;
+    features.bands = {0.76F, 0.70F, 0.62F, 0.58F,
+                      0.30F, 0.24F, 0.18F, 0.12F};
+    features.energy = 0.58F;
+    SceneInstance column;
+    column.position = QVector3D(22.0F, 0.0F, -14.0F);
+    column.random = 0.64F;
+    column.zone = ColorZone::Warm;
+
+    RenderStyleSnapshot restrained;
+    restrained.terrainAmplitude = 0.0F;
+    restrained.centerHighlight = 0.0F;
+    restrained.idleBreathingEnabled = false;
+    RenderStyleSnapshot expressive = restrained;
+    expressive.terrainAmplitude = 1.0F;
+
+    const float low = terrainHeight(column,
+        mapVisualParameters(features, 1.4F, restrained), 1.4F, restrained);
+    const float high = terrainHeight(column,
+        mapVisualParameters(features, 1.4F, expressive), 1.4F, expressive);
+    qInfo() << "column travel low/high amplitude:" << low << high;
+    QVERIFY2(high >= low * 2.35F,
+             "The height control must create clearly visible musical column travel");
+}
+
+void TerrainReactorStateTest::lowMidAndHighBandsOwnDistinctTerrainRegions()
+{
+    RenderStyleSnapshot style;
+    style.centerHighlight = 0.0F;
+    style.idleBreathingEnabled = false;
+    style.terrainAmplitude = 0.82F;
+
+    AudioFeatures lows;
+    lows.bands = {0.90F, 0.82F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F};
+    lows.energy = 0.42F;
+    AudioFeatures mids;
+    mids.bands = {0.0F, 0.0F, 0.86F, 0.82F, 0.0F, 0.0F, 0.0F, 0.0F};
+    mids.energy = 0.42F;
+    AudioFeatures highs;
+    highs.bands = {0.0F, 0.0F, 0.0F, 0.0F, 0.82F, 0.86F, 0.88F, 0.92F};
+    highs.energy = 0.42F;
+
+    SceneInstance core;
+    core.position = QVector3D(3.0F, 0.0F, 2.0F);
+    core.random = 0.44F;
+    core.zone = ColorZone::Peak;
+    SceneInstance ridge = core;
+    ridge.position = QVector3D(30.0F, 0.0F, -8.0F);
+    ridge.random = 0.71F;
+    SceneInstance detail = core;
+    detail.position = QVector3D(-17.0F, 0.0F, 23.0F);
+    detail.random = 0.93F;
+
+    const auto height = [&](const SceneInstance& instance,
+                            const AudioFeatures& source) {
+        return terrainHeight(instance, mapVisualParameters(source, 1.9F, style),
+                             1.9F, style);
+    };
+    const float lowCore = height(core, lows);
+    const float lowRidge = height(ridge, lows);
+    const float midCore = height(core, mids);
+    const float midRidge = height(ridge, mids);
+    const float highDetail = height(detail, highs);
+    const float highCore = height(core, highs);
+    qInfo() << "band regions low(core/ridge) mid(core/ridge) high(detail/core):"
+            << lowCore << lowRidge << midCore << midRidge
+            << highDetail << highCore;
+    QVERIFY2(lowCore > lowRidge + 1.8F,
+             "Bass must own the reactor core instead of lifting the whole field equally");
+    QVERIFY2(midRidge > midCore + 0.45F,
+             "Mid bands must create traveling ridge motion away from the core");
+    QVERIFY2(std::abs(highDetail - highCore) > 0.35F,
+             "High bands must create localized column accents");
 }
 
 void TerrainReactorStateTest::representativeGridHasBroadCoreWithoutIsolatedTowers()
@@ -708,6 +836,8 @@ void TerrainReactorStateTest::automaticQualityUsesHysteresisCooldownAndEffectFir
         quality.advanceWallClock(elapsedSeconds);
     };
     QCOMPARE(quality.stage(), DegradationStage::Full);
+    QVERIFY2(quality.configuration().particleCount >= 144,
+             "The full-quality environment needs a readable layered starfield");
 
     observe(40.0, 1.99);
     QCOMPARE(quality.stage(), DegradationStage::Full);

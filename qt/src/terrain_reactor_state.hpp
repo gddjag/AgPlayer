@@ -186,7 +186,7 @@ enum class DegradationStage : quint8 {
 struct QualityConfiguration {
     int gridSize = 128;
     int floatingCount = 52;
-    int particleCount = 96;
+    int particleCount = 144;
     int meteorCount = 10;
     int rippleCount = 8;
     float internalScale = 0.90F;
@@ -279,7 +279,7 @@ private:
 
 struct CameraSnapshot {
     float yaw = 2.6075219F;
-    float pitch = 0.40F;
+    float pitch = 0.62F;
     float distance = 160.0F;
     float punch = 0.0F;
 };

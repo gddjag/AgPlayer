@@ -10,6 +10,7 @@ private slots:
     void reliableBpmEmitsOnceEveryEightBeats();
     void seeksAndTrackChangesDoNotEmitDuplicateImpacts();
     void unreliableTimingUsesDebouncedTransientFallbackOnly();
+    void adaptiveTransientFloorRejectsRepeatedBackgroundPulses();
 };
 
 namespace {
@@ -101,6 +102,27 @@ void AudioVisualFeatureControllerTest::unreliableTimingUsesDebouncedTransientFal
     QTest::qWait(190);
     features.processSpectrum(spectrum(0.25, true));
     QCOMPARE(features.impactRevision(), 2);
+}
+
+void AudioVisualFeatureControllerTest::adaptiveTransientFloorRejectsRepeatedBackgroundPulses()
+{
+    AudioVisualFeatureController features;
+    features.setActive(true);
+    features.setWaveformTiming(QStringLiteral("track-noisy"), 0.0, 120000, {});
+    QVERIFY(!features.beatReliable());
+
+    for (int cycle = 0; cycle < 3; ++cycle) {
+        features.processSpectrum(spectrum(0.10, true));
+        features.processSpectrum(spectrum(0.18, true));
+        QTest::qWait(190);
+    }
+    QVERIFY2(features.impactRevision() <= 1,
+             "A repeating low-level noise floor must not be classified as a new beat");
+
+    const quint64 beforeAccent = features.impactRevision();
+    features.processSpectrum(spectrum(0.10, true));
+    features.processSpectrum(spectrum(0.82, true));
+    QCOMPARE(features.impactRevision(), beforeAccent + 1);
 }
 
 QTEST_GUILESS_MAIN(AudioVisualFeatureControllerTest)
