@@ -4629,6 +4629,37 @@ TestCase {
         provider.destroy()
     }
 
+    function test_z_thumbnail_brightness_recolors_without_cache_read() {
+        var previousBrightness = SettingsController.trackWaveformBrightness
+        var provider = fakeThumbnailProviderComponent.createObject(testCase)
+        SettingsController.trackWaveformBrightness = 0.66
+        var wrapper = trackWaveformThumbnailComponent.createObject(
+                    mainWindow.contentItem, {
+                        "provider": provider,
+                        "trackId": "brightness-track",
+                        "sourcePath": "brightness.wav",
+                        "delegateGeneration": 21
+                    })
+        verify(provider && wrapper)
+        tryCompare(provider, "requestCount", 1)
+        var itemLoader = findChild(wrapper, "trackWaveformThumbnailItemLoader")
+        verify(itemLoader)
+        tryVerify(function() { return itemLoader.item !== null })
+        compare(wrapper.brightness, 0.66)
+        compare(itemLoader.opacity, 0.66)
+
+        var settledRequests = provider.requestCount
+        SettingsController.trackWaveformBrightness = 0.42
+        tryCompare(wrapper, "brightness", 0.42)
+        tryCompare(itemLoader, "opacity", 0.42)
+        compare(provider.requestCount, settledRequests,
+                "brightness changes must reuse the loaded waveform")
+
+        wrapper.destroy()
+        provider.destroy()
+        SettingsController.trackWaveformBrightness = previousBrightness
+    }
+
     function test_z_visible_thumbnail_retries_only_matching_cache_ready_source() {
         var provider = fakeThumbnailProviderComponent.createObject(testCase)
         var wrapper = trackWaveformThumbnailComponent.createObject(

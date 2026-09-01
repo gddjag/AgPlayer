@@ -12,6 +12,7 @@ Item {
     property var provider: TrackWaveformThumbnailProvider
     property var waveformPeaks: ""
     property var spectralIndex: ""
+    property real brightness: SettingsController.trackWaveformBrightness
 
     property string requestedTrackId: ""
     property int requestedGeneration: 0
@@ -88,6 +89,7 @@ Item {
         objectName: "trackWaveformThumbnailItemLoader"
         anchors.fill: parent
         active: root.enabled
+        opacity: root.brightness
         sourceComponent: Component {
             TrackWaveformThumbnailItem {
                 objectName: "trackWaveformThumbnailItem"
