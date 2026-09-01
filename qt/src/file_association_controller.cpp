@@ -151,7 +151,8 @@ bool FileAssociationController::unregisterAll()
     }
 
     // Always cover the supported built-ins as well in case enumeration missed any.
-    const QStringList extensions = extensionsToRemove + supportedAudioExtensions();
+    const QStringList extensions = extensionsToRemove
+        + supportedAudioExtensions() + agplayer::qt::supportedVideoExtensions();
     for (const QString& ext : extensions) {
         removeExtension(ext);
     }
@@ -287,7 +288,13 @@ bool FileAssociationController::writeExtension(const QString& extension,
 
     bool ok = true;
     ok &= writeRegistryString(key, nullptr, nullptr, progId);
-    ok &= writeRegistryString(key, nullptr, L"PerceivedType", QStringLiteral("audio"));
+    ok &= writeRegistryString(
+        key,
+        nullptr,
+        L"PerceivedType",
+        agplayer::qt::isSupportedVideoExtension(extension)
+            ? QStringLiteral("video")
+            : QStringLiteral("audio"));
     ok &= writeRegistryString(key, L"OpenWithProgids", progId.toStdWString().c_str(),
                               QString());
 
@@ -329,6 +336,20 @@ bool FileAssociationController::removeExtension(const QString& extension)
             lastError_ = tr("Failed to remove extension registry key for .%1").arg(extension);
             return false;
         }
+    }
+
+    // The user may have selected another default application after AgPlayer
+    // registered itself. Preserve that association while removing our stale
+    // OpenWith entry so the deleted ProgID is never left behind.
+    const QString openWithPath = keyPath + QStringLiteral("\\OpenWithProgids");
+    const std::wstring openWithPathW = openWithPath.toStdWString();
+    const std::wstring progIdW = QString::fromLatin1(kProgId).toStdWString();
+    const LSTATUS status = RegDeleteKeyValueW(
+        HKEY_CURRENT_USER, openWithPathW.c_str(), progIdW.c_str());
+    if (status != ERROR_SUCCESS && status != ERROR_FILE_NOT_FOUND
+        && status != ERROR_PATH_NOT_FOUND) {
+        lastError_ = tr("Failed to remove stale ProgID for .%1").arg(extension);
+        return false;
     }
     return true;
 }

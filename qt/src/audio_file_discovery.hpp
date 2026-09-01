@@ -13,6 +13,9 @@ QStringList supportedAudioExtensions();
 bool isSupportedAudioExtension(const QString& extension);
 bool isSupportedAudioFile(const QFileInfo& info);
 
+QStringList supportedVideoExtensions();
+bool isSupportedVideoExtension(const QString& extension);
+
 QList<QUrl> expandAudioUrls(
     const QList<QUrl>& urls,
     bool includeExplicitNonAudioFile = false);

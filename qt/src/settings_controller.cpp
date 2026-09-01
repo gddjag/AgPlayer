@@ -1929,7 +1929,11 @@ void SettingsController::applyFileAssociations()
         return;
     }
 
-    if (!fileAssociationController_->registerForExtensions(fileAssociations_)) {
+    QStringList registrationExtensions = fileAssociations_;
+#ifdef Q_OS_WIN
+    registrationExtensions.append(agplayer::qt::supportedVideoExtensions());
+#endif
+    if (!fileAssociationController_->registerForExtensions(registrationExtensions)) {
         RuntimeLog::log(AG_IO_ERROR, QStringLiteral("Settings"),
             QStringLiteral("Failed to register file associations: %1")
                 .arg(fileAssociationController_->lastError()));

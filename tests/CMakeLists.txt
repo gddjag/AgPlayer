@@ -932,6 +932,7 @@ foreach(qt_test IN ITEMS
     audio_tools_end_to_end_test
     format_conversion_plan_test
     format_conversion_task_model_test
+    audio_file_discovery_test
     file_association_controller_test
     native_drop_router_test
     equalizer_controller_test

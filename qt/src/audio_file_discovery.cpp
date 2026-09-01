@@ -29,6 +29,22 @@ const QSet<QString>& supportedExtensionSet()
     return extensions;
 }
 
+const QStringList& supportedVideoExtensionList()
+{
+    static const QStringList extensions{
+        QStringLiteral("mp4"), QStringLiteral("mkv"),
+        QStringLiteral("webm"), QStringLiteral("mov"),
+        QStringLiteral("avi"), QStringLiteral("m4v")};
+    return extensions;
+}
+
+const QSet<QString>& supportedVideoExtensionSet()
+{
+    static const QSet<QString> extensions(
+        supportedVideoExtensionList().cbegin(), supportedVideoExtensionList().cend());
+    return extensions;
+}
+
 } // namespace
 
 QStringList agplayer::qt::supportedAudioExtensions()
@@ -41,6 +57,18 @@ bool agplayer::qt::isSupportedAudioExtension(const QString& extension)
     QString normalized = extension.trimmed().toCaseFolded();
     while (normalized.startsWith(QLatin1Char('.'))) normalized.remove(0, 1);
     return supportedExtensionSet().contains(normalized);
+}
+
+QStringList agplayer::qt::supportedVideoExtensions()
+{
+    return supportedVideoExtensionList();
+}
+
+bool agplayer::qt::isSupportedVideoExtension(const QString& extension)
+{
+    QString normalized = extension.trimmed().toCaseFolded();
+    while (normalized.startsWith(QLatin1Char('.'))) normalized.remove(0, 1);
+    return supportedVideoExtensionSet().contains(normalized);
 }
 
 bool agplayer::qt::isSupportedAudioFile(const QFileInfo& info)
