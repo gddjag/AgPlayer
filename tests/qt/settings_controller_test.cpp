@@ -11,6 +11,7 @@
 #include <QFile>
 #include <QFileDevice>
 #include <QSettings>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -1009,6 +1010,10 @@ void SettingsControllerTest::defaultPlayerToggleRegistersAndClearsHiddenVideoCap
     // outside the user's production registry keys.
     const QString registryRoot = QStringLiteral("Software\\AgPlayer\\Tests\\%1")
                                      .arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
+    const auto cleanupSandbox = qScopeGuard([registryRoot] {
+        const std::wstring registryRootW = registryRoot.toStdWString();
+        RegDeleteTreeW(HKEY_CURRENT_USER, registryRootW.c_str());
+    });
     {
         SettingsController settings;
         settings.fileAssociationController_ =
@@ -1021,9 +1026,6 @@ void SettingsControllerTest::defaultPlayerToggleRegistersAndClearsHiddenVideoCap
         QVERIFY(!settings.fileAssociationController_->isAssociated(QStringLiteral("mp4")));
     }
 
-    const std::wstring registryRootW = registryRoot.toStdWString();
-    QCOMPARE(RegDeleteTreeW(HKEY_CURRENT_USER, registryRootW.c_str()),
-             static_cast<LSTATUS>(ERROR_SUCCESS));
 #else
     QSKIP("Windows Default Apps capabilities are Windows-only");
 #endif

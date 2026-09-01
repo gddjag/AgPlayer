@@ -1,4 +1,5 @@
 #include <QCoreApplication>
+#include <QScopeGuard>
 #include <QTest>
 #include <QUuid>
 
@@ -47,6 +48,7 @@ private slots:
     void registerAndQuery()
     {
 #ifdef Q_OS_WIN
+        const auto cleanupSandbox = qScopeGuard([this] { removeTestRoot(); });
         const QStringList extensions = {QStringLiteral("agptest")};
         QVERIFY(controller_->registerForExtensions(extensions));
         QVERIFY(controller_->isAssociated(QStringLiteral("agptest")));
@@ -100,6 +102,7 @@ private slots:
     void registerAndUnregisterAllPreservesSharedExtensionData()
     {
 #ifdef Q_OS_WIN
+        const auto cleanupSandbox = qScopeGuard([this] { removeTestRoot(); });
         const QString extensionPath = registryPath(QStringLiteral("Classes\\.mp4"));
         QVERIFY(writeString(extensionPath, nullptr, QStringLiteral("OtherPlayer.File")));
         QVERIFY(writeString(extensionPath, L"PerceivedType", QStringLiteral("other-video")));
@@ -107,7 +110,8 @@ private slots:
                             L"OtherPlayer.File", QString()));
         QVERIFY(writeString(extensionPath + QStringLiteral("\\shell\\custom"), nullptr,
                             QStringLiteral("keep")));
-        QVERIFY(writeString(registryPath(QStringLiteral("Preferences")), L"sentinel",
+        const QString sentinelPath = registryPath(QStringLiteral("AgPlayer\\Settings"));
+        QVERIFY(writeString(sentinelPath, L"sentinel",
                             QStringLiteral("keep-settings")));
 
         const QStringList extensions = FileAssociationController::supportedAudioExtensions()
@@ -150,7 +154,8 @@ private slots:
                             QStringLiteral("OtherPlayer.File")), QString());
         QCOMPARE(readString(extensionPath + QStringLiteral("\\shell\\custom"), QString()),
                  QStringLiteral("keep"));
-        QCOMPARE(readString(registryPath(QStringLiteral("Preferences")), QStringLiteral("sentinel")),
+        QVERIFY(keyExists(sentinelPath));
+        QCOMPARE(readString(sentinelPath, QStringLiteral("sentinel")),
                  QStringLiteral("keep-settings"));
 #else
         QVERIFY(!controller_->unregisterAll());
@@ -160,6 +165,7 @@ private slots:
     void unregisterAllIsIdempotent()
     {
 #ifdef Q_OS_WIN
+        const auto cleanupSandbox = qScopeGuard([this] { removeTestRoot(); });
         QVERIFY(controller_->unregisterAll());
         QVERIFY(controller_->unregisterAll());
         QVERIFY(controller_->lastError().isEmpty());
