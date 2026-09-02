@@ -15,6 +15,8 @@ $waveformCanvas = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $edito
 $toolsWindow = Get-Content -Raw -Encoding UTF8 -LiteralPath (
     Join-Path $SourceRoot 'app/qml/AgPlayer/AudioToolsWindow.qml')
 $toolsNavigation = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $toolsRoot 'ToolSidebar.qml')
+$equalizerWindow = Get-Content -Raw -Encoding UTF8 -LiteralPath (
+    Join-Path $SourceRoot 'app/qml/AgPlayer/EqualizerWindow.qml')
 $appCmake = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $SourceRoot 'app/CMakeLists.txt')
 $appMain = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $SourceRoot 'app/main.cpp')
 $testsCmake = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $SourceRoot 'tests/CMakeLists.txt')
@@ -136,8 +138,7 @@ if ($toolsWindow -notmatch 'onVisibleChanged:[\s\S]{0,220}AudioEditorController\
 foreach ($control in @(
     'editorMainColumn', 'editorInspector', 'editorCommandBar', 'fileSummaryBar',
     'editorTimelineWorkspace', 'editorTrackHeader', 'editorTimeRuler',
-    'editorWaveformCanvas', 'editorTimelineZoomRange',
-    'editorPlaybackTransport',
+    'editorWaveformCanvas', 'editorPlaybackTransport',
     'editorShortcutCard', 'editorStatusBar')) {
     if ($audioEditor -notmatch ('objectName:\s*"' + $control + '"')) {
         throw "The Phase 6 audio editor is missing $control."
@@ -146,10 +147,32 @@ foreach ($control in @(
 
 if ($toolsWindow -notmatch 'width:\s*1672' -or
     $toolsWindow -notmatch 'height:\s*941' -or
-    $toolsWindow -notmatch 'Layout\.preferredHeight:\s*window\.metadataWorkbench\s*\?\s*54\s*:\s*60' -or
-    $toolsWindow -notmatch 'Layout\.preferredHeight:\s*window\.separationWorkbench\s*\?\s*44' -or
+    $toolsWindow -notmatch 'objectName:\s*"audioToolsTitleBar"[\s\S]{0,180}Layout\.preferredHeight:\s*Theme\.navigationActionExtent\s*\+\s*Theme\.spacingLg' -or
+    $toolsWindow -notmatch 'ToolSidebar\s*\{' -or
     $toolsWindow -notmatch 'title:\s*qsTr\("AgPlayer') {
-    throw 'The tools shell must preserve 1672x941 geometry, title, and workbench navigation heights.'
+    throw 'The tools shell must preserve 1672x941 geometry with fixed shared chrome.'
+}
+if ($toolsNavigation -notmatch 'implicitHeight:\s*Theme\.navigationActionExtent\s*\+\s*Theme\.spacingLg' -or
+    $toolsNavigation -match 'referenceWorkbench\s*\?\s*52|separationWorkbench\s*\?\s*44') {
+    throw 'All five tool pages must use one fixed navigation height.'
+}
+foreach ($button in @('audioToolsMinimizeButton', 'audioToolsMaximizeButton',
+                      'audioToolsCloseButton')) {
+    $pattern = 'objectName:\s*"' + $button +
+        '"[\s\S]{0,180}Layout\.preferredWidth:\s*Theme\.navigationActionExtent' +
+        '[\s\S]{0,100}Layout\.preferredHeight:\s*Theme\.navigationActionExtent'
+    if ($toolsWindow -notmatch $pattern) {
+        throw "Audio-tools window button is not compact: $button"
+    }
+}
+foreach ($button in @('equalizerMinimizeButton', 'equalizerMaximizeButton',
+                      'equalizerCloseButton')) {
+    $pattern = 'objectName:\s*"' + $button +
+        '"[\s\S]{0,100}width:\s*Theme\.navigationActionExtent' +
+        '[\s\S]{0,80}height:\s*Theme\.navigationActionExtent'
+    if ($equalizerWindow -notmatch $pattern) {
+        throw "Equalizer window button geometry differs: $button"
+    }
 }
 if ($toolsWindow -notmatch 'objectName:\s*"audioToolsContentStack"') {
     throw 'The tools content stack must expose the Phase 6 acceptance object name.'
@@ -293,11 +316,15 @@ foreach ($mappingCall in @(
     }
 }
 if ($audioEditor -notmatch 'frameAtPixel\(\s*index\s*\*\s*ruler\.width\s*/\s*8\)' -or
-    $audioEditor -notmatch 'first\.onMoved:\s*AudioEditorController\.viewport\.setVisibleRange' -or
-    $audioEditor -notmatch 'second\.onMoved:\s*AudioEditorController\.viewport\.setVisibleRange' -or
     $audioEditor -notmatch 'visibleEndFrame' -or
     $audioEditor -match 'visibleStartFrame\s*\+\s*AudioEditorController\.viewport\.visibleFrameCount') {
-    throw 'Ruler and the two-ended zoom range must use the shared viewport mapper without duplicate frame arithmetic.'
+    throw 'Ruler and timeline interactions must use the shared viewport mapper without duplicate frame arithmetic.'
+}
+foreach ($removedControl in @('editorTrackGain', 'editorTrackGainLabel',
+                              'editorTimelineZoomRange')) {
+    if ($audioEditor -match ('objectName:\s*"' + $removedControl + '"')) {
+        throw "Removed editor control remains: $removedControl"
+    }
 }
 if ($waveformCanvas -notmatch 'viewportChannelPeaks' -or
     $waveformCanvas -match 'visibleStartRatio|visibleEndRatio|renderMode' -or

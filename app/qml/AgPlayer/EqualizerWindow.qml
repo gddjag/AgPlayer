@@ -181,7 +181,7 @@ Window {
                 x: 0
                 y: 0
                 width: parent.width
-                height: window.spacious ? 60 : 44
+                height: Theme.navigationActionExtent + Theme.spacingLg
 
                 DragHandler {
                     target: null
@@ -208,8 +208,8 @@ Window {
 
                     ToolButton {
                         objectName: "equalizerMinimizeButton"
-                        width: 28
-                        height: 28
+                        width: Theme.navigationActionExtent
+                        height: Theme.navigationActionExtent
                         flat: true
                         icon.source: Theme.icon("subtract-line")
                         icon.color: Theme.textPrimary
@@ -221,8 +221,8 @@ Window {
                     }
                     ToolButton {
                         objectName: "equalizerMaximizeButton"
-                        width: 28
-                        height: 28
+                        width: Theme.navigationActionExtent
+                        height: Theme.navigationActionExtent
                         flat: true
                         icon.source: Theme.icon("checkbox-blank-line")
                         icon.color: Theme.textPrimary
@@ -235,8 +235,8 @@ Window {
                     }
                     ToolButton {
                         objectName: "equalizerCloseButton"
-                        width: 28
-                        height: 28
+                        width: Theme.navigationActionExtent
+                        height: Theme.navigationActionExtent
                         flat: true
                         icon.source: Theme.icon("close-fill")
                         icon.color: Theme.textPrimary
@@ -419,7 +419,7 @@ Window {
                             clip: true
                             boundsBehavior: Flickable.StopAtBounds
                             contentWidth: window.spacious ? Math.max(width, 1616)
-                                                          : Math.max(width, 806)
+                                                          : Math.max(width, 1264)
                             contentHeight: height
                             ScrollBar.horizontal: ScrollBar {
                                 objectName: "equalizerBandScrollBar"
@@ -445,9 +445,7 @@ Window {
 
                                         EqualizerBandSlider {
                                             required property int index
-                                            width: window.spacious ? 79
-                                                                   : (bandFlickable.contentWidth
-                                                                      - bandRow.x - 14) / 19
+                                            width: window.spacious ? 79 : 64
                                             height: bandFlickable.height
                                             bandIndex: index
                                             frequencyLabel: window.bandLabels[index]
@@ -473,9 +471,7 @@ Window {
                                     Item { width: window.spacious ? 23 : 7; height: 1 }
 
                                     EqualizerBandSlider {
-                                        width: window.spacious ? 79
-                                                               : (bandFlickable.contentWidth
-                                                                  - bandRow.x - 14) / 19
+                                        width: window.spacious ? 79 : 64
                                         height: bandFlickable.height
                                         bandIndex: -1
                                         frequencyLabel: qsTr("前级")

@@ -125,8 +125,22 @@ TestCase {
         var nav = findChild(window, "audioToolsTopNav")
         var first = findChild(nav, "audioToolNav_0")
         compare(first.mapToItem(nav, 0, 0).x, 12)
-        verifyAscendingX(nav, ["audioToolNav_0", "audioToolNav_4", "audioToolNav_1",
-                               "audioToolNav_2", "audioToolNav_3"])
+        var names = ["audioToolNav_0", "audioToolNav_4", "audioToolNav_1",
+                     "audioToolNav_2", "audioToolNav_3"]
+        verifyAscendingX(nav, names)
+        compare(nav.height, 44)
+        for (var index = 0; index < names.length; ++index)
+            compare(findChild(nav, names[index]).height, first.height)
+        compare(first.height, nav.height)
+    }
+
+    function test_removedTimelineGainAndRangeControlsStayAbsent() {
+        compare(findChild(page, "editorTrackGain"), null)
+        compare(findChild(page, "editorTrackGainLabel"), null)
+        compare(findChild(page, "editorTimelineZoomRange"), null)
+        verify(findChild(page, "editorWaveformCanvas"))
+        verify(findChild(page, "editorPlaybackTransport"))
+        verify(findChild(page, "editorShortcutCard"))
     }
 
     function test_sharedTopNavigationKeepsOneHostXAcrossAllTools() {
@@ -198,12 +212,11 @@ TestCase {
         verifyGeometry("fileSummaryBar", 12, 88, 1306, 52)
         verify(findChild(page, "fileSummaryIcon"))
         verifyGeometry("editorTimelineWorkspace", 12, 152, 1304, 451)
-        verifyGeometry("editorTrackHeader", 12, 188, 96, 387)
-        verifyGeometry("editorTimeRuler", 120, 152, 1198, 52)
-        verifyGeometry("editorWaveformCanvas", 120, 188, 1198, 387)
-        verifyGeometry("editorTimelineZoomRange", 120, 589, 1198, 16)
-        verifyGeometry("editorPlaybackTransport", 12, 618, 1304, 88)
-        verifyGeometry("editorShortcutCard", 12, 718, 1304, 79)
+        verifyGeometry("editorTrackHeader", 12, 188, 80, 387)
+        verifyGeometry("editorTimeRuler", 104, 152, 1214, 52)
+        verifyGeometry("editorWaveformCanvas", 104, 188, 1214, 387)
+        verifyGeometry("editorPlaybackTransport", 12, 611, 1304, 88)
+        verifyGeometry("editorShortcutCard", 12, 711, 1304, 86)
         verifyGeometry("editorStatusBar", 0, 797, 1328, 25)
 
         compare(findChild(page, "inspectorTempoTitle").text,
@@ -539,7 +552,7 @@ TestCase {
         const arrows = ["inspectorTempoCollapse",
                         "inspectorPitchCollapse", "inspectorPreservePitchCollapse",
                         "inspectorExportCollapse"]
-        const heights = [153, 114, 143, 336]
+        const heights = [153, 114, 143, 366]
         const positions = [0, 161, 283, 434]
         for (let index = 0; index < names.length; ++index) {
             const group = findChild(page, names[index])
@@ -671,17 +684,18 @@ TestCase {
         const firstRow = findChild(page, "editorShortcutFirstRow")
         const secondRow = findChild(page, "editorShortcutSecondRow")
         const rowDivider = findChild(page, "editorShortcutRowDivider")
+        const card = findChild(page, "editorShortcutCard")
         const title = findChild(page, "editorShortcutTitle")
-        verify(firstRow && secondRow && rowDivider && title)
+        verify(firstRow && secondRow && rowDivider && card && title)
         compare(firstRow.groupCount, 5)
         compare(firstRow.dividerCount, 4)
         compare(secondRow.groupCount, 5)
         compare(secondRow.dividerCount, 4)
         compare(firstRow.height, 16)
         compare(secondRow.height, 16)
-        compare(Math.round(firstRow.y), 12)
-        compare(Math.round(secondRow.y), 42)
-        compare(Math.round(rowDivider.y), 35)
+        compare(Math.round(firstRow.y), Math.round(4 + card.contentYOffset))
+        compare(Math.round(secondRow.y), Math.round(34 + card.contentYOffset))
+        compare(Math.round(rowDivider.y), Math.round(27 + card.contentYOffset))
         compare(rowDivider.height, 1)
         verify(firstRow.x > title.x + title.width)
         verify(firstRow.y < title.y + title.height)
@@ -692,7 +706,7 @@ TestCase {
         compare(findChild(page, "editorShortcutSecondGroup_3").text,
                 "双击音量线 = 添加控制点")
         compare(findChild(page, "editorShortcutSecondGroup_4").text,
-                "Ctrl+右键 = 选择片段")
+                "Ctrl+右键 = 选择片段 / 双击右键取消")
     }
 
     function test_shortcutReferenceRowsExposeAllLabelsWithoutScrolling() {
@@ -914,8 +928,8 @@ TestCase {
 
     function test_realShell1280KeepsTransportAndShortcutCardSeparate() {
         const layout = createAudioToolsShell(1280, 720)
-        compare(Math.round(layout.page.height), 601)
-        compare(Math.round(layout.content.height), 601)
+        compare(Math.round(layout.page.height), 632)
+        compare(Math.round(layout.content.height), 632)
         const transport = findChild(layout.page, "editorPlaybackTransport")
         const card = findChild(layout.page, "editorShortcutCard")
         const status = findChild(layout.page, "editorStatusBar")
@@ -988,10 +1002,10 @@ TestCase {
         layout.shell.destroy()
     }
 
-    function test_realShell880KeepsTransportShortcutAndStatusInside441() {
+    function test_realShell880KeepsTransportShortcutAndStatusInside472() {
         const layout = createAudioToolsShell(880, 560)
-        compare(Math.round(layout.page.height), 441)
-        compare(Math.round(layout.content.height), 441)
+        compare(Math.round(layout.page.height), 472)
+        compare(Math.round(layout.content.height), 472)
         const transport = findChild(layout.page, "editorPlaybackTransport")
         const primaryPlay = findChild(layout.page, "editorPrimaryPlayButton")
         const canvas = findChild(layout.page, "editorWaveformCanvas")
@@ -1067,7 +1081,7 @@ TestCase {
         compare(next.icon.width, 32)
         compare(stop.icon.width, 32)
 
-        for (const sliderName of ["editorTrackGain", "inspectorSpeedSlider",
+        for (const sliderName of ["inspectorSpeedSlider",
                                   "inspectorPitchSlider"]) {
             const slider = findChild(page, sliderName)
             verify(slider, "missing editor slider " + sliderName)
@@ -1091,7 +1105,7 @@ TestCase {
     }
 
     function test_editorSlidersCenterTracksAndHandlesInTheirHitArea() {
-        for (const sliderName of ["editorTrackGain", "inspectorSpeedSlider",
+        for (const sliderName of ["inspectorSpeedSlider",
                                   "inspectorPitchSlider"]) {
             const slider = findChild(page, sliderName)
             verify(slider)
@@ -1120,7 +1134,7 @@ TestCase {
     }
 
     function test_editorSliderActiveSegmentStaysInsideFineGroove() {
-        for (const sliderName of ["editorTrackGain", "inspectorSpeedSlider",
+        for (const sliderName of ["inspectorSpeedSlider",
                                   "inspectorPitchSlider"]) {
             const slider = findChild(page, sliderName)
             const groove = findChild(slider, "editorSliderGroove")
@@ -1359,29 +1373,6 @@ TestCase {
                         - before) <= 1)
     }
 
-    function test_timelineZoomRangeStartsFullAndShrinksFromBothEnds() {
-        verify(AudioEditorController.createUntitledDocument(48000, 2, 192000))
-        const zoomRange = findChild(page, "editorTimelineZoomRange")
-        const canvas = findChild(page, "editorWaveformCanvas")
-        verify(zoomRange && canvas)
-        AudioEditorController.viewport.setViewportWidth(canvas.width)
-        verify(AudioEditorController.viewport.setVisibleRange(0, 192000))
-        wait(0)
-        compare(Math.round(zoomRange.to), 192000)
-        compare(Math.round(zoomRange.first.value), 0)
-        compare(Math.round(zoomRange.second.value), 192000)
-        zoomRange.first.value = 24000
-        zoomRange.first.moved()
-        wait(0)
-        compare(AudioEditorController.viewport.visibleStartFrame, 24000)
-        compare(AudioEditorController.viewport.visibleEndFrame, 192000)
-        zoomRange.second.value = 144000
-        zoomRange.second.moved()
-        wait(0)
-        compare(AudioEditorController.viewport.visibleStartFrame, 24000)
-        compare(AudioEditorController.viewport.visibleEndFrame, 144000)
-    }
-
     function test_ctrlRightClickSelectsTheWholeEvent() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
         AudioEditorController.clearEventSelection()
@@ -1410,36 +1401,17 @@ TestCase {
         compare(progressFill.color.toString(), "#12b76a")
     }
 
-    function test_trackGainWheelUsesNaturalDirection() {
+    function test_configuredExportOffersOnlyValidSelectionRange() {
+        const selectionOnly = findChild(page, "editorExportSelectionOnly")
+        verify(selectionOnly)
+        compare(selectionOnly.enabled, false)
         verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
-        const gain = findChild(page, "editorTrackGain")
-        verify(gain)
-        compare(AudioEditorController.trackGainDb, 0)
-        mouseWheel(gain, gain.width / 2, gain.height / 2,
-                   0, 120, Qt.NoButton, Qt.NoModifier)
-        verify(AudioEditorController.trackGainDb > 0)
-        const raised = AudioEditorController.trackGainDb
-        mouseWheel(gain, gain.width / 2, gain.height / 2,
-                   0, -120, Qt.NoButton, Qt.NoModifier)
-        verify(AudioEditorController.trackGainDb < raised)
-    }
-
-    function test_trackGainDragUpRaisesAndDragDownLowersVolume() {
-        verify(AudioEditorController.createUntitledDocument(48000, 2, 96000))
-        const gain = findChild(page, "editorTrackGain")
-        verify(gain)
-        mousePress(gain, gain.width / 2, gain.height / 2,
-                   Qt.LeftButton)
-        mouseMove(gain, gain.width / 2, 1, 0)
-        mouseRelease(gain, gain.width / 2, 1, Qt.LeftButton)
-        const raised = AudioEditorController.trackGainDb
-        verify(raised > 0)
-
-        mousePress(gain, gain.width / 2, 1, Qt.LeftButton)
-        mouseMove(gain, gain.width / 2, gain.height - 1, 0)
-        mouseRelease(gain, gain.width / 2, gain.height - 1,
-                     Qt.LeftButton)
-        verify(AudioEditorController.trackGainDb < raised)
+        compare(selectionOnly.enabled, false)
+        verify(AudioEditorController.setSelection(12000, 36000))
+        tryCompare(selectionOnly, "enabled", true)
+        selectionOnly.checked = true
+        verify(AudioEditorController.clearSelection())
+        tryCompare(selectionOnly, "checked", false)
     }
 
     function test_selectionUsesOneDashedBorderAndShowsExactLabels() {

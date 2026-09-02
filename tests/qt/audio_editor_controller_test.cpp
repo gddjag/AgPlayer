@@ -1521,6 +1521,35 @@ private slots:
                      .value(QStringLiteral("offset")).toLongLong(), qint64{599});
     }
 
+    void cropFitsNewDocumentWhileSplitAndTrimPreserveViewport()
+    {
+        AudioEditorController crop(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(crop.createUntitledDocument(48'000, 2, 1'000));
+        crop.viewport()->setViewportWidth(500.0);
+        QVERIFY(crop.viewport()->setVisibleRange(100, 400));
+        QVERIFY(crop.setSelection(200, 800));
+        QVERIFY(crop.triggerAction(QStringLiteral("editor.cropToSelection")));
+        QCOMPARE(crop.totalFrames(), qint64{600});
+        QCOMPARE(crop.viewport()->visibleStartFrame(), qint64{0});
+        QCOMPARE(crop.viewport()->visibleEndFrame(), qint64{600});
+
+        AudioEditorController split(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(split.createUntitledDocument(48'000, 2, 1'000));
+        split.viewport()->setViewportWidth(500.0);
+        QVERIFY(split.viewport()->setVisibleRange(100, 600));
+        QVERIFY(split.splitEvent(1, 400));
+        QCOMPARE(split.viewport()->visibleStartFrame(), qint64{100});
+        QCOMPARE(split.viewport()->visibleEndFrame(), qint64{600});
+
+        AudioEditorController trim(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(trim.createUntitledDocument(48'000, 2, 1'000));
+        trim.viewport()->setViewportWidth(500.0);
+        QVERIFY(trim.viewport()->setVisibleRange(100, 600));
+        QVERIFY(trim.trimEvent(1, 100, 900, 100));
+        QCOMPARE(trim.viewport()->visibleStartFrame(), qint64{100});
+        QCOMPARE(trim.viewport()->visibleEndFrame(), qint64{600});
+    }
+
     void splitAndMergeActionsUseDeterministicPlayheadAndSelectionRules()
     {
         AudioEditorController controller;
@@ -2165,6 +2194,47 @@ private slots:
         QFile exported(temporary.filePath(QStringLiteral("source_edited_2.wav")));
         QVERIFY(exported.open(QIODevice::ReadOnly));
         QCOMPARE(exported.read(4), QByteArray("RIFF", 4));
+    }
+
+    void configuredDirectoryExportSupportsFullAndNonzeroSelectionRanges()
+    {
+        using agplayer::editor::ProjectExportSettings;
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(fixture)));
+        const qint64 total = controller.totalFrames();
+        QVERIFY(total > 8'000);
+        ProjectExportSettings settings;
+        settings.codecName = QStringLiteral("wav");
+        settings.sampleRate = controller.sampleRate();
+        settings.channels = controller.channels();
+        settings.outputDirectory = temporary.path();
+        QVERIFY(controller.setProjectExportSettings(settings));
+
+        QVERIFY(controller.exportToConfiguredDirectory(false));
+        QTRY_COMPARE_WITH_TIMEOUT(controller.state(), EditorSessionState::Ready,
+                                  10'000);
+        const auto full = decodeProbe(controller.lastExportPath());
+        QCOMPARE(full.frames, total);
+
+        const qint64 start = 2'000;
+        const qint64 end = 7'000;
+        QVERIFY(controller.setSelection(start, end));
+        QVERIFY(controller.exportToConfiguredDirectory(true));
+        QTRY_COMPARE_WITH_TIMEOUT(controller.state(), EditorSessionState::Ready,
+                                  10'000);
+        const auto selection = decodeProbe(controller.lastExportPath());
+        QCOMPARE(selection.frames, end - start);
+
+        QVERIFY(controller.clearSelection());
+        const QString previousPath = controller.lastExportPath();
+        QVERIFY(!controller.exportToConfiguredDirectory(true));
+        QVERIFY(!controller.errorMessage().isEmpty());
+        QCOMPARE(controller.lastExportPath(), previousPath);
     }
 
     void configuredExportDefaultsToAUsableDirectoryAndPublishesDecodedSuccessPath()

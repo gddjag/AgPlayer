@@ -35,6 +35,7 @@ Rectangle {
     property bool inspectorExpanded: false
     property bool controlModifierHeld: false
     property bool pendingExportAfterDirectory: false
+    property bool pendingSelectionExport: false
     property string pendingRelinkSourceId: ""
     readonly property bool modalInputActive: openDialog.visible
         || saveProjectDialog.visible || relinkSourceDialog.visible
@@ -277,14 +278,19 @@ Rectangle {
             page.updateExportSetting(
                 "outputDirectory", selectedFolder.toLocalFile())
             const continueExport = page.pendingExportAfterDirectory
+            const selectionOnly = page.pendingSelectionExport
             page.pendingExportAfterDirectory = false
+            page.pendingSelectionExport = false
             if (continueExport) {
                 Qt.callLater(function() {
-                    AudioEditorController.exportToConfiguredDirectory()
+                    AudioEditorController.exportToConfiguredDirectory(selectionOnly)
                 })
             }
         }
-        onRejected: page.pendingExportAfterDirectory = false
+        onRejected: {
+            page.pendingExportAfterDirectory = false
+            page.pendingSelectionExport = false
+        }
     }
     Dialog {
         id: discardDialog
@@ -417,6 +423,7 @@ Rectangle {
             }
 
             Rectangle {
+                id: timelineWorkspace
                 objectName: "editorTimelineWorkspace"
                 x: 12
                 y: page.timelineWorkspaceTop
@@ -436,7 +443,7 @@ Rectangle {
                 objectName: "editorTrackHeader"
                 x: 12
                 y: page.trackRegionTop
-                width: page.interpolateLayout(84, 96)
+                width: page.interpolateLayout(72, 80)
                 height: page.trackRegionHeight
                 color: Theme.surfaceElevated
                 border.color: Theme.divider
@@ -480,35 +487,7 @@ Rectangle {
                             onClicked: AudioEditorController.setTrackSolo(checked)
                         }
                     }
-                    EditorSlider {
-                        id: trackGainSlider
-                        objectName: "editorTrackGain"
-                        Keys.onSpacePressed: function(event) {
-                            event.accepted = true
-                        }
-                        orientation: Qt.Vertical
-                        from: -60
-                        to: 12
-                        stepSize: 1
-                        wheelStep: 1
-                        value: AudioEditorController.trackGainDb
-                        enabled: AudioEditorController.hasDocument
-                            && !AudioEditorController.busy
-                        Layout.fillHeight: true
-                        Layout.alignment: Qt.AlignHCenter
-                        onMoved: AudioEditorController.setTrackGainDb(value)
-                        onWheelAdjusted: function(requestedValue) {
-                            AudioEditorController.setTrackGainDb(requestedValue)
-                        }
-                    }
-                    Label {
-                        objectName: "editorTrackGainLabel"
-                        text: (trackGainSlider.value > 0 ? "+" : "")
-                            + trackGainSlider.value.toFixed(1) + " dB"
-                        color: Theme.textPrimary
-                        font.pixelSize: 11
-                        Layout.alignment: Qt.AlignHCenter
-                    }
+                    Item { Layout.fillHeight: true }
                 }
             }
 
@@ -663,117 +642,12 @@ Rectangle {
                 height: page.trackRegionHeight
             }
 
-            RangeSlider {
-                id: timelineZoomRange
-                objectName: "editorTimelineZoomRange"
-                x: ruler.x
-                y: page.compactNarrowLayout ? 211
-                    : page.shortDesktopLayout ? 366
-                    : page.narrowLayout ? 340
-                    : page.interpolateLayout(378, 589)
-                width: ruler.width
-                height: page.compactNarrowLayout ? 12 : 16
-                from: 0
-                to: Math.max(1, AudioEditorController.totalFrames)
-                stepSize: 1
-                leftPadding: 6
-                rightPadding: 6
-                enabled: AudioEditorController.hasDocument
-                    && AudioEditorController.totalFrames > 0
-                function syncHandles() {
-                    if (!AudioEditorController.hasDocument) {
-                        first.value = 0
-                        second.value = 1
-                        return
-                    }
-                    const start = Math.max(0,
-                        AudioEditorController.viewport.visibleStartFrame)
-                    const end = Math.max(start + 1,
-                        AudioEditorController.viewport.visibleEndFrame)
-                    first.value = 0
-                    second.value = end
-                    first.value = start
-                }
-                first.onMoved: AudioEditorController.viewport.setVisibleRange(
-                    Math.round(first.value), Math.round(second.value))
-                second.onMoved: AudioEditorController.viewport.setVisibleRange(
-                    Math.round(first.value), Math.round(second.value))
-                Component.onCompleted: Qt.callLater(syncHandles)
-                Connections {
-                    target: AudioEditorController.viewport
-                    function onViewportChanged() {
-                        if (!timelineZoomRange.first.pressed
-                                && !timelineZoomRange.second.pressed)
-                            timelineZoomRange.syncHandles()
-                    }
-                }
-                Connections {
-                    target: AudioEditorController
-                    function onDocumentChanged() {
-                        Qt.callLater(timelineZoomRange.syncHandles)
-                    }
-                }
-
-                background: Rectangle {
-                    x: timelineZoomRange.leftPadding
-                    y: timelineZoomRange.topPadding
-                        + timelineZoomRange.availableHeight / 2 - height / 2
-                    width: timelineZoomRange.availableWidth
-                    height: 4
-                    radius: 2
-                    color: Theme.borderStrong
-
-                    Rectangle {
-                        x: timelineZoomRange.first.visualPosition * parent.width
-                        width: Math.max(2,
-                            (timelineZoomRange.second.visualPosition
-                             - timelineZoomRange.first.visualPosition)
-                            * parent.width)
-                        height: parent.height
-                        radius: parent.radius
-                        color: Theme.accent
-                    }
-                }
-                first.handle: Rectangle {
-                    objectName: "editorTimelineZoomStartHandle"
-                    x: timelineZoomRange.leftPadding
-                        + timelineZoomRange.first.visualPosition
-                        * timelineZoomRange.availableWidth - width / 2
-                    y: timelineZoomRange.topPadding
-                        + timelineZoomRange.availableHeight / 2 - height / 2
-                    implicitWidth: 12
-                    implicitHeight: 12
-                    radius: 6
-                    color: timelineZoomRange.first.pressed
-                        ? Theme.accentPressed : Theme.surfaceElevated
-                    border.color: Theme.accent
-                    border.width: 2
-                }
-                second.handle: Rectangle {
-                    objectName: "editorTimelineZoomEndHandle"
-                    x: timelineZoomRange.leftPadding
-                        + timelineZoomRange.second.visualPosition
-                        * timelineZoomRange.availableWidth - width / 2
-                    y: timelineZoomRange.topPadding
-                        + timelineZoomRange.availableHeight / 2 - height / 2
-                    implicitWidth: 12
-                    implicitHeight: 12
-                    radius: 6
-                    color: timelineZoomRange.second.pressed
-                        ? Theme.accentPressed : Theme.surfaceElevated
-                    border.color: Theme.accent
-                    border.width: 2
-                }
-            }
-
             Rectangle {
                 id: playbackTransport
                 objectName: "editorPlaybackTransport"
                 x: 12
-                y: page.compactNarrowLayout ? 229
-                    : page.shortDesktopLayout ? 390
-                    : page.narrowLayout ? 372
-                    : page.interpolateLayout(410, 618)
+                y: timelineWorkspace.y + timelineWorkspace.height
+                    + (page.compactNarrowLayout ? 6 : 8)
                 width: mainSurface.width - 24
                 height: page.compactNarrowLayout ? 92
                     : page.shortDesktopLayout ? 92
@@ -1181,7 +1055,7 @@ Rectangle {
                                 qsTr("Shift+鼠标滚轮 = 横向滚动"),
                                 qsTr("拖拽片段边缘 = 修剪"),
                                 qsTr("双击音量线 = 添加控制点"),
-                                qsTr("Ctrl+右键 = 选择片段")
+                                qsTr("Ctrl+右键 = 选择片段 / 双击右键取消")
                             ]
                             delegate: Item {
                                 required property int index
@@ -1648,7 +1522,7 @@ Rectangle {
                     property bool collapsed: false
                     property bool exportInProgress: false
                     property bool exportCompleted: false
-                    height: collapsed ? 38 : 336
+                    height: collapsed ? 38 : 366
                     clip: true
                     color: Theme.surfaceElevated
                     border.color: Theme.borderStrong
@@ -1924,6 +1798,22 @@ Rectangle {
                                 }
                             }
                         }
+                        ThemedCheckBox {
+                            id: exportSelectionOnly
+                            objectName: "editorExportSelectionOnly"
+                            visible: !exportGroup.collapsed
+                            Layout.fillWidth: true
+                            text: qsTr("仅导出选区")
+                            enabled: AudioEditorController.hasDocument
+                                && !AudioEditorController.busy
+                                && AudioEditorController.selectionStart >= 0
+                                && AudioEditorController.selectionEnd
+                                    > AudioEditorController.selectionStart
+                            onEnabledChanged: {
+                                if (!enabled)
+                                    checked = false
+                            }
+                        }
                         Item { Layout.fillHeight: true }
                         Button {
                             objectName: "editorExportButton"
@@ -1983,8 +1873,11 @@ Rectangle {
                             }
                             onClicked: {
                                 exportGroup.exportCompleted = false
+                                page.pendingSelectionExport =
+                                    exportSelectionOnly.checked
                                 exportGroup.exportInProgress =
-                                    AudioEditorController.exportToConfiguredDirectory()
+                                    AudioEditorController.exportToConfiguredDirectory(
+                                        exportSelectionOnly.checked)
                             }
                         }
                     }

@@ -26,9 +26,8 @@ Rectangle {
     color: Theme.panel
     border.color: Theme.border
     border.width: 1
-    radius: separationWorkbench ? 7 : Theme.radiusMd
-    implicitHeight: separationWorkbench ? 44
-                                         : referenceWorkbench ? 52 : 59
+    radius: Theme.radiusMd
+    implicitHeight: Theme.navigationActionExtent + Theme.spacingLg
 
     RowLayout {
         anchors.left: parent.left
@@ -36,7 +35,7 @@ Rectangle {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.leftMargin: 12
-        anchors.rightMargin: separationWorkbench ? 0 : Theme.spacingLg
+        anchors.rightMargin: Theme.spacingLg
         spacing: Theme.spacingSm
 
         Repeater {
@@ -46,8 +45,7 @@ Rectangle {
                 id: navButton
                 objectName: "audioToolNav_" + modelData.toolId
                 Layout.preferredWidth: 154
-                Layout.preferredHeight: navigation.separationWorkbench ? 44
-                                        : navigation.referenceWorkbench ? 52 : 58
+                Layout.preferredHeight: navigation.implicitHeight
                 Layout.maximumHeight: Layout.preferredHeight
                 flat: true
                 checked: navigation.currentTool === modelData.toolId
@@ -87,8 +85,7 @@ Rectangle {
                     border.color: navButton.checked ? Theme.accent
                                                     : "transparent"
                     border.width: navButton.checked ? 1 : 0
-                    radius: navigation.separationWorkbench ? 6
-                                                           : Theme.radiusMd
+                    radius: Theme.radiusMd
 
                     Rectangle {
                         visible: navButton.checked

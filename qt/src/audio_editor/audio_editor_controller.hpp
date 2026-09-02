@@ -269,7 +269,7 @@ public:
                               int sampleRate = 0, int channels = 0,
                               qint64 bitRate = 0, bool keepMetadata = true,
                               bool variableBitRate = true, int quality = 80);
-    Q_INVOKABLE bool exportToConfiguredDirectory();
+    Q_INVOKABLE bool exportToConfiguredDirectory(bool selectionOnly = false);
     Q_INVOKABLE bool setSelection(qint64 startFrame, qint64 endFrame);
     Q_INVOKABLE bool clearSelection();
     Q_INVOKABLE void selectEvent(const QString& id);

@@ -126,7 +126,8 @@ Window {
                 id: titleBar
                 objectName: "audioToolsTitleBar"
                 Layout.fillWidth: true
-                Layout.preferredHeight: window.metadataWorkbench ? 54 : 60
+                Layout.preferredHeight: Theme.navigationActionExtent
+                    + Theme.spacingLg
                 color: Theme.panel
 
                 RowLayout {
@@ -163,8 +164,8 @@ Window {
                         objectName: "audioToolsMinimizeButton"
                         focusPolicy: Qt.NoFocus
                         Keys.onSpacePressed: function(event) { event.accepted = true }
-                        Layout.preferredWidth: 52
-                        Layout.preferredHeight: 32
+                        Layout.preferredWidth: Theme.navigationActionExtent
+                        Layout.preferredHeight: Theme.navigationActionExtent
                         icon.source: Theme.icon("subtract-line")
                         icon.color: Theme.iconPrimary
                         Accessible.name: qsTr("最小化")
@@ -179,8 +180,8 @@ Window {
                         objectName: "audioToolsMaximizeButton"
                         focusPolicy: Qt.NoFocus
                         Keys.onSpacePressed: function(event) { event.accepted = true }
-                        Layout.preferredWidth: 52
-                        Layout.preferredHeight: 32
+                        Layout.preferredWidth: Theme.navigationActionExtent
+                        Layout.preferredHeight: Theme.navigationActionExtent
                         icon.source: Theme.icon(window.visibility === Window.Maximized
                                                 ? "fullscreen-exit-fill"
                                                 : "checkbox-blank-line")
@@ -199,8 +200,8 @@ Window {
                         objectName: "audioToolsCloseButton"
                         focusPolicy: Qt.NoFocus
                         Keys.onSpacePressed: function(event) { event.accepted = true }
-                        Layout.preferredWidth: 52
-                        Layout.preferredHeight: 32
+                        Layout.preferredWidth: Theme.navigationActionExtent
+                        Layout.preferredHeight: Theme.navigationActionExtent
                         icon.source: Theme.icon("close-fill")
                         icon.color: Theme.iconPrimary
                         Accessible.name: qsTr("关闭")
@@ -219,7 +220,7 @@ Window {
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
                     anchors.right: parent.right
-                    anchors.rightMargin: 182
+                    anchors.rightMargin: 108
                     z: 2
                     acceptedButtons: Qt.LeftButton
                     onPressed: function(mouse) {
@@ -232,8 +233,8 @@ Window {
 
             ToolSidebar {
                 Layout.fillWidth: true
-                Layout.preferredHeight: window.separationWorkbench ? 44
-                                                                    : window.metadataWorkbench ? 52 : 59
+                Layout.preferredHeight: Theme.navigationActionExtent
+                    + Theme.spacingLg
                 window: window
                 currentTool: AudioToolsController.currentTool
                 referenceWorkbench: window.referenceWorkbench

@@ -373,6 +373,35 @@ TestCase {
         }
     }
 
+    function test_nineteen_controls_keep_readable_uniform_geometry() {
+        equalizer.width = 860
+        equalizer.height = 520
+        wait(80)
+        var scroller = findChild(equalizer, "equalizerBandScroller")
+        var repeater = findChild(equalizer, "equalizerBandRepeater")
+        var preamp = findChild(equalizer, "equalizerPreampSlider")
+        verify(scroller && repeater && preamp)
+        compare(repeater.count, 18)
+        verify(scroller.contentWidth > scroller.width,
+               "default EQ must scroll rather than squeeze nineteen columns")
+        var first = repeater.itemAt(0)
+        verify(first.width >= 64, "band width=" + first.width)
+        compare(preamp.width, first.width)
+        for (var index = 1; index < repeater.count; ++index) {
+            compare(repeater.itemAt(index).width, first.width)
+            compare(findChild(repeater.itemAt(index),
+                              "eqBandSlider-" + index + "-control").height,
+                    findChild(first, "eqBandSlider-0-control").height)
+        }
+        var firstHandle = findChild(first, "eqBandSlider-0-control")
+        verify(firstHandle.width > 0 && firstHandle.height > 0)
+        scroller.contentX = scroller.contentWidth - scroller.width
+        wait(30)
+        var preampPoint = preamp.mapToItem(scroller, 0, 0)
+        verify(preampPoint.x < scroller.width
+               && preampPoint.x + preamp.width > 0)
+    }
+
     function test_reference_and_minimum_viewports_render() {
         compare(equalizer.width, 860)
         compare(equalizer.height, 520)
@@ -384,23 +413,19 @@ TestCase {
         verify(findChild(equalizer, "equalizerBand-0-value").font.pixelSize >= 16)
 
         var firstBand = findChild(equalizer, "equalizerBand-0")
-        var lastBand = findChild(equalizer, "equalizerBand-17")
         var footer = findChild(equalizer, "equalizerFooterPanel")
         var outputMeter = findChild(equalizer, "equalizerOutputMeter")
         var firstPoint = firstBand.mapToItem(equalizer.contentItem, 0, 0)
-        var lastPoint = lastBand.mapToItem(equalizer.contentItem, 0, 0)
         var footerPoint = footer.mapToItem(equalizer.contentItem, 0, 0)
         var outputPoint = outputMeter.mapToItem(equalizer.contentItem, 0, 0)
         verify(firstPoint.x >= 0 && firstPoint.y >= 0)
-        verify(lastPoint.x + lastBand.width <= equalizer.width)
-        verify(lastPoint.y + lastBand.height <= equalizer.height)
         verify(footerPoint.y + footer.height <= equalizer.height)
         verify(outputPoint.x + outputMeter.width <= equalizer.width)
         var contentScroller = findChild(equalizer, "equalizerContentScroller")
         var bandScroller = findChild(equalizer, "equalizerBandScroller")
         var footerScroller = findChild(equalizer, "equalizerFooterScroller")
         verify(contentScroller.contentHeight <= contentScroller.height + 0.5)
-        verify(bandScroller.contentWidth <= bandScroller.width + 0.5)
+        verify(bandScroller.contentWidth > bandScroller.width)
         verify(footerScroller.contentWidth <= footerScroller.width + 0.5)
 
         var gains = [2, 1.5, 0, -1, 0.5, -0.5, -1.5, -0.5,
@@ -420,7 +445,7 @@ TestCase {
         wait(120)
         compare(equalizer.width, 1672)
         compare(equalizer.height, 941)
-        compare(findChild(equalizer, "equalizerTitleBar").height, 60)
+        compare(findChild(equalizer, "equalizerTitleBar").height, 44)
         compare(findChild(equalizer, "equalizerHeaderPanel").height, 72)
         compare(findChild(equalizer, "equalizerResponsePanel").height, 291)
         compare(findChild(equalizer, "equalizerBandsPanel").height, 375)
@@ -464,11 +489,11 @@ TestCase {
         compare(findChild(equalizer, "equalizerContentScrollBar").policy,
                 ScrollBar.AlwaysOff)
         compare(findChild(equalizer, "equalizerBandScrollBar").policy,
-                ScrollBar.AlwaysOff)
+                ScrollBar.AlwaysOn)
         compare(findChild(equalizer, "equalizerFooterScrollBar").policy,
                 ScrollBar.AlwaysOff)
         verify(!findChild(equalizer, "equalizerContentScrollBar").visible)
-        verify(!findChild(equalizer, "equalizerBandScrollBar").visible)
+        verify(findChild(equalizer, "equalizerBandScrollBar").visible)
         verify(!findChild(equalizer, "equalizerFooterScrollBar").visible)
         capture(temp + "/AgPlayer-equalizer-1180x680.png",
                 Qt.size(1180, 680))

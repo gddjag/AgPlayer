@@ -1402,9 +1402,14 @@ bool AudioEditorController::exportTo(
                               variableBitRate, quality, true);
 }
 
-bool AudioEditorController::exportToConfiguredDirectory()
+bool AudioEditorController::exportToConfiguredDirectory(
+    const bool selectionOnly)
 {
     if (!has_document_ || busy()) return false;
+    if (selectionOnly && !document_.selection()) {
+        setError(tr("导出范围或路径无效"));
+        return false;
+    }
     if (project_export_settings_.outputDirectory.trimmed().isEmpty()) {
         setError({});
         emit exportDirectoryRequested();
@@ -1465,7 +1470,7 @@ bool AudioEditorController::exportToConfiguredDirectory()
             .arg(stem).arg(suffix).arg(extension));
     }
     return exportWithSettings(
-        QUrl::fromLocalFile(target), false, encoder,
+        QUrl::fromLocalFile(target), selectionOnly, encoder,
         project_export_settings_.sampleRate,
         project_export_settings_.channels,
         project_export_settings_.bitRate,
@@ -2889,6 +2894,7 @@ bool AudioEditorController::triggerAction(const QString& id)
     if (id != QStringLiteral("editor.copy")) {
         finishTimelineMutation();
         if (id == QStringLiteral("editor.cropToSelection")) {
+            viewport_.setVisibleRange(0, document_.totalFrames());
             setLoopEnabled(true);
             if (const auto croppedSelection = document_.selection()) {
                 (void)seekFrame(croppedSelection->start);
