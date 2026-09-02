@@ -26,6 +26,11 @@ extern "C" {
 
 #ifdef _WIN32
 #include <windows.h>
+#else
+#include <fcntl.h>
+#include <sys/file.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 namespace agplayer {
@@ -758,6 +763,194 @@ AudioEquivalence audio_streams_equivalent(const std::string& source_path,
     }
     return classify_audio_stream_evidence(source, staged);
 }
+
+class SourceCommitGuard final {
+public:
+    explicit SourceCommitGuard(const std::filesystem::path& path)
+    {
+#ifdef _WIN32
+        handle_ = CreateFileW(path.c_str(), GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            nullptr, OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+        if (handle_ == INVALID_HANDLE_VALUE) return;
+        if (LockFileEx(handle_, LOCKFILE_EXCLUSIVE_LOCK
+                | LOCKFILE_FAIL_IMMEDIATELY, 0, MAXDWORD, MAXDWORD,
+                &lock_range_) == 0) {
+            CloseHandle(handle_);
+            handle_ = INVALID_HANDLE_VALUE;
+            return;
+        }
+        locked_ = true;
+#else
+        descriptor_ = ::open(path.c_str(), O_RDONLY | O_CLOEXEC);
+        if (descriptor_ < 0) return;
+        if (::flock(descriptor_, LOCK_EX | LOCK_NB) != 0) {
+            ::close(descriptor_);
+            descriptor_ = -1;
+            return;
+        }
+        locked_ = true;
+#endif
+    }
+
+    ~SourceCommitGuard()
+    {
+#ifdef _WIN32
+        if (handle_ != INVALID_HANDLE_VALUE) {
+            if (locked_) {
+                UnlockFileEx(handle_, 0, MAXDWORD, MAXDWORD, &lock_range_);
+            }
+            CloseHandle(handle_);
+        }
+#else
+        if (descriptor_ >= 0) {
+            if (locked_) ::flock(descriptor_, LOCK_UN);
+            ::close(descriptor_);
+        }
+#endif
+    }
+
+    SourceCommitGuard(const SourceCommitGuard&) = delete;
+    SourceCommitGuard& operator=(const SourceCommitGuard&) = delete;
+
+    [[nodiscard]] bool valid() const noexcept
+    {
+#ifdef _WIN32
+        return handle_ != INVALID_HANDLE_VALUE && locked_;
+#else
+        return descriptor_ >= 0 && locked_;
+#endif
+    }
+
+    [[nodiscard]] bool fingerprint(FileSha256& digest) const
+    {
+        if (!valid()) return false;
+        AVSHA* sha = av_sha_alloc();
+        if (sha == nullptr || av_sha_init(sha, 256) < 0) {
+            av_free(sha);
+            return false;
+        }
+        std::array<unsigned char, 64U * 1024U> buffer{};
+        bool ok = true;
+#ifdef _WIN32
+        LARGE_INTEGER zero{};
+        LARGE_INTEGER original{};
+        ok = SetFilePointerEx(handle_, zero, &original, FILE_CURRENT) != 0
+            && SetFilePointerEx(handle_, zero, nullptr, FILE_BEGIN) != 0;
+        while (ok) {
+            DWORD read = 0;
+            if (ReadFile(handle_, buffer.data(),
+                         static_cast<DWORD>(buffer.size()), &read, nullptr) == 0) {
+                ok = false;
+                break;
+            }
+            if (read == 0) break;
+            av_sha_update(sha, buffer.data(), read);
+        }
+        if (SetFilePointerEx(handle_, original, nullptr, FILE_BEGIN) == 0)
+            ok = false;
+#else
+        off_t offset = 0;
+        while (ok) {
+            const ssize_t read = ::pread(descriptor_, buffer.data(),
+                                         buffer.size(), offset);
+            if (read < 0) {
+                ok = false;
+                break;
+            }
+            if (read == 0) break;
+            av_sha_update(sha, buffer.data(),
+                          static_cast<unsigned int>(read));
+            offset += read;
+        }
+#endif
+        if (ok) av_sha_final(sha, digest.data());
+        av_free(sha);
+        return ok;
+    }
+
+    [[nodiscard]] bool copyTo(const std::filesystem::path& destination) const
+    {
+        if (!valid()) return false;
+        std::array<unsigned char, 64U * 1024U> buffer{};
+#ifdef _WIN32
+        HANDLE output = CreateFileW(destination.c_str(), GENERIC_WRITE, 0,
+            nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (output == INVALID_HANDLE_VALUE) return false;
+        LARGE_INTEGER zero{};
+        LARGE_INTEGER original{};
+        bool ok = SetFilePointerEx(handle_, zero, &original, FILE_CURRENT) != 0
+            && SetFilePointerEx(handle_, zero, nullptr, FILE_BEGIN) != 0;
+        while (ok) {
+            DWORD read = 0;
+            if (ReadFile(handle_, buffer.data(),
+                         static_cast<DWORD>(buffer.size()), &read, nullptr) == 0) {
+                ok = false;
+                break;
+            }
+            if (read == 0) break;
+            DWORD offset = 0;
+            while (offset < read) {
+                DWORD written = 0;
+                if (WriteFile(output, buffer.data() + offset, read - offset,
+                              &written, nullptr) == 0 || written == 0) {
+                    ok = false;
+                    break;
+                }
+                offset += written;
+            }
+        }
+        if (ok && FlushFileBuffers(output) == 0) ok = false;
+        if (SetFilePointerEx(handle_, original, nullptr, FILE_BEGIN) == 0)
+            ok = false;
+        CloseHandle(output);
+        return ok;
+#else
+        struct stat source_stat{};
+        if (::fstat(descriptor_, &source_stat) != 0) return false;
+        const int output = ::open(destination.c_str(),
+            O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC,
+            source_stat.st_mode & 0777);
+        if (output < 0) return false;
+        bool ok = true;
+        off_t source_offset = 0;
+        while (ok) {
+            const ssize_t read = ::pread(descriptor_, buffer.data(),
+                                         buffer.size(), source_offset);
+            if (read < 0) {
+                ok = false;
+                break;
+            }
+            if (read == 0) break;
+            ssize_t written_total = 0;
+            while (written_total < read) {
+                const ssize_t written = ::write(
+                    output, buffer.data() + written_total,
+                    static_cast<std::size_t>(read - written_total));
+                if (written <= 0) {
+                    ok = false;
+                    break;
+                }
+                written_total += written;
+            }
+            source_offset += read;
+        }
+        if (ok && ::fsync(output) != 0) ok = false;
+        ::close(output);
+        return ok;
+#endif
+    }
+
+private:
+    bool locked_ = false;
+#ifdef _WIN32
+    HANDLE handle_ = INVALID_HANDLE_VALUE;
+    OVERLAPPED lock_range_{};
+#else
+    int descriptor_ = -1;
+#endif
+};
 
 bool fail_at(const MetadataWriterTestHooks* hooks, const MetadataFailurePoint point)
 {
@@ -2116,15 +2309,39 @@ ag_result write_metadata_with_preserved_backup(
             return AG_IO_ERROR;
         }
     }
-    std::filesystem::copy_file(source, backup,
-                               std::filesystem::copy_options::overwrite_existing, ec);
+    SourceCommitGuard commit_guard(source);
+    FileSha256 guarded_fingerprint{};
+    if (!commit_guard.valid()
+        || !commit_guard.fingerprint(guarded_fingerprint)) {
+        clean_stage();
+        const bool prior_backup_restored = existing_backup->restore(
+            test_hooks != nullptr && test_hooks->fail_backup_restore);
+        error = "Source commit lock could not be acquired";
+        if (!prior_backup_restored) {
+            error += "; prior backup remains preserved at ";
+            error += existing_backup->preserved_path();
+        }
+        return AG_IO_ERROR;
+    }
+    if (guarded_fingerprint != source_fingerprint) {
+        clean_stage();
+        const bool prior_backup_restored = existing_backup->restore(
+            test_hooks != nullptr && test_hooks->fail_backup_restore);
+        error = "Source changed while metadata was being written";
+        if (!prior_backup_restored) {
+            error += "; prior backup remains preserved at ";
+            error += existing_backup->preserved_path();
+        }
+        return AG_IO_ERROR;
+    }
+    const bool backup_created = commit_guard.copyTo(backup);
     FileSha256 pre_replace_fingerprint{};
     FileSha256 backup_fingerprint{};
-    const bool source_fingerprint_read = !ec
-        && file_sha256(source, pre_replace_fingerprint);
-    const bool backup_fingerprint_read = !ec
+    const bool source_fingerprint_read = backup_created
+        && commit_guard.fingerprint(pre_replace_fingerprint);
+    const bool backup_fingerprint_read = backup_created
         && file_sha256(backup, backup_fingerprint);
-    if (!ec && source_fingerprint_read && backup_fingerprint_read
+    if (backup_created && source_fingerprint_read && backup_fingerprint_read
         && (pre_replace_fingerprint != source_fingerprint
             || backup_fingerprint != source_fingerprint)) {
         clean_stage();
@@ -2137,13 +2354,29 @@ ag_result write_metadata_with_preserved_backup(
         }
         return AG_IO_ERROR;
     }
-    if (ec || !source_fingerprint_read || !backup_fingerprint_read
+    if (test_hooks != nullptr && test_hooks->before_atomic_replace)
+        test_hooks->before_atomic_replace();
+    FileSha256 commit_fingerprint{};
+    if (source_fingerprint_read && backup_fingerprint_read
+        && (!commit_guard.fingerprint(commit_fingerprint)
+            || commit_fingerprint != source_fingerprint)) {
+        clean_stage();
+        const bool prior_backup_restored = existing_backup->restore(
+            test_hooks != nullptr && test_hooks->fail_backup_restore);
+        error = "Source changed while metadata was being written";
+        if (!prior_backup_restored) {
+            error += "; prior backup remains preserved at ";
+            error += existing_backup->preserved_path();
+        }
+        return AG_IO_ERROR;
+    }
+    if (!backup_created || !source_fingerprint_read || !backup_fingerprint_read
         || fail_at(test_hooks, MetadataFailurePoint::AtomicReplace)
         || !atomic_replace(staged, source)) {
         clean_stage();
         const bool prior_backup_restored = existing_backup->restore(
             test_hooks != nullptr && test_hooks->fail_backup_restore);
-        error = ec ? "Failed to create backup before replacement"
+        error = !backup_created ? "Failed to create backup before replacement"
             : (!source_fingerprint_read || !backup_fingerprint_read)
                 ? "Failed to verify backup before replacement"
                 : "Failed to atomically replace original file";

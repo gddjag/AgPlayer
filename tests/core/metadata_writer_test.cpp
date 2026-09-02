@@ -481,6 +481,68 @@ int main(const int argc, char** argv)
     assert(!std::filesystem::exists(fingerprint_path.u8string() + ".agbak"));
     std::filesystem::remove(fingerprint_path);
 
+    const std::filesystem::path commit_lock_path =
+        work_dir / "meta-atomic-commit-lock.wav";
+    std::filesystem::copy_file(fixture, commit_lock_path,
+        std::filesystem::copy_options::overwrite_existing);
+    bool commit_hook_called = false;
+    bool competing_write_blocked = false;
+    agplayer::MetadataWriterTestHooks commit_lock_hooks;
+#ifdef _WIN32
+    commit_lock_hooks.before_atomic_replace = [&] {
+        commit_hook_called = true;
+        SetLastError(ERROR_SUCCESS);
+        HANDLE competing_writer = CreateFileW(
+            commit_lock_path.c_str(), GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (competing_writer != INVALID_HANDLE_VALUE) {
+            LARGE_INTEGER offset{};
+            offset.QuadPart = 64;
+            assert(SetFilePointerEx(competing_writer, offset, nullptr,
+                                    FILE_BEGIN) != 0);
+            const unsigned char byte = 0x5aU;
+            DWORD written = 0;
+            SetLastError(ERROR_SUCCESS);
+            const BOOL write_ok = WriteFile(competing_writer, &byte, 1,
+                                            &written, nullptr);
+            competing_write_blocked = write_ok == 0
+                && GetLastError() == ERROR_LOCK_VIOLATION;
+            CloseHandle(competing_writer);
+        }
+    };
+#else
+    commit_lock_hooks.before_atomic_replace = [&] {
+        commit_hook_called = true;
+        std::fstream competing_writer(commit_lock_path,
+            std::ios::binary | std::ios::in | std::ios::out);
+        competing_writer.seekp(64);
+        competing_writer.put(static_cast<char>(0x5a));
+        competing_writer.flush();
+        competing_write_blocked = !competing_writer.good();
+    };
+#endif
+    agplayer::MetadataFileResult commit_lock_result;
+    const ag_result commit_lock_write = agplayer::write_metadata_plan(
+        commit_lock_path.u8string(), write_plan, commit_lock_result,
+        nullptr, &commit_lock_hooks);
+#ifdef _WIN32
+    assert(commit_hook_called);
+    assert(competing_write_blocked);
+    assert(commit_lock_write == AG_OK);
+#else
+    assert(commit_hook_called);
+    if (competing_write_blocked) {
+        assert(commit_lock_write == AG_OK);
+    } else {
+        assert(commit_lock_write != AG_OK);
+        assert(commit_lock_result.error_code
+            == agplayer::MetadataErrorCode::SourceChanged);
+    }
+#endif
+    std::filesystem::remove(commit_lock_path.u8string() + ".agbak");
+    std::filesystem::remove(commit_lock_path);
+
     // A failed write must not overwrite or delete a pre-existing recovery
     // point. This exercises both failure before replacement and readback
     // failure after replacement/rollback.

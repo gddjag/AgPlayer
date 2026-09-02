@@ -161,6 +161,7 @@ struct MetadataWriterTestHooks {
     bool fail_backup_restore = false;
     bool simulate_normalized_packet_timing = false;
     std::function<void()> before_source_commit;
+    std::function<void()> before_atomic_replace;
 };
 
 struct CoverResult {
