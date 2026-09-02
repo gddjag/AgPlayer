@@ -849,7 +849,7 @@ TestCase {
         compare(findChild(window, "equalizerContentScrollBar").policy,
                 ScrollBar.AlwaysOff)
         compare(findChild(window, "equalizerBandScrollBar").policy,
-                ScrollBar.AlwaysOff)
+                ScrollBar.AlwaysOn)
         compare(findChild(window, "equalizerFooterScrollBar").policy,
                 ScrollBar.AlwaysOff)
         contentScroller.contentY = Math.min(300,

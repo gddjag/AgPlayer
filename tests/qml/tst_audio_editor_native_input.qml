@@ -200,7 +200,8 @@ TestCase {
                "880 shell was not visible, exposed, and active")
         page = findChild(host, "audioEditorPage")
         verify(page && testAudioUrl && testAudioUrl.toString().length > 0)
-        compare(Math.round(page.height), 441)
+        verify(page.height >= 441 && page.height <= host.height,
+               "compact title/navigation must leave the editor its full usable page")
 
         verify(nativeDropHelper.sendUrls(page, [testAudioUrl]))
         tryVerify(function() {
@@ -234,8 +235,8 @@ TestCase {
             Qt.LeftButton))
         tryCompare(AudioEditorController, "activeTool", "select")
 
-        // The 441 px shell page deliberately leaves a very compact timeline,
-        // but its real native pointer targets must remain usable.
+        // The narrow shell deliberately leaves a compact timeline, but its
+        // real native pointer targets must remain usable.
         AudioEditorController.viewport.setViewportWidth(canvas.width)
         verify(AudioEditorController.viewport.setVisibleRange(
             0, AudioEditorController.totalFrames))

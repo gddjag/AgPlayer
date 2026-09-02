@@ -112,7 +112,7 @@ Assert-Matches $integratedShell '(?s)objectName:\s*"integratedTrackList".*thumbn
     'Integrated list thumbnails must remain visible when the classic switch is off'
 Assert-Matches $rollingShell '(?s)objectName:\s*"rollingTrackList".*thumbnailVisibilityFollowsSetting:\s*false' `
     'Rolling list thumbnails must remain visible when the classic switch is off'
-Assert-Matches $window '(?s)objectName:\s*"sharedTrackList".*relaxedClassicColumns:\s*true.*tagManagementLayout:\s*listWindow\.tagManagementMode' `
+Assert-Matches $window '(?s)objectName:\s*"sharedTrackList".*layoutProfile:\s*"classic".*tagManagementLayout:\s*listWindow\.tagManagementMode' `
     'The classic list must opt into the relaxed reference layout and its tag variant'
 Assert-Matches $trackList '(?s)trackHeaderTitle.*Layout\.column:\s*1.*trackHeaderFavorite.*root\.singleWindowLayout \? 5 : \(root\.relaxedClassicColumns \? 4 : 2\).*trackHeaderArtist.*visible:\s*root\.showArtistColumn.*trackHeaderAlbum.*visible:\s*root\.showAlbumColumn.*trackHeaderRating.*root\.singleWindowLayout \? 4 : \(root\.relaxedClassicColumns \? 3 : 8\).*trackHeaderBpm.*Layout\.column:\s*root\.relaxedClassicColumns \? 5 : 9.*trackHeaderDuration.*root\.singleWindowLayout \? 3 : \(root\.relaxedClassicColumns \? 2 : 10\)' `
     'Classic headers must render title, duration, rating, favorite, and BPM in reference order'
@@ -120,8 +120,8 @@ Assert-Matches $trackList 'readonly property int ratingIconSize:\s*relaxedClassi
     'Classic and tag list stars must use the smaller reference size'
 Assert-Matches $trackList 'readonly property int favoriteIconSize:\s*relaxedClassicColumns \? 22' `
     'Classic and tag favorites must remain visually stronger than row rating stars'
-Assert-Matches $trackList 'readonly property int classicTitleMaximumWidth:\s*230' `
-    'Classic title and waveform column must leave deliberate room for metadata columns'
+Assert-Matches $trackList '(?s)id:\s*titleCell.*Layout\.fillWidth:\s*!root\.singleWindowLayout.*Layout\.maximumWidth:\s*root\.singleWindowLayout.*Number\.POSITIVE_INFINITY' `
+    'Classic title and waveform column must grow while trailing metadata columns keep fixed widths'
 Assert-Matches $window 'objectName:\s*"leftWorkspaceDivider"[\s\S]*opacity:\s*0\.3' `
     'The classic workspace divider must use 30 percent emphasis'
 Assert-Matches $window 'objectName:\s*"tagPanelDivider"[\s\S]*Layout\.bottomMargin:\s*listWindow\.filterBarHeight' `

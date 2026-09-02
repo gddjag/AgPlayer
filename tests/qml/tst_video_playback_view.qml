@@ -120,8 +120,10 @@ TestCase {
                    "missing basic control " + expectedControls[index])
 
         compare(findChild(bar, "equalizerButton").visible, false)
-        compare(findChild(bar, "waveformModeButton").visible, false)
-        compare(findChild(bar, "modeButton").visible, false)
+        var waveformMode = findChild(bar, "waveformModeButton")
+        var playbackMode = findChild(bar, "modeButton")
+        verify(!waveformMode || !waveformMode.visible)
+        verify(!playbackMode || !playbackMode.visible)
         var forbidden = [
             "videoNavigation", "videoLibrary", "videoQuality",
             "videoFilter", "videoSubtitle", "videoUrl", "openVideoButton"

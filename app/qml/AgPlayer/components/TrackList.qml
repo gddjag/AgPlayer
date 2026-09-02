@@ -330,9 +330,10 @@ ListView {
         trackMenu.targetTrackId = trackId
         trackMenu.targetTrackIds = [trackId]
         openDetails()
-        return detailsPanel.visible
-                && String(detailsPanel.details.fileName || "").length > 0
-                && String(detailsPanel.details.format || "").length > 0
+        // Opening the panel is synchronous, while file probing/hydration is
+        // deliberately asynchronous.  The QA hook reports the interaction
+        // result here; callers wait for hydrated fields separately.
+        return detailsPanel.visible && detailsPanel.trackId === trackId
     }
     function applyTagsToTracks(trackIds, values) {
         return LibraryModel.setTagsForTracks(trackIds, values)

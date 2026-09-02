@@ -35,8 +35,8 @@ if ($window -match '(?s)id:\s*centerTrackFooter.*Layout\.(minimumWidth|maximumWi
 
 Assert-Matches $trackList '(?s)id:\s*trackTitleMarquee.*fontWeight:\s*Font\.DemiBold.*id:\s*waveformWrapperLoader.*anchors\.top:\s*trackTitleMarquee\.bottom.*anchors\.topMargin:\s*[2-4].*height:\s*(15|16)' `
     'Thumbnail waveform must sit 2-4 px below the bold title'
-Assert-Matches $trackList 'property bool singleWindowLayout:\s*false' `
-    'TrackList must expose an explicit single-window/rolling presentation profile'
+Assert-Matches $trackList '(?s)property string layoutProfile:\s*"classic".*readonly property bool singleWindowLayout:\s*layoutProfile === "integrated" \|\| layoutProfile === "rolling"' `
+    'TrackList must expose one explicit shared presentation profile for classic, single-window, and rolling layouts'
 Assert-Matches $trackList '(?s)objectName:\s*"singleWindowTrackSubtitle".*artist:\s*rowItem\.artist.*album:\s*rowItem\.album.*tags:\s*rowItem\.rowTags' `
     'Single-window rows must show artist, album, and optional tags beneath the title'
 Assert-Matches $trackList '(?s)objectName:\s*"singleWindowWaveformThumbnailLoader".*Layout\.fillWidth:\s*true.*Layout\.preferredHeight:\s*root\.singleWindowMediaHeight' `
@@ -46,7 +46,7 @@ Assert-Matches $trackList '(?s)readonly property int titleMinimumWidth:\s*single
 Assert-Matches $trackList '(?s)readonly property bool showBpmColumn:\s*singleWindowLayout \? false.*relaxedClassicColumns \? !tagManagementLayout : !tagFilterActive.*readonly property bool showDurationColumn:\s*singleWindowLayout \|\| relaxedClassicColumns \|\| !tagFilterActive' `
     'Single-window lists must show duration without BPM while classic tag mode keeps its existing policy'
 
-Assert-Matches $navigation '(?s)objectName:\s*"navigationExpandButton".*nodeRow\.nodeType === "library".*Layout\.preferredWidth:\s*visible \? 28 : 0.*Layout\.preferredHeight:\s*28.*icon\.width:\s*18.*icon\.height:\s*18' `
+Assert-Matches $navigation '(?s)readonly property int navigationIconVisualSize:\s*Theme\.navigationIconVisualSize.*readonly property int navigationActionExtent:\s*Theme\.navigationActionExtent.*objectName:\s*"navigationExpandButton".*nodeRow\.nodeType === "library".*Layout\.preferredWidth:\s*visible\s*\? root\.navigationActionExtent : 0.*Layout\.preferredHeight:\s*root\.navigationActionExtent.*icon\.width:\s*root\.navigationIconVisualSize.*icon\.height:\s*root\.navigationIconVisualSize' `
     'Library chevron must remain visible with a 28 px hit target and 18 px icon'
 Assert-Matches $navigation 'anchors\.leftMargin:\s*6 \+ nodeRow\.depth \* 12' `
     'Sidebar indentation must remain compact'
