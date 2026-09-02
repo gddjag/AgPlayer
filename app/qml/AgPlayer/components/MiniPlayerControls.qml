@@ -236,7 +236,8 @@ Rectangle {
                     anchors.right: parent.right
                     anchors.top: parent.top
                     height: 36
-                    position: 0
+                    position: root.waveformMode === 3
+                              ? (playback ? playback.positionMs : 0) : 0
                     cursorPosition: playback ? playback.positionMs : 0
                     duration: root.effectiveDurationMs
                     visualMode: SettingsController.waveformMode

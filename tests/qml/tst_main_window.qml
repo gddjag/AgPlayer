@@ -2535,13 +2535,19 @@ TestCase {
         var previous = SettingsController.waveformPlaybackGuide
         var guide = findChild(mainWindow, "waveformPlaybackGuide")
         var playedClip = findChild(mainWindow, "waveformPlayedClip")
-        verify(guide && playedClip)
+        var waveform = findChild(mainWindow, "mainWaveform")
+        verify(guide && playedClip && waveform)
         SettingsController.waveformPlaybackGuide = true
         tryCompare(guide, "visible", true)
         SettingsController.waveformPlaybackGuide = false
         tryCompare(guide, "visible", false)
-        verify(playedClip.visible,
-               "disabling the guide must retain the played-color region")
+        if (SettingsController.waveformMode === 3) {
+            compare(playedClip.visible, false)
+            compare(waveform.position, waveform.cursorPosition)
+        } else {
+            verify(playedClip.visible,
+                   "disabling the guide must retain the played-color region")
+        }
         SettingsController.waveformPlaybackGuide = previous
     }
 
@@ -2851,9 +2857,8 @@ TestCase {
                 String(spectralSettings.palette[7]))
         compare(waveform.spectralUnplayedOpacity,
                 spectralSettings.unplayedOpacity)
-        compare(playedClip.width, waveform.waveformCursorX)
-        compare(findChild(mainWindow, "playedWaveform").position,
-                waveform.duration)
+        compare(playedClip.visible, false)
+        compare(playbackGuide.visible, true)
 
         SettingsController.waveformMode = 1
         tryCompare(waveform, "visualMode", 1)
@@ -5703,7 +5708,7 @@ TestCase {
         compare(String(waveform.spectralPalette[0]), "#123ecf")
         compare(String(waveform.spectralPalette[7]), "#e82718")
         compare(waveform.spectralUnplayedOpacity, 0.88)
-        compare(playedClip.width, waveform.waveformCursorX)
+        compare(playedClip.visible, false)
         SettingsController.waveformPlaybackGuide = false
         compare(playbackGuide.visible, false)
 
