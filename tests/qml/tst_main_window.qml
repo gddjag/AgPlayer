@@ -5965,7 +5965,7 @@ TestCase {
         tryCompare(Theme, "isLight", false)
         var darkBackground = Theme.background.toString()
         var darkText = Theme.primaryText.toString()
-        compare(darkBackground, "#071018")
+        compare(darkBackground, "#181a1d")
         compare(findChild(mainWindow, "playButtonBody").border.color.toString(),
                 (PlaybackController.state === PlaybackController.Playing
                  ? Theme.playRingPlaying : Theme.playRingPaused).toString())
@@ -5994,13 +5994,71 @@ TestCase {
         compare(Theme.requestedMode, 2)
         compare(Theme.effectiveMode, Theme.systemIsLight ? 1 : 0)
         compare(Theme.background.toString(),
-                Theme.systemIsLight ? "#f3f3f3" : "#071018")
+                Theme.systemIsLight ? "#fafafb" : "#181a1d")
         compare(Theme.cyan.toString(), Theme.accent.toString())
         compare(Theme.waveformCyan.toString(), "#00d4ff")
 
         SettingsController.themeMode = previousMode
         SettingsController.waveformMode = previousWaveformMode
         SettingsController.waveformPlaybackGuide = previousGuide
+    }
+
+    function test_ui_design_system_uses_approved_theme_and_metric_tokens() {
+        var previousMode = SettingsController.themeMode
+
+        SettingsController.themeMode = 0
+        tryCompare(Theme, "isLight", false)
+        compare(Theme.titleBarSurface.toString(), "#202329")
+        compare(Theme.navigationSurface.toString(), "#24272d")
+        compare(Theme.contentSurface.toString(), "#181a1d")
+        compare(Theme.accent.toString(), "#7657e8")
+        compare(Theme.selectedSurface.toString(), "#302a45")
+        verify(colorContrast(Theme.accentText, Theme.accent) >= 4.5)
+
+        SettingsController.themeMode = 1
+        tryCompare(Theme, "isLight", true)
+        compare(Theme.titleBarSurface.toString(), "#e5e8ed")
+        compare(Theme.navigationSurface.toString(), "#eceef2")
+        compare(Theme.contentSurface.toString(), "#fafafb")
+        compare(Theme.accent.toString(), "#1f1ed9")
+        compare(Theme.selectedSurface.toString(), "#e8e8fb")
+        verify(colorContrast(Theme.accentText, Theme.accent) >= 4.5)
+
+        compare(Theme.fontSizeCaption, 11)
+        compare(Theme.fontSizeMeta, 12)
+        compare(Theme.fontSizeBody, 13)
+        compare(Theme.fontSizeBodyStrong, 14)
+        compare(Theme.fontSizeSection, 16)
+        compare(Theme.fontSizePageTitle, 20)
+
+        compare(Theme.radiusXs, 4)
+        compare(Theme.radiusSm, 6)
+        compare(Theme.radiusMd, 8)
+        compare(Theme.radiusLg, 8)
+        compare(Theme.spacingXs, 4)
+        compare(Theme.spacingSm, 8)
+        compare(Theme.spacingMd, 12)
+        compare(Theme.spacingLg, 16)
+        compare(Theme.spacingXl, 24)
+        compare(Theme.spacing2Xl, 32)
+
+        compare(Theme.titleBarHeight, 40)
+        compare(Theme.navigationWidthCompact, 192)
+        compare(Theme.navigationWidth, 216)
+        compare(Theme.navigationWidthExpanded, 240)
+        compare(Theme.controlHeightCompact, 28)
+        compare(Theme.controlHeight, 32)
+        compare(Theme.controlHeightProminent, 36)
+        compare(Theme.navigationRowHeight, 36)
+        compare(Theme.listRowHeight, 40)
+        compare(Theme.mediaListRowHeight, 48)
+        compare(Theme.settingsRowHeight, 48)
+        compare(Theme.tableHeaderHeight, 36)
+        compare(Theme.sliderTrackHeight, 3)
+        compare(Theme.sliderHandleExtent, 12)
+        compare(Theme.minimumInteractionExtent, 28)
+
+        SettingsController.themeMode = previousMode
     }
 
     function test_rating_stars_use_one_solid_orange_color() {
