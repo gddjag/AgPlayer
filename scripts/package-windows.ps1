@@ -105,6 +105,7 @@ $nativeRuntimeDependencies = @(
     "avcodec-62.dll",
     "avformat-62.dll",
     "avutil-60.dll",
+    "swscale-9.dll",
     "swresample-6.dll",
     "libmp3lame.DLL",
     "opus.dll",
@@ -188,6 +189,7 @@ $requiredRuntime = @(
     "avcodec-62.dll",
     "avformat-62.dll",
     "avutil-60.dll",
+    "swscale-9.dll",
     "swresample-6.dll"
 )
 foreach ($relativePath in $requiredRuntime) {

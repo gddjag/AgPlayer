@@ -45,6 +45,16 @@ add_test(NAME c_api_lifecycle_test COMMAND c_api_lifecycle_test)
 set(DECODER_FIXTURE_DIR "${CMAKE_CURRENT_BINARY_DIR}/fixtures")
 set(SINE_WAV_FIXTURE "${DECODER_FIXTURE_DIR}/sine-440hz.wav")
 set(FORMAT_FIXTURE_DIR "${DECODER_FIXTURE_DIR}/formats")
+set(VIDEO_FIXTURE_DIR "${DECODER_FIXTURE_DIR}/video")
+set(VIDEO_WITH_AUDIO_FIXTURE "${VIDEO_FIXTURE_DIR}/video-with-audio.avi")
+set(VIDEO_ONLY_FIXTURE "${VIDEO_FIXTURE_DIR}/video-only.avi")
+set(AUDIO_WITH_ATTACHED_PICTURE_FIXTURE
+    "${VIDEO_FIXTURE_DIR}/audio-with-attached-picture.mka")
+set(ROTATED_VIDEO_FIXTURE "${VIDEO_FIXTURE_DIR}/rotated-video.mov")
+set(ROTATED_180_VIDEO_FIXTURE "${VIDEO_FIXTURE_DIR}/rotated-180-video.mov")
+set(ROTATED_270_VIDEO_FIXTURE "${VIDEO_FIXTURE_DIR}/rotated-270-video.mov")
+set(NON_SQUARE_SAR_VIDEO_FIXTURE "${VIDEO_FIXTURE_DIR}/non-square-sar.mov")
+set(MULTI_VIDEO_FIXTURE "${VIDEO_FIXTURE_DIR}/attached-and-multi-video.mkv")
 
 add_executable(format_matrix_test
     core/format_matrix_test.cpp
@@ -389,6 +399,49 @@ add_executable(fixture_generator
 )
 agplayer_enable_warnings(fixture_generator)
 
+add_executable(video_fixture_generator
+    "${CMAKE_SOURCE_DIR}/tools/video_fixture_generator.cpp"
+)
+target_include_directories(video_fixture_generator SYSTEM PRIVATE
+    "${FFMPEG_INCLUDE_DIRS}"
+)
+target_link_libraries(video_fixture_generator PRIVATE ${FFMPEG_LIBRARIES})
+agplayer_enable_warnings(video_fixture_generator)
+
+add_custom_command(
+    OUTPUT
+        "${VIDEO_WITH_AUDIO_FIXTURE}"
+        "${VIDEO_ONLY_FIXTURE}"
+        "${AUDIO_WITH_ATTACHED_PICTURE_FIXTURE}"
+        "${ROTATED_VIDEO_FIXTURE}"
+        "${ROTATED_180_VIDEO_FIXTURE}"
+        "${ROTATED_270_VIDEO_FIXTURE}"
+        "${NON_SQUARE_SAR_VIDEO_FIXTURE}"
+        "${MULTI_VIDEO_FIXTURE}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${VIDEO_FIXTURE_DIR}"
+    COMMAND $<TARGET_FILE:video_fixture_generator>
+        "${VIDEO_WITH_AUDIO_FIXTURE}"
+        "${VIDEO_ONLY_FIXTURE}"
+        "${AUDIO_WITH_ATTACHED_PICTURE_FIXTURE}"
+        "${ROTATED_VIDEO_FIXTURE}"
+        "${ROTATED_180_VIDEO_FIXTURE}"
+        "${ROTATED_270_VIDEO_FIXTURE}"
+        "${NON_SQUARE_SAR_VIDEO_FIXTURE}"
+        "${MULTI_VIDEO_FIXTURE}"
+    DEPENDS video_fixture_generator
+    VERBATIM
+)
+add_custom_target(video_fixtures DEPENDS
+    "${VIDEO_WITH_AUDIO_FIXTURE}"
+    "${VIDEO_ONLY_FIXTURE}"
+    "${AUDIO_WITH_ATTACHED_PICTURE_FIXTURE}"
+    "${ROTATED_VIDEO_FIXTURE}"
+    "${ROTATED_180_VIDEO_FIXTURE}"
+    "${ROTATED_270_VIDEO_FIXTURE}"
+    "${NON_SQUARE_SAR_VIDEO_FIXTURE}"
+    "${MULTI_VIDEO_FIXTURE}"
+)
+
 set(GAPLESS_A_FIXTURE "${DECODER_FIXTURE_DIR}/gapless-a.wav")
 set(GAPLESS_B_FIXTURE "${DECODER_FIXTURE_DIR}/gapless-b.wav")
 add_custom_command(
@@ -499,7 +552,7 @@ add_custom_target(gapless_fixtures
 add_executable(decoder_test
     core/decoder_test.cpp
 )
-add_dependencies(decoder_test decoder_fixture)
+add_dependencies(decoder_test decoder_fixture video_fixtures)
 target_include_directories(decoder_test PRIVATE
     "${CMAKE_SOURCE_DIR}/core/src"
 )
@@ -507,12 +560,55 @@ target_link_libraries(decoder_test PRIVATE agplayer_core)
 
 agplayer_enable_warnings(decoder_test)
 
-add_test(NAME decoder_test COMMAND decoder_test "${SINE_WAV_FIXTURE}")
+add_test(NAME decoder_test COMMAND decoder_test
+    "${SINE_WAV_FIXTURE}"
+    "${VIDEO_WITH_AUDIO_FIXTURE}"
+    "${VIDEO_ONLY_FIXTURE}"
+    "${AUDIO_WITH_ATTACHED_PICTURE_FIXTURE}"
+    "${ROTATED_VIDEO_FIXTURE}"
+)
 set_tests_properties(decoder_test PROPERTIES
     TIMEOUT 10
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
+
+add_executable(video_decoder_test
+    core/video_decoder_test.cpp
+)
+add_dependencies(video_decoder_test video_fixtures)
+target_link_libraries(video_decoder_test PRIVATE agplayer_core)
+target_include_directories(video_decoder_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
+target_compile_definitions(video_decoder_test PRIVATE
+    AGPLAYER_VIDEO_DECODER_TESTING=1
+)
+agplayer_enable_warnings(video_decoder_test)
+add_test(NAME video_decoder_test COMMAND video_decoder_test
+    "${VIDEO_WITH_AUDIO_FIXTURE}"
+    "${VIDEO_ONLY_FIXTURE}"
+    "${AUDIO_WITH_ATTACHED_PICTURE_FIXTURE}"
+    "${ROTATED_VIDEO_FIXTURE}"
+    "${ROTATED_180_VIDEO_FIXTURE}"
+    "${ROTATED_270_VIDEO_FIXTURE}"
+    "${NON_SQUARE_SAR_VIDEO_FIXTURE}"
+    "${MULTI_VIDEO_FIXTURE}"
+    "${SINE_WAV_FIXTURE}"
+)
+set_tests_properties(video_decoder_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
+add_executable(c_api_header_c_test
+    core/c_api_header_c_test.c
+)
+target_include_directories(c_api_header_c_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/include"
+)
+add_test(NAME c_api_header_c_test COMMAND c_api_header_c_test)
 
 add_executable(waveform_analyzer_test
     core/waveform_analyzer_test.cpp
@@ -579,12 +675,15 @@ set_tests_properties(waveform_cache_test PROPERTIES
 add_executable(audio_engine_test
     core/audio_engine_test.cpp
 )
-add_dependencies(audio_engine_test decoder_fixture)
+add_dependencies(audio_engine_test decoder_fixture video_fixtures)
 target_link_libraries(audio_engine_test PRIVATE agplayer_core)
 
 agplayer_enable_warnings(audio_engine_test)
 
-add_test(NAME audio_engine_test COMMAND audio_engine_test "${SINE_WAV_FIXTURE}")
+add_test(NAME audio_engine_test COMMAND audio_engine_test
+    "${SINE_WAV_FIXTURE}"
+    "${VIDEO_ONLY_FIXTURE}"
+)
 set_tests_properties(audio_engine_test PROPERTIES TIMEOUT 10)
 
 add_executable(output_level_meter_test
@@ -809,6 +908,8 @@ foreach(qt_test IN ITEMS
     import_controller_test
     library_filter_model_test
     playback_controller_test
+    video_playback_controller_test
+    video_frame_item_test
     window_controller_test
     global_hotkey_manager_test
     waveform_coordinate_mapper_test
@@ -831,6 +932,7 @@ foreach(qt_test IN ITEMS
     audio_tools_end_to_end_test
     format_conversion_plan_test
     format_conversion_task_model_test
+    audio_file_discovery_test
     file_association_controller_test
     native_drop_router_test
     equalizer_controller_test
@@ -1334,6 +1436,15 @@ set_tests_properties(qml_main_window_test PROPERTIES
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
+add_test(NAME qml_video_playback_view_test
+    COMMAND qml_main_window_test
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_video_playback_view.qml)
+set_tests_properties(qml_video_playback_view_test PROPERTIES
+    TIMEOUT 20
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
 add_test(NAME qml_equalizer_visual_test
     COMMAND qml_main_window_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_equalizer_visual.qml)
 set_tests_properties(qml_equalizer_visual_test PROPERTIES
@@ -1566,8 +1677,23 @@ target_include_directories(track_waveform_thumbnail_provider_test PRIVATE
     "${CMAKE_SOURCE_DIR}/core/src"
 )
 
-add_dependencies(import_controller_test decoder_fixture)
+add_dependencies(import_controller_test decoder_fixture video_fixtures)
+target_compile_definitions(import_controller_test PRIVATE
+    AGPLAYER_TEST_AUDIO="${SINE_WAV_FIXTURE}"
+    AGPLAYER_TEST_VIDEO_ONLY="${VIDEO_ONLY_FIXTURE}"
+    AGPLAYER_TEST_AUDIO_WITH_ATTACHED_PICTURE="${AUDIO_WITH_ATTACHED_PICTURE_FIXTURE}"
+)
 add_dependencies(playback_controller_test decoder_fixture)
+add_dependencies(video_playback_controller_test decoder_fixture video_fixtures)
+target_compile_definitions(video_playback_controller_test PRIVATE
+    AGPLAYER_TEST_WAV="${SINE_WAV_FIXTURE}"
+    AGPLAYER_TEST_VIDEO_WITH_AUDIO="${VIDEO_WITH_AUDIO_FIXTURE}"
+    AGPLAYER_TEST_VIDEO_ONLY="${VIDEO_ONLY_FIXTURE}"
+    AGPLAYER_VIDEO_DECODER_TESTING=1
+)
+target_include_directories(video_playback_controller_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src"
+)
 add_dependencies(player_experience_controller_test decoder_fixture)
 add_dependencies(waveform_provider_test decoder_fixture)
 set_tests_properties(import_controller_test PROPERTIES
@@ -1576,6 +1702,13 @@ set_tests_properties(import_controller_test PROPERTIES
 set_tests_properties(playback_controller_test PROPERTIES
     TIMEOUT 30
     ENVIRONMENT "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/bin"
+)
+set_tests_properties(video_playback_controller_test PROPERTIES
+    TIMEOUT 60
+    ENVIRONMENT
+        "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE};AGPLAYER_TEST_VIDEO_WITH_AUDIO=${VIDEO_WITH_AUDIO_FIXTURE};AGPLAYER_TEST_VIDEO_ONLY=${VIDEO_ONLY_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/bin"
 )
@@ -1605,6 +1738,10 @@ set_tests_properties(terrain_reactor_item_test PROPERTIES
 )
 set_tests_properties(track_waveform_thumbnail_item_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+set_tests_properties(video_frame_item_test PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
 )
 add_dependencies(replay_gain_scanner_test decoder_fixture)
 set_tests_properties(replay_gain_scanner_test PROPERTIES
@@ -1709,6 +1846,19 @@ set_tests_properties(library_model_stress_test PROPERTIES
 )
 
 if (WIN32)
+    set(agplayer_swscale_runtime_dll
+        "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<IF:$<CONFIG:Debug>,debug/bin,bin>/swscale-9.dll"
+    )
+    get_target_property(agplayer_runtime_directory AgPlayer BINARY_DIR)
+    add_custom_target(agplayer_swscale_runtime
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${agplayer_swscale_runtime_dll}"
+            "${agplayer_runtime_directory}"
+        COMMENT "Deploying FFmpeg swscale runtime"
+        VERBATIM
+    )
+    add_dependencies(AgPlayer agplayer_swscale_runtime)
+
     # This contract intentionally performs a nested Ninja configure.  Do not
     # register it from ad-hoc NMake builds that do not carry the preset's
     # vcpkg toolchain context; the canonical Windows presets satisfy all three

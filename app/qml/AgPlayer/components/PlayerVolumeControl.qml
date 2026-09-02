@@ -5,6 +5,7 @@ import AgPlayer
 Item {
     id: root
     objectName: "mainVolumeControl"
+    property var playback: PlaybackController
     property bool emptyMode: false
     property bool expanded: false
     // The host supplies the horizontal room before its right-side actions.
@@ -42,10 +43,10 @@ Item {
         objectName: "muteButton"
         anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
         width: 44; height: 44; flat: true
-        icon.source: PlaybackController.muted ? Theme.icon("volume-mute-line") : Theme.icon("volume-up-line")
+        icon.source: root.playback.muted ? Theme.icon("volume-mute-line") : Theme.icon("volume-up-line")
         icon.color: Theme.iconPrimary; icon.width: 20; icon.height: 20
-        Accessible.name: PlaybackController.muted ? qsTr("Unmute") : qsTr("Mute")
-        onClicked: PlaybackController.toggleMuted()
+        Accessible.name: root.playback.muted ? qsTr("Unmute") : qsTr("Mute")
+        onClicked: root.playback.toggleMuted()
         ToolTip.text: Accessible.name; ToolTip.visible: hovered
         background: null
     }
@@ -56,12 +57,13 @@ Item {
         width: root.expandedSliderWidth
         opacity: width > 0 ? 1 : 0; visible: !root.emptyMode
         from: 0; to: 1
+        Accessible.name: qsTr("Volume")
         onPressedChanged: {
             if (pressed) { volumeCloseTimer.stop(); root.expanded = true }
             else volumeCloseTimer.restart()
         }
-        onMoved: PlaybackController.setVolume(value)
-        Binding on value { value: PlaybackController.muted ? 0 : PlaybackController.volume; restoreMode: Binding.RestoreBindingOrValue }
+        onMoved: root.playback.setVolume(value)
+        Binding on value { value: root.playback.muted ? 0 : root.playback.volume; restoreMode: Binding.RestoreBindingOrValue }
         Behavior on width { NumberAnimation { duration: root.expanded ? 160 : 220; easing.type: Easing.OutCubic } }
         Behavior on opacity { NumberAnimation { duration: 140 } }
         background: Rectangle {
@@ -84,7 +86,7 @@ Item {
         width: root.showExpandedPercent ? 38 : 0
         opacity: width > 0 ? 1 : 0; visible: !root.emptyMode
         horizontalAlignment: Text.AlignRight
-        text: Math.round(PlaybackController.volume * 100) + "%"
+        text: Math.round(root.playback.volume * 100) + "%"
         color: Theme.primaryText; font.pixelSize: 12
         Behavior on width { NumberAnimation { duration: root.expanded ? 160 : 220; easing.type: Easing.OutCubic } }
         Behavior on opacity { NumberAnimation { duration: 140 } }

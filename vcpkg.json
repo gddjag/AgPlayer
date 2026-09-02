@@ -12,6 +12,7 @@
         "mp3lame",
         "opus",
         "swresample",
+        "swscale",
         "vorbis"
       ]
     },

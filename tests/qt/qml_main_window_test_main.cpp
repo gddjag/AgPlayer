@@ -14,6 +14,7 @@
 #include "settings_controller.hpp"
 #include "tag_model.hpp"
 #include "track_waveform_thumbnail_provider.hpp"
+#include "video_playback_controller.hpp"
 #include "waveform_provider.hpp"
 #include "window_controller.hpp"
 
@@ -436,6 +437,8 @@ public slots:
             runtimeDataDirectory_.filePath(QStringLiteral("tags.json")));
         nativeDropHelper_.setLibraryModel(library_.get());
         playback_ = std::make_unique<PlaybackController>(core_, library_.get());
+        videoPlayback_ = std::make_unique<VideoPlaybackController>(
+            library_.get(), playback_.get());
         equalizer_ = std::make_unique<EqualizerController>(core_);
         importer_ = std::make_unique<ImportController>(library_.get());
         windows_ = std::make_unique<WindowController>();
@@ -475,7 +478,9 @@ public slots:
                                         tagModel_.get(),
                                         libraryNavigation_.get(),
                                         libraryManager_.get(),
-                                        thumbnailProvider_.get()});
+                                        thumbnailProvider_.get(),
+                                        nullptr,
+                                        videoPlayback_.get()});
     }
 
     void qmlEngineAvailable(QQmlEngine* engine)
@@ -549,6 +554,7 @@ private:
     std::unique_ptr<PlaylistModel> playlists_;
     std::unique_ptr<TagModel> tagModel_;
     std::unique_ptr<PlaybackController> playback_;
+    std::unique_ptr<VideoPlaybackController> videoPlayback_;
     std::unique_ptr<EqualizerController> equalizer_;
     std::unique_ptr<ImportController> importer_;
     std::unique_ptr<WindowController> windows_;

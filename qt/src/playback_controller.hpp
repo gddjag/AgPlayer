@@ -171,6 +171,7 @@ signals:
     void selectionStartMsChanged();
     void selectionEndMsChanged();
     void selectionLoopEnabledChanged();
+    void seekCommitted(qint64 positionMs);
     void tempoChanged();
     void scratchStatusChanged();
 

@@ -25,6 +25,8 @@ QJsonObject toJson(const TrackRecord& track)
             {QStringLiteral("sampleRate"), track.sampleRate},
             {QStringLiteral("bitDepth"), track.bitDepth},
             {QStringLiteral("channels"), track.channels},
+            {QStringLiteral("hasAudio"), track.hasAudio},
+            {QStringLiteral("hasVideo"), track.hasVideo},
             {QStringLiteral("metadataProbeAttempted"),
              track.metadataProbeAttempted},
             {QStringLiteral("bitRate"), QJsonValue(track.bitRate)},
@@ -68,6 +70,8 @@ TrackRecord fromJson(const QJsonObject& object)
     track.sampleRate = object.value(QStringLiteral("sampleRate")).toInt();
     track.bitDepth = object.value(QStringLiteral("bitDepth")).toInt();
     track.channels = object.value(QStringLiteral("channels")).toInt();
+    track.hasAudio = object.value(QStringLiteral("hasAudio")).toBool();
+    track.hasVideo = object.value(QStringLiteral("hasVideo")).toBool();
     track.metadataProbeAttempted = object.value(
         QStringLiteral("metadataProbeAttempted")).toBool();
     track.bitRate = object.value(QStringLiteral("bitRate")).toInteger();

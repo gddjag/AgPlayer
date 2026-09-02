@@ -6,6 +6,7 @@
 #include <QList>
 #include <QSet>
 #include <QStringList>
+#include <QThread>
 #include <QUrl>
 
 #include <optional>
@@ -25,6 +26,8 @@ struct TrackRecord {
     int sampleRate = 0;
     int bitDepth = 0;
     int channels = 0;
+    bool hasAudio = false;
+    bool hasVideo = false;
     bool metadataProbeAttempted = false;
     qint64 bitRate = 0;
     qint64 durationMs = 0;
@@ -105,6 +108,8 @@ public:
         DateRole,
         ComposerRole,
         ChannelsRole,
+        HasAudioRole,
+        HasVideoRole,
         MetadataProbeAttemptedRole
     };
     Q_ENUM(Role)
@@ -151,6 +156,20 @@ public:
     std::optional<MetadataProbeClaim> beginMetadataProbe(const QString& trackId);
     bool completeMetadataProbe(const MetadataProbeClaim& claim, bool succeeded,
                                const TrackRecord& probed);
+    bool completeMediaKindProbe(const MetadataProbeClaim& claim,
+                                bool succeeded,
+                                const TrackRecord& probed);
+    bool abandonMetadataProbe(const MetadataProbeClaim& claim)
+    {
+        if (QThread::currentThread() != thread()) return false;
+        const auto inFlight = metadataProbeInFlight_.constFind(claim.trackId);
+        if (inFlight == metadataProbeInFlight_.cend()
+            || inFlight.value() != claim.generation) {
+            return false;
+        }
+        metadataProbeInFlight_.remove(claim.trackId);
+        return true;
+    }
     bool refreshMetadataForPath(const QString& path);
     int refreshMetadataForPaths(const QStringList& paths);
     bool applyReplayGainResult(const QString& trackId, double trackGainDb,

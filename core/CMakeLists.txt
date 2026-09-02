@@ -38,6 +38,8 @@ add_library(agplayer_core STATIC
     src/formant_preserver.cpp
     src/formant_preserver.hpp
     src/decoder.cpp
+    src/video_decoder.cpp
+    src/video_decoder.hpp
     src/graphic_equalizer.cpp
     src/graphic_equalizer.hpp
     src/metadata_writer.cpp
@@ -82,6 +84,11 @@ target_link_libraries(agplayer_core PRIVATE
     SoundTouch::SoundTouch
     signalsmith-stretch
 )
+if(BUILD_TESTING)
+    target_compile_definitions(agplayer_core PRIVATE
+        AGPLAYER_VIDEO_DECODER_TESTING=1
+    )
+endif()
 
 # Stretch/Linear are header-only templates.  Keep their upstream MSVC
 # conversion/shadowing warnings from weakening this project's /WX policy for

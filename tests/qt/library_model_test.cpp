@@ -29,9 +29,41 @@ private slots:
     void stampsNewImportsWithoutOverwritingExistingTimestamps();
     void exposesLiveRecentAndNeverPlayedCounts();
     void missingLocalCoverFallsBackToPackagedArtwork();
+    void mediaKindProbePublishesOneAtomicChange();
     void staleMetadataProbeCannotOverwriteRelocatedTrack();
     void staleMetadataProbeCannotStealRecreatedTrackClaim();
 };
+
+void LibraryModelTest::mediaKindProbePublishesOneAtomicChange()
+{
+    TrackRecord legacy;
+    legacy.trackId = QStringLiteral("legacy-video");
+    legacy.path = QStringLiteral("C:/media/legacy-video.avi");
+    legacy.available = true;
+    legacy.hasAudio = true;
+    LibraryModel model;
+    model.replaceAll({legacy});
+    const auto claim = model.beginMetadataProbe(legacy.trackId);
+    QVERIFY(claim.has_value());
+    QSignalSpy changed(&model, &QAbstractItemModel::dataChanged);
+
+    TrackRecord probed;
+    probed.path = legacy.path;
+    probed.hasAudio = true;
+    probed.hasVideo = true;
+    QVERIFY(model.completeMediaKindProbe(*claim, true, probed));
+
+    QCOMPARE(changed.count(), 1);
+    const QList<int> roles = qvariant_cast<QList<int>>(changed.at(0).at(2));
+    QVERIFY(roles.contains(LibraryModel::MetadataProbeAttemptedRole));
+    QVERIFY(roles.contains(LibraryModel::HasAudioRole));
+    QVERIFY(roles.contains(LibraryModel::HasVideoRole));
+    const TrackRecord* current = model.recordForId(legacy.trackId);
+    QVERIFY(current != nullptr);
+    QVERIFY(current->metadataProbeAttempted);
+    QVERIFY(current->hasAudio);
+    QVERIFY(current->hasVideo);
+}
 
 void LibraryModelTest::staleMetadataProbeCannotStealRecreatedTrackClaim()
 {
@@ -273,6 +305,8 @@ void LibraryModelTest::exposesRolesAndUpdatesFavorite()
     track.sampleRate = 96000;
     track.bitDepth = 24;
     track.channels = 2;
+    track.hasAudio = true;
+    track.hasVideo = true;
     track.bitRate = 4608000;
     track.durationMs = 1234;
     track.fileSize = 5678;
@@ -294,6 +328,8 @@ void LibraryModelTest::exposesRolesAndUpdatesFavorite()
     QCOMPARE(model.data(index, LibraryModel::DateRole).toString(), track.date);
     QCOMPARE(model.data(index, LibraryModel::ComposerRole).toString(), track.composer);
     QCOMPARE(model.data(index, LibraryModel::ChannelsRole).toInt(), track.channels);
+    QCOMPARE(model.data(index, LibraryModel::HasAudioRole).toBool(), true);
+    QCOMPARE(model.data(index, LibraryModel::HasVideoRole).toBool(), true);
     QCOMPARE(model.data(index, LibraryModel::CoverUrlRole).toUrl(), track.coverUrl);
     QCOMPARE(model.data(index, LibraryModel::FavoriteRole).toBool(), track.favorite);
     QCOMPARE(model.data(index, LibraryModel::RatingRole).toInt(), track.rating);
@@ -314,6 +350,8 @@ void LibraryModelTest::exposesRolesAndUpdatesFavorite()
     QCOMPARE(roles.value(LibraryModel::SampleRateRole), QByteArray("sampleRate"));
     QCOMPARE(roles.value(LibraryModel::BitDepthRole), QByteArray("bitDepth"));
     QCOMPARE(roles.value(LibraryModel::ChannelsRole), QByteArray("channels"));
+    QCOMPARE(roles.value(LibraryModel::HasAudioRole), QByteArray("hasAudio"));
+    QCOMPARE(roles.value(LibraryModel::HasVideoRole), QByteArray("hasVideo"));
     QCOMPARE(roles.value(LibraryModel::BitRateRole), QByteArray("bitRate"));
     QCOMPARE(roles.value(LibraryModel::DurationMsRole), QByteArray("durationMs"));
     QCOMPARE(roles.value(LibraryModel::FileSizeRole), QByteArray("fileSize"));

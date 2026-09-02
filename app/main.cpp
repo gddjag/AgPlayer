@@ -45,6 +45,7 @@
 #endif
 
 #include "audio_tools_controller.hpp"
+#include "audio_file_discovery.hpp"
 #include "audio_visual_feature_controller.hpp"
 #include "audio_editor/audio_editor_controller.hpp"
 #include "audio_editor/playback_clip_drag_adapter.hpp"
@@ -74,6 +75,7 @@
 #include "translation_manager.hpp"
 #include "waveform_provider.hpp"
 #include "vocal_separation_controller.hpp"
+#include "video_playback_controller.hpp"
 #include "window_controller.hpp"
 
 Q_IMPORT_PLUGIN(AgPlayerPlugin)
@@ -283,6 +285,8 @@ int main(int argc, char* argv[])
     //   --qa-test-mode              isolate QStandardPaths from user data
     //   --qa-log <path>             write the runtime log to an explicit path
     //   --qa-play <path>            load + play a file through the normal path
+    //   --qa-video-fullscreen       enter video fullscreen through Main.qml
+    //   --qa-exit-after-ms <ms>     fail-safe timed exit for acceptance runs
     //   --qa-screenshot-main <png>  grab the main window after playback starts
     //   --qa-screenshot-mini <png>  grab the mini player window likewise
     //   --qa-tool <0..5>             choose the audio-tool screenshot page
@@ -293,6 +297,8 @@ int main(int argc, char* argv[])
     bool qaTestMode = false;
     QString qaLogPath;
     QString qaPlayPath;
+    bool qaVideoFullscreen = false;
+    int qaExitAfterMs = 0;
     QString qaScreenshotMain;
     QString qaPlayerShell;
     int qaMainWidth = 0;
@@ -333,6 +339,13 @@ int main(int argc, char* argv[])
                 qaLogPath = cliArgs.at(++i);
             } else if (arg == QStringLiteral("--qa-play") && i + 1 < cliArgs.size()) {
                 qaPlayPath = cliArgs.at(++i);
+            } else if (arg == QStringLiteral("--qa-video-fullscreen")) {
+                qaVideoFullscreen = true;
+            } else if (arg == QStringLiteral("--qa-exit-after-ms")
+                       && i + 1 < cliArgs.size()) {
+                bool ok = false;
+                const int value = cliArgs.at(++i).toInt(&ok);
+                if (ok && value > 0) qaExitAfterMs = value;
             } else if (arg == QStringLiteral("--qa-screenshot-main")
                        && i + 1 < cliArgs.size()) {
                 qaScreenshotMain = cliArgs.at(++i);
@@ -646,6 +659,7 @@ int main(int argc, char* argv[])
         }
 
         PlaybackController playback(core, &library);
+        VideoPlaybackController videoPlayback(&library, &playback);
         if (qaPlaybackSelectionStartMs >= 0
             && qaPlaybackSelectionEndMs > qaPlaybackSelectionStartMs) {
             QObject::connect(
@@ -954,7 +968,8 @@ int main(int argc, char* argv[])
                                         &libraryNavigation,
                                         &libraryManager,
                                         &trackWaveformThumbnailProvider,
-                                        &playbackClipDrag},
+                                        &playbackClipDrag,
+                                        &videoPlayback},
                                     &playerExperience, &audioVisualFeatures,
                                     &lyricsService, &audioPreview,
                                     &vocalSeparation);
@@ -1187,6 +1202,45 @@ int main(int argc, char* argv[])
 
         if (!engine.rootObjects().isEmpty()) {
             QObject* mainWindow = engine.rootObjects().first();
+            const bool qaExpectVideo = !qaPlayPath.isEmpty()
+                && agplayer::qt::isSupportedVideoExtension(
+                    QFileInfo(qaPlayPath).suffix());
+
+            const auto enterQaVideoFullscreen =
+                [mainWindow, &videoPlayback, qaVideoFullscreen]() {
+                if (!qaVideoFullscreen || !videoPlayback.visible()) {
+                    return;
+                }
+                if (!QMetaObject::invokeMethod(mainWindow,
+                                               "enterVideoFullscreen")) {
+                    qWarning("QA video fullscreen request failed");
+                }
+            };
+            QObject::connect(&videoPlayback,
+                             &VideoPlaybackController::visibleChanged,
+                             &app, enterQaVideoFullscreen);
+            QTimer::singleShot(0, &app, enterQaVideoFullscreen);
+
+            if (qaExitAfterMs > 0) {
+                QTimer::singleShot(
+                    qaExitAfterMs, &app,
+                    [mainWindow, &videoPlayback, qaExpectVideo]() {
+                        qInfo().noquote()
+                            << "QA timed video diagnostics: visible="
+                            << videoPlayback.visible()
+                            << "workerRunning=" << videoPlayback.workerRunning()
+                            << "queuedFrameCount="
+                            << videoPlayback.queuedFrameCount()
+                            << "queuedFrameBytes="
+                            << videoPlayback.queuedFrameBytes()
+                            << "frameSerial=" << videoPlayback.frameSerial()
+                            << "fullscreen="
+                            << mainWindow->property("videoFullscreen").toBool();
+                        QCoreApplication::exit(
+                            qaExpectVideo && videoPlayback.frameSerial() == 0
+                                ? 8 : 0);
+                    });
+            }
 
             // Load the mini player window from the same module so it shares the
             // registered singletons. WindowController toggles visibility between
@@ -1731,6 +1785,7 @@ int main(int argc, char* argv[])
 
                 const auto captureWindow = [targetWindow, screenshotPath,
                                             mainWindow, &playback,
+                                            &videoPlayback,
                                             wantScreenshotImmersive]() {
                     QWindow* captureTarget = targetWindow;
                     if (wantScreenshotImmersive) {
@@ -1813,6 +1868,17 @@ int main(int argc, char* argv[])
                         << playback.selectionStartMs()
                         << "endMs=" << playback.selectionEndMs()
                         << "loop=" << playback.selectionLoopEnabled();
+                    qInfo().noquote()
+                        << "QA video diagnostics: visible="
+                        << videoPlayback.visible()
+                        << "workerRunning=" << videoPlayback.workerRunning()
+                        << "queuedFrameCount="
+                        << videoPlayback.queuedFrameCount()
+                        << "queuedFrameBytes="
+                        << videoPlayback.queuedFrameBytes()
+                        << "frameSerial=" << videoPlayback.frameSerial()
+                        << "fullscreen="
+                        << mainWindow->property("videoFullscreen").toBool();
                     auto* const quickWin = qobject_cast<QQuickWindow*>(captureTarget);
                     if (quickWin != nullptr) {
                         quickWin->update();
@@ -1875,7 +1941,8 @@ int main(int argc, char* argv[])
                     });
                     waveformReadyTimer->start();
                 } else if (wantScreenshotTools
-                           || (wantScreenshotMain && library.count() == 0)) {
+                           || (wantScreenshotMain && library.count() == 0
+                               && qaPlayPath.isEmpty())) {
                     QTimer::singleShot(1500, captureWindow);
                 } else if (wantScreenshotList
                            && qaListCategory == QStringLiteral("tags")) {
@@ -1926,17 +1993,22 @@ int main(int argc, char* argv[])
                 } else {
                     auto attempts = std::make_shared<int>(0);
                     auto pollFunc = std::make_shared<std::function<void()>>();
-                    *pollFunc = [core, &waveformProvider, attempts, pollFunc,
+                    *pollFunc = [core, &waveformProvider, &videoPlayback,
+                                 qaExpectVideo, attempts, pollFunc,
                                  captureWindow]() {
                         ag_playback_snapshot snapshot{};
                         ag_player_snapshot(core, &snapshot);
-                        if (snapshot.state == AG_PLAYING
-                            && waveformProvider.analysisProgress() >= 1.0) {
+                        const bool mediaReady = qaExpectVideo
+                            ? videoPlayback.visible()
+                                && videoPlayback.frameSerial() > 0
+                            : waveformProvider.analysisProgress() >= 1.0;
+                        if (snapshot.state == AG_PLAYING && mediaReady) {
                             QTimer::singleShot(1500, captureWindow);
                             return;
                         }
                         if (++(*attempts) > 200) { // 10s timeout at 50ms polls
-                            QCoreApplication::quit();
+                            qWarning("Timed out waiting for playback QA readiness");
+                            QCoreApplication::exit(7);
                             return;
                         }
                         QTimer::singleShot(50, *pollFunc);

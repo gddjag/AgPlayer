@@ -13,6 +13,52 @@ TestCase {
     property var task4StateSnapshot: null
     property var task4TemporaryTagKeys: []
     Component {
+        id: videoPlaybackStateComponent
+        QtObject {
+            property bool visible: false
+            property bool loading: false
+            property string errorMessage: ""
+            property int dismissCalls: 0
+            function dismiss() {
+                ++dismissCalls
+                visible = false
+            }
+        }
+    }
+
+    Component {
+        id: videoPlaybackTransportComponent
+        QtObject {
+            enum PlaybackState { Stopped, Playing }
+            property int state: 1
+            property int positionMs: 0
+            property int durationMs: 120000
+            property real speedRatio: 1.0
+            property bool muted: false
+            property real volume: 0.5
+            property int stopCalls: 0
+            property bool stopHidesVideo: true
+            property var videoState: null
+            property var fullscreenProbe: null
+            property var stopFullscreenSamples: []
+            function previous() {}
+            function togglePlayback() {}
+            function next() {}
+            function seek(value) { positionMs = Math.round(value) }
+            function setSpeedRatio(value) { speedRatio = value }
+            function toggleMuted() { muted = !muted }
+            function setVolume(value) { volume = value }
+            function stop() {
+                stopFullscreenSamples.push(Boolean(fullscreenProbe
+                                                   && fullscreenProbe.videoFullscreen))
+                ++stopCalls
+                state = 0
+                if (videoState && stopHidesVideo)
+                    videoState.visible = false
+            }
+        }
+    }
+    Component {
         id: fileDropAreaComponent
         FileDropArea {}
     }
@@ -5842,5 +5888,81 @@ TestCase {
         compare(settings.text, "设置")
         compare(minimize.text, "最小化")
         compare(close.text, "关闭")
+    }
+
+    function test_z_hidden_video_loader_fullscreen_escape_return_and_audio_restore() {
+        var originalPlayback = mainWindow.playback
+        var originalVideoPlayback = mainWindow.videoPlayback
+        var priorVisibility = mainWindow.visibility
+        var videoState = videoPlaybackStateComponent.createObject(testCase)
+        var transport = videoPlaybackTransportComponent.createObject(testCase, {
+            "videoState": videoState,
+            "fullscreenProbe": mainWindow
+        })
+        verify(videoState && transport)
+        mainWindow.playback = transport
+        mainWindow.videoPlayback = videoState
+        transport.stopHidesVideo = false
+
+        try {
+            var shellLoader = findChild(mainWindow, "playerShellLoader")
+            var loader = findChild(mainWindow, "videoPlaybackLoader")
+            verify(shellLoader && loader)
+            var originalShell = shellLoader.item
+            compare(loader.active, false,
+                    "audio-only state must not instantiate the video view")
+
+            videoState.visible = true
+            tryCompare(loader, "active", true)
+            tryVerify(function() { return loader.item !== null })
+            verify(findChild(loader.item, "videoFrameItem"))
+            compare(shellLoader.item, originalShell,
+                    "the audio shell must remain loaded under the video view")
+
+            mainWindow.requestActivate()
+            tryVerify(function() { return mainWindow.active })
+            mainWindow.enterVideoFullscreen()
+            tryCompare(mainWindow, "videoFullscreen", true)
+            verify(nativeDropHelper.sendKey(mainWindow, Qt.Key_Escape))
+            tryCompare(mainWindow, "videoFullscreen", false)
+            compare(transport.stopCalls, 0,
+                    "Escape must only exit fullscreen")
+
+            verify(nativeDropHelper.sendKey(mainWindow, Qt.Key_Escape))
+            compare(transport.stopCalls, 0,
+                    "Escape while windowed must not stop video playback")
+
+            mainWindow.enterVideoFullscreen()
+            tryCompare(mainWindow, "videoFullscreen", true)
+            findChild(loader.item, "videoReturnButton").clicked()
+            tryCompare(mainWindow, "videoFullscreen", false)
+            compare(transport.stopCalls, 1)
+            compare(videoState.dismissCalls, 1,
+                    "return must dismiss video even when core stop cannot hide it")
+            compare(transport.stopFullscreenSamples.length, 1)
+            compare(transport.stopFullscreenSamples[0], false,
+                    "stop must observe an already-windowed main window")
+            tryCompare(loader, "active", false)
+            tryVerify(function() { return loader.item === null })
+            compare(shellLoader.item, originalShell,
+                    "return must reveal the same preserved audio shell")
+
+            videoState.visible = true
+            tryCompare(loader, "active", true)
+            videoState.visible = false
+            tryCompare(loader, "active", false)
+            tryVerify(function() { return loader.item === null })
+        } finally {
+            if (mainWindow.videoFullscreen)
+                mainWindow.exitVideoFullscreen()
+            mainWindow.playback = originalPlayback
+            mainWindow.videoPlayback = originalVideoPlayback
+            if (priorVisibility === Window.Maximized)
+                mainWindow.showMaximized()
+            else
+                mainWindow.showNormal()
+            transport.destroy()
+            videoState.destroy()
+        }
     }
 }

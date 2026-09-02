@@ -53,6 +53,21 @@ int first_audio_stream(const AVFormatContext* context) noexcept
     return -1;
 }
 
+int first_playable_video_stream(const AVFormatContext* context) noexcept
+{
+    if (context == nullptr) return -1;
+    for (unsigned int index = 0; index < context->nb_streams; ++index) {
+        const AVStream* const stream = context->streams[index];
+        const AVCodecParameters* const parameters = stream->codecpar;
+        if (parameters->codec_type == AVMEDIA_TYPE_VIDEO
+            && (stream->disposition & AV_DISPOSITION_ATTACHED_PIC) == 0
+            && parameters->width > 0 && parameters->height > 0) {
+            return static_cast<int>(index);
+        }
+    }
+    return -1;
+}
+
 void recover_flac_stream_info(AVCodecParameters* parameters) noexcept
 {
     if (parameters == nullptr || parameters->codec_id != AV_CODEC_ID_FLAC
@@ -303,17 +318,52 @@ ag_result probe_media_metadata(const std::string& utf8_path,
             avformat_close_input(&context);
             return result;
         };
+        if (avformat_find_stream_info(context, nullptr) < 0) {
+            return finish(AG_UNSUPPORTED_FORMAT);
+        }
+
+        int audio_index = -1;
+        const AVStream* video_stream = nullptr;
+        for (unsigned int index = 0; index < context->nb_streams; ++index) {
+            const AVStream* const stream = context->streams[index];
+            if (stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+                metadata.has_audio = true;
+                if (audio_index < 0) {
+                    audio_index = static_cast<int>(index);
+                }
+            } else if (stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO
+                       && (stream->disposition & AV_DISPOSITION_ATTACHED_PIC) == 0) {
+                metadata.has_video = true;
+                if (video_stream == nullptr) {
+                    video_stream = stream;
+                    metadata.video_width = stream->codecpar->width;
+                    metadata.video_height = stream->codecpar->height;
+                }
+            }
+        }
+        if (!metadata.has_audio && !metadata.has_video) {
+            return finish(AG_UNSUPPORTED_FORMAT);
+        }
+
         std::int64_t observed_duration_ms = 0;
-        const int audio_index = discover_audio_stream_without_codec(
-            context, observed_duration_ms);
-        if (audio_index < 0) return finish(AG_UNSUPPORTED_FORMAT);
-        const AVStream* audio_stream = context->streams[audio_index];
-        const AVCodecParameters* parameters = audio_stream->codecpar;
+        if (audio_index >= 0) {
+            const int discovered_audio_index = discover_audio_stream_without_codec(
+                context, observed_duration_ms);
+            if (discovered_audio_index >= 0) {
+                audio_index = discovered_audio_index;
+            }
+        }
+        const AVStream* const audio_stream = audio_index >= 0
+            ? context->streams[audio_index] : nullptr;
+        const AVStream* const metadata_stream = audio_stream != nullptr
+            ? audio_stream : video_stream;
+        const AVCodecParameters* const parameters = audio_stream != nullptr
+            ? audio_stream->codecpar : nullptr;
         std::size_t tag_budget = kMaxProbeTagBytes;
         bool tag_limit_exceeded = false;
-        const auto read_limited = [audio_stream, context, &tag_budget,
+        const auto read_limited = [metadata_stream, context, &tag_budget,
                                    &tag_limit_exceeded](const char* key) {
-            return read_tag_limited(audio_stream->metadata, context->metadata,
+            return read_tag_limited(metadata_stream->metadata, context->metadata,
                                     key, tag_budget, tag_limit_exceeded);
         };
         const auto read_canonical = [&read_limited, &tag_limit_exceeded](
@@ -348,22 +398,26 @@ ag_result probe_media_metadata(const std::string& utf8_path,
             metadata.date = shared;
         }
         metadata.genre = read_canonical(CanonicalField::Genre);
-        metadata.lyrics = read_lyrics_limited(audio_stream->metadata,
+        metadata.lyrics = read_lyrics_limited(metadata_stream->metadata,
                                               context->metadata, tag_budget,
                                               tag_limit_exceeded);
         if (tag_limit_exceeded) return finish(AG_UNSUPPORTED_FORMAT);
         metadata.format = context->iformat != nullptr
             && context->iformat->name != nullptr ? context->iformat->name : "";
-        metadata.sample_rate = parameters->sample_rate;
-        metadata.channels = parameters->ch_layout.nb_channels;
-        metadata.bits_per_sample = parameters->bits_per_raw_sample > 0
-            ? parameters->bits_per_raw_sample : parameters->bits_per_coded_sample;
-        metadata.bit_rate = parameters->bit_rate > 0
-            ? parameters->bit_rate : context->bit_rate;
-        if (audio_stream->duration > 0
-            && audio_stream->duration != AV_NOPTS_VALUE) {
-            metadata.duration_ms = av_rescale_q(audio_stream->duration,
-                audio_stream->time_base, AVRational{1, 1'000});
+        if (parameters != nullptr) {
+            metadata.sample_rate = parameters->sample_rate;
+            metadata.channels = parameters->ch_layout.nb_channels;
+            metadata.bits_per_sample = parameters->bits_per_raw_sample > 0
+                ? parameters->bits_per_raw_sample : parameters->bits_per_coded_sample;
+            metadata.bit_rate = parameters->bit_rate > 0
+                ? parameters->bit_rate : context->bit_rate;
+        }
+        const AVStream* const duration_stream = audio_stream != nullptr
+            ? audio_stream : video_stream;
+        if (duration_stream != nullptr && duration_stream->duration > 0
+            && duration_stream->duration != AV_NOPTS_VALUE) {
+            metadata.duration_ms = av_rescale_q(duration_stream->duration,
+                duration_stream->time_base, AVRational{1, 1'000});
         } else if (context->duration > 0
                    && context->duration != AV_NOPTS_VALUE) {
             metadata.duration_ms = av_rescale_q(context->duration,
@@ -442,8 +496,22 @@ public:
         audio_stream_index_ = av_find_best_stream(
             format_context_, AVMEDIA_TYPE_AUDIO, -1, -1, &codec, 0);
         if (audio_stream_index_ < 0 || codec == nullptr) {
-            reset();
-            return AG_UNSUPPORTED_FORMAT;
+            // A present-but-undecodable audio stream is never a reason to
+            // replace real media with silence. This path is exclusively for
+            // containers with no audio stream at all.
+            if (first_audio_stream(format_context_) >= 0
+                || !options.allow_silent_video_clock) {
+                reset();
+                return AG_UNSUPPORTED_FORMAT;
+            }
+            const int video_stream_index = first_playable_video_stream(format_context_);
+            if (video_stream_index < 0
+                || !initialize_silent_video_clock(
+                    *format_context_->streams[video_stream_index])) {
+                reset();
+                return AG_UNSUPPORTED_FORMAT;
+            }
+            return AG_OK;
         }
 
         codec_context_ = avcodec_alloc_context3(codec);
@@ -491,6 +559,7 @@ public:
 
     [[nodiscard]] bool is_open() const noexcept
     {
+        if (silent_video_clock_) return format_context_ != nullptr;
         return format_context_ != nullptr && codec_context_ != nullptr
                && swr_context_ != nullptr && packet_ != nullptr
                && frame_ != nullptr;
@@ -503,6 +572,9 @@ public:
         block.timestamp_frame = 0;
         block.timestamp_ms = 0;
         block.end_of_stream = false;
+        if (silent_video_clock_) {
+            return read_silent_video_clock(block);
+        }
         if (codec_context_ == nullptr || frame_ == nullptr || packet_ == nullptr) {
             return AG_INVALID_ARGUMENT;
         }
@@ -578,6 +650,16 @@ public:
 
     ag_result seek(const std::int64_t target_ms)
     {
+        if (silent_video_clock_) {
+            if (target_ms < 0) return AG_INVALID_ARGUMENT;
+            const std::int64_t clamped_ms = (std::min)(
+                target_ms, silent_duration_ms_);
+            const std::int64_t target_frame = av_rescale_rnd(
+                clamped_ms, output_sample_rate_, 1'000, AV_ROUND_UP);
+            silent_cursor_frame_ = (std::min)(target_frame,
+                                               silent_total_frames_);
+            return AG_OK;
+        }
         if (target_ms < 0 || format_context_ == nullptr || codec_context_ == nullptr
             || swr_context_ == nullptr) {
             return AG_INVALID_ARGUMENT;
@@ -595,6 +677,12 @@ public:
 
     ag_result seek_frame(const std::int64_t target_frame)
     {
+        if (silent_video_clock_) {
+            if (target_frame < 0) return AG_INVALID_ARGUMENT;
+            silent_cursor_frame_ = (std::min)(target_frame,
+                                               silent_total_frames_);
+            return AG_OK;
+        }
         if (target_frame < 0 || format_context_ == nullptr
             || codec_context_ == nullptr || swr_context_ == nullptr
             || output_sample_rate_ <= 0) {
@@ -655,6 +743,10 @@ public:
         block_start_frame_ = 0;
         fallback_frame_ = 0;
         fallback_frame_valid_ = true;
+        silent_video_clock_ = false;
+        silent_duration_ms_ = 0;
+        silent_total_frames_ = 0;
+        silent_cursor_frame_ = 0;
         metadata_ = {};
         output_format_ = {};
     }
@@ -730,6 +822,80 @@ private:
             return result;
         }
         return swr_init(swr_context_);
+    }
+
+    [[nodiscard]] bool initialize_silent_video_clock(const AVStream& video_stream)
+    {
+        constexpr int silent_sample_rate = 48'000;
+        constexpr int silent_channels = 2;
+        std::int64_t duration_ms = 0;
+        if (video_stream.duration > 0
+            && video_stream.duration != AV_NOPTS_VALUE) {
+            duration_ms = av_rescale_q(video_stream.duration,
+                                       video_stream.time_base,
+                                       AVRational{1, 1'000});
+        } else if (format_context_->duration > 0
+                   && format_context_->duration != AV_NOPTS_VALUE) {
+            duration_ms = av_rescale_q(format_context_->duration,
+                                       AVRational{1, AV_TIME_BASE},
+                                       AVRational{1, 1'000});
+        }
+        if (duration_ms <= 0) return false;
+
+        const std::int64_t total_frames = av_rescale_rnd(
+            duration_ms, silent_sample_rate, 1'000, AV_ROUND_UP);
+        if (total_frames <= 0
+            || total_frames == (std::numeric_limits<std::int64_t>::max)()) {
+            return false;
+        }
+
+        output_sample_rate_ = silent_sample_rate;
+        output_channels_ = silent_channels;
+        output_format_.sample_rate = silent_sample_rate;
+        output_format_.channels = silent_channels;
+        silent_video_clock_ = true;
+        silent_duration_ms_ = duration_ms;
+        silent_total_frames_ = total_frames;
+        silent_cursor_frame_ = 0;
+        metadata_.format = format_context_->iformat != nullptr
+                               && format_context_->iformat->name != nullptr
+                           ? format_context_->iformat->name
+                           : "";
+        metadata_.sample_rate = silent_sample_rate;
+        metadata_.channels = silent_channels;
+        metadata_.duration_ms = duration_ms;
+        metadata_.has_video = true;
+        metadata_.video_width = video_stream.codecpar->width;
+        metadata_.video_height = video_stream.codecpar->height;
+        metadata_.bit_rate = format_context_->bit_rate;
+        return true;
+    }
+
+    ag_result read_silent_video_clock(DecodedAudioBlock& block) noexcept
+    {
+        constexpr std::size_t silent_block_frames = 1'024U;
+        if (silent_cursor_frame_ >= silent_total_frames_) {
+            block.timestamp_frame = silent_total_frames_;
+            block.timestamp_ms = av_rescale_q(
+                silent_total_frames_, AVRational{1, output_sample_rate_},
+                AVRational{1, 1'000});
+            block.end_of_stream = true;
+            return AG_OK;
+        }
+
+        const std::int64_t remaining = silent_total_frames_ - silent_cursor_frame_;
+        const std::size_t frames = static_cast<std::size_t>((std::min)(
+            remaining, static_cast<std::int64_t>(silent_block_frames)));
+        block.frames = frames;
+        block.timestamp_frame = silent_cursor_frame_;
+        block.timestamp_ms = av_rescale_q(
+            silent_cursor_frame_, AVRational{1, output_sample_rate_},
+            AVRational{1, 1'000});
+        block.samples.assign(frames * static_cast<std::size_t>(output_channels_),
+                             0.0F);
+        silent_cursor_frame_ += static_cast<std::int64_t>(frames);
+        block.end_of_stream = silent_cursor_frame_ == silent_total_frames_;
+        return AG_OK;
     }
 
     void populate_metadata(const AVStream& audio_stream)
@@ -1022,6 +1188,10 @@ private:
     std::int64_t block_start_frame_ = 0;
     std::int64_t fallback_frame_ = 0;
     bool fallback_frame_valid_ = true;
+    bool silent_video_clock_ = false;
+    std::int64_t silent_duration_ms_ = 0;
+    std::int64_t silent_total_frames_ = 0;
+    std::int64_t silent_cursor_frame_ = 0;
     DecoderInterruptCallback interrupt_handler_ = nullptr;
     void* interrupt_context_ = nullptr;
     bool interrupt_triggered_ = false;

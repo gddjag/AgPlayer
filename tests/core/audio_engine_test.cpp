@@ -701,7 +701,7 @@ int main(const int argc, char** argv)
     _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
     _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
 #endif
-    assert(argc == 2);
+    assert(argc == 3);
 
     ag_player_config config{};
     config.backend = AG_AUDIO_BACKEND_NULL;
@@ -778,6 +778,7 @@ int main(const int argc, char** argv)
     assert(ag_player_snapshot(nullptr, &snapshot) == AG_INVALID_ARGUMENT);
 
     const std::filesystem::path fixture_path = argv[1];
+    const std::filesystem::path video_only_path = argv[2];
     const std::filesystem::path missing_path =
         fixture_path.parent_path() / "missing-audio-engine.wav";
     std::filesystem::remove(missing_path);
@@ -791,6 +792,19 @@ int main(const int argc, char** argv)
     assert(ag_player_seek(player, 0) != AG_OK);
     assert(ag_player_snapshot(player, &snapshot) == AG_OK);
     assert(snapshot.state == AG_ERROR);
+    assert(ag_player_load(player, video_only_path.string().c_str()) == AG_OK);
+    assert(ag_player_snapshot(player, &snapshot) == AG_OK);
+    assert(snapshot.state == AG_STOPPED);
+    assert(snapshot.duration_ms > 0);
+    const long long video_seek_target = snapshot.duration_ms / 2;
+    assert(video_seek_target > 0);
+    assert(ag_player_play(player) == AG_OK);
+    assert(ag_player_seek(player, video_seek_target) == AG_OK);
+    assert(ag_player_snapshot(player, &snapshot) == AG_OK);
+    assert(snapshot.state == AG_PLAYING);
+    assert(snapshot.position_ms >= video_seek_target);
+    assert(snapshot.position_ms <= snapshot.duration_ms);
+    assert(ag_player_stop(player) == AG_OK);
     assert(ag_player_load(player, argv[1]) == AG_OK);
 
     snapshot = {};

@@ -43,6 +43,11 @@ find_package(Qt6 6.7 REQUIRED COMPONENTS
     LinguistTools
     Widgets
 )
+# The vcpkg FindFFMPEG module caches the aggregate result.  In an existing
+# build tree that cache otherwise stays stale when a newly enabled FFmpeg
+# feature (such as swscale) is added to vcpkg.json.
+unset(FFMPEG_FOUND CACHE)
+unset(FFMPEG_LIBRARIES CACHE)
 find_package(FFMPEG REQUIRED)
 find_path(MINIAUDIO_INCLUDE_DIRS miniaudio.h REQUIRED)
 find_package(SoundTouch CONFIG REQUIRED)

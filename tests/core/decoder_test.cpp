@@ -9,6 +9,7 @@
 
 #include "decoder.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdint>
@@ -18,8 +19,12 @@
 
 int main(const int argc, char** argv)
 {
-    assert(argc == 2);
+    assert(argc == 6);
     const std::filesystem::path sine_path = argv[1];
+    const std::filesystem::path video_with_audio_path = argv[2];
+    const std::filesystem::path video_only_path = argv[3];
+    const std::filesystem::path audio_with_attached_picture_path = argv[4];
+    const std::filesystem::path rotated_video_path = argv[5];
 
     ag_metadata* metadata = reinterpret_cast<ag_metadata*>(
         static_cast<std::uintptr_t>(1U));
@@ -54,6 +59,51 @@ int main(const int argc, char** argv)
     assert(std::strcmp(cover_mime_type, "") == 0);
     ag_metadata_destroy(metadata);
 
+    agplayer::MediaMetadata video_with_audio;
+    assert(agplayer::probe_media_metadata(video_with_audio_path.string(),
+                                          video_with_audio)
+           == AG_OK);
+    assert(video_with_audio.has_audio);
+    assert(video_with_audio.has_video);
+    assert(video_with_audio.video_width == 320);
+    assert(video_with_audio.video_height == 180);
+
+    agplayer::MediaMetadata video_only;
+    assert(agplayer::probe_media_metadata(video_only_path.string(), video_only)
+           == AG_OK);
+    assert(!video_only.has_audio);
+    assert(video_only.has_video);
+    assert(video_only.duration_ms > 0);
+
+    agplayer::MediaMetadata cover_only;
+    assert(agplayer::probe_media_metadata(audio_with_attached_picture_path.string(),
+                                          cover_only)
+           == AG_OK);
+    assert(cover_only.has_audio);
+    assert(!cover_only.has_video);
+
+    agplayer::MediaMetadata rotated_video;
+    assert(agplayer::probe_media_metadata(rotated_video_path.string(), rotated_video)
+           == AG_OK);
+    assert(!rotated_video.has_audio);
+    assert(rotated_video.has_video);
+    assert(rotated_video.video_width == 320);
+    assert(rotated_video.video_height == 180);
+
+    metadata = nullptr;
+    assert(ag_metadata_open(video_with_audio_path.string().c_str(), &metadata)
+           == AG_OK);
+    assert(metadata != nullptr);
+    assert(ag_metadata_has_audio(metadata) == 1);
+    assert(ag_metadata_has_video(metadata) == 1);
+    assert(ag_metadata_video_width(metadata) == 320);
+    assert(ag_metadata_video_height(metadata) == 180);
+    ag_metadata_destroy(metadata);
+    assert(ag_metadata_has_audio(nullptr) == 0);
+    assert(ag_metadata_has_video(nullptr) == 0);
+    assert(ag_metadata_video_width(nullptr) == 0);
+    assert(ag_metadata_video_height(nullptr) == 0);
+
     const std::filesystem::path missing_path =
         sine_path.parent_path() / "does-not-exist.wav";
     std::filesystem::remove(missing_path);
@@ -70,6 +120,69 @@ int main(const int argc, char** argv)
     assert(decoder.read(block) == AG_OK);
     assert(block.frames > 0U);
     assert(block.samples.size() == block.frames * 2U);
+
+    // Video-only inputs stay unsupported for normal audio callers. The
+    // playback-only opt-in instead exposes a finite, silent 48 kHz stereo
+    // clock so the player retains its existing audio timeline.
+    agplayer::Decoder strict_video_decoder;
+    assert(strict_video_decoder.open(video_only_path.string())
+           == AG_UNSUPPORTED_FORMAT);
+    assert(!strict_video_decoder.is_open());
+
+    agplayer::DecoderOpenOptions silent_clock_options;
+    silent_clock_options.allow_silent_video_clock = true;
+    agplayer::Decoder silent_video_decoder;
+    assert(silent_video_decoder.open(video_only_path.string(),
+                                     silent_clock_options)
+           == AG_OK);
+    assert(silent_video_decoder.is_open());
+    assert(silent_video_decoder.output_format().sample_rate == 48'000);
+    assert(silent_video_decoder.output_format().channels == 2);
+
+    constexpr std::int64_t silent_sample_rate = 48'000;
+    const std::int64_t silent_total_frames =
+        (video_only.duration_ms * silent_sample_rate + 999) / 1'000;
+    assert(silent_total_frames > 0);
+    std::int64_t silent_frames_read = 0;
+    std::int64_t previous_silent_end_frame = 0;
+    std::int64_t previous_silent_timestamp_ms = -1;
+    do {
+        assert(silent_video_decoder.read(block) == AG_OK);
+        if (block.frames > 0U) {
+            assert(block.timestamp_frame == previous_silent_end_frame);
+            assert(block.timestamp_ms >= previous_silent_timestamp_ms);
+            assert(block.samples.size() == block.frames * 2U);
+            assert(std::all_of(block.samples.begin(), block.samples.end(),
+                               [](const float sample) { return sample == 0.0F; }));
+            previous_silent_end_frame += static_cast<std::int64_t>(block.frames);
+            previous_silent_timestamp_ms = block.timestamp_ms;
+            silent_frames_read += static_cast<std::int64_t>(block.frames);
+        }
+    } while (!block.end_of_stream);
+    assert(silent_frames_read == silent_total_frames);
+
+    constexpr std::int64_t silent_seek_ms = 1'000;
+    assert(silent_video_decoder.seek(silent_seek_ms) == AG_OK);
+    assert(silent_video_decoder.read(block) == AG_OK);
+    assert(block.frames > 0U);
+    assert(block.timestamp_frame >= silent_seek_ms * silent_sample_rate / 1'000);
+    assert(block.timestamp_frame
+           <= silent_seek_ms * silent_sample_rate / 1'000
+              + static_cast<std::int64_t>(block.frames));
+    assert(std::all_of(block.samples.begin(), block.samples.end(),
+                       [](const float sample) { return sample == 0.0F; }));
+
+    assert(silent_video_decoder.seekFrame(silent_sample_rate) == AG_OK);
+    assert(silent_video_decoder.read(block) == AG_OK);
+    assert(block.frames > 0U);
+    assert(block.timestamp_frame == silent_sample_rate);
+
+    assert(silent_video_decoder.seekFrame(silent_total_frames + 1'024) == AG_OK);
+    assert(silent_video_decoder.read(block) == AG_OK);
+    assert(block.frames == 0U);
+    assert(block.end_of_stream);
+    silent_video_decoder.close();
+    assert(!silent_video_decoder.is_open());
 
     constexpr std::int64_t seek_target_ms = 1'517;
     assert(decoder.seek(seek_target_ms) == AG_OK);

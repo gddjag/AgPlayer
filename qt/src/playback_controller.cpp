@@ -504,9 +504,12 @@ void PlaybackController::seek(qint64 positionMs)
     }
     const ag_result result = ag_player_seek(player_, targetMs);
     runCommand(result);
-    if (result == AG_OK && positionMs_ != targetMs) {
-        positionMs_ = targetMs;
-        emit positionMsChanged();
+    if (result == AG_OK) {
+        if (positionMs_ != targetMs) {
+            positionMs_ = targetMs;
+            emit positionMsChanged();
+        }
+        emit seekCommitted(targetMs);
     }
 }
 

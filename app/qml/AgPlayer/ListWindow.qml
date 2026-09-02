@@ -655,18 +655,19 @@ Window {
                     }
                     }
 
-                    Rectangle {
-                        objectName: "tagPanelBottomDivider"
-                        visible: listWindow.tagManagementMode
-                        x: parent.width - width
-                        y: parent.height - listWindow.filterBarHeight - height
-                        width: listWorkspace.rightColumnWidth
-                        height: 1
-                        color: Theme.listDivider
-                        opacity: 0.3
-                        z: 4
-                    }
+                }
 
+                Rectangle {
+                    objectName: "tagPanelBottomDivider"
+                    visible: listWindow.tagManagementMode
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: listWindow.filterBarHeight
+                    width: listWorkspace.rightColumnWidth
+                    height: 1
+                    color: Theme.listDivider
+                    opacity: 0.3
+                    z: 4
                 }
             }
 

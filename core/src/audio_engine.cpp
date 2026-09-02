@@ -225,20 +225,13 @@ public:
 
     ag_result open(const std::string& path) noexcept
     {
-        stream_.reset();
-        const ag_result result = file_->open(path);
-        if (result != AG_OK) return result;
-        const MediaMetadata& value = metadata();
-        return configure_processing(value.sample_rate, value.channels);
+        return open_interruptible(path, 0, 0, nullptr, nullptr);
     }
 
     ag_result open(const std::string& path, const int sampleRate,
                    const int channels) noexcept
     {
-        stream_.reset();
-        const ag_result result = file_->open(path, sampleRate, channels);
-        return result == AG_OK
-            ? configure_processing(sampleRate, channels) : result;
+        return open_interruptible(path, sampleRate, channels, nullptr, nullptr);
     }
 
     ag_result open_interruptible(
@@ -250,11 +243,13 @@ public:
         DecoderOpenOptions options;
         options.output_sample_rate = sampleRate;
         options.output_channels = channels;
+        options.allow_silent_video_clock = true;
         options.interrupt_callback = interruptCallback;
         options.interrupt_context = interruptContext;
         const ag_result result = file_->open(path, options);
+        const DecodedAudioFormat& output = file_->output_format();
         return result == AG_OK
-            ? configure_processing(sampleRate, channels) : result;
+            ? configure_processing(output.sample_rate, output.channels) : result;
     }
 
     void clear_interrupt_callback() noexcept

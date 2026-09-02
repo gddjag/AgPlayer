@@ -1,4 +1,6 @@
 #include "settings_controller.hpp"
+#include "audio_file_discovery.hpp"
+#include "file_association_controller.hpp"
 #include "frequency_color_waveform_settings.hpp"
 
 #include <QByteArray>
@@ -9,14 +11,22 @@
 #include <QFile>
 #include <QFileDevice>
 #include <QSettings>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QUuid>
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
+
+#ifdef Q_OS_WIN
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#endif
 
 namespace {
 
@@ -107,6 +117,8 @@ private slots:
     void supportsOnlyChineseAndEnglish();
     void editSessionCanCommitOrCancel();
     void rebindFileAssociationsEnablesRegistrationDuringEdit();
+    void visibleAssociationChoicesRemainAudioOnly();
+    void defaultPlayerToggleRegistersAndClearsHiddenVideoCapabilities();
     void testModeDoesNotTouchStartupRegistry();
     void iniThemeSettingsPreserveStrictLegacyStrings();
 };
@@ -976,6 +988,47 @@ void SettingsControllerTest::rebindFileAssociationsEnablesRegistrationDuringEdit
 
     SettingsController reloaded;
     QVERIFY(reloaded.setAsDefaultPlayer());
+}
+
+void SettingsControllerTest::visibleAssociationChoicesRemainAudioOnly()
+{
+    // Catches a hidden video compatibility registration becoming a visible
+    // per-format setting or changing the existing audio selection contract.
+    QSettings().clear();
+    SettingsController settings;
+    QCOMPARE(settings.fileAssociations(), agplayer::qt::supportedAudioExtensions());
+    for (const QString& extension : agplayer::qt::supportedVideoExtensions()) {
+        QVERIFY(!settings.fileAssociations().contains(extension));
+    }
+}
+
+void SettingsControllerTest::defaultPlayerToggleRegistersAndClearsHiddenVideoCapabilities()
+{
+#ifdef Q_OS_WIN
+    // The controller is injected into a per-test registry namespace. Keep Qt
+    // test mode enabled so settings storage and all association writes remain
+    // outside the user's production registry keys.
+    const QString registryRoot = QStringLiteral("Software\\AgPlayer\\Tests\\%1")
+                                     .arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
+    const auto cleanupSandbox = qScopeGuard([registryRoot] {
+        const std::wstring registryRootW = registryRoot.toStdWString();
+        RegDeleteTreeW(HKEY_CURRENT_USER, registryRootW.c_str());
+    });
+    {
+        SettingsController settings;
+        settings.fileAssociationController_ =
+            std::make_unique<FileAssociationController>(registryRoot);
+        settings.setSetAsDefaultPlayer(true);
+        QCOMPARE(settings.fileAssociationController_->registryRootPath(), registryRoot);
+        QVERIFY(settings.fileAssociationController_->isAssociated(QStringLiteral(".mp4")));
+
+        settings.setSetAsDefaultPlayer(false);
+        QVERIFY(!settings.fileAssociationController_->isAssociated(QStringLiteral("mp4")));
+    }
+
+#else
+    QSKIP("Windows Default Apps capabilities are Windows-only");
+#endif
 }
 
 void SettingsControllerTest::iniThemeSettingsPreserveStrictLegacyStrings()
