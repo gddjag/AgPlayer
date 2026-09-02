@@ -798,6 +798,7 @@ Window {
             anchors.fill: parent
             service: LyricsService
             spatialMode: false
+            onCloseRequested: PlayerExperienceController.lyricsVisible = false
         }
     }
     Connections {

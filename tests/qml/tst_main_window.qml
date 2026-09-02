@@ -97,6 +97,17 @@ TestCase {
     }
 
     Component {
+        id: lyricsSidePanelComponent
+        LibrarySidePanel {
+            width: 312
+            height: 420
+            currentPage: 1
+            expanded: true
+            onExpandedRequested: function(value) { expanded = value }
+        }
+    }
+
+    Component {
         id: defaultListWindowComponent
         ListWindow { visible: true }
     }
@@ -6128,6 +6139,88 @@ TestCase {
             compare(currentLine.visible, true)
             verify(retry.icon.source.toString().indexOf("restore-line") >= 0)
             compare(retry.Accessible.name, qsTr("刷新歌词"))
+        } finally {
+            window.destroy()
+            PlayerExperienceController.lyricsVisible = previousVisible
+        }
+    }
+
+    function test_lyrics_close_hides_only_the_current_host_and_preserves_service_state() {
+        var previousVisible = PlayerExperienceController.lyricsVisible
+        PlayerExperienceController.lyricsVisible = true
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": findChild(mainWindow, "filterModel")
+        })
+        verify(window)
+        try {
+            var lyricsWindow = findChild(window, "listLyricsWindow")
+            var panel = findChild(window, "listLyricsPanel")
+            var closeButton = findChild(panel, "lyricsCloseButton")
+            verify(lyricsWindow && panel && closeButton)
+            tryCompare(lyricsWindow, "visible", true, 500)
+            compare(closeButton.Accessible.name, qsTr("关闭歌词窗口"))
+
+            var statusBefore = LyricsService.status
+            var sourceBefore = LyricsService.sourceProvider
+            var attemptsBefore = JSON.stringify(LyricsService.routeAttempts)
+            mouseClick(closeButton)
+
+            tryCompare(lyricsWindow, "visible", false, 500)
+            compare(PlayerExperienceController.lyricsVisible, false)
+            compare(LyricsService.enabled, false)
+            compare(LyricsService.status, statusBefore)
+            compare(LyricsService.sourceProvider, sourceBefore)
+            compare(JSON.stringify(LyricsService.routeAttempts), attemptsBefore)
+
+            PlayerExperienceController.lyricsVisible = true
+            tryCompare(lyricsWindow, "visible", true, 500)
+            compare(LyricsService.enabled, true)
+            compare(LyricsService.status, statusBefore)
+            compare(LyricsService.sourceProvider, sourceBefore)
+        } finally {
+            window.destroy()
+            PlayerExperienceController.lyricsVisible = previousVisible
+        }
+    }
+
+    function test_shared_lyrics_side_panel_close_collapses_without_changing_page() {
+        var panel = lyricsSidePanelComponent.createObject(mainWindow.contentItem)
+        verify(panel)
+        try {
+            var closeButton = findChild(panel, "lyricsCloseButton")
+            verify(closeButton)
+            compare(panel.currentPage, 1)
+            compare(panel.expanded, true)
+            closeButton.clicked()
+            compare(panel.expanded, false)
+            compare(panel.currentPage, 1)
+        } finally {
+            panel.destroy()
+        }
+    }
+
+    function test_lyrics_route_summary_keeps_no_match_distinct_from_network_failure() {
+        var previousVisible = PlayerExperienceController.lyricsVisible
+        PlayerExperienceController.lyricsVisible = true
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": findChild(mainWindow, "filterModel")
+        })
+        verify(window)
+        try {
+            var panel = findChild(window, "listLyricsPanel")
+            verify(panel)
+            compare(panel.routeReason("not-found"), qsTr("未找到匹配歌词"))
+            compare(panel.routeReason("network-error"), qsTr("网络请求失败"))
+            verify(panel.routeReason("not-found")
+                   !== panel.routeReason("network-error"))
+            var summary = panel.routeAttemptsSummary([
+                { "providerName": "LRCLIB", "diagnostic": "not-found" },
+                { "providerName": "Unison", "diagnostic": "timeout" },
+                { "providerName": "lyrics.ovh", "diagnostic": "invalid-response" }
+            ])
+            verify(summary.indexOf("LRCLIB：未找到匹配歌词") >= 0)
+            verify(summary.indexOf("Unison：请求超时") >= 0)
+            verify(summary.indexOf("lyrics.ovh：返回内容无效") >= 0)
         } finally {
             window.destroy()
             PlayerExperienceController.lyricsVisible = previousVisible

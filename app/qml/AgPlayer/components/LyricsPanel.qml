@@ -7,6 +7,8 @@ Item {
     id: root
     objectName: "lyricsPanel"
 
+    signal closeRequested()
+
     property var service: LyricsService
     property bool fullscreen: false
     property bool spatialMode: false
@@ -98,10 +100,29 @@ Item {
         case "timeout": return qsTr("请求超时")
         case "network-error": return qsTr("网络请求失败")
         case "invalid-response": return qsTr("返回内容无效")
+        case "dns": return qsTr("DNS 解析失败")
+        case "tls":
+        case "tls-error": return qsTr("TLS 安全连接失败")
+        case "server-error":
+        case "provider-error": return qsTr("服务端异常")
+        case "all-routes-failed": return qsTr("所有线路均不可用")
         case "circuit-open": return qsTr("线路暂时熔断")
         case "provider-unavailable": return qsTr("线路不可用")
         default: return qsTr("服务暂时不可用")
         }
+    }
+
+    function routeAttemptsSummary(attempts) {
+        var rows = attempts === undefined
+                ? (root.service ? root.service.routeAttempts : [])
+                : attempts
+        var parts = []
+        for (var index = 0; index < rows.length; ++index) {
+            var row = rows[index]
+            parts.push(String(row.providerName || row.providerId || qsTr("未知线路"))
+                       + "：" + root.routeReason(String(row.diagnostic || "")))
+        }
+        return parts.join("；")
     }
 
     Rectangle {
@@ -305,6 +326,31 @@ Item {
               ? attribution : qsTr("来源：%1").arg(providerName)
     }
 
+    ToolButton {
+        id: closeButton
+        objectName: "lyricsCloseButton"
+        visible: !root.spatialMode && root.chromeVisible
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.margins: 6
+        width: 28
+        height: 28
+        flat: true
+        z: 5
+        icon.source: Theme.icon("close-line")
+        icon.color: Theme.iconSecondary
+        icon.width: 18
+        icon.height: 18
+        Accessible.name: qsTr("关闭歌词窗口")
+        ToolTip.text: Accessible.name
+        ToolTip.visible: hovered
+        onClicked: root.closeRequested()
+        background: Rectangle {
+            color: closeButton.hovered ? Theme.hoverSurface : "transparent"
+            radius: Theme.radiusSm
+        }
+    }
+
     Flickable {
         id: untimedFlickable
         objectName: "untimedLyricsFlickable"
@@ -377,6 +423,7 @@ Item {
 
     Column {
         objectName: "lyricsRouteAttempts"
+        Accessible.name: root.routeAttemptsSummary()
         visible: (root.spatialMode || root.chromeVisible)
                  && root.service
                  && (root.service.status === LyricsService.NotFound

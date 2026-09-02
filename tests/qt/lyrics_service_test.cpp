@@ -158,6 +158,7 @@ private slots:
     void sameTitleAndArtistWithMateriallyWrongDurationIsRejected();
     void notFoundFollowedByTechnicalFailureRemainsRetryable();
     void disabledServiceDoesNotPublishPositionDrivenLineChanges();
+    void disablingLyricsHostPreservesResolvedPresentationState();
     void emptyEmbeddedLyricsFallsThroughToProvider();
     void embeddedLyricsRetainLocalSourceWithoutProviderRequest();
     void sidecarLyricsRetainLocalSourceWithoutProviderRequest();
@@ -537,6 +538,44 @@ void LyricsServiceTest::disabledServiceDoesNotPublishPositionDrivenLineChanges()
     QSignalSpy changed(&service, &LyricsService::currentLineChanged);
     emit playback.positionMsChanged();
     QCOMPARE(changed.count(), 0);
+}
+
+void LyricsServiceTest::disablingLyricsHostPreservesResolvedPresentationState()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    auto* provider = new FakeLyricsProvider;
+    LyricsService service(nullptr, nullptr, nullptr, provider);
+    service.setEnabled(true);
+
+    TrackRecord track;
+    track.trackId = QStringLiteral("preserved-host-state");
+    track.title = QStringLiteral("Preserved Host State");
+    track.artist = QStringLiteral("Artist");
+    track.path = directory.filePath(QStringLiteral("preserved.flac"));
+    service.requestTrack(track);
+    QCOMPARE(provider->exactRequests.size(), 1);
+
+    LyricsProvider::Candidate value;
+    value.title = track.title;
+    value.artist = track.artist;
+    value.source = lrclibSource();
+    value.syncedLyrics = QStringLiteral("[00:01.00]Keep this resolved line");
+    provider->complete(provider->exactRequests.constFirst().requestId,
+                       LyricsProvider::Result::found(value));
+    QCOMPARE(service.status(), LyricsService::Ready);
+    QCOMPARE(service.sourceProvider(), QStringLiteral("LRCLIB"));
+    QCOMPARE(qobject_cast<LyricsLineModel*>(service.lines())->rowCount(), 1);
+
+    service.setEnabled(false);
+    QCOMPARE(service.enabled(), false);
+    QCOMPARE(service.status(), LyricsService::Ready);
+    QCOMPARE(service.sourceProvider(), QStringLiteral("LRCLIB"));
+    QCOMPARE(qobject_cast<LyricsLineModel*>(service.lines())->rowCount(), 1);
+
+    service.setEnabled(true);
+    QCOMPARE(service.status(), LyricsService::Ready);
+    QCOMPARE(provider->exactRequests.size(), 1);
 }
 
 void LyricsServiceTest::emptyEmbeddedLyricsFallsThroughToProvider()

@@ -444,6 +444,7 @@ ApplicationWindow {
                  && !WindowController.listWindowVisible
         spatialMode: false
         z: 70
+        onCloseRequested: PlayerExperienceController.lyricsVisible = false
     }
 
     Item {

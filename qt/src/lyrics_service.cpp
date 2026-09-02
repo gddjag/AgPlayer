@@ -131,8 +131,11 @@ void LyricsService::setEnabled(const bool enabled)
     emit enabledChanged();
     if (!enabled_) {
         cancelPending();
-        resetPresentationState();
-        setStatus(Idle);
+        return;
+    }
+    if (playback_ != nullptr && playback_->currentTrackId() == currentTrackId_
+        && status_ != Idle && status_ != Loading) {
+        updateCurrentLine();
         return;
     }
     requestCurrentTrack();

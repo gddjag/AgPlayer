@@ -186,6 +186,10 @@ Rectangle {
                     anchors.fill: parent
                     service: root.lyricsService
                     spatialMode: false
+                    onCloseRequested: {
+                        PlayerExperienceController.lyricsVisible = false
+                        root.expandedRequested(false)
+                    }
                 }
             }
         }
