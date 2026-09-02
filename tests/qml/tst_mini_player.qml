@@ -342,13 +342,15 @@ TestCase {
                 "stars and favorite must share one visual centerline")
         compare(favorite.icon.width, 16)
         compare(favorite.icon.height, 16)
-        compare(findChild(miniPlayer, "miniElapsedTime").font.pixelSize, 11)
-        compare(findChild(miniPlayer, "miniDurationTime").font.pixelSize, 11)
+        compare(findChild(miniPlayer, "miniElapsedTime").font.pixelSize,
+                Theme.fontSizeCaption)
+        compare(findChild(miniPlayer, "miniDurationTime").font.pixelSize,
+                Theme.fontSizeCaption)
         compare(play.width, 34)
         compare(play.height, 34)
         tryCompare(slider, "visible", false, 300)
         compare(slider.width, 60)
-        verify(slider.handle.width <= 8)
+        compare(slider.handle.width, Theme.sliderHandleExtent)
         playbackFake.setVolume(0.37)
         tryCompare(percent, "text", "37%")
     }

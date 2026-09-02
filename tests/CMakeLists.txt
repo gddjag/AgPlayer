@@ -1359,6 +1359,14 @@ add_test(
 )
 set_tests_properties(removed_custom_theme_contract_test PROPERTIES TIMEOUT 10)
 
+add_test(
+    NAME ui_design_system_usage_contract_test
+    COMMAND "${CMAKE_COMMAND}"
+        "-DROOT=${CMAKE_SOURCE_DIR}"
+        -P "${CMAKE_SOURCE_DIR}/cmake/CheckUiDesignSystemUsage.cmake"
+)
+set_tests_properties(ui_design_system_usage_contract_test PROPERTIES TIMEOUT 10)
+
 set_tests_properties(import_controller_test PROPERTIES
     # The 10K indexing contract itself permits up to 30 seconds.  The CTest
     # watchdog includes process startup and Windows real-time scanning, so keep
@@ -1464,6 +1472,15 @@ set_tests_properties(qml_integrated_theme_test PROPERTIES
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
+add_test(NAME qml_design_system_test
+    COMMAND qml_main_window_test
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_design_system.qml)
+set_tests_properties(qml_design_system_test PROPERTIES
+    TIMEOUT 20
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
 add_test(NAME qml_about_version_test
     COMMAND qml_main_window_test
         -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_main_window.qml
@@ -1501,6 +1518,7 @@ set_tests_properties(qml_mini_player_test PROPERTIES
 )
 add_test(NAME qml_immersive_integration_test
     COMMAND qml_mini_player_test
+        -o ${CMAKE_CURRENT_BINARY_DIR}/qml-immersive-integration.xml,junitxml
         -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_immersive_integration.qml)
 set_tests_properties(qml_immersive_integration_test PROPERTIES
     TIMEOUT 120
@@ -1557,7 +1575,7 @@ add_dependencies(qml_audio_tools_test decoder_fixture)
 add_test(NAME qml_audio_editor_native_input_test
     COMMAND qml_audio_tools_test
         -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_audio_editor_native_input.qml
-        -o -,txt)
+        -o ${CMAKE_CURRENT_BINARY_DIR}/qml-audio-editor-native-input.xml,junitxml)
 set_tests_properties(qml_audio_editor_native_input_test PROPERTIES
     # Native Windows input can exceed 30 seconds in Debug while real fixture
     # playback and window activation complete.

@@ -31,13 +31,15 @@ Item {
     property int sidePanelPage: 0
     property bool sidePanelExpanded: true
 
-    property int topBarHeight: 52
-    property int leftColumnWidth: 248
-    property int rightColumnWidth: 312
+    property int topBarHeight: Theme.titleBarHeight
+    property int leftColumnWidth: width < 1300
+                                  ? Theme.navigationWidthCompact
+                                  : Theme.navigationWidth
+    property int rightColumnWidth: Theme.playerInspectorWidth
     property int waveformHeight: 120
-    property int waveformNavigatorHeight: 10
-    property int bottomBarHeight: 91
-    property int contentSpacing: 8
+    property int waveformNavigatorHeight: 8
+    property int bottomBarHeight: Theme.playerBottomBarHeight
+    property int contentSpacing: Theme.spacingSm
     property bool _waveformViewportResetPending: false
     readonly property real effectiveDurationMs: waveformDurationMs > 0
                                                 ? waveformDurationMs
@@ -214,7 +216,7 @@ Item {
                 anchors.fill: parent
                 anchors.leftMargin: root.contentSpacing
                 anchors.rightMargin: root.contentSpacing
-                spacing: root.contentSpacing
+                spacing: 1
 
                 Rectangle {
                     objectName: "integratedLibraryColumn"
@@ -222,10 +224,9 @@ Item {
                     Layout.minimumWidth: root.leftColumnWidth
                     Layout.maximumWidth: root.leftColumnWidth
                     Layout.fillHeight: true
-                    color: Theme.panel
-                    border.color: Theme.integratedSoftOutline
-                    border.width: 1
-                    radius: Theme.radiusSm
+                    color: Theme.navigationSurface
+                    border.width: 0
+                    radius: 0
 
                     SideNavigation {
                         id: sideNavigation
@@ -259,10 +260,9 @@ Item {
                     objectName: "integratedTrackColumn"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    color: Theme.panel
-                    border.color: Theme.integratedSoftOutline
-                    border.width: 1
-                    radius: Theme.radiusSm
+                    color: Theme.contentSurface
+                    border.width: 0
+                    radius: 0
 
                     ColumnLayout {
                         anchors.fill: parent
@@ -289,7 +289,7 @@ Item {
                             id: searchFilter
                             objectName: "integratedSearchFilter"
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 46
+                            Layout.preferredHeight: 40
                             integratedStyle: true
                             onSearchTextChanged: {
                                 if (root.filterModel
@@ -465,7 +465,7 @@ Item {
                                      - waveform.visibleStartMs) * index / 6)
                             color: Theme.secondaryText
                             font.family: Theme.fontPrimary
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fontSizeCaption
                         }
                     }
                 }
@@ -536,7 +536,7 @@ Item {
                 y: waveform.y
                 width: 1
                 height: waveform.height
-                color: "#54ff84" // theme-color-allow: shared waveform hover guide
+                color: Theme.accent
                 opacity: 0.96
                 z: 7
             }
@@ -555,7 +555,7 @@ Item {
                 height: integratedHoverTime.implicitHeight + 6
                 radius: height / 2
                 color: Theme.panel
-                border.color: "#54ff84" // theme-color-allow: shared waveform hover guide
+                border.color: Theme.accent
                 z: 8
 
                 Text {
@@ -564,7 +564,7 @@ Item {
                     text: root.formatScaleTime(selectionOverlay.hoverPositionMs)
                     color: Theme.primaryText
                     font.family: Theme.fontPrimary
-                    font.pixelSize: 11
+                    font.pixelSize: Theme.fontSizeCaption
                 }
             }
 
@@ -680,8 +680,8 @@ Item {
                     z: 2
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
-                    height: 66
-                    width: Math.min(480, parent.width * 0.29)
+                    height: 56
+                    width: Math.min(420, parent.width * 0.29)
                     spacing: 12
                     readonly property var track: {
                         var count = root.libraryModel ? root.libraryModel.count : 0
@@ -691,8 +691,8 @@ Item {
                     }
                     Rectangle {
                         objectName: "integratedTrackCover"
-                        Layout.preferredWidth: 66
-                        Layout.preferredHeight: 66
+                        Layout.preferredWidth: 56
+                        Layout.preferredHeight: 56
                         color: Theme.panel
                         border.color: Theme.integratedSoftOutline
                         border.width: 1
@@ -722,7 +722,7 @@ Item {
                                   ? trackSummary.track.title : qsTr("未选择歌曲")
                             color: Theme.primaryText
                             font.family: Theme.fontPrimary
-                            font.pixelSize: 16
+                            font.pixelSize: Theme.fontSizeSection
                             font.weight: Font.DemiBold
                             elide: Text.ElideRight
                         }
@@ -737,7 +737,7 @@ Item {
                                    ? trackSummary.track.album : ""
                             tags: trackSummary.track && trackSummary.track.tags
                                   ? trackSummary.track.tags : []
-                            font.pixelSize: 12
+                            font.pixelSize: Theme.fontSizeCaption
                         }
                         RowLayout {
                             id: integratedTrackMetadata
@@ -788,7 +788,7 @@ Item {
                                         text: modelData
                                         color: Theme.secondaryText
                                         font.family: Theme.fontPrimary
-                                        font.pixelSize: 10
+                                        font.pixelSize: Theme.fontSizeCaption
                                     }
                                 }
                             }

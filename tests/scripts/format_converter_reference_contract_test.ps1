@@ -44,11 +44,12 @@ if ($combined -notmatch 'modelData\.available') {
 if ($page -notmatch 'SettingsController\.defaultOutputDirectory') {
     throw 'The output directory must initialize from and persist through SettingsController.'
 }
-if ($settings -notmatch 'objectName:\s*"formatAdvancedSettings"[\s\S]*?Layout\.topMargin:\s*(?:2[4-9]|[3-9]\d)') {
-    throw 'Advanced concurrency controls must begin below the default reference fold.'
+if ($settings -notmatch 'objectName:\s*"formatSettingsScroll"[\s\S]*?ScrollBar\.vertical\.policy:\s*ScrollBar\.AsNeeded' -or
+    $settings -notmatch 'objectName:\s*"formatAdvancedSettings"[\s\S]*?Layout\.topMargin:\s*Theme\.spacingLg') {
+    throw 'Advanced concurrency controls must remain reachable in the independently scrollable settings panel without artificial fold spacing.'
 }
-if ($settings -notmatch 'objectName:\s*"formatLocalProcessingHint"[\s\S]*?Layout\.topMargin:\s*3[0-9]') {
-    throw 'The local-processing hint must retain the reference vertical position.'
+if ($settings -notmatch 'objectName:\s*"formatLocalProcessingHint"[\s\S]*?Layout\.topMargin:\s*Theme\.spacingMd') {
+    throw 'The local-processing hint must use the compact design-system spacing.'
 }
 if ($settings -notmatch 'objectName:\s*"formatOutputFormatGrid"[\s\S]*?Layout\.preferredWidth:\s*384' -or
     $settings -notmatch 'objectName:\s*"formatOutputFormatButton-"\s*\+\s*modelData\.key' -or

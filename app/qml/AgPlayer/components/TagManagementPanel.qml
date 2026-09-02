@@ -277,7 +277,7 @@ Item {
                       + ")"
                 color: Theme.primaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 16
+                font.pixelSize: Theme.fontSizeSection
                 font.weight: Font.DemiBold
                 Layout.fillWidth: true
                 elide: Text.ElideRight
@@ -315,7 +315,7 @@ Item {
                 leftPadding: 34
                 rightPadding: 10
                 font.family: Theme.fontPrimary
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeCaption
                 background: Rectangle {
                     objectName: "tagSearchGlassBackground"
                     color: tagSearchField.activeFocus
@@ -359,7 +359,7 @@ Item {
                         text: addTagButton.text
                         color: Theme.primaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fontSizeCaption
                     }
                 }
                 background: Rectangle {
@@ -486,7 +486,7 @@ Item {
                                 visible: false
                                 text: tagCell.displayName
                                 font.family: Theme.fontPrimary
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontSizeCaption
                             }
                             Row {
                                 anchors.horizontalCenter: parent.horizontalCenter
@@ -502,7 +502,7 @@ Item {
                                     text: tagCell.displayName
                                     color: Theme.tagPillText
                                     font.family: Theme.fontPrimary
-                                    font.pixelSize: 11
+                                    font.pixelSize: Theme.fontSizeCaption
                                     elide: Text.ElideRight
                                 }
                                 Text {
@@ -510,7 +510,7 @@ Item {
                                     text: tagCell.trackCount
                                     color: Theme.tagPillSecondaryText
                                     font.family: Theme.fontPrimary
-                                    font.pixelSize: 10
+                                    font.pixelSize: Theme.fontSizeCaption
                                 }
                             }
                             HoverHandler { id: tagHover }
@@ -609,7 +609,7 @@ Item {
                    : menuItem.enabled ? Theme.primaryText
                                       : Theme.secondaryText
             font.family: Theme.fontPrimary
-            font.pixelSize: Math.max(13, Qt.application.font.pixelSize)
+            font.pixelSize: Theme.fontSizeBody
             verticalAlignment: Text.AlignVCenter
         }
         background: Rectangle {

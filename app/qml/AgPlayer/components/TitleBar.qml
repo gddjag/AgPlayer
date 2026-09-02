@@ -5,7 +5,9 @@ import AgPlayer
 
 Rectangle {
     id: titleBar
-    color: "transparent"
+    color: Theme.titleBarSurface
+    radius: window && window.visibility === Window.Maximized
+            ? 0 : Theme.windowRadius
 
     property Window window
     property bool showBrand: false
@@ -18,9 +20,9 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         anchors.verticalCenterOffset: 0
         height: parent.height
-        anchors.leftMargin: 20
-        anchors.rightMargin: 12
-        spacing: 6
+        anchors.leftMargin: Theme.spacingLg
+        anchors.rightMargin: Theme.spacingMd
+        spacing: Theme.spacingXs
 
         RowLayout {
             objectName: "titleBrand"
@@ -41,7 +43,7 @@ Rectangle {
                 text: "AgPlayer"
                 color: Theme.primaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 13
+                font.pixelSize: Theme.fontSizeBody
                 font.weight: Font.DemiBold
                 font.italic: false
             }
@@ -53,8 +55,8 @@ Rectangle {
             objectName: "settingsButton"
             text: qsTr("设置")
             display: AbstractButton.IconOnly
-            Layout.preferredWidth: 32
-            Layout.preferredHeight: 32
+            Layout.preferredWidth: Theme.controlHeightCompact
+            Layout.preferredHeight: Theme.controlHeightCompact
             icon.source: Theme.icon("settings-3-fill")
             icon.color: Theme.iconSecondary
             icon.width: 16
@@ -81,8 +83,8 @@ Rectangle {
             objectName: "minimizeButton"
             text: qsTr("最小化")
             display: AbstractButton.IconOnly
-            Layout.preferredWidth: 32
-            Layout.preferredHeight: 32
+            Layout.preferredWidth: Theme.controlHeightCompact
+            Layout.preferredHeight: Theme.controlHeightCompact
             icon.source: Theme.icon("subtract-line")
             icon.color: Theme.iconSecondary
             icon.width: 16
@@ -109,8 +111,8 @@ Rectangle {
             objectName: "maximizeButton"
             text: window.visibility === Window.Maximized ? qsTr("还原") : qsTr("最大化")
             display: AbstractButton.IconOnly
-            Layout.preferredWidth: 32
-            Layout.preferredHeight: 32
+            Layout.preferredWidth: Theme.controlHeightCompact
+            Layout.preferredHeight: Theme.controlHeightCompact
             icon.source: window.visibility === Window.Maximized
                        ? Theme.icon("fullscreen-exit-fill")
                        : Theme.icon("checkbox-blank-line")
@@ -144,8 +146,8 @@ Rectangle {
             objectName: "closeButton"
             text: qsTr("关闭")
             display: AbstractButton.IconOnly
-            Layout.preferredWidth: 32
-            Layout.preferredHeight: 32
+            Layout.preferredWidth: Theme.controlHeightCompact
+            Layout.preferredHeight: Theme.controlHeightCompact
             icon.source: Theme.icon("close-fill")
             icon.color: Theme.iconSecondary
             icon.width: 16

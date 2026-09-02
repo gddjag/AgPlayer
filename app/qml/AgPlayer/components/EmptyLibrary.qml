@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import AgPlayer
 
@@ -36,7 +35,7 @@ Rectangle {
                                     : qsTr("Your library is empty")
             color: Theme.primaryText
             font.family: Theme.fontPrimary
-            font.pixelSize: 18
+            font.pixelSize: Theme.fontSizeSection
             font.weight: Font.Medium
             Layout.alignment: Qt.AlignHCenter
         }
@@ -48,47 +47,22 @@ Rectangle {
                   : qsTr("Drag audio files into the window or click below to import")
             color: Theme.secondaryText
             font.family: Theme.fontPrimary
-            font.pixelSize: root.playlistMode && root.width <= 360 ? 8 : 13
-            font.letterSpacing: root.playlistMode && root.width <= 360
-                                ? -1.5 : 0
-            minimumPixelSize: 7
-            fontSizeMode: root.playlistMode ? Text.HorizontalFit
-                                              : Text.FixedSize
+            font.pixelSize: Theme.fontSizeCaption
+            fontSizeMode: Text.FixedSize
             Layout.alignment: Qt.AlignHCenter
-            Layout.fillWidth: true
+            Layout.preferredWidth: Math.min(root.playlistMode ? 520 : 360,
+                                            Math.max(0, root.width - 24))
             horizontalAlignment: Text.AlignHCenter
-            wrapMode: root.playlistMode ? Text.NoWrap : Text.WordWrap
-            Layout.maximumWidth: root.playlistMode ? emptyContent.width : 360
+            wrapMode: Text.WordWrap
         }
 
-        Button {
+        ThemedButton {
             objectName: "emptyImportButton"
             text: root.playlistMode ? qsTr("Import music") : qsTr("Import audio")
             Layout.alignment: Qt.AlignHCenter
             Layout.topMargin: Theme.spacingSm
-            focusPolicy: Qt.StrongFocus
+            prominent: true
             onClicked: root.importRequested()
-
-            background: Rectangle {
-                color: !parent.enabled ? "transparent"
-                      : parent.pressed ? Theme.accentPressed
-                      : parent.hovered ? Theme.accentHover
-                      : "transparent"
-                border.color: parent.visualFocus ? Theme.focus : Theme.accentBorder
-                border.width: parent.visualFocus ? 2 : 1
-                radius: Theme.radiusSm
-                implicitHeight: 36
-            }
-
-            contentItem: Text {
-                id: importLabel
-                text: parent.text
-                color: parent.hovered ? Theme.accentText : Theme.accent
-                font.family: Theme.fontPrimary
-                font.pixelSize: 13
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
         }
     }
 

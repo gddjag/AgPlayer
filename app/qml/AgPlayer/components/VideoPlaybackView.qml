@@ -42,7 +42,7 @@ Item {
                   ? root.videoPlayback.errorMessage : qsTr("正在加载视频画面…")
             color: "white"
             font.family: Theme.fontPrimary
-            font.pixelSize: 14
+            font.pixelSize: Theme.fontSizeBody
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.Wrap
             Accessible.name: text

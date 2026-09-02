@@ -47,7 +47,7 @@ Popup {
                 Text {
                     text: qsTr("文件信息")
                     color: Theme.primaryText
-                    font.pixelSize: 15
+                    font.pixelSize: Theme.fontSizeBody
                     font.weight: Font.DemiBold
                     Layout.fillWidth: true
                 }
@@ -76,7 +76,7 @@ Popup {
                         objectName: "audioFileInfoLabel-" + detailRow.row.key
                         text: detailRow.row.label || ""
                         color: Theme.secondaryText
-                        font.pixelSize: 11
+                        font.pixelSize: Theme.fontSizeCaption
                         Layout.fillWidth: true
                         elide: Text.ElideRight
                         maximumLineCount: 1
@@ -100,7 +100,7 @@ Popup {
                             text: detailRow.row.value || "—"
                             color: Theme.primaryText
                             elide: Text.ElideMiddle
-                            font.pixelSize: 11
+                            font.pixelSize: Theme.fontSizeCaption
                             verticalAlignment: Text.AlignVCenter
                             Accessible.name: detailRow.row.key === "path"
                                              ? root.fullPath : text

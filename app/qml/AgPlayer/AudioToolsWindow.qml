@@ -113,8 +113,8 @@ Window {
 
     Rectangle {
         anchors.fill: parent
-        color: Theme.background
-        border.color: Theme.border
+        color: Theme.contentSurface
+        border.color: Theme.opaqueBorder
         border.width: 1
         radius: window.visibility === Window.Maximized ? 0 : Theme.windowRadius
 
@@ -126,25 +126,24 @@ Window {
                 id: titleBar
                 objectName: "audioToolsTitleBar"
                 Layout.fillWidth: true
-                Layout.preferredHeight: Theme.navigationActionExtent
-                    + Theme.spacingLg
-                color: Theme.panel
+                Layout.preferredHeight: Theme.titleBarHeight
+                color: Theme.titleBarSurface
 
                 RowLayout {
                     z: 1
                     anchors.fill: parent
-                    anchors.leftMargin: 24
-                    anchors.rightMargin: 8
-                    spacing: 14
+                    anchors.leftMargin: Theme.spacingXl
+                    anchors.rightMargin: Theme.spacingSm
+                    spacing: Theme.spacingMd
 
                     Item {
                         objectName: "audioToolsLogo"
-                        Layout.preferredWidth: 28
-                        Layout.preferredHeight: 28
+                        Layout.preferredWidth: Theme.controlHeightCompact
+                        Layout.preferredHeight: Theme.controlHeightCompact
                         Image {
                             anchors.centerIn: parent
-                            width: 28
-                            height: 28
+                            width: Theme.controlHeightCompact
+                            height: Theme.controlHeightCompact
                             source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
                             fillMode: Image.PreserveAspectFit
                         }
@@ -154,63 +153,46 @@ Window {
                         text: qsTr("AgPlayer · 音频工具")
                         color: Theme.primaryText
                         font.family: Theme.fontFallback
-                        font.pixelSize: 20
+                        font.pixelSize: Theme.fontSizeSection
                         font.weight: Font.Medium
                     }
 
                     Item { Layout.fillWidth: true }
 
-                    ToolButton {
+                    ThemedIconButton {
                         objectName: "audioToolsMinimizeButton"
                         focusPolicy: Qt.NoFocus
                         Keys.onSpacePressed: function(event) { event.accepted = true }
                         Layout.preferredWidth: Theme.navigationActionExtent
                         Layout.preferredHeight: Theme.navigationActionExtent
-                        icon.source: Theme.icon("subtract-line")
-                        icon.color: Theme.iconPrimary
-                        Accessible.name: qsTr("最小化")
-                        Accessible.role: Accessible.Button
+                        iconSource: Theme.icon("subtract-line")
+                        accessibleName: qsTr("最小化")
                         onClicked: window.showMinimized()
-                        background: Rectangle {
-                            color: parent.hovered ? Theme.surfaceHover : "transparent"
-                            radius: 3
-                        }
                     }
-                    ToolButton {
+                    ThemedIconButton {
                         objectName: "audioToolsMaximizeButton"
                         focusPolicy: Qt.NoFocus
                         Keys.onSpacePressed: function(event) { event.accepted = true }
                         Layout.preferredWidth: Theme.navigationActionExtent
                         Layout.preferredHeight: Theme.navigationActionExtent
-                        icon.source: Theme.icon(window.visibility === Window.Maximized
-                                                ? "fullscreen-exit-fill"
-                                                : "checkbox-blank-line")
-                        icon.color: Theme.iconPrimary
-                        Accessible.name: window.visibility === Window.Maximized
-                            ? qsTr("还原") : qsTr("最大化")
-                        Accessible.role: Accessible.Button
+                        iconSource: Theme.icon(window.visibility === Window.Maximized
+                                               ? "fullscreen-exit-fill"
+                                               : "checkbox-blank-line")
+                        accessibleName: window.visibility === Window.Maximized
+                                        ? qsTr("还原") : qsTr("最大化")
                         onClicked: window.visibility === Window.Maximized
                                    ? window.showNormal() : window.showMaximized()
-                        background: Rectangle {
-                            color: parent.hovered ? Theme.surfaceHover : "transparent"
-                            radius: 3
-                        }
                     }
-                    ToolButton {
+                    ThemedIconButton {
                         objectName: "audioToolsCloseButton"
                         focusPolicy: Qt.NoFocus
                         Keys.onSpacePressed: function(event) { event.accepted = true }
                         Layout.preferredWidth: Theme.navigationActionExtent
                         Layout.preferredHeight: Theme.navigationActionExtent
-                        icon.source: Theme.icon("close-fill")
-                        icon.color: Theme.iconPrimary
-                        Accessible.name: qsTr("关闭")
-                        Accessible.role: Accessible.Button
+                        iconSource: Theme.icon("close-fill")
+                        accessibleName: qsTr("关闭")
+                        dangerOnHover: true
                         onClicked: window.requestHide()
-                        background: Rectangle {
-                            color: parent.hovered ? Theme.danger : "transparent"
-                            radius: 3
-                        }
                     }
                 }
 
@@ -237,8 +219,7 @@ Window {
 
             ToolSidebar {
                 Layout.fillWidth: true
-                Layout.preferredHeight: Theme.navigationActionExtent
-                    + Theme.spacingLg
+                Layout.preferredHeight: Theme.settingsRowHeight
                 window: window
                 currentTool: AudioToolsController.currentTool
                 referenceWorkbench: window.referenceWorkbench
@@ -252,7 +233,7 @@ Window {
                 objectName: "audioToolsContentStack"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                color: Theme.panel
+                color: Theme.contentSurface
                 border.color: "transparent"
                 border.width: 0
                 radius: 0

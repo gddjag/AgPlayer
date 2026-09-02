@@ -80,7 +80,7 @@ Window {
                         text: "AgPlayer"
                         color: Theme.primaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fontSizeCaption
                         font.weight: Font.Medium
                     }
                     Item { Layout.fillWidth: true }

@@ -217,6 +217,21 @@ TestCase {
         compare(mainWindow.minimumHeight, 720)
     }
 
+    function test_rolling_list_ignores_classic_thumbnail_switch() {
+        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
+        try {
+            SettingsController.listWaveformThumbnailEnabled = false
+            var rolling = rollingWithFakes()
+            var list = findChild(rolling, "rollingTrackList")
+            verify(list)
+            compare(list.layoutProfile, "rolling")
+            compare(list.waveformThumbnailsVisible, true)
+            compare(list.rowHeight, Theme.mediaListRowHeight)
+        } finally {
+            SettingsController.listWaveformThumbnailEnabled = previousEnabled
+        }
+    }
+
     function test_waveform_mode_reuses_single_three_band_analysis() {
         var trackIds = nativeDropHelper.ensureSortableTracks()
         verify(trackIds.length > 0)
@@ -611,7 +626,7 @@ TestCase {
         verify(navigation && column && tagTab && lyricsTab && tagContent
                && lyricsContent && lyricsPanel && toggle)
         compare(navigation.showTagManagementEntry, false)
-        compare(column.width, 232)
+        compare(column.width, 264)
         verify(tagContent.visible)
         compare(lyricsContent.visible, false)
 
@@ -624,7 +639,7 @@ TestCase {
         mouseClick(toggle)
         tryCompare(column, "width", 42)
         mouseClick(toggle)
-        tryCompare(column, "width", 232)
+        tryCompare(column, "width", 264)
         verify(lyricsContent.visible)
     }
 

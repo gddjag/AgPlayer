@@ -59,8 +59,11 @@ ListView {
     readonly property int bpmWidth: compactColumns ? 48 : 64
     readonly property int durationWidth: compactColumns ? 58 : 72
     readonly property int titleMinimumWidth:
-        singleWindowLayout ? 220 : (compactColumns ? 150 : 180)
-    readonly property int singleWindowTitleWidth: 300
+        singleWindowLayout ? 180 : (compactColumns ? 150 : 180)
+    readonly property int singleWindowTitleWidth: Math.max(
+        titleMinimumWidth,
+        Math.min(300, width - 32 - sequenceWidth - durationWidth
+                 - ratingWidth - favoriteWidth - 80))
     readonly property int singleWindowMediaHeight: 34
     readonly property bool showBpmColumn:
         singleWindowLayout ? false
@@ -70,13 +73,15 @@ ListView {
     readonly property int ratingIconSize:
         relaxedClassicColumns ? 15 : (compactColumns ? 15 : 17)
     readonly property int favoriteIconSize: relaxedClassicColumns ? 22 : 18
-    readonly property int headerHeight: integratedCompact ? 48 : 46
+    readonly property int headerHeight: Theme.tableHeaderHeight
     readonly property int headerFontWeight: Font.DemiBold
     readonly property bool waveformThumbnailsVisible:
         !thumbnailVisibilityFollowsSetting
         || SettingsController.listWaveformThumbnailEnabled
     readonly property int rowHeight:
-        singleWindowLayout ? 50 : (waveformThumbnailsVisible ? 50 : 42)
+        singleWindowLayout ? Theme.mediaListRowHeight
+                           : (waveformThumbnailsVisible
+                              ? Theme.mediaListRowHeight : Theme.listRowHeight)
     property int thumbnailItemCount: 0
     property int nextWaveformGeneration: 0
     property int dragPreviewCreationCount: 0
@@ -556,7 +561,7 @@ ListView {
                         text: root.dragPreviewTitle
                         color: Theme.primaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fontSizeCaption
                         elide: Text.ElideRight
                         Layout.maximumWidth: root.dragTrackIds.length > 1
                                              ? 176 : 230
@@ -577,7 +582,7 @@ ListView {
                             text: qsTr("%1 首").arg(root.dragTrackIds.length)
                             color: Theme.primaryText
                             font.family: Theme.fontPrimary
-                            font.pixelSize: 11
+                            font.pixelSize: Theme.fontSizeCaption
                         }
                     }
                 }
@@ -666,7 +671,7 @@ ListView {
                 objectName: "trackIndexCell"
                 Layout.column: 0
                 Layout.minimumWidth: root.sequenceWidth; Layout.preferredWidth: root.sequenceWidth; Layout.maximumWidth: root.sequenceWidth; Layout.fillHeight: true
-                Text { anchors.verticalCenter: parent.verticalCenter; visible: !root.isCurrentTrack(rowItem.trackId); text: rowItem.index + 1; color: rowItem.systemHighlighted ? rowItem.systemHighlightText : Theme.secondaryText; font.pixelSize: 13 }
+                Text { anchors.verticalCenter: parent.verticalCenter; visible: !root.isCurrentTrack(rowItem.trackId); text: rowItem.index + 1; color: rowItem.systemHighlighted ? rowItem.systemHighlightText : Theme.secondaryText; font.pixelSize: Theme.fontSizeBody }
                 Item {
                     id: playingBars
                     objectName: "playingBarsIndicator"
@@ -797,7 +802,7 @@ ListView {
                             artist: rowItem.artist
                             album: rowItem.album
                             tags: rowItem.rowTags
-                            font.pixelSize: 11
+                            font.pixelSize: Theme.fontSizeCaption
                         }
 
                         Loader {
@@ -1056,7 +1061,7 @@ ListView {
         x: (root.width - width) / 2
         y: root.contentY + (root.height - height) / 2
         text: qsTr("未找到符合条件的歌曲")
-        color: Theme.secondaryText; font.pixelSize: 15; z: 5
+        color: Theme.secondaryText; font.pixelSize: Theme.fontSizeBody; z: 5
     }
 
     Menu {
@@ -1186,8 +1191,8 @@ ListView {
             Qt.callLater(root.ensureCurrentTrackVisible)
         }
     }
-    component HeaderText: Text { color: Theme.secondaryText; font.family: Theme.fontPrimary; font.pixelSize: 12; font.weight: root.headerFontWeight; elide: Text.ElideRight }
-    component BodyText: Text { property bool trackAvailable: true; property bool highlighted: false; property color highlightText: Theme.activeSelectionText; color: highlighted ? highlightText : trackAvailable ? Theme.secondaryText : Theme.error; font.family: Theme.fontPrimary; font.pixelSize: 13; elide: Text.ElideRight; wrapMode: Text.NoWrap; maximumLineCount: 1; clip: true }
+    component HeaderText: Text { color: Theme.secondaryText; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption; font.weight: root.headerFontWeight; elide: Text.ElideRight }
+    component BodyText: Text { property bool trackAvailable: true; property bool highlighted: false; property color highlightText: Theme.activeSelectionText; color: highlighted ? highlightText : trackAvailable ? Theme.secondaryText : Theme.error; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeBody; elide: Text.ElideRight; wrapMode: Text.NoWrap; maximumLineCount: 1; clip: true }
     component MarqueeBodyText: Item {
         id: marqueeRoot
         property alias text: marqueeText.text
@@ -1208,7 +1213,7 @@ ListView {
                    : marqueeRoot.trackAvailable ? Theme.secondaryText
                                                  : Theme.error
             font.family: Theme.fontPrimary
-            font.pixelSize: 13
+            font.pixelSize: Theme.fontSizeBody
             font.weight: marqueeRoot.fontWeight
             wrapMode: Text.NoWrap
         }

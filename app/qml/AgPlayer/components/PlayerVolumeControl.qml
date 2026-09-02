@@ -43,12 +43,22 @@ Item {
         objectName: "muteButton"
         anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
         width: 44; height: 44; flat: true
-        icon.source: root.playback.muted ? Theme.icon("volume-mute-line") : Theme.icon("volume-up-line")
+        enabled: root.playback !== null
+        icon.source: root.playback && root.playback.muted
+                     ? Theme.icon("volume-mute-line") : Theme.icon("volume-up-line")
         icon.color: Theme.iconPrimary; icon.width: 20; icon.height: 20
-        Accessible.name: root.playback.muted ? qsTr("Unmute") : qsTr("Mute")
-        onClicked: root.playback.toggleMuted()
+        Accessible.name: root.playback && root.playback.muted
+                         ? qsTr("Unmute") : qsTr("Mute")
+        onClicked: if (root.playback) root.playback.toggleMuted()
         ToolTip.text: Accessible.name; ToolTip.visible: hovered
-        background: null
+        background: Rectangle {
+            color: parent.down ? Theme.surfacePressed
+                : parent.hovered ? Theme.surfaceHover : "transparent"
+            border.width: parent.activeFocus ? 2 : 0
+            border.color: Theme.focus
+            radius: Theme.radiusSm
+            Behavior on color { ColorAnimation { duration: 100 } }
+        }
     }
     Slider {
         id: volumeSlider
@@ -62,20 +72,31 @@ Item {
             if (pressed) { volumeCloseTimer.stop(); root.expanded = true }
             else volumeCloseTimer.restart()
         }
-        onMoved: root.playback.setVolume(value)
-        Binding on value { value: root.playback.muted ? 0 : root.playback.volume; restoreMode: Binding.RestoreBindingOrValue }
+        enabled: root.playback !== null
+        onMoved: if (root.playback) root.playback.setVolume(value)
+        Binding on value {
+            value: !root.playback ? 0
+                : root.playback.muted ? 0 : root.playback.volume
+            restoreMode: Binding.RestoreBindingOrValue
+        }
         Behavior on width { NumberAnimation { duration: root.expanded ? 160 : 220; easing.type: Easing.OutCubic } }
         Behavior on opacity { NumberAnimation { duration: 140 } }
         background: Rectangle {
             x: volumeSlider.leftPadding; y: volumeSlider.topPadding + volumeSlider.availableHeight / 2 - height / 2
-            width: volumeSlider.availableWidth; height: 3; radius: 1.5; color: Theme.border
-            Rectangle { width: volumeSlider.visualPosition * parent.width; height: parent.height; radius: parent.radius; color: Theme.cyan }
+            width: volumeSlider.availableWidth
+            height: Theme.sliderTrackHeight
+            radius: height / 2
+            color: Theme.border
+            Rectangle { width: volumeSlider.visualPosition * parent.width; height: parent.height; radius: parent.radius; color: Theme.accent }
         }
         handle: Rectangle {
             objectName: "volumeSliderHandle"
             x: volumeSlider.leftPadding + volumeSlider.visualPosition * (volumeSlider.availableWidth - width)
             y: volumeSlider.topPadding + volumeSlider.availableHeight / 2 - height / 2
-            width: 10; height: 10; radius: 5; color: Theme.onBrandGradientText
+            width: Theme.sliderHandleExtent
+            height: Theme.sliderHandleExtent
+            radius: width / 2
+            color: Theme.onBrandGradientText
             border.width: 1; border.color: Theme.border
         }
     }
@@ -86,8 +107,8 @@ Item {
         width: root.showExpandedPercent ? 38 : 0
         opacity: width > 0 ? 1 : 0; visible: !root.emptyMode
         horizontalAlignment: Text.AlignRight
-        text: Math.round(root.playback.volume * 100) + "%"
-        color: Theme.primaryText; font.pixelSize: 12
+        text: Math.round((root.playback ? root.playback.volume : 0) * 100) + "%"
+        color: Theme.primaryText; font.pixelSize: Theme.fontSizeCaption
         Behavior on width { NumberAnimation { duration: root.expanded ? 160 : 220; easing.type: Easing.OutCubic } }
         Behavior on opacity { NumberAnimation { duration: 140 } }
     }

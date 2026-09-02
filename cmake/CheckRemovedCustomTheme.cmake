@@ -75,8 +75,10 @@ endif()
 file(READ "${ROOT}/app/qml/AgPlayer/theme/Theme.qml" theme_source)
 foreach(required_contract IN ITEMS
         "readonly property int mode: Runtime.SettingsController.themeMode"
-        "readonly property color accent: \"#007AFF\""
-        "readonly property color currentTrackSurface: \"#578F57C9\"")
+        "readonly property color accent: isLight ? \"#1F1ED9\" : \"#7657E8\""
+        "readonly property color titleBarSurface: isLight ? \"#E5E8ED\" : \"#202329\""
+        "readonly property color navigationSurface: isLight ? \"#ECEEF2\" : \"#24272D\""
+        "readonly property color contentSurface: isLight ? \"#FAFAFB\" : \"#181A1D\"")
     string(FIND "${theme_source}" "${required_contract}" contract_offset)
     if(contract_offset EQUAL -1)
         message(FATAL_ERROR "Theme.qml missing fixed contract: ${required_contract}")

@@ -218,7 +218,7 @@ Item {
                   ? root.terrainItem.diagnostic
                   : qsTr("当前图形后端无法运行沉浸视觉，播放不受影响。")
             color: Qt.rgba(1, 1, 1, 0.84) // theme-color-allow: immersive media visual contract
-            font.pixelSize: 12
+            font.pixelSize: Theme.fontSizeCaption
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             wrapMode: Text.Wrap
@@ -383,7 +383,7 @@ Item {
         anchors.bottomMargin: 2
         text: root.currentTitle()
         color: Qt.rgba(0.88, 0.92, 0.97, root.panelIdle ? 0.42 : 0.72) // theme-color-allow: immersive media visual contract
-        font.pixelSize: 11
+        font.pixelSize: Theme.fontSizeCaption
         elide: Text.ElideRight
         width: Math.min(parent.width * 0.68, implicitWidth)
         horizontalAlignment: Text.AlignHCenter
@@ -414,7 +414,11 @@ Item {
         width: Math.min(placement === PlayerExperienceController.Center ? 700 : 560,
                         parent.width * (placement === PlayerExperienceController.Center
                                         ? 0.62 : 0.42))
-        height: 128 * (PlayerExperienceController.lyricSize / 100.0)
+        // The semantic type scale has a 12 px readability floor. Keep enough
+        // camera-safe height for three wrapped lyric lines at the smallest
+        // user scale instead of shrinking the container below its content.
+        height: Math.max(112,
+                         128 * (PlayerExperienceController.lyricSize / 100.0))
         x: {
             var travel = Math.max(0, parent.width - width)
             var fine = (PlayerExperienceController.lyricPositionX - 50)
@@ -449,7 +453,7 @@ Item {
             anchors.centerIn: parent
             text: qsTr("Wayland 不支持桌面层级，已使用普通无边框透明窗口")
             color: Theme.primaryText
-            font.pixelSize: 11
+            font.pixelSize: Theme.fontSizeCaption
         }
     }
 

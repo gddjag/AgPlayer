@@ -113,9 +113,12 @@ Item {
     }
 
     function routeAttemptsSummary(attempts) {
-        var rows = attempts === undefined
-                ? (root.service ? root.service.routeAttempts : [])
+        var rows = attempts === undefined || attempts === null
+                ? (root.service && root.service.routeAttempts
+                   ? root.service.routeAttempts : [])
                 : attempts
+        if (!rows || rows.length === undefined)
+            rows = []
         var parts = []
         for (var index = 0; index < rows.length; ++index) {
             var row = rows[index]
@@ -185,7 +188,8 @@ Item {
             color: root.spatialMode
                    ? Theme.onBrandGradientText
                    : Theme.textSecondary
-            font.pixelSize: Math.round(13 * root.sizeScale)
+            font.pixelSize: Math.max(Theme.fontSizeCaption,
+                                     Math.round(Theme.fontSizeBody * root.sizeScale))
             horizontalAlignment: root.lineAlignment
             wrapMode: root.spatialMode ? Text.Wrap : Text.NoWrap
             maximumLineCount: root.spatialMode ? 2 : 1
@@ -214,7 +218,8 @@ Item {
                       ? PlayerExperienceController.warmColor
                       : Theme.onBrandGradientText)
                    : Theme.primaryText
-            font.pixelSize: Math.round(21 * root.sizeScale)
+            font.pixelSize: Math.max(Theme.fontSizeSection,
+                                     Math.round(Theme.fontSizePageTitle * root.sizeScale))
             font.weight: root.clarity >= 64 ? Font.DemiBold : Font.Medium
             horizontalAlignment: root.lineAlignment
             wrapMode: root.spatialMode ? Text.Wrap : Text.NoWrap
@@ -235,7 +240,8 @@ Item {
             color: root.spatialMode
                    ? Theme.onBrandGradientText
                    : Theme.textSecondary
-            font.pixelSize: Math.round(13 * root.sizeScale)
+            font.pixelSize: Math.max(Theme.fontSizeCaption,
+                                     Math.round(Theme.fontSizeBody * root.sizeScale))
             horizontalAlignment: root.lineAlignment
             wrapMode: root.spatialMode ? Text.Wrap : Text.NoWrap
             maximumLineCount: root.spatialMode ? 2 : 1
@@ -320,7 +326,7 @@ Item {
         anchors.margins: 10
         z: 2
         color: Theme.textSecondary
-        font.pixelSize: Math.round(11 * root.sizeScale)
+        font.pixelSize: Theme.fontSizeCaption
         opacity: root.spatialMode ? 0.72 : 1
         text: attribution.length > 0
               ? attribution : qsTr("来源：%1").arg(providerName)
@@ -377,7 +383,8 @@ Item {
             wrapMode: Text.Wrap
             color: root.spatialMode ? Theme.onBrandGradientText
                                     : Theme.primaryText
-            font.pixelSize: Math.round(16 * root.sizeScale)
+            font.pixelSize: Math.max(Theme.fontSizeBody,
+                                     Math.round(Theme.fontSizeSection * root.sizeScale))
             horizontalAlignment: root.lineAlignment
         }
     }
@@ -391,7 +398,7 @@ Item {
         anchors.margins: 10
         z: 2
         color: Theme.textSecondary
-        font.pixelSize: Math.round(11 * root.sizeScale)
+        font.pixelSize: Theme.fontSizeCaption
         text: qsTr("纯文本歌词，无时间轴")
     }
 
@@ -414,7 +421,7 @@ Item {
             objectName: "lyricsRouteNoticeText"
             anchors.centerIn: parent
             color: Theme.textSecondary
-            font.pixelSize: Math.round(11 * root.sizeScale)
+            font.pixelSize: Theme.fontSizeCaption
             text: root.service && root.service.routeNotice
                   ? root.service.routeNotice.providerName + ": "
                     + root.routeReason(root.service.routeNotice.diagnostic) : ""
@@ -441,7 +448,7 @@ Item {
             delegate: Text {
                 objectName: "lyricsRouteAttemptText"
                 color: Theme.textSecondary
-                font.pixelSize: Math.round(10 * root.sizeScale)
+                font.pixelSize: Theme.fontSizeCaption
                 text: modelData.providerName + ": " + root.routeReason(modelData.diagnostic)
             }
         }

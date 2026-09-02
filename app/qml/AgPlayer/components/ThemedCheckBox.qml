@@ -5,15 +5,17 @@ import AgPlayer
 T.CheckBox {
     id: control
 
-    implicitHeight: 32
-    implicitWidth: Math.max(32, contentItem.implicitWidth)
+    hoverEnabled: true
+    focusPolicy: Qt.StrongFocus
+    implicitHeight: Theme.controlHeight
+    implicitWidth: Math.max(Theme.controlHeight, contentItem.implicitWidth)
 
     indicator: Rectangle {
         implicitWidth: 18
         implicitHeight: 18
         x: 0
         y: (control.height - height) / 2
-        radius: 4
+        radius: Theme.radiusXs
         color: control.checked ? (control.enabled ? (control.hovered ? Theme.accentHover : Theme.accent)
                                                    : Theme.disabled)
                                : (control.hovered && control.enabled ? Theme.hoverSurface : "transparent")
@@ -25,7 +27,7 @@ T.CheckBox {
             anchors.centerIn: parent
             text: "✓"
             color: control.enabled ? Theme.accentText : Theme.textDisabled
-            font.pixelSize: 12
+            font.pixelSize: Theme.fontSizeMeta
             visible: control.checked
         }
     }
@@ -34,7 +36,7 @@ T.CheckBox {
         text: control.text
         color: control.enabled ? Theme.primaryText : Theme.secondaryText
         font.family: Theme.fontPrimary
-        font.pixelSize: 12
+        font.pixelSize: Theme.fontSizeBody
         leftPadding: control.indicator.width + control.spacing
         verticalAlignment: Text.AlignVCenter
     }

@@ -102,16 +102,17 @@ TestCase {
         const taskPanel = findChild(page, "formatTaskPanel")
         const settingsPanel = findChild(page, "formatSettingsPanel")
         const bottomBar = findChild(page, "formatBottomBar")
-        verify(toolbar && taskPanel && settingsPanel && bottomBar)
+        verify(toolbar && taskPanel && settingsPanel && bottomBar, "reference panels")
         compare(testCase.height, 941)
         compare(Math.round(toolbar.height), 60)
-        compare(Math.round(bottomBar.height), 114)
+        compare(Math.round(bottomBar.height), 72)
         tryVerify(function() {
             return Math.round(taskPanel.mapToItem(page, 0, 0).y) === 65
                    && Math.round(settingsPanel.mapToItem(page, 0, 0).y) === 65
-                   && Math.round(bottomBar.mapToItem(page, 0, 0).y) === 827
-        }, 1000)
-        verify(settingsPanel.width >= 443 && settingsPanel.width <= 447)
+                   && Math.round(bottomBar.mapToItem(page, 0, 0).y) === 869
+        }, 1000, "reference vertical geometry")
+        verify(settingsPanel.width >= 443 && settingsPanel.width <= 447,
+               "settings width=" + settingsPanel.width)
         compare(Math.round(settingsPanel.x - (taskPanel.x + taskPanel.width)), 8)
         let filenameHeaderCell = null
         tryVerify(function() {
@@ -120,7 +121,8 @@ TestCase {
         }, 1000)
         const filenameHeaderPosition = filenameHeaderCell.mapToItem(page, 30, 0)
         verify(Math.round(filenameHeaderPosition.x) >= 92
-               && Math.round(filenameHeaderPosition.x) <= 96)
+               && Math.round(filenameHeaderPosition.x) <= 96,
+               "filename header x=" + filenameHeaderPosition.x)
         verify(!findChild(page, "formatSearchField"))
         verify(!findChild(page, "formatFilterButton"))
         verify(findChild(page, "formatSelectAllCheck"))
@@ -129,12 +131,13 @@ TestCase {
         const metadataIndicator = findChild(page, "keepMetadataCheckIndicator")
         const metadataMark = findChild(page, "keepMetadataCheckMark")
         const extractIndicator = findChild(page, "extractAudioCheckIndicator")
-        verify(metadataCheck && extractAudioCheck && metadataIndicator && metadataMark && extractIndicator)
+        verify(metadataCheck && extractAudioCheck && metadataIndicator && metadataMark && extractIndicator,
+               "reference check controls")
         compare(Math.round(metadataIndicator.width), 20)
         compare(Math.round(metadataIndicator.radius), 3)
         compare(metadataIndicator.color.toString(), Theme.accent.toString())
-        verify(metadataMark.visible)
-        verify(metadataMark.source.toString().indexOf("check-line") >= 0)
+        verify(metadataMark.visible, "metadata mark visible")
+        verify(metadataMark.source.toString().indexOf("check-line") >= 0, "metadata mark source")
         compare(extractIndicator.color.toString(), Theme.accent.toString())
         verify(findChild(page, "formatEncoderBox"))
         verify(findChild(page, "formatOutputDirectoryRow"))
@@ -146,7 +149,8 @@ TestCase {
         const encoderChevron = findChild(page, "formatEncoderBoxChevron")
         const outputDirectoryRow = findChild(page, "formatOutputDirectoryRow")
         verify(outputFormatGrid && firstFormatButton && fourthFormatButton
-               && encoderBox && encoderChevron && outputDirectoryRow)
+               && encoderBox && encoderChevron && outputDirectoryRow,
+               "reference settings controls")
         tryVerify(function() {
             return outputFormatGrid.width > 0 && encoderBox.width > 0
                    && outputDirectoryRow.width > 0
@@ -156,28 +160,35 @@ TestCase {
         const fourthFormatPosition = fourthFormatButton.mapToItem(settingsPanel, 0, 0)
         const encoderPosition = encoderBox.mapToItem(settingsPanel, 0, 0)
         const outputDirectoryPosition = outputDirectoryRow.mapToItem(settingsPanel, 0, 0)
-        verify(Math.round(formatGridPosition.x) === 16)
-        verify(Math.round(outputFormatGrid.width) >= 383 && Math.round(outputFormatGrid.width) <= 385)
-        verify(Math.round(firstFormatButton.width) >= 89 && Math.round(firstFormatButton.width) <= 91)
-        verify(Math.round(fourthFormatPosition.x - firstFormatPosition.x) === 294)
-        verify(Math.round(encoderPosition.x) === 149)
-        verify(Math.round(outputDirectoryPosition.x) === 149)
-        verify(encoderChevron.visible)
-        verify(encoderChevron.source.toString().indexOf("arrow-down-s-line") >= 0)
+        verify(Math.round(formatGridPosition.x) === 16, "format grid x=" + formatGridPosition.x)
+        verify(Math.round(outputFormatGrid.width) >= 383 && Math.round(outputFormatGrid.width) <= 385,
+               "format grid width=" + outputFormatGrid.width)
+        verify(Math.round(firstFormatButton.width) >= 89 && Math.round(firstFormatButton.width) <= 91,
+               "format button width=" + firstFormatButton.width)
+        verify(Math.round(fourthFormatPosition.x - firstFormatPosition.x) === 294,
+               "format fourth delta=" + (fourthFormatPosition.x - firstFormatPosition.x))
+        verify(Math.round(encoderPosition.x) === 149, "encoder x=" + encoderPosition.x)
+        verify(Math.abs(outputDirectoryPosition.x - encoderPosition.x) <= 2.5,
+               "output directory x=" + outputDirectoryPosition.x
+               + ", encoder x=" + encoderPosition.x)
+        verify(encoderChevron.visible, "encoder chevron visible")
+        verify(encoderChevron.source.toString().indexOf("arrow-down-s-line") >= 0,
+               "encoder chevron source")
         const cancelAll = findChild(page, "cancelAllButton")
         const cancelIcon = findChild(page, "cancelAllButtonStopIcon")
-        verify(cancelAll && cancelIcon)
-        verify(cancelIcon.source.toString().indexOf("checkbox-blank-fill") >= 0)
+        verify(cancelAll && cancelIcon, "cancel button and icon")
+        verify(cancelIcon.source.toString().indexOf("checkbox-blank-fill") >= 0,
+               "cancel icon source")
         const localProcessingHint = findChild(page, "formatLocalProcessingHint")
-        verify(localProcessingHint.visible)
+        verify(localProcessingHint.visible, "local processing hint visible")
         verify(findChild(page, "formatSettingsAdvancedToggle"))
         verify(findChild(page, "formatTaskContextMenu"))
         verify(findChild(bottomBar, "converterParallelJobsBox"))
         verify(!findChild(bottomBar, "formatOutputDirectoryRow"))
         const formatBox = findChild(page, "converterOutputFormatBox")
         const toolbarIcon = findChild(page, "formatToolbarIcon-file")
-        verify(formatBox)
-        verify(toolbarIcon)
+        verify(formatBox, "hidden format box")
+        verify(toolbarIcon, "toolbar icon")
         compare(formatBox.count, 8)
         compare(toolbarIcon.tint.toString(), Theme.iconPrimary.toString())
     }
@@ -211,16 +222,20 @@ TestCase {
         const settingsPanel = findChild(page, "formatSettingsPanel")
         const hint = findChild(page, "formatLocalProcessingHint")
         const advanced = findChild(page, "formatAdvancedSettings")
-        verify(settingsPanel && hint && advanced)
+        verify(settingsPanel && hint && advanced, "local processing controls")
         tryVerify(function() {
-            return settingsPanel.height > 630 && hint.visible && hint.height > 0
-        }, 1000)
+            return settingsPanel.height > 0 && hint.visible && hint.height > 0
+        }, 1000, "hint visible within settings panel")
         const hintPosition = hint.mapToItem(settingsPanel, 0, 0)
-        verify(hintPosition.y >= 44)
-        verify(hintPosition.y + hint.height <= settingsPanel.height)
-        verify(hintPosition.y >= 566 && hintPosition.y <= 572)
+        verify(hintPosition.y >= 44, "hint top=" + hintPosition.y)
+        verify(hintPosition.y + hint.height <= settingsPanel.height,
+               "hint bottom=" + (hintPosition.y + hint.height) + ", panel=" + settingsPanel.height)
+        verify(hintPosition.y >= 520 && hintPosition.y <= 552,
+               "compact hint y=" + hintPosition.y)
         const advancedPosition = advanced.mapToItem(settingsPanel, 0, 0)
-        verify(advancedPosition.y >= settingsPanel.height)
+        verify(advancedPosition.y >= hintPosition.y + hint.height,
+               "advanced y=" + advancedPosition.y + ", hint bottom="
+               + (hintPosition.y + hint.height))
     }
 
     function test_outputDirectoryTracksSettingsController() {

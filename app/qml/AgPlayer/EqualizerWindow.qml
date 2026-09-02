@@ -8,9 +8,9 @@ Window {
     id: window
     objectName: "equalizerWindow"
     visible: false
-    width: 860
-    height: 520
-    minimumWidth: 760
+    width: 1180
+    height: 680
+    minimumWidth: 1080
     minimumHeight: 480
     flags: Qt.FramelessWindowHint
     color: "transparent"
@@ -41,20 +41,20 @@ Window {
 
     component ToolbarButton: Button {
         property url iconSource: ""
-        implicitHeight: window.compactToolbar ? 36 : 48
+        implicitHeight: Theme.controlHeightProminent
         implicitWidth: window.compactToolbar ? 96 : 122
-        font.family: "Microsoft YaHei UI"
-        font.pixelSize: window.compactToolbar ? 12 : 16
+        font.family: Theme.fontPrimary
+        font.pixelSize: Theme.fontSizeBody
         font.weight: Font.Medium
         icon.source: iconSource
         icon.color: Theme.textPrimary
-        icon.width: window.compactToolbar ? 18 : 22
-        icon.height: window.compactToolbar ? 18 : 22
+        icon.width: Theme.iconSizeMd
+        icon.height: Theme.iconSizeMd
         spacing: 8
         display: AbstractButton.TextBesideIcon
         palette.buttonText: Theme.textPrimary
         background: Rectangle {
-            radius: window.compactToolbar ? 6 : 8
+            radius: Theme.radiusSm
             color: parent.down ? Theme.surfacePressed
                                : parent.hovered ? Theme.surfaceHover
                                                 : Theme.surfaceElevated
@@ -67,12 +67,12 @@ Window {
         property bool selected: false
         implicitHeight: window.compactToolbar ? 32 : 38
         padding: 0
-        font.family: "Microsoft YaHei UI"
-        font.pixelSize: window.compactToolbar ? 12 : 15
+        font.family: Theme.fontPrimary
+        font.pixelSize: Theme.fontSizeBody
         font.weight: Font.Normal
         palette.buttonText: selected ? Theme.highlightText : Theme.textSecondary
         background: Rectangle {
-            radius: 5
+            radius: Theme.radiusSm
             color: parent.selected ? Theme.highlight
                                    : parent.down ? Theme.surfacePressed
                                                  : "transparent"
@@ -87,14 +87,14 @@ Window {
 
     function meterColor(index) {
         if (index < 5)
-            return "#3AAA65"
+            return "#3AAA65" // theme-color-allow: fixed equalizer meter scale
         if (index < 9)
-            return "#88C32E"
+            return "#88C32E" // theme-color-allow: fixed equalizer meter scale
         if (index < 13)
-            return "#C3AB33"
+            return "#C3AB33" // theme-color-allow: fixed equalizer meter scale
         if (index < 16)
-            return "#D4A03C"
-        return "#7F3431"
+            return "#D4A03C" // theme-color-allow: fixed equalizer meter scale
+        return "#7F3431" // theme-color-allow: fixed equalizer meter scale
     }
 
     function meterNormalizedPosition(db) {
@@ -194,8 +194,8 @@ Window {
                     anchors.centerIn: parent
                     text: qsTr("18 段图形均衡器")
                     color: Theme.textPrimary
-                    font.family: "Microsoft YaHei UI"
-                    font.pixelSize: window.spacious ? 22 : 18
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: Theme.fontSizePageTitle
                     font.weight: Font.Normal
                     renderType: Text.NativeRendering
                 }
@@ -308,7 +308,7 @@ Window {
                                 text: qsTr("启用")
                                 indicatorWidth: window.compactToolbar ? 44 : 56
                                 indicatorHeight: window.compactToolbar ? 26 : 34
-                                labelPixelSize: window.compactToolbar ? 12 : 16
+                                labelPixelSize: Theme.fontSizeBody
                                 Accessible.name: qsTr("启用均衡器")
                                 onToggled: EqualizerController.enabled = checked
                             }
@@ -324,8 +324,8 @@ Window {
                             Label {
                                 text: qsTr("预设：")
                                 color: Theme.textPrimary
-                                font.family: "Microsoft YaHei UI"
-                                font.pixelSize: window.compactToolbar ? 12 : 16
+                                font.family: Theme.fontPrimary
+                                font.pixelSize: Theme.fontSizeBody
                             }
                             ThemedComboBox {
                                 id: presetBox
@@ -418,8 +418,8 @@ Window {
                             anchors.fill: parent
                             clip: true
                             boundsBehavior: Flickable.StopAtBounds
-                            contentWidth: window.spacious ? Math.max(width, 1616)
-                                                          : Math.max(width, 1264)
+                            contentWidth: window.spacious ? Math.max(width, 1510)
+                                                          : Math.max(width, 1028)
                             contentHeight: height
                             ScrollBar.horizontal: ScrollBar {
                                 objectName: "equalizerBandScrollBar"
@@ -445,7 +445,7 @@ Window {
 
                                         EqualizerBandSlider {
                                             required property int index
-                                            width: window.spacious ? 79 : 64
+                                            width: window.spacious ? 72 : 52
                                             height: bandFlickable.height
                                             bandIndex: index
                                             frequencyLabel: window.bandLabels[index]
@@ -459,7 +459,7 @@ Window {
                                         }
                                     }
 
-                                    Item { width: window.spacious ? 22 : 6; height: 1 }
+                                    Item { width: window.spacious ? 16 : 6; height: 1 }
                                     Rectangle {
                                         width: 1
                                         height: window.spacious ? 341
@@ -468,10 +468,10 @@ Window {
                                         y: window.spacious ? 16 : 12
                                         color: Theme.opaqueDivider
                                     }
-                                    Item { width: window.spacious ? 23 : 7; height: 1 }
+                                    Item { width: window.spacious ? 16 : 7; height: 1 }
 
                                     EqualizerBandSlider {
-                                        width: window.spacious ? 79 : 64
+                                        width: window.spacious ? 72 : 52
                                         height: bandFlickable.height
                                         bandIndex: -1
                                         frequencyLabel: qsTr("前级")
@@ -493,8 +493,8 @@ Window {
                             z: 2
                             text: "+" + EqualizerController.gainRangeDb.toFixed(0)
                             color: Theme.textSecondary
-                            font.family: "Microsoft YaHei UI"
-                            font.pixelSize: 14
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: Theme.fontSizeBody
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
@@ -510,8 +510,8 @@ Window {
                             z: 2
                             text: "0"
                             color: Theme.textSecondary
-                            font.family: "Microsoft YaHei UI"
-                            font.pixelSize: 14
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: Theme.fontSizeBody
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
@@ -527,8 +527,8 @@ Window {
                             z: 2
                             text: "−" + EqualizerController.gainRangeDb.toFixed(0)
                             color: Theme.textSecondary
-                            font.family: "Microsoft YaHei UI"
-                            font.pixelSize: 14
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: Theme.fontSizeBody
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
@@ -571,8 +571,8 @@ Window {
                                     height: 42
                                     text: qsTr("范围：")
                                     color: Theme.textPrimary
-                                    font.family: "Microsoft YaHei UI"
-                                    font.pixelSize: window.spacious ? 18 : 14
+                                    font.family: Theme.fontPrimary
+                                    font.pixelSize: Theme.fontSizeBody
                                     verticalAlignment: Text.AlignVCenter
                                 }
 
@@ -623,8 +623,8 @@ Window {
                                     height: 42
                                     text: qsTr("精度：")
                                     color: Theme.textPrimary
-                                    font.family: "Microsoft YaHei UI"
-                                    font.pixelSize: window.spacious ? 18 : 14
+                                    font.family: Theme.fontPrimary
+                                    font.pixelSize: Theme.fontSizeBody
                                     verticalAlignment: Text.AlignVCenter
                                 }
 
@@ -681,8 +681,8 @@ Window {
                                     height: 42
                                     text: qsTr("输出电平：")
                                     color: Theme.textPrimary
-                                    font.family: "Microsoft YaHei UI"
-                                    font.pixelSize: window.spacious ? 18 : 14
+                                    font.family: Theme.fontPrimary
+                                    font.pixelSize: Theme.fontSizeBody
                                     verticalAlignment: Text.AlignVCenter
                                 }
 
@@ -737,8 +737,8 @@ Window {
                                                    : -width / 2
                                                 text: modelData.text
                                                 color: Theme.textSecondary
-                                                font.family: "Microsoft YaHei UI"
-                                                font.pixelSize: 14
+                                                font.family: Theme.fontPrimary
+                                                font.pixelSize: Theme.fontSizeBody
                                             }
                                         }
                                     }
@@ -752,8 +752,8 @@ Window {
                                     height: 42
                                     text: window.displayedOutputPeakDb.toFixed(1) + " dB"
                                     color: Theme.textPrimary
-                                    font.family: "Microsoft YaHei UI"
-                                    font.pixelSize: window.spacious ? 18 : 14
+                                    font.family: Theme.fontPrimary
+                                    font.pixelSize: Theme.fontSizeBody
                                     horizontalAlignment: Text.AlignRight
                                     verticalAlignment: Text.AlignVCenter
                                 }
@@ -783,8 +783,8 @@ Window {
             Label {
                 text: qsTr("保存自定义预设")
                 color: Theme.textPrimary
-                font.family: "Microsoft YaHei UI"
-                font.pixelSize: 20
+                font.family: Theme.fontPrimary
+                font.pixelSize: Theme.fontSizePageTitle
                 font.weight: Font.Medium
             }
             TextField {
@@ -846,8 +846,8 @@ Window {
                 Label {
                     text: qsTr("管理自定义预设")
                     color: Theme.textPrimary
-                    font.family: "Microsoft YaHei UI"
-                    font.pixelSize: 20
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: Theme.fontSizePageTitle
                     font.weight: Font.Medium
                 }
                 Item { Layout.fillWidth: true }
@@ -918,8 +918,8 @@ Window {
             Label {
                 text: qsTr("高级")
                 color: Theme.textSecondary
-                font.family: "Microsoft YaHei UI"
-                font.pixelSize: 15
+                font.family: Theme.fontPrimary
+                font.pixelSize: Theme.fontSizeBody
             }
 
             RowLayout {
@@ -942,7 +942,7 @@ Window {
                     text: qsTr("自动防削波")
                     indicatorWidth: 46
                     indicatorHeight: 28
-                    labelPixelSize: 15
+                    labelPixelSize: Theme.fontSizeBody
                     Accessible.name: qsTr("自动防削波")
                     onToggled: EqualizerController.autoClipProtection = checked
                 }
@@ -951,13 +951,13 @@ Window {
                     text: EqualizerController.protectionDb < -0.05
                           ? qsTr("保护中") : qsTr("无需衰减")
                     color: Theme.textSecondary
-                    font.pixelSize: 14
+                    font.pixelSize: Theme.fontSizeBody
                 }
                 Label {
                     text: EqualizerController.protectionDb.toFixed(1) + " dB"
                     color: EqualizerController.protectionDb < -0.05
-                           ? "#B15DED" : Theme.textSecondary
-                    font.pixelSize: 14
+                           ? "#B15DED" : Theme.textSecondary // theme-color-allow: equalizer band identity
+                    font.pixelSize: Theme.fontSizeBody
                 }
             }
         }

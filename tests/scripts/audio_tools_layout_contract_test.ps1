@@ -137,22 +137,25 @@ if ($toolsWindow -notmatch 'onVisibleChanged:[\s\S]{0,220}AudioEditorController\
 
 foreach ($control in @(
     'editorMainColumn', 'editorInspector', 'editorCommandBar', 'fileSummaryBar',
-    'editorTimelineWorkspace', 'editorTrackHeader', 'editorTimeRuler',
+    'editorTimelineWorkspace', 'editorTimeRuler',
     'editorWaveformCanvas', 'editorPlaybackTransport',
     'editorShortcutCard', 'editorStatusBar')) {
     if ($audioEditor -notmatch ('objectName:\s*"' + $control + '"')) {
         throw "The Phase 6 audio editor is missing $control."
     }
 }
+if ($audioEditor -match 'objectName:\s*"editorTrackHeader"') {
+    throw 'The audio-editor timeline must not restore the removed track-header rail.'
+}
 
 if ($toolsWindow -notmatch 'width:\s*1672' -or
     $toolsWindow -notmatch 'height:\s*941' -or
-    $toolsWindow -notmatch 'objectName:\s*"audioToolsTitleBar"[\s\S]{0,180}Layout\.preferredHeight:\s*Theme\.navigationActionExtent\s*\+\s*Theme\.spacingLg' -or
+    $toolsWindow -notmatch 'objectName:\s*"audioToolsTitleBar"[\s\S]{0,180}Layout\.preferredHeight:\s*Theme\.titleBarHeight' -or
     $toolsWindow -notmatch 'ToolSidebar\s*\{' -or
     $toolsWindow -notmatch 'title:\s*qsTr\("AgPlayer') {
     throw 'The tools shell must preserve 1672x941 geometry with fixed shared chrome.'
 }
-if ($toolsNavigation -notmatch 'implicitHeight:\s*Theme\.navigationActionExtent\s*\+\s*Theme\.spacingLg' -or
+if ($toolsNavigation -notmatch 'implicitHeight:\s*Theme\.settingsRowHeight' -or
     $toolsNavigation -match 'referenceWorkbench\s*\?\s*52|separationWorkbench\s*\?\s*44') {
     throw 'All five tool pages must use one fixed navigation height.'
 }
@@ -212,7 +215,7 @@ if (-not (Test-Path -LiteralPath $qaComparisonPath)) {
 if ($toolsNavigation -notmatch 'visibleToolOrder:\s*\[0,\s*4,\s*1,\s*2,\s*3\]' -or
     $toolsNavigation -notmatch 'objectName:\s*"audioToolNav_"\s*\+\s*modelData\.toolId' -or
     $toolsNavigation -notmatch 'RowLayout' -or
-    $toolsNavigation -notmatch 'visible:\s*navButton\.checked' -or
+    $toolsNavigation -notmatch 'selected:\s*navigation\.currentTool' -or
     $toolsNavigation -match '#[0-9A-Fa-f]{6}') {
     throw 'The five audio tools must retain stable IDs and use shared theme tokens.'
 }
@@ -384,9 +387,9 @@ $statusOverlay = 'objectName:\s*"editorStatusBar"[\s\S]{0,240}' +
     'AudioEditorController\.errorMessage\.length\s*>\s*0\s*\|\|\s*' +
     'statusSuccessTimer\.running'
 if ($audioEditor -notmatch $statusOverlay -or
-    $audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,360}y:\s*mainSurface\.height\s*-\s*25' -or
+    $audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,360}y:\s*mainSurface\.height\s*-\s*height' -or
     $audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,420}width:\s*mainSurface\.width' -or
-    $audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,460}height:\s*25') {
+    $audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,460}height:\s*visible\s*\?\s*25\s*:\s*0') {
     throw 'Status feedback must be a 25 px bottom overlay shown only for processing, errors, or export success.'
 }
 foreach ($accessibleObject in @('audioToolsMinimizeButton',

@@ -82,8 +82,8 @@ TestCase {
                "panel gap=" + (inspector.x - files.width))
         verify(apply.width >= 190)
         verify(cancel.width >= 180)
-        verify(apply.height >= 40)
-        verify(cancel.height >= 40)
+        compare(Math.round(apply.height), Theme.controlHeightProminent)
+        compare(Math.round(cancel.height), Theme.controlHeightProminent)
         verify(apply.x + apply.width <= actionBar.width)
         verify(cancel.x + cancel.width <= actionBar.width)
     }

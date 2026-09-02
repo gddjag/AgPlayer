@@ -8,12 +8,13 @@ Window {
     id: listWindow
     objectName: "listWindow"
     visible: false
-    readonly property int titleBarHeight: 38
-    readonly property int trackHeaderHeight: 56
+    readonly property int titleBarHeight: Theme.titleBarHeight
+    readonly property int trackHeaderHeight: Theme.tableHeaderHeight
     readonly property int defaultVisibleTrackCount: 10
-    readonly property int filterBarHeight: 46
+    readonly property int filterBarHeight: Theme.settingsRowHeight
     readonly property int defaultTrackRowHeight:
-        SettingsController.listWaveformThumbnailEnabled ? 50 : 42
+        SettingsController.listWaveformThumbnailEnabled
+        ? Theme.mediaListRowHeight : Theme.listRowHeight
     readonly property int defaultListHeight:
         titleBarHeight + trackHeaderHeight
         + defaultVisibleTrackCount * defaultTrackRowHeight + filterBarHeight
@@ -455,7 +456,7 @@ Window {
                                : listWindow.resourceDropStatus === "completed"
                                  ? Theme.success : Theme.secondaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: 11
+                        font.pixelSize: Theme.fontSizeCaption
                         elide: Text.ElideRight
                         Layout.maximumWidth: 240
                     }
@@ -500,8 +501,8 @@ Window {
                 objectName: "listWorkspace"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                readonly property int leftColumnWidth: 208
-                readonly property int rightColumnWidth: 248
+                readonly property int leftColumnWidth: Theme.navigationWidth
+                readonly property int rightColumnWidth: Theme.navigationWidthExpanded
                 readonly property int dividerWidth: 1
                 readonly property real centerWidth: centerColumn.width
                 color: Theme.listWorkspaceSurface
@@ -621,7 +622,7 @@ Window {
                                         Layout.alignment: Qt.AlignHCenter
                                         text: qsTr("未找到符合条件的歌曲")
                                         color: Theme.secondaryText
-                                        font.pixelSize: 16
+                                        font.pixelSize: Theme.fontSizeSection
                                     }
                                     Button {
                                         Layout.alignment: Qt.AlignHCenter

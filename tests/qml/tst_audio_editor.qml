@@ -128,7 +128,7 @@ TestCase {
         var names = ["audioToolNav_0", "audioToolNav_4", "audioToolNav_1",
                      "audioToolNav_2", "audioToolNav_3"]
         verifyAscendingX(nav, names)
-        compare(nav.height, 44)
+        compare(nav.height, Theme.settingsRowHeight)
         for (var index = 0; index < names.length; ++index)
             compare(findChild(nav, names[index]).height, first.height)
         compare(first.height, nav.height)
@@ -211,13 +211,13 @@ TestCase {
         verifyGeometry("editorCommandBar", 12, 13, 1306, 64)
         verifyGeometry("fileSummaryBar", 12, 88, 1306, 52)
         verify(findChild(page, "fileSummaryIcon"))
-        verifyGeometry("editorTimelineWorkspace", 12, 152, 1304, 451)
-        verifyGeometry("editorTrackHeader", 12, 188, 80, 387)
-        verifyGeometry("editorTimeRuler", 104, 152, 1214, 52)
-        verifyGeometry("editorWaveformCanvas", 104, 188, 1214, 387)
-        verifyGeometry("editorPlaybackTransport", 12, 611, 1304, 88)
-        verifyGeometry("editorShortcutCard", 12, 711, 1304, 86)
-        verifyGeometry("editorStatusBar", 0, 797, 1328, 25)
+        verifyGeometry("editorTimelineWorkspace", 12, 152, 1304, 490)
+        compare(findChild(page, "editorTrackHeader"), null)
+        verifyGeometry("editorTimeRuler", 12, 152, 1304, 52)
+        verifyGeometry("editorWaveformCanvas", 12, 204, 1304, 438)
+        verifyGeometry("editorPlaybackTransport", 12, 654, 1304, 80)
+        verifyGeometry("editorShortcutCard", 12, 746, 1304, 64)
+        verifyGeometry("editorStatusBar", 0, 822, 1328, 0)
 
         compare(findChild(page, "inspectorTempoTitle").text,
                 "A. 速度 / BPM")
@@ -318,12 +318,15 @@ TestCase {
             verify(titleBar && titleText && contentStack
                    && minimize && maximize && close && moveArea)
             verify(topNav)
-            compare(titleBar.color.toString(), Theme.panel.toString())
+            compare(titleBar.color.toString(), Theme.titleBarSurface.toString())
             compare(titleText.color.toString(), Theme.primaryText.toString())
-            compare(contentStack.color.toString(), Theme.panel.toString())
-            compare(minimize.icon.color.toString(), Theme.iconPrimary.toString())
-            compare(maximize.icon.color.toString(), Theme.iconPrimary.toString())
-            compare(close.icon.color.toString(), Theme.iconPrimary.toString())
+            compare(contentStack.color.toString(), Theme.contentSurface.toString())
+            compare(minimize.contentItem.tint.toString(),
+                    Theme.iconPrimary.toString())
+            compare(maximize.contentItem.tint.toString(),
+                    Theme.iconPrimary.toString())
+            compare(close.contentItem.tint.toString(),
+                    Theme.iconPrimary.toString())
             const moveRight = moveArea.mapToItem(titleBar,
                                                   moveArea.width, 0).x
             const minimizeLeft = minimize.mapToItem(titleBar, 0, 0).x
@@ -488,10 +491,13 @@ TestCase {
         const names = ["importAudio", "saveProject", "select", "split",
                        "delete", "crop", "copy", "paste", "fadeIn",
                        "fadeOut", "mute", "noiseReduction", "clear"]
+        const commandBar = findChild(page, "editorCommandBar")
+        verify(commandBar)
         for (let index = 0; index < names.length; ++index) {
             const button = findChild(page, "editorCommand_" + names[index])
             verify(button)
-            verify(Math.abs(button.width - expectedWidths[index]) <= 2,
+            verify(Math.abs(button.width
+                            - expectedWidths[index] * commandBar.referenceScale) <= 2,
                    names[index] + " width=" + button.width)
         }
     }
@@ -558,7 +564,7 @@ TestCase {
         const arrows = ["inspectorTempoCollapse",
                         "inspectorPitchCollapse", "inspectorPreservePitchCollapse",
                         "inspectorExportCollapse"]
-        const heights = [153, 114, 143, 366]
+        const heights = [153, 114, 143, 370]
         const positions = [0, 161, 283, 434]
         for (let index = 0; index < names.length; ++index) {
             const group = findChild(page, names[index])
@@ -885,7 +891,7 @@ TestCase {
                 ? "editorShortcutFirstGroup_" : "editorShortcutSecondGroup_"
             const lastLabel = findChild(page, prefix + (row.groupCount - 1))
             verify(lastLabel)
-            compare(lastLabel.font.pixelSize, 13)
+            compare(lastLabel.font.pixelSize, Theme.fontSizeBody)
             verify(lastLabel.implicitHeight <= row.height)
             row.contentX = Math.max(0, row.contentWidth - row.width)
             wait(0)
@@ -955,11 +961,11 @@ TestCase {
     function test_clipOperationBandKeeps24LogicalPixels_data() {
         return [
             { tag: "reference", width: 1672, height: 941,
-              canvasHeight: 387 },
+              canvasHeight: 469 },
             { tag: "desktop", width: 1280, height: 720,
-              canvasHeight: 162 },
+              canvasHeight: 260 },
             { tag: "compact", width: 880, height: 560,
-              canvasHeight: 48 }
+              canvasHeight: 158 }
         ]
     }
 
@@ -988,7 +994,7 @@ TestCase {
         verify(headerBottom < canvas.height,
                "clip operation band must leave waveform body access")
         if (data.width === 880) {
-            compare(Math.round(canvas.height - headerBottom), 16)
+            verify(canvas.height - headerBottom >= 24)
             const originalStart = Number(
                 AudioEditorController.timelineEventViews[0].timelineStart)
             mouseDrag(header, header.width * 0.15, 4,
@@ -1080,26 +1086,26 @@ TestCase {
         verify(rewind.icon.source.toString().indexOf("rewind-fill.svg") >= 0)
         verify(forward.icon.source.toString().indexOf("speed-fill.svg") >= 0)
         verify(stop.icon.source.toString().indexOf("stop-fill.svg") >= 0)
-        compare(toStart.icon.width, 32)
-        compare(rewind.icon.width, 32)
-        compare(play.icon.width, 42)
-        compare(forward.icon.width, 32)
-        compare(next.icon.width, 32)
-        compare(stop.icon.width, 32)
+        compare(toStart.icon.width, 26)
+        compare(rewind.icon.width, 26)
+        compare(play.icon.width, 34)
+        compare(forward.icon.width, 26)
+        compare(next.icon.width, 26)
+        compare(stop.icon.width, 26)
 
         for (const sliderName of ["inspectorSpeedSlider",
                                   "inspectorPitchSlider"]) {
             const slider = findChild(page, sliderName)
             verify(slider, "missing editor slider " + sliderName)
-            compare(slider.visibleGrooveThickness, 4)
-            compare(slider.thumbDiameter, 14)
+            compare(slider.visibleGrooveThickness, Theme.sliderTrackHeight)
+            compare(slider.thumbDiameter, Theme.sliderHandleExtent)
             verify(slider.pointerHitExtent >= 28)
             const groove = findChild(slider, "editorSliderGroove")
             verify(groove)
             if (slider.orientation === Qt.Horizontal)
-                verify(Math.abs(groove.height - 4) <= 1)
+                compare(groove.height, Theme.sliderTrackHeight)
             else
-                verify(Math.abs(groove.width - 4) <= 1)
+                compare(groove.width, Theme.sliderTrackHeight)
         }
         for (const switchName of ["inspectorPreservePitchSwitch",
                                    "inspectorFormantSwitch"]) {
@@ -1150,12 +1156,12 @@ TestCase {
             const activePosition = active.mapToItem(slider, 0, 0)
             const groovePosition = groove.mapToItem(slider, 0, 0)
             if (slider.orientation === Qt.Horizontal) {
-                compare(active.height, 4)
+                compare(active.height, Theme.sliderTrackHeight)
                 verify(activePosition.y >= groovePosition.y)
                 verify(activePosition.y + active.height
                        <= groovePosition.y + groove.height + 0.5)
             } else {
-                compare(active.width, 4)
+                compare(active.width, Theme.sliderTrackHeight)
                 verify(activePosition.x >= groovePosition.x)
                 verify(activePosition.x + active.width
                        <= groovePosition.x + groove.width + 0.5)
@@ -1401,10 +1407,10 @@ TestCase {
         const progressFill = findChild(page, "editorExportProgressFill")
         verify(button && progressFill)
         verify(button.font.bold)
-        verify(button.font.pixelSize >= 15)
+        compare(button.font.pixelSize, Theme.fontSizeBody)
         compare(button.text, "导出音频")
         compare(progressFill.width, 0)
-        compare(progressFill.color.toString(), "#12b76a")
+        compare(progressFill.color.toString(), Theme.success.toString())
     }
 
     function test_configuredExportOffersOnlyValidSelectionRange() {
@@ -1711,7 +1717,7 @@ TestCase {
         compare(Math.round(reset.height), 34)
         compare(detect.focusPolicy, Qt.TabFocus)
         compare(reset.focusPolicy, Qt.TabFocus)
-        compare(Math.round(codec.height), 34)
+        compare(Math.round(codec.height), Theme.controlHeight)
     }
 
     function test_targetBpmIsEditableAndResetRestoresAllTimePitchState() {

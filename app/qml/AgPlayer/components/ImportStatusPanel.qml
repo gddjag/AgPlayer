@@ -40,7 +40,7 @@ Item {
             text: qsTr("Importing...")
             color: Theme.primaryText
             font.family: Theme.fontPrimary
-            font.pixelSize: 16
+            font.pixelSize: Theme.fontSizeSection
             font.weight: Font.Medium
             Layout.alignment: Qt.AlignHCenter
         }
@@ -67,7 +67,7 @@ Item {
                 text: qsTr("Some files could not be imported")
                 color: Theme.error
                 font.family: Theme.fontPrimary
-                font.pixelSize: 15
+                font.pixelSize: Theme.fontSizeBody
                 font.weight: Font.Medium
             }
 
@@ -88,7 +88,7 @@ Item {
                 contentItem: Text {
                     text: parent.text
                     color: Theme.primaryText
-                    font.pixelSize: 20
+                    font.pixelSize: Theme.fontSizePageTitle
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -111,7 +111,7 @@ Item {
                 text: modelData
                 color: Theme.secondaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeCaption
                 elide: Text.ElideRight
                 Layout.maximumWidth: 480
             }
@@ -137,7 +137,7 @@ Item {
                 text: parent.text
                 color: parent.hovered ? Theme.background : Theme.cyan
                 font.family: Theme.fontPrimary
-                font.pixelSize: 13
+                font.pixelSize: Theme.fontSizeBody
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }

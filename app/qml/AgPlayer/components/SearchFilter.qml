@@ -7,7 +7,7 @@ Rectangle {
     id: root
     color: "transparent"
     border.width: 0
-    implicitHeight: 42
+    implicitHeight: 40
 
     property string searchText: ""
     property int exactRating: 0
@@ -88,7 +88,7 @@ Rectangle {
                 placeholderTextColor: Theme.textTertiary
                 leftPadding: 34
                 font.family: Theme.fontPrimary
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeCaption
                 onTextChanged: root.searchText = text
                 background: null
             }
@@ -109,7 +109,7 @@ Rectangle {
                 anchors.leftMargin: 8
                 anchors.rightMargin: 8
                 spacing: 5
-                Label { text: qsTr("评分"); color: Theme.secondaryText; font.pixelSize: 12 }
+                Label { text: qsTr("评分"); color: Theme.secondaryText; font.pixelSize: Theme.fontSizeCaption }
                 RowLayout {
                     spacing: 1
                     Repeater {
@@ -150,14 +150,14 @@ Rectangle {
                 anchors.leftMargin: 4
                 anchors.rightMargin: 4
                 spacing: 2
-                Label { text: "BPM"; color: Theme.primaryText; font.pixelSize: 11; Layout.preferredWidth: 24 }
+                Label { text: "BPM"; color: Theme.primaryText; font.pixelSize: Theme.fontSizeCaption; Layout.preferredWidth: 28 }
                 TextField {
                     id: minimumBpmField
                     objectName: "minimumBpmField"
                     Layout.preferredWidth: 34
                     text: Math.round(root.pendingMinBpm).toString()
                     color: Theme.primaryText
-                    font.pixelSize: 11
+                    font.pixelSize: Theme.fontSizeCaption
                     horizontalAlignment: TextInput.AlignHCenter
                     validator: IntValidator { bottom: 60; top: 160 }
                     background: null
@@ -188,7 +188,7 @@ Rectangle {
                     Layout.preferredWidth: 34
                     text: Math.round(root.pendingMaxBpm).toString()
                     color: Theme.primaryText
-                    font.pixelSize: 11
+                    font.pixelSize: Theme.fontSizeCaption
                     horizontalAlignment: TextInput.AlignHCenter
                     validator: IntValidator { bottom: 60; top: 160 }
                     background: null

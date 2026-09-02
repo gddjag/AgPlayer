@@ -23,7 +23,7 @@ Rectangle {
                   : AudioEditorController.hasDocument ? qsTr("就绪") : qsTr("未打开音频")
             color: AudioEditorController.errorMessage.length > 0
                    ? Theme.waveformRed : showSuccess ? Theme.success : Theme.secondaryText
-            font.pixelSize: 11
+            font.pixelSize: Theme.fontSizeCaption
         }
         Item { Layout.fillWidth: true }
         Text {
@@ -37,7 +37,7 @@ Rectangle {
                     .arg(AudioEditorController.selectionFrames)
                 : qsTr("选区范围：--")
             color: Theme.secondaryText
-            font.pixelSize: 11
+            font.pixelSize: Theme.fontSizeCaption
             elide: Text.ElideRight
             Layout.fillWidth: showShortcutHint
         }
@@ -49,7 +49,7 @@ Rectangle {
                   + AudioEditorController.channels + qsTr(" 声道")
                 : qsTr("采样率 --   位深 --   声道 --   时长 --")
             color: Theme.secondaryText
-            font.pixelSize: 11
+            font.pixelSize: Theme.fontSizeCaption
         }
     }
 }

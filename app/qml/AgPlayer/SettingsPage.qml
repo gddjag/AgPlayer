@@ -24,8 +24,7 @@ Item {
     property string searchText: ""
     property bool editResolved: true
     property var hostWindow
-    property bool syncingSectionFromScroll: false
-    property bool programmaticScroll: false
+    property alias programmaticScroll: settingsScroll.programmaticScroll
     readonly property var frequencyWaveformSettings:
         SettingsController.frequencyColorWaveform
     readonly property var spectralBandLabels: [
@@ -33,8 +32,8 @@ Item {
         qsTr("中高频"), qsTr("高频"), qsTr("更高频"), qsTr("最高频")
     ]
     readonly property var spectralBandDefaults: [
-        "#123ecf", "#00a7ba", "#00a76f", "#62bb39",
-        "#d8dc2f", "#ffad22", "#ff611f", "#e82718"
+        "#123ecf", "#00a7ba", "#00a76f", "#62bb39", // theme-color-allow: user-editable waveform spectrum palette
+        "#d8dc2f", "#ffad22", "#ff611f", "#e82718" // theme-color-allow: user-editable waveform spectrum palette
     ]
 
     function open() {
@@ -117,8 +116,7 @@ Item {
     }
 
     onSelectedSectionChanged: {
-        if (!syncingSectionFromScroll)
-            Qt.callLater(scrollToSelectedSection)
+        Qt.callLater(scrollToSelectedSection)
     }
 
     function selectSection(index) {
@@ -126,54 +124,12 @@ Item {
     }
 
     function scrollToSelectedSection() {
-        if (!settingsScroll || !settingsScroll.contentItem
-                || !settingsContentColumn
-                || selectedSection < 0
-                || selectedSection >= settingsContentColumn.children.length)
+        if (!settingsScroll || !settingsScroll.contentItem)
             return
-        const target = settingsContentColumn.children[selectedSection]
-        const maximum = Math.max(0, settingsContentColumn.height
-                                  - settingsScroll.availableHeight)
-        const nextY = Math.max(0, Math.min(target.y, maximum))
-        programmaticScroll = true
-        sectionScrollAnimation.stop()
-        sectionScrollAnimation.from = settingsScroll.contentItem.contentY
-        sectionScrollAnimation.to = nextY
-        sectionScrollAnimation.start()
+        settingsScroll.contentItem.contentY = 0
     }
 
-    function updateSectionFromScroll() {
-        if (programmaticScroll || !settingsScroll.contentItem)
-            return
-        const maximum = Math.max(0, settingsContentColumn.height
-                                  - settingsScroll.availableHeight)
-        const currentY = settingsScroll.contentItem.contentY
-        let nextSection = 0
-        if (maximum > 0 && currentY >= maximum - 1) {
-            nextSection = settingsContentColumn.children.length - 1
-        } else {
-            const probeY = currentY + Math.min(
-                        120, settingsScroll.availableHeight * 0.25)
-            for (let i = 0; i < settingsContentColumn.children.length; ++i) {
-                if (settingsContentColumn.children[i].y <= probeY)
-                    nextSection = i
-            }
-        }
-        if (nextSection !== selectedSection) {
-            syncingSectionFromScroll = true
-            selectedSection = nextSection
-            syncingSectionFromScroll = false
-        }
-    }
-
-    NumberAnimation {
-        id: sectionScrollAnimation
-        target: settingsScroll.contentItem
-        property: "contentY"
-        duration: 180
-        easing.type: Easing.OutCubic
-        onStopped: root.programmaticScroll = false
-    }
+    function updateSectionFromScroll() {}
 
     onAboutToHide: {
         if (!editResolved) {
@@ -283,74 +239,34 @@ Item {
                 text: qsTr("AgPlayer · 设置")
                 color: Theme.primaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 18
+                font.pixelSize: Theme.fontSizeSection
                 font.weight: Font.Bold
             }
 
             Item { Layout.fillWidth: true }
 
-            TextField {
+            ThemedTextField {
                 id: searchField
                 Layout.preferredWidth: 188
-                Layout.preferredHeight: 32
+                Layout.preferredHeight: Theme.controlHeight
                 placeholderText: qsTr("搜索设置...")
-                color: Theme.primaryText
-                font.family: Theme.fontPrimary
-                font.pixelSize: 13
                 verticalAlignment: Text.AlignVCenter
-
-                background: Rectangle {
-                    color: Theme.background
-                    radius: Theme.radiusSm
-                    border.color: Theme.border
-                    border.width: 1
-                }
 
                 onTextChanged: root.searchText = text.toLowerCase()
             }
 
-            Button {
+            ThemedButton {
                 text: qsTr("恢复默认")
-                focusPolicy: Qt.StrongFocus
                 onClicked: SettingsController.resetToDefaults()
-
-                contentItem: Text {
-                    text: parent.text
-                    color: Theme.primaryText
-                    font.family: Theme.fontPrimary
-                    font.pixelSize: 13
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                background: Rectangle {
-                    color: parent.pressed ? Theme.border
-                          : parent.hovered ? Theme.hoverSurface
-                          : "transparent"
-                    border.color: Theme.border
-                    border.width: 1
-                    radius: Theme.radiusSm
-                    implicitWidth: 90
-                    implicitHeight: 32
-                }
             }
 
-            ToolButton {
+            ThemedIconButton {
                 objectName: "settingsCloseButton"
-                icon.source: Theme.icon("close-fill")
-                icon.color: Theme.secondaryText
-                icon.width: 20
-                icon.height: 20
-                focusPolicy: Qt.StrongFocus
+                iconSource: Theme.icon("close-fill")
+                iconSize: 20
+                dangerOnHover: true
+                accessibleName: qsTr("Close settings")
                 onClicked: root.close()
-                Accessible.name: qsTr("Close settings")
-
-                background: Rectangle {
-                    color: parent.pressed ? Theme.danger
-                          : parent.hovered ? Theme.surfaceHover
-                          : "transparent"
-                    radius: Theme.radiusSm
-                }
             }
 
         }
@@ -396,6 +312,7 @@ Item {
                         color: root.selectedSection === modelData.index
                                ? Theme.highlightSoft
                                : (mouseArea.containsMouse ? Theme.surfaceHover : "transparent")
+                        Behavior on color { ColorAnimation { duration: 120 } }
 
                         RowLayout {
                             anchors.fill: parent
@@ -408,6 +325,7 @@ Item {
                                 tint: root.selectedSection === modelData.index
                                       ? Theme.highlight
                                       : Theme.iconSecondary
+                                Behavior on tint { ColorAnimation { duration: 120 } }
                                 sourceSize.width: 17
                                 sourceSize.height: 17
                                 Layout.preferredWidth: 20
@@ -418,10 +336,11 @@ Item {
                                 objectName: "settingsSectionLabel-" + modelData.index
                                 text: modelData.text
                                 color: root.selectedSection === modelData.index
-                                       ? Theme.highlightText
+                                       ? Theme.highlight
                                        : Theme.secondaryText
+                                Behavior on color { ColorAnimation { duration: 120 } }
                                 font.family: Theme.fontPrimary
-                                font.pixelSize: 14
+                                font.pixelSize: Theme.fontSizeBody
                                 Layout.fillWidth: true
                                 elide: Text.ElideRight
                                 clip: true
@@ -452,23 +371,13 @@ Item {
                 id: settingsScroll
                 objectName: "settingsScroll"
                 property string designRole: "settingsContentSurface"
+                property bool programmaticScroll: false
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
                 contentWidth: availableWidth
                 ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
                 ScrollBar.vertical.policy: ScrollBar.AsNeeded
-
-                Connections {
-                    target: settingsScroll.contentItem
-                    function onContentYChanged() {
-                        root.updateSectionFromScroll()
-                    }
-                    function onMovementStarted() {
-                        sectionScrollAnimation.stop()
-                        root.programmaticScroll = false
-                    }
-                }
 
                 ColumnLayout {
                     id: settingsContentColumn
@@ -480,31 +389,42 @@ Item {
 
                     GeneralSection {
                         objectName: "generalSettingsSection"
+                        visible: root.selectedSection === 0
                         Layout.fillWidth: true
                     }
                     PlaybackSection {
                         objectName: "playbackSettingsSection"
+                        visible: root.selectedSection === 1
                         Layout.fillWidth: true
                     }
                     AppearanceSection {
                         objectName: "appearanceSettingsSection"
+                        visible: root.selectedSection === 2
                         Layout.fillWidth: true
                     }
                     AudioToolsSection {
                         objectName: "audioToolsSettingsSection"
+                        visible: root.selectedSection === 3
                         Layout.fillWidth: true
                     }
                     HotkeysSection {
                         objectName: "hotkeysSettingsSection"
+                        visible: root.selectedSection === 4
                         Layout.fillWidth: true
                     }
                     CacheSection {
                         objectName: "cacheSettingsSection"
+                        visible: root.selectedSection === 5
                         Layout.fillWidth: true
                     }
                     AboutSection {
                         objectName: "aboutSettingsSection"
+                        visible: root.selectedSection === 6
                         Layout.fillWidth: true
+                    }
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Theme.spacingXl
                     }
                 }
             }
@@ -526,57 +446,21 @@ Item {
 
             Item { Layout.fillWidth: true }
 
-            Button {
+            ThemedButton {
                 objectName: "settingsCancelButton"
+                Layout.preferredWidth: 110
+                prominent: true
                 text: qsTr("取消")
-                focusPolicy: Qt.StrongFocus
                 onClicked: root.cancelAndClose()
-
-                contentItem: Text {
-                    text: parent.text
-                    color: Theme.primaryText
-                    font.family: Theme.fontPrimary
-                    font.pixelSize: 14
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                background: Rectangle {
-                    color: parent.pressed ? Theme.border
-                          : parent.hovered ? Theme.hoverSurface
-                          : "transparent"
-                    border.color: Theme.border
-                    border.width: 1
-                    radius: Theme.radiusSm
-                    implicitWidth: 110
-                    implicitHeight: 36
-                }
             }
 
-            Button {
+            ThemedButton {
                 objectName: "settingsSaveButton"
+                Layout.preferredWidth: 110
+                prominent: true
+                primary: true
                 text: qsTr("保存更改")
-                focusPolicy: Qt.StrongFocus
                 onClicked: root.saveAndClose()
-
-                contentItem: Text {
-                    text: parent.text
-                    color: Theme.accentText
-                    font.family: Theme.fontPrimary
-                    font.pixelSize: 14
-                    font.weight: Font.Medium
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                background: Rectangle {
-                    color: parent.pressed ? Theme.accentPressed
-                          : parent.hovered ? Theme.accentHover
-                          : Theme.accent
-                    radius: Theme.radiusSm
-                    implicitWidth: 110
-                    implicitHeight: 36
-                }
             }
         }
     }
@@ -590,19 +474,20 @@ Item {
         border.width: 0
         Layout.fillWidth: true
         Layout.alignment: Qt.AlignTop
-        implicitHeight: titleText.implicitHeight + contentContainer.implicitHeight + 20
+        implicitHeight: titleText.implicitHeight + contentContainer.implicitHeight
+                        + Theme.spacingXl
         Layout.preferredHeight: implicitHeight
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 6
-            spacing: 6
+            anchors.margins: Theme.spacingSm
+            spacing: Theme.spacingSm
 
             Text {
                 id: titleText
                 color: Theme.primaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 14
+                font.pixelSize: Theme.fontSizeBodyStrong
                 font.weight: Font.Bold
                 Layout.fillWidth: true
             }
@@ -610,7 +495,7 @@ Item {
             ColumnLayout {
                 id: contentContainer
                 Layout.fillWidth: true
-                spacing: 6
+                spacing: Theme.spacingSm
             }
 
         }
@@ -620,7 +505,7 @@ Item {
             anchors.right: parent.right
             anchors.bottom: parent.bottom
             height: 1
-            color: Theme.border
+            color: Theme.opaqueDivider
         }
     }
 
@@ -629,14 +514,14 @@ Item {
         property alias subtitle: subtitleText.text
 
         Layout.fillWidth: true
-        Layout.topMargin: 4
+        Layout.topMargin: Theme.spacingXs
         Layout.bottomMargin: 0
-        spacing: 8
+        spacing: Theme.spacingSm
 
         Rectangle {
             Layout.preferredWidth: 4
             Layout.preferredHeight: 20
-            color: Theme.cyan
+            color: Theme.accent
             radius: 2
         }
 
@@ -647,16 +532,16 @@ Item {
                 id: titleText
                 color: Theme.primaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 16
+                font.pixelSize: Theme.fontSizeSection
                 font.weight: Font.Bold
             }
 
             Text {
                 id: subtitleText
-                visible: text.length > 0 && text !== titleText.text
+                visible: false
                 color: Theme.secondaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeCaption
             }
         }
     }
@@ -669,7 +554,7 @@ Item {
         default property alias content: contentContainer.children
 
         Layout.fillWidth: true
-        Layout.preferredHeight: 36
+        Layout.preferredHeight: Theme.settingsRowHeight
 
         Text {
             id: labelText
@@ -678,7 +563,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             color: Theme.secondaryText
             font.family: Theme.fontPrimary
-            font.pixelSize: 14
+            font.pixelSize: Theme.fontSizeBody
             width: parent.fitLabelToContent
                    ? Math.min(parent.width - 190,
                               Math.max(parent.labelWidth, contentWidth))
@@ -688,20 +573,33 @@ Item {
         Item {
             id: contentContainer
             anchors.left: labelText.right
-            anchors.leftMargin: 10
+            anchors.leftMargin: Theme.spacingMd
             anchors.right: parent.right
             anchors.top: parent.top
             anchors.bottom: parent.bottom
         }
     }
 
-    component SettingSwitch: ThemedSwitch {}
+    component SettingSwitch: ThemedSwitch {
+        Layout.fillWidth: true
+        Layout.preferredHeight: Theme.settingsRowHeight
+        indicatorTrailing: true
+        labelPixelSize: Theme.fontSizeBody
+    }
 
-    component SettingCombo: ComboBox {
+    component SettingCombo: ThemedComboBox {
         id: combo
         property var valueModel
+        property bool layoutManaged: false
 
         width: 180
+        height: Theme.controlHeight
+        anchors.right: !layoutManaged && parent ? parent.right : undefined
+        anchors.verticalCenter: !layoutManaged && parent
+            ? parent.verticalCenter : undefined
+        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+        Layout.preferredWidth: width
+        Layout.preferredHeight: height
         textRole: "text"
         valueRole: "value"
         model: valueModel
@@ -710,7 +608,7 @@ Item {
             text: combo.displayText
             color: Theme.primaryText
             font.family: Theme.fontPrimary
-            font.pixelSize: 13
+            font.pixelSize: Theme.fontSizeBody
             verticalAlignment: Text.AlignVCenter
             leftPadding: Theme.spacingSm
             rightPadding: (combo.indicator ? combo.indicator.width : 0)
@@ -719,9 +617,9 @@ Item {
         }
 
         background: Rectangle {
-            color: Theme.background
+            color: Theme.surfaceElevated
             radius: Theme.radiusSm
-            border.color: Theme.border
+            border.color: Theme.opaqueBorder
             border.width: 1
         }
 
@@ -739,9 +637,9 @@ Item {
             }
 
             background: Rectangle {
-                color: Theme.panel
+                color: Theme.surfaceElevated
                 radius: Theme.radiusSm
-                border.color: Theme.border
+                border.color: Theme.opaqueBorder
                 border.width: 1
             }
         }
@@ -754,7 +652,7 @@ Item {
                 text: modelData.text
                 color: Theme.primaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 13
+                font.pixelSize: Theme.fontSizeBody
                 verticalAlignment: Text.AlignVCenter
             }
 
@@ -800,7 +698,7 @@ Item {
                 text: parent.text
                 color: parent.enabled ? Theme.primaryText : Theme.secondaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 16
+                font.pixelSize: Theme.fontSizeSection
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }
@@ -828,7 +726,7 @@ Item {
                 text: stepper.value.toFixed(stepper.decimals) + stepper.suffix
                 color: Theme.primaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 13
+                font.pixelSize: Theme.fontSizeBody
             }
         }
 
@@ -841,7 +739,7 @@ Item {
                 text: parent.text
                 color: parent.enabled ? Theme.primaryText : Theme.secondaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 18
+                font.pixelSize: Theme.fontSizeSection
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }
@@ -867,48 +765,36 @@ Item {
     }
 
     component PathFieldRow: RowLayout {
-        property alias path: pathField.text
+        id: pathRow
+        property string path: ""
         property alias dialogFolder: folderDialog.currentFolder
         signal pathSelected(string newPath)
 
         Layout.fillWidth: true
         spacing: Theme.spacingSm
 
-        TextField {
+        ThemedTextField {
             id: pathField
             Layout.fillWidth: true
-            Layout.fillHeight: true
-            color: Theme.primaryText
-            font.family: Theme.fontPrimary
-            font.pixelSize: 13
+            Layout.preferredHeight: Theme.controlHeight
+            Layout.alignment: Qt.AlignVCenter
+            text: pathRow.path
             verticalAlignment: Text.AlignVCenter
-            background: Rectangle {
-                color: Theme.background
-                radius: Theme.radiusSm
-                border.color: Theme.border
-                border.width: 1
-            }
-            onEditingFinished: parent.pathSelected(text)
+            onEditingFinished: pathRow.pathSelected(text)
         }
 
-        ToolButton {
-            icon.source: Theme.icon("folder-open-fill")
-            icon.color: Theme.secondaryText
-            icon.width: 18
-            icon.height: 18
+        ThemedIconButton {
+            iconSource: Theme.icon("folder-open-fill")
+            iconSize: 18
+            accessibleName: qsTr("选择文件夹")
+            Layout.alignment: Qt.AlignVCenter
             onClicked: folderDialog.open()
-
-            background: Rectangle {
-                color: parent.pressed ? Theme.border
-                      : parent.hovered ? Theme.hoverSurface
-                      : "transparent"
-                radius: Theme.radiusSm
-            }
         }
 
         FolderDialog {
             id: folderDialog
-            onAccepted: parent.pathSelected(selectedFolder.toString().replace("file:///", ""))
+            onAccepted: pathRow.pathSelected(
+                            selectedFolder.toString().replace("file:///", ""))
         }
     }
 
@@ -1067,7 +953,7 @@ Item {
                 text: thumb.modeLabel
                 color: selected ? Theme.primaryText : Theme.secondaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 11
+                font.pixelSize: Theme.fontSizeCaption
                 horizontalAlignment: Text.AlignHCenter
             }
         }
@@ -1086,7 +972,7 @@ Item {
                 anchors.centerIn: parent
                 text: "\u2713"
                 color: Theme.accentText
-                font.pixelSize: 11
+                font.pixelSize: Theme.fontSizeCaption
             }
         }
 
@@ -1227,7 +1113,7 @@ Item {
                         text: qsTr("关联格式")
                         color: Theme.secondaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: 14
+                        font.pixelSize: Theme.fontSizeBody
                     }
 
                     Flow {
@@ -1278,29 +1164,10 @@ Item {
                     }
                 }
 
-                Button {
+                ThemedButton {
+                    prominent: true
                     text: qsTr("重新绑定文件关联与图标")
                     onClicked: SettingsController.rebindFileAssociations()
-
-                    contentItem: Text {
-                        text: parent.text
-                        color: Theme.primaryText
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: 13
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-
-                    background: Rectangle {
-                        color: parent.pressed ? Theme.border
-                              : parent.hovered ? Theme.hoverSurface
-                              : "transparent"
-                        border.color: Theme.border
-                        border.width: 1
-                        radius: Theme.radiusSm
-                        implicitWidth: 180
-                        implicitHeight: 36
-                    }
                 }
             }
         }
@@ -1354,29 +1221,9 @@ Item {
                     }
                 }
 
-                Button {
+                ThemedButton {
                     text: qsTr("打开系统默认应用设置")
                     onClicked: SettingsController.openDefaultAppsSettings()
-
-                    contentItem: Text {
-                        text: parent.text
-                        color: Theme.primaryText
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: 13
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-
-                    background: Rectangle {
-                        color: parent.pressed ? Theme.border
-                              : parent.hovered ? Theme.hoverSurface
-                              : "transparent"
-                        border.color: Theme.border
-                        border.width: 1
-                        radius: Theme.radiusSm
-                        implicitWidth: 180
-                        implicitHeight: 32
-                    }
                 }
 
                 SettingSwitch {
@@ -1401,7 +1248,7 @@ Item {
                              && !PlaybackController.exclusiveModeActive
                     text: qsTr("独占不可用，当前使用共享模式")
                     color: Theme.warning
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontSizeCaption
                     Layout.leftMargin: Theme.spacingMd
                 }
             }
@@ -1498,7 +1345,7 @@ Item {
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 8
-                    Button {
+                    ThemedButton {
                         Layout.fillWidth: true
                         text: ReplayGainScanner.running
                               ? qsTr("正在扫描响度…") : qsTr("扫描当前歌曲响度")
@@ -1508,7 +1355,7 @@ Item {
                                        PlaybackController.currentTrackId)
                     }
 
-                    Button {
+                    ThemedButton {
                         Layout.fillWidth: true
                         text: ReplayGainScanner.running
                               ? qsTr("响度扫描 %1%").arg(
@@ -1586,7 +1433,7 @@ Item {
                                     text: parent.text
                                     color: parent.checked ? Theme.accentText : Theme.primaryText
                                     font.family: Theme.fontPrimary
-                                    font.pixelSize: 13
+                                    font.pixelSize: Theme.fontSizeBody
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                 }
@@ -1625,6 +1472,7 @@ Item {
 
                         SettingCombo {
                             objectName: "listWaveformThumbnailModeControl"
+                            layoutManaged: true
                             Layout.preferredWidth: 150
                             enabled: SettingsController.listWaveformThumbnailEnabled
                             valueModel: [
@@ -1641,10 +1489,10 @@ Item {
                             text: qsTr("明亮度")
                             color: Theme.secondaryText
                             font.family: Theme.fontPrimary
-                            font.pixelSize: 12
+                            font.pixelSize: Theme.fontSizeCaption
                         }
 
-                        Slider {
+                        ThemedSlider {
                             id: trackWaveformBrightnessSlider
                             objectName: "trackWaveformBrightnessSlider"
                             Layout.fillWidth: true
@@ -1665,7 +1513,7 @@ Item {
                                   + "%"
                             color: Theme.secondaryText
                             font.family: Theme.fontPrimary
-                            font.pixelSize: 12
+                            font.pixelSize: Theme.fontSizeCaption
                             horizontalAlignment: Text.AlignRight
                         }
                     }
@@ -1807,12 +1655,12 @@ Item {
                     RowLayout {
                         anchors.fill: parent
                         spacing: Theme.spacingSm
-                        ColorField { objectName: "waveformSolidBaseColorField"; visible: SettingsController.waveformMode === 0; colorValue: SettingsController.waveformSolidBaseColor; defaultColor: "#9098a6"; targetProperty: "waveformSolidBaseColor" }
-                        ColorField { objectName: "waveformSolidProgressColorField"; visible: SettingsController.waveformMode === 0; colorValue: SettingsController.waveformSolidProgressColor; defaultColor: "#d27722"; targetProperty: "waveformSolidProgressColor" }
-                        ColorField { objectName: "waveformRgbBaseColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbBaseColor; defaultColor: "#00b4a0"; targetProperty: "waveformRgbBaseColor" }
-                        ColorField { objectName: "waveformRgbStartColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbStartColor; defaultColor: "#00d4ff"; targetProperty: "waveformRgbStartColor" }
-                        ColorField { objectName: "waveformRgbMiddleColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbMiddleColor; defaultColor: "#7b2ff7"; targetProperty: "waveformRgbMiddleColor" }
-                        ColorField { objectName: "waveformRgbEndColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbEndColor; defaultColor: "#e62e9b"; targetProperty: "waveformRgbEndColor" }
+                        ColorField { objectName: "waveformSolidBaseColorField"; visible: SettingsController.waveformMode === 0; colorValue: SettingsController.waveformSolidBaseColor; defaultColor: "#9098a6"; targetProperty: "waveformSolidBaseColor" } // theme-color-allow: user-editable waveform default
+                        ColorField { objectName: "waveformSolidProgressColorField"; visible: SettingsController.waveformMode === 0; colorValue: SettingsController.waveformSolidProgressColor; defaultColor: "#d27722"; targetProperty: "waveformSolidProgressColor" } // theme-color-allow: user-editable waveform default
+                        ColorField { objectName: "waveformRgbBaseColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbBaseColor; defaultColor: "#00b4a0"; targetProperty: "waveformRgbBaseColor" } // theme-color-allow: user-editable waveform default
+                        ColorField { objectName: "waveformRgbStartColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbStartColor; defaultColor: "#00d4ff"; targetProperty: "waveformRgbStartColor" } // theme-color-allow: user-editable waveform default
+                        ColorField { objectName: "waveformRgbMiddleColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbMiddleColor; defaultColor: "#7b2ff7"; targetProperty: "waveformRgbMiddleColor" } // theme-color-allow: user-editable waveform default
+                        ColorField { objectName: "waveformRgbEndColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbEndColor; defaultColor: "#e62e9b"; targetProperty: "waveformRgbEndColor" } // theme-color-allow: user-editable waveform default
                     }
                 }
 
@@ -1865,7 +1713,7 @@ Item {
                         anchors.fill: parent
                         spacing: Theme.spacingSm
 
-                        Slider {
+                        ThemedSlider {
                             id: frequencyUnplayedOpacitySlider
                             objectName: "frequencyUnplayedOpacitySlider"
                             Layout.fillWidth: true
@@ -1884,13 +1732,13 @@ Item {
                             text: Math.round(frequencyUnplayedOpacitySlider.value) + "%"
                             color: Theme.secondaryText
                             font.family: Theme.fontPrimary
-                            font.pixelSize: 12
+                            font.pixelSize: Theme.fontSizeCaption
                             horizontalAlignment: Text.AlignRight
                         }
                     }
                 }
 
-                Button {
+                ThemedButton {
                     objectName: "frequencyColorResetButton"
                     visible: SettingsController.waveformMode === 3
                     text: qsTr("恢复默认频彩")
@@ -1932,6 +1780,7 @@ Item {
                         anchors.fill: parent
                         SettingCombo {
                             objectName: "spectrumColorModeSelector"
+                            layoutManaged: true
                             valueModel: [
                             { text: qsTr("单色"), value: 0 },
                             { text: qsTr("自定义 RGB"), value: 1 }
@@ -1943,34 +1792,34 @@ Item {
                             objectName: "spectrumSolidColorField"
                             visible: SettingsController.spectrumColorMode === 0
                             colorValue: SettingsController.spectrumSolidColor
-                            defaultColor: "#7b2ff7"
+                            defaultColor: "#7b2ff7" // theme-color-allow: user-editable waveform default
                             targetProperty: "spectrumSolidColor"
                         }
                         ColorField {
                             objectName: "spectrumRgbStartColorField"
                             visible: SettingsController.spectrumColorMode === 1
                             colorValue: SettingsController.spectrumRgbStartColor
-                            defaultColor: "#00d4ff"
+                            defaultColor: "#00d4ff" // theme-color-allow: user-editable waveform default
                             targetProperty: "spectrumRgbStartColor"
                         }
                         ColorField {
                             objectName: "spectrumRgbMiddleColorField"
                             visible: SettingsController.spectrumColorMode === 1
                             colorValue: SettingsController.spectrumRgbMiddleColor
-                            defaultColor: "#7b2ff7"
+                            defaultColor: "#7b2ff7" // theme-color-allow: user-editable waveform default
                             targetProperty: "spectrumRgbMiddleColor"
                         }
                         ColorField {
                             objectName: "spectrumRgbEndColorField"
                             visible: SettingsController.spectrumColorMode === 1
                             colorValue: SettingsController.spectrumRgbEndColor
-                            defaultColor: "#e62e9b"
+                            defaultColor: "#e62e9b" // theme-color-allow: user-editable waveform default
                             targetProperty: "spectrumRgbEndColor"
                         }
                     }
                 }
 
-                Button {
+                ThemedButton {
                     objectName: "waveformResetButton"
                     text: qsTr("恢复波形默认")
                     onClicked: SettingsController.resetWaveformDefaults()
@@ -2216,7 +2065,7 @@ Item {
             id: labelText
             color: Theme.secondaryText
             font.family: Theme.fontPrimary
-            font.pixelSize: 14
+            font.pixelSize: Theme.fontSizeBody
             Layout.preferredWidth: 140
             Layout.alignment: Qt.AlignVCenter
         }
@@ -2237,7 +2086,7 @@ Item {
                 text: parent.parent.value
                 color: Theme.primaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 13
+                font.pixelSize: Theme.fontSizeBody
                 horizontalAlignment: Text.AlignRight
                 verticalAlignment: Text.AlignVCenter
                 selectByMouse: true
@@ -2304,10 +2153,10 @@ Item {
                     RowLayout {
                         anchors.fill: parent
                         spacing: 8
-                        TextField {
+                        ThemedTextField {
                             objectName: "cacheSizeLimitField"
                             Layout.preferredWidth: 110
-                            Layout.preferredHeight: 32
+                            Layout.preferredHeight: Theme.controlHeight
                             text: (SettingsController.cacheSizeLimitMB / 1024).toFixed(0)
                             horizontalAlignment: Text.AlignRight
                             validator: DoubleValidator { bottom: 0.1; decimals: 1 }
@@ -2323,7 +2172,7 @@ Item {
                             text: "GB"
                             color: Theme.secondaryText
                             font.family: Theme.fontPrimary
-                            font.pixelSize: 13
+                            font.pixelSize: Theme.fontSizeBody
                         }
                         Item { Layout.fillWidth: true }
                     }
@@ -2349,7 +2198,7 @@ Item {
                         text: SettingsController.currentCacheSizeMB + " MB"
                         color: Theme.primaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: 14
+                        font.pixelSize: Theme.fontSizeBody
                     }
                 }
             }
@@ -2361,98 +2210,33 @@ Item {
                     Layout.fillWidth: true
                     spacing: Theme.spacingSm
 
-                    Button {
+                    ThemedButton {
                         objectName: "clearWaveformCacheButton"
+                        Layout.preferredWidth: 90
                         text: qsTr("波形缓存")
                         onClicked: SettingsController.clearWaveformCache()
-                        contentItem: Text {
-                            text: parent.text
-                            color: Theme.primaryText
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 12
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        background: Rectangle {
-                            color: parent.pressed ? Theme.border
-                                  : parent.hovered ? Theme.hoverSurface
-                                  : "transparent"
-                            border.color: Theme.border
-                            border.width: 1
-                            radius: Theme.radiusSm
-                            implicitWidth: 90
-                            implicitHeight: 32
-                        }
                     }
 
-                    Button {
+                    ThemedButton {
                         objectName: "clearCoverCacheButton"
+                        Layout.preferredWidth: 90
                         text: qsTr("封面缓存")
                         onClicked: SettingsController.clearCoverCache()
-                        contentItem: Text {
-                            text: parent.text
-                            color: Theme.primaryText
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 12
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        background: Rectangle {
-                            color: parent.pressed ? Theme.border
-                                  : parent.hovered ? Theme.hoverSurface
-                                  : "transparent"
-                            border.color: Theme.border
-                            border.width: 1
-                            radius: Theme.radiusSm
-                            implicitWidth: 90
-                            implicitHeight: 32
-                        }
                     }
 
-                    Button {
+                    ThemedButton {
                         objectName: "clearTempCacheButton"
+                        Layout.preferredWidth: 108
                         text: qsTr("转码临时文件")
                         onClicked: SettingsController.clearTempFiles()
-                        contentItem: Text {
-                            text: parent.text
-                            color: Theme.primaryText
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 12
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        background: Rectangle {
-                            color: parent.pressed ? Theme.border
-                                  : parent.hovered ? Theme.hoverSurface
-                                  : "transparent"
-                            border.color: Theme.border
-                            border.width: 1
-                            radius: Theme.radiusSm
-                            implicitWidth: 100
-                            implicitHeight: 32
-                        }
                     }
 
-                    Button {
+                    ThemedButton {
                         objectName: "clearAllCacheButton"
+                        Layout.preferredWidth: 90
+                        danger: true
                         text: qsTr("全部缓存")
                         onClicked: clearCacheConfirmDialog.open()
-                        contentItem: Text {
-                            text: parent.text
-                            color: Theme.onBrandGradientText
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 12
-                            font.weight: Font.Medium
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        background: Rectangle {
-                            color: parent.pressed ? Theme.critical
-                                  : Theme.danger
-                            radius: Theme.radiusSm
-                            implicitWidth: 90
-                            implicitHeight: 32
-                        }
                     }
                 }
 
@@ -2496,7 +2280,7 @@ Item {
                         text: "AgPlayer"
                         color: Theme.primaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: 22
+                        font.pixelSize: Theme.fontSizePageTitle
                         font.weight: Font.Bold
                     }
 
@@ -2504,7 +2288,7 @@ Item {
                         text: qsTr("让音乐·看得见")
                         color: Theme.primaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: 14
+                        font.pixelSize: Theme.fontSizeBody
                         font.weight: Font.Medium
                     }
 
@@ -2513,7 +2297,7 @@ Item {
                         text: qsTr("版本号：") + SettingsController.version
                         color: Theme.secondaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: 13
+                        font.pixelSize: Theme.fontSizeBody
                     }
 
                     Text {
@@ -2521,7 +2305,7 @@ Item {
                         text: qsTr("免费、轻便、纯净")
                         color: Theme.secondaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: 13
+                        font.pixelSize: Theme.fontSizeBody
                     }
                 }
 
@@ -2530,29 +2314,11 @@ Item {
                 RowLayout {
                     spacing: Theme.spacingSm
 
-                    Button {
+                    ThemedButton {
+                        Layout.preferredWidth: 120
+                        prominent: true
                         text: qsTr("访问官网")
                         onClicked: SettingsController.openOfficialWebsite()
-
-                        contentItem: Text {
-                            text: parent.text
-                            color: Theme.primaryText
-                            font.family: Theme.fontPrimary
-                            font.pixelSize: 13
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        background: Rectangle {
-                            color: parent.pressed ? Theme.border
-                                  : parent.hovered ? Theme.hoverSurface
-                                  : "transparent"
-                            border.color: Theme.border
-                            border.width: 1
-                            radius: Theme.radiusSm
-                            implicitWidth: 120
-                            implicitHeight: 36
-                        }
                     }
 
                 }

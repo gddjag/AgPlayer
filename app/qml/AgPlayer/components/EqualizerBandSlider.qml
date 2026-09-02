@@ -14,13 +14,24 @@ Item {
     readonly property string controlObjectPrefix: preamp
                                                   ? "equalizerPreampSlider"
                                                   : "eqBandSlider-" + bandIndex
-    readonly property bool compact: height < 300
-    readonly property real sliderTop: compact ? 32 : 49
-    readonly property real sliderHeight: compact ? Math.max(86, height - 92) : 239
+    readonly property bool compact: !spacious
+    readonly property real sliderTop: compact ? 28 : 42
+    readonly property real sliderHeight: compact ? Math.max(100, height - 66) : 270
     readonly property real gainRangeDb: EqualizerController.gainRangeDb
     readonly property real gainStepDb: EqualizerController.gainStepDb
     implicitWidth: 79
     implicitHeight: 375
+
+    Rectangle {
+        anchors.fill: parent
+        anchors.margins: 2
+        radius: Theme.radiusSm
+        color: dragArea.containsMouse || slider.activeFocus
+               ? Theme.highlightSoft : "transparent"
+        opacity: dragArea.pressed ? 1.0 : 0.72
+        Behavior on color { ColorAnimation { duration: 120 } }
+        Behavior on opacity { NumberAnimation { duration: 100 } }
+    }
 
     function setGain(value) {
         var range = Math.max(0.1, gainRangeDb)
@@ -57,9 +68,10 @@ Item {
         height: 30
         text: root.frequencyLabel
         color: Theme.textPrimary
-        font.family: "Microsoft YaHei UI"
-        font.pixelSize: root.compact ? 16 : 18
-        font.weight: Font.Normal
+        font.family: Theme.fontPrimary
+        font.pixelSize: root.spacious ? Theme.fontSizeBodyStrong
+                                      : Theme.fontSizeCaption
+        font.weight: Font.Medium
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
 
@@ -124,7 +136,7 @@ Item {
                 required property int index
                 x: Math.round((slider.width - width) / 2)
                 y: Math.round(index * (slider.height - 1) / 12)
-                width: index === 6 ? 27 : 19
+                width: index === 6 ? 22 : 14
                 height: 1
                 color: index === 6 ? Theme.borderStrong
                                    : Theme.opaqueDivider
@@ -136,35 +148,30 @@ Item {
             id: railShadow
             x: Math.round((slider.width - width) / 2)
             y: 0
-            width: 8
+            width: Theme.sliderTrackHeight
             height: slider.height
-            radius: 4
-            color: Theme.background
-            border.color: Theme.opaqueBorder
+            radius: width / 2
+            color: Theme.borderStrong
         }
 
         Rectangle {
             x: Math.round((slider.width - width) / 2)
             y: Math.max(0, slider.visualPosition * slider.height)
-            width: 4
+            width: Theme.sliderTrackHeight
             height: Math.max(0, slider.height - y)
-            radius: 2
-            gradient: Gradient {
-                orientation: Gradient.Vertical
-                GradientStop { position: 0; color: "#B15DED" }
-                GradientStop { position: 0.52; color: "#496CFF" }
-                GradientStop { position: 1; color: "#059EF3" }
-            }
+            radius: width / 2
+            color: Theme.accent
         }
 
         Rectangle {
             id: handleShadow
-            x: handle.x - 3
-            y: handle.y + 3
-            width: handle.width + 6
-            height: handle.height + 6
-            radius: 13
+            x: handle.x - 2
+            y: handle.y + 2
+            width: handle.width + 4
+            height: handle.height + 4
+            radius: handle.radius + 2
             color: Theme.controlHandleShadow
+            opacity: 0.55
         }
 
         Rectangle {
@@ -173,24 +180,21 @@ Item {
             y: Math.max(0, Math.min(slider.height - height,
                                    slider.visualPosition
                                    * (slider.height - height)))
-            width: 30
-            height: 40
-            radius: 10
-            gradient: Gradient {
-                orientation: Gradient.Vertical
-                GradientStop { position: 0; color: Theme.controlHandle }
-                GradientStop { position: 0.48; color: Theme.accentText }
-                GradientStop { position: 1; color: Theme.textSecondary }
-            }
+            width: root.spacious ? 18 : 16
+            height: root.spacious ? 24 : 22
+            radius: Theme.radiusXs
+            color: slider.activeFocus || dragArea.pressed
+                   ? Theme.accent : Theme.controlHandle
             border.color: slider.activeFocus ? Theme.focus : Theme.borderStrong
             border.width: slider.activeFocus ? 2 : 1
 
             Rectangle {
                 anchors.centerIn: parent
-                width: 14
-                height: 3
-                radius: 1.5
-                color: Theme.highlight
+                width: parent.width - 6
+                height: 2
+                radius: 1
+                color: slider.activeFocus || dragArea.pressed
+                       ? Theme.accentText : Theme.accent
             }
         }
 
@@ -205,6 +209,7 @@ Item {
         MouseArea {
             id: dragArea
             anchors.fill: parent
+            hoverEnabled: true
             acceptedButtons: Qt.LeftButton
             cursorShape: Qt.SizeVerCursor
 
@@ -230,27 +235,23 @@ Item {
         id: valueChip
         objectName: root.controlObjectPrefix + "-valueChip"
         x: Math.round((parent.width - width) / 2)
-        y: root.compact ? root.sliderTop + root.sliderHeight + 6 : 303
-        width: root.compact ? Math.max(34, parent.width - 4) : 61
-        height: root.compact ? 50 : 56
-        radius: 10
-        gradient: Gradient {
-            orientation: Gradient.Vertical
-            GradientStop { position: 0; color: Theme.surfaceElevated }
-            GradientStop { position: 1; color: Theme.surface }
-        }
-        border.color: Theme.opaqueBorder
+        y: root.sliderTop + root.sliderHeight + 4
+        width: root.spacious ? 58 : Math.min(48, parent.width - 4)
+        height: 28
+        radius: Theme.radiusSm
+        color: Theme.surfaceElevated
+        border.color: dragArea.containsMouse || slider.activeFocus
+                      ? Theme.highlightBorder : Theme.opaqueBorder
+        Behavior on border.color { ColorAnimation { duration: 120 } }
 
         Label {
             objectName: root.controlObjectPrefix + "-value"
             anchors.fill: parent
-            anchors.topMargin: 3
             text: (root.gainDb > 0 ? "+" : "")
-                  + root.gainDb.toFixed(1) + "\ndB"
+                  + root.gainDb.toFixed(1) + " dB"
             color: Theme.textPrimary
-            font.family: "Microsoft YaHei UI"
-            font.pixelSize: 16
-            lineHeight: 1.15
+            font.family: Theme.fontPrimary
+            font.pixelSize: Theme.fontSizeCaption
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
         }

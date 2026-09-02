@@ -262,7 +262,7 @@ Rectangle {
                 anchors.centerIn: parent
                 text: qsTr("拖出片段")
                 color: Theme.editorSelectionLabel
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeCaption
             }
             MouseArea {
                 anchors.fill: parent
@@ -300,7 +300,7 @@ Rectangle {
                 anchors.centerIn: parent
                 text: canvas.selectionDurationText()
                 color: Theme.editorSelectionLabel
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeCaption
             }
         }
     }
@@ -1326,6 +1326,6 @@ Rectangle {
         text: qsTr("导入音频后开始编辑")
         color: Theme.textTertiary
         font.family: Theme.fontPrimary
-        font.pixelSize: 14
+        font.pixelSize: Theme.fontSizeBody
     }
 }

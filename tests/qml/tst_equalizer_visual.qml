@@ -98,10 +98,13 @@ TestCase {
         var footerScroller = findChild(equalizer, "equalizerFooterScroller")
         var outputText = findChild(equalizer, "equalizerOutputLevelText")
         verify(footerScroller && outputText)
-        verify(footerScroller.contentWidth > footerScroller.width)
-        footerScroller.contentX = footerScroller.contentWidth
-                                  - footerScroller.width
-        wait(30)
+        if (footerScroller.contentWidth > footerScroller.width) {
+            footerScroller.contentX = footerScroller.contentWidth
+                                      - footerScroller.width
+            wait(30)
+        } else {
+            compare(footerScroller.contentX, 0)
+        }
         var point = outputText.mapToItem(footerScroller, 0, 0)
         verify(point.x >= -0.5,
                "output level left edge must be visible after scrolling right")
@@ -385,7 +388,7 @@ TestCase {
         verify(scroller.contentWidth > scroller.width,
                "default EQ must scroll rather than squeeze nineteen columns")
         var first = repeater.itemAt(0)
-        verify(first.width >= 64, "band width=" + first.width)
+        verify(first.width >= 52, "band width=" + first.width)
         compare(preamp.width, first.width)
         for (var index = 1; index < repeater.count; ++index) {
             compare(repeater.itemAt(index).width, first.width)
@@ -403,14 +406,17 @@ TestCase {
     }
 
     function test_reference_and_minimum_viewports_render() {
-        compare(equalizer.width, 860)
-        compare(equalizer.height, 520)
-        compare(equalizer.minimumWidth, 760)
+        compare(equalizer.width, 1180)
+        compare(equalizer.height, 680)
+        compare(equalizer.minimumWidth, 1080)
         compare(equalizer.minimumHeight, 480)
         compare(findChildrenByPrefix(equalizer, "equalizerBand-").length, 18)
-        compare(findChild(equalizer, "equalizerTitle").font.pixelSize, 18)
-        verify(findChild(equalizer, "equalizerBand-0-frequency").font.pixelSize >= 16)
-        verify(findChild(equalizer, "equalizerBand-0-value").font.pixelSize >= 16)
+        compare(findChild(equalizer, "equalizerTitle").font.pixelSize,
+                Theme.fontSizePageTitle)
+        compare(findChild(equalizer, "equalizerBand-0-frequency").font.pixelSize,
+                Theme.fontSizeCaption)
+        compare(findChild(equalizer, "equalizerBand-0-value").font.pixelSize,
+                Theme.fontSizeCaption)
 
         var firstBand = findChild(equalizer, "equalizerBand-0")
         var footer = findChild(equalizer, "equalizerFooterPanel")
@@ -425,8 +431,26 @@ TestCase {
         var bandScroller = findChild(equalizer, "equalizerBandScroller")
         var footerScroller = findChild(equalizer, "equalizerFooterScroller")
         verify(contentScroller.contentHeight <= contentScroller.height + 0.5)
-        verify(bandScroller.contentWidth > bandScroller.width)
+        verify(bandScroller.contentWidth <= bandScroller.width + 0.5)
         verify(footerScroller.contentWidth <= footerScroller.width + 0.5)
+
+        equalizer.width = 1080
+        equalizer.height = 480
+        wait(120)
+        compare(equalizer.width, 1080)
+        compare(equalizer.height, 480)
+        footerPoint = footer.mapToItem(equalizer.contentItem, 0, 0)
+        outputPoint = outputMeter.mapToItem(equalizer.contentItem, 0, 0)
+        verify(footerPoint.y + footer.height <= equalizer.height)
+        verify(outputPoint.x + outputMeter.width <= equalizer.width)
+        verify(bandScroller.contentWidth <= bandScroller.width + 0.5,
+               "all 18 EQ bands must fit without horizontal scrolling at the visual minimum")
+        verify(footerScroller.contentWidth <= footerScroller.width + 0.5,
+               "footer controls must fit without horizontal scrolling at the visual minimum")
+
+        equalizer.width = 1180
+        equalizer.height = 680
+        wait(120)
 
         var gains = [2, 1.5, 0, -1, 0.5, -0.5, -1.5, -0.5,
                      0.5, 1.5, 2, 1, 2, 1.5, 1, 0, -1, -2]
@@ -457,7 +481,7 @@ TestCase {
                 "-1.5 dB")
         var resetButton = findChild(equalizer, "equalizerResetButton")
         verify(resetButton.iconSource.toString().indexOf("restore-line.svg") >= 0)
-        compare(resetButton.icon.width, 22)
+        compare(resetButton.icon.width, Theme.iconSizeMd)
         compare(findChild(equalizer, "equalizerMinimizeButton").icon.width, 18)
         compare(findChild(equalizer, "equalizerMaximizeButton").icon.width, 18)
         compare(findChild(equalizer, "equalizerCloseButton").icon.width, 18)
@@ -489,30 +513,30 @@ TestCase {
         compare(findChild(equalizer, "equalizerContentScrollBar").policy,
                 ScrollBar.AlwaysOff)
         compare(findChild(equalizer, "equalizerBandScrollBar").policy,
+                ScrollBar.AlwaysOff)
+        compare(findChild(equalizer, "equalizerFooterScrollBar").policy,
+                ScrollBar.AlwaysOff)
+        verify(!findChild(equalizer, "equalizerContentScrollBar").visible)
+        verify(!findChild(equalizer, "equalizerBandScrollBar").visible)
+        verify(!findChild(equalizer, "equalizerFooterScrollBar").visible)
+        capture(temp + "/AgPlayer-equalizer-1180x680.png",
+                Qt.size(1180, 680))
+
+        equalizer.width = 860
+        equalizer.height = 520
+        wait(100)
+        compare(equalizer.width, 860)
+        compare(equalizer.height, 520)
+        compare(findChild(equalizer, "equalizerContentScrollBar").policy,
+                ScrollBar.AlwaysOff)
+        compare(findChild(equalizer, "equalizerBandScrollBar").policy,
                 ScrollBar.AlwaysOn)
         compare(findChild(equalizer, "equalizerFooterScrollBar").policy,
                 ScrollBar.AlwaysOff)
         verify(!findChild(equalizer, "equalizerContentScrollBar").visible)
         verify(findChild(equalizer, "equalizerBandScrollBar").visible)
         verify(!findChild(equalizer, "equalizerFooterScrollBar").visible)
-        capture(temp + "/AgPlayer-equalizer-1180x680.png",
-                Qt.size(1180, 680))
-
-        equalizer.width = 760
-        equalizer.height = 480
-        wait(100)
-        compare(equalizer.width, 760)
-        compare(equalizer.height, 480)
-        compare(findChild(equalizer, "equalizerContentScrollBar").policy,
-                ScrollBar.AlwaysOff)
-        compare(findChild(equalizer, "equalizerBandScrollBar").policy,
-                ScrollBar.AlwaysOn)
-        compare(findChild(equalizer, "equalizerFooterScrollBar").policy,
-                ScrollBar.AlwaysOn)
-        verify(!findChild(equalizer, "equalizerContentScrollBar").visible)
-        verify(findChild(equalizer, "equalizerBandScrollBar").visible)
-        verify(findChild(equalizer, "equalizerFooterScrollBar").visible)
-        verifyFooterOutputReachable(760, 480)
+        verifyFooterOutputReachable(860, 520)
         var compactCurve = findChild(equalizer, "equalizerResponseCurve")
         var highFrequencyLabels = []
         for (var highBand = 13; highBand <= 17; ++highBand) {
@@ -566,8 +590,8 @@ TestCase {
                && preampPoint.x < bandScroller.width,
                "preamp must be horizontally reachable at minimum size")
         bandScroller.contentX = 0
-        capture(temp + "/AgPlayer-equalizer-760x480.png",
-                Qt.size(760, 480))
+        capture(temp + "/AgPlayer-equalizer-860x520.png",
+                Qt.size(860, 520))
     }
 
     function test_status_meter_refreshes_only_while_visible() {

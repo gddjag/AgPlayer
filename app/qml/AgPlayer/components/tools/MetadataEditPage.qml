@@ -46,27 +46,39 @@ Rectangle {
         { key: "bpm", label: qsTr("BPM") }
     ]
 
-    component ToolbarAction: Button {
-        Layout.preferredHeight: 40
+    component ToolbarAction: ThemedButton {
+        id: toolbarAction
+        Layout.preferredHeight: Theme.controlHeightProminent
         leftPadding: 14
         rightPadding: 14
         spacing: 8
-        font.pixelSize: 14
-        palette.buttonText: Theme.primaryText
-        background: Rectangle {
-            radius: 5
-            color: parent.down ? Theme.activeSelection
-                               : parent.hovered ? Theme.hoverSurface
-                                                : Theme.elevated
-            border.width: 1
-            border.color: page.borderColor
+
+        contentItem: RowLayout {
+            spacing: toolbarAction.spacing
+            ThemedIcon {
+                visible: String(toolbarAction.icon.source).length > 0
+                source: toolbarAction.icon.source
+                tint: toolbarAction.enabled ? Theme.textPrimary
+                                             : Theme.textDisabled
+                sourceSize.width: Theme.iconSizeMd
+                sourceSize.height: Theme.iconSizeMd
+            }
+            Text {
+                text: toolbarAction.text
+                color: toolbarAction.enabled ? Theme.textPrimary
+                                             : Theme.textDisabled
+                font.family: Theme.fontPrimary
+                font.pixelSize: Theme.fontSizeBody
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+            }
         }
     }
 
     component ColumnHeader: ToolButton {
         property string sortField: ""
         flat: true
-        font.pixelSize: 13
+        font.pixelSize: Theme.fontSizeBody
         palette.buttonText: page.mutedColor
         background: Rectangle { color: "transparent" }
         onClicked: if (sortField !== "") page.sortBy(sortField)
@@ -553,14 +565,14 @@ Rectangle {
             }
             RowLayout {
                 Layout.alignment: Qt.AlignRight
-                Button {
+                ThemedButton {
                     text: qsTr("取消")
                     onClicked: {
                         MetadataEditor.applyPreflightDecision("cancel")
                         preflightDecisionDialog.close()
                     }
                 }
-                Button {
+                ThemedButton {
                     text: qsTr("跳过不支持项继续")
                     enabled: MetadataEditor.supportedCount > 0
                     onClicked: {
@@ -588,7 +600,7 @@ Rectangle {
             id: toolbar
             objectName: "metadataToolbar"
             Layout.fillWidth: true
-            Layout.preferredHeight: 40
+            Layout.preferredHeight: Theme.controlHeightProminent
             spacing: 14
 
             ToolbarAction {
@@ -635,29 +647,21 @@ Rectangle {
                 }
             }
             Item { Layout.fillWidth: true }
-            TextField {
+            ThemedTextField {
                 objectName: "metadataSearchField"
                 visible: false
                 Layout.preferredWidth: 244
-                Layout.preferredHeight: 38
+                Layout.preferredHeight: Theme.controlHeight
                 leftPadding: 14
                 rightPadding: 12
                 placeholderText: qsTr("搜索文件名、标签或路径...")
-                color: Theme.primaryText
-                font.pixelSize: 13
-                background: Rectangle {
-                    color: page.inputColor
-                    radius: 5
-                    border.width: 1
-                    border.color: parent.activeFocus ? Theme.focus : page.borderColor
-                }
                 onTextChanged: page.searchText = text
             }
-            ComboBox {
+            ThemedComboBox {
                 objectName: "metadataStatusFilter"
                 Layout.preferredWidth: page.compactLayout ? 96 : 110
                 Layout.minimumWidth: page.compactLayout ? 86 : 100
-                Layout.preferredHeight: 38
+                Layout.preferredHeight: Theme.controlHeight
                 textRole: "text"
                 valueRole: "value"
                 model: [
@@ -667,12 +671,6 @@ Rectangle {
                     { text: qsTr("已修改"), value: "modified" },
                     { text: qsTr("失败"), value: "failed" }
                 ]
-                background: Rectangle {
-                    color: page.inputColor
-                    radius: 5
-                    border.width: 1
-                    border.color: page.borderColor
-                }
                 onCurrentValueChanged: page.statusFilter = currentValue || "all"
             }
         }
@@ -732,7 +730,7 @@ Rectangle {
                             Label {
                                 text: qsTr("文件列表")
                                 color: Theme.primaryText
-                                font.pixelSize: 15
+                                font.pixelSize: Theme.fontSizeBody
                                 font.weight: Font.DemiBold
                             }
                             Rectangle {
@@ -746,7 +744,7 @@ Rectangle {
                                     anchors.centerIn: parent
                                     text: qsTr("已选 %1").arg(page.selectedIndices.length)
                                     color: Theme.primaryText
-                                    font.pixelSize: 13
+                                    font.pixelSize: Theme.fontSizeBody
                                 }
                             }
                             Rectangle {
@@ -759,7 +757,7 @@ Rectangle {
                                     anchors.centerIn: parent
                                     text: qsTr("总计 %1").arg(MetadataEditor.fileCount)
                                     color: page.mutedColor
-                                    font.pixelSize: 13
+                                    font.pixelSize: Theme.fontSizeBody
                                 }
                             }
                             Item { Layout.fillWidth: true }
@@ -776,7 +774,7 @@ Rectangle {
                                 anchors.leftMargin: 10
                                 anchors.rightMargin: 10
                                 spacing: 8
-                                CheckBox {
+                                ThemedCheckBox {
                                     Layout.preferredWidth: 26
                                     checked: page.displayedIndices.length > 0
                                              && page.displayedIndices.every(function(index) {
@@ -837,7 +835,7 @@ Rectangle {
                                     anchors.leftMargin: 10
                                     anchors.rightMargin: 10
                                     spacing: 8
-                                    CheckBox {
+                                    ThemedCheckBox {
                                         Layout.preferredWidth: 26
                                         checked: page.isSelected(sourceIndex)
                                         onClicked: page.toggleIndex(sourceIndex)
@@ -862,7 +860,7 @@ Rectangle {
                                             Layout.fillWidth: true
                                             text: metadata.fileName || ""
                                             color: Theme.primaryText
-                                            font.pixelSize: 13
+                                            font.pixelSize: Theme.fontSizeBody
                                             elide: Text.ElideRight
                                             ToolTip.visible: fileNameHover.hovered
                                             ToolTip.text: text
@@ -939,7 +937,7 @@ Rectangle {
                             Layout.leftMargin: 10
                             Layout.rightMargin: 14
                             spacing: 10
-                            CheckBox {
+                            ThemedCheckBox {
                                 text: qsTr("全选")
                                 checked: page.displayedIndices.length > 0
                                          && page.selectedIndices.length === page.displayedIndices.length
@@ -956,7 +954,7 @@ Rectangle {
                                       .arg(page.selectedIndices.length)
                                       .arg(MetadataEditor.fileCount)
                                 color: page.mutedColor
-                                font.pixelSize: 13
+                                font.pixelSize: Theme.fontSizeBody
                             }
                             ToolbarAction {
                                 objectName: "metadataExportCurrentListButton"
@@ -1008,13 +1006,13 @@ Rectangle {
                                 Label {
                                     text: qsTr("批量元数据编辑")
                                     color: Theme.primaryText
-                                    font.pixelSize: 16
+                                    font.pixelSize: Theme.fontSizeSection
                                     font.weight: Font.DemiBold
                                 }
                                 Label {
                                     text: qsTr("已选 %1 个文件").arg(page.selectedIndices.length)
                                     color: page.mutedColor
-                                    font.pixelSize: 13
+                                    font.pixelSize: Theme.fontSizeBody
                                 }
                                 Item { Layout.fillWidth: true }
                             }
@@ -1027,12 +1025,12 @@ Rectangle {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 0
                                 spacing: 8
-                                Label { text: qsTr("作用范围"); color: page.mutedColor; font.pixelSize: 12 }
-                                ComboBox {
+                                Label { text: qsTr("作用范围"); color: page.mutedColor; font.pixelSize: Theme.fontSizeCaption }
+                                ThemedComboBox {
                                     id: metadataScopeBox
                                     objectName: "metadataScopeBox"
                                     Layout.preferredWidth: 132
-                                    Layout.preferredHeight: 32
+                                    Layout.preferredHeight: Theme.controlHeight
                                     textRole: "text"
                                     valueRole: "value"
                                     model: [
@@ -1042,31 +1040,19 @@ Rectangle {
                                     ]
                                     currentIndex: 1
                                     onCurrentValueChanged: Qt.callLater(page.refreshFields)
-                                    background: Rectangle {
-                                        color: page.inputColor
-                                        radius: 4
-                                        border.width: 1
-                                        border.color: page.borderColor
-                                    }
                                 }
-                                Label { text: qsTr("处理方式"); color: page.mutedColor; font.pixelSize: 12 }
-                                ComboBox {
+                                Label { text: qsTr("处理方式"); color: page.mutedColor; font.pixelSize: Theme.fontSizeCaption }
+                                ThemedComboBox {
                                     id: metadataProcessingModeBox
                                     objectName: "metadataProcessingModeBox"
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 32
+                                    Layout.preferredHeight: Theme.controlHeight
                                     textRole: "text"
                                     valueRole: "value"
                                     model: [
                                         { text: qsTr("仅修改元数据（流复制）"), value: "metadataOnly" },
                                         { text: qsTr("转换时写入新文件"), value: "convert" }
                                     ]
-                                    background: Rectangle {
-                                        color: page.inputColor
-                                        radius: 4
-                                        border.width: 1
-                                        border.color: page.borderColor
-                                    }
                                 }
                                 ToolButton {
                                     objectName: "metadataThreeStateHelp"
@@ -1090,7 +1076,7 @@ Rectangle {
                                     Layout.fillWidth: true
                                     text: qsTr("未修改字段保持原值；点击清空会删除字段。")
                                     color: page.mutedColor
-                                    font.pixelSize: 12
+                                    font.pixelSize: Theme.fontSizeCaption
                                 }
                                 ToolButton {
                                     objectName: "metadataConversionSettingsButton"
@@ -1151,34 +1137,23 @@ Rectangle {
                                                 text: fieldRow.fieldLabel
                                                 color: Theme.primaryText
                                                 Layout.preferredWidth: 92
-                                                font.pixelSize: 14
+                                                font.pixelSize: Theme.fontSizeBody
                                             }
                                             Item {
                                                 Layout.fillWidth: true
-                                                Layout.preferredHeight: 30
-                                                TextField {
+                                                Layout.preferredHeight: Theme.controlHeight
+                                                ThemedTextField {
                                                     id: valueField
                                                     objectName: "metadataValueField_" + fieldRow.fieldKey
                                                     anchors.fill: parent
                                                     enabled: fieldRow.selectedMode !== "clear"
                                                     rightPadding: fieldRow.fieldKey === "date" ? 38 : 12
                                                     leftPadding: 14
-                                                    color: Theme.primaryText
                                                     placeholderText: fieldRow.selectedMode === "clear"
                                                                        ? qsTr("将清除")
                                                                        : fieldRow.sourceMultiple
                                                                          ? qsTr("多种值")
                                                                          : qsTr("保留原值")
-                                                    font.pixelSize: 14
-                                                    background: Rectangle {
-                                                        color: valueField.enabled
-                                                               ? page.inputColor
-                                                               : Theme.background
-                                                        radius: 4
-                                                        border.width: valueField.activeFocus ? 1.5 : 1
-                                                        border.color: valueField.activeFocus
-                                                                      ? Theme.accent : page.borderColor
-                                                    }
                                                     onTextEdited: fieldRow.selectedMode = text.length > 0
                                                                                   ? "set"
                                                                                   : ((!fieldRow.sourceMultiple
@@ -1240,7 +1215,7 @@ Rectangle {
                                     Label {
                                         text: qsTr("封面（Cover Art）")
                                         color: Theme.primaryText
-                                        font.pixelSize: 14
+                                        font.pixelSize: Theme.fontSizeBody
                                         font.weight: Font.DemiBold
                                     }
                                     Rectangle {
@@ -1278,7 +1253,7 @@ Rectangle {
                                                     details.fileName || qsTr("内嵌封面"))
                                               : qsTr("当前封面：无")
                                         color: page.mutedColor
-                                        font.pixelSize: 12
+                                        font.pixelSize: Theme.fontSizeCaption
                                         elide: Text.ElideRight
                                     }
                                     Label {
@@ -1291,7 +1266,7 @@ Rectangle {
                                               .arg(details.mimeType || qsTr("未知格式"))
                                               .arg(page.formatFileSize(details.sizeBytes))
                                         color: page.mutedColor
-                                        font.pixelSize: 11
+                                        font.pixelSize: Theme.fontSizeCaption
                                         elide: Text.ElideRight
                                     }
                                     ToolbarAction {
@@ -1341,7 +1316,7 @@ Rectangle {
                                         Label {
                                             text: qsTr("修改摘要（预览结果）")
                                             color: Theme.primaryText
-                                            font.pixelSize: 15
+                                            font.pixelSize: Theme.fontSizeBody
                                             font.weight: Font.DemiBold
                                         }
                                         Item { Layout.fillWidth: true }
@@ -1378,7 +1353,7 @@ Rectangle {
                                                 Layout.fillWidth: true
                                                 text: modelData
                                                 color: page.mutedColor
-                                                font.pixelSize: 12
+                                                font.pixelSize: Theme.fontSizeCaption
                                                 elide: Text.ElideRight
                                             }
                                         }
@@ -1393,7 +1368,7 @@ Rectangle {
                                               .arg(MetadataEditor.unsupportedCount)
                                               .arg(MetadataEditor.cancelledCount)
                                         color: Theme.accent
-                                        font.pixelSize: 12
+                                        font.pixelSize: Theme.fontSizeCaption
                                     }
                                     Repeater {
                                         model: MetadataEditor.results
@@ -1423,7 +1398,7 @@ Rectangle {
                                                              ? qsTr(" · 成功") : qsTr(" · 失败"))
                                                     color: modelData.success
                                                            ? Theme.success : Theme.error
-                                                    font.pixelSize: 12
+                                                    font.pixelSize: Theme.fontSizeCaption
                                                     font.weight: Font.DemiBold
                                                     elide: Text.ElideMiddle
                                                 }
@@ -1432,7 +1407,7 @@ Rectangle {
                                                     text: page.resultDetailText(modelData)
                                                     color: modelData.success
                                                            ? page.mutedColor : Theme.primaryText
-                                                    font.pixelSize: 11
+                                                    font.pixelSize: Theme.fontSizeCaption
                                                     wrapMode: Text.Wrap
                                                 }
                                             }
@@ -1456,43 +1431,29 @@ Rectangle {
                                     value: MetadataEditor.progress
                                 }
                                 Item { Layout.fillWidth: !MetadataEditor.busy }
-                                Button {
+                                ThemedButton {
                                     id: applyButton
                                     objectName: "metadataApplyButton"
                                     Layout.preferredWidth: 214
-                                    Layout.preferredHeight: 42
+                                    Layout.preferredHeight: Theme.controlHeightProminent
                                     text: qsTr("应用修改")
                                     enabled: page.targetCount() > 0
                                              && page.configuredEditCount() > 0
                                              && !MetadataEditor.busy
-                                    palette.buttonText: Theme.accentText
-                                    background: Rectangle {
-                                        radius: 5
-                                        color: !applyButton.enabled ? Theme.disabled
-                                             : applyButton.down ? Theme.accentPressed
-                                             : applyButton.hovered ? Theme.accentHover
-                                                                   : Theme.accent
-                                    }
+                                    primary: true
+                                    prominent: true
                                     onClicked: page.applyEdits()
                                 }
-                                Button {
+                                ThemedButton {
                                     id: cancelButton
                                     objectName: "metadataCancelButton"
                                     visible: true
                                     enabled: MetadataEditor.busy
                                     Layout.preferredWidth: 198
-                                    Layout.preferredHeight: 42
+                                    Layout.preferredHeight: Theme.controlHeightProminent
                                     text: qsTr("取消")
                                     icon.source: Theme.icon("restore-line")
-                                    palette.buttonText: Theme.primaryText
-                                    background: Rectangle {
-                                        radius: 5
-                                        color: cancelButton.down ? Theme.surfacePressed
-                                             : cancelButton.hovered ? Theme.hoverSurface
-                                                                    : Theme.elevated
-                                        border.width: 1
-                                        border.color: page.borderColor
-                                    }
+                                    prominent: true
                                     onClicked: MetadataEditor.cancel()
                                 }
                             }

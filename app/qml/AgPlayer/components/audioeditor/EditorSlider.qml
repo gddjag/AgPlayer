@@ -5,9 +5,9 @@ import AgPlayer
 Slider {
     id: control
 
-    property int visibleGrooveThickness: 4
-    property int thumbDiameter: 14
-    property int pointerHitExtent: 28
+    property int visibleGrooveThickness: Theme.sliderTrackHeight
+    property int thumbDiameter: Theme.sliderHandleExtent
+    property int pointerHitExtent: Theme.minimumInteractionExtent
     property color editorAccentColor: Theme.accent
     property color editorGrooveColor: Theme.border
     property color editorThumbColor: Theme.textPrimary

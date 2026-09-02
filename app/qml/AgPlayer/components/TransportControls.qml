@@ -19,6 +19,8 @@ RowLayout {
     spacing: compact ? 4 : dense ? 8 : 16
 
     function playbackModeName() {
+        if (!root.playback)
+            return qsTr("播放模式")
         switch (root.playback.mode) {
         case root.playback.Sequential: return qsTr("顺序播放")
         case root.playback.Shuffle: return qsTr("随机播放")
@@ -34,6 +36,7 @@ RowLayout {
                  && root.waveformPlacement === "beforePrevious"
                  && !root.compact
         flat: true
+        enabled: root.playback !== null
         icon.source: Theme.icon("equalizer-line")
         icon.color: Theme.iconPrimary
         icon.width: 20; icon.height: 20
@@ -41,20 +44,35 @@ RowLayout {
         Accessible.name: qsTr("十八段图形均衡器")
         onClicked: root.openEqualizerRequested()
         ToolTip.text: Accessible.name; ToolTip.visible: hovered
-        background: null
+        background: Rectangle {
+            color: parent.down ? Theme.surfacePressed
+                : parent.hovered ? Theme.surfaceHover : "transparent"
+            border.width: parent.activeFocus ? 2 : 0
+            border.color: Theme.focus
+            radius: Theme.radiusSm
+            Behavior on color { ColorAnimation { duration: 100 } }
+        }
     }
     Component {
         id: waveformModeAction
         ToolButton {
             objectName: "waveformModeButton"
             flat: true
+            enabled: root.playback !== null
             icon.source: Theme.icon("waveform-switch")
             icon.color: Theme.iconPrimary
             icon.width: 20; icon.height: 20
             Accessible.name: qsTr("Change waveform mode")
             onClicked: SettingsController.cycleWaveformMode()
             ToolTip.text: Accessible.name; ToolTip.visible: hovered
-            background: null
+            background: Rectangle {
+                color: parent.down ? Theme.surfacePressed
+                    : parent.hovered ? Theme.surfaceHover : "transparent"
+                border.width: parent.activeFocus ? 2 : 0
+                border.color: Theme.focus
+                radius: Theme.radiusSm
+                Behavior on color { ColorAnimation { duration: 100 } }
+            }
         }
     }
     Loader {
@@ -65,11 +83,12 @@ RowLayout {
     ToolButton {
         objectName: "previousButton"
         flat: true
+        enabled: root.playback !== null
         icon.source: Theme.icon("skip-back-fill")
         icon.color: Theme.iconPrimary
         icon.width: 24; icon.height: 24
         Accessible.name: qsTr("Previous track")
-        onClicked: root.playback.previous()
+        onClicked: if (root.playback) root.playback.previous()
         ToolTip.text: Accessible.name; ToolTip.visible: hovered
         background: Rectangle {
             color: root.highlightKeyboardFocus
@@ -87,14 +106,17 @@ RowLayout {
         objectName: "playPauseButton"
         Layout.preferredWidth: 52; Layout.preferredHeight: 52
         flat: true
-        icon.source: root.playback.state === root.playback.Playing
+        icon.source: root.playback
+                     && root.playback.state === root.playback.Playing
                      ? Theme.icon("pause-fill") : Theme.icon("play-fill")
         icon.color: Theme.iconPrimary
         icon.width: 24; icon.height: 24
         scale: down ? 0.95 : hovered ? 1.05 : 1.0
-        Accessible.name: root.playback.state === root.playback.Playing
-                         ? qsTr("Pause") : qsTr("Play")
-        onClicked: root.playback.togglePlayback()
+        enabled: root.playback !== null
+        Accessible.name: root.playback
+                         && root.playback.state === root.playback.Playing
+                          ? qsTr("Pause") : qsTr("Play")
+        onClicked: if (root.playback) root.playback.togglePlayback()
         ToolTip.text: Accessible.name; ToolTip.visible: hovered
         Behavior on scale { NumberAnimation { duration: playPauseButton.down ? 150 : 200; easing.type: Easing.OutCubic } }
         background: Rectangle {
@@ -106,7 +128,8 @@ RowLayout {
                           && root.highlightKeyboardFocus ? 4 : 3
             border.color: playPauseButton.activeFocus
                           && root.highlightKeyboardFocus ? Theme.focus
-                          : root.playback.state === root.playback.Playing
+                          : root.playback
+                            && root.playback.state === root.playback.Playing
                             ? Theme.playRingPlaying : Theme.playRingPaused
             Behavior on color { ColorAnimation { duration: 120 } }
         }
@@ -114,11 +137,12 @@ RowLayout {
     ToolButton {
         objectName: "nextButton"
         flat: true
+        enabled: root.playback !== null
         icon.source: Theme.icon("skip-forward-fill")
         icon.color: Theme.iconPrimary
         icon.width: 24; icon.height: 24
         Accessible.name: qsTr("Next track")
-        onClicked: root.playback.next()
+        onClicked: if (root.playback) root.playback.next()
         ToolTip.text: Accessible.name; ToolTip.visible: hovered
         background: Rectangle {
             color: root.highlightKeyboardFocus
@@ -135,7 +159,10 @@ RowLayout {
         objectName: "modeButton"
         visible: root.showPlaybackMode
         flat: true
+        enabled: root.playback !== null
         icon.source: {
+            if (!root.playback)
+                return Theme.icon("play-order-line")
             switch (root.playback.mode) {
             case root.playback.Sequential: return Theme.icon("play-order-line")
             case root.playback.RepeatOne: return Theme.icon("repeat-one-line-alt")
@@ -146,9 +173,16 @@ RowLayout {
         icon.color: Theme.iconPrimary
         icon.width: 20; icon.height: 20
         Accessible.name: root.playbackModeName()
-        onClicked: root.playback.cycleMode()
+        onClicked: if (root.playback) root.playback.cycleMode()
         ToolTip.text: Accessible.name; ToolTip.visible: hovered
-        background: null
+        background: Rectangle {
+            color: parent.down ? Theme.surfacePressed
+                : parent.hovered ? Theme.surfaceHover : "transparent"
+            border.width: parent.activeFocus ? 2 : 0
+            border.color: Theme.focus
+            radius: Theme.radiusSm
+            Behavior on color { ColorAnimation { duration: 100 } }
+        }
     }
     Loader {
         active: root.showWaveformMode && !root.compact
@@ -161,6 +195,7 @@ RowLayout {
                  && root.waveformPlacement === "afterMode"
                  && !root.compact
         flat: true
+        enabled: root.playback !== null
         icon.source: Theme.icon("equalizer-line")
         icon.color: Theme.iconPrimary
         icon.width: 20
@@ -170,6 +205,13 @@ RowLayout {
         onClicked: root.openEqualizerRequested()
         ToolTip.text: Accessible.name
         ToolTip.visible: hovered
-        background: null
+        background: Rectangle {
+            color: parent.down ? Theme.surfacePressed
+                : parent.hovered ? Theme.surfaceHover : "transparent"
+            border.width: parent.activeFocus ? 2 : 0
+            border.color: Theme.focus
+            radius: Theme.radiusSm
+            Behavior on color { ColorAnimation { duration: 100 } }
+        }
     }
 }

@@ -182,7 +182,7 @@ Rectangle {
             leftPadding: control.indicator.width + 8
             verticalAlignment: Text.AlignVCenter
             color: control.enabled ? Theme.primaryText : Theme.secondaryText
-            font.pixelSize: 13
+            font.pixelSize: Theme.fontSizeBody
         }
     }
 
@@ -204,7 +204,7 @@ Rectangle {
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
             color: control.enabled ? Theme.primaryText : Theme.secondaryText
-            font.pixelSize: 13
+            font.pixelSize: Theme.fontSizeBody
         }
         background: Rectangle {
             color: Theme.elevated
@@ -228,13 +228,16 @@ Rectangle {
             Layout.fillWidth: true
             text: qsTr("转换设置")
             color: Theme.primaryText
-            font.pixelSize: 16
+            font.pixelSize: Theme.fontSizeSection
             font.weight: Font.DemiBold
         }
-        ToolButton {
+        ThemedIconButton {
             objectName: "formatSettingsAdvancedToggle"
             Layout.alignment: Qt.AlignRight
             icon.source: Theme.icon(root.isExpanded ? "arrow-up-s-line" : "arrow-go-forward-line")
+            iconSource: icon.source
+            accessibleName: root.isExpanded
+                ? qsTr("收起转换设置") : qsTr("展开转换设置")
             onClicked: {
                 if (!root.forceCollapsed)
                     root.expanded = !root.expanded
@@ -243,6 +246,8 @@ Rectangle {
     }
 
     ScrollView {
+        id: settingsScroll
+        objectName: "formatSettingsScroll"
         visible: root.isExpanded
         anchors.top: settingsHeader.bottom
         anchors.bottom: parent.bottom
@@ -250,9 +255,11 @@ Rectangle {
         anchors.right: parent.right
         contentWidth: availableWidth
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+        ScrollBar.vertical.policy: ScrollBar.AsNeeded
+        bottomPadding: Theme.spacingMd
 
         ColumnLayout {
-            width: parent.width
+            width: settingsScroll.availableWidth
             spacing: 4
 
             ColumnLayout {
@@ -262,7 +269,7 @@ Rectangle {
                 Layout.leftMargin: 16
                 Layout.rightMargin: 16
                 spacing: 4
-                Text { text: qsTr("A. 输出格式"); color: Theme.primaryText; font.pixelSize: 13 }
+                Text { text: qsTr("A. 输出格式"); color: Theme.primaryText; font.pixelSize: Theme.fontSizeBody }
                 GridLayout {
                     id: outputFormatGrid
                     objectName: "formatOutputFormatGrid"
@@ -295,10 +302,12 @@ Rectangle {
                             }
                             contentItem: Text {
                                 text: parent.text
-                                color: parent.enabled ? Theme.primaryText : Theme.secondaryText
+                                color: !parent.enabled ? Theme.secondaryText
+                                    : parent.checked ? Theme.activeSelectionText
+                                                     : Theme.primaryText
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
-                                font.pixelSize: 13
+                                font.pixelSize: Theme.fontSizeBody
                             }
                         }
                     }
@@ -316,7 +325,7 @@ Rectangle {
                 columns: 2
                 columnSpacing: 11
                 rowSpacing: 4
-                Text { text: qsTr("B. 编码参数"); color: Theme.primaryText; font.pixelSize: 13; Layout.columnSpan: 2 }
+                Text { text: qsTr("B. 编码参数"); color: Theme.primaryText; font.pixelSize: Theme.fontSizeBody; Layout.columnSpan: 2 }
                 Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("编码器"); color: Theme.secondaryText }
                 ReferenceComboBox { objectName: "formatEncoderBox"; Layout.fillWidth: true; Layout.preferredHeight: 32; model: [converter.currentCapability.encoderLabel || "--"] }
                 Text { visible: bitrateModeRow.visible; Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("码率模式"); color: Theme.secondaryText }
@@ -345,7 +354,13 @@ Rectangle {
                                 root.converter.bitrateMode = modelData.key
                             }
                         background: Rectangle { color: parent.checked ? Theme.activeSelection : Theme.elevated; border.color: parent.checked ? Theme.accent : Theme.border; radius: 5 }
-                            contentItem: Text { text: parent.text; color: Theme.primaryText; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                            contentItem: Text {
+                                text: parent.text
+                                color: parent.checked ? Theme.activeSelectionText
+                                                      : Theme.primaryText
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
                         }
                     }
                 }
@@ -459,10 +474,10 @@ Rectangle {
                 columns: 2
                 columnSpacing: 11
                 rowSpacing: 4
-                Text { text: qsTr("C. 输出选项"); color: Theme.primaryText; font.pixelSize: 13; Layout.columnSpan: 2 }
+                Text { text: qsTr("C. 输出选项"); color: Theme.primaryText; font.pixelSize: Theme.fontSizeBody; Layout.columnSpan: 2 }
                 Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("输出目录"); color: Theme.secondaryText }
                 RowLayout {
-                    TextField {
+                    ThemedTextField {
                         objectName: "formatOutputDirectoryRow"
                         Layout.fillWidth: true
                         Layout.preferredHeight: 32
@@ -470,7 +485,12 @@ Rectangle {
                         placeholderText: qsTr("选择输出目录")
                         onTextEdited: root.outputDirectoryEdited(text)
                     }
-                    ToolButton { icon.source: Theme.icon("folder-open-line"); onClicked: root.chooseOutputDirectory() }
+                    ThemedIconButton {
+                        icon.source: Theme.icon("folder-open-line")
+                        iconSource: icon.source
+                        accessibleName: qsTr("选择输出目录")
+                        onClicked: root.chooseOutputDirectory()
+                    }
                 }
                 Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("文件冲突策略"); color: Theme.secondaryText }
                 ReferenceComboBox { id: conflictBox; Layout.fillWidth: true; Layout.preferredHeight: 32; model: [{text:qsTr("自动序号"),value:"auto-number"},{text:qsTr("跳过"),value:"skip"},{text:qsTr("覆盖"),value:"overwrite"},{text:qsTr("询问"),value:"ask"}]; textRole:"text"; valueRole:"value" }
@@ -485,7 +505,7 @@ Rectangle {
                 Layout.fillWidth: true
                 Layout.leftMargin: 16
                 Layout.rightMargin: 16
-                Layout.topMargin: 32
+                Layout.topMargin: Theme.spacingMd
                 Layout.bottomMargin: 6
                 Layout.preferredHeight: 54
                 color: Theme.elevated
@@ -495,7 +515,7 @@ Rectangle {
                     anchors.fill: parent
                     anchors.margins: 12
                     ThemedIcon { source: Theme.icon("information-line"); tint: Theme.accent; sourceSize.width: 20; sourceSize.height: 20 }
-                    Text { Layout.fillWidth: true; text: qsTr("提示：转换任务采用本地处理模式。\n受系统性能影响，实际编码参数可能存在差异。"); color: Theme.secondaryText; wrapMode: Text.WordWrap; font.pixelSize: 12 }
+                    Text { Layout.fillWidth: true; text: qsTr("提示：转换任务采用本地处理模式。\n受系统性能影响，实际编码参数可能存在差异。"); color: Theme.secondaryText; wrapMode: Text.WordWrap; font.pixelSize: Theme.fontSizeCaption }
                 }
             }
 
@@ -504,7 +524,7 @@ Rectangle {
                 Layout.fillWidth: true
                 Layout.leftMargin: 16
                 Layout.rightMargin: 16
-                Layout.topMargin: 40
+                Layout.topMargin: Theme.spacingLg
                 Layout.bottomMargin: 14
                 columns: 2
                 columnSpacing: 10
@@ -512,13 +532,13 @@ Rectangle {
                 Text {
                     text: qsTr("高级设置")
                     color: Theme.primaryText
-                    font.pixelSize: 13
+                    font.pixelSize: Theme.fontSizeBody
                     Layout.columnSpan: 2
                 }
                 Text {
                     text: qsTr("并发数可在任务总进度旁调整")
                     color: Theme.secondaryText
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontSizeCaption
                     Layout.columnSpan: 2
                 }
             }

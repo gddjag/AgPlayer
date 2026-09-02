@@ -104,7 +104,7 @@ Item {
             anchors.margins: 18
             text: qsTr("当前播放队列")
             color: Theme.primaryText
-            font.pixelSize: 15
+            font.pixelSize: Theme.fontSizeBody
             font.weight: Font.DemiBold
         }
 
@@ -196,7 +196,7 @@ Item {
                     color: row.trackId === (root.playback
                                             ? root.playback.currentTrackId : "")
                            ? Theme.iconAccent : Theme.primaryText
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontSizeCaption
                     font.weight: Font.Medium
                     elide: Text.ElideRight
                 }
@@ -209,7 +209,7 @@ Item {
                     text: root.durationText(row.details
                                             ? row.details.durationMs : 0)
                     color: Theme.secondaryText
-                    font.pixelSize: 10
+                    font.pixelSize: Theme.fontSizeCaption
                 }
 
                 MouseArea {

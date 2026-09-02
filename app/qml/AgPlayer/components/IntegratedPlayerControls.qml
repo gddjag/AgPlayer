@@ -54,7 +54,15 @@ Item {
         onClicked: root.togglePlaylistRequested()
         ToolTip.text: Accessible.name
         ToolTip.visible: hovered
-        background: null
+        background: Rectangle {
+            color: parent.down ? Theme.surfacePressed
+                : WindowController.listWindowVisible ? Theme.accentSoft
+                : parent.hovered ? Theme.surfaceHover : "transparent"
+            border.width: parent.activeFocus ? 2 : 0
+            border.color: Theme.focus
+            radius: Theme.radiusSm
+            Behavior on color { ColorAnimation { duration: 100 } }
+        }
     }
 
     Item {
@@ -92,7 +100,14 @@ Item {
             onClicked: WindowController.showAudioTools()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
-            background: null
+            background: Rectangle {
+                color: parent.down ? Theme.surfacePressed
+                    : parent.hovered ? Theme.surfaceHover : "transparent"
+                border.width: parent.activeFocus ? 2 : 0
+                border.color: Theme.focus
+                radius: Theme.radiusSm
+                Behavior on color { ColorAnimation { duration: 100 } }
+            }
         }
 
         ExperienceActions {
@@ -122,7 +137,7 @@ Item {
         id: rightActions
         objectName: "integratedRightActions"
         anchors.right: parent.right
-        anchors.rightMargin: 24
+        anchors.rightMargin: 16
         anchors.verticalCenter: parent.verticalCenter
         spacing: root.actionSpacing
 
@@ -140,7 +155,14 @@ Item {
             onClicked: root.openThemePopup()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
-            background: null
+            background: Rectangle {
+                color: parent.down ? Theme.surfacePressed
+                    : parent.hovered ? Theme.surfaceHover : "transparent"
+                border.width: parent.activeFocus ? 2 : 0
+                border.color: Theme.focus
+                radius: Theme.radiusSm
+                Behavior on color { ColorAnimation { duration: 100 } }
+            }
         }
         ExperienceActions {
             objectName: "immersiveExperienceActions"
@@ -162,7 +184,14 @@ Item {
             onClicked: WindowController.showMini()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
-            background: null
+            background: Rectangle {
+                color: parent.down ? Theme.surfacePressed
+                    : parent.hovered ? Theme.surfaceHover : "transparent"
+                border.width: parent.activeFocus ? 2 : 0
+                border.color: Theme.focus
+                radius: Theme.radiusSm
+                Behavior on color { ColorAnimation { duration: 100 } }
+            }
         }
     }
 
@@ -170,7 +199,7 @@ Item {
         id: playerShellMenu
         objectName: "playerShellMenu"
         parent: root.Window.window ? root.Window.window.contentItem : root
-        width: 200
+        width: 184
 
         MenuItem {
             objectName: "classicShellMenuItem"

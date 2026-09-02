@@ -191,8 +191,19 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/ColorField.qml
         qml/AgPlayer/components/ThemedIcon.qml
         qml/AgPlayer/components/ThemedMenuItem.qml
+        qml/AgPlayer/components/ThemedButton.qml
+        qml/AgPlayer/components/ThemedIconButton.qml
+        qml/AgPlayer/components/ThemedTextField.qml
+        qml/AgPlayer/components/ThemedSlider.qml
+        qml/AgPlayer/components/ThemedListRow.qml
+        qml/AgPlayer/components/ThemedPanel.qml
+        qml/AgPlayer/components/ThemedTabButton.qml
+        qml/AgPlayer/components/ThemedDialog.qml
+        qml/AgPlayer/components/ThemedToolTip.qml
+        qml/AgPlayer/components/ThemedScrollBar.qml
         qml/AgPlayer/components/ThemedSwitch.qml
         qml/AgPlayer/components/ThemedCheckBox.qml
+        qml/AgPlayer/components/ThemedRadioButton.qml
         qml/AgPlayer/components/ThemedRangeSlider.qml
         qml/AgPlayer/components/ThemedComboBox.qml
         qml/AgPlayer/components/tools/FormatConvertPage.qml

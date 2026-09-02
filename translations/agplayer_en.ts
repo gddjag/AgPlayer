@@ -581,6 +581,8 @@
 <context>
     <name>EditorCommandBar</name>
     <message><source>降噪</source><translation>Noise reduction</translation></message>
+    <message><source>音轨静音</source><translation>Mute track</translation></message>
+    <message><source>音轨独奏</source><translation>Solo track</translation></message>
     <message>
         <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="61"/>
         <source>打开</source>

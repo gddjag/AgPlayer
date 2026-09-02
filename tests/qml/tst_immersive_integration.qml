@@ -219,6 +219,11 @@ TestCase {
                             PlayerExperienceController.lyricDepth
                                     = endpoints[depthIndex]
                             var stage = currentLine.parent
+                            var state = label + " placement=" + placement
+                                    + " x=" + endpoints[xIndex]
+                                    + " y=" + endpoints[yIndex]
+                                    + " size=" + sizes[sizeIndex]
+                                    + " depth=" + endpoints[depthIndex]
                             tryVerify(function() {
                                 stage.forceLayout()
                                 var expectedCurrentY = previousLine.visible
@@ -234,12 +239,7 @@ TestCase {
                                         && (!nextLine.visible
                                             || nextLine.y + nextLine.height
                                                <= panel.height + 0.5)
-                            }, 200)
-                            var state = label + " placement=" + placement
-                                    + " x=" + endpoints[xIndex]
-                                    + " y=" + endpoints[yIndex]
-                                    + " size=" + sizes[sizeIndex]
-                                    + " depth=" + endpoints[depthIndex]
+                            }, 200, state + " column layout")
                             verifyMappedLyricBounds(previousLine, surface,
                                                     waveform,
                                                     state + " previous")

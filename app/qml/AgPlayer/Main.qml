@@ -13,7 +13,7 @@ ApplicationWindow {
     minimumWidth: SettingsController.playerShellMode === 1 ? 1180
                   : SettingsController.playerShellMode === 2 ? 1000 : 612
     minimumHeight: SettingsController.playerShellMode === 1 ? 720
-                   : SettingsController.playerShellMode === 2 ? 720 : 228
+                   : SettingsController.playerShellMode === 2 ? 720 : 232
     onClosing: function(close) {
         close.accepted = false
         WindowController.requestClose()
@@ -349,7 +349,7 @@ ApplicationWindow {
 
                 TitleBar {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 36
+                    Layout.preferredHeight: Theme.titleBarHeight
                     window: mainWindow
                     showBrand: true
                     onOpenSettings: mainWindow.openSettingsPage()

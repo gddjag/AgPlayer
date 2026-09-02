@@ -34,33 +34,39 @@ QtObject {
                 * waveformProgressFraction(positionMs, durationMs)
     }
 
-    // Fixed three-mode palette. Custom seeds, generated gradients and glass
-    // derivation are intentionally absent.
-    readonly property color background: isLight ? "#F3F3F3" : "#071018"
-    readonly property color surface: isLight ? "#FFFFFF" : "#0B1721"
-    readonly property color surfaceElevated: isLight ? "#F9F9F9" : "#101E28"
-    readonly property color surfaceHover: isLight ? "#EAEAEA" : "#172A37"
-    readonly property color surfacePressed: isLight ? "#DEDEDE" : "#1D3443"
-    readonly property color textPrimary: isLight ? "#1B1B1B" : "#FFFFFF"
-    readonly property color textSecondary: isLight ? "#5D5D5D" : "#CFCFCF"
-    readonly property color textTertiary: isLight ? "#767676" : "#9EABB5"
-    readonly property color textDisabled: isLight ? "#9A9A9A" : "#73808A"
-    readonly property color opaqueBorder: isLight ? "#D1D1D1" : "#203340"
-    readonly property color borderStrong: isLight ? "#AFAFAF" : "#385064"
-    readonly property color opaqueDivider: isLight ? "#DEDEDE" : "#1A2A35"
-    readonly property color disabled: isLight ? "#E4E4E4" : "#15232D"
+    // Codex-like window hierarchy with WeChat-like neutral density. Pages use
+    // semantic surfaces instead of inferring hierarchy from raw colours.
+    readonly property color titleBarSurface: isLight ? "#E5E8ED" : "#202329"
+    readonly property color navigationSurface: isLight ? "#ECEEF2" : "#24272D"
+    readonly property color contentSurface: isLight ? "#FAFAFB" : "#181A1D"
+    readonly property color surface: isLight ? "#FFFFFF" : "#1E2125"
+    readonly property color surfaceElevated: isLight ? "#FFFFFF" : "#25282E"
+    readonly property color surfaceHover: isLight ? "#E4E7EC" : "#2B2F35"
+    readonly property color surfacePressed: isLight ? "#D9DDE4" : "#343941"
+    readonly property color selectedSurface: isLight ? "#E8E8FB" : "#302A45"
+    readonly property color background: contentSurface
+    readonly property color textPrimary: isLight ? "#202328" : "#F2F3F5"
+    readonly property color textSecondary: isLight ? "#5E646D" : "#B7BBC2"
+    readonly property color textTertiary: isLight ? "#898F98" : "#858B95"
+    readonly property color textDisabled: isLight ? "#ADB2BA" : "#666C75"
+    readonly property color opaqueBorder: isLight ? "#D5D9E0" : "#353941"
+    readonly property color borderStrong: isLight ? "#B9BEC7" : "#4A505A"
+    readonly property color opaqueDivider: opaqueBorder
+    readonly property color disabled: isLight ? "#E5E8ED" : "#2A2D32"
 
-    readonly property color accent: "#007AFF"
-    readonly property color accentHover: "#1A86FF"
-    readonly property color accentPressed: "#0068D9"
-    readonly property color accentSoft: isLight ? "#1F007AFF" : "#33007AFF"
+    // Brand emphasis intentionally differs by appearance: purple on dark,
+    // vivid blue on light. Domain colours remain independent below.
+    readonly property color accent: isLight ? "#1F1ED9" : "#7657E8"
+    readonly property color accentHover: isLight ? "#3433E5" : "#886EF0"
+    readonly property color accentPressed: isLight ? "#1716B8" : "#6345CF"
+    readonly property color accentSoft: isLight ? "#1FE8E8FB" : "#66302A45"
     readonly property color accentText: "#FFFFFF"
     readonly property color accentBorder: accent
     readonly property color focus: accent
     readonly property color highlight: accent
     readonly property color highlightHover: accentHover
     readonly property color highlightPressed: accentPressed
-    readonly property color highlightSoft: isLight ? "#26007AFF" : "#3D007AFF"
+    readonly property color highlightSoft: accentSoft
     readonly property color highlightText: "#FFFFFF"
     readonly property color highlightBorder: accent
 
@@ -86,12 +92,13 @@ QtObject {
     readonly property color activeSelectionText: highlightText
     readonly property color inactiveSelection: highlight
     readonly property color inactiveSelectionText: highlightText
-    readonly property color currentTrackSurface: "#578F57C9"
+    readonly property color currentTrackSurface: isLight ? "#DDE8E8FB"
+                                                        : "#CC302A45"
     readonly property color currentTrackInactiveSurface: currentTrackSurface
     readonly property color currentTrackSelection: currentTrackSurface
-    readonly property color selectedTrackSelection: "#2E007AFF"
+    readonly property color selectedTrackSelection: accentSoft
     readonly property color currentTrackSelectionInactive: currentTrackSurface
-    readonly property color selectedTrackSelectionInactive: "#2E007AFF"
+    readonly property color selectedTrackSelectionInactive: accentSoft
     readonly property color onCyanText: accentText
     readonly property color onBrandGradientText: "#FFFFFF"
     readonly property color iconPrimary: primaryText
@@ -102,25 +109,22 @@ QtObject {
     // Shared compatibility tokens for the integrated, immersive and editor
     // surfaces. They are derived only from the fixed light/dark palette so
     // every shell changes together without reviving custom theme state.
-    readonly property color controlSubtleBorder: isLight ? "#73D1D1D1"
-                                                         : "#A6203340"
+    readonly property color controlSubtleBorder: opaqueBorder
     readonly property color controlHandle: accentText
     readonly property color controlHandleShadow: "#29000000"
-    readonly property color selectionGlassFill: "#AD007AFF"
-    readonly property color selectionGlassHover: "#AD1A86FF"
-    readonly property color selectionGlassPressed: "#AD0068D9"
-    readonly property color selectionGlassBorder: "#47FFFFFF"
-    readonly property color subtleGlassFill: isLight ? "#47FFFFFF" : "#0DFFFFFF"
-    readonly property color subtleGlassHover: isLight ? "#6BFFFFFF" : "#17FFFFFF"
-    readonly property color subtleGlassActive: isLight ? "#61007AFF" : "#2E007AFF"
-    readonly property color subtleGlassBorder: isLight ? "#29000000" : "#33FFFFFF"
-    readonly property color integratedSoftOutline: isLight ? "#1A000000"
-                                                           : "#1AFFFFFF"
+    readonly property color selectionGlassFill: accent
+    readonly property color selectionGlassHover: accentHover
+    readonly property color selectionGlassPressed: accentPressed
+    readonly property color selectionGlassBorder: accentBorder
+    readonly property color subtleGlassFill: surfaceElevated
+    readonly property color subtleGlassHover: surfaceHover
+    readonly property color subtleGlassActive: selectedSurface
+    readonly property color subtleGlassBorder: opaqueBorder
+    readonly property color integratedSoftOutline: opaqueBorder
     readonly property color integratedSliderHandle: accentText
-    readonly property color integratedGlassHighlight: "#29FFFFFF"
-    readonly property color navigatorGlassTrack: isLight ? "#12000000"
-                                                         : "#14FFFFFF"
-    readonly property color navigatorGlassThumb: "#47007AFF"
+    readonly property color integratedGlassHighlight: surfaceHover
+    readonly property color navigatorGlassTrack: opaqueDivider
+    readonly property color navigatorGlassThumb: accentSoft
     readonly property color glassSurface: surface
     readonly property color glassSurfaceElevated: surfaceElevated
     readonly property color glassSurfaceHover: surfaceHover
@@ -149,13 +153,13 @@ QtObject {
 
     readonly property color favoriteRed: "#FF334D"
     readonly property color ratingGold: "#FF9800"
-    readonly property color listWorkspaceSurface: isLight ? "#FCFAFD" : "#06101F"
-    readonly property color listWorkspaceBorder: isLight ? "#B8A9BC" : "#60475F"
-    readonly property color listDivider: isLight ? "#D8CFDC" : "#33283D"
-    readonly property color listHeaderSurface: isLight ? "#F4EFF6" : "#091728"
-    readonly property color listSelectedSurface: isLight ? "#E7DCEF" : "#231238"
-    readonly property color tagAddSurface: isLight ? "#EEE2F3" : "#241039"
-    readonly property color tagSecondaryText: isLight ? "#745B43" : "#C8A77D"
+    readonly property color listWorkspaceSurface: contentSurface
+    readonly property color listWorkspaceBorder: opaqueBorder
+    readonly property color listDivider: opaqueDivider
+    readonly property color listHeaderSurface: isLight ? "#F4F5F7" : "#1D2024"
+    readonly property color listSelectedSurface: selectedSurface
+    readonly property color tagAddSurface: selectedSurface
+    readonly property color tagSecondaryText: textSecondary
     readonly property color listWaveformMono: isLight ? "#6B5A70" : "#C7B8CB"
     readonly property color tagPillSurface: isLight ? "#B8FFFFFF" : "#D11A2B3B"
     readonly property color tagPillHoverSurface: isLight ? "#E0DEEDF7" : "#EB213D54"
@@ -167,9 +171,10 @@ QtObject {
     readonly property color tagPillSecondaryText: isLight ? "#526B7C" : "#B9CCDA"
     readonly property color tagPillShadow: isLight ? "#241A2E3D" : "#4D000000"
 
-    readonly property int radiusSm: 8
-    readonly property int radiusMd: 12
-    readonly property int radiusLg: 18
+    readonly property int radiusXs: 4
+    readonly property int radiusSm: 6
+    readonly property int radiusMd: 8
+    readonly property int radiusLg: 8
     readonly property int windowRadius: Qt.platform.os === "osx" ? 10 : 8
     readonly property int spacingXs: 4
     readonly property int spacingSm: 8
@@ -177,11 +182,44 @@ QtObject {
     readonly property int spacingLg: 16
     readonly property int spacingXl: 24
     readonly property int spacing2Xl: 32
+    readonly property int fontSizeCaption: 12
+    readonly property int fontSizeMeta: 12
+    readonly property int fontSizeBody: 14
+    readonly property int fontSizeBodyStrong: 14
+    readonly property int fontSizeSection: 16
+    readonly property int fontSizePageTitle: 20
+    readonly property int titleBarHeight: 40
+    readonly property int navigationWidthCompact: 192
+    readonly property int navigationWidth: 216
+    readonly property int navigationWidthExpanded: 240
+    readonly property int playerInspectorWidth: 280
+    readonly property int playerTagPanelWidth: 264
+    readonly property int playerBottomBarHeight: 80
+    readonly property int rollingOverviewHeight: 128
+    readonly property int rollingOverviewHeightCompact: 112
+    readonly property int rollingWaveformHeight: 176
+    readonly property int rollingWaveformHeightCompact: 152
+    readonly property int controlHeightCompact: 28
+    readonly property int controlHeight: 32
+    readonly property int controlHeightProminent: 36
+    readonly property int navigationRowHeight: 36
+    readonly property int listRowHeight: 40
+    readonly property int mediaListRowHeight: 48
+    readonly property int settingsRowHeight: 48
+    readonly property int tableHeaderHeight: 36
+    readonly property int sliderTrackHeight: 2
+    readonly property int sliderHandleExtent: 10
+    readonly property int minimumInteractionExtent: 28
+    readonly property int iconSizeSm: 16
+    readonly property int iconSizeMd: 18
+    readonly property int iconSizeLg: 24
     readonly property int navigationIconVisualSize: 18
     readonly property int navigationActionExtent: 28
-    readonly property string fontPrimary: Qt.application.font.family
+    readonly property string fontPrimary: Qt.platform.os === "windows"
+                                          ? "Microsoft YaHei UI"
+                                          : Qt.application.font.family
     readonly property string fontFallback: Qt.platform.os === "windows"
-                                           ? "Microsoft YaHei UI"
+                                           ? "Segoe UI Variable"
                                            : Qt.application.font.family
     readonly property string iconPrefix: "qrc:/qt/qml/AgPlayer/assets/icons/"
     function icon(name) { return iconPrefix + name + ".svg" }

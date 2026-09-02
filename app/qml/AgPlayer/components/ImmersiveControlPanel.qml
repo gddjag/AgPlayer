@@ -176,13 +176,13 @@ Rectangle {
             Text {
                 text: qsTr("视觉反应控制")
                 color: Theme.textPrimary
-                font.pixelSize: 14
+                font.pixelSize: Theme.fontSizeBody
                 font.weight: Font.DemiBold
             }
             Text {
                 text: "VISUAL REACTOR"
                 color: Theme.textTertiary
-                font.pixelSize: 7
+                font.pixelSize: Theme.fontSizeCaption
                 font.letterSpacing: 1.1
             }
         }
@@ -242,7 +242,7 @@ Rectangle {
                 flat: true
                 checkable: true
                 checked: root.currentTab === index
-                font.pixelSize: 10
+                font.pixelSize: Theme.fontSizeCaption
                 onClicked: root.currentTab = index
                 background: Rectangle {
                     radius: 9
@@ -292,8 +292,8 @@ Rectangle {
                 spacing: 9
                 RowLayout {
                     Layout.fillWidth: true
-                    Text { Layout.fillWidth: true; text: qsTr("预设与存储"); color: Theme.textSecondary; font.pixelSize: 9 }
-                    Text { text: "Recent"; color: Theme.textTertiary; font.pixelSize: 8 }
+                    Text { Layout.fillWidth: true; text: qsTr("预设与存储"); color: Theme.textSecondary; font.pixelSize: Theme.fontSizeCaption }
+                    Text { text: "Recent"; color: Theme.textTertiary; font.pixelSize: Theme.fontSizeCaption }
                 }
                 GridLayout {
                     id: presetGrid
@@ -333,7 +333,7 @@ Rectangle {
                                     width: parent.width
                                     text: modelData.title
                                     color: Theme.onBrandGradientText
-                                    font.pixelSize: 11
+                                    font.pixelSize: Theme.fontSizeCaption
                                     font.weight: Font.DemiBold
                                     horizontalAlignment: Text.AlignHCenter
                                     elide: Text.ElideRight
@@ -343,7 +343,7 @@ Rectangle {
                                     text: modelData.sub
                                     color: Theme.onBrandGradientText
                                     opacity: 0.65
-                                    font.pixelSize: 7
+                                    font.pixelSize: Theme.fontSizeCaption
                                     horizontalAlignment: Text.AlignHCenter
                                     elide: Text.ElideRight
                                 }
@@ -353,7 +353,7 @@ Rectangle {
                 }
                 RowLayout {
                     Layout.fillWidth: true
-                    Text { Layout.fillWidth: true; text: qsTr("歌曲自适应配色"); color: Theme.textSecondary; font.pixelSize: 9 }
+                    Text { Layout.fillWidth: true; text: qsTr("歌曲自适应配色"); color: Theme.textSecondary; font.pixelSize: Theme.fontSizeCaption }
                     ThemedCheckBox {
                         objectName: "songColorToggle"
                         text: qsTr("自动")
@@ -408,7 +408,7 @@ Rectangle {
                     }
                     onRejected: root.editingColorProperty = ""
                 }
-                Text { text: qsTr("显示宿主与性能"); color: Theme.textSecondary; font.pixelSize: 9 }
+                Text { text: qsTr("显示宿主与性能"); color: Theme.textSecondary; font.pixelSize: Theme.fontSizeCaption }
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 6
@@ -422,7 +422,7 @@ Rectangle {
                             text: modelData
                             checkable: true
                             checked: PlayerExperienceController.hostMode === index
-                            font.pixelSize: 9
+                            font.pixelSize: Theme.fontSizeCaption
                             onClicked: PlayerExperienceController.hostMode = index
                             background: Rectangle {
                                 radius: 8
@@ -462,16 +462,16 @@ Rectangle {
                     Column {
                         Layout.fillWidth: true
                         spacing: 2
-                        Text { text: qsTr("歌词显示"); color: Theme.textPrimary; font.pixelSize: 11; font.weight: Font.DemiBold }
-                        Text { text: qsTr("三行同步歌词 · 空间纵深"); color: Theme.textTertiary; font.pixelSize: 8 }
+                        Text { text: qsTr("歌词显示"); color: Theme.textPrimary; font.pixelSize: Theme.fontSizeCaption; font.weight: Font.DemiBold }
+                        Text { text: qsTr("三行同步歌词 · 空间纵深"); color: Theme.textTertiary; font.pixelSize: Theme.fontSizeCaption }
                     }
-                    Switch {
+                    ThemedSwitch {
                         objectName: "immersiveLyricsVisibleSwitch"
                         checked: PlayerExperienceController.lyricsVisible
                         onToggled: PlayerExperienceController.lyricsVisible = checked
                     }
                 }
-                Text { text: qsTr("显示位置"); color: Theme.textSecondary; font.pixelSize: 9 }
+                Text { text: qsTr("显示位置"); color: Theme.textSecondary; font.pixelSize: Theme.fontSizeCaption }
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 6
@@ -511,8 +511,8 @@ Rectangle {
                         required property var modelData
                         Layout.fillWidth: true
                         spacing: 7
-                        Text { Layout.preferredWidth: 62; text: modelData.label; color: Theme.textSecondary; font.pixelSize: 9 }
-                        Slider {
+                        Text { Layout.preferredWidth: 62; text: modelData.label; color: Theme.textSecondary; font.pixelSize: Theme.fontSizeCaption }
+                        ThemedSlider {
                             objectName: "lyricSlider_" + modelData.key
                             Layout.fillWidth: true
                             implicitHeight: 20
@@ -521,7 +521,7 @@ Rectangle {
                             value: Number(PlayerExperienceController[modelData.key])
                             onMoved: root.setControllerValue(modelData.key, value)
                         }
-                        Text { Layout.preferredWidth: 28; horizontalAlignment: Text.AlignRight; text: Math.round(PlayerExperienceController[modelData.key]); color: Theme.textPrimary; font.pixelSize: 9 }
+                        Text { Layout.preferredWidth: 28; horizontalAlignment: Text.AlignRight; text: Math.round(PlayerExperienceController[modelData.key]); color: Theme.textPrimary; font.pixelSize: Theme.fontSizeCaption }
                     }
                 }
             }
@@ -530,7 +530,7 @@ Rectangle {
                 visible: root.currentTab === 2
                 Layout.fillWidth: true
                 spacing: 7
-                Text { text: qsTr("声音响应"); color: Theme.textSecondary; font.pixelSize: 9 }
+                Text { text: qsTr("声音响应"); color: Theme.textSecondary; font.pixelSize: Theme.fontSizeCaption }
                 Repeater {
                     model: root.dynamicsGroups
                     ColumnLayout {
@@ -542,7 +542,7 @@ Rectangle {
                         Text {
                             text: groupData.title
                             color: Theme.textSecondary
-                            font.pixelSize: 9
+                            font.pixelSize: Theme.fontSizeCaption
                             font.weight: Font.DemiBold
                         }
                         Repeater {
@@ -551,8 +551,8 @@ Rectangle {
                                 required property var modelData
                                 Layout.fillWidth: true
                                 spacing: 7
-                                Text { Layout.preferredWidth: 62; text: modelData.label; color: Theme.textSecondary; font.pixelSize: 9 }
-                                Slider {
+                                Text { Layout.preferredWidth: 62; text: modelData.label; color: Theme.textSecondary; font.pixelSize: Theme.fontSizeCaption }
+                                ThemedSlider {
                                     objectName: "dynamicSlider_" + modelData.key
                                     Layout.fillWidth: true
                                     implicitHeight: 20
@@ -561,7 +561,7 @@ Rectangle {
                                     value: Number(PlayerExperienceController[modelData.key])
                                     onMoved: root.setControllerValue(modelData.key, value)
                                 }
-                                Text { Layout.preferredWidth: 34; horizontalAlignment: Text.AlignRight; text: root.displayValue(modelData); color: Theme.textPrimary; font.pixelSize: 9 }
+                                Text { Layout.preferredWidth: 34; horizontalAlignment: Text.AlignRight; text: root.displayValue(modelData); color: Theme.textPrimary; font.pixelSize: Theme.fontSizeCaption }
                             }
                         }
                         Flow {
@@ -588,19 +588,19 @@ Rectangle {
                         }
                     }
                 }
-                Text { text: qsTr("视觉 EQ · 8 音域"); color: Theme.textSecondary; font.pixelSize: 9 }
+                Text { text: qsTr("视觉 EQ · 8 音域"); color: Theme.textSecondary; font.pixelSize: Theme.fontSizeCaption }
                 RowLayout {
                     Layout.fillWidth: true
                     Text {
                         Layout.fillWidth: true
                         text: qsTr("音乐语义特征")
                         color: Theme.textSecondary
-                        font.pixelSize: 9
+                        font.pixelSize: Theme.fontSizeCaption
                     }
                     Text {
                         text: qsTr("自动计算")
                         color: Theme.textTertiary
-                        font.pixelSize: 8
+                        font.pixelSize: Theme.fontSizeCaption
                     }
                 }
                 GridLayout {
@@ -633,12 +633,12 @@ Rectangle {
                                         Layout.fillWidth: true
                                         text: modelData
                                         color: Theme.textSecondary
-                                        font.pixelSize: 8
+                                        font.pixelSize: Theme.fontSizeCaption
                                     }
                                     Text {
                                         text: root.semanticFeatureValue(index).toFixed(2)
                                         color: Theme.textTertiary
-                                        font.pixelSize: 8
+                                        font.pixelSize: Theme.fontSizeCaption
                                     }
                                 }
                                 ProgressBar {

@@ -37,7 +37,15 @@ RowLayout {
         onClicked: PlayerExperienceController.toggleLyricsVisible()
         ToolTip.text: Accessible.name
         ToolTip.visible: hovered
-        background: null
+        background: Rectangle {
+            color: parent.down ? Theme.surfacePressed
+                : parent.checked ? Theme.accentSoft
+                : parent.hovered ? Theme.surfaceHover : "transparent"
+            border.width: parent.activeFocus ? 2 : 0
+            border.color: Theme.focus
+            radius: Theme.radiusSm
+            Behavior on color { ColorAnimation { duration: 100 } }
+        }
     }
 
     ToolButton {
@@ -57,6 +65,14 @@ RowLayout {
         onClicked: PlayerExperienceController.toggleImmersiveMode()
         ToolTip.text: Accessible.name
         ToolTip.visible: hovered
-        background: null
+        background: Rectangle {
+            color: parent.down ? Theme.surfacePressed
+                : parent.checked ? Theme.accentSoft
+                : parent.hovered ? Theme.surfaceHover : "transparent"
+            border.width: parent.activeFocus ? 2 : 0
+            border.color: Theme.focus
+            radius: Theme.radiusSm
+            Behavior on color { ColorAnimation { duration: 100 } }
+        }
     }
 }

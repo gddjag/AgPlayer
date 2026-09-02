@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import AgPlayer
 
@@ -23,79 +22,33 @@ Rectangle {
 
     signal toolSelected(int toolId)
 
-    color: Theme.panel
-    border.color: Theme.border
+    color: Theme.navigationSurface
+    border.color: Theme.opaqueBorder
     border.width: 1
-    radius: Theme.radiusMd
-    implicitHeight: Theme.navigationActionExtent + Theme.spacingLg
+    radius: 0
+    implicitHeight: Theme.settingsRowHeight
 
     RowLayout {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        anchors.leftMargin: 12
+        anchors.leftMargin: Theme.spacingMd
         anchors.rightMargin: Theme.spacingLg
         spacing: Theme.spacingSm
 
         Repeater {
             model: navigation.visibleTools
 
-            Button {
+            ThemedTabButton {
                 id: navButton
                 objectName: "audioToolNav_" + modelData.toolId
-                Layout.preferredWidth: 154
+                Layout.preferredWidth: 150
                 Layout.preferredHeight: navigation.implicitHeight
                 Layout.maximumHeight: Layout.preferredHeight
-                flat: true
-                checked: navigation.currentTool === modelData.toolId
-                focusPolicy: Qt.StrongFocus
-                Accessible.name: modelData.name
-                Accessible.role: Accessible.PageTab
-
-                contentItem: RowLayout {
-                    spacing: 7
-                    Item { Layout.preferredWidth: 12 }
-                    ThemedIcon {
-                        source: Theme.icon(modelData.icon)
-                        tint: navButton.checked ? Theme.accent
-                                                : Theme.iconSecondary
-                        sourceSize.width: 18
-                        sourceSize.height: 18
-                        Layout.preferredWidth: 18
-                        Layout.preferredHeight: 18
-                    }
-                    Text {
-                        text: modelData.name
-                        color: navButton.checked ? navigation.activeLabelColor
-                                                 : Theme.secondaryText
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: 15
-                        font.weight: navButton.checked ? Font.DemiBold
-                                                       : Font.Normal
-                    }
-                    Item { Layout.fillWidth: true }
-                }
-
-                background: Rectangle {
-                    color: navButton.checked
-                           ? Theme.subtleGlassActive
-                           : navButton.hovered ? Theme.subtleGlassHover
-                                               : "transparent"
-                    border.color: navButton.checked ? Theme.accent
-                                                    : "transparent"
-                    border.width: navButton.checked ? 1 : 0
-                    radius: Theme.radiusMd
-
-                    Rectangle {
-                        visible: navButton.checked
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        height: 2
-                        color: Theme.accent
-                    }
-                }
+                text: modelData.name
+                iconSource: Theme.icon(modelData.icon)
+                selected: navigation.currentTool === modelData.toolId
 
                 onClicked: navigation.toolSelected(modelData.toolId)
             }

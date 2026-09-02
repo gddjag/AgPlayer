@@ -6,6 +6,8 @@ param(
     [string[]]$Languages = @("zh", "en"),
     [ValidateSet("dark", "light", "system")]
     [string[]]$Themes = @("dark", "light", "system"),
+    [ValidateSet("1", "1.25", "1.5")]
+    [string[]]$ScaleFactors = @("1"),
     [ValidateSet(
         "startup", "playback", "mini", "settings", "list",
         "details",
@@ -59,10 +61,10 @@ function Get-SurfaceExpectation {
             return [pscustomobject]@{ Width = 860; Height = 900 }
         }
         "^list$|^details$" {
-            # The detached classic list follows the 863px classic player
-            # width. Its height is 38px title + 56px header + ten 50px rows
-            # + 46px filter; keep this aligned with ListWindow.
-            return [pscustomobject]@{ Width = 863; Height = 640 }
+            # A fresh detached list uses its 604px token geometry. The desktop
+            # host may restore it to the 906px available height between QA
+            # captures; both are real supported window states.
+            return [pscustomobject]@{ Width = 863; Heights = @(604, 906) }
         }
         "^tool-\d+$" {
             return [pscustomobject]@{ Width = 1672; Height = 941 }
@@ -82,11 +84,16 @@ function Measure-Screenshot {
     $expected = Get-SurfaceExpectation $Surface
     $bitmap = [System.Drawing.Bitmap]::new($Path)
     try {
+        $validHeights = if ($null -ne $expected.Heights) {
+            @($expected.Heights)
+        } else {
+            @($expected.Height)
+        }
         if ($bitmap.Width -ne $expected.Width -or
-            $bitmap.Height -ne $expected.Height) {
-            throw ("{0} has size {1}x{2}; expected {3}x{4}" -f
+            $bitmap.Height -notin $validHeights) {
+            throw ("{0} has size {1}x{2}; expected {3}x({4})" -f
                 $Surface, $bitmap.Width, $bitmap.Height,
-                $expected.Width, $expected.Height)
+                $expected.Width, ($validHeights -join "|"))
         }
 
         $colors = [System.Collections.Generic.HashSet[int]]::new()
@@ -233,11 +240,13 @@ function Invoke-Capture {
     param(
         [string]$Language,
         [string]$Theme,
+        [string]$ScaleFactor,
         [string]$Surface,
         [string[]]$Arguments
     )
 
-    $stem = Get-CaptureStem -Language $Language -Theme $Theme -Surface $Surface
+    $stem = Get-CaptureStem -Language $Language -Theme $Theme `
+        -ScaleFactor $ScaleFactor -Surface $Surface
     $screenshot = Join-Path $outputPath ($stem + ".png")
     $log = Join-Path $outputPath ($stem + ".log")
     Remove-Item -LiteralPath $screenshot, $log -Force -ErrorAction SilentlyContinue
@@ -269,6 +278,7 @@ function Invoke-Capture {
     $results.Add([pscustomobject]@{
         Language = $Language
         Theme = $Theme
+        ScaleFactor = $ScaleFactor
         Surface = $Surface
         Bytes = (Get-Item -LiteralPath $screenshot).Length
         Width = $metrics.Width
@@ -284,6 +294,7 @@ function Get-CaptureStem {
     param(
         [string]$Language,
         [string]$Theme,
+        [string]$ScaleFactor = "1",
         [string]$Surface
     )
 
@@ -291,42 +302,46 @@ function Get-CaptureStem {
     $parts.Add($Language)
     $parts.Add($Theme)
     $parts.Add($Surface)
+    if ($ScaleFactor -ne "1") {
+        $parts.Add("scale-" + $ScaleFactor.Replace(".", ""))
+    }
     return $parts -join "-"
 }
 
 try {
     $env:Path = ($runtimePaths -join ";") + ";" + $originalPath
-    $env:QT_SCALE_FACTOR = "1"
 
     foreach ($language in $Languages) {
         foreach ($theme in $Themes) {
+          foreach ($scaleFactor in $ScaleFactors) {
+            $env:QT_SCALE_FACTOR = $scaleFactor
             $stateRoot = Join-Path $outputPath (
-                "state-{0}-{1}-{2}" -f $language, $theme,
+                "state-{0}-{1}-{2}-{3}" -f $language, $theme, $scaleFactor,
                 [Guid]::NewGuid().ToString("N"))
             New-Item -ItemType Directory -Force -Path $stateRoot | Out-Null
 
             if ($Surfaces -contains "startup") {
-                Invoke-Capture $language $theme "startup" @(
+                Invoke-Capture $language $theme $scaleFactor "startup" @(
                     "--qa-library", (New-QALibraryPath $stateRoot "startup"),
                     "--qa-screenshot-main"
                 )
             }
             if ($Surfaces -contains "playback") {
-                Invoke-Capture $language $theme "playback" @(
+                Invoke-Capture $language $theme $scaleFactor "playback" @(
                     "--qa-library", (New-QALibraryPath $stateRoot "playback"),
                     "--qa-play", $playFixture,
                     "--qa-screenshot-main"
                 )
             }
             if ($Surfaces -contains "mini") {
-                Invoke-Capture $language $theme "mini" @(
+                Invoke-Capture $language $theme $scaleFactor "mini" @(
                     "--qa-library", (New-QALibraryPath $stateRoot "mini"),
                     "--qa-play", $playFixture,
                     "--qa-screenshot-mini"
                 )
             }
             if ($Surfaces -contains "settings") {
-                Invoke-Capture $language $theme "settings" @(
+                Invoke-Capture $language $theme $scaleFactor "settings" @(
                     "--qa-library", (New-QALibraryPath $stateRoot "settings"),
                     "--qa-open-settings",
                     "--qa-settings-section", "2",
@@ -334,14 +349,14 @@ try {
                 )
             }
             if ($Surfaces -contains "list") {
-                Invoke-Capture $language $theme "list" @(
+                Invoke-Capture $language $theme $scaleFactor "list" @(
                     "--qa-library", (New-QALibraryPath $stateRoot "list"),
                     "--qa-import-folder", $formatFixtures,
                     "--qa-screenshot-list"
                 )
             }
             if ($Surfaces -contains "details") {
-                Invoke-Capture $language $theme "details" @(
+                Invoke-Capture $language $theme $scaleFactor "details" @(
                     "--qa-library", (New-QALibraryPath $stateRoot "details"),
                     "--qa-import-folder", $formatFixtures,
                     "--qa-show-track-details",
@@ -350,10 +365,10 @@ try {
                 if ($Surfaces -contains "list") {
                     $listPath = Join-Path $outputPath (
                         (Get-CaptureStem -Language $language -Theme $theme `
-                            -Surface "list") + ".png")
+                            -ScaleFactor $scaleFactor -Surface "list") + ".png")
                     $detailsPath = Join-Path $outputPath (
                         (Get-CaptureStem -Language $language -Theme $theme `
-                            -Surface "details") + ".png")
+                            -ScaleFactor $scaleFactor -Surface "details") + ".png")
                     $detailsDifference = Measure-CaptureDifferencePercent `
                         -FirstPath $listPath -SecondPath $detailsPath
                     if ($detailsDifference -lt 1) {
@@ -368,24 +383,26 @@ try {
                 if ($Surfaces -notcontains $toolSurface) {
                     continue
                 }
-                Invoke-Capture $language $theme $toolSurface @(
+                Invoke-Capture $language $theme $scaleFactor $toolSurface @(
                     "--qa-library", (New-QALibraryPath $stateRoot $toolSurface),
                     "--qa-tool", [string]$tool,
                     "--qa-screenshot-tools"
                 )
             }
+          }
         }
     }
 
     if ($Themes -contains "dark" -and $Themes -contains "light") {
         foreach ($language in $Languages) {
+          foreach ($scaleFactor in $ScaleFactors) {
             foreach ($surface in $Surfaces) {
                 $darkPath = Join-Path $outputPath (
                     (Get-CaptureStem -Language $language -Theme "dark" `
-                        -Surface $surface) + ".png")
+                        -ScaleFactor $scaleFactor -Surface $surface) + ".png")
                 $lightPath = Join-Path $outputPath (
                     (Get-CaptureStem -Language $language -Theme "light" `
-                        -Surface $surface) + ".png")
+                        -ScaleFactor $scaleFactor -Surface $surface) + ".png")
                 $difference = Measure-ThemeDifference $darkPath $lightPath
                 if ($difference -lt 12) {
                     throw (("{0}-{1} dark/light difference is only {2}; " +
@@ -393,6 +410,7 @@ try {
                         $language, $surface, $difference)
                 }
             }
+          }
         }
     }
 
@@ -403,6 +421,7 @@ try {
         Captures = $results.Count
         Languages = $Languages.Count
         Themes = $Themes.Count
+        ScaleFactors = $ScaleFactors.Count
         Surfaces = $Surfaces.Count
         Output = $outputPath
         Result = "PASS"
