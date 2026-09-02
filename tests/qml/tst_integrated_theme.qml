@@ -444,7 +444,7 @@ TestCase {
         var title = findChild(shell, "trackHeaderTitle")
         verify(list && list.headerItem && title)
         compare(list.layoutProfile, "integrated")
-        compare(list.headerItem.height, 48)
+        compare(list.headerItem.height, Theme.tableHeaderHeight)
         compare(title.font.weight, Font.DemiBold)
     }
 
@@ -471,7 +471,7 @@ TestCase {
             var list = findChild(shell, "integratedTrackList")
             verify(list)
             compare(list.waveformThumbnailsVisible, true)
-            compare(list.rowHeight, 50)
+            compare(list.rowHeight, Theme.mediaListRowHeight)
         } finally {
             SettingsController.listWaveformThumbnailEnabled = previousEnabled
         }
@@ -529,7 +529,7 @@ TestCase {
         var tags = classicTagPanelComponent.createObject(testCase)
         verify(list && filter && tags)
 
-        compare(list.headerHeight, 46)
+        compare(list.headerHeight, Theme.tableHeaderHeight)
         compare(list.headerFontWeight, Font.DemiBold)
         compare(filter.moduleBorder.toString(), Theme.controlSubtleBorder.toString())
         var range = findChild(filter, "bpmRange")

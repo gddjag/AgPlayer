@@ -70,13 +70,15 @@ ListView {
     readonly property int ratingIconSize:
         relaxedClassicColumns ? 15 : (compactColumns ? 15 : 17)
     readonly property int favoriteIconSize: relaxedClassicColumns ? 22 : 18
-    readonly property int headerHeight: integratedCompact ? 48 : 46
+    readonly property int headerHeight: Theme.tableHeaderHeight
     readonly property int headerFontWeight: Font.DemiBold
     readonly property bool waveformThumbnailsVisible:
         !thumbnailVisibilityFollowsSetting
         || SettingsController.listWaveformThumbnailEnabled
     readonly property int rowHeight:
-        singleWindowLayout ? 50 : (waveformThumbnailsVisible ? 50 : 42)
+        singleWindowLayout ? Theme.mediaListRowHeight
+                           : (waveformThumbnailsVisible
+                              ? Theme.mediaListRowHeight : Theme.listRowHeight)
     property int thumbnailItemCount: 0
     property int nextWaveformGeneration: 0
     property int dragPreviewCreationCount: 0

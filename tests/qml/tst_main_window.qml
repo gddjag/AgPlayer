@@ -1175,7 +1175,7 @@ TestCase {
         var list = trackListComponent.createObject(mainWindow.contentItem,
                                                    { width: 960, height: 476 })
         verify(list)
-        compare(list.rowHeight, 42)
+        compare(list.rowHeight, Theme.listRowHeight)
         verify(list.headerItem)
         verify(Math.floor((list.height - list.headerItem.height)
                           / list.rowHeight) >= 10,
@@ -1200,11 +1200,14 @@ TestCase {
             var trackList = findChild(listWindow, "sharedTrackList")
             var filter = findChild(listWindow, "librarySearchFilter")
             verify(trackList && filter)
-            var expectedRowHeight = enabled ? 50 : 42
-            var expectedHeight = 38 + 56 + 10 * expectedRowHeight + 46
+            var expectedRowHeight = enabled ? Theme.mediaListRowHeight
+                                            : Theme.listRowHeight
+            var expectedHeight = Theme.titleBarHeight + Theme.tableHeaderHeight
+                    + 10 * expectedRowHeight + Theme.settingsRowHeight
             compare(listWindow.height, expectedHeight)
-            compare(filter.height, 46)
-            tryCompare(trackList, "height", 56 + 10 * expectedRowHeight)
+            compare(filter.height, Theme.settingsRowHeight)
+            tryCompare(trackList, "height",
+                       Theme.tableHeaderHeight + 10 * expectedRowHeight)
             listWindow.destroy()
         }
 
@@ -2812,7 +2815,7 @@ TestCase {
             "height": 360
         })
         verify(list)
-        compare(list.headerItem.height, 46)
+        compare(list.headerItem.height, Theme.tableHeaderHeight)
         compare(findChild(list, "trackHeaderTitle").font.weight,
                 Font.DemiBold)
         list.destroy()
@@ -3346,8 +3349,8 @@ TestCase {
 
         var workspace = findChild(window, "listWorkspace")
         verify(workspace, "ListWindow must expose one continuous workspace")
-        compare(workspace.leftColumnWidth, 208)
-        compare(workspace.rightColumnWidth, 248)
+        compare(workspace.leftColumnWidth, Theme.navigationWidth)
+        compare(workspace.rightColumnWidth, Theme.navigationWidthExpanded)
         compare(workspace.dividerWidth, 1)
         compare(workspace.border.width, 0)
         tryVerify(function() { return workspace.centerWidth > 0 })
@@ -3373,7 +3376,7 @@ TestCase {
 
         var tagPanel = findChild(workspace, "tagManagementPanel")
         verify(tagPanel)
-        tryCompare(tagPanel, "width", 248)
+        tryCompare(tagPanel, "width", Theme.navigationWidthExpanded)
         var tagFlickable = findChild(tagPanel, "tagFlickable")
         var tagFlow = findChild(tagPanel, "tagFlow")
         verify(tagFlickable && tagFlow,
@@ -4622,14 +4625,14 @@ TestCase {
         var list = trackListComponent.createObject(mainWindow.contentItem)
         verify(list)
         tryVerify(function() { return list.count > 0 })
-        compare(list.rowHeight, 42)
+        compare(list.rowHeight, Theme.listRowHeight)
         compare(list.thumbnailItemCount, 0)
         verify(!findChild(list, "trackWaveformThumbnail"))
 
         TrackWaveformThumbnailProvider.refresh()
         var readsBefore = TrackWaveformThumbnailProvider.diagnostics().cacheReadAttempts
         SettingsController.listWaveformThumbnailEnabled = true
-        tryCompare(list, "rowHeight", 50)
+        tryCompare(list, "rowHeight", Theme.mediaListRowHeight)
         tryVerify(function() { return list.thumbnailItemCount > 0 })
         verify(findChild(list.itemAtIndex(0), "trackWaveformThumbnail"))
         compare(findChild(list.itemAtIndex(0), "trackCover").width, 34)
@@ -4647,7 +4650,7 @@ TestCase {
                 "mode changes must recolor without reading waveform data again")
 
         SettingsController.listWaveformThumbnailEnabled = false
-        tryCompare(list, "rowHeight", 42)
+        tryCompare(list, "rowHeight", Theme.listRowHeight)
         tryCompare(list, "thumbnailItemCount", 0)
         verify(!findChild(list, "trackWaveformThumbnail"))
         list.destroy()
@@ -5276,7 +5279,8 @@ TestCase {
 
     function test_main_window_allows_a_smaller_responsive_native_size() {
         compare(mainWindow.minimumWidth, 612)
-        compare(mainWindow.minimumHeight, 228)
+        compare(mainWindow.minimumHeight,
+                Theme.titleBarHeight + 128 + 64)
     }
 
     function test_main_window_keeps_player_content_visible_at_minimum_size() {

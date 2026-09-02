@@ -331,7 +331,7 @@ Item {
         TitleBar {
             objectName: "rollingTitleBar"
             Layout.fillWidth: true
-            Layout.preferredHeight: 44
+            Layout.preferredHeight: Theme.titleBarHeight
             window: root.hostWindow
             showBrand: true
             onOpenSettings: root.openSettingsRequested()
@@ -1087,7 +1087,7 @@ Item {
                     SideNavigation {
                         id: rollingNavigation
                         objectName: "rollingLibraryNavigation"
-                        Layout.preferredWidth: 188
+                        Layout.preferredWidth: Theme.navigationWidthCompact
                         Layout.minimumWidth: 188
                         Layout.maximumWidth: 188
                         Layout.fillHeight: true

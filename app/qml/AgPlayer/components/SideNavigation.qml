@@ -27,7 +27,7 @@ Item {
     property bool contextResourceIsRoot: false
     property string pendingResourceFolderRemoval: ""
     property bool resourceDropAccepted: false
-    readonly property int navigationRowHeight: 38
+    readonly property int navigationRowHeight: Theme.navigationRowHeight
     readonly property int resourceSectionHeight: 54
     readonly property int navigationIconVisualSize:
         Theme.navigationIconVisualSize

@@ -37,9 +37,9 @@ if ($trackListCount -ne 1) {
     throw "ListWindow must contain exactly one shared TrackList; found $trackListCount"
 }
 
-Assert-Matches $window 'readonly property int leftColumnWidth:\s*208' `
+Assert-Matches $window 'readonly property int leftColumnWidth:\s*Theme\.navigationWidth' `
     'Left workspace column must be 208 px'
-Assert-Matches $window 'readonly property int rightColumnWidth:\s*248' `
+Assert-Matches $window 'readonly property int rightColumnWidth:\s*Theme\.navigationWidthExpanded' `
     'Right tag column must be 248 px'
 Assert-Matches $window 'readonly property int dividerWidth:\s*1' `
     'Workspace dividers must remain 1 px'
@@ -106,7 +106,7 @@ Assert-Matches $trackList 'property bool thumbnailVisibilityFollowsSetting:\s*tr
     'Classic TrackList instances must follow the thumbnail visibility setting by default'
 Assert-Matches $trackList '(?s)readonly property bool waveformThumbnailsVisible:\s*!thumbnailVisibilityFollowsSetting\s*\|\|\s*SettingsController\.listWaveformThumbnailEnabled' `
     'TrackList must expose the effective thumbnail visibility policy'
-Assert-Matches $trackList '(?s)rowHeight:\s*singleWindowLayout\s*\?\s*50\s*:\s*\(waveformThumbnailsVisible\s*\?\s*50\s*:\s*42\)' `
+Assert-Matches $trackList '(?s)rowHeight:\s*singleWindowLayout\s*\?\s*Theme\.mediaListRowHeight[\s\S]*waveformThumbnailsVisible[\s\S]*Theme\.mediaListRowHeight\s*:\s*Theme\.listRowHeight' `
     'Single-window rows stay 50 px while classic rows follow effective thumbnail visibility'
 Assert-Matches $integratedShell '(?s)objectName:\s*"integratedTrackList".*thumbnailVisibilityFollowsSetting:\s*false' `
     'Integrated list thumbnails must remain visible when the classic switch is off'

@@ -226,7 +226,7 @@ TestCase {
             verify(list)
             compare(list.layoutProfile, "rolling")
             compare(list.waveformThumbnailsVisible, true)
-            compare(list.rowHeight, 50)
+            compare(list.rowHeight, Theme.mediaListRowHeight)
         } finally {
             SettingsController.listWaveformThumbnailEnabled = previousEnabled
         }

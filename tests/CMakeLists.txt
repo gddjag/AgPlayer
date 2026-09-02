@@ -1362,6 +1362,14 @@ add_test(
 )
 set_tests_properties(removed_custom_theme_contract_test PROPERTIES TIMEOUT 10)
 
+add_test(
+    NAME ui_design_system_usage_contract_test
+    COMMAND "${CMAKE_COMMAND}"
+        "-DROOT=${CMAKE_SOURCE_DIR}"
+        -P "${CMAKE_SOURCE_DIR}/cmake/CheckUiDesignSystemUsage.cmake"
+)
+set_tests_properties(ui_design_system_usage_contract_test PROPERTIES TIMEOUT 10)
+
 set_tests_properties(import_controller_test PROPERTIES
     # The 10K indexing contract itself permits up to 30 seconds.  The CTest
     # watchdog includes process startup and Windows real-time scanning, so keep

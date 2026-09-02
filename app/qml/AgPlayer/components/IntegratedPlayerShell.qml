@@ -31,13 +31,13 @@ Item {
     property int sidePanelPage: 0
     property bool sidePanelExpanded: true
 
-    property int topBarHeight: 52
-    property int leftColumnWidth: 248
+    property int topBarHeight: Theme.titleBarHeight
+    property int leftColumnWidth: Theme.navigationWidthExpanded
     property int rightColumnWidth: 312
     property int waveformHeight: 120
     property int waveformNavigatorHeight: 10
     property int bottomBarHeight: 91
-    property int contentSpacing: 8
+    property int contentSpacing: Theme.spacingSm
     property bool _waveformViewportResetPending: false
     readonly property real effectiveDurationMs: waveformDurationMs > 0
                                                 ? waveformDurationMs
