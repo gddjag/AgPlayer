@@ -367,7 +367,7 @@ Item {
                         text: qsTr("资源文件夹")
                         color: Theme.tagSecondaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fontSizeCaption
                         Layout.fillWidth: true
                     }
                     ToolButton {
@@ -477,7 +477,7 @@ Item {
                            : nodeRow.selected ? Theme.primaryText
                                             : Theme.tagSecondaryText
                     font.family: Theme.fontPrimary
-                    font.pixelSize: Math.max(13, Qt.application.font.pixelSize)
+                    font.pixelSize: Theme.fontSizeBody
                     elide: Text.ElideRight
                     Layout.fillWidth: true
                 }
@@ -485,7 +485,7 @@ Item {
                     text: nodeRow.count
                     color: Theme.tagSecondaryText
                     font.family: Theme.fontPrimary
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontSizeCaption
                 }
             }
 
@@ -622,7 +622,7 @@ Item {
                    : systemMenuItem.enabled ? Theme.primaryText
                                             : Theme.secondaryText
             font.family: Theme.fontPrimary
-            font.pixelSize: Math.max(13, Qt.application.font.pixelSize)
+            font.pixelSize: Theme.fontSizeBody
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
         }

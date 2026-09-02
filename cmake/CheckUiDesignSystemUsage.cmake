@@ -24,16 +24,16 @@ set(legacy_control_baselines
     "app/qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml=3"
     "app/qml/AgPlayer/components/AudioFileInfoPanel.qml=2"
     "app/qml/AgPlayer/components/ColorField.qml=5"
-    "app/qml/AgPlayer/components/EmptyLibrary.qml=1"
+    "app/qml/AgPlayer/components/EmptyLibrary.qml=0"
     "app/qml/AgPlayer/components/ExperienceActions.qml=2"
     "app/qml/AgPlayer/components/ImmersiveControlPanel.qml=8"
     "app/qml/AgPlayer/components/ImmersiveSurface.qml=3"
     "app/qml/AgPlayer/components/ImportStatusPanel.qml=2"
     "app/qml/AgPlayer/components/IntegratedPlayerControls.qml=7"
-    "app/qml/AgPlayer/components/LibraryManagerPage.qml=18"
+    "app/qml/AgPlayer/components/LibraryManagerPage.qml=12"
     "app/qml/AgPlayer/components/LibrarySidePanel.qml=3"
     "app/qml/AgPlayer/components/LyricsPanel.qml=5"
-    "app/qml/AgPlayer/components/MiniPlayerControls.qml=12"
+    "app/qml/AgPlayer/components/MiniPlayerControls.qml=11"
     "app/qml/AgPlayer/components/PlayerControls.qml=7"
     "app/qml/AgPlayer/components/PlayerPane.qml=1"
     "app/qml/AgPlayer/components/PlayerVolumeControl.qml=2"
@@ -42,22 +42,22 @@ set(legacy_control_baselines
     "app/qml/AgPlayer/components/SideNavigation.qml=5"
     "app/qml/AgPlayer/components/TagManagementPanel.qml=7"
     "app/qml/AgPlayer/components/TitleBar.qml=4"
-    "app/qml/AgPlayer/components/tools/AudioEditorPage.qml=23"
-    "app/qml/AgPlayer/components/tools/FilenameProcessPage.qml=16"
-    "app/qml/AgPlayer/components/tools/FormatConvertPage.qml=7"
+    "app/qml/AgPlayer/components/tools/AudioEditorPage.qml=2"
+    "app/qml/AgPlayer/components/tools/FilenameProcessPage.qml=1"
+    "app/qml/AgPlayer/components/tools/FormatConvertPage.qml=0"
     "app/qml/AgPlayer/components/tools/FormatErrorDialog.qml=2"
     "app/qml/AgPlayer/components/tools/FormatPreflightDialog.qml=1"
-    "app/qml/AgPlayer/components/tools/FormatSettingsPanel.qml=7"
+    "app/qml/AgPlayer/components/tools/FormatSettingsPanel.qml=4"
     "app/qml/AgPlayer/components/tools/FormatTaskTable.qml=6"
-    "app/qml/AgPlayer/components/tools/MetadataEditPage.qml=21"
-    "app/qml/AgPlayer/components/tools/VocalSeparationPage.qml=7"
+    "app/qml/AgPlayer/components/tools/MetadataEditPage.qml=8"
+    "app/qml/AgPlayer/components/tools/VocalSeparationPage.qml=6"
     "app/qml/AgPlayer/components/TrackList.qml=5"
     "app/qml/AgPlayer/components/TransportControls.qml=7"
     "app/qml/AgPlayer/components/VideoTransportBar.qml=2"
     "app/qml/AgPlayer/EqualizerWindow.qml=9"
     "app/qml/AgPlayer/ListWindow.qml=7"
     "app/qml/AgPlayer/MiniPlayerWindow.qml=4"
-    "app/qml/AgPlayer/SettingsPage.qml=24"
+    "app/qml/AgPlayer/SettingsPage.qml=3"
 )
 
 function(get_legacy_control_baseline relative_path output_variable)
@@ -88,6 +88,12 @@ foreach(qml_file IN LISTS qml_files)
             file(RELATIVE_PATH relative_qml "${ROOT}" "${qml_file}")
             message(FATAL_ERROR
                 "${relative_qml}:${line_number} contains a raw color. Use Theme or document a media-domain exception with theme-color-allow:")
+        endif()
+        if(qml_line MATCHES "font\\.pixelSize:[^\n]*[0-9]"
+                AND NOT qml_line MATCHES "font\\.pixelSize:[ 	]*Theme\\.fontSize"
+                AND NOT qml_line MATCHES "typography-size-allow:")
+            message(FATAL_ERROR
+                "${relative_qml}:${line_number} contains a numeric font size. Use a Theme typography token or document a visualization-only exception with typography-size-allow:")
         endif()
         if(NOT qml_file MATCHES "/components/Themed[A-Za-z]+\\.qml$"
                 AND qml_line MATCHES "^[ \t]*(component[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*:[ \t]*)?([A-Za-z_][A-Za-z0-9_]*\\.)?(Button|ToolButton|TextField|Slider|RangeSlider|CheckBox|Switch|ComboBox|Dialog|ToolTip|ScrollBar|MenuItem|ItemDelegate)[ \t]*\\{")
@@ -123,7 +129,11 @@ require_text("app/qml/AgPlayer/ListWindow.qml"
 require_text("app/qml/AgPlayer/components/IntegratedPlayerShell.qml"
     "property int topBarHeight: Theme.titleBarHeight")
 require_text("app/qml/AgPlayer/components/IntegratedPlayerShell.qml"
-    "property int leftColumnWidth: Theme.navigationWidthExpanded")
+    "? Theme.navigationWidthCompact")
+require_text("app/qml/AgPlayer/components/IntegratedPlayerShell.qml"
+    ": Theme.navigationWidth")
+require_text("app/qml/AgPlayer/components/IntegratedPlayerShell.qml"
+    "property int rightColumnWidth: Theme.playerInspectorWidth")
 require_text("app/qml/AgPlayer/components/RollingPlayerShell.qml"
     "Layout.preferredHeight: Theme.titleBarHeight")
 require_text("app/qml/AgPlayer/components/RollingPlayerShell.qml"

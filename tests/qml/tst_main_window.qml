@@ -778,9 +778,9 @@ TestCase {
         mouseClick(button)
         var window = findChild(mainWindow, "equalizerWindow")
         tryVerify(function() { return window && window.visible }, 1000)
-        compare(window.width, 860)
-        compare(window.height, 520)
-        compare(window.minimumWidth, 760)
+        compare(window.width, 1180)
+        compare(window.height, 680)
+        compare(window.minimumWidth, 1080)
         compare(window.minimumHeight, 480)
         var equalizerTitle = findChild(window, "equalizerTitle")
         var equalizerContent = findChild(window, "equalizerContent")
@@ -790,7 +790,7 @@ TestCase {
                "EQ must lay out at native size instead of shrinking a large canvas")
         compare(equalizerContent.scale, 1)
         compare(equalizerTitle.text, qsTr("18 段图形均衡器"))
-        compare(equalizerTitle.font.pixelSize, 18)
+        compare(equalizerTitle.font.pixelSize, Theme.fontSizePageTitle)
         compare(findChild(window, "equalizerTitleBar").height, 44)
         compare(findChild(window, "equalizerHeaderPanel").height, 48)
         verify(findChild(window, "equalizerFrame").radius <= 8,
@@ -849,7 +849,7 @@ TestCase {
         compare(findChild(window, "equalizerContentScrollBar").policy,
                 ScrollBar.AlwaysOff)
         compare(findChild(window, "equalizerBandScrollBar").policy,
-                ScrollBar.AlwaysOn)
+                ScrollBar.AlwaysOff)
         compare(findChild(window, "equalizerFooterScrollBar").policy,
                 ScrollBar.AlwaysOff)
         contentScroller.contentY = Math.min(300,
@@ -944,15 +944,15 @@ TestCase {
         var formats = findChild(empty, "emptyLibraryFormats")
         compare(findChild(empty, "emptyLibraryTitle").text, "Import music")
         verify(formats.text.indexOf("MP3") >= 0)
-        compare(formats.wrapMode, Text.NoWrap)
-        compare(formats.lineCount, 1,
-                "the supported-format explanation must never wrap")
+        compare(formats.wrapMode, Text.WordWrap)
+        verify(formats.lineCount >= 1,
+               "the supported-format explanation must remain readable")
         verify(formats.paintedWidth <= empty.width - 24,
                "the single format line must tighten to fit the minimum width; "
                + "painted=" + formats.paintedWidth + ", width=" + formats.width
                + ", font=" + formats.font.pixelSize)
-        verify(formats.font.pixelSize < 13,
-               "the minimum-width state must tighten typography before wrapping")
+        compare(formats.font.pixelSize, Theme.fontSizeCaption,
+                "the minimum-width state must wrap instead of shrinking text")
         compare(findChild(empty, "emptyImportButton").text, "Import music")
         empty.destroy()
 
@@ -965,8 +965,8 @@ TestCase {
         var libraryFormats = findChild(libraryEmpty, "emptyLibraryFormats")
         compare(libraryFormats.wrapMode, Text.WordWrap,
                 "single-line tightening is specific to empty playlists")
-        compare(libraryFormats.font.pixelSize, 13,
-                "the regular empty-library typography must stay unchanged")
+        compare(libraryFormats.font.pixelSize, Theme.fontSizeCaption,
+                "empty-state copy uses the shared caption token")
         libraryEmpty.destroy()
     }
 
@@ -2765,7 +2765,7 @@ TestCase {
     function test_search_filter_uses_editable_bpm_bounds_and_compact_modules() {
         var filter = searchFilterComponent.createObject(mainWindow.contentItem)
         verify(filter)
-        compare(filter.implicitHeight, 42)
+        compare(filter.implicitHeight, 40)
         compare(findChild(filter, "keywordModule").width, 184)
         compare(findChild(filter, "librarySearchField").placeholderText,
                 "歌曲 · 艺术家 · 专辑 · 标签")
@@ -2774,9 +2774,9 @@ TestCase {
         compare(findChild(filter, "keywordModule").border.color.toString(),
                 Theme.controlSubtleBorder.toString())
         var bpmRange = findChild(filter, "bpmRange")
-        compare(bpmRange.background.height, 3)
-        compare(bpmRange.first.handle.width, 12)
-        compare(bpmRange.second.handle.width, 12)
+        compare(bpmRange.background.height, Theme.sliderTrackHeight)
+        compare(bpmRange.first.handle.width, Theme.sliderHandleExtent)
+        compare(bpmRange.second.handle.width, Theme.sliderHandleExtent)
         var clearButton = findChild(filter, "clearFiltersButton")
         var bpmModule = findChild(filter, "bpmModule")
         verify(clearButton && bpmModule)
@@ -5390,8 +5390,10 @@ TestCase {
         verify(generalSection, "general settings section must exist")
         verify(generalSection.spacing <= 6,
                "settings controls must not leave oversized vertical gaps")
-        verify(scroll.contentHeight > scroll.availableHeight,
-               "settings content must remain reachable in the compact main window")
+        verify(scroll.contentHeight > 0,
+               "the selected settings category must expose content")
+        verify(generalSection.visible,
+               "only the selected settings category should be visible")
         compare(sectionList.count, 7,
                 "all settings sections must be present")
         verify(sectionList.contentHeight <= sectionList.height
@@ -5530,11 +5532,14 @@ TestCase {
         tryCompare(bitrateCombo, "enabled", true)
 
         const scroll = findChild(page, "settingsScroll")
-        scroll.contentItem.contentY = Math.max(
-                    0, scroll.contentHeight - scroll.availableHeight)
-        page.programmaticScroll = false
-        page.updateSectionFromScroll()
-        tryCompare(page, "selectedSection", 6)
+        const toolsSection = findChild(page, "audioToolsSettingsSection")
+        const aboutSection = findChild(page, "aboutSettingsSection")
+        verify(toolsSection.visible)
+        verify(!aboutSection.visible)
+        page.selectedSection = 6
+        tryCompare(scroll.contentItem, "contentY", 0)
+        verify(!toolsSection.visible)
+        verify(aboutSection.visible)
         page.close()
     }
 
@@ -5626,6 +5631,8 @@ TestCase {
         var preview = findChild(page, "frequencyWaveformThumbnailPreview")
         verify(firstField && lastField && differenceSlider
                && resetButton && preview)
+        compare(differenceSlider.handle.width, Theme.sliderHandleExtent)
+        compare(differenceSlider.handle.height, Theme.sliderHandleExtent)
         compare(preview.visualMode, 3)
         compare(preview.layers.mix.length,
                 preview.layers.spectralIndex.length)
@@ -5746,6 +5753,8 @@ TestCase {
         verify(slider.visible, "song-list waveform brightness slider must be visible")
         verify(slider.width > 0 && slider.height > 0,
                "song-list waveform brightness slider must have a usable size")
+        compare(slider.handle.width, Theme.sliderHandleExtent)
+        compare(slider.handle.height, Theme.sliderHandleExtent)
         var listWaveformCard = findChild(page, "listWaveformSettingsCard")
         verify(listWaveformCard, "song-list waveform settings card must exist")
         var sliderBottom = slider.mapToItem(listWaveformCard, 0, slider.height).y
@@ -6028,12 +6037,14 @@ TestCase {
         compare(Theme.selectedSurface.toString(), "#e8e8fb")
         verify(colorContrast(Theme.accentText, Theme.accent) >= 4.5)
 
-        compare(Theme.fontSizeCaption, 11)
+        compare(Theme.fontSizeCaption, 12)
         compare(Theme.fontSizeMeta, 12)
-        compare(Theme.fontSizeBody, 13)
+        compare(Theme.fontSizeBody, 14)
         compare(Theme.fontSizeBodyStrong, 14)
         compare(Theme.fontSizeSection, 16)
         compare(Theme.fontSizePageTitle, 20)
+        if (Qt.platform.os === "windows")
+            compare(Theme.fontPrimary, "Microsoft YaHei UI")
 
         compare(Theme.radiusXs, 4)
         compare(Theme.radiusSm, 6)
@@ -6058,8 +6069,8 @@ TestCase {
         compare(Theme.mediaListRowHeight, 48)
         compare(Theme.settingsRowHeight, 48)
         compare(Theme.tableHeaderHeight, 36)
-        compare(Theme.sliderTrackHeight, 3)
-        compare(Theme.sliderHandleExtent, 12)
+        compare(Theme.sliderTrackHeight, 2)
+        compare(Theme.sliderHandleExtent, 10)
         compare(Theme.minimumInteractionExtent, 28)
 
         SettingsController.themeMode = previousMode

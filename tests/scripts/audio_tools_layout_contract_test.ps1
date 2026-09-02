@@ -137,12 +137,15 @@ if ($toolsWindow -notmatch 'onVisibleChanged:[\s\S]{0,220}AudioEditorController\
 
 foreach ($control in @(
     'editorMainColumn', 'editorInspector', 'editorCommandBar', 'fileSummaryBar',
-    'editorTimelineWorkspace', 'editorTrackHeader', 'editorTimeRuler',
+    'editorTimelineWorkspace', 'editorTimeRuler',
     'editorWaveformCanvas', 'editorPlaybackTransport',
     'editorShortcutCard', 'editorStatusBar')) {
     if ($audioEditor -notmatch ('objectName:\s*"' + $control + '"')) {
         throw "The Phase 6 audio editor is missing $control."
     }
+}
+if ($audioEditor -match 'objectName:\s*"editorTrackHeader"') {
+    throw 'The audio-editor timeline must not restore the removed track-header rail.'
 }
 
 if ($toolsWindow -notmatch 'width:\s*1672' -or
@@ -384,9 +387,9 @@ $statusOverlay = 'objectName:\s*"editorStatusBar"[\s\S]{0,240}' +
     'AudioEditorController\.errorMessage\.length\s*>\s*0\s*\|\|\s*' +
     'statusSuccessTimer\.running'
 if ($audioEditor -notmatch $statusOverlay -or
-    $audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,360}y:\s*mainSurface\.height\s*-\s*25' -or
+    $audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,360}y:\s*mainSurface\.height\s*-\s*height' -or
     $audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,420}width:\s*mainSurface\.width' -or
-    $audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,460}height:\s*25') {
+    $audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,460}height:\s*visible\s*\?\s*25\s*:\s*0') {
     throw 'Status feedback must be a 25 px bottom overlay shown only for processing, errors, or export success.'
 }
 foreach ($accessibleObject in @('audioToolsMinimizeButton',

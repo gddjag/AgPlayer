@@ -693,7 +693,7 @@ TestCase {
         verify(nativeDropHelper.doubleClickItem(canvas, onCurve.x, onCurve.y + 5))
         tryVerify(function() {
             return AudioEditorController.timelineEventViews[0].envelope.length === 1
-        })
+        }, 5000, "native double click adds one envelope point")
         const beforeDrag = AudioEditorController.timelineEventViews[0]
             .envelope[0]
         const point = findVisibleItem(canvas, "editorEnvelopePoint")
@@ -704,7 +704,7 @@ TestCase {
             const changed = AudioEditorController.timelineEventViews[0].envelope[0]
             return Number(changed.offset) !== Number(beforeDrag.offset)
                 && Math.abs(Number(changed.gain) - Number(beforeDrag.gain)) > 0.01
-        })
+        }, 5000, "native envelope drag changes offset and gain")
 
         verify(AudioEditorController.undo())
         const restored = AudioEditorController.timelineEventViews[0].envelope[0]

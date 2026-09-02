@@ -28,14 +28,18 @@ and C++ interfaces remain unchanged.
 The following screenshots were captured from the Release build using the real
 Qt application and fixture audio:
 
-- `build/qa/ui-design-system-final/zh-dark-playback.png`
-- `build/qa/ui-design-system-final/zh-dark-settings.png`
-- `build/qa/ui-design-system-final/zh-dark-list.png`
-- `build/qa/ui-design-system-final/zh-dark-tool-1.png`
-- `build/qa/ui-design-system-final/zh-light-playback.png`
-- `build/qa/ui-design-system-final/zh-light-settings.png`
-- `build/qa/ui-design-system-final/zh-light-list.png`
-- `build/qa/ui-design-system-final/zh-light-tool-1.png`
+- `build/qa/ui-remediation-final-v4/zh-dark-settings.png`
+- `build/qa/ui-remediation-final-v4/zh-light-settings.png`
+- `build/qa/ui-remediation-final-v4/zh-dark-tool-1.png`
+- `build/qa/ui-remediation-final-v4/zh-light-tool-1.png`
+- `build/qa/ui-remediation-final-v4/zh-dark-tool-3.png`
+- `build/qa/ui-remediation-final-v4/zh-light-tool-3.png`
+- `build/qa/ui-remediation-final-v4/zh-dark-tool-4.png`
+- `build/qa/ui-remediation-final-v4/zh-light-tool-4.png`
+- `build/qa/ui-remediation-tool0-final/zh-dark-tool-0.png`
+- `build/qa/ui-remediation-tool0-final/zh-light-tool-0.png`
+- `build/qa/ui-remediation-eq-1080/zh-dark-eq-1080x480.png`
+- `build/qa/ui-remediation-eq-1080/zh-light-eq-1080x480.png`
 
 The matrix validates image dimensions, transparent outer corners where the
 surface contract requires them, and distinct dark/light rendering. Manual
@@ -60,25 +64,31 @@ control proportions, and sidebar/content separation.
 
 ## Verification result
 
-- Release all-target build: passed (420 build steps after the incremental app
-  and QML lint build).
-- Final Chinese visual matrix: 12 of 12 dark, light, and system-following
-  captures passed. The dark/light surfaces were manually reviewed after the
-  final shared-control migration.
+- Release all-target build: passed, including `all_qmllint`. The only lint
+  diagnostic is the existing informational unused import in
+  `WaveformSession.qml`.
+- Final remediation matrix: 10 of 10 dark/light settings and audio-tool
+  captures passed. Focused audio-editor and 1080x480 equalizer matrices also
+  passed and were manually reviewed for clipping, alignment, density, and
+  theme-specific contrast.
 - High-DPI visual matrix: 18 of 18 captures passed on the complete rerun across
   three themes, three scale factors, and two core surfaces. The first matrix
   attempt encountered one process teardown access violation after the 125%
   light-settings screenshot had already been saved; the exact case and the
   complete matrix both passed when rerun. This remains recorded as a
   non-deterministic QA teardown risk rather than a claimed product fix.
-- UI design-system and focused shell regression group: passed.
-- Full CTest run: 160 of 162 passed on the first run. The stem preview mixer hit
-  its 10-second timeout under full-suite load, then passed independently in
-  0.39 seconds. The remaining player-action icon contract is a pre-existing
-  baseline mismatch: `lyrics.svg` and its contract script have identical Git
-  object IDs at base `636c4d6` and at this branch head.
+- UI design-system and focused shell/audio-tools regression group: 16 of 17
+  passed. The remaining `qml_audio_editor_native_input_test` fails while
+  simulating a native waveform double-click; the static/editor layout test and
+  all other focused UI tests pass.
+- Full CTest run after the final visual changes and contract update: 161 of 162
+  passed. The only remaining failure is the same native input simulation. The
+  format-converter contract now requires the new independently scrollable,
+  compact panel and passes together with its QML test.
 
-The unrelated icon contract was not changed as part of the UI remediation.
+The native input simulation is tracked as a separate functional-input risk and
+was not masked by changing production waveform behaviour during this visual
+remediation.
 
 Packaging, pushing, and merging to the main branch are outside this acceptance
 scope.

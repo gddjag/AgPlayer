@@ -44,15 +44,16 @@ weight, icon, leading marker, label, or shape must reinforce the state.
 
 ## 3. Typography
 
-Use the native UI family. Windows requests Segoe UI Variable and lets Qt use
-the system glyph fallback (Microsoft YaHei UI for Chinese). Other platforms
-keep their application font and native CJK fallback.
+Use the native UI family. Windows explicitly uses Microsoft YaHei UI so Chinese
+never falls back to a serif or document font; Segoe UI Variable remains the
+Latin fallback. Other platforms keep their application font and native CJK
+fallback.
 
 | Token | Size | Use |
 | --- | ---: | --- |
-| `fontSizeCaption` | 11 | time, waveform ruler, tertiary metadata |
+| `fontSizeCaption` | 12 | time, waveform ruler, tertiary metadata |
 | `fontSizeMeta` | 12 | secondary labels and descriptions |
-| `fontSizeBody` | 13 | lists, controls, inputs, menus |
+| `fontSizeBody` | 14 | lists, controls, inputs, menus |
 | `fontSizeBodyStrong` | 14 | setting titles and emphasized body text |
 | `fontSizeSection` | 16 | section headers |
 | `fontSizePageTitle` | 20 | page title |
@@ -60,6 +61,11 @@ keep their application font and native CJK fallback.
 Normal and Medium are the default weights. DemiBold is reserved for section and
 page titles, selected navigation labels, and the current track title. Regular
 application pages do not use display typography above 20 px.
+
+User-facing text uses these semantic tokens instead of page-local numeric
+sizes. The 12 px caption is the minimum for ordinary labels; smaller text is
+limited to non-essential visualization annotations that cannot carry actions or
+status by themselves.
 
 ## 4. Spacing, radii, and dimensions
 
@@ -75,6 +81,13 @@ The base grid is 4 px. Supported spacing is 4, 8, 12, 16, 24, and 32 px.
 | `navigationWidthCompact` | 192 | narrow navigation |
 | `navigationWidth` | 216 | standard navigation |
 | `navigationWidthExpanded` | 240 | maximum navigation |
+| `playerInspectorWidth` | 280 | integrated tag/lyrics inspector |
+| `playerTagPanelWidth` | 264 | rolling tag/lyrics inspector |
+| `playerBottomBarHeight` | 80 | integrated playback bar |
+| `rollingOverviewHeight` | 128 | rolling overview at standard height |
+| `rollingOverviewHeightCompact` | 112 | rolling overview below 700 px |
+| `rollingWaveformHeight` | 176 | rolling waveform at standard height |
+| `rollingWaveformHeightCompact` | 152 | rolling waveform below 800 px |
 | `controlHeightCompact` | 28 | compact/icon controls |
 | `controlHeight` | 32 | standard controls and inputs |
 | `controlHeightProminent` | 36 | primary actions |
@@ -83,14 +96,56 @@ The base grid is 4 px. Supported spacing is 4, 8, 12, 16, 24, and 32 px.
 | `mediaListRowHeight` | 48 | track row with cover or two lines |
 | `settingsRowHeight` | 48 | settings row |
 | `tableHeaderHeight` | 36 | table header |
-| `sliderTrackHeight` | 3 | slider visual track |
-| `sliderHandleExtent` | 12 | slider visual handle |
+| `sliderTrackHeight` | 2 | slider visual track |
+| `sliderHandleExtent` | 10 | slider visual handle |
 | `minimumInteractionExtent` | 28 | minimum pointer target |
+
+Playback transport rings may use the semantic playing/paused colors defined by
+`Theme.playRingPlaying` and `Theme.playRingPaused`. These state colors are an
+intentional exception to navigation selection colors; they must not be reused
+for ordinary selection or page emphasis.
+
+The 10 px slider handle is visual geometry only. Its pointer and keyboard
+interaction area remains at least 28 px, so compact appearance must not reduce
+usability.
 
 Pills use half-height radius only for tags or short status labels. A page must
 not place every section in a bordered rounded card.
 
-## 5. Component policy
+## 5. Window and page composition
+
+Major window regions use tonal hierarchy before borders: title bar,
+navigation, content, and elevated controls are distinct semantic surfaces.
+Adjacent workspace columns use a 1 px divider or 1 px layout gap. They do not
+become separately rounded cards. Inner page margins are 8 or 12 px; 16 px is
+reserved for page edges and major section separation.
+
+- Integrated player: 192 px navigation below 1300 px, otherwise 216 px; 280 px
+  inspector; 80 px bottom bar; 40 px search; 56 px cover; icon and transport
+  groups remain vertically centred.
+- Rolling player: 192 px navigation; 264 px inspector; 128/112 px overview;
+  176/152 px main waveform; 64 px control bar. The fixed playhead is 2 px with
+  an accent cap. EQ, waveform mode, theme, immersive, and mini-player actions
+  remain available at the 1000 px minimum width.
+- Settings: one selected category is shown at a time. Rows are 48 px, titles
+  and descriptions share a baseline grid, and trailing controls align to one
+  right edge. A switch does not sit in an extra container unless that
+  container communicates a separate state.
+- Audio tools: the toolbar and page tabs share the 32/36 px control scale.
+  Empty workspaces expand, while status, shortcut, summary, and action regions
+  use explicit content-driven heights. The audio editor waveform spans the
+  full timeline width; no unused track-header rail or transport text labels
+  are shown.
+- Tables and lists: headers are 36 px; compact rows are 40 px and media rows
+  are 48 px. Fixed trailing columns must remain visible at minimum window
+  width; the title and waveform columns absorb width changes first.
+
+Text is one line when label and value form a short setting or status pair.
+Descriptions, paths, validation help, and error recovery instructions use a
+second line. Controls never share a line when doing so forces clipping or
+reduces their pointer target below 28 px.
+
+## 6. Component policy
 
 Pages use the shared `Themed*` controls. Extend the shared component instead of
 copying its visuals into a page.
@@ -100,13 +155,14 @@ slider, range slider, switch, checkbox, menu item, list row, panel, dialog,
 tooltip, and scroll bar. Page-level specialisation may change content and width,
 but not typography, state colours, radii, focus treatment, or base height.
 
-Legacy specialised controls are migrated incrementally to avoid changing
-working interaction geometry in a style-only release. The repository contract
-freezes their reviewed direct-Qt-Control baseline per file: refactoring may
-reduce a file's count, but that reduction cannot become quota for another file.
-New files start with a zero-direct-control baseline.
+Production pages use semantic typography and shared controls now, not as an
+optional later cleanup. A direct Qt Quick Control is accepted only inside a
+reviewed domain-specific component whose interaction cannot be represented by
+the shared control (for example a waveform scrubber or colour-spectrum slider).
+The repository contract freezes those explicit exceptions per file: reducing
+an exception cannot create quota elsewhere, and new files start with zero.
 
-## 6. Interaction states
+## 7. Interaction states
 
 Every interactive component handles Default, Hover, Pressed, Selected, Focus,
 Disabled, Loading, and Error where applicable.
@@ -121,7 +177,7 @@ Disabled, Loading, and Error where applicable.
 - Transitions are 120-160 ms and limited to colour, opacity, or small position
   changes. Infinite decorative animation, live blur, and glow are prohibited.
 
-## 7. Page and review contract
+## 8. Page and review contract
 
 New pages must:
 
@@ -139,8 +195,9 @@ test. Compilation alone is not visual acceptance.
 
 The `ui_design_system_usage_contract_test` is the repository guardrail for
 these rules. It checks required hierarchy tokens and real shared-component use
-in core surfaces, rejects raw hexadecimal colours in application QML, and
-blocks growth of the direct-control baseline. A legitimate domain colour must
-carry an inline `theme-color-allow:` explanation so that the exception is
-visible in review. New generic controls belong in `components/Themed*.qml`;
-page-local copies of shared control visuals are not accepted.
+in core surfaces, rejects raw hexadecimal colours and numeric page-local font
+sizes in application QML, and blocks growth of the direct-control exception
+baseline. A legitimate domain colour or visualization-only font calculation
+must carry an inline `theme-color-allow:` or `typography-size-allow:` reason so
+that the exception is visible in review. New generic controls belong in
+`components/Themed*.qml`; page-local copies are not accepted.

@@ -628,7 +628,7 @@ TestCase {
         verify(navigation && column && tagTab && lyricsTab && tagContent
                && lyricsContent && lyricsPanel && toggle)
         compare(navigation.showTagManagementEntry, false)
-        compare(column.width, 232)
+        compare(column.width, 264)
         verify(tagContent.visible)
         compare(lyricsContent.visible, false)
 
@@ -641,7 +641,7 @@ TestCase {
         mouseClick(toggle)
         tryCompare(column, "width", 42)
         mouseClick(toggle)
-        tryCompare(column, "width", 232)
+        tryCompare(column, "width", 264)
         verify(lyricsContent.visible)
     }
 

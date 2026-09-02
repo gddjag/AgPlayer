@@ -9,7 +9,7 @@ Control {
     objectName: "filenameProcessPage"
     padding: 0
     clip: true
-    font.pixelSize: 14
+    font.pixelSize: Theme.fontSizeBody
     focus: true
     background: Rectangle { color: Theme.background }
 
@@ -19,33 +19,14 @@ Control {
     readonly property bool compactLayout: width < 1000
     readonly property real desktopWorkspaceWidth: 1012
 
-    component AccentCheckBox: CheckBox {
-        id: accentCheck
-        indicator: Rectangle {
-            implicitWidth: 20
-            implicitHeight: 20
-            x: parent.leftPadding
-            y: parent.height / 2 - height / 2
-            radius: 3
-            color: accentCheck.checked ? Theme.accent : "transparent"
-            border.width: 1
-            border.color: accentCheck.checked ? Theme.accent : Theme.iconSecondary
-            Text {
-                anchors.centerIn: parent
-                text: "✓"
-                color: Theme.onCyanText
-                font.pixelSize: 15
-                visible: accentCheck.checked
-            }
-        }
-    }
+    component AccentCheckBox: ThemedCheckBox {}
 
     component StatusGlyph: Item {
         id: glyph
         property int status: 0 // 0 ready, 1 warning, 2 error
         property bool square: false
         property real markSize: 15
-        property real fontSize: 12
+        property real fontSize: Theme.fontSizeCaption // typography-size-allow: decorative preview glyph
         implicitWidth: 18
         implicitHeight: 18
         Rectangle {
@@ -98,7 +79,7 @@ Control {
             visible: glyph.status === 1
             text: "⚠"
             color: Theme.warning
-            font.pixelSize: glyph.fontSize + 5
+            font.pixelSize: glyph.fontSize + 5 // typography-size-allow: decorative preview glyph
         }
     }
 
@@ -127,7 +108,7 @@ Control {
             width: 26
             height: compactSpin.height / 2 - 1
             color: compactSpin.up.pressed ? Theme.hoverSurface : "transparent"
-            Text { anchors.centerIn: parent; text: "⌃"; color: Theme.secondaryText; font.pixelSize: 12 }
+            Text { anchors.centerIn: parent; text: "⌃"; color: Theme.secondaryText; font.pixelSize: Theme.fontSizeCaption }
         }
         down.indicator: Rectangle {
             x: compactSpin.width - width - 1
@@ -135,7 +116,7 @@ Control {
             width: 26
             height: compactSpin.height / 2 - 1
             color: compactSpin.down.pressed ? Theme.hoverSurface : "transparent"
-            Text { anchors.centerIn: parent; text: "⌄"; color: Theme.secondaryText; font.pixelSize: 12 }
+            Text { anchors.centerIn: parent; text: "⌄"; color: Theme.secondaryText; font.pixelSize: Theme.fontSizeCaption }
         }
         background: Rectangle {
             color: Theme.background
@@ -145,14 +126,34 @@ Control {
         }
     }
 
-    component CompactComboBox: ComboBox {
-        id: compactCombo
-        indicator: Text {
-            x: compactCombo.width - width - 10
-            anchors.verticalCenter: parent.verticalCenter
-            text: "⌄"
-            color: Theme.secondaryText
-            font.pixelSize: 13
+    component CompactComboBox: ThemedComboBox {}
+
+    component ActionButton: ThemedButton {
+        id: actionButton
+        property real labelPixelSize: Theme.fontSizeBody
+
+        contentItem: RowLayout {
+            spacing: Theme.spacingSm
+            ThemedIcon {
+                visible: String(actionButton.icon.source).length > 0
+                source: actionButton.icon.source
+                tint: !actionButton.enabled ? Theme.textDisabled
+                      : actionButton.primary ? Theme.accentText
+                                             : Theme.textPrimary
+                sourceSize.width: Theme.iconSizeMd
+                sourceSize.height: Theme.iconSizeMd
+            }
+            Text {
+                text: actionButton.text
+                color: !actionButton.enabled ? Theme.textDisabled
+                       : actionButton.primary ? Theme.accentText
+                                              : Theme.textPrimary
+                font.family: Theme.fontPrimary
+                font.pixelSize: actionButton.labelPixelSize
+                font.weight: actionButton.primary ? Font.Medium : Font.Normal
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+            }
         }
     }
 
@@ -365,27 +366,24 @@ Control {
                 anchors.leftMargin: 18
                 anchors.rightMargin: 16
                 spacing: 16
-            Button {
+            ActionButton {
                 Layout.preferredWidth: 124
-                Layout.preferredHeight: 40
+                Layout.preferredHeight: Theme.controlHeightProminent
                 text: qsTr("添加文件")
-                font.pixelSize: 15
                 icon.source: Theme.icon("add-line")
                 onClicked: audioDialog.open()
             }
-            Button {
+            ActionButton {
                 Layout.preferredWidth: 142
-                Layout.preferredHeight: 40
+                Layout.preferredHeight: Theme.controlHeightProminent
                 text: qsTr("添加文件夹")
-                font.pixelSize: 15
                 icon.source: Theme.icon("folder-add-line")
                 onClicked: folderDialog.open()
             }
-            Button {
+            ActionButton {
                 Layout.preferredWidth: 170
-                Layout.preferredHeight: 40
+                Layout.preferredHeight: Theme.controlHeightProminent
                 text: qsTr("从播放列表添加")
-                font.pixelSize: 15
                 icon.source: Theme.icon("music-2-line")
                 enabled: !FilenameProcessor.busy
                          && PlaybackController.currentTrackId.length > 0
@@ -393,20 +391,18 @@ Control {
                 ToolTip.text: qsTr("需要先在播放器中选择歌曲")
                 onClicked: page.addCurrentPlayerTrack()
             }
-            Button {
+            ActionButton {
                 Layout.preferredWidth: 126
-                Layout.preferredHeight: 40
+                Layout.preferredHeight: Theme.controlHeightProminent
                 text: qsTr("移除选中")
-                font.pixelSize: 15
                 icon.source: Theme.icon("delete-bin-line")
                 enabled: selectedIndices.length > 0 && !FilenameProcessor.busy
                 onClicked: deleteSelection()
             }
-            Button {
+            ActionButton {
                 Layout.preferredWidth: 126
-                Layout.preferredHeight: 40
+                Layout.preferredHeight: Theme.controlHeightProminent
                 text: qsTr("清空列表")
-                font.pixelSize: 14
                 icon.source: Theme.icon("delete-bin-line")
                 enabled: FilenameProcessor.fileCount > 0 && !FilenameProcessor.busy
                 onClicked: FilenameProcessor.clear()
@@ -458,7 +454,7 @@ Control {
                             anchors.leftMargin: 18
                             text: qsTr("已选择的文件（%1）").arg(FilenameProcessor.fileCount)
                             color: Theme.primaryText
-                            font.pixelSize: 15
+                            font.pixelSize: Theme.fontSizeBody
                             font.weight: Font.DemiBold
                         }
                     }
@@ -628,7 +624,7 @@ Control {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: qsTr("批量文件名处理")
                                 color: Theme.primaryText
-                                font.pixelSize: 15
+                                font.pixelSize: Theme.fontSizeBody
                                 font.weight: Font.DemiBold
                             }
                         }
@@ -647,59 +643,41 @@ Control {
                                 Layout.fillHeight: true
                                 spacing: 5
                                 Label { text: qsTr("前缀"); color: Theme.primaryText; font.weight: Font.DemiBold }
-                                RadioButton {
+                                ThemedRadioButton {
                                     id: prefixAddRadio
                                     objectName: "filenamePrefixAddRadio"
                                     text: qsTr("添加前缀")
                                     checked: true
                                     ButtonGroup.group: prefixModeGroup
                                     onToggled: page.refreshPreview()
-                                    indicator: Rectangle {
-                                        implicitWidth: 18; implicitHeight: 18; radius: 9
-                                        x: prefixAddRadio.leftPadding
-                                        y: parent.height / 2 - height / 2
-                                        color: "transparent"
-                                        border.width: 1.5
-                                        border.color: prefixAddRadio.checked ? Theme.accent : Theme.iconSecondary
-                                        Rectangle { anchors.centerIn: parent; width: 8; height: 8; radius: 4; color: Theme.accent; visible: prefixAddRadio.checked }
-                                    }
                                 }
-                                TextField {
+                                ThemedTextField {
                                     id: prefixField
                                     objectName: "filenamePrefixField"
                                     Layout.fillWidth: true
                                     Layout.leftMargin: 28
                                     Layout.rightMargin: 9
-                                    Layout.preferredHeight: 36
+                                    Layout.preferredHeight: Theme.controlHeight
                                     enabled: prefixAddRadio.checked
                                     placeholderText: qsTr("留空则清理已有前缀")
                                     ToolTip.visible: hovered
                                     ToolTip.text: qsTr("填写时添加；留空时删除可识别的原前缀和序号")
                                     onTextChanged: page.refreshPreview()
                                 }
-                                RadioButton {
+                                ThemedRadioButton {
                                     id: prefixRemoveRadio
                                     objectName: "filenamePrefixRemoveRadio"
                                     text: qsTr("删除前缀")
                                     ButtonGroup.group: prefixModeGroup
                                     onToggled: page.refreshPreview()
-                                    indicator: Rectangle {
-                                        implicitWidth: 18; implicitHeight: 18; radius: 9
-                                        x: prefixRemoveRadio.leftPadding
-                                        y: parent.height / 2 - height / 2
-                                        color: "transparent"
-                                        border.width: 1.5
-                                        border.color: prefixRemoveRadio.checked ? Theme.accent : Theme.iconSecondary
-                                        Rectangle { anchors.centerIn: parent; width: 8; height: 8; radius: 4; color: Theme.accent; visible: prefixRemoveRadio.checked }
-                                    }
                                 }
-                                TextField {
+                                ThemedTextField {
                                     id: removePrefixField
                                     objectName: "filenameRemovePrefixField"
                                     Layout.fillWidth: true
                                     Layout.leftMargin: 28
                                     Layout.rightMargin: 9
-                                    Layout.preferredHeight: 36
+                                    Layout.preferredHeight: Theme.controlHeight
                                     enabled: prefixRemoveRadio.checked
                                     opacity: enabled ? 1.0 : 0.55
                                     placeholderText: qsTr("输入要删除的前缀")
@@ -716,59 +694,41 @@ Control {
                                 Layout.fillHeight: true
                                 spacing: 5
                                 Label { text: qsTr("后缀"); color: Theme.primaryText; font.weight: Font.DemiBold }
-                                RadioButton {
+                                ThemedRadioButton {
                                     id: suffixAddRadio
                                     objectName: "filenameSuffixAddRadio"
                                     text: qsTr("添加后缀")
                                     checked: true
                                     ButtonGroup.group: suffixModeGroup
                                     onToggled: page.refreshPreview()
-                                    indicator: Rectangle {
-                                        implicitWidth: 18; implicitHeight: 18; radius: 9
-                                        x: suffixAddRadio.leftPadding
-                                        y: parent.height / 2 - height / 2
-                                        color: "transparent"
-                                        border.width: 1.5
-                                        border.color: suffixAddRadio.checked ? Theme.accent : Theme.iconSecondary
-                                        Rectangle { anchors.centerIn: parent; width: 8; height: 8; radius: 4; color: Theme.accent; visible: suffixAddRadio.checked }
-                                    }
                                 }
-                                TextField {
+                                ThemedTextField {
                                     id: suffixField
                                     objectName: "filenameSuffixField"
                                     Layout.fillWidth: true
                                     Layout.leftMargin: 28
                                     Layout.rightMargin: 9
-                                    Layout.preferredHeight: 36
+                                    Layout.preferredHeight: Theme.controlHeight
                                     enabled: suffixAddRadio.checked
                                     placeholderText: qsTr("留空则清理已有后缀")
                                     ToolTip.visible: hovered
                                     ToolTip.text: qsTr("填写时添加；留空时删除可识别的原后缀")
                                     onTextChanged: page.refreshPreview()
                                 }
-                                RadioButton {
+                                ThemedRadioButton {
                                     id: suffixRemoveRadio
                                     objectName: "filenameSuffixRemoveRadio"
                                     text: qsTr("删除后缀")
                                     ButtonGroup.group: suffixModeGroup
                                     onToggled: page.refreshPreview()
-                                    indicator: Rectangle {
-                                        implicitWidth: 18; implicitHeight: 18; radius: 9
-                                        x: suffixRemoveRadio.leftPadding
-                                        y: parent.height / 2 - height / 2
-                                        color: "transparent"
-                                        border.width: 1.5
-                                        border.color: suffixRemoveRadio.checked ? Theme.accent : Theme.iconSecondary
-                                        Rectangle { anchors.centerIn: parent; width: 8; height: 8; radius: 4; color: Theme.accent; visible: suffixRemoveRadio.checked }
-                                    }
                                 }
-                                TextField {
+                                ThemedTextField {
                                     id: removeSuffixField
                                     objectName: "filenameRemoveSuffixField"
                                     Layout.fillWidth: true
                                     Layout.leftMargin: 28
                                     Layout.rightMargin: 9
-                                    Layout.preferredHeight: 36
+                                    Layout.preferredHeight: Theme.controlHeight
                                     enabled: suffixRemoveRadio.checked
                                     opacity: enabled ? 1.0 : 0.55
                                     placeholderText: qsTr("输入要删除的后缀")
@@ -800,7 +760,7 @@ Control {
                                 RowLayout {
                                     visible: false
                                     Label { text: qsTr("空格替换字符"); color: Theme.secondaryText }
-                                    TextField {
+                                    ThemedTextField {
                                         id: spaceReplacementField
                                         text: "_"
                                         enabled: replaceSpacesCheck.checked
@@ -813,7 +773,7 @@ Control {
                                     id: conflictBox
                                     objectName: "filenameConflictBox"
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 36
+                                    Layout.preferredHeight: Theme.controlHeight
                                     model: [
                                         { text: qsTr("自动重命名（添加序号）"), value: "autoNumber" },
                                         { text: qsTr("跳过冲突文件"), value: "skip" },
@@ -829,7 +789,7 @@ Control {
                                     id: caseBox
                                     objectName: "filenameCaseBox"
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 36
+                                    Layout.preferredHeight: Theme.controlHeight
                                     model: [
                                         { text: qsTr("保持不变"), value: "keep" },
                                         { text: qsTr("全部小写"), value: "lower" },
@@ -919,7 +879,7 @@ Control {
                                     onCurrentValueChanged: page.refreshPreview()
                                 }
                                 Label { text: qsTr("分隔符"); color: Theme.secondaryText; Layout.preferredWidth: 108 }
-                                TextField {
+                                ThemedTextField {
                                     id: numberSeparatorField
                                     Layout.preferredWidth: 150
                                     text: "_"
@@ -959,7 +919,7 @@ Control {
                                     anchors.leftMargin: 22
                                     text: qsTr("重命名预览（%1）").arg(previewRows.length)
                                     color: Theme.primaryText
-                                    font.pixelSize: 15
+                                    font.pixelSize: Theme.fontSizeBody
                                     font.weight: Font.DemiBold
                                 }
                             }
@@ -1037,7 +997,7 @@ Control {
                             Label {
                                 text: qsTr("冲突与验证")
                                 color: Theme.primaryText
-                                font.pixelSize: 15
+                                font.pixelSize: Theme.fontSizeBody
                                 font.weight: Font.DemiBold
                             }
                             Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.border }
@@ -1080,21 +1040,21 @@ Control {
                                     }
                                     Label { text: modelData.label; color: Theme.primaryText }
                                     Item { Layout.fillWidth: true }
-                                    Label { text: modelData.value; color: Theme.primaryText; font.pixelSize: 16 }
+                                    Label { text: modelData.value; color: Theme.primaryText; font.pixelSize: Theme.fontSizeSection }
                                 }
                             }
                             Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.border }
                             Label {
                                 text: qsTr("提示")
                                 color: Theme.primaryText
-                                font.pixelSize: 15
+                                font.pixelSize: Theme.fontSizeBody
                                 font.weight: Font.DemiBold
                             }
                             Label {
                                 Layout.fillWidth: true
                                 text: qsTr("文件名长度建议不超过 255 个字符；\n某些字符在 Windows 系统中不可用：\n\\ / : * ? \" < > |")
                                 color: Theme.secondaryText
-                                font.pixelSize: 12
+                                font.pixelSize: Theme.fontSizeCaption
                                 wrapMode: Text.WordWrap
                                 lineHeight: 1.4
                             }
@@ -1124,7 +1084,7 @@ Control {
                         Label { text: qsTr("警告 %1").arg(warningCount); color: warningCount > 0 ? Theme.warning : Theme.secondaryText }
                         Label { text: qsTr("错误 %1").arg(errorCount); color: errorCount > 0 ? Theme.error : Theme.secondaryText }
                         Item { Layout.fillWidth: true }
-                        Label { text: qsTr("事务提交，失败回滚"); color: Theme.secondaryText; font.pixelSize: 10 }
+                        Label { text: qsTr("事务提交，失败回滚"); color: Theme.secondaryText; font.pixelSize: Theme.fontSizeCaption }
                     }
                 }
             }
@@ -1165,11 +1125,11 @@ Control {
                         spacing: 10
                         ColumnLayout {
                             spacing: 1
-                            Label { text: qsTr("成功预览数量"); color: Theme.secondaryText; font.pixelSize: 14 }
+                            Label { text: qsTr("成功预览数量"); color: Theme.secondaryText; font.pixelSize: Theme.fontSizeBody }
                             RowLayout {
                                 spacing: 6
-                                Label { text: readyCount; color: Theme.success; font.pixelSize: 24; font.weight: Font.DemiBold }
-                                Label { text: qsTr("个文件"); color: Theme.secondaryText; font.pixelSize: 13 }
+                                Label { text: readyCount; color: Theme.success; font.pixelSize: Theme.fontSizePageTitle; font.weight: Font.DemiBold }
+                                Label { text: qsTr("个文件"); color: Theme.secondaryText; font.pixelSize: Theme.fontSizeBody }
                             }
                         }
                         Item { Layout.fillWidth: true }
@@ -1193,11 +1153,11 @@ Control {
                         spacing: 10
                         ColumnLayout {
                             spacing: 1
-                            Label { text: qsTr("冲突数量"); color: Theme.secondaryText; font.pixelSize: 14 }
+                            Label { text: qsTr("冲突数量"); color: Theme.secondaryText; font.pixelSize: Theme.fontSizeBody }
                             RowLayout {
                                 spacing: 6
-                                Label { text: conflictCount; color: conflictCount > 0 ? Theme.error : Theme.secondaryText; font.pixelSize: 24; font.weight: Font.DemiBold }
-                                Label { text: qsTr("个文件"); color: Theme.secondaryText; font.pixelSize: 13 }
+                                Label { text: conflictCount; color: conflictCount > 0 ? Theme.error : Theme.secondaryText; font.pixelSize: Theme.fontSizePageTitle; font.weight: Font.DemiBold }
+                                Label { text: qsTr("个文件"); color: Theme.secondaryText; font.pixelSize: Theme.fontSizeBody }
                             }
                         }
                         Item { Layout.fillWidth: true }
@@ -1221,8 +1181,8 @@ Control {
                         spacing: 10
                         ColumnLayout {
                             spacing: 1
-                            Label { text: qsTr("可撤销本次重命名"); color: Theme.secondaryText; font.pixelSize: 14 }
-                            Label { text: FilenameProcessor.canUndo ? qsTr("是") : qsTr("否"); color: Theme.cyan; font.pixelSize: 24 }
+                            Label { text: qsTr("可撤销本次重命名"); color: Theme.secondaryText; font.pixelSize: Theme.fontSizeBody }
+                            Label { text: FilenameProcessor.canUndo ? qsTr("是") : qsTr("否"); color: Theme.cyan; font.pixelSize: Theme.fontSizePageTitle }
                         }
                         Item { Layout.fillWidth: true }
                         ThemedIcon { source: Theme.icon("restore-line"); tint: Theme.cyan; sourceSize.width: 42; sourceSize.height: 42 }
@@ -1246,19 +1206,18 @@ Control {
                     visible: !FilenameProcessor.busy
                     text: qsTr("重命名操作将在处理后生成日志，\n如需退回，可通过撤销恢复原名列表进行还原。")
                     color: Theme.secondaryText
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontSizeCaption
                     wrapMode: Text.WordWrap
                 }
-                Button {
+                ActionButton {
                     id: startRenameButton
                     Layout.preferredWidth: 222
-                    Layout.preferredHeight: 82
-                    Layout.alignment: Qt.AlignTop
-                    Layout.topMargin: -8
+                    Layout.preferredHeight: Theme.controlHeightProminent
+                    Layout.alignment: Qt.AlignVCenter
                     text: qsTr("开始重命名")
-                    font.pixelSize: 17
+                    labelPixelSize: Theme.fontSizeBody
                     icon.source: Theme.icon("play-fill")
-                    highlighted: true
+                    primary: true
                     enabled: FilenameProcessor.fileCount > 0 && runnableCount > 0
                              && !(conflictBox.currentValue === "stop"
                                   && errorCount > 0)
@@ -1271,31 +1230,20 @@ Control {
                                 page.rules(), page.selectedIndices,
                                 conflictBox.currentValue)
                     }
-                    background: Rectangle {
-                        radius: Theme.radiusSm
-                        color: startRenameButton.enabled ? page.actionBlue : Theme.hoverSurface
-                        border.color: startRenameButton.enabled ? page.actionBlue : Theme.border
-                    }
                 }
-                Button {
+                ActionButton {
                     id: cancelRenameButton
                     objectName: "filenameCancelButton"
                     visible: true
                     enabled: FilenameProcessor.busy
                     Layout.leftMargin: -1
                     Layout.preferredWidth: 184
-                    Layout.preferredHeight: 82
-                    Layout.alignment: Qt.AlignTop
-                    Layout.topMargin: -8
+                    Layout.preferredHeight: Theme.controlHeightProminent
+                    Layout.alignment: Qt.AlignVCenter
                     text: qsTr("取消")
-                    font.pixelSize: 17
+                    labelPixelSize: Theme.fontSizeBody
                     icon.source: Theme.icon("close-fill")
                     onClicked: FilenameProcessor.cancel()
-                    background: Rectangle {
-                        radius: Theme.radiusSm
-                        color: page.neutralActionColor
-                        border.color: Theme.border
-                    }
                 }
             }
             Label {
@@ -1305,7 +1253,7 @@ Control {
                 anchors.topMargin: 10
                 text: qsTr("处理摘要")
                 color: Theme.primaryText
-                font.pixelSize: 15
+                font.pixelSize: Theme.fontSizeBody
                 font.weight: Font.DemiBold
             }
         }

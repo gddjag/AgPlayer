@@ -76,6 +76,12 @@ TestCase {
             }
 
             ThemedCheckBox { id: checkBox; text: "复选" }
+            ThemedRadioButton {
+                id: radioButton
+                objectName: "designRadioButton"
+                text: "单选"
+                checked: true
+            }
             ThemedSwitch { id: switchControl; text: "开关" }
             ThemedRangeSlider { id: rangeSlider; width: 220 }
             ThemedComboBox { id: comboBox; width: 220; model: ["A", "B"] }
@@ -116,6 +122,9 @@ TestCase {
         compare(mediaRow.implicitHeight, Theme.mediaListRowHeight)
         compare(tabButton.implicitHeight, Theme.navigationRowHeight)
         compare(checkBox.implicitHeight, Theme.controlHeight)
+        compare(radioButton.implicitHeight, Theme.controlHeight)
+        compare(radioButton.indicator.border.color.toString(),
+                Theme.accent.toString())
         compare(switchControl.implicitHeight, Theme.controlHeight)
         compare(rangeSlider.implicitHeight, Theme.controlHeight)
         compare(comboBox.implicitHeight, Theme.controlHeight)
@@ -139,6 +148,15 @@ TestCase {
         tryCompare(Theme, "isLight", true)
         tryCompare(primaryButton.background, "color", Theme.accent)
         tryCompare(standardRow.background, "color", Theme.selectedSurface)
+    }
+
+    function test_radio_button_exposes_pressed_state() {
+        mousePress(radioButton, 9, radioButton.height / 2, Qt.LeftButton)
+        tryCompare(radioButton, "down", true)
+        compare(radioButton.indicator.color.toString(),
+                Theme.surfacePressed.toString())
+        mouseRelease(radioButton, 9, radioButton.height / 2, Qt.LeftButton)
+        tryCompare(radioButton, "down", false)
     }
 
     function test_controls_expose_accessible_names_and_focus() {

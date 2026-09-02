@@ -76,7 +76,7 @@ Rectangle {
                 text: root.formatTime(root.playback ? root.playback.positionMs : 0)
                 color: Theme.secondaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeCaption
                 Accessible.name: qsTr("当前时间 %1").arg(text)
             }
 
@@ -100,8 +100,8 @@ Rectangle {
                     y: seekSlider.topPadding
                        + seekSlider.availableHeight / 2 - height / 2
                     width: seekSlider.availableWidth
-                    height: 3
-                    radius: 1.5
+                    height: Theme.sliderTrackHeight
+                    radius: height / 2
                     color: Theme.border
                     Rectangle {
                         width: seekSlider.visualPosition * parent.width
@@ -115,7 +115,9 @@ Rectangle {
                        * (seekSlider.availableWidth - width)
                     y: seekSlider.topPadding
                        + seekSlider.availableHeight / 2 - height / 2
-                    width: seekSlider.activeFocus ? 12 : 10
+                    width: seekSlider.activeFocus
+                           ? Theme.sliderHandleExtent + 2
+                           : Theme.sliderHandleExtent
                     height: width
                     radius: width / 2
                     color: Theme.controlHandle
@@ -131,7 +133,7 @@ Rectangle {
                 text: root.formatTime(root.playback ? root.playback.durationMs : 0)
                 color: Theme.secondaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeCaption
                 Accessible.name: qsTr("总时长 %1").arg(text)
             }
         }
@@ -169,6 +171,18 @@ Rectangle {
                 currentIndex: root.speedIndex(
                                   root.playback ? root.playback.speedRatio : 1)
                 Accessible.name: qsTr("播放速度")
+                contentItem: Text {
+                    leftPadding: Theme.spacingSm
+                    rightPadding: 20
+                    text: speedControl.displayText
+                    color: speedControl.enabled ? Theme.primaryText
+                                                : Theme.secondaryText
+                    opacity: speedControl.enabled ? 1.0 : 0.55
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: Theme.fontSizeBody
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                }
                 onActivated: function(index) {
                     if (root.playback
                             && root.playback.setSpeedRatio !== undefined)

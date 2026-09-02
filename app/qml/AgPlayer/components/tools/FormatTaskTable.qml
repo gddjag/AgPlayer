@@ -51,7 +51,7 @@ Rectangle {
             leftPadding: control.indicator.width + 8
             verticalAlignment: Text.AlignVCenter
             color: control.enabled ? Theme.primaryText : Theme.secondaryText
-            font.pixelSize: 13
+            font.pixelSize: Theme.fontSizeBody
         }
     }
 
@@ -65,7 +65,7 @@ Rectangle {
             Layout.preferredHeight: 44
             Layout.leftMargin: 18
             spacing: 12
-            Text { text: qsTr("任务列表"); color: Theme.primaryText; font.pixelSize: 15; font.weight: Font.DemiBold }
+            Text { text: qsTr("任务列表"); color: Theme.primaryText; font.pixelSize: Theme.fontSizeBody; font.weight: Font.DemiBold }
             Repeater {
                 model: [
                     { key: "All", text: qsTr("全部"), count: converter.fileCount },
@@ -91,7 +91,7 @@ Rectangle {
                         color: parent.checked ? Theme.activeSelectionText : Theme.primaryText
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
-                        font.pixelSize: 13
+                        font.pixelSize: Theme.fontSizeBody
                     }
                 }
             }
@@ -126,7 +126,7 @@ Rectangle {
                             verticalAlignment: Text.AlignVCenter
                             text: modelData
                             color: Theme.secondaryText
-                            font.pixelSize: 13
+                            font.pixelSize: Theme.fontSizeBody
                         }
                     }
                 }
@@ -206,7 +206,7 @@ Rectangle {
                          : column === 7 && model.status === "Error" ? Theme.error
                          : column === 7 && model.status === "Converting" ? Theme.accent
                          : Theme.primaryText
-                    font.pixelSize: 13
+                    font.pixelSize: Theme.fontSizeBody
                     ToolTip.visible: column === 7
                                          && model.status === "Error"
                                          && model.errorDetail.length > 0
@@ -250,7 +250,7 @@ Rectangle {
                     text: Math.round(model.progress * 100) + "%"
                     color: Theme.primaryText
                     horizontalAlignment: Text.AlignRight
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontSizeCaption
                 }
                 MouseArea {
                     anchors.fill: parent
@@ -272,7 +272,7 @@ Rectangle {
             verticalAlignment: Text.AlignVCenter
             text: qsTr("共 %1 个任务 / 已选择 %2 个").arg(converter.fileCount).arg(converter.checkedCount)
             color: Theme.secondaryText
-            font.pixelSize: 12
+            font.pixelSize: Theme.fontSizeCaption
         }
     }
 

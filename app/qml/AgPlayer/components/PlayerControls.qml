@@ -7,13 +7,26 @@ Rectangle {
     id: root
     color: "transparent"
 
+    component ActionBackground: Rectangle {
+        color: parent.down ? Theme.surfacePressed
+                           : parent.hovered ? Theme.surfaceHover
+                                            : "transparent"
+        border.width: parent.activeFocus ? 2 : 0
+        border.color: Theme.focus
+        radius: Theme.radiusSm
+        Behavior on color { ColorAnimation { duration: 100 } }
+    }
+
     property bool emptyMode: false
     property bool showListWindowButton: true
     property bool centerTransport: true
     property bool showWaveformMode: true
     property int shellMode: SettingsController.playerShellMode
     readonly property bool rollingLayout: shellMode === 2
-    readonly property bool compactTransport: width < 860
+    // Rolling mode reserves a dedicated 520-DIP control region and keeps
+    // every playback/theme/EQ entry point available even at the 1000-DIP
+    // window minimum. Other shells may still collapse secondary actions.
+    readonly property bool compactTransport: !rollingLayout && width < 860
     readonly property bool denseTransport: width < 1200
     readonly property var actionProfile: PlayerPresentation.profile(
                                              rollingLayout ? "rolling"
@@ -63,7 +76,7 @@ Rectangle {
         }
         ToolTip.text: Accessible.name
         ToolTip.visible: hovered
-        background: null
+        background: ActionBackground {}
     }
 
     TransportControls {
@@ -112,7 +125,7 @@ Rectangle {
         onClicked: WindowController.showAudioTools()
         ToolTip.text: Accessible.name
         ToolTip.visible: hovered
-        background: null
+        background: ActionBackground {}
     }
 
     Loader {
@@ -170,7 +183,7 @@ Rectangle {
             onClicked: root.openThemePopup()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
-            background: null
+            background: ActionBackground {}
         }
 
         ExperienceActions {
@@ -202,7 +215,7 @@ Rectangle {
             onClicked: WindowController.showMini()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
-            background: null
+            background: ActionBackground {}
         }
     }
 

@@ -100,8 +100,8 @@ TestCase {
         verify(input && models && settings && timeline)
         verify(input.height <= 124,
                "the file and source preview row must stay compact")
-        verify(models.height <= 178,
-               "the horizontal model deck must stay compact")
+        verify(models.height <= 198,
+               "the model deck must fit its complete action row")
         verify(settings.height <= 160,
                "output settings must align with the compact source row")
         verify(timeline.height >= 276,

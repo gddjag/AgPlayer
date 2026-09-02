@@ -40,7 +40,7 @@ Item {
         text: root.formatTime(root.playback ? root.playback.positionMs : 0)
         color: "#DBE8F5" // theme-color-allow: immersive waveform time label
         opacity: 0.72 * root.opacityScale
-        font.pixelSize: 10
+        font.pixelSize: Theme.fontSizeCaption
     }
 
     WaveformItem {
@@ -86,6 +86,6 @@ Item {
         text: root.formatTime(root.effectiveDurationMs)
         color: "#DBE8F5" // theme-color-allow: immersive waveform time label
         opacity: 0.72 * root.opacityScale
-        font.pixelSize: 10
+        font.pixelSize: Theme.fontSizeCaption
     }
 }

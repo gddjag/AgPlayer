@@ -490,9 +490,9 @@ TestCase {
                && sliderTrack && clear)
         compare(keyword.border.color.toString(), Theme.opaqueBorder.toString())
         compare(bpm.border.color.toString(), Theme.opaqueBorder.toString())
-        compare(sliderTrack.height, 3)
-        compare(firstHandle.width, 12)
-        compare(firstHandle.height, 12)
+        compare(sliderTrack.height, Theme.sliderTrackHeight)
+        compare(firstHandle.width, Theme.sliderHandleExtent)
+        compare(firstHandle.height, Theme.sliderHandleExtent)
         verify(firstHandle.color.a > 0.70)
 
     }
@@ -510,16 +510,21 @@ TestCase {
         }, 1000)
     }
 
-    function test_integrated_major_outlines_use_soft_border() {
+    function test_integrated_hierarchy_uses_flat_columns_and_framed_media() {
         var shell = enterIntegratedShell()
-        var names = ["integratedLibraryColumn", "integratedTrackColumn",
-                     "integratedTagColumn", "integratedWaveformFrame",
-                     "integratedBottomBar"]
-        for (var index = 0; index < names.length; ++index) {
-            var surface = findChild(shell, names[index])
-            verify(surface, names[index] + " missing")
+        var flatNames = ["integratedLibraryColumn", "integratedTrackColumn"]
+        for (var flatIndex = 0; flatIndex < flatNames.length; ++flatIndex) {
+            var flatSurface = findChild(shell, flatNames[flatIndex])
+            verify(flatSurface, flatNames[flatIndex] + " missing")
+            compare(flatSurface.border.width, 0, flatNames[flatIndex])
+        }
+        var framedNames = ["integratedWaveformFrame", "integratedBottomBar"]
+        for (var index = 0; index < framedNames.length; ++index) {
+            var surface = findChild(shell, framedNames[index])
+            verify(surface, framedNames[index] + " missing")
             compare(surface.border.color.toString(),
-                    Theme.opaqueBorder.toString(), names[index])
+                    Theme.opaqueBorder.toString(), framedNames[index])
+            compare(surface.border.width, 1, framedNames[index])
         }
     }
 
@@ -536,7 +541,7 @@ TestCase {
         var sliderTrack = findChild(range, "rangeSliderTrack")
         verify(range && sliderTrack)
         verify(!range.glassStyle)
-        compare(sliderTrack.height, 3)
+        compare(sliderTrack.height, Theme.sliderTrackHeight)
         compare(tags.controlBorder.toString(),
                 Theme.controlSubtleBorder.toString())
         tryCompare(findChild(tags, "tagSearchField"), "height", 34)
@@ -565,7 +570,7 @@ TestCase {
         verify(bottom && summary && cover && metadata && controls
                && listWindow && centerGroup && transport && volume && rightActions
                && playPause && theme && mini)
-        verify(cover.width >= 64 && cover.height >= 64)
+        verify(cover.width >= 56 && cover.height >= 56)
         verify(metadata.visible)
         fuzzyCompare(summary.mapToItem(bottom, 0, 0).y
                      + summary.height / 2, bottom.height / 2, 1.0)
@@ -606,8 +611,8 @@ TestCase {
         mainWindow.width = 1672
         var summary = findChild(shell, "integratedTrackSummary")
         verify(summary)
-        tryVerify(function() { return summary.width >= 460 }, 1000)
-        verify(summary.width <= 480,
+        tryVerify(function() { return summary.width >= 400 }, 1000)
+        verify(summary.width <= 420,
                "track summary must leave the centered transport unobstructed")
         mainWindow.width = previousWidth
     }
@@ -622,7 +627,7 @@ TestCase {
         var bottomTop = bottomBar.mapToItem(shell, 0, 0).y
         verify(bottomTop - waveformBottom <= 5,
                "waveform and transport gap should match the 4px upper gap")
-        verify(bottomBar.height >= 91,
+        verify(bottomBar.height >= 80,
                "transport canvas should gain height while closing the gap")
     }
 

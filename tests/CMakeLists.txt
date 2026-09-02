@@ -1521,6 +1521,7 @@ set_tests_properties(qml_mini_player_test PROPERTIES
 )
 add_test(NAME qml_immersive_integration_test
     COMMAND qml_mini_player_test
+        -o ${CMAKE_CURRENT_BINARY_DIR}/qml-immersive-integration.xml,junitxml
         -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_immersive_integration.qml)
 set_tests_properties(qml_immersive_integration_test PROPERTIES
     TIMEOUT 120
@@ -1577,7 +1578,7 @@ add_dependencies(qml_audio_tools_test decoder_fixture)
 add_test(NAME qml_audio_editor_native_input_test
     COMMAND qml_audio_tools_test
         -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_audio_editor_native_input.qml
-        -o -,txt)
+        -o ${CMAKE_CURRENT_BINARY_DIR}/qml-audio-editor-native-input.xml,junitxml)
 set_tests_properties(qml_audio_editor_native_input_test PROPERTIES
     # Native Windows input can exceed 30 seconds in Debug while real fixture
     # playback and window activation complete.

@@ -145,7 +145,7 @@ Rectangle {
                 objectName: "miniTrackTitle"
                 text: root.currentTrackValue(LibraryModel.TitleRole) || qsTr("未加载歌曲")
                 color: Theme.primaryText; font.family: Theme.fontPrimary
-                font.pixelSize: 16; font.weight: Font.DemiBold
+                font.pixelSize: Theme.fontSizeSection; font.weight: Font.DemiBold
                 elide: Text.ElideRight; Layout.fillWidth: true
                 Layout.preferredHeight: 20
             }
@@ -158,7 +158,7 @@ Rectangle {
                     text: root.currentTrackValue(LibraryModel.ArtistRole)
                           || qsTr("未知艺术家")
                     color: Theme.secondaryText; font.family: Theme.fontPrimary
-                    font.pixelSize: 10; elide: Text.ElideRight; wrapMode: Text.NoWrap
+                    font.pixelSize: Theme.fontSizeCaption; elide: Text.ElideRight; wrapMode: Text.NoWrap
                     Layout.preferredWidth: Math.min(implicitWidth, 90)
                     Layout.maximumWidth: 90
                     ToolTip.visible: miniArtistHover.hovered && truncated
@@ -167,7 +167,7 @@ Rectangle {
                 }
                 Text {
                     objectName: "miniArtistAlbumSeparator"
-                    text: "·"; color: Theme.secondaryText; font.pixelSize: 10
+                    text: "·"; color: Theme.secondaryText; font.pixelSize: Theme.fontSizeCaption
                     Layout.alignment: Qt.AlignVCenter
                 }
                 Text {
@@ -176,7 +176,7 @@ Rectangle {
                     text: root.currentTrackValue(LibraryModel.AlbumRole)
                           || qsTr("未知专辑")
                     color: Theme.secondaryText; font.family: Theme.fontPrimary
-                    font.pixelSize: 10; elide: Text.ElideRight; wrapMode: Text.NoWrap
+                    font.pixelSize: Theme.fontSizeCaption; elide: Text.ElideRight; wrapMode: Text.NoWrap
                     Layout.preferredWidth: Math.min(implicitWidth, 90)
                     Layout.maximumWidth: 90
                     ToolTip.visible: miniAlbumHover.hovered && truncated
@@ -186,7 +186,7 @@ Rectangle {
                 Text {
                     objectName: "miniTagSeparator"
                     text: "·"; visible: miniTags.visible
-                    color: Theme.tagSecondaryText; font.pixelSize: 10
+                    color: Theme.tagSecondaryText; font.pixelSize: Theme.fontSizeCaption
                     Layout.alignment: Qt.AlignVCenter
                 }
                 Text {
@@ -195,7 +195,7 @@ Rectangle {
                     text: root.currentTrackTags()
                     visible: text.length > 0
                     color: Theme.tagSecondaryText; font.family: Theme.fontPrimary
-                    font.pixelSize: 10; elide: Text.ElideRight; wrapMode: Text.NoWrap
+                    font.pixelSize: Theme.fontSizeCaption; elide: Text.ElideRight; wrapMode: Text.NoWrap
                     Layout.preferredWidth: Math.min(implicitWidth, 70)
                     Layout.maximumWidth: 70
                     ToolTip.visible: miniTagsHover.hovered && truncated
@@ -329,13 +329,13 @@ Rectangle {
                     objectName: "miniElapsedTime"
                     anchors.left: parent.left; anchors.bottom: parent.bottom
                     text: root.formatTime(playback ? playback.positionMs : 0)
-                    color: Theme.secondaryText; font.pixelSize: 11
+                    color: Theme.secondaryText; font.pixelSize: Theme.fontSizeCaption
                 }
                 Text {
                     objectName: "miniDurationTime"
                     anchors.right: parent.right; anchors.bottom: parent.bottom
                     text: root.formatTime(playback ? playback.durationMs : 0)
-                    color: Theme.secondaryText; font.pixelSize: 11
+                    color: Theme.secondaryText; font.pixelSize: Theme.fontSizeCaption
                 }
             }
             RowLayout {
@@ -495,11 +495,11 @@ Rectangle {
                             anchors.leftMargin: 6
                             anchors.rightMargin: 6
                             spacing: 4
-                            Slider {
+                            ThemedSlider {
                                 id: volumeSlider
                                 objectName: "miniVolumeSlider"
                                 Layout.preferredWidth: 60
-                                Layout.preferredHeight: 24
+                                Layout.preferredHeight: Theme.controlHeightCompact
                                 from: 0; to: 1
                                 value: playback && !playback.muted ? playback.volume : 0
                                 onMoved: if (playback) playback.setVolume(value)
@@ -511,25 +511,15 @@ Rectangle {
                                         miniVolumeCloseTimer.restart()
                                     }
                                 }
-                                background: Rectangle {
-                                    x: volumeSlider.leftPadding
-                                    y: volumeSlider.topPadding + volumeSlider.availableHeight / 2 - height / 2
-                                    width: volumeSlider.availableWidth; height: 3; radius: 1.5
-                                    color: Theme.border
-                                    Rectangle { width: volumeSlider.visualPosition * parent.width; height: parent.height; radius: parent.radius; color: Theme.accent }
-                                }
-                                handle: Rectangle {
-                                    x: volumeSlider.leftPadding + volumeSlider.visualPosition * (volumeSlider.availableWidth - width)
-                                    y: volumeSlider.topPadding + volumeSlider.availableHeight / 2 - height / 2
-                                    width: 8; height: 8; radius: 4; color: Theme.primaryText
-                                }
+                                trackColor: Theme.border
+                                handleColor: Theme.primaryText
                             }
                             Text {
                                 objectName: "miniVolumePercent"
                                 text: Math.round((playback && !playback.muted ? playback.volume : 0) * 100) + "%"
                                 color: Theme.primaryText
-                                font.pixelSize: 9
-                                Layout.preferredWidth: 26
+                                font.pixelSize: Theme.fontSizeCaption
+                                Layout.preferredWidth: 34
                             }
                         }
                     }

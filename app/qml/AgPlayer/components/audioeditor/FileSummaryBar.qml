@@ -80,7 +80,7 @@ Rectangle {
             elide: Text.ElideMiddle
             color: Theme.primaryText
             font.family: Theme.fontPrimary
-            font.pixelSize: 13
+            font.pixelSize: Theme.fontSizeBody
         }
         Repeater {
             model: root.summaryItems()
@@ -95,7 +95,7 @@ Rectangle {
                     text: modelData
                     color: Theme.secondaryText
                     font.family: Theme.fontPrimary
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontSizeCaption
                 }
             }
         }

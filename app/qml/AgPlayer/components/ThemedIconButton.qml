@@ -11,6 +11,7 @@ T.Button {
     property bool primary: false
     property bool danger: false
     property bool dangerOnHover: false
+    readonly property bool selected: checkable && checked
 
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
@@ -22,6 +23,7 @@ T.Button {
     contentItem: ThemedIcon {
         source: control.iconSource
         tint: !control.enabled ? Theme.textDisabled
+              : control.selected ? Theme.accent
               : control.primary || control.danger
                 || (control.dangerOnHover && control.hovered)
                 ? Theme.accentText : Theme.iconPrimary
@@ -37,13 +39,16 @@ T.Button {
                  ? (control.down ? Qt.darker(Theme.danger, 1.15)
                                  : control.danger ? Theme.danger
                                                   : Qt.lighter(Theme.danger, 1.08))
+               : control.selected ? (control.down ? Theme.accentPressed
+                                                    : Theme.accentSoft)
                : control.primary ? (control.down ? Theme.accentPressed
                                                   : control.hovered ? Theme.accentHover
                                                                     : Theme.accent)
                : control.down ? Theme.surfacePressed
                : control.hovered ? Theme.surfaceHover : "transparent"
-        border.color: control.activeFocus ? Theme.focus : "transparent"
-        border.width: control.activeFocus ? 2 : 0
+        border.color: control.activeFocus ? Theme.focus
+                      : control.selected ? Theme.accentBorder : "transparent"
+        border.width: control.activeFocus ? 2 : control.selected ? 1 : 0
 
         Behavior on color {
             ColorAnimation { duration: 140 }

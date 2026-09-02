@@ -358,7 +358,9 @@ Item {
             id: overviewRegion
             objectName: "rollingOverviewRegion"
             Layout.fillWidth: true
-            Layout.preferredHeight: root.height < 460 ? 104 : 116
+            Layout.preferredHeight: root.height < 700
+                                    ? Theme.rollingOverviewHeightCompact
+                                    : Theme.rollingOverviewHeight
             Layout.leftMargin: 10
             Layout.rightMargin: 10
 
@@ -367,7 +369,9 @@ Item {
                 objectName: "rollingTrackCover"
                 anchors.left: parent.left
                 anchors.top: parent.top
+                anchors.topMargin: 8
                 anchors.bottom: parent.bottom
+                anchors.bottomMargin: 8
                 width: height
                 color: Theme.panel
                 border.color: Theme.border
@@ -413,7 +417,7 @@ Item {
                               ? root.currentTrack.title : qsTr("未选择歌曲")
                         color: Theme.primaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: 20
+                        font.pixelSize: Theme.fontSizeSection
                         font.weight: Font.DemiBold
                         elide: Text.ElideRight
                         verticalAlignment: Text.AlignVCenter
@@ -422,8 +426,8 @@ Item {
                     ToolButton {
                         id: favoriteButton
                         objectName: "rollingFavoriteButton"
-                        width: 28
-                        height: 28
+                        width: 32
+                        height: 32
                         flat: true
                         icon.source: root.currentTrack
                                      && root.currentTrack.favorite
@@ -432,10 +436,18 @@ Item {
                         icon.color: root.currentTrack
                                     && root.currentTrack.favorite
                                     ? Theme.danger : Theme.iconPrimary
-                        icon.width: 19
-                        icon.height: 19
+                        icon.width: 18
+                        icon.height: 18
                         onClicked: root.toggleFavorite()
-                        background: null
+                        background: Rectangle {
+                            color: parent.down ? Theme.surfacePressed
+                                : parent.hovered ? Theme.surfaceHover
+                                : parent.checked ? Theme.accentSoft : "transparent"
+                            border.width: parent.activeFocus ? 2 : 0
+                            border.color: Theme.focus
+                            radius: Theme.radiusSm
+                            Behavior on color { ColorAnimation { duration: 100 } }
+                        }
                     }
 
                     Row {
@@ -475,7 +487,7 @@ Item {
                            ? root.currentTrack.album : ""
                     tags: root.currentTrack && root.currentTrack.tags
                           ? root.currentTrack.tags : []
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontSizeCaption
                 }
 
                 Column {
@@ -578,7 +590,7 @@ Item {
                             anchors.centerIn: parent
                             text: modelData
                             color: Theme.secondaryText
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fontSizeCaption
                         }
                     }
                 }
@@ -744,7 +756,7 @@ Item {
                         anchors.centerIn: parent
                         text: root.formatTime(overviewWaveformHost.hoverTimeMs)
                         color: Theme.primaryText
-                        font.pixelSize: 10
+                        font.pixelSize: Theme.fontSizeCaption
                     }
                 }
             }
@@ -754,7 +766,9 @@ Item {
             id: mainWaveformCanvas
             objectName: "rollingMainWaveformCanvas"
             Layout.fillWidth: true
-            Layout.preferredHeight: root.height < 800 ? 160 : 190
+            Layout.preferredHeight: root.height < 800
+                                    ? Theme.rollingWaveformHeightCompact
+                                    : Theme.rollingWaveformHeight
             Layout.minimumHeight: 140
             Layout.leftMargin: 10
             Layout.rightMargin: 10
@@ -793,6 +807,39 @@ Item {
             }
 
             Rectangle {
+                anchors.fill: parent
+                color: Theme.accent
+                opacity: root.scratchGestureActive ? 0.07 : 0
+                visible: opacity > 0
+                z: 4
+                Behavior on opacity {
+                    NumberAnimation { duration: 100; easing.type: Easing.OutCubic }
+                }
+            }
+
+            Label {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: parent.top
+                anchors.topMargin: 10
+                visible: root.scratchGestureActive
+                text: {
+                    var delta = (root.scratchVisualPositionMs
+                                 - root.scratchAnchorPositionMs) / 1000
+                    return (delta >= 0 ? "+" : "") + delta.toFixed(2) + " s"
+                }
+                color: Theme.primaryText
+                font.pixelSize: Theme.fontSizeCaption
+                padding: 6
+                background: Rectangle {
+                    color: Theme.surfaceElevated
+                    border.color: Theme.accent
+                    border.width: 1
+                    radius: Theme.radiusSm
+                }
+                z: 7
+            }
+
+            Rectangle {
                 id: centerPlayhead
                 objectName: "rollingCenterPlayhead"
                 // The 1-DIP indicator must use a deterministic integer pixel
@@ -802,8 +849,8 @@ Item {
                 anchors.bottom: parent.bottom
                 anchors.topMargin: 8
                 anchors.bottomMargin: 8
-                width: 1
-                color: Theme.primaryText
+                width: 2
+                color: Theme.accent
                 opacity: 0.95
                 z: 5
 
@@ -811,10 +858,10 @@ Item {
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.top: parent.top
                     anchors.topMargin: -2
-                    width: 5
-                    height: 5
-                    radius: 2.5
-                    color: Theme.primaryText
+                    width: 6
+                    height: 6
+                    radius: 3
+                    color: Theme.accent
                 }
             }
 
@@ -828,7 +875,7 @@ Item {
                          && Boolean(root.playback.scratchBuffering)
                 text: qsTr("搓碟缓冲中")
                 color: Theme.primaryText
-                font.pixelSize: 11
+                font.pixelSize: Theme.fontSizeCaption
                 padding: 6
                 background: Rectangle {
                     color: Theme.surfaceElevated
@@ -944,10 +991,8 @@ Item {
                     // the shared controls rather than silently hiding their
                     // waveform/EQ/skin/mini entry points. The rolling-only
                     // extension returns once both groups fit side by side.
-                    visible: root.width >= 1210
-                    Layout.preferredWidth: visible
-                                           ? (root.width < 1360 ? 394 : 488)
-                                           : 0
+                    visible: true
+                    Layout.preferredWidth: root.width < 1360 ? 394 : 488
                     Layout.maximumWidth: Layout.preferredWidth
                     Layout.fillHeight: true
                     spacing: root.width < 1360 ? 4 : 7
@@ -957,15 +1002,15 @@ Item {
                         Label {
                             text: qsTr("速度")
                             color: Theme.secondaryText
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fontSizeCaption
                         }
                         RowLayout {
                             spacing: 2
                             ToolButton {
                                 objectName: "rollingSpeedMinus"
                                 text: "−"
-                                implicitWidth: 28
-                                implicitHeight: 30
+                                implicitWidth: 32
+                                implicitHeight: 32
                                 onClicked: root.adjustSpeed(-0.05)
                             }
                             Label {
@@ -976,13 +1021,13 @@ Item {
                                           root.playback
                                           ? root.playback.speedRatio : 1)
                                 color: Theme.primaryText
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontSizeBody
                             }
                             ToolButton {
                                 objectName: "rollingSpeedPlus"
                                 text: "+"
-                                implicitWidth: 28
-                                implicitHeight: 30
+                                implicitWidth: 32
+                                implicitHeight: 32
                                 onClicked: root.adjustSpeed(0.05)
                             }
                         }
@@ -997,19 +1042,19 @@ Item {
                                   ? root.sourceBpmValue.toFixed(2) + " BPM"
                                   : "—"
                             color: Theme.secondaryText
-                            font.pixelSize: 9
+                            font.pixelSize: Theme.fontSizeCaption
                         }
                         TextField {
                             id: targetBpm
                             objectName: "rollingTargetBpm"
-                            Layout.preferredWidth: 68
-                            Layout.preferredHeight: 30
+                            Layout.preferredWidth: 72
+                            Layout.preferredHeight: 32
                             horizontalAlignment: Text.AlignHCenter
                             text: root.formatBpm(
                                       root.playback
                                       ? root.playback.targetBpm : 0)
                             color: Theme.primaryText
-                            font.pixelSize: 11
+                            font.pixelSize: Theme.fontSizeBody
                             validator: DoubleValidator {
                                 bottom: 20
                                 top: 400
@@ -1023,8 +1068,8 @@ Item {
                     ToolButton {
                         objectName: "rollingTempoReset"
                         Layout.alignment: Qt.AlignBottom
-                        implicitWidth: 30
-                        implicitHeight: 30
+                        implicitWidth: 32
+                        implicitHeight: 32
                         icon.source: Theme.icon("restore-line")
                         icon.color: Theme.iconPrimary
                         icon.width: 16
@@ -1037,13 +1082,13 @@ Item {
                         Label {
                             text: qsTr("保持音调")
                             color: Theme.secondaryText
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fontSizeCaption
                         }
-                        Switch {
+                        ThemedSwitch {
                             id: keepPitchControl
                             objectName: "rollingKeepPitchControl"
-                            Layout.preferredWidth: 42
-                            Layout.preferredHeight: 30
+                            Layout.preferredWidth: 40
+                            Layout.preferredHeight: 32
                             checked: root.playback
                                      ? Boolean(root.playback.keepPitch) : true
                             onClicked: {
@@ -1060,28 +1105,28 @@ Item {
                         Label {
                             text: qsTr("波形缩放")
                             color: Theme.secondaryText
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fontSizeCaption
                         }
                         RowLayout {
                             spacing: 1
                             ToolButton {
                                 objectName: "rollingZoomMinus"
                                 text: "−"
-                                implicitWidth: 28
-                                implicitHeight: 30
+                                implicitWidth: 32
+                                implicitHeight: 32
                                 onClicked: root.zoomOut()
                             }
                             ToolButton {
                                 objectName: "rollingZoomPlus"
                                 text: "+"
-                                implicitWidth: 28
-                                implicitHeight: 30
+                                implicitWidth: 32
+                                implicitHeight: 32
                                 onClicked: root.zoomIn()
                             }
                             ToolButton {
                                 objectName: "rollingZoomReset"
-                                implicitWidth: 28
-                                implicitHeight: 30
+                                implicitWidth: 32
+                                implicitHeight: 32
                                 icon.source: Theme.icon("restore-line")
                                 icon.color: Theme.iconPrimary
                                 icon.width: 14
@@ -1122,8 +1167,8 @@ Item {
                         id: rollingNavigation
                         objectName: "rollingLibraryNavigation"
                         Layout.preferredWidth: Theme.navigationWidthCompact
-                        Layout.minimumWidth: 188
-                        Layout.maximumWidth: 188
+                        Layout.minimumWidth: Theme.navigationWidthCompact
+                        Layout.maximumWidth: Theme.navigationWidthCompact
                         Layout.fillHeight: true
                         navigationModel: root.navigationModel
                         playlistModel: root.playlistModel
@@ -1185,7 +1230,7 @@ Item {
                             id: rollingSearchFilter
                             objectName: "rollingSearchFilter"
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 42
+                            Layout.preferredHeight: 40
                             integratedStyle: true
                             searchText: root.filterModel
                                         ? root.filterModel.searchText : ""
@@ -1209,7 +1254,7 @@ Item {
                     LibrarySidePanel {
                         id: rollingSidePanel
                         objectNamePrefix: "rolling"
-                        expandedWidth: 232
+                        expandedWidth: Theme.playerTagPanelWidth
                         tagModel: root.tagModel
                         filterModel: root.filterModel
                         lyricsService: root.lyricsService

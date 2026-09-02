@@ -168,8 +168,8 @@ Canvas {
             width: canvas.gridLeft - 18
             text: modelData.text
             color: Theme.textPrimary
-            font.family: "Microsoft YaHei UI"
-            font.pixelSize: canvas.width < 1000 ? 16 : 18
+            font.family: Theme.fontPrimary
+            font.pixelSize: Theme.fontSizeBody
             horizontalAlignment: Text.AlignRight
         }
     }
@@ -187,8 +187,8 @@ Canvas {
                   : 12)
             text: canvas.frequencyLabels[index]
             color: Theme.textSecondary
-            font.family: "Microsoft YaHei UI"
-            font.pixelSize: canvas.width < 1300 ? 14 : 18
+            font.family: Theme.fontPrimary
+            font.pixelSize: Theme.fontSizeCaption
         }
     }
 }

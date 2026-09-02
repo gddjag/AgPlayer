@@ -9,6 +9,7 @@ T.Switch {
     property real indicatorWidth: 36
     property real indicatorHeight: 20
     property real labelPixelSize: Theme.fontSizeBodyStrong
+    property bool indicatorTrailing: false
 
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
@@ -18,7 +19,7 @@ T.Switch {
     indicator: Rectangle {
         implicitWidth: control.indicatorWidth
         implicitHeight: control.indicatorHeight
-        x: 0
+        x: control.indicatorTrailing ? control.width - width : 0
         y: (control.height - height) / 2
         radius: height / 2
         color: !control.enabled ? Theme.disabled
@@ -47,7 +48,10 @@ T.Switch {
         color: control.enabled ? Theme.primaryText : Theme.secondaryText
         font.family: Theme.fontPrimary
         font.pixelSize: control.labelPixelSize
-        leftPadding: visible ? control.indicator.width + control.spacing : 0
+        leftPadding: visible && !control.indicatorTrailing
+                     ? control.indicator.width + control.spacing : 0
+        rightPadding: visible && control.indicatorTrailing
+                      ? control.indicator.width + control.spacing : 0
         verticalAlignment: Text.AlignVCenter
     }
 }

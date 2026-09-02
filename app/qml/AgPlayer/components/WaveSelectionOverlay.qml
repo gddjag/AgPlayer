@@ -157,7 +157,7 @@ Item {
                 text: root.selectionDurationText
                 color: Theme.onBrandGradientText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 11
+                font.pixelSize: Theme.fontSizeCaption
                 font.weight: Font.DemiBold
             }
         }
@@ -184,7 +184,7 @@ Item {
                 text: qsTr("拖出片段")
                 color: Theme.onBrandGradientText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 11
+                font.pixelSize: Theme.fontSizeCaption
             }
 
             MouseArea {

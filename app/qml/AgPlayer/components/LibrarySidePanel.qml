@@ -16,7 +16,7 @@ Rectangle {
     property int lyricsTabWidth: 72
     property int toggleSize: 30
     property int toggleIconSize: 22
-    property int tabFontSize: 15
+    property int tabFontSize: Theme.fontSizeBodyStrong
     property int currentPage: 0
     property bool expanded: true
     property alias tagSearchText: tagPanel.searchText

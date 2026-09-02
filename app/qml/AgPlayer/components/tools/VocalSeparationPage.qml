@@ -70,7 +70,7 @@ Rectangle {
         rightPadding: 10
         topPadding: 5
         bottomPadding: 5
-        font.pixelSize: 12
+        font.pixelSize: Theme.fontSizeCaption
         focusPolicy: Qt.StrongFocus
         background: Rectangle {
             radius: 5
@@ -139,7 +139,7 @@ Rectangle {
             text: checkControl.text
             color: checkControl.enabled ? page.textPrimary : page.muted
             font.family: Theme.fontPrimary
-            font.pixelSize: 10
+            font.pixelSize: Theme.fontSizeCaption
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
         }
@@ -150,7 +150,7 @@ Rectangle {
         implicitHeight: 28
         leftPadding: 10
         rightPadding: 28
-        font.pixelSize: 11
+        font.pixelSize: Theme.fontSizeCaption
         focusPolicy: Qt.StrongFocus
         background: Rectangle {
             radius: 5
@@ -769,7 +769,7 @@ Rectangle {
                                     text: VocalSeparationController.inputInfo.name
                                           ? qsTr("已选择输入") : qsTr("拖拽音频或视频文件到此处")
                                     color: page.textPrimary
-                                    font.pixelSize: 12
+                                    font.pixelSize: Theme.fontSizeCaption
                                     wrapMode: Text.Wrap
                                 }
                                 Label {
@@ -777,7 +777,7 @@ Rectangle {
                                     horizontalAlignment: Text.AlignHCenter
                                     text: qsTr("音频 / MP4 / MKV / MOV / WebM")
                                     color: page.muted
-                                    font.pixelSize: 10
+                                    font.pixelSize: Theme.fontSizeCaption
                                 }
                                 WorkbenchButton {
                                     text: qsTr("选择文件")
@@ -818,7 +818,7 @@ Rectangle {
                                                   || qsTr("尚未选择输入文件")
                                             color: page.textPrimary
                                             elide: Text.ElideRight
-                                            font.pixelSize: 14
+                                            font.pixelSize: Theme.fontSizeBody
                                         }
                                         WorkbenchButton {
                                             visible: page.hasInput
@@ -840,7 +840,7 @@ Rectangle {
                                                 + ":" + String(Math.floor((VocalSeparationController.inputInfo.durationMs / 1000) % 60)).padStart(2, "0")
                                               : qsTr("选择文件后将分析真实波形")
                                         color: page.muted
-                                        font.pixelSize: 11
+                                        font.pixelSize: Theme.fontSizeCaption
                                     }
                                     RowLayout {
                                         Layout.fillWidth: true
@@ -907,7 +907,7 @@ Rectangle {
                         id: modelDeck
                         objectName: "separationModelDeck"
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 174
+                        Layout.preferredHeight: 194
                         color: "transparent"
 
                         ListView {
@@ -917,7 +917,7 @@ Rectangle {
                             anchors.right: parent.right
                             anchors.top: parent.top
                             anchors.bottom: modelScrollBar.top
-                            anchors.bottomMargin: 4
+                            anchors.bottomMargin: 8
                             orientation: ListView.Horizontal
                             spacing: 8
                             clip: true
@@ -976,7 +976,7 @@ Rectangle {
                                             text: cardData.tierLabel
                                             color: page.textPrimary
                                             font.bold: true
-                                            font.pixelSize: 14
+                                            font.pixelSize: Theme.fontSizeBody
                                             elide: Text.ElideRight
                                         }
                                         Rectangle {
@@ -991,43 +991,43 @@ Rectangle {
                                                 anchors.centerIn: parent
                                                 text: cardData.badgeLabel
                                                 color: Theme.warning
-                                                font.pixelSize: 10
+                                                font.pixelSize: Theme.fontSizeCaption
                                             }
                                         }
                                     }
                                     RowLayout {
                                         Layout.fillWidth: true
-                                        Label { text: qsTr("模型名称："); color: page.muted; font.pixelSize: 10; Layout.preferredWidth: 62 }
-                                        Label { Layout.fillWidth: true; text: cardData.name; color: page.textPrimary; font.pixelSize: 10; elide: Text.ElideRight }
+                                        Label { text: qsTr("模型名称："); color: page.muted; font.pixelSize: Theme.fontSizeCaption; Layout.preferredWidth: 62 }
+                                        Label { Layout.fillWidth: true; text: cardData.name; color: page.textPrimary; font.pixelSize: Theme.fontSizeCaption; elide: Text.ElideRight }
                                     }
                                     RowLayout {
                                         Layout.fillWidth: true
-                                        Label { text: qsTr("提供商："); color: page.muted; font.pixelSize: 10; Layout.preferredWidth: 62 }
-                                        Label { Layout.fillWidth: true; text: cardData.provider; color: page.textPrimary; font.pixelSize: 10; elide: Text.ElideRight }
+                                        Label { text: qsTr("提供商："); color: page.muted; font.pixelSize: Theme.fontSizeCaption; Layout.preferredWidth: 62 }
+                                        Label { Layout.fillWidth: true; text: cardData.provider; color: page.textPrimary; font.pixelSize: Theme.fontSizeCaption; elide: Text.ElideRight }
                                     }
                                     RowLayout {
                                         Layout.fillWidth: true
-                                        Label { text: qsTr("模型介绍："); color: page.muted; font.pixelSize: 10; Layout.preferredWidth: 62 }
+                                        Label { text: qsTr("模型介绍："); color: page.muted; font.pixelSize: Theme.fontSizeCaption; Layout.preferredWidth: 62 }
                                         Label {
                                             objectName: "modelStemSummary-" + cardData.id
                                             Layout.fillWidth: true
                                             text: cardData.description + qsTr("；输出：")
                                                   + page.stemSummary(cardData.stems)
                                             color: page.textPrimary
-                                            font.pixelSize: 10
+                                            font.pixelSize: Theme.fontSizeCaption
                                             elide: Text.ElideRight
                                         }
                                     }
                                     RowLayout {
                                         Layout.fillWidth: true
-                                        Label { text: qsTr("官方仓库："); color: page.muted; font.pixelSize: 10; Layout.preferredWidth: 62 }
+                                        Label { text: qsTr("官方仓库："); color: page.muted; font.pixelSize: Theme.fontSizeCaption; Layout.preferredWidth: 62 }
                                         WorkbenchButton {
                                             Layout.fillWidth: true
                                             text: cardData.repositoryUrl
                                             implicitHeight: 18
                                             leftPadding: 0
                                             rightPadding: 0
-                                            font.pixelSize: 10
+                                            font.pixelSize: Theme.fontSizeCaption
                                             Accessible.name: qsTr("打开模型官方仓库")
                                             Accessible.role: Accessible.Button
                                             background: Rectangle {
@@ -1049,18 +1049,18 @@ Rectangle {
                                     }
                                     RowLayout {
                                         Layout.fillWidth: true
-                                        Label { text: qsTr("文件大小："); color: page.muted; font.pixelSize: 10; Layout.preferredWidth: 62 }
-                                        Label { Layout.fillWidth: true; text: page.formatBytes(cardData.bytes); color: page.textPrimary; font.pixelSize: 10 }
+                                        Label { text: qsTr("文件大小："); color: page.muted; font.pixelSize: Theme.fontSizeCaption; Layout.preferredWidth: 62 }
+                                        Label { Layout.fillWidth: true; text: page.formatBytes(cardData.bytes); color: page.textPrimary; font.pixelSize: Theme.fontSizeCaption }
                                     }
                                     RowLayout {
                                         Layout.fillWidth: true
-                                        Label { text: qsTr("状态："); color: page.muted; font.pixelSize: 10; Layout.preferredWidth: 62 }
+                                        Label { text: qsTr("状态："); color: page.muted; font.pixelSize: Theme.fontSizeCaption; Layout.preferredWidth: 62 }
                                         Label {
                                             Layout.fillWidth: true
                                             text: page.modelStateText(cardData.state)
                                             color: cardData.state === VocalSeparationController.Installed
                                                     ? page.success : page.cyan
-                                            font.pixelSize: 10
+                                            font.pixelSize: Theme.fontSizeCaption
                                         }
                                     }
                                      RowLayout {
@@ -1097,7 +1097,7 @@ Rectangle {
                                              text: Math.round(VocalSeparationController.downloadProgress * 100)
                                                    + "% · " + VocalSeparationController.downloadSource
                                              color: page.success
-                                             font.pixelSize: 10
+                                             font.pixelSize: Theme.fontSizeCaption
                                              font.bold: true
                                              horizontalAlignment: Text.AlignRight
                                          }
@@ -1204,7 +1204,7 @@ Rectangle {
                                               text: qsTr("自定义模型")
                                              color: page.cyan
                                              font.bold: true
-                                             font.pixelSize: 15
+                                             font.pixelSize: Theme.fontSizeBody
                                          }
                                      }
                                       Label {
@@ -1212,14 +1212,14 @@ Rectangle {
                                           Layout.fillWidth: true
                                           text: qsTr("兼容 ONNX 模型 / 自动识别支持的模型")
                                          color: page.textPrimary
-                                         font.pixelSize: 11
+                                         font.pixelSize: Theme.fontSizeCaption
                                      }
                                       Label {
                                          Layout.fillWidth: true
                                           text: qsTr("模型目录位置：")
                                                 + VocalSeparationController.modelStorageDirectory
                                          color: page.textPrimary
-                                         font.pixelSize: 11
+                                         font.pixelSize: Theme.fontSizeCaption
                                          elide: Text.ElideMiddle
                                          ToolTip.visible: truncated && modelDirectoryPathHover.hovered
                                          ToolTip.text: text
@@ -1230,7 +1230,7 @@ Rectangle {
                                          Layout.fillWidth: true
                                           text: qsTr("将兼容模型放入模型目录，AgPlayer 将自动识别并在此处列出可用模型介绍。未知或未通过校验的文件不会执行。")
                                          color: page.muted
-                                         font.pixelSize: 10
+                                         font.pixelSize: Theme.fontSizeCaption
                                          wrapMode: Text.Wrap
                                          maximumLineCount: 3
                                          elide: Text.ElideRight
@@ -1332,7 +1332,7 @@ Rectangle {
                                 Label {
                                     text: qsTr("请选择要生成的音轨（至少选择一个）")
                                     color: page.muted
-                                    font.pixelSize: 10
+                                    font.pixelSize: Theme.fontSizeCaption
                                 }
                                 Item { Layout.fillWidth: true }
                             }
@@ -1396,13 +1396,13 @@ Rectangle {
                                                     text: modelData.text
                                                           + (stemOption.info.derived ? qsTr("（派生）") : "")
                                                     color: stemOption.enabled ? page.textPrimary : page.muted
-                                                    font.pixelSize: 11
+                                                    font.pixelSize: Theme.fontSizeCaption
                                                 }
                                                 Label {
                                                     text: stemOption.info.supported
                                                           ? modelData.description : qsTr("当前模型不可用")
                                                     color: page.muted
-                                                    font.pixelSize: 9
+                                                    font.pixelSize: Theme.fontSizeCaption
                                                     elide: Text.ElideRight
                                                     Layout.fillWidth: true
                                                 }
@@ -1453,7 +1453,7 @@ Rectangle {
                                      text: VocalSeparationController.stage.length > 0
                                            ? " · " + VocalSeparationController.stage : ""
                                      color: page.muted
-                                     font.pixelSize: 10
+                                     font.pixelSize: Theme.fontSizeCaption
                                  }
                                  ProgressBar {
                                      id: jobProgress
@@ -1511,7 +1511,7 @@ Rectangle {
                                                   (VocalSeparationController.inputInfo.durationMs || 0)
                                                   * index / 4)
                                         color: page.muted
-                                        font.pixelSize: 9
+                                        font.pixelSize: Theme.fontSizeCaption
                                     }
                                 }
                             }
@@ -1548,16 +1548,15 @@ Rectangle {
                                                     Layout.fillWidth: true
                                                     text: page.stemLabel(modelData.kind)
                                                     color: modelData.supported ? page.textPrimary : page.muted
-                                                    font.pixelSize: 10
+                                                    font.pixelSize: Theme.fontSizeCaption
                                                 }
                                             }
                                         }
-                                        Slider {
+                                        ThemedSlider {
                                             id: stemVolume
                                             objectName: "stemPreviewVolume-" + modelData.kind
                                             Layout.preferredWidth: 72
-                                            Layout.preferredHeight: 22
-                                            implicitHeight: 22
+                                            Layout.preferredHeight: Theme.controlHeightCompact
                                             from: 0; to: 1; stepSize: 0.05
                                             value: Number(modelData.previewVolume === undefined
                                                           ? 0.8 : modelData.previewVolume)
@@ -1570,38 +1569,9 @@ Rectangle {
                                             ToolTip.visible: hovered
                                             ToolTip.text: page.contextLocked ? page.contextLockReason
                                                                                   : qsTr("调整此音轨的试听音量")
-                                            background: Rectangle {
-                                                x: stemVolume.leftPadding
-                                                y: stemVolume.topPadding
-                                                   + stemVolume.availableHeight / 2 - height / 2
-                                                implicitWidth: 72
-                                                implicitHeight: 4
-                                                width: stemVolume.availableWidth
-                                                height: implicitHeight
-                                                radius: 2
-                                                color: Theme.navigatorGlassTrack
-                                                Rectangle {
-                                                    width: stemVolume.visualPosition * parent.width
-                                                    height: parent.height
-                                                    radius: parent.radius
-                                                    color: stemVolume.enabled ? page.cyan : page.muted
-                                                    opacity: stemVolume.enabled ? 0.9 : 0.45
-                                                }
-                                            }
-                                            handle: Rectangle {
-                                                x: stemVolume.leftPadding
-                                                   + stemVolume.visualPosition
-                                                     * (stemVolume.availableWidth - width)
-                                                y: stemVolume.topPadding
-                                                   + stemVolume.availableHeight / 2 - height / 2
-                                                implicitWidth: 10
-                                                implicitHeight: 10
-                                                radius: 5
-                                                color: stemVolume.enabled ? page.cyan : page.muted
-                                                border.color: stemVolume.activeFocus
-                                                              ? page.textPrimary : "transparent"
-                                                 border.width: stemVolume.activeFocus ? 2 : 0
-                                             }
+                                            trackColor: Theme.navigatorGlassTrack
+                                            fillColor: page.cyan
+                                            handleColor: page.cyan
                                              MouseArea {
                                                  id: stemVolumePointer
                                                  objectName: "stemPreviewVolumePointer-" + modelData.kind
@@ -1665,7 +1635,7 @@ Rectangle {
                                                 opacity: 0.7
                                             }
                                         }
-                                        Label { visible: !modelData.supported; Layout.fillWidth: true; text: qsTr("当前模型不支持"); color: page.muted; font.pixelSize: 11 }
+                                        Label { visible: !modelData.supported; Layout.fillWidth: true; text: qsTr("当前模型不支持"); color: page.muted; font.pixelSize: Theme.fontSizeCaption }
                                         TransportIconButton {
                                             Layout.preferredWidth: 26
                                             Layout.preferredHeight: 26
@@ -1703,10 +1673,10 @@ Rectangle {
                         color: page.surface; border.color: page.border; radius: 7
                         ColumnLayout {
                             anchors.fill: parent; anchors.margins: 10; spacing: 4
-                            Label { text: qsTr("输出设置"); color: page.textPrimary; font.bold: true; font.pixelSize: 13 }
+                            Label { text: qsTr("输出设置"); color: page.textPrimary; font.bold: true; font.pixelSize: Theme.fontSizeBody }
                             RowLayout {
                                 Layout.fillWidth: true
-                                Label { text: qsTr("格式"); color: page.muted; Layout.preferredWidth: 68; font.pixelSize: 11 }
+                                Label { text: qsTr("格式"); color: page.muted; Layout.preferredWidth: 68; font.pixelSize: Theme.fontSizeCaption }
                                 WorkbenchComboBox {
                                     Layout.fillWidth: true
                                     model: [qsTr("WAV（无损）"), qsTr("FLAC（无损）"), qsTr("MP3（兼容）")]
@@ -1724,8 +1694,8 @@ Rectangle {
                             }
                             RowLayout {
                                 Layout.fillWidth: true
-                                Label { text: qsTr("输出目录"); color: page.muted; Layout.preferredWidth: 68; font.pixelSize: 11 }
-                                Label { Layout.fillWidth: true; text: VocalSeparationController.outputDirectory; color: page.textPrimary; elide: Text.ElideMiddle; font.pixelSize: 10 }
+                                Label { text: qsTr("输出目录"); color: page.muted; Layout.preferredWidth: 68; font.pixelSize: Theme.fontSizeCaption }
+                                Label { Layout.fillWidth: true; text: VocalSeparationController.outputDirectory; color: page.textPrimary; elide: Text.ElideMiddle; font.pixelSize: Theme.fontSizeCaption }
                                 WorkbenchButton {
                                     text: qsTr("选择")
                                     implicitHeight: 24
@@ -1737,7 +1707,7 @@ Rectangle {
                             }
                             RowLayout {
                                 Layout.fillWidth: true
-                                Label { text: qsTr("处理设备"); color: page.muted; Layout.preferredWidth: 68; font.pixelSize: 11 }
+                                Label { text: qsTr("处理设备"); color: page.muted; Layout.preferredWidth: 68; font.pixelSize: Theme.fontSizeCaption }
                                 Repeater {
                                      model: VocalSeparationController.availableDevices
                                      WorkbenchButton {
@@ -1841,21 +1811,21 @@ Rectangle {
                                     Layout.preferredWidth: 160
                                     text: page.fullDesktop ? qsTr("文件名") : qsTr("文件 / 模型")
                                     color: page.muted
-                                    font.pixelSize: 10
+                                    font.pixelSize: Theme.fontSizeCaption
                                 }
                                 Label {
                                     objectName: "separationHistoryHeaderModel"
                                     Layout.preferredWidth: 110
                                     text: qsTr("模型")
                                     color: page.muted
-                                    font.pixelSize: 10
+                                    font.pixelSize: Theme.fontSizeCaption
                                     visible: page.fullDesktop
                                 }
                                 Label {
                                     Layout.preferredWidth: 92
                                     text: qsTr("时间")
                                     color: page.muted
-                                    font.pixelSize: 10
+                                    font.pixelSize: Theme.fontSizeCaption
                                     visible: page.fullDesktop
                                 }
                                 Label {
@@ -1863,17 +1833,17 @@ Rectangle {
                                     Layout.preferredWidth: 100
                                     text: qsTr("时间 / 状态")
                                     color: page.muted
-                                    font.pixelSize: 10
+                                    font.pixelSize: Theme.fontSizeCaption
                                     visible: !page.fullDesktop
                                 }
                                 Label {
                                     Layout.preferredWidth: 48
                                     text: qsTr("状态")
                                     color: page.muted
-                                    font.pixelSize: 10
+                                    font.pixelSize: Theme.fontSizeCaption
                                     visible: page.fullDesktop
                                 }
-                                 Label { Layout.preferredWidth: 34; text: qsTr("目录"); color: page.muted; font.pixelSize: 10; horizontalAlignment: Text.AlignHCenter }
+                                 Label { Layout.preferredWidth: 34; text: qsTr("目录"); color: page.muted; font.pixelSize: Theme.fontSizeCaption; horizontalAlignment: Text.AlignHCenter }
                             }
                             ListView {
                                 id: historyList
@@ -1888,7 +1858,7 @@ Rectangle {
                                         objectName: "separationHistoryFileCell"
                                         Layout.fillWidth: true
                                         Layout.preferredWidth: 160
-                                        Label { Layout.fillWidth: true; text: modelData.inputName || modelData.inputPath || ""; color: page.textPrimary; elide: Text.ElideRight; font.pixelSize: 10 }
+                                        Label { Layout.fillWidth: true; text: modelData.inputName || modelData.inputPath || ""; color: page.textPrimary; elide: Text.ElideRight; font.pixelSize: Theme.fontSizeCaption }
                                         Label {
                                             Layout.fillWidth: true
                                             text: page.fullDesktop
@@ -1896,7 +1866,7 @@ Rectangle {
                                                   : (modelData.modelId || "") + " · "
                                                     + (modelData.outputPath || "")
                                             color: page.muted
-                                            font.pixelSize: 9
+                                            font.pixelSize: Theme.fontSizeCaption
                                             elide: Text.ElideMiddle
                                         }
                                     }
@@ -1905,7 +1875,7 @@ Rectangle {
                                         Layout.preferredWidth: 110
                                         text: modelData.modelId || ""
                                         color: page.muted
-                                        font.pixelSize: 9
+                                        font.pixelSize: Theme.fontSizeCaption
                                         wrapMode: Text.Wrap
                                         visible: page.fullDesktop
                                     }
@@ -1913,7 +1883,7 @@ Rectangle {
                                         Layout.preferredWidth: 92
                                         text: modelData.createdAt || ""
                                         color: page.muted
-                                        font.pixelSize: 9
+                                        font.pixelSize: Theme.fontSizeCaption
                                         wrapMode: Text.Wrap
                                         visible: page.fullDesktop
                                     }
@@ -1922,7 +1892,7 @@ Rectangle {
                                         text: page.historyStatusText(modelData.status)
                                         color: (modelData.status || "").toLowerCase() === "completed"
                                                ? page.success : page.cyan
-                                        font.pixelSize: 9
+                                        font.pixelSize: Theme.fontSizeCaption
                                         visible: page.fullDesktop
                                     }
                                     ColumnLayout {
@@ -1934,7 +1904,7 @@ Rectangle {
                                             Layout.fillWidth: true
                                             text: modelData.createdAt || ""
                                             color: page.muted
-                                            font.pixelSize: 9
+                                            font.pixelSize: Theme.fontSizeCaption
                                             elide: Text.ElideRight
                                         }
                                         Label {
@@ -1942,7 +1912,7 @@ Rectangle {
                                             text: page.historyStatusText(modelData.status)
                                             color: (modelData.status || "").toLowerCase() === "completed"
                                                    ? page.success : page.cyan
-                                            font.pixelSize: 9
+                                            font.pixelSize: Theme.fontSizeCaption
                                         }
                                     }
                                      RowLayout {
@@ -2053,7 +2023,8 @@ Rectangle {
                                                         || VocalSeparationController.inputInfo.durationMs)
                                                      : VocalSeparationController.inputInfo.durationMs)
                              color: page.textPrimary
-                             font.pixelSize: page.compact ? 18 : 21
+                             font.pixelSize: page.compact ? Theme.fontSizeSection
+                                                          : Theme.fontSizePageTitle
                              font.weight: Font.Medium
                             horizontalAlignment: Text.AlignHCenter
                             elide: Text.ElideRight
@@ -2064,7 +2035,7 @@ Rectangle {
                      Layout.row: 0
                      Layout.column: page.compact ? 2 : 3
                      Layout.fillWidth: page.compact
-                     implicitHeight: 38; font.pixelSize: 13
+                     implicitHeight: 38; font.pixelSize: Theme.fontSizeBody
                      text: qsTr("重新分离"); enabled: !page.contextLocked && VocalSeparationController.jobState === VocalSeparationController.Completed
                     Accessible.name: text; Accessible.role: Accessible.Button
                     ToolTip.visible: hovered && !enabled; ToolTip.text: page.contextLocked ? page.contextLockReason : qsTr("分离完成后可重新开始")
@@ -2074,7 +2045,7 @@ Rectangle {
                      Layout.row: 0
                      Layout.column: page.compact ? 3 : 4
                      Layout.fillWidth: page.compact
-                     implicitHeight: 38; font.pixelSize: 13
+                     implicitHeight: 38; font.pixelSize: Theme.fontSizeBody
                      text: qsTr("导出伴奏"); enabled: !page.contextLocked && page.stemInfo(VocalSeparationController.Accompaniment).available
                     Accessible.name: text; Accessible.role: Accessible.Button
                     ToolTip.visible: hovered && !enabled; ToolTip.text: page.contextLocked ? page.contextLockReason : qsTr("伴奏输出尚不可用")
@@ -2084,7 +2055,7 @@ Rectangle {
                      Layout.row: page.compact ? 1 : 0
                      Layout.column: page.compact ? 0 : 5
                      Layout.fillWidth: page.compact
-                     implicitHeight: 38; font.pixelSize: 13
+                     implicitHeight: 38; font.pixelSize: Theme.fontSizeBody
                      text: qsTr("导出人声"); enabled: !page.contextLocked && page.stemInfo(VocalSeparationController.Vocals).available
                     Accessible.name: text; Accessible.role: Accessible.Button
                     ToolTip.visible: hovered && !enabled; ToolTip.text: page.contextLocked ? page.contextLockReason : qsTr("人声输出尚不可用")
@@ -2094,7 +2065,7 @@ Rectangle {
                      Layout.row: page.compact ? 1 : 0
                      Layout.column: page.compact ? 1 : 6
                      Layout.fillWidth: page.compact
-                     implicitHeight: 38; font.pixelSize: 13
+                     implicitHeight: 38; font.pixelSize: Theme.fontSizeBody
                      text: qsTr("导出所有音轨")
                     enabled: !page.contextLocked
                              && VocalSeparationController.jobState === VocalSeparationController.Completed
@@ -2118,7 +2089,7 @@ Rectangle {
                      Layout.fillWidth: true
                      Layout.preferredWidth: page.compact ? 0 : bottomBar.width * 0.30
                      implicitHeight: 42
-                     font.pixelSize: 14
+                     font.pixelSize: Theme.fontSizeBody
                     text: VocalSeparationController.jobState === VocalSeparationController.Running
                           ? qsTr("取消分离")
                           : VocalSeparationController.jobState === VocalSeparationController.Cancelling

@@ -41,8 +41,8 @@ Assert-Matches $trackList '(?s)objectName:\s*"singleWindowTrackSubtitle".*artist
     'Single-window rows must show artist, album, and optional tags beneath the title'
 Assert-Matches $trackList '(?s)objectName:\s*"singleWindowWaveformThumbnailLoader".*Layout\.fillWidth:\s*true.*Layout\.preferredHeight:\s*root\.singleWindowMediaHeight' `
     'Single-window and rolling waveform thumbnails must occupy their own column and match the cover height'
-Assert-Matches $trackList '(?s)readonly property int titleMinimumWidth:\s*singleWindowLayout \? 220 : \(compactColumns \? 150 : 180\)' `
-    'Single-window rows need a wider metadata title region without changing the ordinary/tag floor'
+Assert-Matches $trackList '(?s)readonly property int titleMinimumWidth:\s*singleWindowLayout \? 180 : \(compactColumns \? 150 : 180\).*readonly property int singleWindowTitleWidth:\s*Math\.max\(\s*titleMinimumWidth,\s*Math\.min\(300,' `
+    'Single-window rows need a responsive metadata title region without changing the ordinary/tag floor'
 Assert-Matches $trackList '(?s)readonly property bool showBpmColumn:\s*singleWindowLayout \? false.*relaxedClassicColumns \? !tagManagementLayout : !tagFilterActive.*readonly property bool showDurationColumn:\s*singleWindowLayout \|\| relaxedClassicColumns \|\| !tagFilterActive' `
     'Single-window lists must show duration without BPM while classic tag mode keeps its existing policy'
 

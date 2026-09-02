@@ -152,8 +152,9 @@ Rectangle {
                         { text: qsTr("移除选中"), icon: "delete-bin-line", action: "remove" },
                         { text: qsTr("清空列表"), icon: "delete-bin-line", action: "clear" }
                     ]
-                    Button {
+                    ThemedButton {
                         objectName: modelData.action === "file" ? "formatAddFileButton" : ""
+                        prominent: true
                         visible: !page.compactLayout
                                  || modelData.action === "file"
                                  || modelData.action === "folder"
@@ -161,8 +162,8 @@ Rectangle {
                                                : modelData.action === "file" ? 130
                                                : modelData.action === "folder" ? 142
                                                : 128
-                        Layout.preferredHeight: 40
-                        enabled: !converter.busy
+                        Layout.preferredHeight: Theme.controlHeightProminent
+                        available: !converter.busy
                                  && (modelData.action !== "playlist"
                                      || PlaybackController.currentTrackId.length > 0)
                         text: modelData.text
@@ -179,11 +180,6 @@ Rectangle {
                             else
                                 converter.clear()
                         }
-                        background: Rectangle {
-                            color: parent.hovered ? Theme.hoverSurface : Theme.elevated
-                            border.color: Theme.border
-                            radius: 6
-                        }
                         contentItem: RowLayout {
                             spacing: 8
                             ThemedIcon {
@@ -198,7 +194,7 @@ Rectangle {
                             Text {
                                 text: parent.parent.text
                                 color: Theme.primaryText
-                                font.pixelSize: 14
+                                font.pixelSize: Theme.fontSizeBody
                             }
                         }
                     }
@@ -244,7 +240,7 @@ Rectangle {
             id: bottomBar
             objectName: "formatBottomBar"
             Layout.fillWidth: true
-            Layout.preferredHeight: 114
+            Layout.preferredHeight: 72
             color: Theme.panel
             border.color: Theme.border
             radius: 6
@@ -259,7 +255,7 @@ Rectangle {
                     Layout.preferredWidth: page.compactLayout ? 220 : 430
                     spacing: 8
                     RowLayout {
-                        Text { text: qsTr("总进度"); color: Theme.primaryText; font.pixelSize: 14 }
+                        Text { text: qsTr("总进度"); color: Theme.primaryText; font.pixelSize: Theme.fontSizeBody }
                         ProgressBar {
                             id: totalProgress
                             objectName: "formatTotalProgress"
@@ -277,8 +273,8 @@ Rectangle {
                             }
                         }
                         Text { text: Math.round(totalProgress.value * 100) + "%"; color: Theme.primaryText }
-                        Text { text: qsTr("并发"); color: Theme.secondaryText; font.pixelSize: 13 }
-                        ComboBox {
+                        Text { text: qsTr("并发"); color: Theme.secondaryText; font.pixelSize: Theme.fontSizeBody }
+                        ThemedComboBox {
                             id: converterParallelJobsBox
                             objectName: "converterParallelJobsBox"
                             Layout.preferredWidth: 72
@@ -299,7 +295,7 @@ Rectangle {
                         text: qsTr("%1 个任务 / 预计剩余 %2").arg(converter.fileCount)
                               .arg(converter.etaText)
                         color: Theme.secondaryText
-                        font.pixelSize: 13
+                        font.pixelSize: Theme.fontSizeBody
                     }
                 }
 
@@ -344,57 +340,58 @@ Rectangle {
 
                 Item { Layout.preferredWidth: page.compactLayout ? 0 : 159 }
 
-                Button {
+                ThemedButton {
                     id: convertAllButton
                     objectName: "convertAllButton"
+                    primary: true
+                    prominent: true
                     Layout.preferredWidth: page.compactLayout ? 125 : 174
-                    Layout.preferredHeight: 68
-                    enabled: converter.checkedCount > 0 && !converter.busy
+                    Layout.preferredHeight: Theme.controlHeightProminent
+                    available: converter.checkedCount > 0 && !converter.busy
                     text: qsTr("开始处理")
                     icon.source: Theme.icon("play-fill")
                     onClicked: page.requestPlan()
-                    background: Rectangle { color: parent.enabled ? Theme.accent : Theme.border; radius: 6 }
                     contentItem: RowLayout {
                         spacing: 10
-                        ThemedIcon { source: parent.parent.icon.source; tint: Theme.accentText; sourceSize.width: 22; sourceSize.height: 22 }
-                        Text { text: parent.parent.text; color: Theme.accentText; font.pixelSize: 17 }
+                        ThemedIcon { source: parent.parent.icon.source; tint: Theme.accentText; sourceSize.width: Theme.iconSizeMd; sourceSize.height: Theme.iconSizeMd }
+                        Text { text: parent.parent.text; color: Theme.accentText; font.pixelSize: Theme.fontSizeBody }
                     }
                 }
 
-                Button {
+                ThemedButton {
                     objectName: "cancelAllButton"
+                    prominent: true
                     Layout.preferredWidth: page.compactLayout ? 115 : 168
-                    Layout.preferredHeight: 68
-                    enabled: converter.busy
+                    Layout.preferredHeight: Theme.controlHeightProminent
+                    available: converter.busy
                     text: qsTr("取消全部")
                     icon.source: Theme.icon("checkbox-blank-fill")
                     onClicked: converter.cancelAll()
-                    background: Rectangle { color: parent.enabled ? Theme.elevated : Theme.background; radius: 6 }
                     contentItem: RowLayout {
                         spacing: 10
                         ThemedIcon {
                             objectName: "cancelAllButtonStopIcon"
                             source: parent.parent.icon.source
                             tint: Theme.iconPrimary
-                            sourceSize.width: 22
-                            sourceSize.height: 22
+                            sourceSize.width: Theme.iconSizeMd
+                            sourceSize.height: Theme.iconSizeMd
                         }
-                        Text { text: parent.parent.text; color: Theme.primaryText; font.pixelSize: 17 }
+                        Text { text: parent.parent.text; color: Theme.primaryText; font.pixelSize: Theme.fontSizeBody }
                     }
                 }
             }
         }
     }
 
-    ComboBox {
+    ThemedComboBox {
         objectName: "converterOutputFormatBox"
         visible: false
         model: converter.outputCapabilities
         textRole: "label"
         valueRole: "key"
     }
-    Button { objectName: "convertSelectedButton"; visible: false; onClicked: page.requestPlan() }
-    Button { objectName: "retryFailedButton"; visible: false; onClicked: converter.retryFailed() }
+    ThemedButton { objectName: "convertSelectedButton"; visible: false; onClicked: page.requestPlan() }
+    ThemedButton { objectName: "retryFailedButton"; visible: false; onClicked: converter.retryFailed() }
 
     DropArea {
         objectName: "formatDropArea"

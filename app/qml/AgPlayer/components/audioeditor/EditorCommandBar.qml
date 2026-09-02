@@ -10,10 +10,10 @@ Rectangle {
     signal importRequested()
     signal saveProjectRequested()
     property int actionRevision: 0
-    readonly property real referenceCommandWidth: 1175
-    readonly property real commandSpacingWidth: 12 * commandRow.spacing
+    readonly property real referenceCommandWidth: 1255
+    readonly property real commandSpacingWidth: 14 * commandRow.spacing
     readonly property real availableCommandWidth: Math.max(0,
-        width - commandSpacingWidth - commandRow.spacing)
+        width - commandSpacingWidth)
     readonly property real referenceScale: Math.min(1.0,
         availableCommandWidth / referenceCommandWidth)
 
@@ -62,7 +62,7 @@ Rectangle {
                 text: parent.parent.label
                 color: parent.parent.enabled ? Theme.textPrimary : Theme.textDisabled
                 font.family: Theme.fontPrimary
-                font.pixelSize: 13
+                font.pixelSize: Theme.fontSizeBody
                 Layout.alignment: Qt.AlignHCenter
             }
         }
@@ -73,6 +73,22 @@ Rectangle {
             border.width: 1
             radius: 6
         }
+    }
+
+    component TrackToggleButton: ThemedIconButton {
+        required property string label
+        required property string iconName
+        iconSource: Theme.icon(iconName)
+        iconSize: Theme.iconSizeMd
+        checkable: true
+        enabled: AudioEditorController.hasDocument
+            && !AudioEditorController.busy
+        Layout.preferredWidth: 40 * bar.referenceScale
+        Layout.minimumWidth: 32
+        Layout.fillHeight: true
+        accessibleName: label
+        ToolTip.visible: hovered
+        ToolTip.text: label
     }
 
     RowLayout {
@@ -215,6 +231,20 @@ Rectangle {
                 && AudioEditorController.totalFrames > 0
                 && !AudioEditorController.busy
             onClicked: AudioEditorController.clearTimeline()
+        }
+        TrackToggleButton {
+            objectName: "editorTrackMute"
+            label: qsTr("音轨静音")
+            iconName: "volume-mute-line"
+            checked: AudioEditorController.trackMuted
+            onClicked: AudioEditorController.setTrackMuted(checked)
+        }
+        TrackToggleButton {
+            objectName: "editorTrackSolo"
+            label: qsTr("音轨独奏")
+            iconName: "mic-line"
+            checked: AudioEditorController.trackSolo
+            onClicked: AudioEditorController.setTrackSolo(checked)
         }
     }
 }

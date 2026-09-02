@@ -182,9 +182,9 @@ QtObject {
     readonly property int spacingLg: 16
     readonly property int spacingXl: 24
     readonly property int spacing2Xl: 32
-    readonly property int fontSizeCaption: 11
+    readonly property int fontSizeCaption: 12
     readonly property int fontSizeMeta: 12
-    readonly property int fontSizeBody: 13
+    readonly property int fontSizeBody: 14
     readonly property int fontSizeBodyStrong: 14
     readonly property int fontSizeSection: 16
     readonly property int fontSizePageTitle: 20
@@ -192,6 +192,13 @@ QtObject {
     readonly property int navigationWidthCompact: 192
     readonly property int navigationWidth: 216
     readonly property int navigationWidthExpanded: 240
+    readonly property int playerInspectorWidth: 280
+    readonly property int playerTagPanelWidth: 264
+    readonly property int playerBottomBarHeight: 80
+    readonly property int rollingOverviewHeight: 128
+    readonly property int rollingOverviewHeightCompact: 112
+    readonly property int rollingWaveformHeight: 176
+    readonly property int rollingWaveformHeightCompact: 152
     readonly property int controlHeightCompact: 28
     readonly property int controlHeight: 32
     readonly property int controlHeightProminent: 36
@@ -200,16 +207,19 @@ QtObject {
     readonly property int mediaListRowHeight: 48
     readonly property int settingsRowHeight: 48
     readonly property int tableHeaderHeight: 36
-    readonly property int sliderTrackHeight: 3
-    readonly property int sliderHandleExtent: 12
+    readonly property int sliderTrackHeight: 2
+    readonly property int sliderHandleExtent: 10
     readonly property int minimumInteractionExtent: 28
+    readonly property int iconSizeSm: 16
+    readonly property int iconSizeMd: 18
+    readonly property int iconSizeLg: 24
     readonly property int navigationIconVisualSize: 18
     readonly property int navigationActionExtent: 28
     readonly property string fontPrimary: Qt.platform.os === "windows"
-                                          ? "Segoe UI Variable"
+                                          ? "Microsoft YaHei UI"
                                           : Qt.application.font.family
     readonly property string fontFallback: Qt.platform.os === "windows"
-                                           ? "Microsoft YaHei UI"
+                                           ? "Segoe UI Variable"
                                            : Qt.application.font.family
     readonly property string iconPrefix: "qrc:/qt/qml/AgPlayer/assets/icons/"
     function icon(name) { return iconPrefix + name + ".svg" }

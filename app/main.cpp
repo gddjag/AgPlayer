@@ -7,6 +7,7 @@
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
+#include <QFont>
 #include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlComponent>
@@ -267,6 +268,13 @@ int main(int argc, char* argv[])
     // Theme.qml still follows the host system palette when requested.
     QQuickStyle::setStyle(QStringLiteral("Basic"));
     QApplication app(argc, argv);
+#ifdef Q_OS_WIN
+    QFont interfaceFont = app.font();
+    interfaceFont.setFamilies({QStringLiteral("Microsoft YaHei UI"),
+                               QStringLiteral("Segoe UI Variable"),
+                               QStringLiteral("Segoe UI")});
+    app.setFont(interfaceFont);
+#endif
     app.setApplicationName(QStringLiteral("AgPlayer"));
     app.setApplicationVersion(
         QString::fromLatin1(agplayer::version::kVersion));
@@ -422,7 +430,7 @@ int main(int argc, char* argv[])
                 bool heightOk = false;
                 const int width = cliArgs.at(++i).toInt(&widthOk);
                 const int height = cliArgs.at(++i).toInt(&heightOk);
-                if (widthOk && heightOk && width >= 880 && height >= 520) {
+                if (widthOk && heightOk && width >= 1080 && height >= 480) {
                     qaEqualizerSize = QSize(width, height);
                 }
             } else if (arg == QStringLiteral("--qa-library")

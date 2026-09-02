@@ -268,8 +268,9 @@ Rectangle {
                                   || qsTr("No track loaded")
                             color: Theme.primaryText
                             font.family: Theme.fontPrimary
-                            font.pixelSize: root.minimalHeight ? 14
-                                            : root.compactHeight ? 22 : 26
+                            font.pixelSize: root.minimalHeight
+                                            ? Theme.fontSizeBodyStrong
+                                            : Theme.fontSizePageTitle
                             font.weight: Font.DemiBold
                         }
                         HoverHandler { id: titleHover }
@@ -369,7 +370,9 @@ Rectangle {
                                       + (tags.length > 0 ? " · " + tags : "")
                                 color: Theme.secondaryText
                                 font.family: Theme.fontPrimary
-                                font.pixelSize: root.minimalHeight ? 9 : 14
+                                font.pixelSize: root.minimalHeight
+                                                ? Theme.fontSizeCaption
+                                                : Theme.fontSizeBody
                                 elide: Text.ElideRight
                                 width: parent.width
                             }
@@ -453,7 +456,7 @@ Rectangle {
                                 text: modelData
                                 color: Theme.secondaryText
                                 font.family: Theme.fontPrimary
-                                font.pixelSize: root.minimalHeight ? 8 : 11
+                                font.pixelSize: Theme.fontSizeCaption
                             }
                         }
                     }
@@ -638,7 +641,7 @@ Rectangle {
                     text: root.formatTime(waveformFrame.hoverPreviewMs)
                     color: Theme.primaryText
                     font.family: Theme.fontPrimary
-                    font.pixelSize: 11
+                    font.pixelSize: Theme.fontSizeCaption
                 }
             }
 
@@ -664,7 +667,7 @@ Rectangle {
                 text: root.formatTime(PlaybackController.positionMs)
                 color: Theme.secondaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: root.minimalHeight ? 10 : 12
+                font.pixelSize: Theme.fontSizeCaption
             }
 
             Item { Layout.fillWidth: true }
@@ -673,7 +676,7 @@ Rectangle {
                 text: root.formatTime(PlaybackController.durationMs)
                 color: Theme.secondaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: root.minimalHeight ? 10 : 12
+                font.pixelSize: Theme.fontSizeCaption
             }
         }
     }

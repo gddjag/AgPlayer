@@ -135,7 +135,7 @@ Control {
                     text: qsTr("选择颜色")
                     color: Theme.primaryText
                     font.family: Theme.fontPrimary
-                    font.pixelSize: 15
+                    font.pixelSize: Theme.fontSizeBody
                     font.weight: Font.DemiBold
                 }
                 Rectangle {
@@ -235,6 +235,19 @@ Control {
                         GradientStop { position: 1.00; color: "#ff0000" } // theme-color-allow: color picker hue spectrum
                     }
                 }
+                handle: Rectangle {
+                    x: hueSlider.leftPadding + hueSlider.visualPosition
+                       * (hueSlider.availableWidth - width)
+                    y: hueSlider.topPadding
+                       + hueSlider.availableHeight / 2 - height / 2
+                    width: Theme.sliderHandleExtent
+                    height: Theme.sliderHandleExtent
+                    radius: width / 2
+                    color: Theme.controlHandle
+                    border.width: 1
+                    border.color: hueSlider.activeFocus ? Theme.focus
+                                                        : Theme.borderStrong
+                }
             }
 
             RowLayout {
@@ -258,7 +271,7 @@ Control {
                             text: modelData.name + " " + modelData.value
                             color: Theme.secondaryText
                             font.family: Theme.fontPrimary
-                            font.pixelSize: 12
+                            font.pixelSize: Theme.fontSizeCaption
                         }
                     }
                 }

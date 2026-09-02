@@ -456,7 +456,7 @@ Window {
                                : listWindow.resourceDropStatus === "completed"
                                  ? Theme.success : Theme.secondaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: 11
+                        font.pixelSize: Theme.fontSizeCaption
                         elide: Text.ElideRight
                         Layout.maximumWidth: 240
                     }
@@ -622,7 +622,7 @@ Window {
                                         Layout.alignment: Qt.AlignHCenter
                                         text: qsTr("未找到符合条件的歌曲")
                                         color: Theme.secondaryText
-                                        font.pixelSize: 16
+                                        font.pixelSize: Theme.fontSizeSection
                                     }
                                     Button {
                                         Layout.alignment: Qt.AlignHCenter

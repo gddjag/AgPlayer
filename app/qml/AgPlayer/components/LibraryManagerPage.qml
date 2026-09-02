@@ -73,7 +73,7 @@ Item {
                    ? Theme.activeSelectionText
                    : menuItem.enabled ? Theme.primaryText : Theme.secondaryText
             font.family: Theme.fontPrimary
-            font.pixelSize: Math.max(13, Qt.application.font.pixelSize)
+            font.pixelSize: Theme.fontSizeBody
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
         }
@@ -452,11 +452,11 @@ Item {
             Text {
                 text: qsTr("曲库管理")
                 color: Theme.primaryText
-                font.pixelSize: 24
+                font.pixelSize: Theme.fontSizePageTitle
                 font.weight: Font.DemiBold
             }
             Item { Layout.preferredWidth: 18 }
-            TextField {
+            ThemedTextField {
                 Layout.fillWidth: true
                 Layout.maximumWidth: 430
                 placeholderText: qsTr("搜索歌曲、艺术家、专辑或文件夹")
@@ -535,11 +535,11 @@ Item {
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: 0
-                            Text { text: modelData.t; color: Theme.secondaryText; font.pixelSize: 10 }
+                            Text { text: modelData.t; color: Theme.secondaryText; font.pixelSize: Theme.fontSizeCaption }
                             Text {
                                 text: modelData.v
                                 color: Theme.primaryText
-                                font.pixelSize: 16
+                                font.pixelSize: Theme.fontSizeSection
                                 font.weight: Font.DemiBold
                             }
                         }
@@ -563,8 +563,8 @@ Item {
                 ColumnLayout {
                     Layout.preferredWidth: 235
                     spacing: 3
-                    Text { text: qsTr("文件夹监控"); color: Theme.secondaryText; font.pixelSize: 11 }
-                    ComboBox {
+                    Text { text: qsTr("文件夹监控"); color: Theme.secondaryText; font.pixelSize: Theme.fontSizeCaption }
+                    ThemedComboBox {
                         Layout.fillWidth: true
                         model: [qsTr("正在监控 %1 个文件夹").arg(manager.monitoredFolders.length)]
                     }
@@ -572,8 +572,8 @@ Item {
                 ColumnLayout {
                     Layout.preferredWidth: 170
                     spacing: 3
-                    Text { text: qsTr("格式筛选"); color: Theme.secondaryText; font.pixelSize: 11 }
-                    ComboBox {
+                    Text { text: qsTr("格式筛选"); color: Theme.secondaryText; font.pixelSize: Theme.fontSizeCaption }
+                    ThemedComboBox {
                         Layout.fillWidth: true
                         model: [qsTr("全部格式"), "MP3", "WAV", "FLAC", "AAC", "M4A", "OGG"]
                         onActivated: {
@@ -585,11 +585,11 @@ Item {
                 ColumnLayout {
                     Layout.preferredWidth: 236
                     spacing: 3
-                    Text { text: qsTr("BPM筛选"); color: Theme.secondaryText; font.pixelSize: 11 }
+                    Text { text: qsTr("BPM筛选"); color: Theme.secondaryText; font.pixelSize: Theme.fontSizeCaption }
                     RowLayout {
                         spacing: 6
                         Label { text: root.minBpm; color: Theme.primaryText; Layout.preferredWidth: 24 }
-                        RangeSlider {
+                        ThemedRangeSlider {
                             id: bpmRange
                             objectName: "libraryManagerBpmRange"
                             Layout.preferredWidth: 150
@@ -600,18 +600,6 @@ Item {
                             second.value: root.maxBpm
                             first.onMoved: { root.minBpm = Math.round(first.value); manager.currentPage = 0 }
                             second.onMoved: { root.maxBpm = Math.round(second.value); manager.currentPage = 0 }
-                            first.handle: Rectangle {
-                                x: bpmRange.leftPadding + bpmRange.first.visualPosition * (bpmRange.availableWidth - width)
-                                y: bpmRange.topPadding + bpmRange.availableHeight / 2 - height / 2
-                                width: 12; height: 12; radius: 6
-                                color: Theme.primaryText; border.color: Theme.accent
-                            }
-                            second.handle: Rectangle {
-                                x: bpmRange.leftPadding + bpmRange.second.visualPosition * (bpmRange.availableWidth - width)
-                                y: bpmRange.topPadding + bpmRange.availableHeight / 2 - height / 2
-                                width: 12; height: 12; radius: 6
-                                color: Theme.primaryText; border.color: Theme.accent
-                            }
                         }
                         Label { text: root.maxBpm; color: Theme.primaryText; Layout.preferredWidth: 26 }
                     }
@@ -619,7 +607,7 @@ Item {
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 3
-                    Text { text: qsTr("星级收藏"); color: Theme.secondaryText; font.pixelSize: 11 }
+                    Text { text: qsTr("星级收藏"); color: Theme.secondaryText; font.pixelSize: Theme.fontSizeCaption }
                     Row {
                         spacing: 2
                         Repeater {
@@ -672,9 +660,8 @@ Item {
                             anchors.leftMargin: 8
                             anchors.rightMargin: 8
                             spacing: 0
-                            CheckBox {
-                                Layout.preferredWidth: 26
-                                scale: 0.8
+                            ThemedCheckBox {
+                                Layout.preferredWidth: Theme.controlHeight
                                 onToggled: {
                                     if (!checked) root.selectedTrackIds = []
                                     else {
@@ -738,9 +725,8 @@ Item {
                                 anchors.leftMargin: 8
                                 anchors.rightMargin: 8
                                 spacing: 0
-                                CheckBox {
-                                    Layout.preferredWidth: 26
-                                    scale: 0.8
+                                ThemedCheckBox {
+                                    Layout.preferredWidth: Theme.controlHeight
                                     checked: root.selectedTrackIds.indexOf(trackId) >= 0
                                     onClicked: root.toggleSelection(trackId, true)
                                 }
@@ -889,7 +875,7 @@ Item {
                         Layout.fillWidth: true
                         text: root.selectedTrack.title || qsTr("未选择歌曲")
                         color: Theme.primaryText
-                        font.pixelSize: 15
+                        font.pixelSize: Theme.fontSizeBody
                         font.weight: Font.DemiBold
                         elide: Text.ElideRight
                     }
@@ -935,7 +921,7 @@ Item {
                                             : index === 11 ? "libraryDetailsBitrate" : ""
                                 text: modelData
                                 color: index % 2 === 0 ? Theme.secondaryText : Theme.primaryText
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontSizeCaption
                                 elide: Text.ElideRight
                             }
                         }

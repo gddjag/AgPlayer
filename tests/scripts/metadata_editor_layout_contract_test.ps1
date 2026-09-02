@@ -78,8 +78,8 @@ if ($page -notmatch 'readonly property real desktopMinimumWidth:\s*1206') {
 if ($page -notmatch 'MetadataEditor\.aggregateMetadata\(aggregateTargetIndices\(\)\)') {
     throw 'Field and cover previews must aggregate the active task scope.'
 }
-if ($page -notmatch 'Layout\.preferredHeight:\s*40') {
-    throw 'The reference toolbar and primary actions require 40-pixel controls.'
+if ($page -notmatch 'Layout\.preferredHeight:\s*Theme\.controlHeightProminent') {
+    throw 'Metadata toolbar actions must use the shared prominent control height.'
 }
 if ($page -notmatch 'MetadataEditor\.applyMetadata\(payload, targets\)') {
     throw 'The apply button must invoke the metadata transaction controller.'
