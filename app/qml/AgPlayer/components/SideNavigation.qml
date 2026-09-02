@@ -29,6 +29,10 @@ Item {
     property bool resourceDropAccepted: false
     readonly property int navigationRowHeight: 38
     readonly property int resourceSectionHeight: 54
+    readonly property int navigationIconVisualSize:
+        Theme.navigationIconVisualSize
+    readonly property int navigationActionExtent:
+        Theme.navigationActionExtent
 
     signal categorySelected(string category)
     signal navigationSelected(string nodeType, string nodeId,
@@ -353,11 +357,11 @@ Item {
                     spacing: 4
                     Image {
                         source: Theme.icon("user-resource-folder")
-                        sourceSize.width: 16
-                        sourceSize.height: 16
+                        sourceSize.width: root.navigationIconVisualSize
+                        sourceSize.height: root.navigationIconVisualSize
                         fillMode: Image.PreserveAspectFit
-                        Layout.preferredWidth: 16
-                        Layout.preferredHeight: 16
+                        Layout.preferredWidth: root.navigationIconVisualSize
+                        Layout.preferredHeight: root.navigationIconVisualSize
                     }
                     Text {
                         text: qsTr("资源文件夹")
@@ -369,13 +373,13 @@ Item {
                     ToolButton {
                         objectName: nodeRow.nodeType === "resourceSection"
                                     ? "addResourceFolderButton" : ""
-                        Layout.preferredWidth: 28
-                        Layout.preferredHeight: 28
+                        Layout.preferredWidth: root.navigationActionExtent
+                        Layout.preferredHeight: root.navigationActionExtent
                         icon.source: Theme.icon("user-add-resource-folder")
                         contentItem: Image {
                             source: Theme.icon("user-add-resource-folder")
-                            sourceSize.width: 16
-                            sourceSize.height: 16
+                            sourceSize.width: root.navigationIconVisualSize
+                            sourceSize.height: root.navigationIconVisualSize
                             fillMode: Image.PreserveAspectFit
                         }
                         ToolTip.visible: hovered
@@ -386,13 +390,13 @@ Item {
                     ToolButton {
                         objectName: nodeRow.nodeType === "resourceSection"
                                     ? "removeResourceFolderButton" : ""
-                        Layout.preferredWidth: 28
-                        Layout.preferredHeight: 28
+                        Layout.preferredWidth: root.navigationActionExtent
+                        Layout.preferredHeight: root.navigationActionExtent
                         icon.source: Theme.icon("subtract-line")
                         icon.color: enabled ? Theme.iconSecondary
                                             : Theme.secondaryText
-                        icon.width: 16
-                        icon.height: 16
+                        icon.width: root.navigationIconVisualSize
+                        icon.height: root.navigationIconVisualSize
                         enabled: root.activeNodeType === "resourceRoot"
                                  && root.selectedResourceFolder.length > 0
                         ToolTip.visible: hovered
@@ -410,6 +414,7 @@ Item {
                 anchors.rightMargin: 8
                 spacing: 4
                 visible: nodeRow.nodeType !== "resourceSection"
+                z: 4
 
                 ToolButton {
                     objectName: "navigationExpandButton"
@@ -417,14 +422,15 @@ Item {
                              || ((nodeRow.nodeType === "resourceRoot"
                                   || nodeRow.nodeType === "resourceFolder")
                                  && nodeRow.hasChildren)
-                    Layout.preferredWidth: visible ? 28 : 0
-                    Layout.preferredHeight: 28
+                    Layout.preferredWidth: visible
+                                           ? root.navigationActionExtent : 0
+                    Layout.preferredHeight: root.navigationActionExtent
                     icon.source: Theme.icon(nodeRow.expanded
                                             ? "arrow-down-s-line"
                                             : "arrow-right-s-line")
                     icon.color: Theme.tagSecondaryText
-                    icon.width: 18
-                    icon.height: 18
+                    icon.width: root.navigationIconVisualSize
+                    icon.height: root.navigationIconVisualSize
                     background: null
                     onClicked: root.navigationModel.setExpanded(
                                    nodeRow.nodeId, !nodeRow.expanded)
@@ -434,7 +440,8 @@ Item {
                                 || ((nodeRow.nodeType === "resourceRoot"
                                 || nodeRow.nodeType === "resourceFolder")
                                && nodeRow.hasChildren))
-                    Layout.preferredWidth: visible ? 28 : 0
+                    Layout.preferredWidth: visible
+                                           ? root.navigationActionExtent : 0
                     Layout.preferredHeight: 1
                 }
                 Image {
@@ -443,11 +450,12 @@ Item {
                     source: visible
                             ? Theme.icon(root.suppliedIconForNode(nodeRow.nodeType))
                             : ""
-                    sourceSize.width: 17
-                    sourceSize.height: 17
+                    sourceSize.width: root.navigationIconVisualSize
+                    sourceSize.height: root.navigationIconVisualSize
                     fillMode: Image.PreserveAspectFit
-                    Layout.preferredWidth: visible ? 17 : 0
-                    Layout.preferredHeight: 17
+                    Layout.preferredWidth: visible
+                                           ? root.navigationIconVisualSize : 0
+                    Layout.preferredHeight: root.navigationIconVisualSize
                 }
                 ThemedIcon {
                     visible: root.suppliedIconForNode(nodeRow.nodeType) === ""
@@ -456,14 +464,17 @@ Item {
                                                              : nodeRow.selected
                                                                ? Theme.iconAccent
                                                                : Theme.iconSecondary
-                    sourceSize.width: 17
-                    sourceSize.height: 17
-                    Layout.preferredWidth: visible ? 17 : 0
-                    Layout.preferredHeight: 17
+                    sourceSize.width: root.navigationIconVisualSize
+                    sourceSize.height: root.navigationIconVisualSize
+                    Layout.preferredWidth: visible
+                                           ? root.navigationIconVisualSize : 0
+                    Layout.preferredHeight: root.navigationIconVisualSize
                 }
                 Text {
                     text: nodeRow.displayName
-                    color: nodeRow.selected ? Theme.primaryText
+                    color: playlistDropTarget.containsDrag
+                           ? Theme.primaryText
+                           : nodeRow.selected ? Theme.primaryText
                                             : Theme.tagSecondaryText
                     font.family: Theme.fontPrimary
                     font.pixelSize: Math.max(13, Qt.application.font.pixelSize)
@@ -520,7 +531,7 @@ Item {
                 opacity: playlistDropTarget.containsDrag
                          ? 1 : nodeRow.dropLoadPulse
                 scale: 1 - nodeRow.dropLoadPulse * 0.04
-                z: 3
+                z: 2
             }
             SequentialAnimation {
                 id: playlistLoadAnimation

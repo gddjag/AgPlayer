@@ -520,27 +520,24 @@ public slots:
                                              NativeDropRouter::Target::Main);
                 QObject::connect(
                     nativeDrops_.get(), &NativeDropRouter::pathsDropped,
-                    importer_.get(), [this](NativeDropRouter::Target target,
-                                             const QStringList& paths) {
+                    mainWindow_, [this](NativeDropRouter::Target target,
+                                        const QStringList& paths) {
                         if (target == NativeDropRouter::Target::Main) {
-                            playFirstImportedAfterNativeDrop_ = true;
-                            importer_->importPaths(paths);
+                            QList<QUrl> urls;
+                            urls.reserve(paths.size());
+                            for (const QString& path : paths)
+                                urls.append(QUrl::fromLocalFile(path));
+                            bool accepted = false;
+                            const bool invoked = QMetaObject::invokeMethod(
+                                mainWindow_, "handleShellDropUrls",
+                                Qt::DirectConnection,
+                                Q_RETURN_ARG(bool, accepted),
+                                Q_ARG(QVariant, QVariant::fromValue(urls)));
+                            if (!invoked)
+                                qWarning() << "Unable to invoke classified test drop";
+                            Q_UNUSED(accepted)
                         }
                     });
-                QObject::connect(importer_.get(), &ImportController::finished,
-                                 playback_.get(), [this] {
-                    if (!playFirstImportedAfterNativeDrop_) {
-                        return;
-                    }
-                    playFirstImportedAfterNativeDrop_ = false;
-                    const QStringList ids = importer_->importedTrackIds();
-                    if (!ids.isEmpty()) {
-                        const int row = library_->indexForTrackId(ids.front());
-                        if (row >= 0) {
-                            playback_->playRow(row);
-                        }
-                    }
-                });
             }
             engine->rootContext()->setContextProperty("testMainWindow", mainWindow_);
         }
@@ -570,7 +567,6 @@ private:
     std::unique_ptr<NativeDropRouter> nativeDrops_;
     std::unique_ptr<QQmlComponent> component_;
     QObject* mainWindow_ = nullptr;
-    bool playFirstImportedAfterNativeDrop_ = false;
     NativeDropHelper nativeDropHelper_;
 };
 

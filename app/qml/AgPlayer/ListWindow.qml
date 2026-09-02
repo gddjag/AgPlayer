@@ -197,12 +197,17 @@ Window {
             if (classified.kind === LibraryManagerController.Directory)
                 directoryPaths.push(path)
         }
+        var registeredCount = 0
         for (var pathIndex = 0; pathIndex < directoryPaths.length;
              ++pathIndex) {
-            LibraryManagerController.addMonitoredFolder(
-                        directoryPaths[pathIndex])
+            if (LibraryManagerController.addMonitoredFolder(
+                        directoryPaths[pathIndex]))
+                ++registeredCount
         }
-        return directoryPaths.length > 0
+        // addMonitoredFolder persists the root and schedules the shared
+        // background scan/import.  Only a newly registered root is accepted;
+        // duplicates and invalid URLs must not look successful.
+        return registeredCount > 0
     }
     function resourceDropContainsPoint(x, y) {
         var local = sideNavigation.mapFromItem(null, x, y)
@@ -560,7 +565,7 @@ Window {
                                                   ? filterModel.tagKey : ""
                                     searchText: filterModel
                                                 ? filterModel.searchText : ""
-                                    relaxedClassicColumns: true
+                                    layoutProfile: "classic"
                                     tagManagementLayout: listWindow.tagManagementMode
                                 }
                             }

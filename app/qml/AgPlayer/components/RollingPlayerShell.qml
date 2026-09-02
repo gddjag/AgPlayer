@@ -1140,8 +1140,7 @@ Item {
                                              : false
                             activeTagKey: root.filterModel
                                           ? root.filterModel.tagKey : ""
-                            integratedCompact: true
-                            singleWindowLayout: true
+                            layoutProfile: "rolling"
                             thumbnailVisibilityFollowsSetting: false
                         }
 

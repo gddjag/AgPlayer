@@ -976,7 +976,6 @@ int main(int argc, char* argv[])
 
         QString pendingPlayFilePath;
         int pendingPlayFinishes = 0;
-        bool playFirstImportedAfterDrop = false;
 
         auto playFileIfPending = [&]() {
             if (pendingPlayFilePath.isEmpty()) {
@@ -1075,17 +1074,7 @@ int main(int argc, char* argv[])
 
         QObject::connect(&importer, &ImportController::finished, &app,
                          [&library, &playback, &importer, &pendingPlayFilePath,
-                          &pendingPlayFinishes, &playFirstImportedAfterDrop]() {
-            if (playFirstImportedAfterDrop) {
-                playFirstImportedAfterDrop = false;
-                const QStringList ids = importer.importedTrackIds();
-                if (!ids.isEmpty()) {
-                    const int row = library.indexForTrackId(ids.front());
-                    if (row >= 0) {
-                        playback.playRow(row);
-                    }
-                }
-            }
+                          &pendingPlayFinishes]() {
             if (pendingPlayFilePath.isEmpty()) {
                 return;
             }
@@ -1385,8 +1374,19 @@ int main(int argc, char* argv[])
                     }
                     switch (target) {
                     case NativeDropRouter::Target::Main:
-                        playFirstImportedAfterDrop = true;
-                        importer.importPaths(paths);
+                        {
+                        bool accepted = false;
+                        const bool invoked = mainWindow != nullptr
+                            && QMetaObject::invokeMethod(
+                                mainWindow, "handleShellDropUrls",
+                                Qt::DirectConnection,
+                                Q_RETURN_ARG(bool, accepted),
+                                Q_ARG(QVariant, QVariant::fromValue(urls)));
+                        if (!invoked) {
+                            qWarning() << "Unable to submit classified main-window drop";
+                        }
+                        Q_UNUSED(accepted)
+                        }
                         break;
                     case NativeDropRouter::Target::List:
                         {

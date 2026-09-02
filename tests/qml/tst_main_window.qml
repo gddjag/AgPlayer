@@ -73,6 +73,9 @@ TestCase {
         TrackList {
             width: 1100
             height: 500
+            // Standalone component tests keep covering the legacy detailed
+            // table; production shells select an explicit layout profile.
+            layoutProfile: "detailed"
         }
     }
 
@@ -3022,7 +3025,7 @@ TestCase {
             compare(lyricsWindow.hostScreen.height, window.screen.height)
             var list = findChild(window, "sharedTrackList")
             verify(list)
-            compare(list.relaxedClassicColumns, true)
+            compare(list.layoutProfile, "classic")
 
             var title = findChild(list, "trackHeaderTitle")
             var duration = findChild(list, "trackHeaderDuration")
@@ -3082,6 +3085,98 @@ TestCase {
             filterModel.category = previousCategory
             filterModel.tagKey = previousTagKey
         }
+    }
+
+    function test_native_and_qml_shell_drops_share_the_classified_submission() {
+        verify(mainWindow["handleShellDropUrls"] !== undefined,
+               "all player shells need one classified drop submission")
+        var unsupported = nativeDropHelper.createNonAudioDropFile()
+        var missing = nativeDropHelper.missingDropUrl()
+        verify(unsupported && missing)
+        ImportController.clearErrors()
+        compare(mainWindow.handleShellDropUrls([unsupported, missing]), false)
+        wait(50)
+        verify(!ImportController.busy)
+        compare(ImportController.errors.length, 0,
+                "classification must reject unsupported paths before import")
+    }
+
+    function test_task1b_track_list_profiles_keep_trailing_columns_fixed() {
+        var profiles = ["classic", "integrated", "rolling"]
+        var widths = [863, 960, 1180, 1440, 1672]
+        for (var profileIndex = 0; profileIndex < profiles.length;
+             ++profileIndex) {
+            var list = trackListComponent.createObject(mainWindow.contentItem)
+            verify(list)
+            verify(list["layoutProfile"] !== undefined,
+                   "TrackList must expose one explicit layoutProfile")
+            list.layoutProfile = profiles[profileIndex]
+            var trailingWidth = -1
+            for (var widthIndex = 0; widthIndex < widths.length; ++widthIndex) {
+                list.width = widths[widthIndex]
+                wait(0)
+                var duration = findChild(list, "trackHeaderDuration")
+                var rating = findChild(list, "trackHeaderRating")
+                var favorite = findChild(list, "trackHeaderFavorite")
+                var bpm = findChild(list, "trackHeaderBpm")
+                verify(duration && rating && favorite && bpm)
+                verify(duration.visible && rating.visible && favorite.visible)
+                if (profileIndex === 0)
+                    verify(bpm.visible)
+                var firstTrailing = duration.mapToItem(list, 0, 0).x
+                var fixedWidth = list.width - firstTrailing
+                if (trailingWidth < 0)
+                    trailingWidth = fixedWidth
+                else
+                    verify(Math.abs(fixedWidth - trailingWidth) <= 1.0,
+                           "profile=" + profiles[profileIndex]
+                           + " width=" + widths[widthIndex]
+                           + " trailing=" + fixedWidth
+                           + " expected=" + trailingWidth)
+            }
+            list.destroy()
+        }
+    }
+
+    function test_task1b_navigation_uses_shared_icon_and_action_tokens() {
+        verify(Theme["navigationIconVisualSize"] !== undefined)
+        verify(Theme["navigationActionExtent"] !== undefined)
+        verify(Theme.navigationActionExtent >= 28)
+        var side = sideNavigationComponent.createObject(mainWindow.contentItem)
+        verify(side)
+        compare(side.navigationIconVisualSize,
+                Theme.navigationIconVisualSize)
+        compare(side.navigationActionExtent,
+                Theme.navigationActionExtent)
+        var nodeNames = ["navigationNode-library:all",
+                         "navigationNode-favorites:favorites",
+                         "navigationNode-tags:manage"]
+        for (var index = 0; index < nodeNames.length; ++index) {
+            var node = findChild(side, nodeNames[index])
+            verify(node)
+            verify(node.height >= Theme.navigationActionExtent)
+        }
+        side.destroy()
+    }
+
+    function test_task1b_duplicate_and_invalid_resource_drops_are_rejected() {
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1200,
+            "height": 620
+        })
+        verify(window)
+        var folder = nativeDropHelper.createDropDirectory()
+        var invalid = nativeDropHelper.createNonAudioDropFile()
+        verify(folder && invalid)
+        verify(window.handleResourceDropUrls([folder]))
+        compare(window.handleResourceDropUrls([folder]), false,
+                "an already registered directory must not report success")
+        compare(window.handleResourceDropUrls([invalid]), false)
+        var path = LibraryManagerController.classifyDropUrl(folder).path
+        verify(LibraryManagerController.removeMonitoredFolder(path))
+        window.destroy()
     }
 
     function test_z_tag_workspace_is_one_continuous_three_column_surface() {

@@ -247,6 +247,22 @@ ApplicationWindow {
         ImportController.importUrls(urls)
     }
 
+    function handleShellDropUrls(urls): bool {
+        if (!urls || urls.length === 0)
+            return false
+        var accepted = []
+        for (var index = 0; index < urls.length; ++index) {
+            var classified = LibraryManagerController.classifyDropUrl(urls[index])
+            if (classified.kind === LibraryManagerController.Directory
+                    || classified.kind === LibraryManagerController.AudioFile)
+                accepted.push(classified.url)
+        }
+        if (accepted.length === 0)
+            return false
+        importDroppedFiles(accepted)
+        return true
+    }
+
     function openFolderDialog() {
         var dialog = folderDialogComponent.createObject(mainWindow)
         if (dialog)
@@ -679,9 +695,7 @@ ApplicationWindow {
         // participates in drag-and-drop hit testing; putting it above the
         // controls steals click and seek input on some Qt/Windows builds.
         z: -5
-        onUrlsDropped: function(urls) {
-            mainWindow.importDroppedFiles(urls)
-        }
+        urlsSubmitter: mainWindow.handleShellDropUrls
     }
 
     ImportStatusPanel {

@@ -224,6 +224,7 @@ TestCase {
             var rolling = rollingWithFakes()
             var list = findChild(rolling, "rollingTrackList")
             verify(list)
+            compare(list.layoutProfile, "rolling")
             compare(list.waveformThumbnailsVisible, true)
             compare(list.rowHeight, 50)
         } finally {

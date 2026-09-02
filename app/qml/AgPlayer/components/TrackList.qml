@@ -22,9 +22,12 @@ ListView {
     property string searchText: ""
     property bool tagFilterActive: false
     property string activeTagKey: ""
-    property bool integratedCompact: false
-    property bool singleWindowLayout: false
-    property bool relaxedClassicColumns: false
+    // The data model and delegate stay shared; shells select only presentation.
+    property string layoutProfile: "classic"
+    readonly property bool relaxedClassicColumns: layoutProfile === "classic"
+    readonly property bool singleWindowLayout:
+        layoutProfile === "integrated" || layoutProfile === "rolling"
+    readonly property bool integratedCompact: singleWindowLayout
     property bool tagManagementLayout: false
     property bool thumbnailVisibilityFollowsSetting: true
     property var selectedTrackIds: []
@@ -35,8 +38,11 @@ ListView {
         !relaxedClassicColumns && !singleWindowLayout
     readonly property bool showAlbumColumn:
         !relaxedClassicColumns && !singleWindowLayout
+    // Named production profiles never change trailing metadata geometry when
+    // the window grows.  The legacy detailed fixture retains its historical
+    // narrow-width behavior for non-shell consumers.
     readonly property bool compactColumns:
-        integratedCompact || singleWindowLayout || width < 900
+        layoutProfile === "detailed" ? width < 900 : true
     readonly property int favoriteAlbumGap: 6
     readonly property int artistAlbumGap: 6
     readonly property int albumRatingGap: 6
@@ -54,7 +60,6 @@ ListView {
     readonly property int durationWidth: compactColumns ? 58 : 72
     readonly property int titleMinimumWidth:
         singleWindowLayout ? 220 : (compactColumns ? 150 : 180)
-    readonly property int classicTitleMaximumWidth: 230
     readonly property int singleWindowTitleWidth: 300
     readonly property int singleWindowMediaHeight: 34
     readonly property bool showBpmColumn:
@@ -485,7 +490,7 @@ ListView {
             rows: 1
             columnSpacing: 0
             HeaderText { objectName: "trackHeaderIndex"; text: "#"; Layout.column: 0; Layout.minimumWidth: root.sequenceWidth; Layout.preferredWidth: root.sequenceWidth; Layout.maximumWidth: root.sequenceWidth }
-            HeaderText { objectName: "trackHeaderTitle"; text: qsTr("歌曲"); Layout.column: 1; Layout.fillWidth: !root.singleWindowLayout; Layout.minimumWidth: root.titleMinimumWidth; Layout.preferredWidth: root.singleWindowLayout ? root.singleWindowTitleWidth : -1; Layout.maximumWidth: root.singleWindowLayout ? root.singleWindowTitleWidth : (root.relaxedClassicColumns ? root.classicTitleMaximumWidth : Number.POSITIVE_INFINITY) }
+            HeaderText { objectName: "trackHeaderTitle"; text: qsTr("歌曲"); Layout.column: 1; Layout.fillWidth: !root.singleWindowLayout; Layout.minimumWidth: root.titleMinimumWidth; Layout.preferredWidth: root.singleWindowLayout ? root.singleWindowTitleWidth : -1; Layout.maximumWidth: root.singleWindowLayout ? root.singleWindowTitleWidth : Number.POSITIVE_INFINITY }
             Item { objectName: "trackHeaderWaveform"; visible: root.singleWindowLayout; Layout.column: 2; Layout.fillWidth: visible }
             HeaderText { objectName: "trackHeaderFavorite"; text: qsTr("收藏"); Layout.column: root.singleWindowLayout ? 5 : (root.relaxedClassicColumns ? 4 : 2); horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: root.favoriteWidth; Layout.preferredWidth: root.favoriteWidth; Layout.maximumWidth: root.favoriteWidth }
             Item { objectName: "trackHeaderFavoriteAlbumGap"; visible: !root.relaxedClassicColumns && !root.singleWindowLayout; Layout.column: 3; Layout.minimumWidth: visible ? root.favoriteAlbumGap : 0; Layout.preferredWidth: visible ? root.favoriteAlbumGap : 0; Layout.maximumWidth: visible ? root.favoriteAlbumGap : 0 }
@@ -744,9 +749,7 @@ ListView {
                                        ? root.singleWindowTitleWidth : -1
                 Layout.maximumWidth: root.singleWindowLayout
                                      ? root.singleWindowTitleWidth
-                                     : (root.relaxedClassicColumns
-                                        ? root.classicTitleMaximumWidth
-                                        : Number.POSITIVE_INFINITY)
+                                     : Number.POSITIVE_INFINITY
                 Layout.fillHeight: true
                 RowLayout {
                     anchors.fill: parent

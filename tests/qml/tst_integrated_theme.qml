@@ -99,7 +99,7 @@ TestCase {
         TrackList {
             width: 720
             height: 180
-            integratedCompact: false
+            layoutProfile: "classic"
         }
     }
 
@@ -443,6 +443,7 @@ TestCase {
         var list = findChild(shell, "integratedTrackList")
         var title = findChild(shell, "trackHeaderTitle")
         verify(list && list.headerItem && title)
+        compare(list.layoutProfile, "integrated")
         compare(list.headerItem.height, 48)
         compare(title.font.weight, Font.DemiBold)
     }

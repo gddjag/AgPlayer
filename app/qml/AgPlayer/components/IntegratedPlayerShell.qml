@@ -280,8 +280,7 @@ Item {
                                              ? root.filterModel.tagKey.length > 0 : false
                             activeTagKey: root.filterModel
                                           ? root.filterModel.tagKey : ""
-                            integratedCompact: true
-                            singleWindowLayout: true
+                            layoutProfile: "integrated"
                             thumbnailVisibilityFollowsSetting: false
                         }
 
