@@ -128,7 +128,7 @@ TestCase {
         var names = ["audioToolNav_0", "audioToolNav_4", "audioToolNav_1",
                      "audioToolNav_2", "audioToolNav_3"]
         verifyAscendingX(nav, names)
-        compare(nav.height, 44)
+        compare(nav.height, Theme.settingsRowHeight)
         for (var index = 0; index < names.length; ++index)
             compare(findChild(nav, names[index]).height, first.height)
         compare(first.height, nav.height)
@@ -318,9 +318,9 @@ TestCase {
             verify(titleBar && titleText && contentStack
                    && minimize && maximize && close && moveArea)
             verify(topNav)
-            compare(titleBar.color.toString(), Theme.panel.toString())
+            compare(titleBar.color.toString(), Theme.titleBarSurface.toString())
             compare(titleText.color.toString(), Theme.primaryText.toString())
-            compare(contentStack.color.toString(), Theme.panel.toString())
+            compare(contentStack.color.toString(), Theme.contentSurface.toString())
             compare(minimize.icon.color.toString(), Theme.iconPrimary.toString())
             compare(maximize.icon.color.toString(), Theme.iconPrimary.toString())
             compare(close.icon.color.toString(), Theme.iconPrimary.toString())

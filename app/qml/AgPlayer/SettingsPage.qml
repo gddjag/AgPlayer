@@ -590,19 +590,20 @@ Item {
         border.width: 0
         Layout.fillWidth: true
         Layout.alignment: Qt.AlignTop
-        implicitHeight: titleText.implicitHeight + contentContainer.implicitHeight + 20
+        implicitHeight: titleText.implicitHeight + contentContainer.implicitHeight
+                        + Theme.spacingXl
         Layout.preferredHeight: implicitHeight
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 6
-            spacing: 6
+            anchors.margins: Theme.spacingSm
+            spacing: Theme.spacingSm
 
             Text {
                 id: titleText
                 color: Theme.primaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 14
+                font.pixelSize: Theme.fontSizeBodyStrong
                 font.weight: Font.Bold
                 Layout.fillWidth: true
             }
@@ -610,7 +611,7 @@ Item {
             ColumnLayout {
                 id: contentContainer
                 Layout.fillWidth: true
-                spacing: 6
+                spacing: Theme.spacingSm
             }
 
         }
@@ -620,7 +621,7 @@ Item {
             anchors.right: parent.right
             anchors.bottom: parent.bottom
             height: 1
-            color: Theme.border
+            color: Theme.opaqueDivider
         }
     }
 
@@ -629,14 +630,14 @@ Item {
         property alias subtitle: subtitleText.text
 
         Layout.fillWidth: true
-        Layout.topMargin: 4
+        Layout.topMargin: Theme.spacingXs
         Layout.bottomMargin: 0
-        spacing: 8
+        spacing: Theme.spacingSm
 
         Rectangle {
             Layout.preferredWidth: 4
             Layout.preferredHeight: 20
-            color: Theme.cyan
+            color: Theme.accent
             radius: 2
         }
 
@@ -647,7 +648,7 @@ Item {
                 id: titleText
                 color: Theme.primaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 16
+                font.pixelSize: Theme.fontSizeSection
                 font.weight: Font.Bold
             }
 
@@ -656,7 +657,7 @@ Item {
                 visible: text.length > 0 && text !== titleText.text
                 color: Theme.secondaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeCaption
             }
         }
     }
@@ -669,7 +670,7 @@ Item {
         default property alias content: contentContainer.children
 
         Layout.fillWidth: true
-        Layout.preferredHeight: 36
+        Layout.preferredHeight: Theme.settingsRowHeight
 
         Text {
             id: labelText
@@ -678,7 +679,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             color: Theme.secondaryText
             font.family: Theme.fontPrimary
-            font.pixelSize: 14
+            font.pixelSize: Theme.fontSizeBody
             width: parent.fitLabelToContent
                    ? Math.min(parent.width - 190,
                               Math.max(parent.labelWidth, contentWidth))
@@ -688,7 +689,7 @@ Item {
         Item {
             id: contentContainer
             anchors.left: labelText.right
-            anchors.leftMargin: 10
+            anchors.leftMargin: Theme.spacingMd
             anchors.right: parent.right
             anchors.top: parent.top
             anchors.bottom: parent.bottom
@@ -697,11 +698,12 @@ Item {
 
     component SettingSwitch: ThemedSwitch {}
 
-    component SettingCombo: ComboBox {
+    component SettingCombo: ThemedComboBox {
         id: combo
         property var valueModel
 
         width: 180
+        height: Theme.controlHeight
         textRole: "text"
         valueRole: "value"
         model: valueModel
@@ -710,7 +712,7 @@ Item {
             text: combo.displayText
             color: Theme.primaryText
             font.family: Theme.fontPrimary
-            font.pixelSize: 13
+            font.pixelSize: Theme.fontSizeBody
             verticalAlignment: Text.AlignVCenter
             leftPadding: Theme.spacingSm
             rightPadding: (combo.indicator ? combo.indicator.width : 0)
@@ -719,9 +721,9 @@ Item {
         }
 
         background: Rectangle {
-            color: Theme.background
+            color: Theme.surfaceElevated
             radius: Theme.radiusSm
-            border.color: Theme.border
+            border.color: Theme.opaqueBorder
             border.width: 1
         }
 
@@ -739,9 +741,9 @@ Item {
             }
 
             background: Rectangle {
-                color: Theme.panel
+                color: Theme.surfaceElevated
                 radius: Theme.radiusSm
-                border.color: Theme.border
+                border.color: Theme.opaqueBorder
                 border.width: 1
             }
         }
@@ -754,7 +756,7 @@ Item {
                 text: modelData.text
                 color: Theme.primaryText
                 font.family: Theme.fontPrimary
-                font.pixelSize: 13
+                font.pixelSize: Theme.fontSizeBody
                 verticalAlignment: Text.AlignVCenter
             }
 

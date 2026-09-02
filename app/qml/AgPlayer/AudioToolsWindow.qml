@@ -113,8 +113,8 @@ Window {
 
     Rectangle {
         anchors.fill: parent
-        color: Theme.background
-        border.color: Theme.border
+        color: Theme.contentSurface
+        border.color: Theme.opaqueBorder
         border.width: 1
         radius: window.visibility === Window.Maximized ? 0 : Theme.windowRadius
 
@@ -126,25 +126,24 @@ Window {
                 id: titleBar
                 objectName: "audioToolsTitleBar"
                 Layout.fillWidth: true
-                Layout.preferredHeight: Theme.navigationActionExtent
-                    + Theme.spacingLg
-                color: Theme.panel
+                Layout.preferredHeight: Theme.titleBarHeight
+                color: Theme.titleBarSurface
 
                 RowLayout {
                     z: 1
                     anchors.fill: parent
-                    anchors.leftMargin: 24
-                    anchors.rightMargin: 8
-                    spacing: 14
+                    anchors.leftMargin: Theme.spacingXl
+                    anchors.rightMargin: Theme.spacingSm
+                    spacing: Theme.spacingMd
 
                     Item {
                         objectName: "audioToolsLogo"
-                        Layout.preferredWidth: 28
-                        Layout.preferredHeight: 28
+                        Layout.preferredWidth: Theme.controlHeightCompact
+                        Layout.preferredHeight: Theme.controlHeightCompact
                         Image {
                             anchors.centerIn: parent
-                            width: 28
-                            height: 28
+                            width: Theme.controlHeightCompact
+                            height: Theme.controlHeightCompact
                             source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
                             fillMode: Image.PreserveAspectFit
                         }
@@ -154,7 +153,7 @@ Window {
                         text: qsTr("AgPlayer · 音频工具")
                         color: Theme.primaryText
                         font.family: Theme.fontFallback
-                        font.pixelSize: 20
+                        font.pixelSize: Theme.fontSizeSection
                         font.weight: Font.Medium
                     }
 
@@ -237,8 +236,7 @@ Window {
 
             ToolSidebar {
                 Layout.fillWidth: true
-                Layout.preferredHeight: Theme.navigationActionExtent
-                    + Theme.spacingLg
+                Layout.preferredHeight: Theme.settingsRowHeight
                 window: window
                 currentTool: AudioToolsController.currentTool
                 referenceWorkbench: window.referenceWorkbench
@@ -252,7 +250,7 @@ Window {
                 objectName: "audioToolsContentStack"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                color: Theme.panel
+                color: Theme.contentSurface
                 border.color: "transparent"
                 border.width: 0
                 radius: 0

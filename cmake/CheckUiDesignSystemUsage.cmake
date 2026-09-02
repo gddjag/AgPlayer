@@ -35,5 +35,19 @@ require_text("app/qml/AgPlayer/components/RollingPlayerShell.qml"
     "Layout.preferredHeight: Theme.titleBarHeight")
 require_text("app/qml/AgPlayer/components/RollingPlayerShell.qml"
     "Layout.preferredWidth: Theme.navigationWidthCompact")
+require_text("app/qml/AgPlayer/SettingsPage.qml"
+    "Layout.preferredHeight: Theme.settingsRowHeight")
+require_text("app/qml/AgPlayer/SettingsPage.qml"
+    "component SettingCombo: ThemedComboBox")
+require_text("app/qml/AgPlayer/AudioToolsWindow.qml"
+    "Layout.preferredHeight: Theme.titleBarHeight")
+require_text("app/qml/AgPlayer/AudioToolsWindow.qml"
+    "color: Theme.titleBarSurface")
+require_text("app/qml/AgPlayer/AudioToolsWindow.qml"
+    "color: Theme.contentSurface")
+require_text("app/qml/AgPlayer/components/tools/ToolSidebar.qml"
+    "color: Theme.navigationSurface")
+require_text("app/qml/AgPlayer/components/tools/ToolSidebar.qml"
+    "implicitHeight: Theme.settingsRowHeight")
 
 message(STATUS "UI design-system usage contract passed")

@@ -147,12 +147,12 @@ foreach ($control in @(
 
 if ($toolsWindow -notmatch 'width:\s*1672' -or
     $toolsWindow -notmatch 'height:\s*941' -or
-    $toolsWindow -notmatch 'objectName:\s*"audioToolsTitleBar"[\s\S]{0,180}Layout\.preferredHeight:\s*Theme\.navigationActionExtent\s*\+\s*Theme\.spacingLg' -or
+    $toolsWindow -notmatch 'objectName:\s*"audioToolsTitleBar"[\s\S]{0,180}Layout\.preferredHeight:\s*Theme\.titleBarHeight' -or
     $toolsWindow -notmatch 'ToolSidebar\s*\{' -or
     $toolsWindow -notmatch 'title:\s*qsTr\("AgPlayer') {
     throw 'The tools shell must preserve 1672x941 geometry with fixed shared chrome.'
 }
-if ($toolsNavigation -notmatch 'implicitHeight:\s*Theme\.navigationActionExtent\s*\+\s*Theme\.spacingLg' -or
+if ($toolsNavigation -notmatch 'implicitHeight:\s*Theme\.settingsRowHeight' -or
     $toolsNavigation -match 'referenceWorkbench\s*\?\s*52|separationWorkbench\s*\?\s*44') {
     throw 'All five tool pages must use one fixed navigation height.'
 }

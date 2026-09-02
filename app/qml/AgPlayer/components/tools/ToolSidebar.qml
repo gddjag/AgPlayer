@@ -23,18 +23,18 @@ Rectangle {
 
     signal toolSelected(int toolId)
 
-    color: Theme.panel
-    border.color: Theme.border
+    color: Theme.navigationSurface
+    border.color: Theme.opaqueBorder
     border.width: 1
-    radius: Theme.radiusMd
-    implicitHeight: Theme.navigationActionExtent + Theme.spacingLg
+    radius: 0
+    implicitHeight: Theme.settingsRowHeight
 
     RowLayout {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        anchors.leftMargin: 12
+        anchors.leftMargin: Theme.spacingMd
         anchors.rightMargin: Theme.spacingLg
         spacing: Theme.spacingSm
 
@@ -44,7 +44,7 @@ Rectangle {
             Button {
                 id: navButton
                 objectName: "audioToolNav_" + modelData.toolId
-                Layout.preferredWidth: 154
+                Layout.preferredWidth: 150
                 Layout.preferredHeight: navigation.implicitHeight
                 Layout.maximumHeight: Layout.preferredHeight
                 flat: true
@@ -70,7 +70,7 @@ Rectangle {
                         color: navButton.checked ? navigation.activeLabelColor
                                                  : Theme.secondaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: 15
+                        font.pixelSize: Theme.fontSizeBody
                         font.weight: navButton.checked ? Font.DemiBold
                                                        : Font.Normal
                     }
@@ -79,13 +79,13 @@ Rectangle {
 
                 background: Rectangle {
                     color: navButton.checked
-                           ? Theme.subtleGlassActive
-                           : navButton.hovered ? Theme.subtleGlassHover
+                           ? Theme.selectedSurface
+                           : navButton.hovered ? Theme.surfaceHover
                                                : "transparent"
                     border.color: navButton.checked ? Theme.accent
                                                     : "transparent"
                     border.width: navButton.checked ? 1 : 0
-                    radius: Theme.radiusMd
+                    radius: Theme.radiusSm
 
                     Rectangle {
                         visible: navButton.checked
