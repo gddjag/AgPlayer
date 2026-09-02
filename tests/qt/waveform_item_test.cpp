@@ -339,6 +339,26 @@ void WaveformItemTest::spectralProgressUpdatesAlphaWithoutReplacingGeometry()
         node = item.updatePaintNode(node, nullptr);
         QCOMPARE(static_cast<QSGGeometryNode*>(node)->geometry(), geometry);
         QCOMPARE(geometry->vertexData(), vertexStorage);
+
+        const int peakCount = renderedPeakCount(node, item);
+        const int expectedPlayed = progress <= 0.0
+            ? 0
+            : progress >= 1.0
+              ? peakCount
+              : static_cast<int>(std::floor(
+                    progress * static_cast<qreal>(peakCount - 1))) + 1;
+        const auto* data = vertices(node);
+        for (int peak = 0; peak < peakCount; ++peak) {
+            QCOMPARE(static_cast<int>(data[peak * 2].a),
+                     peak < expectedPlayed ? 255 : 153);
+            QCOMPARE(static_cast<int>(data[peak * 2 + 1].a),
+                     peak < expectedPlayed ? 255 : 153);
+        }
+        if (expectedPlayed > 0 && expectedPlayed < peakCount) {
+            QCOMPARE(static_cast<int>(data[(expectedPlayed - 1) * 2].a),
+                     255);
+            QCOMPARE(static_cast<int>(data[expectedPlayed * 2].a), 153);
+        }
     }
 
     item.setPosition(0);

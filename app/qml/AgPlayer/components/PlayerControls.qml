@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import AgPlayer
+import "PlayerPresentation.js" as PlayerPresentation
 
 Rectangle {
     id: root
@@ -15,10 +16,29 @@ Rectangle {
     readonly property bool rollingLayout: shellMode === 2
     readonly property bool compactTransport: width < 860
     readonly property bool denseTransport: width < 1200
-    readonly property var actionProfile: lyricsActions.actionOrder
-
+    readonly property var actionProfile: PlayerPresentation.profile(
+                                             rollingLayout ? "rolling"
+                                                           : "classic")
+    property real popupDevicePixelRatioOverrideForTesting: 0
+    readonly property real themePopupDevicePixelRatio:
+        popupDevicePixelRatioOverrideForTesting > 0
+        ? popupDevicePixelRatioOverrideForTesting
+        : root.Window.window && root.Window.window.screen
+          ? root.Window.window.screen.devicePixelRatio : 1
     signal openEqualizerRequested()
     signal toggleEmbeddedPlaylistRequested()
+
+    function themePopupPositionForDpr(dpr) {
+        var window = root.Window.window
+        var surface = window ? window.contentItem : root
+        return PlayerPresentation.popupPosition(themeModeButton,
+                                                playerShellMenu, surface, dpr)
+    }
+
+    function openThemePopup() {
+        var point = themePopupPositionForDpr(themePopupDevicePixelRatio)
+        playerShellMenu.popup(point.x, point.y)
+    }
 
     ToolButton {
         id: listWindowButton
@@ -26,7 +46,9 @@ Rectangle {
         anchors.left: parent.left
         anchors.leftMargin: 24
         anchors.verticalCenter: parent.verticalCenter
-        visible: root.showListWindowButton && !root.rollingLayout
+        visible: root.showListWindowButton
+                 && PlayerPresentation.hasAction(root.actionProfile,
+                                                 "listWindowButton")
         flat: true
         icon.source: Theme.icon("list-unordered")
         icon.color: WindowController.listWindowVisible
@@ -62,7 +84,9 @@ Rectangle {
         compact: root.compactTransport
         dense: root.denseTransport
         showWaveformMode: root.showWaveformMode
-        rollingOrder: root.rollingLayout
+                          && PlayerPresentation.hasAction(
+                              root.actionProfile, "waveformModeButton")
+        rollingOrder: root.actionProfile.rollingOrder
         spacing: root.emptyMode && !root.denseTransport
                  ? 28 : (compact ? 4 : dense ? 8 : 16)
         onOpenEqualizerRequested: root.openEqualizerRequested()
@@ -92,20 +116,20 @@ Rectangle {
         background: null
     }
 
-    ExperienceActions {
+    Loader {
         id: lyricsActions
-        objectName: "experienceActions"
-        visible: !root.rollingLayout
+        active: !root.rollingLayout
         anchors.left: root.rollingLayout ? audioToolsButton.right
                                          : centerControls.right
         anchors.leftMargin: root.denseTransport ? 2 : 8
         anchors.verticalCenter: centerControls.verticalCenter
-        compact: root.denseTransport
-        width: implicitWidth
-        height: implicitHeight
-        showImmersive: false
-        showLyrics: true
-        profile: root.rollingLayout ? "rolling" : "classic"
+        sourceComponent: ExperienceActions {
+            objectName: "experienceActions"
+            compact: root.denseTransport
+            presentationProfile: root.actionProfile
+            allowImmersive: false
+            allowLyrics: true
+        }
     }
 
     PlayerVolumeControl {
@@ -135,14 +159,16 @@ Rectangle {
             objectName: "themeModeButton"
             width: root.denseTransport ? 32 : implicitWidth
             height: root.denseTransport ? 32 : implicitHeight
-            visible: !root.compactTransport
+            visible: PlayerPresentation.hasAction(root.actionProfile,
+                                                  "themeModeButton")
+                     && !root.compactTransport
             flat: true
             icon.source: Theme.icon("theme-skin")
             icon.color: Theme.iconPrimary
             icon.width: 20
             icon.height: 20
             Accessible.name: qsTr("切换主题")
-            onClicked: playerShellMenu.open()
+            onClicked: root.openThemePopup()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
             background: null
@@ -152,18 +178,22 @@ Rectangle {
             objectName: "immersiveExperienceActions"
             visible: !root.compactTransport
             anchors.verticalCenter: parent.verticalCenter
+            presentationProfile: root.actionProfile
             compact: root.denseTransport
             width: implicitWidth
             height: implicitHeight
-            showImmersive: true
-            showLyrics: false
+            allowImmersive: true
+            allowLyrics: false
         }
 
         ToolButton {
             objectName: "miniPlayerButton"
             width: root.denseTransport ? 32 : implicitWidth
             height: root.denseTransport ? 32 : implicitHeight
-            visible: !root.emptyMode && !root.compactTransport
+            visible: PlayerPresentation.hasAction(root.actionProfile,
+                                                  "miniPlayerButton")
+                     && !root.emptyMode
+                     && !root.compactTransport
             flat: true
             icon.source: Theme.icon("picture-in-picture-2-line")
             icon.color: Theme.iconPrimary
@@ -180,10 +210,8 @@ Rectangle {
     Menu {
         id: playerShellMenu
         objectName: "playerShellMenu"
-        x: lyricsActions.popupX(themeModeButton, playerShellMenu, root,
-                                root.Window.window.contentItem)
-        y: lyricsActions.popupY(themeModeButton, playerShellMenu, root,
-                                root.Window.window.contentItem)
+        parent: root.Window.window ? root.Window.window.contentItem : root
+        width: 200
 
         MenuItem {
             objectName: "classicShellMenuItem"

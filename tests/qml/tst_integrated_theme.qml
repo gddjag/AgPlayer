@@ -726,6 +726,14 @@ TestCase {
                 String(base.spectralPalette[7]))
         compare(played.spectralUnplayedOpacity,
                 base.spectralUnplayedOpacity)
+        for (var theme = 0; theme < 3; ++theme) {
+            SettingsController.themeMode = theme
+            wait(0)
+            compare(base.spectralUnplayedOpacity,
+                    Theme.nonImmersiveSpectralUnplayedOpacity)
+            compare(played.spectralUnplayedOpacity,
+                    Theme.nonImmersiveSpectralUnplayedOpacity)
+        }
         compare(played.rgbProgress, base.rgbProgress)
         compare(played.amplitudeScale, base.amplitudeScale)
         compare(played.density, base.density)
@@ -774,9 +782,14 @@ TestCase {
         wait(20)
         var controls = findChild(shell, "integratedPlayerControls")
         verify(controls)
-        compare(controls.actionProfile.join(","),
+        compare(controls.actionProfile.order.join(","),
                 "listWindowButton,audioToolsButton,equalizerButton,waveformModeButton,previousButton,playPauseButton,nextButton,modeButton,lyricsActionButton,mainVolumeControl,themeModeButton,immersiveActionButton,miniPlayerButton")
-        var names = controls.actionProfile
+        var names = controls.actionProfile.order
+        var transport = findChild(controls, "integratedTransportControls")
+        verify(transport)
+        compare(transport.rollingOrder, controls.actionProfile.rollingOrder)
+        compare(transport.showWaveformMode,
+                controls.actionProfile.order.indexOf("waveformModeButton") >= 0)
         var previousX = -1
         for (var index = 0; index < names.length; ++index) {
             var action = findChild(controls, names[index])
@@ -785,6 +798,39 @@ TestCase {
             verify(actionX > previousX, names[index] + " is out of order")
             previousX = actionX
         }
+    }
+
+    function test_integrated_theme_popup_opens_above_icon_at_real_dpr_positions() {
+        var shell = enterIntegratedShell()
+        mainWindow.width = 1672
+        wait(20)
+        var controls = findChild(shell, "integratedPlayerControls")
+        var button = findChild(controls, "themeModeButton")
+        var menu = findChild(controls, "playerShellMenu")
+        verify(controls && button && menu)
+        compare(menu.parent, controls.Window.window.contentItem)
+        for (var index = 0; index < 2; ++index) {
+            var dpr = index === 0 ? 1.0 : 1.5
+            controls.popupDevicePixelRatioOverrideForTesting = dpr
+            mouseClick(button)
+            tryVerify(function() { return menu.visible && menu.height > 0 }, 500)
+            var point = controls.themePopupPositionForDpr(dpr)
+            verify(isFinite(point.x) && isFinite(point.y))
+            verify(Math.abs(point.x * dpr - Math.round(point.x * dpr)) < 0.01)
+            verify(Math.abs(point.y * dpr - Math.round(point.y * dpr)) < 0.01)
+            var surface = controls.Window.window.contentItem
+            var buttonPoint = button.mapToItem(surface, 0, 0)
+            var menuPoint = menu.parent.mapToItem(surface, menu.x, menu.y)
+            verify(menuPoint.y + menu.height <= buttonPoint.y + 1 / dpr)
+            var buttonCenter = buttonPoint.x + button.width / 2
+            verify(menuPoint.x <= buttonCenter
+                   && buttonCenter <= menuPoint.x + menu.width)
+            verify(menuPoint.x >= 0)
+            verify(menuPoint.x + menu.width <= surface.width + 1 / dpr)
+            menu.close()
+            wait(0)
+        }
+        controls.popupDevicePixelRatioOverrideForTesting = 0
     }
 
     function test_shell_switch_is_removed_from_transport() {

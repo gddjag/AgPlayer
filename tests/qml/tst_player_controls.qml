@@ -159,8 +159,13 @@ TestCase {
         compare(lyrics.icon.height, 20)
         compare(immersive.icon.width, 20)
         compare(immersive.icon.height, 20)
-        compare(controls.actionProfile.join(","),
+        compare(controls.actionProfile.order.join(","),
                 "listWindowButton,audioToolsButton,equalizerButton,waveformModeButton,previousButton,playPauseButton,nextButton,modeButton,lyricsActionButton,mainVolumeControl,themeModeButton,immersiveActionButton,miniPlayerButton")
+        var transport = findChild(controls, "centerPlaybackControls")
+        verify(transport)
+        compare(transport.rollingOrder, controls.actionProfile.rollingOrder)
+        compare(transport.showWaveformMode,
+                controls.actionProfile.order.indexOf("waveformModeButton") >= 0)
     }
 
     function test_non_immersive_spectral_progress_policy_is_theme_independent() {
@@ -168,12 +173,15 @@ TestCase {
         tryVerify(function() {
             return findControl("classicPlayerShell") !== null
         }, 1500)
+        var waveform = findControl("mainWaveform")
+        verify(waveform)
         verify(Theme.nonImmersiveSpectralUnplayedOpacity <= 0.60)
         var expected = Theme.nonImmersiveSpectralUnplayedOpacity
         for (var theme = 0; theme < 3; ++theme) {
             SettingsController.themeMode = theme
             wait(0)
             compare(Theme.nonImmersiveSpectralUnplayedOpacity, expected)
+            compare(waveform.spectralUnplayedOpacity, expected)
         }
         var positions = [0, 0.001, 0.5, 0.999, 1]
         for (var index = 0; index < positions.length; ++index) {
@@ -195,7 +203,7 @@ TestCase {
         }, 1500)
         var controls = findControl("playerControls")
         verify(controls)
-        var names = controls.actionProfile
+        var names = controls.actionProfile.order
         var previousRight = -1
         var centerY = controls.height / 2
         for (var index = 0; index < names.length; ++index) {
@@ -225,33 +233,64 @@ TestCase {
             return findControl("classicPlayerShell") !== null
         }, 1500)
         var controls = findControl("playerControls")
-        var helper = findChild(controls, "experienceActions")
         var button = findChild(controls, "themeModeButton")
         var menu = findChild(controls, "playerShellMenu")
-        verify(controls && helper && button && menu)
-        mouseClick(button)
-        tryVerify(function() { return menu.visible && menu.height > 0 }, 500)
+        verify(controls && button && menu)
+        var playerWindow = controls.Window.window
+        var previousWidth = playerWindow.width
+        var previousHeight = playerWindow.height
+        playerWindow.width = 863
+        playerWindow.height = 266
+        tryVerify(function() {
+            var surface = controls.Window.window.contentItem
+            var buttonPoint = button.mapToItem(surface, 0, 0)
+            return Math.abs(surface.width - 863) <= 1
+                    && controls.width <= surface.width + 1
+                    && buttonPoint.x + button.width <= surface.width + 1
+        }, 500, "the compact player layout must settle inside its window")
+        compare(menu.parent, controls.Window.window.contentItem)
         for (var index = 0; index < 2; ++index) {
             var dpr = index === 0 ? 1.0 : 1.5
             var popupWindow = controls.Window.window
             verify(popupWindow)
-            var point = helper.popupPosition(button, menu, controls, dpr,
-                                             popupWindow.contentItem)
+            controls.popupDevicePixelRatioOverrideForTesting = dpr
+            compare(controls.themePopupDevicePixelRatio, dpr)
+            mouseClick(button)
+            tryVerify(function() { return menu.visible && menu.height > 0 }, 500)
+            var point = controls.themePopupPositionForDpr(dpr)
+            verify(Math.abs(point.x * dpr - Math.round(point.x * dpr)) < 0.01)
+            verify(Math.abs(point.y * dpr - Math.round(point.y * dpr)) < 0.01)
             var mappedButton = button.mapToItem(popupWindow.contentItem, 0, 0)
-            verify(point.y + menu.height <= mappedButton.y + 1 / dpr,
-                   "popup must remain above the invoking icon at DPR " + dpr)
-            verify(point.x >= 0)
-            verify(point.x + menu.width
+            var mappedMenu = menu.parent.mapToItem(popupWindow.contentItem,
+                                                   menu.x, menu.y)
+            verify(mappedMenu.y + menu.height <= mappedButton.y + 1 / dpr,
+                   "popup must remain above the invoking icon at DPR " + dpr
+                   + "; menuY=" + mappedMenu.y
+                   + "; menuHeight=" + menu.height
+                   + "; buttonY=" + mappedButton.y)
+            var buttonCenter = mappedButton.x + button.width / 2
+            verify(mappedMenu.x <= buttonCenter
+                   && buttonCenter <= mappedMenu.x + menu.width,
+                   "popup must remain horizontally anchored to the icon at DPR "
+                   + dpr + "; menuX=" + mappedMenu.x
+                   + "; menuWidth=" + menu.width
+                   + "; buttonCenter=" + buttonCenter)
+            verify(mappedMenu.x >= 0)
+            verify(mappedMenu.x + menu.width
                    <= popupWindow.contentItem.width + 1 / dpr,
-                   "popup right " + (point.x + menu.width)
-                   + " (x=" + point.x + ", width=" + menu.width
+                   "popup right " + (mappedMenu.x + menu.width)
+                   + " (x=" + mappedMenu.x + ", width=" + menu.width
                    + ") exceeds " + popupWindow.contentItem.width
                    + " at DPR " + dpr
                    + "; controls=" + controls.width)
-            verify(point.y >= 0)
-            verify(point.y + menu.height
+            verify(mappedMenu.y >= 0)
+            verify(mappedMenu.y + menu.height
                    <= popupWindow.contentItem.height + 1 / dpr)
+            menu.close()
+            wait(0)
         }
-        menu.close()
+        controls.popupDevicePixelRatioOverrideForTesting = 0
+        playerWindow.width = previousWidth
+        playerWindow.height = previousHeight
     }
 }

@@ -303,9 +303,12 @@ TestCase {
                     "every player shell exposes the shared waveform action")
             compare(findChild(controls, "listWindowButton").visible, mode !== 2,
                     "rolling always exposes its ten-row list and needs no toggle")
-            compare(findChild(controls, "lyricsActionButton").visible,
-                    mode !== 2,
+            var lyricsAction = findChild(controls, "lyricsActionButton")
+            compare(lyricsAction !== null && lyricsAction.visible, mode !== 2,
                     "rolling already exposes lyrics in its persistent side pane")
+            if (mode === 2)
+                compare(findChild(controls, "experienceActions"), null,
+                        "rolling must not instantiate a hidden action registry")
         }
 
         var rolling = enterMode(2)
@@ -489,14 +492,16 @@ TestCase {
         var first = String(rolling.frequencyWaveformSettings.palette[0])
         var last = String(rolling.frequencyWaveformSettings.palette[7])
 
-        SettingsController.themeMode = 1
-        tryCompare(overview, "spectralUnplayedOpacity",
-                   Theme.nonImmersiveSpectralUnplayedOpacity)
-        compare(String(overview.spectralPalette[0]), first)
-        compare(String(mainWaveform.spectralPalette[7]), last)
-        SettingsController.themeMode = 0
-        compare(String(overview.spectralPalette[0]), first)
-        compare(String(mainWaveform.spectralPalette[7]), last)
+        for (var theme = 0; theme < 3; ++theme) {
+            SettingsController.themeMode = theme
+            wait(0)
+            compare(overview.spectralUnplayedOpacity,
+                    Theme.nonImmersiveSpectralUnplayedOpacity)
+            compare(mainWaveform.spectralUnplayedOpacity,
+                    Theme.nonImmersiveSpectralUnplayedOpacity)
+            compare(String(overview.spectralPalette[0]), first)
+            compare(String(mainWaveform.spectralPalette[7]), last)
+        }
     }
 
     function test_rolling_tempo_meter_and_zoom_controls_are_live() {

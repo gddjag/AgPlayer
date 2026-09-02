@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import AgPlayer
+import "PlayerPresentation.js" as PlayerPresentation
 
 Item {
     id: root
@@ -10,10 +11,29 @@ Item {
     property real leftReservedWidth: 0
     readonly property bool denseLayout: width < 1440
     readonly property real actionSpacing: denseLayout ? 6 : 10
-    readonly property var actionProfile: lyricsActions.actionOrder
+    readonly property var actionProfile:
+        PlayerPresentation.profile("integrated")
+    property real popupDevicePixelRatioOverrideForTesting: 0
+    readonly property real themePopupDevicePixelRatio:
+        popupDevicePixelRatioOverrideForTesting > 0
+        ? popupDevicePixelRatioOverrideForTesting
+        : root.Window.window && root.Window.window.screen
+          ? root.Window.window.screen.devicePixelRatio : 1
     signal openEqualizerRequested()
     signal togglePlaylistRequested()
     anchors.fill: parent
+
+    function themePopupPositionForDpr(dpr) {
+        var window = root.Window.window
+        var surface = window ? window.contentItem : root
+        return PlayerPresentation.popupPosition(themeModeButton,
+                                                playerShellMenu, surface, dpr)
+    }
+
+    function openThemePopup() {
+        var point = themePopupPositionForDpr(themePopupDevicePixelRatio)
+        playerShellMenu.popup(point.x, point.y)
+    }
 
     ToolButton {
         id: listWindowButton
@@ -21,6 +41,8 @@ Item {
         anchors.left: parent.left
         anchors.leftMargin: root.leftReservedWidth + 12
         anchors.verticalCenter: parent.verticalCenter
+        visible: PlayerPresentation.hasAction(root.actionProfile,
+                                              "listWindowButton")
         flat: true
         icon.source: Theme.icon("list-unordered")
         icon.color: WindowController.listWindowVisible
@@ -50,6 +72,9 @@ Item {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             dense: root.denseLayout
+            showWaveformMode: PlayerPresentation.hasAction(
+                                  root.actionProfile, "waveformModeButton")
+            rollingOrder: root.actionProfile.rollingOrder
             onOpenEqualizerRequested: root.openEqualizerRequested()
         }
 
@@ -80,9 +105,9 @@ Item {
             compact: root.denseLayout
             width: implicitWidth
             height: implicitHeight
-            showImmersive: false
-            showLyrics: true
-            profile: "integrated"
+            presentationProfile: root.actionProfile
+            allowImmersive: false
+            allowLyrics: true
         }
 
         PlayerVolumeControl {
@@ -105,13 +130,15 @@ Item {
         ToolButton {
             id: themeModeButton
             objectName: "themeModeButton"
+            visible: PlayerPresentation.hasAction(root.actionProfile,
+                                                  "themeModeButton")
             flat: true
             icon.source: Theme.icon("theme-skin")
             icon.color: Theme.iconPrimary
             icon.width: 20
             icon.height: 20
             Accessible.name: qsTr("Switch theme")
-            onClicked: playerShellMenu.open()
+            onClicked: root.openThemePopup()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
             background: null
@@ -119,11 +146,14 @@ Item {
         ExperienceActions {
             objectName: "immersiveExperienceActions"
             anchors.verticalCenter: parent.verticalCenter
-            showImmersive: true
-            showLyrics: false
+            presentationProfile: root.actionProfile
+            allowImmersive: true
+            allowLyrics: false
         }
         ToolButton {
             objectName: "miniPlayerButton"
+            visible: PlayerPresentation.hasAction(root.actionProfile,
+                                                  "miniPlayerButton")
             flat: true
             icon.source: Theme.icon("picture-in-picture-2-line")
             icon.color: Theme.iconPrimary
@@ -140,10 +170,8 @@ Item {
     Menu {
         id: playerShellMenu
         objectName: "playerShellMenu"
-        x: lyricsActions.popupX(themeModeButton, playerShellMenu, root,
-                                root.Window.window.contentItem)
-        y: lyricsActions.popupY(themeModeButton, playerShellMenu, root,
-                                root.Window.window.contentItem)
+        parent: root.Window.window ? root.Window.window.contentItem : root
+        width: 200
 
         MenuItem {
             objectName: "classicShellMenuItem"

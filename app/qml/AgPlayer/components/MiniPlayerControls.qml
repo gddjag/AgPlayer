@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import AgPlayer
+import "PlayerPresentation.js" as PlayerPresentation
 
 Rectangle {
     id: root
@@ -16,6 +17,13 @@ Rectangle {
     property var rawWaveformLayers: ({})
     property real waveformDurationMs: 0
     property int libraryRevision: 0
+    readonly property var actionProfile: PlayerPresentation.profile("mini")
+    property real popupDevicePixelRatioOverrideForTesting: 0
+    readonly property real themePopupDevicePixelRatio:
+        popupDevicePixelRatioOverrideForTesting > 0
+        ? popupDevicePixelRatioOverrideForTesting
+        : root.Window.window && root.Window.window.screen
+          ? root.Window.window.screen.devicePixelRatio : 1
     // The complete decoded PCM duration is the waveform clock; metadata is a
     // fallback only until analysis finishes.
     readonly property real effectiveDurationMs: waveformDurationMs > 0
@@ -335,18 +343,11 @@ Rectangle {
                 objectName: "miniTransport"
                 Layout.fillWidth: true; Layout.fillHeight: true; spacing: 3
                 Item { Layout.fillWidth: true }
-                ExperienceActions {
-                    id: miniActionRegistry
-                    visible: false
-                    profile: "mini"
-                    showLyrics: false
-                    showImmersive: false
-                    Layout.preferredWidth: 0
-                    Layout.preferredHeight: 0
-                }
                 ToolButton {
                     id: themeModeButton
                     objectName: "miniThemeModeButton"
+                    visible: PlayerPresentation.hasAction(
+                                 root.actionProfile, "miniThemeModeButton")
                     Layout.preferredWidth: 28
                     Layout.minimumWidth: Layout.preferredWidth
                     Layout.maximumWidth: Layout.preferredWidth
@@ -358,12 +359,14 @@ Rectangle {
                     Accessible.name: qsTr("切换主题")
                     ToolTip.text: Accessible.name
                     ToolTip.visible: hovered
-                    onClicked: miniPlayerShellMenu.open()
+                    onClicked: root.openThemePopup()
                     background: null
                 }
                 ToolButton {
                     id: waveformModeButton
                     objectName: "miniWaveformModeButton"
+                    visible: PlayerPresentation.hasAction(
+                                 root.actionProfile, "miniWaveformModeButton")
                     Layout.preferredWidth: 28
                     Layout.minimumWidth: Layout.preferredWidth
                     Layout.maximumWidth: Layout.preferredWidth
@@ -535,14 +538,24 @@ Rectangle {
             }
         }
     }
+    function themePopupPositionForDpr(dpr) {
+        var window = root.Window.window
+        var surface = window ? window.contentItem : root
+        return PlayerPresentation.popupPosition(themeModeButton,
+                                                miniPlayerShellMenu,
+                                                surface, dpr)
+    }
+
+    function openThemePopup() {
+        var point = themePopupPositionForDpr(themePopupDevicePixelRatio)
+        miniPlayerShellMenu.popup(point.x, point.y)
+    }
 
     Menu {
         id: miniPlayerShellMenu
         objectName: "miniPlayerShellMenu"
-        x: miniActionRegistry.popupX(themeModeButton, miniPlayerShellMenu,
-                                    root, root.Window.window.contentItem)
-        y: miniActionRegistry.popupY(themeModeButton, miniPlayerShellMenu,
-                                    root, root.Window.window.contentItem)
+        parent: root.Window.window ? root.Window.window.contentItem : root
+        width: 200
 
         MenuItem {
             text: qsTr("经典双窗口")
