@@ -455,9 +455,8 @@ TestCase {
         ]
         verify(panel !== null, "file information panel must exist")
         compare(panel.objectName, "audioFileInfoPanel")
-        compare(panel.width, 300)
-        verify(panel.height > 0, "file information panel must have a usable height")
-        compare(panel.height, Math.min(panel.parent.height - 24, 470))
+        compare(panel.width, 130)
+        compare(panel.height, 438)
         var scrollView = findChild(panel, "audioFileInfoScroll")
         verify(scrollView !== null)
         compare(panel.rows.length, expectedKeys.length,
@@ -1277,8 +1276,9 @@ TestCase {
                         detailsPanel.contentItem, 0, 0)
             var valuePosition = values[detailIndex].mapToItem(
                         detailsPanel.contentItem, 0, 0)
-            verify(labelPosition.x + labels[detailIndex].contentWidth
-                   <= valuePosition.x - 4)
+            verify(labelPosition.y + labels[detailIndex].height
+                   <= valuePosition.y,
+                   "portrait information rows must stack label above value")
         }
         detailsPanel.close()
         listWindow.destroy()
@@ -2859,7 +2859,7 @@ TestCase {
         compare(String(waveform.spectralPalette[7]),
                 String(spectralSettings.palette[7]))
         compare(waveform.spectralUnplayedOpacity,
-                spectralSettings.unplayedOpacity)
+                Theme.nonImmersiveSpectralUnplayedOpacity)
         compare(playedClip.visible, false)
         compare(playbackGuide.visible, true)
 
@@ -5669,14 +5669,20 @@ TestCase {
         verify(picker)
         picker.open()
         tryCompare(picker, "visible", true, 1000)
-        verify(picker.width > 0 && picker.width <= 360,
+        verify(picker.width > 0 && picker.width <= 300,
                "color picker must stay compact")
-        verify(picker.height > 0 && picker.height <= 430,
+        verify(picker.height > 0 && picker.height <= 360,
                "color picker must stay compact")
         var cancelButton = findChild(firstField, "colorPickerCancelButton")
         var confirmButton = findChild(firstField, "colorPickerConfirmButton")
+        var restoreButton = findChild(firstField, "colorPickerRestoreButton")
         verify(cancelButton, "compact color picker must expose cancel action")
         verify(confirmButton, "compact color picker must expose confirm action")
+        verify(restoreButton,
+               "compact color picker must expose per-slot restore default")
+        compare(String(firstField.defaultColor).toUpperCase(), "#123ECF")
+        verify(confirmButton.focus,
+               "compact color picker must nominate an initial keyboard target")
 
         var originalColor = String(firstField.colorValue)
         picker.workingColor = "#445566"
@@ -5690,6 +5696,15 @@ TestCase {
         confirmButton.clicked()
         compare(String(firstField.colorValue).toUpperCase(), "#445566",
                 "confirm must commit the working color")
+
+        firstField.openPicker()
+        tryCompare(picker, "visible", true, 1000)
+        restoreButton.clicked()
+        compare(String(picker.workingColor).toUpperCase(), "#123ECF")
+        confirmButton.clicked()
+        compare(String(SettingsController.frequencyColorWaveform.palette[0])
+                .toUpperCase(), "#123ECF",
+                "restoring and confirming must persist the slot default")
         firstField.colorEdited(originalColor)
 
         page.cancelAndClose()
@@ -5946,7 +5961,7 @@ TestCase {
         compare(waveform.spectralPalette.length, 8)
         compare(String(waveform.spectralPalette[0]), "#123ecf")
         compare(String(waveform.spectralPalette[7]), "#e82718")
-        compare(waveform.spectralUnplayedOpacity, 0.88)
+        compare(waveform.spectralUnplayedOpacity, 0.60)
         compare(playedClip.visible, false)
         SettingsController.waveformPlaybackGuide = false
         compare(playbackGuide.visible, false)

@@ -7,6 +7,7 @@ import AgPlayer
 Control {
     id: root
     property color colorValue: "#000000"
+    property color defaultColor: colorValue
     property string targetProperty: ""
     property bool showText: true
     signal colorEdited(string value)
@@ -81,9 +82,9 @@ Control {
         objectName: "colorFieldPicker"
         parent: Overlay.overlay
         anchors.centerIn: parent
-        width: Math.min(360, parent ? parent.width * 0.9 : 360)
-        height: Math.min(430, parent ? parent.height * 0.9 : 430)
-        padding: 16
+        width: Math.min(296, parent ? parent.width * 0.9 : 296)
+        height: Math.min(356, parent ? parent.height * 0.9 : 356)
+        padding: 12
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
@@ -92,9 +93,29 @@ Control {
         property real saturation: 0
         property real brightness: 0
         property color workingColor: root.colorValue
+        onOpened: Qt.callLater(function() {
+            if (picker.visible)
+                confirmButton.forceActiveFocus(Qt.PopupFocusReason)
+        })
 
         function updateWorkingColor() {
             workingColor = Qt.hsva(hue, saturation, brightness, 1.0)
+        }
+
+        function setWorkingColor(value) {
+            workingColor = value
+            hue = workingColor.hsvHue >= 0 ? workingColor.hsvHue : 0
+            saturation = workingColor.hsvSaturation
+            brightness = workingColor.hsvValue
+        }
+
+        function restoreDefault() {
+            setWorkingColor(root.defaultColor)
+        }
+
+        function acceptColor() {
+            root.colorEdited(workingColor.toString().toUpperCase())
+            close()
         }
 
         background: Rectangle {
@@ -129,7 +150,7 @@ Control {
             Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.minimumHeight: 190
+                Layout.minimumHeight: 132
 
                 Rectangle {
                     anchors.fill: parent
@@ -246,6 +267,11 @@ Control {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
+                Button {
+                    objectName: "colorPickerRestoreButton"
+                    text: qsTr("恢复默认")
+                    onClicked: picker.restoreDefault()
+                }
                 Item { Layout.fillWidth: true }
                 Button {
                     objectName: "colorPickerCancelButton"
@@ -253,12 +279,11 @@ Control {
                     onClicked: picker.close()
                 }
                 Button {
+                    id: confirmButton
                     objectName: "colorPickerConfirmButton"
                     text: qsTr("确定")
-                    onClicked: {
-                        root.colorEdited(picker.workingColor.toString().toUpperCase())
-                        picker.close()
-                    }
+                    focus: true
+                    onClicked: picker.acceptColor()
                 }
             }
         }

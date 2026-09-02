@@ -13,12 +13,16 @@ Popup {
     property url coverUrl: ""
     signal copyRequested(string value)
 
-    width: 300
-    height: Math.min(parent ? Math.max(0, parent.height - 24) : 470, 470)
+    width: 130
+    height: 438
     modal: false
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-    onOpened: closeButton.forceActiveFocus()
+    onOpened: {
+        if (scrollView.contentItem.contentY !== undefined)
+            scrollView.contentItem.contentY = 0
+        closeButton.forceActiveFocus()
+    }
 
     background: Rectangle {
         color: Theme.elevated
@@ -61,7 +65,7 @@ Popup {
             Repeater {
                 model: root.rows
 
-                delegate: RowLayout {
+                delegate: ColumnLayout {
                     id: detailRow
                     required property int index
                     readonly property var row: root.rows[index] || ({})
@@ -73,7 +77,9 @@ Popup {
                         text: detailRow.row.label || ""
                         color: Theme.secondaryText
                         font.pixelSize: 11
-                        Layout.preferredWidth: 176
+                        Layout.fillWidth: true
+                        elide: Text.ElideRight
+                        maximumLineCount: 1
                     }
                     ToolButton {
                         id: copyTarget

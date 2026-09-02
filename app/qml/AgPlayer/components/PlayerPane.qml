@@ -484,7 +484,7 @@ Rectangle {
                 // Keep this base pass entirely unplayed. The played pass is
                 // clipped below at the exact playback pixel, avoiding the
                 // visible bucket-by-bucket progress jump of peak colouring.
-                position: root.waveformMode === 3
+                position: SettingsController.waveformMode === 3
                           ? root.visualPlaybackPositionMs : 0
                 cursorPosition: root.visualPlaybackPositionMs
                 duration: root.effectiveDurationMs
