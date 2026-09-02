@@ -5,6 +5,8 @@ import AgPlayer
 T.CheckBox {
     id: control
 
+    hoverEnabled: true
+    focusPolicy: Qt.StrongFocus
     implicitHeight: Theme.controlHeight
     implicitWidth: Math.max(Theme.controlHeight, contentItem.implicitWidth)
 

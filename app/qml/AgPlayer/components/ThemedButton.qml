@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Templates as T
+import QtQuick.Controls as C
 import AgPlayer
 
 T.Button {
@@ -9,6 +10,7 @@ T.Button {
     property bool danger: false
     property bool compact: false
     property bool prominent: false
+    property bool loading: false
 
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
@@ -20,24 +22,36 @@ T.Button {
     leftPadding: Theme.spacingMd
     rightPadding: Theme.spacingMd
     Accessible.name: text
+    Accessible.description: loading ? qsTr("正在处理") : ""
     Accessible.role: Accessible.Button
 
-    contentItem: Text {
-        text: control.text
-        color: !control.enabled ? Theme.textDisabled
-               : control.primary || control.danger ? Theme.accentText
-                                                  : Theme.textPrimary
-        font.family: Theme.fontPrimary
-        font.pixelSize: Theme.fontSizeBody
-        font.weight: control.primary ? Font.Medium : Font.Normal
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
-        elide: Text.ElideRight
+    contentItem: Row {
+        spacing: Theme.spacingSm
+
+        C.BusyIndicator {
+            objectName: "themedButtonBusyIndicator"
+            width: Theme.fontSizeBody
+            height: width
+            running: control.loading
+            visible: running
+        }
+
+        Text {
+            text: control.text
+            color: !control.enabled ? Theme.textDisabled
+                   : control.primary || control.danger ? Theme.accentText
+                                                      : Theme.textPrimary
+            font.family: Theme.fontPrimary
+            font.pixelSize: Theme.fontSizeBody
+            font.weight: control.primary ? Font.Medium : Font.Normal
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+        }
     }
 
     background: Rectangle {
         radius: Theme.radiusSm
-        color: !control.enabled ? Theme.disabled
+        color: !control.enabled || control.loading ? Theme.disabled
                : control.danger ? (control.down ? Qt.darker(Theme.danger, 1.15)
                                                  : control.hovered ? Qt.lighter(Theme.danger, 1.08)
                                                                    : Theme.danger)

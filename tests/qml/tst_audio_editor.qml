@@ -321,9 +321,12 @@ TestCase {
             compare(titleBar.color.toString(), Theme.titleBarSurface.toString())
             compare(titleText.color.toString(), Theme.primaryText.toString())
             compare(contentStack.color.toString(), Theme.contentSurface.toString())
-            compare(minimize.icon.color.toString(), Theme.iconPrimary.toString())
-            compare(maximize.icon.color.toString(), Theme.iconPrimary.toString())
-            compare(close.icon.color.toString(), Theme.iconPrimary.toString())
+            compare(minimize.contentItem.tint.toString(),
+                    Theme.iconPrimary.toString())
+            compare(maximize.contentItem.tint.toString(),
+                    Theme.iconPrimary.toString())
+            compare(close.contentItem.tint.toString(),
+                    Theme.iconPrimary.toString())
             const moveRight = moveArea.mapToItem(titleBar,
                                                   moveArea.width, 0).x
             const minimizeLeft = minimize.mapToItem(titleBar, 0, 0).x

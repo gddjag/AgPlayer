@@ -4,6 +4,8 @@ import AgPlayer
 
 ComboBox {
     id: control
+    hoverEnabled: true
+    focusPolicy: Qt.StrongFocus
     implicitHeight: Theme.controlHeight
     palette.window: Theme.elevated
     palette.base: Theme.elevated
@@ -35,7 +37,9 @@ ComboBox {
     }
 
     background: Rectangle {
-        color: control.enabled ? Theme.elevated : Theme.panel
+        color: !control.enabled ? Theme.disabled
+               : control.down ? Theme.surfacePressed
+               : control.hovered ? Theme.surfaceHover : Theme.surfaceElevated
         border.color: control.activeFocus ? Theme.focus : Theme.border
         border.width: 1
         radius: Theme.radiusSm

@@ -212,7 +212,7 @@ if (-not (Test-Path -LiteralPath $qaComparisonPath)) {
 if ($toolsNavigation -notmatch 'visibleToolOrder:\s*\[0,\s*4,\s*1,\s*2,\s*3\]' -or
     $toolsNavigation -notmatch 'objectName:\s*"audioToolNav_"\s*\+\s*modelData\.toolId' -or
     $toolsNavigation -notmatch 'RowLayout' -or
-    $toolsNavigation -notmatch 'visible:\s*navButton\.checked' -or
+    $toolsNavigation -notmatch 'selected:\s*navigation\.currentTool' -or
     $toolsNavigation -match '#[0-9A-Fa-f]{6}') {
     throw 'The five audio tools must retain stable IDs and use shared theme tokens.'
 }

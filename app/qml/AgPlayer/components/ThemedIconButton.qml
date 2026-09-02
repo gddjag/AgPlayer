@@ -10,6 +10,7 @@ T.Button {
     property int iconSize: 18
     property bool primary: false
     property bool danger: false
+    property bool dangerOnHover: false
 
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
@@ -21,8 +22,9 @@ T.Button {
     contentItem: ThemedIcon {
         source: control.iconSource
         tint: !control.enabled ? Theme.textDisabled
-              : control.primary || control.danger ? Theme.accentText
-                                                 : Theme.iconPrimary
+              : control.primary || control.danger
+                || (control.dangerOnHover && control.hovered)
+                ? Theme.accentText : Theme.iconPrimary
         width: control.iconSize
         height: control.iconSize
         anchors.centerIn: parent
@@ -31,9 +33,10 @@ T.Button {
     background: Rectangle {
         radius: Theme.radiusSm
         color: !control.enabled ? Theme.disabled
-               : control.danger ? (control.down ? Qt.darker(Theme.danger, 1.15)
-                                                 : control.hovered ? Qt.lighter(Theme.danger, 1.08)
-                                                                   : Theme.danger)
+               : control.danger || (control.dangerOnHover && control.hovered)
+                 ? (control.down ? Qt.darker(Theme.danger, 1.15)
+                                 : control.danger ? Theme.danger
+                                                  : Qt.lighter(Theme.danger, 1.08))
                : control.primary ? (control.down ? Theme.accentPressed
                                                   : control.hovered ? Theme.accentHover
                                                                     : Theme.accent)

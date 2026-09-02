@@ -197,6 +197,10 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/ThemedSlider.qml
         qml/AgPlayer/components/ThemedListRow.qml
         qml/AgPlayer/components/ThemedPanel.qml
+        qml/AgPlayer/components/ThemedTabButton.qml
+        qml/AgPlayer/components/ThemedDialog.qml
+        qml/AgPlayer/components/ThemedToolTip.qml
+        qml/AgPlayer/components/ThemedScrollBar.qml
         qml/AgPlayer/components/ThemedSwitch.qml
         qml/AgPlayer/components/ThemedCheckBox.qml
         qml/AgPlayer/components/ThemedRangeSlider.qml

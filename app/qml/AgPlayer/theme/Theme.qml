@@ -205,7 +205,9 @@ QtObject {
     readonly property int minimumInteractionExtent: 28
     readonly property int navigationIconVisualSize: 18
     readonly property int navigationActionExtent: 28
-    readonly property string fontPrimary: Qt.application.font.family
+    readonly property string fontPrimary: Qt.platform.os === "windows"
+                                          ? "Segoe UI Variable"
+                                          : Qt.application.font.family
     readonly property string fontFallback: Qt.platform.os === "windows"
                                            ? "Microsoft YaHei UI"
                                            : Qt.application.font.family

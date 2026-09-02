@@ -5,6 +5,8 @@ import AgPlayer
 T.RangeSlider {
     id: control
     property bool glassStyle: false
+    hoverEnabled: true
+    focusPolicy: Qt.StrongFocus
     implicitHeight: Theme.controlHeight
     background: Rectangle {
         objectName: "rangeSliderTrack"

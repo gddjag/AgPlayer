@@ -10,6 +10,8 @@ T.Switch {
     property real indicatorHeight: 20
     property real labelPixelSize: Theme.fontSizeBodyStrong
 
+    hoverEnabled: true
+    focusPolicy: Qt.StrongFocus
     implicitWidth: Math.max(indicatorWidth + 6, contentItem.implicitWidth)
     implicitHeight: Math.max(Theme.controlHeight, indicatorHeight + 8)
 

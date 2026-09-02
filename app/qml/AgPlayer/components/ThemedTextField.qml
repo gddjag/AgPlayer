@@ -16,16 +16,21 @@ T.TextField {
     font.pixelSize: Theme.fontSizeBody
     verticalAlignment: TextInput.AlignVCenter
     focusPolicy: Qt.StrongFocus
+    hoverEnabled: true
     Accessible.name: accessibleName.length > 0 ? accessibleName : placeholderText
+    Accessible.description: error ? errorMessage : ""
     Accessible.role: Accessible.EditableText
 
     property string accessibleName: ""
+    property bool error: false
+    property string errorMessage: ""
 
     background: Rectangle {
         radius: Theme.radiusSm
         color: !control.enabled ? Theme.disabled
                : control.hovered ? Theme.surfaceHover : Theme.surfaceElevated
-        border.color: control.activeFocus ? Theme.focus : Theme.opaqueBorder
+        border.color: control.error ? Theme.danger
+                      : control.activeFocus ? Theme.focus : Theme.opaqueBorder
         border.width: control.activeFocus ? 2 : 1
 
         Behavior on color {

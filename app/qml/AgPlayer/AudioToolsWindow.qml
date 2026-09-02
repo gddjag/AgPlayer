@@ -159,57 +159,40 @@ Window {
 
                     Item { Layout.fillWidth: true }
 
-                    ToolButton {
+                    ThemedIconButton {
                         objectName: "audioToolsMinimizeButton"
                         focusPolicy: Qt.NoFocus
                         Keys.onSpacePressed: function(event) { event.accepted = true }
                         Layout.preferredWidth: Theme.navigationActionExtent
                         Layout.preferredHeight: Theme.navigationActionExtent
-                        icon.source: Theme.icon("subtract-line")
-                        icon.color: Theme.iconPrimary
-                        Accessible.name: qsTr("最小化")
-                        Accessible.role: Accessible.Button
+                        iconSource: Theme.icon("subtract-line")
+                        accessibleName: qsTr("最小化")
                         onClicked: window.showMinimized()
-                        background: Rectangle {
-                            color: parent.hovered ? Theme.surfaceHover : "transparent"
-                            radius: 3
-                        }
                     }
-                    ToolButton {
+                    ThemedIconButton {
                         objectName: "audioToolsMaximizeButton"
                         focusPolicy: Qt.NoFocus
                         Keys.onSpacePressed: function(event) { event.accepted = true }
                         Layout.preferredWidth: Theme.navigationActionExtent
                         Layout.preferredHeight: Theme.navigationActionExtent
-                        icon.source: Theme.icon(window.visibility === Window.Maximized
-                                                ? "fullscreen-exit-fill"
-                                                : "checkbox-blank-line")
-                        icon.color: Theme.iconPrimary
-                        Accessible.name: window.visibility === Window.Maximized
-                            ? qsTr("还原") : qsTr("最大化")
-                        Accessible.role: Accessible.Button
+                        iconSource: Theme.icon(window.visibility === Window.Maximized
+                                               ? "fullscreen-exit-fill"
+                                               : "checkbox-blank-line")
+                        accessibleName: window.visibility === Window.Maximized
+                                        ? qsTr("还原") : qsTr("最大化")
                         onClicked: window.visibility === Window.Maximized
                                    ? window.showNormal() : window.showMaximized()
-                        background: Rectangle {
-                            color: parent.hovered ? Theme.surfaceHover : "transparent"
-                            radius: 3
-                        }
                     }
-                    ToolButton {
+                    ThemedIconButton {
                         objectName: "audioToolsCloseButton"
                         focusPolicy: Qt.NoFocus
                         Keys.onSpacePressed: function(event) { event.accepted = true }
                         Layout.preferredWidth: Theme.navigationActionExtent
                         Layout.preferredHeight: Theme.navigationActionExtent
-                        icon.source: Theme.icon("close-fill")
-                        icon.color: Theme.iconPrimary
-                        Accessible.name: qsTr("关闭")
-                        Accessible.role: Accessible.Button
+                        iconSource: Theme.icon("close-fill")
+                        accessibleName: qsTr("关闭")
+                        dangerOnHover: true
                         onClicked: window.requestHide()
-                        background: Rectangle {
-                            color: parent.hovered ? Theme.danger : "transparent"
-                            radius: 3
-                        }
                     }
                 }
 

@@ -44,9 +44,9 @@ weight, icon, leading marker, label, or shape must reinforce the state.
 
 ## 3. Typography
 
-Use the native UI family. Windows resolves to Segoe UI Variable where
-available, with Microsoft YaHei UI for Chinese. Other platforms keep their
-application font and native CJK fallback.
+Use the native UI family. Windows requests Segoe UI Variable and lets Qt use
+the system glyph fallback (Microsoft YaHei UI for Chinese). Other platforms
+keep their application font and native CJK fallback.
 
 | Token | Size | Use |
 | --- | ---: | --- |
@@ -100,6 +100,11 @@ slider, range slider, switch, checkbox, menu item, list row, panel, dialog,
 tooltip, and scroll bar. Page-level specialisation may change content and width,
 but not typography, state colours, radii, focus treatment, or base height.
 
+Legacy specialised controls are migrated incrementally to avoid changing
+working interaction geometry in a style-only release. The repository contract
+freezes their reviewed direct-Qt-Control baseline at 227 instances: refactoring
+may reduce that number, while new pages and features may not increase it.
+
 ## 6. Interaction states
 
 Every interactive component handles Default, Hover, Pressed, Selected, Focus,
@@ -132,8 +137,9 @@ Exceptions must be documented beside the property and covered by a focused
 test. Compilation alone is not visual acceptance.
 
 The `ui_design_system_usage_contract_test` is the repository guardrail for
-these rules. It checks the required hierarchy tokens in core surfaces and
-rejects raw hexadecimal colours in application QML. A legitimate domain colour
-must carry an inline `theme-color-allow:` explanation so that the exception is
+these rules. It checks required hierarchy tokens and real shared-component use
+in core surfaces, rejects raw hexadecimal colours in application QML, and
+blocks growth of the direct-control baseline. A legitimate domain colour must
+carry an inline `theme-color-allow:` explanation so that the exception is
 visible in review. New generic controls belong in `components/Themed*.qml`;
 page-local copies of shared control visuals are not accepted.
