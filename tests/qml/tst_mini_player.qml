@@ -159,7 +159,7 @@ TestCase {
         })
     }
 
-    function test_spectral_waveform_uses_one_palette_render_pass() {
+    function test_frequency_waveform_uses_one_three_band_render_pass() {
         var previousMode = SettingsController.waveformMode
         var previousGuide = SettingsController.waveformPlaybackGuide
         var waveform = findChild(miniPlayer, "miniWaveform")
@@ -174,12 +174,10 @@ TestCase {
 
         SettingsController.waveformMode = 3
         tryCompare(waveform, "visualMode", 3)
-        compare(waveform.spectralPalette.length, 8)
-        compare(String(waveform.spectralPalette[0]),
-                String(frequencySettings.palette[0]))
-        compare(String(waveform.spectralPalette[7]),
-                String(frequencySettings.palette[7]))
-        compare(waveform.spectralUnplayedOpacity,
+        compare(String(waveform.lowColor), String(frequencySettings.lowColor))
+        compare(String(waveform.midColor), String(frequencySettings.midColor))
+        compare(String(waveform.highColor), String(frequencySettings.highColor))
+        compare(waveform.frequencyUnplayedOpacity,
                 frequencySettings.unplayedOpacity)
         compare(clip.visible, false,
                 "frequency overlays must not be drawn twice in the played region")

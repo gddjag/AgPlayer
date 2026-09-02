@@ -1,6 +1,5 @@
 #pragma once
 
-#include <QElapsedTimer>
 #include <QFutureWatcher>
 #include <QObject>
 #include <QString>
@@ -42,8 +41,6 @@ public:
                                         bool frequencyColor = false);
     Q_INVOKABLE void prefetchTracks(const QStringList& paths);
     Q_INVOKABLE void cancelForTrack(const QString& path);
-    Q_INVOKABLE void cancelFrequencyForTrack(const QString& path);
-    void setAudioResourcePressure(bool pressured);
 
 signals:
     void waveformReady(const QString& path, const QVariantMap& layers);
@@ -62,13 +59,7 @@ private:
     void setAnalysisProgress(double progress);
     QVariantMap waveformToVariantMap(const ag_waveform* waveform) const;
     void cancelActiveJob();
-    void startAnalysis(bool frequencyColor);
-    void updateFrequencyPause(bool queryPowerState);
-
-    enum class JobKind {
-        MixOnly,
-        FrequencyColor,
-    };
+    void startAnalysis();
 
     struct AnalysisResources {
         ag_cancel_token* cancelToken = nullptr;
@@ -76,15 +67,12 @@ private:
 
         ~AnalysisResources();
         void cancel() const;
-        void setPaused(bool paused) const;
     };
 
     struct Job {
         QString path;
         QString trackId;
         quint64 generation = 0;
-        JobKind kind = JobKind::MixOnly;
-        bool frequencyRequested = false;
         ag_result result = AG_OK;
         ag_waveform_aggregation aggregation =
             AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE;
@@ -100,16 +88,10 @@ private:
     QString currentPath_;
     QString currentTrackId_;
     QVariantMap currentLayers_;
-    QVariantMap currentMixLayers_;
     quint64 activeGeneration_ = 0;
     ag_waveform_aggregation currentAggregation_ =
         AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE;
     double analysisProgress_ = 0.0;
-    JobKind activeJobKind_ = JobKind::MixOnly;
     bool currentFrequencyRequested_ = false;
-    bool audioResourcePressure_ = false;
-    bool energySaverActive_ = false;
-    QElapsedTimer powerQueryClock_;
-    qint64 lastPowerQueryElapsedMs_ = -1;
     QThreadPool currentAnalysisPool_;
 };

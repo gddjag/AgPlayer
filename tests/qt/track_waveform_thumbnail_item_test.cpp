@@ -21,6 +21,7 @@ private slots:
     void downsamplingPreservesMinimumAndMaximumEnvelope();
     void buildsCoverageGeometryForAntialiasedSampledPolyline();
     void reusesGeometryWhenOnlyColorChanges();
+    void mixesThreeBandColorsWithoutChangingGeometry();
     void rebuildsOnlyForPeaksOrSize();
     void clearsOldNodeForInvalidContentOrSize();
     void exposesNoPlaybackProgressApi();
@@ -43,6 +44,11 @@ QByteArray fullEnvelope(const unsigned char extent)
         result[bucket * 2 + 1] = static_cast<char>(upper);
     }
     return result;
+}
+
+QByteArray fullBand(const unsigned char energy)
+{
+    return QByteArray(kExpectedThumbnailBuckets, static_cast<char>(energy));
 }
 
 QSGGeometryNode* geometryNode(QSGNode* node)
@@ -170,11 +176,44 @@ void TrackWaveformThumbnailItemTest::reusesGeometryWhenOnlyColorChanges()
     QCOMPARE(recolored, node);
     QCOMPARE(geometryNode(recolored)->geometry(), geometry);
     QCOMPARE(geometry->vertexDataAsColoredPoint2D(), vertices);
-    QVERIFY(vertices[0].y >= 0.0F);
+    QCOMPARE(vertices[0].y, -123.0F);
     QCOMPARE(vertices[0].r, 0xABU);
     QCOMPARE(vertices[0].g, 0xCDU);
     QCOMPARE(vertices[0].b, 0xEFU);
     delete recolored;
+}
+
+void TrackWaveformThumbnailItemTest::mixesThreeBandColorsWithoutChangingGeometry()
+{
+    TestableTrackWaveformThumbnailItem item;
+    item.setWidth(128.0);
+    item.setHeight(10.0);
+    item.setPeaks(fullEnvelope(64U));
+    item.setBass(fullBand(255U));
+    item.setMid(fullBand(0U));
+    item.setHigh(fullBand(0U));
+    item.setLowColor(QColor(QStringLiteral("#ff0000")));
+    item.setMidColor(QColor(QStringLiteral("#00ff00")));
+    item.setHighColor(QColor(QStringLiteral("#0000ff")));
+
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node != nullptr);
+    QSGGeometry* const geometry = geometryNode(node)->geometry();
+    auto* const vertices = geometry->vertexDataAsColoredPoint2D();
+    QCOMPARE(vertices[0].r, 255U);
+    QCOMPARE(vertices[0].g, 0U);
+    QCOMPARE(vertices[0].b, 0U);
+    vertices[0].y = -123.0F;
+
+    item.setLowColor(QColor(QStringLiteral("#8b3dff")));
+    node = item.updatePaintNode(node, nullptr);
+    QCOMPARE(geometryNode(node)->geometry(), geometry);
+    QCOMPARE(geometry->vertexDataAsColoredPoint2D(), vertices);
+    QCOMPARE(vertices[0].y, -123.0F);
+    QCOMPARE(vertices[0].r, 0x8BU);
+    QCOMPARE(vertices[0].g, 0x3DU);
+    QCOMPARE(vertices[0].b, 0xFFU);
+    delete node;
 }
 
 void TrackWaveformThumbnailItemTest::rebuildsOnlyForPeaksOrSize()

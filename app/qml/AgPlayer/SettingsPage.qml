@@ -946,8 +946,8 @@ Item {
 
                     if (mode === 3) {
                         // The native renderer below owns the frequency preview,
-                        // so settings shows the same four transparent layers as
-                        // the player instead of a weighted single outline.
+                        // so settings shows the same three-band color mixture
+                        // and original amplitude geometry as the player.
                         return
                     } else if (mode === 1) {
                         var waveformGradient = ctx.createLinearGradient(0, 0, width, 0)
@@ -1027,15 +1027,23 @@ Item {
                             "mix": [0.12, 0.30, 0.18, 0.66, 0.24, 0.48, 0.20, 0.78,
                                     0.34, 0.58, 0.16, 0.72, 0.26, 0.54, 0.20, 0.82,
                                     0.32, 0.62, 0.18, 0.74, 0.28, 0.52, 0.16, 0.68],
-                            "spectralIndex": [12, 26, 38, 52, 68, 84, 104, 126,
-                                              146, 168, 188, 208, 228, 244, 232, 214,
-                                              194, 174, 154, 132, 108, 82, 54, 28]
+                            "bass": [0.88, 0.78, 0.62, 0.42, 0.22, 0.14, 0.18, 0.32,
+                                     0.56, 0.76, 0.68, 0.40, 0.18, 0.12, 0.20, 0.46,
+                                     0.72, 0.82, 0.58, 0.30, 0.16, 0.20, 0.44, 0.70],
+                            "mid": [0.16, 0.28, 0.52, 0.78, 0.68, 0.42, 0.24, 0.18,
+                                    0.28, 0.52, 0.82, 0.72, 0.44, 0.22, 0.16, 0.28,
+                                    0.54, 0.80, 0.70, 0.42, 0.24, 0.18, 0.34, 0.62],
+                            "high": [0.12, 0.18, 0.24, 0.34, 0.58, 0.82, 0.72, 0.46,
+                                     0.24, 0.18, 0.30, 0.56, 0.84, 0.74, 0.48, 0.26,
+                                     0.18, 0.30, 0.60, 0.86, 0.70, 0.44, 0.24, 0.16]
                         })
                         duration: 1000
                         position: 0
                         cursorPosition: 520
-                        spectralPalette: root.frequencyWaveformSettings.palette
-                        spectralUnplayedOpacity:
+                        lowColor: root.frequencyWaveformSettings.lowColor
+                        midColor: root.frequencyWaveformSettings.midColor
+                        highColor: root.frequencyWaveformSettings.highColor
+                        frequencyUnplayedOpacity:
                             root.frequencyWaveformSettings.unplayedOpacity
                         amplitudeScale: Math.min(
                                             1.0, SettingsController.waveformHeight)
@@ -1764,26 +1772,40 @@ Item {
 
                 SettingRow {
                     visible: SettingsController.waveformMode === 3
-                    label: qsTr("频彩调色板")
-                    Layout.preferredHeight: 74
+                    label: qsTr("频彩基色")
 
-                    GridLayout {
+                    RowLayout {
                         anchors.fill: parent
-                        columns: 4
-                        columnSpacing: 4
-                        rowSpacing: 4
+                        spacing: Theme.spacingSm
 
-                        Repeater {
-                            model: 8
-                            delegate: ColorField {
-                                required property int index
-                                objectName: "spectralPaletteColor" + index
-                                Layout.fillWidth: true
-                                colorValue: root.frequencyWaveformSettings.palette[index]
-                                targetProperty: ""
-                                onColorEdited: function(value) {
-                                    root.frequencyWaveformSettings.setPaletteColor(index, value)
-                                }
+                        Text { text: qsTr("Low"); color: Theme.secondaryText }
+                        ColorField {
+                            objectName: "frequencyLowColor"
+                            Layout.fillWidth: true
+                            colorValue: root.frequencyWaveformSettings.lowColor
+                            targetProperty: ""
+                            onColorEdited: function(value) {
+                                root.frequencyWaveformSettings.lowColor = value
+                            }
+                        }
+                        Text { text: qsTr("Mid"); color: Theme.secondaryText }
+                        ColorField {
+                            objectName: "frequencyMidColor"
+                            Layout.fillWidth: true
+                            colorValue: root.frequencyWaveformSettings.midColor
+                            targetProperty: ""
+                            onColorEdited: function(value) {
+                                root.frequencyWaveformSettings.midColor = value
+                            }
+                        }
+                        Text { text: qsTr("High"); color: Theme.secondaryText }
+                        ColorField {
+                            objectName: "frequencyHighColor"
+                            Layout.fillWidth: true
+                            colorValue: root.frequencyWaveformSettings.highColor
+                            targetProperty: ""
+                            onColorEdited: function(value) {
+                                root.frequencyWaveformSettings.highColor = value
                             }
                         }
                     }
@@ -1798,8 +1820,8 @@ Item {
                         spacing: Theme.spacingSm
 
                         Slider {
-                            id: spectralProgressDifferenceSlider
-                            objectName: "spectralProgressDifferenceSlider"
+                            id: frequencyUnplayedOpacitySlider
+                            objectName: "frequencyUnplayedOpacitySlider"
                             Layout.fillWidth: true
                             from: 0
                             to: 40
@@ -1813,7 +1835,7 @@ Item {
 
                         Text {
                             Layout.preferredWidth: 38
-                            text: Math.round(spectralProgressDifferenceSlider.value) + "%"
+                            text: Math.round(frequencyUnplayedOpacitySlider.value) + "%"
                             color: Theme.secondaryText
                             font.family: Theme.fontPrimary
                             font.pixelSize: 12
@@ -1823,7 +1845,7 @@ Item {
                 }
 
                 Button {
-                    objectName: "spectralPaletteResetButton"
+                    objectName: "frequencyColorResetButton"
                     visible: SettingsController.waveformMode === 3
                     text: qsTr("恢复默认频彩")
                     onClicked: root.frequencyWaveformSettings.resetToDefault()

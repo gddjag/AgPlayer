@@ -1,5 +1,7 @@
 # Spectral Centroid 频彩波形替换实施计划
 
+> **已废弃（2026-09-03）：** 本文记录的 FFT / Hann / Spectral Centroid / 8 色板方案已被三频 Low / Mid / High 方案完整替换，不再是当前实现或验收依据。当前记录见 `docs/development/2026-09-03-three-band-frequency-color-waveform.md`。
+
 > **执行要求：** 使用测试驱动方式逐项实施；所有行为修改先观察失败测试，再写最小实现。本计划在当前会话内执行，不自动提交 Git。
 
 **目标：** 用“现有振幅包络 + FFT 512 + Hann + Spectral Centroid + 8 色连续映射”直接替换旧三频《频彩波形》，保持纯色、RGB、柱状频谱行为不变。

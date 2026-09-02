@@ -546,8 +546,10 @@ Item {
                                      ? SettingsController.spectrumSolidColor
                                      : SettingsController.spectrumRgbEndColor)
                                   : SettingsController.waveformRgbEndColor
-                spectralPalette: root.frequencyWaveformSettings.palette
-                spectralUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
+                lowColor: root.frequencyWaveformSettings.lowColor
+                midColor: root.frequencyWaveformSettings.midColor
+                highColor: root.frequencyWaveformSettings.highColor
+                frequencyUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
                 rgbProgress: SettingsController.waveformMode === 1
                              && SettingsController.waveformRgbProgress
                 amplitudeScale: SettingsController.waveformHeight
@@ -582,8 +584,10 @@ Item {
                     gradientStartColor: waveform.gradientStartColor
                     gradientMiddleColor: waveform.gradientMiddleColor
                     gradientEndColor: waveform.gradientEndColor
-                    spectralPalette: root.frequencyWaveformSettings.palette
-                    spectralUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
+                    lowColor: root.frequencyWaveformSettings.lowColor
+                    midColor: root.frequencyWaveformSettings.midColor
+                    highColor: root.frequencyWaveformSettings.highColor
+                    frequencyUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
                     rgbProgress: waveform.rgbProgress
                     amplitudeScale: waveform.amplitudeScale
                     density: waveform.density

@@ -538,8 +538,10 @@ Item {
                     pointerInteractionEnabled: false
                     visualMode: 3
                     baseColor: SettingsController.waveformRgbBaseColor
-                    spectralPalette: root.frequencyWaveformSettings.palette
-                    spectralUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
+                    lowColor: root.frequencyWaveformSettings.lowColor
+                    midColor: root.frequencyWaveformSettings.midColor
+                    highColor: root.frequencyWaveformSettings.highColor
+                    frequencyUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
                     amplitudeScale: SettingsController.waveformHeight
                     density: SettingsController.waveformDensity
                     lineWidth: SettingsController.waveformThickness
@@ -619,8 +621,10 @@ Item {
                 pointerInteractionEnabled: false
                 visualMode: 3
                 baseColor: SettingsController.waveformRgbBaseColor
-                spectralPalette: root.frequencyWaveformSettings.palette
-                spectralUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
+                lowColor: root.frequencyWaveformSettings.lowColor
+                midColor: root.frequencyWaveformSettings.midColor
+                highColor: root.frequencyWaveformSettings.highColor
+                frequencyUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
                 amplitudeScale: Math.max(
                                     0.9,
                                     SettingsController.waveformHeight * 1.25)

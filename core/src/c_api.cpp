@@ -96,7 +96,6 @@ struct ag_waveform {
     std::vector<float> bass_;
     std::vector<float> mid_;
     std::vector<float> high_;
-    std::vector<std::uint8_t> spectral_index_;
     double bpm_ = 0.0;
     std::uint64_t duration_ms_ = 0U;
     std::uint64_t total_samples_ = 0U;
@@ -1414,7 +1413,7 @@ ag_result ag_waveform_analyze(const char* utf8_path,
     }
 }
 
-ag_result ag_waveform_analyze_with_spectral_index(
+ag_result ag_waveform_analyze_with_aggregation(
     const char* utf8_path,
     const size_t target_points,
     const ag_waveform_aggregation aggregation,
@@ -1437,7 +1436,6 @@ ag_result ag_waveform_analyze_with_spectral_index(
         std::vector<float> bass;
         std::vector<float> mid;
         std::vector<float> high;
-        std::vector<std::uint8_t> spectral_index;
         const std::shared_ptr<ag_cancel_state> cancel_state =
             retain_cancel_state(cancel_token);
         PausableProgressBridge progress_bridge{
@@ -1449,8 +1447,8 @@ ag_result ag_waveform_analyze_with_spectral_index(
             utf8_path, target_points, cancelled_flag(cancel_state),
             pausable_progress, &progress_bridge, peaks, bass, mid, high,
             static_cast<agplayer::WaveformAggregation>(aggregation),
-            &duration_ms, &total_samples, &sample_rate, &spectral_index,
-            pausable_checkpoint, &progress_bridge);
+            &duration_ms, &total_samples, &sample_rate, pausable_checkpoint,
+            &progress_bridge);
         if (result != AG_OK) {
             return result;
         }
@@ -1463,7 +1461,6 @@ ag_result ag_waveform_analyze_with_spectral_index(
         waveform->bass_ = std::move(bass);
         waveform->mid_ = std::move(mid);
         waveform->high_ = std::move(high);
-        waveform->spectral_index_ = std::move(spectral_index);
         waveform->duration_ms_ = duration_ms;
         waveform->total_samples_ = total_samples;
         waveform->sample_rate_ = sample_rate;
@@ -1480,7 +1477,7 @@ ag_result ag_track_frequency_color_analysis(
     void* const user_data,
     ag_waveform** out_waveform)
 {
-    return ag_waveform_analyze_with_spectral_index(
+    return ag_waveform_analyze_with_aggregation(
         utf8_path, target_points, AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE,
         cancel_token, progress_callback, user_data, out_waveform);
 }
@@ -1495,18 +1492,6 @@ float ag_waveform_peak(const ag_waveform* waveform, const size_t index)
     return waveform == nullptr || index >= waveform->peaks.size()
                ? 0.0F
                : waveform->peaks[index];
-}
-
-size_t ag_waveform_spectral_index_count(const ag_waveform* waveform)
-{
-    return waveform == nullptr ? 0U : waveform->spectral_index_.size();
-}
-
-uint8_t ag_waveform_spectral_index(const ag_waveform* waveform,
-                                   const size_t index)
-{
-    return waveform == nullptr || index >= waveform->spectral_index_.size()
-        ? 0U : waveform->spectral_index_[index];
 }
 
 void ag_waveform_destroy(ag_waveform* waveform)

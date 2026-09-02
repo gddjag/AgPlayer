@@ -420,8 +420,6 @@ ag_result ag_waveform_analyze(const char* utf8_path,
                               ag_waveform** out_waveform);
 size_t ag_waveform_count(const ag_waveform* waveform);
 float ag_waveform_peak(const ag_waveform* waveform, size_t index);
-size_t ag_waveform_spectral_index_count(const ag_waveform* waveform);
-uint8_t ag_waveform_spectral_index(const ag_waveform* waveform, size_t index);
 void ag_waveform_destroy(ag_waveform* waveform);
 
 typedef enum ag_waveform_layer {
@@ -437,7 +435,7 @@ typedef enum ag_waveform_aggregation {
     AG_WAVEFORM_AGGREGATION_RMS = 2
 } ag_waveform_aggregation;
 
-ag_result ag_waveform_analyze_with_spectral_index(
+ag_result ag_waveform_analyze_with_aggregation(
     const char* utf8_path,
     size_t target_points,
     ag_waveform_aggregation aggregation,
@@ -446,8 +444,7 @@ ag_result ag_waveform_analyze_with_spectral_index(
     void* user_data,
     ag_waveform** out_waveform);
 
-/* Compatibility entry point retained for existing integrations. New code may
- * use ag_waveform_analyze_with_spectral_index to choose aggregation. */
+/* Frequency-color entry point using average-absolute bucket aggregation. */
 ag_result ag_track_frequency_color_analysis(
     const char* utf8_path,
     size_t target_points,

@@ -22,8 +22,8 @@ class TrackWaveformThumbnailProviderTest final : public QObject {
 private slots:
     void quantizesHighDensitySymmetricEnvelope();
     void ignoresNonFiniteSamplesAndClampsFiniteAmplitude();
-    void downscalesSpectralIndexWithAmplitudeWeighting();
-    void readsExistingV2CacheWithoutChangingIt();
+    void downscalesBandEnergyWithAmplitudeWeighting();
+    void readsExistingCacheWithoutChangingIt();
     void cacheMissRequestsLowPriorityAnalysis();
     void returnsEmptyForMissCorruptionMismatchAndEmptyMix();
     void coalescesSameTrackAndPublishesOnlyLatestGeneration();
@@ -98,7 +98,18 @@ bool saveCache(const QString& cacheDirectory,
     }
     agplayer::WaveformCacheData data;
     data.mix = mix;
-    return agplayer::WaveformCache::save_v2(
+    if (mix.empty()) {
+        return agplayer::WaveformCache::save_v2(
+            filesystemPath(cachePath(cacheDirectory, sourcePath, suffix)),
+            filesystemPath(sourcePath), data);
+    }
+    data.bass.assign(mix.size(), 0.25F);
+    data.mid.assign(mix.size(), 0.5F);
+    data.high.assign(mix.size(), 0.75F);
+    data.duration_ms = 1'000U;
+    data.total_samples = 48'000U;
+    data.sample_rate = 48'000U;
+    return agplayer::WaveformCache::save_v4(
         filesystemPath(cachePath(cacheDirectory, sourcePath, suffix)),
         filesystemPath(sourcePath), data);
 }
@@ -152,23 +163,23 @@ void TrackWaveformThumbnailProviderTest::ignoresNonFiniteSamplesAndClampsFiniteA
              kExpectedThumbnailBytes);
 }
 
-void TrackWaveformThumbnailProviderTest::downscalesSpectralIndexWithAmplitudeWeighting()
+void TrackWaveformThumbnailProviderTest::downscalesBandEnergyWithAmplitudeWeighting()
 {
     std::vector<float> mix(4096U, 0.1F);
-    std::vector<std::uint8_t> spectral(4096U, 10U);
-    spectral[1] = 250U;
+    std::vector<float> energy(4096U, 10.0F / 255.0F);
+    energy[1] = 250.0F / 255.0F;
     mix[1] = 1.0F;
 
     const QByteArray bytes =
-        TrackWaveformThumbnailProvider::quantizeSpectralIndex(spectral, mix);
+        TrackWaveformThumbnailProvider::quantizeBandEnergy(energy, mix);
 
     QCOMPARE(bytes.size(), kExpectedThumbnailBuckets);
     QVERIFY(static_cast<unsigned char>(bytes.at(0)) > 200U);
     QCOMPARE(static_cast<unsigned char>(bytes.at(1)), 10U);
-    QCOMPARE(TrackWaveformThumbnailProvider::quantizeSpectralIndex({}, {}).size(), 0);
+    QCOMPARE(TrackWaveformThumbnailProvider::quantizeBandEnergy({}, {}).size(), 0);
 }
 
-void TrackWaveformThumbnailProviderTest::readsExistingV2CacheWithoutChangingIt()
+void TrackWaveformThumbnailProviderTest::readsExistingCacheWithoutChangingIt()
 {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
@@ -194,13 +205,16 @@ void TrackWaveformThumbnailProviderTest::readsExistingV2CacheWithoutChangingIt()
     provider.request(QStringLiteral("persistent-track"), sourcePath, 7U);
 
     const QList<QVariant> result = waitForResult(spy);
-    QCOMPARE(result.size(), 4);
+    QCOMPARE(result.size(), 6);
     QCOMPARE(result.at(0).toString(), QStringLiteral("persistent-track"));
     QCOMPARE(result.at(1).toULongLong(), 7U);
     const QByteArray peaks = result.at(2).toByteArray();
     QCOMPARE(peaks.size(), kExpectedThumbnailBytes);
     QCOMPARE(static_cast<unsigned char>(peaks.at(1032 * 2)), 25U);
     QCOMPARE(static_cast<unsigned char>(peaks.at(1032 * 2 + 1)), 230U);
+    QCOMPARE(result.at(3).toByteArray().size(), kExpectedThumbnailBuckets);
+    QCOMPARE(result.at(4).toByteArray().size(), kExpectedThumbnailBuckets);
+    QCOMPARE(result.at(5).toByteArray().size(), kExpectedThumbnailBuckets);
 
     QVERIFY(cacheFile.open(QIODevice::ReadOnly));
     QCOMPARE(cacheFile.readAll(), before);
@@ -211,8 +225,7 @@ void TrackWaveformThumbnailProviderTest::readsExistingV2CacheWithoutChangingIt()
                  .value(QStringLiteral("maxActiveWorkers"))
                  .toInt(),
              1);
-    QCOMPARE(analysisSpy.count(), 1);
-    QCOMPARE(analysisSpy.takeFirst().at(0).toString(), sourcePath);
+    QCOMPARE(analysisSpy.count(), 0);
 }
 
 void TrackWaveformThumbnailProviderTest::cacheMissRequestsLowPriorityAnalysis()
@@ -230,7 +243,7 @@ void TrackWaveformThumbnailProviderTest::cacheMissRequestsLowPriorityAnalysis()
 
     provider.request(QStringLiteral("analysis-miss"), sourcePath, 1U, true);
     const QList<QVariant> result = waitForResult(readySpy);
-    QCOMPARE(result.size(), 4);
+    QCOMPARE(result.size(), 6);
     QVERIFY(result.at(2).toByteArray().isEmpty());
     QTRY_COMPARE_WITH_TIMEOUT(analysisSpy.count(), 1, 5000);
     QCOMPARE(analysisSpy.takeFirst().at(0).toString(), sourcePath);
@@ -251,7 +264,7 @@ void TrackWaveformThumbnailProviderTest::returnsEmptyForMissCorruptionMismatchAn
     QVERIFY(!missPath.isEmpty());
     provider.request(QStringLiteral("miss"), missPath, 1U);
     QList<QVariant> result = waitForResult(spy);
-    QCOMPARE(result.size(), 4);
+    QCOMPARE(result.size(), 6);
     QVERIFY(result.at(2).toByteArray().isEmpty());
     QVERIFY(QDir(cacheDirectory).entryList(QDir::Files).isEmpty());
 
@@ -264,7 +277,7 @@ void TrackWaveformThumbnailProviderTest::returnsEmptyForMissCorruptionMismatchAn
     corruptCache.close();
     provider.request(QStringLiteral("corrupt"), corruptPath, 2U);
     result = waitForResult(spy);
-    QCOMPARE(result.size(), 4);
+    QCOMPARE(result.size(), 6);
     QVERIFY(result.at(2).toByteArray().isEmpty());
 
     const QString mismatchPath =
@@ -280,7 +293,7 @@ void TrackWaveformThumbnailProviderTest::returnsEmptyForMissCorruptionMismatchAn
     QVERIFY(QFile::copy(oldCachePath, currentCachePath));
     provider.request(QStringLiteral("mismatch"), mismatchPath, 3U);
     result = waitForResult(spy);
-    QCOMPARE(result.size(), 4);
+    QCOMPARE(result.size(), 6);
     QVERIFY(result.at(2).toByteArray().isEmpty());
 
     const QString emptyPath =
@@ -289,7 +302,7 @@ void TrackWaveformThumbnailProviderTest::returnsEmptyForMissCorruptionMismatchAn
     QVERIFY(saveCache(cacheDirectory, emptyPath, {}));
     provider.request(QStringLiteral("empty"), emptyPath, 4U);
     result = waitForResult(spy);
-    QCOMPARE(result.size(), 4);
+    QCOMPARE(result.size(), 6);
     QVERIFY(result.at(2).toByteArray().isEmpty());
 
     QCOMPARE(provider.diagnostics().value(QStringLiteral("cacheEntries")).toInt(),
@@ -316,7 +329,7 @@ void TrackWaveformThumbnailProviderTest::coalescesSameTrackAndPublishesOnlyLates
     QCOMPARE(running.value(QStringLiteral("inFlightTracks")).toInt(), 1);
     QCOMPARE(running.value(QStringLiteral("queuedJobs")).toInt(), 0);
     const QList<QVariant> result = waitForResult(spy);
-    QCOMPARE(result.size(), 4);
+    QCOMPARE(result.size(), 6);
     QCOMPARE(result.at(1).toULongLong(), 100U);
     QCOMPARE(result.at(2).toByteArray().size(),
              kExpectedThumbnailBytes);
@@ -384,7 +397,7 @@ void TrackWaveformThumbnailProviderTest::retainsAtMost256SuccessfulTracks()
         provider.request(QStringLiteral("track-%1").arg(track), sourcePath,
                          static_cast<quint64>(track + 1));
         const QList<QVariant> result = waitForResult(spy);
-        QCOMPARE(result.size(), 4);
+        QCOMPARE(result.size(), 6);
         QCOMPARE(result.at(2).toByteArray().size(),
                  kExpectedThumbnailBytes);
     }
@@ -394,7 +407,7 @@ void TrackWaveformThumbnailProviderTest::retainsAtMost256SuccessfulTracks()
     QVERIFY(QFile::remove(cachePath(cacheDirectory, sourcePath)));
     provider.request(QStringLiteral("track-0"), sourcePath, 999U);
     const QList<QVariant> evictedResult = waitForResult(spy);
-    QCOMPARE(evictedResult.size(), 4);
+    QCOMPARE(evictedResult.size(), 6);
     QVERIFY(evictedResult.at(2).toByteArray().isEmpty());
 }
 
@@ -482,7 +495,7 @@ void TrackWaveformThumbnailProviderTest::repeatedMissUsesShortInvalidatableCoold
 
     provider.request(QStringLiteral("miss-two"), sourcePath, 2U);
     const QList<QVariant> cooled = waitForResult(spy);
-    QCOMPARE(cooled.size(), 4);
+    QCOMPARE(cooled.size(), 6);
     QVERIFY(cooled.at(2).toByteArray().isEmpty());
     QCOMPARE(provider.diagnostics()
                  .value(QStringLiteral("cacheReadAttempts"))
@@ -496,7 +509,7 @@ void TrackWaveformThumbnailProviderTest::repeatedMissUsesShortInvalidatableCoold
     QVERIFY(saveCache(cacheDirectory, sourcePath, {0.75F}));
     provider.request(QStringLiteral("still-cooled"), sourcePath, 3U);
     const QList<QVariant> stillCooled = waitForResult(spy);
-    QCOMPARE(stillCooled.size(), 4);
+    QCOMPARE(stillCooled.size(), 6);
     QVERIFY(stillCooled.at(2).toByteArray().isEmpty());
     QCOMPARE(provider.diagnostics()
                  .value(QStringLiteral("cacheReadAttempts"))
@@ -506,7 +519,7 @@ void TrackWaveformThumbnailProviderTest::repeatedMissUsesShortInvalidatableCoold
     provider.refresh();
     provider.request(QStringLiteral("after-refresh"), sourcePath, 4U);
     const QList<QVariant> refreshed = waitForResult(spy);
-    QCOMPARE(refreshed.size(), 4);
+    QCOMPARE(refreshed.size(), 6);
     QCOMPARE(refreshed.at(2).toByteArray().size(),
              kExpectedThumbnailBytes);
     QCOMPARE(provider.diagnostics()
@@ -525,7 +538,7 @@ void TrackWaveformThumbnailProviderTest::repeatedMissUsesShortInvalidatableCoold
     QTest::qWait(300);
     provider.request(QStringLiteral("after-expiry"), sourcePath, 6U);
     const QList<QVariant> expired = waitForResult(spy);
-    QCOMPARE(expired.size(), 4);
+    QCOMPARE(expired.size(), 6);
     QCOMPARE(expired.at(2).toByteArray().size(),
              kExpectedThumbnailBytes);
     QCOMPARE(provider.diagnostics()
@@ -556,7 +569,7 @@ void TrackWaveformThumbnailProviderTest::cacheDirectoryEpochInvalidatesNegativeC
     provider.setCacheDirectory(newDirectory);
     provider.request(QStringLiteral("new-hit"), sourcePath, 2U);
     const QList<QVariant> result = waitForResult(spy);
-    QCOMPARE(result.size(), 4);
+    QCOMPARE(result.size(), 6);
     QCOMPARE(result.at(2).toByteArray().size(),
              kExpectedThumbnailBytes);
     QCOMPARE(provider.diagnostics()
@@ -661,7 +674,7 @@ void TrackWaveformThumbnailProviderTest::repeatedCorruptCacheUsesCooldown()
 
     provider.request(QStringLiteral("corrupt-two"), sourcePath, 2U);
     const QList<QVariant> result = waitForResult(spy);
-    QCOMPARE(result.size(), 4);
+    QCOMPARE(result.size(), 6);
     QVERIFY(result.at(2).toByteArray().isEmpty());
     QCOMPARE(provider.diagnostics()
                  .value(QStringLiteral("cacheReadAttempts"))
@@ -688,7 +701,7 @@ void TrackWaveformThumbnailProviderTest::negativeCooldownRetainsAtMost256Sources
         provider.request(QStringLiteral("negative-track-%1").arg(index),
                          sourcePath, static_cast<quint64>(index + 1));
         const QList<QVariant> result = waitForResult(spy);
-        QCOMPARE(result.size(), 4);
+        QCOMPARE(result.size(), 6);
         QVERIFY(result.at(2).toByteArray().isEmpty());
     }
     QCOMPARE(provider.diagnostics()
@@ -703,7 +716,7 @@ void TrackWaveformThumbnailProviderTest::negativeCooldownRetainsAtMost256Sources
     provider.request(QStringLiteral("negative-track-0-retry"), firstSource,
                      999U);
     const QList<QVariant> retried = waitForResult(spy);
-    QCOMPARE(retried.size(), 4);
+    QCOMPARE(retried.size(), 6);
     QCOMPARE(retried.at(2).toByteArray().size(),
              kExpectedThumbnailBytes);
     QCOMPARE(provider.diagnostics()
@@ -729,7 +742,7 @@ void TrackWaveformThumbnailProviderTest::newerSourceForActiveTrackPublishesOnlyL
     provider.request(QStringLiteral("same-track"), sourceB, 11U);
 
     const QList<QVariant> result = waitForResult(spy);
-    QCOMPARE(result.size(), 4);
+    QCOMPARE(result.size(), 6);
     QCOMPARE(result.at(0).toString(), QStringLiteral("same-track"));
     QCOMPARE(result.at(1).toULongLong(), 11U);
     QCOMPARE(static_cast<unsigned char>(result.at(2).toByteArray().at(0)),
@@ -758,7 +771,7 @@ void TrackWaveformThumbnailProviderTest::cacheDirectoryChangeSuppressesActiveOld
     provider.setCacheDirectory(newDirectory);
 
     const QList<QVariant> result = waitForResult(spy);
-    QCOMPARE(result.size(), 4);
+    QCOMPARE(result.size(), 6);
     QCOMPARE(result.at(1).toULongLong(), 21U);
     QCOMPARE(static_cast<unsigned char>(result.at(2).toByteArray().at(0)),
              32U);
@@ -844,7 +857,7 @@ void TrackWaveformThumbnailProviderTest::sourceMismatchedAverageFallsBackToValid
                    &TrackWaveformThumbnailProvider::thumbnailReady);
     provider.request(QStringLiteral("fallback-rms"), sourcePath, 1U);
     const QList<QVariant> result = waitForResult(spy);
-    QCOMPARE(result.size(), 4);
+    QCOMPARE(result.size(), 6);
     QCOMPARE(static_cast<unsigned char>(result.at(2).toByteArray().at(0)),
              64U);
     QCOMPARE(static_cast<unsigned char>(result.at(2).toByteArray().at(1)),
@@ -941,7 +954,7 @@ void TrackWaveformThumbnailProviderTest::refreshThenCacheHitHasNoStaleCooldownPu
     provider.request(QStringLiteral("refresh-track"), sourcePath, 3U);
 
     const QList<QVariant> result = waitForResult(spy);
-    QCOMPARE(result.size(), 4);
+    QCOMPARE(result.size(), 6);
     QCOMPARE(result.at(1).toULongLong(), 3U);
     QCOMPARE(result.at(2).toByteArray().size(),
              kExpectedThumbnailBytes);

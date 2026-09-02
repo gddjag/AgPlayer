@@ -148,7 +148,6 @@ void test_c_api_analysis_and_cancellation(const std::string& source_path)
     assert(ag_waveform_count(waveform) > 100U);
     assert(progress.values.front() == 0.0F);
     assert(progress.values.back() == 1.0F);
-    assert(ag_waveform_spectral_index_count(waveform) == 0U);
     ag_waveform_destroy(waveform);
     waveform = nullptr;
 
@@ -168,10 +167,9 @@ void test_c_api_analysis_and_cancellation(const std::string& source_path)
     ag_cancel_token_set_paused(token, 1);
     waveform = nullptr;
     auto paused_analysis = std::async(std::launch::async, [&] {
-        return ag_waveform_analyze_with_spectral_index(
+        return ag_track_frequency_color_analysis(
             source_path.c_str(), 512U,
-            AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE, token, nullptr,
-            nullptr, &waveform);
+            token, nullptr, nullptr, &waveform);
     });
     assert(paused_analysis.wait_for(std::chrono::milliseconds(50))
            == std::future_status::timeout);
@@ -187,9 +185,8 @@ void test_c_api_analysis_and_cancellation(const std::string& source_path)
     ProgressState reentrant_pause;
     reentrant_pause.token = token;
     reentrant_pause.pause_cycle = true;
-    assert(ag_waveform_analyze_with_spectral_index(
-               source_path.c_str(), 512U,
-               AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE, token,
+    assert(ag_track_frequency_color_analysis(
+               source_path.c_str(), 512U, token,
                record_progress, &reentrant_pause, &waveform) == AG_OK);
     assert(waveform != nullptr);
     assert(!reentrant_pause.pause_cycle);
@@ -199,13 +196,12 @@ void test_c_api_analysis_and_cancellation(const std::string& source_path)
 
     token = ag_cancel_token_create();
     assert(token != nullptr);
-    ProgressState spectral_cancelling;
-    spectral_cancelling.token = token;
-    spectral_cancelling.cancel = true;
-    assert(ag_waveform_analyze_with_spectral_index(
-               source_path.c_str(), 512U,
-               AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE, token,
-               record_progress, &spectral_cancelling, &waveform)
+    ProgressState frequency_cancelling;
+    frequency_cancelling.token = token;
+    frequency_cancelling.cancel = true;
+    assert(ag_track_frequency_color_analysis(
+               source_path.c_str(), 512U, token,
+               record_progress, &frequency_cancelling, &waveform)
            == AG_CANCELLED);
     assert(waveform == nullptr);
     ag_cancel_token_destroy(token);
@@ -214,7 +210,11 @@ void test_c_api_analysis_and_cancellation(const std::string& source_path)
                source_path.c_str(), 512U, nullptr, nullptr, nullptr,
                &waveform) == AG_OK);
     assert(waveform != nullptr);
-    assert(ag_waveform_spectral_index_count(waveform)
+    assert(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_BASS)
+           == ag_waveform_count(waveform));
+    assert(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_MID)
+           == ag_waveform_count(waveform));
+    assert(ag_waveform_layer_count(waveform, AG_WAVEFORM_LAYER_HIGH)
            == ag_waveform_count(waveform));
     ag_waveform_destroy(waveform);
     waveform = nullptr;

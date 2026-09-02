@@ -11,11 +11,6 @@ QtObject {
     property bool active: true
     property bool frequencyReady: false
     property int libraryRevision: 0
-    // Rolling mode always needs the shared frequency layers for its overview.
-    // Keep the request independent from the user's classic waveform style.
-    readonly property bool frequencyAnalysisRequested: active
-        && (SettingsController.waveformMode === 3
-            || SettingsController.playerShellMode === 2)
     readonly property string trackId:
         String(PlaybackController.currentTrackId || "")
     readonly property var trackPalette: paletteForTrack(trackId)
@@ -75,16 +70,12 @@ QtObject {
         durationMs = 0
         frequencyReady = false
         publishVisualTiming()
-        if (!active) {
-            if (path && path.length > 0)
-                WaveformProvider.cancelFrequencyForTrack(path)
+        if (!active)
             return
-        }
         if (!path || path.length === 0)
             return
         generation = WaveformProvider.loadForTrack(
-                    PlaybackController.currentTrackId, path,
-                    frequencyAnalysisRequested)
+                    PlaybackController.currentTrackId, path, true)
         WaveformProvider.prefetchTracks(neighbors)
     }
 
@@ -133,17 +124,8 @@ QtObject {
         if (active) {
             loadWaveform()
         } else {
-            var path = currentPath()
-            if (path && path.length > 0)
-                WaveformProvider.cancelFrequencyForTrack(path)
             frequencyReady = false
         }
     }
 
-    onFrequencyAnalysisRequestedChanged: {
-        // Skin switches can request frequency colour without changing the
-        // classic waveform style; reload exactly once for that new contract.
-        if (active)
-            loadWaveform()
-    }
 }
