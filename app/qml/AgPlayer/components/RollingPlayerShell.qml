@@ -18,7 +18,9 @@ Item {
     property var lyricsService: LyricsService
     property var visualFeatures: AudioVisualFeatureController
     property var currentTrack: null
-    property real waveformPixelsPerSecond: 120
+    // Rolling viewport state. Waveform samples/layers remain owned and
+    // rendered by WaveformItem; only the visible time interval changes.
+    property real visibleBeats: 8.0
     property bool scratchGestureActive: false
     property real scratchVisualPositionMs: 0
     property real scratchAnchorPositionMs: 0
@@ -43,16 +45,22 @@ Item {
         ? Number(playback.sourceBpm)
         : currentTrack && Number(currentTrack.bpm) > 0
           ? Number(currentTrack.bpm) : 0
+    readonly property real effectiveBpm: {
+        var bpm = playback ? Number(playback.targetBpm) : 0
+        if (!(bpm > 0))
+            bpm = sourceBpmValue
+        return bpm > 0 ? bpm : 120.0
+    }
+    readonly property real beatSec: 60.0 / effectiveBpm
+    readonly property real viewTimeSpanSec: visibleBeats * beatSec
+    readonly property real canvasWidth:
+        Math.max(1, mainWaveformCanvas.width)
+    readonly property real pxPerSec:
+        canvasWidth / Math.max(0.001, viewTimeSpanSec)
     readonly property real viewportCenterMs:
         scratchGestureActive ? scratchVisualPositionMs : playbackPositionMs
-    readonly property real viewportSpanMs: {
-        if (effectiveDurationMs <= 0)
-            return 0
-        var widthForTime = Math.max(1, mainWaveformCanvas.width)
-        return Math.min(effectiveDurationMs,
-                        Math.max(250, widthForTime
-                                 / waveformPixelsPerSecond * 1000))
-    }
+    readonly property real viewportSpanMs:
+        effectiveDurationMs > 0 ? viewTimeSpanSec * 1000.0 : 0
     // Unlike a conventional editor waveform, the rolling deck retains blank
     // lead-in / lead-out space.  This keeps source time under the immovable
     // centre needle even at 0 and at the track end.
@@ -63,6 +71,8 @@ Item {
     }
     readonly property real viewportEndMs:
         effectiveDurationMs <= 0 ? 0 : viewportStartMs + viewportSpanMs
+    readonly property real viewStartTimeSec: viewportStartMs / 1000.0
+    readonly property real viewEndTimeSec: viewportEndMs / 1000.0
     readonly property real waveformVisibleStartMs:
         Math.round(clamp(viewportStartMs, 0, effectiveDurationMs))
     readonly property real waveformVisibleEndMs:
@@ -139,12 +149,16 @@ Item {
     function signedRateForDrag(deltaX, elapsedMs) {
         var safeElapsed = Math.max(1, Number(elapsedMs) || 0)
         var rate = -Number(deltaX || 0) / safeElapsed * 1000
-                   / waveformPixelsPerSecond
+                   / pxPerSec
         return clamp(rate, -3, 3)
     }
 
     function deltaMsForPixels(deltaX) {
-        return -Number(deltaX || 0) / waveformPixelsPerSecond * 1000
+        return -Number(deltaX || 0) / pxPerSec * 1000
+    }
+
+    function timeToX(timeSec) {
+        return (Number(timeSec) - viewStartTimeSec) * pxPerSec
     }
 
     function alignWaveformToPlayhead() {
@@ -191,21 +205,16 @@ Item {
             playback.resetTempo()
     }
 
-    function setZoom(value) {
-        waveformPixelsPerSecond = clamp(Number(value) || 120, 60, 480)
-        syncWaveformViewport()
-    }
-
     function zoomIn() {
-        setZoom(waveformPixelsPerSecond * 1.25)
+        visibleBeats = Math.max(4.0, visibleBeats - 2.0)
     }
 
     function zoomOut() {
-        setZoom(waveformPixelsPerSecond / 1.25)
+        visibleBeats = Math.min(64.0, visibleBeats + 2.0)
     }
 
     function resetZoom() {
-        setZoom(120)
+        visibleBeats = 8.0
     }
 
     function finishScratchGesture(cancelled) {
@@ -257,7 +266,15 @@ Item {
         currentTrack = libraryModel.trackForId(playback.currentTrackId)
     }
 
-    onWaveformPixelsPerSecondChanged: syncWaveformViewport()
+    onVisibleBeatsChanged: {
+        var boundedBeats = clamp(visibleBeats, 4.0, 64.0)
+        if (visibleBeats !== boundedBeats) {
+            visibleBeats = boundedBeats
+            return
+        }
+        syncWaveformViewport()
+    }
+    onEffectiveBpmChanged: syncWaveformViewport()
     onViewportCenterMsChanged: syncWaveformViewport()
     onViewportSpanMsChanged: Qt.callLater(syncWaveformViewport)
     onEffectiveDurationMsChanged: syncWaveformViewport()
@@ -633,6 +650,23 @@ Item {
                         density: overviewWaveform.density
                         lineWidth: overviewWaveform.lineWidth
                     }
+                }
+
+                Rectangle {
+                    id: overviewPlayhead
+                    objectName: "rollingOverviewPlayhead"
+                    x: root.effectiveDurationMs > 0
+                       ? root.clamp(
+                             overviewWaveform.pixelForTime(
+                                 root.playbackPositionMs) - width / 2,
+                             0, Math.max(0, overviewWaveform.width - width))
+                       : 0
+                    anchors.top: overviewWaveform.top
+                    anchors.bottom: overviewWaveform.bottom
+                    width: 1
+                    color: Theme.onBrandGradientText
+                    enabled: false
+                    z: 6
                 }
 
                 Rectangle {
