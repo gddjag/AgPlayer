@@ -104,7 +104,7 @@ Item {
             id: themeModeButton
             objectName: "themeModeButton"
             flat: true
-            icon.source: Theme.icon("brush-line")
+            icon.source: Theme.icon("theme-skin")
             icon.color: Theme.iconPrimary
             icon.width: 20
             icon.height: 20

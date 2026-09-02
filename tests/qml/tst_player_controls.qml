@@ -154,7 +154,10 @@ TestCase {
                 "theme/shell selection must have one visible entry")
         compare(theme.icon.width, 20)
         compare(theme.icon.height, 20)
+        verify(theme.icon.source.toString().endsWith("/theme-skin.svg"))
         compare(lyrics.icon.width, 20)
         compare(lyrics.icon.height, 20)
+        compare(immersive.icon.width, 20)
+        compare(immersive.icon.height, 20)
     }
 }

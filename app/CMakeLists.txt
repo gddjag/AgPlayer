@@ -97,6 +97,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/split-cells-horizontal.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/subtract-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/sound-module-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/theme-skin.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/time-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-mute-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-mute-line.svg

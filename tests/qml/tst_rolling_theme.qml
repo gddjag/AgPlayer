@@ -310,7 +310,7 @@ TestCase {
         var skinButton = findChild(rolling, "themeModeButton")
         verify(skinButton)
         verify(skinButton.icon.source.toString()
-               .endsWith("/brush-line.svg"))
+               .endsWith("/theme-skin.svg"))
         mouseClick(skinButton)
         var menu = findChild(rolling, "playerShellMenu")
         verify(menu)

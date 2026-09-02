@@ -379,6 +379,13 @@ TestCase {
         verify(immersive.icon.source.toString().endsWith(
                    "/immersive-visual-mode.svg"))
         verify(lyrics.icon.source.toString().endsWith("/lyrics.svg"))
+        compare(immersive.icon.width, 20)
+        compare(immersive.icon.height, 20)
+        compare(lyrics.icon.width, 20)
+        compare(lyrics.icon.height, 20)
+        var theme = findChild(shell, "themeModeButton")
+        verify(theme)
+        verify(theme.icon.source.toString().endsWith("/theme-skin.svg"))
     }
 
     function test_right_panel_uses_outlined_glass_controls() {

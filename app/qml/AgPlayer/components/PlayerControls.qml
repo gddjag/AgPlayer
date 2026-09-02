@@ -135,7 +135,7 @@ Rectangle {
             height: root.denseTransport ? 32 : implicitHeight
             visible: !root.compactTransport
             flat: true
-            icon.source: Theme.icon("brush-line")
+            icon.source: Theme.icon("theme-skin")
             icon.color: Theme.iconPrimary
             icon.width: 20
             icon.height: 20
