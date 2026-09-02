@@ -50,5 +50,20 @@ small radii, restrained borders, and theme-specific accents.
 - Treat compilation as necessary but not sufficient; approve UI work only after
   real screenshots are reviewed.
 
+## Verification result
+
+- Release all-target build: passed (420 build steps after the incremental app
+  and QML lint build).
+- Dark/light Chinese visual matrix: 8 of 8 captures passed and were manually
+  reviewed.
+- UI design-system and focused shell regression group: passed.
+- Full CTest run: 160 of 162 passed on the first run. The stem preview mixer hit
+  its 10-second timeout under full-suite load, then passed independently in
+  0.39 seconds. The remaining player-action icon contract is a pre-existing
+  baseline mismatch: `lyrics.svg` and its contract script have identical Git
+  object IDs at base `636c4d6` and at this branch head.
+
+The unrelated icon contract was not changed as part of the UI remediation.
+
 Packaging, pushing, and merging to the main branch are outside this acceptance
 scope.
