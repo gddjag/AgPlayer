@@ -220,7 +220,11 @@ Window {
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
                     anchors.right: parent.right
-                    anchors.rightMargin: 108
+                    // Leave the complete three-button hit region to the
+                    // controls: 3 button extents, 2 RowLayout gaps, and the
+                    // title row's trailing margin.
+                    anchors.rightMargin: 3 * Theme.navigationActionExtent
+                        + 2 * 14 + 8
                     z: 2
                     acceptedButtons: Qt.LeftButton
                     onPressed: function(mouse) {

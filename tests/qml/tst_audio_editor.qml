@@ -313,9 +313,10 @@ TestCase {
             const minimize = findChild(shell, "audioToolsMinimizeButton")
             const maximize = findChild(shell, "audioToolsMaximizeButton")
             const close = findChild(shell, "audioToolsCloseButton")
+            const moveArea = findChild(shell, "audioToolsMoveArea")
             const topNav = findChild(shell, "audioToolsTopNav")
             verify(titleBar && titleText && contentStack
-                   && minimize && maximize && close)
+                   && minimize && maximize && close && moveArea)
             verify(topNav)
             compare(titleBar.color.toString(), Theme.panel.toString())
             compare(titleText.color.toString(), Theme.primaryText.toString())
@@ -323,6 +324,11 @@ TestCase {
             compare(minimize.icon.color.toString(), Theme.iconPrimary.toString())
             compare(maximize.icon.color.toString(), Theme.iconPrimary.toString())
             compare(close.icon.color.toString(), Theme.iconPrimary.toString())
+            const moveRight = moveArea.mapToItem(titleBar,
+                                                  moveArea.width, 0).x
+            const minimizeLeft = minimize.mapToItem(titleBar, 0, 0).x
+            verify(moveRight <= minimizeLeft,
+                   "window move area must not cover minimize hit target")
             compare(topNav.activeLabelColor.toString(),
                     Theme.primaryText.toString())
             compare(findChild(shell, "skinBackdrop"), null)
