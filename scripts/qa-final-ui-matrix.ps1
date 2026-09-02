@@ -50,7 +50,7 @@ function Get-SurfaceExpectation {
 
     switch -Regex ($Surface) {
         "^startup$|^playback$" {
-            return [pscustomobject]@{ Width = 960; Height = 298 }
+            return [pscustomobject]@{ Width = 863; Height = 266 }
         }
         "^mini$" {
             return [pscustomobject]@{ Width = 588; Height = 186 }
@@ -59,9 +59,10 @@ function Get-SurfaceExpectation {
             return [pscustomobject]@{ Width = 860; Height = 900 }
         }
         "^list$|^details$" {
-            # 38px title + 56px header + ten default 50px waveform rows
-            # + 54px filter. Keep this aligned with ListWindow.defaultListHeight.
-            return [pscustomobject]@{ Width = 960; Height = 648 }
+            # The detached classic list follows the 863px classic player
+            # width. Its height is 38px title + 56px header + ten 50px rows
+            # + 46px filter; keep this aligned with ListWindow.
+            return [pscustomobject]@{ Width = 863; Height = 640 }
         }
         "^tool-\d+$" {
             return [pscustomobject]@{ Width = 1672; Height = 941 }

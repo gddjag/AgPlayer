@@ -1970,7 +1970,7 @@ int main(int argc, char* argv[])
                                 QObject* const detailsPanel = trackList == nullptr
                                     ? nullptr
                                     : trackList->findChild<QObject*>(
-                                        QStringLiteral("trackDetailsPanel"));
+                                        QStringLiteral("audioFileInfoPanel"));
                                 if (!invoked || !detailsOpened.toBool()
                                     || detailsPanel == nullptr
                                     || !detailsPanel->property("visible").toBool()) {
