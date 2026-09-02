@@ -89,7 +89,7 @@ TestCase {
         compare(AudioVisualFeatureController.impactRevision, revision)
     }
 
-    function test_shared_view_uses_one_spectral_centroid_waveform() {
+    function test_shared_view_uses_one_three_band_frequency_waveform() {
         compare(waveformItemCount(sharedWaveform), 1)
 
         var item = findChild(sharedWaveform, "immersiveWaveform")
@@ -98,12 +98,10 @@ TestCase {
         compare(item.layers, waveformSession.layers)
         compare(item.duration, waveformSession.durationMs)
         compare(item.visualMode, 3)
-        compare(item.spectralPalette.length, 8)
-        compare(String(item.spectralPalette[0]),
-                String(frequencySettings.palette[0]))
-        compare(String(item.spectralPalette[7]),
-                String(frequencySettings.palette[7]))
-        compare(item.spectralUnplayedOpacity,
+        compare(String(item.lowColor), String(frequencySettings.lowColor))
+        compare(String(item.midColor), String(frequencySettings.midColor))
+        compare(String(item.highColor), String(frequencySettings.highColor))
+        compare(item.frequencyUnplayedOpacity,
                 frequencySettings.unplayedOpacity)
         compare(findChild(sharedWaveform,
                           "immersiveWaveformPlaybackGuide"), null)
@@ -111,15 +109,15 @@ TestCase {
                           "immersiveWaveformPlaybackFocusDot"), null)
     }
 
-    function test_track_change_does_not_randomize_spectral_palette() {
+    function test_track_change_does_not_randomize_frequency_colors() {
         var item = findChild(sharedWaveform, "immersiveWaveform")
         verify(item)
-        var first = String(item.spectralPalette[0])
-        var last = String(item.spectralPalette[7])
+        var low = String(item.lowColor)
+        var high = String(item.highColor)
         waveformSession.trackId = "track-a"
         waveformSession.trackId = "track-b"
-        compare(String(item.spectralPalette[0]), first)
-        compare(String(item.spectralPalette[7]), last)
+        compare(String(item.lowColor), low)
+        compare(String(item.highColor), high)
     }
 
 }

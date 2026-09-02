@@ -23,6 +23,9 @@ add_library(agplayer_qt STATIC
     src/audio_preview_controller.hpp
     src/file_association_controller.cpp
     src/file_association_controller.hpp
+    src/frequency_color_waveform_settings.cpp
+    src/frequency_color_waveform_settings.hpp
+    src/frequency_color_mix.hpp
     src/filename_processor.cpp
     src/filename_processor.hpp
     src/filename_transform_engine.cpp

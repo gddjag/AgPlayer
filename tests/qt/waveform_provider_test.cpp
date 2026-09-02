@@ -5,20 +5,17 @@
 
 #include <QCoreApplication>
 #include <QDir>
-#include <QFile>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 
 #include <cstdint>
-#include <filesystem>
 
 namespace agplayer::testing {
 
 void reset_waveform_provider_counters() noexcept;
-std::uint64_t waveform_provider_frequency_jobs_started() noexcept;
-std::uint64_t waveform_provider_mix_jobs_started() noexcept;
+std::uint64_t waveform_provider_jobs_started() noexcept;
 
 } // namespace agplayer::testing
 
@@ -35,26 +32,6 @@ QVariantMap lastLayers(const QSignalSpy& spy)
     return spy.last().at(1).toMap();
 }
 
-std::filesystem::path filesystemPath(const QString& path)
-{
-#ifdef Q_OS_WIN
-    return std::filesystem::path(path.toStdWString());
-#else
-    return std::filesystem::u8path(path.toUtf8().constData());
-#endif
-}
-
-QString cachePath(const QString& directory, const QString& sourcePath,
-                  const bool legacyV2)
-{
-    const std::filesystem::path source = filesystemPath(sourcePath);
-    const std::string key = legacyV2
-        ? agplayer::WaveformCache::legacy_v2_key_for(source)
-        : agplayer::WaveformCache::key_for(source);
-    return QDir(directory).filePath(
-        QString::fromStdString(key) + QStringLiteral("-average.agwf"));
-}
-
 } // namespace
 
 class WaveformProviderTest final : public QObject {
@@ -65,10 +42,10 @@ private slots:
     void emptyPathEmitsEmptyWaveform();
     void plainAnalysisPreservesAmplitudeAndRgbBands();
     void plainCacheHitDoesNotStartAnalysis();
-    void plainModeNeverStartsSpectralAnalysis();
-    void spectralRequestUpgradesTheExistingAgwfCache();
-    void spectralCacheHitPublishesWithoutDecode();
-    void switchingBackToPlainDoesNotPublishStaleSpectralData();
+    void frequencyModeUsesTheSameFourLayerAnalysis();
+    void displayModeChangeKeepsOneActiveAnalysis();
+    void frequencyCacheHitPublishesWithoutDecode();
+    void switchingBackToPlainReusesTheSameCache();
     void destroyingProviderJoinsTheExistingWorkerPool();
 
 private:
@@ -111,9 +88,9 @@ void WaveformProviderTest::plainAnalysisPreservesAmplitudeAndRgbBands()
     QCOMPARE(layers.value(QStringLiteral("bass")).toList().size(), pointCount);
     QCOMPARE(layers.value(QStringLiteral("mid")).toList().size(), pointCount);
     QCOMPARE(layers.value(QStringLiteral("high")).toList().size(), pointCount);
-    QVERIFY(layers.value(QStringLiteral("spectralIndex")).toList().isEmpty());
+    QVERIFY(!layers.contains(QStringLiteral("spectralIndex")));
     QVERIFY(!layers.value(QStringLiteral("_frequencyReady")).toBool());
-    QCOMPARE(layers.value(QStringLiteral("_cacheVersion")).toInt(), 3);
+    QCOMPARE(layers.value(QStringLiteral("_cacheVersion")).toInt(), 4);
 }
 
 void WaveformProviderTest::plainCacheHitDoesNotStartAnalysis()
@@ -133,11 +110,10 @@ void WaveformProviderTest::plainCacheHitDoesNotStartAnalysis()
     QSignalSpy ready(&cached, &WaveformProvider::waveformReady);
     cached.loadForTrack(QStringLiteral("cached"), fixturePath_, false);
     QCOMPARE(ready.count(), 1);
-    QCOMPARE(agplayer::testing::waveform_provider_mix_jobs_started(), 0U);
-    QCOMPARE(agplayer::testing::waveform_provider_frequency_jobs_started(), 0U);
+    QCOMPARE(agplayer::testing::waveform_provider_jobs_started(), 0U);
 }
 
-void WaveformProviderTest::plainModeNeverStartsSpectralAnalysis()
+void WaveformProviderTest::frequencyModeUsesTheSameFourLayerAnalysis()
 {
     if (fixturePath_.isEmpty()) QSKIP("AGPLAYER_TEST_WAV not set");
     QTemporaryDir directory;
@@ -146,13 +122,20 @@ void WaveformProviderTest::plainModeNeverStartsSpectralAnalysis()
     settings.setCacheDirectory(directory.filePath(QStringLiteral("cache")));
     WaveformProvider provider(&settings);
     agplayer::testing::reset_waveform_provider_counters();
-    provider.loadForTrack(QStringLiteral("plain"), fixturePath_, false);
+    QSignalSpy ready(&provider, &WaveformProvider::waveformReady);
+    provider.loadForTrack(QStringLiteral("frequency"), fixturePath_, true);
     finishProviderAnalysis(provider);
-    QCOMPARE(agplayer::testing::waveform_provider_frequency_jobs_started(), 0U);
-    QCOMPARE(agplayer::testing::waveform_provider_mix_jobs_started(), 1U);
+    QCOMPARE(agplayer::testing::waveform_provider_jobs_started(), 1U);
+    const QVariantMap layers = lastLayers(ready);
+    const int pointCount = layers.value(QStringLiteral("mix")).toList().size();
+    QCOMPARE(layers.value(QStringLiteral("bass")).toList().size(), pointCount);
+    QCOMPARE(layers.value(QStringLiteral("mid")).toList().size(), pointCount);
+    QCOMPARE(layers.value(QStringLiteral("high")).toList().size(), pointCount);
+    QVERIFY(!layers.contains(QStringLiteral("spectralIndex")));
+    QVERIFY(layers.value(QStringLiteral("_frequencyReady")).toBool());
 }
 
-void WaveformProviderTest::spectralRequestUpgradesTheExistingAgwfCache()
+void WaveformProviderTest::displayModeChangeKeepsOneActiveAnalysis()
 {
     if (fixturePath_.isEmpty()) QSKIP("AGPLAYER_TEST_WAV not set");
     QTemporaryDir directory;
@@ -160,44 +143,23 @@ void WaveformProviderTest::spectralRequestUpgradesTheExistingAgwfCache()
     SettingsController settings;
     const QString cacheDirectory = directory.filePath(QStringLiteral("cache"));
     settings.setCacheDirectory(cacheDirectory);
-    {
-        WaveformProvider warm(&settings);
-        warm.loadForTrack(QStringLiteral("warm"), fixturePath_, false);
-        finishProviderAnalysis(warm);
-    }
-    const QString currentCache = cachePath(cacheDirectory, fixturePath_, false);
-    const QString legacyCache = cachePath(cacheDirectory, fixturePath_, true);
-    agplayer::WaveformCacheData legacyData;
-    QVERIFY(agplayer::WaveformCache::load_v3(
-        filesystemPath(currentCache), filesystemPath(fixturePath_), legacyData));
-    legacyData.spectral_index.clear();
-    QVERIFY(agplayer::WaveformCache::save_v2(
-        filesystemPath(legacyCache), filesystemPath(fixturePath_), legacyData));
-    QVERIFY(QFile::remove(currentCache));
-
     agplayer::testing::reset_waveform_provider_counters();
     WaveformProvider provider(&settings);
     QSignalSpy ready(&provider, &WaveformProvider::waveformReady);
-    provider.loadForTrack(QStringLiteral("spectral"), fixturePath_, true);
-    QCOMPARE(ready.count(), 1);
-    QVERIFY(!lastLayers(ready).value(QStringLiteral("_frequencyReady")).toBool());
+    const qulonglong generation = provider.loadForTrack(
+        QStringLiteral("same"), fixturePath_, true);
+    QCOMPARE(provider.loadForTrack(QStringLiteral("same"), fixturePath_, false),
+             generation);
     finishProviderAnalysis(provider);
 
-    QCOMPARE(ready.count(), 2);
-    const QVariantMap complete = lastLayers(ready);
-    const int pointCount = complete.value(QStringLiteral("mix")).toList().size();
-    QCOMPARE(complete.value(QStringLiteral("spectralIndex")).toList().size(),
-             pointCount);
-    QVERIFY(complete.value(QStringLiteral("_frequencyReady")).toBool());
-    QCOMPARE(complete.value(QStringLiteral("_frequencyCacheVersion")).toInt(), 3);
-    QCOMPARE(agplayer::testing::waveform_provider_frequency_jobs_started(), 1U);
+    QCOMPARE(agplayer::testing::waveform_provider_jobs_started(), 1U);
+    QCOMPARE(ready.count(), 1);
+    QVERIFY(!lastLayers(ready).value(QStringLiteral("_frequencyReady")).toBool());
     QCOMPARE(QDir(cacheDirectory).entryList(
                  {QStringLiteral("*.agwf")}, QDir::Files).size(), 1);
-    QCOMPARE(QDir(cacheDirectory).entryList(
-                 {QStringLiteral("*.fcw1")}, QDir::Files).size(), 0);
 }
 
-void WaveformProviderTest::spectralCacheHitPublishesWithoutDecode()
+void WaveformProviderTest::frequencyCacheHitPublishesWithoutDecode()
 {
     if (fixturePath_.isEmpty()) QSKIP("AGPLAYER_TEST_WAV not set");
     QTemporaryDir directory;
@@ -217,16 +179,14 @@ void WaveformProviderTest::spectralCacheHitPublishesWithoutDecode()
     QCOMPARE(ready.count(), 1);
     const QVariantMap layers = lastLayers(ready);
     QVERIFY(layers.value(QStringLiteral("_frequencyReady")).toBool());
-    QCOMPARE(layers.value(QStringLiteral("spectralIndex")).toList().size(),
-             layers.value(QStringLiteral("mix")).toList().size());
+    QVERIFY(!layers.contains(QStringLiteral("spectralIndex")));
     QVERIFY(!layers.value(QStringLiteral("bass")).toList().isEmpty());
     QVERIFY(!layers.value(QStringLiteral("mid")).toList().isEmpty());
     QVERIFY(!layers.value(QStringLiteral("high")).toList().isEmpty());
-    QCOMPARE(agplayer::testing::waveform_provider_frequency_jobs_started(), 0U);
-    QCOMPARE(agplayer::testing::waveform_provider_mix_jobs_started(), 0U);
+    QCOMPARE(agplayer::testing::waveform_provider_jobs_started(), 0U);
 }
 
-void WaveformProviderTest::switchingBackToPlainDoesNotPublishStaleSpectralData()
+void WaveformProviderTest::switchingBackToPlainReusesTheSameCache()
 {
     if (fixturePath_.isEmpty()) QSKIP("AGPLAYER_TEST_WAV not set");
     QTemporaryDir directory;
@@ -237,14 +197,13 @@ void WaveformProviderTest::switchingBackToPlainDoesNotPublishStaleSpectralData()
     QSignalSpy ready(&provider, &WaveformProvider::waveformReady);
 
     provider.loadForTrack(QStringLiteral("same"), fixturePath_, true);
-    provider.loadForTrack(QStringLiteral("same"), fixturePath_, false);
     finishProviderAnalysis(provider);
+    agplayer::testing::reset_waveform_provider_counters();
+    provider.loadForTrack(QStringLiteral("same"), fixturePath_, false);
 
     QVERIFY(!ready.isEmpty());
-    for (const QList<QVariant>& emission : ready) {
-        QVERIFY(!emission.at(1).toMap()
-                     .value(QStringLiteral("_frequencyReady")).toBool());
-    }
+    QVERIFY(!lastLayers(ready).value(QStringLiteral("_frequencyReady")).toBool());
+    QCOMPARE(agplayer::testing::waveform_provider_jobs_started(), 0U);
 }
 
 void WaveformProviderTest::destroyingProviderJoinsTheExistingWorkerPool()

@@ -33,8 +33,8 @@ public:
 
     [[nodiscard]] static QByteArray quantizeMixPeaks(
         const std::vector<float>& mix);
-    [[nodiscard]] static QByteArray quantizeSpectralIndex(
-        const std::vector<std::uint8_t>& spectralIndex,
+    [[nodiscard]] static QByteArray quantizeBandEnergy(
+        const std::vector<float>& energy,
         const std::vector<float>& mix);
 
     Q_INVOKABLE void request(const QString& trackId,
@@ -52,7 +52,9 @@ signals:
     void thumbnailReady(const QString& trackId,
                         quint64 generation,
                         const QByteArray& peaks,
-                        const QByteArray& spectralIndex);
+                        const QByteArray& bass,
+                        const QByteArray& mid,
+                        const QByteArray& high);
     void sourceCacheInvalidated(const QString& sourcePath);
     void analysisRequested(const QString& sourcePath);
 
@@ -70,7 +72,9 @@ private:
         QString sourcePath;
         quint64 cacheEpoch = 0U;
         QByteArray peaks;
-        QByteArray spectralIndex;
+        QByteArray bass;
+        QByteArray mid;
+        QByteArray high;
     };
 
     struct ActiveLoad final {
@@ -82,7 +86,9 @@ private:
     struct CacheEntry final {
         QString sourcePath;
         QByteArray peaks;
-        QByteArray spectralIndex;
+        QByteArray bass;
+        QByteArray mid;
+        QByteArray high;
         std::list<QString>::iterator order;
     };
 
@@ -93,7 +99,9 @@ private:
 
     struct ThumbnailData final {
         QByteArray peaks;
-        QByteArray spectralIndex;
+        QByteArray bass;
+        QByteArray mid;
+        QByteArray high;
     };
 
     [[nodiscard]] static ThumbnailData loadFromCacheOnly(
@@ -105,7 +113,9 @@ private:
     void insertCache(const QString& trackId,
                      const QString& sourcePath,
                      const QByteArray& peaks,
-                     const QByteArray& spectralIndex);
+                     const QByteArray& bass,
+                     const QByteArray& mid,
+                     const QByteArray& high);
     [[nodiscard]] QString negativeKey(const QString& sourcePath) const;
     [[nodiscard]] bool hasNegativeCooldown(const QString& sourcePath);
     void insertNegativeCooldown(const QString& sourcePath);

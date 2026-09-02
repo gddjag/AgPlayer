@@ -11,8 +11,9 @@ Item {
     property string mode: "Spectral"
     property var provider: TrackWaveformThumbnailProvider
     property var waveformPeaks: ""
-    property var spectralIndex: ""
-    property real brightness: SettingsController.trackWaveformBrightness
+    property var bassEnergy: ""
+    property var midEnergy: ""
+    property var highEnergy: ""
 
     property string requestedTrackId: ""
     property int requestedGeneration: 0
@@ -35,7 +36,9 @@ Item {
         requestScheduled = false
         cancelRequest()
         waveformPeaks = ""
-        spectralIndex = ""
+        bassEnergy = ""
+        midEnergy = ""
+        highEnergy = ""
         if (!requestEligible())
             return
         requestedTrackId = trackId
@@ -70,11 +73,13 @@ Item {
     Connections {
         target: root.provider
         function onThumbnailReady(readyTrackId, readyGeneration, peaks,
-                                  spectralIndex) {
+                                  bass, mid, high) {
             if (readyTrackId === root.requestedTrackId
                     && readyGeneration === root.requestedGeneration) {
                 root.waveformPeaks = peaks
-                root.spectralIndex = spectralIndex
+                root.bassEnergy = bass
+                root.midEnergy = mid
+                root.highEnergy = high
             }
         }
         function onSourceCacheInvalidated(invalidatedSourcePath) {
@@ -95,9 +100,12 @@ Item {
                 objectName: "trackWaveformThumbnailItem"
                 peaks: root.waveformPeaks
                 waveformColor: Theme.listWaveformMono
-                spectralIndex: root.mode === "Mono"
-                               ? "" : (root.spectralIndex || "")
-                spectralPalette: SettingsController.frequencyColorWaveform.palette
+                bass: root.mode === "Mono" ? "" : (root.bassEnergy || "")
+                mid: root.mode === "Mono" ? "" : (root.midEnergy || "")
+                high: root.mode === "Mono" ? "" : (root.highEnergy || "")
+                lowColor: SettingsController.frequencyColorWaveform.lowColor
+                midColor: SettingsController.frequencyColorWaveform.midColor
+                highColor: SettingsController.frequencyColorWaveform.highColor
             }
         }
     }

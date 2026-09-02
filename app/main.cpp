@@ -289,6 +289,7 @@ int main(int argc, char* argv[])
     //   --qa-exit-after-ms <ms>     fail-safe timed exit for acceptance runs
     //   --qa-screenshot-main <png>  grab the main window after playback starts
     //   --qa-screenshot-mini <png>  grab the mini player window likewise
+    //   --qa-waveform-mode <0..3>   override waveform mode for visual QA
     //   --qa-tool <0..5>             choose the audio-tool screenshot page
     //   --qa-settings-section <0..6> capture one settings section
     //   --qa-equalizer-size <w> <h> resize the EQ visual target
@@ -301,6 +302,7 @@ int main(int argc, char* argv[])
     int qaExitAfterMs = 0;
     QString qaScreenshotMain;
     QString qaPlayerShell;
+    int qaWaveformMode = -1;
     int qaMainWidth = 0;
     int qaMainHeight = 0;
     bool qaIntegratedShellLifecycleProbe = false;
@@ -352,6 +354,11 @@ int main(int argc, char* argv[])
             } else if (arg == QStringLiteral("--qa-player-shell")
                        && i + 1 < cliArgs.size()) {
                 qaPlayerShell = cliArgs.at(++i).toLower();
+            } else if (arg == QStringLiteral("--qa-waveform-mode")
+                       && i + 1 < cliArgs.size()) {
+                bool ok = false;
+                const int mode = cliArgs.at(++i).toInt(&ok);
+                if (ok && mode >= 0 && mode <= 3) qaWaveformMode = mode;
             } else if (arg == QStringLiteral("--qa-width")
                        && i + 1 < cliArgs.size()) {
                 bool ok = false;
@@ -810,6 +817,9 @@ int main(int argc, char* argv[])
         }
         if (qaTestMode) {
             settings.setWaveformMode(1);
+        }
+        if (qaWaveformMode >= 0) {
+            settings.setWaveformMode(qaWaveformMode);
         }
         TranslationManager translations;
         if (!translations.setLanguage(settings.language())) {

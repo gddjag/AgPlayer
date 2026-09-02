@@ -897,10 +897,10 @@ TestCase {
         compare(miniWindow.waveformSession, session)
         compare(miniControls.waveformSession, session)
         compare(immersiveWaveform.waveformSession, session)
-        compare(nativeWaveform.spectralPalette.length, 8)
-        compare(String(nativeWaveform.spectralPalette[0]), "#123ecf")
-        compare(String(nativeWaveform.spectralPalette[7]), "#e82718")
-        compare(nativeWaveform.spectralUnplayedOpacity, 0.88)
+        compare(String(nativeWaveform.lowColor), "#8b3dff")
+        compare(String(nativeWaveform.midColor), "#ffb000")
+        compare(String(nativeWaveform.highColor), "#002fa7")
+        compare(nativeWaveform.frequencyUnplayedOpacity, 0.88)
     }
 
     function test_three_line_spatial_lyrics_support_position_and_scale() {

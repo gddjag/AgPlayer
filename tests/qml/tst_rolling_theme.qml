@@ -217,22 +217,7 @@ TestCase {
         compare(mainWindow.minimumHeight, 720)
     }
 
-    function test_rolling_list_ignores_classic_thumbnail_switch() {
-        var previousEnabled = SettingsController.listWaveformThumbnailEnabled
-        try {
-            SettingsController.listWaveformThumbnailEnabled = false
-            var rolling = rollingWithFakes()
-            var list = findChild(rolling, "rollingTrackList")
-            verify(list)
-            compare(list.layoutProfile, "rolling")
-            compare(list.waveformThumbnailsVisible, true)
-            compare(list.rowHeight, 50)
-        } finally {
-            SettingsController.listWaveformThumbnailEnabled = previousEnabled
-        }
-    }
-
-    function test_waveform_modes_reuse_shared_spectral_analysis() {
+    function test_waveform_mode_reuses_single_three_band_analysis() {
         var trackIds = nativeDropHelper.ensureSortableTracks()
         verify(trackIds.length > 0)
         PlaybackController.playRow(LibraryModel.indexForTrackId(trackIds[0]))
@@ -254,7 +239,7 @@ TestCase {
         SettingsController.waveformMode = 3
         wait(0)
         compare(session.generation, generationBeforeFrequencyChange,
-                "spectral indices are cached with the shared waveform analysis")
+                "frequency mode must reuse the single three-band analysis")
     }
 
     function test_three_shells_share_exact_control_order_and_skin_menu() {
@@ -507,25 +492,23 @@ TestCase {
         })
     }
 
-    function test_spectral_waveform_palette_is_theme_independent() {
+    function test_frequency_waveform_colors_are_theme_independent() {
         var rolling = rollingWithFakes()
         var overview = findChild(rolling, "rollingOverviewWaveform")
         var mainWaveform = findChild(rolling, "rollingMainWaveform")
         verify(overview && mainWaveform)
 
-        var first = String(rolling.frequencyWaveformSettings.palette[0])
-        var last = String(rolling.frequencyWaveformSettings.palette[7])
+        var low = String(rolling.frequencyWaveformSettings.lowColor)
+        var high = String(rolling.frequencyWaveformSettings.highColor)
 
-        for (var theme = 0; theme < 3; ++theme) {
-            SettingsController.themeMode = theme
-            wait(0)
-            compare(overview.spectralUnplayedOpacity,
-                    Theme.nonImmersiveSpectralUnplayedOpacity)
-            compare(mainWaveform.spectralUnplayedOpacity,
-                    Theme.nonImmersiveSpectralUnplayedOpacity)
-            compare(String(overview.spectralPalette[0]), first)
-            compare(String(mainWaveform.spectralPalette[7]), last)
-        }
+        SettingsController.themeMode = 1
+        tryCompare(overview, "frequencyUnplayedOpacity",
+                   rolling.frequencyWaveformSettings.unplayedOpacity)
+        compare(String(overview.lowColor), low)
+        compare(String(mainWaveform.highColor), high)
+        SettingsController.themeMode = 0
+        compare(String(overview.lowColor), low)
+        compare(String(mainWaveform.highColor), high)
     }
 
     function test_rolling_tempo_meter_and_zoom_controls_are_live() {

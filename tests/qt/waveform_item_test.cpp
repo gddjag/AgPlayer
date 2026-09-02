@@ -1,4 +1,5 @@
 #include "waveform_item.hpp"
+#include "frequency_color_mix.hpp"
 
 #include <QHoverEvent>
 #include <QMouseEvent>
@@ -36,9 +37,9 @@ class WaveformItemTest final : public QObject {
 private slots:
     void mapsPointerToClampedTime();
     void buildsCenteredFiniteNormalizedLinePairs();
-    void spectralModeUsesAmplitudeGeometryAndCentroidPalette();
-    void spectralPaletteChangeDoesNotReplaceGeometryNode();
-    void spectralProgressUpdatesAlphaWithoutReplacingGeometry();
+    void threeBandMixerKeepsPureColorsAndCreatesCombinations();
+    void frequencyModeUsesAmplitudeGeometryAndOpacityOnlyProgress();
+    void frequencyColorChangeDoesNotReplaceGeometryNode();
     void reusesNodeAndUpdatesGeometryAfterResize();
     void clearsOldNodeForEmptyOrZeroSizedContent();
     void hoverUpdatesPreviewWithoutSeeking();
@@ -86,15 +87,13 @@ QVariantList peaks(std::initializer_list<double> values)
 QVariantMap makeLayers(const QVariantList& mix = {},
                        const QVariantList& bass = {},
                        const QVariantList& mid = {},
-                       const QVariantList& high = {},
-                       const QVariantList& spectralIndex = {})
+                       const QVariantList& high = {})
 {
     QVariantMap map;
     map[QStringLiteral("mix")] = mix;
     map[QStringLiteral("bass")] = bass;
     map[QStringLiteral("mid")] = mid;
     map[QStringLiteral("high")] = high;
-    map[QStringLiteral("spectralIndex")] = spectralIndex;
     return map;
 }
 
@@ -243,7 +242,29 @@ void WaveformItemTest::visualModesUseConfiguredProgressAndBaseColors()
     delete node;
 }
 
-void WaveformItemTest::spectralModeUsesAmplitudeGeometryAndCentroidPalette()
+void WaveformItemTest::threeBandMixerKeepsPureColorsAndCreatesCombinations()
+{
+    const QColor low(QStringLiteral("#8B3DFF"));
+    const QColor mid(QStringLiteral("#FFB000"));
+    const QColor high(QStringLiteral("#002FA7"));
+    QCOMPARE(agplayer::ui::mixFrequencyColor(1.0, 0.0, 0.0,
+                                             low, mid, high), low);
+    QCOMPARE(agplayer::ui::mixFrequencyColor(0.0, 1.0, 0.0,
+                                             low, mid, high), mid);
+    QCOMPARE(agplayer::ui::mixFrequencyColor(0.0, 0.0, 1.0,
+                                             low, mid, high), high);
+    const QColor lowMid = agplayer::ui::mixFrequencyColor(
+        1.0, 1.0, 0.0, low, mid, high);
+    const QColor all = agplayer::ui::mixFrequencyColor(
+        1.0, 1.0, 1.0, low, mid, high);
+    QVERIFY(lowMid != low);
+    QVERIFY(lowMid != mid);
+    QVERIFY(all != low && all != mid && all != high);
+    QVERIFY(lowMid.hslSaturationF() >= 0.55);
+    QVERIFY(all.hslSaturationF() >= 0.45);
+}
+
+void WaveformItemTest::frequencyModeUsesAmplitudeGeometryAndOpacityOnlyProgress()
 {
     TestableWaveformItem plain;
     plain.setWidth(100);
@@ -256,57 +277,71 @@ void WaveformItemTest::spectralModeUsesAmplitudeGeometryAndCentroidPalette()
     plain.setLayers(makeLayers(peaks({0.25, 0.5, 0.75, 1.0})));
     QSGNode* plainNode = plain.updatePaintNode(nullptr, nullptr);
 
-    TestableWaveformItem spectral;
-    spectral.setWidth(100);
-    spectral.setHeight(40);
-    spectral.setDuration(100);
-    spectral.setPosition(50);
-    spectral.setDensity(2.0);
-    spectral.setLineWidth(1.0);
-    spectral.setVisualMode(3);
-    spectral.setSpectralPalette(
-        {QStringLiteral("#000000"), QStringLiteral("#ffffff")});
-    spectral.setSpectralUnplayedOpacity(0.88);
-    spectral.setLayers(makeLayers(
-        peaks({0.25, 0.5, 0.75, 1.0}), {}, {}, {},
-        peaks({0, 85, 170, 255})));
-    QSGNode* spectralNode = spectral.updatePaintNode(nullptr, nullptr);
+    TestableWaveformItem frequency;
+    frequency.setWidth(100);
+    frequency.setHeight(40);
+    frequency.setDuration(100);
+    frequency.setPosition(0);
+    frequency.setDensity(2.0);
+    frequency.setLineWidth(1.0);
+    frequency.setVisualMode(3);
+    frequency.setLowColor(QColor(QStringLiteral("#ff0000")));
+    frequency.setMidColor(QColor(QStringLiteral("#00ff00")));
+    frequency.setHighColor(QColor(QStringLiteral("#0000ff")));
+    frequency.setFrequencyUnplayedOpacity(0.88);
+    frequency.setLayers(makeLayers(
+        peaks({0.25, 0.5, 0.75, 1.0}),
+        peaks({1.0, 0.0, 1.0, 1.0}),
+        peaks({0.0, 1.0, 1.0, 1.0}),
+        peaks({0.0, 0.0, 0.0, 1.0})));
+    QSGNode* frequencyNode = frequency.updatePaintNode(nullptr, nullptr);
 
     QVERIFY(plainNode != nullptr);
-    QVERIFY(spectralNode != nullptr);
+    QVERIFY(frequencyNode != nullptr);
     const auto* plainVertices = vertices(plainNode);
-    const auto* spectralVertices = vertices(spectralNode);
+    const auto* frequencyVertices = vertices(frequencyNode);
     const int count = static_cast<QSGGeometryNode*>(plainNode)
                           ->geometry()->vertexCount();
-    QCOMPARE(static_cast<QSGGeometryNode*>(spectralNode)
+    QCOMPARE(static_cast<QSGGeometryNode*>(frequencyNode)
                  ->geometry()->vertexCount(), count);
     for (int index = 0; index < count; ++index) {
-        QCOMPARE(spectralVertices[index].x, plainVertices[index].x);
-        QCOMPARE(spectralVertices[index].y, plainVertices[index].y);
+        QCOMPARE(frequencyVertices[index].x, plainVertices[index].x);
+        QCOMPARE(frequencyVertices[index].y, plainVertices[index].y);
     }
-    compareColor(spectralVertices[0], 0, 0, 0, 255);
-    const int last = count - 2;
-    compareColor(spectralVertices[last], 255, 255, 255, 224);
+    compareColor(frequencyVertices[0], 255, 0, 0, 224);
+    const int sampleVertex = count / 2;
+    const auto before = frequencyVertices[sampleVertex];
+    frequency.setPosition(100);
+    frequencyNode = frequency.updatePaintNode(frequencyNode, nullptr);
+    const auto after = vertices(frequencyNode)[sampleVertex];
+    QCOMPARE(after.x, before.x);
+    QCOMPARE(after.y, before.y);
+    QCOMPARE(after.r, before.r);
+    QCOMPARE(after.g, before.g);
+    QCOMPARE(after.b, before.b);
+    QCOMPARE(before.a, 224U);
+    QCOMPARE(after.a, 255U);
     delete plainNode;
-    delete spectralNode;
+    delete frequencyNode;
 }
 
-void WaveformItemTest::spectralPaletteChangeDoesNotReplaceGeometryNode()
+void WaveformItemTest::frequencyColorChangeDoesNotReplaceGeometryNode()
 {
     TestableWaveformItem item;
     item.setWidth(120);
     item.setHeight(48);
     item.setDuration(100);
     item.setVisualMode(3);
-    item.setLayers(makeLayers(peaks({1.0, 0.5, 0.75, 0.25}), {}, {}, {},
-                              peaks({0, 85, 170, 255})));
+    item.setLayers(makeLayers(peaks({1.0, 0.5, 0.75, 0.25}),
+                              peaks({1.0, 1.0, 1.0, 1.0}),
+                              peaks({0.0, 0.0, 0.0, 0.0}),
+                              peaks({0.0, 0.0, 0.0, 0.0})));
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
     auto* geometry = static_cast<QSGGeometryNode*>(node)->geometry();
     const void* vertexStorage = geometry->vertexData();
 
-    item.setSpectralPalette(
-        {QStringLiteral("#ff0000"), QStringLiteral("#00ff00")});
+    item.setLowColor(QColor(QStringLiteral("#ff0000")));
     QSGNode* updated = item.updatePaintNode(node, nullptr);
     QCOMPARE(updated, node);
     QCOMPARE(static_cast<QSGGeometryNode*>(updated)->geometry(), geometry);

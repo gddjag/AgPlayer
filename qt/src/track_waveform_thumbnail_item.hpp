@@ -3,7 +3,6 @@
 #include <QByteArray>
 #include <QColor>
 #include <QQuickItem>
-#include <QVariantList>
 
 class QSGNode;
 
@@ -12,10 +11,15 @@ class TrackWaveformThumbnailItem : public QQuickItem {
     Q_PROPERTY(QByteArray peaks READ peaks WRITE setPeaks NOTIFY peaksChanged)
     Q_PROPERTY(QColor waveformColor READ waveformColor WRITE setWaveformColor
                    NOTIFY waveformColorChanged)
-    Q_PROPERTY(QByteArray spectralIndex READ spectralIndex WRITE setSpectralIndex
-                   NOTIFY spectralIndexChanged)
-    Q_PROPERTY(QVariantList spectralPalette READ spectralPalette
-                   WRITE setSpectralPalette NOTIFY spectralPaletteChanged)
+    Q_PROPERTY(QByteArray bass READ bass WRITE setBass NOTIFY bassChanged)
+    Q_PROPERTY(QByteArray mid READ mid WRITE setMid NOTIFY midChanged)
+    Q_PROPERTY(QByteArray high READ high WRITE setHigh NOTIFY highChanged)
+    Q_PROPERTY(QColor lowColor READ lowColor WRITE setLowColor
+                   NOTIFY lowColorChanged)
+    Q_PROPERTY(QColor midColor READ midColor WRITE setMidColor
+                   NOTIFY midColorChanged)
+    Q_PROPERTY(QColor highColor READ highColor WRITE setHighColor
+                   NOTIFY highColorChanged)
 
 public:
     static constexpr int kPeakCount = 2048;
@@ -27,16 +31,28 @@ public:
     void setPeaks(const QByteArray& peaks);
     QColor waveformColor() const;
     void setWaveformColor(const QColor& color);
-    QByteArray spectralIndex() const;
-    void setSpectralIndex(const QByteArray& spectralIndex);
-    QVariantList spectralPalette() const;
-    void setSpectralPalette(const QVariantList& palette);
+    QByteArray bass() const;
+    void setBass(const QByteArray& bass);
+    QByteArray mid() const;
+    void setMid(const QByteArray& mid);
+    QByteArray high() const;
+    void setHigh(const QByteArray& high);
+    QColor lowColor() const;
+    void setLowColor(const QColor& color);
+    QColor midColor() const;
+    void setMidColor(const QColor& color);
+    QColor highColor() const;
+    void setHighColor(const QColor& color);
 
 signals:
     void peaksChanged();
     void waveformColorChanged();
-    void spectralIndexChanged();
-    void spectralPaletteChanged();
+    void bassChanged();
+    void midChanged();
+    void highChanged();
+    void lowColorChanged();
+    void midColorChanged();
+    void highColorChanged();
 
 protected:
     void geometryChange(const QRectF& newGeometry,
@@ -48,12 +64,16 @@ private:
     void markGeometryDirty();
     void markColorDirty();
     void rebuildGeometry(QSGNode* sceneNode);
+    void recolorGeometry(QSGNode* sceneNode);
 
     QByteArray peaks_;
     QColor waveformColor_ = Qt::white;
-    QByteArray spectralIndex_;
-    QVariantList spectralPalette_;
-    QVector<QColor> spectralColors_;
+    QByteArray bass_;
+    QByteArray mid_;
+    QByteArray high_;
+    QColor lowColor_ = QColor(QStringLiteral("#8B3DFF"));
+    QColor midColor_ = QColor(QStringLiteral("#FFB000"));
+    QColor highColor_ = QColor(QStringLiteral("#002FA7"));
     bool geometryDirty_ = true;
     bool colorDirty_ = true;
 };

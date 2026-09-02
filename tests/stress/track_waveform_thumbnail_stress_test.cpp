@@ -59,8 +59,11 @@ void TrackWaveformThumbnailStressTest::keepsTenThousandLogicalRowsBoundedToVisib
     QVERIFY(QDir().mkpath(cacheDirectory));
     agplayer::WaveformCacheData data;
     data.mix.assign(256U, 0.5F);
+    data.bass.assign(256U, 0.25F);
+    data.mid.assign(256U, 0.40F);
+    data.high.assign(256U, 0.10F);
     const QString existingCache = cachePath(cacheDirectory, sourcePath);
-    QVERIFY(agplayer::WaveformCache::save_v2(
+    QVERIFY(agplayer::WaveformCache::save_v4(
         filesystemPath(existingCache), filesystemPath(sourcePath), data));
     QFile cacheFile(existingCache);
     QVERIFY(cacheFile.open(QIODevice::ReadOnly));

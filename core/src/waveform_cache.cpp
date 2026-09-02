@@ -32,15 +32,15 @@ namespace {
 constexpr std::array<char, 4> cache_magic{'A', 'G', 'W', 'F'};
 constexpr std::uint32_t cache_version_v1 = 1U;
 constexpr std::uint32_t cache_version_v2 = 2U;
-constexpr std::uint32_t cache_version_v3 = 3U;
+constexpr std::uint32_t cache_version_v4 = 4U;
 constexpr std::uint64_t v1_header_size = 32U;
 constexpr std::uint64_t v2_header_size = 88U;
 constexpr std::uint64_t v2_timeline_header_size = 104U;
 constexpr std::uint64_t v2_timeline_metadata_flag = 1U;
-constexpr std::uint64_t v3_header_size = 112U;
+constexpr std::uint64_t v4_header_size = 104U;
 constexpr std::uint64_t fnv_offset = 14'695'981'039'346'656'037ULL;
 constexpr std::uint64_t fnv_prime = 1'099'511'628'211ULL;
-constexpr std::uint32_t analysis_schema_version = 3U;
+constexpr std::uint32_t analysis_schema_version = 4U;
 
 struct SourceMetadata final {
     std::uint64_t size = 0U;
@@ -666,7 +666,7 @@ bool WaveformCache::load_v2(const std::filesystem::path& cache_path,
     }
 }
 
-bool WaveformCache::save_v3(const std::filesystem::path& cache_path,
+bool WaveformCache::save_v4(const std::filesystem::path& cache_path,
                             const std::filesystem::path& source_path,
                             const WaveformCacheData& data) noexcept
 {
@@ -678,8 +678,9 @@ bool WaveformCache::save_v3(const std::filesystem::path& cache_path,
         if (!source_metadata(source_path, source)
             || !validate_layer(data.mix) || !validate_layer(data.bass)
             || !validate_layer(data.mid) || !validate_layer(data.high)
-            || (!data.spectral_index.empty()
-                && data.spectral_index.size() != data.mix.size())) {
+            || data.mix.empty() || data.bass.size() != data.mix.size()
+            || data.mid.size() != data.mix.size()
+            || data.high.size() != data.mix.size()) {
             return false;
         }
         for (const auto& cue : data.cues) {
@@ -692,7 +693,6 @@ bool WaveformCache::save_v3(const std::filesystem::path& cache_path,
         const std::uint64_t bass_count = data.bass.size();
         const std::uint64_t mid_count = data.mid.size();
         const std::uint64_t high_count = data.high.size();
-        const std::uint64_t spectral_count = data.spectral_index.size();
         const std::uint64_t cue_count = data.cues.size();
         const std::uint64_t max_floats =
             std::numeric_limits<std::uint64_t>::max() / sizeof(float);
@@ -708,14 +708,13 @@ bool WaveformCache::save_v3(const std::filesystem::path& cache_path,
         output.write(cache_magic.data(),
                      static_cast<std::streamsize>(cache_magic.size()));
         if (!output
-            || !write_little_endian(output, cache_version_v3)
+            || !write_little_endian(output, cache_version_v4)
             || !write_little_endian(output, source.size)
             || !write_little_endian(output, source.mtime_ns)
             || !write_little_endian(output, mix_count)
             || !write_little_endian(output, bass_count)
             || !write_little_endian(output, mid_count)
             || !write_little_endian(output, high_count)
-            || !write_little_endian(output, spectral_count)
             || !write_double(output, data.bpm)
             || !write_little_endian(output, cue_count)
             || !write_little_endian(output, v2_timeline_metadata_flag)
@@ -730,11 +729,6 @@ bool WaveformCache::save_v3(const std::filesystem::path& cache_path,
             output.close();
             std::filesystem::remove(temp_path, cleanup_error);
             return false;
-        }
-        if (!data.spectral_index.empty()) {
-            output.write(
-                reinterpret_cast<const char*>(data.spectral_index.data()),
-                static_cast<std::streamsize>(data.spectral_index.size()));
         }
         for (const auto& cue : data.cues) {
             if (!write_little_endian(output, cue.position_ms)
@@ -765,7 +759,7 @@ bool WaveformCache::save_v3(const std::filesystem::path& cache_path,
     }
 }
 
-bool WaveformCache::load_v3(const std::filesystem::path& cache_path,
+bool WaveformCache::load_v4(const std::filesystem::path& cache_path,
                             const std::filesystem::path& source_path,
                             WaveformCacheData& data) noexcept
 {
@@ -778,7 +772,7 @@ bool WaveformCache::load_v3(const std::filesystem::path& cache_path,
         std::error_code error;
         const std::uintmax_t file_size =
             std::filesystem::file_size(cache_path, error);
-        if (error || file_size < v3_header_size) {
+        if (error || file_size < v4_header_size) {
             return false;
         }
         std::ifstream input(cache_path, std::ios::binary);
@@ -791,7 +785,6 @@ bool WaveformCache::load_v3(const std::filesystem::path& cache_path,
         std::uint64_t bass_count = 0U;
         std::uint64_t mid_count = 0U;
         std::uint64_t high_count = 0U;
-        std::uint64_t spectral_count = 0U;
         double bpm = 0.0;
         std::uint64_t cue_count = 0U;
         std::uint64_t flags = 0U;
@@ -806,19 +799,19 @@ bool WaveformCache::load_v3(const std::filesystem::path& cache_path,
             || !read_little_endian(input, bass_count)
             || !read_little_endian(input, mid_count)
             || !read_little_endian(input, high_count)
-            || !read_little_endian(input, spectral_count)
             || !read_double(input, bpm)
             || !read_little_endian(input, cue_count)
             || !read_little_endian(input, flags)
             || !read_little_endian(input, duration_ms)
             || !read_little_endian(input, total_samples)
             || !read_little_endian(input, sample_rate)
-            || version != cache_version_v3 || source_size != source.size
+            || version != cache_version_v4 || source_size != source.size
             || source_mtime != source.mtime_ns
             || flags != v2_timeline_metadata_flag
             || !std::isfinite(bpm)
             || sample_rate > std::numeric_limits<std::uint32_t>::max()
-            || (spectral_count != 0U && spectral_count != mix_count)) {
+            || mix_count == 0U || bass_count != mix_count
+            || mid_count != mix_count || high_count != mix_count) {
             return false;
         }
         const std::uint64_t max_count =
@@ -833,10 +826,8 @@ bool WaveformCache::load_v3(const std::filesystem::path& cache_path,
         const std::uint64_t float_bytes =
             (mix_count + bass_count + mid_count + high_count) * sizeof(float);
         if (float_bytes > std::numeric_limits<std::uint64_t>::max()
-                                - v3_header_size
-            || spectral_count > std::numeric_limits<std::uint64_t>::max()
-                                    - v3_header_size - float_bytes
-            || file_size < v3_header_size + float_bytes + spectral_count) {
+                                - v4_header_size
+            || file_size < v4_header_size + float_bytes) {
             return false;
         }
 
@@ -851,16 +842,8 @@ bool WaveformCache::load_v3(const std::filesystem::path& cache_path,
             || !read_layer(input, high_count, loaded.high)) {
             return false;
         }
-        loaded.spectral_index.resize(static_cast<std::size_t>(spectral_count));
-        if (spectral_count > 0U) {
-            input.read(reinterpret_cast<char*>(loaded.spectral_index.data()),
-                       static_cast<std::streamsize>(spectral_count));
-            if (!input) {
-                return false;
-            }
-        }
         const std::uint64_t payload_bytes =
-            v3_header_size + float_bytes + spectral_count;
+            v4_header_size + float_bytes;
         const std::uint64_t remaining =
             static_cast<std::uint64_t>(file_size) - payload_bytes;
         if (cue_count > remaining / 9U) {

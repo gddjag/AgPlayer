@@ -609,12 +609,11 @@ Item {
                     cursorPosition: -1
                     pointerInteractionEnabled: false
                     visualMode: 3
-                    baseColor: SettingsController.waveformMode === 0
-                               ? SettingsController.waveformSolidBaseColor
-                               : SettingsController.waveformRgbBaseColor
-                    spectralPalette: root.frequencyWaveformSettings.palette
-                    spectralUnplayedOpacity:
-                        Theme.nonImmersiveSpectralUnplayedOpacity
+                    baseColor: SettingsController.waveformRgbBaseColor
+                    lowColor: root.frequencyWaveformSettings.lowColor
+                    midColor: root.frequencyWaveformSettings.midColor
+                    highColor: root.frequencyWaveformSettings.highColor
+                    frequencyUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
                     amplitudeScale: SettingsController.waveformHeight
                     density: SettingsController.waveformDensity
                     lineWidth: SettingsController.waveformThickness
@@ -779,12 +778,11 @@ Item {
                 cursorPosition: -1
                 pointerInteractionEnabled: false
                 visualMode: 3
-                baseColor: SettingsController.waveformMode === 0
-                           ? SettingsController.waveformSolidBaseColor
-                           : SettingsController.waveformRgbBaseColor
-                spectralPalette: root.frequencyWaveformSettings.palette
-                spectralUnplayedOpacity:
-                    Theme.nonImmersiveSpectralUnplayedOpacity
+                baseColor: SettingsController.waveformRgbBaseColor
+                lowColor: root.frequencyWaveformSettings.lowColor
+                midColor: root.frequencyWaveformSettings.midColor
+                highColor: root.frequencyWaveformSettings.highColor
+                frequencyUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
                 amplitudeScale: Math.max(
                                     0.9,
                                     SettingsController.waveformHeight * 1.25)

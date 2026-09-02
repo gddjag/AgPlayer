@@ -693,7 +693,6 @@ TestCase {
             "bass": [0.8, 0.3, 0.6, 0.2],
             "mid": [0.4, 0.7, 0.2, 0.9],
             "high": [0.6, 0.1, 0.9, 0.5],
-            "spectralIndex": [12, 96, 180, 244],
             "_sampleRate": 48000,
             "_totalSamples": 4800000,
             "_peakCount": 4
@@ -719,21 +718,11 @@ TestCase {
         compare(played.gradientStartColor.toString(), base.gradientStartColor.toString())
         compare(played.gradientMiddleColor.toString(), base.gradientMiddleColor.toString())
         compare(played.gradientEndColor.toString(), base.gradientEndColor.toString())
-        compare(base.spectralPalette.length, 8)
-        compare(String(base.spectralPalette[0]),
-                String(frequencySettings.palette[0]))
-        compare(String(played.spectralPalette[7]),
-                String(base.spectralPalette[7]))
-        compare(played.spectralUnplayedOpacity,
-                base.spectralUnplayedOpacity)
-        for (var theme = 0; theme < 3; ++theme) {
-            SettingsController.themeMode = theme
-            wait(0)
-            compare(base.spectralUnplayedOpacity,
-                    Theme.nonImmersiveSpectralUnplayedOpacity)
-            compare(played.spectralUnplayedOpacity,
-                    Theme.nonImmersiveSpectralUnplayedOpacity)
-        }
+        compare(String(base.lowColor), String(frequencySettings.lowColor))
+        compare(String(base.midColor), String(frequencySettings.midColor))
+        compare(String(played.highColor), String(base.highColor))
+        compare(played.frequencyUnplayedOpacity,
+                base.frequencyUnplayedOpacity)
         compare(played.rgbProgress, base.rgbProgress)
         compare(played.amplitudeScale, base.amplitudeScale)
         compare(played.density, base.density)

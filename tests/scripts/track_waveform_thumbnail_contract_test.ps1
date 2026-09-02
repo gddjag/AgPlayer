@@ -31,7 +31,10 @@ $cacheOnlyBoundaryText = $allText + "`n" + $cacheText
 
 $required = @(
     'WaveformCache::key_for\s*\(',
-    'WaveformCache::load_v2\s*\('
+    'WaveformCache::load_v4\s*\(',
+    'quantizeBandEnergy\s*\(data\.bass,\s*data\.mix\)',
+    'quantizeBandEnergy\s*\(data\.mid,\s*data\.mix\)',
+    'quantizeBandEnergy\s*\(data\.high,\s*data\.mix\)'
 )
 foreach ($pattern in $required) {
     if ($providerText -notmatch $pattern) {

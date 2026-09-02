@@ -67,10 +67,12 @@ QtObject {
         layers = ({})
         durationMs = 0
         publishVisualTiming()
+        if (!active)
+            return
         if (!path || path.length === 0)
             return
         generation = WaveformProvider.loadForTrack(
-                    PlaybackController.currentTrackId, path)
+                    PlaybackController.currentTrackId, path, true)
         WaveformProvider.prefetchTracks(neighbors)
     }
 
@@ -109,4 +111,13 @@ QtObject {
         target: SettingsController
         function onWaveformPeakAlgorithmChanged() { root.loadWaveform() }
     }
+
+    onActiveChanged: {
+        if (active) {
+            loadWaveform()
+        } else {
+            frequencyReady = false
+        }
+    }
+
 }

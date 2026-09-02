@@ -18,7 +18,6 @@ struct WaveformCacheData final {
     std::vector<float> bass;
     std::vector<float> mid;
     std::vector<float> high;
-    std::vector<std::uint8_t> spectral_index;
     double bpm = 0.0;
     std::uint64_t duration_ms = 0U;
     std::uint64_t total_samples = 0U;
@@ -55,13 +54,13 @@ public:
         const std::filesystem::path& source_path,
         const WaveformCacheData& data) noexcept;
 
-    // v3: v2 payload plus one-byte-per-point SpectralIndex. Empty spectral
-    // data is valid for plain/RGB waveform caches.
-    [[nodiscard]] static bool load_v3(
+    // v4: one complete amplitude + Low/Mid/High payload using the current
+    // 250 Hz / 4 kHz analysis schema.
+    [[nodiscard]] static bool load_v4(
         const std::filesystem::path& cache_path,
         const std::filesystem::path& source_path,
         WaveformCacheData& data) noexcept;
-    [[nodiscard]] static bool save_v3(
+    [[nodiscard]] static bool save_v4(
         const std::filesystem::path& cache_path,
         const std::filesystem::path& source_path,
         const WaveformCacheData& data) noexcept;
