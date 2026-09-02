@@ -8,8 +8,8 @@ ApplicationWindow {
     id: mainWindow
     objectName: "mainWindow"
     visible: true
-    width: 960
-    height: 298
+    width: 863
+    height: 266
     minimumWidth: SettingsController.playerShellMode === 1 ? 1180
                   : SettingsController.playerShellMode === 2 ? 1000 : 612
     minimumHeight: SettingsController.playerShellMode === 1 ? 720

@@ -5010,8 +5010,8 @@ TestCase {
     }
 
     function test_empty_library_uses_the_normal_player_structure() {
-        compare(mainWindow.width, 960)
-        compare(mainWindow.height, 298)
+        compare(mainWindow.width, 863)
+        compare(mainWindow.height, 266)
 
         var pane = findChild(mainWindow, "playerPane")
         var controls = findChild(mainWindow, "playerControls")

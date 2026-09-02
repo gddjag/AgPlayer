@@ -80,6 +80,7 @@ private slots:
     void mainMaximizeHidesOnlyDockedList();
     void geometryDockAndPinStatePersist();
     void legacyMiniGeometryMigratesToReferenceDefault();
+    void persistedClassicGeometrySurvivesReferenceDefaultChange();
     void shellModesPersistIndependentMainWindowGeometry();
     void classicAndRollingListWindowStateRemainIndependent();
     void switchingBackWithoutClassicGeometryUsesCompactDefault();
@@ -646,7 +647,7 @@ void WindowControllerTest::switchingBackWithoutClassicGeometryUsesCompactDefault
     windows.setMainWindowShellMode(0);
 
     QCOMPARE(mainWindow.size(),
-             QSize(960, 298).boundedTo(
+             QSize(863, 266).boundedTo(
                  mainWindow.screen()->availableGeometry().size()));
 }
 
@@ -1833,6 +1834,22 @@ void WindowControllerTest::legacyMiniGeometryMigratesToReferenceDefault()
     windows.setWindows(&mainWindow, &miniWindow);
 
     QCOMPARE(miniWindow.size(), QSize(588, 186));
+}
+
+void WindowControllerTest::persistedClassicGeometrySurvivesReferenceDefaultChange()
+{
+    const QRect userGeometry(42, 84, 733, 347);
+    QSettings settings;
+    settings.setValue(QStringLiteral("windows/mainGeometry"), userGeometry);
+    settings.sync();
+
+    QWindow mainWindow;
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+
+    QCOMPARE(mainWindow.geometry(), userGeometry);
+    QCOMPARE(QSettings().value(QStringLiteral("windows/mainGeometry")).toRect(),
+             userGeometry);
 }
 
 void WindowControllerTest::restoredGeometryBalancesMinimumAndAvailableScreen()

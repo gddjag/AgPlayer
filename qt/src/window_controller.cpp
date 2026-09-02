@@ -150,7 +150,7 @@ void WindowController::setWindows(QWindow* mainWindow, QWindow* miniWindow)
             // remain untouched while the new compact first-run geometry wins.
             if (geometry.size() == QSize(1036, 321)
                 || geometry.size() == QSize(1228, 380)) {
-                geometry.setSize(QSize(960, 298));
+                geometry.setSize(QSize(863, 266));
                 settings_.setValue(mainGeometryKey, geometry);
             }
             settings_.setValue(mainGeometryVersionKey, 2);
@@ -1504,7 +1504,7 @@ bool WindowController::restoreMainWindowGeometry(QWindow* window,
     const QRect available = screen->availableGeometry();
     const QSize preferred = mainWindowShellMode_ == 1
         ? QSize(1672, 941)
-        : mainWindowShellMode_ == 2 ? QSize(1440, 480) : QSize(960, 298);
+        : mainWindowShellMode_ == 2 ? QSize(1440, 480) : QSize(863, 266);
     const QSize size = preferred.boundedTo(available.size());
     QRect geometry(QPoint(), size);
     geometry.moveCenter(available.center());
