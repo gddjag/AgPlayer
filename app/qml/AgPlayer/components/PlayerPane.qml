@@ -39,6 +39,7 @@ Rectangle {
     }
     property int libraryRevision: 0
 
+
     function currentRow(): int {
         return LibraryModel.indexForTrackId(PlaybackController.currentTrackId)
     }
@@ -509,7 +510,8 @@ Rectangle {
                                      : SettingsController.spectrumRgbEndColor)
                                   : SettingsController.waveformRgbEndColor
                 spectralPalette: root.frequencyWaveformSettings.palette
-                spectralUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
+                spectralUnplayedOpacity:
+                    Theme.nonImmersiveSpectralUnplayedOpacity
                 rgbProgress: SettingsController.waveformMode === 1
                              && SettingsController.waveformRgbProgress
                 amplitudeScale: SettingsController.waveformMode === 2
@@ -549,7 +551,8 @@ Rectangle {
                     gradientMiddleColor: waveform.gradientMiddleColor
                     gradientEndColor: waveform.gradientEndColor
                     spectralPalette: root.frequencyWaveformSettings.palette
-                    spectralUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
+                    spectralUnplayedOpacity:
+                        Theme.nonImmersiveSpectralUnplayedOpacity
                     rgbProgress: waveform.rgbProgress
                     amplitudeScale: waveform.amplitudeScale
                     density: waveform.density

@@ -15,6 +15,25 @@ QtObject {
                                          : (mode === 1 ? 1 : 0)
     readonly property bool isLight: effectiveMode === 1
 
+    // Waveform progress contrast is a presentation token, not a theme color.
+    // Keeping it here gives every non-immersive shell one lightweight policy
+    // without instantiating an otherwise hidden waveform renderer.
+    readonly property real nonImmersiveSpectralUnplayedOpacity:
+        Math.min(0.60, Number(Runtime.SettingsController
+                              .frequencyColorWaveform.unplayedOpacity))
+
+    function waveformProgressFraction(positionMs, durationMs) {
+        var duration = Number(durationMs || 0)
+        if (duration <= 0)
+            return 0
+        return Math.max(0, Math.min(1, Number(positionMs || 0) / duration))
+    }
+
+    function waveformProgressClipWidth(availableWidth, positionMs, durationMs) {
+        return Math.max(0, Number(availableWidth || 0))
+                * waveformProgressFraction(positionMs, durationMs)
+    }
+
     // Fixed three-mode palette. Custom seeds, generated gradients and glass
     // derivation are intentionally absent.
     readonly property color background: isLight ? "#F3F3F3" : "#071018"

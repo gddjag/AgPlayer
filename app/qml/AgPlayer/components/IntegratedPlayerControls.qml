@@ -10,6 +10,7 @@ Item {
     property real leftReservedWidth: 0
     readonly property bool denseLayout: width < 1440
     readonly property real actionSpacing: denseLayout ? 6 : 10
+    readonly property var actionProfile: lyricsActions.actionOrder
     signal openEqualizerRequested()
     signal togglePlaylistRequested()
     anchors.fill: parent
@@ -81,6 +82,7 @@ Item {
             height: implicitHeight
             showImmersive: false
             showLyrics: true
+            profile: "integrated"
         }
 
         PlayerVolumeControl {
@@ -116,6 +118,7 @@ Item {
         }
         ExperienceActions {
             objectName: "immersiveExperienceActions"
+            anchors.verticalCenter: parent.verticalCenter
             showImmersive: true
             showLyrics: false
         }
@@ -137,9 +140,10 @@ Item {
     Menu {
         id: playerShellMenu
         objectName: "playerShellMenu"
-        x: Math.max(0, themeModeButton.mapToItem(root, 0, 0).x
-                    + themeModeButton.width / 2 - width / 2)
-        y: Math.max(0, themeModeButton.mapToItem(root, 0, 0).y - height)
+        x: lyricsActions.popupX(themeModeButton, playerShellMenu, root,
+                                root.Window.window.contentItem)
+        y: lyricsActions.popupY(themeModeButton, playerShellMenu, root,
+                                root.Window.window.contentItem)
 
         MenuItem {
             objectName: "classicShellMenuItem"

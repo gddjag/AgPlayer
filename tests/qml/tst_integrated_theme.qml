@@ -768,6 +768,25 @@ TestCase {
         wait(20)
     }
 
+    function test_integrated_reference_action_profile_includes_playlist_and_lyrics() {
+        var shell = enterIntegratedShell()
+        mainWindow.width = 1672
+        wait(20)
+        var controls = findChild(shell, "integratedPlayerControls")
+        verify(controls)
+        compare(controls.actionProfile.join(","),
+                "listWindowButton,audioToolsButton,equalizerButton,waveformModeButton,previousButton,playPauseButton,nextButton,modeButton,lyricsActionButton,mainVolumeControl,themeModeButton,immersiveActionButton,miniPlayerButton")
+        var names = controls.actionProfile
+        var previousX = -1
+        for (var index = 0; index < names.length; ++index) {
+            var action = findChild(controls, names[index])
+            verify(action && action.visible, "missing " + names[index])
+            var actionX = action.mapToItem(controls, 0, 0).x
+            verify(actionX > previousX, names[index] + " is out of order")
+            previousX = actionX
+        }
+    }
+
     function test_shell_switch_is_removed_from_transport() {
         var shell = enterIntegratedShell()
         compare(findChild(shell, "playerShellModeButton"), null)

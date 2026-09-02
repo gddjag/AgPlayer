@@ -103,15 +103,26 @@ TestCase {
         }
     }
 
-    function test_mini_player_control_order_excludes_experience_actions() {
+    function test_mini_player_control_order_starts_with_theme_then_waveform() {
         var controls = findChild(miniPlayer, "miniPlayerControls")
         verify(controls)
         verifyAscendingX(controls, [
-            "miniWaveformModeButton", "miniPreviousButton", "miniPlayPauseButton",
+            "miniThemeModeButton", "miniWaveformModeButton",
+            "miniPreviousButton", "miniPlayPauseButton",
             "miniNextButton", "miniModeButton", "miniMuteButton"
         ])
         verify(findChild(controls, "lyricsActionButton") === null)
         verify(findChild(controls, "immersiveActionButton") === null)
+    }
+
+    function test_mini_waveform_is_clipped_to_its_container() {
+        var controls = findChild(miniPlayer, "miniPlayerControls")
+        var container = findChild(controls, "miniWaveformContainer")
+        var waveform = findChild(controls, "miniWaveform")
+        verify(container && waveform)
+        compare(container.clip, true)
+        verify(waveform.x >= 0)
+        verify(waveform.x + waveform.width <= container.width + 0.5)
     }
 
     function test_mini_and_main_share_state() {
@@ -180,7 +191,7 @@ TestCase {
         compare(String(waveform.spectralPalette[7]),
                 String(frequencySettings.palette[7]))
         compare(waveform.spectralUnplayedOpacity,
-                frequencySettings.unplayedOpacity)
+                Theme.nonImmersiveSpectralUnplayedOpacity)
         compare(clip.visible, false,
                 "frequency overlays must not be drawn twice in the played region")
         SettingsController.waveformPlaybackGuide = true

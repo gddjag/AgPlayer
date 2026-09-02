@@ -38,6 +38,7 @@ private slots:
     void buildsCenteredFiniteNormalizedLinePairs();
     void spectralModeUsesAmplitudeGeometryAndCentroidPalette();
     void spectralPaletteChangeDoesNotReplaceGeometryNode();
+    void spectralProgressUpdatesAlphaWithoutReplacingGeometry();
     void reusesNodeAndUpdatesGeometryAfterResize();
     void clearsOldNodeForEmptyOrZeroSizedContent();
     void hoverUpdatesPreviewWithoutSeeking();
@@ -312,6 +313,41 @@ void WaveformItemTest::spectralPaletteChangeDoesNotReplaceGeometryNode()
     QCOMPARE(geometry->vertexData(), vertexStorage);
     compareColor(vertices(updated)[0], 255, 0, 0, 224);
     delete updated;
+}
+
+void WaveformItemTest::spectralProgressUpdatesAlphaWithoutReplacingGeometry()
+{
+    TestableWaveformItem item;
+    item.setWidth(1000);
+    item.setHeight(48);
+    item.setDuration(100000);
+    item.setVisualMode(3);
+    item.setSpectralUnplayedOpacity(0.60);
+    item.setSpectralPalette({QStringLiteral("#ff0000"),
+                             QStringLiteral("#00ff00")});
+    item.setLayers(makeLayers(peaks({1.0, 0.8, 0.6, 0.4}), {}, {}, {},
+                              peaks({0, 85, 170, 255})));
+
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node != nullptr);
+    auto* geometry = static_cast<QSGGeometryNode*>(node)->geometry();
+    const void* vertexStorage = geometry->vertexData();
+
+    const QList<qreal> progressValues{0.0, 0.001, 0.5, 0.999, 1.0};
+    for (const qreal progress : progressValues) {
+        item.setPosition(progress * item.duration());
+        node = item.updatePaintNode(node, nullptr);
+        QCOMPARE(static_cast<QSGGeometryNode*>(node)->geometry(), geometry);
+        QCOMPARE(geometry->vertexData(), vertexStorage);
+    }
+
+    item.setPosition(0);
+    node = item.updatePaintNode(node, nullptr);
+    QCOMPARE(static_cast<int>(vertices(node)[0].a), 153);
+    item.setPosition(item.duration());
+    node = item.updatePaintNode(node, nullptr);
+    QCOMPARE(static_cast<int>(vertices(node)[0].a), 255);
+    delete node;
 }
 
 void WaveformItemTest::onePixelWaveformLeavesTheCanvasEdgeClear()

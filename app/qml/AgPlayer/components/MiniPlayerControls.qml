@@ -227,8 +227,10 @@ Rectangle {
                 Item { Layout.fillWidth: true }
             }
             Item {
+                objectName: "miniWaveformContainer"
                 Layout.fillWidth: true
                 Layout.preferredHeight: 50
+                clip: true
                 WaveformItem {
                     id: waveform
                     objectName: "miniWaveform"
@@ -261,7 +263,8 @@ Rectangle {
                                          : SettingsController.spectrumRgbEndColor)
                                       : SettingsController.waveformRgbEndColor
                     spectralPalette: root.frequencyWaveformSettings.palette
-                    spectralUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
+                    spectralUnplayedOpacity:
+                        Theme.nonImmersiveSpectralUnplayedOpacity
                     rgbProgress: SettingsController.waveformMode === 1
                                  && SettingsController.waveformRgbProgress
                     amplitudeScale: SettingsController.waveformMode === 2
@@ -296,7 +299,8 @@ Rectangle {
                         gradientMiddleColor: waveform.gradientMiddleColor
                         gradientEndColor: waveform.gradientEndColor
                         spectralPalette: root.frequencyWaveformSettings.palette
-                        spectralUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
+                        spectralUnplayedOpacity:
+                            Theme.nonImmersiveSpectralUnplayedOpacity
                         rgbProgress: waveform.rgbProgress
                         amplitudeScale: waveform.amplitudeScale
                         density: waveform.density
@@ -331,6 +335,32 @@ Rectangle {
                 objectName: "miniTransport"
                 Layout.fillWidth: true; Layout.fillHeight: true; spacing: 3
                 Item { Layout.fillWidth: true }
+                ExperienceActions {
+                    id: miniActionRegistry
+                    visible: false
+                    profile: "mini"
+                    showLyrics: false
+                    showImmersive: false
+                    Layout.preferredWidth: 0
+                    Layout.preferredHeight: 0
+                }
+                ToolButton {
+                    id: themeModeButton
+                    objectName: "miniThemeModeButton"
+                    Layout.preferredWidth: 28
+                    Layout.minimumWidth: Layout.preferredWidth
+                    Layout.maximumWidth: Layout.preferredWidth
+                    Layout.preferredHeight: 28
+                    icon.source: Theme.icon("theme-skin")
+                    icon.color: Theme.iconPrimary
+                    icon.width: 16
+                    icon.height: 16
+                    Accessible.name: qsTr("切换主题")
+                    ToolTip.text: Accessible.name
+                    ToolTip.visible: hovered
+                    onClicked: miniPlayerShellMenu.open()
+                    background: null
+                }
                 ToolButton {
                     id: waveformModeButton
                     objectName: "miniWaveformModeButton"
@@ -503,6 +533,34 @@ Rectangle {
                 }
                 Item { Layout.fillWidth: true }
             }
+        }
+    }
+
+    Menu {
+        id: miniPlayerShellMenu
+        objectName: "miniPlayerShellMenu"
+        x: miniActionRegistry.popupX(themeModeButton, miniPlayerShellMenu,
+                                    root, root.Window.window.contentItem)
+        y: miniActionRegistry.popupY(themeModeButton, miniPlayerShellMenu,
+                                    root, root.Window.window.contentItem)
+
+        MenuItem {
+            text: qsTr("经典双窗口")
+            checkable: true
+            checked: SettingsController.playerShellMode === 0
+            onTriggered: SettingsController.playerShellMode = 0
+        }
+        MenuItem {
+            text: qsTr("集成单窗口")
+            checkable: true
+            checked: SettingsController.playerShellMode === 1
+            onTriggered: SettingsController.playerShellMode = 1
+        }
+        MenuItem {
+            text: qsTr("滚动播放模式")
+            checkable: true
+            checked: SettingsController.playerShellMode === 2
+            onTriggered: SettingsController.playerShellMode = 2
         }
     }
 

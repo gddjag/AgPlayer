@@ -15,6 +15,7 @@ Rectangle {
     readonly property bool rollingLayout: shellMode === 2
     readonly property bool compactTransport: width < 860
     readonly property bool denseTransport: width < 1200
+    readonly property var actionProfile: lyricsActions.actionOrder
 
     signal openEqualizerRequested()
     signal toggleEmbeddedPlaylistRequested()
@@ -104,6 +105,7 @@ Rectangle {
         height: implicitHeight
         showImmersive: false
         showLyrics: true
+        profile: root.rollingLayout ? "rolling" : "classic"
     }
 
     PlayerVolumeControl {
@@ -149,6 +151,7 @@ Rectangle {
         ExperienceActions {
             objectName: "immersiveExperienceActions"
             visible: !root.compactTransport
+            anchors.verticalCenter: parent.verticalCenter
             compact: root.denseTransport
             width: implicitWidth
             height: implicitHeight
@@ -177,9 +180,10 @@ Rectangle {
     Menu {
         id: playerShellMenu
         objectName: "playerShellMenu"
-        x: Math.max(0, themeModeButton.mapToItem(root, 0, 0).x
-                    + themeModeButton.width / 2 - width / 2)
-        y: Math.max(0, themeModeButton.mapToItem(root, 0, 0).y - height)
+        x: lyricsActions.popupX(themeModeButton, playerShellMenu, root,
+                                root.Window.window.contentItem)
+        y: lyricsActions.popupY(themeModeButton, playerShellMenu, root,
+                                root.Window.window.contentItem)
 
         MenuItem {
             objectName: "classicShellMenuItem"

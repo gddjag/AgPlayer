@@ -24,6 +24,7 @@ Item {
     property bool waveformFrequencyReady: false
     readonly property var frequencyWaveformSettings:
         SettingsController.frequencyColorWaveform
+
     property Component bottomBarComponent: null
     property alias tagSearchText: sidePanelColumn.tagSearchText
     property var hostWindow: null
@@ -386,7 +387,8 @@ Item {
                                      : SettingsController.spectrumRgbEndColor)
                                   : SettingsController.waveformRgbEndColor
                 spectralPalette: root.frequencyWaveformSettings.palette
-                spectralUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
+                spectralUnplayedOpacity:
+                    Theme.nonImmersiveSpectralUnplayedOpacity
                 rgbProgress: SettingsController.waveformMode === 1
                              && SettingsController.waveformRgbProgress
                 amplitudeScale: SettingsController.waveformHeight
@@ -422,7 +424,8 @@ Item {
                     gradientMiddleColor: waveform.gradientMiddleColor
                     gradientEndColor: waveform.gradientEndColor
                     spectralPalette: root.frequencyWaveformSettings.palette
-                    spectralUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
+                    spectralUnplayedOpacity:
+                        Theme.nonImmersiveSpectralUnplayedOpacity
                     rgbProgress: waveform.rgbProgress
                     amplitudeScale: waveform.amplitudeScale
                     density: waveform.density

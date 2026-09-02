@@ -79,6 +79,7 @@ Item {
         || (SettingsController.themeMode === 2 && Theme.isLight)
     readonly property var frequencyWaveformSettings:
         SettingsController.frequencyColorWaveform
+
     readonly property var metadataBadges: {
         var revision = libraryTrackRevision
         var track = currentTrack
@@ -595,7 +596,8 @@ Item {
                                ? SettingsController.waveformSolidBaseColor
                                : SettingsController.waveformRgbBaseColor
                     spectralPalette: root.frequencyWaveformSettings.palette
-                    spectralUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
+                    spectralUnplayedOpacity:
+                        Theme.nonImmersiveSpectralUnplayedOpacity
                     amplitudeScale: SettingsController.waveformHeight
                     density: SettingsController.waveformDensity
                     lineWidth: SettingsController.waveformThickness
@@ -626,7 +628,7 @@ Item {
                         baseColor: overviewWaveform.baseColor
                         spectralPalette: overviewWaveform.spectralPalette
                         spectralUnplayedOpacity:
-                            overviewWaveform.spectralUnplayedOpacity
+                            Theme.nonImmersiveSpectralUnplayedOpacity
                         amplitudeScale: overviewWaveform.amplitudeScale
                         density: overviewWaveform.density
                         lineWidth: overviewWaveform.lineWidth
@@ -747,7 +749,8 @@ Item {
                            ? SettingsController.waveformSolidBaseColor
                            : SettingsController.waveformRgbBaseColor
                 spectralPalette: root.frequencyWaveformSettings.palette
-                spectralUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
+                spectralUnplayedOpacity:
+                    Theme.nonImmersiveSpectralUnplayedOpacity
                 amplitudeScale: Math.max(
                                     0.9,
                                     SettingsController.waveformHeight * 1.25)
@@ -895,7 +898,7 @@ Item {
                     Layout.fillHeight: true
                     shellMode: 2
                     centerTransport: false
-                    showWaveformMode: false
+                    showWaveformMode: true
                     onOpenEqualizerRequested:
                         root.openEqualizerRequested()
                 }

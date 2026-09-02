@@ -264,7 +264,8 @@ TestCase {
         for (var mode = 0; mode < 3; ++mode) {
             var names = mode === 2
                     ? ["previousButton", "playPauseButton", "nextButton",
-                       "modeButton", "equalizerButton", "audioToolsButton",
+                       "modeButton", "waveformModeButton", "equalizerButton",
+                       "audioToolsButton",
                        "themeModeButton", "immersiveActionButton",
                        "miniPlayerButton", "mainVolumeControl"]
                     : ["listWindowButton", "audioToolsButton",
@@ -298,8 +299,8 @@ TestCase {
             }
             var waveformMode = findChild(controls, "waveformModeButton")
             verify(waveformMode)
-            compare(waveformMode.visible, mode !== 2,
-                    "rolling mode fixes the renderer to spectral waveform")
+            compare(waveformMode.visible, true,
+                    "every player shell exposes the shared waveform action")
             compare(findChild(controls, "listWindowButton").visible, mode !== 2,
                     "rolling always exposes its ten-row list and needs no toggle")
             compare(findChild(controls, "lyricsActionButton").visible,
@@ -490,7 +491,7 @@ TestCase {
 
         SettingsController.themeMode = 1
         tryCompare(overview, "spectralUnplayedOpacity",
-                   rolling.frequencyWaveformSettings.unplayedOpacity)
+                   Theme.nonImmersiveSpectralUnplayedOpacity)
         compare(String(overview.spectralPalette[0]), first)
         compare(String(mainWaveform.spectralPalette[7]), last)
         SettingsController.themeMode = 0
@@ -620,7 +621,7 @@ TestCase {
                    minimumWidthSharedActions[actionIndex]
                    + " stays available at the rolling minimum width")
         }
-        compare(findChild(controls, "waveformModeButton").visible, false)
+        compare(findChild(controls, "waveformModeButton").visible, true)
         compare(findChild(controls, "listWindowButton").visible, false)
         var transport = findChild(controls, "centerPlaybackControls")
         verify(transport)

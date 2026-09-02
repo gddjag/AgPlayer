@@ -13,6 +13,19 @@ Item {
         waveformSession && Number(waveformSession.durationMs) > 0
         ? Number(waveformSession.durationMs)
         : playback && playback.durationMs > 0 ? playback.durationMs : 0
+    // Non-immersive players share a contrast floor across every theme. The
+    // immersive waveform below deliberately keeps its presentation binding.
+    readonly property real nonImmersiveSpectralUnplayedOpacity:
+        Theme.nonImmersiveSpectralUnplayedOpacity
+
+    function progressFraction(positionMs, durationMs) {
+        return Theme.waveformProgressFraction(positionMs, durationMs)
+    }
+
+    function progressClipWidth(availableWidth, positionMs, durationMs) {
+        return Theme.waveformProgressClipWidth(availableWidth, positionMs,
+                                               durationMs)
+    }
 
     function formatTime(ms) {
         var total = Math.max(0, Math.floor(Number(ms || 0) / 1000))

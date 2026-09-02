@@ -41,17 +41,23 @@ RowLayout {
         ToolTip.text: Accessible.name; ToolTip.visible: hovered
         background: null
     }
-    ToolButton {
-        objectName: "waveformModeButton"
-        visible: root.showWaveformMode && !root.compact
-        flat: true
-        icon.source: Theme.icon("waveform-switch")
-        icon.color: Theme.iconPrimary
-        icon.width: 20; icon.height: 20
-        Accessible.name: qsTr("Change waveform mode")
-        onClicked: SettingsController.cycleWaveformMode()
-        ToolTip.text: Accessible.name; ToolTip.visible: hovered
-        background: null
+    Component {
+        id: waveformModeAction
+        ToolButton {
+            objectName: "waveformModeButton"
+            flat: true
+            icon.source: Theme.icon("waveform-switch")
+            icon.color: Theme.iconPrimary
+            icon.width: 20; icon.height: 20
+            Accessible.name: qsTr("Change waveform mode")
+            onClicked: SettingsController.cycleWaveformMode()
+            ToolTip.text: Accessible.name; ToolTip.visible: hovered
+            background: null
+        }
+    }
+    Loader {
+        active: root.showWaveformMode && !root.compact && !root.rollingOrder
+        sourceComponent: waveformModeAction
     }
     ToolButton {
         objectName: "previousButton"
@@ -140,6 +146,10 @@ RowLayout {
         onClicked: root.playback.cycleMode()
         ToolTip.text: Accessible.name; ToolTip.visible: hovered
         background: null
+    }
+    Loader {
+        active: root.showWaveformMode && !root.compact && root.rollingOrder
+        sourceComponent: waveformModeAction
     }
     ToolButton {
         objectName: "equalizerButton"
