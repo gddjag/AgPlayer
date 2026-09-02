@@ -123,6 +123,21 @@ QList<VocalModelCard> VocalSeparationCatalog::models()
     };
 }
 
+bool isSafeModelId(const QString& id)
+{
+    if (id.isEmpty() || id != id.trimmed() || id.size() > 96
+        || id.startsWith('.') || id.contains(QStringLiteral(".."))) {
+        return false;
+    }
+    for (const QChar character : id) {
+        if (!(character.isLetterOrNumber() || character == QLatin1Char('-')
+              || character == QLatin1Char('_') || character == QLatin1Char('.'))) {
+            return false;
+        }
+    }
+    return true;
+}
+
 QUrl vocalDomesticMirrorUrl(const QUrl& source)
 {
     if (source.scheme() != QStringLiteral("https")
@@ -151,7 +166,8 @@ CustomManifestValidationResult validateCustomModelManifest(const QJsonObject& ma
     static const QSet<QString> fileKeys{
         QStringLiteral("name"), QStringLiteral("bytes"), QStringLiteral("sha256"),
         QStringLiteral("shape")};
-    if (!hasOnlyKeys(manifest, manifestKeys) || manifest.value(QStringLiteral("id")).toString().isEmpty()) {
+    if (!hasOnlyKeys(manifest, manifestKeys)
+        || !isSafeModelId(manifest.value(QStringLiteral("id")).toString())) {
         return reject(QStringLiteral("Manifest contains unsupported fields or has no id"));
     }
     const QString family = manifest.value(QStringLiteral("family")).toString();

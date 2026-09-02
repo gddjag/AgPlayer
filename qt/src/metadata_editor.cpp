@@ -152,6 +152,12 @@ agplayer::MetadataEditPlan planForPayload(const QVariantMap& fields,
                                           const QString& coverMode)
 {
     agplayer::MetadataEditPlan plan;
+    const QString audioPolicy = fields.value(
+        QStringLiteral("audioPolicy"),
+        QStringLiteral("forceVerifiedNormalization")).toString();
+    plan.audio_policy = audioPolicy == QLatin1String("strict")
+        ? agplayer::MetadataAudioPolicy::StrictPacketIdentity
+        : agplayer::MetadataAudioPolicy::ForceVerifiedNormalization;
     static const QStringList supportedKeys{
         QStringLiteral("title"), QStringLiteral("artist"), QStringLiteral("album"),
         QStringLiteral("albumArtist"), QStringLiteral("genre"), QStringLiteral("customTag"),
@@ -920,9 +926,7 @@ void MetadataEditor::startApply(const QVariantMap& fields,
                                       ? QStringLiteral("cancelled")
                                       : QStringLiteral("write"));
                 fileResult.insert(QStringLiteral("message"),
-                                  result == AG_OK
-                                      ? tr("已验证元数据与音频流，已完成替换")
-                                      : QString::fromStdString(writeResult.message));
+                                  QString::fromStdString(writeResult.message));
                 fileResult.insert(QStringLiteral("errorCode"),
                                   static_cast<int>(writeResult.error_code));
                 fileResult.insert(QStringLiteral("resultCode"),
@@ -931,6 +935,10 @@ void MetadataEditor::startApply(const QVariantMap& fields,
                                   writeResult.used_stream_copy);
                 fileResult.insert(QStringLiteral("audioVerifiedUnchanged"),
                                   writeResult.audio_verified_unchanged);
+                fileResult.insert(QStringLiteral("audioEquivalence"),
+                                  static_cast<int>(writeResult.audio_equivalence));
+                fileResult.insert(QStringLiteral("usedForceFallback"),
+                                  writeResult.used_force_fallback);
                 fileResult.insert(QStringLiteral("packetsCopied"),
                                   static_cast<qulonglong>(
                                       writeResult.runtime.packets_copied));

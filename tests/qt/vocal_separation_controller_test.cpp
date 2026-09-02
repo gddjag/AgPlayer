@@ -47,6 +47,33 @@ public:
             .arg(int(controller.verificationPurpose_))
             .toUtf8();
     }
+
+    static void seedDownloadFailure(VocalSeparationController& controller,
+                                    const bool mirrorAttempted)
+    {
+        VocalSeparationController::DownloadItem item;
+        item.file = {QStringLiteral("test.onnx"),
+                     QUrl(QStringLiteral("https://huggingface.co/test.onnx")),
+                     16, QString(64, QLatin1Char('a'))};
+        item.destination = QStringLiteral("unused.onnx");
+        item.mirrorUrl = QUrl(QStringLiteral("https://hf-mirror.com/test.onnx"));
+        item.mirrorAttempted = mirrorAttempted;
+        controller.downloadQueue_ = {item};
+        controller.downloadingModelId_ = QStringLiteral("two-stem");
+        controller.downloadSource_ = mirrorAttempted
+            ? QStringLiteral("国内镜像") : QStringLiteral("官方线路");
+    }
+
+    static void failDownload(VocalSeparationController& controller,
+                             const QString& diagnostic)
+    {
+        controller.handleDownloadFailure({false, diagnostic}, false);
+    }
+
+    static void cancelDownloader(VocalSeparationController& controller)
+    {
+        controller.downloader_->cancel();
+    }
 };
 
 class VocalSeparationControllerTest final : public QObject {
@@ -59,9 +86,11 @@ private slots:
     void historyActionsPreserveReservedUnicodePaths();
     void downloadsMultipleArtifactsSequentiallyThroughTheController();
     void downloadProgressNeverMutatesAnActiveSeparationJob();
+    void downloadFailureRetriesMirrorBeforeReportingExhaustion();
     void installedMappingUsesCheapDiscoveryThenExplicitAsyncHashing();
     void customModelDirectoryPersistsAndRecognizesTrustedFlatFiles();
     void customModelDirectoryIgnoresUnknownFiles();
+    void customSidecarManifestUsesTrustedFingerprintAndReportsRejection();
     void cancellingVerificationImmediatelyRestoresCheapModelStates();
     void deletingDuringRefreshVerificationCannotResurrectTheModel();
     void verificationHashHonorsCancellationBeforeReadingFile();
@@ -1561,6 +1590,137 @@ exportNeverOverwritesAndPlaylistUsesTheRealImportPath()
     QVERIFY(!controller.addStemToPlaylist(
         VocalSeparationController::StemKind::Vocals,
         QStringLiteral("missing-playlist")));
+}
+
+void VocalSeparationControllerTest::
+customSidecarManifestUsesTrustedFingerprintAndReportsRejection()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray trustedBytes("trusted-test-model");
+    const auto options = optionsFor(temporary, QStringLiteral("stale"),
+                                    trustedBytes);
+    const QString customRoot = temporary.filePath(QStringLiteral("自定义模型"));
+    QVERIFY(QDir().mkpath(customRoot));
+    QVERIFY(writeBytes(QDir(customRoot).filePath(QStringLiteral("renamed.onnx")),
+                       trustedBytes));
+    const QJsonObject trustedManifest{
+        {QStringLiteral("id"), QStringLiteral("custom-two-stem")},
+        {QStringLiteral("family"), QStringLiteral("MDX")},
+        {QStringLiteral("stems"), QJsonArray{
+             QStringLiteral("vocals"), QStringLiteral("instrumental")}},
+        {QStringLiteral("files"), QJsonArray{QJsonObject{
+             {QStringLiteral("name"), QStringLiteral("renamed.onnx")},
+             {QStringLiteral("bytes"), trustedBytes.size()},
+             {QStringLiteral("sha256"), sha256(trustedBytes)},
+             {QStringLiteral("shape"), QJsonArray{1, 2, 256}},
+        }}},
+    };
+    QVERIFY(writeBytes(
+        QDir(customRoot).filePath(QStringLiteral("custom-two-stem.json")),
+        QJsonDocument(trustedManifest).toJson(QJsonDocument::Compact)));
+
+    const QByteArray unknownBytes("unknown-model-data");
+    QVERIFY(writeBytes(QDir(customRoot).filePath(QStringLiteral("unknown.onnx")),
+                       unknownBytes));
+    QJsonObject rejectedManifest = trustedManifest;
+    rejectedManifest.insert(QStringLiteral("id"),
+                            QStringLiteral("unknown-profile"));
+    rejectedManifest.insert(QStringLiteral("files"), QJsonArray{QJsonObject{
+        {QStringLiteral("name"), QStringLiteral("unknown.onnx")},
+        {QStringLiteral("bytes"), unknownBytes.size()},
+        {QStringLiteral("sha256"), sha256(unknownBytes)},
+        {QStringLiteral("shape"), QJsonArray{1, 2, 256}},
+    }});
+    QVERIFY(writeBytes(
+        QDir(customRoot).filePath(QStringLiteral("unknown-profile.json")),
+        QJsonDocument(rejectedManifest).toJson(QJsonDocument::Compact)));
+
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.selectModelDirectory(QUrl::fromLocalFile(customRoot)));
+    QTRY_COMPARE_WITH_TIMEOUT(
+        modelStateFor(controller.models(), QStringLiteral("custom-two-stem")),
+        int(VocalSeparationController::ModelState::Installed), 5000);
+    QVERIFY(controller.selectModel(QStringLiteral("custom-two-stem")));
+
+    QVariantMap accepted;
+    for (const QVariant& value : controller.models()) {
+        const QVariantMap model = value.toMap();
+        if (model.value(QStringLiteral("id")).toString()
+            == QStringLiteral("custom-two-stem")) {
+            accepted = model;
+            break;
+        }
+    }
+    QCOMPARE(accepted.value(QStringLiteral("origin")).toString(),
+             QStringLiteral("custom"));
+    QCOMPARE(accepted.value(QStringLiteral("compatibility")).toString(),
+             QStringLiteral("trusted-worker-profile"));
+    QVERIFY(accepted.value(QStringLiteral("profile")).toString().contains(
+        QStringLiteral("mdx"), Qt::CaseInsensitive));
+    QCOMPARE(accepted.value(QStringLiteral("paths")).toStringList(),
+             QStringList{QDir(customRoot).filePath(QStringLiteral("renamed.onnx"))});
+    QCOMPARE(accepted.value(QStringLiteral("hashes")).toStringList(),
+             QStringList{sha256(trustedBytes)});
+    QVERIFY(accepted.value(QStringLiteral("rejectionReason")).toString().isEmpty());
+
+    QVariantMap rejected;
+    for (const QVariant& value : controller.models()) {
+        const QVariantMap model = value.toMap();
+        if (model.value(QStringLiteral("id")).toString()
+            == QStringLiteral("unknown-profile")) {
+            rejected = model;
+            break;
+        }
+    }
+    QVERIFY(!rejected.isEmpty());
+    QCOMPARE(rejected.value(QStringLiteral("state")).toInt(),
+             int(VocalSeparationController::ModelState::ModelFailed));
+    QVERIFY(!rejected.value(QStringLiteral("rejectionReason"))
+                 .toString().isEmpty());
+}
+
+void VocalSeparationControllerTest::
+downloadFailureRetriesMirrorBeforeReportingExhaustion()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray modelBytes("trusted-test-model");
+    const auto options = optionsFor(temporary, QStringLiteral("stale"),
+                                    modelBytes);
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+    QSignalSpy exhausted(
+        &controller, &VocalSeparationController::downloadSourcesExhausted);
+
+    VocalSeparationControllerTestDriver::seedDownloadFailure(controller, false);
+    VocalSeparationControllerTestDriver::failDownload(
+        controller, QStringLiteral("official failed"));
+    QCOMPARE(exhausted.count(), 0);
+    QCOMPARE(controller.downloadSource(), QStringLiteral("国内镜像"));
+    QVERIFY(controller.downloadBusy());
+
+    VocalSeparationControllerTestDriver::failDownload(
+        controller, QStringLiteral("mirror failed"));
+    QCOMPARE(exhausted.count(), 1);
+    const QVariantMap outcome = exhausted.takeFirst().at(0).toMap();
+    QCOMPARE(outcome.value(QStringLiteral("modelId")).toString(),
+             QStringLiteral("two-stem"));
+    QCOMPARE(outcome.value(QStringLiteral("source")).toString(),
+             QStringLiteral("国内镜像"));
+    QCOMPARE(outcome.value(QStringLiteral("diagnostic")).toString(),
+             QStringLiteral("mirror failed"));
+    QVERIFY(!controller.downloadBusy());
+
+    VocalSeparationControllerTestDriver::seedDownloadFailure(controller, true);
+    VocalSeparationControllerTestDriver::cancelDownloader(controller);
+    QVERIFY2(exhausted.count() == 0,
+             "cancelling a download must not open backup-source UI");
 }
 
 void VocalSeparationControllerTest::

@@ -631,6 +631,10 @@ Rectangle {
                 page.resultPreviewPositionMs = 0
             }
         }
+        function onDownloadSourcesExhausted(outcome) {
+            if (outcome && outcome.modelId)
+                backupModelDialog.open()
+        }
     }
 
     Connections {
@@ -1059,38 +1063,44 @@ Rectangle {
                                             font.pixelSize: 10
                                         }
                                     }
-                                     ProgressBar {
-                                        visible: cardData.id === VocalSeparationController.downloadingModelId
-                                        from: 0
-                                        to: 1
-                                        value: VocalSeparationController.downloadProgress
-                                        Layout.fillWidth: true
-                                         Layout.preferredHeight: 4
-                                         background: Rectangle {
-                                             implicitHeight: 4
-                                             radius: 2
-                                             color: Theme.navigatorGlassTrack
-                                         }
-                                         contentItem: Item {
-                                             implicitHeight: 4
-                                             Rectangle {
-                                                 width: parent.width * parent.parent.visualPosition
-                                                 height: parent.height
-                                                 radius: 2
-                                                 color: page.success
-                                             }
-                                         }
-                                     }
-                                     Label {
-                                         objectName: "separationDownloadPercentage-" + cardData.id
+                                     RowLayout {
+                                         objectName: "separationDownloadProgressRow-" + cardData.id
                                          visible: cardData.id === VocalSeparationController.downloadingModelId
                                          Layout.fillWidth: true
-                                         text: Math.round(VocalSeparationController.downloadProgress * 100)
-                                               + "% · " + VocalSeparationController.downloadSource
-                                         color: page.success
-                                         font.pixelSize: 10
-                                         font.bold: true
-                                         horizontalAlignment: Text.AlignRight
+                                         Layout.preferredHeight: 12
+                                         spacing: 6
+                                         ProgressBar {
+                                             objectName: "separationDownloadProgress-" + cardData.id
+                                             from: 0
+                                             to: 1
+                                             value: VocalSeparationController.downloadProgress
+                                             Layout.fillWidth: true
+                                             Layout.preferredHeight: 4
+                                             background: Rectangle {
+                                                 implicitHeight: 4
+                                                 radius: 2
+                                                 color: Theme.navigatorGlassTrack
+                                             }
+                                             contentItem: Item {
+                                                 implicitHeight: 4
+                                                 Rectangle {
+                                                     width: parent.width * parent.parent.visualPosition
+                                                     height: parent.height
+                                                     radius: 2
+                                                     color: page.success
+                                                 }
+                                             }
+                                         }
+                                         Label {
+                                             objectName: "separationDownloadPercentage-" + cardData.id
+                                             Layout.preferredWidth: implicitWidth
+                                             text: Math.round(VocalSeparationController.downloadProgress * 100)
+                                                   + "% · " + VocalSeparationController.downloadSource
+                                             color: page.success
+                                             font.pixelSize: 10
+                                             font.bold: true
+                                             horizontalAlignment: Text.AlignRight
+                                         }
                                      }
                                     Item { Layout.fillHeight: true }
                                      RowLayout {
@@ -1627,14 +1637,14 @@ Rectangle {
                                                  }
                                             }
                                             Rectangle {
-                                                visible: stemWaveform.duration > 0
+                                                objectName: "separationStemGuide-" + modelData.kind
+                                                visible: modelData.available
+                                                         && stemWaveform.duration > 0
                                                          && page.resultPreviewCurrent
-                                                         && VocalSeparationController.resultPreviewMode
-                                                            === VocalSeparationController.Solo
-                                                         && VocalSeparationController.resultPreviewSoloKind
-                                                            === modelData.kind
                                                 x: Math.max(0, Math.min(parent.width - width,
-                                                                       stemWaveform.waveformCursorX))
+                                                    page.resultPreviewPositionMs
+                                                    / stemWaveform.duration
+                                                    * parent.width))
                                                 width: 1
                                                 anchors.top: parent.top
                                                 anchors.bottom: parent.bottom

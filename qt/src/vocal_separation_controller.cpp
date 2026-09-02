@@ -206,6 +206,7 @@ VocalSeparationController::VocalSeparationController(
         scheduleModelDirectoryScan();
     });
     rebuildModelDirectoryWatcher();
+    baseCatalog_ = options_.catalog;
     history_ = historyStore_.load();
     availableDevices_ = {
         QVariantMap{{QStringLiteral("mode"), int(DeviceMode::Auto)},
@@ -222,12 +223,7 @@ VocalSeparationController::VocalSeparationController(
                     {QStringLiteral("reason"), tr("尚未探测")}},
     };
     refreshModels();
-    for (const VocalModelCard& model : std::as_const(options_.catalog)) {
-        if (modelFilesPresent(model)) {
-            scheduleModelDirectoryScan();
-            break;
-        }
-    }
+    scheduleModelDirectoryScan();
     if (!options_.catalog.isEmpty()) selectedModelId_ = options_.catalog.first().id;
     rebuildStems();
 
@@ -283,28 +279,7 @@ VocalSeparationController::VocalSeparationController(
     connect(downloader_.get(), &VocalSeparationDownloader::finished,
             this, [this](const VocalInstallResult& result) {
         if (!result.ok) {
-            if (!downloadQueue_.isEmpty()
-                && !downloadQueue_.first().mirrorAttempted
-                && downloadQueue_.first().mirrorUrl.isValid()) {
-                DownloadItem& retry = downloadQueue_.first();
-                retry.file.url = retry.mirrorUrl;
-                retry.mirrorAttempted = true;
-                downloadSource_ = tr("国内镜像");
-                emit downloadStateChanged();
-                setError(tr("官方线路失败，已自动切换国内镜像"));
-                startNextDownload();
-                return;
-            }
-            downloadQueue_.clear();
-            failedDownloadModelId_ = downloadingModelId_;
-            downloadingModelId_.clear();
-            downloadProgress_ = 0.0;
-            completedDownloadBytes_ = 0;
-            totalDownloadBytes_ = 0;
-            emit downloadProgressChanged();
-            emit downloadStateChanged();
-            setError(result.error);
-            refreshModels();
+            handleDownloadFailure(result, true);
             return;
         }
         const DownloadItem completed = downloadQueue_.takeFirst();
@@ -324,16 +299,8 @@ VocalSeparationController::VocalSeparationController(
                 if (runtimeInstallCancellation_ == cancellation)
                     runtimeInstallCancellation_.reset();
                 if (!installed.ok) {
-                    downloadQueue_.clear();
-                    failedDownloadModelId_ = downloadingModelId_;
-                    downloadingModelId_.clear();
-                    downloadProgress_ = 0.0;
-                    completedDownloadBytes_ = 0;
-                    totalDownloadBytes_ = 0;
-                    emit downloadProgressChanged();
-                    emit downloadStateChanged();
-                    setError(installed.error);
-                    refreshModels();
+                    finishExhaustedDownload(QStringLiteral("runtime"),
+                                            installed.error);
                     return;
                 }
                 runtimeVerified_ = true;
@@ -576,7 +543,9 @@ bool VocalSeparationController::beginModelDownload(
 
 bool VocalSeparationController::verifyInstalledModels()
 {
-    return beginVerification(VerificationPurpose::Refresh);
+    modelDirectoryScanTimer_.stop();
+    scanModelDirectory();
+    return verificationWatcher_ != nullptr;
 }
 
 void VocalSeparationController::pauseDownload() { downloader_->pause(); }
@@ -1373,6 +1342,11 @@ void VocalSeparationController::refreshModels()
 {
     models_.clear();
     for (const VocalModelCard& model : options_.catalog) {
+        const bool customModel = std::none_of(
+            baseCatalog_.cbegin(), baseCatalog_.cend(),
+            [&model](const VocalModelCard& builtIn) {
+                return builtIn.id == model.id;
+            });
         ModelState state = modelInstalled(model) ? ModelState::Installed
             : modelFilesPresent(model)
                 && !verifiedOrRejectedModelIds_.contains(model.id)
@@ -1397,7 +1371,12 @@ void VocalSeparationController::refreshModels()
         QVariantList kinds;
         for (const QString& name : model.stems) kinds.push_back(int(stemKind(name)));
         qint64 totalBytes = 0;
-        for (const VocalDownloadFile& file : model.files) totalBytes += file.bytes;
+        const QStringList modelPaths = modelFilePaths(model);
+        QStringList modelHashes;
+        for (const VocalDownloadFile& file : model.files) {
+            totalBytes += file.bytes;
+            modelHashes.push_back(file.sha256.toLower());
+        }
         bool mirrorAvailable = false;
         for (const VocalDownloadFile& file : model.files) {
             if (vocalDomesticMirrorUrl(file.url).isValid()) {
@@ -1422,8 +1401,21 @@ void VocalSeparationController::refreshModels()
             {QStringLiteral("provider"), model.provider},
             {QStringLiteral("repositoryUrl"), model.repositoryUrl},
             {QStringLiteral("domesticMirrorAvailable"), mirrorAvailable},
+            {QStringLiteral("origin"), customModel
+                 ? QStringLiteral("custom") : QStringLiteral("built-in")},
+            {QStringLiteral("compatibility"),
+             QStringLiteral("trusted-worker-profile")},
+            {QStringLiteral("profile"),
+             (model.family == VocalModelFamily::Mdx
+                  ? QStringLiteral("mdx:") : QStringLiteral("demucs:"))
+                 + model.stems.join(QLatin1Char(','))},
+            {QStringLiteral("paths"), modelPaths},
+            {QStringLiteral("hashes"), modelHashes},
+            {QStringLiteral("rejectionReason"), QString()},
         });
     }
+    for (const QVariant& rejected : std::as_const(rejectedCustomModels_))
+        models_.push_back(rejected);
     emit modelsChanged();
     emit startEligibilityChanged();
 }
@@ -1472,6 +1464,45 @@ void VocalSeparationController::setError(const QString& error)
     if (error_ == error) return;
     error_ = error;
     emit errorChanged();
+}
+
+void VocalSeparationController::handleDownloadFailure(
+    const VocalInstallResult& result, const bool startRetry)
+{
+    if (!downloadQueue_.isEmpty()
+        && !downloadQueue_.first().mirrorAttempted
+        && downloadQueue_.first().mirrorUrl.isValid()) {
+        DownloadItem& retry = downloadQueue_.first();
+        retry.file.url = retry.mirrorUrl;
+        retry.mirrorAttempted = true;
+        downloadSource_ = tr("国内镜像");
+        emit downloadStateChanged();
+        setError(tr("官方线路失败，已自动切换国内镜像"));
+        if (startRetry) startNextDownload();
+        return;
+    }
+    finishExhaustedDownload(downloadSource_, result.error);
+}
+
+void VocalSeparationController::finishExhaustedDownload(
+    const QString& source, const QString& diagnostic)
+{
+    const QString modelId = downloadingModelId_;
+    downloadQueue_.clear();
+    failedDownloadModelId_ = modelId;
+    downloadingModelId_.clear();
+    downloadProgress_ = 0.0;
+    completedDownloadBytes_ = 0;
+    totalDownloadBytes_ = 0;
+    emit downloadProgressChanged();
+    emit downloadStateChanged();
+    setError(diagnostic);
+    refreshModels();
+    emit downloadSourcesExhausted(QVariantMap{
+        {QStringLiteral("modelId"), modelId},
+        {QStringLiteral("source"), source},
+        {QStringLiteral("diagnostic"), diagnostic},
+    });
 }
 
 void VocalSeparationController::startNextDownload()
@@ -1532,19 +1563,126 @@ void VocalSeparationController::scheduleModelDirectoryScan()
     modelDirectoryScanTimer_.start();
 }
 
+void VocalSeparationController::discoverCustomModels()
+{
+    options_.catalog = baseCatalog_;
+    rejectedCustomModels_.clear();
+
+    const QDir root(modelStorageDirectory_);
+    if (!root.exists()) return;
+    QSet<QString> knownIds;
+    for (const VocalModelCard& model : std::as_const(baseCatalog_))
+        knownIds.insert(model.id);
+    const auto hashesFor = [](const QList<VocalDownloadFile>& files) {
+        QStringList hashes;
+        for (const VocalDownloadFile& file : files)
+            hashes.push_back(file.sha256.toLower());
+        hashes.sort();
+        return hashes;
+    };
+    const auto reject = [this](const QString& id, const QString& reason) {
+        rejectedCustomModels_.push_back(QVariantMap{
+            {QStringLiteral("id"), id},
+            {QStringLiteral("family"), QStringLiteral("custom")},
+            {QStringLiteral("stems"), QVariantList{}},
+            {QStringLiteral("state"), int(ModelState::ModelFailed)},
+            {QStringLiteral("bytes"), 0},
+            {QStringLiteral("provenance"), tr("本地 sidecar 清单")},
+            {QStringLiteral("resourceGuidance"), reason},
+            {QStringLiteral("name"), id},
+            {QStringLiteral("useCase"), reason},
+            {QStringLiteral("description"), reason},
+            {QStringLiteral("tierLabel"), tr("自定义模型")},
+            {QStringLiteral("badgeLabel"), tr("未通过")},
+            {QStringLiteral("provider"), tr("本地文件")},
+            {QStringLiteral("repositoryUrl"), QString()},
+            {QStringLiteral("domesticMirrorAvailable"), false},
+            {QStringLiteral("origin"), QStringLiteral("custom")},
+            {QStringLiteral("compatibility"), QStringLiteral("rejected")},
+            {QStringLiteral("profile"), QString()},
+            {QStringLiteral("paths"), QStringList{}},
+            {QStringLiteral("hashes"), QStringList{}},
+            {QStringLiteral("rejectionReason"), reason},
+        });
+    };
+    const QFileInfoList manifests = root.entryInfoList(
+        {QStringLiteral("*.json")}, QDir::Files | QDir::Readable,
+        QDir::Name | QDir::IgnoreCase);
+    for (const QFileInfo& info : manifests) {
+        QFile file(info.absoluteFilePath());
+        if (!safeExistingFileWithin(info.absoluteFilePath(), modelStorageDirectory_)
+            || info.size() <= 0 || info.size() > 256 * 1024
+            || !file.open(QIODevice::ReadOnly)) {
+            reject(info.completeBaseName(), tr("模型清单不是安全的普通文件"));
+            continue;
+        }
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(
+            file.readAll(), &parseError);
+        const QJsonObject manifest = document.object();
+        const QString id = manifest.value(QStringLiteral("id"))
+                               .toString(info.completeBaseName());
+        const CustomManifestValidationResult valid =
+            validateCustomModelManifest(manifest);
+        if (parseError.error != QJsonParseError::NoError || !document.isObject()
+            || !valid.accepted) {
+            reject(id, valid.error.isEmpty() ? tr("模型清单 JSON 无效")
+                                             : valid.error);
+            continue;
+        }
+        if (knownIds.contains(id)) {
+            reject(id, tr("模型标识与现有模型重复"));
+            continue;
+        }
+        const VocalModelFamily family =
+            manifest.value(QStringLiteral("family")).toString()
+                    == QStringLiteral("Demucs")
+            ? VocalModelFamily::Demucs : VocalModelFamily::Mdx;
+        QStringList stems;
+        for (const QJsonValue& stem :
+             manifest.value(QStringLiteral("stems")).toArray())
+            stems.push_back(stem.toString());
+        QList<VocalDownloadFile> modelFiles;
+        bool safeFiles = true;
+        for (const QJsonValue& value :
+             manifest.value(QStringLiteral("files")).toArray()) {
+            const QJsonObject entry = value.toObject();
+            const QString name = entry.value(QStringLiteral("name")).toString();
+            if (!safeExistingFileWithin(root.filePath(name),
+                                        modelStorageDirectory_)) {
+                safeFiles = false;
+                break;
+            }
+            modelFiles.push_back({name, {},
+                entry.value(QStringLiteral("bytes")).toInteger(),
+                entry.value(QStringLiteral("sha256")).toString().toLower()});
+        }
+        bool trusted = safeFiles;
+        if (trusted) {
+            trusted = std::any_of(baseCatalog_.cbegin(), baseCatalog_.cend(),
+                [&](const VocalModelCard& candidate) {
+                    return candidate.family == family
+                        && hashesFor(candidate.files) == hashesFor(modelFiles);
+                });
+        }
+        if (!trusted) {
+            reject(id, safeFiles
+                ? tr("模型指纹不在受信 Worker 配置中，已拒绝执行")
+                : tr("模型文件缺失、越界或是链接文件"));
+            continue;
+        }
+        options_.catalog.push_back(VocalModelCard{
+            id, family, modelFiles, stems,
+            tr("本地 sidecar 清单（受信指纹）"),
+            tr("启动前仍会由 Worker 校验张量与 opset"),
+            id, tr("用户提供的兼容 ONNX 模型"), tr("自定义模型"),
+            tr("受信指纹"), tr("本地文件"), QString()});
+        knownIds.insert(id);
+    }
+}
+
 void VocalSeparationController::scanModelDirectory()
 {
-    verifiedModelIds_.clear();
-    verifiedOrRejectedModelIds_.clear();
-    refreshModels();
-    bool completeKnownModel = false;
-    for (const VocalModelCard& model : std::as_const(options_.catalog)) {
-        if (modelFilesPresent(model)) {
-            completeKnownModel = true;
-            break;
-        }
-    }
-    if (!completeKnownModel) return;
     const VocalDownloadState downloadState = downloader_
         ? downloader_->state() : VocalDownloadState::Idle;
     const bool busy = requestInFlight() || verificationWatcher_ != nullptr
@@ -1556,6 +1694,18 @@ void VocalSeparationController::scanModelDirectory()
         modelDirectoryRescanPending_ = true;
         return;
     }
+    discoverCustomModels();
+    verifiedModelIds_.clear();
+    verifiedOrRejectedModelIds_.clear();
+    refreshModels();
+    bool completeKnownModel = false;
+    for (const VocalModelCard& model : std::as_const(options_.catalog)) {
+        if (modelFilesPresent(model)) {
+            completeKnownModel = true;
+            break;
+        }
+    }
+    if (!completeKnownModel) return;
     modelDirectoryRescanPending_ = false;
     beginVerification(VerificationPurpose::Refresh);
 }

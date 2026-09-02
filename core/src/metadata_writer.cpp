@@ -33,6 +33,37 @@ constexpr std::uintmax_t kMetadataWriteMargin = 4U * 1024U * 1024U;
 constexpr std::size_t kMaxMetadataFieldBytes = 1U * 1024U * 1024U;
 constexpr std::size_t kMaxMetadataCoverBytes = 32U * 1024U * 1024U;
 
+AudioEquivalence classify_audio_stream_evidence(
+    const std::vector<AudioStreamEvidence>& before,
+    const std::vector<AudioStreamEvidence>& after) noexcept
+{
+    if (before.size() != after.size()) return AudioEquivalence::Different;
+
+    bool timing_is_exact = true;
+    for (std::size_t index = 0; index < before.size(); ++index) {
+        const AudioStreamEvidence& source = before[index];
+        const AudioStreamEvidence& staged = after[index];
+        if (source.codec_id != staged.codec_id
+            || source.sample_rate != staged.sample_rate
+            || source.channels != staged.channels
+            || source.format != staged.format
+            || source.bits_coded != staged.bits_coded
+            || source.bits_raw != staged.bits_raw
+            || source.payload_hash != staged.payload_hash
+            || source.payload_bytes != staged.payload_bytes) {
+            return AudioEquivalence::Different;
+        }
+        timing_is_exact = timing_is_exact
+            && source.time_base_num == staged.time_base_num
+            && source.time_base_den == staged.time_base_den
+            && source.duration == staged.duration
+            && source.packet_count == staged.packet_count
+            && source.timestamp_hash == staged.timestamp_hash;
+    }
+    return timing_is_exact ? AudioEquivalence::ExactPacketCopy
+                           : AudioEquivalence::NormalizedPacketTiming;
+}
+
 const std::vector<const char*>& known_metadata_aliases(const CanonicalField field)
 {
     static const std::vector<const char*> title{
@@ -629,23 +660,8 @@ bool read_metadata_snapshot(const std::string& path,
     return true;
 }
 
-struct AudioPacketSignature {
-    AVCodecID codec_id = AV_CODEC_ID_NONE;
-    int sample_rate = 0;
-    int channels = 0;
-    int format = -1;
-    int bits_coded = 0;
-    int bits_raw = 0;
-    AVRational time_base{0, 1};
-    std::int64_t duration = AV_NOPTS_VALUE;
-    std::uint64_t hash = 1469598103934665603ULL;
-    std::uint64_t bytes = 0;
-    std::uint64_t packets = 0;
-    std::uint64_t timestamp_hash = 1469598103934665603ULL;
-};
-
 bool audio_packet_signatures(const std::string& path,
-                             std::vector<AudioPacketSignature>& signatures,
+                             std::vector<AudioStreamEvidence>& signatures,
                              MetadataRuntimeMetrics* runtime)
 {
     AVFormatContext* context = nullptr;
@@ -659,10 +675,11 @@ bool audio_packet_signatures(const std::string& path,
         const AVCodecParameters* parameters = stream->codecpar;
         if (parameters->codec_type != AVMEDIA_TYPE_AUDIO) continue;
         mapping[index] = static_cast<int>(signatures.size());
-        signatures.push_back({parameters->codec_id, parameters->sample_rate,
+        signatures.push_back({static_cast<int>(parameters->codec_id), parameters->sample_rate,
             parameters->ch_layout.nb_channels, parameters->format,
             parameters->bits_per_coded_sample, parameters->bits_per_raw_sample,
-            stream->time_base, stream->duration});
+            stream->time_base.num, stream->time_base.den, stream->duration,
+            1469598103934665603ULL, 0, 0, 1469598103934665603ULL});
     }
     AVPacket* packet = av_packet_alloc();
     if (packet == nullptr) {
@@ -675,14 +692,14 @@ bool audio_packet_signatures(const std::string& path,
             && packet->stream_index < static_cast<int>(mapping.size())) {
             const int audio_index = mapping[static_cast<std::size_t>(packet->stream_index)];
             if (audio_index >= 0) {
-                AudioPacketSignature& signature =
+                AudioStreamEvidence& signature =
                     signatures[static_cast<std::size_t>(audio_index)];
                 for (int offset = 0; offset < packet->size; ++offset) {
-                    signature.hash ^= packet->data[offset];
-                    signature.hash *= 1099511628211ULL;
+                    signature.payload_hash ^= packet->data[offset];
+                    signature.payload_hash *= 1099511628211ULL;
                 }
-                signature.bytes += static_cast<std::uint64_t>(packet->size);
-                ++signature.packets;
+                signature.payload_bytes += static_cast<std::uint64_t>(packet->size);
+                ++signature.packet_count;
                 const std::array<std::int64_t, 3> timing{
                     packet->pts, packet->dts, packet->duration};
                 for (const std::int64_t value : timing) {
@@ -701,34 +718,17 @@ bool audio_packet_signatures(const std::string& path,
     return read_result == AVERROR_EOF;
 }
 
-bool audio_streams_equivalent(const std::string& source_path,
-                              const std::string& staged_path,
-                              MetadataRuntimeMetrics* runtime)
+AudioEquivalence audio_streams_equivalent(const std::string& source_path,
+                                          const std::string& staged_path,
+                                          MetadataRuntimeMetrics* runtime)
 {
-    std::vector<AudioPacketSignature> source;
-    std::vector<AudioPacketSignature> staged;
+    std::vector<AudioStreamEvidence> source;
+    std::vector<AudioStreamEvidence> staged;
     if (!audio_packet_signatures(source_path, source, runtime)
-        || !audio_packet_signatures(staged_path, staged, runtime)
-        || source.size() != staged.size()) {
-        return false;
+        || !audio_packet_signatures(staged_path, staged, runtime)) {
+        return AudioEquivalence::Different;
     }
-    for (std::size_t index = 0; index < source.size(); ++index) {
-        const AudioPacketSignature& before = source[index];
-        const AudioPacketSignature& after = staged[index];
-        const bool duration_equal = before.duration == AV_NOPTS_VALUE
-            || after.duration == AV_NOPTS_VALUE || before.duration == after.duration;
-        if (before.codec_id != after.codec_id
-            || before.sample_rate != after.sample_rate
-            || before.channels != after.channels || before.format != after.format
-            || before.bits_coded != after.bits_coded || before.bits_raw != after.bits_raw
-            || av_cmp_q(before.time_base, after.time_base) != 0 || !duration_equal
-            || before.hash != after.hash || before.bytes != after.bytes
-            || before.packets != after.packets
-            || before.timestamp_hash != after.timestamp_hash) {
-            return false;
-        }
-    }
-    return true;
+    return classify_audio_stream_evidence(source, staged);
 }
 
 bool fail_at(const MetadataWriterTestHooks* hooks, const MetadataFailurePoint point)
@@ -867,6 +867,7 @@ ag_result write_metadata_with_preserved_backup(
     const std::atomic_bool* cancel,
     const MetadataWriterTestHooks* test_hooks,
     MetadataRuntimeMetrics* runtime,
+    AudioEquivalence* audio_equivalence,
     ExistingBackupGuard* existing_backup);
 
 std::optional<std::uintmax_t> metadata_staging_space_required(
@@ -1337,7 +1338,7 @@ ag_result write_metadata_plan(const std::string& utf8_path,
     std::string error;
     const ag_result write_result = write_metadata_with_preserved_backup(
         utf8_path, update, error, &plan, cancel, test_hooks,
-        &result.runtime, &existing_backup);
+        &result.runtime, &result.audio_equivalence, &existing_backup);
     if (write_result != AG_OK) {
         const bool prior_backup_restored = existing_backup.restore(
             test_hooks != nullptr && test_hooks->fail_backup_restore);
@@ -1356,6 +1357,10 @@ ag_result write_metadata_plan(const std::string& utf8_path,
         }
         return write_result;
     }
+    result.used_force_fallback =
+        plan.audio_policy == MetadataAudioPolicy::ForceVerifiedNormalization
+        && result.audio_equivalence
+            == AudioEquivalence::NormalizedPacketTiming;
 
     const auto restore_original = [&]() {
         if (test_hooks != nullptr && test_hooks->fail_source_restore) {
@@ -1462,7 +1467,10 @@ ag_result write_metadata_plan(const std::string& utf8_path,
     result.audio_verified_unchanged = true;
     result.final_status = FileResultStatus::Completed;
     result.error_code = MetadataErrorCode::None;
-    result.message = "Verified with packet stream copy";
+    result.message = result.audio_equivalence
+            == AudioEquivalence::NormalizedPacketTiming
+        ? "Verified with packet stream copy and normalized container timing"
+        : "Verified with exact packet stream copy";
     (void)before_size;
     (void)before_time;
     existing_backup.discard();
@@ -1918,9 +1926,13 @@ ag_result write_metadata_with_preserved_backup(
     const std::atomic_bool* cancel,
     const MetadataWriterTestHooks* test_hooks,
     MetadataRuntimeMetrics* runtime,
+    AudioEquivalence* audio_equivalence,
     ExistingBackupGuard* existing_backup)
 {
     if (runtime != nullptr) *runtime = {};
+    if (audio_equivalence != nullptr) {
+        *audio_equivalence = AudioEquivalence::Different;
+    }
     const std::filesystem::path source = filesystem_path_from_utf8(utf8_path);
     std::error_code ec;
     const auto source_size = std::filesystem::file_size(source, ec);
@@ -2019,9 +2031,25 @@ ag_result write_metadata_with_preserved_backup(
             error = "Verification failed: staged cover differs from request";
             return AG_DECODE_ERROR;
         }
-        if (!audio_streams_equivalent(utf8_path, staged_utf8, runtime)) {
+        AudioEquivalence equivalence =
+            audio_streams_equivalent(utf8_path, staged_utf8, runtime);
+        if (test_hooks != nullptr
+            && test_hooks->simulate_normalized_packet_timing
+            && equivalence == AudioEquivalence::ExactPacketCopy) {
+            equivalence = AudioEquivalence::NormalizedPacketTiming;
+        }
+        if (audio_equivalence != nullptr) *audio_equivalence = equivalence;
+        if (equivalence == AudioEquivalence::Different) {
             clean_stage();
             error = "Verification failed: audio packet payload changed";
+            return AG_DECODE_ERROR;
+        }
+        if (equivalence == AudioEquivalence::NormalizedPacketTiming
+            && verification_plan->audio_policy
+                == MetadataAudioPolicy::StrictPacketIdentity) {
+            clean_stage();
+            error = "Verification failed: container timing was normalized; "
+                    "verified force mode is required";
             return AG_DECODE_ERROR;
         }
     }
@@ -2081,7 +2109,7 @@ ag_result write_metadata(const std::string& utf8_path,
 {
     return write_metadata_with_preserved_backup(
         utf8_path, update, error, verification_plan, cancel, test_hooks,
-        runtime, nullptr);
+        runtime, nullptr, nullptr);
 }
 
 } // namespace agplayer

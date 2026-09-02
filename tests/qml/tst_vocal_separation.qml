@@ -229,6 +229,29 @@ TestCase {
         verify(percentage)
         compare(percentage.color.toString(), Theme.success.toString())
     }
+
+    function test_activeDownloadUsesOneContainedProgressRow() {
+        separationTestDriver.reset()
+        separationTestDriver.setDownloadState("uvr-mdxnet-kara",
+                                              VocalSeparationController.Downloading,
+                                              0.42, "")
+        const card = findChild(page, "separationModelCard-uvr-mdxnet-kara")
+        const progressRow = findChild(card,
+                                      "separationDownloadProgressRow-uvr-mdxnet-kara")
+        const actionRow = findChild(card,
+                                    "separationModelAction-uvr-mdxnet-kara")
+        verify(card && progressRow && actionRow)
+        verify(progressRow.visible)
+        const progressBottom = progressRow.mapToItem(card, 0,
+                                                     progressRow.height).y
+        const actionTop = actionRow.mapToItem(card, 0, 0).y
+        verify(progressBottom <= actionTop,
+               "download progress and route must occupy one row above actions")
+        const actionBottom = actionRow.mapToItem(card, 0, actionRow.height).y
+        verify(actionBottom <= card.height,
+               "download actions must remain inside the fixed model card")
+        separationTestDriver.reset()
+    }
     function test_inputChooserAdvertisesAudioAndVideoContainers() {
         const dialog = findChild(page, "separationInputDialog")
         verify(dialog)
@@ -394,6 +417,40 @@ TestCase {
         verify(AudioPreviewController.playing)
         verify(AudioPreviewController.positionMs >= soloPosition - 100,
                "switching from solo back to the bottom mix must preserve position")
+
+        AudioPreviewController.stop()
+        separationTestDriver.reset()
+    }
+
+    function test_mixAndSoloShareOneGuideAcrossEveryAvailableResultTrack() {
+        verify(separationTestDriver.setReady(testAudioUrl))
+        verify(separationTestDriver.setCompletedWithAudio(testAudioUrl))
+        const resultPlay = findChild(page, "separationTransportPlay")
+        const vocalsGuide = findChild(
+            page, "separationStemGuide-" + VocalSeparationController.Vocals)
+        const accompanimentGuide = findChild(
+            page, "separationStemGuide-"
+                  + VocalSeparationController.Accompaniment)
+        verify(resultPlay && vocalsGuide && accompanimentGuide)
+
+        mouseClick(resultPlay)
+        tryCompare(VocalSeparationController, "resultPreviewMode",
+                   VocalSeparationController.Mix, 2000)
+        tryVerify(function() { return page.resultPreviewPositionMs > 100 }, 2000)
+        verify(vocalsGuide.visible && accompanimentGuide.visible)
+        verify(vocalsGuide.x > 0)
+        verify(Math.abs(vocalsGuide.x - accompanimentGuide.x) <= 1,
+               "mix preview must draw one equal-X guide on all available tracks")
+
+        const vocalsWaveform = findChild(
+            page, "separationStemWaveform-" + VocalSeparationController.Vocals)
+        mouseClick(vocalsWaveform, vocalsWaveform.width * 0.64,
+                   vocalsWaveform.height / 2)
+        tryCompare(VocalSeparationController, "resultPreviewMode",
+                   VocalSeparationController.Solo, 2000)
+        verify(vocalsGuide.visible && accompanimentGuide.visible)
+        verify(Math.abs(vocalsGuide.x - accompanimentGuide.x) <= 1,
+               "solo routing must not hide the shared time guide")
 
         AudioPreviewController.stop()
         separationTestDriver.reset()

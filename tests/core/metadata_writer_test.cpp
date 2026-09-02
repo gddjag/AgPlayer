@@ -143,6 +143,45 @@ int main(const int argc, char** argv)
     const std::filesystem::path fixture = argv[1];
     const std::filesystem::path work_dir = fixture.parent_path();
 
+    agplayer::AudioStreamEvidence exact_before;
+    exact_before.codec_id = 86018;
+    exact_before.sample_rate = 48'000;
+    exact_before.channels = 2;
+    exact_before.format = 8;
+    exact_before.bits_coded = 16;
+    exact_before.bits_raw = 16;
+    exact_before.time_base_num = 1;
+    exact_before.time_base_den = 48'000;
+    exact_before.duration = 96'000;
+    exact_before.payload_hash = 0x1234U;
+    exact_before.payload_bytes = 4'096;
+    exact_before.packet_count = 8;
+    exact_before.timestamp_hash = 0x5678U;
+    assert(agplayer::classify_audio_stream_evidence(
+               {exact_before}, {exact_before})
+           == agplayer::AudioEquivalence::ExactPacketCopy);
+
+    agplayer::AudioStreamEvidence normalized_after = exact_before;
+    normalized_after.time_base_num = 1;
+    normalized_after.time_base_den = 1'000;
+    normalized_after.duration = 2'000;
+    normalized_after.packet_count = 6;
+    normalized_after.timestamp_hash = 0x9abcU;
+    assert(agplayer::classify_audio_stream_evidence(
+               {exact_before}, {normalized_after})
+           == agplayer::AudioEquivalence::NormalizedPacketTiming);
+
+    agplayer::AudioStreamEvidence changed_payload = normalized_after;
+    changed_payload.payload_hash ^= 1U;
+    assert(agplayer::classify_audio_stream_evidence(
+               {exact_before}, {changed_payload})
+           == agplayer::AudioEquivalence::Different);
+    agplayer::AudioStreamEvidence changed_codec = normalized_after;
+    changed_codec.sample_rate = 44'100;
+    assert(agplayer::classify_audio_stream_evidence(
+               {exact_before}, {changed_codec})
+           == agplayer::AudioEquivalence::Different);
+
     // Hand-derived AAC-LC/stereo ADTS fixed-header bytes. A parser that reads
     // sampling_frequency_index from any bits except byte 2 bits 5..2 fails
     // this table, including the common 44.1 kHz case and every legal rate.
@@ -211,6 +250,44 @@ int main(const int argc, char** argv)
     assert(std::strcmp(ag_metadata_title(metadata), "Plan Title") == 0);
     assert(std::strcmp(ag_metadata_artist(metadata), "Plan Artist") == 0);
     ag_metadata_destroy(metadata);
+
+    const std::filesystem::path strict_normalized_src =
+        work_dir / "meta-strict-normalized-src.wav";
+    std::filesystem::copy_file(fixture, strict_normalized_src,
+                               std::filesystem::copy_options::overwrite_existing);
+    const std::vector<unsigned char> strict_original =
+        file_bytes(strict_normalized_src);
+    agplayer::MetadataEditPlan strict_normalized_plan;
+    strict_normalized_plan.fields = {{agplayer::CanonicalField::Title,
+                                      agplayer::MetadataAction::Set,
+                                      "Strict Normalized"}};
+    strict_normalized_plan.audio_policy =
+        agplayer::MetadataAudioPolicy::StrictPacketIdentity;
+    agplayer::MetadataWriterTestHooks normalized_hooks;
+    normalized_hooks.simulate_normalized_packet_timing = true;
+    agplayer::MetadataFileResult strict_normalized_result;
+    assert(agplayer::write_metadata_plan(
+               strict_normalized_src.u8string(), strict_normalized_plan,
+               strict_normalized_result, nullptr, &normalized_hooks)
+           == AG_DECODE_ERROR);
+    assert(file_bytes(strict_normalized_src) == strict_original);
+    assert(!std::filesystem::exists(
+        std::filesystem::path(strict_normalized_src.u8string() + ".agbak")));
+
+    agplayer::MetadataEditPlan force_normalized_plan = strict_normalized_plan;
+    force_normalized_plan.audio_policy =
+        agplayer::MetadataAudioPolicy::ForceVerifiedNormalization;
+    agplayer::MetadataFileResult force_normalized_result;
+    assert(agplayer::write_metadata_plan(
+               strict_normalized_src.u8string(), force_normalized_plan,
+               force_normalized_result, nullptr, &normalized_hooks)
+           == AG_OK);
+    assert(force_normalized_result.audio_equivalence
+           == agplayer::AudioEquivalence::NormalizedPacketTiming);
+    assert(force_normalized_result.used_force_fallback);
+    assert(force_normalized_result.audio_verified_unchanged);
+    assert(force_normalized_result.message.find("normalized container timing")
+           != std::string::npos);
 
     // WAV exposes one physical RIFF date tag. An omitted counterpart has Keep
     // semantics, so a DATE-only or YEAR-only request must be rejected rather

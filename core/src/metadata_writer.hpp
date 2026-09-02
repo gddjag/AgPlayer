@@ -24,6 +24,11 @@ enum class MetadataAction { Keep, Set, Clear };
 
 enum class CoverAction { Keep, Set, Clear };
 
+enum class MetadataAudioPolicy {
+    StrictPacketIdentity,
+    ForceVerifiedNormalization,
+};
+
 enum class CanonicalField {
     Title,
     Artist,
@@ -49,6 +54,7 @@ struct FieldEdit {
 struct MetadataEditPlan {
     std::vector<FieldEdit> fields;
     CoverAction cover_action = CoverAction::Keep;
+    MetadataAudioPolicy audio_policy = MetadataAudioPolicy::StrictPacketIdentity;
     const unsigned char* cover_data = nullptr;
     std::size_t cover_size = 0;
     std::string cover_mime_type;
@@ -152,6 +158,7 @@ struct MetadataWriterTestHooks {
     bool seed_preservation_fixture = false;
     bool fail_source_restore = false;
     bool fail_backup_restore = false;
+    bool simulate_normalized_packet_timing = false;
 };
 
 struct CoverResult {
@@ -163,10 +170,41 @@ struct CoverResult {
     std::string reason;
 };
 
+enum class AudioEquivalence {
+    Different,
+    ExactPacketCopy,
+    NormalizedPacketTiming,
+};
+
+// Decoder-free evidence used to prove that a metadata-only remux preserved
+// audio payloads. Container timing is deliberately separate from codec and
+// payload identity because muxers may legally normalize it during stream copy.
+struct AudioStreamEvidence {
+    int codec_id = 0;
+    int sample_rate = 0;
+    int channels = 0;
+    int format = -1;
+    int bits_coded = 0;
+    int bits_raw = 0;
+    int time_base_num = 0;
+    int time_base_den = 1;
+    std::int64_t duration = 0;
+    std::uint64_t payload_hash = 0;
+    std::uint64_t payload_bytes = 0;
+    std::uint64_t packet_count = 0;
+    std::uint64_t timestamp_hash = 0;
+};
+
+AudioEquivalence classify_audio_stream_evidence(
+    const std::vector<AudioStreamEvidence>& before,
+    const std::vector<AudioStreamEvidence>& after) noexcept;
+
 struct MetadataFileResult {
     FileResultStatus final_status = FileResultStatus::Failed;
     bool used_stream_copy = false;
     bool audio_verified_unchanged = false;
+    bool used_force_fallback = false;
+    AudioEquivalence audio_equivalence = AudioEquivalence::Different;
     std::vector<FieldResult> fields;
     CoverResult cover;
     std::string message;

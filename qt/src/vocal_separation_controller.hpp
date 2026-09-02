@@ -192,6 +192,7 @@ signals:
     void progressChanged();
     void downloadProgressChanged();
     void downloadStateChanged();
+    void downloadSourcesExhausted(const QVariantMap& outcome);
     void errorChanged();
     void outputFormatChanged();
     void outputDirectoryChanged();
@@ -273,10 +274,15 @@ private:
     void setJobState(JobState state, const QString& stage = {});
     void setError(const QString& error);
     bool beginModelDownload(const QString& modelId, bool preferDomesticMirror);
+    void handleDownloadFailure(const VocalInstallResult& result,
+                               bool startRetry);
+    void finishExhaustedDownload(const QString& source,
+                                 const QString& diagnostic);
     void startNextDownload();
     void rebuildModelDirectoryWatcher();
     void scheduleModelDirectoryScan();
     void scanModelDirectory();
+    void discoverCustomModels();
     void handleProbe(const QJsonObject& payload);
     void handleResult(const QJsonObject& payload);
     void analyzeNextWaveform();
@@ -312,6 +318,7 @@ private:
     QPointer<ImportController> importer_;
     QPointer<PlaylistModel> playlists_;
     VocalSeparationControllerOptions options_;
+    QList<VocalModelCard> baseCatalog_;
     VocalSeparationHistoryStore historyStore_;
     SeparationProcessClient process_;
     QNetworkAccessManager network_;
@@ -340,6 +347,7 @@ private:
     QList<StemKind> resultPreviewMixKinds_;
     QVariantMap inputInfo_;
     QVariantList models_;
+    QVariantList rejectedCustomModels_;
     QVariantList availableDevices_;
     QVariantList stems_;
     QVariantList history_;
