@@ -74,7 +74,7 @@ Item {
             dense: root.denseLayout
             showWaveformMode: PlayerPresentation.hasAction(
                                   root.actionProfile, "waveformModeButton")
-            rollingOrder: root.actionProfile.rollingOrder
+            waveformPlacement: root.actionProfile.waveformPlacement
             onOpenEqualizerRequested: root.openEqualizerRequested()
         }
 

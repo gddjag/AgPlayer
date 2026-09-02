@@ -11,7 +11,7 @@ RowLayout {
     property bool dense: false
     property bool showEqualizer: true
     property bool showWaveformMode: true
-    property bool rollingOrder: false
+    property string waveformPlacement: "beforePrevious"
     property bool showPlaybackMode: true
     property bool highlightKeyboardFocus: false
     readonly property real playButtonCenterX:
@@ -28,9 +28,11 @@ RowLayout {
     }
 
     ToolButton {
-        objectName: root.rollingOrder ? "leadingEqualizerButton"
-                                      : "equalizerButton"
-        visible: root.showEqualizer && !root.rollingOrder && !root.compact
+        objectName: root.waveformPlacement === "afterMode"
+                    ? "leadingEqualizerButton" : "equalizerButton"
+        visible: root.showEqualizer
+                 && root.waveformPlacement === "beforePrevious"
+                 && !root.compact
         flat: true
         icon.source: Theme.icon("equalizer-line")
         icon.color: Theme.iconPrimary
@@ -56,7 +58,8 @@ RowLayout {
         }
     }
     Loader {
-        active: root.showWaveformMode && !root.compact && !root.rollingOrder
+        active: root.showWaveformMode && !root.compact
+                && root.waveformPlacement === "beforePrevious"
         sourceComponent: waveformModeAction
     }
     ToolButton {
@@ -148,12 +151,15 @@ RowLayout {
         background: null
     }
     Loader {
-        active: root.showWaveformMode && !root.compact && root.rollingOrder
+        active: root.showWaveformMode && !root.compact
+                && root.waveformPlacement === "afterMode"
         sourceComponent: waveformModeAction
     }
     ToolButton {
         objectName: "equalizerButton"
-        visible: root.showEqualizer && root.rollingOrder && !root.compact
+        visible: root.showEqualizer
+                 && root.waveformPlacement === "afterMode"
+                 && !root.compact
         flat: true
         icon.source: Theme.icon("equalizer-line")
         icon.color: Theme.iconPrimary

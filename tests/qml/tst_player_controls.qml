@@ -159,13 +159,10 @@ TestCase {
         compare(lyrics.icon.height, 20)
         compare(immersive.icon.width, 20)
         compare(immersive.icon.height, 20)
-        compare(controls.actionProfile.order.join(","),
-                "listWindowButton,audioToolsButton,equalizerButton,waveformModeButton,previousButton,playPauseButton,nextButton,modeButton,lyricsActionButton,mainVolumeControl,themeModeButton,immersiveActionButton,miniPlayerButton")
         var transport = findChild(controls, "centerPlaybackControls")
         verify(transport)
-        compare(transport.rollingOrder, controls.actionProfile.rollingOrder)
-        compare(transport.showWaveformMode,
-                controls.actionProfile.order.indexOf("waveformModeButton") >= 0)
+        compare(transport.waveformPlacement, "beforePrevious")
+        compare(transport.showWaveformMode, true)
     }
 
     function test_non_immersive_spectral_progress_policy_is_theme_independent() {
@@ -203,7 +200,13 @@ TestCase {
         }, 1500)
         var controls = findControl("playerControls")
         verify(controls)
-        var names = controls.actionProfile.order
+        var names = [
+            "listWindowButton", "audioToolsButton", "equalizerButton",
+            "waveformModeButton", "previousButton", "playPauseButton",
+            "nextButton", "modeButton", "lyricsActionButton",
+            "mainVolumeControl", "themeModeButton",
+            "immersiveActionButton", "miniPlayerButton"
+        ]
         var previousRight = -1
         var centerY = controls.height / 2
         for (var index = 0; index < names.length; ++index) {

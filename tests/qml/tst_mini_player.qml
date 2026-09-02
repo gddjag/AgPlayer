@@ -115,8 +115,6 @@ TestCase {
         verify(findChild(controls, "immersiveActionButton") === null)
         compare(findChild(controls, "experienceActions"), null,
                 "mini must not instantiate a hidden UI registry")
-        compare(controls.actionProfile.order.join(","),
-                "miniThemeModeButton,miniWaveformModeButton,miniPreviousButton,miniPlayPauseButton,miniNextButton,miniModeButton,miniMuteButton")
     }
 
     function test_mini_theme_popup_opens_above_icon_at_real_dpr_positions() {

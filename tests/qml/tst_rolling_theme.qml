@@ -301,6 +301,13 @@ TestCase {
             verify(waveformMode)
             compare(waveformMode.visible, true,
                     "every player shell exposes the shared waveform action")
+            var transport = findChild(controls,
+                                      mode === 1
+                                      ? "integratedTransportControls"
+                                      : "centerPlaybackControls")
+            verify(transport)
+            compare(transport.waveformPlacement,
+                    mode === 2 ? "afterMode" : "beforePrevious")
             compare(findChild(controls, "listWindowButton").visible, mode !== 2,
                     "rolling always exposes its ten-row list and needs no toggle")
             var lyricsAction = findChild(controls, "lyricsActionButton")

@@ -776,20 +776,23 @@ TestCase {
         wait(20)
     }
 
-    function test_integrated_reference_action_profile_includes_playlist_and_lyrics() {
+    function test_integrated_reference_action_geometry_includes_playlist_and_lyrics() {
         var shell = enterIntegratedShell()
         mainWindow.width = 1672
         wait(20)
         var controls = findChild(shell, "integratedPlayerControls")
         verify(controls)
-        compare(controls.actionProfile.order.join(","),
-                "listWindowButton,audioToolsButton,equalizerButton,waveformModeButton,previousButton,playPauseButton,nextButton,modeButton,lyricsActionButton,mainVolumeControl,themeModeButton,immersiveActionButton,miniPlayerButton")
-        var names = controls.actionProfile.order
+        var names = [
+            "listWindowButton", "audioToolsButton", "equalizerButton",
+            "waveformModeButton", "previousButton", "playPauseButton",
+            "nextButton", "modeButton", "lyricsActionButton",
+            "mainVolumeControl", "themeModeButton",
+            "immersiveActionButton", "miniPlayerButton"
+        ]
         var transport = findChild(controls, "integratedTransportControls")
         verify(transport)
-        compare(transport.rollingOrder, controls.actionProfile.rollingOrder)
-        compare(transport.showWaveformMode,
-                controls.actionProfile.order.indexOf("waveformModeButton") >= 0)
+        compare(transport.waveformPlacement, "beforePrevious")
+        compare(transport.showWaveformMode, true)
         var previousX = -1
         for (var index = 0; index < names.length; ++index) {
             var action = findChild(controls, names[index])

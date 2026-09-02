@@ -86,7 +86,7 @@ Rectangle {
         showWaveformMode: root.showWaveformMode
                           && PlayerPresentation.hasAction(
                               root.actionProfile, "waveformModeButton")
-        rollingOrder: root.actionProfile.rollingOrder
+        waveformPlacement: root.actionProfile.waveformPlacement
         spacing: root.emptyMode && !root.denseTransport
                  ? 28 : (compact ? 4 : dense ? 8 : 16)
         onOpenEqualizerRequested: root.openEqualizerRequested()

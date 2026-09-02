@@ -2,34 +2,47 @@
 
 var profiles = {
     "classic": {
-        order: ["listWindowButton", "audioToolsButton", "equalizerButton",
-                "waveformModeButton", "previousButton", "playPauseButton",
-                "nextButton", "modeButton", "lyricsActionButton",
-                "mainVolumeControl", "themeModeButton",
-                "immersiveActionButton", "miniPlayerButton"],
-        rollingOrder: false
+        actions: ({
+            "listWindowButton": true, "audioToolsButton": true,
+            "equalizerButton": true, "waveformModeButton": true,
+            "previousButton": true, "playPauseButton": true,
+            "nextButton": true, "modeButton": true,
+            "lyricsActionButton": true, "mainVolumeControl": true,
+            "themeModeButton": true, "immersiveActionButton": true,
+            "miniPlayerButton": true
+        }),
+        waveformPlacement: "beforePrevious"
     },
     "integrated": {
-        order: ["listWindowButton", "audioToolsButton", "equalizerButton",
-                "waveformModeButton", "previousButton", "playPauseButton",
-                "nextButton", "modeButton", "lyricsActionButton",
-                "mainVolumeControl", "themeModeButton",
-                "immersiveActionButton", "miniPlayerButton"],
-        rollingOrder: false
+        actions: ({
+            "listWindowButton": true, "audioToolsButton": true,
+            "equalizerButton": true, "waveformModeButton": true,
+            "previousButton": true, "playPauseButton": true,
+            "nextButton": true, "modeButton": true,
+            "lyricsActionButton": true, "mainVolumeControl": true,
+            "themeModeButton": true, "immersiveActionButton": true,
+            "miniPlayerButton": true
+        }),
+        waveformPlacement: "beforePrevious"
     },
     "rolling": {
-        order: ["previousButton", "playPauseButton", "nextButton",
-                "modeButton", "waveformModeButton", "equalizerButton",
-                "audioToolsButton", "themeModeButton",
-                "immersiveActionButton", "miniPlayerButton",
-                "mainVolumeControl"],
-        rollingOrder: true
+        actions: ({
+            "previousButton": true, "playPauseButton": true,
+            "nextButton": true, "modeButton": true,
+            "waveformModeButton": true, "equalizerButton": true,
+            "audioToolsButton": true, "themeModeButton": true,
+            "immersiveActionButton": true, "miniPlayerButton": true,
+            "mainVolumeControl": true
+        }),
+        waveformPlacement: "afterMode"
     },
     "mini": {
-        order: ["miniThemeModeButton", "miniWaveformModeButton",
-                "miniPreviousButton", "miniPlayPauseButton",
-                "miniNextButton", "miniModeButton", "miniMuteButton"],
-        rollingOrder: false
+        actions: ({
+            "miniThemeModeButton": true, "miniWaveformModeButton": true,
+            "miniPreviousButton": true, "miniPlayPauseButton": true,
+            "miniNextButton": true, "miniModeButton": true,
+            "miniMuteButton": true
+        })
     }
 }
 
@@ -38,8 +51,8 @@ function profile(name) {
 }
 
 function hasAction(profileValue, objectName) {
-    return profileValue && profileValue.order
-            && profileValue.order.indexOf(objectName) !== -1
+    return profileValue && profileValue.actions
+            && profileValue.actions[objectName] === true
 }
 
 function popupPosition(button, popup, windowSurface, devicePixelRatio) {
