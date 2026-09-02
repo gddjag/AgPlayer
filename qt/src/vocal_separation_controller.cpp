@@ -298,6 +298,14 @@ VocalSeparationController::VocalSeparationController(
                 runtimeInstallerWatcher_ = nullptr;
                 if (runtimeInstallCancellation_ == cancellation)
                     runtimeInstallCancellation_.reset();
+                if (cancellation->load(std::memory_order_acquire)) {
+                    refreshModels();
+                    if (modelDirectoryRescanPending_) {
+                        modelDirectoryRescanPending_ = false;
+                        scheduleModelDirectoryScan();
+                    }
+                    return;
+                }
                 if (!installed.ok) {
                     finishExhaustedDownload(QStringLiteral("runtime"),
                                             installed.error);
@@ -550,6 +558,32 @@ bool VocalSeparationController::verifyInstalledModels()
 
 void VocalSeparationController::pauseDownload() { downloader_->pause(); }
 void VocalSeparationController::resumeDownload() { downloader_->resume(); }
+
+void VocalSeparationController::cancelDownload()
+{
+    if (downloader_) downloader_->cancel();
+    if (verificationPurpose_ == VerificationPurpose::Download) {
+        ++verificationGeneration_;
+        if (verificationCancellation_)
+            verificationCancellation_->store(true, std::memory_order_release);
+        verificationPurpose_ = VerificationPurpose::None;
+        verifyingModelId_.clear();
+    }
+    if (runtimeInstallCancellation_)
+        runtimeInstallCancellation_->store(true, std::memory_order_release);
+    downloadQueue_.clear();
+    downloadingModelId_.clear();
+    failedDownloadModelId_.clear();
+    downloadSource_.clear();
+    preferDomesticMirror_ = false;
+    downloadProgress_ = 0.0;
+    completedDownloadBytes_ = 0;
+    totalDownloadBytes_ = 0;
+    emit downloadProgressChanged();
+    emit downloadStateChanged();
+    setError({});
+    refreshModels();
+}
 
 bool VocalSeparationController::deleteModel(const QString& modelId)
 {
@@ -1151,6 +1185,10 @@ bool VocalSeparationController::beginVerification(
         }
         if (generation != verificationGeneration_) {
             refreshModels();
+            if (modelDirectoryRescanPending_) {
+                modelDirectoryRescanPending_ = false;
+                scheduleModelDirectoryScan();
+            }
             return;
         }
         finishVerification(generation, result);
@@ -1317,7 +1355,7 @@ bool VocalSeparationController::launchSeparation(
     for (const QString& name : context.stemNames) requestedStems.push_back(name);
     QJsonArray stemLabels;
     for (const QString& label : context.stemLabels) stemLabels.push_back(label);
-    const QJsonObject payload{
+    QJsonObject payload{
         {QStringLiteral("runtimePath"), options_.runtimeLibraryPath},
         {QStringLiteral("inputPath"), context.inputPath},
         {QStringLiteral("modelFiles"), modelFiles},
@@ -1333,6 +1371,19 @@ bool VocalSeparationController::launchSeparation(
         {QStringLiteral("stemLabels"), stemLabels},
         {QStringLiteral("device"), deviceName(context.device)},
     };
+    const auto custom = customModelBindings_.constFind(context.modelId);
+    if (custom != customModelBindings_.cend()) {
+        QJsonArray hashes;
+        for (const QString& hash : custom->sha256) hashes.push_back(hash);
+        QJsonArray bytes;
+        for (const qint64 size : custom->bytes) bytes.push_back(size);
+        QJsonArray roles;
+        for (const QString& role : custom->roles) roles.push_back(role);
+        payload.insert(QStringLiteral("modelProfile"), custom->profileId);
+        payload.insert(QStringLiteral("modelSha256"), hashes);
+        payload.insert(QStringLiteral("modelBytes"), bytes);
+        payload.insert(QStringLiteral("modelRoles"), roles);
+    }
     if (!process_.startJob(payload)) return false;
     setJobState(JobState::Running, QStringLiteral("starting"));
     return true;
@@ -1405,10 +1456,11 @@ void VocalSeparationController::refreshModels()
                  ? QStringLiteral("custom") : QStringLiteral("built-in")},
             {QStringLiteral("compatibility"),
              QStringLiteral("trusted-worker-profile")},
-            {QStringLiteral("profile"),
-             (model.family == VocalModelFamily::Mdx
-                  ? QStringLiteral("mdx:") : QStringLiteral("demucs:"))
-                 + model.stems.join(QLatin1Char(','))},
+            {QStringLiteral("profile"), customModelBindings_.contains(model.id)
+                 ? customModelBindings_.value(model.id).profileId
+                 : (model.family == VocalModelFamily::Mdx
+                        ? QStringLiteral("mdx:") : QStringLiteral("demucs:"))
+                       + model.stems.join(QLatin1Char(','))},
             {QStringLiteral("paths"), modelPaths},
             {QStringLiteral("hashes"), modelHashes},
             {QStringLiteral("rejectionReason"), QString()},
@@ -1526,6 +1578,12 @@ void VocalSeparationController::startNextDownload()
         return;
     }
     const DownloadItem& item = downloadQueue_.first();
+    const QString route = item.mirrorAttempted ? tr("国内镜像")
+                                                : tr("官方线路");
+    if (downloadSource_ != route) {
+        downloadSource_ = route;
+        emit downloadStateChanged();
+    }
     if (!QDir().mkpath(QFileInfo(item.destination).absolutePath())) {
         downloadQueue_.clear();
         failedDownloadModelId_ = downloadingModelId_;
@@ -1567,6 +1625,7 @@ void VocalSeparationController::discoverCustomModels()
 {
     options_.catalog = baseCatalog_;
     rejectedCustomModels_.clear();
+    customModelBindings_.clear();
 
     const QDir root(modelStorageDirectory_);
     if (!root.exists()) return;
@@ -1643,6 +1702,7 @@ void VocalSeparationController::discoverCustomModels()
              manifest.value(QStringLiteral("stems")).toArray())
             stems.push_back(stem.toString());
         QList<VocalDownloadFile> modelFiles;
+        QStringList roles;
         bool safeFiles = true;
         for (const QJsonValue& value :
              manifest.value(QStringLiteral("files")).toArray()) {
@@ -1656,20 +1716,59 @@ void VocalSeparationController::discoverCustomModels()
             modelFiles.push_back({name, {},
                 entry.value(QStringLiteral("bytes")).toInteger(),
                 entry.value(QStringLiteral("sha256")).toString().toLower()});
+            roles.push_back(entry.value(QStringLiteral("role")).toString());
         }
-        bool trusted = safeFiles;
-        if (trusted) {
-            trusted = std::any_of(baseCatalog_.cbegin(), baseCatalog_.cend(),
-                [&](const VocalModelCard& candidate) {
-                    return candidate.family == family
-                        && hashesFor(candidate.files) == hashesFor(modelFiles);
-                });
+        const QString declaredProfile = manifest.value(QStringLiteral("profile"))
+                                            .toString();
+        const QHash<QString, QPair<VocalModelFamily, qsizetype>> knownProfiles{
+            {QStringLiteral("uvr-mdxnet-kara"),
+             {VocalModelFamily::Mdx, 1}},
+            {QStringLiteral("uvr-mdx-net-inst-hq3"),
+             {VocalModelFamily::Mdx, 1}},
+            {QStringLiteral("htdemucs-ft-fp16"),
+             {VocalModelFamily::Demucs, 4}},
+        };
+        const auto exactBase = std::find_if(
+            baseCatalog_.cbegin(), baseCatalog_.cend(),
+            [&](const VocalModelCard& candidate) {
+                return candidate.family == family
+                    && hashesFor(candidate.files) == hashesFor(modelFiles);
+            });
+        QString profileId = declaredProfile;
+        qsizetype profileFileCount = 0;
+        if (declaredProfile.isEmpty() && exactBase != baseCatalog_.cend()) {
+            profileId = exactBase->id;
+            profileFileCount = exactBase->files.size();
+        } else if (knownProfiles.contains(declaredProfile)
+                   && knownProfiles.value(declaredProfile).first == family) {
+            profileFileCount = knownProfiles.value(declaredProfile).second;
         }
-        if (!trusted) {
+        const QStringList expectedRoles{
+            QStringLiteral("drums"), QStringLiteral("bass"),
+            QStringLiteral("other"), QStringLiteral("vocals")};
+        QStringList sortedRoles = roles;
+        sortedRoles.removeAll(QString());
+        sortedRoles.sort();
+        QStringList sortedExpectedRoles = expectedRoles;
+        sortedExpectedRoles.sort();
+        const bool validRoles = family == VocalModelFamily::Mdx
+            ? sortedRoles.isEmpty() : sortedRoles == sortedExpectedRoles;
+        if (!safeFiles || profileFileCount <= 0
+            || modelFiles.size() != profileFileCount || !validRoles) {
             reject(id, safeFiles
-                ? tr("模型指纹不在受信 Worker 配置中，已拒绝执行")
+                ? tr("模型执行配置或音轨角色不受支持，已拒绝执行")
                 : tr("模型文件缺失、越界或是链接文件"));
             continue;
+        }
+        if (knownProfiles.contains(profileId)) {
+            CustomModelBinding binding;
+            binding.profileId = profileId;
+            binding.roles = family == VocalModelFamily::Demucs ? roles : QStringList{};
+            for (const VocalDownloadFile& modelFile : modelFiles) {
+                binding.sha256.push_back(modelFile.sha256.toLower());
+                binding.bytes.push_back(modelFile.bytes);
+            }
+            customModelBindings_.insert(id, binding);
         }
         options_.catalog.push_back(VocalModelCard{
             id, family, modelFiles, stems,

@@ -63,6 +63,7 @@ class SeparationNativeBackendTest final : public QObject {
 private slots:
     void startRequestRequiresBoundedNativeFields();
     void startRequestRejectsOversizedPathsAndNames();
+    void startRequestAcceptsOnlyCompleteCustomModelDeclarations();
     void sha256IsComputedFromTheActualFile();
     void streamedModelCaptureIsCancellableAndBounded();
     void capturedModelBytesRejectAReplacementAfterTrustValidation();
@@ -172,6 +173,49 @@ void SeparationNativeBackendTest::startRequestRejectsOversizedPathsAndNames()
     QJsonObject longExtension = base;
     longExtension.insert(QStringLiteral("extension"), QString(17, QLatin1Char('e')));
     QCOMPARE(parseStartRequest(longExtension).code,
+             QStringLiteral("invalid_start_request"));
+}
+
+void SeparationNativeBackendTest::
+startRequestAcceptsOnlyCompleteCustomModelDeclarations()
+{
+    const QString hash(64, QLatin1Char('a'));
+    const QJsonObject base{
+        {QStringLiteral("runtimePath"), QStringLiteral("C:/runtime/onnxruntime.dll")},
+        {QStringLiteral("inputPath"), QStringLiteral("C:/audio/source.wav")},
+        {QStringLiteral("modelFiles"), QJsonArray{QStringLiteral("C:/models/custom.onnx")}},
+        {QStringLiteral("outputDirectory"), QStringLiteral("C:/audio")},
+        {QStringLiteral("baseName"), QStringLiteral("source")},
+        {QStringLiteral("directoryName"), QStringLiteral("source-custom")},
+        {QStringLiteral("modelName"), QStringLiteral("Custom MDX")},
+        {QStringLiteral("extension"), QStringLiteral("wav")},
+        {QStringLiteral("stems"), QJsonArray{QStringLiteral("vocals")}},
+        {QStringLiteral("stemLabels"), QJsonArray{QStringLiteral("Vocals")}},
+        {QStringLiteral("device"), QStringLiteral("cpu")},
+        {QStringLiteral("modelProfile"), QStringLiteral("uvr-mdxnet-kara")},
+        {QStringLiteral("modelSha256"), QJsonArray{hash}},
+        {QStringLiteral("modelBytes"), QJsonArray{12345}},
+        {QStringLiteral("modelRoles"), QJsonArray{}},
+    };
+    const StartRequestParseResult parsed = parseStartRequest(base);
+    QVERIFY2(parsed.ok, qPrintable(parsed.message));
+    QCOMPARE(parsed.request.modelProfile, QStringLiteral("uvr-mdxnet-kara"));
+    QCOMPARE(parsed.request.modelSha256, QStringList{hash});
+    QCOMPARE(parsed.request.modelBytes, (QVector<qint64>{12'345}));
+
+    for (const QString& missing : {QStringLiteral("modelProfile"),
+                                   QStringLiteral("modelSha256"),
+                                   QStringLiteral("modelBytes")}) {
+        QJsonObject incomplete = base;
+        incomplete.remove(missing);
+        QCOMPARE(parseStartRequest(incomplete).code,
+                 QStringLiteral("invalid_start_request"));
+    }
+
+    QJsonObject badHash = base;
+    badHash.insert(QStringLiteral("modelSha256"),
+                   QJsonArray{QStringLiteral("not-a-hash")});
+    QCOMPARE(parseStartRequest(badHash).code,
              QStringLiteral("invalid_start_request"));
 }
 

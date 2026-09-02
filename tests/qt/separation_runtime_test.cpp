@@ -90,6 +90,7 @@ class SeparationRuntimeTest final : public QObject {
 private slots:
     void missingAndBadDynamicRuntimeAreRejected();
     void trustedProfilesBindHashesToExactTensorSemantics();
+    void customDeclarationsReuseOnlyKnownTensorProfiles();
     void workerTrustSizesAndHashesMatchTheInstallCatalog();
     void demucsRowsAreBoundToTrustedHashes();
     void invalidTensorNamesTypesShapesAndOpsetsAreRejected();
@@ -145,6 +146,48 @@ void SeparationRuntimeTest::trustedProfilesBindHashesToExactTensorSemantics()
     QCOMPARE(demucs->outputs.front().shape, (QVector<qint64>{1, 4, 2, 343980}));
 
     QVERIFY(!trustedProfileForHashes({QString(64, QLatin1Char('0'))}).has_value());
+}
+
+void SeparationRuntimeTest::customDeclarationsReuseOnlyKnownTensorProfiles()
+{
+    const QString customHash(64, QLatin1Char('a'));
+    const auto custom = customProfileForDeclaration(
+        QStringLiteral("uvr-mdxnet-kara"), {customHash}, {12'345}, {});
+    QVERIFY2(custom.ok, qPrintable(custom.message));
+    QCOMPARE(custom.profile.id, QStringLiteral("uvr-mdxnet-kara"));
+    QCOMPARE(custom.profile.sha256, QStringList{customHash});
+    QCOMPARE(custom.profile.expectedSizeBytes, (QVector<qint64>{12'345}));
+    QCOMPARE(custom.profile.inputs.front().shape,
+             (QVector<qint64>{-1, 4, 2048, 256}));
+
+    const auto unknown = customProfileForDeclaration(
+        QStringLiteral("unknown-engine"), {customHash}, {12'345}, {});
+    QVERIFY(!unknown.ok);
+    QCOMPARE(unknown.code, QStringLiteral("model_profile_unknown"));
+
+    const auto malformedHash = customProfileForDeclaration(
+        QStringLiteral("uvr-mdxnet-kara"), {QStringLiteral("not-a-hash")},
+        {12'345}, {});
+    QVERIFY(!malformedHash.ok);
+    QCOMPARE(malformedHash.code, QStringLiteral("model_declaration_invalid"));
+
+    const QStringList demucsHashes{
+        QString(64, QLatin1Char('1')), QString(64, QLatin1Char('2')),
+        QString(64, QLatin1Char('3')), QString(64, QLatin1Char('4'))};
+    const auto demucs = customProfileForDeclaration(
+        QStringLiteral("htdemucs-ft-fp16"), demucsHashes,
+        {100, 101, 102, 103},
+        {QStringLiteral("drums"), QStringLiteral("bass"),
+         QStringLiteral("other"), QStringLiteral("vocals")});
+    QVERIFY2(demucs.ok, qPrintable(demucs.message));
+
+    const auto duplicateRole = customProfileForDeclaration(
+        QStringLiteral("htdemucs-ft-fp16"), demucsHashes,
+        {100, 101, 102, 103},
+        {QStringLiteral("drums"), QStringLiteral("drums"),
+         QStringLiteral("other"), QStringLiteral("vocals")});
+    QVERIFY(!duplicateRole.ok);
+    QCOMPARE(duplicateRole.code, QStringLiteral("model_declaration_invalid"));
 }
 
 void SeparationRuntimeTest::workerTrustSizesAndHashesMatchTheInstallCatalog()

@@ -84,6 +84,28 @@ QStringList stringArray(const QJsonValue& value, qsizetype maximumEntryLength,
     return result;
 }
 
+QVector<qint64> integerArray(const QJsonValue& value, bool* valid)
+{
+    QVector<qint64> result;
+    if (!value.isArray()) {
+        *valid = false;
+        return result;
+    }
+    for (const QJsonValue& entry : value.toArray()) {
+        if (!entry.isDouble()) {
+            *valid = false;
+            return {};
+        }
+        const qint64 number = entry.toInteger(-1);
+        if (number <= 0) {
+            *valid = false;
+            return {};
+        }
+        result.push_back(number);
+    }
+    return result;
+}
+
 QString utf8Error(ag_result result)
 {
     const char* detail = ag_last_error();
@@ -611,7 +633,9 @@ BackendResult runDemucs(const NativeStartRequest& request,
         BackendResult loaded = loadTrustedModelArtifact(
             modelPath, trusted, cancelled, &artifact);
         if (!loaded.ok) return loaded;
-        const int row = trustedDemucsRowForHash(artifact.sha256);
+        const int row = request.modelRoles.isEmpty()
+            ? trustedDemucsRowForHash(artifact.sha256)
+            : DemucsProfile::trusted().rows.indexOf(request.modelRoles.at(modelIndex));
         if (row < 0) return fail(QStringLiteral("model_semantics_invalid"),
                                  QStringLiteral("Demucs hash does not identify its trusted row"));
         const QString stem = profile.rows.at(row);
@@ -694,7 +718,9 @@ StartRequestParseResult parseStartRequest(const QJsonObject& payload)
         QStringLiteral("baseName"), QStringLiteral("directoryName"),
         QStringLiteral("modelName"),
         QStringLiteral("extension"), QStringLiteral("stemLabels"),
-        QStringLiteral("stems"), QStringLiteral("device")};
+        QStringLiteral("stems"), QStringLiteral("device"),
+        QStringLiteral("modelProfile"), QStringLiteral("modelSha256"),
+        QStringLiteral("modelBytes"), QStringLiteral("modelRoles")};
     for (auto it = payload.constBegin(); it != payload.constEnd(); ++it) {
         if (!allowed.contains(it.key())) {
             return {false, QStringLiteral("invalid_start_request"),
@@ -717,6 +743,42 @@ StartRequestParseResult parseStartRequest(const QJsonObject& payload)
                                 &arraysValid);
     request.stemLabels = stringArray(payload.value(QStringLiteral("stemLabels")),
                                      240, &arraysValid);
+    const bool hasCustomDeclaration = payload.contains(QStringLiteral("modelProfile"))
+        || payload.contains(QStringLiteral("modelSha256"))
+        || payload.contains(QStringLiteral("modelBytes"))
+        || payload.contains(QStringLiteral("modelRoles"));
+    if (hasCustomDeclaration) {
+        request.modelProfile = payload.value(QStringLiteral("modelProfile"))
+                                   .toString();
+        request.modelSha256 = stringArray(
+            payload.value(QStringLiteral("modelSha256")), 64, &arraysValid);
+        request.modelBytes = integerArray(
+            payload.value(QStringLiteral("modelBytes")), &arraysValid);
+        if (payload.contains(QStringLiteral("modelRoles"))) {
+            const QJsonArray roles = payload.value(QStringLiteral("modelRoles"))
+                                         .toArray();
+            if (!payload.value(QStringLiteral("modelRoles")).isArray()) {
+                arraysValid = false;
+            } else {
+                for (const QJsonValue& role : roles) {
+                    if (!role.isString() || role.toString().size() > 32) {
+                        arraysValid = false;
+                        break;
+                    }
+                    request.modelRoles.push_back(role.toString());
+                }
+            }
+        }
+        if (request.modelProfile.isEmpty()
+            || request.modelSha256.size() != request.modelFiles.size()
+            || request.modelBytes.size() != request.modelFiles.size()) {
+            arraysValid = false;
+        } else if (!customProfileForDeclaration(
+                       request.modelProfile, request.modelSha256,
+                       request.modelBytes, request.modelRoles).ok) {
+            arraysValid = false;
+        }
+    }
     const QString device = payload.value(QStringLiteral("device")).toString();
     if (device == QStringLiteral("auto")) request.device = DeviceMode::Auto;
     else if (device == QStringLiteral("cpu")) request.device = DeviceMode::Cpu;
@@ -1032,14 +1094,31 @@ BackendResult NativeWorkerBackend::separate(const QJsonObject& payload,
         return fail(QStringLiteral("input_missing"),
                     QStringLiteral("Input audio does not exist"));
     }
+    std::optional<TrustedModelProfile> trusted;
+    if (!request.modelProfile.isEmpty()) {
+        const CustomProfileResolution custom = customProfileForDeclaration(
+            request.modelProfile, request.modelSha256,
+            request.modelBytes, request.modelRoles);
+        if (!custom.ok) return fail(custom.code, custom.message);
+        trusted = custom.profile;
+    }
     QStringList hashes;
-    for (const QString& model : request.modelFiles) {
+    const QVector<TrustedModelFile> trustedFiles = trusted.has_value()
+        ? trustedFilesForProfile(*trusted) : allTrustedModelFiles();
+    for (qsizetype index = 0; index < request.modelFiles.size(); ++index) {
+        const QString& model = request.modelFiles.at(index);
         const ModelArtifactReadResult hashed = readModelArtifact(
-            model, false, allTrustedModelFiles(), cancelled);
+            model, false, trustedFiles, cancelled);
         if (!hashed.ok) return fail(hashed.code, hashed.message);
+        if (!request.modelProfile.isEmpty()
+            && hashed.sha256.compare(request.modelSha256.at(index),
+                                     Qt::CaseInsensitive) != 0) {
+            return fail(QStringLiteral("model_hash_mismatch"),
+                        QStringLiteral("Custom model file order does not match its declaration"));
+        }
         hashes.push_back(hashed.sha256);
     }
-    const std::optional<TrustedModelProfile> trusted = trustedProfileForHashes(hashes);
+    if (!trusted.has_value()) trusted = trustedProfileForHashes(hashes);
     if (!trusted) return fail(QStringLiteral("model_untrusted"),
                               QStringLiteral("Model hashes are not on the built-in allowlist"));
     const QStringList allowedStems = trusted->family == QStringLiteral("mdx")

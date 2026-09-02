@@ -252,6 +252,22 @@ TestCase {
                "download actions must remain inside the fixed model card")
         separationTestDriver.reset()
     }
+
+    function test_activeDownloadExposesARealCancelAction() {
+        separationTestDriver.reset()
+        separationTestDriver.setDownloadState("uvr-mdxnet-kara",
+                                              VocalSeparationController.Downloading,
+                                              0.25, "")
+        const card = findChild(page, "separationModelCard-uvr-mdxnet-kara")
+        const cancel = findChild(card,
+                                 "separationCancelDownload-uvr-mdxnet-kara")
+        verify(cancel && cancel.visible && cancel.enabled)
+        mouseClick(cancel)
+        tryVerify(function() {
+            return !VocalSeparationController.downloadBusy
+        }, 1000)
+        separationTestDriver.reset()
+    }
     function test_inputChooserAdvertisesAudioAndVideoContainers() {
         const dialog = findChild(page, "separationInputDialog")
         verify(dialog)

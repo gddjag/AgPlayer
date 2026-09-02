@@ -1164,6 +1164,19 @@ Rectangle {
                                                     VocalSeparationController.downloadModel(cardData.id)
                                             }
                                          }
+                                         WorkbenchButton {
+                                             objectName: "separationCancelDownload-" + cardData.id
+                                             visible: cardData.id === VocalSeparationController.downloadingModelId
+                                                      && VocalSeparationController.downloadBusy
+                                             implicitHeight: 24
+                                             topPadding: 3
+                                             bottomPadding: 3
+                                             text: qsTr("取消")
+                                             enabled: visible && !page.contextLocked
+                                             Accessible.name: qsTr("取消下载")
+                                             Accessible.role: Accessible.Button
+                                             onClicked: VocalSeparationController.cancelDownload()
+                                         }
                                      }
                                  }
                                  ColumnLayout {

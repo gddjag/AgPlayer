@@ -21,6 +21,10 @@ struct NativeStartRequest {
     QString runtimePath;
     QString inputPath;
     QStringList modelFiles;
+    QString modelProfile;
+    QStringList modelSha256;
+    QVector<qint64> modelBytes;
+    QStringList modelRoles;
     QString outputDirectory;
     QString baseName;
     QString directoryName;

@@ -52,8 +52,18 @@ struct ContractValidationResult {
     QString message;
 };
 
+struct CustomProfileResolution {
+    bool ok = false;
+    QString code;
+    QString message;
+    TrustedModelProfile profile;
+};
+
 [[nodiscard]] std::optional<TrustedModelProfile>
 trustedProfileForHashes(const QStringList& sha256);
+[[nodiscard]] CustomProfileResolution customProfileForDeclaration(
+    const QString& profileId, const QStringList& sha256,
+    const QVector<qint64>& expectedSizeBytes, const QStringList& roles);
 [[nodiscard]] QVector<TrustedModelFile> allTrustedModelFiles();
 [[nodiscard]] QVector<TrustedModelFile>
 trustedFilesForProfile(const TrustedModelProfile& profile);

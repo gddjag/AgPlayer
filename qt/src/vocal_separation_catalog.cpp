@@ -162,10 +162,10 @@ CustomManifestValidationResult validateCustomModelManifest(const QJsonObject& ma
 {
     static const QSet<QString> manifestKeys{
         QStringLiteral("id"), QStringLiteral("family"), QStringLiteral("stems"),
-        QStringLiteral("files")};
+        QStringLiteral("files"), QStringLiteral("profile")};
     static const QSet<QString> fileKeys{
         QStringLiteral("name"), QStringLiteral("bytes"), QStringLiteral("sha256"),
-        QStringLiteral("shape")};
+        QStringLiteral("shape"), QStringLiteral("role")};
     if (!hasOnlyKeys(manifest, manifestKeys)
         || !isSafeModelId(manifest.value(QStringLiteral("id")).toString())) {
         return reject(QStringLiteral("Manifest contains unsupported fields or has no id"));
@@ -188,7 +188,7 @@ CustomManifestValidationResult validateCustomModelManifest(const QJsonObject& ma
     }
     const QJsonArray files = manifest.value(QStringLiteral("files")).toArray();
     if (files.isEmpty() || (family == QStringLiteral("MDX") && files.size() != 1)
-        || (family == QStringLiteral("Demucs") && files.size() > 4)) {
+        || (family == QStringLiteral("Demucs") && files.size() != 4)) {
         return reject(QStringLiteral("Manifest has an invalid ONNX file set"));
     }
     QSet<QString> names;

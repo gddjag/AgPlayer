@@ -81,6 +81,55 @@ std::optional<TrustedModelProfile> trustedProfileForHashes(const QStringList& sh
     return std::nullopt;
 }
 
+CustomProfileResolution customProfileForDeclaration(
+    const QString& profileId, const QStringList& sha256,
+    const QVector<qint64>& expectedSizeBytes, const QStringList& roles)
+{
+    const auto profileIt = std::find_if(
+        profiles().cbegin(), profiles().cend(),
+        [&profileId](const TrustedModelProfile& profile) {
+            return profile.id == profileId;
+        });
+    if (profileIt == profiles().cend()) {
+        return {false, QStringLiteral("model_profile_unknown"),
+                QStringLiteral("Custom model names an unknown execution profile"), {}};
+    }
+    const bool demucs = profileIt->family == QStringLiteral("demucs");
+    const qsizetype expectedFiles = demucs ? 4 : 1;
+    if (sha256.size() != expectedFiles
+        || expectedSizeBytes.size() != expectedFiles) {
+        return {false, QStringLiteral("model_declaration_invalid"),
+                QStringLiteral("Custom model file declaration is incomplete"), {}};
+    }
+    constexpr qint64 kMaximumModelFileBytes = 1024LL * 1024LL * 1024LL;
+    for (qsizetype index = 0; index < sha256.size(); ++index) {
+        const QString hash = sha256.at(index);
+        if (hash.size() != 64
+            || !std::all_of(hash.cbegin(), hash.cend(), [](const QChar ch) {
+                return ch.isDigit()
+                    || (ch.toLower() >= QLatin1Char('a')
+                        && ch.toLower() <= QLatin1Char('f'));
+            })
+            || expectedSizeBytes.at(index) <= 0
+            || expectedSizeBytes.at(index) > kMaximumModelFileBytes) {
+            return {false, QStringLiteral("model_declaration_invalid"),
+                    QStringLiteral("Custom model fingerprint or size is invalid"), {}};
+        }
+    }
+    if ((!demucs && !roles.isEmpty())
+        || (demucs && normalized(roles)
+            != normalized({QStringLiteral("drums"), QStringLiteral("bass"),
+                           QStringLiteral("other"), QStringLiteral("vocals")}))) {
+        return {false, QStringLiteral("model_declaration_invalid"),
+                QStringLiteral("Custom model roles do not match the execution profile"), {}};
+    }
+    TrustedModelProfile resolved = *profileIt;
+    resolved.sha256 = sha256;
+    for (QString& hash : resolved.sha256) hash = hash.toLower();
+    resolved.expectedSizeBytes = expectedSizeBytes;
+    return {true, {}, {}, resolved};
+}
+
 QVector<TrustedModelFile> trustedFilesForProfile(
     const TrustedModelProfile& profile)
 {

@@ -451,6 +451,36 @@ int main(const int argc, char** argv)
         std::filesystem::remove(failure_path);
     }
 
+    // Size and timestamp are not an identity check. A same-size external
+    // writer that restores the timestamp must still win over our staged edit.
+    const std::filesystem::path fingerprint_path =
+        work_dir / "meta-source-fingerprint.wav";
+    std::filesystem::copy_file(fixture, fingerprint_path,
+        std::filesystem::copy_options::overwrite_existing);
+    const auto fingerprint_time =
+        std::filesystem::last_write_time(fingerprint_path);
+    auto external_bytes = file_bytes(fingerprint_path);
+    assert(external_bytes.size() > 64U);
+    external_bytes[external_bytes.size() / 2U] ^= 0x01U;
+    agplayer::MetadataWriterTestHooks fingerprint_hooks;
+    fingerprint_hooks.before_source_commit = [&] {
+        std::ofstream output(fingerprint_path,
+                             std::ios::binary | std::ios::trunc);
+        output.write(reinterpret_cast<const char*>(external_bytes.data()),
+                     static_cast<std::streamsize>(external_bytes.size()));
+        output.close();
+        std::filesystem::last_write_time(fingerprint_path, fingerprint_time);
+    };
+    agplayer::MetadataFileResult fingerprint_result;
+    assert(agplayer::write_metadata_plan(
+               fingerprint_path.u8string(), write_plan, fingerprint_result,
+               nullptr, &fingerprint_hooks) != AG_OK);
+    assert(fingerprint_result.error_code
+           == agplayer::MetadataErrorCode::SourceChanged);
+    assert(file_bytes(fingerprint_path) == external_bytes);
+    assert(!std::filesystem::exists(fingerprint_path.u8string() + ".agbak"));
+    std::filesystem::remove(fingerprint_path);
+
     // A failed write must not overwrite or delete a pre-existing recovery
     // point. This exercises both failure before replacement and readback
     // failure after replacement/rollback.

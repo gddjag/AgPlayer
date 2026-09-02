@@ -6,6 +6,7 @@ extern "C" {
 #include <libavutil/dict.h>
 #include <libavutil/mem.h>
 #include <libavutil/opt.h>
+#include <libavutil/sha.h>
 }
 
 #include <chrono>
@@ -32,6 +33,33 @@ namespace agplayer {
 constexpr std::uintmax_t kMetadataWriteMargin = 4U * 1024U * 1024U;
 constexpr std::size_t kMaxMetadataFieldBytes = 1U * 1024U * 1024U;
 constexpr std::size_t kMaxMetadataCoverBytes = 32U * 1024U * 1024U;
+
+using FileSha256 = std::array<unsigned char, 32>;
+
+bool file_sha256(const std::filesystem::path& path, FileSha256& digest)
+{
+    std::ifstream input(path, std::ios::binary);
+    if (!input) return false;
+    AVSHA* sha = av_sha_alloc();
+    if (sha == nullptr || av_sha_init(sha, 256) < 0) {
+        av_free(sha);
+        return false;
+    }
+    std::array<unsigned char, 64U * 1024U> buffer{};
+    while (input) {
+        input.read(reinterpret_cast<char*>(buffer.data()),
+                   static_cast<std::streamsize>(buffer.size()));
+        const std::streamsize read = input.gcount();
+        if (read > 0) {
+            av_sha_update(sha, buffer.data(),
+                          static_cast<unsigned int>(read));
+        }
+    }
+    const bool ok = input.eof();
+    if (ok) av_sha_final(sha, digest.data());
+    av_free(sha);
+    return ok;
+}
 
 AudioEquivalence classify_audio_stream_evidence(
     const std::vector<AudioStreamEvidence>& before,
@@ -1942,6 +1970,11 @@ ag_result write_metadata_with_preserved_backup(
         return cancel != nullptr && cancel->load(std::memory_order_acquire)
             ? AG_CANCELLED : AG_IO_ERROR;
     }
+    FileSha256 source_fingerprint{};
+    if (!file_sha256(source, source_fingerprint)) {
+        error = "Input file fingerprint could not be read";
+        return AG_IO_ERROR;
+    }
     const auto nonce = std::to_string(
         std::chrono::steady_clock::now().time_since_epoch().count());
     const std::filesystem::path staged = source.parent_path()
@@ -2053,10 +2086,15 @@ ag_result write_metadata_with_preserved_backup(
             return AG_DECODE_ERROR;
         }
     }
+    if (test_hooks != nullptr && test_hooks->before_source_commit)
+        test_hooks->before_source_commit();
+    FileSha256 current_fingerprint{};
     const auto current_size = std::filesystem::file_size(source, ec);
     const auto current_time = std::filesystem::last_write_time(source, ec);
     if (fail_at(test_hooks, MetadataFailurePoint::SourceChanged)
-        || ec || current_size != source_size || current_time != source_time) {
+        || ec || current_size != source_size || current_time != source_time
+        || !file_sha256(source, current_fingerprint)
+        || current_fingerprint != source_fingerprint) {
         clean_stage();
         error = "Source changed while metadata was being written";
         return AG_IO_ERROR;
@@ -2080,13 +2118,35 @@ ag_result write_metadata_with_preserved_backup(
     }
     std::filesystem::copy_file(source, backup,
                                std::filesystem::copy_options::overwrite_existing, ec);
-    if (ec || fail_at(test_hooks, MetadataFailurePoint::AtomicReplace)
+    FileSha256 pre_replace_fingerprint{};
+    FileSha256 backup_fingerprint{};
+    const bool source_fingerprint_read = !ec
+        && file_sha256(source, pre_replace_fingerprint);
+    const bool backup_fingerprint_read = !ec
+        && file_sha256(backup, backup_fingerprint);
+    if (!ec && source_fingerprint_read && backup_fingerprint_read
+        && (pre_replace_fingerprint != source_fingerprint
+            || backup_fingerprint != source_fingerprint)) {
+        clean_stage();
+        const bool prior_backup_restored = existing_backup->restore(
+            test_hooks != nullptr && test_hooks->fail_backup_restore);
+        error = "Source changed while metadata was being written";
+        if (!prior_backup_restored) {
+            error += "; prior backup remains preserved at ";
+            error += existing_backup->preserved_path();
+        }
+        return AG_IO_ERROR;
+    }
+    if (ec || !source_fingerprint_read || !backup_fingerprint_read
+        || fail_at(test_hooks, MetadataFailurePoint::AtomicReplace)
         || !atomic_replace(staged, source)) {
         clean_stage();
         const bool prior_backup_restored = existing_backup->restore(
             test_hooks != nullptr && test_hooks->fail_backup_restore);
         error = ec ? "Failed to create backup before replacement"
-                   : "Failed to atomically replace original file";
+            : (!source_fingerprint_read || !backup_fingerprint_read)
+                ? "Failed to verify backup before replacement"
+                : "Failed to atomically replace original file";
         if (!prior_backup_restored) {
             error += "; prior backup remains preserved at ";
             error += existing_backup->preserved_path();

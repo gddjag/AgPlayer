@@ -154,6 +154,7 @@ public:
     Q_INVOKABLE bool downloadModelFromMirror(const QString& modelId);
     Q_INVOKABLE void pauseDownload();
     Q_INVOKABLE void resumeDownload();
+    Q_INVOKABLE void cancelDownload();
     Q_INVOKABLE bool deleteModel(const QString& modelId);
     Q_INVOKABLE bool selectModel(const QString& modelId);
     Q_INVOKABLE bool setStemSelected(StemKind kind, bool selected);
@@ -240,6 +241,13 @@ private:
         bool runtimeArchive = false;
         QUrl mirrorUrl;
         bool mirrorAttempted = false;
+    };
+
+    struct CustomModelBinding {
+        QString profileId;
+        QStringList sha256;
+        QVector<qint64> bytes;
+        QStringList roles;
     };
 
     enum class VerificationPurpose { None, Refresh, Download, Start, Probe };
@@ -348,6 +356,7 @@ private:
     QVariantMap inputInfo_;
     QVariantList models_;
     QVariantList rejectedCustomModels_;
+    QHash<QString, CustomModelBinding> customModelBindings_;
     QVariantList availableDevices_;
     QVariantList stems_;
     QVariantList history_;

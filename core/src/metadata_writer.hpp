@@ -5,6 +5,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -159,6 +160,7 @@ struct MetadataWriterTestHooks {
     bool fail_source_restore = false;
     bool fail_backup_restore = false;
     bool simulate_normalized_packet_timing = false;
+    std::function<void()> before_source_commit;
 };
 
 struct CoverResult {

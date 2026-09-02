@@ -74,6 +74,33 @@ public:
     {
         controller.downloader_->cancel();
     }
+
+    static void seedQueuedRoute(VocalSeparationController& controller,
+                                const VocalDownloadFile& file,
+                                const QUrl& mirror,
+                                const bool mirrorAttempted)
+    {
+        VocalSeparationController::DownloadItem item;
+        item.file = file;
+        item.destination = QDir(controller.options_.dataRoot)
+                               .filePath(QStringLiteral("queued.onnx"));
+        item.mirrorUrl = mirror;
+        item.mirrorAttempted = mirrorAttempted;
+        controller.downloadQueue_ = {item};
+        controller.downloadingModelId_ = QStringLiteral("two-stem");
+    }
+
+    static void startQueuedDownload(VocalSeparationController& controller)
+    {
+        controller.startNextDownload();
+    }
+
+    static bool downloadPipelineIdle(
+        const VocalSeparationController& controller)
+    {
+        return controller.verificationWatcher_ == nullptr
+            && controller.runtimeInstallerWatcher_ == nullptr;
+    }
 };
 
 class VocalSeparationControllerTest final : public QObject {
@@ -87,6 +114,7 @@ private slots:
     void downloadsMultipleArtifactsSequentiallyThroughTheController();
     void downloadProgressNeverMutatesAnActiveSeparationJob();
     void downloadFailureRetriesMirrorBeforeReportingExhaustion();
+    void queuedDownloadRouteAndCancellationUseProductionControllerState();
     void installedMappingUsesCheapDiscoveryThenExplicitAsyncHashing();
     void customModelDirectoryPersistsAndRecognizesTrustedFlatFiles();
     void customModelDirectoryIgnoresUnknownFiles();
@@ -1598,8 +1626,11 @@ customSidecarManifestUsesTrustedFingerprintAndReportsRejection()
     QTemporaryDir temporary;
     QVERIFY(temporary.isValid());
     const QByteArray trustedBytes("trusted-test-model");
-    const auto options = optionsFor(temporary, QStringLiteral("stale"),
-                                    trustedBytes);
+    const QString requestMarker = temporary.filePath(
+        QStringLiteral("custom-request.json"));
+    const auto options = optionsFor(
+        temporary, QStringLiteral("capture-payload-delayed-shutdown"),
+        trustedBytes, requestMarker);
     const QString customRoot = temporary.filePath(QStringLiteral("自定义模型"));
     QVERIFY(QDir().mkpath(customRoot));
     QVERIFY(writeBytes(QDir(customRoot).filePath(QStringLiteral("renamed.onnx")),
@@ -1620,12 +1651,14 @@ customSidecarManifestUsesTrustedFingerprintAndReportsRejection()
         QDir(customRoot).filePath(QStringLiteral("custom-two-stem.json")),
         QJsonDocument(trustedManifest).toJson(QJsonDocument::Compact)));
 
-    const QByteArray unknownBytes("unknown-model-data");
+    const QByteArray unknownBytes("compatible-new-model-data");
     QVERIFY(writeBytes(QDir(customRoot).filePath(QStringLiteral("unknown.onnx")),
                        unknownBytes));
     QJsonObject rejectedManifest = trustedManifest;
     rejectedManifest.insert(QStringLiteral("id"),
-                            QStringLiteral("unknown-profile"));
+                            QStringLiteral("compatible-new-profile"));
+    rejectedManifest.insert(QStringLiteral("profile"),
+                            QStringLiteral("uvr-mdxnet-kara"));
     rejectedManifest.insert(QStringLiteral("files"), QJsonArray{QJsonObject{
         {QStringLiteral("name"), QStringLiteral("unknown.onnx")},
         {QStringLiteral("bytes"), unknownBytes.size()},
@@ -1635,6 +1668,14 @@ customSidecarManifestUsesTrustedFingerprintAndReportsRejection()
     QVERIFY(writeBytes(
         QDir(customRoot).filePath(QStringLiteral("unknown-profile.json")),
         QJsonDocument(rejectedManifest).toJson(QJsonDocument::Compact)));
+    QJsonObject unsupportedManifest = rejectedManifest;
+    unsupportedManifest.insert(QStringLiteral("id"),
+                               QStringLiteral("unsupported-profile"));
+    unsupportedManifest.insert(QStringLiteral("profile"),
+                               QStringLiteral("arbitrary-onnx"));
+    QVERIFY(writeBytes(
+        QDir(customRoot).filePath(QStringLiteral("unsupported-profile.json")),
+        QJsonDocument(unsupportedManifest).toJson(QJsonDocument::Compact)));
 
     AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
     WaveformProvider waveforms;
@@ -1667,20 +1708,44 @@ customSidecarManifestUsesTrustedFingerprintAndReportsRejection()
              QStringList{sha256(trustedBytes)});
     QVERIFY(accepted.value(QStringLiteral("rejectionReason")).toString().isEmpty());
 
-    QVariantMap rejected;
+    QVariantMap compatible;
     for (const QVariant& value : controller.models()) {
         const QVariantMap model = value.toMap();
         if (model.value(QStringLiteral("id")).toString()
-            == QStringLiteral("unknown-profile")) {
-            rejected = model;
+            == QStringLiteral("compatible-new-profile")) {
+            compatible = model;
             break;
         }
     }
-    QVERIFY(!rejected.isEmpty());
-    QCOMPARE(rejected.value(QStringLiteral("state")).toInt(),
+    QVERIFY(!compatible.isEmpty());
+    QCOMPARE(compatible.value(QStringLiteral("state")).toInt(),
+             int(VocalSeparationController::ModelState::Installed));
+    QCOMPARE(compatible.value(QStringLiteral("profile")).toString(),
+             QStringLiteral("uvr-mdxnet-kara"));
+    QCOMPARE(compatible.value(QStringLiteral("hashes")).toStringList(),
+             QStringList{sha256(unknownBytes)});
+    QCOMPARE(modelStateFor(controller.models(),
+                           QStringLiteral("unsupported-profile")),
              int(VocalSeparationController::ModelState::ModelFailed));
-    QVERIFY(!rejected.value(QStringLiteral("rejectionReason"))
-                 .toString().isEmpty());
+
+    QVERIFY(controller.selectModel(QStringLiteral("compatible-new-profile")));
+    QVERIFY(writeBytes(options.runtimeLibraryPath, QByteArrayLiteral("runtime")));
+    QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
+    QVERIFY(controller.start());
+    QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(),
+                              VocalSeparationController::JobState::Completed,
+                              5'000);
+    QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(requestMarker), 5'000);
+    QFile marker(requestMarker);
+    QVERIFY(marker.open(QIODevice::ReadOnly));
+    const QJsonObject request =
+        QJsonDocument::fromJson(marker.readAll()).object();
+    QCOMPARE(request.value(QStringLiteral("modelProfile")).toString(),
+             QStringLiteral("uvr-mdxnet-kara"));
+    QCOMPARE(request.value(QStringLiteral("modelSha256")).toArray(),
+             QJsonArray{sha256(unknownBytes)});
+    QCOMPARE(request.value(QStringLiteral("modelBytes")).toArray(),
+             QJsonArray{unknownBytes.size()});
 }
 
 void VocalSeparationControllerTest::
@@ -1721,6 +1786,50 @@ downloadFailureRetriesMirrorBeforeReportingExhaustion()
     VocalSeparationControllerTestDriver::cancelDownloader(controller);
     QVERIFY2(exhausted.count() == 0,
              "cancelling a download must not open backup-source UI");
+}
+
+void VocalSeparationControllerTest::
+queuedDownloadRouteAndCancellationUseProductionControllerState()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray modelBytes("queued-route-model");
+    const QString sourcePath = temporary.filePath(QStringLiteral("source.onnx"));
+    QVERIFY(writeBytes(sourcePath, modelBytes));
+    const auto options = optionsFor(temporary, QStringLiteral("stale"),
+                                    modelBytes);
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+    QSignalSpy exhausted(
+        &controller, &VocalSeparationController::downloadSourcesExhausted);
+
+    VocalSeparationControllerTestDriver::seedQueuedRoute(
+        controller,
+        {QStringLiteral("queued.onnx"), QUrl::fromLocalFile(sourcePath),
+         modelBytes.size(), sha256(modelBytes)},
+        QUrl(QStringLiteral("https://hf-mirror.com/queued.onnx")), false);
+    VocalSeparationControllerTestDriver::startQueuedDownload(controller);
+    QCOMPARE(controller.downloadSource(), QStringLiteral("官方线路"));
+    QVERIFY(controller.downloadBusy());
+
+    controller.cancelDownload();
+    QVERIFY(!controller.downloadBusy());
+    QCOMPARE(controller.downloadProgress(), 0.0);
+    QCOMPARE(exhausted.count(), 0);
+
+    QVERIFY(controller.downloadModel(QStringLiteral("two-stem")));
+    controller.cancelDownload();
+    QVERIFY(!controller.downloadBusy());
+    QCOMPARE(exhausted.count(), 0);
+    QTRY_VERIFY_WITH_TIMEOUT(
+        VocalSeparationControllerTestDriver::downloadPipelineIdle(controller),
+        5'000);
+    QVERIFY(controller.downloadModel(QStringLiteral("two-stem")));
+    controller.cancelDownload();
+    QVERIFY(!controller.downloadBusy());
+    QCOMPARE(exhausted.count(), 0);
 }
 
 void VocalSeparationControllerTest::
