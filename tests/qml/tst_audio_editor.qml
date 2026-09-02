@@ -1404,7 +1404,7 @@ TestCase {
         verify(button.font.pixelSize >= 15)
         compare(button.text, "导出音频")
         compare(progressFill.width, 0)
-        compare(progressFill.color.toString(), "#12b76a")
+        compare(progressFill.color.toString(), Theme.success.toString())
     }
 
     function test_configuredExportOffersOnlyValidSelectionRange() {

@@ -151,9 +151,9 @@ Item {
             radius: 2
             gradient: Gradient {
                 orientation: Gradient.Vertical
-                GradientStop { position: 0; color: "#B15DED" }
-                GradientStop { position: 0.52; color: "#496CFF" }
-                GradientStop { position: 1; color: "#059EF3" }
+                GradientStop { position: 0; color: "#B15DED" } // theme-color-allow: equalizer band visualization
+                GradientStop { position: 0.52; color: "#496CFF" } // theme-color-allow: equalizer band visualization
+                GradientStop { position: 1; color: "#059EF3" } // theme-color-allow: equalizer band visualization
             }
         }
 

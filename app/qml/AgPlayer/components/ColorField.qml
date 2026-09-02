@@ -6,7 +6,7 @@ import AgPlayer
 
 Control {
     id: root
-    property color colorValue: "#000000"
+    property color colorValue: "#000000" // theme-color-allow: color picker value domain
     property color defaultColor: colorValue
     property string targetProperty: ""
     property bool showText: true
@@ -226,13 +226,13 @@ Control {
                     radius: 4
                     gradient: Gradient {
                         orientation: Gradient.Horizontal
-                        GradientStop { position: 0.00; color: "#ff0000" }
-                        GradientStop { position: 0.17; color: "#ffff00" }
-                        GradientStop { position: 0.33; color: "#00ff00" }
-                        GradientStop { position: 0.50; color: "#00ffff" }
-                        GradientStop { position: 0.67; color: "#0000ff" }
-                        GradientStop { position: 0.83; color: "#ff00ff" }
-                        GradientStop { position: 1.00; color: "#ff0000" }
+                        GradientStop { position: 0.00; color: "#ff0000" } // theme-color-allow: color picker hue spectrum
+                        GradientStop { position: 0.17; color: "#ffff00" } // theme-color-allow: color picker hue spectrum
+                        GradientStop { position: 0.33; color: "#00ff00" } // theme-color-allow: color picker hue spectrum
+                        GradientStop { position: 0.50; color: "#00ffff" } // theme-color-allow: color picker hue spectrum
+                        GradientStop { position: 0.67; color: "#0000ff" } // theme-color-allow: color picker hue spectrum
+                        GradientStop { position: 0.83; color: "#ff00ff" } // theme-color-allow: color picker hue spectrum
+                        GradientStop { position: 1.00; color: "#ff0000" } // theme-color-allow: color picker hue spectrum
                     }
                 }
             }

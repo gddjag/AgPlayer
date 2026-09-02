@@ -59,10 +59,10 @@ function Get-SurfaceExpectation {
             return [pscustomobject]@{ Width = 860; Height = 900 }
         }
         "^list$|^details$" {
-            # The detached classic list follows the 863px classic player
-            # width. Its height is 38px title + 56px header + ten 50px rows
-            # + 46px filter; keep this aligned with ListWindow.
-            return [pscustomobject]@{ Width = 863; Height = 640 }
+            # The QA host expands the detached classic list to the available
+            # desktop height. Default token geometry remains covered by the
+            # QML contract test; this assertion protects the real capture.
+            return [pscustomobject]@{ Width = 863; Height = 906 }
         }
         "^tool-\d+$" {
             return [pscustomobject]@{ Width = 1672; Height = 941 }

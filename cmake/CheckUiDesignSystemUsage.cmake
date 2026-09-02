@@ -13,6 +13,24 @@ function(require_text relative_path expected)
     endif()
 endfunction()
 
+file(GLOB_RECURSE qml_files "${ROOT}/app/qml/AgPlayer/*.qml")
+foreach(qml_file IN LISTS qml_files)
+    if(qml_file MATCHES "/theme/Theme\\.qml$")
+        continue()
+    endif()
+    file(STRINGS "${qml_file}" qml_lines)
+    set(line_number 0)
+    foreach(qml_line IN LISTS qml_lines)
+        math(EXPR line_number "${line_number} + 1")
+        if(qml_line MATCHES "#[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]"
+                AND NOT qml_line MATCHES "theme-color-allow:")
+            file(RELATIVE_PATH relative_qml "${ROOT}" "${qml_file}")
+            message(FATAL_ERROR
+                "${relative_qml}:${line_number} contains a raw color. Use Theme or document a media-domain exception with theme-color-allow:")
+        endif()
+    endforeach()
+endforeach()
+
 require_text("app/qml/AgPlayer/components/TitleBar.qml"
     "color: Theme.titleBarSurface")
 require_text("app/qml/AgPlayer/components/TitleBar.qml"

@@ -87,14 +87,14 @@ Window {
 
     function meterColor(index) {
         if (index < 5)
-            return "#3AAA65"
+            return "#3AAA65" // theme-color-allow: fixed equalizer meter scale
         if (index < 9)
-            return "#88C32E"
+            return "#88C32E" // theme-color-allow: fixed equalizer meter scale
         if (index < 13)
-            return "#C3AB33"
+            return "#C3AB33" // theme-color-allow: fixed equalizer meter scale
         if (index < 16)
-            return "#D4A03C"
-        return "#7F3431"
+            return "#D4A03C" // theme-color-allow: fixed equalizer meter scale
+        return "#7F3431" // theme-color-allow: fixed equalizer meter scale
     }
 
     function meterNormalizedPosition(db) {
@@ -956,7 +956,7 @@ Window {
                 Label {
                     text: EqualizerController.protectionDb.toFixed(1) + " dB"
                     color: EqualizerController.protectionDb < -0.05
-                           ? "#B15DED" : Theme.textSecondary
+                           ? "#B15DED" : Theme.textSecondary // theme-color-allow: equalizer band identity
                     font.pixelSize: 14
                 }
             }

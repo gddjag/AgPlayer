@@ -33,8 +33,8 @@ Item {
         qsTr("中高频"), qsTr("高频"), qsTr("更高频"), qsTr("最高频")
     ]
     readonly property var spectralBandDefaults: [
-        "#123ecf", "#00a7ba", "#00a76f", "#62bb39",
-        "#d8dc2f", "#ffad22", "#ff611f", "#e82718"
+        "#123ecf", "#00a7ba", "#00a76f", "#62bb39", // theme-color-allow: user-editable waveform spectrum palette
+        "#d8dc2f", "#ffad22", "#ff611f", "#e82718" // theme-color-allow: user-editable waveform spectrum palette
     ]
 
     function open() {
@@ -1801,12 +1801,12 @@ Item {
                     RowLayout {
                         anchors.fill: parent
                         spacing: Theme.spacingSm
-                        ColorField { objectName: "waveformSolidBaseColorField"; visible: SettingsController.waveformMode === 0; colorValue: SettingsController.waveformSolidBaseColor; defaultColor: "#9098a6"; targetProperty: "waveformSolidBaseColor" }
-                        ColorField { objectName: "waveformSolidProgressColorField"; visible: SettingsController.waveformMode === 0; colorValue: SettingsController.waveformSolidProgressColor; defaultColor: "#d27722"; targetProperty: "waveformSolidProgressColor" }
-                        ColorField { objectName: "waveformRgbBaseColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbBaseColor; defaultColor: "#00b4a0"; targetProperty: "waveformRgbBaseColor" }
-                        ColorField { objectName: "waveformRgbStartColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbStartColor; defaultColor: "#00d4ff"; targetProperty: "waveformRgbStartColor" }
-                        ColorField { objectName: "waveformRgbMiddleColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbMiddleColor; defaultColor: "#7b2ff7"; targetProperty: "waveformRgbMiddleColor" }
-                        ColorField { objectName: "waveformRgbEndColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbEndColor; defaultColor: "#e62e9b"; targetProperty: "waveformRgbEndColor" }
+                        ColorField { objectName: "waveformSolidBaseColorField"; visible: SettingsController.waveformMode === 0; colorValue: SettingsController.waveformSolidBaseColor; defaultColor: "#9098a6"; targetProperty: "waveformSolidBaseColor" } // theme-color-allow: user-editable waveform default
+                        ColorField { objectName: "waveformSolidProgressColorField"; visible: SettingsController.waveformMode === 0; colorValue: SettingsController.waveformSolidProgressColor; defaultColor: "#d27722"; targetProperty: "waveformSolidProgressColor" } // theme-color-allow: user-editable waveform default
+                        ColorField { objectName: "waveformRgbBaseColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbBaseColor; defaultColor: "#00b4a0"; targetProperty: "waveformRgbBaseColor" } // theme-color-allow: user-editable waveform default
+                        ColorField { objectName: "waveformRgbStartColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbStartColor; defaultColor: "#00d4ff"; targetProperty: "waveformRgbStartColor" } // theme-color-allow: user-editable waveform default
+                        ColorField { objectName: "waveformRgbMiddleColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbMiddleColor; defaultColor: "#7b2ff7"; targetProperty: "waveformRgbMiddleColor" } // theme-color-allow: user-editable waveform default
+                        ColorField { objectName: "waveformRgbEndColorField"; visible: SettingsController.waveformMode === 1; colorValue: SettingsController.waveformRgbEndColor; defaultColor: "#e62e9b"; targetProperty: "waveformRgbEndColor" } // theme-color-allow: user-editable waveform default
                     }
                 }
 
@@ -1939,28 +1939,28 @@ Item {
                             objectName: "spectrumSolidColorField"
                             visible: SettingsController.spectrumColorMode === 0
                             colorValue: SettingsController.spectrumSolidColor
-                            defaultColor: "#7b2ff7"
+                            defaultColor: "#7b2ff7" // theme-color-allow: user-editable waveform default
                             targetProperty: "spectrumSolidColor"
                         }
                         ColorField {
                             objectName: "spectrumRgbStartColorField"
                             visible: SettingsController.spectrumColorMode === 1
                             colorValue: SettingsController.spectrumRgbStartColor
-                            defaultColor: "#00d4ff"
+                            defaultColor: "#00d4ff" // theme-color-allow: user-editable waveform default
                             targetProperty: "spectrumRgbStartColor"
                         }
                         ColorField {
                             objectName: "spectrumRgbMiddleColorField"
                             visible: SettingsController.spectrumColorMode === 1
                             colorValue: SettingsController.spectrumRgbMiddleColor
-                            defaultColor: "#7b2ff7"
+                            defaultColor: "#7b2ff7" // theme-color-allow: user-editable waveform default
                             targetProperty: "spectrumRgbMiddleColor"
                         }
                         ColorField {
                             objectName: "spectrumRgbEndColorField"
                             visible: SettingsController.spectrumColorMode === 1
                             colorValue: SettingsController.spectrumRgbEndColor
-                            defaultColor: "#e62e9b"
+                            defaultColor: "#e62e9b" // theme-color-allow: user-editable waveform default
                             targetProperty: "spectrumRgbEndColor"
                         }
                     }

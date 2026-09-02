@@ -114,9 +114,9 @@ Canvas {
 
         var gradient = ctx.createLinearGradient(plotLeft, 0,
                                                 width - plotRight, 0)
-        gradient.addColorStop(0, "#09AED9")
-        gradient.addColorStop(0.52, "#176CF0")
-        gradient.addColorStop(1, "#E35BD6")
+        gradient.addColorStop(0, "#09AED9") // theme-color-allow: equalizer response visualization
+        gradient.addColorStop(0.52, "#176CF0") // theme-color-allow: equalizer response visualization
+        gradient.addColorStop(1, "#E35BD6") // theme-color-allow: equalizer response visualization
 
         ctx.beginPath()
         traceEnvelope(ctx, envelope)
@@ -147,7 +147,7 @@ Canvas {
         for (var band = 0; band < envelope.length; ++band) {
             ctx.beginPath()
             ctx.arc(envelope[band].x, envelope[band].y, 8.5, 0, Math.PI * 2)
-            ctx.fillStyle = band < 9 ? "#087FB6" : "#8439A8"
+            ctx.fillStyle = band < 9 ? "#087FB6" : "#8439A8" // theme-color-allow: equalizer response visualization
             ctx.fill()
             ctx.strokeStyle = Theme.controlHandle.toString()
             ctx.lineWidth = 2

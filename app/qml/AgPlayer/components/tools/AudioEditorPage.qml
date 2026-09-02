@@ -1861,7 +1861,7 @@ Rectangle {
                                         : exportGroup.exportCompleted
                                             ? parent.width : 0
                                     height: parent.height
-                                    color: "#12B76A"
+                                    color: Theme.success
                                     radius: parent.radius
                                     Behavior on width {
                                         NumberAnimation {

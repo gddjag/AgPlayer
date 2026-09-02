@@ -130,3 +130,10 @@ New pages must:
 
 Exceptions must be documented beside the property and covered by a focused
 test. Compilation alone is not visual acceptance.
+
+The `ui_design_system_usage_contract_test` is the repository guardrail for
+these rules. It checks the required hierarchy tokens in core surfaces and
+rejects raw hexadecimal colours in application QML. A legitimate domain colour
+must carry an inline `theme-color-allow:` explanation so that the exception is
+visible in review. New generic controls belong in `components/Themed*.qml`;
+page-local copies of shared control visuals are not accepted.

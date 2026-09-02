@@ -572,7 +572,7 @@ Rectangle {
                 width: 1
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
-                color: Theme.isLight ? "#ffffff" : "#000000"
+                color: Theme.isLight ? "#ffffff" : "#000000" // theme-color-allow: waveform edge mask
                 z: 4
             }
 
