@@ -1,7 +1,7 @@
 # AgPlayer Reference Quality Repair Design
 
-**Date:** 2026-09-02  
-**Status:** Approved by the user on 2026-09-02  
+**Date:** 2026-09-02
+**Status:** Approved by the user on 2026-09-02
 **Parent designs:**
 
 - `2026-09-01-agplayer-unified-player-tools-quality-design.md`
