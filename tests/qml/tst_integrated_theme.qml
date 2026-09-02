@@ -187,7 +187,7 @@ TestCase {
         verify(!overlay.selectionActive)
     }
 
-    function test_selection_hover_handles_and_glass_badges_match_contract() {
+    function test_selection_hover_handles_and_opaque_badges_match_contract() {
         standaloneSelection.setSelection(20000, 60000)
         mouseMove(standaloneSelection, 400, 50)
         compare(standaloneSelection.hoverPositionMs, 50000)
@@ -205,8 +205,8 @@ TestCase {
         verify(leftVisual && durationBadge && durationLabel
                && dragBadge && dragLabel)
         compare(leftVisual.width, 2)
-        verify(durationBadge.color.a < 0.85)
-        verify(dragBadge.color.a < 0.85)
+        compare(durationBadge.color.toString(), Theme.accent.toString())
+        compare(dragBadge.color.toString(), Theme.accentHover.toString())
         compare(durationLabel.color.toString(),
                 Theme.onBrandGradientText.toString())
         compare(dragLabel.color.toString(),
@@ -388,7 +388,7 @@ TestCase {
         verify(theme.icon.source.toString().endsWith("/theme-skin.svg"))
     }
 
-    function test_right_panel_uses_outlined_glass_controls() {
+    function test_right_panel_uses_outlined_native_controls() {
         var shell = enterIntegratedShell()
         var tagOutline = findChild(shell, "integratedTagTabOutline")
         var lyricsOutline = findChild(shell, "integratedLyricsTabOutline")
@@ -401,10 +401,10 @@ TestCase {
         mouseClick(tagTab)
         compare(tagOutline.border.width, 1)
         compare(lyricsOutline.border.width, 1)
-        verify(tagOutline.color.a > lyricsOutline.color.a,
-               "the active tab needs a subtle filled highlight")
-        verify(searchGlass.color.a > 0 && searchGlass.color.a < 0.35)
-        verify(addGlass.color.a > 0 && addGlass.color.a < 0.35)
+        compare(tagOutline.color.toString(), Theme.selectedSurface.toString())
+        compare(lyricsOutline.color.toString(), Theme.surfaceElevated.toString())
+        compare(searchGlass.color.toString(), Theme.surfaceElevated.toString())
+        compare(addGlass.color.toString(), Theme.surfaceElevated.toString())
         compare(toggleIcon.width, 22)
         compare(toggleIcon.height, 22)
     }
@@ -425,17 +425,17 @@ TestCase {
                      column.width / 2, 1.0)
     }
 
-    function test_wave_navigator_uses_light_glass_material() {
+    function test_wave_navigator_uses_flat_native_material() {
         var shell = enterIntegratedShell()
         var track = findChild(shell, "integratedWaveformNavigatorTrack")
         var thumb = findChild(shell, "integratedWaveformNavigatorThumb")
         var highlight = findChild(shell,
                                   "integratedWaveformNavigatorHighlight")
         verify(track && thumb && highlight)
-        verify(track.color.a > 0 && track.color.a <= 0.09)
-        verify(thumb.color.a > track.color.a && thumb.color.a <= 0.32)
-        verify(thumb.border.color.a <= 0.12)
-        verify(highlight.color.a > 0 && highlight.color.a <= 0.18)
+        compare(track.color.toString(), Theme.opaqueDivider.toString())
+        compare(thumb.color.toString(), Theme.accentSoft.toString())
+        compare(thumb.border.color.toString(), Theme.opaqueBorder.toString())
+        compare(highlight.color.toString(), Theme.surfaceHover.toString())
     }
 
     function test_integrated_track_header_is_compact_and_bold() {
@@ -488,8 +488,8 @@ TestCase {
         var clear = findChild(filter, "clearFiltersButton")
         verify(filter && keyword && bpm && range && firstHandle
                && sliderTrack && clear)
-        verify(keyword.border.color.a <= 0.12)
-        verify(bpm.border.color.a <= 0.12)
+        compare(keyword.border.color.toString(), Theme.opaqueBorder.toString())
+        compare(bpm.border.color.toString(), Theme.opaqueBorder.toString())
         compare(sliderTrack.height, 3)
         compare(firstHandle.width, 12)
         compare(firstHandle.height, 12)
@@ -518,8 +518,8 @@ TestCase {
         for (var index = 0; index < names.length; ++index) {
             var surface = findChild(shell, names[index])
             verify(surface, names[index] + " missing")
-            verify(surface.border.color.a <= 0.12,
-                   names[index] + " border is too strong")
+            compare(surface.border.color.toString(),
+                    Theme.opaqueBorder.toString(), names[index])
         }
     }
 

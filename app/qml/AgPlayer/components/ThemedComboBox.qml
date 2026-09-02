@@ -4,7 +4,7 @@ import AgPlayer
 
 ComboBox {
     id: control
-    implicitHeight: 30
+    implicitHeight: Theme.controlHeight
     palette.window: Theme.elevated
     palette.base: Theme.elevated
     palette.text: Theme.primaryText
@@ -20,7 +20,7 @@ ComboBox {
         color: control.enabled ? Theme.primaryText : Theme.secondaryText
         opacity: control.enabled ? 1.0 : 0.55
         font.family: Theme.fontPrimary
-        font.pixelSize: Math.max(13, Qt.application.font.pixelSize)
+        font.pixelSize: Theme.fontSizeBody
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
     }
@@ -44,14 +44,14 @@ ComboBox {
     delegate: ItemDelegate {
         required property int index
         width: ListView.view ? ListView.view.width : control.width
-        implicitHeight: 32
+        implicitHeight: Theme.controlHeight
         highlighted: control.highlightedIndex === index
         contentItem: Text {
             text: control.textAt(index)
             color: parent.highlighted ? Theme.activeSelectionText
                                       : Theme.primaryText
             font.family: Theme.fontPrimary
-            font.pixelSize: Math.max(13, Qt.application.font.pixelSize)
+            font.pixelSize: Theme.fontSizeBody
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
         }

@@ -1467,6 +1467,15 @@ set_tests_properties(qml_integrated_theme_test PROPERTIES
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
+add_test(NAME qml_design_system_test
+    COMMAND qml_main_window_test
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_design_system.qml)
+set_tests_properties(qml_design_system_test PROPERTIES
+    TIMEOUT 20
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
 add_test(NAME qml_about_version_test
     COMMAND qml_main_window_test
         -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_main_window.qml

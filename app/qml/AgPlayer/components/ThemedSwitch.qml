@@ -6,12 +6,12 @@ T.Switch {
     id: control
 
     property color checkedColor: Theme.accent
-    property real indicatorWidth: 38
+    property real indicatorWidth: 36
     property real indicatorHeight: 20
-    property real labelPixelSize: 14
+    property real labelPixelSize: Theme.fontSizeBodyStrong
 
     implicitWidth: Math.max(indicatorWidth + 6, contentItem.implicitWidth)
-    implicitHeight: Math.max(32, indicatorHeight + 8)
+    implicitHeight: Math.max(Theme.controlHeight, indicatorHeight + 8)
 
     indicator: Rectangle {
         implicitWidth: control.indicatorWidth

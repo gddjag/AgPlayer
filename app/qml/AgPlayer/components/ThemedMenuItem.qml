@@ -5,7 +5,7 @@ import AgPlayer
 MenuItem {
     id: control
     implicitWidth: 230
-    implicitHeight: 34
+    implicitHeight: Theme.controlHeight
     leftPadding: 12
     rightPadding: control.subMenu ? 30 : 12
 
@@ -16,7 +16,7 @@ MenuItem {
                : control.enabled ? Theme.primaryText : Theme.secondaryText
         opacity: control.enabled ? 1.0 : 0.55
         font.family: Theme.fontPrimary
-        font.pixelSize: Math.max(13, Qt.application.font.pixelSize)
+        font.pixelSize: Theme.fontSizeBody
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
     }

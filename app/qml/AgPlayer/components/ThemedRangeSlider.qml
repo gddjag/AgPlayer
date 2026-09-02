@@ -5,13 +5,13 @@ import AgPlayer
 T.RangeSlider {
     id: control
     property bool glassStyle: false
-    implicitHeight: 28
+    implicitHeight: Theme.controlHeight
     background: Rectangle {
         objectName: "rangeSliderTrack"
         x: control.leftPadding
         y: control.topPadding + control.availableHeight / 2 - height / 2
         width: control.availableWidth
-        height: 3
+        height: Theme.sliderTrackHeight
         radius: height / 2
         color: !control.enabled ? Theme.disabled
               : control.glassStyle ? Theme.integratedSoftOutline
@@ -28,7 +28,9 @@ T.RangeSlider {
         x: control.leftPadding + control.first.visualPosition
            * (control.availableWidth - width)
         y: control.topPadding + control.availableHeight / 2 - height / 2
-        width: 12; height: 12; radius: 6
+        width: Theme.sliderHandleExtent
+        height: Theme.sliderHandleExtent
+        radius: width / 2
         color: !control.enabled ? Theme.border
               : control.glassStyle
                 ? Theme.integratedSliderHandle
@@ -51,7 +53,9 @@ T.RangeSlider {
         x: control.leftPadding + control.second.visualPosition
            * (control.availableWidth - width)
         y: control.topPadding + control.availableHeight / 2 - height / 2
-        width: 12; height: 12; radius: 6
+        width: Theme.sliderHandleExtent
+        height: Theme.sliderHandleExtent
+        radius: width / 2
         color: !control.enabled ? Theme.border
               : control.glassStyle
                 ? Theme.integratedSliderHandle
