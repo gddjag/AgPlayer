@@ -577,6 +577,100 @@ int main(const int argc, char** argv)
     std::filesystem::remove(path_swap_path);
     std::filesystem::remove(displaced_path);
 
+    const std::filesystem::path cas_swap_path =
+        work_dir / "meta-post-check-path-swap.wav";
+    const std::filesystem::path cas_displaced_path =
+        work_dir / "meta-post-check-path-swap.displaced.wav";
+    std::filesystem::copy_file(fixture, cas_swap_path,
+        std::filesystem::copy_options::overwrite_existing);
+    auto cas_replacement_bytes = file_bytes(fixture);
+    assert(cas_replacement_bytes.size() > 96U);
+    cas_replacement_bytes[96] ^= 0x33U;
+    bool cas_swap_hook_called = false;
+    agplayer::MetadataWriterTestHooks cas_swap_hooks;
+    cas_swap_hooks.before_replace_file = [&] {
+        cas_swap_hook_called = true;
+        assert(MoveFileExW(cas_swap_path.c_str(), cas_displaced_path.c_str(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0);
+        std::ofstream replacement(cas_swap_path,
+            std::ios::binary | std::ios::trunc);
+        replacement.write(
+            reinterpret_cast<const char*>(cas_replacement_bytes.data()),
+            static_cast<std::streamsize>(cas_replacement_bytes.size()));
+        replacement.close();
+    };
+    agplayer::MetadataFileResult cas_swap_result;
+    assert(agplayer::write_metadata_plan(cas_swap_path.u8string(), write_plan,
+        cas_swap_result, nullptr, &cas_swap_hooks) == AG_IO_ERROR);
+    assert(cas_swap_hook_called);
+    assert(cas_swap_result.error_code
+        == agplayer::MetadataErrorCode::SourceChanged);
+    assert(file_bytes(cas_swap_path) == cas_replacement_bytes);
+    assert(!std::filesystem::exists(cas_swap_path.u8string() + ".agbak"));
+    std::filesystem::remove(cas_swap_path);
+    std::filesystem::remove(cas_displaced_path);
+
+    const std::filesystem::path error_1177_path =
+        work_dir / "meta-replace-error-1177.wav";
+    std::filesystem::copy_file(fixture, error_1177_path,
+        std::filesystem::copy_options::overwrite_existing);
+    const auto error_1177_original = file_bytes(error_1177_path);
+    const std::filesystem::path error_1177_backup =
+        error_1177_path.u8string() + ".agbak";
+    constexpr std::array<unsigned char, 8> prior_backup_marker{
+        'p', 'r', 'i', 'o', 'r', '-', 'b', '\n'};
+    {
+        std::ofstream prior_backup(error_1177_backup, std::ios::binary);
+        prior_backup.write(
+            reinterpret_cast<const char*>(prior_backup_marker.data()),
+            static_cast<std::streamsize>(prior_backup_marker.size()));
+    }
+    agplayer::MetadataWriterTestHooks error_1177_hooks;
+    error_1177_hooks.simulate_replace_error_1177 = true;
+    agplayer::MetadataFileResult error_1177_result;
+    assert(agplayer::write_metadata_plan(error_1177_path.u8string(), write_plan,
+        error_1177_result, nullptr, &error_1177_hooks) == AG_IO_ERROR);
+    assert(error_1177_result.error_code
+        == agplayer::MetadataErrorCode::AtomicReplaceFailed);
+    assert(file_bytes(error_1177_path) == error_1177_original);
+    assert(file_bytes(error_1177_backup)
+        == std::vector<unsigned char>(prior_backup_marker.begin(),
+                                      prior_backup_marker.end()));
+    std::filesystem::remove(error_1177_backup);
+    std::filesystem::remove(error_1177_path);
+
+    const std::filesystem::path error_1177_recovery_path =
+        work_dir / "meta-replace-error-1177-recovery.wav";
+    std::filesystem::copy_file(fixture, error_1177_recovery_path,
+        std::filesystem::copy_options::overwrite_existing);
+    const auto error_1177_recovery_original =
+        file_bytes(error_1177_recovery_path);
+    agplayer::MetadataWriterTestHooks error_1177_recovery_hooks;
+    error_1177_recovery_hooks.simulate_replace_error_1177 = true;
+    error_1177_recovery_hooks.fail_source_restore = true;
+    agplayer::MetadataFileResult error_1177_recovery_result;
+    assert(agplayer::write_metadata_plan(error_1177_recovery_path.u8string(),
+        write_plan, error_1177_recovery_result, nullptr,
+        &error_1177_recovery_hooks) == AG_IO_ERROR);
+    assert(error_1177_recovery_result.error_code
+        == agplayer::MetadataErrorCode::AtomicReplaceFailed);
+    assert(error_1177_recovery_result.message.find(
+        "original recovery backup remains at") != std::string::npos);
+    bool found_error_1177_recovery = false;
+    for (const auto& item : std::filesystem::directory_iterator(work_dir)) {
+        if (item.path().filename().u8string().find(
+                "meta-replace-error-1177-recovery.wav.agbak.recovery-")
+            == std::string::npos) {
+            continue;
+        }
+        assert(file_bytes(item.path()) == error_1177_recovery_original);
+        std::filesystem::remove(item.path());
+        found_error_1177_recovery = true;
+        break;
+    }
+    assert(found_error_1177_recovery);
+    std::filesystem::remove(error_1177_recovery_path);
+
     const std::filesystem::path commit_lock_failure_path =
         work_dir / "meta-commit-lock-failure.wav";
     std::filesystem::copy_file(fixture, commit_lock_failure_path,

@@ -2396,8 +2396,63 @@ ag_result write_metadata_with_preserved_backup(
         return AG_IO_ERROR;
     }
 #ifdef _WIN32
-    if (ReplaceFileW(source.c_str(), staged.c_str(), backup.c_str(),
-            REPLACEFILE_IGNORE_MERGE_ERRORS, nullptr, nullptr) == 0) {
+    if (test_hooks != nullptr && test_hooks->before_replace_file)
+        test_hooks->before_replace_file();
+    bool replace_succeeded = false;
+    DWORD replace_error = ERROR_SUCCESS;
+    if (test_hooks != nullptr
+        && test_hooks->simulate_replace_error_1177) {
+        // Reproduce ReplaceFileW's documented 1177 partial state: the
+        // original target has moved to backup while staged retains its name.
+        if (MoveFileExW(source.c_str(), backup.c_str(),
+                MOVEFILE_WRITE_THROUGH) != 0) {
+            replace_error = ERROR_UNABLE_TO_MOVE_REPLACEMENT_2;
+        } else {
+            replace_error = GetLastError();
+        }
+    } else {
+        replace_succeeded = ReplaceFileW(source.c_str(), staged.c_str(),
+            backup.c_str(), REPLACEFILE_IGNORE_MERGE_ERRORS, nullptr,
+            nullptr) != 0;
+        if (!replace_succeeded) replace_error = GetLastError();
+    }
+    if (!replace_succeeded) {
+        if (replace_error == ERROR_UNABLE_TO_MOVE_REPLACEMENT_2) {
+            const bool source_restored =
+                !(test_hooks != nullptr && test_hooks->fail_source_restore)
+                && MoveFileExW(backup.c_str(), source.c_str(),
+                               MOVEFILE_WRITE_THROUGH) != 0;
+            clean_stage();
+            error = "Failed to atomically replace original file after "
+                    "the original moved to backup";
+            if (source_restored) {
+                const bool prior_backup_restored = existing_backup->restore(
+                    test_hooks != nullptr
+                    && test_hooks->fail_backup_restore);
+                if (!prior_backup_restored) {
+                    error += "; prior backup remains preserved at ";
+                    error += existing_backup->preserved_path();
+                }
+            } else {
+                const auto recovery =
+                    existing_backup->preserve_after_source_restore_failure(
+                        test_hooks != nullptr
+                        && test_hooks->fail_backup_restore);
+                if (!recovery.original_backup_path.empty()) {
+                    error += "; original recovery backup remains at ";
+                    error += recovery.original_backup_path;
+                } else {
+                    error += "; original recovery backup path is unavailable";
+                }
+                if (!recovery.prior_backup_path.empty()) {
+                    error += recovery.prior_backup_restored
+                        ? "; prior backup restored at "
+                        : "; prior backup remains preserved at ";
+                    error += recovery.prior_backup_path;
+                }
+            }
+            return AG_IO_ERROR;
+        }
         clean_stage();
         const bool prior_backup_restored = existing_backup->restore(
             test_hooks != nullptr && test_hooks->fail_backup_restore);
