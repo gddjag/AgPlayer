@@ -18,7 +18,8 @@ and C++ interfaces remain unchanged.
   rolling player shells, the detached track list, settings, and audio tools.
 - Added a repository contract that rejects unreviewed raw QML colours and
   verifies required token/shared-component use on core surfaces. It also blocks
-  any increase above the reviewed 227-instance legacy direct-control baseline.
+  direct-control growth against a per-file legacy baseline, so reductions in
+  one old page cannot become quota for another and new files start at zero.
 - Retained allowlisted media-domain colours for waveform, spectrum, equalizer,
   rating, favourite, and user-editable visual content.
 

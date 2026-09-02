@@ -11,7 +11,9 @@ T.Button {
     property bool compact: false
     property bool prominent: false
     property bool loading: false
+    property bool available: true
 
+    enabled: available && !loading
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
     implicitHeight: compact ? Theme.controlHeightCompact
@@ -25,18 +27,23 @@ T.Button {
     Accessible.description: loading ? qsTr("正在处理") : ""
     Accessible.role: Accessible.Button
 
-    contentItem: Row {
-        spacing: Theme.spacingSm
+    contentItem: Item {
+        implicitWidth: buttonLabel.implicitWidth
+        implicitHeight: Math.max(buttonLabel.implicitHeight,
+                                 busyIndicator.implicitHeight)
 
         C.BusyIndicator {
+            id: busyIndicator
             objectName: "themedButtonBusyIndicator"
             width: Theme.fontSizeBody
             height: width
             running: control.loading
             visible: running
+            anchors.centerIn: parent
         }
 
         Text {
+            id: buttonLabel
             text: control.text
             color: !control.enabled ? Theme.textDisabled
                    : control.primary || control.danger ? Theme.accentText
@@ -44,6 +51,8 @@ T.Button {
             font.family: Theme.fontPrimary
             font.pixelSize: Theme.fontSizeBody
             font.weight: control.primary ? Font.Medium : Font.Normal
+            visible: !control.loading
+            anchors.centerIn: parent
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
         }
@@ -51,7 +60,7 @@ T.Button {
 
     background: Rectangle {
         radius: Theme.radiusSm
-        color: !control.enabled || control.loading ? Theme.disabled
+        color: !control.enabled ? Theme.disabled
                : control.danger ? (control.down ? Qt.darker(Theme.danger, 1.15)
                                                  : control.hovered ? Qt.lighter(Theme.danger, 1.08)
                                                                    : Theme.danger)

@@ -84,12 +84,19 @@ TestCase {
     ThemedDialog { id: themedDialog; title: "对话框" }
     ThemedToolTip { id: themedToolTip; text: "提示" }
     ThemedScrollBar { id: themedScrollBar; size: 0.5 }
+    SignalSpy {
+        id: primaryButtonClickSpy
+        target: primaryButton
+        signalName: "clicked"
+    }
 
     function init() {
         SettingsController.themeMode = 0
-        primaryButton.enabled = true
+        primaryButton.available = true
         primaryButton.loading = false
         textField.error = false
+        textField.errorMessage = ""
+        primaryButtonClickSpy.clear()
         mouseMove(testCase, testCase.width - 1, testCase.height - 1)
         primaryButton.forceActiveFocus()
         wait(0)
@@ -124,9 +131,9 @@ TestCase {
         compare(standardRow.background.color.toString(),
                 Theme.selectedSurface.toString())
 
-        primaryButton.enabled = false
+        primaryButton.available = false
         tryCompare(primaryButton.background, "color", Theme.disabled)
-        primaryButton.enabled = true
+        primaryButton.available = true
 
         SettingsController.themeMode = 1
         tryCompare(Theme, "isLight", true)
@@ -156,18 +163,30 @@ TestCase {
         mouseRelease(primaryButton, primaryButton.width / 2,
                      primaryButton.height / 2)
 
+        const originalWidth = primaryButton.implicitWidth
+        primaryButtonClickSpy.clear()
         primaryButton.loading = true
         tryCompare(primaryButton.background, "color", Theme.disabled)
+        compare(primaryButton.enabled, false)
+        compare(primaryButton.implicitWidth, originalWidth)
         const busyIndicator = findChild(primaryButton,
                                         "themedButtonBusyIndicator")
         verify(busyIndicator && busyIndicator.running)
+        mouseClick(primaryButton, primaryButton.width / 2,
+                   primaryButton.height / 2)
+        compare(primaryButtonClickSpy.count, 0)
         primaryButton.loading = false
 
         textField.errorMessage = "无效内容"
         textField.error = true
-        compare(textField.background.border.color.toString(),
+        const inputFrame = findChild(textField, "themedTextFieldFrame")
+        const errorLabel = findChild(textField, "themedTextFieldErrorLabel")
+        compare(inputFrame.border.color.toString(),
                 Theme.danger.toString())
         compare(textField.Accessible.description, "无效内容")
+        verify(errorLabel && errorLabel.visible)
+        compare(errorLabel.text, "无效内容")
+        verify(textField.implicitHeight > Theme.controlHeight)
         textField.error = false
     }
 

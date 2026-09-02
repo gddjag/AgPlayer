@@ -102,8 +102,9 @@ but not typography, state colours, radii, focus treatment, or base height.
 
 Legacy specialised controls are migrated incrementally to avoid changing
 working interaction geometry in a style-only release. The repository contract
-freezes their reviewed direct-Qt-Control baseline at 227 instances: refactoring
-may reduce that number, while new pages and features may not increase it.
+freezes their reviewed direct-Qt-Control baseline per file: refactoring may
+reduce a file's count, but that reduction cannot become quota for another file.
+New files start with a zero-direct-control baseline.
 
 ## 6. Interaction states
 
@@ -114,9 +115,9 @@ Disabled, Loading, and Error where applicable.
 - Pressed uses the pressed semantic surface; no layout jump.
 - Keyboard focus uses a 2 px theme accent ring.
 - Disabled content remains readable and does not accept input.
-- Loading preserves the original control extent.
-- Error explains the cause next to the relevant control; red alone is not an
-  explanation.
+- Loading preserves the original control extent and does not accept activation.
+- Error explains the cause visibly next to the relevant control; red alone is
+  not an explanation.
 - Transitions are 120-160 ms and limited to colour, opacity, or small position
   changes. Infinite decorative animation, live blur, and glow are prohibited.
 
