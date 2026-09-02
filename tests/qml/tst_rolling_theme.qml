@@ -339,9 +339,10 @@ TestCase {
         var interaction = findChild(rolling, "rollingOverviewInteraction")
         var progress = findChild(rolling, "rollingOverviewProgress")
         var playedClip = findChild(rolling, "rollingOverviewPlayedClip")
+        var playhead = findChild(rolling, "rollingOverviewPlayhead")
         var hoverCapsule = findChild(rolling, "rollingOverviewHoverCapsule")
         var hoverText = findChild(rolling, "rollingOverviewHoverText")
-        verify(overview && interaction && progress && playedClip
+        verify(overview && interaction && progress && playedClip && playhead
                && hoverCapsule && hoverText)
         compare(overview.visibleStartMs, 0)
         compare(overview.visibleEndMs, 120000)
@@ -349,6 +350,11 @@ TestCase {
         compare(overview.position, 0)
         compare(playedClip.width, overview.width * 0.5)
         compare(progress.color.toString(), Theme.waveformMagenta.toString())
+        compare(playhead.color.toString(),
+                Theme.onBrandGradientText.toString())
+        compare(playhead.height, overview.height)
+        verify(Math.abs(playhead.mapToItem(overview, playhead.width / 2, 0).x
+                        - overview.pixelForTime(fakePlayback.positionMs)) <= 1)
 
         mouseMove(interaction, interaction.width * 0.25,
                   interaction.height / 2)
@@ -360,6 +366,12 @@ TestCase {
         compare(fakePlayback.seekCount, 1)
         verify(Math.abs(fakePlayback.lastSeek - 30000) <= 1)
         compare(fakePlayback.playCount, 1)
+        tryVerify(function() {
+            return Math.abs(
+                        playhead.mapToItem(overview,
+                                           playhead.width / 2, 0).x
+                        - overview.width * 0.25) <= 1
+        })
     }
 
     function test_main_waveform_scrolls_under_fixed_center_playhead() {
@@ -370,7 +382,6 @@ TestCase {
         verify(canvas && waveform && playhead)
         compare(waveform.visualMode, 3)
         compare(waveform.position, fakePlayback.positionMs)
-        rolling.waveformPixelsPerSecond = 120
         rolling.syncWaveformViewport()
         var firstStart = waveform.visibleStartMs
         var referenceX = waveform.pixelForTime(59000)
@@ -394,18 +405,25 @@ TestCase {
         var surface = findChild(rolling, "rollingScratchSurface")
         var buffering = findChild(rolling, "rollingScratchStatus")
         verify(surface && buffering)
-        compare(rolling.signedRateForDrag(-12, 100), 1)
-        compare(rolling.signedRateForDrag(12, 100), -1)
-        compare(rolling.signedRateForDrag(-120, 10), 3)
-        compare(rolling.deltaMsForPixels(-12), 100)
+        var tenthSecondPixels = rolling.pxPerSec * 0.1
+        verify(Math.abs(rolling.signedRateForDrag(
+                            -tenthSecondPixels, 100) - 1) < 0.0001)
+        verify(Math.abs(rolling.signedRateForDrag(
+                            tenthSecondPixels, 100) + 1) < 0.0001)
+        compare(rolling.signedRateForDrag(-rolling.pxPerSec, 10), 3)
+        verify(Math.abs(rolling.deltaMsForPixels(
+                            -tenthSecondPixels) - 100) < 0.0001)
 
         mousePress(surface, surface.width / 2, surface.height / 2,
                    Qt.LeftButton)
         mouseMove(surface, surface.width / 2 - 3, surface.height / 2, 20)
         compare(fakePlayback.beginCount, 0)
+        var viewStartBeforeDrag = rolling.viewStartTimeSec
         mouseMove(surface, surface.width / 2 - 18, surface.height / 2, 80)
         compare(fakePlayback.beginCount, 1)
         verify(fakePlayback.lastScratchRate > 0)
+        verify(rolling.viewStartTimeSec > viewStartBeforeDrag,
+               "left drag continuously advances the visible time window")
         mouseRelease(surface, surface.width / 2 - 18,
                      surface.height / 2, Qt.LeftButton)
         compare(fakePlayback.endCount, 1)
@@ -445,7 +463,6 @@ TestCase {
         var canvas = findChild(rolling, "rollingMainWaveformCanvas")
         var waveform = findChild(rolling, "rollingMainWaveform")
         verify(canvas && waveform)
-        rolling.waveformPixelsPerSecond = 120
 
         var edgePositions = [0, 100, fakePlayback.durationMs - 100,
                              fakePlayback.durationMs]
@@ -533,16 +550,56 @@ TestCase {
         rolling.resetRollingTempo()
         compare(fakePlayback.resetCount, 1)
 
-        rolling.waveformPixelsPerSecond = 120
+        rolling.visibleBeats = 8
         rolling.zoomIn()
-        compare(rolling.waveformPixelsPerSecond, 150)
+        compare(rolling.visibleBeats, 6)
+        rolling.zoomIn()
+        compare(rolling.visibleBeats, 4)
+        rolling.zoomIn()
+        compare(rolling.visibleBeats, 4)
         rolling.zoomOut()
-        compare(rolling.waveformPixelsPerSecond, 120)
-        rolling.waveformPixelsPerSecond = 470
-        rolling.zoomIn()
-        compare(rolling.waveformPixelsPerSecond, 480)
+        compare(rolling.visibleBeats, 6)
+        rolling.visibleBeats = 64
+        rolling.zoomOut()
+        compare(rolling.visibleBeats, 64)
         rolling.resetZoom()
-        compare(rolling.waveformPixelsPerSecond, 120)
+        compare(rolling.visibleBeats, 8)
+
+        rolling.visibleBeats = 2
+        tryCompare(rolling, "visibleBeats", 4)
+        rolling.visibleBeats = 100
+        tryCompare(rolling, "visibleBeats", 64)
+    }
+
+    function test_bpm_drives_continuous_viewport_time_and_pixel_mapping() {
+        var rolling = rollingWithFakes()
+        var canvas = findChild(rolling, "rollingMainWaveformCanvas")
+        verify(canvas)
+
+        rolling.visibleBeats = 8
+        compare(rolling.visibleBeats, 8)
+        compare(rolling.effectiveBpm, 120)
+        verify(Math.abs(rolling.beatSec - 0.5) < 0.0001)
+        verify(Math.abs(rolling.viewTimeSpanSec - 4.0) < 0.0001)
+        verify(Math.abs(rolling.viewStartTimeSec - 58.0) < 0.0001)
+        verify(Math.abs(rolling.viewEndTimeSec - 62.0) < 0.0001)
+        verify(Math.abs(rolling.pxPerSec - canvas.width / 4.0) < 0.0001)
+        verify(Math.abs(rolling.timeToX(fakePlayback.positionMs / 1000)
+                        - canvas.width * 0.5) < 0.0001)
+
+        fakePlayback.speedRatio = 1.25
+        tryVerify(function() {
+            return Math.abs(rolling.effectiveBpm - 150) < 0.0001
+                    && Math.abs(rolling.viewTimeSpanSec - 3.2) < 0.0001
+                    && Math.abs(rolling.viewStartTimeSec - 58.4) < 0.0001
+                    && Math.abs(rolling.viewEndTimeSec - 61.6) < 0.0001
+        })
+        verify(Math.abs(rolling.timeToX(fakePlayback.positionMs / 1000)
+                        - canvas.width * 0.5) < 0.0001)
+
+        fakePlayback.sourceBpm = 0
+        tryCompare(rolling, "effectiveBpm", 120)
+        verify(Math.abs(rolling.beatSec - 0.5) < 0.0001)
     }
 
     function test_single_and_rolling_subtitle_joins_optional_tags() {
