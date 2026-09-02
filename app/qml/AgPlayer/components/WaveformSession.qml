@@ -1,5 +1,5 @@
 import QtQuick
-import AgPlayer
+import AgPlayer as Runtime
 
 QtObject {
     id: root
@@ -8,9 +8,11 @@ QtObject {
     property var layers: ({})
     property real durationMs: 0
     property real generation: 0
+    property bool active: true
+    property bool frequencyReady: false
     property int libraryRevision: 0
     readonly property string trackId:
-        String(PlaybackController.currentTrackId || "")
+        String(Runtime.PlaybackController.currentTrackId || "")
     readonly property var trackPalette: paletteForTrack(trackId)
     readonly property double trackColorHash: Number(trackPalette.hash)
     readonly property color paletteCoolColor: trackPalette.cool
@@ -35,7 +37,7 @@ QtObject {
     }
 
     function publishVisualTiming() {
-        AudioVisualFeatureController.setWaveformTiming(
+        Runtime.AudioVisualFeatureController.setWaveformTiming(
                     trackId,
                     Number(layers._bpm) || 0,
                     Math.max(0, Number(layers._durationMs) || durationMs || 0),
@@ -43,13 +45,14 @@ QtObject {
     }
 
     function currentRow() {
-        return LibraryModel.indexForTrackId(PlaybackController.currentTrackId)
+        return Runtime.LibraryModel.indexForTrackId(
+                    Runtime.PlaybackController.currentTrackId)
     }
 
     function currentPath() {
         var row = currentRow()
-        return row < 0 ? "" : LibraryModel.data(
-                    LibraryModel.index(row, 0), LibraryModel.PathRole)
+        return row < 0 ? "" : Runtime.LibraryModel.data(
+                    Runtime.LibraryModel.index(row, 0), Runtime.LibraryModel.PathRole)
     }
 
     function loadWaveform() {
@@ -57,13 +60,13 @@ QtObject {
         var path = currentPath()
         var neighbors = []
         if (row > 0)
-            neighbors.push(LibraryModel.data(
-                               LibraryModel.index(row - 1, 0),
-                               LibraryModel.PathRole))
-        if (row >= 0 && row + 1 < LibraryModel.count)
-            neighbors.push(LibraryModel.data(
-                               LibraryModel.index(row + 1, 0),
-                               LibraryModel.PathRole))
+            neighbors.push(Runtime.LibraryModel.data(
+                               Runtime.LibraryModel.index(row - 1, 0),
+                               Runtime.LibraryModel.PathRole))
+        if (row >= 0 && row + 1 < Runtime.LibraryModel.count)
+            neighbors.push(Runtime.LibraryModel.data(
+                               Runtime.LibraryModel.index(row + 1, 0),
+                               Runtime.LibraryModel.PathRole))
         layers = ({})
         durationMs = 0
         publishVisualTiming()
@@ -71,35 +74,40 @@ QtObject {
             return
         if (!path || path.length === 0)
             return
-        generation = WaveformProvider.loadForTrack(
-                    PlaybackController.currentTrackId, path, true)
-        WaveformProvider.prefetchTracks(neighbors)
+        generation = Runtime.WaveformProvider.loadForTrack(
+                    Runtime.PlaybackController.currentTrackId, path, true)
+        Runtime.WaveformProvider.prefetchTracks(neighbors)
     }
 
     Component.onCompleted: loadWaveform()
 
     property Connections playbackConnection: Connections {
-        target: PlaybackController
+        target: Runtime.PlaybackController
         function onCurrentTrackIdChanged() { root.loadWaveform() }
     }
 
     property Connections libraryConnection: Connections {
-        target: LibraryModel
+        target: Runtime.LibraryModel
         function onDataChanged() { ++root.libraryRevision }
         function onModelReset() { ++root.libraryRevision; root.loadWaveform() }
     }
 
     property Connections waveformConnection: Connections {
-        target: WaveformProvider
+        target: Runtime.WaveformProvider
+        function onActiveGenerationChanged() {
+            root.frequencyReady = false
+        }
         function onWaveformReady(path, resultLayers) {
             var responseTrack = String(resultLayers._trackId || "")
             var responseGeneration = Number(resultLayers._generation || 0)
             var sameTrack = responseTrack.length === 0
-                    || responseTrack === String(PlaybackController.currentTrackId)
+                    || responseTrack === String(Runtime.PlaybackController.currentTrackId)
             var sameGeneration = responseGeneration === 0
-                    || responseGeneration === Number(WaveformProvider.activeGeneration)
-            if (sameTrack && sameGeneration && path === root.currentPath()) {
+                    || responseGeneration === Number(Runtime.WaveformProvider.activeGeneration)
+            if (root.active && sameTrack && sameGeneration
+                    && path === root.currentPath()) {
                 root.layers = resultLayers
+                root.frequencyReady = Boolean(resultLayers._frequencyReady)
                 root.durationMs = Math.max(
                             0, Number(resultLayers._durationMs) || 0)
                 root.publishVisualTiming()
@@ -108,7 +116,7 @@ QtObject {
     }
 
     property Connections settingsConnection: Connections {
-        target: SettingsController
+        target: Runtime.SettingsController
         function onWaveformPeakAlgorithmChanged() { root.loadWaveform() }
     }
 

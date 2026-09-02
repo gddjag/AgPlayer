@@ -221,7 +221,7 @@ TestCase {
         compare(String(waveform.midColor), String(frequencySettings.midColor))
         compare(String(waveform.highColor), String(frequencySettings.highColor))
         compare(waveform.frequencyUnplayedOpacity,
-                frequencySettings.unplayedOpacity)
+                Theme.nonImmersiveSpectralUnplayedOpacity)
         compare(clip.visible, false,
                 "frequency overlays must not be drawn twice in the played region")
         SettingsController.waveformPlaybackGuide = true

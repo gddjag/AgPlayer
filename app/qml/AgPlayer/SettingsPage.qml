@@ -27,14 +27,6 @@ Item {
     property alias programmaticScroll: settingsScroll.programmaticScroll
     readonly property var frequencyWaveformSettings:
         SettingsController.frequencyColorWaveform
-    readonly property var spectralBandLabels: [
-        qsTr("最低频"), qsTr("低频"), qsTr("低中频"), qsTr("中频"),
-        qsTr("中高频"), qsTr("高频"), qsTr("更高频"), qsTr("最高频")
-    ]
-    readonly property var spectralBandDefaults: [
-        "#123ecf", "#00a7ba", "#00a76f", "#62bb39", // theme-color-allow: user-editable waveform spectrum palette
-        "#d8dc2f", "#ffad22", "#ff611f", "#e82718" // theme-color-allow: user-editable waveform spectrum palette
-    ]
 
     function open() {
         if (visible)
@@ -1666,13 +1658,13 @@ Item {
 
                 SettingRow {
                     visible: SettingsController.waveformMode === 3
-                    label: qsTr("频彩基色")
+                    label: qsTr("频彩调色板")
 
                     RowLayout {
                         anchors.fill: parent
                         spacing: Theme.spacingSm
 
-                        Text { text: qsTr("Low"); color: Theme.secondaryText }
+                        Text { text: qsTr("低频"); color: Theme.secondaryText }
                         ColorField {
                             objectName: "frequencyLowColor"
                             Layout.fillWidth: true
@@ -1682,7 +1674,7 @@ Item {
                                 root.frequencyWaveformSettings.lowColor = value
                             }
                         }
-                        Text { text: qsTr("Mid"); color: Theme.secondaryText }
+                        Text { text: qsTr("中频"); color: Theme.secondaryText }
                         ColorField {
                             objectName: "frequencyMidColor"
                             Layout.fillWidth: true
@@ -1692,7 +1684,7 @@ Item {
                                 root.frequencyWaveformSettings.midColor = value
                             }
                         }
-                        Text { text: qsTr("High"); color: Theme.secondaryText }
+                        Text { text: qsTr("高频"); color: Theme.secondaryText }
                         ColorField {
                             objectName: "frequencyHighColor"
                             Layout.fillWidth: true

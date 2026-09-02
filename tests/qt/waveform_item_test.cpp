@@ -350,61 +350,6 @@ void WaveformItemTest::frequencyColorChangeDoesNotReplaceGeometryNode()
     delete updated;
 }
 
-void WaveformItemTest::spectralProgressUpdatesAlphaWithoutReplacingGeometry()
-{
-    TestableWaveformItem item;
-    item.setWidth(1000);
-    item.setHeight(48);
-    item.setDuration(100000);
-    item.setVisualMode(3);
-    item.setSpectralUnplayedOpacity(0.60);
-    item.setSpectralPalette({QStringLiteral("#ff0000"),
-                             QStringLiteral("#00ff00")});
-    item.setLayers(makeLayers(peaks({1.0, 0.8, 0.6, 0.4}), {}, {}, {},
-                              peaks({0, 85, 170, 255})));
-
-    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
-    QVERIFY(node != nullptr);
-    auto* geometry = static_cast<QSGGeometryNode*>(node)->geometry();
-    const void* vertexStorage = geometry->vertexData();
-
-    const QList<qreal> progressValues{0.0, 0.001, 0.5, 0.999, 1.0};
-    for (const qreal progress : progressValues) {
-        item.setPosition(progress * item.duration());
-        node = item.updatePaintNode(node, nullptr);
-        QCOMPARE(static_cast<QSGGeometryNode*>(node)->geometry(), geometry);
-        QCOMPARE(geometry->vertexData(), vertexStorage);
-
-        const int peakCount = renderedPeakCount(node, item);
-        const int expectedPlayed = progress <= 0.0
-            ? 0
-            : progress >= 1.0
-              ? peakCount
-              : static_cast<int>(std::floor(
-                    progress * static_cast<qreal>(peakCount - 1))) + 1;
-        const auto* data = vertices(node);
-        for (int peak = 0; peak < peakCount; ++peak) {
-            QCOMPARE(static_cast<int>(data[peak * 2].a),
-                     peak < expectedPlayed ? 255 : 153);
-            QCOMPARE(static_cast<int>(data[peak * 2 + 1].a),
-                     peak < expectedPlayed ? 255 : 153);
-        }
-        if (expectedPlayed > 0 && expectedPlayed < peakCount) {
-            QCOMPARE(static_cast<int>(data[(expectedPlayed - 1) * 2].a),
-                     255);
-            QCOMPARE(static_cast<int>(data[expectedPlayed * 2].a), 153);
-        }
-    }
-
-    item.setPosition(0);
-    node = item.updatePaintNode(node, nullptr);
-    QCOMPARE(static_cast<int>(vertices(node)[0].a), 153);
-    item.setPosition(item.duration());
-    node = item.updatePaintNode(node, nullptr);
-    QCOMPARE(static_cast<int>(vertices(node)[0].a), 255);
-    delete node;
-}
-
 void WaveformItemTest::onePixelWaveformLeavesTheCanvasEdgeClear()
 {
     TestableWaveformItem item;
@@ -432,13 +377,12 @@ void WaveformItemTest::frequencyModeUpdatesProgressOpacityWithoutRebuildingNode(
     item.setDensity(2.0);
     item.setLineWidth(1.0);
     item.setVisualMode(3);
-    item.setSpectralUnplayedOpacity(0.60);
+    item.setFrequencyUnplayedOpacity(0.60);
     item.setLayers(makeLayers(
         peaks({1.0, 1.0, 1.0, 1.0}),
         peaks({1.0, 1.0, 1.0, 1.0}),
         peaks({0.0, 0.0, 0.0, 0.0}),
-        peaks({0.0, 0.0, 0.0, 0.0}),
-        peaks({0, 85, 170, 255})));
+        peaks({0.0, 0.0, 0.0, 0.0})));
 
     item.setPosition(0);
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);

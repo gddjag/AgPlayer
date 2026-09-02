@@ -240,6 +240,7 @@ TestCase {
         enterMode(0)
         var session = findChild(mainWindow, "sharedWaveformSession")
         verify(session)
+        session.loadWaveform()
         tryVerify(function() { return session.generation > 0 }, 1000)
 
         SettingsController.waveformMode = 0
@@ -518,7 +519,7 @@ TestCase {
 
         SettingsController.themeMode = 1
         tryCompare(overview, "frequencyUnplayedOpacity",
-                   rolling.frequencyWaveformSettings.unplayedOpacity)
+                   Theme.nonImmersiveSpectralUnplayedOpacity)
         compare(String(overview.lowColor), low)
         compare(String(mainWaveform.highColor), high)
         SettingsController.themeMode = 0

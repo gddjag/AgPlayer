@@ -2870,7 +2870,7 @@ TestCase {
         compare(String(waveform.midColor), String(frequencySettings.midColor))
         compare(String(waveform.highColor), String(frequencySettings.highColor))
         compare(waveform.frequencyUnplayedOpacity,
-                frequencySettings.unplayedOpacity)
+                Theme.nonImmersiveSpectralUnplayedOpacity)
         compare(playedClip.visible, false)
         compare(playbackGuide.visible, true)
 
@@ -5658,83 +5658,6 @@ TestCase {
             page.destroy()
     }
 
-    function test_settings_frequency_palette_uses_band_labels_and_compact_picker() {
-        var page = findChild(mainWindow, "settingsPage")
-        var ownsPage = false
-        if (!page) {
-            page = settingsPageComponent.createObject(mainWindow.contentItem)
-            ownsPage = true
-        }
-        verify(page)
-        var previousWaveformMode = SettingsController.waveformMode
-        SettingsController.waveformMode = 3
-        page.open()
-        page.selectedSection = 2
-        wait(0)
-        tryCompare(page, "programmaticScroll", false, 1000)
-
-        const expectedLabels = [
-            "最低频", "低频", "低中频", "中频",
-            "中高频", "高频", "更高频", "最高频"
-        ]
-        for (var index = 0; index < expectedLabels.length; ++index) {
-            var label = findChild(page, "spectralPaletteLabel" + index)
-            verify(label, "frequency palette must name band " + index)
-            compare(label.text, expectedLabels[index])
-        }
-
-        var firstField = findChild(page, "spectralPaletteColor0")
-        verify(firstField)
-        compare(firstField.showText, false,
-                "frequency swatches must not expose hexadecimal text")
-        var picker = findChild(firstField, "colorFieldPicker")
-        verify(picker)
-        picker.open()
-        tryCompare(picker, "visible", true, 1000)
-        verify(picker.width > 0 && picker.width <= 300,
-               "color picker must stay compact")
-        verify(picker.height > 0 && picker.height <= 360,
-               "color picker must stay compact")
-        var cancelButton = findChild(firstField, "colorPickerCancelButton")
-        var confirmButton = findChild(firstField, "colorPickerConfirmButton")
-        var restoreButton = findChild(firstField, "colorPickerRestoreButton")
-        verify(cancelButton, "compact color picker must expose cancel action")
-        verify(confirmButton, "compact color picker must expose confirm action")
-        verify(restoreButton,
-               "compact color picker must expose per-slot restore default")
-        compare(String(firstField.defaultColor).toUpperCase(), "#123ECF")
-        verify(confirmButton.focus,
-               "compact color picker must nominate an initial keyboard target")
-
-        var originalColor = String(firstField.colorValue)
-        picker.workingColor = "#445566"
-        cancelButton.clicked()
-        compare(String(firstField.colorValue), originalColor,
-                "cancel must not commit the working color")
-
-        firstField.openPicker()
-        tryCompare(picker, "visible", true, 1000)
-        picker.workingColor = "#445566"
-        confirmButton.clicked()
-        compare(String(firstField.colorValue).toUpperCase(), "#445566",
-                "confirm must commit the working color")
-
-        firstField.openPicker()
-        tryCompare(picker, "visible", true, 1000)
-        restoreButton.clicked()
-        compare(String(picker.workingColor).toUpperCase(), "#123ECF")
-        confirmButton.clicked()
-        compare(String(SettingsController.frequencyColorWaveform.palette[0])
-                .toUpperCase(), "#123ECF",
-                "restoring and confirming must persist the slot default")
-        firstField.colorEdited(originalColor)
-
-        page.cancelAndClose()
-        SettingsController.waveformMode = previousWaveformMode
-        if (ownsPage)
-            page.destroy()
-    }
-
     function test_settings_list_waveform_brightness_is_live_and_defaults_to_66_percent() {
         var page = findChild(mainWindow, "settingsPage")
         var ownsPage = false
@@ -5983,7 +5906,8 @@ TestCase {
         compare(String(waveform.lowColor), "#8b3dff")
         compare(String(waveform.midColor), "#ffb000")
         compare(String(waveform.highColor), "#002fa7")
-        compare(waveform.frequencyUnplayedOpacity, 0.88)
+        compare(waveform.frequencyUnplayedOpacity,
+                Theme.nonImmersiveSpectralUnplayedOpacity)
         compare(playedClip.visible, false)
         SettingsController.waveformPlaybackGuide = false
         compare(playbackGuide.visible, false)

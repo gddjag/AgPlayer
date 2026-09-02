@@ -625,7 +625,7 @@ Item {
                     lowColor: root.frequencyWaveformSettings.lowColor
                     midColor: root.frequencyWaveformSettings.midColor
                     highColor: root.frequencyWaveformSettings.highColor
-                    frequencyUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
+                    frequencyUnplayedOpacity: Theme.nonImmersiveSpectralUnplayedOpacity
                     amplitudeScale: SettingsController.waveformHeight
                     density: SettingsController.waveformDensity
                     lineWidth: SettingsController.waveformThickness
@@ -654,8 +654,10 @@ Item {
                         pointerInteractionEnabled: false
                         visualMode: 3
                         baseColor: overviewWaveform.baseColor
-                        spectralPalette: overviewWaveform.spectralPalette
-                        spectralUnplayedOpacity:
+                        lowColor: overviewWaveform.lowColor
+                        midColor: overviewWaveform.midColor
+                        highColor: overviewWaveform.highColor
+                        frequencyUnplayedOpacity:
                             Theme.nonImmersiveSpectralUnplayedOpacity
                         amplitudeScale: overviewWaveform.amplitudeScale
                         density: overviewWaveform.density
@@ -796,7 +798,7 @@ Item {
                 lowColor: root.frequencyWaveformSettings.lowColor
                 midColor: root.frequencyWaveformSettings.midColor
                 highColor: root.frequencyWaveformSettings.highColor
-                frequencyUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
+                frequencyUnplayedOpacity: Theme.nonImmersiveSpectralUnplayedOpacity
                 amplitudeScale: Math.max(
                                     0.9,
                                     SettingsController.waveformHeight * 1.25)

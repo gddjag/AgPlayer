@@ -178,7 +178,7 @@ TestCase {
             SettingsController.themeMode = theme
             wait(0)
             compare(Theme.nonImmersiveSpectralUnplayedOpacity, expected)
-            compare(waveform.spectralUnplayedOpacity, expected)
+            compare(waveform.frequencyUnplayedOpacity, expected)
         }
         var positions = [0, 0.001, 0.5, 0.999, 1]
         for (var index = 0; index < positions.length; ++index) {

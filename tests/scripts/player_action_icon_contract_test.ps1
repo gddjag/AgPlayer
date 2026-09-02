@@ -6,8 +6,8 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $icons = @{
-    'assets/icons/lyrics.svg' = '7358680EB87056916DE5C869752417E6BDDE11833E8D11659EDF0774860AF6CC'
-    'assets/icons/immersive-visual-mode.svg' = '916EDD52CACAFD27F598A60AB0C3747F93C37E8E0FAB271E1EBA280AAA013C18'
+    'assets/icons/lyrics.svg' = 'AA5C1B97E7690B0A8930B183A9C54660B9BD652BDD62817169F5215AAAB87DE5'
+    'assets/icons/immersive-visual-mode.svg' = '3B0D5D65B4B49C64188CD19CE35832408FE56FA194E3B5BA0419673A55CFE986'
 }
 
 foreach ($entry in $icons.GetEnumerator()) {

@@ -688,9 +688,12 @@ TestCase {
         })
         const gainLine = findVisibleItem(canvas, "editorEventCombinedGainLine")
         verify(gainLine)
-        const onCurve = gainLine.mapToItem(canvas, gainLine.width * 0.55,
-                                            gainLine.height * 0.5)
-        verify(nativeDropHelper.doubleClickItem(canvas, onCurve.x, onCurve.y + 5))
+        const gainInteraction = findVisibleItem(
+            canvas, "editorEventGainInteraction")
+        verify(gainInteraction)
+        verify(nativeDropHelper.doubleClickItem(
+            gainInteraction, gainInteraction.width * 0.55,
+            gainInteraction.height * 0.5))
         tryVerify(function() {
             return AudioEditorController.timelineEventViews[0].envelope.length === 1
         }, 5000, "native double click adds one envelope point")

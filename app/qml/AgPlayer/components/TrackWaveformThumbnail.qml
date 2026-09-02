@@ -14,6 +14,7 @@ Item {
     property var bassEnergy: ""
     property var midEnergy: ""
     property var highEnergy: ""
+    property real brightness: SettingsController.trackWaveformBrightness
 
     property string requestedTrackId: ""
     property int requestedGeneration: 0

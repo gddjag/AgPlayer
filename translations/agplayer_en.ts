@@ -3748,6 +3748,9 @@ Clear: Remove all known aliases for this field.</translation>
     <message><source>显示歌曲列表波形缩略图</source><translation>Show waveform thumbnails in the song list</translation></message>
     <message><source>缩略波形颜色</source><translation>Thumbnail waveform color</translation></message>
     <message><source>频彩调色板</source><translation>Spectral color palette</translation></message>
+    <message><source>低频</source><translation>Low</translation></message>
+    <message><source>中频</source><translation>Mid</translation></message>
+    <message><source>高频</source><translation>High</translation></message>
     <message><source>波形与频谱颜色</source><translation>Waveform and spectrum colors</translation></message>
     <message><source>自定义波形</source><translation>Custom waveform</translation></message>
     <message><source>底色 / RGB 渐变</source><translation>Base color / RGB gradient</translation></message>

@@ -515,7 +515,7 @@ Rectangle {
                 lowColor: root.frequencyWaveformSettings.lowColor
                 midColor: root.frequencyWaveformSettings.midColor
                 highColor: root.frequencyWaveformSettings.highColor
-                frequencyUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
+                frequencyUnplayedOpacity: Theme.nonImmersiveSpectralUnplayedOpacity
                 rgbProgress: SettingsController.waveformMode === 1
                              && SettingsController.waveformRgbProgress
                 amplitudeScale: SettingsController.waveformMode === 2
@@ -557,7 +557,7 @@ Rectangle {
                     lowColor: root.frequencyWaveformSettings.lowColor
                     midColor: root.frequencyWaveformSettings.midColor
                     highColor: root.frequencyWaveformSettings.highColor
-                    frequencyUnplayedOpacity: root.frequencyWaveformSettings.unplayedOpacity
+                    frequencyUnplayedOpacity: Theme.nonImmersiveSpectralUnplayedOpacity
                     rgbProgress: waveform.rgbProgress
                     amplitudeScale: waveform.amplitudeScale
                     density: waveform.density

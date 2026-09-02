@@ -852,7 +852,9 @@ Rectangle {
                     }
                     y: (1 - volumeLine.combinedGainAtOffset(hoverOffset) / 2)
                         * volumeLine.height - height / 2
-                    height: 12
+                    // Keep the centre line plus six pixels on either side
+                    // inside the native pointer target after scene rounding.
+                    height: 13
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                     cursorShape: Qt.SizeVerCursor
                     readonly property var fadeMenu: fadeCurveMenu
@@ -913,7 +915,12 @@ Rectangle {
                             > canvas.displayedSelectionStart && outsideSelection
                         if (outsideSelection)
                             AudioEditorController.setLoopEnabled(false)
-                        AudioEditorController.seekFrame(frame)
+                        // Defer the seek until the composed pointer sequence
+                        // completes, otherwise documentChanged can recreate
+                        // this delegate between the two native clicks.
+                        Qt.callLater(function() {
+                            AudioEditorController.seekFrame(frame)
+                        })
                         volumeLine.gainCandidate = Number(
                             eventDelegate.modelData.gain)
                         gainMoved = false
