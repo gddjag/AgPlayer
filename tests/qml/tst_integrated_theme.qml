@@ -448,6 +448,21 @@ TestCase {
         compare(title.font.weight, Font.DemiBold)
     }
 
+    function test_integrated_host_keeps_trailing_cells_inside_content_width() {
+        var shell = enterIntegratedShell()
+        mainWindow.width = 1180
+        wait(0)
+        var list = findChild(shell, "integratedTrackList")
+        verify(list && list.width > 0)
+        var names = ["trackHeaderDuration", "trackHeaderRating",
+                     "trackHeaderFavorite"]
+        for (var index = 0; index < names.length; ++index) {
+            var cell = findChild(list, names[index])
+            verify(cell && cell.visible)
+            verify(cell.mapToItem(list, cell.width, 0).x <= list.width + 1)
+        }
+    }
+
     function test_integrated_list_ignores_classic_thumbnail_switch() {
         var previousEnabled = SettingsController.listWaveformThumbnailEnabled
         try {

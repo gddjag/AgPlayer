@@ -44,6 +44,18 @@ Window {
     property var activeImportDialog: null
     property bool importBatchActive: false
     property string exportPlaylistId: ""
+    property string resourceDropStatus: "idle"
+    readonly property bool resourceDropActive:
+        resourceDropStatus === "pending"
+        || resourceDropStatus === "waiting"
+        || resourceDropStatus === "scanned"
+        || resourceDropStatus === "importing"
+    readonly property string resourceDropStatusText:
+        resourceDropStatus === "completed" ? qsTr("资源文件夹刷新完成")
+        : resourceDropStatus === "failed" ? qsTr("资源文件夹刷新失败")
+        : resourceDropStatus === "importing" ? qsTr("正在导入资源文件夹…")
+        : resourceDropActive ? qsTr("正在刷新资源文件夹…")
+        : ""
     readonly property bool tagManagementMode:
         sideNavigation.activeNodeType === "tags"
 
@@ -126,7 +138,18 @@ Window {
     }
     Connections {
         target: ImportController
+        function onBusyChanged() {
+            if (listWindow.resourceDropStatus === "scanned"
+                    && ImportController.busy)
+                listWindow.resourceDropStatus = "importing"
+        }
         function onFinished() {
+            if (listWindow.resourceDropStatus === "waiting") {
+                listWindow.resourceDropStatus = "pending"
+                LibraryManagerController.rescan()
+            } else if (listWindow.resourceDropStatus === "importing") {
+                listWindow.finishResourceDrop()
+            }
             if (!listWindow.importBatchActive)
                 return
             if (listWindow.importTargetPlaylistId
@@ -204,10 +227,12 @@ Window {
                         directoryPaths[pathIndex]))
                 ++registeredCount
         }
-        // addMonitoredFolder persists the root and schedules the shared
-        // background scan/import.  Only a newly registered root is accepted;
-        // duplicates and invalid URLs must not look successful.
-        return registeredCount > 0
+        if (registeredCount <= 0)
+            return false
+        // A synchronous true means accepted/pending only.  Completion is
+        // reported after the shared scanner and importer signals finish.
+        resourceDropStatus = "pending"
+        return true
     }
     function resourceDropContainsPoint(x, y) {
         var local = sideNavigation.mapFromItem(null, x, y)
@@ -421,6 +446,19 @@ Window {
                     anchors.leftMargin: 14
                     anchors.rightMargin: 10
                     spacing: 8
+                    Label {
+                        objectName: "resourceDropStatusLabel"
+                        visible: listWindow.resourceDropStatus !== "idle"
+                        text: listWindow.resourceDropStatusText
+                        color: listWindow.resourceDropStatus === "failed"
+                               ? Theme.danger
+                               : listWindow.resourceDropStatus === "completed"
+                                 ? Theme.success : Theme.secondaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 11
+                        elide: Text.ElideRight
+                        Layout.maximumWidth: 240
+                    }
                     Item { Layout.fillWidth: true }
                     ToolButton {
                         objectName: "listWindowMinimizeButton"
@@ -761,6 +799,32 @@ Window {
             service: LyricsService
             spatialMode: false
         }
+    }
+    Connections {
+        target: LibraryManagerController
+        function onScanFinished() {
+            if (!listWindow.resourceDropActive)
+                return
+            if (ImportController.busy) {
+                listWindow.resourceDropStatus = "waiting"
+                return
+            }
+            listWindow.resourceDropStatus = "scanned"
+            Qt.callLater(function() {
+                if (listWindow.resourceDropStatus !== "scanned")
+                    return
+                if (ImportController.busy)
+                    listWindow.resourceDropStatus = "importing"
+                else
+                    listWindow.finishResourceDrop()
+            })
+        }
+    }
+
+    function finishResourceDrop() {
+        resourceDropStatus = resourceDropStatus === "importing"
+                && ImportController.errors.length > 0
+                ? "failed" : "completed"
     }
 
 }

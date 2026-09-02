@@ -24,6 +24,7 @@
 #include <QDateTime>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -364,6 +365,39 @@ public:
             QStringLiteral("resource-%1").arg(
                 QUuid::createUuid().toString(QUuid::WithoutBraces)));
         return QDir().mkpath(path) ? QUrl::fromLocalFile(path) : QUrl{};
+    }
+
+    Q_INVOKABLE QUrl createAudioDropDirectory(const QUrl& source,
+                                              int fileCount)
+    {
+        if (!source.isLocalFile() || fileCount <= 0
+            || !dropDirectory_.isValid()) return {};
+        const QFileInfo sourceInfo(source.toLocalFile());
+        if (!sourceInfo.isFile()) return {};
+        const QString path = dropDirectory_.filePath(
+            QStringLiteral("audio-resource-%1").arg(
+                QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        if (!QDir().mkpath(path)) return {};
+        for (int index = 0; index < fileCount; ++index) {
+            const QString destination = QDir(path).filePath(
+                QStringLiteral("track-%1.%2")
+                    .arg(index, 2, 10, QLatin1Char('0'))
+                    .arg(sourceInfo.suffix()));
+            if (!QFile::copy(sourceInfo.absoluteFilePath(), destination))
+                return {};
+        }
+        return QUrl::fromLocalFile(path);
+    }
+
+    Q_INVOKABLE QUrl createInvalidAudioDropDirectory()
+    {
+        const QUrl directory = createDropDirectory();
+        if (!directory.isLocalFile()) return {};
+        QFile file(QDir(directory.toLocalFile())
+                       .filePath(QStringLiteral("invalid.wav")));
+        return file.open(QIODevice::WriteOnly)
+                && file.write("not an audio stream") > 0
+            ? directory : QUrl{};
     }
 
     Q_INVOKABLE QUrl createNonAudioDropFile()

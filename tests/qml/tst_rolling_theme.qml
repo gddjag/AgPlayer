@@ -596,6 +596,16 @@ TestCase {
         verify(library.y + library.height <= rolling.height + 1)
         compare(trackList.trackModel, rolling.filterModel)
         compare(trackList.playlistModel, rolling.playlistModel)
+        var trailingNames = ["trackHeaderDuration", "trackHeaderRating",
+                             "trackHeaderFavorite"]
+        for (var trailingIndex = 0; trailingIndex < trailingNames.length;
+             ++trailingIndex) {
+            var trailing = findChild(trackList,
+                                     trailingNames[trailingIndex])
+            verify(trailing && trailing.visible)
+            verify(trailing.mapToItem(trackList, trailing.width, 0).x
+                   <= trackList.width + 1)
+        }
         var controls = findChild(rolling, "playerControls")
         verify(controls)
         var minimumWidthSharedActions = [

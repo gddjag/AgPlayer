@@ -3179,6 +3179,150 @@ TestCase {
         window.destroy()
     }
 
+    function test_task1b_resource_drop_reports_completion_only_after_refresh() {
+        tryVerify(function() { return !LibraryManagerController.scanning }, 3000)
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1200,
+            "height": 620
+        })
+        verify(window)
+        verify(window["resourceDropStatus"] !== undefined)
+        var folder = nativeDropHelper.createDropDirectory()
+        verify(folder)
+        var scanFinished = signalSpyComponent.createObject(testCase, {
+            "target": LibraryManagerController,
+            "signalName": "scanFinished"
+        })
+        verify(scanFinished)
+        verify(window.handleResourceDropUrls([folder]))
+        compare(window.resourceDropStatus, "pending",
+                "drop acceptance must not be presented as completion")
+        var statusLabel = findChild(window, "resourceDropStatusLabel")
+        verify(statusLabel && statusLabel.visible)
+        verify(statusLabel.text.indexOf("刷新") >= 0)
+        verify(statusLabel.text.indexOf("完成") < 0)
+        tryCompare(scanFinished, "count", 1, 3000)
+        tryCompare(window, "resourceDropStatus", "completed", 1000)
+        verify(statusLabel.text.indexOf("完成") >= 0)
+        var path = LibraryManagerController.classifyDropUrl(folder).path
+        verify(LibraryManagerController.removeMonitoredFolder(path))
+        scanFinished.destroy()
+        window.destroy()
+    }
+
+    function test_task1b_resource_drop_waits_for_scan_started_import() {
+        tryVerify(function() {
+            return !LibraryManagerController.scanning
+                    && !ImportController.busy
+        }, 3000)
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1200,
+            "height": 620
+        })
+        verify(window)
+        var folder = nativeDropHelper.createAudioDropDirectory(testAudioUrl, 24)
+        verify(folder)
+        var importFinished = signalSpyComponent.createObject(testCase, {
+            "target": ImportController,
+            "signalName": "finished"
+        })
+        verify(importFinished)
+        verify(window.handleResourceDropUrls([folder]))
+        compare(window.resourceDropStatus, "pending")
+        tryVerify(function() { return ImportController.busy }, 3000)
+        compare(window.resourceDropStatus, "importing")
+        compare(importFinished.count, 0)
+        tryCompare(importFinished, "count", 1, 5000)
+        tryCompare(window, "resourceDropStatus", "completed", 1000)
+        var path = LibraryManagerController.classifyDropUrl(folder).path
+        verify(LibraryManagerController.removeMonitoredFolder(path))
+        var importedIds = ImportController.importedTrackIds.slice(0)
+        for (var index = 0; index < importedIds.length; ++index)
+            LibraryModel.removeTrack(importedIds[index])
+        importFinished.destroy()
+        window.destroy()
+    }
+
+    function test_task1b_resource_drop_reports_import_failure() {
+        tryVerify(function() {
+            return !LibraryManagerController.scanning
+                    && !ImportController.busy
+        }, 3000)
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1200,
+            "height": 620
+        })
+        verify(window)
+        var folder = nativeDropHelper.createInvalidAudioDropDirectory()
+        verify(folder)
+        var importFinished = signalSpyComponent.createObject(testCase, {
+            "target": ImportController,
+            "signalName": "finished"
+        })
+        verify(importFinished)
+        verify(window.handleResourceDropUrls([folder]))
+        tryCompare(importFinished, "count", 1, 5000)
+        tryCompare(window, "resourceDropStatus", "failed", 1000)
+        var statusLabel = findChild(window, "resourceDropStatusLabel")
+        verify(statusLabel && statusLabel.text.indexOf("失败") >= 0)
+        var path = LibraryManagerController.classifyDropUrl(folder).path
+        verify(LibraryManagerController.removeMonitoredFolder(path))
+        ImportController.clearErrors()
+        importFinished.destroy()
+        window.destroy()
+    }
+
+    function test_task1b_classic_and_tag_hosts_keep_trailing_cells_in_bounds() {
+        var filterModel = findChild(mainWindow, "filterModel")
+        var previousCategory = filterModel.category
+        var previousTagKey = filterModel.tagKey
+        var window = null
+        try {
+            verify(nativeDropHelper.ensureSortableTracks().length >= 3)
+            filterModel.category = "all"
+            filterModel.tagKey = ""
+            window = listWindowComponent.createObject(null, {
+                "filterModel": filterModel,
+                "width": 956,
+                "height": 620,
+                "visible": true
+            })
+            verify(window)
+            tryVerify(function() { return window.width === 956 }, 1000)
+            var list = findChild(window, "sharedTrackList")
+            verify(list)
+            tryVerify(function() { return list.width > 0 }, 1000)
+            function verifyBounds(names) {
+                for (var index = 0; index < names.length; ++index) {
+                    var cell = findChild(list, names[index])
+                    verify(cell && cell.visible, names[index])
+                    var right = cell.mapToItem(list, cell.width, 0).x
+                    verify(right <= list.width + 1,
+                           names[index] + " right=" + right
+                           + " list=" + list.width)
+                }
+            }
+            verifyBounds(["trackHeaderDuration", "trackHeaderRating",
+                          "trackHeaderFavorite", "trackHeaderBpm"])
+            var navigation = findChild(window, "referenceSideNavigation")
+            navigation.activateNode("tags", "tags:manage", "")
+            tryCompare(window, "tagManagementMode", true)
+            verifyBounds(["trackHeaderDuration", "trackHeaderRating",
+                          "trackHeaderFavorite"])
+        } finally {
+            if (window)
+                window.destroy()
+            filterModel.category = previousCategory
+            filterModel.tagKey = previousTagKey
+        }
+    }
+
     function test_z_tag_workspace_is_one_continuous_three_column_surface() {
         var previousEnabled = SettingsController.listWaveformThumbnailEnabled
         SettingsController.listWaveformThumbnailEnabled = false
