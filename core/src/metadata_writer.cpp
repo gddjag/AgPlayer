@@ -767,6 +767,7 @@ AudioEquivalence audio_streams_equivalent(const std::string& source_path,
 class SourceCommitGuard final {
 public:
     explicit SourceCommitGuard(const std::filesystem::path& path)
+        : path_(path)
     {
 #ifdef _WIN32
         handle_ = CreateFileW(path.c_str(), GENERIC_READ,
@@ -870,79 +871,56 @@ public:
         return ok;
     }
 
-    [[nodiscard]] bool copyTo(const std::filesystem::path& destination) const
+    [[nodiscard]] bool matchesPath(
+        const std::filesystem::path& candidate) const
     {
         if (!valid()) return false;
-        std::array<unsigned char, 64U * 1024U> buffer{};
 #ifdef _WIN32
-        HANDLE output = CreateFileW(destination.c_str(), GENERIC_WRITE, 0,
-            nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (output == INVALID_HANDLE_VALUE) return false;
-        LARGE_INTEGER zero{};
-        LARGE_INTEGER original{};
-        bool ok = SetFilePointerEx(handle_, zero, &original, FILE_CURRENT) != 0
-            && SetFilePointerEx(handle_, zero, nullptr, FILE_BEGIN) != 0;
-        while (ok) {
-            DWORD read = 0;
-            if (ReadFile(handle_, buffer.data(),
-                         static_cast<DWORD>(buffer.size()), &read, nullptr) == 0) {
-                ok = false;
-                break;
-            }
-            if (read == 0) break;
-            DWORD offset = 0;
-            while (offset < read) {
-                DWORD written = 0;
-                if (WriteFile(output, buffer.data() + offset, read - offset,
-                              &written, nullptr) == 0 || written == 0) {
-                    ok = false;
-                    break;
-                }
-                offset += written;
-            }
+        BY_HANDLE_FILE_INFORMATION locked_info{};
+        if (GetFileInformationByHandle(handle_, &locked_info) == 0) {
+            return false;
         }
-        if (ok && FlushFileBuffers(output) == 0) ok = false;
-        if (SetFilePointerEx(handle_, original, nullptr, FILE_BEGIN) == 0)
-            ok = false;
-        CloseHandle(output);
-        return ok;
+        HANDLE candidate_handle = CreateFileW(candidate.c_str(),
+            FILE_READ_ATTRIBUTES,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (candidate_handle == INVALID_HANDLE_VALUE) return false;
+        BY_HANDLE_FILE_INFORMATION candidate_info{};
+        const bool read = GetFileInformationByHandle(
+            candidate_handle, &candidate_info) != 0;
+        CloseHandle(candidate_handle);
+        return read
+            && locked_info.dwVolumeSerialNumber
+                == candidate_info.dwVolumeSerialNumber
+            && locked_info.nFileIndexHigh == candidate_info.nFileIndexHigh
+            && locked_info.nFileIndexLow == candidate_info.nFileIndexLow;
 #else
-        struct stat source_stat{};
-        if (::fstat(descriptor_, &source_stat) != 0) return false;
-        const int output = ::open(destination.c_str(),
-            O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC,
-            source_stat.st_mode & 0777);
-        if (output < 0) return false;
-        bool ok = true;
-        off_t source_offset = 0;
-        while (ok) {
-            const ssize_t read = ::pread(descriptor_, buffer.data(),
-                                         buffer.size(), source_offset);
-            if (read < 0) {
-                ok = false;
-                break;
-            }
-            if (read == 0) break;
-            ssize_t written_total = 0;
-            while (written_total < read) {
-                const ssize_t written = ::write(
-                    output, buffer.data() + written_total,
-                    static_cast<std::size_t>(read - written_total));
-                if (written <= 0) {
-                    ok = false;
-                    break;
-                }
-                written_total += written;
-            }
-            source_offset += read;
-        }
-        if (ok && ::fsync(output) != 0) ok = false;
-        ::close(output);
-        return ok;
+        struct stat locked_info{};
+        struct stat candidate_info{};
+        return ::fstat(descriptor_, &locked_info) == 0
+            && ::lstat(candidate.c_str(), &candidate_info) == 0
+            && locked_info.st_dev == candidate_info.st_dev
+            && locked_info.st_ino == candidate_info.st_ino;
 #endif
     }
 
+    [[nodiscard]] bool copyTo(const std::filesystem::path& destination) const
+    {
+        if (!matchesPath(path_)) return false;
+#ifdef _WIN32
+        const bool copied = CopyFileW(path_.c_str(), destination.c_str(), TRUE)
+            != 0;
+#else
+        std::error_code copy_error;
+        const bool copied = std::filesystem::copy_file(
+            path_, destination, std::filesystem::copy_options::none,
+            copy_error) && !copy_error;
+#endif
+        return copied && matchesPath(path_);
+    }
+
 private:
+    std::filesystem::path path_;
     bool locked_ = false;
 #ifdef _WIN32
     HANDLE handle_ = INVALID_HANDLE_VALUE;
@@ -1478,6 +1456,9 @@ MetadataErrorCode metadata_error_code_for_write(const ag_result result,
     }
     if (error.find("Source changed") != std::string::npos) {
         return MetadataErrorCode::SourceChanged;
+    }
+    if (error.find("commit lock") != std::string::npos) {
+        return MetadataErrorCode::FileInUse;
     }
     if (error.find("backup") != std::string::npos
         || error.find("atomically replace") != std::string::npos) {
@@ -2311,7 +2292,8 @@ ag_result write_metadata_with_preserved_backup(
     }
     SourceCommitGuard commit_guard(source);
     FileSha256 guarded_fingerprint{};
-    if (!commit_guard.valid()
+    if ((test_hooks != nullptr && test_hooks->fail_commit_lock)
+        || !commit_guard.valid()
         || !commit_guard.fingerprint(guarded_fingerprint)) {
         clean_stage();
         const bool prior_backup_restored = existing_backup->restore(
@@ -2323,7 +2305,8 @@ ag_result write_metadata_with_preserved_backup(
         }
         return AG_IO_ERROR;
     }
-    if (guarded_fingerprint != source_fingerprint) {
+    if (!commit_guard.matchesPath(source)
+        || guarded_fingerprint != source_fingerprint) {
         clean_stage();
         const bool prior_backup_restored = existing_backup->restore(
             test_hooks != nullptr && test_hooks->fail_backup_restore);
@@ -2334,16 +2317,30 @@ ag_result write_metadata_with_preserved_backup(
         }
         return AG_IO_ERROR;
     }
-    const bool backup_created = commit_guard.copyTo(backup);
-    FileSha256 pre_replace_fingerprint{};
+#ifndef _WIN32
     FileSha256 backup_fingerprint{};
-    const bool source_fingerprint_read = backup_created
-        && commit_guard.fingerprint(pre_replace_fingerprint);
+#endif
+#ifdef _WIN32
+    // ReplaceFileW moves the exact replaced file to backup atomically. This
+    // preserves all filesystem-managed streams and attributes and lets us
+    // verify after the commit that the replaced path was still our locked
+    // source object.
+    const bool backup_created = true;
+    const bool backup_fingerprint_read = true;
+#else
+    // POSIX locks are advisory, so retain identity and digest checks around
+    // the eventual rename. copy_file preserves native copy semantics instead
+    // of reconstructing only the default byte stream.
+    const bool backup_created = commit_guard.copyTo(backup);
     const bool backup_fingerprint_read = backup_created
         && file_sha256(backup, backup_fingerprint);
-    if (backup_created && source_fingerprint_read && backup_fingerprint_read
-        && (pre_replace_fingerprint != source_fingerprint
-            || backup_fingerprint != source_fingerprint)) {
+#endif
+    if (!commit_guard.matchesPath(source)
+        || !backup_created || !backup_fingerprint_read
+#ifndef _WIN32
+        || backup_fingerprint != source_fingerprint
+#endif
+    ) {
         clean_stage();
         const bool prior_backup_restored = existing_backup->restore(
             test_hooks != nullptr && test_hooks->fail_backup_restore);
@@ -2354,12 +2351,29 @@ ag_result write_metadata_with_preserved_backup(
         }
         return AG_IO_ERROR;
     }
+    FileSha256 commit_fingerprint{};
+    if (!commit_guard.matchesPath(source)
+        || !commit_guard.fingerprint(commit_fingerprint)
+        || commit_fingerprint != source_fingerprint) {
+        clean_stage();
+        const bool prior_backup_restored = existing_backup->restore(
+            test_hooks != nullptr && test_hooks->fail_backup_restore);
+        error = "Source changed while metadata was being written";
+        if (!prior_backup_restored) {
+            error += "; prior backup remains preserved at ";
+            error += existing_backup->preserved_path();
+        }
+        return AG_IO_ERROR;
+    }
+    // The deterministic race hook intentionally sits after the final digest.
+    // Identity and digest are checked once more after it, immediately next to
+    // the replacement operation.
     if (test_hooks != nullptr && test_hooks->before_atomic_replace)
         test_hooks->before_atomic_replace();
-    FileSha256 commit_fingerprint{};
-    if (source_fingerprint_read && backup_fingerprint_read
-        && (!commit_guard.fingerprint(commit_fingerprint)
-            || commit_fingerprint != source_fingerprint)) {
+    FileSha256 final_fingerprint{};
+    if (!commit_guard.matchesPath(source)
+        || !commit_guard.fingerprint(final_fingerprint)
+        || final_fingerprint != source_fingerprint) {
         clean_stage();
         const bool prior_backup_restored = existing_backup->restore(
             test_hooks != nullptr && test_hooks->fail_backup_restore);
@@ -2370,22 +2384,78 @@ ag_result write_metadata_with_preserved_backup(
         }
         return AG_IO_ERROR;
     }
-    if (!backup_created || !source_fingerprint_read || !backup_fingerprint_read
-        || fail_at(test_hooks, MetadataFailurePoint::AtomicReplace)
-        || !atomic_replace(staged, source)) {
+    if (fail_at(test_hooks, MetadataFailurePoint::AtomicReplace)) {
         clean_stage();
         const bool prior_backup_restored = existing_backup->restore(
             test_hooks != nullptr && test_hooks->fail_backup_restore);
-        error = !backup_created ? "Failed to create backup before replacement"
-            : (!source_fingerprint_read || !backup_fingerprint_read)
-                ? "Failed to verify backup before replacement"
-                : "Failed to atomically replace original file";
+        error = "Failed to atomically replace original file";
         if (!prior_backup_restored) {
             error += "; prior backup remains preserved at ";
             error += existing_backup->preserved_path();
         }
         return AG_IO_ERROR;
     }
+#ifdef _WIN32
+    if (ReplaceFileW(source.c_str(), staged.c_str(), backup.c_str(),
+            REPLACEFILE_IGNORE_MERGE_ERRORS, nullptr, nullptr) == 0) {
+        clean_stage();
+        const bool prior_backup_restored = existing_backup->restore(
+            test_hooks != nullptr && test_hooks->fail_backup_restore);
+        error = "Failed to atomically replace original file";
+        if (!prior_backup_restored) {
+            error += "; prior backup remains preserved at ";
+            error += existing_backup->preserved_path();
+        }
+        return AG_IO_ERROR;
+    }
+    FileSha256 replaced_fingerprint{};
+    if (!commit_guard.matchesPath(backup)
+        || !commit_guard.fingerprint(replaced_fingerprint)
+        || replaced_fingerprint != source_fingerprint) {
+        // If the path changed after our final pre-check, ReplaceFileW captured
+        // the competing file in backup. Restore it so the competing writer
+        // wins instead of being silently overwritten.
+        const bool foreign_source_restored = atomic_replace(backup, source);
+        clean_stage();
+        error = "Source changed during atomic metadata replacement";
+        if (foreign_source_restored) {
+            const bool prior_backup_restored = existing_backup->restore(
+                test_hooks != nullptr && test_hooks->fail_backup_restore);
+            if (!prior_backup_restored) {
+                error += "; prior backup remains preserved at ";
+                error += existing_backup->preserved_path();
+            }
+        } else {
+            const auto recovery =
+                existing_backup->preserve_after_source_restore_failure(
+                    test_hooks != nullptr
+                    && test_hooks->fail_backup_restore);
+            error += "; competing source recovery remains at ";
+            error += recovery.original_backup_path;
+            if (!recovery.prior_backup_restored) {
+                error += "; prior backup remains preserved at ";
+                error += recovery.prior_backup_path;
+            }
+        }
+        return AG_IO_ERROR;
+    }
+#else
+    // rename is atomic, but flock is advisory. The immediately adjacent
+    // lstat/fstat identity and SHA-256 checks above deterministically catch
+    // non-cooperating writes injected before this instruction; POSIX has no
+    // portable compare-and-swap rename primitive for the remaining interval.
+    if (!atomic_replace(staged, source)) {
+        clean_stage();
+        const bool prior_backup_restored = existing_backup->restore(
+            test_hooks != nullptr && test_hooks->fail_backup_restore);
+        error = "Failed to atomically replace original file";
+        if (!prior_backup_restored) {
+            error += "; prior backup remains preserved at ";
+            error += existing_backup->preserved_path();
+        }
+        return AG_IO_ERROR;
+    }
+#endif
     if (owned_backup.has_value()) existing_backup->discard();
     std::filesystem::remove(std::filesystem::path(staged.native()
                                 + std::filesystem::u8path(".agbak").native()), ec);

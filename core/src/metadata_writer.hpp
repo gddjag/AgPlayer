@@ -159,6 +159,7 @@ struct MetadataWriterTestHooks {
     bool seed_preservation_fixture = false;
     bool fail_source_restore = false;
     bool fail_backup_restore = false;
+    bool fail_commit_lock = false;
     bool simulate_normalized_packet_timing = false;
     std::function<void()> before_source_commit;
     std::function<void()> before_atomic_replace;

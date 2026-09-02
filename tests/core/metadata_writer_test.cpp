@@ -543,6 +543,103 @@ int main(const int argc, char** argv)
     std::filesystem::remove(commit_lock_path.u8string() + ".agbak");
     std::filesystem::remove(commit_lock_path);
 
+#ifdef _WIN32
+    const std::filesystem::path path_swap_path =
+        work_dir / "meta-final-path-swap.wav";
+    const std::filesystem::path displaced_path =
+        work_dir / "meta-final-path-swap.displaced.wav";
+    std::filesystem::copy_file(fixture, path_swap_path,
+        std::filesystem::copy_options::overwrite_existing);
+    auto replacement_bytes = file_bytes(fixture);
+    assert(replacement_bytes.size() > 64U);
+    replacement_bytes[64] ^= 0x5aU;
+    bool path_swap_hook_called = false;
+    agplayer::MetadataWriterTestHooks path_swap_hooks;
+    path_swap_hooks.before_atomic_replace = [&] {
+        path_swap_hook_called = true;
+        assert(MoveFileExW(path_swap_path.c_str(), displaced_path.c_str(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0);
+        std::ofstream replacement(path_swap_path,
+            std::ios::binary | std::ios::trunc);
+        replacement.write(
+            reinterpret_cast<const char*>(replacement_bytes.data()),
+            static_cast<std::streamsize>(replacement_bytes.size()));
+        replacement.close();
+    };
+    agplayer::MetadataFileResult path_swap_result;
+    assert(agplayer::write_metadata_plan(path_swap_path.u8string(), write_plan,
+        path_swap_result, nullptr, &path_swap_hooks) == AG_IO_ERROR);
+    assert(path_swap_hook_called);
+    assert(path_swap_result.error_code
+        == agplayer::MetadataErrorCode::SourceChanged);
+    assert(file_bytes(path_swap_path) == replacement_bytes);
+    assert(!std::filesystem::exists(path_swap_path.u8string() + ".agbak"));
+    std::filesystem::remove(path_swap_path);
+    std::filesystem::remove(displaced_path);
+
+    const std::filesystem::path commit_lock_failure_path =
+        work_dir / "meta-commit-lock-failure.wav";
+    std::filesystem::copy_file(fixture, commit_lock_failure_path,
+        std::filesystem::copy_options::overwrite_existing);
+    const auto commit_lock_failure_before =
+        file_bytes(commit_lock_failure_path);
+    agplayer::MetadataWriterTestHooks commit_lock_failure_hooks;
+    commit_lock_failure_hooks.fail_commit_lock = true;
+    agplayer::MetadataFileResult commit_lock_failure_result;
+    assert(agplayer::write_metadata_plan(
+        commit_lock_failure_path.u8string(), write_plan,
+        commit_lock_failure_result, nullptr,
+        &commit_lock_failure_hooks) == AG_IO_ERROR);
+    assert(commit_lock_failure_result.error_code
+        == agplayer::MetadataErrorCode::FileInUse);
+    assert(file_bytes(commit_lock_failure_path)
+        == commit_lock_failure_before);
+    assert(!std::filesystem::exists(
+        commit_lock_failure_path.u8string() + ".agbak"));
+    std::filesystem::remove(commit_lock_failure_path);
+
+    const std::filesystem::path stream_recovery_path =
+        work_dir / "meta-backup-stream-recovery.wav";
+    std::filesystem::copy_file(fixture, stream_recovery_path,
+        std::filesystem::copy_options::overwrite_existing);
+    const std::wstring alternate_stream =
+        stream_recovery_path.native() + L":agplayer-recovery";
+    HANDLE stream_writer = CreateFileW(alternate_stream.c_str(), GENERIC_WRITE,
+        0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    assert(stream_writer != INVALID_HANDLE_VALUE);
+    constexpr std::array<unsigned char, 8> stream_marker{
+        'a', 'g', '-', 's', 't', 'r', 'm', '\n'};
+    DWORD stream_written = 0;
+    assert(WriteFile(stream_writer, stream_marker.data(),
+        static_cast<DWORD>(stream_marker.size()), &stream_written, nullptr)
+        != 0);
+    assert(stream_written == stream_marker.size());
+    CloseHandle(stream_writer);
+    agplayer::MetadataWriterTestHooks stream_recovery_hooks{
+        agplayer::MetadataFailurePoint::PostReplaceReadback};
+    agplayer::MetadataFileResult stream_recovery_result;
+    assert(agplayer::write_metadata_plan(stream_recovery_path.u8string(),
+        write_plan, stream_recovery_result, nullptr,
+        &stream_recovery_hooks) == AG_DECODE_ERROR);
+    assert(stream_recovery_result.error_code
+        == agplayer::MetadataErrorCode::VerificationFailed);
+    HANDLE stream_reader = CreateFileW(alternate_stream.c_str(), GENERIC_READ,
+        FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL,
+        nullptr);
+    assert(stream_reader != INVALID_HANDLE_VALUE);
+    std::array<unsigned char, stream_marker.size()> recovered_marker{};
+    DWORD stream_read = 0;
+    assert(ReadFile(stream_reader, recovered_marker.data(),
+        static_cast<DWORD>(recovered_marker.size()), &stream_read, nullptr)
+        != 0);
+    CloseHandle(stream_reader);
+    assert(stream_read == recovered_marker.size());
+    assert(recovered_marker == stream_marker);
+    assert(!std::filesystem::exists(
+        stream_recovery_path.u8string() + ".agbak"));
+    std::filesystem::remove(stream_recovery_path);
+#endif
+
     // A failed write must not overwrite or delete a pre-existing recovery
     // point. This exercises both failure before replacement and readback
     // failure after replacement/rollback.
