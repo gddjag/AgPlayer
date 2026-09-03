@@ -207,30 +207,24 @@ void normalize_frequency_layers(std::vector<float>& bass,
         percentile95_of_nonzero_values(high, scratch)};
     const float global_p95 = *std::max_element(band_p95.begin(),
                                                 band_p95.end());
-    const std::array<float, 3U> gains{0.90F, 1.00F, 1.35F};
+    const std::array<float, 3U> gains{0.90F, 1.00F, 1.50F};
 
     const auto normalize = [global_p95](std::vector<float>& layer,
                                         const float layer_p95,
-                                        const float gain,
-                                        const std::size_t index,
-                                        const float dominant) {
-        const float reference = 0.35F * global_p95 + 0.65F * layer_p95;
+                                        const float gain) {
+        const float reference = 0.15F * global_p95 + 0.85F * layer_p95;
         const float noise_floor = 0.015F * layer_p95;
-        float& value = layer[index];
-        value = reference > 0.0F && std::isfinite(value)
-                && value > noise_floor && dominant > 0.0F
-            ? std::clamp(gain * (value - noise_floor) / reference
-                             * value / dominant,
-                         0.0F, 1.0F)
-            : 0.0F;
+        for (float& value : layer) {
+            value = reference > 0.0F && std::isfinite(value)
+                    && value > noise_floor
+                ? std::clamp(gain * (value - noise_floor) / reference,
+                             0.0F, 1.0F)
+                : 0.0F;
+        }
     };
-    for (std::size_t index = 0U; index < bass.size(); ++index) {
-        const float dominant = std::max(
-            bass[index], std::max(mid[index], high[index]));
-        normalize(bass, band_p95[0U], gains[0U], index, dominant);
-        normalize(mid, band_p95[1U], gains[1U], index, dominant);
-        normalize(high, band_p95[2U], gains[2U], index, dominant);
-    }
+    normalize(bass, band_p95[0U], gains[0U]);
+    normalize(mid, band_p95[1U], gains[1U]);
+    normalize(high, band_p95[2U], gains[2U]);
 }
 
 void finalize_aggregation(std::vector<float>& layer,

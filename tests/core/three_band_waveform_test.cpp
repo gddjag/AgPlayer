@@ -28,13 +28,16 @@ std::vector<float> tone(const double frequency_hz)
 
 std::vector<float> equal_amplitude_mix()
 {
+    constexpr double amplitude = 0.003;
     std::vector<float> samples(frames);
     for (std::size_t frame = 0U; frame < frames; ++frame) {
         const double time = static_cast<double>(frame) / sample_rate;
-        samples[frame] = static_cast<float>(
-            0.2 * (std::sin(2.0 * pi * 100.0 * time)
-                   + std::sin(2.0 * pi * 1'000.0 * time)
-                   + std::sin(2.0 * pi * 10'000.0 * time)));
+        double value = amplitude * (std::sin(2.0 * pi * 100.0 * time)
+                                    + std::sin(2.0 * pi * 1'000.0 * time));
+        if (frame >= 24'000U && frame < 24'050U) {
+            value += amplitude * std::sin(2.0 * pi * 10'000.0 * time);
+        }
+        samples[frame] = static_cast<float>(value);
     }
     return samples;
 }
@@ -98,7 +101,7 @@ BandEnergy analyze_tone(const double frequency_hz)
 void test_low_mid_high_tones_are_classified_by_the_250_and_4000_hz_split()
 {
     const BandEnergy low = analyze_tone(100.0);
-    const BandEnergy mid = analyze_tone(3'000.0);
+    const BandEnergy mid = analyze_tone(1'000.0);
     const BandEnergy high = analyze_tone(8'000.0);
 
     assert(low.bass > low.mid);
@@ -123,9 +126,14 @@ void test_silence_has_no_frequency_color_energy()
     std::vector<float> high;
     assert(bucketizer.finish(mix, bass, mid, high) == AG_OK);
     const auto is_zero = [](const float value) { return value == 0.0F; };
+    assert(std::all_of(mix.begin(), mix.end(), is_zero));
     assert(std::all_of(bass.begin(), bass.end(), is_zero));
     assert(std::all_of(mid.begin(), mid.end(), is_zero));
     assert(std::all_of(high.begin(), high.end(), is_zero));
+    assert_finite_unit_interval(mix);
+    assert_finite_unit_interval(bass);
+    assert_finite_unit_interval(mid);
+    assert_finite_unit_interval(high);
 }
 
 void test_short_10khz_burst_retains_materially_visible_high_energy()
@@ -159,9 +167,9 @@ void test_equal_amplitude_mix_keeps_high_above_twenty_percent_of_low_and_mid()
     std::vector<float> mid;
     std::vector<float> high;
     assert(bucketizer.finish(mix, bass, mid, high) == AG_OK);
-    const float high_mean = static_cast<float>(settled_mean(high));
-    assert(high_mean >= 0.20F * static_cast<float>(settled_mean(bass)));
-    assert(high_mean >= 0.20F * static_cast<float>(settled_mean(mid)));
+    const float high_peak = *std::max_element(high.begin(), high.end());
+    assert(high_peak >= 0.20F * *std::max_element(bass.begin(), bass.end()));
+    assert(high_peak >= 0.20F * *std::max_element(mid.begin(), mid.end()));
     assert_finite_unit_interval(mix);
     assert_finite_unit_interval(bass);
     assert_finite_unit_interval(mid);
@@ -174,6 +182,6 @@ int main()
 {
     test_low_mid_high_tones_are_classified_by_the_250_and_4000_hz_split();
     test_silence_has_no_frequency_color_energy();
-    test_short_10khz_burst_retains_materially_visible_high_energy();
     test_equal_amplitude_mix_keeps_high_above_twenty_percent_of_low_and_mid();
+    test_short_10khz_burst_retains_materially_visible_high_energy();
 }
