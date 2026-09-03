@@ -49,7 +49,7 @@ Expected: the new transient/balance and schema5 key assertions fail while existi
 
 - [ ] **Step 3: Implement RMS/peak extraction and robust normalization**
 
-Maintain per-band sum-of-squares and peak vectors. At finish, calculate `0.80 * rms + 0.20 * peak`, 95th-percentile references, `0.35 * globalP95 + 0.65 * bandP95`, gains `{0.90, 1.00, 1.35}`, and the `0.015 * bandP95` noise floor. Preserve the selected aggregation for `mix` height only.
+Maintain per-band sum-of-squares and peak vectors. At finish, calculate `0.80 * rms + 0.20 * peak`, 95th-percentile references, `0.15 * globalP95 + 0.85 * bandP95`, gains `{0.90, 1.00, 1.50}`, and the `0.015 * bandP95` noise floor. Preserve the selected aggregation for `mix` height only.
 
 - [ ] **Step 4: Invalidate old analysis keys without changing the payload format**
 
@@ -82,7 +82,7 @@ git commit -m "feat: balance three-band waveform energy"
 
 - [ ] **Step 1: Add failing literal color tests**
 
-Using the fixed RGB defaults, assert pure full-energy bands return the exact base colors; equal Low+Mid is bright yellow, Mid+High bright cyan, Low+High bright magenta, all three are near white; a 0.15 High contribution remains visibly blue; and mixed outputs are finite valid QColor values. Update settings tests to require the three exact new defaults and reset values.
+Using the fixed RGB defaults, assert pure full-energy bands return the exact base colors; equal Low+Mid is bright yellow, Mid+High bright cyan, Low+High bright magenta, and all three are near white. For `Mid=0.35, High=0.15`, require the result to differ from pure Mid and its blue byte to be at least150. Assert mixed outputs are finite valid QColor values. Update settings tests to require the three exact new defaults and reset values.
 
 - [ ] **Step 2: Run focused Qt tests and verify the intended failures**
 
