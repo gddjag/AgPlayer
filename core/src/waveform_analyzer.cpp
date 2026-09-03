@@ -212,7 +212,7 @@ void normalize_frequency_layers(std::vector<float>& bass,
     const auto normalize = [global_p95](std::vector<float>& layer,
                                         const float layer_p95,
                                         const float gain) {
-        const float reference = 0.15F * global_p95 + 0.85F * layer_p95;
+        const float reference = 0.45F * global_p95 + 0.55F * layer_p95;
         const float noise_floor = 0.015F * layer_p95;
         for (float& value : layer) {
             value = reference > 0.0F && std::isfinite(value)
