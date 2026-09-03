@@ -70,6 +70,41 @@ struct VertexColor {
     unsigned char alpha;
 };
 
+constexpr double kFrequencyEdgeBrightness = 0.72;
+constexpr double kFrequencyCenterBrightness = 1.08;
+constexpr double kFrequencyEdgeOpacity = 0.55;
+
+unsigned char shadedChannel(const int channel, const double brightness)
+{
+    const double linear = agplayer::ui::detail::srgbToLinear(
+        static_cast<double>(channel) / 255.0);
+    return static_cast<unsigned char>(std::lround(
+        agplayer::ui::detail::linearToSrgb(linear * brightness) * 255.0));
+}
+
+Rgb shadedRgb(const Rgb& rgb, const double brightness)
+{
+    return {shadedChannel(rgb.red, brightness),
+            shadedChannel(rgb.green, brightness),
+            shadedChannel(rgb.blue, brightness)};
+}
+
+unsigned char scaledAlpha(const unsigned char alpha, const double opacity)
+{
+    return static_cast<unsigned char>(std::lround(
+        static_cast<double>(alpha) * opacity));
+}
+
+void writeVertexColor(QSGGeometry::ColoredPoint2D& vertex,
+                      const Rgb& rgb,
+                      const unsigned char alpha)
+{
+    vertex.r = static_cast<unsigned char>(rgb.red);
+    vertex.g = static_cast<unsigned char>(rgb.green);
+    vertex.b = static_cast<unsigned char>(rgb.blue);
+    vertex.a = alpha;
+}
+
 VertexColor mixColor(double normalizedX,
                      bool played,
                      int visualMode,
@@ -166,6 +201,7 @@ void updateMixVertexColors(QSGGeometry::ColoredPoint2D* vertices,
                            qreal frequencyUnplayedOpacity,
                            std::size_t strokeCopies)
 {
+    const std::size_t verticesPerStroke = visualMode == 3 ? 4U : 2U;
     for (std::size_t copy = 0; copy < strokeCopies; ++copy) {
         for (std::size_t index = 0; index < peakCount; ++index) {
             const double normalizedX = peakCount == 1U
@@ -182,15 +218,23 @@ void updateMixVertexColors(QSGGeometry::ColoredPoint2D* vertices,
                          lowColor, midColor, highColor,
                          frequencyUnplayedOpacity);
 
-            const std::size_t vertex = (copy * peakCount + index) * 2U;
-            vertices[vertex].r = static_cast<unsigned char>(color.rgb.red);
-            vertices[vertex].g = static_cast<unsigned char>(color.rgb.green);
-            vertices[vertex].b = static_cast<unsigned char>(color.rgb.blue);
-            vertices[vertex].a = color.alpha;
-            vertices[vertex + 1U].r = static_cast<unsigned char>(color.rgb.red);
-            vertices[vertex + 1U].g = static_cast<unsigned char>(color.rgb.green);
-            vertices[vertex + 1U].b = static_cast<unsigned char>(color.rgb.blue);
-            vertices[vertex + 1U].a = color.alpha;
+            const std::size_t vertex =
+                (copy * peakCount + index) * verticesPerStroke;
+            if (visualMode == 3) {
+                const Rgb edge = shadedRgb(color.rgb,
+                                           kFrequencyEdgeBrightness);
+                const Rgb center = shadedRgb(color.rgb,
+                                             kFrequencyCenterBrightness);
+                const auto edgeAlpha = scaledAlpha(color.alpha,
+                                                   kFrequencyEdgeOpacity);
+                writeVertexColor(vertices[vertex], edge, edgeAlpha);
+                writeVertexColor(vertices[vertex + 1U], center, color.alpha);
+                writeVertexColor(vertices[vertex + 2U], center, color.alpha);
+                writeVertexColor(vertices[vertex + 3U], edge, edgeAlpha);
+            } else {
+                writeVertexColor(vertices[vertex], color.rgb, color.alpha);
+                writeVertexColor(vertices[vertex + 1U], color.rgb, color.alpha);
+            }
         }
     }
 }
@@ -738,7 +782,7 @@ qreal WaveformItem::frequencyUnplayedOpacity() const noexcept
 void WaveformItem::setFrequencyUnplayedOpacity(qreal opacity)
 {
     const qreal clamped = std::clamp(
-        std::isfinite(opacity) ? opacity : qreal{0.88}, qreal{0.18}, qreal{1.0});
+        std::isfinite(opacity) ? opacity : qreal{0.38}, qreal{0.18}, qreal{1.0});
     if (qFuzzyCompare(frequencyUnplayedOpacity_ + 1.0, clamped + 1.0)) {
         return;
     }
@@ -1009,7 +1053,8 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         const std::size_t spectrumCapVertices = visualMode_ == 2
             ? peakCount * 2U
             : 0U;
-        const auto vertexCount = peakCount * 2U
+        const std::size_t verticesPerStroke = visualMode_ == 3 ? 4U : 2U;
+        const auto vertexCount = peakCount * verticesPerStroke
             * activeLayers * strokeCopies + spectrumCapVertices;
         if (vertexCount > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
             delete node;
@@ -1137,8 +1182,8 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                     const auto red = static_cast<unsigned char>(color.rgb.red);
                     const auto green = static_cast<unsigned char>(color.rgb.green);
                     const auto blue = static_cast<unsigned char>(color.rgb.blue);
-                    const std::size_t vertex =
-                        vertexOffset + (copy * peakCount + index) * 2U;
+                    const std::size_t vertex = vertexOffset
+                        + (copy * peakCount + index) * verticesPerStroke;
 
                     if (visualMode_ == 2) {
                         vertices[vertex].set(
@@ -1147,6 +1192,37 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                         vertices[vertex + 1U].set(
                             x, spectrumBaseline,
                             red, green, blue, color.alpha);
+                    } else if (visualMode_ == 3) {
+                        const Rgb edge = shadedRgb(
+                            color.rgb, kFrequencyEdgeBrightness);
+                        const Rgb centerRgb = shadedRgb(color.rgb,
+                                                        kFrequencyCenterBrightness);
+                        const auto edgeAlpha = scaledAlpha(color.alpha,
+                                                           kFrequencyEdgeOpacity);
+                        vertices[vertex].set(
+                            x, center - amplitude,
+                            static_cast<unsigned char>(edge.red),
+                            static_cast<unsigned char>(edge.green),
+                            static_cast<unsigned char>(edge.blue),
+                            edgeAlpha);
+                        vertices[vertex + 1U].set(
+                            x, center,
+                            static_cast<unsigned char>(centerRgb.red),
+                            static_cast<unsigned char>(centerRgb.green),
+                            static_cast<unsigned char>(centerRgb.blue),
+                            color.alpha);
+                        vertices[vertex + 2U].set(
+                            x, center,
+                            static_cast<unsigned char>(centerRgb.red),
+                            static_cast<unsigned char>(centerRgb.green),
+                            static_cast<unsigned char>(centerRgb.blue),
+                            color.alpha);
+                        vertices[vertex + 3U].set(
+                            x, center + amplitude,
+                            static_cast<unsigned char>(edge.red),
+                            static_cast<unsigned char>(edge.green),
+                            static_cast<unsigned char>(edge.blue),
+                            edgeAlpha);
                     } else {
                         vertices[vertex].set(
                             x, center - amplitude, red, green, blue, color.alpha);
@@ -1204,7 +1280,7 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                 }
                 vertexOffset += peakCount * 2U * (strokeCopies + 1U);
             } else {
-                vertexOffset += peakCount * 2U * strokeCopies;
+                vertexOffset += peakCount * verticesPerStroke * strokeCopies;
             }
         };
 
@@ -1267,7 +1343,8 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
             rgbProgress_, node->lowValues_, node->midValues_,
             node->highValues_, lowColor_, midColor_, highColor_,
             frequencyUnplayedOpacity_, strokeCopies);
-        vertexOffset += peakCount * 2U * strokeCopies;
+        const std::size_t verticesPerStroke = node->visualMode_ == 3 ? 4U : 2U;
+        vertexOffset += peakCount * verticesPerStroke * strokeCopies;
         if (node->visualMode_ == 2) {
             // Peak-hold caps are a separate geometry range.  Recolor them in
             // the same update so their colour never trails the bar below.

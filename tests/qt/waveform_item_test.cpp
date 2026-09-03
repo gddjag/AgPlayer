@@ -1,5 +1,7 @@
 #include "waveform_item.hpp"
 #include "frequency_color_mix.hpp"
+#include "frequency_color_waveform_settings.hpp"
+#include "track_waveform_thumbnail_item.hpp"
 
 #include <QHoverEvent>
 #include <QMouseEvent>
@@ -37,6 +39,7 @@ class WaveformItemTest final : public QObject {
 private slots:
     void mapsPointerToClampedTime();
     void buildsCenteredFiniteNormalizedLinePairs();
+    void defaultFrequencyColorsUseFixedPalette();
     void threeBandMixerKeepsPureColorsAndCreatesCombinations();
     void frequencyModeUsesAmplitudeGeometryAndOpacityOnlyProgress();
     void frequencyColorChangeDoesNotReplaceGeometryNode();
@@ -244,24 +247,86 @@ void WaveformItemTest::visualModesUseConfiguredProgressAndBaseColors()
 
 void WaveformItemTest::threeBandMixerKeepsPureColorsAndCreatesCombinations()
 {
-    const QColor low(QStringLiteral("#8B3DFF"));
-    const QColor mid(QStringLiteral("#FFB000"));
-    const QColor high(QStringLiteral("#002FA7"));
+    const QColor low(QStringLiteral("#FC0909"));
+    const QColor mid(QStringLiteral("#03FF00"));
+    const QColor high(QStringLiteral("#0048FF"));
+    QCOMPARE(agplayer::ui::mixFrequencyColor(0.0, 0.0, 0.0,
+                                             low, mid, high), low);
     QCOMPARE(agplayer::ui::mixFrequencyColor(1.0, 0.0, 0.0,
                                              low, mid, high), low);
     QCOMPARE(agplayer::ui::mixFrequencyColor(0.0, 1.0, 0.0,
                                              low, mid, high), mid);
     QCOMPARE(agplayer::ui::mixFrequencyColor(0.0, 0.0, 1.0,
                                              low, mid, high), high);
+
     const QColor lowMid = agplayer::ui::mixFrequencyColor(
         1.0, 1.0, 0.0, low, mid, high);
+    const QColor midHigh = agplayer::ui::mixFrequencyColor(
+        0.0, 1.0, 1.0, low, mid, high);
+    const QColor lowHigh = agplayer::ui::mixFrequencyColor(
+        1.0, 0.0, 1.0, low, mid, high);
     const QColor all = agplayer::ui::mixFrequencyColor(
         1.0, 1.0, 1.0, low, mid, high);
-    QVERIFY(lowMid != low);
-    QVERIFY(lowMid != mid);
-    QVERIFY(all != low && all != mid && all != high);
-    QVERIFY(lowMid.hslSaturationF() >= 0.55);
-    QVERIFY(all.hslSaturationF() >= 0.45);
+    const QColor denseMusic = agplayer::ui::mixFrequencyColor(
+        0.63, 0.74, 0.88, low, mid, high);
+    const QColor quietMidHigh = agplayer::ui::mixFrequencyColor(
+        0.0, 0.35, 0.15, low, mid, high);
+
+    const auto verifyFiniteColor = [](const QColor& color) {
+        QVERIFY(color.isValid());
+        QVERIFY(std::isfinite(color.redF()));
+        QVERIFY(std::isfinite(color.greenF()));
+        QVERIFY(std::isfinite(color.blueF()));
+    };
+    verifyFiniteColor(lowMid);
+    verifyFiniteColor(midHigh);
+    verifyFiniteColor(lowHigh);
+    verifyFiniteColor(all);
+    verifyFiniteColor(denseMusic);
+    verifyFiniteColor(quietMidHigh);
+
+    QVERIFY2(lowMid.red() >= 245 && lowMid.green() >= 245
+                 && lowMid.blue() <= 40,
+             "full Low + Mid must add to bright yellow");
+    QVERIFY2(midHigh.red() <= 40 && midHigh.green() >= 245
+                 && midHigh.blue() >= 245,
+             "full Mid + High must add to bright cyan");
+    QVERIFY2(lowHigh.red() >= 245 && lowHigh.green() <= 128
+                 && lowHigh.blue() >= 245,
+             "full Low + High must add to bright magenta");
+    QVERIFY2(all.hsvSaturationF() >= 0.25 && all.valueF() >= 0.75,
+             "balanced full-band energy must stay bright without washing out");
+    QVERIFY2(denseMusic.hsvSaturationF() >= 0.35,
+             "dense three-band music must retain visible chroma");
+    QVERIFY2(denseMusic.green() > denseMusic.red()
+                 && denseMusic.blue() > denseMusic.red(),
+             "the representative High-heavy mix must remain blue/cyan");
+    QVERIFY(quietMidHigh != mid);
+    QVERIFY2(quietMidHigh.blue() >= 150,
+             "quiet High energy must remain visible in a Mid-heavy mix");
+}
+
+void WaveformItemTest::defaultFrequencyColorsUseFixedPalette()
+{
+    const QColor expectedLow(QStringLiteral("#FC0909"));
+    const QColor expectedMid(QStringLiteral("#03FF00"));
+    const QColor expectedHigh(QStringLiteral("#0048FF"));
+
+    const FrequencyColorWaveformSettings settings;
+    QCOMPARE(settings.lowColor(), expectedLow);
+    QCOMPARE(settings.midColor(), expectedMid);
+    QCOMPARE(settings.highColor(), expectedHigh);
+
+    const WaveformItem waveform;
+    QCOMPARE(waveform.lowColor(), expectedLow);
+    QCOMPARE(waveform.midColor(), expectedMid);
+    QCOMPARE(waveform.highColor(), expectedHigh);
+    QCOMPARE(waveform.frequencyUnplayedOpacity(), 0.38);
+
+    const TrackWaveformThumbnailItem thumbnail;
+    QCOMPARE(thumbnail.lowColor(), expectedLow);
+    QCOMPARE(thumbnail.midColor(), expectedMid);
+    QCOMPARE(thumbnail.highColor(), expectedHigh);
 }
 
 void WaveformItemTest::frequencyModeUsesAmplitudeGeometryAndOpacityOnlyProgress()
@@ -302,25 +367,59 @@ void WaveformItemTest::frequencyModeUsesAmplitudeGeometryAndOpacityOnlyProgress(
     const auto* frequencyVertices = vertices(frequencyNode);
     const int count = static_cast<QSGGeometryNode*>(plainNode)
                           ->geometry()->vertexCount();
+    QCOMPARE(count, 200);
     QCOMPARE(static_cast<QSGGeometryNode*>(frequencyNode)
-                 ->geometry()->vertexCount(), count);
-    for (int index = 0; index < count; ++index) {
-        QCOMPARE(frequencyVertices[index].x, plainVertices[index].x);
-        QCOMPARE(frequencyVertices[index].y, plainVertices[index].y);
+                 ->geometry()->vertexCount(), count * 2);
+    const int peakCount = count / 2;
+    for (int index = 0; index < peakCount; ++index) {
+        const int plainVertex = index * 2;
+        const int frequencyVertex = index * 4;
+        QCOMPARE(frequencyVertices[frequencyVertex].x,
+                 plainVertices[plainVertex].x);
+        QCOMPARE(frequencyVertices[frequencyVertex + 1].x,
+                 plainVertices[plainVertex].x);
+        QCOMPARE(frequencyVertices[frequencyVertex + 2].x,
+                 plainVertices[plainVertex].x);
+        QCOMPARE(frequencyVertices[frequencyVertex + 3].x,
+                 plainVertices[plainVertex].x);
+        QCOMPARE(frequencyVertices[frequencyVertex].y,
+                 plainVertices[plainVertex].y);
+        QCOMPARE(frequencyVertices[frequencyVertex + 1].y, 20.0F);
+        QCOMPARE(frequencyVertices[frequencyVertex + 2].y, 20.0F);
+        QCOMPARE(frequencyVertices[frequencyVertex + 3].y,
+                 plainVertices[plainVertex + 1].y);
     }
-    compareColor(frequencyVertices[0], 255, 0, 0, 224);
-    const int sampleVertex = count / 2;
-    const auto before = frequencyVertices[sampleVertex];
+    QCOMPARE(static_cast<int>(frequencyVertices[0].a), 123);
+    QCOMPARE(static_cast<int>(frequencyVertices[1].a), 224);
+    QCOMPARE(static_cast<int>(frequencyVertices[2].a), 224);
+    QCOMPARE(static_cast<int>(frequencyVertices[3].a), 123);
+    QVERIFY(frequencyVertices[1].r > frequencyVertices[0].r);
+    const auto beforeEdge = frequencyVertices[0];
+    const auto beforeCenter = frequencyVertices[1];
+
+    std::vector<QPointF> beforePositions;
+    beforePositions.reserve(static_cast<std::size_t>(count * 2));
+    for (int index = 0; index < count * 2; ++index) {
+        beforePositions.emplace_back(frequencyVertices[index].x,
+                                     frequencyVertices[index].y);
+    }
     frequency.setPosition(100);
     frequencyNode = frequency.updatePaintNode(frequencyNode, nullptr);
-    const auto after = vertices(frequencyNode)[sampleVertex];
-    QCOMPARE(after.x, before.x);
-    QCOMPARE(after.y, before.y);
-    QCOMPARE(after.r, before.r);
-    QCOMPARE(after.g, before.g);
-    QCOMPARE(after.b, before.b);
-    QCOMPARE(before.a, 224U);
-    QCOMPARE(after.a, 255U);
+    const auto* playedVertices = vertices(frequencyNode);
+    for (int index = 0; index < count * 2; ++index) {
+        QCOMPARE(playedVertices[index].x, beforePositions[index].x());
+        QCOMPARE(playedVertices[index].y, beforePositions[index].y());
+    }
+    QCOMPARE(static_cast<int>(playedVertices[0].a), 140);
+    QCOMPARE(static_cast<int>(playedVertices[1].a), 255);
+    QCOMPARE(static_cast<int>(playedVertices[2].a), 255);
+    QCOMPARE(static_cast<int>(playedVertices[3].a), 140);
+    QCOMPARE(playedVertices[0].r, beforeEdge.r);
+    QCOMPARE(playedVertices[0].g, beforeEdge.g);
+    QCOMPARE(playedVertices[0].b, beforeEdge.b);
+    QCOMPARE(playedVertices[1].r, beforeCenter.r);
+    QCOMPARE(playedVertices[1].g, beforeCenter.g);
+    QCOMPARE(playedVertices[1].b, beforeCenter.b);
     delete plainNode;
     delete frequencyNode;
 }
@@ -332,6 +431,7 @@ void WaveformItemTest::frequencyColorChangeDoesNotReplaceGeometryNode()
     item.setHeight(48);
     item.setDuration(100);
     item.setVisualMode(3);
+    item.setFrequencyUnplayedOpacity(0.88);
     item.setLayers(makeLayers(peaks({1.0, 0.5, 0.75, 0.25}),
                               peaks({1.0, 1.0, 1.0, 1.0}),
                               peaks({0.0, 0.0, 0.0, 0.0}),
@@ -346,7 +446,12 @@ void WaveformItemTest::frequencyColorChangeDoesNotReplaceGeometryNode()
     QCOMPARE(updated, node);
     QCOMPARE(static_cast<QSGGeometryNode*>(updated)->geometry(), geometry);
     QCOMPARE(geometry->vertexData(), vertexStorage);
-    compareColor(vertices(updated)[0], 255, 0, 0, 224);
+    const auto* updatedVertices = vertices(updated);
+    QVERIFY(updatedVertices[0].r < updatedVertices[1].r);
+    compareColor(updatedVertices[1], 255, 0, 0, 224);
+    QCOMPARE(static_cast<int>(updatedVertices[0].a), 123);
+    QCOMPARE(static_cast<int>(updatedVertices[2].a), 224);
+    QCOMPARE(static_cast<int>(updatedVertices[3].a), 123);
     delete updated;
 }
 
@@ -388,15 +493,18 @@ void WaveformItemTest::frequencyModeUpdatesProgressOpacityWithoutRebuildingNode(
     item.setPosition(0);
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
-    const int unplayedAlpha = static_cast<int>(vertices(node)[0].a);
+    const int unplayedAlpha = static_cast<int>(vertices(node)[1].a);
     QCOMPARE(unplayedAlpha, 97);
+    QCOMPARE(static_cast<int>(vertices(node)[0].a), 53);
 
     item.setPosition(100);
     QSGNode* updatedNode = item.updatePaintNode(node, nullptr);
     QCOMPARE(updatedNode, node);
-    QCOMPARE(static_cast<int>(vertices(updatedNode)[0].a), 255);
-    QCOMPARE(static_cast<int>(vertices(updatedNode)[6].a), 255);
-    QVERIFY(static_cast<int>(vertices(updatedNode)[0].a) > unplayedAlpha + 100);
+    QCOMPARE(static_cast<int>(vertices(updatedNode)[0].a), 140);
+    QCOMPARE(static_cast<int>(vertices(updatedNode)[1].a), 255);
+    QCOMPARE(static_cast<int>(vertices(updatedNode)[2].a), 255);
+    QCOMPARE(static_cast<int>(vertices(updatedNode)[3].a), 140);
+    QVERIFY(static_cast<int>(vertices(updatedNode)[1].a) > unplayedAlpha + 100);
     delete updatedNode;
 }
 

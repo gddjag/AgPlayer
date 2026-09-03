@@ -24,20 +24,16 @@ QStringList normalizedTags(const QStringList& values)
 
 const QList<QColor>& tagPalette()
 {
-    static const QList<QColor> palette{QColor("#B85C5C"), QColor("#C7874D"),
-        QColor("#B8A14A"), QColor("#6FAD65"), QColor("#4FA59A"), QColor("#568FC7"),
-        QColor("#7768C7"), QColor("#A467B8")};
+    static const QList<QColor> palette{QColor("#EE0000"), QColor("#007BFF"),
+        QColor("#28A745"), QColor("#FD7E14"), QColor("#6F42C1"),
+        QColor("#D63384"), QColor("#17A2B8"), QColor("#809438"),
+        QColor("#925B37"), QColor("#495057")};
     return palette;
 }
 
-QColor nextColor(const QList<TagEntry>& entries, const QString& key)
+QColor nextColor(const QString& key)
 {
     const QList<QColor>& palette = tagPalette();
-    for (const QColor& color : palette) {
-        if (std::none_of(entries.cbegin(), entries.cend(), [&color](const TagEntry& entry) {
-                return entry.color == color;
-            })) return color;
-    }
     quint32 hash = 2166136261U;
     for (const QChar character : key) {
         hash ^= character.unicode();
@@ -263,7 +259,7 @@ int TagModel::rowForKey(const QString& key) const { return rowsByKey_.value(keyF
 
 QColor TagModel::nextColorFor(const QString& key) const
 {
-    return nextColor(entries_, key);
+    return nextColor(key);
 }
 
 void TagModel::rebuildFromLibrary()
@@ -299,7 +295,7 @@ void TagModel::rebuildFromLibrary()
                 const QString key = keyFor(tag);
                 int row = rowByKey.value(key, -1);
                 if (row < 0) {
-                    const QColor color = nextColor(entries, key);
+                    const QColor color = nextColor(key);
                     entries.append({key, tag, 0, color});
                     metadataChanged = true;
                     row = entries.size() - 1;

@@ -577,6 +577,8 @@
         <source>选择颜色</source>
         <translation>选择颜色</translation>
     </message>
+    <message><source>色号</source><translation>色号</translation></message>
+    <message><source>十六进制色号，可复制粘贴</source><translation>十六进制色号，可复制粘贴</translation></message>
 </context>
 <context>
     <name>EditorCommandBar</name>
@@ -3748,9 +3750,15 @@
     <message><source>显示歌曲列表波形缩略图</source><translation>显示歌曲列表波形缩略图</translation></message>
     <message><source>缩略波形颜色</source><translation>缩略波形颜色</translation></message>
     <message><source>频彩调色板</source><translation>频彩调色板</translation></message>
+    <message><source>最低频</source><translation>最低频</translation></message>
     <message><source>低频</source><translation>低频</translation></message>
+    <message><source>低中频</source><translation>低中频</translation></message>
     <message><source>中频</source><translation>中频</translation></message>
+    <message><source>中高频</source><translation>中高频</translation></message>
     <message><source>高频</source><translation>高频</translation></message>
+    <message><source>更高频</source><translation>更高频</translation></message>
+    <message><source>最高频</source><translation>最高频</translation></message>
+    <message><source>点击调整对应基础色</source><translation>点击调整对应基础色</translation></message>
     <message><source>波形与频谱颜色</source><translation>波形与频谱颜色</translation></message>
     <message><source>自定义波形</source><translation>自定义波形</translation></message>
     <message><source>底色 / RGB 渐变</source><translation>底色 / RGB 渐变</translation></message>

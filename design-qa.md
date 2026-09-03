@@ -356,3 +356,25 @@ final result: passed
 No hardware listening or true-peak calibration was included in this visual acceptance.
 
 final result: passed
+
+---
+
+# Design QA — 原生标签胶囊 — 2026-09-03
+
+## 对照来源
+
+- 参考图：`E:/Administrator/下载/codex-clipboard-4edaef8e-1ae5-44fc-af9a-8505d1bd6a81.png`
+- 深色 Qt 实机截图：`.artifacts/acceptance/2026-09-03-tag-capsules/tag-capsules-dark.png`
+- 浅色 Qt 实机截图：`.artifacts/acceptance/2026-09-03-tag-capsules/tag-capsules-light.png`
+
+## 验收结果
+
+- 匹配 28 px 高度、5 px 外圆角、彩色名称区、白色数量区、中央三角缺口、紧凑阴影、13 px 半粗文字、自适应宽度与自动换行。
+- hover、键盘焦点、按下、选中、右键菜单与拖放继续使用共享标签代理。
+- 胶囊宽度受共享侧栏约束；超长名称省略并保留悬浮完整提示，不溢出容器。
+- 三种播放器主题共用同一 `TagManagementPanel`；已保存的用户配色不被覆盖，新标签使用统一十色调色板。
+- 未使用 HTML、CSS、WebEngine、截图切片或额外主题副本。
+
+没有剩余 P0、P1、P2 视觉差异。
+
+final result: passed

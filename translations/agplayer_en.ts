@@ -577,6 +577,8 @@
         <source>选择颜色</source>
         <translation>Select color</translation>
     </message>
+    <message><source>色号</source><translation>Hex</translation></message>
+    <message><source>十六进制色号，可复制粘贴</source><translation>Hex color; supports copy and paste</translation></message>
 </context>
 <context>
     <name>EditorCommandBar</name>
@@ -3748,9 +3750,15 @@ Clear: Remove all known aliases for this field.</translation>
     <message><source>显示歌曲列表波形缩略图</source><translation>Show waveform thumbnails in the song list</translation></message>
     <message><source>缩略波形颜色</source><translation>Thumbnail waveform color</translation></message>
     <message><source>频彩调色板</source><translation>Spectral color palette</translation></message>
+    <message><source>最低频</source><translation>Sub bass</translation></message>
     <message><source>低频</source><translation>Low</translation></message>
+    <message><source>低中频</source><translation>Low-mid</translation></message>
     <message><source>中频</source><translation>Mid</translation></message>
+    <message><source>中高频</source><translation>High-mid</translation></message>
     <message><source>高频</source><translation>High</translation></message>
+    <message><source>更高频</source><translation>Upper high</translation></message>
+    <message><source>最高频</source><translation>Air</translation></message>
+    <message><source>点击调整对应基础色</source><translation>Click to adjust the corresponding base color</translation></message>
     <message><source>波形与频谱颜色</source><translation>Waveform and spectrum colors</translation></message>
     <message><source>自定义波形</source><translation>Custom waveform</translation></message>
     <message><source>底色 / RGB 渐变</source><translation>Base color / RGB gradient</translation></message>

@@ -4,6 +4,7 @@
 #include <QColor>
 #include <QFile>
 #include <QFileInfo>
+#include <QSet>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -13,7 +14,7 @@ class TagModelTest final : public QObject {
 
 private slots:
     void persistsEmptyTagsAndUpdatesOnlyAffectedCounts();
-    void assignsDistinctInitialPaletteColors();
+    void assignsStableRandomPaletteColors();
     void retainsUnsavedEmptyDirectoryEntriesAcrossLibraryReset();
     void persistsMetadataDiscoveredFromTrackTags();
     void renamesAnEmptyTagWithoutLosingItsColor();
@@ -66,7 +67,7 @@ void TagModelTest::persistsEmptyTagsAndUpdatesOnlyAffectedCounts()
     QCOMPARE(restored.countForKey(QStringLiteral("driving")), 0);
 }
 
-void TagModelTest::assignsDistinctInitialPaletteColors()
+void TagModelTest::assignsStableRandomPaletteColors()
 {
     // Catches initial aggregation allocating every missing tag from an empty
     // stale palette snapshot instead of reserving colours as entries are made.
@@ -79,7 +80,38 @@ void TagModelTest::assignsDistinctInitialPaletteColors()
 
     QVERIFY(tags.colorForKey(QStringLiteral("rock")).isValid());
     QVERIFY(tags.colorForKey(QStringLiteral("jazz")).isValid());
-    QVERIFY(tags.colorForKey(QStringLiteral("rock")) != tags.colorForKey(QStringLiteral("jazz")));
+    const QSet<QString> expectedPalette{QStringLiteral("#EE0000"),
+        QStringLiteral("#007BFF"), QStringLiteral("#28A745"),
+        QStringLiteral("#FD7E14"), QStringLiteral("#6F42C1"),
+        QStringLiteral("#D63384"), QStringLiteral("#17A2B8"),
+        QStringLiteral("#809438"), QStringLiteral("#925B37"),
+        QStringLiteral("#495057")};
+    const QStringList names{QStringLiteral("热"), QStringLiteral("新品"),
+        QStringLiteral("高推荐"), QStringLiteral("限时折扣"),
+        QStringLiteral("官方精选款"), QStringLiteral("会员专属福利"),
+        QStringLiteral("平台爆款热销单品"), QStringLiteral("春季上新限定活动专区"),
+        QStringLiteral("HOT"), QStringLiteral("NEW 2026年度限定好物推荐")};
+    LibraryModel firstLibrary;
+    TagModel firstOrder(&firstLibrary, dir.filePath(QStringLiteral("palette-first.json")));
+    QHash<QString, QColor> firstColors;
+    QSet<QString> usedColors;
+    for (const QString& name : names) {
+        QVERIFY(firstOrder.createTag(name));
+        const QColor color = firstOrder.colorForKey(name);
+        const QString colorName = color.name(QColor::HexRgb).toUpper();
+        QVERIFY(expectedPalette.contains(colorName));
+        firstColors.insert(name, color);
+        usedColors.insert(colorName);
+    }
+    QVERIFY(usedColors.size() >= 5);
+
+    LibraryModel reverseLibrary;
+    TagModel reverseOrder(&reverseLibrary,
+                          dir.filePath(QStringLiteral("palette-reverse.json")));
+    for (auto iterator = names.crbegin(); iterator != names.crend(); ++iterator) {
+        QVERIFY(reverseOrder.createTag(*iterator));
+        QCOMPARE(reverseOrder.colorForKey(*iterator), firstColors.value(*iterator));
+    }
 }
 
 void TagModelTest::retainsUnsavedEmptyDirectoryEntriesAcrossLibraryReset()

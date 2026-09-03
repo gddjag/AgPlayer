@@ -4,25 +4,53 @@
 
 - 产品名称继续使用“频彩波形”。
 - 单套离线分析同时输出原始振幅 `mix` 与 Low / Mid / High 三路能量；分频点为 250 Hz、4 kHz。
-- 默认基色为 Low `#8B3DFF`、Mid `#FFB000`、High `#002FA7`，设置页只暴露这三个颜色。
-- 组合颜色在渲染时以线性 RGB 混合并做有限饱和度、明度恢复，不进入缓存键或缓存载荷。
-- 波形高度只由原始振幅决定；播放进度只改变 Alpha。
-- 全链路只使用一套 `WaveformAnalyzer`、一个 `.agwf` v4 缓存和现有 QSG 顶点色渲染器。
+- 波形高度只由原始振幅决定，Low / Mid / High 只参与着色；播放进度只改变 Alpha。
+- 默认基色为 Low `#FC0909`、Mid `#03FF00`、High `#0048FF`，设置页只暴露这三个颜色。
+- 缓存、分析器、Provider 和 QSG 渲染器仍各只有一套，没有新增 ShaderEffect、线程、依赖或算法设置项。
+
+## 能量校准
+
+- Low 和 High 使用二阶 IIR biquad，Mid 使用 250 Hz 高通串联 4 kHz 低通；保持平滑交叉且不引入高阶 FIR 的计算与延迟成本。
+- 每个时间桶分别累计三路平方和与峰值，频带特征为 `0.80 * RMS + 0.20 * peak`，兼顾持续内容和短瞬态。
+- 每个频带取非零 P95；归一化参考为 `0.45 * globalP95 + 0.55 * bandP95`，Low / Mid / High 增益分别为 `0.90 / 1.00 / 1.50`，噪声门限为 `0.015 * bandP95`。这是经三项行为契约验证的保守校准点，不宣称为数学上已证明的最小值。
+- 缓存分析键使用 schema 5，使旧算法结果自动失效；磁盘载荷仍为 `.agwf` v4，字段结构没有改变。
+
+## 加法混色
+
+- 三路能量先经过 `pow(pow(clamp(x), 0.55), 1.20)`，再将三个用户基色转换到线性 sRGB 后直接相加，不做逐频段权重和归一化，也不做 HSL 饱和度/明度恢复。
+- 加法结果超过1时先共享缩放获得余量；三通道共同线性能量保留5%，再同比例恢复共享峰值。该固定成本步骤保留普通混合音乐中的通道差异，避免后续限幅把三路长期高能量压成近白。
+- 每个处理后的线性通道使用强度 `1.35` 的有界 soft-knee，再编码回 sRGB；纯单频满能量保持其设置基色，组合频带可形成黄、青、品红等中间色，三频同时偏高也保持可见色度。
+- 全零频带继续回退 Low 基色，避免原始振幅可见但三路均落入噪声门时出现黑色断口。
+
+## 渲染层次
+
+- 主波形仅在频彩模式（visual mode 3）把一根竖线拆成“上边缘到中心、中心到下边缘”两段，共四个顶点；普通波形和频谱仍为每根线两个顶点。
+- 中心 RGB 在线性光中乘 `1.08`，边缘 RGB 乘 `0.72`；中心保留原播放进度 Alpha，边缘 Alpha 为其 `0.55`。
+- 改色/播放进度更新继续复用同一个 geometry node 和顶点存储，并按四顶点布局只刷新 RGBA；顶点位置、原振幅高度和时间映射不变。
+- 列表缩略图保持原顶点数量，只共享三频加法混色结果，避免在小高度列表中增加无收益的几何量。
 
 ## 已删除或替换
 
 - 删除离线频彩波形的 FFT、Hann 窗、Spectral Centroid、`spectralIndex` C API、缓存字段和 QML 属性。
-- 删除未再调用的旧 20 / 180 / 2800 Hz `FrequencyBandSplitter` / Linkwitz-Riley 分频实现，避免并存两套算法。
+- 删除未再调用的旧 20 / 180 / 2800 Hz 分频实现，避免并存两套算法。
 - 删除 8 色 Palette 设置与插值路径，替换为 Low / Mid / High 三个可配置基色。
 - 删除主波形 Provider 的双任务分类、频彩升级任务、资源压力暂停接口及 QML 取消频彩任务接口。
-- 列表缩略图与主波形均直接消费同一份 mix/bass/mid/high 缓存数据；改色只重写顶点 RGBA，不改波形几何。
-- 旧 `.agwf` 分析结果通过缓存格式/算法版本 4 自动失效，不做旧 Spectral Centroid 数据迁移。
+- 列表缩略图与主波形均直接消费同一份 mix/bass/mid/high 缓存数据；组合色不进入缓存键或载荷。
+
+## 设置迁移
+
+- `appearance/waveformFrequencyColorSchemaVersion` 当前为1。schema 缺失或旧时，只有已存储三色完整且同时等于旧默认 Low `#8B3DFF`、Mid `#FFB000`、High `#002FA7` 才一次性迁移并持久化为当前默认 `#FC0909/#03FF00/#0048FF`。
+- 任意一色不同即视为用户自定义，三色全部保留，只补写当前 schema；因此部分自定义不会被覆盖。无法区分“用户主动选择了完整旧默认组”和“旧版未改默认值”，前者会发生一次迁移，这是该精确匹配策略的剩余边界。
 
 ## 验证记录
 
-- MSVC Debug 全量构建通过：`cmake --build build/msvc-debug --config Debug`。
-- 15 项核心、缓存、Provider、QSG、设置、QML 与缩略图压力/源码契约测试通过；另有 6 个直接覆盖本次改动的 MainWindow / RollingTheme 用例单独运行通过。
-- 播放器真实界面截图：`build/qa/three-band-frequency/player-frequency.png`。
-- 设置页真实界面截图：`build/qa/three-band-frequency/settings-frequency-5.png`；确认只显示三个基色输入和未播放透明度，预览能产生自动混色。
-- 已知基线限制：完整 `qml_main_window_test` 仍会在约一分钟处失败/超时；完整 `qml_rolling_theme_test` 仍有三个与本次频彩改动无关的既存布局/控件/BPM 失败。本次相关函数均已隔离验证通过。
-- 尚未执行实体声卡播放、长时性能测量或发布包验收；本记录不把这些项目标记为已验证。
+- 严格测试先行：四顶点、中心/边缘 Alpha 与明暗层次的新断言在旧两顶点实现上先失败，之后才修改生产代码。
+- 调色板迁移同样执行 RED/GREEN：旧实现上“完整旧默认组升级并落盘”和“自定义组补写 schema”两项测试分别因旧色仍被加载、schema 缺失而失败，最小迁移实现后通过；干净默认、重置和既有持久化合同继续由 `settings_controller_test` 覆盖。
+- 功能视觉基线 HEAD `a514a0e` 的 MSVC Debug clean build 通过；频彩聚焦 `waveform_analyzer_test`、`three_band_waveform_test`、`waveform_cache_test`、`waveform_item_test`、`settings_controller_test` 共 **5/5** 通过。
+- 测试确认频彩四顶点的外端位置与普通波形上下端一致，中心位于原波形中线；播放前后全部顶点位置不变，仅 Alpha 改变。
+- 测试确认普通波形继续使用两顶点布局，频谱与缩略图回归均通过。
+- 真实曲目用现有 `.agwf` 的2000组三频数据做秒级重放：旧传递中位饱和度0.0654、强色3.45%、近白60.35%；共享余量单独使用没有改善，去除 soft-knee 也不足以通过，根因是共同能量叠加后被逐通道压平。
+- 新传递的同数据重放达到中位饱和度0.4988、强色95.40%、近白0.30%。默认 Qt RHI 下的真实播放器截图 `build/qa/reference-style-frequency-color/player-frequency-color-common05-integrated-final.png`，波形 ROI `(8,286,1220,365)` 达到中位饱和度0.3992、强色94.87%、高亮近白0.38%，可见蓝、青、品红及少量其他组合色。
+- 当前源码对应的播放器证据采用 `build/qa/reference-style-frequency-color/player-frequency-color-current-head.png`：截图 `1228×399`，波形 ROI `(8,286,1220,365)` / `1212×79`；亮像素中位饱和度 **0.3992**，强色占比 **94.87%**，高亮近白 **0.38%**，均通过规格门槛。设置证据为 `build/qa/reference-style-frequency-color/settings-frequency-color-current-head-rerun.png`（`860×900`），显示频彩模式、恰好三个基色、当前默认三色和锁定高度 `78 px`。
+- 同一功能视觉基线的完整 Debug CTest 为 **145/155**：10 项失败中9项为既有基线，另1项是可独立复现的 `audio_engine_test` 缓冲帧断言；本功能差异不触及音频引擎。仓库全套因此仍非绿色，不能据此宣称发布就绪。
+- 尚未执行实体声卡播放、长时 GPU/CPU 性能测量或发布包验收；播放进度的 RGB/位置不变、仅 Alpha 改变已有自动化证明，但没有真实应用前后 seek 截图对。

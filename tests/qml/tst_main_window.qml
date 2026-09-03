@@ -3357,6 +3357,17 @@ TestCase {
         var secondPill = findChild(panel, "tagPill-" + keys[1])
         var longPill = findChild(panel, "tagPill-" + keys[keys.length - 1])
         verify(firstPill && secondPill && longPill)
+        compare(firstPill.height, 28)
+        compare(firstPill.radius, 5)
+        var firstLeft = findChild(firstPill, "tagCapsuleLeft-" + keys[0])
+        var firstRight = findChild(firstPill, "tagCapsuleRight-" + keys[0])
+        var firstNotch = findChild(firstPill, "tagCapsuleNotch-" + keys[0])
+        verify(firstLeft && firstRight && firstNotch)
+        compare(firstRight.height, 28)
+        verify(firstRight.width >= 42)
+        compare(firstNotch.width, 8)
+        compare(firstNotch.height, 8)
+        compare(firstNotch.rotation, 45)
         verify(longPill.width > firstPill.width,
                "long labels must retain a larger natural capsule width")
         var shortPills = [firstPill, secondPill,
@@ -3392,9 +3403,9 @@ TestCase {
 
         panel.selectTag(keys[0])
         tryVerify(function() { return firstPill.selectedVisual }, 500)
-        verify(firstPill.resolvedSurface.toString()
-               === Theme.tagPillSelectedSurface.toString(),
-               "selected tags must use the low-saturation blue token")
+        verify(firstPill.resolvedAccent.toString()
+               !== firstPill.baseAccent.toString(),
+               "selected tags must darken their own stable palette color")
 
         var pointer = findChild(firstPill, "tagPillPointerArea-" + keys[0])
         verify(pointer)
@@ -3411,20 +3422,27 @@ TestCase {
         tryVerify(function() { return !firstPill.hoveredVisual }, 500)
         mouseMove(pointer, pointer.width / 2, pointer.height / 2)
         tryVerify(function() { return firstPill.hoveredVisual }, 500)
-        verify(firstPill.resolvedSurface.toString()
-               === Theme.tagPillHoverSurface.toString())
+        verify(firstPill.resolvedAccent.toString()
+               !== firstPill.baseAccent.toString())
+        mousePress(pointer, pointer.width / 2, pointer.height / 2,
+                   Qt.LeftButton)
+        tryVerify(function() { return firstPill.pressedVisual }, 500)
+        verify(firstPill.resolvedAccent.toString()
+               !== firstPill.baseAccent.toString())
+        mouseRelease(pointer, pointer.width / 2, pointer.height / 2,
+                     Qt.LeftButton)
 
         var previousMode = SettingsController.themeMode
         SettingsController.themeMode = 1
-        verify(Theme.tagPillSurface !== Theme.tagPillSelectedSurface)
-        verify(Theme.tagPillText !== Theme.tagPillSecondaryText)
-        verify(colorContrast(Theme.tagPillText, Theme.tagPillSurface) >= 3)
-        verify(colorContrast(Theme.tagPillSecondaryText, Theme.tagPillSurface) >= 3)
+        verify(colorContrast(Theme.tagCapsuleNameText,
+                             firstPill.baseAccent) >= 3)
+        verify(colorContrast(firstPill.baseAccent,
+                             Theme.tagCapsuleCountSurface) >= 3)
         SettingsController.themeMode = 0
-        verify(Theme.tagPillSurface !== Theme.tagPillSelectedSurface)
-        verify(Theme.tagPillText !== Theme.tagPillSecondaryText)
-        verify(colorContrast(Theme.tagPillText, Theme.tagPillSurface) >= 3)
-        verify(colorContrast(Theme.tagPillSecondaryText, Theme.tagPillSurface) >= 3)
+        verify(colorContrast(Theme.tagCapsuleNameText,
+                             firstPill.baseAccent) >= 3)
+        verify(colorContrast(firstPill.baseAccent,
+                             Theme.tagCapsuleCountSurface) >= 3)
         SettingsController.themeMode = previousMode
 
         panel.searchText = names[names.length - 1]
@@ -4886,7 +4904,7 @@ TestCase {
                 tagPill = findChild(tagPanel, "tagPill-" + tagKey)
                 return tagPill !== null
             }, 1000)
-            compare(tagPill.height, 24)
+            compare(tagPill.height, 28)
 
             emptyNavigation = emptyLibraryNavigationComponent.createObject(
                         mainWindow.contentItem)
@@ -5558,14 +5576,34 @@ TestCase {
                                          "frequencyUnplayedOpacitySlider")
         var resetButton = findChild(page, "frequencyColorResetButton")
         var preview = findChild(page, "frequencyWaveformThumbnailPreview")
+        var palette = findChild(page, "frequencyBandPalette")
         verify(lowField && midField && highField && differenceSlider
-               && resetButton && preview)
+               && resetButton && preview && palette)
+        compare(palette.bandCount, 8)
+        compare(palette.bandNames.join("/"),
+                "最低频/低频/低中频/中频/中高频/高频/更高频/最高频")
         compare(differenceSlider.handle.width, Theme.sliderHandleExtent)
         compare(differenceSlider.handle.height, Theme.sliderHandleExtent)
         compare(preview.visualMode, 3)
         compare(preview.layers.mix.length, preview.layers.bass.length)
         compare(preview.layers.mix.length, preview.layers.mid.length)
         compare(preview.layers.mix.length, preview.layers.high.length)
+
+        lowField.openPicker()
+        var colorPicker = findChild(mainWindow, "colorFieldPicker")
+        var hexField = findChild(mainWindow, "colorPickerHexField")
+        verify(colorPicker && hexField)
+        verify(colorPicker.width <= 280 && colorPicker.height <= 332)
+        verify(hexField.selectByMouse)
+        hexField.text = "#A1B2C3"
+        hexField.selectAll()
+        hexField.copy()
+        hexField.clear()
+        hexField.paste()
+        compare(hexField.text, "#A1B2C3")
+        hexField.accepted()
+        compare(String(colorPicker.workingColor), "#a1b2c3")
+        colorPicker.close()
 
         lowField.colorEdited("#112233")
         midField.colorEdited("#445566")
@@ -5574,14 +5612,14 @@ TestCase {
         compare(String(SettingsController.frequencyColorWaveform.midColor), "#445566")
         compare(String(SettingsController.frequencyColorWaveform.highColor), "#778899")
         compare(String(preview.lowColor), "#112233")
-        differenceSlider.value = 40
+        differenceSlider.value = 62
         differenceSlider.moved()
-        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.6)
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.38)
         resetButton.clicked()
-        compare(String(SettingsController.frequencyColorWaveform.lowColor), "#8b3dff")
-        compare(String(SettingsController.frequencyColorWaveform.midColor), "#ffb000")
-        compare(String(SettingsController.frequencyColorWaveform.highColor), "#002fa7")
-        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.88)
+        compare(String(SettingsController.frequencyColorWaveform.lowColor), "#fc0909")
+        compare(String(SettingsController.frequencyColorWaveform.midColor), "#03ff00")
+        compare(String(SettingsController.frequencyColorWaveform.highColor), "#0048ff")
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.38)
 
         page.cancelAndClose()
         SettingsController.waveformMode = previousWaveformMode
@@ -5683,12 +5721,12 @@ TestCase {
         lowColorField.colorEdited("#112233")
         compare(String(SettingsController.frequencyColorWaveform.lowColor), "#112233")
         compare(String(frequencyPreview.lowColor), "#112233")
-        differenceSlider.value = 40
+        differenceSlider.value = 62
         differenceSlider.moved()
-        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.6)
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.38)
         frequencyResetButton.clicked()
-        compare(String(SettingsController.frequencyColorWaveform.lowColor), "#8b3dff")
-        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.88)
+        compare(String(SettingsController.frequencyColorWaveform.lowColor), "#fc0909")
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.38)
 
         resetButton.clicked()
         tryCompare(SettingsController, "waveformHeight", 0.8)
@@ -5834,9 +5872,9 @@ TestCase {
         compare(findChild(mainWindow, "playButtonBody").border.color.toString(),
                 (PlaybackController.state === PlaybackController.Playing
                  ? Theme.playRingPlaying : Theme.playRingPaused).toString())
-        compare(String(waveform.lowColor), "#8b3dff")
-        compare(String(waveform.midColor), "#ffb000")
-        compare(String(waveform.highColor), "#002fa7")
+        compare(String(waveform.lowColor), "#fc0909")
+        compare(String(waveform.midColor), "#03ff00")
+        compare(String(waveform.highColor), "#0048ff")
         compare(waveform.frequencyUnplayedOpacity,
                 Theme.nonImmersiveSpectralUnplayedOpacity)
         compare(playedClip.visible, false)
@@ -5852,8 +5890,8 @@ TestCase {
         verify(Theme.primaryText.toString() !== darkText)
         compare(findChild(mainWindow, "settingsButton").icon.color.toString(),
                 Theme.iconSecondary.toString())
-        compare(String(waveform.lowColor), "#8b3dff")
-        compare(String(waveform.highColor), "#002fa7")
+        compare(String(waveform.lowColor), "#fc0909")
+        compare(String(waveform.highColor), "#0048ff")
 
         SettingsController.themeMode = 2
         tryCompare(Theme, "followsSystem", true)

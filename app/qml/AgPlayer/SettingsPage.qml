@@ -28,6 +28,24 @@ Item {
     readonly property var frequencyWaveformSettings:
         SettingsController.frequencyColorWaveform
 
+    function blendColor(left, right, amount) {
+        var ratio = Math.max(0, Math.min(1, Number(amount)))
+        return Qt.rgba(left.r + (right.r - left.r) * ratio,
+                       left.g + (right.g - left.g) * ratio,
+                       left.b + (right.b - left.b) * ratio, 1)
+    }
+
+    function frequencyBandColor(index) {
+        var position = Math.max(0, Math.min(7, Number(index))) / 7
+        if (position <= 0.5)
+            return blendColor(frequencyWaveformSettings.lowColor,
+                              frequencyWaveformSettings.midColor,
+                              position * 2)
+        return blendColor(frequencyWaveformSettings.midColor,
+                          frequencyWaveformSettings.highColor,
+                          (position - 0.5) * 2)
+    }
+
     function open() {
         if (visible)
             return
@@ -1660,39 +1678,103 @@ Item {
                     visible: SettingsController.waveformMode === 3
                     label: qsTr("频彩调色板")
 
-                    RowLayout {
+                    Item {
+                        id: frequencyBandPalette
+                        objectName: "frequencyBandPalette"
                         anchors.fill: parent
-                        spacing: Theme.spacingSm
+                        readonly property var bandNames: [
+                            qsTr("最低频"), qsTr("低频"), qsTr("低中频"),
+                            qsTr("中频"), qsTr("中高频"), qsTr("高频"),
+                            qsTr("更高频"), qsTr("最高频")
+                        ]
+                        readonly property int bandCount: bandNames.length
 
-                        Text { text: qsTr("低频"); color: Theme.secondaryText }
-                        ColorField {
-                            objectName: "frequencyLowColor"
-                            Layout.fillWidth: true
-                            colorValue: root.frequencyWaveformSettings.lowColor
-                            targetProperty: ""
-                            onColorEdited: function(value) {
-                                root.frequencyWaveformSettings.lowColor = value
+                        RowLayout {
+                            anchors.fill: parent
+                            spacing: 4
+
+                            Repeater {
+                                model: frequencyBandPalette.bandCount
+
+                                delegate: Item {
+                                    required property int index
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        spacing: 2
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: frequencyBandPalette.bandNames[index]
+                                            color: Theme.secondaryText
+                                            font.family: Theme.fontPrimary
+                                            font.pixelSize: Theme.fontSizeMeta
+                                            horizontalAlignment: Text.AlignHCenter
+                                            elide: Text.ElideRight
+                                        }
+
+                                        Rectangle {
+                                            id: bandSwatch
+                                            Layout.alignment: Qt.AlignHCenter
+                                            Layout.preferredWidth: 22
+                                            Layout.preferredHeight: 16
+                                            radius: 3
+                                            color: root.frequencyBandColor(index)
+                                            border.color: Theme.borderStrong
+
+                                            TapHandler {
+                                                onTapped: {
+                                                    if (index <= 2)
+                                                        frequencyLowColor.openPicker()
+                                                    else if (index <= 4)
+                                                        frequencyMidColor.openPicker()
+                                                    else
+                                                        frequencyHighColor.openPicker()
+                                                }
+                                            }
+                                            HoverHandler { id: bandHover }
+                                            ToolTip.visible: bandHover.hovered
+                                            ToolTip.text: qsTr("点击调整对应基础色")
+                                        }
+                                    }
+                                }
                             }
                         }
-                        Text { text: qsTr("中频"); color: Theme.secondaryText }
-                        ColorField {
-                            objectName: "frequencyMidColor"
-                            Layout.fillWidth: true
-                            colorValue: root.frequencyWaveformSettings.midColor
-                            targetProperty: ""
-                            onColorEdited: function(value) {
-                                root.frequencyWaveformSettings.midColor = value
-                            }
+                    }
+
+                    ColorField {
+                        id: frequencyLowColor
+                        objectName: "frequencyLowColor"
+                        visible: false
+                        colorValue: root.frequencyWaveformSettings.lowColor
+                        defaultColor: "#fc0909" // theme-color-allow: frequency palette domain
+                        targetProperty: ""
+                        onColorEdited: function(value) {
+                            root.frequencyWaveformSettings.lowColor = value
                         }
-                        Text { text: qsTr("高频"); color: Theme.secondaryText }
-                        ColorField {
-                            objectName: "frequencyHighColor"
-                            Layout.fillWidth: true
-                            colorValue: root.frequencyWaveformSettings.highColor
-                            targetProperty: ""
-                            onColorEdited: function(value) {
-                                root.frequencyWaveformSettings.highColor = value
-                            }
+                    }
+                    ColorField {
+                        id: frequencyMidColor
+                        objectName: "frequencyMidColor"
+                        visible: false
+                        colorValue: root.frequencyWaveformSettings.midColor
+                        defaultColor: "#03ff00" // theme-color-allow: frequency palette domain
+                        targetProperty: ""
+                        onColorEdited: function(value) {
+                            root.frequencyWaveformSettings.midColor = value
+                        }
+                    }
+                    ColorField {
+                        id: frequencyHighColor
+                        objectName: "frequencyHighColor"
+                        visible: false
+                        colorValue: root.frequencyWaveformSettings.highColor
+                        defaultColor: "#0048ff" // theme-color-allow: frequency palette domain
+                        targetProperty: ""
+                        onColorEdited: function(value) {
+                            root.frequencyWaveformSettings.highColor = value
                         }
                     }
                 }
@@ -1710,7 +1792,7 @@ Item {
                             objectName: "frequencyUnplayedOpacitySlider"
                             Layout.fillWidth: true
                             from: 0
-                            to: 40
+                            to: 82
                             stepSize: 1
                             value: Math.round((1.0
                                 - root.frequencyWaveformSettings.unplayedOpacity) * 100)

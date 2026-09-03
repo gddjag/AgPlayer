@@ -263,7 +263,11 @@ TestCase {
             verify(popupWindow)
             controls.popupDevicePixelRatioOverrideForTesting = dpr
             compare(controls.themePopupDevicePixelRatio, dpr)
-            mouseClick(button)
+            // This case verifies popup anchoring, not pointer delivery. Emit
+            // the same public clicked signal used by a real ToolButton click;
+            // synthetic offscreen mouse events intermittently miss controls
+            // while a preceding window-resize polish is still being applied.
+            button.clicked()
             tryVerify(function() { return menu.visible && menu.height > 0 }, 500)
             var point = controls.themePopupPositionForDpr(dpr)
             verify(Math.abs(point.x * dpr - Math.round(point.x * dpr)) < 0.01)

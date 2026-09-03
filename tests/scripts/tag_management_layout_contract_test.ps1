@@ -52,10 +52,16 @@ Assert-Matches $tagPanel '(?s)Flow\s*\{.*id:\s*tagFlow' `
     'Tag panel must lay capsules out with Flow'
 Assert-Matches $tagPanel 'contentHeight:\s*tagFlow\.height' `
     'Tag Flickable content height must follow the natural Flow height'
-Assert-Matches $tagPanel '(?s)id:\s*tagPill.*implicitWidth:\s*Math\.min\(tagFlow\.width,.*tagNameMeasure\.implicitWidth.*tagCount\.implicitWidth.*implicitHeight:\s*24.*height:\s*implicitHeight.*radius:\s*12' `
-    'Tag capsules must preserve natural width in 24 px rounded pills'
-Assert-Matches $tagPanel 'selectedVisual|hoveredVisual|tagDropTarget\.containsDrag' `
+Assert-Matches $tagPanel '(?s)id:\s*tagPill.*countSectionWidth:.*tagCount\.implicitWidth.*nameSectionWidth:.*tagNameMeasure\.implicitWidth.*implicitWidth:\s*Math\.min\(tagFlow\.width,.*implicitHeight:\s*28.*height:\s*implicitHeight.*radius:\s*5' `
+    'Tag capsules must preserve natural width in 28 px reference capsules'
+Assert-Matches $tagPanel 'selectedVisual|hoveredVisual|pressedVisual|tagDropTarget\.containsDrag' `
     'Tag capsules must expose selected, hover and drop visual states'
+Assert-Matches $tagPanel 'objectName:\s*"tagCapsuleLeft-"' `
+    'Tag capsules must expose a colored name section'
+Assert-Matches $tagPanel 'objectName:\s*"tagCapsuleRight-"' `
+    'Tag capsules must expose a separate count section'
+Assert-Matches $tagPanel '(?s)objectName:\s*"tagCapsuleNotch-".*width:\s*8.*height:\s*8.*rotation:\s*45' `
+    'Tag capsules must reproduce the centered triangular divider notch'
 Assert-Matches $tagPanel '(?s)Flickable\s*\{.*contentHeight:\s*tagFlow\.height.*Flow\s*\{.*width:\s*tagFlickable\.width.*height:\s*childrenRect\.height' `
     'Tag capsules must wrap naturally and expose their full height to scrolling'
 if ($tagPanel -match 'Keys\.onSpacePressed') {
@@ -76,12 +82,10 @@ if ($tagPanel -match '\bGridView\s*\{') {
     throw 'Tag capsules must not use a fixed GridView'
 }
 
-Assert-Matches $theme 'tagPillSurface' `
-    'Theme must expose a base translucent tag surface'
-Assert-Matches $theme 'tagPillHoverSurface' `
-    'Theme must expose a tag hover surface'
-Assert-Matches $theme 'tagPillSelectedSurface' `
-    'Theme must expose a low-saturation selected tag surface'
+Assert-Matches $theme 'tagCapsuleCountSurface' `
+    'Theme must expose the shared light count surface'
+Assert-Matches $theme 'tagCapsuleNameText' `
+    'Theme must expose the shared capsule name text color'
 Assert-Matches $theme 'tagPillDropSurface' `
     'Theme must expose a tag drop surface'
 

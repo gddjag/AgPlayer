@@ -171,6 +171,11 @@ QtObject {
     readonly property color tagPillText: isLight ? "#21313D" : "#EFF7FC"
     readonly property color tagPillSecondaryText: isLight ? "#526B7C" : "#B9CCDA"
     readonly property color tagPillShadow: isLight ? "#241A2E3D" : "#4D000000"
+    // Shared by every player shell because TagManagementPanel is shared.
+    // The pale count half intentionally stays neutral across themes so the
+    // tag's persisted palette colour remains immediately recognizable.
+    readonly property color tagCapsuleCountSurface: "#FFFFFF"
+    readonly property color tagCapsuleNameText: "#FFFFFF"
 
     readonly property int radiusXs: 4
     readonly property int radiusSm: 6
@@ -184,6 +189,7 @@ QtObject {
     readonly property int spacingXl: 24
     readonly property int spacing2Xl: 32
     readonly property int fontSizeCaption: 12
+    readonly property int fontSizeTagCapsule: 13
     readonly property int fontSizeMeta: 12
     readonly property int fontSizeBody: 14
     readonly property int fontSizeBodyStrong: 14

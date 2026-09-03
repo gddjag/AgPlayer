@@ -56,8 +56,8 @@ endforeach()
 file(READ "${ROOT}/app/qml/AgPlayer/components/ColorField.qml" color_field)
 if(NOT color_field MATCHES "Popup[ \t\r\n]*\\{"
    OR NOT color_field MATCHES "objectName:[ \t]*\"colorFieldPicker\""
-   OR NOT color_field MATCHES "Math.min\\(296,"
-   OR NOT color_field MATCHES "Math.min\\(356,")
+   OR NOT color_field MATCHES "Math.min\\(280,"
+   OR NOT color_field MATCHES "Math.min\\(332,")
     message(FATAL_ERROR
         "ColorField.qml must keep the compact shared color picker contract")
 endif()

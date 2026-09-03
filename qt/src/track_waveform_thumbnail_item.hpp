@@ -71,9 +71,9 @@ private:
     QByteArray bass_;
     QByteArray mid_;
     QByteArray high_;
-    QColor lowColor_ = QColor(QStringLiteral("#8B3DFF"));
-    QColor midColor_ = QColor(QStringLiteral("#FFB000"));
-    QColor highColor_ = QColor(QStringLiteral("#002FA7"));
+    QColor lowColor_ = QColor(QStringLiteral("#FC0909"));
+    QColor midColor_ = QColor(QStringLiteral("#03FF00"));
+    QColor highColor_ = QColor(QStringLiteral("#0048FF"));
     bool geometryDirty_ = true;
     bool colorDirty_ = true;
 };

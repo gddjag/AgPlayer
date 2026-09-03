@@ -30,11 +30,7 @@ Control {
     }
 
     function openPicker() {
-        picker.workingColor = root.colorValue
-        picker.hue = picker.workingColor.hsvHue >= 0
-                ? picker.workingColor.hsvHue : 0
-        picker.saturation = picker.workingColor.hsvSaturation
-        picker.brightness = picker.workingColor.hsvValue
+        picker.setWorkingColor(root.colorValue)
         picker.open()
     }
 
@@ -82,9 +78,9 @@ Control {
         objectName: "colorFieldPicker"
         parent: Overlay.overlay
         anchors.centerIn: parent
-        width: Math.min(296, parent ? parent.width * 0.9 : 296)
-        height: Math.min(356, parent ? parent.height * 0.9 : 356)
-        padding: 12
+        width: Math.min(280, parent ? parent.width * 0.9 : 280)
+        height: Math.min(332, parent ? parent.height * 0.9 : 332)
+        padding: 10
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
@@ -100,6 +96,7 @@ Control {
 
         function updateWorkingColor() {
             workingColor = Qt.hsva(hue, saturation, brightness, 1.0)
+            hexField.text = workingColor.toString().toUpperCase()
         }
 
         function setWorkingColor(value) {
@@ -107,6 +104,17 @@ Control {
             hue = workingColor.hsvHue >= 0 ? workingColor.hsvHue : 0
             saturation = workingColor.hsvSaturation
             brightness = workingColor.hsvValue
+            hexField.text = workingColor.toString().toUpperCase()
+        }
+
+        function applyHexText(value) {
+            var normalized = root.normalized(value)
+            if (normalized.length > 0) {
+                setWorkingColor(normalized)
+                return true
+            }
+            hexField.text = workingColor.toString().toUpperCase()
+            return false
         }
 
         function restoreDefault() {
@@ -126,7 +134,7 @@ Control {
         }
 
         contentItem: ColumnLayout {
-            spacing: 12
+            spacing: 10
 
             RowLayout {
                 Layout.fillWidth: true
@@ -150,7 +158,7 @@ Control {
             Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.minimumHeight: 132
+                Layout.minimumHeight: 104
 
                 Rectangle {
                     anchors.fill: parent
@@ -211,6 +219,7 @@ Control {
             Slider {
                 id: hueSlider
                 Layout.fillWidth: true
+                Layout.preferredHeight: 28
                 from: 0
                 to: 1
                 value: picker.hue
@@ -253,6 +262,37 @@ Control {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
+
+                Text {
+                    text: qsTr("色号")
+                    color: Theme.secondaryText
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: Theme.fontSizeCaption
+                }
+
+                ThemedTextField {
+                    id: hexField
+                    objectName: "colorPickerHexField"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 30
+                    selectByMouse: true
+                    placeholderText: "#RRGGBB"
+                    error: !acceptableInput
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: Theme.fontSizeCaption
+                    horizontalAlignment: TextInput.AlignHCenter
+                    validator: RegularExpressionValidator {
+                        regularExpression: /^#[0-9A-Fa-f]{6}$/
+                    }
+                    onAccepted: picker.applyHexText(text)
+                    onEditingFinished: picker.applyHexText(text)
+                    Accessible.name: qsTr("十六进制色号，可复制粘贴")
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
                 Repeater {
                     model: [
                         { name: "H", value: Math.round(picker.hue * 360) + "°" },
@@ -262,7 +302,7 @@ Control {
                     delegate: Rectangle {
                         required property var modelData
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 32
+                        Layout.preferredHeight: 28
                         color: Theme.background
                         border.color: Theme.border
                         radius: Theme.radiusSm
@@ -282,18 +322,21 @@ Control {
                 spacing: 8
                 Button {
                     objectName: "colorPickerRestoreButton"
+                    Layout.preferredHeight: 30
                     text: qsTr("恢复默认")
                     onClicked: picker.restoreDefault()
                 }
                 Item { Layout.fillWidth: true }
                 Button {
                     objectName: "colorPickerCancelButton"
+                    Layout.preferredHeight: 30
                     text: qsTr("取消")
                     onClicked: picker.close()
                 }
                 Button {
                     id: confirmButton
                     objectName: "colorPickerConfirmButton"
+                    Layout.preferredHeight: 30
                     text: qsTr("确定")
                     focus: true
                     onClicked: picker.acceptColor()

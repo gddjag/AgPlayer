@@ -716,7 +716,11 @@ target_link_libraries(stem_preview_mixer_test PRIVATE agplayer_core)
 agplayer_enable_warnings(stem_preview_mixer_test)
 add_test(NAME stem_preview_mixer_test COMMAND stem_preview_mixer_test)
 set_tests_properties(stem_preview_mixer_test PROPERTIES
-    TIMEOUT 10
+    # Windows antivirus/file-indexing can transiently hold the generated WAV
+    # fixtures after the assertions finish.  The test normally completes in
+    # well under one second; this avoids treating delayed temp cleanup as an
+    # audio-mixer failure in the complete serial suite.
+    TIMEOUT 30
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
