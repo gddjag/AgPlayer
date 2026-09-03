@@ -39,6 +39,31 @@ inline double applySoftKnee(const double channel) noexcept
         / (1.0 - std::exp(-strength));
 }
 
+inline void preserveAdditiveChroma(std::array<double, 3>& linear) noexcept
+{
+    // Dense music carries substantial energy in all three bands. Keep the
+    // shared peak, but reduce the common light before the per-channel knee so
+    // small band differences are not flattened into near-white output.
+    double peak = *std::max_element(linear.begin(), linear.end());
+    if (peak <= 0.0) return;
+    if (peak > 1.0) {
+        for (double& channel : linear) channel /= peak;
+        peak = 1.0;
+    }
+
+    constexpr double commonRetention = 0.05;
+    const double common = *std::min_element(linear.begin(), linear.end());
+    for (double& channel : linear) {
+        channel -= common * (1.0 - commonRetention);
+    }
+
+    const double adjustedPeak = *std::max_element(linear.begin(), linear.end());
+    if (adjustedPeak > 0.0) {
+        const double scale = peak / adjustedPeak;
+        for (double& channel : linear) channel *= scale;
+    }
+}
+
 } // namespace detail
 
 inline QColor mixFrequencyColor(const double lowEnergy,
@@ -72,6 +97,7 @@ inline QColor mixFrequencyColor(const double lowEnergy,
         linear[1] += detail::srgbToLinear(colors[index].greenF()) * weights[index];
         linear[2] += detail::srgbToLinear(colors[index].blueF()) * weights[index];
     }
+    detail::preserveAdditiveChroma(linear);
 
     return QColor::fromRgbF(
         detail::linearToSrgb(detail::applySoftKnee(linear[0])),

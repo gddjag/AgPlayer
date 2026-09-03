@@ -266,6 +266,8 @@ void WaveformItemTest::threeBandMixerKeepsPureColorsAndCreatesCombinations()
         1.0, 0.0, 1.0, low, mid, high);
     const QColor all = agplayer::ui::mixFrequencyColor(
         1.0, 1.0, 1.0, low, mid, high);
+    const QColor denseMusic = agplayer::ui::mixFrequencyColor(
+        0.63, 0.74, 0.88, low, mid, high);
     const QColor quietMidHigh = agplayer::ui::mixFrequencyColor(
         0.0, 0.35, 0.15, low, mid, high);
 
@@ -279,6 +281,7 @@ void WaveformItemTest::threeBandMixerKeepsPureColorsAndCreatesCombinations()
     verifyFiniteColor(midHigh);
     verifyFiniteColor(lowHigh);
     verifyFiniteColor(all);
+    verifyFiniteColor(denseMusic);
     verifyFiniteColor(quietMidHigh);
 
     QVERIFY2(lowMid.red() >= 245 && lowMid.green() >= 245
@@ -290,8 +293,13 @@ void WaveformItemTest::threeBandMixerKeepsPureColorsAndCreatesCombinations()
     QVERIFY2(lowHigh.red() >= 245 && lowHigh.green() <= 128
                  && lowHigh.blue() >= 245,
              "full Low + High must add to bright magenta");
-    QVERIFY2(all.red() >= 245 && all.green() >= 245 && all.blue() >= 245,
-             "full Low + Mid + High must add to near white");
+    QVERIFY2(all.hsvSaturationF() >= 0.25 && all.valueF() >= 0.75,
+             "balanced full-band energy must stay bright without washing out");
+    QVERIFY2(denseMusic.hsvSaturationF() >= 0.35,
+             "dense three-band music must retain visible chroma");
+    QVERIFY2(denseMusic.green() > denseMusic.red()
+                 && denseMusic.blue() > denseMusic.red(),
+             "the representative High-heavy mix must remain blue/cyan");
     QVERIFY(quietMidHigh != mid);
     QVERIFY2(quietMidHigh.blue() >= 150,
              "quiet High energy must remain visible in a Mid-heavy mix");

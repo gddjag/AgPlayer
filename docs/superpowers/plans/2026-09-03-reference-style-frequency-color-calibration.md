@@ -82,7 +82,7 @@ git commit -m "feat: balance three-band waveform energy"
 
 - [ ] **Step 1: Add failing literal color tests**
 
-Using the fixed RGB defaults, assert pure full-energy bands return the exact base colors; equal Low+Mid is bright yellow, Mid+High bright cyan, Low+High bright magenta, and all three are near white. For `Mid=0.35, High=0.15`, require the result to differ from pure Mid and its blue byte to be at least150. Assert mixed outputs are finite valid QColor values. Update settings tests to require the three exact new defaults and reset values.
+Using the fixed RGB defaults, assert pure full-energy bands return the exact base colors; equal Low+Mid is bright yellow, Mid+High bright cyan, and Low+High bright magenta. Require balanced full-band and representative dense-music inputs to remain bright and visibly chromatic rather than washing out. For `Mid=0.35, High=0.15`, require the result to differ from pure Mid and its blue byte to be at least150. Assert mixed outputs are finite valid QColor values. Update settings tests to require the three exact new defaults and reset values.
 
 - [ ] **Step 2: Run focused Qt tests and verify the intended failures**
 
@@ -96,7 +96,7 @@ Expected: additive-mixture and default-color assertions fail against the old HSL
 
 - [ ] **Step 3: Implement the color transfer**
 
-For each energy calculate `pow(pow(clamp(x,0,1),0.55),1.20)`. Decode base colors to linear light, add unnormalised weighted channels, apply `(1-exp(-1.35*x))/(1-exp(-1.35))` with `[0,1]` clamp, then encode to sRGB. Preserve exact pure full-energy base colors and remove HSL recovery.
+For each energy calculate `pow(pow(clamp(x,0,1),0.55),1.20)`. Decode base colors to linear light and add unnormalised weighted channels. Before the existing soft-knee, apply shared peak headroom and retain 5% of the three-channel common component, restoring the shared peak afterwards; this preserves channel differences in dense music without per-band renormalisation. Then apply `(1-exp(-1.35*x))/(1-exp(-1.35))` with `[0,1]` clamp and encode to sRGB. Preserve exact pure full-energy base colors and remove HSL recovery.
 
 - [ ] **Step 4: Change defaults only, without new settings**
 
