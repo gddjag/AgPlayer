@@ -8,6 +8,10 @@ namespace {
 const QColor defaultLow(QStringLiteral("#FC0909"));
 const QColor defaultMid(QStringLiteral("#03FF00"));
 const QColor defaultHigh(QStringLiteral("#0048FF"));
+const QColor legacyDefaultLow(QStringLiteral("#8B3DFF"));
+const QColor legacyDefaultMid(QStringLiteral("#FFB000"));
+const QColor legacyDefaultHigh(QStringLiteral("#002FA7"));
+constexpr int currentColorSchemaVersion = 1;
 
 QColor storedColor(QSettings& settings, const QString& key,
                    const QColor& fallback)
@@ -97,6 +101,24 @@ void FrequencyColorWaveformSettings::load(QSettings& settings)
                             defaultMid);
     highColor_ = storedColor(settings, QStringLiteral("waveformFrequencyHighColor"),
                              defaultHigh);
+    const QString schemaKey = QStringLiteral(
+        "waveformFrequencyColorSchemaVersion");
+    const int storedSchema = settings.value(schemaKey, 0).toInt();
+    if (storedSchema < currentColorSchemaVersion) {
+        if (lowColor_ == legacyDefaultLow && midColor_ == legacyDefaultMid
+            && highColor_ == legacyDefaultHigh) {
+            lowColor_ = defaultLow;
+            midColor_ = defaultMid;
+            highColor_ = defaultHigh;
+            settings.setValue(QStringLiteral("waveformFrequencyLowColor"),
+                              lowColor_.name(QColor::HexRgb));
+            settings.setValue(QStringLiteral("waveformFrequencyMidColor"),
+                              midColor_.name(QColor::HexRgb));
+            settings.setValue(QStringLiteral("waveformFrequencyHighColor"),
+                              highColor_.name(QColor::HexRgb));
+        }
+        settings.setValue(schemaKey, currentColorSchemaVersion);
+    }
     const double storedOpacity = settings.value(
         QStringLiteral("waveformFrequencyUnplayedOpacity"), 0.88).toDouble();
     unplayedOpacity_ = std::clamp(
@@ -111,6 +133,8 @@ void FrequencyColorWaveformSettings::save(QSettings& settings) const
                       midColor_.name(QColor::HexRgb));
     settings.setValue(QStringLiteral("waveformFrequencyHighColor"),
                       highColor_.name(QColor::HexRgb));
+    settings.setValue(QStringLiteral("waveformFrequencyColorSchemaVersion"),
+                      currentColorSchemaVersion);
     settings.setValue(QStringLiteral("waveformFrequencyUnplayedOpacity"),
                       unplayedOpacity_);
     settings.remove(QStringLiteral("waveformSpectralPalette"));

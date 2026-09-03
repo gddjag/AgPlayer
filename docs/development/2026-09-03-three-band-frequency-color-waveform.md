@@ -37,13 +37,20 @@
 - 删除主波形 Provider 的双任务分类、频彩升级任务、资源压力暂停接口及 QML 取消频彩任务接口。
 - 列表缩略图与主波形均直接消费同一份 mix/bass/mid/high 缓存数据；组合色不进入缓存键或载荷。
 
+## 设置迁移
+
+- `appearance/waveformFrequencyColorSchemaVersion` 当前为1。schema 缺失或旧时，只有已存储三色完整且同时等于旧默认 Low `#8B3DFF`、Mid `#FFB000`、High `#002FA7` 才一次性迁移并持久化为当前默认 `#FC0909/#03FF00/#0048FF`。
+- 任意一色不同即视为用户自定义，三色全部保留，只补写当前 schema；因此部分自定义不会被覆盖。无法区分“用户主动选择了完整旧默认组”和“旧版未改默认值”，前者会发生一次迁移，这是该精确匹配策略的剩余边界。
+
 ## 验证记录
 
 - 严格测试先行：四顶点、中心/边缘 Alpha 与明暗层次的新断言在旧两顶点实现上先失败，之后才修改生产代码。
-- MSVC Debug 聚焦构建通过：`waveform_item_test`、`track_waveform_thumbnail_item_test`、`waveform_provider_test`。
-- 聚焦回归通过：上述 3 项 CTest 共 3/3 通过，0 失败。
+- 调色板迁移同样执行 RED/GREEN：旧实现上“完整旧默认组升级并落盘”和“自定义组补写 schema”两项测试分别因旧色仍被加载、schema 缺失而失败，最小迁移实现后通过；干净默认、重置和既有持久化合同继续由 `settings_controller_test` 覆盖。
+- 功能视觉基线 HEAD `a514a0e` 的 MSVC Debug clean build 通过；频彩聚焦 `waveform_analyzer_test`、`three_band_waveform_test`、`waveform_cache_test`、`waveform_item_test`、`settings_controller_test` 共 **5/5** 通过。
 - 测试确认频彩四顶点的外端位置与普通波形上下端一致，中心位于原波形中线；播放前后全部顶点位置不变，仅 Alpha 改变。
 - 测试确认普通波形继续使用两顶点布局，频谱与缩略图回归均通过。
 - 真实曲目用现有 `.agwf` 的2000组三频数据做秒级重放：旧传递中位饱和度0.0654、强色3.45%、近白60.35%；共享余量单独使用没有改善，去除 soft-knee 也不足以通过，根因是共同能量叠加后被逐通道压平。
 - 新传递的同数据重放达到中位饱和度0.4988、强色95.40%、近白0.30%。默认 Qt RHI 下的真实播放器截图 `build/qa/reference-style-frequency-color/player-frequency-color-common05-integrated-final.png`，波形 ROI `(8,286,1220,365)` 达到中位饱和度0.3992、强色94.87%、高亮近白0.38%，可见蓝、青、品红及少量其他组合色。
-- MSVC Debug 聚焦回归 `waveform_item_test`、`settings_controller_test` 共2/2通过。尚未执行实体声卡播放、长时 GPU/CPU 性能测量或发布包验收。
+- 当前源码对应的播放器证据采用 `build/qa/reference-style-frequency-color/player-frequency-color-current-head.png`：截图 `1228×399`，波形 ROI `(8,286,1220,365)` / `1212×79`；亮像素中位饱和度 **0.3992**，强色占比 **94.87%**，高亮近白 **0.38%**，均通过规格门槛。设置证据为 `build/qa/reference-style-frequency-color/settings-frequency-color-current-head-rerun.png`（`860×900`），显示频彩模式、恰好三个基色、当前默认三色和锁定高度 `78 px`。
+- 同一功能视觉基线的完整 Debug CTest 为 **145/155**：10 项失败中9项为既有基线，另1项是可独立复现的 `audio_engine_test` 缓冲帧断言；本功能差异不触及音频引擎。仓库全套因此仍非绿色，不能据此宣称发布就绪。
+- 尚未执行实体声卡播放、长时 GPU/CPU 性能测量或发布包验收；播放进度的 RGB/位置不变、仅 Alpha 改变已有自动化证明，但没有真实应用前后 seek 截图对。
