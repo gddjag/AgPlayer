@@ -5182,9 +5182,9 @@ TestCase {
         differenceSlider.moved()
         compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.6)
         resetButton.clicked()
-        compare(String(SettingsController.frequencyColorWaveform.lowColor), "#8b3dff")
-        compare(String(SettingsController.frequencyColorWaveform.midColor), "#ffb000")
-        compare(String(SettingsController.frequencyColorWaveform.highColor), "#002fa7")
+        compare(String(SettingsController.frequencyColorWaveform.lowColor), "#fc0909")
+        compare(String(SettingsController.frequencyColorWaveform.midColor), "#03ff00")
+        compare(String(SettingsController.frequencyColorWaveform.highColor), "#0048ff")
         compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.88)
 
         page.cancelAndClose()
@@ -5254,7 +5254,7 @@ TestCase {
         differenceSlider.moved()
         compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.6)
         frequencyResetButton.clicked()
-        compare(String(SettingsController.frequencyColorWaveform.lowColor), "#8b3dff")
+        compare(String(SettingsController.frequencyColorWaveform.lowColor), "#fc0909")
         compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.88)
 
         resetButton.clicked()
@@ -5401,9 +5401,9 @@ TestCase {
         compare(findChild(mainWindow, "playButtonBody").border.color.toString(),
                 (PlaybackController.state === PlaybackController.Playing
                  ? Theme.playRingPlaying : Theme.playRingPaused).toString())
-        compare(String(waveform.lowColor), "#8b3dff")
-        compare(String(waveform.midColor), "#ffb000")
-        compare(String(waveform.highColor), "#002fa7")
+        compare(String(waveform.lowColor), "#fc0909")
+        compare(String(waveform.midColor), "#03ff00")
+        compare(String(waveform.highColor), "#0048ff")
         compare(waveform.frequencyUnplayedOpacity, 0.88)
         compare(playedClip.visible, false)
         SettingsController.waveformPlaybackGuide = false
@@ -5418,8 +5418,8 @@ TestCase {
         verify(Theme.primaryText.toString() !== darkText)
         compare(findChild(mainWindow, "settingsButton").icon.color.toString(),
                 Theme.iconSecondary.toString())
-        compare(String(waveform.lowColor), "#8b3dff")
-        compare(String(waveform.highColor), "#002fa7")
+        compare(String(waveform.lowColor), "#fc0909")
+        compare(String(waveform.highColor), "#0048ff")
 
         SettingsController.themeMode = 2
         tryCompare(Theme, "followsSystem", true)

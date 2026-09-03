@@ -5,9 +5,9 @@
 
 namespace {
 
-const QColor defaultLow(QStringLiteral("#8B3DFF"));
-const QColor defaultMid(QStringLiteral("#FFB000"));
-const QColor defaultHigh(QStringLiteral("#002FA7"));
+const QColor defaultLow(QStringLiteral("#FC0909"));
+const QColor defaultMid(QStringLiteral("#03FF00"));
+const QColor defaultHigh(QStringLiteral("#0048FF"));
 
 QColor storedColor(QSettings& settings, const QString& key,
                    const QColor& fallback)

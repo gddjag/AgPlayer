@@ -243,24 +243,53 @@ void WaveformItemTest::visualModesUseConfiguredProgressAndBaseColors()
 
 void WaveformItemTest::threeBandMixerKeepsPureColorsAndCreatesCombinations()
 {
-    const QColor low(QStringLiteral("#8B3DFF"));
-    const QColor mid(QStringLiteral("#FFB000"));
-    const QColor high(QStringLiteral("#002FA7"));
+    const QColor low(QStringLiteral("#FC0909"));
+    const QColor mid(QStringLiteral("#03FF00"));
+    const QColor high(QStringLiteral("#0048FF"));
     QCOMPARE(agplayer::ui::mixFrequencyColor(1.0, 0.0, 0.0,
                                              low, mid, high), low);
     QCOMPARE(agplayer::ui::mixFrequencyColor(0.0, 1.0, 0.0,
                                              low, mid, high), mid);
     QCOMPARE(agplayer::ui::mixFrequencyColor(0.0, 0.0, 1.0,
                                              low, mid, high), high);
+
     const QColor lowMid = agplayer::ui::mixFrequencyColor(
         1.0, 1.0, 0.0, low, mid, high);
+    const QColor midHigh = agplayer::ui::mixFrequencyColor(
+        0.0, 1.0, 1.0, low, mid, high);
+    const QColor lowHigh = agplayer::ui::mixFrequencyColor(
+        1.0, 0.0, 1.0, low, mid, high);
     const QColor all = agplayer::ui::mixFrequencyColor(
         1.0, 1.0, 1.0, low, mid, high);
-    QVERIFY(lowMid != low);
-    QVERIFY(lowMid != mid);
-    QVERIFY(all != low && all != mid && all != high);
-    QVERIFY(lowMid.hslSaturationF() >= 0.55);
-    QVERIFY(all.hslSaturationF() >= 0.45);
+    const QColor quietMidHigh = agplayer::ui::mixFrequencyColor(
+        0.0, 0.35, 0.15, low, mid, high);
+
+    const auto verifyFiniteColor = [](const QColor& color) {
+        QVERIFY(color.isValid());
+        QVERIFY(std::isfinite(color.redF()));
+        QVERIFY(std::isfinite(color.greenF()));
+        QVERIFY(std::isfinite(color.blueF()));
+    };
+    verifyFiniteColor(lowMid);
+    verifyFiniteColor(midHigh);
+    verifyFiniteColor(lowHigh);
+    verifyFiniteColor(all);
+    verifyFiniteColor(quietMidHigh);
+
+    QVERIFY2(lowMid.red() >= 245 && lowMid.green() >= 245
+                 && lowMid.blue() <= 40,
+             "full Low + Mid must add to bright yellow");
+    QVERIFY2(midHigh.red() <= 40 && midHigh.green() >= 245
+                 && midHigh.blue() >= 245,
+             "full Mid + High must add to bright cyan");
+    QVERIFY2(lowHigh.red() >= 245 && lowHigh.green() <= 128
+                 && lowHigh.blue() >= 245,
+             "full Low + High must add to bright magenta");
+    QVERIFY2(all.red() >= 245 && all.green() >= 245 && all.blue() >= 245,
+             "full Low + Mid + High must add to near white");
+    QVERIFY(quietMidHigh != mid);
+    QVERIFY2(quietMidHigh.blue() >= 150,
+             "quiet High energy must remain visible in a Mid-heavy mix");
 }
 
 void WaveformItemTest::frequencyModeUsesAmplitudeGeometryAndOpacityOnlyProgress()

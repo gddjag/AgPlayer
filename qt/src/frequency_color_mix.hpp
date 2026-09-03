@@ -24,6 +24,21 @@ inline double linearToSrgb(const double channel) noexcept
         : 1.055 * std::pow(clamped, 1.0 / 2.4) - 0.055;
 }
 
+inline double energyWeight(const double energy) noexcept
+{
+    const double clamped = std::clamp(
+        std::isfinite(energy) ? energy : 0.0, 0.0, 1.0);
+    return std::pow(std::pow(clamped, 0.55), 1.20);
+}
+
+inline double applySoftKnee(const double channel) noexcept
+{
+    constexpr double strength = 1.35;
+    const double clamped = std::clamp(channel, 0.0, 1.0);
+    return (1.0 - std::exp(-strength * clamped))
+        / (1.0 - std::exp(-strength));
+}
+
 } // namespace detail
 
 inline QColor mixFrequencyColor(const double lowEnergy,
@@ -34,52 +49,31 @@ inline QColor mixFrequencyColor(const double lowEnergy,
                                 const QColor& highColor)
 {
     const std::array<QColor, 3> colors{lowColor, midColor, highColor};
-    std::array<double, 3> weights{
-        std::sqrt(std::clamp(lowEnergy, 0.0, 1.0)),
-        std::sqrt(std::clamp(midEnergy, 0.0, 1.0)),
-        std::sqrt(std::clamp(highEnergy, 0.0, 1.0)),
+    const std::array<double, 3> weights{
+        detail::energyWeight(lowEnergy),
+        detail::energyWeight(midEnergy),
+        detail::energyWeight(highEnergy),
     };
-    constexpr double visible = 1.0e-6;
-    int active = 0;
-    int dominant = 0;
-    for (int index = 0; index < 3; ++index) {
-        if (weights[static_cast<std::size_t>(index)] > visible) ++active;
-        if (weights[static_cast<std::size_t>(index)]
-            > weights[static_cast<std::size_t>(dominant)]) {
-            dominant = index;
+
+    for (std::size_t index = 0; index < weights.size(); ++index) {
+        if (weights[index] == 1.0
+            && weights[(index + 1) % weights.size()] == 0.0
+            && weights[(index + 2) % weights.size()] == 0.0) {
+            return colors[index];
         }
     }
-    if (active == 1) return colors[static_cast<std::size_t>(dominant)];
-    if (active == 0) return lowColor;
-
-    const double sum = weights[0] + weights[1] + weights[2];
-    for (double& weight : weights) weight /= sum;
 
     std::array<double, 3> linear{};
-    double targetSaturation = 0.0;
-    double targetLightness = 0.0;
     for (std::size_t index = 0; index < colors.size(); ++index) {
         linear[0] += detail::srgbToLinear(colors[index].redF()) * weights[index];
         linear[1] += detail::srgbToLinear(colors[index].greenF()) * weights[index];
         linear[2] += detail::srgbToLinear(colors[index].blueF()) * weights[index];
-        targetSaturation += colors[index].hslSaturationF() * weights[index];
-        targetLightness += colors[index].lightnessF() * weights[index];
     }
 
-    QColor mixed = QColor::fromRgbF(detail::linearToSrgb(linear[0]),
-                                    detail::linearToSrgb(linear[1]),
-                                    detail::linearToSrgb(linear[2]));
-    float hue = 0.0F;
-    float saturation = 0.0F;
-    float lightness = 0.0F;
-    float alpha = 1.0F;
-    mixed.getHslF(&hue, &saturation, &lightness, &alpha);
-    if (hue < 0.0) hue = colors[static_cast<std::size_t>(dominant)].hslHueF();
-    saturation = static_cast<float>(std::clamp(
-        std::max<double>(saturation, targetSaturation * 0.75), 0.0, 1.0));
-    lightness = static_cast<float>(std::clamp(
-        std::max<double>(lightness, targetLightness * 0.90), 0.18, 0.78));
-    return QColor::fromHslF(hue, saturation, lightness, 1.0);
+    return QColor::fromRgbF(
+        detail::linearToSrgb(detail::applySoftKnee(linear[0])),
+        detail::linearToSrgb(detail::applySoftKnee(linear[1])),
+        detail::linearToSrgb(detail::applySoftKnee(linear[2])));
 }
 
 } // namespace agplayer::ui
