@@ -42,6 +42,19 @@ std::vector<float> equal_amplitude_mix()
     return samples;
 }
 
+std::vector<float> continuous_equal_amplitude_three_tone_mix()
+{
+    std::vector<float> samples(frames);
+    for (std::size_t frame = 0U; frame < frames; ++frame) {
+        const double time = static_cast<double>(frame) / sample_rate;
+        samples[frame] = static_cast<float>(
+            0.2 * (std::sin(2.0 * pi * 100.0 * time)
+                   + std::sin(2.0 * pi * 1'000.0 * time)
+                   + std::sin(2.0 * pi * 10'000.0 * time)));
+    }
+    return samples;
+}
+
 std::vector<float> low_mid_bed_with_short_high_burst()
 {
     std::vector<float> samples(frames);
@@ -102,12 +115,15 @@ void test_low_mid_high_tones_are_classified_by_the_250_and_4000_hz_split()
 {
     const BandEnergy low = analyze_tone(100.0);
     const BandEnergy mid = analyze_tone(1'000.0);
+    const BandEnergy upper_mid = analyze_tone(3'000.0);
     const BandEnergy high = analyze_tone(8'000.0);
 
     assert(low.bass > low.mid);
     assert(low.bass > low.high);
     assert(mid.mid > mid.bass);
     assert(mid.mid > mid.high);
+    // 3 kHz is in the smooth transition toward the 4 kHz high-pass cutoff.
+    assert(upper_mid.high <= 1.5 * upper_mid.mid);
     assert(high.high > high.bass);
     assert(high.high > high.mid);
 }
@@ -176,6 +192,28 @@ void test_equal_amplitude_mix_keeps_high_above_twenty_percent_of_low_and_mid()
     assert_finite_unit_interval(high);
 }
 
+void test_continuous_equal_amplitude_three_tone_mix_keeps_high_above_twenty_percent()
+{
+    agplayer::WaveformBucketizer bucketizer(
+        frames, 64U, 1U, sample_rate,
+        agplayer::WaveformAggregation::AverageAbsolute);
+    assert(bucketizer.add(continuous_equal_amplitude_three_tone_mix(), frames)
+           == AG_OK);
+
+    std::vector<float> mix;
+    std::vector<float> bass;
+    std::vector<float> mid;
+    std::vector<float> high;
+    assert(bucketizer.finish(mix, bass, mid, high) == AG_OK);
+    const float high_mean = static_cast<float>(settled_mean(high));
+    assert(high_mean >= 0.20F * static_cast<float>(settled_mean(bass)));
+    assert(high_mean >= 0.20F * static_cast<float>(settled_mean(mid)));
+    assert_finite_unit_interval(mix);
+    assert_finite_unit_interval(bass);
+    assert_finite_unit_interval(mid);
+    assert_finite_unit_interval(high);
+}
+
 } // namespace
 
 int main()
@@ -183,5 +221,6 @@ int main()
     test_low_mid_high_tones_are_classified_by_the_250_and_4000_hz_split();
     test_silence_has_no_frequency_color_energy();
     test_equal_amplitude_mix_keeps_high_above_twenty_percent_of_low_and_mid();
+    test_continuous_equal_amplitude_three_tone_mix_keeps_high_above_twenty_percent();
     test_short_10khz_burst_retains_materially_visible_high_energy();
 }
