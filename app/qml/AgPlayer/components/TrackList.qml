@@ -62,8 +62,8 @@ ListView {
         singleWindowLayout ? 180 : (compactColumns ? 150 : 180)
     readonly property int singleWindowTitleWidth: Math.max(
         titleMinimumWidth,
-        Math.min(300, width - 32 - sequenceWidth - durationWidth
-                 - ratingWidth - favoriteWidth - 80))
+        Math.min(320, width - 32 - sequenceWidth - durationWidth
+                  - ratingWidth - favoriteWidth - 80))
     readonly property int singleWindowMediaHeight: 34
     readonly property int singleWindowSubtitleFontSize:
         Math.max(10, Theme.fontSizeCaption - 1)
@@ -804,7 +804,7 @@ ListView {
                             artist: rowItem.artist
                             album: rowItem.album
                             tags: rowItem.rowTags
-                            font.pixelSize: Theme.fontSizeCaption
+                            font.pixelSize: root.singleWindowSubtitleFontSize
                         }
 
                         Loader {
@@ -925,6 +925,8 @@ ListView {
                 Layout.fillWidth: true
                 Layout.preferredHeight: root.singleWindowMediaHeight
                 Layout.alignment: Qt.AlignVCenter
+                Layout.leftMargin: 10
+                Layout.rightMargin: 12
                 sourceComponent: Component {
                     TrackWaveformThumbnail {
                         trackId: rowItem.trackId
@@ -1069,7 +1071,7 @@ ListView {
     Menu {
         id: trackMenu
         objectName: "trackContextMenu"
-        width: 240
+        width: 196
         palette.window: Theme.elevated
         palette.text: Theme.primaryText
         palette.button: Theme.elevated
@@ -1091,7 +1093,7 @@ ListView {
         SystemMenuItem { objectName: "trackMenuPlayNext"; text: qsTr("下一首播放"); enabled: trackMenu.targetTrackIds.length === 1; onTriggered: PlaybackController.queueNext(trackMenu.targetTrackId) }
         Menu {
             id: moveMenu
-            width: 240
+            width: 196
             palette.window: Theme.elevated
             palette.text: Theme.primaryText
             palette.button: Theme.elevated
@@ -1129,7 +1131,7 @@ ListView {
         Menu {
             id: audioToolsMenu
             objectName: "audioToolsTrackMenu"
-            width: 240
+            width: 196
             title: qsTr("使用音频工具打开")
             palette.window: Theme.elevated
             palette.text: Theme.primaryText
@@ -1161,7 +1163,7 @@ ListView {
         SystemMenuItem { objectName: "trackMenuTrash"; text: qsTr("彻底删除至回收站"); onTriggered: trashConfirm.open() }
     }
 
-    component SystemMenuItem: ThemedMenuItem { width: 230 }
+    component SystemMenuItem: ThemedMenuItem { width: 186 }
 
     AudioFileInfoPanel {
         id: detailsPanel

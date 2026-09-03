@@ -78,9 +78,9 @@ Control {
         objectName: "colorFieldPicker"
         parent: Overlay.overlay
         anchors.centerIn: parent
-        width: Math.min(280, parent ? parent.width * 0.9 : 280)
-        height: Math.min(332, parent ? parent.height * 0.9 : 332)
-        padding: 10
+        width: Math.min(268, parent ? parent.width * 0.9 : 268)
+        height: Math.min(292, parent ? parent.height * 0.9 : 292)
+        padding: 8
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
@@ -134,7 +134,7 @@ Control {
         }
 
         contentItem: ColumnLayout {
-            spacing: 10
+            spacing: 6
 
             RowLayout {
                 Layout.fillWidth: true
@@ -158,7 +158,7 @@ Control {
             Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.minimumHeight: 104
+                Layout.minimumHeight: 86
 
                 Rectangle {
                     anchors.fill: parent
@@ -219,7 +219,7 @@ Control {
             Slider {
                 id: hueSlider
                 Layout.fillWidth: true
-                Layout.preferredHeight: 28
+                Layout.preferredHeight: 22
                 from: 0
                 to: 1
                 value: picker.hue
@@ -274,7 +274,7 @@ Control {
                     id: hexField
                     objectName: "colorPickerHexField"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 30
+                    Layout.preferredHeight: 28
                     selectByMouse: true
                     placeholderText: "#RRGGBB"
                     error: !acceptableInput
@@ -302,7 +302,7 @@ Control {
                     delegate: Rectangle {
                         required property var modelData
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 28
+                        Layout.preferredHeight: 25
                         color: Theme.background
                         border.color: Theme.border
                         radius: Theme.radiusSm
@@ -322,21 +322,21 @@ Control {
                 spacing: 8
                 Button {
                     objectName: "colorPickerRestoreButton"
-                    Layout.preferredHeight: 30
+                    Layout.preferredHeight: 28
                     text: qsTr("恢复默认")
                     onClicked: picker.restoreDefault()
                 }
                 Item { Layout.fillWidth: true }
                 Button {
                     objectName: "colorPickerCancelButton"
-                    Layout.preferredHeight: 30
+                    Layout.preferredHeight: 28
                     text: qsTr("取消")
                     onClicked: picker.close()
                 }
                 Button {
                     id: confirmButton
                     objectName: "colorPickerConfirmButton"
-                    Layout.preferredHeight: 30
+                    Layout.preferredHeight: 28
                     text: qsTr("确定")
                     focus: true
                     onClicked: picker.acceptColor()

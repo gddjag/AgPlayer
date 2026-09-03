@@ -240,8 +240,7 @@ Rectangle {
                     anchors.right: parent.right
                     anchors.top: parent.top
                     height: 36
-                    position: root.waveformMode === 3
-                              ? (playback ? playback.positionMs : 0) : 0
+                    position: 0
                     cursorPosition: playback ? playback.positionMs : 0
                     duration: root.effectiveDurationMs
                     visualMode: SettingsController.waveformMode
@@ -280,10 +279,10 @@ Rectangle {
                 }
                 Item {
                     objectName: "miniWaveformPlayedClip"
-                    // Spectral-centroid mode already renders played/unplayed
-                    // contrast in the native WaveformItem pass. A second
-                    // clipped pass doubles the palette in the played region.
-                    visible: SettingsController.waveformMode !== 3
+                    // Every waveform mode shares the continuous mapped clip.
+                    // The frequency pass keeps its RGB and restores full
+                    // opacity only inside the exact played region.
+                    visible: true
                     width: waveform.waveformCursorX
                     height: waveform.height
                     clip: true

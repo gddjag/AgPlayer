@@ -168,6 +168,7 @@ Rectangle {
         anchors.leftMargin: root.denseTransport ? 0 : 4
         anchors.verticalCenter: centerControls.verticalCenter
         emptyMode: root.emptyMode || root.rollingLayout
+        compact: root.compactTransport
         maximumExpandedWidth: Math.min(
             196, Math.max(44, secondaryActions.x - x - 8))
     }
@@ -180,15 +181,15 @@ Rectangle {
                             ? (root.denseTransport ? 2 : 8) : 0
         anchors.right: root.rollingLayout ? undefined : parent.right
         anchors.rightMargin: root.rollingLayout ? 0
-                            : (root.denseTransport ? 0 : 24)
+                            : 24
         anchors.verticalCenter: centerControls.verticalCenter
-        spacing: root.denseTransport ? 4 : 14
+        spacing: root.denseTransport ? 2 : 14
 
         ToolButton {
             id: themeModeButton
             objectName: "themeModeButton"
-            width: root.denseTransport ? 32 : implicitWidth
-            height: root.denseTransport ? 32 : implicitHeight
+            width: root.denseTransport ? 28 : implicitWidth
+            height: root.denseTransport ? 28 : implicitHeight
             visible: PlayerPresentation.hasAction(root.actionProfile,
                                                   "themeModeButton")
             flat: true
@@ -217,8 +218,8 @@ Rectangle {
 
         ToolButton {
             objectName: "miniPlayerButton"
-            width: root.denseTransport ? 32 : implicitWidth
-            height: root.denseTransport ? 32 : implicitHeight
+            width: root.denseTransport ? 28 : implicitWidth
+            height: root.denseTransport ? 28 : implicitHeight
             visible: PlayerPresentation.hasAction(root.actionProfile,
                                                   "miniPlayerButton")
                      && !root.emptyMode

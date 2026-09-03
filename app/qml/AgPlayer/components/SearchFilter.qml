@@ -150,12 +150,13 @@ Rectangle {
                 anchors.leftMargin: 4
                 anchors.rightMargin: 4
                 spacing: 2
-                Label { text: "BPM"; color: Theme.primaryText; font.pixelSize: Theme.fontSizeCaption; Layout.preferredWidth: 28 }
+                Label { text: "BPM"; color: Theme.primaryText; font.pixelSize: Theme.fontSizeCaption; Layout.preferredWidth: 28; Layout.alignment: Qt.AlignVCenter }
                 TextField {
                     id: minimumBpmField
                     objectName: "minimumBpmField"
                     Layout.preferredWidth: 34
                     Layout.fillHeight: true
+                    Layout.alignment: Qt.AlignVCenter
                     verticalAlignment: TextInput.AlignVCenter
                     text: Math.round(root.pendingMinBpm).toString()
                     color: Theme.primaryText
@@ -190,6 +191,7 @@ Rectangle {
                     objectName: "maximumBpmField"
                     Layout.preferredWidth: 34
                     Layout.fillHeight: true
+                    Layout.alignment: Qt.AlignVCenter
                     verticalAlignment: TextInput.AlignVCenter
                     text: Math.round(root.pendingMaxBpm).toString()
                     color: Theme.primaryText

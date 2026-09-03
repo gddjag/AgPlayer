@@ -353,6 +353,7 @@ ApplicationWindow {
                     Layout.preferredHeight: Theme.titleBarHeight
                     window: mainWindow
                     showBrand: true
+                    surfaceColor: Theme.background
                     onOpenSettings: mainWindow.openSettingsPage()
                 }
 

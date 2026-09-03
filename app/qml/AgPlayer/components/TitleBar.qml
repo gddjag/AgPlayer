@@ -5,7 +5,8 @@ import AgPlayer
 
 Rectangle {
     id: titleBar
-    color: Theme.titleBarSurface
+    property color surfaceColor: Theme.titleBarSurface
+    color: surfaceColor
     radius: window && window.visibility === Window.Maximized
             ? 0 : Theme.windowRadius
 

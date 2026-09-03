@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import AgPlayer
 
@@ -20,8 +19,8 @@ Item {
     property string panelTitle: qsTr("标签管理")
     readonly property int visibleTagCount: tagRepeater.count
     readonly property int pillHorizontalPadding: 12
-    readonly property int pillCountHorizontalPadding: 10
-    readonly property int pillCountMinimumWidth: 42
+    readonly property int pillCountHorizontalPadding: 6
+    readonly property int pillCountMinimumWidth: 28
     readonly property int pillContentSpacing: 0
     readonly property int pillMinimumWidth: 70
     readonly property color controlBorder: compact
@@ -160,8 +159,7 @@ Item {
             objectName: "tagMenuColor"
             text: qsTr("修改颜色")
             onTriggered: {
-                tagColorPicker.selectedColor = root.contextTagColor
-                tagColorPicker.open()
+                tagColorPicker.openPicker()
             }
         }
         MenuSeparator {}
@@ -214,15 +212,18 @@ Item {
         }
     }
 
-    ColorDialog {
+    ColorField {
         id: tagColorPicker
         objectName: "tagColorPicker"
-        title: qsTr("选择标签颜色")
-        onAccepted: function() {
+        visible: false
+        colorValue: root.contextTagColor
+        defaultColor: root.contextTagColor
+        targetProperty: ""
+        onColorEdited: function(value) {
             if (root.tagModel.setTagColor(root.contextTagKey,
-                                          selectedColor.toString())) {
+                                          value)) {
                 root.changeTagColorRequested(root.contextTagKey,
-                                             selectedColor)
+                                             value)
             }
         }
     }
@@ -426,6 +427,7 @@ Item {
                         height: implicitHeight
 
                         Rectangle {
+                            visible: !Theme.isLight
                             anchors.left: tagPill.left
                             anchors.right: tagPill.right
                             anchors.leftMargin: 3

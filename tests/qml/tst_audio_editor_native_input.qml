@@ -536,6 +536,27 @@ TestCase {
         compare(AudioEditorController.selectedEventId, String(copied.id))
     }
 
+    function test_leftTrimOfFirstClipCropsWithoutLeavingTimelineGap() {
+        verify(AudioEditorController.createUntitledDocument(48000, 2, 192000))
+        const canvas = findChild(page, "editorWaveformCanvas")
+        verify(canvas)
+        AudioEditorController.viewport.setViewportWidth(canvas.width)
+        verify(AudioEditorController.viewport.setVisibleRange(0, 192000))
+        tryVerify(function() {
+            return findVisibleItem(canvas, "editorEventLeftTrimHandle") !== null
+        })
+        const handle = findVisibleItem(canvas, "editorEventLeftTrimHandle")
+        const before = AudioEditorController.timelineEventViews[0]
+        verify(nativeDropHelper.dragItem(
+            handle, handle.width / 2, handle.height / 2, 120, 0))
+        tryVerify(function() {
+            return Number(AudioEditorController.timelineEventViews[0].sourceStart)
+                > Number(before.sourceStart)
+        })
+        compare(Number(AudioEditorController.timelineEventViews[0].timelineStart), 0)
+        verify(AudioEditorController.totalFrames < 192000)
+    }
+
     function test_rightTrimHandleKeepsNativeGrabAndCommitsOneUndoStep() {
         verify(AudioEditorController.createUntitledDocument(48000, 2, 192000))
         const canvas = findChild(page, "editorWaveformCanvas")

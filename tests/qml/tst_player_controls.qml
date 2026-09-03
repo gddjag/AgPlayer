@@ -165,7 +165,7 @@ TestCase {
         compare(transport.showWaveformMode, true)
     }
 
-    function test_non_immersive_spectral_progress_policy_is_theme_independent() {
+    function test_non_immersive_spectral_progress_policy_preserves_light_readability() {
         SettingsController.playerShellMode = 0
         tryVerify(function() {
             return findControl("classicPlayerShell") !== null
@@ -184,6 +184,12 @@ TestCase {
             compare(Theme.nonImmersiveSpectralUnplayedOpacity, expected)
             compare(waveform.frequencyUnplayedOpacity, expected)
         }
+        SettingsController.frequencyColorWaveform.unplayedOpacity = 0.28
+        SettingsController.themeMode = 0
+        compare(Theme.nonImmersiveSpectralUnplayedOpacity, 0.28)
+        SettingsController.themeMode = 1
+        compare(Theme.nonImmersiveSpectralUnplayedOpacity, 0.55)
+        compare(waveform.frequencyUnplayedOpacity, 0.55)
         SettingsController.frequencyColorWaveform.unplayedOpacity = originalOpacity
         var positions = [0, 0.001, 0.5, 0.999, 1]
         for (var index = 0; index < positions.length; ++index) {

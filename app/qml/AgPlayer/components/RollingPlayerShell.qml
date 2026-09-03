@@ -173,6 +173,10 @@ Item {
     function syncWaveformViewport() {
         if (!mainWaveform)
             return
+        // `playback` is injected as a var in tests and in the shell loader.
+        // Write the derived centre explicitly so a late controller swap can
+        // never leave WaveformItem on its construction-time position.
+        mainWaveform.position = Math.round(viewportCenterMs)
         mainWaveform.setVisibleRange(Math.round(waveformVisibleStartMs),
                                      Math.round(waveformVisibleEndMs))
         alignWaveformToPlayhead()
@@ -343,7 +347,7 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        spacing: 6
+        spacing: 4
 
         TitleBar {
             objectName: "rollingTitleBar"
@@ -413,7 +417,7 @@ Item {
                         objectName: "rollingTrackTitle"
                         width: Math.min(implicitWidth, Math.max(
                                             120, parent.width - favoriteButton.width
-                                            - ratingRow.width - 22))
+                                            - 14))
                         text: root.currentTrack && root.currentTrack.title
                               ? root.currentTrack.title : qsTr("未选择歌曲")
                         color: Theme.primaryText
@@ -451,9 +455,33 @@ Item {
                         }
                     }
 
+                }
+
+                Row {
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.topMargin: 30
+                    anchors.right: meters.left
+                    anchors.rightMargin: 12
+                    height: 20
+                    spacing: 6
+
+                    TrackSubtitle {
+                        objectName: "rollingTrackSubtitle"
+                        width: Math.max(0, parent.width - ratingRow.width - 6)
+                        height: parent.height
+                        artist: root.currentTrack && root.currentTrack.artist
+                                ? root.currentTrack.artist : ""
+                        album: root.currentTrack && root.currentTrack.album
+                               ? root.currentTrack.album : ""
+                        tags: root.currentTrack && root.currentTrack.tags
+                              ? root.currentTrack.tags : []
+                        font.pixelSize: Theme.fontSizeCaption
+                    }
+
                     Row {
                         id: ratingRow
-                        height: 28
+                        height: parent.height
                         spacing: 1
                         Repeater {
                             model: 5
@@ -473,22 +501,6 @@ Item {
                             }
                         }
                     }
-                }
-
-                TrackSubtitle {
-                    objectName: "rollingTrackSubtitle"
-                    anchors.left: parent.left
-                    anchors.top: parent.top
-                    anchors.topMargin: 30
-                    anchors.right: meters.left
-                    anchors.rightMargin: 12
-                    artist: root.currentTrack && root.currentTrack.artist
-                            ? root.currentTrack.artist : ""
-                    album: root.currentTrack && root.currentTrack.album
-                           ? root.currentTrack.album : ""
-                    tags: root.currentTrack && root.currentTrack.tags
-                          ? root.currentTrack.tags : []
-                    font.pixelSize: Theme.fontSizeCaption
                 }
 
                 Column {
@@ -775,8 +787,9 @@ Item {
             Layout.minimumHeight: 140
             Layout.leftMargin: 10
             Layout.rightMargin: 10
-            color: Theme.panel
-            border.color: Theme.border
+            color: Theme.isLight ? Theme.panel : Qt.darker(Theme.panel, 1.12)
+            border.color: Qt.rgba(Theme.border.r, Theme.border.g,
+                                  Theme.border.b, 0.3)
             border.width: 1
             radius: Theme.radiusSm
             clip: true
@@ -801,9 +814,7 @@ Item {
                 midColor: root.frequencyWaveformSettings.midColor
                 highColor: root.frequencyWaveformSettings.highColor
                 frequencyUnplayedOpacity: Theme.nonImmersiveSpectralUnplayedOpacity
-                amplitudeScale: Math.max(
-                                    0.9,
-                                    SettingsController.waveformHeight * 1.25)
+                amplitudeScale: SettingsController.waveformHeight
                 density: SettingsController.waveformDensity
                 lineWidth: SettingsController.waveformThickness
             }
@@ -865,6 +876,26 @@ Item {
                     radius: 3
                     color: Theme.accent
                 }
+            }
+
+            Label {
+                id: currentTimeCapsule
+                objectName: "rollingCurrentTimeCapsule"
+                anchors.right: centerPlayhead.left
+                anchors.rightMargin: 6
+                anchors.top: parent.top
+                anchors.topMargin: 8
+                text: root.formatTime(root.viewportCenterMs)
+                color: Theme.primaryText
+                font.pixelSize: Theme.fontSizeCaption
+                padding: 5
+                background: Rectangle {
+                    color: Theme.surfaceElevated
+                    border.color: Theme.accent
+                    border.width: 1
+                    radius: height / 2
+                }
+                z: 7
             }
 
             Label {
@@ -962,9 +993,10 @@ Item {
             Layout.preferredHeight: 64
             Layout.leftMargin: 10
             Layout.rightMargin: 10
-            Layout.bottomMargin: 6
+            Layout.bottomMargin: 2
             color: Theme.panel
-            border.color: Theme.border
+            border.color: Qt.rgba(Theme.border.r, Theme.border.g,
+                                  Theme.border.b, 0.3)
             border.width: 1
             radius: Theme.radiusSm
 
@@ -1040,9 +1072,7 @@ Item {
                         Label {
                             id: sourceBpm
                             objectName: "rollingSourceBpm"
-                            text: root.sourceBpmValue > 0
-                                  ? root.sourceBpmValue.toFixed(2) + " BPM"
-                                  : "—"
+                            text: qsTr("BPM")
                             color: Theme.secondaryText
                             font.pixelSize: Theme.fontSizeCaption
                         }
@@ -1074,8 +1104,8 @@ Item {
                         implicitHeight: 32
                         icon.source: Theme.icon("restore-line")
                         icon.color: Theme.iconPrimary
-                        icon.width: 16
-                        icon.height: 16
+                        icon.width: 19
+                        icon.height: 19
                         onClicked: root.resetRollingTempo()
                     }
 
@@ -1131,8 +1161,8 @@ Item {
                                 implicitHeight: 32
                                 icon.source: Theme.icon("restore-line")
                                 icon.color: Theme.iconPrimary
-                                icon.width: 14
-                                icon.height: 14
+                                icon.width: 19
+                                icon.height: 19
                                 onClicked: root.resetZoom()
                             }
                         }
@@ -1151,7 +1181,8 @@ Item {
             Layout.rightMargin: 10
             Layout.bottomMargin: 8
             color: Theme.listWorkspaceSurface
-            border.color: Theme.border
+            border.color: Qt.rgba(Theme.border.r, Theme.border.g,
+                                  Theme.border.b, 0.3)
             border.width: 1
             radius: Theme.radiusSm
             clip: true

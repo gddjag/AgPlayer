@@ -173,7 +173,7 @@ TestCase {
         })
     }
 
-    function test_frequency_waveform_uses_one_three_band_render_pass() {
+    function test_frequency_waveform_uses_smooth_three_band_progress_overlay() {
         var previousMode = SettingsController.waveformMode
         var previousGuide = SettingsController.waveformPlaybackGuide
         var waveform = findChild(miniPlayer, "miniWaveform")
@@ -193,8 +193,15 @@ TestCase {
         compare(String(waveform.highColor), String(frequencySettings.highColor))
         compare(waveform.frequencyUnplayedOpacity,
                 Theme.nonImmersiveSpectralUnplayedOpacity)
-        compare(clip.visible, false,
-                "frequency overlays must not be drawn twice in the played region")
+        compare(waveform.position, 0,
+                "the mini base frequency pass must remain entirely unplayed")
+        compare(clip.visible, true,
+                "frequency progress must use the precise clipped overlay")
+        compare(findChild(miniPlayer, "miniPlayedWaveform").position,
+                findChild(miniPlayer, "miniPlayedWaveform").duration)
+        tryVerify(function() {
+            return Math.abs(clip.width - waveform.waveformCursorX) <= 0.5
+        })
         SettingsController.waveformPlaybackGuide = true
         compare(guide.visible, false,
                 "frequency mode must hide the legacy QML guide even when enabled")

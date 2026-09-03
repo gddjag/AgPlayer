@@ -681,7 +681,10 @@ Item {
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
                     height: 56
-                    width: Math.min(420, parent.width * 0.29)
+                    // Keep the summary clear of the transport cluster at the
+                    // 1180 px minimum window while still letting it grow on
+                    // wider layouts.
+                    width: Math.min(420, parent.width * 0.25)
                     spacing: 12
                     readonly property var track: {
                         var count = root.libraryModel ? root.libraryModel.count : 0

@@ -363,14 +363,14 @@ TestCase {
         }, 1000)
     }
 
-    function test_bottom_actions_use_uploaded_immersive_and_lyrics_icons() {
+    function test_bottom_actions_use_uploaded_immersive_icon_without_duplicate_lyrics() {
         var shell = enterIntegratedShell()
         var controls = findChild(shell, "integratedPlayerControls")
         var audioTools = findChild(shell, "audioToolsButton")
         var immersive = findChild(shell, "immersiveActionButton")
-        var lyrics = findChild(shell, "lyricsActionButton")
         var rightActions = findChild(shell, "integratedRightActions")
-        verify(controls && audioTools && immersive && lyrics && rightActions)
+        verify(controls && audioTools && immersive && rightActions)
+        compare(findChild(shell, "lyricsActionButton"), null)
         compare(findChild(shell, "playerShellModeButton"), null)
         compare(findChild(shell, "themeActionButton"), null)
         verify(findChild(shell, "miniPlayerButton"))
@@ -378,11 +378,8 @@ TestCase {
                 findChild(shell, "integratedCenterControls"))
         verify(immersive.icon.source.toString().endsWith(
                    "/immersive-visual-mode.svg"))
-        verify(lyrics.icon.source.toString().endsWith("/lyrics.svg"))
         compare(immersive.icon.width, 26)
         compare(immersive.icon.height, 26)
-        compare(lyrics.icon.width, 26)
-        compare(lyrics.icon.height, 26)
         var theme = findChild(shell, "themeModeButton")
         verify(theme)
         verify(theme.icon.source.toString().endsWith("/theme-skin.svg"))
@@ -576,30 +573,23 @@ TestCase {
                      + summary.height / 2, bottom.height / 2, 1.0)
         fuzzyCompare(controls.y + controls.height / 2,
                      controls.parent.height / 2, 1.0)
-        verify(listWindow.visible && playPause.visible && theme.visible
+        verify(!listWindow.visible && playPause.visible && theme.visible
                && mini.visible)
         var summaryRight = summary.mapToItem(bottom, summary.width, 0).x
-        var listLeft = listWindow.mapToItem(bottom, 0, 0).x
-        var listRight = listWindow.mapToItem(bottom, listWindow.width, 0).x
         var transportLeft = transport.mapToItem(bottom, 0, 0).x
         var transportRight = transport.mapToItem(
                     bottom, transport.width, 0).x
         var volumeLeft = volume.mapToItem(bottom, 0, 0).x
         var volumeRight = volume.mapToItem(bottom, volume.width, 0).x
         var rightActionsLeft = rightActions.mapToItem(bottom, 0, 0).x
-        verify(summaryRight <= listLeft,
-               "embedded list entry must stay outside the track summary")
-        verify(listRight <= transportLeft,
-               "embedded list entry must not overlap transport")
+        verify(summaryRight <= transportLeft,
+               "track summary must stay outside the centered transport")
         verify(transportRight <= volumeLeft,
                "volume must follow the center transport")
         verify(volumeRight <= rightActionsLeft,
                "center transport/volume must not overlap right-side tools")
         var centeredLeft = bottom.width / 2 - transport.playButtonCenterX
-        var expectedLeft = Math.max(listRight + 12,
-                            Math.min(centeredLeft,
-                                     rightActionsLeft
-                                     - centerGroup.width - 12))
+        var expectedLeft = centeredLeft
         fuzzyCompare(centerGroup.mapToItem(bottom, 0, 0).x,
                      expectedLeft, 2.0)
     }
@@ -757,9 +747,7 @@ TestCase {
         compare(controls.denseLayout, true)
         compare(volume.emptyMode, true)
         compare(volume.width, 44)
-        verify(listWindow.mapToItem(
-                   controls, listWindow.width, 0).x
-               <= centerGroup.mapToItem(controls, 0, 0).x)
+        verify(!listWindow.visible)
         verify(transport.mapToItem(
                    controls, transport.width, 0).x
                <= volume.mapToItem(controls, 0, 0).x)
@@ -770,19 +758,21 @@ TestCase {
         wait(20)
     }
 
-    function test_integrated_reference_action_geometry_includes_playlist_and_lyrics() {
+    function test_integrated_reference_action_geometry_omits_duplicate_playlist_and_lyrics() {
         var shell = enterIntegratedShell()
         mainWindow.width = 1672
         wait(20)
         var controls = findChild(shell, "integratedPlayerControls")
         verify(controls)
         var names = [
-            "listWindowButton", "audioToolsButton", "equalizerButton",
+            "audioToolsButton", "equalizerButton",
             "waveformModeButton", "previousButton", "playPauseButton",
-            "nextButton", "modeButton", "lyricsActionButton",
+            "nextButton", "modeButton",
             "mainVolumeControl", "themeModeButton",
             "immersiveActionButton", "miniPlayerButton"
         ]
+        compare(findChild(controls, "lyricsActionButton"), null)
+        compare(findChild(controls, "listWindowButton").visible, false)
         var transport = findChild(controls, "integratedTransportControls")
         verify(transport)
         compare(transport.waveformPlacement, "beforePrevious")

@@ -576,7 +576,7 @@ Rectangle {
                 color: page.textPrimary
                 selectionColor: page.primary
                 selectedTextColor: "white"
-                text: qsTr("如果点击模型下载太慢或者下载不了，可切换以下纯免费线路。\n\n免费模型来源：\n1. 官方线路：模型卡的“下载”按钮。\n2. 国内公益镜像：HTDemucs 支持 HF-Mirror 自动线路，官方失败会自动切换。\n3. 第三方公益服务：百度网盘人声伴奏分离模型。\n4. 用户自行下载：放入模型目录后点击“检测”。\n\n百度网盘链接: https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888\n提取码: 8888")
+                text: qsTr("如果点击模型下载太慢或者下载不了，可切换以下纯免费线路。\n\n免费模型来源：\n1. 官方线路：模型卡的“下载”按钮。\n2. 国内公益镜像：HTDemucs 支持 HF-Mirror 自动线路，官方失败会自动切换。\n3. 第三方公益服务：百度网盘人声伴奏分离模型。\n4. 用户自行下载：放入模型目录后点击“检测”。\n\n放置方法：模型可以直接放在模型根目录，也可以放在任意层级的分类子目录；检测会递归扫描全部子目录。内置支持的模型须保留原文件名和完整文件组。其他兼容 ONNX 模型请附带同名 .agmodel.json 描述文件，检测成功后会自动加入模型列表。\n\n百度网盘链接: https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888\n提取码: 8888")
                 background: Rectangle {
                     color: page.input
                     border.color: page.border
@@ -1111,9 +1111,9 @@ Rectangle {
                                          Layout.bottomMargin: 4
                                           spacing: 4
                                           Item { Layout.fillWidth: true; Layout.minimumWidth: 0 }
-                                         WorkbenchButton {
-                                             visible: cardData.state === VocalSeparationController.Installed
-                                                      || cardData.state === VocalSeparationController.ModelFailed
+                                          WorkbenchButton {
+                                              visible: cardData.state === VocalSeparationController.Installed
+                                                       || cardData.state === VocalSeparationController.ModelFailed
                                              implicitHeight: 24
                                              topPadding: 3
                                              bottomPadding: 3
@@ -1121,8 +1121,24 @@ Rectangle {
                                             enabled: !page.contextLocked && !VocalSeparationController.downloadBusy
                                             Accessible.name: qsTr("删除模型")
                                             Accessible.role: Accessible.Button
-                                            onClicked: VocalSeparationController.deleteModel(cardData.id)
-                                         }
+                                              onClicked: VocalSeparationController.deleteModel(cardData.id)
+                                          }
+                                          WorkbenchButton {
+                                              objectName: "separationInstallRuntime-" + cardData.id
+                                              visible: cardData.state === VocalSeparationController.Installed
+                                                       && !VocalSeparationController.runtimeReady
+                                              implicitHeight: 24
+                                              leftPadding: 6
+                                              rightPadding: 6
+                                              topPadding: 3
+                                              bottomPadding: 3
+                                              text: qsTr("安装运行组件")
+                                              enabled: !page.contextLocked
+                                                       && !VocalSeparationController.downloadBusy
+                                              Accessible.name: qsTr("安装 ONNX Runtime")
+                                              Accessible.role: Accessible.Button
+                                              onClicked: VocalSeparationController.downloadModel(cardData.id)
+                                          }
                                           WorkbenchButton {
                                               objectName: "separationDomesticMirror-" + cardData.id
                                               visible: cardData.state !== VocalSeparationController.Installed
@@ -1151,7 +1167,7 @@ Rectangle {
                                             text: cardData.state === VocalSeparationController.Verifying ? qsTr("校验中")
                                                 : cardData.state === VocalSeparationController.Downloading ? qsTr("暂停")
                                                 : cardData.state === VocalSeparationController.Paused ? qsTr("继续")
-                                                : cardData.state === VocalSeparationController.ModelFailed ? qsTr("重试")
+                                                : cardData.state === VocalSeparationController.ModelFailed ? qsTr("重新下载")
                                                 : cardData.state === VocalSeparationController.PendingVerification ? qsTr("校验")
                                                 : qsTr("下载")
                                             Accessible.name: text

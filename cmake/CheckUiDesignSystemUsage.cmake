@@ -109,7 +109,9 @@ foreach(qml_file IN LISTS qml_files)
 endforeach()
 
 require_text("app/qml/AgPlayer/components/TitleBar.qml"
-    "color: Theme.titleBarSurface")
+    "property color surfaceColor: Theme.titleBarSurface")
+require_text("app/qml/AgPlayer/components/TitleBar.qml"
+    "color: surfaceColor")
 require_text("app/qml/AgPlayer/AudioToolsWindow.qml"
     "ThemedIconButton {")
 require_text("app/qml/AgPlayer/components/tools/ToolSidebar.qml"

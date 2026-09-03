@@ -915,7 +915,8 @@ void LyricsServiceTest::defaultServiceExposesOrderedProviderRoutesWithoutRequest
     LyricsService service(nullptr, nullptr, nullptr);
     QCOMPARE(service.diagnostics().value(QStringLiteral("providerRoutes")).toStringList(),
              QStringList({QStringLiteral("lrcapi"), QStringLiteral("lrclib"),
-                          QStringLiteral("unison")}));
+                          QStringLiteral("unison"),
+                          QStringLiteral("lyrics-ovh")}));
 }
 
 void LyricsServiceTest::lowMatchLrclibSearchFallsThroughToUnison()

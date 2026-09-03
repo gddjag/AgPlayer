@@ -199,14 +199,18 @@ void WaveformItemTest::waveformStrokesStayInsideContainerEdges()
     for (int copy = 0; copy < strokeCopies; ++copy) {
         const int firstVertex = copy * peakCount * 2;
         const int lastVertex = firstVertex + (peakCount - 1) * 2;
-        QVERIFY2(data[firstVertex].x > 0.0F,
-                 "the first waveform stroke must not overlap the left border");
-        QVERIFY2(data[lastVertex].x < item.width(),
-                 "the last waveform stroke must not overlap the right border");
+        QVERIFY2(data[firstVertex].x >= 0.0F,
+                 "the first waveform stroke must stay inside the left border");
+        QVERIFY2(data[lastVertex].x <= item.width(),
+                 "the last waveform stroke must stay inside the right border");
         QVERIFY2(data[firstVertex].x > previousFirstX,
                  "stroke copies must not stack into a bright edge line");
         previousFirstX = data[firstVertex].x;
     }
+    QVERIFY(data[0].x >= 1.0F);
+    const int outerLastVertex =
+        (strokeCopies - 1) * peakCount * 2 + (peakCount - 1) * 2;
+    QCOMPARE(data[outerLastVertex].x, static_cast<float>(item.width()));
 
     delete node;
 }
@@ -321,7 +325,7 @@ void WaveformItemTest::defaultFrequencyColorsUseFixedPalette()
     QCOMPARE(waveform.lowColor(), expectedLow);
     QCOMPARE(waveform.midColor(), expectedMid);
     QCOMPARE(waveform.highColor(), expectedHigh);
-    QCOMPARE(waveform.frequencyUnplayedOpacity(), 0.38);
+    QCOMPARE(waveform.frequencyUnplayedOpacity(), 0.28);
 
     const TrackWaveformThumbnailItem thumbnail;
     QCOMPARE(thumbnail.lowColor(), expectedLow);
@@ -680,8 +684,7 @@ void WaveformItemTest::silentTailRemainsVisibleAtTheTimelineEnd()
     const auto* points = vertices(node);
     const auto* geometryNode = static_cast<const QSGGeometryNode*>(node);
     const int lastVertex = geometryNode->geometry()->vertexCount() - 2;
-    QVERIFY(points[lastVertex].x < item.width());
-    QVERIFY(points[lastVertex].x >= item.width() - 0.5F);
+    QCOMPARE(points[lastVertex].x, static_cast<float>(item.width()));
     QVERIFY2(std::abs(points[lastVertex + 1].y - points[lastVertex].y) >= 1.0F,
              "silent timeline buckets must render a visible baseline");
     compareColor(points[lastVertex], 0xE4, 0x00, 0x7F, 0xFF);
@@ -732,18 +735,16 @@ void WaveformItemTest::reusesNodeAndUpdatesGeometryAfterResize()
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
     const auto* initialGeometry = static_cast<const QSGGeometryNode*>(node)->geometry();
-    QVERIFY(vertices(node)[initialGeometry->vertexCount() - 2].x < item.width());
-    QVERIFY(vertices(node)[initialGeometry->vertexCount() - 2].x
-            >= item.width() - 0.5F);
+    QCOMPARE(vertices(node)[initialGeometry->vertexCount() - 2].x,
+             static_cast<float>(item.width()));
 
     item.setWidth(240);
     QSGNode* resizedNode = item.updatePaintNode(node, nullptr);
     QCOMPARE(resizedNode, node);
     const auto* resizedGeometry =
         static_cast<const QSGGeometryNode*>(resizedNode)->geometry();
-    QVERIFY(vertices(resizedNode)[resizedGeometry->vertexCount() - 2].x < item.width());
-    QVERIFY(vertices(resizedNode)[resizedGeometry->vertexCount() - 2].x
-            >= item.width() - 0.5F);
+    QCOMPARE(vertices(resizedNode)[resizedGeometry->vertexCount() - 2].x,
+             static_cast<float>(item.width()));
 
     item.setPosition(10);
     item.setDuration(20);

@@ -7,6 +7,7 @@ Item {
     objectName: "mainVolumeControl"
     property var playback: PlaybackController
     property bool emptyMode: false
+    property bool compact: false
     property bool expanded: false
     // The host supplies the horizontal room before its right-side actions.
     // The transport remains centered while the slider grows only to the right.
@@ -15,12 +16,14 @@ Item {
     readonly property alias muteButton: muteButton
     readonly property bool showExpandedPercent: !emptyMode && expanded
                                                 && maximumExpandedWidth >= 136
+    readonly property real buttonExtent: compact ? 32 : 44
     readonly property real expandedSliderWidth: !emptyMode && expanded
-        ? Math.max(0, Math.min(108, maximumExpandedWidth - 44
+        ? Math.max(0, Math.min(108, maximumExpandedWidth - buttonExtent
                               - (showExpandedPercent ? 44 : 0))) : 0
-    width: emptyMode ? 44 : 44 + volumeSlider.width + volumePercent.width
+    width: emptyMode ? buttonExtent
+                     : buttonExtent + volumeSlider.width + volumePercent.width
                        + (volumePercent.width > 0 ? 6 : 0)
-    height: 44
+    height: buttonExtent
     z: 10
     clip: false
 
@@ -42,7 +45,7 @@ Item {
         id: muteButton
         objectName: "muteButton"
         anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
-        width: 44; height: 44; flat: true
+        width: root.buttonExtent; height: root.buttonExtent; flat: true
         enabled: root.playback !== null
         icon.source: root.playback && root.playback.muted
                      ? Theme.icon("volume-mute-line") : Theme.icon("volume-up-line")

@@ -54,7 +54,7 @@ Assert-Match $shell 'objectName:\s*"integratedWaveformNavigator"[\s\S]*waveform\
 Assert-Match $main 'id:\s*integratedBottomBarComponent[\s\S]*IntegratedPlayerControls\s*\{' 'Integrated shell must inject its dedicated control layout.'
 Assert-Match $shell 'item\.leftReservedWidth\s*=\s*Qt\.binding[\s\S]*return\s+trackSummary\.width' 'Integrated controls must reserve the complete track-summary region.'
 Assert-Match $integratedControls 'objectName:\s*"integratedCenterControls"[\s\S]*TransportControls[\s\S]*PlayerVolumeControl[\s\S]*objectName:\s*"integratedRightActions"' 'Integrated controls must keep transport and volume together in the centered control group.'
-Assert-Match $integratedControls '(?s)objectName:\s*"integratedCenterControls".*objectName:\s*"audioToolsButton".*objectName:\s*"experienceActions".*allowLyrics:\s*true.*PlayerVolumeControl' 'Integrated center actions must keep audio tools, transport, lyrics, and volume around the centered play control.'
+Assert-Match $integratedControls '(?s)objectName:\s*"integratedCenterControls".*objectName:\s*"audioToolsButton".*objectName:\s*"experienceActions".*allowLyrics:\s*false.*PlayerVolumeControl' 'Integrated center actions must keep audio tools, transport, and volume around the centered play control without duplicating the side-panel lyrics control.'
 Assert-Match $integratedControls '(?s)objectName:\s*"integratedRightActions".*objectName:\s*"themeModeButton".*objectName:\s*"immersiveExperienceActions".*objectName:\s*"miniPlayerButton"' 'Integrated right actions must keep theme, immersive, and mini-player ordered as specified.'
 if ($integratedControls -match 'objectName:\s*"windowLayoutButton"') {
     throw 'Integrated controls must expose one combined theme/shell entry'

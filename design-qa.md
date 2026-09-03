@@ -118,6 +118,39 @@ final result: blocked
 
 final result: passed
 
+---
+
+# Design QA — 播放器关键修复与音频工具 — 2026-09-03
+
+## 视觉真值与运行证据
+
+- 双窗口参考：`E:/Administrator/下载/微信图片_2026-09-03_172941_627.png`（909×945）；实现：`build/qa/2026-09-03-critical-repair/classic-dark-final.png`（863×266）。同高组合对照：`build/qa/2026-09-03-critical-repair/compare-classic-final.png`（1722×266）。
+- 浅色列表参考：`E:/Administrator/下载/微信图片_2026-09-03_181024_301.png`；实现：`build/qa/2026-09-03-critical-repair/integrated-light-final.png`（1448×900）。组合对照：`build/qa/2026-09-03-critical-repair/compare-integrated-light-final.png`（2918×900）。
+- 滚动主题参考：`E:/Administrator/下载/微信图片_2026-09-03_180040_923.png`（1563×1170）；实现：`build/qa/2026-09-03-critical-repair/rolling-dark-final.png`（1448×900）。组合对照：`build/qa/2026-09-03-critical-repair/compare-rolling-final.png`（2658×900）。
+- 音频编辑参考：`E:/Administrator/下载/微信图片_2026-09-03_181427_587.png`（2073×1167）；实现：`build/qa/2026-09-03-critical-repair/editor-light-final.png`（1672×942）。组合对照：`build/qa/2026-09-03-critical-repair/compare-editor-light-final.png`（3353×942）。
+- 迷你播放器实现：`build/qa/2026-09-03-critical-repair/mini-dark-final.png`（588×186）。
+- 所有实现图均由真实 Release `AgPlayer.exe` 在 `--qa-test-mode` 下抓取；对照图按相同高度缩放，双窗口参考只裁取上方播放器区域，不改变比例。
+
+## 验收结论
+
+| 检查项 | 结果 | 证据 |
+| --- | --- | --- |
+| 双窗口与迷你波形尾部 | 通过 | 两个实际窗口均绘制到容器右边界，末尾不再被描边副本裁掉。 |
+| 深色播放进度明暗差 | 通过 | 已播放层与未播放层分别独立绘制；深色实机截图中差异清晰。 |
+| 浅色未播放波形 | 通过 | 浅色最小可见不透明度提高后，未播放区域仍可辨认。 |
+| 控件间距与分组 | 通过 | 歌词已贴近播放模式；左右控制组保留对称安全边距，图标未贴边或消失。 |
+| 共享列表与标签胶囊 | 通过 | 固定尾列、可伸缩歌曲/波形区、紧凑数量区、浅色无灰投影均在真实窗口可见。 |
+| 滚动视口 | 通过 | 中心播放线、当前时间胶囊、短一档画布、紧凑容器和共享列表均无溢出。 |
+| 颜色选择器与三色频彩设置 | 通过 | 共享原生 QML 选择器支持色号复制粘贴；低/中/高三色由 QML/设置测试覆盖。 |
+| 音频编辑缩放条 | 通过 | 30% 底条无端点色块，时间线与底部提示区未发生裁切。 |
+| 分离页布局 | 通过 | 模型卡片、同排进度和操作按钮均在容器内，输入预览波形可见。 |
+
+实现与参考因测试音频、歌曲库内容不同而存在波形形状和文字内容差异；这不属于布局偏差。真实 GPU 推理、任意第三方模型结构和用户那一个元数据失败文件不属于本轮截图验收范围。
+
+没有剩余 P0、P1、P2 视觉差异。
+
+final result: passed
+
 Release note: this result covers the requested loaded-input/uninstalled-model UI state. A completed-model state comparison and real audio-hardware interaction remain separate release gates and are not claimed here.
 
 ## Final compact-workbench refinement

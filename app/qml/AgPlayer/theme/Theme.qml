@@ -19,7 +19,7 @@ QtObject {
     // Keeping it here gives every non-immersive shell one lightweight policy
     // without instantiating an otherwise hidden waveform renderer.
     readonly property real nonImmersiveSpectralUnplayedOpacity:
-        Math.max(0.18, Math.min(1.0,
+        Math.max(isLight ? 0.55 : 0.18, Math.min(1.0,
             Number(Runtime.SettingsController
                    .frequencyColorWaveform.unplayedOpacity)))
 
@@ -202,10 +202,10 @@ QtObject {
     readonly property int playerInspectorWidth: 280
     readonly property int playerTagPanelWidth: 264
     readonly property int playerBottomBarHeight: 80
-    readonly property int rollingOverviewHeight: 120
-    readonly property int rollingOverviewHeightCompact: 104
-    readonly property int rollingWaveformHeight: 160
-    readonly property int rollingWaveformHeightCompact: 136
+    readonly property int rollingOverviewHeight: 108
+    readonly property int rollingOverviewHeightCompact: 92
+    readonly property int rollingWaveformHeight: 146
+    readonly property int rollingWaveformHeightCompact: 124
     readonly property int controlHeightCompact: 28
     readonly property int controlHeight: 32
     readonly property int controlHeightProminent: 36

@@ -87,6 +87,10 @@ WindowController::~WindowController()
 }
 
 bool WindowController::mainVisible() const noexcept { return mainVisible_; }
+QRect WindowController::mainWindowGeometry() const noexcept
+{
+    return mainWindow_ != nullptr ? mainWindow_->geometry() : QRect();
+}
 bool WindowController::miniVisible() const noexcept { return miniVisible_; }
 bool WindowController::immersivePresentationActive() const noexcept
 {
@@ -132,6 +136,7 @@ void WindowController::setWindows(QWindow* mainWindow, QWindow* miniWindow)
     // Do not publish mainWindow_ until its native handle exists. This
     // controller is also a global native event filter; calling winId() from
     // WM_NCCREATE would otherwise recursively create the same HWND.
+    const QRect previousMainGeometry = mainWindowGeometry();
     mainWindow_ = nullptr;
     mainWindowHandle_ = 0;
     miniWindow_ = miniWindow;
@@ -177,6 +182,9 @@ void WindowController::setWindows(QWindow* mainWindow, QWindow* miniWindow)
         applyPlatformWindowStyle(mainWindow_);
         mainWindow_->setVisible(mainVisible_);
         persistGeometry(mainWindow_, mainWindowGeometryKey());
+        if (mainWindow_->geometry() != previousMainGeometry) {
+            emit mainWindowGeometryChanged();
+        }
         if (audioToolsWindow_ != nullptr) {
             audioToolsWindow_->setTransientParent(mainWindow_);
         }
@@ -202,6 +210,9 @@ void WindowController::setWindows(QWindow* mainWindow, QWindow* miniWindow)
         miniWindow_->setFlag(Qt::WindowStaysOnTopHint, alwaysOnTop_);
         miniWindow_->setVisible(miniVisible_);
         persistGeometry(miniWindow_, miniGeometryKey);
+    }
+    if (mainWindow_ == nullptr && previousMainGeometry.isValid()) {
+        emit mainWindowGeometryChanged();
     }
 }
 
@@ -247,6 +258,7 @@ void WindowController::setMainWindowShellMode(int mode)
         }
         rememberNativePixelSize(mainWindow_);
         persistGeometry(mainWindow_, mainWindowGeometryKey());
+        emit mainWindowGeometryChanged();
     }
     if (listWindow_ != nullptr && mainWindowShellMode_ != 1) {
         listWindowGeometryInitialized_ = false;
@@ -1731,6 +1743,7 @@ bool WindowController::eventFilter(QObject* watched, QEvent* event)
             if (!updatingWindowGeometry_ && !listWindowDetached_) {
                 repositionDockedListWindow();
             }
+            emit mainWindowGeometryChanged();
         } else if (event->type() == QEvent::WindowStateChange) {
             applyPlatformWindowStyle(mainWindow_);
             const Qt::WindowState state = mainWindow_->windowState();

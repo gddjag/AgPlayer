@@ -900,7 +900,7 @@ TestCase {
         compare(String(nativeWaveform.lowColor), "#fc0909")
         compare(String(nativeWaveform.midColor), "#03ff00")
         compare(String(nativeWaveform.highColor), "#0048ff")
-        compare(nativeWaveform.frequencyUnplayedOpacity, 0.38)
+        compare(nativeWaveform.frequencyUnplayedOpacity, 0.28)
     }
 
     function test_three_line_spatial_lyrics_support_position_and_scale() {

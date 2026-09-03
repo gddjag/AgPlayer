@@ -269,12 +269,18 @@ TestCase {
                        "audioToolsButton",
                        "themeModeButton", "immersiveActionButton",
                        "miniPlayerButton", "mainVolumeControl"]
-                    : ["listWindowButton", "audioToolsButton",
-                       "equalizerButton", "waveformModeButton",
-                       "previousButton", "playPauseButton", "nextButton",
-                       "modeButton", "lyricsActionButton", "mainVolumeControl",
-                       "themeModeButton", "immersiveActionButton",
-                       "miniPlayerButton"]
+                    : mode === 1
+                      ? ["audioToolsButton", "equalizerButton",
+                         "waveformModeButton", "previousButton",
+                         "playPauseButton", "nextButton", "modeButton",
+                         "mainVolumeControl", "themeModeButton",
+                         "immersiveActionButton", "miniPlayerButton"]
+                      : ["listWindowButton", "audioToolsButton",
+                         "equalizerButton", "waveformModeButton",
+                         "previousButton", "playPauseButton", "nextButton",
+                         "modeButton", "lyricsActionButton",
+                         "mainVolumeControl", "themeModeButton",
+                         "immersiveActionButton", "miniPlayerButton"]
             var activeShell = enterMode(mode)
             var controls = mode === 1
                     ? findChild(mainWindow, "integratedPlayerControls")
@@ -309,11 +315,11 @@ TestCase {
             verify(transport)
             compare(transport.waveformPlacement,
                     mode === 2 ? "afterMode" : "beforePrevious")
-            compare(findChild(controls, "listWindowButton").visible, mode !== 2,
-                    "rolling always exposes its ten-row list and needs no toggle")
+            compare(findChild(controls, "listWindowButton").visible, mode === 0,
+                    "single and rolling shells expose their shared list directly")
             var lyricsAction = findChild(controls, "lyricsActionButton")
-            compare(lyricsAction !== null && lyricsAction.visible, mode !== 2,
-                    "rolling already exposes lyrics in its persistent side pane")
+            compare(lyricsAction !== null && lyricsAction.visible, mode === 0,
+                    "single and rolling shells expose lyrics in the persistent side pane")
             if (mode === 2)
                 compare(findChild(controls, "experienceActions"), null,
                         "rolling must not instantiate a hidden action registry")
@@ -382,7 +388,7 @@ TestCase {
         var playhead = findChild(rolling, "rollingCenterPlayhead")
         verify(canvas && waveform && playhead)
         compare(waveform.visualMode, 3)
-        compare(waveform.position, fakePlayback.positionMs)
+        tryCompare(waveform, "position", fakePlayback.positionMs)
         rolling.syncWaveformViewport()
         var firstStart = waveform.visibleStartMs
         var referenceX = waveform.pixelForTime(59000)
@@ -535,7 +541,7 @@ TestCase {
         var leftMeter = findChild(rolling, "rollingLeftMeter")
         var rightMeter = findChild(rolling, "rollingRightMeter")
         verify(sourceBpm && targetBpm && keepPitch && leftMeter && rightMeter)
-        compare(sourceBpm.text, "120.00 BPM")
+        compare(sourceBpm.text, "BPM")
         compare(targetBpm.text, "120.00")
         compare(leftMeter.peak, fakeVisualFeatures.leftPeak)
         compare(rightMeter.rms, fakeVisualFeatures.rightRms)
@@ -573,7 +579,9 @@ TestCase {
     function test_bpm_drives_continuous_viewport_time_and_pixel_mapping() {
         var rolling = rollingWithFakes()
         var canvas = findChild(rolling, "rollingMainWaveformCanvas")
-        verify(canvas)
+        var capsule = findChild(rolling, "rollingCurrentTimeCapsule")
+        var playhead = findChild(rolling, "rollingCenterPlayhead")
+        verify(canvas && capsule && playhead)
 
         rolling.visibleBeats = 8
         compare(rolling.visibleBeats, 8)
@@ -585,6 +593,10 @@ TestCase {
         verify(Math.abs(rolling.pxPerSec - canvas.width / 4.0) < 0.0001)
         verify(Math.abs(rolling.timeToX(fakePlayback.positionMs / 1000)
                         - canvas.width * 0.5) < 0.0001)
+        compare(capsule.text, "01:00")
+        verify(capsule.mapToItem(canvas, capsule.width, 0).x
+               < playhead.mapToItem(canvas, 0, 0).x,
+               "the current-time capsule stays on the top-left of the needle")
 
         fakePlayback.speedRatio = 1.25
         tryVerify(function() {

@@ -28,22 +28,12 @@ Item {
     readonly property var frequencyWaveformSettings:
         SettingsController.frequencyColorWaveform
 
-    function blendColor(left, right, amount) {
-        var ratio = Math.max(0, Math.min(1, Number(amount)))
-        return Qt.rgba(left.r + (right.r - left.r) * ratio,
-                       left.g + (right.g - left.g) * ratio,
-                       left.b + (right.b - left.b) * ratio, 1)
-    }
-
     function frequencyBandColor(index) {
-        var position = Math.max(0, Math.min(7, Number(index))) / 7
-        if (position <= 0.5)
-            return blendColor(frequencyWaveformSettings.lowColor,
-                              frequencyWaveformSettings.midColor,
-                              position * 2)
-        return blendColor(frequencyWaveformSettings.midColor,
-                          frequencyWaveformSettings.highColor,
-                          (position - 0.5) * 2)
+        if (Number(index) <= 0)
+            return frequencyWaveformSettings.lowColor
+        if (Number(index) === 1)
+            return frequencyWaveformSettings.midColor
+        return frequencyWaveformSettings.highColor
     }
 
     function open() {
@@ -1683,9 +1673,7 @@ Item {
                         objectName: "frequencyBandPalette"
                         anchors.fill: parent
                         readonly property var bandNames: [
-                            qsTr("最低频"), qsTr("低频"), qsTr("低中频"),
-                            qsTr("中频"), qsTr("中高频"), qsTr("高频"),
-                            qsTr("更高频"), qsTr("最高频")
+                            qsTr("低频红色"), qsTr("中频绿色"), qsTr("高频蓝色")
                         ]
                         readonly property int bandCount: bandNames.length
 
@@ -1701,9 +1689,9 @@ Item {
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
 
-                                    ColumnLayout {
+                                    RowLayout {
                                         anchors.fill: parent
-                                        spacing: 2
+                                        spacing: Theme.spacingSm
 
                                         Text {
                                             Layout.fillWidth: true
@@ -1711,24 +1699,24 @@ Item {
                                             color: Theme.secondaryText
                                             font.family: Theme.fontPrimary
                                             font.pixelSize: Theme.fontSizeMeta
-                                            horizontalAlignment: Text.AlignHCenter
+                                            horizontalAlignment: Text.AlignRight
                                             elide: Text.ElideRight
                                         }
 
                                         Rectangle {
                                             id: bandSwatch
                                             Layout.alignment: Qt.AlignHCenter
-                                            Layout.preferredWidth: 22
-                                            Layout.preferredHeight: 16
+                                            Layout.preferredWidth: 28
+                                            Layout.preferredHeight: 20
                                             radius: 3
                                             color: root.frequencyBandColor(index)
                                             border.color: Theme.borderStrong
 
                                             TapHandler {
                                                 onTapped: {
-                                                    if (index <= 2)
+                                                    if (index === 0)
                                                         frequencyLowColor.openPicker()
-                                                    else if (index <= 4)
+                                                    else if (index === 1)
                                                         frequencyMidColor.openPicker()
                                                     else
                                                         frequencyHighColor.openPicker()

@@ -43,6 +43,16 @@ AudioPreviewController::AudioPreviewController(
     pollTimer_.setInterval(40);
     connect(&pollTimer_, &QTimer::timeout,
             this, &AudioPreviewController::pollSnapshot);
+    if (mainPlayback_ != nullptr) {
+        connect(mainPlayback_, &PlaybackController::stateChanged, this,
+                [this] {
+            if (mainPlayback_ != nullptr
+                && mainPlayback_->state() == PlaybackController::Playing
+                && hasSource()) {
+                stopPlaybackAndClear();
+            }
+        });
+    }
 }
 
 AudioPreviewController::~AudioPreviewController()

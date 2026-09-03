@@ -2490,13 +2490,10 @@ TestCase {
         tryCompare(guide, "visible", true)
         SettingsController.waveformPlaybackGuide = false
         tryCompare(guide, "visible", false)
-        if (SettingsController.waveformMode === 3) {
-            compare(playedClip.visible, false)
-            compare(waveform.position, waveform.cursorPosition)
-        } else {
-            verify(playedClip.visible,
-                   "disabling the guide must retain the played-color region")
-        }
+        verify(playedClip.visible,
+               "disabling the guide must retain the played-color region")
+        if (SettingsController.waveformMode === 3)
+            compare(waveform.position, 0)
         SettingsController.waveformPlaybackGuide = previous
     }
 
@@ -2770,10 +2767,11 @@ TestCase {
     function test_waveform_modes_use_offline_waveform_and_live_spectrum() {
         var waveform = findChild(mainWindow, "mainWaveform")
         var playedClip = findChild(mainWindow, "waveformPlayedClip")
+        var playedWaveform = findChild(mainWindow, "playedWaveform")
         var playbackGuide = findChild(mainWindow, "waveformPlaybackGuide")
         var session = mainWindow.waveformSession
         var frequencySettings = SettingsController.frequencyColorWaveform
-        verify(waveform && playedClip && playbackGuide && session)
+        verify(waveform && playedClip && playedWaveform && playbackGuide && session)
         var previousMode = SettingsController.waveformMode
         var previousGuide = SettingsController.waveformPlaybackGuide
         var previousLayers = session.layers
@@ -2804,7 +2802,14 @@ TestCase {
         compare(String(waveform.highColor), String(frequencySettings.highColor))
         compare(waveform.frequencyUnplayedOpacity,
                 Theme.nonImmersiveSpectralUnplayedOpacity)
-        compare(playedClip.visible, false)
+        compare(waveform.position, 0,
+                "the base frequency pass must remain entirely unplayed")
+        compare(playedClip.visible, true,
+                "frequency progress must use the same smooth clipped overlay")
+        compare(playedWaveform.position, playedWaveform.duration)
+        tryVerify(function() {
+            return Math.abs(playedClip.width - waveform.waveformCursorX) <= 0.5
+        })
         compare(playbackGuide.visible, true)
 
         SettingsController.waveformMode = 1
@@ -2956,11 +2961,12 @@ TestCase {
                 "height": 720
             })
             verify(window)
-            compare(window.boundedLyricsWindowY(100, 200, 104, 0, 800),
-                    308)
-            compare(window.boundedLyricsWindowY(700, 200, 104, 0, 800),
-                    588)
-            compare(window.boundedLyricsWindowX(900, 240, 0, 1000), 760)
+            compare(window.boundedLyricsWindowY(100, 500, 0, 800), 100)
+            compare(window.boundedLyricsWindowY(700, 500, 0, 800), 300)
+            compare(window.boundedLyricsWindowX(100, 700, 240, 0, 1000),
+                    708)
+            compare(window.boundedLyricsWindowX(300, 900, 240, 0, 1000),
+                    52)
             var lyricsWindow = findChild(window, "listLyricsWindow")
             verify(lyricsWindow)
             verify(lyricsWindow.hostScreen)
@@ -3364,7 +3370,9 @@ TestCase {
         var firstNotch = findChild(firstPill, "tagCapsuleNotch-" + keys[0])
         verify(firstLeft && firstRight && firstNotch)
         compare(firstRight.height, 28)
-        verify(firstRight.width >= 42)
+        verify(firstRight.width >= 28)
+        verify(firstRight.width < 42,
+               "the count half must follow the number without broad white padding")
         compare(firstNotch.width, 8)
         compare(firstNotch.height, 8)
         compare(firstNotch.rotation, 45)
@@ -3697,18 +3705,15 @@ TestCase {
         tryVerify(function() { return menu.visible }, 500)
         var colorAction = findChild(menu, "tagMenuColor")
         verify(colorAction && colorAction.enabled)
-        var colorPicker = findChild(panel, "tagColorPicker")
-        verify(colorPicker)
-        // Qt 6.7's offscreen quick-dialog fallback reports one internal
-        // implicit-width loop when the same ColorDialog is reopened. Native
-        // Windows dialogs do not use this fallback.
-        ignoreWarning(new RegExp(
-            "QML ColorDialog: Binding loop detected for property .*implicitWidth.*"))
+        var colorField = findChild(panel, "tagColorPicker")
+        verify(colorField)
         mouseClick(colorAction, colorAction.width / 2,
                    colorAction.height / 2)
+        var colorPicker = findChild(window, "colorFieldPicker")
+        verify(colorPicker)
         tryCompare(colorPicker, "visible", true)
-        colorPicker.selectedColor = "#123456"
-        colorPicker.reject()
+        colorPicker.setWorkingColor("#123456")
+        colorPicker.close()
         compare(TagModel.data(TagModel.index(renamedRow, 0),
                               TagModel.ColorRole).toString(), beforeColor)
         compare(colorRequested.count, 0,
@@ -3720,8 +3725,8 @@ TestCase {
         mouseClick(colorAction, colorAction.width / 2,
                    colorAction.height / 2)
         tryCompare(colorPicker, "visible", true)
-        colorPicker.selectedColor = "#123456"
-        colorPicker.accept()
+        colorPicker.setWorkingColor("#123456")
+        colorPicker.acceptColor()
         compare(TagModel.data(TagModel.index(renamedRow, 0),
                               TagModel.ColorRole).toString(), "#123456")
         compare(colorRequested.count, 1)
@@ -5579,9 +5584,9 @@ TestCase {
         var palette = findChild(page, "frequencyBandPalette")
         verify(lowField && midField && highField && differenceSlider
                && resetButton && preview && palette)
-        compare(palette.bandCount, 8)
+        compare(palette.bandCount, 3)
         compare(palette.bandNames.join("/"),
-                "最低频/低频/低中频/中频/中高频/高频/更高频/最高频")
+                "低频红色/中频绿色/高频蓝色")
         compare(differenceSlider.handle.width, Theme.sliderHandleExtent)
         compare(differenceSlider.handle.height, Theme.sliderHandleExtent)
         compare(preview.visualMode, 3)
@@ -5619,7 +5624,7 @@ TestCase {
         compare(String(SettingsController.frequencyColorWaveform.lowColor), "#fc0909")
         compare(String(SettingsController.frequencyColorWaveform.midColor), "#03ff00")
         compare(String(SettingsController.frequencyColorWaveform.highColor), "#0048ff")
-        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.38)
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.28)
 
         page.cancelAndClose()
         SettingsController.waveformMode = previousWaveformMode
@@ -5726,7 +5731,7 @@ TestCase {
         compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.38)
         frequencyResetButton.clicked()
         compare(String(SettingsController.frequencyColorWaveform.lowColor), "#fc0909")
-        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.38)
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.28)
 
         resetButton.clicked()
         tryCompare(SettingsController, "waveformHeight", 0.8)
@@ -5877,7 +5882,7 @@ TestCase {
         compare(String(waveform.highColor), "#0048ff")
         compare(waveform.frequencyUnplayedOpacity,
                 Theme.nonImmersiveSpectralUnplayedOpacity)
-        compare(playedClip.visible, false)
+        compare(playedClip.visible, true)
         SettingsController.waveformPlaybackGuide = false
         compare(playbackGuide.visible, false)
 
@@ -6002,6 +6007,8 @@ TestCase {
             var rightActions = findChild(controls, "integratedRightActions")
             verify(summary && listButton && centerGroup
                    && transport && playButton && volume && rightActions)
+            compare(listButton.visible, false)
+            compare(findChild(controls, "lyricsActionButton"), null)
             verifyAscendingX(transport, [
                 "equalizerButton", "waveformModeButton", "previousButton",
                 "playPauseButton", "nextButton", "modeButton"
@@ -6009,15 +6016,18 @@ TestCase {
             verifyAscendingX(rightActions, [
                 "themeModeButton", "immersiveActionButton", "miniPlayerButton"
             ])
-            verify(summary.mapToItem(controls, summary.width, 0).x
-                   <= listButton.mapToItem(controls, 0, 0).x)
+            var summaryEndX = summary.mapToItem(controls, summary.width, 0).x
+            var audioToolsStartX = findChild(controls, "audioToolsButton").mapToItem(
+                        controls, 0, 0).x
+            verify(summaryEndX <= audioToolsStartX + 1.0,
+                   "summary end " + summaryEndX
+                   + " overlaps audio tools at " + audioToolsStartX)
             verify(findChild(controls, "audioToolsButton").mapToItem(
                        controls, findChild(controls, "audioToolsButton").width, 0).x
                    <= transport.mapToItem(controls, 0, 0).x)
             verify(transport.mapToItem(
                        controls, transport.width, 0).x
-                   <= findChild(controls, "lyricsActionButton").mapToItem(
-                       controls, 0, 0).x)
+                   <= volume.mapToItem(controls, 0, 0).x)
             verify(volume.mapToItem(
                        controls, volume.width, 0).x
                    <= rightActions.mapToItem(controls, 0, 0).x)
@@ -6070,6 +6080,9 @@ TestCase {
             compare(panel.Window.window, lyricsWindow)
             verify(panel.Window.window !== window,
                    "lyrics must not live inside the list window container")
+            verify(lyricsWindow.height >= window.height,
+                   "lyrics height follows the combined player and list host")
+            verify(lyricsWindow.width >= 280 && lyricsWindow.width <= 420)
         } finally {
             window.destroy()
             PlayerExperienceController.lyricsVisible = previousVisible

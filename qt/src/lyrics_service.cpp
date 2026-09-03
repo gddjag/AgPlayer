@@ -3,6 +3,7 @@
 #include "playback_controller.hpp"
 #include "settings_controller.hpp"
 #include "lrcapi_lyrics_provider.hpp"
+#include "lyrics_ovh_provider.hpp"
 #include "unison_lyrics_provider.hpp"
 
 #include <QDateTime>
@@ -48,10 +49,12 @@ LyricsService::LyricsService(LibraryModel* library, PlaybackController* playback
         auto* lrcapi = new LrcApiLyricsProvider(networkManager_, this);
         auto* lrclib = new LrclibProvider(networkManager_, this);
         auto* unison = new UnisonLyricsProvider(networkManager_, this);
+        auto* lyricsOvh = new LyricsOvhProvider(networkManager_, this);
         provider_ = new LyricsProviderChain(
             {{QStringLiteral("lrcapi"), QStringLiteral("LrcAPI"), lrcapi},
              {QStringLiteral("lrclib"), QStringLiteral("LRCLIB"), lrclib},
              {QStringLiteral("unison"), QStringLiteral("Unison"), unison},
+             {QStringLiteral("lyrics-ovh"), QStringLiteral("lyrics.ovh"), lyricsOvh},
             }, this, {},
             [this](const LyricsProvider::Track& track,
                    const QList<LyricsProvider::Candidate>& candidates) {

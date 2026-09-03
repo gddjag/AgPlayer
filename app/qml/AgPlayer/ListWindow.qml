@@ -746,19 +746,23 @@ Window {
         targetWindow: listWindow
     }
 
-    function boundedLyricsWindowX(hostX, lyricsWidth, screenLeft,
-                                  screenRight) {
+    function boundedLyricsWindowX(hostLeft, hostRight, lyricsWidth,
+                                  screenLeft, screenRight) {
+        var spacing = Theme.spacingSm
+        var rightCandidate = hostRight + spacing
+        if (rightCandidate + lyricsWidth <= screenRight)
+            return rightCandidate
+        var leftCandidate = hostLeft - lyricsWidth - spacing
+        if (leftCandidate >= screenLeft)
+            return leftCandidate
         return Math.max(screenLeft,
-                        Math.min(hostX, screenRight - lyricsWidth))
+                        Math.min(rightCandidate, screenRight - lyricsWidth))
     }
 
-    function boundedLyricsWindowY(hostY, hostHeight, lyricsHeight,
+    function boundedLyricsWindowY(hostTop, lyricsHeight,
                                   screenTop, screenBottom) {
-        var spacing = Theme.spacingSm
-        var below = hostY + hostHeight + spacing
-        if (below + lyricsHeight <= screenBottom)
-            return below
-        return Math.max(screenTop, hostY - lyricsHeight - spacing)
+        return Math.max(screenTop,
+                        Math.min(hostTop, screenBottom - lyricsHeight))
     }
 
     Window {
@@ -783,13 +787,34 @@ Window {
             : Qt.rect(0, 0, listWindow.width,
                       listWindow.y + listWindow.height
                       + height + Theme.spacingSm)
-        width: Math.min(listWindow.width, availableGeometry.width)
-        height: 104
+        readonly property rect combinedHostGeometry: {
+            var main = listWindow.windows
+                    ? listWindow.windows.mainWindowGeometry : Qt.rect(0, 0, 0, 0)
+            if (listWindow.windows.listWindowDetached
+                    || !main || main.width <= 0 || main.height <= 0) {
+                return Qt.rect(listWindow.x, listWindow.y,
+                               listWindow.width, listWindow.height)
+            }
+            var left = Math.min(main.x, listWindow.x)
+            var top = Math.min(main.y, listWindow.y)
+            var right = Math.max(main.x + main.width,
+                                 listWindow.x + listWindow.width)
+            var bottom = Math.max(main.y + main.height,
+                                  listWindow.y + listWindow.height)
+            return Qt.rect(left, top, right - left, bottom - top)
+        }
+        width: Math.min(420, availableGeometry.width,
+                        Math.max(280,
+                                 Math.round(combinedHostGeometry.width * 0.32)))
+        height: Math.min(availableGeometry.height,
+                         Math.max(200, combinedHostGeometry.height))
         x: listWindow.boundedLyricsWindowX(
-               listWindow.x, width, availableGeometry.x,
+               combinedHostGeometry.x,
+               combinedHostGeometry.x + combinedHostGeometry.width,
+               width, availableGeometry.x,
                availableGeometry.x + availableGeometry.width)
         y: listWindow.boundedLyricsWindowY(
-               listWindow.y, listWindow.height, height,
+               combinedHostGeometry.y, height,
                availableGeometry.y,
                availableGeometry.y + availableGeometry.height)
 

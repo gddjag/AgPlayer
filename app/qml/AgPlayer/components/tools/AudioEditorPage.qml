@@ -661,13 +661,6 @@ Rectangle {
                     color: "transparent"
                     implicitWidth: 28
                     implicitHeight: 28
-                    Rectangle {
-                        anchors.centerIn: parent
-                        width: 3
-                        height: 10
-                        radius: 0
-                        color: Theme.accent
-                    }
                 }
                 second.handle: Rectangle {
                     objectName: "editorTimelineZoomEndHandle"
@@ -675,13 +668,6 @@ Rectangle {
                     color: "transparent"
                     implicitWidth: 28
                     implicitHeight: 28
-                    Rectangle {
-                        anchors.centerIn: parent
-                        width: 3
-                        height: 10
-                        radius: 0
-                        color: Theme.accent
-                    }
                 }
             }
 

@@ -487,8 +487,7 @@ Rectangle {
                 // Keep this base pass entirely unplayed. The played pass is
                 // clipped below at the exact playback pixel, avoiding the
                 // visible bucket-by-bucket progress jump of peak colouring.
-                position: SettingsController.waveformMode === 3
-                          ? root.visualPlaybackPositionMs : 0
+                position: 0
                 cursorPosition: root.visualPlaybackPositionMs
                 duration: root.effectiveDurationMs
                 analysisProgress: WaveformProvider.analysisProgress
@@ -530,10 +529,10 @@ Rectangle {
             Item {
                 id: playedWaveformClip
                 objectName: "waveformPlayedClip"
-                // Spectral-centroid mode shades played and unplayed samples
-                // in the native waveform pass; a clipped second pass would
-                // draw the played palette twice.
-                visible: SettingsController.waveformMode !== 3
+                // Every mode uses the same continuous C++ time-to-pixel clip.
+                // Frequency colour stays unchanged; the clipped pass only
+                // restores full opacity across the exact playback boundary.
+                visible: true
                 width: waveformFrame.playbackX
                 height: parent.height
                 clip: true

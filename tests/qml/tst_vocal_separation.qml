@@ -749,6 +749,12 @@ TestCase {
         separationTestDriver.setRuntimeMissing()
         verify(!VocalSeparationController.canStart)
         compare(VocalSeparationController.startDisabledReason, "ONNX Runtime 尚未安装")
+        const runtimeInstaller = findChild(
+            page, "separationInstallRuntime-"
+                  + VocalSeparationController.selectedModelId)
+        verify(runtimeInstaller)
+        verify(runtimeInstaller.visible)
+        compare(runtimeInstaller.text, "安装运行组件")
 
         separationTestDriver.setDevices("fallback")
         compare(VocalSeparationController.availableDevices[0].available, true)
@@ -760,6 +766,13 @@ TestCase {
         compare(VocalSeparationController.availableDevices[0].reason,
                 "CPU 和 GPU 均未通过设备探测")
         separationTestDriver.reset()
+    }
+
+    function test_backupModelInstructionsExplainRecursiveDetection() {
+        const instructions = findChild(page, "separationBackupModelText")
+        verify(instructions)
+        verify(instructions.text.indexOf("任意层级的分类子目录") >= 0)
+        verify(instructions.text.indexOf(".agmodel.json") >= 0)
     }
 
     function test_probeRunningCancellingAndCompletedLockTheRealControls() {

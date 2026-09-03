@@ -62,6 +62,7 @@ class VocalSeparationController final : public QObject {
                    NOTIFY outputDirectoryChanged)
     Q_PROPERTY(QString modelStorageDirectory READ modelStorageDirectory
                    NOTIFY modelStorageDirectoryChanged)
+    Q_PROPERTY(bool runtimeReady READ runtimeReady NOTIFY startEligibilityChanged)
     Q_PROPERTY(bool canStart READ canStart NOTIFY startEligibilityChanged)
     Q_PROPERTY(QString startDisabledReason READ startDisabledReason
                    NOTIFY startEligibilityChanged)
@@ -138,6 +139,7 @@ public:
     QString outputFormat() const;
     QString outputDirectory() const;
     QString modelStorageDirectory() const;
+    bool runtimeReady() const;
     bool canStart() const;
     QString startDisabledReason() const;
     bool canRetry() const noexcept;
@@ -272,7 +274,6 @@ private:
     QString runtimeDirectory() const;
     bool modelInstalled(const VocalModelCard& model) const;
     bool modelFilesPresent(const VocalModelCard& model) const;
-    bool runtimeReady() const;
     bool deviceAvailable(DeviceMode mode) const;
     bool beginVerification(VerificationPurpose purpose,
                            const VocalModelCard* model = nullptr);

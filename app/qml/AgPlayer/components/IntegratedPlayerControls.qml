@@ -40,8 +40,7 @@ Item {
         anchors.left: parent.left
         anchors.leftMargin: root.leftReservedWidth + 12
         anchors.verticalCenter: parent.verticalCenter
-        visible: PlayerPresentation.hasAction(root.actionProfile,
-                                              "listWindowButton")
+        visible: false
         flat: true
         icon.source: Theme.icon("list-unordered")
         icon.color: WindowController.listWindowVisible
@@ -121,7 +120,7 @@ Item {
             height: implicitHeight
             presentationProfile: root.actionProfile
             allowImmersive: false
-            allowLyrics: true
+            allowLyrics: false
         }
 
         PlayerVolumeControl {

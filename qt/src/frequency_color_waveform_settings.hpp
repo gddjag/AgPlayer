@@ -35,5 +35,5 @@ private:
     QColor lowColor_{QStringLiteral("#FC0909")};
     QColor midColor_{QStringLiteral("#03FF00")};
     QColor highColor_{QStringLiteral("#0048FF")};
-    double unplayedOpacity_ = 0.38;
+    double unplayedOpacity_ = 0.28;
 };

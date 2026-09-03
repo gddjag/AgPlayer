@@ -17,6 +17,8 @@ class QWindow;
 class WindowController final : public QObject, public QAbstractNativeEventFilter {
     Q_OBJECT
     Q_PROPERTY(bool mainVisible READ mainVisible NOTIFY mainVisibleChanged)
+    Q_PROPERTY(QRect mainWindowGeometry READ mainWindowGeometry
+                   NOTIFY mainWindowGeometryChanged)
     Q_PROPERTY(bool miniVisible READ miniVisible NOTIFY miniVisibleChanged)
     Q_PROPERTY(bool immersivePresentationActive READ immersivePresentationActive
                    NOTIFY immersivePresentationActiveChanged)
@@ -55,6 +57,7 @@ public:
     ~WindowController();
 
     bool mainVisible() const noexcept;
+    QRect mainWindowGeometry() const noexcept;
     bool miniVisible() const noexcept;
     bool immersivePresentationActive() const noexcept;
     bool audioToolsVisible() const noexcept;
@@ -122,6 +125,7 @@ public:
 
 signals:
     void mainVisibleChanged();
+    void mainWindowGeometryChanged();
     void miniVisibleChanged();
     void immersivePresentationActiveChanged();
     void audioToolsVisibleChanged();

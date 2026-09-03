@@ -85,6 +85,7 @@ RowLayout {
     Loader {
         active: root.showWaveformMode
                 && root.waveformPlacement === "beforePrevious"
+        visible: active
         Layout.preferredWidth: root.compact ? 32 : 40
         Layout.preferredHeight: root.compact ? 32 : 40
         sourceComponent: waveformModeAction
@@ -201,6 +202,7 @@ RowLayout {
     Loader {
         active: root.showWaveformMode
                 && root.waveformPlacement === "afterMode"
+        visible: active
         Layout.preferredWidth: root.compact ? 32 : 40
         Layout.preferredHeight: root.compact ? 32 : 40
         sourceComponent: waveformModeAction

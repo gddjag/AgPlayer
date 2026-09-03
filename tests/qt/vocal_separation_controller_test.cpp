@@ -1896,6 +1896,10 @@ batchExportPublishesOneCompleteDirectoryOrNothing()
     const QString accompaniment = stemFor(
         controller.stems(), VocalSeparationController::StemKind::Accompaniment)
                                       .value(QStringLiteral("path")).toString();
+    // Result waveform analysis can still own the decoded file briefly after
+    // the worker job reaches Completed. Wait for that real async owner before
+    // deleting the stem used to exercise the atomic export failure path.
+    WaveformProviderTestAccess::waitForAnalysis(waveforms);
     QVERIFY(QFile::remove(accompaniment));
     const QString failedRoot = temporary.filePath(QStringLiteral("失败导出"));
     QVERIFY(QDir().mkpath(failedRoot));
