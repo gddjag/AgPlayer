@@ -29,7 +29,10 @@ rawBand = 0.80 * rms + 0.20 * peak
 
 ```text
 reference = 0.45 * globalP95 + 0.55 * bandP95
-normalized = clamp(rawBand * bandGain / reference, 0, 1)
+noiseFloor = 0.015 * bandP95
+normalized = 0                                      if rawBand <= noiseFloor
+             clamp((rawBand - noiseFloor) * bandGain / reference, 0, 1)
+                                                    otherwise
 ```
 
 频段增益固定为 Low `0.90`、Mid `1.00`、High `1.50`。小于 `bandP95 * 0.015` 的数值视为零。全静音和无有限参考值时三路输出全零。`0.25 * globalP95 + 0.75 * bandP95` 未通过纯 100 Hz 的 Mid 泄漏契约；`0.45 * globalP95 + 0.55 * bandP95` 通过该契约、持续同幅三音、短 10 kHz 瞬态和缓存验证，因此作为经测试的保守校准点采用，而非数学上已证明的最小值。
