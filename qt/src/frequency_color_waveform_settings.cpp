@@ -12,7 +12,7 @@ const QColor legacyDefaultLow(QStringLiteral("#8B3DFF"));
 const QColor legacyDefaultMid(QStringLiteral("#FFB000"));
 const QColor legacyDefaultHigh(QStringLiteral("#002FA7"));
 constexpr int currentColorSchemaVersion = 2;
-constexpr double defaultUnplayedOpacity = 0.28;
+constexpr double defaultUnplayedOpacity = 0.20;
 constexpr double legacyDefaultUnplayedOpacity = 0.38;
 
 QColor storedColor(QSettings& settings, const QString& key,
@@ -73,7 +73,7 @@ double FrequencyColorWaveformSettings::unplayedOpacity() const noexcept
 void FrequencyColorWaveformSettings::setUnplayedOpacity(double opacity)
 {
     const double clamped = std::clamp(
-        std::isfinite(opacity) ? opacity : defaultUnplayedOpacity, 0.18, 1.0);
+        std::isfinite(opacity) ? opacity : defaultUnplayedOpacity, 0.0, 1.0);
     if (qFuzzyCompare(unplayedOpacity_ + 1.0, clamped + 1.0)) {
         return;
     }
@@ -134,7 +134,7 @@ void FrequencyColorWaveformSettings::load(QSettings& settings)
     }
     unplayedOpacity_ = std::clamp(
         std::isfinite(storedOpacity) ? storedOpacity : defaultUnplayedOpacity,
-        0.18, 1.0);
+        0.0, 1.0);
     if (storedSchema < currentColorSchemaVersion) {
         if (!opacityWasStored) {
             settings.setValue(opacityKey, unplayedOpacity_);

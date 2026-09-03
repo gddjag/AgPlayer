@@ -22,8 +22,9 @@ Item {
     readonly property bool sidePlacement:
         placement !== PlayerExperienceController.Center
     readonly property int lineAlignment:
-        placement === PlayerExperienceController.Left ? Text.AlignLeft
-        : placement === PlayerExperienceController.Right ? Text.AlignRight
+        spatialMode && sidePlacement
+        ? (placement === PlayerExperienceController.Left
+           ? Text.AlignLeft : Text.AlignRight)
         : Text.AlignHCenter
     readonly property real sizeScale: lyricSize / 100.0
     readonly property real clarityScale: clarity / 100.0
@@ -162,11 +163,9 @@ Item {
     Column {
         id: lyricStack
         objectName: "cinematicLyricsStage"
-        anchors.fill: parent
-        anchors.leftMargin: root.spatialMode ? 0 : 18
-        anchors.rightMargin: root.spatialMode ? 0 : 18
-        anchors.topMargin: root.spatialMode ? 0 : 8
-        anchors.bottomMargin: root.spatialMode ? 0 : 8
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.verticalCenter: parent.verticalCenter
+        width: parent.width - (root.spatialMode ? 0 : 36)
         spacing: Math.max(3, 6 * root.sizeScale)
         visible: !root.spatialUntimedFallback
         transform: Rotation {
@@ -373,19 +372,23 @@ Item {
         anchors.bottomMargin: 24
         clip: true
         contentWidth: width
-        contentHeight: untimedText.height
+        contentHeight: untimedText.height > height
+                       ? untimedText.height + height : height
         z: 1
         Text {
             id: untimedText
             objectName: "untimedLyricsText"
             width: untimedFlickable.width
+            y: height > untimedFlickable.height
+               ? untimedFlickable.height / 2
+               : (untimedFlickable.height - height) / 2
             text: untimedFlickable.untimedTextValue
             wrapMode: Text.Wrap
             color: root.spatialMode ? Theme.onBrandGradientText
                                     : Theme.primaryText
             font.pixelSize: Math.max(Theme.fontSizeBody,
                                      Math.round(Theme.fontSizeSection * root.sizeScale))
-            horizontalAlignment: root.lineAlignment
+            horizontalAlignment: Text.AlignHCenter
         }
     }
 

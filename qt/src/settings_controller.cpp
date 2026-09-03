@@ -625,7 +625,7 @@ void SettingsController::setListWaveformThumbnailMode(const QString& value)
 void SettingsController::setTrackWaveformBrightness(double value)
 {
     const double normalized = std::isfinite(value)
-        ? clampValue(value, 0.20, 1.00) : 0.66;
+        ? clampValue(value, 0.20, 1.00) : 0.50;
     if (trackWaveformBrightness_ == normalized) {
         return;
     }
@@ -958,7 +958,7 @@ void SettingsController::resetWaveformDefaults()
     setSpectrumRgbEndColor(QStringLiteral("#e62e9b"));
     setListWaveformThumbnailEnabled(true);
     setListWaveformThumbnailMode(QStringLiteral("Spectral"));
-    setTrackWaveformBrightness(0.66);
+    setTrackWaveformBrightness(0.50);
 }
 
 void SettingsController::beginEdit()
@@ -1407,12 +1407,12 @@ void SettingsController::load()
     }
     bool brightnessOk = false;
     const double storedTrackWaveformBrightness = settings_
-        .value(QStringLiteral("trackWaveformBrightness"), 0.66)
+        .value(QStringLiteral("trackWaveformBrightness"), 0.50)
         .toDouble(&brightnessOk);
     trackWaveformBrightness_ = brightnessOk
             && std::isfinite(storedTrackWaveformBrightness)
         ? clampValue(storedTrackWaveformBrightness, 0.20, 1.00)
-        : 0.66;
+        : 0.50;
     if (!brightnessOk || !std::isfinite(storedTrackWaveformBrightness)
         || trackWaveformBrightness_ != storedTrackWaveformBrightness) {
         settings_.setValue(QStringLiteral("trackWaveformBrightness"),
@@ -1792,7 +1792,7 @@ void SettingsController::restoreDefaults(const bool includeMediaSettings)
         waveformCanvasLocked_ = true;
         listWaveformThumbnailEnabled_ = true;
         listWaveformThumbnailMode_ = QStringLiteral("Spectral");
-        trackWaveformBrightness_ = 0.66;
+        trackWaveformBrightness_ = 0.50;
         spectrumColorMode_ = 1;
         spectrumSolidColor_ = QStringLiteral("#7b2ff7");
         spectrumRgbStartColor_ = QStringLiteral("#00d4ff");

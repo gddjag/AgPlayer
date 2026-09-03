@@ -651,9 +651,8 @@ Item {
                     anchors.left: overviewWaveform.left
                     anchors.top: overviewWaveform.top
                     width: root.effectiveDurationMs > 0
-                           ? overviewWaveform.width * root.clamp(
-                                 root.playbackPositionMs
-                                 / root.effectiveDurationMs, 0, 1) : 0
+                           ? overviewWaveform.pixelForTime(
+                                 root.playbackPositionMs) : 0
                     height: overviewWaveform.height
                     clip: true
                     enabled: false
@@ -711,9 +710,8 @@ Item {
                         anchors.top: parent.top
                         anchors.bottom: parent.bottom
                         width: root.effectiveDurationMs > 0
-                               ? parent.width * root.clamp(
-                                     root.playbackPositionMs
-                                     / root.effectiveDurationMs, 0, 1)
+                               ? overviewWaveform.pixelForTime(
+                                     root.playbackPositionMs)
                                : 0
                         radius: parent.radius
                         color: Theme.waveformMagenta
@@ -729,8 +727,7 @@ Item {
                     function updateHover(x) {
                         overviewWaveformHost.hoverTimeMs =
                                 root.effectiveDurationMs > 0
-                                ? root.clamp(x / Math.max(1, width), 0, 1)
-                                  * root.effectiveDurationMs : -1
+                                ? overviewWaveform.timeForX(x) : -1
                     }
                     onPositionChanged: function(mouse) { updateHover(mouse.x) }
                     onEntered: updateHover(mouseX)
@@ -738,9 +735,7 @@ Item {
                     onClicked: function(mouse) {
                         if (!root.playback || root.effectiveDurationMs <= 0)
                             return
-                        var target = root.clamp(
-                                    mouse.x / Math.max(1, width), 0, 1)
-                                    * root.effectiveDurationMs
+                        var target = overviewWaveform.timeForX(mouse.x)
                         if (root.playback.seek !== undefined)
                             root.playback.seek(Math.round(target))
                         if (root.playback.play !== undefined)
@@ -888,13 +883,8 @@ Item {
                 text: root.formatTime(root.viewportCenterMs)
                 color: Theme.primaryText
                 font.pixelSize: Theme.fontSizeCaption
-                padding: 5
-                background: Rectangle {
-                    color: Theme.surfaceElevated
-                    border.color: Theme.accent
-                    border.width: 1
-                    radius: height / 2
-                }
+                padding: 0
+                background: null
                 z: 7
             }
 

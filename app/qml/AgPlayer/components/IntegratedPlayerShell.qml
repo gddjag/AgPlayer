@@ -684,7 +684,8 @@ Item {
                     // Keep the summary clear of the transport cluster at the
                     // 1180 px minimum window while still letting it grow on
                     // wider layouts.
-                    width: Math.min(420, parent.width * 0.25)
+                    width: Math.min(420, Math.max(160,
+                                                  parent.width * 0.25 - 6))
                     spacing: 12
                     readonly property var track: {
                         var count = root.libraryModel ? root.libraryModel.count : 0

@@ -117,7 +117,7 @@ bool PlaybackClipDragAdapter::begin(
 
     HandoffRequest request;
     request.sourceIdentity = sourceIdentity(source);
-    request.outputFileStem = QStringLiteral("%1_%2-%3")
+    request.outputFileStem = QStringLiteral("%1_片段_%2-%3")
         .arg(safeTitle(track->title), timeStamp(selectionStartMs),
              timeStamp(selectionEndMs));
     request.playbackClip = HandoffRequest::PlaybackClipSource{

@@ -93,8 +93,8 @@ Item {
             flat: true
             icon.source: Theme.icon("briefcase-4-line")
             icon.color: Theme.iconPrimary
-            icon.width: 20
-            icon.height: 20
+            icon.width: 22
+            icon.height: 22
             Accessible.name: qsTr("打开音频工具")
             onClicked: WindowController.showAudioTools()
             ToolTip.text: Accessible.name
@@ -148,8 +148,8 @@ Item {
             flat: true
             icon.source: Theme.icon("theme-skin")
             icon.color: Theme.iconPrimary
-            icon.width: 20
-            icon.height: 20
+            icon.width: 22
+            icon.height: 22
             Accessible.name: qsTr("切换主题皮肤")
             onClicked: root.openThemePopup()
             ToolTip.text: Accessible.name
@@ -177,8 +177,8 @@ Item {
             flat: true
             icon.source: Theme.icon("picture-in-picture-2-line")
             icon.color: Theme.iconPrimary
-            icon.width: 20
-            icon.height: 20
+            icon.width: 22
+            icon.height: 22
             Accessible.name: qsTr("切换到迷你播放器")
             onClicked: WindowController.showMini()
             ToolTip.text: Accessible.name
@@ -198,7 +198,7 @@ Item {
         id: playerShellMenu
         objectName: "playerShellMenu"
         parent: root.Window.window ? root.Window.window.contentItem : root
-        width: 184
+        width: Math.max(168, implicitContentWidth + leftPadding + rightPadding)
 
         MenuItem {
             objectName: "classicShellMenuItem"

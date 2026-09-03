@@ -2598,9 +2598,12 @@ TestCase {
         verifyAscendingX(rightActions, [
             "themeModeButton", "immersiveActionButton", "miniPlayerButton"
         ])
-        compare(findChild(rightActions, "themeModeButton").icon.width, 20)
-        compare(findChild(rightActions, "immersiveActionButton").icon.width, 26)
-        compare(findChild(rightActions, "miniPlayerButton").icon.width, 20)
+        compare(findChild(rightActions, "themeModeButton").icon.width, 22)
+        compare(findChild(rightActions, "immersiveActionButton").icon.width, 22)
+        compare(findChild(rightActions, "miniPlayerButton").icon.width, 22)
+        verify(findChild(rightActions, "themeModeButton").width >= 32)
+        verify(findChild(rightActions, "immersiveActionButton").width >= 32)
+        verify(findChild(rightActions, "miniPlayerButton").width >= 32)
         verify(findChild(controls, "audioToolsButton").mapToItem(
                    controls, findChild(controls, "audioToolsButton").width, 0).x
                <= transport.mapToItem(controls, 0, 0).x)
@@ -3712,6 +3715,8 @@ TestCase {
         var colorPicker = findChild(window, "colorFieldPicker")
         verify(colorPicker)
         tryCompare(colorPicker, "visible", true)
+        verify(colorPicker.width >= 300 && colorPicker.width <= 320)
+        verify(colorPicker.contentItem.width <= colorPicker.availableWidth + 0.5)
         colorPicker.setWorkingColor("#123456")
         colorPicker.close()
         compare(TagModel.data(TagModel.index(renamedRow, 0),
@@ -5598,7 +5603,8 @@ TestCase {
         var colorPicker = findChild(mainWindow, "colorFieldPicker")
         var hexField = findChild(mainWindow, "colorPickerHexField")
         verify(colorPicker && hexField)
-        verify(colorPicker.width <= 280 && colorPicker.height <= 332)
+        verify(colorPicker.width >= 300 && colorPicker.width <= 320)
+        verify(colorPicker.height <= 332)
         verify(hexField.selectByMouse)
         hexField.text = "#A1B2C3"
         hexField.selectAll()
@@ -5617,14 +5623,14 @@ TestCase {
         compare(String(SettingsController.frequencyColorWaveform.midColor), "#445566")
         compare(String(SettingsController.frequencyColorWaveform.highColor), "#778899")
         compare(String(preview.lowColor), "#112233")
-        differenceSlider.value = 62
+        differenceSlider.value = 38
         differenceSlider.moved()
         compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.38)
         resetButton.clicked()
         compare(String(SettingsController.frequencyColorWaveform.lowColor), "#fc0909")
         compare(String(SettingsController.frequencyColorWaveform.midColor), "#03ff00")
         compare(String(SettingsController.frequencyColorWaveform.highColor), "#0048ff")
-        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.28)
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.20)
 
         page.cancelAndClose()
         SettingsController.waveformMode = previousWaveformMode
@@ -5632,7 +5638,7 @@ TestCase {
             page.destroy()
     }
 
-    function test_settings_list_waveform_brightness_is_live_and_defaults_to_66_percent() {
+    function test_settings_list_waveform_brightness_is_live_and_defaults_to_50_percent() {
         var page = findChild(mainWindow, "settingsPage")
         var ownsPage = false
         if (!page) {
@@ -5659,7 +5665,7 @@ TestCase {
                "song-list waveform brightness slider must fit inside its settings card")
         compare(slider.from, 20)
         compare(slider.to, 100)
-        compare(Math.round(slider.value), 66)
+        compare(Math.round(slider.value), 50)
         slider.value = 74
         slider.moved()
         compare(SettingsController.trackWaveformBrightness, 0.74)
@@ -5726,12 +5732,12 @@ TestCase {
         lowColorField.colorEdited("#112233")
         compare(String(SettingsController.frequencyColorWaveform.lowColor), "#112233")
         compare(String(frequencyPreview.lowColor), "#112233")
-        differenceSlider.value = 62
+        differenceSlider.value = 38
         differenceSlider.moved()
         compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.38)
         frequencyResetButton.clicked()
         compare(String(SettingsController.frequencyColorWaveform.lowColor), "#fc0909")
-        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.28)
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.20)
 
         resetButton.clicked()
         tryCompare(SettingsController, "waveformHeight", 0.8)

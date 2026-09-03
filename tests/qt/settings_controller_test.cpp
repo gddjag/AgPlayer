@@ -541,7 +541,7 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
         QCOMPARE(frequency->lowColor(), QColor(QStringLiteral("#fc0909")));
         QCOMPARE(frequency->midColor(), QColor(QStringLiteral("#03ff00")));
         QCOMPARE(frequency->highColor(), QColor(QStringLiteral("#0048ff")));
-        QCOMPARE(frequency->unplayedOpacity(), 0.28);
+    QCOMPARE(frequency->unplayedOpacity(), 0.20);
 
         settings.setWaveformHeight(3.0);
         settings.setWaveformDensity(0.1);
@@ -581,7 +581,7 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
              QColor(QStringLiteral("#03ff00")));
     QCOMPARE(reloaded.frequencyColorWaveform()->highColor(),
              QColor(QStringLiteral("#0048ff")));
-    QCOMPARE(reloaded.frequencyColorWaveform()->unplayedOpacity(), 0.28);
+    QCOMPARE(reloaded.frequencyColorWaveform()->unplayedOpacity(), 0.20);
     QCOMPARE(reloaded.listWaveformThumbnailMode(), QStringLiteral("Spectral"));
     persisted.clear();
 }
@@ -593,7 +593,7 @@ void SettingsControllerTest::trackWaveformBrightnessDefaultsClampsPersistsAndRes
 
     {
         SettingsController settings;
-        QCOMPARE(settings.trackWaveformBrightness(), 0.66);
+        QCOMPARE(settings.trackWaveformBrightness(), 0.50);
         QSignalSpy changed(&settings,
                            &SettingsController::trackWaveformBrightnessChanged);
 
@@ -611,14 +611,14 @@ void SettingsControllerTest::trackWaveformBrightnessDefaultsClampsPersistsAndRes
         QCOMPARE(settings.trackWaveformBrightness(), 0.20);
         settings.setTrackWaveformBrightness(
             std::numeric_limits<double>::quiet_NaN());
-        QCOMPARE(settings.trackWaveformBrightness(), 0.66);
+        QCOMPARE(settings.trackWaveformBrightness(), 0.50);
     }
 
     SettingsController reloaded;
-    QCOMPARE(reloaded.trackWaveformBrightness(), 0.66);
+    QCOMPARE(reloaded.trackWaveformBrightness(), 0.50);
     reloaded.setTrackWaveformBrightness(0.81);
     reloaded.resetWaveformDefaults();
-    QCOMPARE(reloaded.trackWaveformBrightness(), 0.66);
+    QCOMPARE(reloaded.trackWaveformBrightness(), 0.50);
     persisted.clear();
 }
 
@@ -676,7 +676,7 @@ void SettingsControllerTest::frequencyColorPaletteMigratesExactLegacyDefaults()
     QCOMPARE(alreadyMigratedSchema.frequencyColorWaveform()->highColor(),
              QColor(QStringLiteral("#002fa7")));
     QCOMPARE(alreadyMigratedSchema.frequencyColorWaveform()->unplayedOpacity(),
-             0.28);
+             0.20);
     persisted.clear();
 }
 
@@ -726,7 +726,7 @@ void SettingsControllerTest::frequencyColorPalettePreservesCustomColors()
              2);
     QCOMPARE(persisted.value(QStringLiteral(
                  "appearance/waveformFrequencyUnplayedOpacity")).toDouble(),
-             0.28);
+             0.20);
     persisted.clear();
 }
 

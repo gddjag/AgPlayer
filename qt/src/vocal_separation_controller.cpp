@@ -9,6 +9,7 @@
 #include "waveform_provider.hpp"
 
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDir>
@@ -1525,6 +1526,17 @@ void VocalSeparationController::refreshModels()
                         ? QStringLiteral("mdx:") : QStringLiteral("demucs:"))
                        + model.stems.join(QLatin1Char(','))},
             {QStringLiteral("paths"), modelPaths},
+            {QStringLiteral("modelPath"), modelPaths.isEmpty()
+                 ? QString() : modelPaths.constFirst()},
+            {QStringLiteral("stemCount"), model.stems.size()},
+            {QStringLiteral("backend"), QStringLiteral("onnxruntime-native")},
+            {QStringLiteral("available"),
+             state == ModelState::Installed && runtimeReady()},
+            {QStringLiteral("failureReason"),
+             state == ModelState::Installed && !runtimeReady()
+                 ? tr("ONNX Runtime 尚未安装或未通过校验")
+                 : state == ModelState::ModelFailed
+                     ? tr("模型校验失败") : QString()},
             {QStringLiteral("hashes"), modelHashes},
             {QStringLiteral("rejectionReason"), QString()},
         });
@@ -1724,6 +1736,11 @@ void VocalSeparationController::discoverCustomModels(
             {QStringLiteral("compatibility"), QStringLiteral("rejected")},
             {QStringLiteral("profile"), QString()},
             {QStringLiteral("paths"), QStringList{}},
+            {QStringLiteral("modelPath"), QString()},
+            {QStringLiteral("stemCount"), 0},
+            {QStringLiteral("backend"), QStringLiteral("unknown")},
+            {QStringLiteral("available"), false},
+            {QStringLiteral("failureReason"), reason},
             {QStringLiteral("hashes"), QStringList{}},
             {QStringLiteral("rejectionReason"), reason},
         });
@@ -1847,6 +1864,80 @@ void VocalSeparationController::discoverCustomModels(
             id, tr("用户提供的兼容 ONNX 模型"), tr("自定义模型"),
             tr("受信指纹"), tr("本地文件"), QString()});
         knownIds.insert(id);
+    }
+
+    // Raw model files are intentionally discoverable at any nesting depth so
+    // users can diagnose what AgPlayer found without a WebEngine or bundled
+    // Python runtime.  They remain non-executable until a trusted worker
+    // profile (sidecar manifest) and the corresponding backend are verified.
+    QSet<QString> catalogFileNames;
+    for (const VocalModelCard& model : std::as_const(options_.catalog)) {
+        for (const VocalDownloadFile& file : model.files)
+            catalogFileNames.insert(file.fileName.toLower());
+    }
+    QSet<QString> rawPaths;
+    for (auto it = indexedModelFiles_.cbegin();
+         it != indexedModelFiles_.cend(); ++it) {
+        if (catalogFileNames.contains(it.key()))
+            continue;
+        for (const QString& path : it.value()) {
+            const QFileInfo raw(path);
+            const QString suffix = raw.suffix().toLower();
+            if (!QStringList{QStringLiteral("onnx"), QStringLiteral("pth"),
+                             QStringLiteral("th")}.contains(suffix)
+                || rawPaths.contains(raw.absoluteFilePath())
+                || !safeExistingFileWithin(raw.absoluteFilePath(),
+                                           modelStorageDirectory_)) {
+                continue;
+            }
+            rawPaths.insert(raw.absoluteFilePath());
+            const QString lowered = raw.fileName().toLower();
+            const bool demucs = suffix == QStringLiteral("th")
+                || lowered.contains(QStringLiteral("demucs"));
+            const bool vr = suffix == QStringLiteral("pth");
+            const QString family = demucs ? QStringLiteral("demucs")
+                : vr ? QStringLiteral("vr") : QStringLiteral("mdx");
+            const QString backend = suffix == QStringLiteral("onnx")
+                ? QStringLiteral("onnxruntime-native")
+                : QStringLiteral("external-python");
+            const QString reason = suffix == QStringLiteral("onnx")
+                ? tr("已识别 ONNX 文件；需要兼容的 sidecar 配置并通过张量与运行时探测后才能执行")
+                : tr("已识别模型文件；需要安装可选外置 Python 运行时后才能执行");
+            const QString id = QStringLiteral("local-%1").arg(
+                QString::fromLatin1(QCryptographicHash::hash(
+                    raw.absoluteFilePath().toUtf8(),
+                    QCryptographicHash::Sha256).toHex().left(12)));
+            rejectedCustomModels_.push_back(QVariantMap{
+                {QStringLiteral("id"), id},
+                {QStringLiteral("family"), family},
+                {QStringLiteral("stems"), QVariantList{}},
+                {QStringLiteral("state"), int(ModelState::ModelFailed)},
+                {QStringLiteral("bytes"), raw.size()},
+                {QStringLiteral("provenance"), tr("用户模型目录递归扫描")},
+                {QStringLiteral("resourceGuidance"), reason},
+                {QStringLiteral("name"), raw.completeBaseName()},
+                {QStringLiteral("useCase"), reason},
+                {QStringLiteral("description"), reason},
+                {QStringLiteral("tierLabel"), tr("自定义模型")},
+                {QStringLiteral("badgeLabel"), tr("待配置")},
+                {QStringLiteral("provider"), vr ? QStringLiteral("UVR")
+                    : demucs ? QStringLiteral("Demucs")
+                             : QStringLiteral("本地 ONNX")},
+                {QStringLiteral("repositoryUrl"), QString()},
+                {QStringLiteral("domesticMirrorAvailable"), false},
+                {QStringLiteral("origin"), QStringLiteral("custom")},
+                {QStringLiteral("compatibility"), QStringLiteral("diagnostic")},
+                {QStringLiteral("profile"), QString()},
+                {QStringLiteral("paths"), QStringList{raw.absoluteFilePath()}},
+                {QStringLiteral("modelPath"), raw.absoluteFilePath()},
+                {QStringLiteral("stemCount"), 0},
+                {QStringLiteral("backend"), backend},
+                {QStringLiteral("available"), false},
+                {QStringLiteral("failureReason"), reason},
+                {QStringLiteral("hashes"), QStringList{}},
+                {QStringLiteral("rejectionReason"), reason},
+            });
+        }
     }
 }
 

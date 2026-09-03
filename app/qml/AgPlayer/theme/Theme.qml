@@ -15,11 +15,11 @@ QtObject {
                                          : (mode === 1 ? 1 : 0)
     readonly property bool isLight: effectiveMode === 1
 
-    // Waveform progress contrast is a presentation token, not a theme color.
-    // Keeping it here gives every non-immersive shell one lightweight policy
-    // without instantiating an otherwise hidden waveform renderer.
+    // Every shell consumes the user's unplayed-region brightness directly.
+    // Themes must never add an opacity floor: doing so hides progress in dark
+    // modes and makes the same setting behave differently between windows.
     readonly property real nonImmersiveSpectralUnplayedOpacity:
-        Math.max(isLight ? 0.55 : 0.18, Math.min(1.0,
+        Math.max(0.0, Math.min(1.0,
             Number(Runtime.SettingsController
                    .frequencyColorWaveform.unplayedOpacity)))
 

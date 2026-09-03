@@ -782,7 +782,7 @@ qreal WaveformItem::frequencyUnplayedOpacity() const noexcept
 void WaveformItem::setFrequencyUnplayedOpacity(qreal opacity)
 {
     const qreal clamped = std::clamp(
-        std::isfinite(opacity) ? opacity : qreal{0.28}, qreal{0.18}, qreal{1.0});
+        std::isfinite(opacity) ? opacity : qreal{0.20}, qreal{0.0}, qreal{1.0});
     if (qFuzzyCompare(frequencyUnplayedOpacity_ + 1.0, clamped + 1.0)) {
         return;
     }
@@ -1037,10 +1037,10 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
             : static_cast<std::size_t>(std::max(1.0, std::ceil(lineWidth_)));
         // Stroke copies are centred around each logical sample. Keep the
         // existing one-pixel leading inset so the first peak cannot rasterize
-        // as a solid border, but reserve only the outer-copy offset at the
-        // trailing side so the final copy reaches the item edge. The previous
-        // extra half-pixel right inset left a visible blank rail at the tail of
-        // compact classic and mini waveforms.
+        // as a solid border. Reserve the outer-copy offset plus half a physical
+        // pixel at the trailing side: a line centred exactly on width() is
+        // clipped in half by the scene graph and made the final non-zero peak
+        // look truncated, especially in compact classic and mini waveforms.
         const double strokeOuterOffset =
             static_cast<double>(strokeCopies - 1U) * 0.5;
         const double waveformLeftInset = std::min(
@@ -1048,7 +1048,8 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
             static_cast<double>(strokeCopies) * 0.5
                 + 0.5 / std::max(1.0, devicePixelRatio));
         const double waveformRightInset = std::min(
-            width() - waveformLeftInset, strokeOuterOffset);
+            width() - waveformLeftInset,
+            strokeOuterOffset + 0.5 / std::max(1.0, devicePixelRatio));
         const double waveformSpan = std::max(
             0.0, width() - waveformLeftInset - waveformRightInset);
         const std::size_t activeLayers = visualMode_ == 2

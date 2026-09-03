@@ -180,6 +180,8 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(ready.size(), 1, 10'000);
         QTRY_COMPARE_WITH_TIMEOUT(drags.size(), 1, 10'000);
         QVERIFY(drags.front().isLocalFile());
+        QVERIFY(QFileInfo(drags.front().toLocalFile()).completeBaseName().startsWith(
+            QStringLiteral("歌_曲_名_片段_00m00.100-00m00.350_")));
         QCOMPARE(QDir(directory.path()).entryList(
                      {QStringLiteral("*.wav")}, QDir::Files).size(), 1);
 

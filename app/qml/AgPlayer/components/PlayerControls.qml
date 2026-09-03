@@ -188,15 +188,15 @@ Rectangle {
         ToolButton {
             id: themeModeButton
             objectName: "themeModeButton"
-            width: root.denseTransport ? 28 : implicitWidth
-            height: root.denseTransport ? 28 : implicitHeight
+            width: root.denseTransport ? 32 : Math.max(32, implicitWidth)
+            height: root.denseTransport ? 32 : Math.max(32, implicitHeight)
             visible: PlayerPresentation.hasAction(root.actionProfile,
                                                   "themeModeButton")
             flat: true
             icon.source: Theme.icon("theme-skin")
             icon.color: Theme.iconPrimary
-            icon.width: 20
-            icon.height: 20
+            icon.width: 22
+            icon.height: 22
             Accessible.name: qsTr("切换主题")
             onClicked: root.openThemePopup()
             ToolTip.text: Accessible.name
@@ -218,16 +218,16 @@ Rectangle {
 
         ToolButton {
             objectName: "miniPlayerButton"
-            width: root.denseTransport ? 28 : implicitWidth
-            height: root.denseTransport ? 28 : implicitHeight
+            width: root.denseTransport ? 32 : Math.max(32, implicitWidth)
+            height: root.denseTransport ? 32 : Math.max(32, implicitHeight)
             visible: PlayerPresentation.hasAction(root.actionProfile,
                                                   "miniPlayerButton")
                      && !root.emptyMode
             flat: true
             icon.source: Theme.icon("picture-in-picture-2-line")
             icon.color: Theme.iconPrimary
-            icon.width: 20
-            icon.height: 20
+            icon.width: 22
+            icon.height: 22
             Accessible.name: qsTr("切换到迷你播放器")
             onClicked: WindowController.showMini()
             ToolTip.text: Accessible.name
@@ -240,7 +240,7 @@ Rectangle {
         id: playerShellMenu
         objectName: "playerShellMenu"
         parent: root.Window.window ? root.Window.window.contentItem : root
-        width: 200
+        width: Math.max(168, implicitContentWidth + leftPadding + rightPadding)
 
         MenuItem {
             objectName: "classicShellMenuItem"

@@ -117,7 +117,7 @@ private slots:
     void queuedDownloadRouteAndCancellationUseProductionControllerState();
     void installedMappingUsesCheapDiscoveryThenExplicitAsyncHashing();
     void customModelDirectoryPersistsAndRecognizesTrustedNestedFiles();
-    void customModelDirectoryIgnoresUnknownFiles();
+    void customModelDirectoryListsNestedRawModelsWithBackendDiagnostics();
     void customSidecarManifestUsesTrustedFingerprintAndReportsRejection();
     void cancellingVerificationImmediatelyRestoresCheapModelStates();
     void deletingDuringRefreshVerificationCannotResurrectTheModel();
@@ -653,7 +653,8 @@ customModelDirectoryPersistsAndRecognizesTrustedNestedFiles()
         int(VocalSeparationController::ModelState::Installed), 5000);
 }
 
-void VocalSeparationControllerTest::customModelDirectoryIgnoresUnknownFiles()
+void VocalSeparationControllerTest::
+customModelDirectoryListsNestedRawModelsWithBackendDiagnostics()
 {
     QTemporaryDir temporary;
     QVERIFY(temporary.isValid());
@@ -662,9 +663,12 @@ void VocalSeparationControllerTest::customModelDirectoryIgnoresUnknownFiles()
         temporary, QStringLiteral("stale"), modelBytes);
     const QString customRoot = temporary.filePath(QStringLiteral("模型"));
     QVERIFY(QDir().mkpath(customRoot));
-    QVERIFY(writeBytes(QDir(customRoot).filePath(
-                               QStringLiteral("unknown.onnx")),
-                           modelBytes));
+    const QString nested = QDir(customRoot).filePath(
+        QStringLiteral("UVR5/MDX_Net_Models"));
+    QVERIFY(QDir().mkpath(nested));
+    const QString rawModel = QDir(nested).filePath(
+        QStringLiteral("Kim_Vocal_2.onnx"));
+    QVERIFY(writeBytes(rawModel, modelBytes));
     AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
     WaveformProvider waveforms;
     VocalSeparationController controller(
@@ -673,6 +677,22 @@ void VocalSeparationControllerTest::customModelDirectoryIgnoresUnknownFiles()
     QTest::qWait(900);
     QCOMPARE(modelStateFor(controller.models(), QStringLiteral("two-stem")),
              int(VocalSeparationController::ModelState::NotInstalled));
+    QVariantMap discovered;
+    for (const QVariant& value : controller.models()) {
+        const QVariantMap model = value.toMap();
+        if (model.value(QStringLiteral("modelPath")).toString()
+            == QFileInfo(rawModel).absoluteFilePath()) {
+            discovered = model;
+            break;
+        }
+    }
+    QVERIFY(!discovered.isEmpty());
+    QCOMPARE(discovered.value(QStringLiteral("origin")).toString(),
+             QStringLiteral("custom"));
+    QCOMPARE(discovered.value(QStringLiteral("backend")).toString(),
+             QStringLiteral("onnxruntime-native"));
+    QCOMPARE(discovered.value(QStringLiteral("available")).toBool(), false);
+    QVERIFY(!discovered.value(QStringLiteral("failureReason")).toString().isEmpty());
 }
 
 void VocalSeparationControllerTest::

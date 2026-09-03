@@ -54,6 +54,15 @@ enum class PeakReadState {
     Cancelled,
 };
 
+QString handoffTimeStamp(const qint64 milliseconds)
+{
+    const qint64 bounded = std::max<qint64>(0, milliseconds);
+    return QStringLiteral("%1m%2.%3")
+        .arg(bounded / 60'000, 2, 10, QLatin1Char('0'))
+        .arg((bounded / 1000) % 60, 2, 10, QLatin1Char('0'))
+        .arg(bounded % 1000, 3, 10, QLatin1Char('0'));
+}
+
 qint64 viewportTargetPoints(const qint64 visibleFrames,
                            const qreal viewportWidth,
                            const qreal devicePixelRatio)
@@ -1811,6 +1820,15 @@ bool AudioEditorController::beginSelectionHandoff(
     request.snapshot = document_.timelineSnapshot();
     request.sourceIdentity = handoffSourceIdentity(request.snapshot);
     if (request.sourceIdentity.isEmpty()) return false;
+    const qint64 selectionStartMs = sample_rate_ > 0
+        ? selection->start * 1000 / sample_rate_ : 0;
+    const qint64 selectionEndMs = sample_rate_ > 0
+        ? selection->end * 1000 / sample_rate_ : 0;
+    const QString sourceStem = source_path_.isEmpty()
+        ? tr("未命名音频") : QFileInfo(source_path_).completeBaseName();
+    request.outputFileStem = QStringLiteral("%1_片段_%2-%3")
+        .arg(sourceStem, handoffTimeStamp(selectionStartMs),
+             handoffTimeStamp(selectionEndMs));
     ensureSelectionHandoffServices();
     applyTrackMix(request.snapshot);
     request.selection = *selection;

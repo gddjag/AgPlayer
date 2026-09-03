@@ -210,7 +210,8 @@ void WaveformItemTest::waveformStrokesStayInsideContainerEdges()
     QVERIFY(data[0].x >= 1.0F);
     const int outerLastVertex =
         (strokeCopies - 1) * peakCount * 2 + (peakCount - 1) * 2;
-    QCOMPARE(data[outerLastVertex].x, static_cast<float>(item.width()));
+    QCOMPARE(data[outerLastVertex].x,
+             static_cast<float>(item.width() - 0.5));
 
     delete node;
 }
@@ -321,11 +322,14 @@ void WaveformItemTest::defaultFrequencyColorsUseFixedPalette()
     QCOMPARE(settings.midColor(), expectedMid);
     QCOMPARE(settings.highColor(), expectedHigh);
 
-    const WaveformItem waveform;
+    WaveformItem waveform;
     QCOMPARE(waveform.lowColor(), expectedLow);
     QCOMPARE(waveform.midColor(), expectedMid);
     QCOMPARE(waveform.highColor(), expectedHigh);
-    QCOMPARE(waveform.frequencyUnplayedOpacity(), 0.28);
+    QCOMPARE(waveform.frequencyUnplayedOpacity(), 0.20);
+
+    waveform.setFrequencyUnplayedOpacity(-1.0);
+    QCOMPARE(waveform.frequencyUnplayedOpacity(), 0.0);
 
     const TrackWaveformThumbnailItem thumbnail;
     QCOMPARE(thumbnail.lowColor(), expectedLow);
@@ -684,7 +688,8 @@ void WaveformItemTest::silentTailRemainsVisibleAtTheTimelineEnd()
     const auto* points = vertices(node);
     const auto* geometryNode = static_cast<const QSGGeometryNode*>(node);
     const int lastVertex = geometryNode->geometry()->vertexCount() - 2;
-    QCOMPARE(points[lastVertex].x, static_cast<float>(item.width()));
+    QCOMPARE(points[lastVertex].x,
+             static_cast<float>(item.width() - 0.5));
     QVERIFY2(std::abs(points[lastVertex + 1].y - points[lastVertex].y) >= 1.0F,
              "silent timeline buckets must render a visible baseline");
     compareColor(points[lastVertex], 0xE4, 0x00, 0x7F, 0xFF);
@@ -736,7 +741,7 @@ void WaveformItemTest::reusesNodeAndUpdatesGeometryAfterResize()
     QVERIFY(node != nullptr);
     const auto* initialGeometry = static_cast<const QSGGeometryNode*>(node)->geometry();
     QCOMPARE(vertices(node)[initialGeometry->vertexCount() - 2].x,
-             static_cast<float>(item.width()));
+             static_cast<float>(item.width() - 0.5));
 
     item.setWidth(240);
     QSGNode* resizedNode = item.updatePaintNode(node, nullptr);
@@ -744,7 +749,7 @@ void WaveformItemTest::reusesNodeAndUpdatesGeometryAfterResize()
     const auto* resizedGeometry =
         static_cast<const QSGGeometryNode*>(resizedNode)->geometry();
     QCOMPARE(vertices(resizedNode)[resizedGeometry->vertexCount() - 2].x,
-             static_cast<float>(item.width()));
+             static_cast<float>(item.width() - 0.5));
 
     item.setPosition(10);
     item.setDuration(20);

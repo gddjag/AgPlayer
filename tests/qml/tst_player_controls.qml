@@ -59,7 +59,7 @@ TestCase {
 
         verify(typeof actions.buttonSize === "function",
                "PlayerControls must instantiate the shared ExperienceActions component")
-        compare(actions.buttonSize(), 28)
+        compare(actions.buttonSize(), 32)
         tryVerify(function() {
             return xInControls(lyrics, controls) + lyrics.width
                     <= xInControls(immersive, controls)
@@ -152,20 +152,20 @@ TestCase {
         }
         compare(findChild(controls, "windowLayoutButton"), null,
                 "theme/shell selection must have one visible entry")
-        compare(theme.icon.width, 20)
-        compare(theme.icon.height, 20)
+        compare(theme.icon.width, 22)
+        compare(theme.icon.height, 22)
         verify(theme.icon.source.toString().endsWith("/theme-skin.svg"))
-        compare(lyrics.icon.width, 26)
-        compare(lyrics.icon.height, 26)
-        compare(immersive.icon.width, 26)
-        compare(immersive.icon.height, 26)
+        compare(lyrics.icon.width, 22)
+        compare(lyrics.icon.height, 22)
+        compare(immersive.icon.width, 22)
+        compare(immersive.icon.height, 22)
         var transport = findChild(controls, "centerPlaybackControls")
         verify(transport)
         compare(transport.waveformPlacement, "beforePrevious")
         compare(transport.showWaveformMode, true)
     }
 
-    function test_non_immersive_spectral_progress_policy_preserves_light_readability() {
+    function test_non_immersive_spectral_progress_uses_one_setting_in_all_themes() {
         SettingsController.playerShellMode = 0
         tryVerify(function() {
             return findControl("classicPlayerShell") !== null
@@ -184,12 +184,12 @@ TestCase {
             compare(Theme.nonImmersiveSpectralUnplayedOpacity, expected)
             compare(waveform.frequencyUnplayedOpacity, expected)
         }
-        SettingsController.frequencyColorWaveform.unplayedOpacity = 0.28
+        SettingsController.frequencyColorWaveform.unplayedOpacity = 0.20
         SettingsController.themeMode = 0
-        compare(Theme.nonImmersiveSpectralUnplayedOpacity, 0.28)
+        compare(Theme.nonImmersiveSpectralUnplayedOpacity, 0.20)
         SettingsController.themeMode = 1
-        compare(Theme.nonImmersiveSpectralUnplayedOpacity, 0.55)
-        compare(waveform.frequencyUnplayedOpacity, 0.55)
+        compare(Theme.nonImmersiveSpectralUnplayedOpacity, 0.20)
+        compare(waveform.frequencyUnplayedOpacity, 0.20)
         SettingsController.frequencyColorWaveform.unplayedOpacity = originalOpacity
         var positions = [0, 0.001, 0.5, 0.999, 1]
         for (var index = 0; index < positions.length; ++index) {

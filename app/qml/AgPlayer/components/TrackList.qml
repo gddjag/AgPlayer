@@ -58,12 +58,13 @@ ListView {
                                            : (compactColumns ? 82 : 110))
     readonly property int bpmWidth: compactColumns ? 48 : 64
     readonly property int durationWidth: compactColumns ? 58 : 72
+    readonly property int trailingColumnGap: singleWindowLayout ? 12 : 0
     readonly property int titleMinimumWidth:
         singleWindowLayout ? 180 : (compactColumns ? 150 : 180)
     readonly property int singleWindowTitleWidth: Math.max(
         titleMinimumWidth,
         Math.min(320, width - 32 - sequenceWidth - durationWidth
-                  - ratingWidth - favoriteWidth - 80))
+                  - ratingWidth - favoriteWidth - trailingColumnGap * 3 - 80))
     readonly property int singleWindowMediaHeight: 34
     readonly property int singleWindowSubtitleFontSize:
         Math.max(10, Theme.fontSizeCaption - 1)
@@ -500,15 +501,15 @@ ListView {
             HeaderText { objectName: "trackHeaderIndex"; text: "#"; Layout.column: 0; Layout.minimumWidth: root.sequenceWidth; Layout.preferredWidth: root.sequenceWidth; Layout.maximumWidth: root.sequenceWidth }
             HeaderText { objectName: "trackHeaderTitle"; text: qsTr("歌曲"); Layout.column: 1; Layout.fillWidth: !root.singleWindowLayout; Layout.minimumWidth: root.titleMinimumWidth; Layout.preferredWidth: root.singleWindowLayout ? root.singleWindowTitleWidth : -1; Layout.maximumWidth: root.singleWindowLayout ? root.singleWindowTitleWidth : Number.POSITIVE_INFINITY }
             Item { objectName: "trackHeaderWaveform"; visible: root.singleWindowLayout; Layout.column: 2; Layout.fillWidth: visible }
-            HeaderText { objectName: "trackHeaderFavorite"; text: qsTr("收藏"); Layout.column: root.singleWindowLayout ? 5 : (root.relaxedClassicColumns ? 4 : 2); horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: root.favoriteWidth; Layout.preferredWidth: root.favoriteWidth; Layout.maximumWidth: root.favoriteWidth }
+            HeaderText { objectName: "trackHeaderFavorite"; text: qsTr("收藏"); Layout.column: root.singleWindowLayout ? 5 : (root.relaxedClassicColumns ? 4 : 2); Layout.leftMargin: root.singleWindowLayout ? root.trailingColumnGap : 0; horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: root.favoriteWidth; Layout.preferredWidth: root.favoriteWidth; Layout.maximumWidth: root.favoriteWidth }
             Item { objectName: "trackHeaderFavoriteAlbumGap"; visible: !root.relaxedClassicColumns && !root.singleWindowLayout; Layout.column: 3; Layout.minimumWidth: visible ? root.favoriteAlbumGap : 0; Layout.preferredWidth: visible ? root.favoriteAlbumGap : 0; Layout.maximumWidth: visible ? root.favoriteAlbumGap : 0 }
             HeaderText { objectName: "trackHeaderArtist"; text: qsTr("艺术家"); visible: root.showArtistColumn; Layout.column: 4; Layout.minimumWidth: visible ? root.artistWidth : 0; Layout.preferredWidth: visible ? root.artistWidth : 0; Layout.maximumWidth: visible ? root.artistWidth : 0 }
             Item { objectName: "trackHeaderArtistAlbumGap"; visible: root.showArtistColumn; Layout.column: 5; Layout.minimumWidth: visible ? root.artistAlbumGap : 0; Layout.preferredWidth: visible ? root.artistAlbumGap : 0; Layout.maximumWidth: visible ? root.artistAlbumGap : 0 }
             HeaderText { objectName: "trackHeaderAlbum"; text: qsTr("专辑"); visible: root.showAlbumColumn; Layout.column: 6; Layout.minimumWidth: visible ? root.albumWidth : 0; Layout.preferredWidth: visible ? root.albumWidth : 0; Layout.maximumWidth: visible ? root.albumWidth : 0 }
             Item { objectName: "trackHeaderAlbumRatingGap"; visible: root.showAlbumColumn; Layout.column: 7; Layout.minimumWidth: visible ? root.albumRatingGap : 0; Layout.preferredWidth: visible ? root.albumRatingGap : 0; Layout.maximumWidth: visible ? root.albumRatingGap : 0 }
-            HeaderText { objectName: "trackHeaderRating"; text: qsTr("评分"); Layout.column: root.singleWindowLayout ? 4 : (root.relaxedClassicColumns ? 3 : 8); Layout.leftMargin: root.relaxedClassicColumns ? 12 : 0; horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: root.ratingWidth; Layout.preferredWidth: root.ratingWidth; Layout.maximumWidth: root.ratingWidth }
+            HeaderText { objectName: "trackHeaderRating"; text: qsTr("评分"); Layout.column: root.singleWindowLayout ? 4 : (root.relaxedClassicColumns ? 3 : 8); Layout.leftMargin: root.singleWindowLayout ? root.trailingColumnGap : (root.relaxedClassicColumns ? 12 : 0); horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: root.ratingWidth; Layout.preferredWidth: root.ratingWidth; Layout.maximumWidth: root.ratingWidth }
             HeaderText { objectName: "trackHeaderBpm"; text: "BPM"; visible: root.showBpmColumn; Layout.column: root.relaxedClassicColumns ? 5 : 9; horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: visible ? root.bpmWidth : 0; Layout.preferredWidth: visible ? root.bpmWidth : 0; Layout.maximumWidth: visible ? root.bpmWidth : 0 }
-            HeaderText { objectName: "trackHeaderDuration"; text: qsTr("时长"); visible: root.showDurationColumn; Layout.column: root.singleWindowLayout ? 3 : (root.relaxedClassicColumns ? 2 : 10); horizontalAlignment: Text.AlignRight; Layout.minimumWidth: visible ? root.durationWidth : 0; Layout.preferredWidth: visible ? root.durationWidth : 0; Layout.maximumWidth: visible ? root.durationWidth : 0 }
+            HeaderText { objectName: "trackHeaderDuration"; text: qsTr("时长"); visible: root.showDurationColumn; Layout.column: root.singleWindowLayout ? 3 : (root.relaxedClassicColumns ? 2 : 10); Layout.leftMargin: root.singleWindowLayout ? root.trailingColumnGap : 0; horizontalAlignment: Text.AlignRight; Layout.minimumWidth: visible ? root.durationWidth : 0; Layout.preferredWidth: visible ? root.durationWidth : 0; Layout.maximumWidth: visible ? root.durationWidth : 0 }
         }
     }
 
@@ -944,6 +945,7 @@ ListView {
                 Layout.minimumWidth: root.favoriteWidth
                 Layout.preferredWidth: root.favoriteWidth
                 Layout.maximumWidth: root.favoriteWidth
+                Layout.leftMargin: root.singleWindowLayout ? root.trailingColumnGap : 0
                 icon.source: rowItem.favorite ? Theme.icon("heart-fill") : Theme.icon("heart-line")
                 icon.color: rowItem.favorite ? Theme.favoriteRed : Theme.secondaryText
                 icon.width: root.favoriteIconSize
@@ -1013,7 +1015,7 @@ ListView {
                 objectName: "trackRatingCell"
                 Layout.column: root.singleWindowLayout
                                ? 4 : (root.relaxedClassicColumns ? 3 : 8)
-                Layout.leftMargin: root.relaxedClassicColumns ? 12 : 0
+                Layout.leftMargin: root.singleWindowLayout ? root.trailingColumnGap : (root.relaxedClassicColumns ? 12 : 0)
                 spacing: 0
                 Layout.minimumWidth: root.ratingWidth
                 Layout.preferredWidth: root.ratingWidth
@@ -1034,7 +1036,7 @@ ListView {
                 }
             }
             BodyText { objectName: "trackBpmCell"; text: root.formatBpm(rowItem.bpm); visible: root.showBpmColumn; Layout.column: root.relaxedClassicColumns ? 5 : 9; horizontalAlignment: Text.AlignHCenter; trackAvailable: rowItem.available; highlighted: rowItem.systemHighlighted; highlightText: rowItem.systemHighlightText; Layout.minimumWidth: visible ? root.bpmWidth : 0; Layout.preferredWidth: visible ? root.bpmWidth : 0; Layout.maximumWidth: visible ? root.bpmWidth : 0 }
-            BodyText { objectName: "trackDurationCell"; text: root.formatTime(rowItem.durationMs); visible: root.showDurationColumn; Layout.column: root.singleWindowLayout ? 3 : (root.relaxedClassicColumns ? 2 : 10); horizontalAlignment: Text.AlignRight; trackAvailable: rowItem.available; highlighted: rowItem.systemHighlighted; highlightText: rowItem.systemHighlightText; Layout.minimumWidth: visible ? root.durationWidth : 0; Layout.preferredWidth: visible ? root.durationWidth : 0; Layout.maximumWidth: visible ? root.durationWidth : 0 }
+            BodyText { objectName: "trackDurationCell"; text: root.formatTime(rowItem.durationMs); visible: root.showDurationColumn; Layout.column: root.singleWindowLayout ? 3 : (root.relaxedClassicColumns ? 2 : 10); Layout.leftMargin: root.singleWindowLayout ? root.trailingColumnGap : 0; horizontalAlignment: Text.AlignRight; trackAvailable: rowItem.available; highlighted: rowItem.systemHighlighted; highlightText: rowItem.systemHighlightText; Layout.minimumWidth: visible ? root.durationWidth : 0; Layout.preferredWidth: visible ? root.durationWidth : 0; Layout.maximumWidth: visible ? root.durationWidth : 0 }
         }
 
         HoverHandler { id: rowHover }
@@ -1071,7 +1073,7 @@ ListView {
     Menu {
         id: trackMenu
         objectName: "trackContextMenu"
-        width: 196
+        width: 168
         palette.window: Theme.elevated
         palette.text: Theme.primaryText
         palette.button: Theme.elevated
@@ -1093,7 +1095,7 @@ ListView {
         SystemMenuItem { objectName: "trackMenuPlayNext"; text: qsTr("下一首播放"); enabled: trackMenu.targetTrackIds.length === 1; onTriggered: PlaybackController.queueNext(trackMenu.targetTrackId) }
         Menu {
             id: moveMenu
-            width: 196
+            width: 168
             palette.window: Theme.elevated
             palette.text: Theme.primaryText
             palette.button: Theme.elevated
@@ -1131,7 +1133,7 @@ ListView {
         Menu {
             id: audioToolsMenu
             objectName: "audioToolsTrackMenu"
-            width: 196
+            width: 168
             title: qsTr("使用音频工具打开")
             palette.window: Theme.elevated
             palette.text: Theme.primaryText

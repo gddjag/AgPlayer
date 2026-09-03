@@ -378,8 +378,8 @@ TestCase {
                 findChild(shell, "integratedCenterControls"))
         verify(immersive.icon.source.toString().endsWith(
                    "/immersive-visual-mode.svg"))
-        compare(immersive.icon.width, 26)
-        compare(immersive.icon.height, 26)
+        compare(immersive.icon.width, 22)
+        compare(immersive.icon.height, 22)
         var theme = findChild(shell, "themeModeButton")
         verify(theme)
         verify(theme.icon.source.toString().endsWith("/theme-skin.svg"))

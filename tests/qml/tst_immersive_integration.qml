@@ -395,12 +395,12 @@ TestCase {
         compare(findChild(mainActions, "themeActionButton"), null)
         compare(findChild(miniControls, "lyricsActionButton"), null)
         compare(findChild(miniControls, "immersiveActionButton"), null)
-        compare(findChild(mainActions, "lyricsActionButton").icon.width, 26)
-        compare(findChild(mainActions, "lyricsActionButton").icon.height, 26)
+        compare(findChild(mainActions, "lyricsActionButton").icon.width, 22)
+        compare(findChild(mainActions, "lyricsActionButton").icon.height, 22)
 
         mainActions.compact = true
-        compare(findChild(mainActions, "lyricsActionButton").icon.width, 26)
-        compare(findChild(mainActions, "lyricsActionButton").icon.height, 26)
+        compare(findChild(mainActions, "lyricsActionButton").icon.width, 22)
+        compare(findChild(mainActions, "lyricsActionButton").icon.height, 22)
         mainActions.compact = false
 
         PlayerExperienceController.lyricsVisible = false
@@ -440,6 +440,9 @@ TestCase {
         verify(plainText.text.indexOf("long complete plain lyric line 23") >= 0)
         compare(plainText.wrapMode, Text.Wrap)
         verify(flickable.contentHeight > flickable.height)
+        compare(plainText.y, flickable.height / 2)
+        compare(flickable.contentHeight,
+                plainText.height + flickable.height)
         var originalContentY = flickable.contentY
         flickable.flick(0, -1200)
         tryVerify(function() { return flickable.contentY > originalContentY }, 1500)

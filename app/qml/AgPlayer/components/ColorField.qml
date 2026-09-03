@@ -78,9 +78,9 @@ Control {
         objectName: "colorFieldPicker"
         parent: Overlay.overlay
         anchors.centerIn: parent
-        width: Math.min(268, parent ? parent.width * 0.9 : 268)
-        height: Math.min(292, parent ? parent.height * 0.9 : 292)
-        padding: 8
+        width: Math.min(320, parent ? parent.width - 24 : 320)
+        height: Math.min(312, parent ? parent.height - 24 : 312)
+        padding: 10
         modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside

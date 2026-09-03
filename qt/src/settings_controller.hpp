@@ -520,7 +520,7 @@ private:
     bool waveformCanvasLocked_ = true;
     bool listWaveformThumbnailEnabled_ = true;
     QString listWaveformThumbnailMode_ = QStringLiteral("Spectral");
-    double trackWaveformBrightness_ = 0.66;
+    double trackWaveformBrightness_ = 0.50;
     int spectrumColorMode_ = 1;
     QString spectrumSolidColor_ = QStringLiteral("#7b2ff7");
     QString spectrumRgbStartColor_ = QStringLiteral("#00d4ff");

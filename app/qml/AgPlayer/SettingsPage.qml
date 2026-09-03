@@ -1769,7 +1769,7 @@ Item {
 
                 SettingRow {
                     visible: SettingsController.waveformMode === 3
-                    label: qsTr("播放进度明暗差")
+                    label: qsTr("未播放区明亮度")
 
                     RowLayout {
                         anchors.fill: parent
@@ -1780,13 +1780,13 @@ Item {
                             objectName: "frequencyUnplayedOpacitySlider"
                             Layout.fillWidth: true
                             from: 0
-                            to: 82
+                            to: 100
                             stepSize: 1
-                            value: Math.round((1.0
-                                - root.frequencyWaveformSettings.unplayedOpacity) * 100)
+                            value: Math.round(
+                                root.frequencyWaveformSettings.unplayedOpacity * 100)
                             onMoved: root.frequencyWaveformSettings.unplayedOpacity
-                                = 1.0 - value / 100.0
-                            Accessible.name: qsTr("播放进度明暗差")
+                                = value / 100.0
+                            Accessible.name: qsTr("未播放区明亮度")
                         }
 
                         Text {

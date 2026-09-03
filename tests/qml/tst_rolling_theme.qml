@@ -582,6 +582,8 @@ TestCase {
         var capsule = findChild(rolling, "rollingCurrentTimeCapsule")
         var playhead = findChild(rolling, "rollingCenterPlayhead")
         verify(canvas && capsule && playhead)
+        compare(capsule.background, null,
+                "the fixed-needle time readout must use a transparent background")
 
         rolling.visibleBeats = 8
         compare(rolling.visibleBeats, 8)
