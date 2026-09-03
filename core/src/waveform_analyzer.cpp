@@ -4,6 +4,7 @@
 #include "waveform_analyzer_filters.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <vector>
@@ -29,9 +30,13 @@ WaveformBucketizer::WaveformBucketizer(const std::size_t total_frames,
       sample_rate_(sample_rate),
       aggregation_(aggregation),
       buckets_(std::min(total_frames, target_points), 0.0F),
-      bass_buckets_(buckets_.size(), 0.0F),
-      mid_buckets_(buckets_.size(), 0.0F),
-      high_buckets_(buckets_.size(), 0.0F),
+      bass_sum_squares_(buckets_.size(), 0.0F),
+      mid_sum_squares_(buckets_.size(), 0.0F),
+      high_sum_squares_(buckets_.size(), 0.0F),
+      bass_peaks_(buckets_.size(), 0.0F),
+      mid_peaks_(buckets_.size(), 0.0F),
+      high_peaks_(buckets_.size(), 0.0F),
+      frequency_scratch_(buckets_.size(), 0.0F),
       bucket_sample_counts_(buckets_.size(), 0U),
       failed_(total_frames == 0U || target_points == 0U || channels == 0U
               || sample_rate <= 0.0F
@@ -107,6 +112,14 @@ ag_result WaveformBucketizer::add(const std::vector<float>& samples,
                 break;
             }
         };
+        const auto accumulate_frequency = [this](
+                                              std::vector<float>& sum_squares,
+                                              std::vector<float>& peaks,
+                                              const float value) noexcept {
+            sum_squares[current_bucket_] += value * value;
+            peaks[current_bucket_] = std::max(
+                peaks[current_bucket_], std::abs(value));
+        };
         const std::size_t sample_offset = frame * channels_;
         for (std::size_t channel = 0U; channel < channels_; ++channel) {
             const float sample = samples[sample_offset + channel];
@@ -119,9 +132,9 @@ ag_result WaveformBucketizer::add(const std::vector<float>& samples,
             const float mid = mid_filters_[channel].process(sample);
             const float high = high_filters_[channel].process(sample);
             accumulate(buckets_, sample);
-            accumulate(bass_buckets_, bass);
-            accumulate(mid_buckets_, mid);
-            accumulate(high_buckets_, high);
+            accumulate_frequency(bass_sum_squares_, bass_peaks_, bass);
+            accumulate_frequency(mid_sum_squares_, mid_peaks_, mid);
+            accumulate_frequency(high_sum_squares_, high_peaks_, high);
             ++bucket_sample_counts_[current_bucket_];
         }
     }
@@ -151,32 +164,73 @@ void normalize_layer(std::vector<float>& layer) noexcept
     }
 }
 
+float percentile95_of_nonzero_values(const std::vector<float>& layer,
+                                     std::vector<float>& scratch) noexcept
+{
+    scratch.clear();
+    for (const float value : layer) {
+        if (std::isfinite(value) && value > 0.0F) {
+            scratch.push_back(value);
+        }
+    }
+    if (scratch.empty()) {
+        return 0.0F;
+    }
+    const std::size_t index = (95U * scratch.size() + 99U) / 100U - 1U;
+    std::nth_element(scratch.begin(), scratch.begin() + index, scratch.end());
+    return scratch[index];
+}
+
+void finalize_frequency_energy(std::vector<float>& sum_squares,
+                               const std::vector<float>& peaks,
+                               const std::vector<std::size_t>& counts) noexcept
+{
+    for (std::size_t index = 0U; index < sum_squares.size(); ++index) {
+        if (counts[index] == 0U) {
+            sum_squares[index] = 0.0F;
+            continue;
+        }
+        const float rms = std::sqrt(sum_squares[index]
+                                    / static_cast<float>(counts[index]));
+        sum_squares[index] = 0.80F * rms + 0.20F * peaks[index];
+    }
+}
+
 void normalize_frequency_layers(std::vector<float>& bass,
                                 std::vector<float>& mid,
-                                std::vector<float>& high) noexcept
+                                std::vector<float>& high,
+                                std::vector<float>& scratch) noexcept
 {
-    float maximum = 0.0F;
-    const auto include_maximum = [&maximum](const std::vector<float>& layer) {
-        for (const float value : layer) {
-            if (std::isfinite(value)) {
-                maximum = std::max(maximum, value);
-            }
-        }
-    };
-    include_maximum(bass);
-    include_maximum(mid);
-    include_maximum(high);
+    const std::array<float, 3U> band_p95{
+        percentile95_of_nonzero_values(bass, scratch),
+        percentile95_of_nonzero_values(mid, scratch),
+        percentile95_of_nonzero_values(high, scratch)};
+    const float global_p95 = *std::max_element(band_p95.begin(),
+                                                band_p95.end());
+    const std::array<float, 3U> gains{0.90F, 1.00F, 1.35F};
 
-    const auto normalize = [maximum](std::vector<float>& layer) {
-        for (float& value : layer) {
-            value = maximum > 0.0F && std::isfinite(value)
-                ? std::clamp(value / maximum, 0.0F, 1.0F)
-                : 0.0F;
-        }
+    const auto normalize = [global_p95](std::vector<float>& layer,
+                                        const float layer_p95,
+                                        const float gain,
+                                        const std::size_t index,
+                                        const float dominant) {
+        const float reference = 0.35F * global_p95 + 0.65F * layer_p95;
+        const float noise_floor = 0.015F * layer_p95;
+        float& value = layer[index];
+        value = reference > 0.0F && std::isfinite(value)
+                && value > noise_floor && dominant > 0.0F
+            ? std::clamp(gain * (value - noise_floor) / reference
+                             * value / dominant,
+                         0.0F, 1.0F)
+            : 0.0F;
     };
-    normalize(bass);
-    normalize(mid);
-    normalize(high);
+    for (std::size_t index = 0U; index < bass.size(); ++index) {
+        const float dominant = std::max(
+            bass[index], std::max(mid[index], high[index]));
+        normalize(bass, band_p95[0U], gains[0U], index, dominant);
+        normalize(mid, band_p95[1U], gains[1U], index, dominant);
+        normalize(high, band_p95[2U], gains[2U], index, dominant);
+    }
 }
 
 void finalize_aggregation(std::vector<float>& layer,
@@ -214,16 +268,17 @@ ag_result WaveformBucketizer::finish(std::vector<float>& peaks,
     }
 
     finalize_aggregation(buckets_, bucket_sample_counts_, aggregation_);
-    finalize_aggregation(bass_buckets_, bucket_sample_counts_, aggregation_);
-    finalize_aggregation(mid_buckets_, bucket_sample_counts_, aggregation_);
-    finalize_aggregation(high_buckets_, bucket_sample_counts_, aggregation_);
+    finalize_frequency_energy(bass_sum_squares_, bass_peaks_, bucket_sample_counts_);
+    finalize_frequency_energy(mid_sum_squares_, mid_peaks_, bucket_sample_counts_);
+    finalize_frequency_energy(high_sum_squares_, high_peaks_, bucket_sample_counts_);
     normalize_layer(buckets_);
-    normalize_frequency_layers(bass_buckets_, mid_buckets_, high_buckets_);
+    normalize_frequency_layers(bass_sum_squares_, mid_sum_squares_, high_sum_squares_,
+                               frequency_scratch_);
 
     peaks = std::move(buckets_);
-    bass = std::move(bass_buckets_);
-    mid = std::move(mid_buckets_);
-    high = std::move(high_buckets_);
+    bass = std::move(bass_sum_squares_);
+    mid = std::move(mid_sum_squares_);
+    high = std::move(high_sum_squares_);
     return AG_OK;
 }
 

@@ -53,9 +53,13 @@ private:
     std::size_t bucket_remainder_ = 0U;
     std::size_t bucket_error_ = 0U;
     std::vector<float> buckets_;
-    std::vector<float> bass_buckets_;
-    std::vector<float> mid_buckets_;
-    std::vector<float> high_buckets_;
+    std::vector<float> bass_sum_squares_;
+    std::vector<float> mid_sum_squares_;
+    std::vector<float> high_sum_squares_;
+    std::vector<float> bass_peaks_;
+    std::vector<float> mid_peaks_;
+    std::vector<float> high_peaks_;
+    std::vector<float> frequency_scratch_;
     std::vector<std::size_t> bucket_sample_counts_;
     std::vector<detail::BiquadFilter> bass_filters_;
     std::vector<detail::BandpassFilter> mid_filters_;

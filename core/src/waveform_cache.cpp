@@ -40,7 +40,7 @@ constexpr std::uint64_t v2_timeline_metadata_flag = 1U;
 constexpr std::uint64_t v4_header_size = 104U;
 constexpr std::uint64_t fnv_offset = 14'695'981'039'346'656'037ULL;
 constexpr std::uint64_t fnv_prime = 1'099'511'628'211ULL;
-constexpr std::uint32_t analysis_schema_version = 4U;
+constexpr std::uint32_t analysis_schema_version = 5U;
 
 struct SourceMetadata final {
     std::uint64_t size = 0U;

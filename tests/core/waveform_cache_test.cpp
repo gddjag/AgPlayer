@@ -15,8 +15,10 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iterator>
 #include <limits>
+#include <sstream>
 #include <string>
 #include <system_error>
 #include <thread>
@@ -126,6 +128,51 @@ std::vector<unsigned char> read_bytes(const std::filesystem::path& path)
             std::istreambuf_iterator<char>()};
 }
 
+void hash_schema4_byte(std::uint64_t& hash, const unsigned char byte)
+{
+    constexpr std::uint64_t fnv_prime = 1'099'511'628'211ULL;
+    hash ^= byte;
+    hash *= fnv_prime;
+}
+
+template <typename Value>
+void hash_schema4_integer(std::uint64_t& hash, Value value)
+{
+    for (std::size_t index = 0U; index < sizeof(Value); ++index) {
+        hash_schema4_byte(hash, static_cast<unsigned char>(value & 0xFFU));
+        value >>= 8U;
+    }
+}
+
+std::string recorded_schema4_key_fixture(const std::filesystem::path& path)
+{
+    constexpr std::uint64_t fnv_offset = 14'695'981'039'346'656'037ULL;
+    std::error_code error;
+    const std::filesystem::path canonical =
+        std::filesystem::weakly_canonical(path, error);
+    assert(!error);
+    const std::uint64_t size = std::filesystem::file_size(path, error);
+    assert(!error);
+    const std::int64_t mtime_ns =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::filesystem::last_write_time(path, error).time_since_epoch())
+            .count();
+    assert(!error);
+
+    std::uint64_t hash = fnv_offset;
+    for (const unsigned char byte : canonical.u8string()) {
+        hash_schema4_byte(hash, byte);
+    }
+    hash_schema4_byte(hash, 0U);
+    hash_schema4_integer(hash, size);
+    hash_schema4_integer(hash, static_cast<std::uint64_t>(mtime_ns));
+    hash_schema4_integer(hash, 4U);
+
+    std::ostringstream key;
+    key << std::hex << std::setfill('0') << std::setw(16) << hash;
+    return key.str();
+}
+
 } // namespace
 
 int main(const int argc, char** argv)
@@ -145,6 +192,7 @@ int main(const int argc, char** argv)
 
     const std::string first_key = agplayer::WaveformCache::key_for(source_path);
     assert(!first_key.empty());
+    assert(first_key != recorded_schema4_key_fixture(source_path));
     const std::string legacy_v2_key =
         agplayer::WaveformCache::legacy_v2_key_for(source_path);
     assert(!legacy_v2_key.empty());
