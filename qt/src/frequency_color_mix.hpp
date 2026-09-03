@@ -54,6 +54,9 @@ inline QColor mixFrequencyColor(const double lowEnergy,
         detail::energyWeight(midEnergy),
         detail::energyWeight(highEnergy),
     };
+    if (weights[0] == 0.0 && weights[1] == 0.0 && weights[2] == 0.0) {
+        return lowColor;
+    }
 
     for (std::size_t index = 0; index < weights.size(); ++index) {
         if (weights[index] == 1.0

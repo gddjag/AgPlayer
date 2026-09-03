@@ -224,9 +224,9 @@ private:
     QColor gradientStartColor_ = QColor(QStringLiteral("#00d4ff"));
     QColor gradientMiddleColor_ = QColor(QStringLiteral("#7b2ff7"));
     QColor gradientEndColor_ = QColor(QStringLiteral("#e62e9b"));
-    QColor lowColor_{QStringLiteral("#8B3DFF")};
-    QColor midColor_{QStringLiteral("#FFB000")};
-    QColor highColor_{QStringLiteral("#002FA7")};
+    QColor lowColor_{QStringLiteral("#FC0909")};
+    QColor midColor_{QStringLiteral("#03FF00")};
+    QColor highColor_{QStringLiteral("#0048FF")};
     qreal frequencyUnplayedOpacity_ = 0.88;
     bool rgbProgress_ = true;
     qreal amplitudeScale_ = 1.0;

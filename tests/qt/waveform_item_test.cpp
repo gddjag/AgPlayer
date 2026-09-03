@@ -1,5 +1,7 @@
 #include "waveform_item.hpp"
 #include "frequency_color_mix.hpp"
+#include "frequency_color_waveform_settings.hpp"
+#include "track_waveform_thumbnail_item.hpp"
 
 #include <QHoverEvent>
 #include <QMouseEvent>
@@ -37,6 +39,7 @@ class WaveformItemTest final : public QObject {
 private slots:
     void mapsPointerToClampedTime();
     void buildsCenteredFiniteNormalizedLinePairs();
+    void defaultFrequencyColorsUseFixedPalette();
     void threeBandMixerKeepsPureColorsAndCreatesCombinations();
     void frequencyModeUsesAmplitudeGeometryAndOpacityOnlyProgress();
     void frequencyColorChangeDoesNotReplaceGeometryNode();
@@ -246,6 +249,8 @@ void WaveformItemTest::threeBandMixerKeepsPureColorsAndCreatesCombinations()
     const QColor low(QStringLiteral("#FC0909"));
     const QColor mid(QStringLiteral("#03FF00"));
     const QColor high(QStringLiteral("#0048FF"));
+    QCOMPARE(agplayer::ui::mixFrequencyColor(0.0, 0.0, 0.0,
+                                             low, mid, high), low);
     QCOMPARE(agplayer::ui::mixFrequencyColor(1.0, 0.0, 0.0,
                                              low, mid, high), low);
     QCOMPARE(agplayer::ui::mixFrequencyColor(0.0, 1.0, 0.0,
@@ -290,6 +295,28 @@ void WaveformItemTest::threeBandMixerKeepsPureColorsAndCreatesCombinations()
     QVERIFY(quietMidHigh != mid);
     QVERIFY2(quietMidHigh.blue() >= 150,
              "quiet High energy must remain visible in a Mid-heavy mix");
+}
+
+void WaveformItemTest::defaultFrequencyColorsUseFixedPalette()
+{
+    const QColor expectedLow(QStringLiteral("#FC0909"));
+    const QColor expectedMid(QStringLiteral("#03FF00"));
+    const QColor expectedHigh(QStringLiteral("#0048FF"));
+
+    const FrequencyColorWaveformSettings settings;
+    QCOMPARE(settings.lowColor(), expectedLow);
+    QCOMPARE(settings.midColor(), expectedMid);
+    QCOMPARE(settings.highColor(), expectedHigh);
+
+    const WaveformItem waveform;
+    QCOMPARE(waveform.lowColor(), expectedLow);
+    QCOMPARE(waveform.midColor(), expectedMid);
+    QCOMPARE(waveform.highColor(), expectedHigh);
+
+    const TrackWaveformThumbnailItem thumbnail;
+    QCOMPARE(thumbnail.lowColor(), expectedLow);
+    QCOMPARE(thumbnail.midColor(), expectedMid);
+    QCOMPARE(thumbnail.highColor(), expectedHigh);
 }
 
 void WaveformItemTest::frequencyModeUsesAmplitudeGeometryAndOpacityOnlyProgress()
