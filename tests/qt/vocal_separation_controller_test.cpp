@@ -1151,7 +1151,7 @@ startingANewResultGenerationClearsPreviouslyPublishedStems()
 
     QVERIFY(QFile::copy(audioFixture(), invalidNextInput));
     QVERIFY(controller.selectInput(QUrl::fromLocalFile(invalidNextInput)));
-    QTest::qWait(300);
+    QTRY_VERIFY_WITH_TIMEOUT(controller.canStart(), 5'000);
     QVERIFY(controller.start());
     QVERIFY(!stemFor(controller.stems(), VocalSeparationController::StemKind::Vocals)
                  .value(QStringLiteral("available")).toBool());
@@ -1960,6 +1960,10 @@ void VocalSeparationControllerTest::selectedPlaylistActionRejectsAnUnsafeSubset(
     const QString accompaniment = stemFor(
         controller.stems(), VocalSeparationController::StemKind::Accompaniment)
                                       .value(QStringLiteral("path")).toString();
+    // The result waveform provider may still be decoding this stem after the
+    // controller reports Completed. Release that real async reader before
+    // deleting the file used to simulate an unsafe playlist subset.
+    WaveformProviderTestAccess::waitForAnalysis(waveforms);
     QVERIFY(QFile::remove(accompaniment));
     const QString playlistId = playlists.createPlaylist(QStringLiteral("all or none"));
     QVERIFY(!controller.addSelectedToPlaylist(playlistId));
