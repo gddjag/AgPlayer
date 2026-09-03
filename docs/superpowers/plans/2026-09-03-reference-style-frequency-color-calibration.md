@@ -49,7 +49,7 @@ Expected: the new transient/balance and schema5 key assertions fail while existi
 
 - [ ] **Step 3: Implement RMS/peak extraction and robust normalization**
 
-Maintain per-band sum-of-squares and peak vectors. At finish, calculate `0.80 * rms + 0.20 * peak`, 95th-percentile references, `0.15 * globalP95 + 0.85 * bandP95`, gains `{0.90, 1.00, 1.50}`, and the `0.015 * bandP95` noise floor. Preserve the selected aggregation for `mix` height only.
+Maintain per-band sum-of-squares and peak vectors. At finish, calculate `0.80 * rms + 0.20 * peak`, 95th-percentile references, `0.45 * globalP95 + 0.55 * bandP95`, gains `{0.90, 1.00, 1.50}`, and the `0.015 * bandP95` noise floor. This is the tested conservative calibration point, not a mathematically proven minimum. Preserve the selected aggregation for `mix` height only.
 
 - [ ] **Step 4: Invalidate old analysis keys without changing the payload format**
 
