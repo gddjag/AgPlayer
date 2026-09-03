@@ -265,7 +265,7 @@ Rectangle {
                             anchors.verticalCenter: parent.verticalCenter
                             x: 0
                             text: root.currentTrackValue(LibraryModel.TitleRole)
-                                  || qsTr("No track loaded")
+                                  || qsTr("未载入歌曲")
                             color: Theme.primaryText
                             font.family: Theme.fontPrimary
                             font.pixelSize: root.minimalHeight
@@ -321,8 +321,8 @@ Rectangle {
                         icon.width: root.minimalHeight ? 15 : 22
                         icon.height: root.minimalHeight ? 15 : 22
                         Accessible.name: root.currentTrackFavorite()
-                                         ? qsTr("Remove from favorites")
-                                         : qsTr("Add to favorites")
+                                         ? qsTr("取消收藏")
+                                         : qsTr("添加收藏")
                         focusPolicy: Qt.StrongFocus
                         enabled: root.currentRow() >= 0
                         onClicked: root.toggleCurrentFavorite()

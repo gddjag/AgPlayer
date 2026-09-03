@@ -38,7 +38,7 @@ var profiles = {
     },
     "mini": {
         actions: ({
-            "miniThemeModeButton": true, "miniWaveformModeButton": true,
+            "miniWaveformModeButton": true,
             "miniPreviousButton": true, "miniPlayPauseButton": true,
             "miniNextButton": true, "miniModeButton": true,
             "miniMuteButton": true

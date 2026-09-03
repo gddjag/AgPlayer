@@ -103,48 +103,19 @@ TestCase {
         }
     }
 
-    function test_mini_player_control_order_starts_with_theme_then_waveform() {
+    function test_mini_player_control_order_omits_theme_and_starts_with_waveform() {
         var controls = findChild(miniPlayer, "miniPlayerControls")
         verify(controls)
         verifyAscendingX(controls, [
-            "miniThemeModeButton", "miniWaveformModeButton",
-            "miniPreviousButton", "miniPlayPauseButton",
+            "miniWaveformModeButton", "miniPreviousButton", "miniPlayPauseButton",
             "miniNextButton", "miniModeButton", "miniMuteButton"
         ])
+        compare(findChild(controls, "miniThemeModeButton"), null)
+        compare(findChild(controls, "miniPlayerShellMenu"), null)
         verify(findChild(controls, "lyricsActionButton") === null)
         verify(findChild(controls, "immersiveActionButton") === null)
         compare(findChild(controls, "experienceActions"), null,
                 "mini must not instantiate a hidden UI registry")
-    }
-
-    function test_mini_theme_popup_opens_above_icon_at_real_dpr_positions() {
-        var controls = findChild(miniPlayer, "miniPlayerControls")
-        var button = findChild(controls, "miniThemeModeButton")
-        var menu = findChild(controls, "miniPlayerShellMenu")
-        verify(controls && button && menu)
-        compare(menu.parent, controls.Window.window.contentItem)
-        for (var index = 0; index < 2; ++index) {
-            var dpr = index === 0 ? 1.0 : 1.5
-            controls.popupDevicePixelRatioOverrideForTesting = dpr
-            mouseClick(button)
-            tryVerify(function() { return menu.visible && menu.height > 0 }, 500)
-            var point = controls.themePopupPositionForDpr(dpr)
-            verify(isFinite(point.x) && isFinite(point.y))
-            verify(Math.abs(point.x * dpr - Math.round(point.x * dpr)) < 0.01)
-            verify(Math.abs(point.y * dpr - Math.round(point.y * dpr)) < 0.01)
-            var surface = controls.Window.window.contentItem
-            var buttonPoint = button.mapToItem(surface, 0, 0)
-            var menuPoint = menu.parent.mapToItem(surface, menu.x, menu.y)
-            verify(menuPoint.y + menu.height <= buttonPoint.y + 1 / dpr)
-            var buttonCenter = buttonPoint.x + button.width / 2
-            verify(menuPoint.x <= buttonCenter
-                   && buttonCenter <= menuPoint.x + menu.width)
-            verify(menuPoint.x >= 0)
-            verify(menuPoint.x + menu.width <= surface.width + 1 / dpr)
-            menu.close()
-            wait(0)
-        }
-        controls.popupDevicePixelRatioOverrideForTesting = 0
     }
 
     function test_mini_waveform_is_clipped_to_its_container() {

@@ -59,7 +59,7 @@ TestCase {
 
         verify(typeof actions.buttonSize === "function",
                "PlayerControls must instantiate the shared ExperienceActions component")
-        compare(actions.buttonSize(), 26)
+        compare(actions.buttonSize(), 28)
         tryVerify(function() {
             return xInControls(lyrics, controls) + lyrics.width
                     <= xInControls(immersive, controls)
@@ -155,10 +155,10 @@ TestCase {
         compare(theme.icon.width, 20)
         compare(theme.icon.height, 20)
         verify(theme.icon.source.toString().endsWith("/theme-skin.svg"))
-        compare(lyrics.icon.width, 20)
-        compare(lyrics.icon.height, 20)
-        compare(immersive.icon.width, 20)
-        compare(immersive.icon.height, 20)
+        compare(lyrics.icon.width, 26)
+        compare(lyrics.icon.height, 26)
+        compare(immersive.icon.width, 26)
+        compare(immersive.icon.height, 26)
         var transport = findChild(controls, "centerPlaybackControls")
         verify(transport)
         compare(transport.waveformPlacement, "beforePrevious")
@@ -172,7 +172,11 @@ TestCase {
         }, 1500)
         var waveform = findControl("mainWaveform")
         verify(waveform)
-        verify(Theme.nonImmersiveSpectralUnplayedOpacity <= 0.60)
+        var originalOpacity = SettingsController.frequencyColorWaveform.unplayedOpacity
+        SettingsController.frequencyColorWaveform.unplayedOpacity = 0.60
+        compare(Theme.nonImmersiveSpectralUnplayedOpacity, 0.60)
+        SettingsController.frequencyColorWaveform.unplayedOpacity = 0.88
+        compare(Theme.nonImmersiveSpectralUnplayedOpacity, 0.88)
         var expected = Theme.nonImmersiveSpectralUnplayedOpacity
         for (var theme = 0; theme < 3; ++theme) {
             SettingsController.themeMode = theme
@@ -180,6 +184,7 @@ TestCase {
             compare(Theme.nonImmersiveSpectralUnplayedOpacity, expected)
             compare(waveform.frequencyUnplayedOpacity, expected)
         }
+        SettingsController.frequencyColorWaveform.unplayedOpacity = originalOpacity
         var positions = [0, 0.001, 0.5, 0.999, 1]
         for (var index = 0; index < positions.length; ++index) {
             var fraction = positions[index]
@@ -208,7 +213,7 @@ TestCase {
             "immersiveActionButton", "miniPlayerButton"
         ]
         var previousRight = -1
-        var centerY = controls.height / 2
+        var centerY = controls.height / 2 - 2
         for (var index = 0; index < names.length; ++index) {
             var action = findChild(controls, names[index])
             verify(action && action.visible, "missing " + names[index])

@@ -950,10 +950,11 @@ Rectangle {
                                 color: customEntry ? page.raised
                                       : VocalSeparationController.selectedModelId === cardData.id
                                         ? Theme.accentSoft : page.surface
-                                border.color: customEntry ? page.cyan
+                                 border.color: customEntry ? page.cyan
                                               : VocalSeparationController.selectedModelId === cardData.id
                                                 ? page.cyan : page.border
-                                radius: 7
+                                 radius: 7
+                                 clip: true
 
                                 MouseArea {
                                     anchors.fill: parent
@@ -1093,7 +1094,8 @@ Rectangle {
                                          }
                                          Label {
                                              objectName: "separationDownloadPercentage-" + cardData.id
-                                             Layout.preferredWidth: implicitWidth
+                                             Layout.minimumWidth: 0
+                                             Layout.maximumWidth: 116
                                              text: Math.round(VocalSeparationController.downloadProgress * 100)
                                                    + "% · " + VocalSeparationController.downloadSource
                                              color: page.success
@@ -1103,11 +1105,12 @@ Rectangle {
                                          }
                                      }
                                     Item { Layout.fillHeight: true }
-                                     RowLayout {
+                                      RowLayout {
                                          objectName: "separationModelAction-" + cardData.id
                                          Layout.fillWidth: true
                                          Layout.bottomMargin: 4
-                                         Item { Layout.fillWidth: true }
+                                          spacing: 4
+                                          Item { Layout.fillWidth: true; Layout.minimumWidth: 0 }
                                          WorkbenchButton {
                                              visible: cardData.state === VocalSeparationController.Installed
                                                       || cardData.state === VocalSeparationController.ModelFailed
@@ -1124,6 +1127,8 @@ Rectangle {
                                               objectName: "separationDomesticMirror-" + cardData.id
                                               visible: cardData.state !== VocalSeparationController.Installed
                                               implicitHeight: 24
+                                              leftPadding: 6
+                                              rightPadding: 6
                                               topPadding: 3
                                               bottomPadding: 3
                                               text: qsTr("国内镜像")
@@ -1138,7 +1143,9 @@ Rectangle {
                                           }
                                           WorkbenchButton {
                                               visible: cardData.state !== VocalSeparationController.Installed
-                                             implicitHeight: 24
+                                               implicitHeight: 24
+                                               leftPadding: 6
+                                               rightPadding: 6
                                              topPadding: 3
                                              bottomPadding: 3
                                             text: cardData.state === VocalSeparationController.Verifying ? qsTr("校验中")
@@ -1168,7 +1175,9 @@ Rectangle {
                                              objectName: "separationCancelDownload-" + cardData.id
                                              visible: cardData.id === VocalSeparationController.downloadingModelId
                                                       && VocalSeparationController.downloadBusy
-                                             implicitHeight: 24
+                                              implicitHeight: 24
+                                              leftPadding: 6
+                                              rightPadding: 6
                                              topPadding: 3
                                              bottomPadding: 3
                                              text: qsTr("取消")
@@ -1680,7 +1689,9 @@ Rectangle {
                                 WorkbenchComboBox {
                                     Layout.fillWidth: true
                                     model: [qsTr("WAV（无损）"), qsTr("FLAC（无损）"), qsTr("MP3（兼容）")]
-                                    implicitHeight: 24
+                                              implicitHeight: 24
+                                              leftPadding: 6
+                                              rightPadding: 6
                                     currentIndex: VocalSeparationController.outputFormat === "flac" ? 1
                                                   : VocalSeparationController.outputFormat === "mp3" ? 2 : 0
                                     enabled: !page.contextLocked

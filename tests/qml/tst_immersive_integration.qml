@@ -395,12 +395,12 @@ TestCase {
         compare(findChild(mainActions, "themeActionButton"), null)
         compare(findChild(miniControls, "lyricsActionButton"), null)
         compare(findChild(miniControls, "immersiveActionButton"), null)
-        compare(findChild(mainActions, "lyricsActionButton").icon.width, 20)
-        compare(findChild(mainActions, "lyricsActionButton").icon.height, 20)
+        compare(findChild(mainActions, "lyricsActionButton").icon.width, 26)
+        compare(findChild(mainActions, "lyricsActionButton").icon.height, 26)
 
         mainActions.compact = true
-        compare(findChild(mainActions, "lyricsActionButton").icon.width, 20)
-        compare(findChild(mainActions, "lyricsActionButton").icon.height, 20)
+        compare(findChild(mainActions, "lyricsActionButton").icon.width, 26)
+        compare(findChild(mainActions, "lyricsActionButton").icon.height, 26)
         mainActions.compact = false
 
         PlayerExperienceController.lyricsVisible = false

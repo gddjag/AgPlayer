@@ -377,7 +377,8 @@ void WaveformItemTest::frequencyModeUpdatesProgressOpacityWithoutRebuildingNode(
     item.setDensity(2.0);
     item.setLineWidth(1.0);
     item.setVisualMode(3);
-    item.setFrequencyUnplayedOpacity(0.60);
+    item.setFrequencyUnplayedOpacity(0.38);
+    QCOMPARE(item.frequencyUnplayedOpacity(), 0.38);
     item.setLayers(makeLayers(
         peaks({1.0, 1.0, 1.0, 1.0}),
         peaks({1.0, 1.0, 1.0, 1.0}),
@@ -388,7 +389,7 @@ void WaveformItemTest::frequencyModeUpdatesProgressOpacityWithoutRebuildingNode(
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
     const int unplayedAlpha = static_cast<int>(vertices(node)[0].a);
-    QCOMPARE(unplayedAlpha, 153);
+    QCOMPARE(unplayedAlpha, 97);
 
     item.setPosition(100);
     QSGNode* updatedNode = item.updatePaintNode(node, nullptr);

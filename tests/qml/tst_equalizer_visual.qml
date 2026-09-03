@@ -406,10 +406,10 @@ TestCase {
     }
 
     function test_reference_and_minimum_viewports_render() {
-        compare(equalizer.width, 1180)
-        compare(equalizer.height, 680)
-        compare(equalizer.minimumWidth, 1080)
-        compare(equalizer.minimumHeight, 480)
+        compare(equalizer.width, 1080)
+        compare(equalizer.height, 620)
+        compare(equalizer.minimumWidth, 960)
+        compare(equalizer.minimumHeight, 460)
         compare(findChildrenByPrefix(equalizer, "equalizerBand-").length, 18)
         compare(findChild(equalizer, "equalizerTitle").font.pixelSize,
                 Theme.fontSizePageTitle)

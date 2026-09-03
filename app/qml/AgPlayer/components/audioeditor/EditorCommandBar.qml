@@ -232,19 +232,5 @@ Rectangle {
                 && !AudioEditorController.busy
             onClicked: AudioEditorController.clearTimeline()
         }
-        TrackToggleButton {
-            objectName: "editorTrackMute"
-            label: qsTr("音轨静音")
-            iconName: "volume-mute-line"
-            checked: AudioEditorController.trackMuted
-            onClicked: AudioEditorController.setTrackMuted(checked)
-        }
-        TrackToggleButton {
-            objectName: "editorTrackSolo"
-            label: qsTr("音轨独奏")
-            iconName: "mic-line"
-            checked: AudioEditorController.trackSolo
-            onClicked: AudioEditorController.setTrackSolo(checked)
-        }
     }
 }

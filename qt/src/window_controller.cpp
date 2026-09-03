@@ -223,6 +223,28 @@ void WindowController::setMainWindowShellMode(int mode)
     loadPersistedListWindowState();
     if (mainWindow_ != nullptr) {
         restoreMainWindowGeometry(mainWindow_, true);
+        if (mainWindowShellMode_ == 0) {
+            const QSize referenceSize(863, 266);
+            const QRect available = availableGeometryForWindow(mainWindow_);
+            const QSize targetSize = available.isValid()
+                ? referenceSize.boundedTo(available.size()) : referenceSize;
+            QRect geometry(mainWindow_->position(), targetSize);
+            if (available.isValid()) {
+                if (geometry.right() > available.right()) {
+                    geometry.moveRight(available.right());
+                }
+                if (geometry.bottom() > available.bottom()) {
+                    geometry.moveBottom(available.bottom());
+                }
+                if (geometry.left() < available.left()) {
+                    geometry.moveLeft(available.left());
+                }
+                if (geometry.top() < available.top()) {
+                    geometry.moveTop(available.top());
+                }
+            }
+            mainWindow_->setGeometry(geometry);
+        }
         rememberNativePixelSize(mainWindow_);
         persistGeometry(mainWindow_, mainWindowGeometryKey());
     }
@@ -1504,7 +1526,7 @@ bool WindowController::restoreMainWindowGeometry(QWindow* window,
     const QRect available = screen->availableGeometry();
     const QSize preferred = mainWindowShellMode_ == 1
         ? QSize(1672, 941)
-        : mainWindowShellMode_ == 2 ? QSize(1440, 480) : QSize(863, 266);
+        : mainWindowShellMode_ == 2 ? QSize(1672, 820) : QSize(863, 266);
     const QSize size = preferred.boundedTo(available.size());
     QRect geometry(QPoint(), size);
     geometry.moveCenter(available.center());

@@ -49,8 +49,8 @@ Item {
         icon.width: 20
         icon.height: 20
         Accessible.name: WindowController.listWindowVisible
-                         ? qsTr("Hide playlist window")
-                         : qsTr("Show playlist window")
+                         ? qsTr("收起播放列表")
+                         : qsTr("展开播放列表")
         onClicked: root.togglePlaylistRequested()
         ToolTip.text: Accessible.name
         ToolTip.visible: hovered
@@ -96,7 +96,7 @@ Item {
             icon.color: Theme.iconPrimary
             icon.width: 20
             icon.height: 20
-            Accessible.name: qsTr("Open audio tools")
+            Accessible.name: qsTr("打开音频工具")
             onClicked: WindowController.showAudioTools()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered
@@ -151,7 +151,7 @@ Item {
             icon.color: Theme.iconPrimary
             icon.width: 20
             icon.height: 20
-            Accessible.name: qsTr("Switch theme")
+            Accessible.name: qsTr("切换主题皮肤")
             onClicked: root.openThemePopup()
             ToolTip.text: Accessible.name
             ToolTip.visible: hovered

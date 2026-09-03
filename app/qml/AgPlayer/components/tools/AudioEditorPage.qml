@@ -31,7 +31,7 @@ Rectangle {
         : narrowLayout ? 36 : interpolateLayout(44, 52)
     readonly property real trackRegionTop: timelineWorkspaceTop + rulerHeight
     readonly property real trackRegionHeight: Math.max(48,
-        timelineWorkspace.height - rulerHeight)
+        timelineWorkspace.height - rulerHeight - 14)
     readonly property real lowerSectionGap:
         compactNarrowLayout || narrowLayout ? 8 : 12
     readonly property real transportHeight: compactNarrowLayout ? 72
@@ -590,6 +590,101 @@ Rectangle {
                 height: page.trackRegionHeight
             }
 
+            ThemedRangeSlider {
+                id: timelineZoomRange
+                objectName: "editorTimelineZoomRange"
+                x: ruler.x
+                y: waveformCanvas.y + waveformCanvas.height + 2
+                width: ruler.width
+                height: 28
+                from: 0
+                to: Math.max(1, AudioEditorController.totalFrames)
+                stepSize: 1
+                leftPadding: 0
+                rightPadding: 0
+                enabled: AudioEditorController.hasDocument
+                    && AudioEditorController.totalFrames > 0
+
+                function syncHandles() {
+                    if (!AudioEditorController.hasDocument) {
+                        first.value = 0
+                        second.value = 1
+                        return
+                    }
+                    first.value = Math.max(0,
+                        AudioEditorController.viewport.visibleStartFrame)
+                    second.value = Math.max(first.value + 1,
+                        AudioEditorController.viewport.visibleEndFrame)
+                }
+                first.onMoved: AudioEditorController.viewport.setVisibleRange(
+                    Math.round(first.value), Math.round(second.value))
+                second.onMoved: AudioEditorController.viewport.setVisibleRange(
+                    Math.round(first.value), Math.round(second.value))
+                Component.onCompleted: Qt.callLater(syncHandles)
+                Connections {
+                    target: AudioEditorController.viewport
+                    function onViewportChanged() {
+                        if (!timelineZoomRange.first.pressed
+                                && !timelineZoomRange.second.pressed)
+                            timelineZoomRange.syncHandles()
+                    }
+                }
+                Connections {
+                    target: AudioEditorController
+                    function onDocumentChanged() {
+                        Qt.callLater(timelineZoomRange.syncHandles)
+                    }
+                }
+                background: Rectangle {
+                    x: 0
+                    y: (timelineZoomRange.height - height) / 2
+                    width: timelineZoomRange.availableWidth
+                    height: 4
+                    radius: 0
+                    color: Qt.rgba(Theme.borderStrong.r,
+                                   Theme.borderStrong.g,
+                                   Theme.borderStrong.b, 0.30)
+                    Rectangle {
+                        x: timelineZoomRange.first.visualPosition * parent.width
+                        width: Math.max(2,
+                            (timelineZoomRange.second.visualPosition
+                             - timelineZoomRange.first.visualPosition)
+                            * parent.width)
+                        height: parent.height
+                        radius: 0
+                        color: Theme.accent
+                    }
+                }
+                first.handle: Rectangle {
+                    objectName: "editorTimelineZoomStartHandle"
+                    radius: 0
+                    color: "transparent"
+                    implicitWidth: 28
+                    implicitHeight: 28
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 3
+                        height: 10
+                        radius: 0
+                        color: Theme.accent
+                    }
+                }
+                second.handle: Rectangle {
+                    objectName: "editorTimelineZoomEndHandle"
+                    radius: 0
+                    color: "transparent"
+                    implicitWidth: 28
+                    implicitHeight: 28
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 3
+                        height: 10
+                        radius: 0
+                        color: Theme.accent
+                    }
+                }
+            }
+
             Rectangle {
                 id: playbackTransport
                 objectName: "editorPlaybackTransport"
@@ -967,12 +1062,12 @@ Rectangle {
                                 qsTr("Shift+鼠标滚轮 = 横向滚动"),
                                 qsTr("拖拽片段边缘 = 修剪"),
                                 qsTr("双击音量线 = 添加控制点"),
-                                qsTr("Ctrl+右键 = 选择片段 / 双击右键取消")
+                                qsTr("Ctrl+右键 = 选择片段 / Ctrl+双击右键 = 取消片段选择")
                             ]
                             delegate: Item {
                                 required property int index
                                 required property string modelData
-                                width: secondGroupText.implicitWidth + 12
+                                width: secondGroupText.implicitWidth + 10
                                 height: shortcutSecondRow.height
                                 Text {
                                     id: secondGroupText
@@ -980,7 +1075,7 @@ Rectangle {
                                     anchors.centerIn: parent
                                     text: modelData
                                     color: Theme.textSecondary
-                                    font.pixelSize: Theme.fontSizeBody
+                                    font.pixelSize: Theme.fontSizeCaption
                                 }
                                 Rectangle {
                                     objectName: "editorShortcutSecondDivider_" + index

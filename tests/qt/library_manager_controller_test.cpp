@@ -119,7 +119,9 @@ void LibraryManagerControllerTest::classifiesCanonicalDropPaths()
         QDir(musicRoot).filePath(QStringLiteral("song.mp3")), "audio");
     const QString textPath = writeFile(
         QDir(musicRoot).filePath(QStringLiteral("notes.txt")), "notes");
-    QVERIFY(!audioPath.isEmpty() && !textPath.isEmpty());
+    const QString videoPath = writeFile(
+        QDir(musicRoot).filePath(QStringLiteral("clip.MP4")), "video");
+    QVERIFY(!audioPath.isEmpty() && !textPath.isEmpty() && !videoPath.isEmpty());
 
     const QString aliasPath = directory.filePath(QStringLiteral("music-alias"));
 #ifdef Q_OS_WIN
@@ -168,6 +170,10 @@ void LibraryManagerControllerTest::classifiesCanonicalDropPaths()
                  .value(QStringLiteral("kind"))
                  .value<LibraryManagerController::DropPathKind>(),
              LibraryManagerController::DropPathKind::OtherFile);
+    QCOMPARE(manager.classifyDropUrl(QUrl::fromLocalFile(videoPath))
+                 .value(QStringLiteral("kind"))
+                 .value<LibraryManagerController::DropPathKind>(),
+             LibraryManagerController::DropPathKind::VideoFile);
     QCOMPARE(manager.classifyDropUrl(QUrl::fromLocalFile(
                  directory.filePath(QStringLiteral("missing.mp3"))))
                  .value(QStringLiteral("kind"))

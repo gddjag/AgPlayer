@@ -19,7 +19,12 @@ RowLayout {
             presentationProfile, "lyricsActionButton")
     spacing: compact ? 0 : 2
 
-    function buttonSize() { return compact ? 26 : 32 }
+    function buttonSize() { return compact ? 28 : 34 }
+    function keyboardFocused(control) {
+        return control.activeFocus
+            && (control.focusReason === Qt.TabFocusReason
+                || control.focusReason === Qt.BacktabFocusReason)
+    }
 
     ToolButton {
         objectName: root.showLyrics ? "lyricsActionButton" : ""
@@ -31,8 +36,8 @@ RowLayout {
         checked: PlayerExperienceController.lyricsVisible
         icon.source: Theme.icon("lyrics")
         icon.color: checked ? Theme.iconAccent : Theme.iconPrimary
-        icon.width: 20
-        icon.height: 20
+        icon.width: 26
+        icon.height: 26
         Accessible.name: checked ? qsTr("隐藏歌词") : qsTr("显示歌词")
         onClicked: PlayerExperienceController.toggleLyricsVisible()
         ToolTip.text: Accessible.name
@@ -41,7 +46,7 @@ RowLayout {
             color: parent.down ? Theme.surfacePressed
                 : parent.checked ? Theme.accentSoft
                 : parent.hovered ? Theme.surfaceHover : "transparent"
-            border.width: parent.activeFocus ? 2 : 0
+            border.width: root.keyboardFocused(parent) ? 2 : 0
             border.color: Theme.focus
             radius: Theme.radiusSm
             Behavior on color { ColorAnimation { duration: 100 } }
@@ -59,8 +64,8 @@ RowLayout {
                  !== PlayerExperienceController.Off
         icon.source: Theme.icon("immersive-visual-mode")
         icon.color: checked ? Theme.iconAccent : Theme.iconPrimary
-        icon.width: 20
-        icon.height: 20
+        icon.width: 26
+        icon.height: 26
         Accessible.name: checked ? qsTr("关闭沉浸视觉") : qsTr("开启沉浸视觉")
         onClicked: PlayerExperienceController.toggleImmersiveMode()
         ToolTip.text: Accessible.name
@@ -69,7 +74,7 @@ RowLayout {
             color: parent.down ? Theme.surfacePressed
                 : parent.checked ? Theme.accentSoft
                 : parent.hovered ? Theme.surfaceHover : "transparent"
-            border.width: parent.activeFocus ? 2 : 0
+            border.width: root.keyboardFocused(parent) ? 2 : 0
             border.color: Theme.focus
             radius: Theme.radiusSm
             Behavior on color { ColorAnimation { duration: 100 } }

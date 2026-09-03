@@ -343,7 +343,7 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        spacing: 8
+        spacing: 6
 
         TitleBar {
             objectName: "rollingTitleBar"
@@ -397,6 +397,7 @@ Item {
                 anchors.leftMargin: 16
                 anchors.right: parent.right
                 anchors.top: parent.top
+                anchors.topMargin: 8
                 height: 52
 
                 Row {
@@ -495,7 +496,7 @@ Item {
                     objectName: "rollingStereoMeter"
                     anchors.right: parent.right
                     anchors.top: parent.top
-                    width: Math.min(154, Math.max(112, parent.width * 0.17))
+                    width: Math.min(118, Math.max(90, parent.width * 0.13))
                     spacing: 3
 
                     Item {
@@ -508,7 +509,7 @@ Item {
                                            ? Number(root.visualFeatures.leftRms)
                                            : 0
                         width: parent.width
-                        height: 9
+                        height: 7
                         Row {
                             anchors.fill: parent
                             spacing: 2
@@ -542,7 +543,7 @@ Item {
                                            ? Number(root.visualFeatures.rightRms)
                                            : 0
                         width: parent.width
-                        height: 9
+                        height: 7
                         Row {
                             anchors.fill: parent
                             spacing: 2
@@ -571,7 +572,8 @@ Item {
             Row {
                 id: badgeRow
                 objectName: "rollingMetadataBadges"
-                anchors.right: parent.right
+                anchors.left: coverFrame.right
+                anchors.leftMargin: 16
                 anchors.top: parent.top
                 anchors.topMargin: 54
                 height: 22

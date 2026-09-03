@@ -139,7 +139,7 @@ Rectangle {
 
         Rectangle {
             objectName: "bpmModule"
-        Layout.preferredWidth: 216
+            Layout.preferredWidth: 216
             Layout.fillHeight: true
             color: root.moduleColor
             border.color: root.moduleBorder
@@ -155,6 +155,8 @@ Rectangle {
                     id: minimumBpmField
                     objectName: "minimumBpmField"
                     Layout.preferredWidth: 34
+                    Layout.fillHeight: true
+                    verticalAlignment: TextInput.AlignVCenter
                     text: Math.round(root.pendingMinBpm).toString()
                     color: Theme.primaryText
                     font.pixelSize: Theme.fontSizeCaption
@@ -176,6 +178,7 @@ Rectangle {
                     Layout.preferredWidth: 104
                     Layout.minimumWidth: 104
                     Layout.maximumWidth: 104
+                    Layout.alignment: Qt.AlignVCenter
                     from: 60; to: 160; stepSize: 1
                     first.value: root.pendingMinBpm
                     second.value: root.pendingMaxBpm
@@ -186,6 +189,8 @@ Rectangle {
                     id: maximumBpmField
                     objectName: "maximumBpmField"
                     Layout.preferredWidth: 34
+                    Layout.fillHeight: true
+                    verticalAlignment: TextInput.AlignVCenter
                     text: Math.round(root.pendingMaxBpm).toString()
                     color: Theme.primaryText
                     font.pixelSize: Theme.fontSizeCaption

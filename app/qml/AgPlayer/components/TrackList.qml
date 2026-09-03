@@ -65,6 +65,8 @@ ListView {
         Math.min(300, width - 32 - sequenceWidth - durationWidth
                  - ratingWidth - favoriteWidth - 80))
     readonly property int singleWindowMediaHeight: 34
+    readonly property int singleWindowSubtitleFontSize:
+        Math.max(10, Theme.fontSizeCaption - 1)
     readonly property bool showBpmColumn:
         singleWindowLayout ? false
         : (relaxedClassicColumns ? !tagManagementLayout : !tagFilterActive)
@@ -582,7 +584,7 @@ ListView {
                             text: qsTr("%1 首").arg(root.dragTrackIds.length)
                             color: Theme.primaryText
                             font.family: Theme.fontPrimary
-                            font.pixelSize: Theme.fontSizeCaption
+                            font.pixelSize: root.singleWindowSubtitleFontSize
                         }
                     }
                 }
@@ -1157,13 +1159,6 @@ ListView {
             onTriggered: root.removeSelectedFromCurrentView()
         }
         SystemMenuItem { objectName: "trackMenuTrash"; text: qsTr("彻底删除至回收站"); onTriggered: trashConfirm.open() }
-        MenuSeparator {}
-        SystemMenuItem {
-            objectName: "trackMenuDetails"
-            text: qsTr("查看音频文件信息")
-            enabled: trackMenu.targetTrackIds.length === 1
-            onTriggered: root.openDetails()
-        }
     }
 
     component SystemMenuItem: ThemedMenuItem { width: 230 }

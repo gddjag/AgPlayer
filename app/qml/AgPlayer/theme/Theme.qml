@@ -19,8 +19,9 @@ QtObject {
     // Keeping it here gives every non-immersive shell one lightweight policy
     // without instantiating an otherwise hidden waveform renderer.
     readonly property real nonImmersiveSpectralUnplayedOpacity:
-        Math.min(0.60, Number(Runtime.SettingsController
-                              .frequencyColorWaveform.unplayedOpacity))
+        Math.max(0.18, Math.min(1.0,
+            Number(Runtime.SettingsController
+                   .frequencyColorWaveform.unplayedOpacity)))
 
     function waveformProgressFraction(positionMs, durationMs) {
         var duration = Number(durationMs || 0)
@@ -195,10 +196,10 @@ QtObject {
     readonly property int playerInspectorWidth: 280
     readonly property int playerTagPanelWidth: 264
     readonly property int playerBottomBarHeight: 80
-    readonly property int rollingOverviewHeight: 128
-    readonly property int rollingOverviewHeightCompact: 112
-    readonly property int rollingWaveformHeight: 176
-    readonly property int rollingWaveformHeightCompact: 152
+    readonly property int rollingOverviewHeight: 120
+    readonly property int rollingOverviewHeightCompact: 104
+    readonly property int rollingWaveformHeight: 160
+    readonly property int rollingWaveformHeightCompact: 136
     readonly property int controlHeightCompact: 28
     readonly property int controlHeight: 32
     readonly property int controlHeightProminent: 36
@@ -213,7 +214,7 @@ QtObject {
     readonly property int iconSizeSm: 16
     readonly property int iconSizeMd: 18
     readonly property int iconSizeLg: 24
-    readonly property int navigationIconVisualSize: 18
+    readonly property int navigationIconVisualSize: 21
     readonly property int navigationActionExtent: 28
     readonly property string fontPrimary: Qt.platform.os === "windows"
                                           ? "Microsoft YaHei UI"

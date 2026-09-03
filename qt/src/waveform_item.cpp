@@ -738,7 +738,7 @@ qreal WaveformItem::frequencyUnplayedOpacity() const noexcept
 void WaveformItem::setFrequencyUnplayedOpacity(qreal opacity)
 {
     const qreal clamped = std::clamp(
-        std::isfinite(opacity) ? opacity : qreal{0.88}, qreal{0.60}, qreal{1.0});
+        std::isfinite(opacity) ? opacity : qreal{0.88}, qreal{0.18}, qreal{1.0});
     if (qFuzzyCompare(frequencyUnplayedOpacity_ + 1.0, clamped + 1.0)) {
         return;
     }

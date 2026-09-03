@@ -416,6 +416,15 @@ Rectangle {
                     gestureActive = AudioEditorController.beginEventGesture(
                         modelData.id, "move", duplicateMove)
                 }
+                onDoubleClicked: function(mouse) {
+                    if (mouse.button === Qt.RightButton
+                            && ((mouse.modifiers & Qt.ControlModifier) !== 0
+                                || canvas.controlModifierHeld)) {
+                        AudioEditorController.clearSelection()
+                        AudioEditorController.clearEventSelection()
+                        mouse.accepted = true
+                    }
+                }
                 onPositionChanged: function(mouse) {
                     if (!pressed || !gestureActive
                             || AudioEditorController.activeTool === "scissors")
@@ -471,6 +480,7 @@ Rectangle {
                 property string sharedRightId: ""
                 property bool useSharedBoundary: false
                 property bool gestureActive: false
+                property bool hasPreviousEvent: false
                 property double candidateSourceStart: 0
                 property double candidateTimelineStart: 0
                 onPressed: function(mouse) {
@@ -479,6 +489,7 @@ Rectangle {
                     candidateSourceStart = originalSourceStart
                     candidateTimelineStart = originalTimelineStart
                     const previous = canvas.previousTimelineEvent(modelData.id)
+                    hasPreviousEvent = previous !== null
                     sharedLeftId = previous ? previous.id : ""
                     sharedRightId = modelData.id
                     useSharedBoundary = previous
@@ -505,9 +516,11 @@ Rectangle {
                     let nextSourceStart = Math.max(0, Math.min(
                         Number(modelData.sourceEnd) - 1,
                         Math.round(originalSourceStart + delta)))
-                    let nextTimeline = Math.max(0, Math.round(
+                    // Trimming the leading edge of the first audible clip is a
+                    // crop, not a move: keep the edited result pinned to zero.
+                    let nextTimeline = hasPreviousEvent ? Math.max(0, Math.round(
                         originalTimelineStart
-                            + nextSourceStart - originalSourceStart))
+                            + nextSourceStart - originalSourceStart)) : 0
                     let updated = false
                     if (useSharedBoundary) {
                         updated = AudioEditorController.trimSharedBoundary(
@@ -1162,6 +1175,15 @@ Rectangle {
             if (outsideSelection)
                 AudioEditorController.setLoopEnabled(false)
             AudioEditorController.seekFrame(pressFrame)
+        }
+        onDoubleClicked: function(mouse) {
+            if (mouse.button === Qt.RightButton
+                    && ((mouse.modifiers & Qt.ControlModifier) !== 0
+                        || canvas.controlModifierHeld)) {
+                AudioEditorController.clearSelection()
+                AudioEditorController.clearEventSelection()
+                mouse.accepted = true
+            }
         }
         onPositionChanged: function(mouse) {
             if (!pressed) return

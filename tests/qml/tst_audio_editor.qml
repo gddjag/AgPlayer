@@ -134,10 +134,15 @@ TestCase {
         compare(first.height, nav.height)
     }
 
-    function test_removedTimelineGainAndRangeControlsStayAbsent() {
+    function test_removedTimelineGainAndTrackControlsStayAbsent() {
         compare(findChild(page, "editorTrackGain"), null)
         compare(findChild(page, "editorTrackGainLabel"), null)
-        compare(findChild(page, "editorTimelineZoomRange"), null)
+        compare(findChild(page, "editorTrackMute"), null)
+        compare(findChild(page, "editorTrackSolo"), null)
+        const zoom = findChild(page, "editorTimelineZoomRange")
+        verify(zoom)
+        compare(findChild(zoom, "editorTimelineZoomStartHandle").radius, 0)
+        compare(findChild(zoom, "editorTimelineZoomEndHandle").radius, 0)
         verify(findChild(page, "editorWaveformCanvas"))
         verify(findChild(page, "editorPlaybackTransport"))
         verify(findChild(page, "editorShortcutCard"))
@@ -214,7 +219,8 @@ TestCase {
         verifyGeometry("editorTimelineWorkspace", 12, 152, 1304, 490)
         compare(findChild(page, "editorTrackHeader"), null)
         verifyGeometry("editorTimeRuler", 12, 152, 1304, 52)
-        verifyGeometry("editorWaveformCanvas", 12, 204, 1304, 438)
+        verifyGeometry("editorWaveformCanvas", 12, 204, 1304, 424)
+        verifyGeometry("editorTimelineZoomRange", 12, 630, 1304, 28)
         verifyGeometry("editorPlaybackTransport", 12, 654, 1304, 80)
         verifyGeometry("editorShortcutCard", 12, 746, 1304, 64)
         verifyGeometry("editorStatusBar", 0, 822, 1328, 0)
@@ -718,7 +724,7 @@ TestCase {
         compare(findChild(page, "editorShortcutSecondGroup_3").text,
                 "双击音量线 = 添加控制点")
         compare(findChild(page, "editorShortcutSecondGroup_4").text,
-                "Ctrl+右键 = 选择片段 / 双击右键取消")
+                "Ctrl+右键 = 选择片段 / Ctrl+双击右键 = 取消片段选择")
     }
 
     function test_shortcutReferenceRowsExposeAllLabelsWithoutScrolling() {
@@ -891,7 +897,8 @@ TestCase {
                 ? "editorShortcutFirstGroup_" : "editorShortcutSecondGroup_"
             const lastLabel = findChild(page, prefix + (row.groupCount - 1))
             verify(lastLabel)
-            compare(lastLabel.font.pixelSize, Theme.fontSizeBody)
+            compare(lastLabel.font.pixelSize, row === firstRow
+                    ? Theme.fontSizeBody : Theme.fontSizeCaption)
             verify(lastLabel.implicitHeight <= row.height)
             row.contentX = Math.max(0, row.contentWidth - row.width)
             wait(0)
@@ -961,11 +968,11 @@ TestCase {
     function test_clipOperationBandKeeps24LogicalPixels_data() {
         return [
             { tag: "reference", width: 1672, height: 941,
-              canvasHeight: 469 },
+              canvasHeight: 455 },
             { tag: "desktop", width: 1280, height: 720,
-              canvasHeight: 260 },
+              canvasHeight: 246 },
             { tag: "compact", width: 880, height: 560,
-              canvasHeight: 158 }
+              canvasHeight: 144 }
         ]
     }
 

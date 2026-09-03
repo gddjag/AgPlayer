@@ -221,7 +221,7 @@ TestCase {
         verify(control)
         compare(control.playback, PlaybackController)
         compare(findChild(control, "muteButton").Accessible.name,
-                PlaybackController.muted ? qsTr("Unmute") : qsTr("Mute"))
+                PlaybackController.muted ? qsTr("取消静音") : qsTr("静音"))
         fuzzyCompare(findChild(control, "volumeSlider").value,
                      PlaybackController.muted ? 0 : PlaybackController.volume,
                      0.001)

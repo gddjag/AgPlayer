@@ -66,8 +66,11 @@ Assert-Matches $managerPage '(?s)Keys\.onDeletePressed:.*removeTracksFromLibrary
 if ($managerPage -match 'libraryTrackRename|renameTrackDialog|libraryTrackRelocate|relocateTrackDialog') {
     throw 'Library manager must not expose rename or relocate actions'
 }
-Assert-Matches $managerPage '(?s)function\s+openFileDetails\(trackId\).*fileOps\.trackDetails.*objectName:\s*"libraryTrackDetails".*text:\s*qsTr\("查看音频文件信息"\).*openFileDetails' `
-    'Library manager menu must end with the shared audio file details action'
+if ($managerPage -match 'objectName:\s*"libraryTrackDetails"' -or
+    $managerPage -match 'text:\s*qsTr\("查看音频文件信息"\)' -or
+    $managerPage -match 'function\s+openFileDetails') {
+    throw 'Library manager must not expose the removed audio file details action'
+}
 Assert-Matches $managerPage 'lastPersistenceError' `
     'Library manager must surface tombstone persistence errors'
 

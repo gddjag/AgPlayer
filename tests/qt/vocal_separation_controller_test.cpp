@@ -116,7 +116,7 @@ private slots:
     void downloadFailureRetriesMirrorBeforeReportingExhaustion();
     void queuedDownloadRouteAndCancellationUseProductionControllerState();
     void installedMappingUsesCheapDiscoveryThenExplicitAsyncHashing();
-    void customModelDirectoryPersistsAndRecognizesTrustedFlatFiles();
+    void customModelDirectoryPersistsAndRecognizesTrustedNestedFiles();
     void customModelDirectoryIgnoresUnknownFiles();
     void customSidecarManifestUsesTrustedFingerprintAndReportsRejection();
     void cancellingVerificationImmediatelyRestoresCheapModelStates();
@@ -611,7 +611,7 @@ installedMappingUsesCheapDiscoveryThenExplicitAsyncHashing()
 }
 
 void VocalSeparationControllerTest::
-customModelDirectoryPersistsAndRecognizesTrustedFlatFiles()
+customModelDirectoryPersistsAndRecognizesTrustedNestedFiles()
 {
     QTemporaryDir temporary;
     QVERIFY(temporary.isValid());
@@ -631,7 +631,10 @@ customModelDirectoryPersistsAndRecognizesTrustedFlatFiles()
             QUrl::fromLocalFile(customRoot)));
         QCOMPARE(controller.modelStorageDirectory(),
                  QFileInfo(customRoot).absoluteFilePath());
-        QVERIFY(writeBytes(QDir(customRoot).filePath(
+        const QString nestedRoot = QDir(customRoot).filePath(
+            QStringLiteral("人声模型/MDX/正式版"));
+        QVERIFY(QDir().mkpath(nestedRoot));
+        QVERIFY(writeBytes(QDir(nestedRoot).filePath(
                                QStringLiteral("test.onnx")),
                            modelBytes));
         QTRY_COMPARE_WITH_TIMEOUT(

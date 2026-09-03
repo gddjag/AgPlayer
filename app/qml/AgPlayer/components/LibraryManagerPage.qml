@@ -124,12 +124,6 @@ Item {
         if (failedIds.length > 0) removeTrackErrorDialog.open()
     }
 
-    function openFileDetails(trackId) {
-        fileDetailsPanel.trackId = trackId
-        refreshFileDetailsPanel(trackId)
-        fileDetailsPanel.open()
-        fileOps.requestTrackDetailsHydration(trackId)
-    }
     function refreshFileDetailsPanel(trackId) {
         fileDetailsPanel.details = fileOps.trackDetails(trackId)
         fileDetailsPanel.fullPath = String(fileDetailsPanel.details.path || "")
@@ -431,13 +425,6 @@ Item {
             objectName: "libraryTrackTrash"
             text: qsTr("彻底删除至回收站")
             onTriggered: trashTrackDialog.open()
-        }
-        MenuSeparator {}
-        SystemMenuItem {
-            objectName: "libraryTrackDetails"
-            text: qsTr("查看音频文件信息")
-            enabled: trackMenu.targetTrackIds.length === 1
-            onTriggered: root.openFileDetails(trackMenu.targetTrackId)
         }
     }
 

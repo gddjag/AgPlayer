@@ -12,6 +12,7 @@
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -175,7 +176,66 @@ bool modelFilesMatchSizes(const VocalModelCard& model,
     return true;
 }
 
+using ModelFileIndex = QHash<QString, QStringList>;
+
+QStringList resolveModelFilePaths(const VocalModelCard& model,
+                                  const QString& storageDirectory,
+                                  const ModelFileIndex& files)
+{
+    QStringList nested;
+    QStringList flat;
+    nested.reserve(model.files.size());
+    flat.reserve(model.files.size());
+    const QDir root(storageDirectory);
+    for (const VocalDownloadFile& file : model.files) {
+        nested.push_back(QDir(root.filePath(model.id)).filePath(file.fileName));
+        flat.push_back(root.filePath(file.fileName));
+    }
+    if (modelFilesMatchSizes(model, nested)) return nested;
+    if (modelFilesMatchSizes(model, flat)) return flat;
+
+    QStringList discovered;
+    discovered.reserve(model.files.size());
+    for (const VocalDownloadFile& expected : model.files) {
+        QString matchedPath;
+        const QStringList candidates = files.value(expected.fileName.toLower());
+        for (const QString& candidate : candidates) {
+            const QFileInfo info(candidate);
+            if (info.size() == expected.bytes
+                && safeExistingFileWithin(info.absoluteFilePath(), storageDirectory)) {
+                matchedPath = info.absoluteFilePath();
+                break;
+            }
+        }
+        if (matchedPath.isEmpty()) return nested;
+        discovered.push_back(matchedPath);
+    }
+    return modelFilesMatchSizes(model, discovered) ? discovered : nested;
+}
+
 } // namespace
+
+VocalSeparationController::ModelDirectoryIndex
+VocalSeparationController::buildModelDirectoryIndex(const QString& root)
+{
+    ModelDirectoryIndex result;
+    if (QFileInfo(root).isDir()) result.directories.push_back(root);
+    QDirIterator iterator(root, QDir::Files | QDir::Readable | QDir::NoSymLinks,
+                          QDirIterator::Subdirectories);
+    while (iterator.hasNext()) {
+        const QFileInfo info(iterator.next());
+        result.filesByName[info.fileName().toLower()].push_back(
+            info.absoluteFilePath());
+        if (info.suffix().compare(QStringLiteral("json"), Qt::CaseInsensitive) == 0)
+            result.manifests.push_back(info.absoluteFilePath());
+    }
+    QDirIterator directoryIterator(root, QDir::Dirs | QDir::NoDotAndDotDot,
+                                   QDirIterator::Subdirectories);
+    while (directoryIterator.hasNext())
+        result.directories.push_back(directoryIterator.next());
+    result.directories.removeDuplicates();
+    return result;
+}
 
 VocalSeparationController::VocalSeparationController(
     AudioPreviewController* preview, WaveformProvider* waveformProvider,
@@ -346,6 +406,13 @@ VocalSeparationController::~VocalSeparationController()
         verificationWatcher_ = nullptr;
     }
     verificationCancellation_.reset();
+    if (modelDirectoryIndexWatcher_ != nullptr) {
+        QFutureWatcher<ModelDirectoryIndex>* const watcher =
+            modelDirectoryIndexWatcher_;
+        disconnect(watcher, nullptr, this, nullptr);
+        watcher->future().waitForFinished();
+        modelDirectoryIndexWatcher_ = nullptr;
+    }
     if (runtimeInstallCancellation_)
         runtimeInstallCancellation_->store(true, std::memory_order_release);
     if (runtimeInstallerWatcher_ != nullptr) {
@@ -553,7 +620,8 @@ bool VocalSeparationController::verifyInstalledModels()
 {
     modelDirectoryScanTimer_.stop();
     scanModelDirectory();
-    return verificationWatcher_ != nullptr;
+    return modelDirectoryIndexWatcher_ != nullptr
+        || verificationWatcher_ != nullptr;
 }
 
 void VocalSeparationController::pauseDownload() { downloader_->pause(); }
@@ -595,6 +663,7 @@ bool VocalSeparationController::deleteModel(const QString& modelId)
             || downloadState == VocalDownloadState::Verifying);
     if (model == nullptr || requestInFlight() || downloadActive
         || runtimeInstallerWatcher_ != nullptr
+        || modelDirectoryIndexWatcher_ != nullptr
         || verificationWatcher_ != nullptr)
         return false;
     const QStringList resolvedPaths = modelFilePaths(*model);
@@ -1057,6 +1126,7 @@ bool VocalSeparationController::selectModelDirectory(const QUrl& directory)
         || downloadState == VocalDownloadState::Paused
         || downloadState == VocalDownloadState::Verifying;
     if (requestInFlight() || verificationWatcher_ != nullptr
+        || modelDirectoryIndexWatcher_ != nullptr
         || runtimeInstallerWatcher_ != nullptr || downloadActive
         || !downloadQueue_.isEmpty()) {
         return false;
@@ -1075,6 +1145,7 @@ bool VocalSeparationController::selectModelDirectory(const QUrl& directory)
     }
     modelDirectoryScanTimer_.stop();
     modelStorageDirectory_ = selected;
+    indexedModelFiles_.clear();
     modelDirectoryRescanPending_ = false;
     verifiedModelIds_.clear();
     verifiedOrRejectedModelIds_.clear();
@@ -1109,17 +1180,8 @@ QString VocalSeparationController::modelDirectory(const QString& modelId) const
 QStringList VocalSeparationController::modelFilePaths(
     const VocalModelCard& model) const
 {
-    QStringList nested;
-    QStringList flat;
-    nested.reserve(model.files.size());
-    flat.reserve(model.files.size());
-    for (const VocalDownloadFile& file : model.files) {
-        nested.push_back(QDir(modelDirectory(model.id)).filePath(file.fileName));
-        flat.push_back(QDir(modelStorageDirectory_).filePath(file.fileName));
-    }
-    if (modelFilesMatchSizes(model, nested)) return nested;
-    if (modelFilesMatchSizes(model, flat)) return flat;
-    return nested;
+    return resolveModelFilePaths(model, modelStorageDirectory_,
+                                 indexedModelFiles_);
 }
 
 QString VocalSeparationController::runtimeDirectory() const
@@ -1161,9 +1223,7 @@ bool VocalSeparationController::beginVerification(
         return false;
     const QList<VocalModelCard> catalog = model == nullptr
         ? options_.catalog : QList<VocalModelCard>{*model};
-    QHash<QString, QStringList> catalogPaths;
-    for (const VocalModelCard& candidate : catalog)
-        catalogPaths.insert(candidate.id, modelFilePaths(candidate));
+    const QString modelStorageDirectory = modelStorageDirectory_;
     const QString runtimePath = options_.runtimeLibraryPath;
     const bool verifyRuntime = options_.verifyRuntimeIntegrity;
     const QString runtimeHash = VocalSeparationCatalog::directMlRuntime().sha256;
@@ -1195,16 +1255,19 @@ bool VocalSeparationController::beginVerification(
     });
     refreshModels();
     verificationWatcher_->setFuture(QtConcurrent::run(
-        [catalog, catalogPaths, runtimePath, verifyRuntime, runtimeHash,
+        [catalog, modelStorageDirectory, runtimePath, verifyRuntime, runtimeHash,
          cancellation] {
             VerificationResult result;
+            const ModelFileIndex fileIndex = buildModelDirectoryIndex(
+                modelStorageDirectory).filesByName;
             const auto cancelled = [&cancellation] {
                 return cancellation->load(std::memory_order_acquire);
             };
             for (const VocalModelCard& candidate : catalog) {
                 if (cancelled()) return result;
                 bool verified = !candidate.files.isEmpty();
-                const QStringList paths = catalogPaths.value(candidate.id);
+                const QStringList paths = resolveModelFilePaths(
+                    candidate, modelStorageDirectory, fileIndex);
                 if (paths.size() != candidate.files.size()) verified = false;
                 for (qsizetype index = 0;
                      index < candidate.files.size(); ++index) {
@@ -1621,7 +1684,8 @@ void VocalSeparationController::scheduleModelDirectoryScan()
     modelDirectoryScanTimer_.start();
 }
 
-void VocalSeparationController::discoverCustomModels()
+void VocalSeparationController::discoverCustomModels(
+    const QStringList& manifestPaths)
 {
     options_.catalog = baseCatalog_;
     rejectedCustomModels_.clear();
@@ -1664,9 +1728,14 @@ void VocalSeparationController::discoverCustomModels()
             {QStringLiteral("rejectionReason"), reason},
         });
     };
-    const QFileInfoList manifests = root.entryInfoList(
-        {QStringLiteral("*.json")}, QDir::Files | QDir::Readable,
-        QDir::Name | QDir::IgnoreCase);
+    QFileInfoList manifests;
+    manifests.reserve(manifestPaths.size());
+    for (const QString& path : manifestPaths) manifests.push_back(QFileInfo(path));
+    std::sort(manifests.begin(), manifests.end(),
+              [](const QFileInfo& left, const QFileInfo& right) {
+                  return left.absoluteFilePath().compare(
+                             right.absoluteFilePath(), Qt::CaseInsensitive) < 0;
+              });
     for (const QFileInfo& info : manifests) {
         QFile file(info.absoluteFilePath());
         if (!safeExistingFileWithin(info.absoluteFilePath(), modelStorageDirectory_)
@@ -1708,7 +1777,8 @@ void VocalSeparationController::discoverCustomModels()
              manifest.value(QStringLiteral("files")).toArray()) {
             const QJsonObject entry = value.toObject();
             const QString name = entry.value(QStringLiteral("name")).toString();
-            if (!safeExistingFileWithin(root.filePath(name),
+            const QString manifestFilePath = info.dir().filePath(name);
+            if (!safeExistingFileWithin(manifestFilePath,
                                         modelStorageDirectory_)) {
                 safeFiles = false;
                 break;
@@ -1785,6 +1855,7 @@ void VocalSeparationController::scanModelDirectory()
     const VocalDownloadState downloadState = downloader_
         ? downloader_->state() : VocalDownloadState::Idle;
     const bool busy = requestInFlight() || verificationWatcher_ != nullptr
+        || modelDirectoryIndexWatcher_ != nullptr
         || runtimeInstallerWatcher_ != nullptr || !downloadQueue_.isEmpty()
         || downloadState == VocalDownloadState::Downloading
         || downloadState == VocalDownloadState::Paused
@@ -1793,20 +1864,43 @@ void VocalSeparationController::scanModelDirectory()
         modelDirectoryRescanPending_ = true;
         return;
     }
-    discoverCustomModels();
-    verifiedModelIds_.clear();
-    verifiedOrRejectedModelIds_.clear();
-    refreshModels();
-    bool completeKnownModel = false;
-    for (const VocalModelCard& model : std::as_const(options_.catalog)) {
-        if (modelFilesPresent(model)) {
-            completeKnownModel = true;
-            break;
+    const QString scannedRoot = modelStorageDirectory_;
+    auto* const watcher = new QFutureWatcher<ModelDirectoryIndex>(this);
+    modelDirectoryIndexWatcher_ = watcher;
+    connect(watcher, &QFutureWatcher<ModelDirectoryIndex>::finished, this,
+            [this, watcher, scannedRoot] {
+        const ModelDirectoryIndex result = watcher->result();
+        watcher->deleteLater();
+        if (modelDirectoryIndexWatcher_ != watcher) return;
+        modelDirectoryIndexWatcher_ = nullptr;
+        if (scannedRoot != modelStorageDirectory_) {
+            scheduleModelDirectoryScan();
+            return;
         }
-    }
-    if (!completeKnownModel) return;
-    modelDirectoryRescanPending_ = false;
-    beginVerification(VerificationPurpose::Refresh);
+        indexedModelFiles_ = result.filesByName;
+        const QStringList watched = modelDirectoryWatcher_.directories();
+        if (!watched.isEmpty()) modelDirectoryWatcher_.removePaths(watched);
+        if (!result.directories.isEmpty())
+            modelDirectoryWatcher_.addPaths(result.directories);
+        discoverCustomModels(result.manifests);
+        verifiedModelIds_.clear();
+        verifiedOrRejectedModelIds_.clear();
+        refreshModels();
+        bool completeKnownModel = false;
+        for (const VocalModelCard& model : std::as_const(options_.catalog)) {
+            if (modelFilesPresent(model)) {
+                completeKnownModel = true;
+                break;
+            }
+        }
+        const bool rescanRequested = std::exchange(
+            modelDirectoryRescanPending_, false);
+        if (completeKnownModel)
+            beginVerification(VerificationPurpose::Refresh);
+        if (rescanRequested) scheduleModelDirectoryScan();
+    });
+    watcher->setFuture(QtConcurrent::run(
+        [scannedRoot] { return buildModelDirectoryIndex(scannedRoot); }));
 }
 
 void VocalSeparationController::handleProbe(const QJsonObject& payload)

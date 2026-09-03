@@ -125,7 +125,7 @@
     <message><source>S = 播放头分割</source><translation>S = Split at playhead</translation></message>
     <message><source>Ctrl+C/X/V = 复制/剪切/粘贴</source><translation>Ctrl+C/X/V = Copy/Cut/Paste</translation></message>
     <message><source>Ctrl+Z/Y = 撤销/重做</source><translation>Ctrl+Z/Y = Undo/Redo</translation></message>
-    <message><source>Ctrl+右键 = 选择片段 / 双击右键取消</source><translation>Ctrl+Right-click = Select clip / Double right-click = Clear</translation></message>
+    <message><source>Ctrl+右键 = 选择片段 / Ctrl+双击右键 = 取消片段选择</source><translation>Ctrl+Right-click = Select clip / Ctrl+double right-click = Clear clip selection</translation></message>
     <message><source>仅导出选区</source><translation>Export selection only</translation></message>
     <message><source>导出中 %1%</source><translation>Exporting %1%</translation></message>
     <message><source>✔ 已导出</source><translation>✔ Exported</translation></message>

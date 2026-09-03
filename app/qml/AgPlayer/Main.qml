@@ -10,8 +10,8 @@ ApplicationWindow {
     visible: true
     width: 863
     height: 266
-    minimumWidth: SettingsController.playerShellMode === 1 ? 1180
-                  : SettingsController.playerShellMode === 2 ? 1000 : 612
+    minimumWidth: SettingsController.playerShellMode === 1
+                  || SettingsController.playerShellMode === 2 ? 1180 : 612
     minimumHeight: SettingsController.playerShellMode === 1 ? 720
                    : SettingsController.playerShellMode === 2 ? 720 : 232
     onClosing: function(close) {
@@ -254,7 +254,8 @@ ApplicationWindow {
         for (var index = 0; index < urls.length; ++index) {
             var classified = LibraryManagerController.classifyDropUrl(urls[index])
             if (classified.kind === LibraryManagerController.Directory
-                    || classified.kind === LibraryManagerController.AudioFile)
+                    || classified.kind === LibraryManagerController.AudioFile
+                    || classified.kind === LibraryManagerController.VideoFile)
                 accepted.push(classified.url)
         }
         if (accepted.length === 0)

@@ -48,7 +48,7 @@ Item {
                      ? Theme.icon("volume-mute-line") : Theme.icon("volume-up-line")
         icon.color: Theme.iconPrimary; icon.width: 20; icon.height: 20
         Accessible.name: root.playback && root.playback.muted
-                         ? qsTr("Unmute") : qsTr("Mute")
+                         ? qsTr("取消静音") : qsTr("静音")
         onClicked: if (root.playback) root.playback.toggleMuted()
         ToolTip.text: Accessible.name; ToolTip.visible: hovered
         background: Rectangle {
@@ -67,7 +67,7 @@ Item {
         width: root.expandedSliderWidth
         opacity: width > 0 ? 1 : 0; visible: !root.emptyMode
         from: 0; to: 1
-        Accessible.name: qsTr("Volume")
+        Accessible.name: qsTr("音量")
         onPressedChanged: {
             if (pressed) { volumeCloseTimer.stop(); root.expanded = true }
             else volumeCloseTimer.restart()

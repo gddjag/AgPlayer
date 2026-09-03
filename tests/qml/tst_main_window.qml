@@ -778,10 +778,10 @@ TestCase {
         mouseClick(button)
         var window = findChild(mainWindow, "equalizerWindow")
         tryVerify(function() { return window && window.visible }, 1000)
-        compare(window.width, 1180)
-        compare(window.height, 680)
-        compare(window.minimumWidth, 1080)
-        compare(window.minimumHeight, 480)
+        compare(window.width, 1080)
+        compare(window.height, 620)
+        compare(window.minimumWidth, 960)
+        compare(window.minimumHeight, 460)
         var equalizerTitle = findChild(window, "equalizerTitle")
         var equalizerContent = findChild(window, "equalizerContent")
         verify(equalizerTitle,
@@ -1138,8 +1138,7 @@ TestCase {
             ["trackMenuMoveFile", "移动到指定文件夹"],
             ["trackMenuCopyFile", "复制到指定文件夹"],
             ["trackMenuRemove", "从列表删除"],
-            ["trackMenuTrash", "彻底删除至回收站"],
-            ["trackMenuDetails", "查看音频文件信息"]
+            ["trackMenuTrash", "彻底删除至回收站"]
         ]
         for (var index = 0; index < expected.length; ++index) {
             var action = findChild(menu, expected[index][0])
@@ -1149,6 +1148,8 @@ TestCase {
         }
         verify(!findChild(menu, "trackMenuRename"))
         verify(!findChild(menu, "trackMenuRelocate"))
+        verify(!findChild(menu, "trackMenuDetails"),
+               "right-click file information was explicitly removed")
         menu.close()
         list.destroy()
     }
@@ -1298,7 +1299,7 @@ TestCase {
         listWindow.destroy()
     }
 
-    function test_track_list_file_information_uses_shared_panel_contract() {
+    function test_track_list_context_menu_omits_file_information() {
         var trackIds = nativeDropHelper.ensureSortableTracks()
         verify(trackIds.length > 0)
         var list = trackListComponent.createObject(mainWindow.contentItem)
@@ -1307,7 +1308,6 @@ TestCase {
         list.positionViewAtBeginning()
         wait(30)
 
-        var panel = null
         var menu = null
         try {
             var firstRow = list.itemAtIndex(0)
@@ -1316,49 +1316,15 @@ TestCase {
                        Qt.RightButton)
             menu = findChild(list, "trackContextMenu")
             tryVerify(function() { return menu && menu.visible }, 500)
-            var detailsAction = findChild(menu, "trackMenuDetails")
-            verify(detailsAction, "track menu must expose file information")
-            verify(detailsAction.enabled, "file information action must be enabled")
-            verify(detailsAction.visible && detailsAction.width > 20
-                   && detailsAction.height > 20,
-                   "file information action must be visibly clickable")
-            positionMenuActionInViewport(menu, detailsAction)
-            var detailsSpy = signalSpyComponent.createObject(testCase,
-                                                              { "target": detailsAction,
-                                                                "signalName": "triggered" })
-            verify(detailsSpy.valid)
-            mouseClick(detailsAction, detailsAction.width / 2,
-                       detailsAction.height / 2)
-            compare(detailsSpy.count, 1,
-                    "clicking file information must trigger its menu action")
-            panel = findChild(list, "audioFileInfoPanel")
-            tryVerify(function() { return panel && panel.visible }, 500)
-            tryVerify(function() {
-                return requiredFileInfoRowsAreHydrated(panel)
-            }, 3000)
-            verifyFileInfoPanel(panel, String(panel.details.path || ""))
-            mainWindow.requestActivate()
-            tryVerify(function() { return mainWindow.active }, 1000)
-            var trackListClose = findChild(panel, "audioFileInfoClose")
-            trackListClose.forceActiveFocus()
-            verify(trackListClose.activeFocus,
-                   "close button focus failed; active=" + mainWindow.active
-                   + ", visible=" + mainWindow.visible
-                   + ", activeFocusItem="
-                   + (mainWindow.activeFocusItem
-                      ? mainWindow.activeFocusItem.objectName : "null"))
-            keyClick(Qt.Key_Escape)
-            tryVerify(function() { return !panel.visible }, 500)
+            compare(findChild(menu, "trackMenuDetails"), null)
         } finally {
             if (menu)
                 menu.close()
-            if (panel)
-                panel.close()
             list.destroy()
         }
     }
 
-    function test_library_manager_file_information_uses_shared_panel_contract() {
+    function test_library_manager_context_menu_omits_file_information() {
         var trackIds = nativeDropHelper.ensureSortableTracks()
         verify(trackIds.length > 0)
         var page = libraryManagerPageComponent.createObject(mainWindow.contentItem)
@@ -1367,7 +1333,6 @@ TestCase {
         page.height = Math.max(page.height, page.implicitHeight)
         wait(30)
 
-        var panel = null
         var menu = null
         try {
             var trackList = findChild(page, "libraryManagerTrackList")
@@ -1404,44 +1369,10 @@ TestCase {
                        Qt.RightButton)
             menu = findChild(page, "libraryManagerTrackMenu")
             tryVerify(function() { return menu && menu.visible }, 500)
-            var detailsAction = findChild(menu, "libraryTrackDetails")
-            verify(detailsAction, "library manager menu must expose file information")
-            verify(detailsAction.enabled, "file information action must be enabled")
-            verify(detailsAction.visible && detailsAction.width > 20
-                   && detailsAction.height > 20,
-                   "file information action must be visibly clickable")
-            positionMenuActionInViewport(menu, detailsAction)
-            var detailsSpy = signalSpyComponent.createObject(testCase,
-                                                              { "target": detailsAction,
-                                                                "signalName": "triggered" })
-            verify(detailsSpy.valid)
-            mouseClick(detailsAction, detailsAction.width / 2,
-                       detailsAction.height / 2)
-            compare(detailsSpy.count, 1,
-                    "clicking file information must trigger its menu action")
-            panel = findChild(page, "audioFileInfoPanel")
-            tryVerify(function() { return panel && panel.visible }, 500)
-            tryVerify(function() {
-                return requiredFileInfoRowsAreHydrated(panel)
-            }, 3000)
-            verifyFileInfoPanel(panel, String(panel.details.path || ""))
-            mainWindow.requestActivate()
-            tryVerify(function() { return mainWindow.active }, 1000)
-            var libraryManagerClose = findChild(panel, "audioFileInfoClose")
-            libraryManagerClose.forceActiveFocus()
-            verify(libraryManagerClose.activeFocus,
-                   "close button focus failed; active=" + mainWindow.active
-                   + ", visible=" + mainWindow.visible
-                   + ", activeFocusItem="
-                   + (mainWindow.activeFocusItem
-                      ? mainWindow.activeFocusItem.objectName : "null"))
-            keyClick(Qt.Key_Escape)
-            tryVerify(function() { return !panel.visible }, 500)
+            compare(findChild(menu, "libraryTrackDetails"), null)
         } finally {
             if (menu)
                 menu.close()
-            if (panel)
-                panel.close()
             page.destroy()
         }
     }
@@ -2342,6 +2273,7 @@ TestCase {
     }
 
     function test_waveform_click_seeks_real_playback_controller() {
+        SettingsController.waveformMode = 0
         var waveform = findChild(mainWindow, "mainWaveform")
         var seekSurface = findChild(mainWindow, "waveformInteractionSurface")
         verify(waveform, "main waveform should exist after importing audio")
@@ -2669,13 +2601,9 @@ TestCase {
         verifyAscendingX(rightActions, [
             "themeModeButton", "immersiveActionButton", "miniPlayerButton"
         ])
-        var actionNames = ["themeModeButton", "immersiveActionButton",
-                           "miniPlayerButton"]
-        for (var actionIndex = 0; actionIndex < actionNames.length;
-             ++actionIndex) {
-            compare(findChild(rightActions, actionNames[actionIndex]).icon.width,
-                    20, actionNames[actionIndex] + " icon width")
-        }
+        compare(findChild(rightActions, "themeModeButton").icon.width, 20)
+        compare(findChild(rightActions, "immersiveActionButton").icon.width, 26)
+        compare(findChild(rightActions, "miniPlayerButton").icon.width, 20)
         verify(findChild(controls, "audioToolsButton").mapToItem(
                    controls, findChild(controls, "audioToolsButton").width, 0).x
                <= transport.mapToItem(controls, 0, 0).x)
@@ -2708,6 +2636,11 @@ TestCase {
         compare(controls.compactTransport, true)
         verify(findChild(controls, "audioToolsButton").visible)
         verify(findChild(controls, "lyricsActionButton").visible)
+        verify(findChild(controls, "equalizerButton").visible)
+        verify(findChild(controls, "waveformModeButton").visible)
+        verify(findChild(controls, "themeModeButton").visible)
+        verify(findChild(controls, "immersiveActionButton").visible)
+        verify(findChild(controls, "miniPlayerButton").visible)
         verify(transport.mapToItem(controls, transport.width, 0).x
                <= volume.mapToItem(controls, 0, 0).x)
         verify(volume.mapToItem(controls, volume.width, 0).x
@@ -4965,8 +4898,8 @@ TestCase {
             tryVerify(function() { return chevron.visible }, 500)
             compare(chevron.width, 28)
             compare(chevron.height, 28)
-            compare(chevron.icon.width, 18)
-            compare(chevron.icon.height, 18)
+            compare(chevron.icon.width, 21)
+            compare(chevron.icon.height, 21)
         } finally {
             if (emptyNavigation)
                 emptyNavigation.destroy()
@@ -5260,9 +5193,6 @@ TestCase {
     }
 
     function test_empty_library_uses_the_normal_player_structure() {
-        compare(mainWindow.width, 863)
-        compare(mainWindow.height, 266)
-
         var pane = findChild(mainWindow, "playerPane")
         var controls = findChild(mainWindow, "playerControls")
         compare(findChild(mainWindow, "emptyStartup"), null)
@@ -5312,10 +5242,11 @@ TestCase {
         verify(centerRight <= volumeLeft + 0.5,
                "compact playback actions must not overlap the volume control")
         verify(volumeRight <= secondaryLeft + 0.5,
-               "compact volume control must not overlap the right actions")
+               "compact volume control must not overlap the right actions: "
+               + volumeRight + " > " + secondaryLeft)
         compare(findChild(mainWindow, "experienceActions").compact, true)
         compare(findChild(mainWindow, "playerShellModeButton"), null)
-        compare(findChild(mainWindow, "miniPlayerButton").visible, false)
+        compare(findChild(mainWindow, "miniPlayerButton").visible, true)
         var artist = findChild(mainWindow, "trackArtistAlbum")
         var rating = findChild(mainWindow, "trackRating")
         var metadata = findChild(mainWindow, "trackMetadataBadges")

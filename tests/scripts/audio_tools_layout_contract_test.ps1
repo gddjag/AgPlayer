@@ -162,8 +162,9 @@ if ($toolsNavigation -notmatch 'implicitHeight:\s*Theme\.settingsRowHeight' -or
 foreach ($button in @('audioToolsMinimizeButton', 'audioToolsMaximizeButton',
                       'audioToolsCloseButton')) {
     $pattern = 'objectName:\s*"' + $button +
-        '"[\s\S]{0,180}Layout\.preferredWidth:\s*Theme\.navigationActionExtent' +
-        '[\s\S]{0,100}Layout\.preferredHeight:\s*Theme\.navigationActionExtent'
+        '"[\s\S]{0,180}Layout\.preferredWidth:\s*24' +
+        '[\s\S]{0,100}Layout\.preferredHeight:\s*24' +
+        '[\s\S]{0,100}iconSize:\s*14'
     if ($toolsWindow -notmatch $pattern) {
         throw "Audio-tools window button is not compact: $button"
     }
@@ -323,11 +324,16 @@ if ($audioEditor -notmatch 'frameAtPixel\(\s*index\s*\*\s*ruler\.width\s*/\s*8\)
     $audioEditor -match 'visibleStartFrame\s*\+\s*AudioEditorController\.viewport\.visibleFrameCount') {
     throw 'Ruler and timeline interactions must use the shared viewport mapper without duplicate frame arithmetic.'
 }
-foreach ($removedControl in @('editorTrackGain', 'editorTrackGainLabel',
-                              'editorTimelineZoomRange')) {
+foreach ($removedControl in @('editorTrackGain', 'editorTrackGainLabel')) {
     if ($audioEditor -match ('objectName:\s*"' + $removedControl + '"')) {
         throw "Removed editor control remains: $removedControl"
     }
+}
+if ($audioEditor -notmatch 'ThemedRangeSlider\s*\{[\s\S]{0,120}objectName:\s*"editorTimelineZoomRange"' -or
+    $audioEditor -notmatch 'Qt\.rgba\(Theme\.borderStrong\.r,[\s\S]{0,120}0\.30\)' -or
+    $audioEditor -notmatch 'objectName:\s*"editorTimelineZoomStartHandle"[\s\S]{0,100}radius:\s*0' -or
+    $audioEditor -notmatch 'objectName:\s*"editorTimelineZoomEndHandle"[\s\S]{0,100}radius:\s*0') {
+    throw 'The restored editor zoom strip must use the themed range control, square handles, and 30% track.'
 }
 if ($waveformCanvas -notmatch 'viewportChannelPeaks' -or
     $waveformCanvas -match 'visibleStartRatio|visibleEndRatio|renderMode' -or

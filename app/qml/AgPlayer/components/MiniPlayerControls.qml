@@ -18,12 +18,6 @@ Rectangle {
     property real waveformDurationMs: 0
     property int libraryRevision: 0
     readonly property var actionProfile: PlayerPresentation.profile("mini")
-    property real popupDevicePixelRatioOverrideForTesting: 0
-    readonly property real themePopupDevicePixelRatio:
-        popupDevicePixelRatioOverrideForTesting > 0
-        ? popupDevicePixelRatioOverrideForTesting
-        : root.Window.window && root.Window.window.screen
-          ? root.Window.window.screen.devicePixelRatio : 1
     // The complete decoded PCM duration is the waveform clock; metadata is a
     // fallback only until analysis finishes.
     readonly property real effectiveDurationMs: waveformDurationMs > 0
@@ -346,25 +340,6 @@ Rectangle {
                 Layout.fillWidth: true; Layout.fillHeight: true; spacing: 3
                 Item { Layout.fillWidth: true }
                 ToolButton {
-                    id: themeModeButton
-                    objectName: "miniThemeModeButton"
-                    visible: PlayerPresentation.hasAction(
-                                 root.actionProfile, "miniThemeModeButton")
-                    Layout.preferredWidth: 28
-                    Layout.minimumWidth: Layout.preferredWidth
-                    Layout.maximumWidth: Layout.preferredWidth
-                    Layout.preferredHeight: 28
-                    icon.source: Theme.icon("theme-skin")
-                    icon.color: Theme.iconPrimary
-                    icon.width: 16
-                    icon.height: 16
-                    Accessible.name: qsTr("切换主题")
-                    ToolTip.text: Accessible.name
-                    ToolTip.visible: hovered
-                    onClicked: root.openThemePopup()
-                    background: null
-                }
-                ToolButton {
                     id: waveformModeButton
                     objectName: "miniWaveformModeButton"
                     visible: PlayerPresentation.hasAction(
@@ -530,45 +505,6 @@ Rectangle {
             }
         }
     }
-    function themePopupPositionForDpr(dpr) {
-        var window = root.Window.window
-        var surface = window ? window.contentItem : root
-        return PlayerPresentation.popupPosition(themeModeButton,
-                                                miniPlayerShellMenu,
-                                                surface, dpr)
-    }
-
-    function openThemePopup() {
-        var point = themePopupPositionForDpr(themePopupDevicePixelRatio)
-        miniPlayerShellMenu.popup(point.x, point.y)
-    }
-
-    Menu {
-        id: miniPlayerShellMenu
-        objectName: "miniPlayerShellMenu"
-        parent: root.Window.window ? root.Window.window.contentItem : root
-        width: 200
-
-        MenuItem {
-            text: qsTr("经典双窗口")
-            checkable: true
-            checked: SettingsController.playerShellMode === 0
-            onTriggered: SettingsController.playerShellMode = 0
-        }
-        MenuItem {
-            text: qsTr("集成单窗口")
-            checkable: true
-            checked: SettingsController.playerShellMode === 1
-            onTriggered: SettingsController.playerShellMode = 1
-        }
-        MenuItem {
-            text: qsTr("滚动播放模式")
-            checkable: true
-            checked: SettingsController.playerShellMode === 2
-            onTriggered: SettingsController.playerShellMode = 2
-        }
-    }
-
     Connections {
         target: playback; ignoreUnknownSignals: true
         function onTrackIndexChanged() { root.loadWaveform() }

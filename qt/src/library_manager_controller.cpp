@@ -347,8 +347,13 @@ QVariantMap LibraryManagerController::classifyDropUrl(const QUrl& url) const
             if (info.isDir()) {
                 kind = DropPathKind::Directory;
             } else if (info.isFile()) {
-                kind = agplayer::qt::isSupportedAudioFile(info)
-                    ? DropPathKind::AudioFile : DropPathKind::OtherFile;
+                if (agplayer::qt::isSupportedAudioFile(info)) {
+                    kind = DropPathKind::AudioFile;
+                } else if (agplayer::qt::isSupportedVideoExtension(info.suffix())) {
+                    kind = DropPathKind::VideoFile;
+                } else {
+                    kind = DropPathKind::OtherFile;
+                }
             }
         }
     }

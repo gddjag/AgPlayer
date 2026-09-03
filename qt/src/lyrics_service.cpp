@@ -2,8 +2,8 @@
 
 #include "playback_controller.hpp"
 #include "settings_controller.hpp"
+#include "lrcapi_lyrics_provider.hpp"
 #include "unison_lyrics_provider.hpp"
-#include "lyrics_ovh_provider.hpp"
 
 #include <QDateTime>
 #include <QDir>
@@ -45,13 +45,14 @@ LyricsService::LyricsService(LibraryModel* library, PlaybackController* playback
         provider_ = provider;
     } else {
         networkManager_ = new QNetworkAccessManager(this);
+        auto* lrcapi = new LrcApiLyricsProvider(networkManager_, this);
         auto* lrclib = new LrclibProvider(networkManager_, this);
         auto* unison = new UnisonLyricsProvider(networkManager_, this);
-        auto* ovh = new LyricsOvhProvider(networkManager_, this);
         provider_ = new LyricsProviderChain(
-            {{QStringLiteral("lrclib"), QStringLiteral("LRCLIB"), lrclib},
+            {{QStringLiteral("lrcapi"), QStringLiteral("LrcAPI"), lrcapi},
+             {QStringLiteral("lrclib"), QStringLiteral("LRCLIB"), lrclib},
              {QStringLiteral("unison"), QStringLiteral("Unison"), unison},
-             {QStringLiteral("lyrics-ovh"), QStringLiteral("lyrics.ovh"), ovh}}, this, {},
+            }, this, {},
             [this](const LyricsProvider::Track& track,
                    const QList<LyricsProvider::Candidate>& candidates) {
                 return bestCandidate(track, candidates).has_value();

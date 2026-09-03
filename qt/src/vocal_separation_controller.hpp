@@ -258,9 +258,16 @@ private:
         bool runtimeVerified = false;
     };
 
+    struct ModelDirectoryIndex {
+        QHash<QString, QStringList> filesByName;
+        QStringList directories;
+        QStringList manifests;
+    };
+
     const VocalModelCard* selectedModel() const;
     const VocalModelCard* modelForId(const QString& modelId) const;
     QString modelDirectory(const QString& modelId) const;
+    static ModelDirectoryIndex buildModelDirectoryIndex(const QString& root);
     QStringList modelFilePaths(const VocalModelCard& model) const;
     QString runtimeDirectory() const;
     bool modelInstalled(const VocalModelCard& model) const;
@@ -290,7 +297,7 @@ private:
     void rebuildModelDirectoryWatcher();
     void scheduleModelDirectoryScan();
     void scanModelDirectory();
-    void discoverCustomModels();
+    void discoverCustomModels(const QStringList& manifests);
     void handleProbe(const QJsonObject& payload);
     void handleResult(const QJsonObject& payload);
     void analyzeNextWaveform();
@@ -334,6 +341,7 @@ private:
     QFileSystemWatcher modelDirectoryWatcher_;
     QTimer modelDirectoryScanTimer_;
     QFutureWatcher<VerificationResult>* verificationWatcher_ = nullptr;
+    QFutureWatcher<ModelDirectoryIndex>* modelDirectoryIndexWatcher_ = nullptr;
     QFutureWatcher<VocalInstallResult>* runtimeInstallerWatcher_ = nullptr;
     std::shared_ptr<std::atomic_bool> verificationCancellation_;
     std::shared_ptr<std::atomic_bool> runtimeInstallCancellation_;
@@ -364,6 +372,7 @@ private:
     QString outputFormat_ = QStringLiteral("wav");
     QString outputDirectory_;
     QString modelStorageDirectory_;
+    QHash<QString, QStringList> indexedModelFiles_;
     bool modelDirectoryRescanPending_ = false;
     DeviceMode deviceMode_ = DeviceMode::Auto;
     JobState jobState_ = JobState::Idle;

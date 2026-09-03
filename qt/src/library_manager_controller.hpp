@@ -62,7 +62,7 @@ class LibraryManagerController : public QAbstractListModel {
     Q_PROPERTY(int pageCount READ pageCount NOTIFY filterChanged)
 
 public:
-    enum class DropPathKind { Invalid, Directory, AudioFile, OtherFile };
+    enum class DropPathKind { Invalid, Directory, AudioFile, VideoFile, OtherFile };
     Q_ENUM(DropPathKind)
 
     enum Role { TrackIdRole = Qt::UserRole + 1, PathRole, TitleRole, ArtistRole,

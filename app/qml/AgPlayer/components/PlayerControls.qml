@@ -11,7 +11,10 @@ Rectangle {
         color: parent.down ? Theme.surfacePressed
                            : parent.hovered ? Theme.surfaceHover
                                             : "transparent"
-        border.width: parent.activeFocus ? 2 : 0
+        border.width: parent.activeFocus
+                      && (parent.focusReason === Qt.TabFocusReason
+                          || parent.focusReason === Qt.BacktabFocusReason)
+                      ? 2 : 0
         border.color: Theme.focus
         radius: Theme.radiusSm
         Behavior on color { ColorAnimation { duration: 100 } }
@@ -58,6 +61,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.leftMargin: 24
         anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenterOffset: root.rollingLayout ? 0 : -2
         visible: root.showListWindowButton
                  && PlayerPresentation.hasAction(root.actionProfile,
                                                  "listWindowButton")
@@ -83,10 +87,23 @@ Rectangle {
         id: centerControls
         objectName: "centerPlaybackControls"
         anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenterOffset: root.rollingLayout ? 0 : -2
         x: {
-            var centered = root.width / 2 - playButtonCenterX
+            var toolWidth = root.compactTransport ? 32 : 40
+            var playWidth = root.compactTransport ? 46 : 52
+            var leadingCount = 1 // previous
+            if (showEqualizer && waveformPlacement === "beforePrevious")
+                ++leadingCount
+            if (showWaveformMode && waveformPlacement === "beforePrevious")
+                ++leadingCount
+            var playCenterOffset = leadingCount * toolWidth
+                    + leadingCount * spacing + playWidth / 2
+            var centered = root.width / 2 - playCenterOffset
             var leftLimit = listWindowButton.visible
                     ? listWindowButton.x + listWindowButton.width + 12 : 12
+            if (!root.rollingLayout)
+                leftLimit += (root.denseTransport ? 32 : 40)
+                    + (root.denseTransport ? 4 : 10)
             if (root.rollingLayout)
                 return leftLimit
             return root.centerTransport
@@ -162,8 +179,9 @@ Rectangle {
         anchors.leftMargin: root.rollingLayout
                             ? (root.denseTransport ? 2 : 8) : 0
         anchors.right: root.rollingLayout ? undefined : parent.right
-        anchors.rightMargin: root.rollingLayout ? 0 : 24
-        anchors.verticalCenter: parent.verticalCenter
+        anchors.rightMargin: root.rollingLayout ? 0
+                            : (root.denseTransport ? 0 : 24)
+        anchors.verticalCenter: centerControls.verticalCenter
         spacing: root.denseTransport ? 4 : 14
 
         ToolButton {
@@ -173,7 +191,6 @@ Rectangle {
             height: root.denseTransport ? 32 : implicitHeight
             visible: PlayerPresentation.hasAction(root.actionProfile,
                                                   "themeModeButton")
-                     && !root.compactTransport
             flat: true
             icon.source: Theme.icon("theme-skin")
             icon.color: Theme.iconPrimary
@@ -188,7 +205,7 @@ Rectangle {
 
         ExperienceActions {
             objectName: "immersiveExperienceActions"
-            visible: !root.compactTransport
+            visible: true
             anchors.verticalCenter: parent.verticalCenter
             presentationProfile: root.actionProfile
             compact: root.denseTransport
@@ -205,7 +222,6 @@ Rectangle {
             visible: PlayerPresentation.hasAction(root.actionProfile,
                                                   "miniPlayerButton")
                      && !root.emptyMode
-                     && !root.compactTransport
             flat: true
             icon.source: Theme.icon("picture-in-picture-2-line")
             icon.color: Theme.iconPrimary

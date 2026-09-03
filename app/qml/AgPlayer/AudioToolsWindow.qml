@@ -163,8 +163,9 @@ Window {
                         objectName: "audioToolsMinimizeButton"
                         focusPolicy: Qt.NoFocus
                         Keys.onSpacePressed: function(event) { event.accepted = true }
-                        Layout.preferredWidth: Theme.navigationActionExtent
-                        Layout.preferredHeight: Theme.navigationActionExtent
+                        Layout.preferredWidth: 24
+                        Layout.preferredHeight: 24
+                        iconSize: 14
                         iconSource: Theme.icon("subtract-line")
                         accessibleName: qsTr("最小化")
                         onClicked: window.showMinimized()
@@ -173,8 +174,9 @@ Window {
                         objectName: "audioToolsMaximizeButton"
                         focusPolicy: Qt.NoFocus
                         Keys.onSpacePressed: function(event) { event.accepted = true }
-                        Layout.preferredWidth: Theme.navigationActionExtent
-                        Layout.preferredHeight: Theme.navigationActionExtent
+                        Layout.preferredWidth: 24
+                        Layout.preferredHeight: 24
+                        iconSize: 14
                         iconSource: Theme.icon(window.visibility === Window.Maximized
                                                ? "fullscreen-exit-fill"
                                                : "checkbox-blank-line")
@@ -187,8 +189,9 @@ Window {
                         objectName: "audioToolsCloseButton"
                         focusPolicy: Qt.NoFocus
                         Keys.onSpacePressed: function(event) { event.accepted = true }
-                        Layout.preferredWidth: Theme.navigationActionExtent
-                        Layout.preferredHeight: Theme.navigationActionExtent
+                        Layout.preferredWidth: 24
+                        Layout.preferredHeight: 24
+                        iconSize: 14
                         iconSource: Theme.icon("close-fill")
                         accessibleName: qsTr("关闭")
                         dangerOnHover: true

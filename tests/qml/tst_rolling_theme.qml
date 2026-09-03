@@ -213,7 +213,7 @@ TestCase {
             return shell("classicPlayerShell") === null
                    && shell("integratedPlayerShell") === null
         }, 1500)
-        compare(mainWindow.minimumWidth, 1000)
+        compare(mainWindow.minimumWidth, 1180)
         compare(mainWindow.minimumHeight, 720)
     }
 

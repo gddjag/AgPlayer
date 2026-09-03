@@ -81,7 +81,7 @@ private slots:
     void geometryDockAndPinStatePersist();
     void legacyMiniGeometryMigratesToReferenceDefault();
     void persistedClassicGeometrySurvivesReferenceDefaultChange();
-    void shellModesPersistIndependentMainWindowGeometry();
+    void switchingBackToClassicRestoresReferenceSize();
     void classicAndRollingListWindowStateRemainIndependent();
     void switchingBackWithoutClassicGeometryUsesCompactDefault();
     void persistedDockEdgeSurvivesInitialPreferenceWiring();
@@ -307,9 +307,10 @@ void WindowControllerTest::immersivePresentationHonorsDeferredShellRequestWithou
     windows.setMainWindowShellMode(0);
 
     windows.leaveImmersivePresentation();
-    QCOMPARE(mainWindow.geometry(), classicGeometry);
+    QCOMPARE(mainWindow.size(), QSize(863, 266).boundedTo(
+                 mainWindow.screen()->availableGeometry().size()));
     QCOMPARE(settings.value(QStringLiteral("windows/mainGeometry")).toRect(),
-             classicGeometry);
+             mainWindow.geometry());
     QCOMPARE(settings.value(QStringLiteral("windows/integratedMainGeometry")).toRect(),
              integratedGeometry);
 }
@@ -510,11 +511,12 @@ void WindowControllerTest::immersivePresentationDefersClassicShellRequestWithout
         windows.setMainWindowShellMode(0);
         windows.leaveImmersivePresentation();
 
-        QCOMPARE(mainWindow.geometry(), classicGeometry);
+        QCOMPARE(mainWindow.size(), QSize(863, 266).boundedTo(
+                     mainWindow.screen()->availableGeometry().size()));
         QTest::qWait(300);
         settings.sync();
         QCOMPARE(settings.value(QStringLiteral("windows/mainGeometry")).toRect(),
-                 classicGeometry);
+                 mainWindow.geometry());
         QCOMPARE(settings.value(
                      QStringLiteral("windows/integratedMainGeometry")).toRect(),
                  integratedGeometry);
@@ -537,7 +539,7 @@ void WindowControllerTest::immersivePresentationDefersClassicShellRequestWithout
              integratedGeometry);
 }
 
-void WindowControllerTest::shellModesPersistIndependentMainWindowGeometry()
+void WindowControllerTest::switchingBackToClassicRestoresReferenceSize()
 {
     QWindow mainWindow;
     mainWindow.setGeometry(40, 50, 960, 298);
@@ -552,22 +554,25 @@ void WindowControllerTest::shellModesPersistIndependentMainWindowGeometry()
     mainWindow.setGeometry(20, 40, 760, 700);
 
     windows.setMainWindowShellMode(0);
-    QCOMPARE(mainWindow.geometry(), QRect(20, 30, 700, 320));
+    QCOMPARE(mainWindow.size(), QSize(863, 266).boundedTo(
+                 mainWindow.screen()->availableGeometry().size()));
 
     windows.setMainWindowShellMode(1);
     QCOMPARE(mainWindow.geometry(), QRect(20, 40, 760, 700));
 
     windows.setMainWindowShellMode(2);
-    QCOMPARE(mainWindow.size(), QSize(1440, 480).boundedTo(
+    QCOMPARE(mainWindow.size(), QSize(1672, 820).boundedTo(
                  mainWindow.screen()->availableGeometry().size()));
     mainWindow.setGeometry(30, 50, 760, 460);
 
     windows.setMainWindowShellMode(0);
-    QCOMPARE(mainWindow.geometry(), QRect(20, 30, 700, 320));
+    QCOMPARE(mainWindow.size(), QSize(863, 266).boundedTo(
+                 mainWindow.screen()->availableGeometry().size()));
+    const QRect referenceClassicGeometry = mainWindow.geometry();
     windows.setMainWindowShellMode(2);
     QCOMPARE(mainWindow.geometry(), QRect(30, 50, 760, 460));
     QCOMPARE(QSettings().value(QStringLiteral("windows/mainGeometry")).toRect(),
-             QRect(20, 30, 700, 320));
+             referenceClassicGeometry);
     QCOMPARE(QSettings().value(
                  QStringLiteral("windows/integratedMainGeometry")).toRect(),
              QRect(20, 40, 760, 700));
