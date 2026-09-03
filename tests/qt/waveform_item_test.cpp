@@ -357,25 +357,59 @@ void WaveformItemTest::frequencyModeUsesAmplitudeGeometryAndOpacityOnlyProgress(
     const auto* frequencyVertices = vertices(frequencyNode);
     const int count = static_cast<QSGGeometryNode*>(plainNode)
                           ->geometry()->vertexCount();
+    QCOMPARE(count, 200);
     QCOMPARE(static_cast<QSGGeometryNode*>(frequencyNode)
-                 ->geometry()->vertexCount(), count);
-    for (int index = 0; index < count; ++index) {
-        QCOMPARE(frequencyVertices[index].x, plainVertices[index].x);
-        QCOMPARE(frequencyVertices[index].y, plainVertices[index].y);
+                 ->geometry()->vertexCount(), count * 2);
+    const int peakCount = count / 2;
+    for (int index = 0; index < peakCount; ++index) {
+        const int plainVertex = index * 2;
+        const int frequencyVertex = index * 4;
+        QCOMPARE(frequencyVertices[frequencyVertex].x,
+                 plainVertices[plainVertex].x);
+        QCOMPARE(frequencyVertices[frequencyVertex + 1].x,
+                 plainVertices[plainVertex].x);
+        QCOMPARE(frequencyVertices[frequencyVertex + 2].x,
+                 plainVertices[plainVertex].x);
+        QCOMPARE(frequencyVertices[frequencyVertex + 3].x,
+                 plainVertices[plainVertex].x);
+        QCOMPARE(frequencyVertices[frequencyVertex].y,
+                 plainVertices[plainVertex].y);
+        QCOMPARE(frequencyVertices[frequencyVertex + 1].y, 20.0F);
+        QCOMPARE(frequencyVertices[frequencyVertex + 2].y, 20.0F);
+        QCOMPARE(frequencyVertices[frequencyVertex + 3].y,
+                 plainVertices[plainVertex + 1].y);
     }
-    compareColor(frequencyVertices[0], 255, 0, 0, 224);
-    const int sampleVertex = count / 2;
-    const auto before = frequencyVertices[sampleVertex];
+    QCOMPARE(static_cast<int>(frequencyVertices[0].a), 123);
+    QCOMPARE(static_cast<int>(frequencyVertices[1].a), 224);
+    QCOMPARE(static_cast<int>(frequencyVertices[2].a), 224);
+    QCOMPARE(static_cast<int>(frequencyVertices[3].a), 123);
+    QVERIFY(frequencyVertices[1].r > frequencyVertices[0].r);
+    const auto beforeEdge = frequencyVertices[0];
+    const auto beforeCenter = frequencyVertices[1];
+
+    std::vector<QPointF> beforePositions;
+    beforePositions.reserve(static_cast<std::size_t>(count * 2));
+    for (int index = 0; index < count * 2; ++index) {
+        beforePositions.emplace_back(frequencyVertices[index].x,
+                                     frequencyVertices[index].y);
+    }
     frequency.setPosition(100);
     frequencyNode = frequency.updatePaintNode(frequencyNode, nullptr);
-    const auto after = vertices(frequencyNode)[sampleVertex];
-    QCOMPARE(after.x, before.x);
-    QCOMPARE(after.y, before.y);
-    QCOMPARE(after.r, before.r);
-    QCOMPARE(after.g, before.g);
-    QCOMPARE(after.b, before.b);
-    QCOMPARE(before.a, 224U);
-    QCOMPARE(after.a, 255U);
+    const auto* playedVertices = vertices(frequencyNode);
+    for (int index = 0; index < count * 2; ++index) {
+        QCOMPARE(playedVertices[index].x, beforePositions[index].x());
+        QCOMPARE(playedVertices[index].y, beforePositions[index].y());
+    }
+    QCOMPARE(static_cast<int>(playedVertices[0].a), 140);
+    QCOMPARE(static_cast<int>(playedVertices[1].a), 255);
+    QCOMPARE(static_cast<int>(playedVertices[2].a), 255);
+    QCOMPARE(static_cast<int>(playedVertices[3].a), 140);
+    QCOMPARE(playedVertices[0].r, beforeEdge.r);
+    QCOMPARE(playedVertices[0].g, beforeEdge.g);
+    QCOMPARE(playedVertices[0].b, beforeEdge.b);
+    QCOMPARE(playedVertices[1].r, beforeCenter.r);
+    QCOMPARE(playedVertices[1].g, beforeCenter.g);
+    QCOMPARE(playedVertices[1].b, beforeCenter.b);
     delete plainNode;
     delete frequencyNode;
 }
@@ -401,7 +435,12 @@ void WaveformItemTest::frequencyColorChangeDoesNotReplaceGeometryNode()
     QCOMPARE(updated, node);
     QCOMPARE(static_cast<QSGGeometryNode*>(updated)->geometry(), geometry);
     QCOMPARE(geometry->vertexData(), vertexStorage);
-    compareColor(vertices(updated)[0], 255, 0, 0, 224);
+    const auto* updatedVertices = vertices(updated);
+    QVERIFY(updatedVertices[0].r < updatedVertices[1].r);
+    compareColor(updatedVertices[1], 255, 0, 0, 224);
+    QCOMPARE(static_cast<int>(updatedVertices[0].a), 123);
+    QCOMPARE(static_cast<int>(updatedVertices[2].a), 224);
+    QCOMPARE(static_cast<int>(updatedVertices[3].a), 123);
     delete updated;
 }
 
