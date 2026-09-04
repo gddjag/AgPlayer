@@ -1132,31 +1132,61 @@ BackendResult NativeWorkerBackend::separate(const QJsonObject& payload,
             QStringLiteral("Selected stem is not produced by the trusted model"));
     }
 
-    OutputTransaction transaction({request.outputDirectory, request.baseName,
-                                   request.extension, request.stems,
-                                   request.modelName, request.stemLabels,
-                                   request.directoryName});
-    const TransactionResult begun = transaction.begin();
+    const OutputPlan outputPlan{request.outputDirectory, request.baseName,
+                                request.extension, request.stems,
+                                request.modelName, request.stemLabels,
+                                request.directoryName};
+    auto transaction = std::make_unique<OutputTransaction>(outputPlan);
+    const TransactionResult begun = transaction->begin();
     if (!begun.ok) return transactionFailure(begun);
     progress(0.0, QStringLiteral("provider_probe"));
     OrtNativeProviderProbe providerProbe;
-    const NativeProviderSelection provider = selectNativeProvider(
+    NativeProviderSelection provider = selectNativeProvider(
         request, *trusted, cancelled, providerProbe);
     if (!provider.ok) {
         return cleanupAfterFailure(
-            transaction, fail(provider.code, provider.message));
+            *transaction, fail(provider.code, provider.message));
     }
     BackendResult separated = trusted->family == QStringLiteral("mdx")
-        ? runMdx(request, *trusted, provider, cancelled, progress, transaction)
-        : runDemucs(request, *trusted, provider, cancelled, progress, transaction);
-    if (!separated.ok) return cleanupAfterFailure(transaction, separated);
+        ? runMdx(request, *trusted, provider, cancelled, progress, *transaction)
+        : runDemucs(request, *trusted, provider, cancelled, progress, *transaction);
+    if (!separated.ok && request.device == DeviceMode::Auto
+        && provider.provider == ExecutionProvider::DirectMl
+        && !cancelled.isCancelled()) {
+        // A lightweight provider probe can succeed even when a large model
+        // exceeds a driver's DirectML limits. Auto mode promises a usable
+        // result, so discard every partial GPU output and retry once on CPU.
+        const QString gpuFailure = separated.message.isEmpty()
+            ? separated.code : separated.message;
+        const TransactionResult cancelledTransaction = transaction->cancel();
+        if (!cancelledTransaction.ok) return transactionFailure(cancelledTransaction);
+
+        NativeStartRequest cpuRequest = request;
+        cpuRequest.device = DeviceMode::Cpu;
+        NativeProviderSelection cpuProvider = selectNativeProvider(
+            cpuRequest, *trusted, cancelled, providerProbe);
+        if (!cpuProvider.ok) return fail(cpuProvider.code, cpuProvider.message);
+        cpuProvider.fallbackReason = gpuFailure;
+
+        transaction = std::make_unique<OutputTransaction>(outputPlan);
+        const TransactionResult fallbackBegun = transaction->begin();
+        if (!fallbackBegun.ok) return transactionFailure(fallbackBegun);
+        progress(0.0, QStringLiteral("cpu_fallback"));
+        separated = trusted->family == QStringLiteral("mdx")
+            ? runMdx(cpuRequest, *trusted, cpuProvider, cancelled, progress,
+                     *transaction)
+            : runDemucs(cpuRequest, *trusted, cpuProvider, cancelled, progress,
+                        *transaction);
+        provider = std::move(cpuProvider);
+    }
+    if (!separated.ok) return cleanupAfterFailure(*transaction, separated);
     progress(0.98, QStringLiteral("verification"));
     if (cancelled.isCancelled()) {
         return cleanupAfterFailure(
-            transaction, fail(QStringLiteral("cancelled"),
-                              QStringLiteral("Separation cancelled")));
+            *transaction, fail(QStringLiteral("cancelled"),
+                               QStringLiteral("Separation cancelled")));
     }
-    const TransactionResult committed = transaction.commit(
+    const TransactionResult committed = transaction->commit(
         verifyAudio, cancelled);
     if (!committed.ok) return transactionFailure(committed);
     QJsonArray outputs;

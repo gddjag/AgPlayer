@@ -11,7 +11,7 @@ Window {
     readonly property int titleBarHeight: Theme.titleBarHeight
     readonly property int trackHeaderHeight: Theme.tableHeaderHeight
     readonly property int defaultVisibleTrackCount: 10
-    readonly property int filterBarHeight: Theme.settingsRowHeight
+    readonly property int filterBarHeight: 34
     readonly property int defaultTrackRowHeight:
         SettingsController.listWaveformThumbnailEnabled
         ? Theme.mediaListRowHeight : Theme.listRowHeight
@@ -769,22 +769,45 @@ Window {
                                        windowHeight, hostGeometry,
                                        snapDistance) {
         var spacing = Theme.spacingSm
+        var horizontalOverlap = Math.max(0, Math.min(
+            windowX + windowWidth, hostGeometry.x + hostGeometry.width)
+            - Math.max(windowX, hostGeometry.x))
+        var verticalOverlap = Math.max(0, Math.min(
+            windowY + windowHeight, hostGeometry.y + hostGeometry.height)
+            - Math.max(windowY, hostGeometry.y))
+        var horizontalProjection = horizontalOverlap > 0
+                || Math.abs((windowX + windowWidth / 2)
+                            - (hostGeometry.x + hostGeometry.width / 2))
+                   <= hostGeometry.width / 2 + snapDistance
+        var verticalProjection = verticalOverlap > 0
+                || Math.abs((windowY + windowHeight / 2)
+                            - (hostGeometry.y + hostGeometry.height / 2))
+                   <= hostGeometry.height / 2 + snapDistance
         var distances = [
             { "edge": "left",
               "distance": Math.abs(windowX + windowWidth
-                                   - (hostGeometry.x - spacing)) },
+                                   - (hostGeometry.x - spacing)),
+              "eligible": verticalProjection },
             { "edge": "right",
               "distance": Math.abs(windowX
                                    - (hostGeometry.x
-                                      + hostGeometry.width + spacing)) },
+                                      + hostGeometry.width + spacing)),
+              "eligible": verticalProjection },
             { "edge": "top",
               "distance": Math.abs(windowY + windowHeight
-                                   - (hostGeometry.y - spacing)) },
+                                   - (hostGeometry.y - spacing)),
+              "eligible": horizontalProjection },
             { "edge": "bottom",
               "distance": Math.abs(windowY
                                    - (hostGeometry.y
-                                      + hostGeometry.height + spacing)) }
+                                      + hostGeometry.height + spacing)),
+              "eligible": horizontalProjection }
         ]
+        distances = distances.filter(function(candidate) {
+            return candidate.eligible
+        })
+        if (distances.length === 0)
+            return "none"
         distances.sort(function(first, second) {
             return first.distance - second.distance
         })
@@ -841,7 +864,8 @@ Window {
         property real horizontalHeight: Math.min(300,
                                                   Math.max(220,
                                                       combinedHostGeometry.height * 0.32))
-        readonly property real snapDistance: 52
+        readonly property real snapDistance: 120
+        property string dragSnapPreviewEdge: "none"
 
         width: sideWidth
         height: Math.min(availableGeometry.height,
@@ -889,6 +913,7 @@ Window {
                         x, y, width, height, combinedHostGeometry,
                         snapDistance)
             if (edge === "none") {
+                dragSnapPreviewEdge = "none"
                 docked = false
                 x = Math.max(availableGeometry.x,
                              Math.min(x, availableGeometry.x
@@ -900,6 +925,7 @@ Window {
             }
             dockEdge = edge
             docked = true
+            dragSnapPreviewEdge = "none"
             syncDockGeometry()
         }
 
@@ -944,8 +970,27 @@ Window {
                             + translation.x
                     listLyricsWindow.y = listLyricsWindow.dragStartY
                             + translation.y
+                    listLyricsWindow.dragSnapPreviewEdge =
+                            listWindow.lyricsDockEdgeForGeometry(
+                                listLyricsWindow.x, listLyricsWindow.y,
+                                listLyricsWindow.width, listLyricsWindow.height,
+                                listLyricsWindow.combinedHostGeometry,
+                                listLyricsWindow.snapDistance)
                 }
             }
+        }
+
+        Rectangle {
+            objectName: "lyricsSnapPreview"
+            anchors.fill: parent
+            color: "transparent"
+            border.color: Theme.accent
+            border.width: 2
+            radius: Theme.radiusMd
+            visible: listLyricsWindow.draggingWindow
+                     && listLyricsWindow.dragSnapPreviewEdge !== "none"
+            opacity: 0.72
+            z: 19
         }
 
         LyricsPanel {

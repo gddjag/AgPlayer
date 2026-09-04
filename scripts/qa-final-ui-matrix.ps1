@@ -61,10 +61,11 @@ function Get-SurfaceExpectation {
             return [pscustomobject]@{ Width = 860; Height = 900 }
         }
         "^list$|^details$" {
-            # A fresh detached list uses its 604px token geometry. The desktop
-            # host may restore it to the 906px available height between QA
-            # captures; both are real supported window states.
-            return [pscustomobject]@{ Width = 863; Heights = @(604, 906) }
+            # A fresh detached list uses its compact 590px geometry. Older
+            # persisted QA state may still restore the previous 604px height,
+            # while the desktop host may expand it to the 906px available height;
+            # all three are real supported window states.
+            return [pscustomobject]@{ Width = 863; Heights = @(590, 604, 906) }
         }
         "^tool-\d+$" {
             return [pscustomobject]@{ Width = 1672; Height = 941 }

@@ -55,15 +55,13 @@ Item {
         onClicked: if (root.playback) root.playback.toggleMuted()
         ToolTip.text: Accessible.name; ToolTip.visible: hovered
         background: Rectangle {
-            color: parent.down ? Theme.surfacePressed
-                : parent.hovered ? Theme.surfaceHover : "transparent"
+            color: "transparent"
             border.width: parent.activeFocus
                           && (parent.focusReason === Qt.TabFocusReason
                               || parent.focusReason === Qt.BacktabFocusReason)
                           ? 2 : 0
             border.color: Theme.focus
             radius: Theme.radiusSm
-            Behavior on color { ColorAnimation { duration: 100 } }
         }
     }
     Slider {

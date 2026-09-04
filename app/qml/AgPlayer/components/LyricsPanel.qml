@@ -33,6 +33,11 @@ Item {
         spatialMode && service && service.status === LyricsService.Ready
         && !service.synchronizedLyrics && !service.instrumental
         && service.untimedLyrics.length > 0
+    readonly property bool hasTimelineModel:
+        !spatialMode && service && service.lines !== undefined
+        && service.currentLineIndex !== undefined
+        && service.status === LyricsService.Ready
+        && service.synchronizedLyrics
 
     visible: service && service.enabled
     opacity: lyricOpacity / 100.0
@@ -167,7 +172,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         width: parent.width - (root.spatialMode ? 0 : 36)
         spacing: Math.max(3, 6 * root.sizeScale)
-        visible: !root.spatialUntimedFallback
+        visible: !root.spatialUntimedFallback && !root.hasTimelineModel
         transform: Rotation {
             objectName: "cinematicLyricsPerspective"
             origin.x: root.placement === PlayerExperienceController.Right
@@ -254,6 +259,61 @@ Item {
             transformOrigin: root.placement === PlayerExperienceController.Right
                              ? Item.Right : root.placement === PlayerExperienceController.Left
                                             ? Item.Left : Item.Center
+        }
+    }
+
+    ListView {
+        id: timelineList
+        objectName: "lyricsTimelineList"
+        visible: root.hasTimelineModel
+        anchors.fill: parent
+        anchors.leftMargin: 18
+        anchors.rightMargin: 18
+        anchors.topMargin: sourceText.visible ? 30 : 12
+        anchors.bottomMargin: 42
+        clip: true
+        model: root.service ? root.service.lines : null
+        currentIndex: root.service ? root.service.currentLineIndex : -1
+        preferredHighlightBegin: height / 2 - 22
+        preferredHighlightEnd: height / 2 + 22
+        highlightRangeMode: ListView.StrictlyEnforceRange
+        boundsBehavior: Flickable.StopAtBounds
+        header: Item { width: 1; height: Math.max(0, timelineList.height / 2 - 22) }
+        footer: Item { width: 1; height: Math.max(0, timelineList.height / 2 - 22) }
+        onMovementStarted: root.noteManualScroll()
+        onCurrentIndexChanged: {
+            if (currentIndex >= 0 && !moving && !flicking)
+                positionViewAtIndex(currentIndex, ListView.Center)
+        }
+
+        delegate: Item {
+            required property int index
+            required property string text
+            width: ListView.view.width
+            height: Math.max(36, Math.round(44 * root.sizeScale))
+
+            Text {
+                anchors.fill: parent
+                anchors.leftMargin: 4
+                anchors.rightMargin: 4
+                text: parent.text
+                color: parent.index === timelineList.currentIndex
+                       ? Theme.primaryText : Theme.textSecondary
+                opacity: parent.index === timelineList.currentIndex ? 1 : 0.64
+                font.family: Theme.fontPrimary
+                font.pixelSize: Math.max(
+                    Theme.fontSizeBody,
+                    Math.round((parent.index === timelineList.currentIndex
+                                ? Theme.fontSizeSection : Theme.fontSizeBody)
+                               * root.sizeScale))
+                font.weight: parent.index === timelineList.currentIndex
+                             ? Font.DemiBold : Font.Normal
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                wrapMode: Text.Wrap
+                maximumLineCount: 2
+                elide: Text.ElideRight
+            }
         }
     }
 
@@ -513,6 +573,37 @@ Item {
             ToolTip.visible: hovered
             onClicked: lrcDialog.open()
             background: null
+        }
+    }
+
+    Row {
+        objectName: "lyricsFontSizeControl"
+        visible: !root.spatialMode && root.chromeVisible
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        anchors.leftMargin: 10
+        anchors.bottomMargin: 6
+        spacing: 6
+        z: 5
+
+        Text {
+            anchors.verticalCenter: parent.verticalCenter
+            text: qsTr("字号")
+            color: Theme.textSecondary
+            font.family: Theme.fontPrimary
+            font.pixelSize: Theme.fontSizeCaption
+        }
+        ThemedSlider {
+            id: lyricsFontSizeSlider
+            objectName: "lyricsFontSizeSlider"
+            width: 104
+            height: 28
+            from: 60
+            to: 140
+            stepSize: 1
+            value: PlayerExperienceController.lyricSize
+            onMoved: PlayerExperienceController.lyricSize = Math.round(value)
+            Accessible.name: qsTr("歌词字号")
         }
     }
 

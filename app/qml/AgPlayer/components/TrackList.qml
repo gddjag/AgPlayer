@@ -61,7 +61,7 @@ ListView {
     readonly property int trailingColumnGap: singleWindowLayout ? 8 : 0
     // The shared integrated/rolling row keeps equal breathing room around the
     // flexible waveform while leaving the fixed metadata columns compact.
-    readonly property int singleWindowWaveformGap: 14
+    readonly property int singleWindowWaveformGap: 8
     readonly property int titleMinimumWidth:
         singleWindowLayout ? 180 : (compactColumns ? 150 : 180)
     readonly property int singleWindowTitleWidth: Math.max(
@@ -930,8 +930,7 @@ ListView {
                 Layout.preferredHeight: root.singleWindowMediaHeight
                 Layout.alignment: Qt.AlignVCenter
                 Layout.leftMargin: root.singleWindowWaveformGap
-                Layout.rightMargin: root.singleWindowWaveformGap
-                                    - root.trailingColumnGap
+                Layout.rightMargin: 0
                 sourceComponent: Component {
                     TrackWaveformThumbnail {
                         trackId: rowItem.trackId

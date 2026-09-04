@@ -34,9 +34,9 @@ public:
     [[nodiscard]] QString lineAt(qint64 positionMs, qint64 offsetMs) const;
     [[nodiscard]] QString previousLine(qint64 positionMs, qint64 offsetMs) const;
     [[nodiscard]] QString nextLine(qint64 positionMs, qint64 offsetMs) const;
+    [[nodiscard]] int activeIndex(qint64 positionMs, qint64 offsetMs) const;
     [[nodiscard]] static LyricsDocument parseLrc(const QByteArray& contents);
 
 private:
-    [[nodiscard]] int activeIndex(qint64 positionMs, qint64 offsetMs) const;
     QList<LyricsLine> lines_;
 };

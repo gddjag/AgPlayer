@@ -114,7 +114,8 @@ approvedCatalogModelRunsOnRequestedDeviceWhenExplicitlyEnabled()
         "AGPLAYER_SEPARATION_REAL_DURATION_SMOKE") != 0;
     if (requestedDevice.isEmpty()) requestedDevice = QStringLiteral("cpu");
     QVERIFY2(requestedDevice == QStringLiteral("cpu")
-                 || requestedDevice == QStringLiteral("gpu"),
+                 || requestedDevice == QStringLiteral("gpu")
+                 || requestedDevice == QStringLiteral("auto"),
              qPrintable(QStringLiteral("Unknown real device: ") + requestedDevice));
     if (runtime.isEmpty() || input.isEmpty() || catalogRoot.isEmpty()) {
         QSKIP("Opt-in real-model test requires AGPLAYER_SEPARATION_ORT_DLL, "
@@ -184,9 +185,18 @@ approvedCatalogModelRunsOnRequestedDeviceWhenExplicitlyEnabled()
         QVERIFY2(result.ok,
                  qPrintable(entry.first + QStringLiteral(": ") + result.code
                             + QStringLiteral(": ") + result.message));
-        QCOMPARE(result.payload.value(QStringLiteral("provider")).toString(),
-                 requestedDevice == QStringLiteral("gpu")
-                     ? QStringLiteral("directml") : QStringLiteral("cpu"));
+        const QString selectedProvider =
+            result.payload.value(QStringLiteral("provider")).toString();
+        if (requestedDevice == QStringLiteral("auto")) {
+            QVERIFY2(selectedProvider == QStringLiteral("directml")
+                         || selectedProvider == QStringLiteral("cpu"),
+                     qPrintable(QStringLiteral("Auto selected unknown provider: ")
+                                + selectedProvider));
+        } else {
+            QCOMPARE(selectedProvider,
+                     requestedDevice == QStringLiteral("gpu")
+                         ? QStringLiteral("directml") : QStringLiteral("cpu"));
+        }
         const QJsonArray outputs = result.payload.value(QStringLiteral("outputs")).toArray();
         QCOMPARE(outputs.size(), stems.size());
         QHash<QString, DecodedTrack> decoded;

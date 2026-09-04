@@ -8,16 +8,13 @@ Rectangle {
     color: "transparent"
 
     component ActionBackground: Rectangle {
-        color: parent.down ? Theme.surfacePressed
-                           : parent.hovered ? Theme.surfaceHover
-                                            : "transparent"
+        color: "transparent"
         border.width: parent.activeFocus
                       && (parent.focusReason === Qt.TabFocusReason
                           || parent.focusReason === Qt.BacktabFocusReason)
                       ? 2 : 0
         border.color: Theme.focus
         radius: Theme.radiusSm
-        Behavior on color { ColorAnimation { duration: 100 } }
     }
 
     property bool emptyMode: false
@@ -256,7 +253,7 @@ Rectangle {
         id: playerShellMenu
         objectName: "playerShellMenu"
         parent: root.Window.window ? root.Window.window.contentItem : root
-        width: Math.max(136, implicitContentWidth + leftPadding + rightPadding)
+        width: Math.max(120, implicitContentWidth + leftPadding + rightPadding)
 
         MenuItem {
             objectName: "classicShellMenuItem"

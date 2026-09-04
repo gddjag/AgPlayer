@@ -1204,9 +1204,9 @@ TestCase {
             var expectedRowHeight = enabled ? Theme.mediaListRowHeight
                                             : Theme.listRowHeight
             var expectedHeight = Theme.titleBarHeight + Theme.tableHeaderHeight
-                    + 10 * expectedRowHeight + Theme.settingsRowHeight
+                    + 10 * expectedRowHeight + listWindow.filterBarHeight
             compare(listWindow.height, expectedHeight)
-            compare(filter.height, Theme.settingsRowHeight)
+            compare(filter.height, listWindow.filterBarHeight)
             tryCompare(trackList, "height",
                        Theme.tableHeaderHeight + 10 * expectedRowHeight)
             listWindow.destroy()
@@ -2422,11 +2422,14 @@ TestCase {
     }
 
     function test_main_waveform_masks_the_clipped_first_peak_at_the_left_edge() {
+        var sharedView = findChild(mainWindow, "mainFullTrackWaveform")
         var waveform = findChild(mainWindow, "mainWaveform")
         var playedClip = findChild(mainWindow, "waveformPlayedClip")
         var playedWaveform = findChild(mainWindow, "playedWaveform")
         var mask = findChild(mainWindow, "waveformLeftEdgeMask")
-        verify(waveform && playedClip && playedWaveform && mask)
+        verify(sharedView && waveform && playedClip && playedWaveform && mask)
+        compare(waveform.width, sharedView.width)
+        compare(playedWaveform.width, sharedView.width)
         compare(mask.x, 0)
         compare(mask.width, 1)
         compare(mask.height, waveform.height)
@@ -2699,7 +2702,7 @@ TestCase {
     function test_search_filter_uses_editable_bpm_bounds_and_compact_modules() {
         var filter = searchFilterComponent.createObject(mainWindow.contentItem)
         verify(filter)
-        compare(filter.implicitHeight, 40)
+        compare(filter.implicitHeight, 34)
         compare(findChild(filter, "keywordModule").width, 184)
         compare(findChild(filter, "librarySearchField").placeholderText,
                 "歌曲 · 艺术家 · 专辑 · 标签")
@@ -3368,14 +3371,17 @@ TestCase {
         var longPill = findChild(panel, "tagPill-" + keys[keys.length - 1])
         verify(firstPill && secondPill && longPill)
         compare(firstPill.height, 28)
-        compare(firstPill.radius, 5)
+        compare(firstPill.radius, 4)
+        compare(panel.pillHorizontalPadding, 6)
+        compare(panel.pillCountHorizontalPadding, 5)
+        compare(panel.pillCountMinimumWidth, 0)
         var firstLeft = findChild(firstPill, "tagCapsuleLeft-" + keys[0])
         var firstRight = findChild(firstPill, "tagCapsuleRight-" + keys[0])
         var firstNotch = findChild(firstPill, "tagCapsuleNotch-" + keys[0])
         verify(firstLeft && firstRight && firstNotch)
         compare(firstRight.height, 28)
-        verify(firstRight.width >= 28)
-        verify(firstRight.width < 42,
+        verify(firstRight.width >= 14)
+        verify(firstRight.width < 32,
                "the count half must follow the number without broad white padding")
         compare(firstNotch.width, 8)
         compare(firstNotch.height, 8)
@@ -3716,7 +3722,7 @@ TestCase {
         var colorPicker = findChild(window, "colorFieldPicker")
         verify(colorPicker)
         tryCompare(colorPicker, "visible", true)
-        verify(colorPicker.width >= 300 && colorPicker.width <= 320)
+        verify(colorPicker.width >= 288 && colorPicker.width <= 304)
         verify(colorPicker.contentItem.width <= colorPicker.availableWidth + 0.5)
         colorPicker.setWorkingColor("#123456")
         colorPicker.close()
@@ -5608,11 +5614,11 @@ TestCase {
         var confirmButton = findChild(mainWindow, "colorPickerConfirmButton")
         verify(colorPicker && hexField)
         verify(restoreButton && cancelButton && confirmButton)
-        verify(colorPicker.width >= 300 && colorPicker.width <= 320)
+        verify(colorPicker.width >= 288 && colorPicker.width <= 304)
         verify(colorPicker.height <= 332)
-        verify(restoreButton.width <= 88)
-        verify(cancelButton.width <= 72)
-        verify(confirmButton.width <= 72)
+        verify(restoreButton.width <= 76)
+        verify(cancelButton.width <= 60)
+        verify(confirmButton.width <= 60)
         verify(hexField.selectByMouse)
         hexField.text = "#A1B2C3"
         hexField.selectAll()
@@ -5633,12 +5639,14 @@ TestCase {
         compare(String(preview.lowColor), "#112233")
         differenceSlider.value = 38
         differenceSlider.moved()
-        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.38)
+        compare(SettingsController.frequencyColorWaveform.unplayedDimness, 0.38)
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.62)
         resetButton.clicked()
         compare(String(SettingsController.frequencyColorWaveform.lowColor), "#fc0909")
         compare(String(SettingsController.frequencyColorWaveform.midColor), "#03ff00")
         compare(String(SettingsController.frequencyColorWaveform.highColor), "#0048ff")
-        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.12)
+        compare(SettingsController.frequencyColorWaveform.unplayedDimness, 0.68)
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.32)
 
         page.cancelAndClose()
         SettingsController.waveformMode = previousWaveformMode
@@ -5742,10 +5750,12 @@ TestCase {
         compare(String(frequencyPreview.lowColor), "#112233")
         differenceSlider.value = 38
         differenceSlider.moved()
-        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.38)
+        compare(SettingsController.frequencyColorWaveform.unplayedDimness, 0.38)
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.62)
         frequencyResetButton.clicked()
         compare(String(SettingsController.frequencyColorWaveform.lowColor), "#fc0909")
-        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.12)
+        compare(SettingsController.frequencyColorWaveform.unplayedDimness, 0.68)
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.32)
 
         resetButton.clicked()
         tryCompare(SettingsController, "waveformHeight", 0.8)
@@ -6142,8 +6152,13 @@ TestCase {
             var surface = findChild(panel, "lyricsPanelSurface")
             var controls = findChild(panel, "lyricsChromeControls")
             var currentLine = findChild(panel, "currentLyricLine")
+            var timeline = findChild(panel, "lyricsTimelineList")
+            var fontSlider = findChild(panel, "lyricsFontSizeSlider")
             var retry = findChild(panel, "lyricsRetryButton")
-            verify(surface && controls && currentLine && retry)
+            verify(surface && controls && currentLine && timeline
+                   && fontSlider && retry)
+            compare(fontSlider.from, 60)
+            compare(fontSlider.to, 140)
 
             panel.chromeAutoHideDelay = 20
             panel.revealChrome()

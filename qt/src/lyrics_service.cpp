@@ -102,6 +102,11 @@ QString LyricsService::currentLine() const
     return playback_ == nullptr ? QString() : lineModel_.lineAt(
         playback_->positionMs(), documentOffsetMs_ + userOffsetMs_);
 }
+int LyricsService::currentLineIndex() const
+{
+    return playback_ == nullptr ? -1 : lineModel_.activeIndex(
+        playback_->positionMs(), documentOffsetMs_ + userOffsetMs_);
+}
 QString LyricsService::previousLine() const
 {
     return playback_ == nullptr ? QString() : lineModel_.previousLine(

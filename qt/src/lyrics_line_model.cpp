@@ -58,6 +58,7 @@ void LyricsLineModel::setLines(QList<LyricsLine> lines)
 
 void LyricsLineModel::clear() { setLines({}); }
 
+// Public so LyricsService and QML can share the exact same active-line lookup.
 int LyricsLineModel::activeIndex(const qint64 positionMs, const qint64 offsetMs) const
 {
     const qint64 effectivePosition = positionMs - offsetMs;

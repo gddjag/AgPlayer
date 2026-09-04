@@ -85,11 +85,10 @@ Rectangle {
     }
     function applyWaveformMode() {
         if (SettingsController.waveformMode === 2) {
-            waveform.peaks = root.shapeSpectrum(playback ? playback.spectrum : [])
-            playedWaveform.peaks = waveform.peaks
+            fullTrackWaveform.peaks = root.shapeSpectrum(
+                        playback ? playback.spectrum : [])
         } else {
-            waveform.layers = rawWaveformLayers || ({})
-            playedWaveform.layers = rawWaveformLayers || ({})
+            fullTrackWaveform.layers = rawWaveformLayers || ({})
         }
     }
     function loadWaveform() {
@@ -233,141 +232,28 @@ Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 50
                 clip: true
-                WaveformItem {
-                    id: waveform
-                    objectName: "miniWaveform"
+
+                FullTrackWaveformView {
+                    id: fullTrackWaveform
+                    objectName: "miniFullTrackWaveform"
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: parent.top
                     height: 36
-                    pointerInteractionEnabled: false
-                    position: 0
-                    cursorPosition: playback ? playback.positionMs : 0
+                    waveformObjectName: "miniWaveform"
+                    playedClipObjectName: "miniWaveformPlayedClip"
+                    playedWaveformObjectName: "miniPlayedWaveform"
+                    interactionObjectName: "miniWaveformInteractionSurface"
+                    hoverGuideObjectName: "miniWaveformHoverGuide"
+                    hoverCapsuleObjectName: "miniWaveformHoverTimeCapsule"
+                    playbackGuideObjectName: "miniWaveformPlaybackGuide"
+                    leftMaskObjectName: "miniWaveformLeftEdgeMask"
                     duration: root.effectiveDurationMs
-                    visualMode: SettingsController.waveformMode
-                    baseColor: SettingsController.waveformMode === 0
-                               ? SettingsController.waveformSolidBaseColor
-                               : SettingsController.waveformRgbBaseColor
-                    progressColor: SettingsController.waveformSolidProgressColor
-                    gradientStartColor: SettingsController.waveformMode === 2
-                                        ? (SettingsController.spectrumColorMode === 0
-                                           ? SettingsController.spectrumSolidColor
-                                           : SettingsController.spectrumRgbStartColor)
-                                        : SettingsController.waveformRgbStartColor
-                    gradientMiddleColor: SettingsController.waveformMode === 2
-                                         ? (SettingsController.spectrumColorMode === 0
-                                            ? SettingsController.spectrumSolidColor
-                                            : SettingsController.spectrumRgbMiddleColor)
-                                         : SettingsController.waveformRgbMiddleColor
-                    gradientEndColor: SettingsController.waveformMode === 2
-                                      ? (SettingsController.spectrumColorMode === 0
-                                         ? SettingsController.spectrumSolidColor
-                                         : SettingsController.spectrumRgbEndColor)
-                                      : SettingsController.waveformRgbEndColor
-                    lowColor: root.frequencyWaveformSettings.lowColor
-                    midColor: root.frequencyWaveformSettings.midColor
-                    highColor: root.frequencyWaveformSettings.highColor
-                    frequencyUnplayedOpacity: Theme.nonImmersiveSpectralUnplayedOpacity
-                    rgbProgress: SettingsController.waveformMode === 1
-                                 && SettingsController.waveformRgbProgress
-                    amplitudeScale: SettingsController.waveformMode === 2
-                                    ? 1.0 : SettingsController.waveformHeight
-                    density: SettingsController.waveformMode === 2
-                             ? 1.0 : SettingsController.waveformDensity
-                    lineWidth: SettingsController.waveformMode === 2
-                                ? 3.0 : SettingsController.waveformThickness
-                    onSeekRequested: positionMs => { if (playback) playback.seek(positionMs) }
-                }
-                Item {
-                    objectName: "miniWaveformPlayedClip"
-                    // Every waveform mode shares the continuous mapped clip.
-                    // The frequency pass keeps its RGB and restores full
-                    // opacity only inside the exact played region.
-                    visible: true
-                    width: waveform.waveformCursorX
-                    height: waveform.height
-                    clip: true
-                    WaveformItem {
-                        id: playedWaveform
-                        objectName: "miniPlayedWaveform"
-                        enabled: false
-                        width: waveform.width
-                        height: waveform.height
-                        duration: waveform.duration
-                        position: waveform.duration
-                        visualMode: waveform.visualMode
-                        baseColor: waveform.baseColor
-                        progressColor: waveform.progressColor
-                        gradientStartColor: waveform.gradientStartColor
-                        gradientMiddleColor: waveform.gradientMiddleColor
-                        gradientEndColor: waveform.gradientEndColor
-                        lowColor: root.frequencyWaveformSettings.lowColor
-                        midColor: root.frequencyWaveformSettings.midColor
-                        highColor: root.frequencyWaveformSettings.highColor
-                        frequencyUnplayedOpacity: Theme.nonImmersiveSpectralUnplayedOpacity
-                        rgbProgress: waveform.rgbProgress
-                        amplitudeScale: waveform.amplitudeScale
-                        density: waveform.density
-                        lineWidth: waveform.lineWidth
+                    position: playback ? playback.positionMs : 0
+                    playbackGuideColor: SettingsController.waveformSolidProgressColor
+                    onSeekRequested: function(positionMs) {
+                        if (playback) playback.seek(positionMs)
                     }
-                }
-                MouseArea {
-                    id: miniWaveformInteractionSurface
-                    objectName: "miniWaveformInteractionSurface"
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    height: waveform.height
-                    hoverEnabled: true
-                    acceptedButtons: Qt.LeftButton
-                    cursorShape: Qt.ArrowCursor
-                    z: 5
-
-                    function updatePreviewAt(x) {
-                        waveform.setHoverPositionForInteraction(
-                                    waveform.timeForX(x))
-                    }
-                    onPositionChanged: mouse => updatePreviewAt(mouse.x)
-                    onEntered: updatePreviewAt(mouseX)
-                    onPressed: mouse => updatePreviewAt(mouse.x)
-                    onReleased: mouse => {
-                        updatePreviewAt(mouse.x)
-                        if (playback)
-                            playback.seek(waveform.timeForX(mouse.x))
-                    }
-                    onExited: waveform.setHoverPositionForInteraction(-1)
-                }
-                Rectangle {
-                    objectName: "miniWaveformHoverTimeCapsule"
-                    visible: SettingsController.waveformHoverTimePreview
-                             && waveform.hoverPosition >= 0
-                    x: Math.max(0, Math.min(parent.width - width,
-                            waveform.pixelForTime(waveform.hoverPosition)
-                            - width / 2))
-                    y: 2
-                    width: miniHoverTime.implicitWidth + 12
-                    height: miniHoverTime.implicitHeight + 6
-                    radius: height / 2
-                    color: Theme.panel
-                    border.color: "#54ff84" // theme-color-allow: waveform hover guide
-                    z: 7
-                    Text {
-                        id: miniHoverTime
-                        anchors.centerIn: parent
-                        text: root.formatTime(waveform.hoverPosition)
-                        color: Theme.primaryText
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: Theme.fontSizeCaption
-                    }
-                }
-                Rectangle {
-                    objectName: "miniWaveformPlaybackGuide"
-                    visible: SettingsController.waveformPlaybackGuide
-                    x: waveform.waveformCursorX
-                    width: 1
-                    height: waveform.height
-                    color: SettingsController.waveformSolidProgressColor
-                    z: 10
                 }
                 Text {
                     objectName: "miniElapsedTime"

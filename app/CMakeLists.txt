@@ -157,6 +157,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/WaveSelectionOverlay.qml
         qml/AgPlayer/components/WaveformSession.qml
         qml/AgPlayer/components/SharedWaveformView.qml
+        qml/AgPlayer/components/FullTrackWaveformView.qml
         qml/AgPlayer/components/PlayerPane.qml
         qml/AgPlayer/components/PlayerControls.qml
         qml/AgPlayer/components/TransportControls.qml

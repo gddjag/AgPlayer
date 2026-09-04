@@ -289,7 +289,7 @@ Item {
                             id: searchFilter
                             objectName: "integratedSearchFilter"
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 40
+                            Layout.preferredHeight: 34
                             integratedStyle: true
                             onSearchTextChanged: {
                                 if (root.filterModel

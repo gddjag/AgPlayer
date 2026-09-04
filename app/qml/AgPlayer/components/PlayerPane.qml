@@ -157,12 +157,10 @@ Rectangle {
         if (SettingsController.waveformMode === 2) {
             root.spectrumVisual = root.shapeSpectrum(
                 PlaybackController.spectrum)
-            waveform.peaks = root.spectrumVisual
-            playedWaveform.peaks = root.spectrumVisual
+            fullTrackWaveform.peaks = root.spectrumVisual
             return
         }
-        waveform.layers = root.rawWaveformLayers || ({})
-        playedWaveform.layers = root.rawWaveformLayers || ({})
+        fullTrackWaveform.layers = root.rawWaveformLayers || ({})
     }
 
     function loadWaveform() {
@@ -185,10 +183,8 @@ Rectangle {
                                   LibraryModel.PathRole))
         root.rawWaveformLayers = {}
         root.waveformDurationMs = 0
-        waveform.layers = {}
-        waveform.peaks = []
-        playedWaveform.layers = {}
-        playedWaveform.peaks = []
+        fullTrackWaveform.layers = {}
+        fullTrackWaveform.peaks = []
         if (!path || path.length === 0) {
             return
         }
@@ -473,191 +469,28 @@ Rectangle {
             Layout.preferredHeight: root.requestedWaveformHeight
             Layout.minimumHeight: root.minimalHeight ? 32 : 48
             clip: true
-            readonly property real hoverPreviewMs: waveform.hoverPosition
-            readonly property real playbackX: waveform.waveformCursorX
+            readonly property real hoverPreviewMs: fullTrackWaveform.hoverPosition
+            readonly property real playbackX: fullTrackWaveform.waveformCursorX
 
-            WaveformItem {
-                id: waveform
-                objectName: "mainWaveform"
+            FullTrackWaveformView {
+                id: fullTrackWaveform
+                objectName: "mainFullTrackWaveform"
                 anchors.fill: parent
-                // The overlay owns pointer input. Keeping the renderer passive
-                // prevents a click from being converted twice with different
-                // item coordinates.
-                pointerInteractionEnabled: false
-                // Keep this base pass entirely unplayed. The played pass is
-                // clipped below at the exact playback pixel, avoiding the
-                // visible bucket-by-bucket progress jump of peak colouring.
-                position: 0
-                cursorPosition: root.visualPlaybackPositionMs
+                waveformObjectName: "mainWaveform"
+                playedClipObjectName: "waveformPlayedClip"
+                playedWaveformObjectName: "playedWaveform"
+                interactionObjectName: "waveformInteractionSurface"
+                hoverGuideObjectName: "waveformHoverGuide"
+                hoverCapsuleObjectName: "waveformHoverTimeCapsule"
+                playbackGuideObjectName: "waveformPlaybackGuide"
+                leftMaskObjectName: "waveformLeftEdgeMask"
                 duration: root.effectiveDurationMs
+                position: root.visualPlaybackPositionMs
                 analysisProgress: WaveformProvider.analysisProgress
-                visualMode: SettingsController.waveformMode
-                baseColor: SettingsController.waveformMode === 0
-                           ? SettingsController.waveformSolidBaseColor
-                           : SettingsController.waveformRgbBaseColor
-                progressColor: SettingsController.waveformSolidProgressColor
-                gradientStartColor: SettingsController.waveformMode === 2
-                                    ? (SettingsController.spectrumColorMode === 0
-                                       ? SettingsController.spectrumSolidColor
-                                       : SettingsController.spectrumRgbStartColor)
-                                    : SettingsController.waveformRgbStartColor
-                gradientMiddleColor: SettingsController.waveformMode === 2
-                                     ? (SettingsController.spectrumColorMode === 0
-                                        ? SettingsController.spectrumSolidColor
-                                        : SettingsController.spectrumRgbMiddleColor)
-                                     : SettingsController.waveformRgbMiddleColor
-                gradientEndColor: SettingsController.waveformMode === 2
-                                  ? (SettingsController.spectrumColorMode === 0
-                                     ? SettingsController.spectrumSolidColor
-                                     : SettingsController.spectrumRgbEndColor)
-                                  : SettingsController.waveformRgbEndColor
-                lowColor: root.frequencyWaveformSettings.lowColor
-                midColor: root.frequencyWaveformSettings.midColor
-                highColor: root.frequencyWaveformSettings.highColor
-                frequencyUnplayedOpacity: Theme.nonImmersiveSpectralUnplayedOpacity
-                rgbProgress: SettingsController.waveformMode === 1
-                             && SettingsController.waveformRgbProgress
-                amplitudeScale: SettingsController.waveformMode === 2
-                                ? 1.0 : SettingsController.waveformHeight
-                density: SettingsController.waveformMode === 2
-                         ? 1.0 : SettingsController.waveformDensity
-                lineWidth: SettingsController.waveformMode === 2
-                            ? 3.0 : SettingsController.waveformThickness
-                onSeekRequested: positionMs => PlaybackController.seek(positionMs)
-            }
-
-            Item {
-                id: playedWaveformClip
-                objectName: "waveformPlayedClip"
-                // Every mode uses the same continuous C++ time-to-pixel clip.
-                // Frequency colour stays unchanged; the clipped pass only
-                // restores full opacity across the exact playback boundary.
-                visible: true
-                width: waveformFrame.playbackX
-                height: parent.height
-                clip: true
-                enabled: false
-
-                WaveformItem {
-                    id: playedWaveform
-                    objectName: "playedWaveform"
-                    enabled: false
-                    width: waveformFrame.width
-                    height: waveformFrame.height
-                    duration: root.effectiveDurationMs
-                    position: root.effectiveDurationMs
-                    analysisProgress: WaveformProvider.analysisProgress
-                    visualMode: SettingsController.waveformMode
-                    baseColor: waveform.baseColor
-                    progressColor: waveform.progressColor
-                    gradientStartColor: waveform.gradientStartColor
-                    gradientMiddleColor: waveform.gradientMiddleColor
-                    gradientEndColor: waveform.gradientEndColor
-                    lowColor: root.frequencyWaveformSettings.lowColor
-                    midColor: root.frequencyWaveformSettings.midColor
-                    highColor: root.frequencyWaveformSettings.highColor
-                    frequencyUnplayedOpacity: Theme.nonImmersiveSpectralUnplayedOpacity
-                    rgbProgress: waveform.rgbProgress
-                    amplitudeScale: waveform.amplitudeScale
-                    density: waveform.density
-                    lineWidth: waveform.lineWidth
+                playbackGuideColor: "#002fa7" // theme-color-allow: waveform playback guide
+                onSeekRequested: function(positionMs) {
+                    PlaybackController.seek(positionMs)
                 }
-            }
-
-            // The renderer samples the first bucket exactly on x=0.  A loud
-            // first bucket is clipped against the container edge and reads as
-            // a solid border instead of waveform content.  Mask only that
-            // clipped pixel; time/pixel mapping and the analysed peaks remain
-            // unchanged.
-            Rectangle {
-                id: waveformLeftEdgeMask
-                objectName: "waveformLeftEdgeMask"
-                x: 0
-                width: 1
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                color: Theme.isLight ? "#ffffff" : "#000000" // theme-color-allow: waveform edge mask
-                z: 4
-            }
-
-            MouseArea {
-                id: waveformInteractionSurface
-                objectName: "waveformInteractionSurface"
-                anchors.fill: parent
-                hoverEnabled: true
-                acceptedButtons: Qt.LeftButton
-                z: 5
-
-                function updatePreviewAt(x) {
-                    waveform.setHoverPositionForInteraction(
-                                waveform.timeForX(x))
-                }
-
-                function updatePreview(mouse) { updatePreviewAt(mouse.x) }
-
-                onPositionChanged: mouse => updatePreview(mouse)
-                onEntered: updatePreviewAt(mouseX)
-                onPressed: mouse => updatePreview(mouse)
-                onReleased: mouse => {
-                    updatePreview(mouse)
-                    PlaybackController.seek(waveform.timeForX(mouse.x))
-                }
-                onExited: waveform.setHoverPositionForInteraction(-1)
-            }
-
-            Rectangle {
-                id: waveformHoverGuide
-                objectName: "waveformHoverGuide"
-                visible: SettingsController.waveformHoverTimePreview
-                         && waveformFrame.hoverPreviewMs >= 0
-                x: Math.max(0, Math.min(parent.width - width,
-                                        waveform.pixelForTime(
-                                            waveformFrame.hoverPreviewMs)))
-                width: 1
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                color: "#54ff84" // theme-color-allow: waveform hover guide
-                opacity: 0.96
-            }
-
-            Rectangle {
-                objectName: "waveformHoverTimeCapsule"
-                visible: SettingsController.waveformHoverTimePreview
-                         && waveformFrame.hoverPreviewMs >= 0
-                x: Math.max(0, Math.min(
-                                waveformFrame.width - width,
-                                 (root.effectiveDurationMs > 0
-                                  ? waveform.pixelForTime(
-                                        waveformFrame.hoverPreviewMs)
-                                 : 0) - width / 2))
-                y: 2
-                width: hoverTime.implicitWidth + 12
-                height: hoverTime.implicitHeight + 6
-                radius: height / 2
-                color: Theme.panel
-                border.color: "#54ff84" // theme-color-allow: waveform hover guide
-                z: 7
-
-                Text {
-                    id: hoverTime
-                    anchors.centerIn: parent
-                    text: root.formatTime(waveformFrame.hoverPreviewMs)
-                    color: Theme.primaryText
-                    font.family: Theme.fontPrimary
-                    font.pixelSize: Theme.fontSizeCaption
-                }
-            }
-
-            Rectangle {
-                id: waveformPlaybackGuide
-                objectName: "waveformPlaybackGuide"
-                visible: SettingsController.waveformPlaybackGuide
-                x: waveform.waveformCursorX
-                width: 1
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                color: "#002fa7" // theme-color-allow: waveform playback guide
-                z: 10
             }
 
         }

@@ -43,13 +43,10 @@ RowLayout {
         ToolTip.text: Accessible.name
         ToolTip.visible: hovered
         background: Rectangle {
-            color: parent.down ? Theme.surfacePressed
-                : parent.checked ? Theme.accentSoft
-                : parent.hovered ? Theme.surfaceHover : "transparent"
+            color: "transparent"
             border.width: root.keyboardFocused(parent) ? 2 : 0
             border.color: Theme.focus
             radius: Theme.radiusSm
-            Behavior on color { ColorAnimation { duration: 100 } }
         }
     }
 
@@ -71,13 +68,10 @@ RowLayout {
         ToolTip.text: Accessible.name
         ToolTip.visible: hovered
         background: Rectangle {
-            color: parent.down ? Theme.surfacePressed
-                : parent.checked ? Theme.accentSoft
-                : parent.hovered ? Theme.surfaceHover : "transparent"
+            color: "transparent"
             border.width: root.keyboardFocused(parent) ? 2 : 0
             border.color: Theme.focus
             radius: Theme.radiusSm
-            Behavior on color { ColorAnimation { duration: 100 } }
         }
     }
 }

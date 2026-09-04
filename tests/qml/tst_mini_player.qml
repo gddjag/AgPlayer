@@ -121,9 +121,12 @@ TestCase {
     function test_mini_waveform_is_clipped_to_its_container() {
         var controls = findChild(miniPlayer, "miniPlayerControls")
         var container = findChild(controls, "miniWaveformContainer")
+        var sharedView = findChild(controls, "miniFullTrackWaveform")
         var waveform = findChild(controls, "miniWaveform")
-        verify(container && waveform)
+        verify(container && sharedView && waveform)
         compare(container.clip, true)
+        compare(sharedView.width, container.width)
+        compare(waveform.width, sharedView.width)
         verify(waveform.x >= 0)
         verify(waveform.x + waveform.width <= container.width + 0.5)
     }

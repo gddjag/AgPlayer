@@ -22,6 +22,7 @@ class LyricsService final : public QObject {
     Q_PROPERTY(Status status READ status NOTIFY statusChanged)
     Q_PROPERTY(QObject* lines READ lines CONSTANT)
     Q_PROPERTY(QString currentLine READ currentLine NOTIFY currentLineChanged)
+    Q_PROPERTY(int currentLineIndex READ currentLineIndex NOTIFY currentLineChanged)
     Q_PROPERTY(QString previousLine READ previousLine NOTIFY currentLineChanged)
     Q_PROPERTY(QString nextLine READ nextLine NOTIFY currentLineChanged)
     Q_PROPERTY(qint64 offsetMs READ offsetMs WRITE setOffsetMs NOTIFY offsetMsChanged)
@@ -49,6 +50,7 @@ public:
     [[nodiscard]] Status status() const noexcept;
     [[nodiscard]] QObject* lines() noexcept;
     [[nodiscard]] QString currentLine() const;
+    [[nodiscard]] int currentLineIndex() const;
     [[nodiscard]] QString previousLine() const;
     [[nodiscard]] QString nextLine() const;
     [[nodiscard]] qint64 offsetMs() const noexcept;

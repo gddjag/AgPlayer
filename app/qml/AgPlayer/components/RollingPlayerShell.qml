@@ -7,6 +7,19 @@ Item {
     id: root
     objectName: "rollingPlayerShell"
 
+    component DeckToolButton: ToolButton {
+        flat: true
+        background: Rectangle {
+            color: "transparent"
+            border.width: parent.activeFocus
+                          && (parent.focusReason === Qt.TabFocusReason
+                              || parent.focusReason === Qt.BacktabFocusReason)
+                          ? 1 : 0
+            border.color: Theme.focus
+            radius: Theme.radiusSm
+        }
+    }
+
     property var hostWindow: null
     property var playback: PlaybackController
     property var waveformSession: null
@@ -415,9 +428,7 @@ Item {
 
                     Text {
                         objectName: "rollingTrackTitle"
-                        width: Math.min(implicitWidth, Math.max(
-                                            120, parent.width - favoriteButton.width
-                                            - 14))
+                        width: Math.min(implicitWidth, Math.max(120, parent.width))
                         text: root.currentTrack && root.currentTrack.title
                               ? root.currentTrack.title : qsTr("未选择歌曲")
                         color: Theme.primaryText
@@ -426,33 +437,6 @@ Item {
                         font.weight: Font.DemiBold
                         elide: Text.ElideRight
                         verticalAlignment: Text.AlignVCenter
-                    }
-
-                    ToolButton {
-                        id: favoriteButton
-                        objectName: "rollingFavoriteButton"
-                        width: 32
-                        height: 32
-                        flat: true
-                        icon.source: root.currentTrack
-                                     && root.currentTrack.favorite
-                                     ? Theme.icon("heart-fill")
-                                     : Theme.icon("heart-line")
-                        icon.color: root.currentTrack
-                                    && root.currentTrack.favorite
-                                    ? Theme.danger : Theme.iconPrimary
-                        icon.width: 18
-                        icon.height: 18
-                        onClicked: root.toggleFavorite()
-                        background: Rectangle {
-                            color: parent.down ? Theme.surfacePressed
-                                : parent.hovered ? Theme.surfaceHover
-                                : parent.checked ? Theme.accentSoft : "transparent"
-                            border.width: parent.activeFocus ? 2 : 0
-                            border.color: Theme.focus
-                            radius: Theme.radiusSm
-                            Behavior on color { ColorAnimation { duration: 100 } }
-                        }
                     }
 
                 }
@@ -468,9 +452,7 @@ Item {
 
                     TrackSubtitle {
                         objectName: "rollingTrackSubtitle"
-                        width: Math.min(implicitWidth,
-                                        Math.max(0, parent.width
-                                                 - ratingRow.width - 6))
+                        width: Math.min(implicitWidth, Math.max(0, parent.width))
                         height: parent.height
                         artist: root.currentTrack && root.currentTrack.artist
                                 ? root.currentTrack.artist : ""
@@ -481,28 +463,6 @@ Item {
                         font.pixelSize: Theme.fontSizeCaption
                     }
 
-                    Row {
-                        id: ratingRow
-                        height: parent.height
-                        spacing: 1
-                        Repeater {
-                            model: 5
-                            ThemedIcon {
-                                width: 14
-                                height: 14
-                                y: (ratingRow.height - height) / 2
-                                source: index < (root.currentTrack
-                                                 ? Number(root.currentTrack.rating)
-                                                 : 0)
-                                        ? Theme.icon("star-fill")
-                                        : Theme.icon("star-line")
-                                tint: index < (root.currentTrack
-                                               ? Number(root.currentTrack.rating)
-                                               : 0)
-                                      ? Theme.warning : Theme.iconSecondary
-                            }
-                        }
-                    }
                 }
 
                 Column {
@@ -1033,7 +993,7 @@ Item {
                         }
                         RowLayout {
                             spacing: 2
-                            ToolButton {
+                            DeckToolButton {
                                 objectName: "rollingSpeedMinus"
                                 text: "−"
                                 implicitWidth: 32
@@ -1050,7 +1010,7 @@ Item {
                                 color: Theme.primaryText
                                 font.pixelSize: Theme.fontSizeBody
                             }
-                            ToolButton {
+                            DeckToolButton {
                                 objectName: "rollingSpeedPlus"
                                 text: "+"
                                 implicitWidth: 32
@@ -1090,7 +1050,7 @@ Item {
                         }
                     }
 
-                    ToolButton {
+                    DeckToolButton {
                         objectName: "rollingTempoReset"
                         Layout.alignment: Qt.AlignBottom
                         implicitWidth: 32
@@ -1134,21 +1094,21 @@ Item {
                         }
                         RowLayout {
                             spacing: 1
-                            ToolButton {
+                            DeckToolButton {
                                 objectName: "rollingZoomMinus"
                                 text: "−"
                                 implicitWidth: 32
                                 implicitHeight: 32
                                 onClicked: root.zoomOut()
                             }
-                            ToolButton {
+                            DeckToolButton {
                                 objectName: "rollingZoomPlus"
                                 text: "+"
                                 implicitWidth: 32
                                 implicitHeight: 32
                                 onClicked: root.zoomIn()
                             }
-                            ToolButton {
+                            DeckToolButton {
                                 objectName: "rollingZoomReset"
                                 implicitWidth: 32
                                 implicitHeight: 32
@@ -1266,7 +1226,7 @@ Item {
                             id: rollingSearchFilter
                             objectName: "rollingSearchFilter"
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 40
+                            Layout.preferredHeight: 34
                             integratedStyle: true
                             searchText: root.filterModel
                                         ? root.filterModel.searchText : ""

@@ -628,6 +628,8 @@ TestCase {
         fakeLibrary.trackTags = []
         fakeLibrary.dataChanged()
         tryCompare(subtitle, "text", "测试艺术家 · 测试专辑")
+        compare(findChild(rolling, "rollingFavoriteButton"), null)
+        compare(findChild(rolling, "rollingTrackRating"), null)
     }
 
     function test_rolling_reuses_collapsible_tag_and_lyrics_side_panel() {

@@ -44,7 +44,7 @@ Assert-Matches $window 'readonly property int rightColumnWidth:\s*Theme\.navigat
 Assert-Matches $window 'readonly property int dividerWidth:\s*1' `
     'Workspace dividers must remain 1 px'
 Assert-Matches $window '(?s)objectName:\s*"centerTrackFooter".*Layout\.preferredHeight:\s*listWindow\.filterBarHeight' `
-    'Search/filter bar must be 54 px'
+    'Search/filter bar must follow the compact shared footer height'
 
 Assert-Matches $tagPanel '(?s)Flickable\s*\{.*id:\s*tagFlickable' `
     'Tag panel must scroll with a Flickable'
@@ -52,8 +52,8 @@ Assert-Matches $tagPanel '(?s)Flow\s*\{.*id:\s*tagFlow' `
     'Tag panel must lay capsules out with Flow'
 Assert-Matches $tagPanel 'contentHeight:\s*tagFlow\.height' `
     'Tag Flickable content height must follow the natural Flow height'
-Assert-Matches $tagPanel '(?s)id:\s*tagPill.*countSectionWidth:.*tagCount\.implicitWidth.*nameSectionWidth:.*tagNameMeasure\.implicitWidth.*implicitWidth:\s*Math\.min\(tagFlow\.width,.*implicitHeight:\s*28.*height:\s*implicitHeight.*radius:\s*5' `
-    'Tag capsules must preserve natural width in 28 px reference capsules'
+Assert-Matches $tagPanel '(?s)id:\s*tagPill.*countSectionWidth:.*tagCount\.implicitWidth.*nameSectionWidth:.*tagNameMeasure\.implicitWidth.*implicitWidth:\s*Math\.min\(tagFlow\.width,.*implicitHeight:\s*28.*height:\s*implicitHeight.*radius:\s*4' `
+    'Tag capsules must preserve compact natural width in 28 px reference capsules'
 Assert-Matches $tagPanel 'selectedVisual|hoveredVisual|pressedVisual|tagDropTarget\.containsDrag' `
     'Tag capsules must expose selected, hover and drop visual states'
 Assert-Matches $tagPanel 'objectName:\s*"tagCapsuleLeft-"' `

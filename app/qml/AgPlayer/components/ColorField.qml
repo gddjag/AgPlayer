@@ -78,7 +78,7 @@ Control {
         objectName: "colorFieldPicker"
         parent: Overlay.overlay
         anchors.centerIn: parent
-        width: Math.min(320, parent ? parent.width - 24 : 320)
+        width: Math.min(296, parent ? parent.width - 24 : 296)
         height: Math.min(312, parent ? parent.height - 24 : 312)
         padding: 10
         modal: true
@@ -303,9 +303,9 @@ Control {
                     delegate: Rectangle {
                         required property var modelData
                         objectName: "colorPicker" + modelData.name + "Value"
-                        Layout.preferredWidth: 82
-                        Layout.minimumWidth: 72
-                        Layout.maximumWidth: 82
+                        Layout.preferredWidth: 72
+                        Layout.minimumWidth: 64
+                        Layout.maximumWidth: 72
                         Layout.preferredHeight: 25
                         color: Theme.background
                         border.color: Theme.border
@@ -327,8 +327,8 @@ Control {
                 spacing: 8
                 Button {
                     objectName: "colorPickerRestoreButton"
-                    Layout.preferredWidth: 86
-                    Layout.maximumWidth: 86
+                    Layout.preferredWidth: 76
+                    Layout.maximumWidth: 76
                     Layout.preferredHeight: 28
                     text: qsTr("恢复默认")
                     onClicked: picker.restoreDefault()
@@ -336,8 +336,8 @@ Control {
                 Item { Layout.fillWidth: true }
                 Button {
                     objectName: "colorPickerCancelButton"
-                    Layout.preferredWidth: 66
-                    Layout.maximumWidth: 66
+                    Layout.preferredWidth: 58
+                    Layout.maximumWidth: 58
                     Layout.preferredHeight: 28
                     text: qsTr("取消")
                     onClicked: picker.close()
@@ -345,8 +345,8 @@ Control {
                 Button {
                     id: confirmButton
                     objectName: "colorPickerConfirmButton"
-                    Layout.preferredWidth: 66
-                    Layout.maximumWidth: 66
+                    Layout.preferredWidth: 58
+                    Layout.maximumWidth: 58
                     Layout.preferredHeight: 28
                     text: qsTr("确定")
                     focus: true

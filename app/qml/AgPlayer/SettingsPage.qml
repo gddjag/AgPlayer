@@ -1769,7 +1769,7 @@ Item {
 
                 SettingRow {
                     visible: SettingsController.waveformMode === 3
-                    label: qsTr("未播放区明亮度")
+                    label: qsTr("未播放区明暗度")
 
                     RowLayout {
                         anchors.fill: parent
@@ -1783,10 +1783,10 @@ Item {
                             to: 100
                             stepSize: 1
                             value: Math.round(
-                                root.frequencyWaveformSettings.unplayedOpacity * 100)
-                            onMoved: root.frequencyWaveformSettings.unplayedOpacity
+                                root.frequencyWaveformSettings.unplayedDimness * 100)
+                            onMoved: root.frequencyWaveformSettings.unplayedDimness
                                 = value / 100.0
-                            Accessible.name: qsTr("未播放区明亮度")
+                            Accessible.name: qsTr("未播放区明暗度")
                         }
 
                         Text {

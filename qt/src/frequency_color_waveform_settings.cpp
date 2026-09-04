@@ -11,9 +11,8 @@ const QColor defaultHigh(QStringLiteral("#0048FF"));
 const QColor legacyDefaultLow(QStringLiteral("#8B3DFF"));
 const QColor legacyDefaultMid(QStringLiteral("#FFB000"));
 const QColor legacyDefaultHigh(QStringLiteral("#002FA7"));
-constexpr int currentColorSchemaVersion = 2;
-constexpr double defaultUnplayedOpacity = 0.12;
-constexpr double legacyDefaultUnplayedOpacity = 0.38;
+constexpr int currentColorSchemaVersion = 3;
+constexpr double defaultUnplayedDimness = 0.68;
 
 QColor storedColor(QSettings& settings, const QString& key,
                    const QColor& fallback)
@@ -67,17 +66,28 @@ void FrequencyColorWaveformSettings::setHighColor(const QColor& color)
 
 double FrequencyColorWaveformSettings::unplayedOpacity() const noexcept
 {
-    return unplayedOpacity_;
+    return 1.0 - unplayedDimness_;
 }
 
 void FrequencyColorWaveformSettings::setUnplayedOpacity(double opacity)
 {
     const double clamped = std::clamp(
-        std::isfinite(opacity) ? opacity : defaultUnplayedOpacity, 0.0, 1.0);
-    if (qFuzzyCompare(unplayedOpacity_ + 1.0, clamped + 1.0)) {
-        return;
-    }
-    unplayedOpacity_ = clamped;
+        std::isfinite(opacity) ? opacity : 1.0 - defaultUnplayedDimness,
+        0.0, 1.0);
+    setUnplayedDimness(1.0 - clamped);
+}
+
+double FrequencyColorWaveformSettings::unplayedDimness() const noexcept
+{
+    return unplayedDimness_;
+}
+
+void FrequencyColorWaveformSettings::setUnplayedDimness(double dimness)
+{
+    const double clamped = std::clamp(
+        std::isfinite(dimness) ? dimness : defaultUnplayedDimness, 0.0, 1.0);
+    if (qFuzzyCompare(unplayedDimness_ + 1.0, clamped + 1.0)) return;
+    unplayedDimness_ = clamped;
     emit changed();
 }
 
@@ -85,12 +95,12 @@ void FrequencyColorWaveformSettings::resetToDefault()
 {
     const bool changedState = lowColor_ != defaultLow
         || midColor_ != defaultMid || highColor_ != defaultHigh
-        || !qFuzzyCompare(unplayedOpacity_ + 1.0,
-                          defaultUnplayedOpacity + 1.0);
+        || !qFuzzyCompare(unplayedDimness_ + 1.0,
+                          defaultUnplayedDimness + 1.0);
     lowColor_ = defaultLow;
     midColor_ = defaultMid;
     highColor_ = defaultHigh;
-    unplayedOpacity_ = defaultUnplayedOpacity;
+    unplayedDimness_ = defaultUnplayedDimness;
     if (changedState) {
         emit changed();
     }
@@ -123,22 +133,24 @@ void FrequencyColorWaveformSettings::load(QSettings& settings)
     }
     const QString opacityKey = QStringLiteral(
         "waveformFrequencyUnplayedOpacity");
-    double storedOpacity = settings.value(
-        opacityKey, defaultUnplayedOpacity).toDouble();
+    const QString dimnessKey = QStringLiteral(
+        "waveformFrequencyUnplayedDimness");
     const bool opacityWasStored = settings.contains(opacityKey);
-    if (storedSchema < 2
-        && qFuzzyCompare(storedOpacity + 1.0,
-                         legacyDefaultUnplayedOpacity + 1.0)) {
-        storedOpacity = defaultUnplayedOpacity;
-        settings.setValue(opacityKey, storedOpacity);
-    }
-    unplayedOpacity_ = std::clamp(
-        std::isfinite(storedOpacity) ? storedOpacity : defaultUnplayedOpacity,
+    const bool dimnessWasStored = settings.contains(dimnessKey);
+    double storedOpacity = settings.value(
+        opacityKey, 1.0 - defaultUnplayedDimness).toDouble();
+    const double storedDimness = dimnessWasStored
+        ? settings.value(dimnessKey, defaultUnplayedDimness).toDouble()
+        : 1.0 - storedOpacity;
+    unplayedDimness_ = std::clamp(
+        std::isfinite(storedDimness) ? storedDimness : defaultUnplayedDimness,
         0.0, 1.0);
+    if (!dimnessWasStored) {
+        settings.setValue(dimnessKey, unplayedDimness_);
+    }
     if (storedSchema < currentColorSchemaVersion) {
-        if (!opacityWasStored) {
-            settings.setValue(opacityKey, unplayedOpacity_);
-        }
+        if (!opacityWasStored)
+            settings.setValue(opacityKey, unplayedOpacity());
         settings.setValue(schemaKey, currentColorSchemaVersion);
     }
 }
@@ -154,7 +166,9 @@ void FrequencyColorWaveformSettings::save(QSettings& settings) const
     settings.setValue(QStringLiteral("waveformFrequencyColorSchemaVersion"),
                       currentColorSchemaVersion);
     settings.setValue(QStringLiteral("waveformFrequencyUnplayedOpacity"),
-                      unplayedOpacity_);
+                      unplayedOpacity());
+    settings.setValue(QStringLiteral("waveformFrequencyUnplayedDimness"),
+                      unplayedDimness_);
     settings.remove(QStringLiteral("waveformSpectralPalette"));
     settings.remove(QStringLiteral("waveformSpectralUnplayedOpacity"));
 }

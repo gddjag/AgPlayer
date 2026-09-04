@@ -18,11 +18,11 @@ Item {
     property bool showHeader: true
     property string panelTitle: qsTr("标签管理")
     readonly property int visibleTagCount: tagRepeater.count
-    readonly property int pillHorizontalPadding: 12
-    readonly property int pillCountHorizontalPadding: 6
-    readonly property int pillCountMinimumWidth: 28
+    readonly property int pillHorizontalPadding: 6
+    readonly property int pillCountHorizontalPadding: 5
+    readonly property int pillCountMinimumWidth: 0
     readonly property int pillContentSpacing: 0
-    readonly property int pillMinimumWidth: 70
+    readonly property int pillMinimumWidth: 0
     readonly property color controlBorder: compact
                                                    ? Theme.integratedSoftOutline
                                                    : Theme.controlSubtleBorder
@@ -474,7 +474,7 @@ Item {
                             implicitHeight: 28
                             width: implicitWidth
                             height: implicitHeight
-                            radius: 5
+                            radius: 4
                             clip: true
                             color: "transparent"
                             border.width: 0

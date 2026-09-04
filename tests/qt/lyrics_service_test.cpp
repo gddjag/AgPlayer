@@ -396,6 +396,8 @@ void LyricsServiceTest::modelSelectsCurrentLineWithOffsetAndFollowPause()
                     {3000, QStringLiteral("three")}});
     QCOMPARE(model.lineAt(2100, 0), QStringLiteral("two"));
     QCOMPARE(model.lineAt(2100, 250), QStringLiteral("one"));
+    QCOMPARE(model.activeIndex(2100, 0), 1);
+    QCOMPARE(model.activeIndex(2100, 250), 0);
     QCOMPARE(model.previousLine(2100, 0), QStringLiteral("one"));
     QCOMPARE(model.nextLine(2100, 0), QStringLiteral("three"));
 }

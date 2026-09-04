@@ -549,7 +549,7 @@ void WindowControllerTest::switchingBackToClassicRestoresReferenceSize()
     mainWindow.setGeometry(20, 30, 700, 320);
 
     windows.setMainWindowShellMode(1);
-    QCOMPARE(mainWindow.size(), QSize(1672, 941).boundedTo(
+    QCOMPARE(mainWindow.size(), QSize(1386, 941).boundedTo(
                  mainWindow.screen()->availableGeometry().size()));
     mainWindow.setGeometry(20, 40, 760, 700);
 
@@ -561,7 +561,7 @@ void WindowControllerTest::switchingBackToClassicRestoresReferenceSize()
     QCOMPARE(mainWindow.geometry(), QRect(20, 40, 760, 700));
 
     windows.setMainWindowShellMode(2);
-    QCOMPARE(mainWindow.size(), QSize(1672, 820).boundedTo(
+    QCOMPARE(mainWindow.size(), QSize(1386, 820).boundedTo(
                  mainWindow.screen()->availableGeometry().size()));
     mainWindow.setGeometry(30, 50, 760, 460);
 

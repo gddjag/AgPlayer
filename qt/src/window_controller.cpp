@@ -1537,8 +1537,8 @@ bool WindowController::restoreMainWindowGeometry(QWindow* window,
     }
     const QRect available = screen->availableGeometry();
     const QSize preferred = mainWindowShellMode_ == 1
-        ? QSize(1672, 941)
-        : mainWindowShellMode_ == 2 ? QSize(1672, 820) : QSize(863, 266);
+        ? QSize(1386, 941)
+        : mainWindowShellMode_ == 2 ? QSize(1386, 820) : QSize(863, 266);
     const QSize size = preferred.boundedTo(available.size());
     QRect geometry(QPoint(), size);
     geometry.moveCenter(available.center());

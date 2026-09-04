@@ -51,7 +51,7 @@ Assert-Matches $navigation '(?s)readonly property int navigationIconVisualSize:\
 Assert-Matches $navigation 'anchors\.leftMargin:\s*6 \+ nodeRow\.depth \* 12' `
     'Sidebar indentation must remain compact'
 
-Assert-Matches $tagPanel '(?s)id:\s*tagPill.*implicitHeight:\s*28.*height:\s*implicitHeight.*radius:\s*5' `
+Assert-Matches $tagPanel '(?s)id:\s*tagPill.*implicitHeight:\s*28.*height:\s*implicitHeight.*radius:\s*4' `
     'Tag capsules must be 28 px high and vertically centered'
 Assert-Matches $tagPanel '(?s)TagFilterModel\s*\{.*sourceModel:\s*root\.tagModel.*query:\s*root\.searchText' `
     'Tag panel must retain the quantity-descending stable-name proxy sorting'
