@@ -580,6 +580,43 @@ bool VocalSeparationController::downloadModelFromMirror(const QString& modelId)
     return beginModelDownload(modelId, true);
 }
 
+bool VocalSeparationController::configureRuntime(const QString& modelIdForUi)
+{
+    if (!downloadQueue_.isEmpty() || verificationWatcher_ != nullptr
+        || runtimeInstallerWatcher_ != nullptr
+        || downloader_->state() == VocalDownloadState::Downloading
+        || downloader_->state() == VocalDownloadState::Paused
+        || downloader_->state() == VocalDownloadState::Verifying) {
+        return false;
+    }
+    if (runtimeReady()) return true;
+
+    const VocalRuntimePackage package =
+        VocalSeparationCatalog::directMlRuntime();
+    const VocalDownloadFile archive{
+        QStringLiteral("runtime.nupkg"), package.url,
+        package.bytes, package.sha256};
+    downloadQueue_.push_back({
+        archive,
+        QDir(options_.dataRoot).filePath(
+            QStringLiteral("downloads/runtime.nupkg")),
+        true, {}, false});
+    runtimeOnlyDownload_ = true;
+    preferDomesticMirror_ = false;
+    downloadSource_ = tr("官方线路");
+    downloadingModelId_ = modelIdForUi.isEmpty()
+        ? QStringLiteral("runtime") : modelIdForUi;
+    failedDownloadModelId_.clear();
+    downloadProgress_ = 0.0;
+    completedDownloadBytes_ = 0;
+    totalDownloadBytes_ = package.bytes;
+    emit downloadProgressChanged();
+    emit downloadStateChanged();
+    setError({});
+    startNextDownload();
+    return true;
+}
+
 bool VocalSeparationController::beginModelDownload(
     const QString& modelId, const bool preferDomesticMirror)
 {
@@ -641,6 +678,7 @@ void VocalSeparationController::cancelDownload()
     if (runtimeInstallCancellation_)
         runtimeInstallCancellation_->store(true, std::memory_order_release);
     downloadQueue_.clear();
+    runtimeOnlyDownload_ = false;
     downloadingModelId_.clear();
     failedDownloadModelId_.clear();
     downloadSource_.clear();
@@ -1645,6 +1683,7 @@ void VocalSeparationController::finishExhaustedDownload(
 {
     const QString modelId = downloadingModelId_;
     downloadQueue_.clear();
+    runtimeOnlyDownload_ = false;
     failedDownloadModelId_ = modelId;
     downloadingModelId_.clear();
     downloadProgress_ = 0.0;
@@ -1664,10 +1703,11 @@ void VocalSeparationController::finishExhaustedDownload(
 void VocalSeparationController::startNextDownload()
 {
     if (downloadQueue_.isEmpty()) {
-        if (!downloadingModelId_.isEmpty())
+        if (!runtimeOnlyDownload_ && !downloadingModelId_.isEmpty())
             verifiedModelIds_.insert(downloadingModelId_);
-        if (!downloadingModelId_.isEmpty())
+        if (!runtimeOnlyDownload_ && !downloadingModelId_.isEmpty())
             verifiedOrRejectedModelIds_.insert(downloadingModelId_);
+        runtimeOnlyDownload_ = false;
         downloadingModelId_.clear();
         downloadProgress_ = 1.0;
         completedDownloadBytes_ = totalDownloadBytes_;

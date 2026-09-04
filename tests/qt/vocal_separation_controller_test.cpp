@@ -101,6 +101,15 @@ public:
         return controller.verificationWatcher_ == nullptr
             && controller.runtimeInstallerWatcher_ == nullptr;
     }
+
+    static bool runtimeOnlyDownloadActive(
+        const VocalSeparationController& controller)
+    {
+        return controller.runtimeOnlyDownload_
+            && controller.downloadingModelId_ == QStringLiteral("runtime")
+            && !controller.downloadQueue_.isEmpty()
+            && controller.downloadQueue_.constFirst().runtimeArchive;
+    }
 };
 
 class VocalSeparationControllerTest final : public QObject {
@@ -115,6 +124,7 @@ private slots:
     void downloadProgressNeverMutatesAnActiveSeparationJob();
     void downloadFailureRetriesMirrorBeforeReportingExhaustion();
     void queuedDownloadRouteAndCancellationUseProductionControllerState();
+    void runtimeCanBeConfiguredWithoutCatalogModelLookup();
     void installedMappingUsesCheapDiscoveryThenExplicitAsyncHashing();
     void customModelDirectoryPersistsAndRecognizesTrustedNestedFiles();
     void customModelDirectoryListsNestedRawModelsWithBackendDiagnostics();
@@ -2110,6 +2120,26 @@ void VocalSeparationControllerTest::unicodeLongPathsWorkThroughHistoryAndExport(
                                   QUrl::fromLocalFile(target)));
     QVERIFY(QFileInfo(target).isFile());
 #endif
+}
+
+void VocalSeparationControllerTest::runtimeCanBeConfiguredWithoutCatalogModelLookup()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const auto options = optionsFor(temporary, QStringLiteral("stale"),
+                                    QByteArray("model"));
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+
+    QVERIFY(controller.configureRuntime(QString{}));
+    QVERIFY(VocalSeparationControllerTestDriver::runtimeOnlyDownloadActive(
+        controller));
+    QCOMPARE(controller.downloadSource(), QStringLiteral("官方线路"));
+
+    controller.cancelDownload();
+    QVERIFY(!controller.downloadBusy());
 }
 
 QTEST_MAIN(VocalSeparationControllerTest)

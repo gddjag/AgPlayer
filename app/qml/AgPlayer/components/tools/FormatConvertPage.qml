@@ -273,23 +273,6 @@ Rectangle {
                             }
                         }
                         Text { text: Math.round(totalProgress.value * 100) + "%"; color: Theme.primaryText }
-                        Text { text: qsTr("并发"); color: Theme.secondaryText; font.pixelSize: Theme.fontSizeBody }
-                        ThemedComboBox {
-                            id: converterParallelJobsBox
-                            objectName: "converterParallelJobsBox"
-                            Layout.preferredWidth: 72
-                            model: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-                            currentIndex: Math.max(0, model.indexOf(SettingsController.parallelJobs))
-                            enabled: !converter.busy
-                            onActivated: SettingsController.parallelJobs = currentValue
-                            background: Rectangle {
-                                objectName: "converterParallelJobsBoxFrame"
-                                color: parent.enabled ? Theme.elevated : Theme.background
-                                border.color: Theme.border
-                                border.width: 1
-                                radius: 5
-                            }
-                        }
                     }
                     Text {
                         text: qsTr("%1 个任务 / 预计剩余 %2").arg(converter.fileCount)
@@ -302,6 +285,32 @@ Rectangle {
                 Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; Layout.topMargin: 22; Layout.bottomMargin: 22; color: Theme.border }
 
                 Item { Layout.fillWidth: true }
+
+                RowLayout {
+                    objectName: "converterParallelJobsGroup"
+                    spacing: 8
+                    Text {
+                        text: qsTr("并发")
+                        color: Theme.secondaryText
+                        font.pixelSize: Theme.fontSizeBody
+                    }
+                    ThemedComboBox {
+                        id: converterParallelJobsBox
+                        objectName: "converterParallelJobsBox"
+                        Layout.preferredWidth: 72
+                        model: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+                        currentIndex: Math.max(0, model.indexOf(SettingsController.parallelJobs))
+                        enabled: !converter.busy
+                        onActivated: SettingsController.parallelJobs = currentValue
+                        background: Rectangle {
+                            objectName: "converterParallelJobsBoxFrame"
+                            color: parent.enabled ? Theme.elevated : Theme.background
+                            border.color: Theme.border
+                            border.width: 1
+                            radius: 5
+                        }
+                    }
+                }
 
                 Rectangle {
                     objectName: "formatSummaryCard"

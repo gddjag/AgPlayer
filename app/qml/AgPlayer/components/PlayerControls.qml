@@ -167,7 +167,9 @@ Rectangle {
                                          : lyricsActions.right
         anchors.leftMargin: root.denseTransport ? 0 : 4
         anchors.verticalCenter: centerControls.verticalCenter
-        emptyMode: root.emptyMode || root.rollingLayout
+        // Rolling mode still needs the hover flyout; it only relocates the
+        // shell actions and must not downgrade volume to an icon-only button.
+        emptyMode: root.emptyMode
         compact: root.compactTransport
         maximumExpandedWidth: root.rollingLayout && root.secondaryActionHost
                               ? 156
@@ -191,6 +193,8 @@ Rectangle {
             id: themeModeButton
             parent: root.secondaryActionHost || secondaryActions
             anchors.left: root.secondaryActionHost ? parent.left : undefined
+            anchors.verticalCenter: root.secondaryActionHost
+                                    ? parent.verticalCenter : undefined
             objectName: "themeModeButton"
             width: root.denseTransport ? 32 : Math.max(32, implicitWidth)
             height: root.denseTransport ? 32 : Math.max(32, implicitHeight)
@@ -230,6 +234,8 @@ Rectangle {
             anchors.left: root.secondaryActionHost
                           ? immersiveExperienceActions.right : undefined
             anchors.leftMargin: root.secondaryActionHost ? 4 : 0
+            anchors.verticalCenter: root.secondaryActionHost
+                                    ? parent.verticalCenter : undefined
             objectName: "miniPlayerButton"
             width: root.denseTransport ? 32 : Math.max(32, implicitWidth)
             height: root.denseTransport ? 32 : Math.max(32, implicitHeight)

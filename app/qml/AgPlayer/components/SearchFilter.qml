@@ -7,7 +7,9 @@ Rectangle {
     id: root
     color: "transparent"
     border.width: 0
-    implicitHeight: 34
+    implicitHeight: 32
+    readonly property int contentTopMargin: 3
+    readonly property int contentBottomMargin: integratedStyle ? 1 : 5
 
     property string searchText: ""
     property int exactRating: 0
@@ -57,8 +59,8 @@ Rectangle {
         anchors.fill: parent
         anchors.leftMargin: Theme.spacingSm
         anchors.rightMargin: Theme.spacingSm
-        anchors.topMargin: 4
-        anchors.bottomMargin: 2
+        anchors.topMargin: root.contentTopMargin
+        anchors.bottomMargin: root.contentBottomMargin
         spacing: 10
 
         Rectangle {

@@ -154,6 +154,7 @@ public:
     Q_INVOKABLE bool dropInput(const QList<QUrl>& urls);
     Q_INVOKABLE bool downloadModel(const QString& modelId);
     Q_INVOKABLE bool downloadModelFromMirror(const QString& modelId);
+    Q_INVOKABLE bool configureRuntime(const QString& modelIdForUi);
     Q_INVOKABLE void pauseDownload();
     Q_INVOKABLE void resumeDownload();
     Q_INVOKABLE void cancelDownload();
@@ -352,6 +353,7 @@ private:
     QSet<QString> verifiedModelIds_;
     QSet<QString> verifiedOrRejectedModelIds_;
     bool runtimeVerified_ = false;
+    bool runtimeOnlyDownload_ = false;
     QList<DownloadItem> downloadQueue_;
     QString downloadingModelId_;
     QString failedDownloadModelId_;

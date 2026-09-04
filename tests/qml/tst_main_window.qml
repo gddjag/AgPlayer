@@ -2702,7 +2702,7 @@ TestCase {
     function test_search_filter_uses_editable_bpm_bounds_and_compact_modules() {
         var filter = searchFilterComponent.createObject(mainWindow.contentItem)
         verify(filter)
-        compare(filter.implicitHeight, 34)
+        compare(filter.implicitHeight, 32)
         compare(findChild(filter, "keywordModule").width, 184)
         compare(findChild(filter, "librarySearchField").placeholderText,
                 "歌曲 · 艺术家 · 专辑 · 标签")
@@ -3371,7 +3371,7 @@ TestCase {
         var longPill = findChild(panel, "tagPill-" + keys[keys.length - 1])
         verify(firstPill && secondPill && longPill)
         compare(firstPill.height, 28)
-        compare(firstPill.radius, 4)
+        compare(firstPill.radius, Theme.radiusSm)
         compare(panel.pillHorizontalPadding, 6)
         compare(panel.pillCountHorizontalPadding, 5)
         compare(panel.pillCountMinimumWidth, 0)

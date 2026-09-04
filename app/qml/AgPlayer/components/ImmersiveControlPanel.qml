@@ -15,11 +15,13 @@ Rectangle {
     property real featureSpectralFlux: 0
     property bool featureKick: false
     property real featureKickEnvelope: 0
-    readonly property real expandedHeight: currentTab === 0 ? 390
-                                                : currentTab === 1 ? 520 : 690
+    // Keep the panel narrow, but give every tab enough vertical room that its
+    // lower controls are not hidden behind a short initial viewport.
+    readonly property real expandedHeight: currentTab === 0 ? 700
+                                                : currentTab === 1 ? 700 : 760
     signal pointerActivity()
 
-    width: 356
+    width: 320
     height: collapsed ? 52 : Math.min(expandedHeight,
                                       parent ? parent.height - 108
                                              : expandedHeight)

@@ -87,6 +87,11 @@ TestCase {
         verify(findChild(page, "separationBackupModelDialog"))
         verify(findChild(page, "separationCustomModelCard"))
         verify(findChild(page, "separationDetectModels"))
+        const previousWaveformMode = SettingsController.waveformMode
+        SettingsController.waveformMode = 3
+        compare(waveform.visualMode, 0,
+                "peak-only separation previews must not select the four-layer frequency renderer")
+        SettingsController.waveformMode = previousWaveformMode
         compare(VocalSeparationController.inputInfo.name, undefined)
         verify(!primary.enabled)
         verify(primary.Accessible.name.length > 0)
@@ -116,11 +121,15 @@ TestCase {
         const vocalsWaveform = findChild(
             page, "separationStemWaveform-" + VocalSeparationController.Vocals)
         verify(inputWaveform && inputPreview && vocalsWaveform)
-        compare(inputWaveform.visualMode, SettingsController.waveformMode)
+        compare(inputWaveform.visualMode,
+                SettingsController.waveformMode === 3
+                ? 0 : SettingsController.waveformMode)
         compare(inputWaveform.density,
                 SettingsController.waveformMode === 2
                 ? 1.0 : SettingsController.waveformDensity)
-        compare(vocalsWaveform.visualMode, SettingsController.waveformMode)
+        compare(vocalsWaveform.visualMode,
+                SettingsController.waveformMode === 3
+                ? 0 : SettingsController.waveformMode)
         verify(inputWaveform.pointerInteractionEnabled)
         compare(inputWaveform.duration,
                 VocalSeparationController.inputInfo.durationMs || 0)
@@ -216,7 +225,9 @@ TestCase {
                 "自定义模型")
         verify(findChild(customCard, "separationCustomModelCopy").text
                .indexOf("自动识别支持的模型") >= 0)
-        verify(backupText.text.indexOf("如果点击模型下载太慢或者下载不了") >= 0)
+        verify(backupText.text.indexOf("支持与环境") >= 0)
+        verify(backupText.text.indexOf("MDX / MDXC ONNX") >= 0)
+        verify(backupText.text.indexOf("Demucs .th") >= 0)
         verify(backupText.text.indexOf("https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888") >= 0)
         verify(backupText.text.indexOf("提取码: 8888") >= 0)
     }
@@ -754,7 +765,7 @@ TestCase {
                   + VocalSeparationController.selectedModelId)
         verify(runtimeInstaller)
         verify(runtimeInstaller.visible)
-        compare(runtimeInstaller.text, "安装运行组件")
+        compare(runtimeInstaller.text, "一键配置")
 
         separationTestDriver.setDevices("fallback")
         compare(VocalSeparationController.availableDevices[0].available, true)

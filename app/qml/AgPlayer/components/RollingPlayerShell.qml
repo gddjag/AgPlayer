@@ -773,6 +773,7 @@ Item {
                 frequencyUnplayedOpacity: Theme.nonImmersiveSpectralUnplayedOpacity
                 amplitudeScale: SettingsController.waveformHeight
                 density: SettingsController.waveformDensity
+                preserveSourcePeakDensity: true
                 lineWidth: SettingsController.waveformThickness
             }
 
@@ -1124,9 +1125,9 @@ Item {
                     Item {
                         id: rollingShellActions
                         objectName: "rollingShellActions"
-                        Layout.preferredWidth: 106
-                        Layout.minimumWidth: 106
-                        Layout.maximumWidth: 106
+                        Layout.preferredWidth: 108
+                        Layout.minimumWidth: 108
+                        Layout.maximumWidth: 108
                         Layout.fillHeight: true
                         Layout.leftMargin: 8
                     }
@@ -1226,7 +1227,7 @@ Item {
                             id: rollingSearchFilter
                             objectName: "rollingSearchFilter"
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 34
+                            Layout.preferredHeight: 32
                             integratedStyle: true
                             searchText: root.filterModel
                                         ? root.filterModel.searchText : ""

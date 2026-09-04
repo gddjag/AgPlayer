@@ -226,7 +226,11 @@ Rectangle {
         id: unifiedWaveform
         property bool useTrackAccent: false
         property color trackAccent: page.cyan
-        visualMode: SettingsController.waveformMode
+        // Separation previews currently carry a single peak envelope. The
+        // frequency renderer requires synchronized mix/bass/mid/high layers,
+        // so selecting it made valid input and stem previews disappear.
+        visualMode: SettingsController.waveformMode === 3
+                    ? 0 : SettingsController.waveformMode
         baseColor: useTrackAccent
                    ? Qt.rgba(trackAccent.r, trackAccent.g, trackAccent.b, 0.55)
                    : (SettingsController.waveformMode === 0
@@ -587,7 +591,7 @@ Rectangle {
                     color: page.textPrimary
                     selectionColor: page.primary
                     selectedTextColor: "white"
-                    text: qsTr("如果点击模型下载太慢或者下载不了，可切换以下纯免费线路。\n\n免费模型来源：\n1. 官方线路：模型卡的“下载”按钮。\n2. 国内公益镜像：HTDemucs 支持 HF-Mirror 自动线路，官方失败会自动切换。\n3. 第三方公益服务：百度网盘人声伴奏分离模型。\n4. 用户自行下载：放入模型目录后点击“检测”。\n\n放置方法：模型可以直接放在模型根目录，也可以放在任意层级的分类子目录；检测会递归扫描全部子目录。内置支持的模型须保留原文件名和完整文件组。其他兼容 ONNX 模型请附带同名 .agmodel.json 描述文件，检测成功后会自动加入模型列表。\n\n注意：本地文件不会再次下载。显示“已识别 · 待配置”表示文件已找到，但还缺少可信 sidecar 或可选运行后端；悬停模型介绍可查看具体原因。\n\n百度网盘链接: https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888\n提取码: 8888")
+                    text: qsTr("支持与环境：\n• MDX / MDXC ONNX、HTDemucs ONNX：使用 AgPlayer 一键配置的 ONNX Runtime（CPU / DirectML GPU）。\n• Demucs .th、UVR .pth：需要可选的外置 Python / PyTorch 运行环境，不会塞入轻量主安装包。\n\n模型来源：\n1. 官方线路：模型卡的“下载”按钮。\n2. 国内公益镜像：HTDemucs 支持 HF-Mirror 自动线路，官方失败会自动切换。\n3. 第三方公益服务：百度网盘人声伴奏分离模型。\n4. 用户自行下载：放入模型目录后点击“检测”。\n\n放置方法：模型可以直接放在模型根目录，也可以放在任意层级的分类子目录；检测会递归扫描全部子目录。内置模型须保留原文件名和完整文件组。其他兼容 ONNX 模型请附带同名 .agmodel.json 描述文件。\n\n本地文件不会再次下载。“已识别 · 待配置”表示文件已经找到；ONNX 模型可点击“一键配置”自动安装运行组件，未知张量契约仍需可信 sidecar。悬停模型介绍可查看具体原因。\n\n百度网盘链接: https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888\n提取码: 8888")
                     background: Rectangle {
                         color: page.input
                         border.color: page.border
@@ -1143,23 +1147,28 @@ Rectangle {
                                           }
                                           WorkbenchButton {
                                               objectName: "separationInstallRuntime-" + cardData.id
-                                              visible: cardData.state === VocalSeparationController.Installed
-                                                       && !VocalSeparationController.runtimeReady
+                                              visible: (cardData.state === VocalSeparationController.Installed
+                                                        && !VocalSeparationController.runtimeReady)
+                                                       || (cardData.origin === "custom"
+                                                           && cardData.compatibility === "diagnostic"
+                                                           && cardData.backend === "onnxruntime-native")
                                               implicitHeight: 24
                                               leftPadding: 6
                                               rightPadding: 6
                                               topPadding: 3
                                               bottomPadding: 3
-                                              text: qsTr("安装运行组件")
+                                              text: qsTr("一键配置")
                                               enabled: !page.contextLocked
                                                        && !VocalSeparationController.downloadBusy
                                               Accessible.name: qsTr("安装 ONNX Runtime")
                                               Accessible.role: Accessible.Button
-                                              onClicked: VocalSeparationController.downloadModel(cardData.id)
+                                              onClicked: VocalSeparationController.configureRuntime(cardData.id)
                                           }
                                           WorkbenchButton {
                                               objectName: "separationDomesticMirror-" + cardData.id
                                               visible: cardData.state !== VocalSeparationController.Installed
+                                                       && !(cardData.origin === "custom"
+                                                            && cardData.compatibility === "diagnostic")
                                               implicitHeight: 24
                                               leftPadding: 6
                                               rightPadding: 6
@@ -1177,6 +1186,8 @@ Rectangle {
                                           }
                                           WorkbenchButton {
                                               visible: cardData.state !== VocalSeparationController.Installed
+                                                       && !(cardData.origin === "custom"
+                                                            && cardData.compatibility === "diagnostic")
                                                implicitHeight: 24
                                                leftPadding: 6
                                                rightPadding: 6

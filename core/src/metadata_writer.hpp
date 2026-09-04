@@ -162,6 +162,7 @@ struct MetadataWriterTestHooks {
     bool fail_commit_lock = false;
     bool simulate_replace_error_1177 = false;
     bool simulate_normalized_packet_timing = false;
+    bool simulate_source_muxer_encoder_metadata = false;
     std::function<void()> before_source_commit;
     std::function<void()> before_atomic_replace;
     std::function<void()> before_replace_file;

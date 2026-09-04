@@ -3,6 +3,7 @@
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
+#include <libavutil/avstring.h>
 #include <libavutil/dict.h>
 #include <libavutil/mem.h>
 #include <libavutil/opt.h>
@@ -1171,10 +1172,20 @@ bool validate_metadata_edit_plan(const MetadataEditPlan& plan,
 
 MetadataSnapshot::Dictionary unmanaged_dictionary(
     const MetadataSnapshot::Dictionary& dictionary,
-    const MetadataEditPlan& plan)
+    const MetadataEditPlan& plan,
+    const bool exclude_muxer_owned_fields = false)
 {
     MetadataSnapshot::Dictionary unmanaged;
     for (const auto& entry : dictionary) {
+        // libavformat writes this container-level implementation tag itself
+        // during remuxing (for example "Lavf59.6.100").  It is not the
+        // user-editable encoded-by field, which is stored as `encoded_by`.
+        // Requiring its byte-for-byte preservation rejects otherwise valid
+        // metadata-only writes produced by a different FFmpeg build.
+        if (exclude_muxer_owned_fields
+            && av_strcasecmp(entry.first.c_str(), "encoder") == 0) {
+            continue;
+        }
         bool managed = false;
         for (const FieldEdit& edit : plan.fields) {
             if (edit.action != MetadataAction::Keep
@@ -1192,12 +1203,13 @@ bool dictionary_entries_preserved(
     const MetadataSnapshot::Dictionary& before,
     const MetadataSnapshot::Dictionary& after,
     const MetadataEditPlan& plan,
-    const bool exclude_managed_fields = true)
+    const bool exclude_managed_fields = true,
+    const bool exclude_muxer_owned_fields = false)
 {
     const MetadataSnapshot::Dictionary required = exclude_managed_fields
-        ? unmanaged_dictionary(before, plan) : before;
+        ? unmanaged_dictionary(before, plan, exclude_muxer_owned_fields) : before;
     const MetadataSnapshot::Dictionary actual = exclude_managed_fields
-        ? unmanaged_dictionary(after, plan) : after;
+        ? unmanaged_dictionary(after, plan, exclude_muxer_owned_fields) : after;
     return std::includes(actual.begin(), actual.end(),
                          required.begin(), required.end());
 }
@@ -1207,7 +1219,7 @@ bool unmanaged_metadata_preserved(const MetadataSnapshot& before,
                                   const MetadataEditPlan& plan)
 {
     if (!dictionary_entries_preserved(before.format_metadata,
-                                      after.format_metadata, plan)
+                                      after.format_metadata, plan, true, true)
         || before.chapter_details != after.chapter_details) {
         return false;
     }
@@ -2174,6 +2186,12 @@ ag_result write_metadata_with_preserved_backup(
         error = "Failed to read source metadata before staging";
         return AG_IO_ERROR;
     }
+    if (test_hooks != nullptr
+        && test_hooks->simulate_source_muxer_encoder_metadata) {
+        source_snapshot.format_metadata.emplace_back("encoder", "Lavf-old-build");
+        std::sort(source_snapshot.format_metadata.begin(),
+                  source_snapshot.format_metadata.end());
+    }
     if (runtime != nullptr) {
         runtime->audio_streams_before = source_snapshot.audio_streams;
         runtime->chapters_before = source_snapshot.chapters;
@@ -2203,36 +2221,45 @@ ag_result write_metadata_with_preserved_backup(
     }
     if (verification_plan != nullptr) {
         MetadataSnapshot staged_snapshot;
-        bool verified = read_metadata_snapshot(staged_utf8, staged_snapshot,
-                                               runtime);
-        if (runtime != nullptr && verified) {
+        const bool snapshot_read = read_metadata_snapshot(
+            staged_utf8, staged_snapshot, runtime);
+        bool fields_match = snapshot_read;
+        if (runtime != nullptr && snapshot_read) {
             runtime->audio_streams_after = staged_snapshot.audio_streams;
             runtime->chapters_after = staged_snapshot.chapters;
             runtime->attachments_after = staged_snapshot.attachments;
         }
-        if (verified) {
+        if (fields_match) {
             for (const FieldEdit& edit : verification_plan->fields) {
                 if (edit.action == MetadataAction::Keep) continue;
                 const std::string& actual =
                     staged_snapshot.fields[canonical_index(edit.field)];
                 if ((edit.action == MetadataAction::Set && actual != *edit.value_utf8)
                     || (edit.action == MetadataAction::Clear && !actual.empty())) {
-                    verified = false;
+                    fields_match = false;
                     break;
                 }
             }
         }
-        verified = verified
-            && !fail_at(test_hooks, MetadataFailurePoint::Verification);
-        verified = verified
+        const bool injected_verification_failure =
+            fail_at(test_hooks, MetadataFailurePoint::Verification);
+        const bool structure_matches = snapshot_read
             && staged_snapshot.audio_streams == source_snapshot.audio_streams
             && staged_snapshot.chapters == source_snapshot.chapters
-            && staged_snapshot.attachments == source_snapshot.attachments
+            && staged_snapshot.attachments == source_snapshot.attachments;
+        const bool unmanaged_matches = snapshot_read
             && unmanaged_metadata_preserved(source_snapshot, staged_snapshot,
                                             *verification_plan);
-        if (!verified) {
+        if (!snapshot_read || !fields_match || injected_verification_failure
+            || !structure_matches || !unmanaged_matches) {
             clean_stage();
-            error = "Verification failed: staged metadata differs from request";
+            error = "Verification failed: staged metadata differs from request (";
+            if (!snapshot_read) error += "snapshot read failed; ";
+            if (!fields_match) error += "requested fields differ; ";
+            if (injected_verification_failure) error += "injected failure; ";
+            if (!structure_matches) error += "stream structure differs; ";
+            if (!unmanaged_matches) error += "unmanaged metadata differs; ";
+            error += ")";
             return AG_DECODE_ERROR;
         }
         const bool cover_matches = verification_plan->cover_action == CoverAction::Set

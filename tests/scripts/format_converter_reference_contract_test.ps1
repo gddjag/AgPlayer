@@ -129,9 +129,9 @@ if ($table -notmatch 'component\s+ReferenceCheckBox\s*:\s*CheckBox' -or
 if (-not (Test-Path -LiteralPath (Join-Path $SourceRoot 'assets/icons/check-line.svg'))) {
     throw 'Missing approved check-line icon asset for the reference checkbox indicator.'
 }
-if ($page -notmatch 'objectName:\s*"formatTotalProgress"[\s\S]{0,1200}?objectName:\s*"converterParallelJobsBox"' -or
+if ($page -notmatch 'objectName:\s*"formatTotalProgress"[\s\S]{0,3000}?objectName:\s*"converterParallelJobsGroup"[\s\S]{0,800}?objectName:\s*"converterParallelJobsBox"[\s\S]{0,1000}?objectName:\s*"formatSummaryCard"' -or
     $page -match 'formatOutputDirectoryRow') {
-    throw 'The reference footer must place parallel jobs beside total progress without duplicating output-directory controls.'
+    throw 'The reference footer must place parallel jobs in the right-side action area before the summary without duplicating output-directory controls.'
 }
 foreach ($asset in @(
     'arrow-up-s-line.svg', 'checkbox-circle-line.svg',

@@ -387,6 +387,7 @@ public:
     qreal height_ = -1.0;
     qreal devicePixelRatio_ = -1.0;
     qreal density_ = -1.0;
+    bool preserveSourcePeakDensity_ = false;
     qreal lineWidth_ = -1.0;
     qint64 position_ = -1;
     qint64 duration_ = -1;
@@ -848,6 +849,21 @@ qreal WaveformItem::density() const
     return density_;
 }
 
+bool WaveformItem::preserveSourcePeakDensity() const noexcept
+{
+    return preserveSourcePeakDensity_;
+}
+
+void WaveformItem::setPreserveSourcePeakDensity(bool preserve)
+{
+    if (preserveSourcePeakDensity_ == preserve) {
+        return;
+    }
+    preserveSourcePeakDensity_ = preserve;
+    emit preserveSourcePeakDensityChanged();
+    update();
+}
+
 void WaveformItem::setDensity(qreal density)
 {
     const qreal finite = std::isfinite(density) ? density : 2.0;
@@ -1001,14 +1017,27 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
             std::ceil(std::max(
                 0.0, width() * devicePixelRatio * density_ / 2.0))));
 
+    const qint64 visibleDurationMs = std::max<qint64>(
+        1, visibleEndMs_ - visibleStartMs_);
+    const double visibleFraction = duration_ > 0
+        ? std::clamp(static_cast<double>(visibleDurationMs)
+                         / static_cast<double>(duration_),
+                     0.0, 1.0)
+        : 1.0;
+    const std::size_t visibleSourcePeaks = hasMix
+        ? std::max<std::size_t>(
+              1U, static_cast<std::size_t>(std::ceil(
+                      static_cast<double>(snapshot->mix->values.size())
+                      * visibleFraction)))
+        : 1U;
     const std::size_t peakCount = visualMode_ == 2
         ? renderedSpectrumBarCount(width(), devicePixelRatio)
-        // The analysed waveform stays immutable at its compact source
-        // resolution.  Map it onto the complete display budget here so a
-        // wider player gains visual detail instead of stretching a sparse
-        // set of vertical lines.  resampleValues() interpolates on expansion
-        // and preserves extrema when several source buckets share a pixel.
-        : maxPoints;
+        : preserveSourcePeakDensity_
+          ? std::min(maxPoints, visibleSourcePeaks)
+          // Full-track waveforms intentionally interpolate to the physical
+          // pixel budget. The rolling deck opts into the source-density path
+          // so zoom changes the visible time span without inventing peaks.
+          : maxPoints;
 
     const unsigned char layerMask = hasMix ? 1U : 0U;
 
@@ -1017,6 +1046,8 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                                  || !qFuzzyCompare(node->height_, height())
                                  || !qFuzzyCompare(node->devicePixelRatio_, devicePixelRatio)
                                  || !qFuzzyCompare(node->density_, density_)
+                                 || node->preserveSourcePeakDensity_
+                                        != preserveSourcePeakDensity_
                                  || !qFuzzyCompare(node->lineWidth_, lineWidth_)
                                  || node->visibleStartMs_ != visibleStartMs_
                                  || node->visibleEndMs_ != visibleEndMs_
@@ -1304,6 +1335,7 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         node->height_ = height();
         node->devicePixelRatio_ = devicePixelRatio;
         node->density_ = density_;
+        node->preserveSourcePeakDensity_ = preserveSourcePeakDensity_;
         node->lineWidth_ = lineWidth_;
         node->position_ = position_;
         node->duration_ = duration_;

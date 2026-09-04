@@ -39,10 +39,10 @@ Assert-Matches $trackList '(?s)property string layoutProfile:\s*"classic".*reado
     'TrackList must expose one explicit shared presentation profile for classic, single-window, and rolling layouts'
 Assert-Matches $trackList '(?s)objectName:\s*"singleWindowTrackSubtitle".*artist:\s*rowItem\.artist.*album:\s*rowItem\.album.*tags:\s*rowItem\.rowTags' `
     'Single-window rows must show artist, album, and optional tags beneath the title'
-Assert-Matches $trackList '(?s)objectName:\s*"singleWindowWaveformThumbnailLoader".*Layout\.fillWidth:\s*true.*Layout\.preferredHeight:\s*root\.singleWindowMediaHeight' `
-    'Single-window and rolling waveform thumbnails must occupy their own column and match the cover height'
-Assert-Matches $trackList '(?s)readonly property int titleMinimumWidth:\s*singleWindowLayout \? 180 : \(compactColumns \? 150 : 180\).*readonly property int singleWindowTitleWidth:\s*Math\.max\(\s*titleMinimumWidth,\s*Math\.min\(320,' `
-    'Single-window rows need a responsive metadata title region without changing the ordinary/tag floor'
+Assert-Matches $trackList '(?s)objectName:\s*"singleWindowWaveformThumbnailLoader".*Layout\.fillWidth:\s*true.*Layout\.preferredHeight:\s*root\.singleWindowWaveformHeight.*Layout\.alignment:\s*Qt\.AlignVCenter' `
+    'Single-window and rolling waveform thumbnails must occupy their own shorter, vertically centered column'
+Assert-Matches $trackList '(?s)readonly property int titleMinimumWidth:\s*singleWindowLayout \? 180 : \(compactColumns \? 150 : 180\).*readonly property int singleWindowFlexibleWidth:\s*Math\.max\(.*readonly property int singleWindowTitleWidth:\s*Math\.max\(\s*titleMinimumWidth,\s*Math\.floor\(singleWindowFlexibleWidth \* 0\.42\)\)' `
+    'Single-window rows need responsive title and waveform regions without changing the ordinary/tag floor'
 Assert-Matches $trackList '(?s)readonly property bool showBpmColumn:\s*singleWindowLayout \? false.*relaxedClassicColumns \? !tagManagementLayout : !tagFilterActive.*readonly property bool showDurationColumn:\s*singleWindowLayout \|\| relaxedClassicColumns \|\| !tagFilterActive' `
     'Single-window lists must show duration without BPM while classic tag mode keeps its existing policy'
 
@@ -51,7 +51,7 @@ Assert-Matches $navigation '(?s)readonly property int navigationIconVisualSize:\
 Assert-Matches $navigation 'anchors\.leftMargin:\s*6 \+ nodeRow\.depth \* 12' `
     'Sidebar indentation must remain compact'
 
-Assert-Matches $tagPanel '(?s)id:\s*tagPill.*implicitHeight:\s*28.*height:\s*implicitHeight.*radius:\s*4' `
+Assert-Matches $tagPanel '(?s)id:\s*tagPill.*implicitHeight:\s*28.*height:\s*implicitHeight.*radius:\s*Theme\.radiusSm' `
     'Tag capsules must be 28 px high and vertically centered'
 Assert-Matches $tagPanel '(?s)TagFilterModel\s*\{.*sourceModel:\s*root\.tagModel.*query:\s*root\.searchText' `
     'Tag panel must retain the quantity-descending stable-name proxy sorting'

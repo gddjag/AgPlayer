@@ -52,7 +52,7 @@ Assert-Matches $tagPanel '(?s)Flow\s*\{.*id:\s*tagFlow' `
     'Tag panel must lay capsules out with Flow'
 Assert-Matches $tagPanel 'contentHeight:\s*tagFlow\.height' `
     'Tag Flickable content height must follow the natural Flow height'
-Assert-Matches $tagPanel '(?s)id:\s*tagPill.*countSectionWidth:.*tagCount\.implicitWidth.*nameSectionWidth:.*tagNameMeasure\.implicitWidth.*implicitWidth:\s*Math\.min\(tagFlow\.width,.*implicitHeight:\s*28.*height:\s*implicitHeight.*radius:\s*4' `
+Assert-Matches $tagPanel '(?s)id:\s*tagPill.*countSectionWidth:.*tagCount\.implicitWidth.*nameSectionWidth:.*tagNameMeasure\.implicitWidth.*implicitWidth:\s*Math\.min\(tagFlow\.width,.*implicitHeight:\s*28.*height:\s*implicitHeight.*radius:\s*Theme\.radiusSm' `
     'Tag capsules must preserve compact natural width in 28 px reference capsules'
 Assert-Matches $tagPanel 'selectedVisual|hoveredVisual|pressedVisual|tagDropTarget\.containsDrag' `
     'Tag capsules must expose selected, hover and drop visual states'

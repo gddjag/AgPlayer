@@ -58,17 +58,23 @@ ListView {
                                            : (compactColumns ? 82 : 110))
     readonly property int bpmWidth: compactColumns ? 48 : 64
     readonly property int durationWidth: compactColumns ? 58 : 72
-    readonly property int trailingColumnGap: singleWindowLayout ? 8 : 0
+    readonly property int trailingColumnGap: singleWindowLayout ? 6 : 0
     // The shared integrated/rolling row keeps equal breathing room around the
     // flexible waveform while leaving the fixed metadata columns compact.
-    readonly property int singleWindowWaveformGap: 8
+    readonly property int singleWindowWaveformGap: 6
     readonly property int titleMinimumWidth:
         singleWindowLayout ? 180 : (compactColumns ? 150 : 180)
+    readonly property int singleWindowFlexibleWidth: Math.max(
+        titleMinimumWidth + 120,
+        width - 32 - sequenceWidth - durationWidth - ratingWidth
+        - favoriteWidth - trailingColumnGap * 3 - 48)
+    // Both the title block and waveform grow with the window. A proportional
+    // share avoids the old 320-DIP title ceiling while preserving a useful
+    // waveform region at every supported width.
     readonly property int singleWindowTitleWidth: Math.max(
-        titleMinimumWidth,
-        Math.min(320, width - 32 - sequenceWidth - durationWidth
-                  - ratingWidth - favoriteWidth - trailingColumnGap * 3 - 80))
+        titleMinimumWidth, Math.floor(singleWindowFlexibleWidth * 0.42))
     readonly property int singleWindowMediaHeight: 34
+    readonly property int singleWindowWaveformHeight: 26
     readonly property int singleWindowSubtitleFontSize:
         Math.max(10, Theme.fontSizeCaption - 1)
     readonly property bool showBpmColumn:
@@ -787,7 +793,9 @@ ListView {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             y: root && root.singleWindowLayout
-                               ? 3
+                               ? Math.round((parent.height - height
+                                             - singleWindowTrackSubtitle.implicitHeight
+                                             - 1) / 2)
                                : (root && root.waveformThumbnailsVisible
                                   ? 8 : (parent.height - height) / 2)
                             height: implicitHeight
@@ -799,6 +807,7 @@ ListView {
                         }
 
                         TrackSubtitle {
+                            id: singleWindowTrackSubtitle
                             objectName: "singleWindowTrackSubtitle"
                             visible: root.singleWindowLayout
                             anchors.left: parent.left
@@ -927,7 +936,7 @@ ListView {
                         && root.thumbnailHostVisible && rowItem.inViewport
                 Layout.column: 2
                 Layout.fillWidth: true
-                Layout.preferredHeight: root.singleWindowMediaHeight
+                Layout.preferredHeight: root.singleWindowWaveformHeight
                 Layout.alignment: Qt.AlignVCenter
                 Layout.leftMargin: root.singleWindowWaveformGap
                 Layout.rightMargin: 0
@@ -1039,7 +1048,7 @@ ListView {
                 }
             }
             BodyText { objectName: "trackBpmCell"; text: root.formatBpm(rowItem.bpm); visible: root.showBpmColumn; Layout.column: root.relaxedClassicColumns ? 5 : 9; horizontalAlignment: Text.AlignHCenter; trackAvailable: rowItem.available; highlighted: rowItem.systemHighlighted; highlightText: rowItem.systemHighlightText; Layout.minimumWidth: visible ? root.bpmWidth : 0; Layout.preferredWidth: visible ? root.bpmWidth : 0; Layout.maximumWidth: visible ? root.bpmWidth : 0 }
-            BodyText { objectName: "trackDurationCell"; text: root.formatTime(rowItem.durationMs); visible: root.showDurationColumn; Layout.column: root.singleWindowLayout ? 3 : (root.relaxedClassicColumns ? 2 : 10); Layout.leftMargin: root.singleWindowLayout ? root.trailingColumnGap : 0; horizontalAlignment: Text.AlignRight; trackAvailable: rowItem.available; highlighted: rowItem.systemHighlighted; highlightText: rowItem.systemHighlightText; Layout.minimumWidth: visible ? root.durationWidth : 0; Layout.preferredWidth: visible ? root.durationWidth : 0; Layout.maximumWidth: visible ? root.durationWidth : 0 }
+            BodyText { objectName: "trackDurationCell"; text: root.formatTime(rowItem.durationMs); visible: root.showDurationColumn; Layout.column: root.singleWindowLayout ? 3 : (root.relaxedClassicColumns ? 2 : 10); Layout.leftMargin: root.singleWindowLayout ? root.trailingColumnGap : 0; horizontalAlignment: root.singleWindowLayout ? Text.AlignHCenter : Text.AlignRight; trackAvailable: rowItem.available; highlighted: rowItem.systemHighlighted; highlightText: rowItem.systemHighlightText; Layout.minimumWidth: visible ? root.durationWidth : 0; Layout.preferredWidth: visible ? root.durationWidth : 0; Layout.maximumWidth: visible ? root.durationWidth : 0 }
         }
 
         HoverHandler { id: rowHover }

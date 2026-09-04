@@ -326,6 +326,32 @@ TestCase {
             if (mode === 2)
                 compare(findChild(controls, "themeModeButton").parent.objectName,
                         "rollingShellActions")
+            if (mode === 2) {
+                var rollingVolume = findChild(controls, "mainVolumeControl")
+                var rollingSlider = findChild(controls, "volumeSlider")
+                var rollingActions = findChild(activeShell,
+                                               "rollingShellActions")
+                verify(rollingVolume && rollingSlider && rollingActions)
+                compare(rollingVolume.emptyMode, false,
+                        "rolling mode must keep the shared volume flyout")
+                rollingVolume.expandedForQa = true
+                tryVerify(function() { return rollingSlider.visible
+                                              && rollingSlider.width >= 48 },
+                          500)
+                rollingVolume.expandedForQa = false
+                var actionNames = ["themeModeButton", "immersiveActionButton",
+                                   "miniPlayerButton"]
+                for (var actionIndex = 0; actionIndex < actionNames.length;
+                     ++actionIndex) {
+                    var action = findChild(controls, actionNames[actionIndex])
+                    verify(action)
+                    verify(Math.abs(action.mapToItem(rollingActions, 0, 0).y
+                                    - (rollingActions.height - action.height) / 2)
+                           <= 1,
+                           actionNames[actionIndex]
+                           + " must be vertically centered after zoom reset")
+                }
+            }
         }
 
         var rolling = enterMode(2)
@@ -674,6 +700,8 @@ TestCase {
         var tags = findChild(rolling, "rollingTagManagementPanel")
         verify(overview && waveform && bottom && library
                && trackList && filter && tags)
+        compare(trackList.singleWindowWaveformHeight, 26)
+        compare(trackList.trailingColumnGap, 6)
 
         mainWindow.width = 1000
         mainWindow.height = 720

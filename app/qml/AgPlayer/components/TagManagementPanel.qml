@@ -474,7 +474,7 @@ Item {
                             implicitHeight: 28
                             width: implicitWidth
                             height: implicitHeight
-                            radius: 4
+                            radius: Theme.radiusSm
                             clip: true
                             color: "transparent"
                             border.width: 0

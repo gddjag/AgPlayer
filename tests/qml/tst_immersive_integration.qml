@@ -774,7 +774,8 @@ TestCase {
                 : null
         verify(panel)
         compare(panel.currentTab, 0)
-        verify(panel.height < 500)
+        verify(panel.height > 590)
+        verify(panel.height <= panel.parent.height - 108)
         var presetCards = []
         for (var preset = 0; preset < 9; ++preset) {
             var presetCard = findChild(panel, "immersivePresetCard" + preset)
@@ -1164,6 +1165,9 @@ TestCase {
         var panel = immersiveControlPanelComponent.createObject(
                     mainWindow.contentItem)
         verify(panel)
+        compare(panel.width, 320)
+        compare(panel.expandedHeight, panel.currentTab === 0 ? 700
+                                                           : panel.currentTab === 1 ? 700 : 760)
         var terrainGroup = findChild(panel, "dynamicsTerrainGroup")
         var lightGroup = findChild(panel, "dynamicsLightGroup")
         var motionGroup = findChild(panel, "dynamicsMotionGroup")

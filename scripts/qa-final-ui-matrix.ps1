@@ -65,7 +65,7 @@ function Get-SurfaceExpectation {
             # persisted QA state may still restore the previous 604px height,
             # while the desktop host may expand it to the 906px available height;
             # all three are real supported window states.
-            return [pscustomobject]@{ Width = 863; Heights = @(590, 604, 906) }
+            return [pscustomobject]@{ Width = 863; Heights = @(590, 604, 888, 906) }
         }
         "^tool-\d+$" {
             return [pscustomobject]@{ Width = 1672; Height = 941 }

@@ -49,6 +49,7 @@ private slots:
     void cancelDoesNotCommitAStaleSeek();
     void downsamplesPeaksToPixelBudget();
     void sparseWaveformFillsWideDisplayBudget();
+    void sourceDensityModeDoesNotUpsampleSparsePeaks();
     void downsamplingKeepsImpulseOnItsTimelinePixel();
     void reusesGeometryWhenPositionChangesWithinBucket();
     void subPixelWidthDoesNotCrash();
@@ -697,6 +698,23 @@ void WaveformItemTest::silentTailRemainsVisibleAtTheTimelineEnd()
     QVERIFY2(std::abs(points[lastVertex + 1].y - points[lastVertex].y) >= 39.0F,
              "the final non-zero peak must render at full height inside the edge");
     compareColor(points[lastVertex], 0xE4, 0x00, 0x7F, 0xFF);
+    delete node;
+}
+
+void WaveformItemTest::sourceDensityModeDoesNotUpsampleSparsePeaks()
+{
+    TestableWaveformItem item;
+    item.setWidth(200);
+    item.setHeight(40);
+    item.setDuration(1000);
+    item.setLineWidth(1);
+    item.setPeaks(peaks({0.2, 0.4, 0.6, 0.8}));
+    item.setPreserveSourcePeakDensity(true);
+
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node != nullptr);
+    const auto* geometryNode = static_cast<const QSGGeometryNode*>(node);
+    QCOMPARE(geometryNode->geometry()->vertexCount(), 8);
     delete node;
 }
 
