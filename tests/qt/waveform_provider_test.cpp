@@ -84,7 +84,7 @@ void WaveformProviderTest::plainAnalysisPreservesAmplitudeAndRgbBands()
     QCOMPARE(ready.count(), 1);
     const QVariantMap layers = lastLayers(ready);
     const int pointCount = layers.value(QStringLiteral("mix")).toList().size();
-    QVERIFY(pointCount > 0);
+    QCOMPARE(pointCount, 32768);
     QCOMPARE(layers.value(QStringLiteral("bass")).toList().size(), pointCount);
     QCOMPARE(layers.value(QStringLiteral("mid")).toList().size(), pointCount);
     QCOMPARE(layers.value(QStringLiteral("high")).toList().size(), pointCount);

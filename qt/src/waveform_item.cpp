@@ -1034,9 +1034,9 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         ? renderedSpectrumBarCount(width(), devicePixelRatio)
         : preserveSourcePeakDensity_
           ? std::min(maxPoints, visibleSourcePeaks)
-          // Full-track waveforms intentionally interpolate to the physical
-          // pixel budget. The rolling deck opts into the source-density path
-          // so zoom changes the visible time span without inventing peaks.
+          // Map the selected source-time window to the physical pixel budget.
+          // Downsampling is peak-preserving, while zooming in only interpolates
+          // between the high-density source buckets supplied by the provider.
           : maxPoints;
 
     const unsigned char layerMask = hasMix ? 1U : 0U;

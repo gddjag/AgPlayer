@@ -166,6 +166,7 @@ public:
     Q_INVOKABLE bool selectOutputDirectory(const QUrl& directory);
     Q_INVOKABLE bool probeDevices();
     Q_INVOKABLE bool start();
+    Q_INVOKABLE void reportStartDisabledReason();
     Q_INVOKABLE void cancel();
     Q_INVOKABLE bool retry();
     Q_INVOKABLE bool previewInput();

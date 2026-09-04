@@ -427,19 +427,6 @@ Item {
                         height: implicitHeight
 
                         Rectangle {
-                            visible: !Theme.isLight
-                            anchors.left: tagPill.left
-                            anchors.right: tagPill.right
-                            anchors.leftMargin: 3
-                            anchors.rightMargin: 3
-                            anchors.top: tagPill.bottom
-                            anchors.topMargin: 2
-                            height: 4
-                            radius: 3
-                            color: Theme.tagPillShadow
-                        }
-
-                        Rectangle {
                             id: tagPill
                             objectName: "tagPill-" + tagCell.key
                             property bool selectedVisual: tagCell.selected

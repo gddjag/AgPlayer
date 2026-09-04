@@ -144,7 +144,8 @@ void hash_schema4_integer(std::uint64_t& hash, Value value)
     }
 }
 
-std::string recorded_schema4_key_fixture(const std::filesystem::path& path)
+std::string recorded_schema_key_fixture(const std::filesystem::path& path,
+                                        const std::uint64_t schema)
 {
     constexpr std::uint64_t fnv_offset = 14'695'981'039'346'656'037ULL;
     std::error_code error;
@@ -166,7 +167,7 @@ std::string recorded_schema4_key_fixture(const std::filesystem::path& path)
     hash_schema4_byte(hash, 0U);
     hash_schema4_integer(hash, size);
     hash_schema4_integer(hash, static_cast<std::uint64_t>(mtime_ns));
-    hash_schema4_integer(hash, 4U);
+    hash_schema4_integer(hash, schema);
 
     std::ostringstream key;
     key << std::hex << std::setfill('0') << std::setw(16) << hash;
@@ -192,7 +193,11 @@ int main(const int argc, char** argv)
 
     const std::string first_key = agplayer::WaveformCache::key_for(source_path);
     assert(!first_key.empty());
-    assert(first_key != recorded_schema4_key_fixture(source_path));
+    assert(first_key != recorded_schema_key_fixture(source_path, 4U));
+    // Increasing foreground analysis density changes every peak bucket. Keep
+    // old schema-5 files out of the provider so rolling views cannot stretch
+    // their sparse 2,000-point payload across a high-detail viewport.
+    assert(first_key != recorded_schema_key_fixture(source_path, 5U));
     const std::string legacy_v2_key =
         agplayer::WaveformCache::legacy_v2_key_for(source_path);
     assert(!legacy_v2_key.empty());

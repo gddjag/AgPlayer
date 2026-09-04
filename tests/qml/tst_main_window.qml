@@ -1717,6 +1717,30 @@ TestCase {
         tryCompare(PlaybackController, "currentTrackId",
                    LibraryModel.data(LibraryModel.index(playableIndex, 0),
                                      LibraryModel.TrackIdRole))
+
+        // The shared integrated/rolling layout exposes the waveform as a
+        // separate column.  It must remain an equally valid activation
+        // target instead of only the title cell starting playback.
+        SettingsController.listWaveformThumbnailEnabled = true
+        list.layoutProfile = "integrated"
+        wait(30)
+        list.positionViewAtIndex(playableIndex, ListView.Center)
+        wait(30)
+        playable = list.itemAtIndex(playableIndex)
+        verify(playable)
+        var waveformLoader = findChild(
+                    playable, "singleWindowWaveformThumbnailLoader")
+        verify(waveformLoader && waveformLoader.visible)
+        var waveformActivation = findChild(
+                    waveformLoader, "singleWindowWaveformActivation")
+        verify(waveformActivation,
+               "the standalone waveform column must expose double-click playback")
+        mouseDoubleClickSequence(waveformLoader,
+                                 waveformLoader.width / 2,
+                                 waveformLoader.height / 2)
+        tryCompare(PlaybackController, "currentTrackId",
+                   LibraryModel.data(LibraryModel.index(playableIndex, 0),
+                                     LibraryModel.TrackIdRole))
         list.destroy()
         SettingsController.listWaveformThumbnailEnabled = previousEnabled
     }

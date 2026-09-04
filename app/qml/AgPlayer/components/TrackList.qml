@@ -949,6 +949,20 @@ ListView {
                         provider: root.thumbnailProvider
                     }
                 }
+                TapHandler {
+                    objectName: "singleWindowWaveformActivation"
+                    acceptedButtons: Qt.LeftButton
+                    gesturePolicy: TapHandler.ReleaseWithinBounds
+                    onTapped: root.updateSelection(rowItem.trackId,
+                                                   rowItem.index,
+                                                   point.modifiers)
+                    onDoubleTapped: {
+                        if (rowItem.available) {
+                            PlaybackController.playTrackIds(
+                                        root.visibleTrackIds(), rowItem.trackId)
+                        }
+                    }
+                }
             }
             ToolButton {
                 objectName: "trackFavoriteCell"

@@ -549,6 +549,10 @@ TestCase {
         var mainWaveform = findChild(rolling, "rollingMainWaveform")
         verify(overview && mainWaveform)
 
+        compare(mainWaveform.preserveSourcePeakDensity, false,
+                "the rolling viewport must keep dense waveform detail instead of "
+                + "stretching sparse source peaks across the canvas")
+
         var low = String(rolling.frequencyWaveformSettings.lowColor)
         var high = String(rolling.frequencyWaveformSettings.highColor)
 

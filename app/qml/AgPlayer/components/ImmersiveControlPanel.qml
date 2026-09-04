@@ -311,9 +311,8 @@ Rectangle {
                             objectName: "immersivePresetCard" + index
                             Layout.row: Math.floor(index / 3)
                             Layout.column: index % 3
-                            Layout.preferredWidth: 104
-                            Layout.minimumWidth: 104
-                            Layout.maximumWidth: 104
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
                             Layout.preferredHeight: 70
                             padding: 0
                             flat: true

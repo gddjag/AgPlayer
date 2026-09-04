@@ -74,8 +74,9 @@ Assert-Matches $tagPanel 'property int pillHorizontalPadding' `
     'Tag pill geometry must use explicit horizontal padding'
 Assert-Matches $tagPanel 'property int pillContentSpacing' `
     'Tag pill geometry must use explicit content spacing'
-Assert-Matches $tagPanel 'anchors\.top:\s*tagPill\.bottom' `
-    'Tag pill shadow must be offset below the capsule'
+if ($tagPanel -match 'anchors\.top:\s*tagPill\.bottom') {
+    throw 'Tag pills must not render a drop shadow below the capsule'
+}
 Assert-Matches $tagPanel '(?s)TagFilterModel\s*\{.*sourceModel:\s*root\.tagModel.*query:\s*root\.searchText' `
     'Tag search must use the incremental C++ proxy model'
 if ($tagPanel -match '\bGridView\s*\{') {

@@ -773,7 +773,12 @@ Item {
                 frequencyUnplayedOpacity: Theme.nonImmersiveSpectralUnplayedOpacity
                 amplitudeScale: SettingsController.waveformHeight
                 density: SettingsController.waveformDensity
-                preserveSourcePeakDensity: true
+                // The analyser already provides a bounded, high-detail source.
+                // Fill the physical-pixel budget from the visible time slice so
+                // a short 8-beat viewport never turns into enlarged, widely
+                // spaced source bars. Max-preserving downsampling retains
+                // transients when the user zooms out.
+                preserveSourcePeakDensity: false
                 lineWidth: SettingsController.waveformThickness
             }
 
@@ -1125,11 +1130,12 @@ Item {
                     Item {
                         id: rollingShellActions
                         objectName: "rollingShellActions"
-                        Layout.preferredWidth: 108
-                        Layout.minimumWidth: 108
-                        Layout.maximumWidth: 108
+                        Layout.preferredWidth: 116
+                        Layout.minimumWidth: 116
+                        Layout.maximumWidth: 116
                         Layout.fillHeight: true
-                        Layout.leftMargin: 8
+                        Layout.leftMargin: 12
+                        Layout.rightMargin: 4
                     }
                 }
             }

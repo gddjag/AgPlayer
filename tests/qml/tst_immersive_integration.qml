@@ -1174,6 +1174,17 @@ TestCase {
         var impactGroup = findChild(panel, "dynamicsImpactGroup")
         verify(terrainGroup && lightGroup && motionGroup && impactGroup)
 
+        panel.currentTab = 0
+        wait(0)
+        var presetScroll = findChild(panel, "immersivePanelScroll")
+        var lastPreset = findChild(panel, "immersivePresetCard8")
+        verify(presetScroll && lastPreset)
+        var presetRight = lastPreset.mapToItem(presetScroll, lastPreset.width, 0).x
+        verify(presetRight <= presetScroll.width + 0.5,
+               "preset and color controls must stay inside the narrow panel")
+        panel.currentTab = 2
+        wait(0)
+
         var terrainKeys = ["terrainAmplitude", "inputCompression", "audioResponse",
                            "responseRange", "subjectClarity"]
         var lightKeys = ["centerHighlight", "depthOfField"]

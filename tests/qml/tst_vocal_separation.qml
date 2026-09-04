@@ -766,6 +766,11 @@ TestCase {
         verify(runtimeInstaller)
         verify(runtimeInstaller.visible)
         compare(runtimeInstaller.text, "一键配置")
+        const primary = findChild(page, "separationPrimaryAction")
+        verify(primary && primary.enabled,
+               "start must remain clickable so missing prerequisites can be explained")
+        mouseClick(primary)
+        verify(VocalSeparationController.error.indexOf("一键配置") >= 0)
 
         separationTestDriver.setDevices("fallback")
         compare(VocalSeparationController.availableDevices[0].available, true)

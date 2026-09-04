@@ -1690,21 +1690,6 @@ Rectangle {
                                             }
                                         }
                                         Label { visible: !modelData.supported; Layout.fillWidth: true; text: qsTr("当前模型不支持"); color: page.muted; font.pixelSize: Theme.fontSizeCaption }
-                                        TransportIconButton {
-                                            Layout.preferredWidth: 26
-                                            Layout.preferredHeight: 26
-                                            implicitWidth: 26
-                                            implicitHeight: 26
-                                            enabled: modelData.available && !page.contextLocked
-                                            iconName: "download-line"
-                                            iconTint: accent
-                                            Accessible.name: page.stemLabel(modelData.kind) + qsTr("导出")
-                                            Accessible.role: Accessible.Button
-                                            ToolTip.visible: hovered && !enabled
-                                            ToolTip.text: page.contextLocked ? page.contextLockReason : qsTr("输出尚不可用")
-                                            onClicked: VocalSeparationController
-                                                .exportStemToOutputDirectory(modelData.kind)
-                                        }
                                     }
                                 }
                             }
@@ -2152,14 +2137,20 @@ Rectangle {
                             ? qsTr("正在取消") : qsTr("开始分离")
                     enabled: VocalSeparationController.jobState === VocalSeparationController.Running
                              || (VocalSeparationController.jobState !== VocalSeparationController.Cancelling
-                                 && VocalSeparationController.canStart)
+                                 && !page.contextLocked && page.hasInput)
                     focusPolicy: Qt.StrongFocus
                     Accessible.name: text; Accessible.role: Accessible.Button
                     ToolTip.visible: hovered && !enabled
                     ToolTip.text: VocalSeparationController.jobState === VocalSeparationController.Cancelling
                                   ? qsTr("正在取消分离任务") : VocalSeparationController.startDisabledReason
-                    onClicked: VocalSeparationController.jobState === VocalSeparationController.Running
-                               ? VocalSeparationController.cancel() : VocalSeparationController.start()
+                    onClicked: {
+                        if (VocalSeparationController.jobState === VocalSeparationController.Running)
+                            VocalSeparationController.cancel()
+                        else if (VocalSeparationController.canStart)
+                            VocalSeparationController.start()
+                        else
+                            VocalSeparationController.reportStartDisabledReason()
+                    }
                     primaryAction: true
                 }
             }

@@ -877,6 +877,17 @@ bool VocalSeparationController::start()
     return beginSeparationRequest(std::move(context));
 }
 
+void VocalSeparationController::reportStartDisabledReason()
+{
+    QString reason = startDisabledReason();
+    if (reason == tr("ONNX Runtime 尚未安装")) {
+        reason += tr("，请点击所选模型的“一键配置”并等待下载完成");
+    } else if (reason == tr("所选模型尚未安装或未通过校验")) {
+        reason += tr("，请先下载或配置所选模型");
+    }
+    setError(reason);
+}
+
 bool VocalSeparationController::beginSeparationRequest(
     ActiveRequestContext context)
 {

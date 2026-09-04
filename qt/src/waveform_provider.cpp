@@ -23,6 +23,10 @@ struct ProviderCounters final {
 
 ProviderCounters providerCounters;
 
+// Four float layers are about 512 KiB per cached track. This is dense enough
+// for a few-beat rolling viewport without keeping the full library in memory.
+constexpr std::size_t kWaveformAnalysisPoints = 32768;
+
 std::filesystem::path filesystemPath(const QString& path)
 {
 #ifdef Q_OS_WIN
@@ -375,7 +379,7 @@ void WaveformProvider::startAnalysis()
     const QString sourcePath = currentPath_;
     const QString sourceTrackId = currentTrackId_;
     const quint64 sourceGeneration = activeGeneration_;
-    constexpr std::size_t targetPoints = 2000;
+    constexpr std::size_t targetPoints = kWaveformAnalysisPoints;
 
     watcher_ = new QFutureWatcher<Job>(this);
     connect(watcher_, &QFutureWatcher<Job>::finished,
@@ -426,7 +430,7 @@ void WaveformProvider::prefetchTracks(const QStringList& paths)
         queuedPaths.insert(path);
         const QPointer<WaveformProvider> guard(this);
         QtConcurrent::task([path, cacheDirectory, aggregation, guard] {
-            constexpr std::size_t targetPoints = 2000;
+            constexpr std::size_t targetPoints = kWaveformAnalysisPoints;
             const QString cachePath = cacheFilePathForDirectory(
                 cacheDirectory, path, aggregation);
             if (cachePath.isEmpty()) {
