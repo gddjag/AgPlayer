@@ -198,7 +198,7 @@ Item {
         id: playerShellMenu
         objectName: "playerShellMenu"
         parent: root.Window.window ? root.Window.window.contentItem : root
-        width: Math.max(168, implicitContentWidth + leftPadding + rightPadding)
+        width: Math.max(136, implicitContentWidth + leftPadding + rightPadding)
 
         MenuItem {
             objectName: "classicShellMenuItem"

@@ -468,7 +468,9 @@ Item {
 
                     TrackSubtitle {
                         objectName: "rollingTrackSubtitle"
-                        width: Math.max(0, parent.width - ratingRow.width - 6)
+                        width: Math.min(implicitWidth,
+                                        Math.max(0, parent.width
+                                                 - ratingRow.width - 6))
                         height: parent.height
                         artist: root.currentTrack && root.currentTrack.artist
                                 ? root.currentTrack.artist : ""
@@ -723,7 +725,7 @@ Item {
                     objectName: "rollingOverviewInteraction"
                     anchors.fill: parent
                     hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
+                    cursorShape: Qt.ArrowCursor
                     function updateHover(x) {
                         overviewWaveformHost.hoverTimeMs =
                                 root.effectiveDurationMs > 0
@@ -999,11 +1001,12 @@ Item {
                 PlayerControls {
                     objectName: "playerControls"
                     Layout.fillWidth: true
-                    Layout.minimumWidth: 520
+                    Layout.minimumWidth: 430
                     Layout.fillHeight: true
                     shellMode: 2
                     centerTransport: false
                     showWaveformMode: true
+                    secondaryActionHost: rollingShellActions
                     onOpenEqualizerRequested:
                         root.openEqualizerRequested()
                 }
@@ -1156,6 +1159,16 @@ Item {
                                 onClicked: root.resetZoom()
                             }
                         }
+                    }
+
+                    Item {
+                        id: rollingShellActions
+                        objectName: "rollingShellActions"
+                        Layout.preferredWidth: 106
+                        Layout.minimumWidth: 106
+                        Layout.maximumWidth: 106
+                        Layout.fillHeight: true
+                        Layout.leftMargin: 8
                     }
                 }
             }

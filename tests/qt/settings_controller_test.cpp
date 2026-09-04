@@ -541,7 +541,7 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
         QCOMPARE(frequency->lowColor(), QColor(QStringLiteral("#fc0909")));
         QCOMPARE(frequency->midColor(), QColor(QStringLiteral("#03ff00")));
         QCOMPARE(frequency->highColor(), QColor(QStringLiteral("#0048ff")));
-    QCOMPARE(frequency->unplayedOpacity(), 0.20);
+    QCOMPARE(frequency->unplayedOpacity(), 0.12);
 
         settings.setWaveformHeight(3.0);
         settings.setWaveformDensity(0.1);
@@ -581,7 +581,7 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
              QColor(QStringLiteral("#03ff00")));
     QCOMPARE(reloaded.frequencyColorWaveform()->highColor(),
              QColor(QStringLiteral("#0048ff")));
-    QCOMPARE(reloaded.frequencyColorWaveform()->unplayedOpacity(), 0.20);
+    QCOMPARE(reloaded.frequencyColorWaveform()->unplayedOpacity(), 0.12);
     QCOMPARE(reloaded.listWaveformThumbnailMode(), QStringLiteral("Spectral"));
     persisted.clear();
 }
@@ -676,7 +676,7 @@ void SettingsControllerTest::frequencyColorPaletteMigratesExactLegacyDefaults()
     QCOMPARE(alreadyMigratedSchema.frequencyColorWaveform()->highColor(),
              QColor(QStringLiteral("#002fa7")));
     QCOMPARE(alreadyMigratedSchema.frequencyColorWaveform()->unplayedOpacity(),
-             0.20);
+             0.12);
     persisted.clear();
 }
 
@@ -726,7 +726,7 @@ void SettingsControllerTest::frequencyColorPalettePreservesCustomColors()
              2);
     QCOMPARE(persisted.value(QStringLiteral(
                  "appearance/waveformFrequencyUnplayedOpacity")).toDouble(),
-             0.20);
+             0.12);
     persisted.clear();
 }
 

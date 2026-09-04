@@ -12,7 +12,7 @@ const QColor legacyDefaultLow(QStringLiteral("#8B3DFF"));
 const QColor legacyDefaultMid(QStringLiteral("#FFB000"));
 const QColor legacyDefaultHigh(QStringLiteral("#002FA7"));
 constexpr int currentColorSchemaVersion = 2;
-constexpr double defaultUnplayedOpacity = 0.20;
+constexpr double defaultUnplayedOpacity = 0.12;
 constexpr double legacyDefaultUnplayedOpacity = 0.38;
 
 QColor storedColor(QSettings& settings, const QString& key,

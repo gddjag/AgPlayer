@@ -76,17 +76,26 @@ AudioEquivalence classify_audio_stream_evidence(
     for (std::size_t index = 0; index < before.size(); ++index) {
         const AudioStreamEvidence& source = before[index];
         const AudioStreamEvidence& staged = after[index];
+        const bool format_compatible = source.format < 0 || staged.format < 0
+            || source.format == staged.format;
+        const bool coded_bits_compatible = source.bits_coded <= 0
+            || staged.bits_coded <= 0 || source.bits_coded == staged.bits_coded;
+        const bool raw_bits_compatible = source.bits_raw <= 0
+            || staged.bits_raw <= 0 || source.bits_raw == staged.bits_raw;
         if (source.codec_id != staged.codec_id
             || source.sample_rate != staged.sample_rate
             || source.channels != staged.channels
-            || source.format != staged.format
-            || source.bits_coded != staged.bits_coded
-            || source.bits_raw != staged.bits_raw
+            || !format_compatible
+            || !coded_bits_compatible
+            || !raw_bits_compatible
             || source.payload_hash != staged.payload_hash
             || source.payload_bytes != staged.payload_bytes) {
             return AudioEquivalence::Different;
         }
         timing_is_exact = timing_is_exact
+            && source.format == staged.format
+            && source.bits_coded == staged.bits_coded
+            && source.bits_raw == staged.bits_raw
             && source.time_base_num == staged.time_base_num
             && source.time_base_den == staged.time_base_den
             && source.duration == staged.duration

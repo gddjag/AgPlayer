@@ -31,7 +31,7 @@ Item {
     Timer {
         id: volumeCloseTimer
         objectName: "mainVolumeCloseTimer"
-        interval: 2000
+        interval: 250
         onTriggered: if (!volumeSlider.pressed && !volumeHover.hovered) root.expanded = false
     }
     HoverHandler {
@@ -57,7 +57,10 @@ Item {
         background: Rectangle {
             color: parent.down ? Theme.surfacePressed
                 : parent.hovered ? Theme.surfaceHover : "transparent"
-            border.width: parent.activeFocus ? 2 : 0
+            border.width: parent.activeFocus
+                          && (parent.focusReason === Qt.TabFocusReason
+                              || parent.focusReason === Qt.BacktabFocusReason)
+                          ? 2 : 0
             border.color: Theme.focus
             radius: Theme.radiusSm
             Behavior on color { ColorAnimation { duration: 100 } }

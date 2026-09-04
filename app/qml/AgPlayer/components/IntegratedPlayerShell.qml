@@ -435,6 +435,18 @@ Item {
                 }
             }
 
+            Rectangle {
+                id: integratedPlaybackGuide
+                objectName: "integratedWaveformPlaybackGuide"
+                visible: SettingsController.waveformPlaybackGuide
+                x: waveform.x + waveform.waveformCursorX
+                y: waveform.y
+                width: 1
+                height: waveform.height
+                color: "#002fa7" // theme-color-allow: playback guide
+                z: 10
+            }
+
             Item {
                 id: timeRuler
                 objectName: "integratedWaveformTimeRuler"

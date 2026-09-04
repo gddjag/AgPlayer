@@ -41,7 +41,7 @@ private slots:
     void buildsCenteredFiniteNormalizedLinePairs();
     void defaultFrequencyColorsUseFixedPalette();
     void threeBandMixerKeepsPureColorsAndCreatesCombinations();
-    void frequencyModeUsesAmplitudeGeometryAndOpacityOnlyProgress();
+    void frequencyModeUsesAmplitudeGeometryAndBrightnessOnlyProgress();
     void frequencyColorChangeDoesNotReplaceGeometryNode();
     void reusesNodeAndUpdatesGeometryAfterResize();
     void clearsOldNodeForEmptyOrZeroSizedContent();
@@ -58,7 +58,7 @@ private slots:
     void waveformStrokesStayInsideContainerEdges();
     void onePixelWaveformLeavesTheCanvasEdgeClear();
     void visualModesUseConfiguredProgressAndBaseColors();
-    void frequencyModeUpdatesProgressOpacityWithoutRebuildingNode();
+    void frequencyModeUpdatesProgressBrightnessWithoutRebuildingNode();
     void spectrumUsesBottomBaselineAndCenterEnvelope();
     void spectrumUpsamplesSparseInputToDenseBars();
     void spectrumContractUsesFixedBarsWithPeakCaps();
@@ -337,7 +337,7 @@ void WaveformItemTest::defaultFrequencyColorsUseFixedPalette()
     QCOMPARE(thumbnail.highColor(), expectedHigh);
 }
 
-void WaveformItemTest::frequencyModeUsesAmplitudeGeometryAndOpacityOnlyProgress()
+void WaveformItemTest::frequencyModeUsesAmplitudeGeometryAndBrightnessOnlyProgress()
 {
     TestableWaveformItem plain;
     plain.setWidth(100);
@@ -397,10 +397,10 @@ void WaveformItemTest::frequencyModeUsesAmplitudeGeometryAndOpacityOnlyProgress(
         QCOMPARE(frequencyVertices[frequencyVertex + 3].y,
                  plainVertices[plainVertex + 1].y);
     }
-    QCOMPARE(static_cast<int>(frequencyVertices[0].a), 123);
-    QCOMPARE(static_cast<int>(frequencyVertices[1].a), 224);
-    QCOMPARE(static_cast<int>(frequencyVertices[2].a), 224);
-    QCOMPARE(static_cast<int>(frequencyVertices[3].a), 123);
+    QCOMPARE(static_cast<int>(frequencyVertices[0].a), 140);
+    QCOMPARE(static_cast<int>(frequencyVertices[1].a), 255);
+    QCOMPARE(static_cast<int>(frequencyVertices[2].a), 255);
+    QCOMPARE(static_cast<int>(frequencyVertices[3].a), 140);
     QVERIFY(frequencyVertices[1].r > frequencyVertices[0].r);
     const auto beforeEdge = frequencyVertices[0];
     const auto beforeCenter = frequencyVertices[1];
@@ -422,10 +422,10 @@ void WaveformItemTest::frequencyModeUsesAmplitudeGeometryAndOpacityOnlyProgress(
     QCOMPARE(static_cast<int>(playedVertices[1].a), 255);
     QCOMPARE(static_cast<int>(playedVertices[2].a), 255);
     QCOMPARE(static_cast<int>(playedVertices[3].a), 140);
-    QCOMPARE(playedVertices[0].r, beforeEdge.r);
+    QVERIFY(playedVertices[0].r > beforeEdge.r);
     QCOMPARE(playedVertices[0].g, beforeEdge.g);
     QCOMPARE(playedVertices[0].b, beforeEdge.b);
-    QCOMPARE(playedVertices[1].r, beforeCenter.r);
+    QVERIFY(playedVertices[1].r > beforeCenter.r);
     QCOMPARE(playedVertices[1].g, beforeCenter.g);
     QCOMPARE(playedVertices[1].b, beforeCenter.b);
     delete plainNode;
@@ -456,10 +456,13 @@ void WaveformItemTest::frequencyColorChangeDoesNotReplaceGeometryNode()
     QCOMPARE(geometry->vertexData(), vertexStorage);
     const auto* updatedVertices = vertices(updated);
     QVERIFY(updatedVertices[0].r < updatedVertices[1].r);
-    compareColor(updatedVertices[1], 255, 0, 0, 224);
-    QCOMPARE(static_cast<int>(updatedVertices[0].a), 123);
-    QCOMPARE(static_cast<int>(updatedVertices[2].a), 224);
-    QCOMPARE(static_cast<int>(updatedVertices[3].a), 123);
+    QVERIFY(updatedVertices[1].r > 220);
+    QVERIFY(updatedVertices[1].r > updatedVertices[1].g);
+    QVERIFY(updatedVertices[1].r > updatedVertices[1].b);
+    QCOMPARE(static_cast<int>(updatedVertices[1].a), 255);
+    QCOMPARE(static_cast<int>(updatedVertices[0].a), 140);
+    QCOMPARE(static_cast<int>(updatedVertices[2].a), 255);
+    QCOMPARE(static_cast<int>(updatedVertices[3].a), 140);
     delete updated;
 }
 
@@ -481,7 +484,7 @@ void WaveformItemTest::onePixelWaveformLeavesTheCanvasEdgeClear()
     delete node;
 }
 
-void WaveformItemTest::frequencyModeUpdatesProgressOpacityWithoutRebuildingNode()
+void WaveformItemTest::frequencyModeUpdatesProgressBrightnessWithoutRebuildingNode()
 {
     TestableWaveformItem item;
     item.setWidth(4);
@@ -501,9 +504,9 @@ void WaveformItemTest::frequencyModeUpdatesProgressOpacityWithoutRebuildingNode(
     item.setPosition(0);
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
-    const int unplayedAlpha = static_cast<int>(vertices(node)[1].a);
-    QCOMPARE(unplayedAlpha, 97);
-    QCOMPARE(static_cast<int>(vertices(node)[0].a), 53);
+    const int unplayedBrightness = static_cast<int>(vertices(node)[1].r);
+    QCOMPARE(static_cast<int>(vertices(node)[1].a), 255);
+    QCOMPARE(static_cast<int>(vertices(node)[0].a), 140);
 
     item.setPosition(100);
     QSGNode* updatedNode = item.updatePaintNode(node, nullptr);
@@ -512,7 +515,8 @@ void WaveformItemTest::frequencyModeUpdatesProgressOpacityWithoutRebuildingNode(
     QCOMPARE(static_cast<int>(vertices(updatedNode)[1].a), 255);
     QCOMPARE(static_cast<int>(vertices(updatedNode)[2].a), 255);
     QCOMPARE(static_cast<int>(vertices(updatedNode)[3].a), 140);
-    QVERIFY(static_cast<int>(vertices(updatedNode)[1].a) > unplayedAlpha + 100);
+    QVERIFY(static_cast<int>(vertices(updatedNode)[1].r)
+            > unplayedBrightness + 20);
     delete updatedNode;
 }
 
@@ -681,7 +685,7 @@ void WaveformItemTest::silentTailRemainsVisibleAtTheTimelineEnd()
     item.setVisualMode(0);
     item.setBaseColor(QColor(QStringLiteral("#9098a6")));
     item.setProgressColor(QColor(QStringLiteral("#e4007f")));
-    item.setPeaks(peaks({1.0, 0.0, 0.0}));
+    item.setPeaks(peaks({0.0, 0.0, 1.0}));
 
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
@@ -690,8 +694,8 @@ void WaveformItemTest::silentTailRemainsVisibleAtTheTimelineEnd()
     const int lastVertex = geometryNode->geometry()->vertexCount() - 2;
     QCOMPARE(points[lastVertex].x,
              static_cast<float>(item.width() - 0.5));
-    QVERIFY2(std::abs(points[lastVertex + 1].y - points[lastVertex].y) >= 1.0F,
-             "silent timeline buckets must render a visible baseline");
+    QVERIFY2(std::abs(points[lastVertex + 1].y - points[lastVertex].y) >= 39.0F,
+             "the final non-zero peak must render at full height inside the edge");
     compareColor(points[lastVertex], 0xE4, 0x00, 0x7F, 0xFF);
     delete node;
 }

@@ -293,6 +293,7 @@ Control {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
+                Item { Layout.fillWidth: true }
                 Repeater {
                     model: [
                         { name: "H", value: Math.round(picker.hue * 360) + "°" },
@@ -301,7 +302,10 @@ Control {
                     ]
                     delegate: Rectangle {
                         required property var modelData
-                        Layout.fillWidth: true
+                        objectName: "colorPicker" + modelData.name + "Value"
+                        Layout.preferredWidth: 82
+                        Layout.minimumWidth: 72
+                        Layout.maximumWidth: 82
                         Layout.preferredHeight: 25
                         color: Theme.background
                         border.color: Theme.border
@@ -315,6 +319,7 @@ Control {
                         }
                     }
                 }
+                Item { Layout.fillWidth: true }
             }
 
             RowLayout {
@@ -322,6 +327,8 @@ Control {
                 spacing: 8
                 Button {
                     objectName: "colorPickerRestoreButton"
+                    Layout.preferredWidth: 86
+                    Layout.maximumWidth: 86
                     Layout.preferredHeight: 28
                     text: qsTr("恢复默认")
                     onClicked: picker.restoreDefault()
@@ -329,6 +336,8 @@ Control {
                 Item { Layout.fillWidth: true }
                 Button {
                     objectName: "colorPickerCancelButton"
+                    Layout.preferredWidth: 66
+                    Layout.maximumWidth: 66
                     Layout.preferredHeight: 28
                     text: qsTr("取消")
                     onClicked: picker.close()
@@ -336,6 +345,8 @@ Control {
                 Button {
                     id: confirmButton
                     objectName: "colorPickerConfirmButton"
+                    Layout.preferredWidth: 66
+                    Layout.maximumWidth: 66
                     Layout.preferredHeight: 28
                     text: qsTr("确定")
                     focus: true

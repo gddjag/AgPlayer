@@ -147,9 +147,14 @@ VertexColor mixColor(double normalizedX,
         const QColor mixed = agplayer::ui::mixFrequencyColor(
             lowEnergy, midEnergy, highEnergy,
             lowColor, midColor, highColor);
-        return {{mixed.red(), mixed.green(), mixed.blue()},
-                static_cast<unsigned char>(std::lround(
-                    255.0 * (played ? 1.0 : frequencyUnplayedOpacity)))};
+        // The setting is presented as unplayed-region brightness. Applying it
+        // to alpha made the waveform disappear into a light background and
+        // produced a much weaker perceived contrast on dark themes. Keep the
+        // geometry opaque and shade its own colour instead, so one 0..100%
+        // value remains legible and theme-independent.
+        return {shadedRgb({mixed.red(), mixed.green(), mixed.blue()},
+                          played ? 1.0 : frequencyUnplayedOpacity),
+                255U};
     }
     if (legacyColor.isValid()) {
         return {{legacyColor.red(), legacyColor.green(), legacyColor.blue()}, 255U};

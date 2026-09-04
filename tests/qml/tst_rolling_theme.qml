@@ -266,9 +266,9 @@ TestCase {
             var names = mode === 2
                     ? ["previousButton", "playPauseButton", "nextButton",
                        "modeButton", "waveformModeButton", "equalizerButton",
-                       "audioToolsButton",
+                       "audioToolsButton", "mainVolumeControl",
                        "themeModeButton", "immersiveActionButton",
-                       "miniPlayerButton", "mainVolumeControl"]
+                       "miniPlayerButton"]
                     : mode === 1
                       ? ["audioToolsButton", "equalizerButton",
                          "waveformModeButton", "previousButton",
@@ -323,6 +323,9 @@ TestCase {
             if (mode === 2)
                 compare(findChild(controls, "experienceActions"), null,
                         "rolling must not instantiate a hidden action registry")
+            if (mode === 2)
+                compare(findChild(controls, "themeModeButton").parent.objectName,
+                        "rollingShellActions")
         }
 
         var rolling = enterMode(2)

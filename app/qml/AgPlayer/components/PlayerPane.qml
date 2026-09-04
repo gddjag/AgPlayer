@@ -621,6 +621,7 @@ Rectangle {
             }
 
             Rectangle {
+                objectName: "waveformHoverTimeCapsule"
                 visible: SettingsController.waveformHoverTimePreview
                          && waveformFrame.hoverPreviewMs >= 0
                 x: Math.max(0, Math.min(
@@ -635,6 +636,7 @@ Rectangle {
                 radius: height / 2
                 color: Theme.panel
                 border.color: "#54ff84" // theme-color-allow: waveform hover guide
+                z: 7
 
                 Text {
                     id: hoverTime

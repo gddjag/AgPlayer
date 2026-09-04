@@ -624,6 +624,7 @@ TestCase {
     function test_integrated_waveform_progress_uses_continuous_pixel_clip() {
         var shell = enterIntegratedShell()
         var previousMode = SettingsController.waveformMode
+        var previousGuide = SettingsController.waveformPlaybackGuide
         SettingsController.waveformMode = 3
         shell.playbackController = fakePlayback
         shell.waveformDurationMs = 100000
@@ -672,9 +673,17 @@ TestCase {
         tryVerify(function() {
             return base.duration === 0 && clip.width === 0
         }, 1000)
-        compare(findChild(shell, "integratedWaveformPlaybackGuide"), null)
+        var playbackGuide = findChild(shell, "integratedWaveformPlaybackGuide")
+        verify(playbackGuide)
+        SettingsController.waveformPlaybackGuide = true
+        tryCompare(playbackGuide, "visible", true)
+        verify(Math.abs(playbackGuide.x
+                        - (base.x + base.waveformCursorX)) <= 0.5)
+        SettingsController.waveformPlaybackGuide = false
+        tryCompare(playbackGuide, "visible", false)
         compare(findChild(shell, "integratedWaveformPlaybackFocusDot"), null)
         SettingsController.waveformMode = previousMode
+        SettingsController.waveformPlaybackGuide = previousGuide
     }
 
     function test_integrated_waveform_syncs_visible_range_and_frequency_mix() {

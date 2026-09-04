@@ -995,8 +995,8 @@ TestCase {
         panel.spatialMode = false
         panel.placement = PlayerExperienceController.Left
         compare(perspective.angle, 0)
-        compare(currentLine.wrapMode, Text.NoWrap)
-        compare(currentLine.maximumLineCount, 1)
+        compare(currentLine.wrapMode, Text.Wrap)
+        compare(currentLine.maximumLineCount, 3)
         compare(currentLine.scale, 1)
         compare(previousLine.opacity, 1)
         compare(currentLine.opacity, 1)

@@ -662,7 +662,36 @@ bool VocalSeparationController::deleteModel(const QString& modelId)
         && (downloadState == VocalDownloadState::Downloading
             || downloadState == VocalDownloadState::Paused
             || downloadState == VocalDownloadState::Verifying);
-    if (model == nullptr || requestInFlight() || downloadActive
+    if (model == nullptr) {
+        const auto diagnostic = std::find_if(
+            rejectedCustomModels_.cbegin(), rejectedCustomModels_.cend(),
+            [&modelId](const QVariant& value) {
+                return value.toMap().value(QStringLiteral("id")).toString()
+                    == modelId;
+            });
+        if (diagnostic == rejectedCustomModels_.cend() || requestInFlight()
+            || modelDirectoryIndexWatcher_ != nullptr
+            || verificationWatcher_ != nullptr) {
+            return false;
+        }
+        const QStringList paths = diagnostic->toMap()
+                                      .value(QStringLiteral("paths"))
+                                      .toStringList();
+        if (paths.isEmpty()) {
+            setError(tr("此诊断项没有可安全删除的本地模型文件"));
+            return false;
+        }
+        for (const QString& path : paths) {
+            if (!safeExistingFileWithin(path, modelStorageDirectory_)
+                || !QFile::remove(path)) {
+                setError(tr("无法删除本地模型文件：%1").arg(path));
+                return false;
+            }
+        }
+        scheduleModelDirectoryScan();
+        return true;
+    }
+    if (requestInFlight() || downloadActive
         || runtimeInstallerWatcher_ != nullptr
         || modelDirectoryIndexWatcher_ != nullptr
         || verificationWatcher_ != nullptr)
@@ -2030,6 +2059,8 @@ void VocalSeparationController::handleProbe(const QJsonObject& payload)
     activeRequest_.reset();
     failedRequest_.reset();
     setJobState(JobState::Idle, QStringLiteral("ready"));
+    if (std::exchange(modelDirectoryRescanPending_, false))
+        scheduleModelDirectoryScan();
 }
 
 void VocalSeparationController::handleResult(const QJsonObject& payload)

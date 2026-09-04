@@ -24,6 +24,7 @@ Rectangle {
     property bool showListWindowButton: true
     property bool centerTransport: true
     property bool showWaveformMode: true
+    property Item secondaryActionHost: null
     property int shellMode: SettingsController.playerShellMode
     readonly property bool rollingLayout: shellMode === 2
     // Rolling mode reserves a dedicated 520-DIP control region and keeps
@@ -163,14 +164,18 @@ Rectangle {
 
     PlayerVolumeControl {
         id: volumeControl
-        anchors.left: root.rollingLayout ? secondaryActions.right
+        anchors.left: root.rollingLayout && root.secondaryActionHost
+                     ? audioToolsButton.right
+                     : root.rollingLayout ? secondaryActions.right
                                          : lyricsActions.right
         anchors.leftMargin: root.denseTransport ? 0 : 4
         anchors.verticalCenter: centerControls.verticalCenter
         emptyMode: root.emptyMode || root.rollingLayout
         compact: root.compactTransport
-        maximumExpandedWidth: Math.min(
-            196, Math.max(44, secondaryActions.x - x - 8))
+        maximumExpandedWidth: root.rollingLayout && root.secondaryActionHost
+                              ? 156
+                              : Math.min(196, Math.max(
+                                    44, secondaryActions.x - x - 8))
     }
 
     Row {
@@ -187,6 +192,8 @@ Rectangle {
 
         ToolButton {
             id: themeModeButton
+            parent: root.secondaryActionHost || secondaryActions
+            anchors.left: root.secondaryActionHost ? parent.left : undefined
             objectName: "themeModeButton"
             width: root.denseTransport ? 32 : Math.max(32, implicitWidth)
             height: root.denseTransport ? 32 : Math.max(32, implicitHeight)
@@ -205,7 +212,12 @@ Rectangle {
         }
 
         ExperienceActions {
+            id: immersiveExperienceActions
             objectName: "immersiveExperienceActions"
+            parent: root.secondaryActionHost || secondaryActions
+            anchors.left: root.secondaryActionHost
+                          ? themeModeButton.right : undefined
+            anchors.leftMargin: root.secondaryActionHost ? 4 : 0
             visible: true
             anchors.verticalCenter: parent.verticalCenter
             presentationProfile: root.actionProfile
@@ -217,6 +229,10 @@ Rectangle {
         }
 
         ToolButton {
+            parent: root.secondaryActionHost || secondaryActions
+            anchors.left: root.secondaryActionHost
+                          ? immersiveExperienceActions.right : undefined
+            anchors.leftMargin: root.secondaryActionHost ? 4 : 0
             objectName: "miniPlayerButton"
             width: root.denseTransport ? 32 : Math.max(32, implicitWidth)
             height: root.denseTransport ? 32 : Math.max(32, implicitHeight)
@@ -240,7 +256,7 @@ Rectangle {
         id: playerShellMenu
         objectName: "playerShellMenu"
         parent: root.Window.window ? root.Window.window.contentItem : root
-        width: Math.max(168, implicitContentWidth + leftPadding + rightPadding)
+        width: Math.max(136, implicitContentWidth + leftPadding + rightPadding)
 
         MenuItem {
             objectName: "classicShellMenuItem"

@@ -171,6 +171,17 @@ int main(const int argc, char** argv)
                {exact_before}, {normalized_after})
            == agplayer::AudioEquivalence::NormalizedPacketTiming);
 
+    // Demuxers may leave stream-copy-only codec details unknown on the source
+    // and fill them after remuxing. Unknown sample-format/bit-depth values must
+    // not turn identical encoded payload into a false audio-change failure.
+    agplayer::AudioStreamEvidence unknown_codec_details = exact_before;
+    unknown_codec_details.format = -1;
+    unknown_codec_details.bits_coded = 0;
+    unknown_codec_details.bits_raw = 0;
+    assert(agplayer::classify_audio_stream_evidence(
+               {unknown_codec_details}, {exact_before})
+           == agplayer::AudioEquivalence::NormalizedPacketTiming);
+
     agplayer::AudioStreamEvidence changed_payload = normalized_after;
     changed_payload.payload_hash ^= 1U;
     assert(agplayer::classify_audio_stream_evidence(

@@ -203,8 +203,8 @@ TestCase {
             return Math.abs(clip.width - waveform.waveformCursorX) <= 0.5
         })
         SettingsController.waveformPlaybackGuide = true
-        compare(guide.visible, false,
-                "frequency mode must hide the legacy QML guide even when enabled")
+        compare(guide.visible, true,
+                "the shared playback-guide setting must apply in frequency mode")
         SettingsController.waveformMode = 1
         tryCompare(guide, "visible", true)
         SettingsController.waveformMode = 0
@@ -212,6 +212,20 @@ TestCase {
         tryCompare(guide, "visible", true)
         SettingsController.waveformMode = previousMode
         SettingsController.waveformPlaybackGuide = previousGuide
+    }
+
+    function test_mini_waveform_restores_hover_time_capsule() {
+        var previousPreview = SettingsController.waveformHoverTimePreview
+        SettingsController.waveformHoverTimePreview = true
+        var waveform = findChild(miniPlayer, "miniWaveform")
+        var interaction = findChild(miniPlayer, "miniWaveformInteractionSurface")
+        var capsule = findChild(miniPlayer, "miniWaveformHoverTimeCapsule")
+        verify(waveform && interaction && capsule)
+        interaction.updatePreviewAt(interaction.width * 0.75)
+        tryCompare(capsule, "visible", true)
+        compare(waveform.hoverPosition,
+                waveform.timeForX(interaction.width * 0.75))
+        SettingsController.waveformHoverTimePreview = previousPreview
     }
 
     function test_mini_player_can_cycle_the_shared_waveform_mode() {

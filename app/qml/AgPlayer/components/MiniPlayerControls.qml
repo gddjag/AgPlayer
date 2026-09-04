@@ -240,6 +240,7 @@ Rectangle {
                     anchors.right: parent.right
                     anchors.top: parent.top
                     height: 36
+                    pointerInteractionEnabled: false
                     position: 0
                     cursorPosition: playback ? playback.positionMs : 0
                     duration: root.effectiveDurationMs
@@ -310,10 +311,58 @@ Rectangle {
                         lineWidth: waveform.lineWidth
                     }
                 }
+                MouseArea {
+                    id: miniWaveformInteractionSurface
+                    objectName: "miniWaveformInteractionSurface"
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    height: waveform.height
+                    hoverEnabled: true
+                    acceptedButtons: Qt.LeftButton
+                    cursorShape: Qt.ArrowCursor
+                    z: 5
+
+                    function updatePreviewAt(x) {
+                        waveform.setHoverPositionForInteraction(
+                                    waveform.timeForX(x))
+                    }
+                    onPositionChanged: mouse => updatePreviewAt(mouse.x)
+                    onEntered: updatePreviewAt(mouseX)
+                    onPressed: mouse => updatePreviewAt(mouse.x)
+                    onReleased: mouse => {
+                        updatePreviewAt(mouse.x)
+                        if (playback)
+                            playback.seek(waveform.timeForX(mouse.x))
+                    }
+                    onExited: waveform.setHoverPositionForInteraction(-1)
+                }
+                Rectangle {
+                    objectName: "miniWaveformHoverTimeCapsule"
+                    visible: SettingsController.waveformHoverTimePreview
+                             && waveform.hoverPosition >= 0
+                    x: Math.max(0, Math.min(parent.width - width,
+                            waveform.pixelForTime(waveform.hoverPosition)
+                            - width / 2))
+                    y: 2
+                    width: miniHoverTime.implicitWidth + 12
+                    height: miniHoverTime.implicitHeight + 6
+                    radius: height / 2
+                    color: Theme.panel
+                    border.color: "#54ff84" // theme-color-allow: waveform hover guide
+                    z: 7
+                    Text {
+                        id: miniHoverTime
+                        anchors.centerIn: parent
+                        text: root.formatTime(waveform.hoverPosition)
+                        color: Theme.primaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: Theme.fontSizeCaption
+                    }
+                }
                 Rectangle {
                     objectName: "miniWaveformPlaybackGuide"
-                    visible: SettingsController.waveformMode !== 3
-                             && SettingsController.waveformPlaybackGuide
+                    visible: SettingsController.waveformPlaybackGuide
                     x: waveform.waveformCursorX
                     width: 1
                     height: waveform.height

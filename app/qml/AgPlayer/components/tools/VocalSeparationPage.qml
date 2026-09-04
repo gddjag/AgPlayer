@@ -54,12 +54,16 @@ Rectangle {
         !== VocalSeparationController.None
 
     onVisibleChanged: {
-        if (visible && !VocalSeparationController.downloadBusy)
+        if (visible && !VocalSeparationController.downloadBusy) {
+            VocalSeparationController.probeDevices()
             VocalSeparationController.verifyInstalledModels()
+        }
     }
     Component.onCompleted: {
-        if (visible && !VocalSeparationController.downloadBusy)
+        if (visible && !VocalSeparationController.downloadBusy) {
+            VocalSeparationController.probeDevices()
             VocalSeparationController.verifyInstalledModels()
+        }
     }
 
     component WorkbenchButton: Button {
@@ -479,8 +483,12 @@ Rectangle {
         return "music-2-line"
     }
 
-    function modelStateText(state) {
-        switch (state) {
+    function modelStateText(card) {
+        if (card.origin === "custom" && card.compatibility === "diagnostic")
+            return qsTr("已识别 · 待配置")
+        if (card.origin === "custom" && card.compatibility === "rejected")
+            return qsTr("配置无效")
+        switch (card.state) {
         case VocalSeparationController.NotInstalled: return qsTr("未下载")
         case VocalSeparationController.PendingVerification: return qsTr("待校验")
         case VocalSeparationController.Downloading: return qsTr("下载中")
@@ -555,7 +563,8 @@ Rectangle {
         objectName: "separationBackupModelDialog"
         modal: true
         anchors.centerIn: Overlay.overlay
-        width: Math.min(520, page.width - 48)
+        width: Math.min(640, Math.max(420, page.width - 48))
+        height: Math.min(500, Math.max(360, page.height - 48))
         title: qsTr("备用模型下载地址")
         padding: 14
         background: Rectangle {
@@ -565,22 +574,25 @@ Rectangle {
         }
         contentItem: ColumnLayout {
             spacing: 10
-            TextArea {
-                id: backupModelText
-                objectName: "separationBackupModelText"
+            ScrollView {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 168
-                readOnly: true
-                selectByMouse: true
-                wrapMode: TextEdit.Wrap
-                color: page.textPrimary
-                selectionColor: page.primary
-                selectedTextColor: "white"
-                text: qsTr("如果点击模型下载太慢或者下载不了，可切换以下纯免费线路。\n\n免费模型来源：\n1. 官方线路：模型卡的“下载”按钮。\n2. 国内公益镜像：HTDemucs 支持 HF-Mirror 自动线路，官方失败会自动切换。\n3. 第三方公益服务：百度网盘人声伴奏分离模型。\n4. 用户自行下载：放入模型目录后点击“检测”。\n\n放置方法：模型可以直接放在模型根目录，也可以放在任意层级的分类子目录；检测会递归扫描全部子目录。内置支持的模型须保留原文件名和完整文件组。其他兼容 ONNX 模型请附带同名 .agmodel.json 描述文件，检测成功后会自动加入模型列表。\n\n百度网盘链接: https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888\n提取码: 8888")
-                background: Rectangle {
-                    color: page.input
-                    border.color: page.border
-                    radius: 5
+                Layout.fillHeight: true
+                clip: true
+                TextArea {
+                    id: backupModelText
+                    objectName: "separationBackupModelText"
+                    readOnly: true
+                    selectByMouse: true
+                    wrapMode: TextEdit.Wrap
+                    color: page.textPrimary
+                    selectionColor: page.primary
+                    selectedTextColor: "white"
+                    text: qsTr("如果点击模型下载太慢或者下载不了，可切换以下纯免费线路。\n\n免费模型来源：\n1. 官方线路：模型卡的“下载”按钮。\n2. 国内公益镜像：HTDemucs 支持 HF-Mirror 自动线路，官方失败会自动切换。\n3. 第三方公益服务：百度网盘人声伴奏分离模型。\n4. 用户自行下载：放入模型目录后点击“检测”。\n\n放置方法：模型可以直接放在模型根目录，也可以放在任意层级的分类子目录；检测会递归扫描全部子目录。内置支持的模型须保留原文件名和完整文件组。其他兼容 ONNX 模型请附带同名 .agmodel.json 描述文件，检测成功后会自动加入模型列表。\n\n注意：本地文件不会再次下载。显示“已识别 · 待配置”表示文件已找到，但还缺少可信 sidecar 或可选运行后端；悬停模型介绍可查看具体原因。\n\n百度网盘链接: https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888\n提取码: 8888")
+                    background: Rectangle {
+                        color: page.input
+                        border.color: page.border
+                        radius: 5
+                    }
                 }
             }
             RowLayout {
@@ -1010,6 +1022,7 @@ Rectangle {
                                         Layout.fillWidth: true
                                         Label { text: qsTr("模型介绍："); color: page.muted; font.pixelSize: Theme.fontSizeCaption; Layout.preferredWidth: 62 }
                                         Label {
+                                            id: modelDescription
                                             objectName: "modelStemSummary-" + cardData.id
                                             Layout.fillWidth: true
                                             text: cardData.description + qsTr("；输出：")
@@ -1017,6 +1030,11 @@ Rectangle {
                                             color: page.textPrimary
                                             font.pixelSize: Theme.fontSizeCaption
                                             elide: Text.ElideRight
+                                            HoverHandler { id: modelDescriptionHover }
+                                            ToolTip.visible: modelDescriptionHover.hovered
+                                                                 && modelDescription.truncated
+                                            ToolTip.text: modelDescription.text
+                                            ToolTip.delay: 250
                                         }
                                     }
                                     RowLayout {
@@ -1058,7 +1076,7 @@ Rectangle {
                                         Label { text: qsTr("状态："); color: page.muted; font.pixelSize: Theme.fontSizeCaption; Layout.preferredWidth: 62 }
                                         Label {
                                             Layout.fillWidth: true
-                                            text: page.modelStateText(cardData.state)
+                                            text: page.modelStateText(cardData)
                                             color: cardData.state === VocalSeparationController.Installed
                                                     ? page.success : page.cyan
                                             font.pixelSize: Theme.fontSizeCaption

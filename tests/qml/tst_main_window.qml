@@ -2460,9 +2460,11 @@ TestCase {
         var surface = findChild(mainWindow, "mainWaveform")
         var interactionSurface = findChild(mainWindow, "waveformInteractionSurface")
         var guide = findChild(mainWindow, "waveformHoverGuide")
+        var capsule = findChild(mainWindow, "waveformHoverTimeCapsule")
         verify(surface)
         verify(interactionSurface)
         verify(guide)
+        verify(capsule)
         verify(surface.enabled)
         compare(surface.timeForX(surface.width * 0.15),
                 Math.round(surface.duration * 0.15))
@@ -2471,6 +2473,7 @@ TestCase {
         compare(surface.pixelForTime(surface.duration), surface.width)
         interactionSurface.updatePreviewAt(interactionSurface.width * 0.15)
         tryVerify(function() { return guide.visible }, 300)
+        tryVerify(function() { return capsule.visible }, 300)
         tryCompare(guide, "x",
                    surface.pixelForTime(Math.round(surface.duration * 0.15)))
         interactionSurface.updatePreviewAt(interactionSurface.width * 0.85)
@@ -2650,7 +2653,7 @@ TestCase {
         wait(20)
     }
 
-    function test_main_volume_flyout_stays_open_for_two_seconds_after_leave() {
+    function test_main_volume_flyout_retracts_after_pointer_leaves() {
         var control = findChild(mainWindow, "mainVolumeControl")
         var closeTimer = findChild(mainWindow, "mainVolumeCloseTimer")
         var slider = findChild(mainWindow, "volumeSlider")
@@ -2658,11 +2661,9 @@ TestCase {
         control.expandedForQa = true
         slider.forceActiveFocus()
         closeTimer.restart()
-        wait(1600)
-        verify(control.expandedForQa,
-               "main volume must stay open for the two-second pointer transfer")
-        wait(550)
-        tryVerify(function() { return !control.expandedForQa }, 300)
+        compare(closeTimer.interval, 250)
+        wait(320)
+        tryVerify(function() { return !control.expandedForQa }, 200)
     }
 
     function test_spectrum_source_is_mirrored_before_responsive_rendering() {
@@ -5602,9 +5603,16 @@ TestCase {
         lowField.openPicker()
         var colorPicker = findChild(mainWindow, "colorFieldPicker")
         var hexField = findChild(mainWindow, "colorPickerHexField")
+        var restoreButton = findChild(mainWindow, "colorPickerRestoreButton")
+        var cancelButton = findChild(mainWindow, "colorPickerCancelButton")
+        var confirmButton = findChild(mainWindow, "colorPickerConfirmButton")
         verify(colorPicker && hexField)
+        verify(restoreButton && cancelButton && confirmButton)
         verify(colorPicker.width >= 300 && colorPicker.width <= 320)
         verify(colorPicker.height <= 332)
+        verify(restoreButton.width <= 88)
+        verify(cancelButton.width <= 72)
+        verify(confirmButton.width <= 72)
         verify(hexField.selectByMouse)
         hexField.text = "#A1B2C3"
         hexField.selectAll()
@@ -5630,7 +5638,7 @@ TestCase {
         compare(String(SettingsController.frequencyColorWaveform.lowColor), "#fc0909")
         compare(String(SettingsController.frequencyColorWaveform.midColor), "#03ff00")
         compare(String(SettingsController.frequencyColorWaveform.highColor), "#0048ff")
-        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.20)
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.12)
 
         page.cancelAndClose()
         SettingsController.waveformMode = previousWaveformMode
@@ -5737,7 +5745,7 @@ TestCase {
         compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.38)
         frequencyResetButton.clicked()
         compare(String(SettingsController.frequencyColorWaveform.lowColor), "#fc0909")
-        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.20)
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.12)
 
         resetButton.clicked()
         tryCompare(SettingsController, "waveformHeight", 0.8)
@@ -6089,9 +6097,34 @@ TestCase {
             verify(lyricsWindow.height >= window.height,
                    "lyrics height follows the combined player and list host")
             verify(lyricsWindow.width >= 280 && lyricsWindow.width <= 420)
+            compare(lyricsWindow.dockEdge, "right")
+            compare(lyricsWindow.docked, true)
+            verify(findChild(lyricsWindow, "lyricsWindowDragHandler"))
         } finally {
             window.destroy()
             PlayerExperienceController.lyricsVisible = previousVisible
+        }
+    }
+
+    function test_list_lyrics_window_selects_all_four_magnetic_edges() {
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": findChild(mainWindow, "filterModel")
+        })
+        verify(window)
+        try {
+            var host = Qt.rect(300, 200, 600, 500)
+            compare(window.lyricsDockEdgeForGeometry(
+                        112, 240, 180, 220, host, 52), "left")
+            compare(window.lyricsDockEdgeForGeometry(
+                        908, 240, 180, 220, host, 52), "right")
+            compare(window.lyricsDockEdgeForGeometry(
+                        360, -28, 240, 220, host, 52), "top")
+            compare(window.lyricsDockEdgeForGeometry(
+                        360, 708, 240, 220, host, 52), "bottom")
+            compare(window.lyricsDockEdgeForGeometry(
+                        20, 100, 180, 180, host, 32), "none")
+        } finally {
+            window.destroy()
         }
     }
 

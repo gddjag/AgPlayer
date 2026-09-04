@@ -55,7 +55,10 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        anchors.margins: Theme.spacingSm
+        anchors.leftMargin: Theme.spacingSm
+        anchors.rightMargin: Theme.spacingSm
+        anchors.topMargin: 4
+        anchors.bottomMargin: 2
         spacing: 10
 
         Rectangle {
@@ -150,7 +153,7 @@ Rectangle {
                 anchors.leftMargin: 4
                 anchors.rightMargin: 4
                 spacing: 2
-                Label { text: "BPM"; color: Theme.primaryText; font.pixelSize: Theme.fontSizeCaption; Layout.preferredWidth: 28; Layout.alignment: Qt.AlignVCenter }
+                Label { text: "BPM"; color: Theme.primaryText; font.pixelSize: Theme.fontSizeCaption; Layout.preferredWidth: 28; Layout.alignment: Qt.AlignVCenter; verticalAlignment: Text.AlignVCenter }
                 TextField {
                     id: minimumBpmField
                     objectName: "minimumBpmField"

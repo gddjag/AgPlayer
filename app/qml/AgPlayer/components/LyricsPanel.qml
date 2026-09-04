@@ -190,9 +190,9 @@ Item {
             font.pixelSize: Math.max(Theme.fontSizeCaption,
                                      Math.round(Theme.fontSizeBody * root.sizeScale))
             horizontalAlignment: root.lineAlignment
-            wrapMode: root.spatialMode ? Text.Wrap : Text.NoWrap
-            maximumLineCount: root.spatialMode ? 2 : 1
-            elide: Text.ElideRight
+            wrapMode: Text.Wrap
+            maximumLineCount: root.spatialMode ? 2 : 3
+            elide: root.spatialMode ? Text.ElideRight : Text.ElideNone
             opacity: root.spatialMode
                      ? 0.32 + root.clarityScale * 0.18 : 1
             visible: !root.spatialMode || text.length > 0
@@ -221,9 +221,9 @@ Item {
                                      Math.round(Theme.fontSizePageTitle * root.sizeScale))
             font.weight: root.clarity >= 64 ? Font.DemiBold : Font.Medium
             horizontalAlignment: root.lineAlignment
-            wrapMode: root.spatialMode ? Text.Wrap : Text.NoWrap
-            maximumLineCount: root.spatialMode ? 2 : 1
-            elide: Text.ElideRight
+            wrapMode: Text.Wrap
+            maximumLineCount: root.spatialMode ? 2 : 3
+            elide: root.spatialMode ? Text.ElideRight : Text.ElideNone
             opacity: root.spatialMode ? settleOpacity : 1
             scale: root.spatialMode
                    ? (1.04 + root.depthScale * 0.05) * settleScale : 1
@@ -242,9 +242,9 @@ Item {
             font.pixelSize: Math.max(Theme.fontSizeCaption,
                                      Math.round(Theme.fontSizeBody * root.sizeScale))
             horizontalAlignment: root.lineAlignment
-            wrapMode: root.spatialMode ? Text.Wrap : Text.NoWrap
-            maximumLineCount: root.spatialMode ? 2 : 1
-            elide: Text.ElideRight
+            wrapMode: Text.Wrap
+            maximumLineCount: root.spatialMode ? 2 : 3
+            elide: root.spatialMode ? Text.ElideRight : Text.ElideNone
             opacity: root.spatialMode
                      ? 0.26 + root.clarityScale * 0.15 : 1
             visible: !root.spatialMode || text.length > 0

@@ -765,6 +765,33 @@ Window {
                         Math.min(hostTop, screenBottom - lyricsHeight))
     }
 
+    function lyricsDockEdgeForGeometry(windowX, windowY, windowWidth,
+                                       windowHeight, hostGeometry,
+                                       snapDistance) {
+        var spacing = Theme.spacingSm
+        var distances = [
+            { "edge": "left",
+              "distance": Math.abs(windowX + windowWidth
+                                   - (hostGeometry.x - spacing)) },
+            { "edge": "right",
+              "distance": Math.abs(windowX
+                                   - (hostGeometry.x
+                                      + hostGeometry.width + spacing)) },
+            { "edge": "top",
+              "distance": Math.abs(windowY + windowHeight
+                                   - (hostGeometry.y - spacing)) },
+            { "edge": "bottom",
+              "distance": Math.abs(windowY
+                                   - (hostGeometry.y
+                                      + hostGeometry.height + spacing)) }
+        ]
+        distances.sort(function(first, second) {
+            return first.distance - second.distance
+        })
+        return distances[0].distance <= snapDistance
+                ? distances[0].edge : "none"
+    }
+
     Window {
         id: listLyricsWindow
         objectName: "listLyricsWindow"
@@ -803,9 +830,20 @@ Window {
                                   listWindow.y + listWindow.height)
             return Qt.rect(left, top, right - left, bottom - top)
         }
-        width: Math.min(420, availableGeometry.width,
-                        Math.max(280,
-                                 Math.round(combinedHostGeometry.width * 0.32)))
+        property string dockEdge: "right"
+        property bool docked: true
+        property bool draggingWindow: false
+        property real dragStartX: 0
+        property real dragStartY: 0
+        property real sideWidth: Math.min(420, availableGeometry.width,
+                                          Math.max(280, Math.round(
+                                              combinedHostGeometry.width * 0.32)))
+        property real horizontalHeight: Math.min(300,
+                                                  Math.max(220,
+                                                      combinedHostGeometry.height * 0.32))
+        readonly property real snapDistance: 52
+
+        width: sideWidth
         height: Math.min(availableGeometry.height,
                          Math.max(200, combinedHostGeometry.height))
         x: listWindow.boundedLyricsWindowX(
@@ -817,6 +855,98 @@ Window {
                combinedHostGeometry.y, height,
                availableGeometry.y,
                availableGeometry.y + availableGeometry.height)
+
+        function syncDockGeometry() {
+            if (!docked || draggingWindow || !visible)
+                return
+            var host = combinedHostGeometry
+            var area = availableGeometry
+            var spacing = Theme.spacingSm
+            if (dockEdge === "left" || dockEdge === "right") {
+                width = Math.min(sideWidth, area.width)
+                height = Math.min(area.height, Math.max(200, host.height))
+                x = dockEdge === "left"
+                        ? host.x - width - spacing
+                        : host.x + host.width + spacing
+                y = listWindow.boundedLyricsWindowY(
+                            host.y, height, area.y, area.y + area.height)
+            } else {
+                width = Math.min(area.width, Math.max(280, host.width))
+                height = Math.min(horizontalHeight, area.height)
+                x = Math.max(area.x,
+                             Math.min(host.x, area.x + area.width - width))
+                y = dockEdge === "top"
+                        ? host.y - height - spacing
+                        : host.y + host.height + spacing
+            }
+            x = Math.max(area.x, Math.min(x, area.x + area.width - width))
+            y = Math.max(area.y, Math.min(y, area.y + area.height - height))
+        }
+
+        function finishWindowDrag() {
+            draggingWindow = false
+            var edge = listWindow.lyricsDockEdgeForGeometry(
+                        x, y, width, height, combinedHostGeometry,
+                        snapDistance)
+            if (edge === "none") {
+                docked = false
+                x = Math.max(availableGeometry.x,
+                             Math.min(x, availableGeometry.x
+                                      + availableGeometry.width - width))
+                y = Math.max(availableGeometry.y,
+                             Math.min(y, availableGeometry.y
+                                      + availableGeometry.height - height))
+                return
+            }
+            dockEdge = edge
+            docked = true
+            syncDockGeometry()
+        }
+
+        onVisibleChanged: if (visible) Qt.callLater(syncDockGeometry)
+
+        Connections {
+            target: listWindow
+            function onXChanged() { listLyricsWindow.syncDockGeometry() }
+            function onYChanged() { listLyricsWindow.syncDockGeometry() }
+            function onWidthChanged() { listLyricsWindow.syncDockGeometry() }
+            function onHeightChanged() { listLyricsWindow.syncDockGeometry() }
+        }
+
+        Item {
+            objectName: "lyricsWindowMoveRegion"
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.rightMargin: 38
+            height: 30
+            z: 20
+
+            DragHandler {
+                id: lyricsWindowDrag
+                objectName: "lyricsWindowDragHandler"
+                target: null
+                acceptedButtons: Qt.LeftButton
+                onActiveChanged: {
+                    if (active) {
+                        listLyricsWindow.dragStartX = listLyricsWindow.x
+                        listLyricsWindow.dragStartY = listLyricsWindow.y
+                        listLyricsWindow.draggingWindow = true
+                        listLyricsWindow.docked = false
+                    } else if (listLyricsWindow.draggingWindow) {
+                        listLyricsWindow.finishWindowDrag()
+                    }
+                }
+                onTranslationChanged: {
+                    if (!active)
+                        return
+                    listLyricsWindow.x = listLyricsWindow.dragStartX
+                            + translation.x
+                    listLyricsWindow.y = listLyricsWindow.dragStartY
+                            + translation.y
+                }
+            }
+        }
 
         LyricsPanel {
             id: listLyricsPanel
