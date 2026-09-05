@@ -5,14 +5,17 @@
 
 namespace {
 
-const QColor defaultLow(QStringLiteral("#FC0909"));
-const QColor defaultMid(QStringLiteral("#03FF00"));
-const QColor defaultHigh(QStringLiteral("#0048FF"));
+const QColor defaultLow(QStringLiteral("#FF0000"));
+const QColor defaultMid(QStringLiteral("#00FF00"));
+const QColor defaultHigh(QStringLiteral("#0000FF"));
+const QColor previousDefaultLow(QStringLiteral("#FC0909"));
+const QColor previousDefaultMid(QStringLiteral("#03FF00"));
+const QColor previousDefaultHigh(QStringLiteral("#0048FF"));
 const QColor legacyDefaultLow(QStringLiteral("#8B3DFF"));
 const QColor legacyDefaultMid(QStringLiteral("#FFB000"));
 const QColor legacyDefaultHigh(QStringLiteral("#002FA7"));
-constexpr int currentColorSchemaVersion = 3;
-constexpr double defaultUnplayedDimness = 0.68;
+constexpr int currentColorSchemaVersion = 4;
+constexpr double defaultUnplayedDimness = 0.30;
 
 QColor storedColor(QSettings& settings, const QString& key,
                    const QColor& fallback)
@@ -117,19 +120,24 @@ void FrequencyColorWaveformSettings::load(QSettings& settings)
     const QString schemaKey = QStringLiteral(
         "waveformFrequencyColorSchemaVersion");
     const int storedSchema = settings.value(schemaKey, 0).toInt();
-    if (storedSchema < 1) {
-        if (lowColor_ == legacyDefaultLow && midColor_ == legacyDefaultMid
-            && highColor_ == legacyDefaultHigh) {
-            lowColor_ = defaultLow;
-            midColor_ = defaultMid;
-            highColor_ = defaultHigh;
-            settings.setValue(QStringLiteral("waveformFrequencyLowColor"),
-                              lowColor_.name(QColor::HexRgb));
-            settings.setValue(QStringLiteral("waveformFrequencyMidColor"),
-                              midColor_.name(QColor::HexRgb));
-            settings.setValue(QStringLiteral("waveformFrequencyHighColor"),
-                              highColor_.name(QColor::HexRgb));
-        }
+    // Match complete presets only. The older violet palette in schema 1+
+    // was already a deliberate choice and retains its existing protection.
+    const bool untouchedLegacy = storedSchema < 1
+        && lowColor_ == legacyDefaultLow && midColor_ == legacyDefaultMid
+        && highColor_ == legacyDefaultHigh;
+    const bool untouchedPrevious = storedSchema < currentColorSchemaVersion
+        && lowColor_ == previousDefaultLow && midColor_ == previousDefaultMid
+        && highColor_ == previousDefaultHigh;
+    if (untouchedLegacy || untouchedPrevious) {
+        lowColor_ = defaultLow;
+        midColor_ = defaultMid;
+        highColor_ = defaultHigh;
+        settings.setValue(QStringLiteral("waveformFrequencyLowColor"),
+                          lowColor_.name(QColor::HexRgb));
+        settings.setValue(QStringLiteral("waveformFrequencyMidColor"),
+                          midColor_.name(QColor::HexRgb));
+        settings.setValue(QStringLiteral("waveformFrequencyHighColor"),
+                          highColor_.name(QColor::HexRgb));
     }
     const QString opacityKey = QStringLiteral(
         "waveformFrequencyUnplayedOpacity");

@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <memory>
 #include <vector>
+#include "waveform_display_summary.hpp"
 
 class WaveformItem : public QQuickItem {
     Q_OBJECT
@@ -195,6 +196,7 @@ protected:
 private:
     struct LayerSnapshot {
         std::vector<float> values;
+        agplayer::ui::WaveformDisplaySummary summary;
     };
 
     struct PeakSnapshot {
@@ -202,6 +204,8 @@ private:
         std::shared_ptr<const LayerSnapshot> bass;
         std::shared_ptr<const LayerSnapshot> mid;
         std::shared_ptr<const LayerSnapshot> high;
+        std::shared_ptr<const LayerSnapshot> peak;
+        std::shared_ptr<const LayerSnapshot> rms;
         std::shared_ptr<const LayerSnapshot> spectrumPeakHold;
         std::uint64_t revision = 0;
         qint64 totalSamples = 0;
@@ -210,8 +214,7 @@ private:
     };
 
     void setHoverPosition(qint64 position);
-    void normalizeLayerInput(QVariantList& normalized,
-                             const QVariantList& input,
+    void normalizeLayerInput(const QVariantList& input,
                              std::shared_ptr<LayerSnapshot>& snapshot);
 
     QVariantList peaks_;
@@ -230,9 +233,9 @@ private:
     QColor gradientStartColor_ = QColor(QStringLiteral("#00d4ff"));
     QColor gradientMiddleColor_ = QColor(QStringLiteral("#7b2ff7"));
     QColor gradientEndColor_ = QColor(QStringLiteral("#e62e9b"));
-    QColor lowColor_{QStringLiteral("#FC0909")};
-    QColor midColor_{QStringLiteral("#03FF00")};
-    QColor highColor_{QStringLiteral("#0048FF")};
+    QColor lowColor_{QStringLiteral("#FF0000")};
+    QColor midColor_{QStringLiteral("#00FF00")};
+    QColor highColor_{QStringLiteral("#0000FF")};
     qreal frequencyUnplayedOpacity_ = 0.20;
     bool rgbProgress_ = true;
     qreal amplitudeScale_ = 1.0;

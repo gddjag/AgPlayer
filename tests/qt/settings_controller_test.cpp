@@ -2,6 +2,7 @@
 #include "audio_file_discovery.hpp"
 #include "file_association_controller.hpp"
 #include "frequency_color_waveform_settings.hpp"
+#include "frequency_color_mix.hpp"
 
 #include <QByteArray>
 #include <QColor>
@@ -104,6 +105,11 @@ private slots:
     void waveformAppearanceSettingsClampPersistAndReset();
     void frequencyColorPaletteMigratesExactLegacyDefaults();
     void frequencyColorPalettePreservesCustomColors();
+    void frequencyColorPaletteUpgradesPreviousRgbPreset();
+    void frequencyColorMixPreservesPastelAndChroma();
+    void frequencyColorMixHonorsPaletteAndRejectsNonfiniteEnergy();
+    void frequencyColorMixKeepsCustomEndpointContinuous();
+    void frequencyColorMixKeepsQuietAudioVisibleWithoutFlatteningDynamics();
     void restoresLegacyRgbColorsWithoutDeletingKeys();
     void mapsSimplifiedColorsIntoRestoredContract();
     void listWaveformThumbnailSettingsPersistFallbackAndReset();
@@ -538,11 +544,11 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
         QCOMPARE(settings.waveformThickness(), 1.0);
         QCOMPARE(settings.waveformMode(), 0);
         auto* frequency = settings.frequencyColorWaveform();
-        QCOMPARE(frequency->lowColor(), QColor(QStringLiteral("#fc0909")));
-        QCOMPARE(frequency->midColor(), QColor(QStringLiteral("#03ff00")));
-        QCOMPARE(frequency->highColor(), QColor(QStringLiteral("#0048ff")));
-        QCOMPARE(frequency->unplayedDimness(), 0.68);
-        QCOMPARE(frequency->unplayedOpacity(), 0.32);
+        QCOMPARE(frequency->lowColor(), QColor(QStringLiteral("#ff0000")));
+        QCOMPARE(frequency->midColor(), QColor(QStringLiteral("#00ff00")));
+        QCOMPARE(frequency->highColor(), QColor(QStringLiteral("#0000ff")));
+        QCOMPARE(frequency->unplayedDimness(), 0.30);
+        QCOMPARE(frequency->unplayedOpacity(), 0.70);
 
         settings.setWaveformHeight(3.0);
         settings.setWaveformDensity(0.1);
@@ -579,13 +585,13 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
     QCOMPARE(reloaded.frequencyColorWaveform()->unplayedOpacity(), 0.60);
     reloaded.resetWaveformDefaults();
     QCOMPARE(reloaded.frequencyColorWaveform()->lowColor(),
-             QColor(QStringLiteral("#fc0909")));
+             QColor(QStringLiteral("#ff0000")));
     QCOMPARE(reloaded.frequencyColorWaveform()->midColor(),
-             QColor(QStringLiteral("#03ff00")));
+             QColor(QStringLiteral("#00ff00")));
     QCOMPARE(reloaded.frequencyColorWaveform()->highColor(),
-             QColor(QStringLiteral("#0048ff")));
-    QCOMPARE(reloaded.frequencyColorWaveform()->unplayedDimness(), 0.68);
-    QCOMPARE(reloaded.frequencyColorWaveform()->unplayedOpacity(), 0.32);
+             QColor(QStringLiteral("#0000ff")));
+    QCOMPARE(reloaded.frequencyColorWaveform()->unplayedDimness(), 0.30);
+    QCOMPARE(reloaded.frequencyColorWaveform()->unplayedOpacity(), 0.70);
     QCOMPARE(reloaded.listWaveformThumbnailMode(), QStringLiteral("Spectral"));
     persisted.clear();
 }
@@ -643,11 +649,11 @@ void SettingsControllerTest::frequencyColorPaletteMigratesExactLegacyDefaults()
 
     SettingsController settings;
     QCOMPARE(settings.frequencyColorWaveform()->lowColor(),
-             QColor(QStringLiteral("#fc0909")));
+             QColor(QStringLiteral("#ff0000")));
     QCOMPARE(settings.frequencyColorWaveform()->midColor(),
-             QColor(QStringLiteral("#03ff00")));
+             QColor(QStringLiteral("#00ff00")));
     QCOMPARE(settings.frequencyColorWaveform()->highColor(),
-             QColor(QStringLiteral("#0048ff")));
+             QColor(QStringLiteral("#0000ff")));
     // The palette itself migrates, but an explicitly stored legacy opacity is
     // inverted into dimness so an upgrade keeps the user's visual contrast.
     QCOMPARE(settings.frequencyColorWaveform()->unplayedOpacity(), 0.38);
@@ -657,16 +663,16 @@ void SettingsControllerTest::frequencyColorPaletteMigratesExactLegacyDefaults()
              0.62);
     QCOMPARE(persisted.value(
                  QStringLiteral("appearance/waveformFrequencyLowColor")).toString(),
-             QStringLiteral("#fc0909"));
+             QStringLiteral("#ff0000"));
     QCOMPARE(persisted.value(
                  QStringLiteral("appearance/waveformFrequencyMidColor")).toString(),
-             QStringLiteral("#03ff00"));
+             QStringLiteral("#00ff00"));
     QCOMPARE(persisted.value(
                  QStringLiteral("appearance/waveformFrequencyHighColor")).toString(),
-             QStringLiteral("#0048ff"));
+             QStringLiteral("#0000ff"));
     QCOMPARE(persisted.value(QStringLiteral(
                  "appearance/waveformFrequencyColorSchemaVersion")).toInt(),
-             3);
+             4);
 
     persisted.clear();
     persisted.setValue(QStringLiteral(
@@ -687,7 +693,7 @@ void SettingsControllerTest::frequencyColorPaletteMigratesExactLegacyDefaults()
     QCOMPARE(alreadyMigratedSchema.frequencyColorWaveform()->highColor(),
              QColor(QStringLiteral("#002fa7")));
     QCOMPARE(alreadyMigratedSchema.frequencyColorWaveform()->unplayedOpacity(),
-             0.32);
+             0.70);
     persisted.clear();
 }
 
@@ -715,7 +721,7 @@ void SettingsControllerTest::frequencyColorPalettePreservesCustomColors()
     }
     QCOMPARE(persisted.value(QStringLiteral(
                  "appearance/waveformFrequencyColorSchemaVersion")).toInt(),
-             3);
+             4);
 
     persisted.clear();
     persisted.setValue(QStringLiteral("appearance/waveformFrequencyLowColor"),
@@ -734,11 +740,123 @@ void SettingsControllerTest::frequencyColorPalettePreservesCustomColors()
              QColor(QStringLiteral("#778899")));
     QCOMPARE(persisted.value(QStringLiteral(
                  "appearance/waveformFrequencyColorSchemaVersion")).toInt(),
-             3);
+             4);
     QCOMPARE(persisted.value(QStringLiteral(
                  "appearance/waveformFrequencyUnplayedOpacity")).toDouble(),
-             0.32);
+             0.70);
     persisted.clear();
+}
+
+void SettingsControllerTest::frequencyColorPaletteUpgradesPreviousRgbPreset()
+{
+    // Only the entire old preset should migrate; a one-channel customization
+    // and an explicitly selected old palette in the new schema must survive.
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QSettings persisted(directory.filePath("palette.ini"), QSettings::IniFormat);
+    for (const int schema : {0, 1, 2, 3, 4}) {
+        for (const bool customized : {false, true}) {
+            persisted.clear();
+            persisted.setValue("waveformFrequencyColorSchemaVersion", schema);
+            persisted.setValue("waveformFrequencyLowColor", "#fc0909");
+            persisted.setValue("waveformFrequencyMidColor", "#03ff00");
+            persisted.setValue("waveformFrequencyHighColor",
+                               customized ? "#0048fe" : "#0048ff");
+            persisted.setValue("waveformFrequencyUnplayedDimness", 0.42);
+            FrequencyColorWaveformSettings settings;
+            settings.load(persisted);
+            const bool migrate = !customized && schema < 4;
+            QCOMPARE(settings.lowColor(), QColor(migrate ? "#ff0000" : "#fc0909"));
+            QCOMPARE(settings.midColor(), QColor(migrate ? "#00ff00" : "#03ff00"));
+            QCOMPARE(settings.highColor(), QColor(customized ? "#0048fe"
+                                                             : migrate ? "#0000ff" : "#0048ff"));
+            QCOMPARE(settings.unplayedDimness(), 0.42);
+            FrequencyColorWaveformSettings reloaded;
+            reloaded.load(persisted);
+            QCOMPARE(reloaded.lowColor(), settings.lowColor());
+            QCOMPARE(reloaded.highColor(), settings.highColor());
+        }
+    }
+}
+
+void SettingsControllerTest::frequencyColorMixPreservesPastelAndChroma()
+{
+    const auto mix = [](double low, double mid, double high) {
+        return agplayer::ui::mixFrequencyColor(low, mid, high,
+                                              Qt::red, Qt::green, Qt::blue);
+    };
+    QCOMPARE(mix(1, 1, 1), QColor(Qt::white));
+    QCOMPARE(mix(1, 1, 0), QColor(Qt::yellow));
+    QCOMPARE(mix(0, 1, 1), QColor(Qt::cyan));
+    QCOMPARE(mix(1, 0, 1), QColor(Qt::magenta));
+    const QColor pastel = mix(0.7, 0.8, 0.9);
+    QVERIFY(pastel.redF() > 0.90);
+    QVERIFY(pastel.redF() < pastel.greenF());
+    QVERIFY(pastel.greenF() < pastel.blueF());
+    // Scaling all energies equally must preserve linear-light chroma. A
+    // per-channel knee or common-light subtraction breaks this contract.
+    const QColor bright = mix(0.2, 0.5, 0.9);
+    const QColor dim = mix(0.02, 0.05, 0.09);
+    const double brightRatio = linearChannel(bright.redF()) / linearChannel(bright.blueF());
+    const double dimRatio = linearChannel(dim.redF()) / linearChannel(dim.blueF());
+    QVERIFY(std::abs(brightRatio - dimRatio) < 0.001);
+    QVERIFY(relativeLuminance(dim) < relativeLuminance(bright));
+    QColor previous = mix(0.7, 0.8, 0.80);
+    for (int step = 1; step <= 100; ++step) {
+        const QColor next = mix(0.7, 0.8, 0.80 + 0.001 * step);
+        QVERIFY(std::abs(next.redF() - previous.redF()) < 0.002);
+        QVERIFY(std::abs(next.blueF() - previous.blueF()) < 0.002);
+        previous = next;
+    }
+}
+
+void SettingsControllerTest::frequencyColorMixHonorsPaletteAndRejectsNonfiniteEnergy()
+{
+    const QColor low("#804020"), mid("#123456"), high("#d0e0f0");
+    const auto mix = [&](double l, double m, double h) {
+        return agplayer::ui::mixFrequencyColor(l, m, h, low, mid, high);
+    };
+    QCOMPARE(mix(1, 0, 0), low);
+    QCOMPARE(mix(0, 1, 0), mid);
+    QCOMPARE(mix(0, 0, 1), high);
+    QCOMPARE(mix(0, 0, 0), low);
+    QCOMPARE(mix(std::numeric_limits<double>::quiet_NaN(), 1,
+                 std::numeric_limits<double>::infinity()), mid);
+    QCOMPARE(mix(-1, 2, 0), mid);
+    const QColor mixed = mix(0.3, 0.6, 0.9);
+    QVERIFY(mixed.isValid());
+    QVERIFY(mixed != agplayer::ui::mixFrequencyColor(0.3, 0.6, 0.9,
+                                                    Qt::red, Qt::green, Qt::blue));
+}
+
+void SettingsControllerTest::frequencyColorMixKeepsCustomEndpointContinuous()
+{
+    const QColor custom("#804020");
+    const QColor nearEndpoint = agplayer::ui::mixFrequencyColor(
+        0.9999, 0, 0, custom, Qt::green, Qt::blue);
+    QVERIFY(std::abs(nearEndpoint.redF() - custom.redF()) < 0.001);
+    QVERIFY(std::abs(nearEndpoint.greenF() - custom.greenF()) < 0.001);
+    QVERIFY(std::abs(nearEndpoint.blueF() - custom.blueF()) < 0.001);
+}
+
+void SettingsControllerTest::frequencyColorMixKeepsQuietAudioVisibleWithoutFlatteningDynamics()
+{
+    const auto mix = [](double low, double mid, double high) {
+        return agplayer::ui::mixFrequencyColor(low, mid, high,
+                                              Qt::red, Qt::green, Qt::blue);
+    };
+    const QColor quiet = mix(0.05, 0, 0);
+    const QColor veryQuiet = mix(0.001, 0, 0);
+    QVERIFY(quiet.red() >= 170);
+    QCOMPARE(quiet.green(), 0);
+    QCOMPARE(quiet.blue(), 0);
+    QVERIFY(veryQuiet.red() < quiet.red());
+    QVERIFY(veryQuiet.red() > 0);
+    const QColor quietMix = mix(0.02, 0.05, 0.09);
+    const QColor brighterMix = mix(0.2, 0.5, 0.9);
+    const double quietRatio = linearChannel(quietMix.redF()) / linearChannel(quietMix.blueF());
+    const double brighterRatio = linearChannel(brighterMix.redF()) / linearChannel(brighterMix.blueF());
+    QVERIFY(std::abs(quietRatio - brighterRatio) < 0.001);
 }
 
 void SettingsControllerTest::cacheLimitMigratesOnlyUntouchedLegacyDefault()

@@ -368,6 +368,8 @@ int main(const int argc, char** argv)
         data.bass = {0.2F, 0.3F, 0.4F, 0.5F};
         data.mid = {0.3F, 0.4F, 0.5F, 0.6F};
         data.high = {0.4F, 0.5F, 0.6F, 0.7F};
+        data.peak = {0.8F, 0.7F, 0.9F, 0.3F};
+        data.rms = {0.3F, 0.4F, 0.5F, 0.2F};
         data.bpm = 120.0;
         data.duration_ms = 2'000U;
         data.total_samples = 96'000U;
@@ -385,6 +387,8 @@ int main(const int argc, char** argv)
         assert(loaded_v4.bass == data.bass);
         assert(loaded_v4.mid == data.mid);
         assert(loaded_v4.high == data.high);
+        assert(loaded_v4.peak == data.peak);
+        assert(loaded_v4.rms == data.rms);
         assert(loaded_v4.duration_ms == data.duration_ms);
         assert(loaded_v4.total_samples == data.total_samples);
         assert(loaded_v4.sample_rate == data.sample_rate);

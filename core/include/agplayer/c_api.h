@@ -504,7 +504,9 @@ typedef enum ag_waveform_layer {
     AG_WAVEFORM_LAYER_MIX = 0,
     AG_WAVEFORM_LAYER_BASS = 1,
     AG_WAVEFORM_LAYER_MID = 2,
-    AG_WAVEFORM_LAYER_HIGH = 3
+    AG_WAVEFORM_LAYER_HIGH = 3,
+    AG_WAVEFORM_LAYER_PEAK = 4,
+    AG_WAVEFORM_LAYER_RMS = 5
 } ag_waveform_layer;
 
 typedef enum ag_waveform_aggregation {
@@ -512,6 +514,32 @@ typedef enum ag_waveform_aggregation {
     AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE = 1,
     AG_WAVEFORM_AGGREGATION_RMS = 2
 } ag_waveform_aggregation;
+
+/* Borrowed immutable arrays, valid only during the callback. Undecoded buckets
+ * are zero padded; total_samples is the current estimated full timeline. The
+ * final ag_waveform uses the actual decoded sample count. Callback runs on the
+ * calling thread and may cancel via cancel_token. */
+typedef struct ag_waveform_snapshot {
+    const float* mix;
+    const float* bass;
+    const float* mid;
+    const float* high;
+    const float* peak;
+    const float* rms;
+    size_t count;
+    uint64_t total_samples;
+    int sample_rate;
+} ag_waveform_snapshot;
+typedef void (*ag_waveform_snapshot_callback)(
+    const ag_waveform_snapshot* snapshot, void* user_data);
+
+ag_result ag_waveform_analyze_progressive(
+    const char* utf8_path, size_t target_points,
+    ag_waveform_aggregation aggregation,
+    const ag_cancel_token* cancel_token,
+    ag_progress_callback progress_callback, void* user_data,
+    ag_waveform_snapshot_callback snapshot_callback, void* snapshot_user_data,
+    ag_waveform** out_waveform);
 
 ag_result ag_waveform_analyze_with_aggregation(
     const char* utf8_path,

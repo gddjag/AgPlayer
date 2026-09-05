@@ -204,9 +204,11 @@ void updateMixVertexColors(QSGGeometry::ColoredPoint2D* vertices,
                            const QColor& midColor,
                            const QColor& highColor,
                            qreal frequencyUnplayedOpacity,
-                           std::size_t strokeCopies)
+                           std::size_t strokeCopies,
+                           bool frequencyDetail = false)
 {
-    const std::size_t verticesPerStroke = visualMode == 3 ? 4U : 2U;
+    const std::size_t verticesPerStroke = visualMode == 3
+        ? (frequencyDetail ? 8U : 4U) : 2U;
     for (std::size_t copy = 0; copy < strokeCopies; ++copy) {
         for (std::size_t index = 0; index < peakCount; ++index) {
             const double normalizedX = peakCount == 1U
@@ -233,9 +235,18 @@ void updateMixVertexColors(QSGGeometry::ColoredPoint2D* vertices,
                 const auto edgeAlpha = scaledAlpha(color.alpha,
                                                    kFrequencyEdgeOpacity);
                 writeVertexColor(vertices[vertex], edge, edgeAlpha);
-                writeVertexColor(vertices[vertex + 1U], center, color.alpha);
-                writeVertexColor(vertices[vertex + 2U], center, color.alpha);
-                writeVertexColor(vertices[vertex + 3U], edge, edgeAlpha);
+                if (frequencyDetail) {
+                    for (std::size_t i = 1U; i < 7U; ++i) {
+                        const bool atCenter = i == 3U || i == 4U;
+                        writeVertexColor(vertices[vertex + i],
+                                         atCenter ? center : color.rgb, color.alpha);
+                    }
+                    writeVertexColor(vertices[vertex + 7U], edge, edgeAlpha);
+                } else {
+                    writeVertexColor(vertices[vertex + 1U], center, color.alpha);
+                    writeVertexColor(vertices[vertex + 2U], center, color.alpha);
+                    writeVertexColor(vertices[vertex + 3U], edge, edgeAlpha);
+                }
             } else {
                 writeVertexColor(vertices[vertex], color.rgb, color.alpha);
                 writeVertexColor(vertices[vertex + 1U], color.rgb, color.alpha);
@@ -347,7 +358,7 @@ void resampleVisibleValues(const std::vector<float>& values,
                            std::size_t pointCount,
                            std::vector<float>& result)
 {
-    if (values.empty()) {
+    if (values.empty() || pointCount == 0U) {
         result.clear();
         return;
     }
@@ -357,15 +368,69 @@ void resampleVisibleValues(const std::vector<float>& values,
         return;
     }
     const std::size_t lastIndex = values.size() - 1U;
-    const std::size_t first = std::min(lastIndex, static_cast<std::size_t>(
-        std::floor(static_cast<double>(visibleStartMs)
-                   / static_cast<double>(durationMs) * lastIndex)));
-    const std::size_t last = std::min(lastIndex, std::max(first, static_cast<std::size_t>(
-        std::ceil(static_cast<double>(visibleEndMs)
-                  / static_cast<double>(durationMs) * lastIndex))));
-    const std::vector<float> window(values.begin() + static_cast<qsizetype>(first),
-                                    values.begin() + static_cast<qsizetype>(last) + 1);
-    resampleValues(window, pointCount, result);
+    const double first = static_cast<double>(visibleStartMs) / durationMs * lastIndex;
+    const double last = static_cast<double>(visibleEndMs) / durationMs * lastIndex;
+    const double stride = (last - first) / static_cast<double>(pointCount);
+    const auto sample = [&](double position) {
+        position = std::clamp(position, 0.0, static_cast<double>(lastIndex));
+        const auto left = static_cast<std::size_t>(position);
+        const auto right = std::min(left + 1U, lastIndex);
+        return static_cast<float>(values[left]
+            + (values[right] - values[left]) * (position - left));
+    };
+    result.resize(pointCount);
+    for (std::size_t index = 0; index < pointCount; ++index) {
+        const double begin = first + index * stride;
+        const double end = std::min(last, begin + stride);
+        if (stride < 1.0) {
+            // Preserve the fractional source position. Snapping the slice to
+            // whole buckets caused visible pauses followed by jumps while panning.
+            result[index] = sample((begin + end) * 0.5);
+        } else {
+            float maximum = std::max(sample(begin), sample(end));
+            for (std::size_t source = static_cast<std::size_t>(std::ceil(begin));
+                 source <= lastIndex && static_cast<double>(source) < end; ++source) {
+                maximum = std::max(maximum, values[source]);
+            }
+            result[index] = maximum;
+        }
+    }
+}
+
+void resampleSummary(const std::vector<float>& values,
+                     const agplayer::ui::WaveformDisplaySummary& summary,
+                     qint64 startMs, qint64 endMs, qint64 durationMs,
+                     std::size_t count, bool preservePeaks,
+                     std::vector<float>& result)
+{
+    if (values.empty() || count == 0U) {
+        result.clear();
+        return;
+    }
+    const double size = static_cast<double>(values.size());
+    const double first = durationMs > 0
+        ? std::clamp(static_cast<double>(startMs) / durationMs, 0.0, 1.0) * size : 0.0;
+    const double last = durationMs > 0
+        ? std::clamp(static_cast<double>(endMs) / durationMs, 0.0, 1.0) * size : size;
+    const double stride = (last - first) / static_cast<double>(count);
+    result.resize(count);
+    for (std::size_t i = 0; i < count; ++i) {
+        const double begin = first + static_cast<double>(i) * stride;
+        const double end = std::min(last, begin + stride);
+        if (stride < 1.0) {
+            // Samples represent bucket centers, not their left edges. Retain
+            // sub-bucket panning without blending past the track endpoints.
+            const double position = std::clamp((begin + end) * 0.5 - 0.5,
+                                               0.0, size - 1.0);
+            const auto left = static_cast<std::size_t>(position);
+            const auto right = std::min(left + 1U, values.size() - 1U);
+            result[i] = static_cast<float>(values[left]
+                + (values[right] - values[left]) * (position - left));
+        } else {
+            result[i] = preservePeaks ? summary.peak(begin, end)
+                                      : summary.rms(begin, end);
+        }
+    }
 }
 
 class WaveformNode final : public QSGGeometryNode {
@@ -410,6 +475,8 @@ public:
     std::vector<float> lowValues_;
     std::vector<float> midValues_;
     std::vector<float> highValues_;
+    std::vector<float> rmsValues_;
+    bool frequencyDetail_ = false;
     QColor lowColor_;
     QColor midColor_;
     QColor highColor_;
@@ -520,26 +587,36 @@ void WaveformItem::setLayers(const QVariantMap& layers)
         return map.value(key).toList();
     };
 
-    QVariantList normalizedMix;
     auto mix = std::make_shared<LayerSnapshot>();
-    normalizeLayerInput(normalizedMix, extract(layers, QStringLiteral("mix")), mix);
+    normalizeLayerInput(extract(layers, QStringLiteral("mix")), mix);
 
     auto bass = std::make_shared<LayerSnapshot>();
     auto mid = std::make_shared<LayerSnapshot>();
     auto high = std::make_shared<LayerSnapshot>();
-    QVariantList normalizedBass;
-    QVariantList normalizedMid;
-    QVariantList normalizedHigh;
-    normalizeLayerInput(normalizedBass, extract(layers, QStringLiteral("bass")), bass);
-    normalizeLayerInput(normalizedMid, extract(layers, QStringLiteral("mid")), mid);
-    normalizeLayerInput(normalizedHigh, extract(layers, QStringLiteral("high")), high);
+    normalizeLayerInput(extract(layers, QStringLiteral("bass")), bass);
+    normalizeLayerInput(extract(layers, QStringLiteral("mid")), mid);
+    normalizeLayerInput(extract(layers, QStringLiteral("high")), high);
 
+    bass->summary.build(bass->values);
+    mid->summary.build(mid->values);
+    high->summary.build(high->values);
+    const auto detailLayer = [&](const QString& key, bool keepPeaks) {
+        auto layer = std::make_shared<LayerSnapshot>();
+        normalizeLayerInput(extract(layers, key), layer);
+        // Incomplete/mismatched optional data must not use a different timeline.
+        if (layer->values.size() != mix->values.size()) layer->values.clear();
+        layer->summary.build(layer->values, keepPeaks);
+        return layer->values.empty() ? std::shared_ptr<LayerSnapshot>{} : layer;
+    };
+    snapshot->peak = detailLayer(QStringLiteral("peak"), true);
+    snapshot->rms = detailLayer(QStringLiteral("rms"), false);
+
+    snapshot->peakCount = static_cast<qsizetype>(std::max({mix->values.size(),
+        bass->values.size(), mid->values.size(), high->values.size()}));
     snapshot->mix = mix->values.empty() ? nullptr : std::move(mix);
     snapshot->bass = bass->values.empty() ? nullptr : std::move(bass);
     snapshot->mid = mid->values.empty() ? nullptr : std::move(mid);
     snapshot->high = high->values.empty() ? nullptr : std::move(high);
-    snapshot->peakCount = std::max({normalizedMix.size(), normalizedBass.size(),
-                                    normalizedMid.size(), normalizedHigh.size()});
     snapshot->sampleRate =
         std::max<qint64>(0, layers.value(QStringLiteral("_sampleRate")).toLongLong());
     snapshot->totalSamples =
@@ -558,13 +635,12 @@ void WaveformItem::setLayers(const QVariantMap& layers)
     update();
 }
 
-void WaveformItem::normalizeLayerInput(QVariantList& normalized,
-                                       const QVariantList& input,
+void WaveformItem::normalizeLayerInput(const QVariantList& input,
                                        std::shared_ptr<LayerSnapshot>& snapshot)
 {
-    normalized.clear();
     snapshot->values.clear();
-    normalized.reserve(input.size());
+    // Retain the input QVariantMap through implicit sharing. Only the typed,
+    // sanitized render snapshot is needed; do not rebuild six throwaway lists.
     snapshot->values.reserve(static_cast<std::size_t>(input.size()));
     for (const QVariant& value : input) {
         bool converted = false;
@@ -574,7 +650,6 @@ void WaveformItem::normalizeLayerInput(QVariantList& normalized,
         }
         peak = std::clamp(std::abs(peak), 0.0, 1.0);
         snapshot->values.push_back(static_cast<float>(peak));
-        normalized.append(peak);
     }
 }
 
@@ -632,9 +707,15 @@ void WaveformItem::setDuration(qreal duration)
     }
     const qint64 previousVisibleStart = visibleStartMs_;
     const qint64 previousVisibleEnd = visibleEndMs_;
+    const bool showingFullTrack = visibleStartMs_ == 0
+        && visibleEndMs_ == duration_;
     duration_ = clamped;
     visibleStartMs_ = std::clamp(visibleStartMs_, qint64{0}, duration_);
-    visibleEndMs_ = std::clamp(visibleEndMs_, visibleStartMs_, duration_);
+    // A full-track view must follow the next track (or corrected decoded
+    // duration). Otherwise a previous 2:22 track truncates every longer track.
+    // Explicit zoom/rolling ranges retain their chosen source-time interval.
+    visibleEndMs_ = showingFullTrack ? duration_
+        : std::clamp(visibleEndMs_, visibleStartMs_, duration_);
     if (visibleEndMs_ == visibleStartMs_) {
         visibleStartMs_ = 0;
         visibleEndMs_ = duration_;
@@ -1051,6 +1132,7 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                                  || !qFuzzyCompare(node->lineWidth_, lineWidth_)
                                  || node->visibleStartMs_ != visibleStartMs_
                                  || node->visibleEndMs_ != visibleEndMs_
+                                 || node->duration_ != duration_
                                  || node->visualMode_ != visualMode_
                                  || node->baseColor_ != baseColor_
                                  || node->progressColor_ != progressColor_
@@ -1097,7 +1179,9 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         const std::size_t spectrumCapVertices = visualMode_ == 2
             ? peakCount * 2U
             : 0U;
-        const std::size_t verticesPerStroke = visualMode_ == 3 ? 4U : 2U;
+        node->frequencyDetail_ = visualMode_ == 3 && snapshot->peak && snapshot->rms;
+        const std::size_t verticesPerStroke = visualMode_ == 3
+            ? (node->frequencyDetail_ ? 8U : 4U) : 2U;
         const auto vertexCount = peakCount * verticesPerStroke
             * activeLayers * strokeCopies + spectrumCapVertices;
         if (vertexCount > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
@@ -1120,15 +1204,25 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                                   visibleEndMs_, duration_, peakCount,
                                   node->mixValues_);
             if (visualMode_ == 3) {
-                resampleVisibleValues(snapshot->bass->values, visibleStartMs_,
+                resampleSummary(snapshot->bass->values, snapshot->bass->summary, visibleStartMs_,
                                       visibleEndMs_, duration_, peakCount,
-                                      node->lowValues_);
-                resampleVisibleValues(snapshot->mid->values, visibleStartMs_,
+                                      false, node->lowValues_);
+                resampleSummary(snapshot->mid->values, snapshot->mid->summary, visibleStartMs_,
                                       visibleEndMs_, duration_, peakCount,
-                                      node->midValues_);
-                resampleVisibleValues(snapshot->high->values, visibleStartMs_,
+                                      false, node->midValues_);
+                resampleSummary(snapshot->high->values, snapshot->high->summary, visibleStartMs_,
                                       visibleEndMs_, duration_, peakCount,
-                                      node->highValues_);
+                                      false, node->highValues_);
+                if (node->frequencyDetail_) {
+                    resampleSummary(snapshot->peak->values, snapshot->peak->summary,
+                                    visibleStartMs_, visibleEndMs_, duration_, peakCount,
+                                    true, node->mixValues_);
+                    resampleSummary(snapshot->rms->values, snapshot->rms->summary,
+                                    visibleStartMs_, visibleEndMs_, duration_, peakCount,
+                                    false, node->rmsValues_);
+                } else {
+                    node->rmsValues_.clear();
+                }
             } else {
                 node->lowValues_.clear();
                 node->midValues_.clear();
@@ -1249,7 +1343,29 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                             static_cast<unsigned char>(edge.green),
                             static_cast<unsigned char>(edge.blue),
                             edgeAlpha);
-                        vertices[vertex + 1U].set(
+                        if (node->frequencyDetail_) {
+                            const float body = std::clamp(static_cast<float>(
+                                node->rmsValues_[index] * center * amplitudeScale_),
+                                0.0F, amplitude);
+                            const auto setBodyVertex = [&](std::size_t offsetIndex, float y,
+                                                           const Rgb& rgb) {
+                                vertices[vertex + offsetIndex].set(x, y,
+                                    static_cast<unsigned char>(rgb.red),
+                                    static_cast<unsigned char>(rgb.green),
+                                    static_cast<unsigned char>(rgb.blue), color.alpha);
+                            };
+                            setBodyVertex(1U, center - body, color.rgb);
+                            setBodyVertex(2U, center - body, color.rgb);
+                            setBodyVertex(3U, center, centerRgb);
+                            setBodyVertex(4U, center, centerRgb);
+                            setBodyVertex(5U, center + body, color.rgb);
+                            setBodyVertex(6U, center + body, color.rgb);
+                            vertices[vertex + 7U].set(x, center + amplitude,
+                                static_cast<unsigned char>(edge.red),
+                                static_cast<unsigned char>(edge.green),
+                                static_cast<unsigned char>(edge.blue), edgeAlpha);
+                        } else {
+                            vertices[vertex + 1U].set(
                             x, center,
                             static_cast<unsigned char>(centerRgb.red),
                             static_cast<unsigned char>(centerRgb.green),
@@ -1267,6 +1383,7 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                             static_cast<unsigned char>(edge.green),
                             static_cast<unsigned char>(edge.blue),
                             edgeAlpha);
+                        }
                     } else {
                         vertices[vertex].set(
                             x, center - amplitude, red, green, blue, color.alpha);
@@ -1387,8 +1504,9 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
             gradientStartColor_, gradientMiddleColor_, gradientEndColor_,
             rgbProgress_, node->lowValues_, node->midValues_,
             node->highValues_, lowColor_, midColor_, highColor_,
-            frequencyUnplayedOpacity_, strokeCopies);
-        const std::size_t verticesPerStroke = node->visualMode_ == 3 ? 4U : 2U;
+            frequencyUnplayedOpacity_, strokeCopies, node->frequencyDetail_);
+        const std::size_t verticesPerStroke = node->visualMode_ == 3
+            ? (node->frequencyDetail_ ? 8U : 4U) : 2U;
         vertexOffset += peakCount * verticesPerStroke * strokeCopies;
         if (node->visualMode_ == 2) {
             // Peak-hold caps are a separate geometry range.  Recolor them in

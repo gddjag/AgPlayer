@@ -102,6 +102,8 @@ struct ag_video_decoder {
 
 struct ag_waveform {
     std::vector<float> peaks;
+    std::vector<float> raw_peak_;
+    std::vector<float> raw_rms_;
     std::vector<float> bass_;
     std::vector<float> mid_;
     std::vector<float> high_;
@@ -1602,49 +1604,9 @@ ag_result ag_waveform_analyze(const char* utf8_path,
                               void* const user_data,
                               ag_waveform** out_waveform)
 {
-    if (out_waveform == nullptr) {
-        return AG_INVALID_ARGUMENT;
-    }
-    *out_waveform = nullptr;
-    if (utf8_path == nullptr || utf8_path[0] == '\0'
-        || target_points == 0U) {
-        return AG_INVALID_ARGUMENT;
-    }
-
-    try {
-        std::vector<float> peaks;
-        std::vector<float> bass;
-        std::vector<float> mid;
-        std::vector<float> high;
-        const std::shared_ptr<ag_cancel_state> cancel_state =
-            retain_cancel_state(cancel_token);
-        const std::atomic_bool* cancelled = cancelled_flag(cancel_state);
-        std::uint64_t duration_ms = 0U;
-        std::uint64_t total_samples = 0U;
-        int sample_rate = 0;
-        const ag_result result = agplayer::WaveformAnalyzer::analyze(
-            utf8_path, target_points, cancelled, progress_callback, user_data,
-            peaks, bass, mid, high, agplayer::WaveformAggregation::Peak,
-            &duration_ms, &total_samples, &sample_rate);
-        if (result != AG_OK) {
-            return result;
-        }
-        ag_waveform* waveform = new (std::nothrow) ag_waveform{};
-        if (waveform == nullptr) {
-            return AG_INTERNAL_ERROR;
-        }
-        waveform->peaks = std::move(peaks);
-        waveform->bass_ = std::move(bass);
-        waveform->mid_ = std::move(mid);
-        waveform->high_ = std::move(high);
-        waveform->duration_ms_ = duration_ms;
-        waveform->total_samples_ = total_samples;
-        waveform->sample_rate_ = sample_rate;
-        *out_waveform = waveform;
-        return AG_OK;
-    } catch (...) {
-        return AG_INTERNAL_ERROR;
-    }
+    return ag_waveform_analyze_with_aggregation(utf8_path, target_points,
+        AG_WAVEFORM_AGGREGATION_PEAK, cancel_token, progress_callback,
+        user_data, out_waveform);
 }
 
 ag_result ag_waveform_analyze_with_aggregation(
@@ -1654,6 +1616,18 @@ ag_result ag_waveform_analyze_with_aggregation(
     const ag_cancel_token* cancel_token,
     const ag_progress_callback progress_callback,
     void* const user_data,
+    ag_waveform** out_waveform)
+{
+    return ag_waveform_analyze_progressive(utf8_path, target_points, aggregation,
+        cancel_token, progress_callback, user_data, nullptr, nullptr, out_waveform);
+}
+
+ag_result ag_waveform_analyze_progressive(
+    const char* utf8_path, const size_t target_points,
+    const ag_waveform_aggregation aggregation,
+    const ag_cancel_token* cancel_token,
+    const ag_progress_callback progress_callback, void* const user_data,
+    const ag_waveform_snapshot_callback snapshot_callback, void* const snapshot_user_data,
     ag_waveform** out_waveform)
 {
     if (out_waveform == nullptr) {
@@ -1670,6 +1644,8 @@ ag_result ag_waveform_analyze_with_aggregation(
         std::vector<float> bass;
         std::vector<float> mid;
         std::vector<float> high;
+        std::vector<float> raw_peak;
+        std::vector<float> raw_rms;
         const std::shared_ptr<ag_cancel_state> cancel_state =
             retain_cancel_state(cancel_token);
         PausableProgressBridge progress_bridge{
@@ -1682,7 +1658,7 @@ ag_result ag_waveform_analyze_with_aggregation(
             pausable_progress, &progress_bridge, peaks, bass, mid, high,
             static_cast<agplayer::WaveformAggregation>(aggregation),
             &duration_ms, &total_samples, &sample_rate, pausable_checkpoint,
-            &progress_bridge);
+            &progress_bridge, &raw_peak, &raw_rms, snapshot_callback, snapshot_user_data);
         if (result != AG_OK) {
             return result;
         }
@@ -1692,6 +1668,8 @@ ag_result ag_waveform_analyze_with_aggregation(
             return AG_INTERNAL_ERROR;
         }
         waveform->peaks = std::move(peaks);
+        waveform->raw_peak_ = std::move(raw_peak);
+        waveform->raw_rms_ = std::move(raw_rms);
         waveform->bass_ = std::move(bass);
         waveform->mid_ = std::move(mid);
         waveform->high_ = std::move(high);
@@ -1748,6 +1726,10 @@ size_t ag_waveform_layer_count(const ag_waveform* waveform,
         return waveform->mid_.size();
     case AG_WAVEFORM_LAYER_HIGH:
         return waveform->high_.size();
+    case AG_WAVEFORM_LAYER_PEAK:
+        return waveform->raw_peak_.size();
+    case AG_WAVEFORM_LAYER_RMS:
+        return waveform->raw_rms_.size();
     }
     return 0U;
 }
@@ -1772,6 +1754,12 @@ float ag_waveform_layer_peak(const ag_waveform* waveform,
         break;
     case AG_WAVEFORM_LAYER_HIGH:
         layer_peaks = &waveform->high_;
+        break;
+    case AG_WAVEFORM_LAYER_PEAK:
+        layer_peaks = &waveform->raw_peak_;
+        break;
+    case AG_WAVEFORM_LAYER_RMS:
+        layer_peaks = &waveform->raw_rms_;
         break;
     default:
         return 0.0F;
@@ -1848,13 +1836,15 @@ ag_result ag_track_analysis_with_aggregation(
         std::vector<float> high;
         const auto internal_aggregation =
             static_cast<agplayer::WaveformAggregation>(aggregation);
+        std::vector<float> raw_peak;
+        std::vector<float> raw_rms;
         std::uint64_t duration_ms = 0U;
         std::uint64_t total_samples = 0U;
         int sample_rate = 0;
         ag_result waveform_result = agplayer::WaveformAnalyzer::analyze(
             utf8_path, target_points, cancelled, progress_callback, user_data,
             peaks, bass, mid, high, internal_aggregation, &duration_ms,
-            &total_samples, &sample_rate);
+            &total_samples, &sample_rate, nullptr, nullptr, &raw_peak, &raw_rms);
         if (waveform_result != AG_OK) {
             return waveform_result;
         }
@@ -1872,6 +1862,8 @@ ag_result ag_track_analysis_with_aggregation(
         waveform->sample_rate_ = sample_rate;
 
         agplayer::BpmAnalyzeInput bpm_input;
+        waveform->raw_peak_ = std::move(raw_peak);
+        waveform->raw_rms_ = std::move(raw_rms);
         bpm_input.file_path = utf8_path;
         bpm_input.cancelled = cancelled;
         agplayer::BpmAnalyzeOutput bpm_output;

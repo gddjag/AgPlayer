@@ -75,6 +75,11 @@ private slots:
     void zoomKeepsAnchorStableAndUsesVisibleRange();
     void zoomClampsToEightTimesAndResizeDoesNotResetViewport();
     void visibleRangeCanBePannedWithoutChangingItsSpan();
+    void fullTrackRangeFollowsLongerTrackAndDecodedDuration();
+    void explicitViewportSurvivesDurationCorrection();
+    void subBucketPanMovesWaveformContinuously();
+    void frequencyDetailUsesPeakOutlineAndRmsBody();
+    void frequencyOverviewIntegratesEnergyInsteadOfIndependentMaxima();
 };
 
 namespace {
@@ -300,10 +305,11 @@ void WaveformItemTest::threeBandMixerKeepsPureColorsAndCreatesCombinations()
     QVERIFY2(lowHigh.red() >= 245 && lowHigh.green() <= 128
                  && lowHigh.blue() >= 245,
              "full Low + High must add to bright magenta");
-    QVERIFY2(all.hsvSaturationF() >= 0.25 && all.valueF() >= 0.75,
-             "balanced full-band energy must stay bright without washing out");
-    QVERIFY2(denseMusic.hsvSaturationF() >= 0.35,
-             "dense three-band music must retain visible chroma");
+    QVERIFY2(all.hsvSaturationF() < 0.1 && all.valueF() >= 0.95,
+             "balanced full-band energy must allow a neutral highlight");
+    QVERIFY2(denseMusic.hsvSaturationF() > 0.02
+                 && denseMusic.hsvSaturationF() < 0.25,
+             "near-balanced music must retain gentle pastel chroma");
     QVERIFY2(denseMusic.green() > denseMusic.red()
                  && denseMusic.blue() > denseMusic.red(),
              "the representative High-heavy mix must remain blue/cyan");
@@ -314,9 +320,9 @@ void WaveformItemTest::threeBandMixerKeepsPureColorsAndCreatesCombinations()
 
 void WaveformItemTest::defaultFrequencyColorsUseFixedPalette()
 {
-    const QColor expectedLow(QStringLiteral("#FC0909"));
-    const QColor expectedMid(QStringLiteral("#03FF00"));
-    const QColor expectedHigh(QStringLiteral("#0048FF"));
+    const QColor expectedLow(QStringLiteral("#FF0000"));
+    const QColor expectedMid(QStringLiteral("#00FF00"));
+    const QColor expectedHigh(QStringLiteral("#0000FF"));
 
     const FrequencyColorWaveformSettings settings;
     QCOMPARE(settings.lowColor(), expectedLow);
@@ -1212,6 +1218,106 @@ void WaveformItemTest::zoomClampsToEightTimesAndResizeDoesNotResetViewport()
     QCOMPARE(item.visibleEndMs(), qint64{112500});
     QCOMPARE(item.timeForX(1000.0), qint64{100000});
     QCOMPARE(item.pixelForTime(100000), 1000.0);
+}
+
+void WaveformItemTest::fullTrackRangeFollowsLongerTrackAndDecodedDuration()
+{
+    TestableWaveformItem item;
+    item.setWidth(863);
+    item.setHeight(80);
+    item.setDuration(142000);
+    item.setPeaks(peaks({0.1, 0.1, 0.1, 0.8}));
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    item.setDuration(300000);
+    QCOMPARE(item.visibleEndMs(), qint64{300000});
+    QCOMPARE(item.timeForX(863), qint64{300000});
+    node = item.updatePaintNode(node, nullptr);
+    const auto* geometry = static_cast<QSGGeometryNode*>(node)->geometry();
+    const auto* data = vertices(node);
+    const int last = geometry->vertexCount() - 1;
+    QVERIFY(data[last].x > 860);
+    QVERIFY(std::abs(data[last].y - 40.0F) > 20.0F);
+    item.setDuration(300026); // decoded duration replacing container metadata
+    QCOMPARE(item.visibleEndMs(), qint64{300026});
+    delete node;
+}
+
+void WaveformItemTest::explicitViewportSurvivesDurationCorrection()
+{
+    WaveformItem item;
+    item.setDuration(300000);
+    item.setVisibleRange(100000, 104000);
+    item.setDuration(300026);
+    QCOMPARE(item.visibleStartMs(), qint64{100000});
+    QCOMPARE(item.visibleEndMs(), qint64{104000});
+}
+
+void WaveformItemTest::subBucketPanMovesWaveformContinuously()
+{
+    TestableWaveformItem item;
+    item.setWidth(100);
+    item.setHeight(100);
+    item.setDuration(100000);
+    item.setPeaks(peaks({0.1, 0.9}));
+    item.setVisibleRange(20000, 24000);
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    const float before = vertices(node)[1].y;
+    item.setVisibleRange(21000, 25000);
+    node = item.updatePaintNode(node, nullptr);
+    QVERIFY(std::abs(vertices(node)[1].y - before) > 0.01F);
+    delete node;
+}
+
+void WaveformItemTest::frequencyDetailUsesPeakOutlineAndRmsBody()
+{
+    TestableWaveformItem item;
+    item.setWidth(4);
+    item.setHeight(100);
+    item.setDensity(1);
+    item.setLineWidth(1);
+    item.setVisualMode(3);
+    auto layers = makeLayers(peaks({0.1, 0.1}), peaks({1, 1}),
+                             peaks({0, 0}), peaks({0, 0}));
+    layers[QStringLiteral("peak")] = peaks({0.8, 0.8});
+    layers[QStringLiteral("rms")] = peaks({0.2, 0.6});
+    item.setLayers(layers);
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node);
+    const auto* geometry = static_cast<QSGGeometryNode*>(node)->geometry();
+    QCOMPARE(geometry->vertexCount(), 16);
+    const auto* data = vertices(node);
+    QVERIFY(std::abs(data[0].y - 10.0F) < 0.001F);
+    QVERIFY(std::abs(data[1].y - 40.0F) < 0.001F);
+    QVERIFY(std::abs(data[9].y - 20.0F) < 0.001F);
+    QVERIFY(std::abs(data[7].y - 90.0F) < 0.001F);
+    const float originalInner = data[1].y;
+    item.setLowColor(QColor("#ff00ff"));
+    QCOMPARE(item.updatePaintNode(node, nullptr), node);
+    QCOMPARE(vertices(node)[1].y, originalInner);
+    QVERIFY(vertices(node)[1].b > 0);
+    delete node;
+}
+
+void WaveformItemTest::frequencyOverviewIntegratesEnergyInsteadOfIndependentMaxima()
+{
+    TestableWaveformItem item;
+    item.setWidth(1);
+    item.setHeight(80);
+    item.setDensity(1);
+    item.setLineWidth(1);
+    item.setVisualMode(3);
+    item.setFrequencyUnplayedOpacity(1);
+    item.setLowColor(Qt::red);
+    item.setMidColor(Qt::green);
+    item.setHighColor(Qt::blue);
+    // One low-frequency impulse: sqrt((1+0+0+0)/4) = 0.5.
+    // Sustained high-frequency amplitude 0.6 should dominate this overview bin.
+    item.setLayers(makeLayers(peaks({1, 1, 1, 1}), peaks({1, 0, 0, 0}),
+                              peaks({0, 0, 0, 0}), peaks({0.6, 0.6, 0.6, 0.6})));
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node);
+    QVERIFY(vertices(node)[1].b > vertices(node)[1].r);
+    delete node;
 }
 
 QTEST_MAIN(WaveformItemTest)

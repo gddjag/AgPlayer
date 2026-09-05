@@ -164,7 +164,9 @@ void test_short_10khz_burst_retains_materially_visible_high_energy()
     std::vector<float> mid;
     std::vector<float> high;
     assert(bucketizer.finish(mix, bass, mid, high) == AG_OK);
-    assert(*std::max_element(high.begin(), high.end()) >= 0.15F);
+    // The 50-frame burst occupies 1/15 of a bucket. Its absolute RMS remains
+    // measurable without per-track boosts; the raw peak layer carries crest.
+    assert(*std::max_element(high.begin(), high.end()) >= 0.03F);
     assert_finite_unit_interval(mix);
     assert_finite_unit_interval(bass);
     assert_finite_unit_interval(mid);
@@ -218,6 +220,12 @@ void test_continuous_equal_amplitude_three_tone_mix_keeps_high_above_twenty_perc
 
 int main()
 {
+    // A 0.6 sine has RMS 0.4243; independent per-band normalization or a
+    // hardcoded high-band boost destroys amplitude ratios across tracks.
+    const auto calibrated_low = analyze_tone(100.0);
+    const auto calibrated_high = analyze_tone(8'000.0);
+    assert(calibrated_low.bass > 0.39 && calibrated_low.bass < 0.44);
+    assert(calibrated_high.high > 0.39 && calibrated_high.high < 0.44);
     test_low_mid_high_tones_are_classified_by_the_250_and_4000_hz_split();
     test_silence_has_no_frequency_color_energy();
     test_equal_amplitude_mix_keeps_high_above_twenty_percent_of_low_and_mid();

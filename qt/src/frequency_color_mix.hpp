@@ -28,7 +28,7 @@ inline double energyWeight(const double energy) noexcept
 {
     const double clamped = std::clamp(
         std::isfinite(energy) ? energy : 0.0, 0.0, 1.0);
-    return std::pow(std::pow(clamped, 0.55), 1.20);
+    return std::pow(clamped, 0.66);
 }
 
 inline double applySoftKnee(const double channel) noexcept
@@ -39,29 +39,19 @@ inline double applySoftKnee(const double channel) noexcept
         / (1.0 - std::exp(-strength));
 }
 
-inline void preserveAdditiveChroma(std::array<double, 3>& linear) noexcept
+inline void mapAdditiveBrightness(std::array<double, 3>& linear,
+                                   const double peakWeight) noexcept
 {
-    // Dense music carries substantial energy in all three bands. Keep the
-    // shared peak, but reduce the common light before the per-channel knee so
-    // small band differences are not flattened into near-white output.
-    double peak = *std::max_element(linear.begin(), linear.end());
-    if (peak <= 0.0) return;
-    if (peak > 1.0) {
-        for (double& channel : linear) channel /= peak;
-        peak = 1.0;
-    }
-
-    constexpr double commonRetention = 0.05;
-    const double common = *std::min_element(linear.begin(), linear.end());
-    for (double& channel : linear) {
-        channel -= common * (1.0 - commonRetention);
-    }
-
-    const double adjustedPeak = *std::max_element(linear.begin(), linear.end());
-    if (adjustedPeak > 0.0) {
-        const double scale = peak / adjustedPeak;
-        for (double& channel : linear) channel *= scale;
-    }
+    // Map energy once, independently of palette brightness. This keeps a dark
+    // custom color continuous as its band approaches full energy. One shared
+    // gain preserves linear-light channel ratios, including pastel mixtures.
+    // Lift quiet audio in display brightness without changing its raw waveform
+    // height; overlapping custom colors are scaled together to stay in gamut.
+    const double peak = *std::max_element(linear.begin(), linear.end());
+    if (peak <= 0.0 || peakWeight <= 0.0) return;
+    const double gain = std::min(std::sqrt(applySoftKnee(peakWeight)) / peakWeight,
+                                1.0 / peak);
+    for (double& channel : linear) channel *= gain;
 }
 
 } // namespace detail
@@ -97,12 +87,13 @@ inline QColor mixFrequencyColor(const double lowEnergy,
         linear[1] += detail::srgbToLinear(colors[index].greenF()) * weights[index];
         linear[2] += detail::srgbToLinear(colors[index].blueF()) * weights[index];
     }
-    detail::preserveAdditiveChroma(linear);
+    detail::mapAdditiveBrightness(
+        linear, *std::max_element(weights.begin(), weights.end()));
 
     return QColor::fromRgbF(
-        detail::linearToSrgb(detail::applySoftKnee(linear[0])),
-        detail::linearToSrgb(detail::applySoftKnee(linear[1])),
-        detail::linearToSrgb(detail::applySoftKnee(linear[2])));
+        detail::linearToSrgb(linear[0]),
+        detail::linearToSrgb(linear[1]),
+        detail::linearToSrgb(linear[2]));
 }
 
 } // namespace agplayer::ui

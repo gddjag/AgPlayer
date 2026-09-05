@@ -13,6 +13,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <vector>
 
 class QTimer;
@@ -52,21 +53,25 @@ signals:
 
 private:
     friend struct WaveformProviderTestAccess;
+    friend struct WaveformPrefetchTestAccess;
     friend struct FrequencyPowerStateTestAccess;
 
     void onAnalysisFinished();
     void onProgressTimer();
     void setAnalysisProgress(double progress);
-    QVariantMap waveformToVariantMap(const ag_waveform* waveform) const;
     void cancelActiveJob();
+    void cancelPrefetchJobs();
     void startAnalysis();
 
     struct AnalysisResources {
         ag_cancel_token* cancelToken = nullptr;
         ag_waveform* waveform = nullptr;
+        std::atomic_bool canceled{false};
+        std::mutex snapshotMutex;
+        QVariantMap pendingSnapshot;
 
         ~AnalysisResources();
-        void cancel() const;
+        void cancel();
     };
 
     struct Job {
@@ -78,6 +83,8 @@ private:
             AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE;
         std::shared_ptr<AnalysisResources> resources;
         std::shared_ptr<std::atomic<double>> progress;
+        QVariantMap layers;
+        bool cacheSaved = false;
     };
 
     SettingsController* settings_ = nullptr;
@@ -85,6 +92,7 @@ private:
     QTimer* progressTimer_ = nullptr;
     std::shared_ptr<std::atomic<double>> activeProgress_;
     std::shared_ptr<AnalysisResources> activeResources_;
+    std::shared_ptr<AnalysisResources> prefetchResources_;
     QString currentPath_;
     QString currentTrackId_;
     QVariantMap currentLayers_;

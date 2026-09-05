@@ -36,8 +36,8 @@ signals:
     void changed();
 
 private:
-    QColor lowColor_{QStringLiteral("#FC0909")};
-    QColor midColor_{QStringLiteral("#03FF00")};
-    QColor highColor_{QStringLiteral("#0048FF")};
-    double unplayedDimness_ = 0.68;
+    QColor lowColor_{QStringLiteral("#FF0000")};
+    QColor midColor_{QStringLiteral("#00FF00")};
+    QColor highColor_{QStringLiteral("#0000FF")};
+    double unplayedDimness_ = 0.30;
 };

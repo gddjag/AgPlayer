@@ -40,10 +40,10 @@ constexpr std::uint64_t v2_timeline_metadata_flag = 1U;
 constexpr std::uint64_t v4_header_size = 104U;
 constexpr std::uint64_t fnv_offset = 14'695'981'039'346'656'037ULL;
 constexpr std::uint64_t fnv_prime = 1'099'511'628'211ULL;
-// Schema 6 invalidates waveform files generated before the endpoint and
-// high-detail viewport fixes. The binary v4 container remains compatible;
-// only the cache key changes so existing libraries are analysed once again.
-constexpr std::uint32_t analysis_schema_version = 6U;
+// Schema 8 adds original full-band peak/RMS and single-pass PCM bucketing.
+// v4 flag 2 carries two additional same-length layers; older v4 remains readable.
+constexpr std::uint32_t analysis_schema_version = 8U;
+constexpr std::uint64_t amplitude_detail_flag = 2U;
 
 struct SourceMetadata final {
     std::uint64_t size = 0U;
@@ -675,6 +675,10 @@ bool WaveformCache::save_v4(const std::filesystem::path& cache_path,
 {
     const std::filesystem::path temp_path = temporary_path(cache_path);
     try {
+        const bool has_detail = !data.peak.empty() || !data.rms.empty();
+        if (has_detail && (data.peak.size() != data.mix.size()
+            || data.rms.size() != data.mix.size()
+            || !validate_layer(data.peak) || !validate_layer(data.rms))) return false;
         std::error_code cleanup_error;
         std::filesystem::remove(temp_path, cleanup_error);
         SourceMetadata source;
@@ -720,7 +724,8 @@ bool WaveformCache::save_v4(const std::filesystem::path& cache_path,
             || !write_little_endian(output, high_count)
             || !write_double(output, data.bpm)
             || !write_little_endian(output, cue_count)
-            || !write_little_endian(output, v2_timeline_metadata_flag)
+            || !write_little_endian(output, v2_timeline_metadata_flag
+                | (has_detail ? amplitude_detail_flag : 0U))
             || !write_little_endian(output, data.duration_ms)
             || !write_little_endian(output, data.total_samples)
             || !write_little_endian(
@@ -728,7 +733,9 @@ bool WaveformCache::save_v4(const std::filesystem::path& cache_path,
             || !write_layer(output, data.mix)
             || !write_layer(output, data.bass)
             || !write_layer(output, data.mid)
-            || !write_layer(output, data.high)) {
+            || !write_layer(output, data.high)
+            || (has_detail && (!write_layer(output, data.peak)
+                               || !write_layer(output, data.rms)))) {
             output.close();
             std::filesystem::remove(temp_path, cleanup_error);
             return false;
@@ -810,7 +817,8 @@ bool WaveformCache::load_v4(const std::filesystem::path& cache_path,
             || !read_little_endian(input, sample_rate)
             || version != cache_version_v4 || source_size != source.size
             || source_mtime != source.mtime_ns
-            || flags != v2_timeline_metadata_flag
+            || (flags != v2_timeline_metadata_flag
+                && flags != (v2_timeline_metadata_flag | amplitude_detail_flag))
             || !std::isfinite(bpm)
             || sample_rate > std::numeric_limits<std::uint32_t>::max()
             || mix_count == 0U || bass_count != mix_count
@@ -826,8 +834,10 @@ bool WaveformCache::load_v4(const std::filesystem::path& cache_path,
             || mix_count + bass_count + mid_count + high_count > max_count) {
             return false;
         }
-        const std::uint64_t float_bytes =
-            (mix_count + bass_count + mid_count + high_count) * sizeof(float);
+        const bool has_detail = (flags & amplitude_detail_flag) != 0U;
+        const std::uint64_t layer_count = has_detail ? 6U : 4U;
+        if (mix_count > max_count / layer_count) return false;
+        const std::uint64_t float_bytes = mix_count * layer_count * sizeof(float);
         if (float_bytes > std::numeric_limits<std::uint64_t>::max()
                                 - v4_header_size
             || file_size < v4_header_size + float_bytes) {
@@ -842,7 +852,9 @@ bool WaveformCache::load_v4(const std::filesystem::path& cache_path,
         if (!read_layer(input, mix_count, loaded.mix)
             || !read_layer(input, bass_count, loaded.bass)
             || !read_layer(input, mid_count, loaded.mid)
-            || !read_layer(input, high_count, loaded.high)) {
+            || !read_layer(input, high_count, loaded.high)
+            || (has_detail && (!read_layer(input, mix_count, loaded.peak)
+                               || !read_layer(input, mix_count, loaded.rms)))) {
             return false;
         }
         const std::uint64_t payload_bytes =

@@ -37,6 +37,10 @@ QtObject {
     }
 
     function publishVisualTiming() {
+        // Partial display snapshots are not new beat-analysis results. Publishing
+        // them would reset spectrum/transient history on every preview update.
+        if (layers._complete === false)
+            return
         Runtime.AudioVisualFeatureController.setWaveformTiming(
                     trackId,
                     Number(layers._bpm) || 0,

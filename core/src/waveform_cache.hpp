@@ -15,6 +15,8 @@ struct WaveformCacheCue final {
 
 struct WaveformCacheData final {
     std::vector<float> mix;
+    std::vector<float> peak;
+    std::vector<float> rms;
     std::vector<float> bass;
     std::vector<float> mid;
     std::vector<float> high;

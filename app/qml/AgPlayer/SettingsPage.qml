@@ -1737,7 +1737,7 @@ Item {
                         objectName: "frequencyLowColor"
                         visible: false
                         colorValue: root.frequencyWaveformSettings.lowColor
-                        defaultColor: "#fc0909" // theme-color-allow: frequency palette domain
+                        defaultColor: "#ff0000" // theme-color-allow: frequency palette domain
                         targetProperty: ""
                         onColorEdited: function(value) {
                             root.frequencyWaveformSettings.lowColor = value
@@ -1748,7 +1748,7 @@ Item {
                         objectName: "frequencyMidColor"
                         visible: false
                         colorValue: root.frequencyWaveformSettings.midColor
-                        defaultColor: "#03ff00" // theme-color-allow: frequency palette domain
+                        defaultColor: "#00ff00" // theme-color-allow: frequency palette domain
                         targetProperty: ""
                         onColorEdited: function(value) {
                             root.frequencyWaveformSettings.midColor = value
@@ -1759,7 +1759,7 @@ Item {
                         objectName: "frequencyHighColor"
                         visible: false
                         colorValue: root.frequencyWaveformSettings.highColor
-                        defaultColor: "#0048ff" // theme-color-allow: frequency palette domain
+                        defaultColor: "#0000ff" // theme-color-allow: frequency palette domain
                         targetProperty: ""
                         onColorEdited: function(value) {
                             root.frequencyWaveformSettings.highColor = value

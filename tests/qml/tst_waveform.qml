@@ -10,6 +10,23 @@ TestCase {
     width: 800
     height: 100
 
+    function test_partialWaveformDoesNotResetVisualBeatTiming() {
+        const component = Qt.createComponent(
+                    "../../app/qml/AgPlayer/components/WaveformSession.qml")
+        compare(component.status, Component.Ready, component.errorString())
+        const session = component.createObject(testCase, { active: false })
+        verify(session !== null)
+        AudioVisualFeatureController.setWaveformTiming("playing", 120, 120000, [0.2, 0.6])
+        compare(AudioVisualFeatureController.beatReliable, true)
+        session.layers = { _complete: false, _durationMs: 120000, mix: [0.2, 0] }
+        session.publishVisualTiming()
+        compare(AudioVisualFeatureController.beatReliable, true)
+        session.layers = { _complete: true, _durationMs: 120000, _bpm: 0, mix: [0.2, 0.3] }
+        session.publishVisualTiming()
+        compare(AudioVisualFeatureController.beatReliable, false)
+        session.destroy()
+    }
+
     WaveformItem {
         id: waveform
         width: 800
