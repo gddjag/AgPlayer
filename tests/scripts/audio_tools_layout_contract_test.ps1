@@ -162,11 +162,11 @@ if ($toolsNavigation -notmatch 'implicitHeight:\s*Theme\.settingsRowHeight' -or
 foreach ($button in @('audioToolsMinimizeButton', 'audioToolsMaximizeButton',
                       'audioToolsCloseButton')) {
     $pattern = 'objectName:\s*"' + $button +
-        '"[\s\S]{0,180}Layout\.preferredWidth:\s*24' +
-        '[\s\S]{0,100}Layout\.preferredHeight:\s*24' +
+        '"[\s\S]{0,180}Layout\.preferredWidth:\s*Theme\.navigationActionExtent' +
+        '[\s\S]{0,100}Layout\.preferredHeight:\s*Theme\.navigationActionExtent' +
         '[\s\S]{0,100}iconSize:\s*14'
     if ($toolsWindow -notmatch $pattern) {
-        throw "Audio-tools window button is not compact: $button"
+        throw "Audio-tools window button does not use the shared action extent: $button"
     }
 }
 foreach ($button in @('equalizerMinimizeButton', 'equalizerMaximizeButton',
@@ -213,12 +213,12 @@ if ($qaFinalMatrix -match 'Width\s*=\s*1672;\s*Height\s*=\s*942') {
 if (-not (Test-Path -LiteralPath $qaComparisonPath)) {
     throw 'The Phase 6 source/candidate comparison and difference-mask script is missing.'
 }
-if ($toolsNavigation -notmatch 'visibleToolOrder:\s*\[0,\s*4,\s*1,\s*2,\s*3\]' -or
+if ($toolsNavigation -notmatch 'visibleToolOrder:\s*\[0,\s*4,\s*1,\s*2,\s*3,\s*5\]' -or
     $toolsNavigation -notmatch 'objectName:\s*"audioToolNav_"\s*\+\s*modelData\.toolId' -or
     $toolsNavigation -notmatch 'RowLayout' -or
     $toolsNavigation -notmatch 'selected:\s*navigation\.currentTool' -or
     $toolsNavigation -match '#[0-9A-Fa-f]{6}') {
-    throw 'The five audio tools must retain stable IDs and use shared theme tokens.'
+    throw 'The six audio tools must retain stable IDs and use shared theme tokens.'
 }
 $repeaterPosition = $toolsNavigation.IndexOf('Repeater {')
 $firstFillSpacerPosition = $toolsNavigation.IndexOf('Item { Layout.fillWidth:')

@@ -6,6 +6,7 @@
 #include <agplayer/c_api.h>
 
 #include <QByteArray>
+#include <QSet>
 
 #include <algorithm>
 #include <array>
@@ -743,14 +744,18 @@ bool PlaybackController::playTrackIds(const QStringList& trackIds,
     }
 
     QStringList scopeIds;
+    scopeIds.reserve(trackIds.size());
+    QSet<QString> queuedIds;
+    queuedIds.reserve(trackIds.size());
     for (const QString& trackId : trackIds) {
-        if (scopeIds.contains(trackId)) {
+        if (queuedIds.contains(trackId)) {
             continue;
         }
         const int row = library_->indexForTrackId(trackId);
         if (row >= 0 && library_->tracks().at(row).available
             && !library_->tracks().at(row).path.isEmpty()) {
             scopeIds.append(trackId);
+            queuedIds.insert(trackId);
         }
     }
     const int current = scopeIds.indexOf(currentTrackId);
@@ -767,8 +772,9 @@ bool PlaybackController::playTrackIds(const QStringList& trackIds,
     if (allowFallback) {
         for (const TrackRecord& track : library_->tracks()) {
             if (track.available && !track.path.isEmpty()
-                && !queueIds.contains(track.trackId)) {
+                && !queuedIds.contains(track.trackId)) {
                 queueIds.append(track.trackId);
+                queuedIds.insert(track.trackId);
             }
         }
     }
@@ -1377,18 +1383,19 @@ void PlaybackController::pollSpectrum()
     }
 
     bool changed = spectrum_.size() != static_cast<qsizetype>(bins.size());
-    QVariantList next;
-    next.reserve(static_cast<qsizetype>(bins.size()));
     for (std::size_t index = 0U; index < bins.size(); ++index) {
-        next.append(bins[index]);
         if (!changed
             && std::abs(spectrum_.at(static_cast<qsizetype>(index)).toFloat()
                         - bins[index])
                    > 0.002F) {
             changed = true;
+            break;
         }
     }
     if (changed) {
+        QVariantList next;
+        next.reserve(static_cast<qsizetype>(bins.size()));
+        for (const float bin : bins) next.append(bin);
         spectrum_ = std::move(next);
         emit spectrumChanged();
     }

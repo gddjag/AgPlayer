@@ -102,29 +102,16 @@ int stageIndex(DegradationStage stage) noexcept
 
 float mapAudioValue(float value, const RenderDynamics& dynamics) noexcept
 {
-    const float bounded = clampUnit(value);
+    // The playback spectrum already has a logarithmic scale and a decay.
+    // Lift quiet musical detail without normalizing silence up to full height.
+    const float bounded = clampUnit((clampUnit(value) - 0.002F) / 0.998F);
     const float exponent = 0.55F + dynamics.inputCompression * 1.1F;
     const float compressed = 1.0F - std::pow(1.0F - bounded, exponent);
-    return clampUnit(compressed * dynamics.audioResponse);
-}
-
-QVector4D hsv(float hue, float saturation, float value) noexcept
-{
-    hue -= std::floor(hue);
-    const float sector = hue * 6.0F;
-    const int index = int(std::floor(sector)) % 6;
-    const float fraction = sector - std::floor(sector);
-    const float p = value * (1.0F - saturation);
-    const float q = value * (1.0F - saturation * fraction);
-    const float t = value * (1.0F - saturation * (1.0F - fraction));
-    switch (index) {
-    case 0: return {value, t, p, 1.0F};
-    case 1: return {q, value, p, 1.0F};
-    case 2: return {p, value, t, 1.0F};
-    case 3: return {p, q, value, 1.0F};
-    case 4: return {t, p, value, 1.0F};
-    default: return {value, p, q, 1.0F};
-    }
+    const float lifted = std::pow(compressed, 0.70F);
+    // Bounded gain retains the ordering of loud bands. Multiplication followed
+    // by clipping used to turn ordinary ~0.55 input into the same full height.
+    const float gain = dynamics.audioResponse;
+    return clampUnit(lifted * gain / (1.0F + lifted * (gain - 1.0F)));
 }
 
 } // namespace
@@ -144,15 +131,44 @@ quint32 stableTrackPaletteSeed(QStringView trackIdentity) noexcept
 TrackPalette trackPalette(quint32 seed) noexcept
 {
     DeterministicRandom random(seed == 0U ? 1U : seed);
-    const float hue = random.unit();
-    const float split = 0.31F + random.unit() * 0.18F;
-    const float accentOffset = 0.58F + random.unit() * 0.16F;
-    const QVector4D cool = hsv(hue, 0.64F, 0.94F);
-    const QVector4D warm = hsv(hue + split, 0.66F, 0.98F);
-    const QVector4D accent = hsv(hue + accentOffset, 0.52F, 1.0F);
-    const QVector4D peak = hsv(hue + split * 0.45F, 0.34F, 0.98F);
-    const QVector4D dark = hsv(hue + 0.06F, 0.72F, 0.085F);
-    return {dark, cool, warm, accent, peak};
+    static const std::array<TrackPalette, 6> coordinatedPalettes{{
+        TrackPalette{QVector4D(0.018F, 0.026F, 0.075F, 1.0F),
+                     QVector4D(0.14F, 0.52F, 0.98F, 1.0F),
+                     QVector4D(0.96F, 0.32F, 0.34F, 1.0F),
+                     QVector4D(0.28F, 0.86F, 0.95F, 1.0F),
+                     QVector4D(1.0F, 0.84F, 0.80F, 1.0F)},
+        TrackPalette{QVector4D(0.020F, 0.040F, 0.085F, 1.0F),
+                     QVector4D(0.10F, 0.78F, 0.94F, 1.0F),
+                     QVector4D(0.98F, 0.40F, 0.32F, 1.0F),
+                     QVector4D(0.42F, 0.72F, 1.0F, 1.0F),
+                     QVector4D(0.84F, 0.86F, 1.0F, 1.0F)},
+        TrackPalette{QVector4D(0.032F, 0.022F, 0.072F, 1.0F),
+                     QVector4D(0.20F, 0.46F, 0.96F, 1.0F),
+                     QVector4D(0.98F, 0.32F, 0.43F, 1.0F),
+                     QVector4D(0.34F, 0.90F, 0.88F, 1.0F),
+                     QVector4D(0.96F, 0.78F, 0.82F, 1.0F)},
+        TrackPalette{QVector4D(0.014F, 0.046F, 0.070F, 1.0F),
+                     QVector4D(0.08F, 0.83F, 0.91F, 1.0F),
+                     QVector4D(0.94F, 0.34F, 0.42F, 1.0F),
+                     QVector4D(0.24F, 0.65F, 1.0F, 1.0F),
+                     QVector4D(0.86F, 0.94F, 1.0F, 1.0F)},
+        TrackPalette{QVector4D(0.030F, 0.030F, 0.080F, 1.0F),
+                     QVector4D(0.18F, 0.62F, 1.0F, 1.0F),
+                     QVector4D(1.0F, 0.48F, 0.34F, 1.0F),
+                     QVector4D(0.34F, 0.72F, 1.0F, 1.0F),
+                     QVector4D(1.0F, 0.82F, 0.88F, 1.0F)},
+        TrackPalette{QVector4D(0.016F, 0.038F, 0.088F, 1.0F),
+                     QVector4D(0.12F, 0.70F, 0.98F, 1.0F),
+                     QVector4D(0.98F, 0.38F, 0.32F, 1.0F),
+                     QVector4D(0.18F, 0.80F, 0.76F, 1.0F),
+                     QVector4D(0.82F, 0.87F, 1.0F, 1.0F)},
+    }};
+    const std::size_t family = std::size_t(seed)
+        % coordinatedPalettes.size();
+    const TrackPalette& from = coordinatedPalettes[family];
+    const TrackPalette& to = coordinatedPalettes[
+        (family + 1U) % coordinatedPalettes.size()];
+    return blendTrackPalettes(from, to, random.unit() * 0.22F);
 }
 
 TrackPalette blendTrackPalettes(const TrackPalette& from,
@@ -217,6 +233,7 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
 {
     SceneLayout result;
     const int boundedGrid = std::max(1, gridSize);
+    const int boundedParticleCount = std::clamp(particleCount, 0, 1600);
     const int terrainCount = boundedGrid * boundedGrid;
     result.terrain.reserve(terrainCount);
     result.floating.reserve(std::max(0, floatingCount));
@@ -224,7 +241,7 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
     result.meteorTrails.reserve(std::max(0, meteorCount) * 3);
     result.collisionRipples.reserve(std::max(0, meteorCount) * 16);
     result.collisionParticles.reserve(std::max(0, meteorCount) * 12);
-    result.particles.reserve(std::max(0, particleCount));
+    result.particles.reserve(boundedParticleCount);
 
     DeterministicRandom random(seed);
     constexpr float extent = 168.0F;
@@ -241,8 +258,8 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
                 continue;
             }
             instance.position = QVector3D(worldX, 0.0F, worldZ);
-            instance.scale = QVector3D(spacing * 0.997F, 1.0F,
-                                       spacing * 0.997F);
+            instance.scale = QVector3D(spacing * 0.90F, 1.0F,
+                                       spacing * 0.90F);
             instance.random = random.unit();
             const float radius = distance / stageRadius;
             instance.zone = zoneFor(worldX, worldZ, radius, instance.random);
@@ -287,14 +304,32 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
             result.collisionParticles.append(burst);
         }
     }
-    for (int index = 0; index < particleCount; ++index) {
+    constexpr float goldenRatioConjugate = 0.61803398875F;
+    constexpr float plasticRatioConjugate = 0.75487766625F;
+    const float verticalOffset = random.unit();
+    const float azimuthOffset = random.unit();
+    for (int index = 0; index < boundedParticleCount; ++index) {
         const ColorZone starZone = index % 3 == 0 ? ColorZone::Cool
             : index % 3 == 1 ? ColorZone::Warm : ColorZone::Peak;
-        SceneInstance particle = makeExtra(random, 72.0F, 168.0F,
-                                           10.0F, 82.0F, starZone);
-        const float depth = clampUnit((particle.position.y() - 10.0F) / 72.0F);
-        const float starSize = 0.08F + (1.0F - depth) * 0.18F
-            + random.unit() * 0.04F;
+        SceneInstance particle;
+        const float radialDepth = (float(index) + random.unit())
+            / float(boundedParticleCount);
+        const float normalizedRadius = std::sqrt(radialDepth);
+        const float radius = 240.0F + normalizedRadius * 320.0F;
+        const float verticalCycle = std::fmod(
+            float(index) * goldenRatioConjugate + verticalOffset, 1.0F);
+        const float vertical = verticalCycle * 2.0F - 1.0F;
+        const float horizontal = std::sqrt(std::max(
+            0.0F, 1.0F - vertical * vertical));
+        const float azimuthCycle = std::fmod(
+            float(index) * plasticRatioConjugate + azimuthOffset, 1.0F);
+        const float azimuth = azimuthCycle * 2.0F * float(M_PI);
+        particle.position = QVector3D(horizontal * std::cos(azimuth), vertical,
+                                      horizontal * std::sin(azimuth)) * radius;
+        particle.random = random.unit();
+        particle.zone = starZone;
+        const float starSize = 0.075F + (1.0F - normalizedRadius) * 0.32F
+            + random.unit() * 0.035F;
         particle.scale = QVector3D(starSize, starSize, starSize);
         result.particles.append(particle);
     }
@@ -393,6 +428,8 @@ float terrainHeight(const SceneInstance& unsafeInstance,
     parameters.particleActivity = clampUnit(parameters.particleActivity);
     parameters.meteorActivity = clampUnit(parameters.meteorActivity);
     parameters.cameraPunch = clampUnit(parameters.cameraPunch);
+    parameters.beatStrength = clampUnit(parameters.beatStrength);
+    parameters.beatAge = clampUnit(parameters.beatAge);
     parameters.impactStrength = clampUnit(parameters.impactStrength);
     parameters.impactAge = clampUnit(parameters.impactAge);
     parameters.timeSeconds = std::max(
@@ -427,13 +464,19 @@ float terrainHeight(const SceneInstance& unsafeInstance,
     const float wideRidge = ridgeA * 0.56F + ridgeB * 0.44F;
     const float bass = parameters.bands[0] * (1.65F + core * 2.75F)
         + parameters.bands[1] * (1.35F + bassField * 1.70F) * center;
-    const float midDistance = clampUnit(distance
-        / std::max(1.0F, dynamics.responseRadius * 0.62F));
-    const float midAnnulus = 0.42F + midDistance * midDistance
-        * (3.0F - 2.0F * midDistance) * 1.05F;
+    const float ridgeCoordinateA = instance.position.x() * 0.052F
+        + instance.position.z() * 0.024F;
+    const float ridgeCoordinateB = instance.position.z() * 0.061F
+        - instance.position.x() * 0.019F;
+    const float ridgeMaskA = std::pow(0.5F + 0.5F * std::sin(
+        ridgeCoordinateA + timeSeconds * 0.24F), 2.4F);
+    const float ridgeMaskB = std::pow(0.5F + 0.5F * std::cos(
+        ridgeCoordinateB - timeSeconds * 0.19F), 2.7F);
+    const float midRegionalField = std::clamp(0.36F + (1.0F - center) * 0.38F
+        + ridgeMaskA * 0.45F + ridgeMaskB * 0.12F, 0.0F, 1.35F);
     const float mids = (parameters.bands[2] * (0.58F + wideRidge * 2.30F)
         + parameters.bands[3] * (0.62F + (1.0F - wideRidge) * 2.05F))
-        * midAnnulus;
+        * midRegionalField;
     const float detailA = 0.5F + 0.5F * std::sin(
         instance.position.x() * 0.18F + instance.position.z() * 0.11F);
     const float detailB = 0.5F + 0.5F * std::cos(
@@ -471,11 +514,6 @@ float terrainHeight(const SceneInstance& unsafeInstance,
     const float ripple = parameters.rippleStrength * rippleToggle
         * std::exp(-(ringDistance * ringDistance) / 30.25F) * 3.35F
         * cellModulation;
-    const float ringPhase = 0.5F + 0.5F * std::cos(
-        distance * 0.29F - timeSeconds * 1.15F);
-    const float structuralRing = std::pow(ringPhase, 6.0F) * rippleToggle
-        * (0.20F + parameters.energy * 0.95F) * 0.88F * terrainField
-        * cellModulation;
     const float impactAge = clampUnit(parameters.impactAge);
     const float impact = clampUnit(parameters.impactStrength);
     const float centerPulse = impact * dynamics.centerHighlight
@@ -484,10 +522,14 @@ float terrainHeight(const SceneInstance& unsafeInstance,
     const float domeRadius = std::max(12.0F, dynamics.responseRadius * 0.36F);
     const float centerDome = std::exp(-(distance * distance)
                                       / (domeRadius * domeRadius));
+    const float beatEnvelope = parameters.beatStrength
+        * std::pow(1.0F - parameters.beatAge, 2.0F);
     const float steadyCenter = parameters.energy * dynamics.centerHighlight
-        * (0.08F + parameters.bands[0] * 0.24F) * centerDome * 3.2F;
+        * (0.16F + parameters.bands[0] * 0.32F) * centerDome * 8.0F;
+    const float beatLift = beatEnvelope * dynamics.centerHighlight
+        * centerDome * 3.8F;
     const float centerShoulders = parameters.energy * dynamics.centerHighlight
-        * terrainField * (0.06F + core * 0.24F + wideRidge * 0.54F);
+        * terrainField * (0.035F + core * 0.14F + wideRidge * 0.26F);
     const float impactRadius = impactAge * dynamics.responseRadius * 1.15F;
     const float impactDistance = std::abs(distance - impactRadius);
     const float impactRing = impact * dynamics.rhythmStrength
@@ -495,9 +537,8 @@ float terrainHeight(const SceneInstance& unsafeInstance,
     const float amplitude = 0.16F + clampUnit(style.terrainAmplitude) * 2.14F;
     const float maximumHeight = impact > 0.0F ? 36.0F : 32.0F;
     const float rawHeight = std::max(0.0F,
-        idle + ((bass + mids + peak) * terrainField + ripple
-                + structuralRing) * amplitude
-        + steadyCenter + centerShoulders
+        idle + ((bass + mids + peak) * terrainField + ripple) * amplitude
+        + steadyCenter + beatLift + centerShoulders
         + centerPulse + impactRing);
     return std::max(0.035F, maximumHeight
         * (1.0F - std::exp(-rawHeight / maximumHeight)));
@@ -584,38 +625,59 @@ DegradationStage AutomaticQualityController::stage() const noexcept
     return stage_;
 }
 
-QualityConfiguration AutomaticQualityController::configuration() const noexcept
+QualityConfiguration AutomaticQualityController::configuration(bool eco) const noexcept
 {
     QualityConfiguration result;
     switch (stage_) {
     case DegradationStage::Full:
         break;
     case DegradationStage::ReducedParticles:
-        result.particleCount = 72;
+        result.particleCount = 240;
         break;
     case DegradationStage::ReducedMeteors:
-        result.particleCount = 72;
+        result.particleCount = 240;
         result.meteorCount = 6;
         break;
     case DegradationStage::ReducedRipples:
-        result.particleCount = 72;
+        result.particleCount = 240;
         result.meteorCount = 6;
         result.rippleCount = 4;
         break;
     case DegradationStage::ReducedGrid:
-        result.particleCount = 72;
+        result.particleCount = 240;
         result.meteorCount = 6;
         result.rippleCount = 4;
         result.gridSize = 96;
         result.internalScale = 0.82F;
+        result.sampleCount = 1;
         break;
     case DegradationStage::ReducedResolution:
-        result.particleCount = 40;
+        result.particleCount = 120;
         result.meteorCount = 4;
         result.rippleCount = 3;
         result.gridSize = 96;
         result.internalScale = 0.70F;
+        result.sampleCount = 1;
         break;
+    }
+    if (eco) {
+        // Compose the desktop budget with adaptive stages here: capping the
+        // full-size presets afterward swallowed Eco's first four reductions.
+        const int stage = stageIndex(stage_);
+        result.gridSize = std::min(result.gridSize,
+            stage >= stageIndex(DegradationStage::ReducedGrid) ? 80 : 96);
+        result.floatingCount = std::min(result.floatingCount, 36);
+        result.particleCount = std::min(result.particleCount,
+            stage >= stageIndex(DegradationStage::ReducedParticles) ? 64 : 160);
+        result.meteorCount = std::min(result.meteorCount,
+            stage >= stageIndex(DegradationStage::ReducedMeteors) ? 3 : 5);
+        result.rippleCount = std::min(result.rippleCount,
+            stage >= stageIndex(DegradationStage::ReducedRipples) ? 2 : 4);
+        const float scale = stage >= stageIndex(DegradationStage::ReducedResolution)
+            ? 0.60F : stage >= stageIndex(DegradationStage::ReducedGrid)
+                ? 0.70F : 0.75F;
+        result.internalScale = std::min(result.internalScale, scale);
+        result.sampleCount = 1;
     }
     return result;
 }
@@ -698,6 +760,20 @@ bool RendererResourceState::claimPunchRevision(quint64 revision) noexcept
     return false;
 }
 
+bool RendererResourceState::claimBeatRevision(quint64 revision) noexcept
+{
+    if (revision == 0) return false;
+    quint64 consumed = consumedBeatRevision_.load(std::memory_order_acquire);
+    while (revision > consumed) {
+        if (consumedBeatRevision_.compare_exchange_weak(
+                consumed, revision, std::memory_order_acq_rel,
+                std::memory_order_acquire)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool RendererResourceState::claimImpactRevision(quint64 revision) noexcept
 {
     if (revision == 0) return false;
@@ -755,6 +831,11 @@ void CameraMotion::zoomBy(float wheelDelta, double nowSeconds) noexcept
 void CameraMotion::applyBeatPunch(float strength) noexcept
 {
     snapshot_.punch = clampUnit(snapshot_.punch + clampUnit(strength));
+}
+
+void CameraMotion::clearBeatPunch() noexcept
+{
+    snapshot_.punch = 0.0F;
 }
 void CameraMotion::advance(double nowSeconds, float elapsedSeconds,
                            float autoRotateSpeed) noexcept
@@ -826,6 +907,52 @@ bool PunchEventConsumer::consume(const PunchEvent& event,
     return true;
 }
 
+bool PunchEventConsumer::discard(const PunchEvent& event,
+                                 CameraMotion& camera) noexcept
+{
+    const bool discarded = lifecycle_.claimPunchRevision(event.revision);
+    camera.clearBeatPunch();
+    return discarded;
+}
+
+BeatEventConsumer::BeatEventConsumer(
+    RendererResourceState& lifecycle) noexcept
+    : lifecycle_(lifecycle)
+{
+}
+
+bool BeatEventConsumer::consume(const BeatEvent& event,
+                                float nowSeconds) noexcept
+{
+    if (!lifecycle_.claimBeatRevision(event.revision)) return false;
+    startSeconds_ = std::max(0.0F, nowSeconds);
+    baseStrength_ = clampUnit(event.strength);
+    active_ = baseStrength_ > 0.0F;
+    return true;
+}
+
+bool BeatEventConsumer::discard(const BeatEvent& event) noexcept
+{
+    const bool discarded = lifecycle_.claimBeatRevision(event.revision);
+    baseStrength_ = 0.0F;
+    active_ = false;
+    return discarded;
+}
+
+BeatPulseSnapshot BeatEventConsumer::snapshot(float nowSeconds) const noexcept
+{
+    BeatPulseSnapshot result;
+    if (!active_) return result;
+    const float elapsed = std::max(0.0F, nowSeconds - startSeconds_);
+    const float age = std::clamp(elapsed / durationSeconds_, 0.0F, 1.0F);
+    if (age >= 1.0F) return result;
+    result.active = true;
+    result.age = age;
+    const float envelope = 1.0F - age;
+    result.strength = clampUnit(baseStrength_ * envelope * envelope);
+    return result;
+}
+
 ImpactEventConsumer::ImpactEventConsumer(
     RendererResourceState& lifecycle) noexcept
     : lifecycle_(lifecycle)
@@ -840,6 +967,14 @@ bool ImpactEventConsumer::consume(const ImpactEvent& event,
     baseStrength_ = clampUnit(event.strength);
     active_ = baseStrength_ > 0.0F;
     return true;
+}
+
+bool ImpactEventConsumer::discard(const ImpactEvent& event) noexcept
+{
+    const bool discarded = lifecycle_.claimImpactRevision(event.revision);
+    baseStrength_ = 0.0F;
+    active_ = false;
+    return discarded;
 }
 
 ImpactPulseSnapshot ImpactEventConsumer::snapshot(float nowSeconds) const noexcept

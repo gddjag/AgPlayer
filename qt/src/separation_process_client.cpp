@@ -26,7 +26,7 @@ SeparationProcessClient::SeparationProcessClient(
         beginTimeoutFailure(tr("分离 Worker 响应超时"));
     });
     connect(&exitTimer_, &QTimer::timeout, this, [this] {
-        if (process_.state() != QProcess::NotRunning) process_.kill();
+        if (process_.state() != QProcess::NotRunning) terminateProcess();
     });
     connect(&process_, &QProcess::started, this, [this] {
         if (userCancellation_) {
@@ -79,7 +79,7 @@ SeparationProcessClient::~SeparationProcessClient()
 {
     process_.disconnect(this);
     if (process_.state() != QProcess::NotRunning) {
-        process_.kill();
+        terminateProcess();
         process_.waitForFinished(1000);
     }
 }
@@ -107,6 +107,14 @@ QString SeparationProcessClient::activeRequestId() const
 bool SeparationProcessClient::startProbe(const QJsonObject& payload)
 {
     return begin(ProtocolType::Probe, payload);
+}
+
+bool SeparationProcessClient::setWorker(QString program, QStringList arguments)
+{
+    if (!canAcceptRequest()) return false;
+    program_ = std::move(program);
+    arguments_ = std::move(arguments);
+    return true;
 }
 
 bool SeparationProcessClient::startJob(const QJsonObject& payload)
@@ -284,7 +292,7 @@ void SeparationProcessClient::finishFailure(const QString& message)
     userCancellation_ = false;
     completing_ = false;
     setState(Error);
-    if (process_.state() != QProcess::NotRunning) process_.kill();
+    if (process_.state() != QProcess::NotRunning) terminateProcess();
     emit failed(message, true);
 }
 
@@ -304,4 +312,20 @@ void SeparationProcessClient::requestShutdown()
     setState(Ready);
     send(ProtocolType::Shutdown, activeRequestId_);
     exitTimer_.start(std::max(1, deadlines_.cancelGraceMs));
+}
+
+void SeparationProcessClient::terminateProcess()
+{
+#ifdef Q_OS_WIN
+    // A Windows venv launcher owns a second Python process; cancelling only
+    // the launcher would leave inference and file writes running invisibly.
+    if (process_.state() != QProcess::NotRunning) {
+        QProcess terminateTree;
+        terminateTree.start(QStringLiteral("taskkill.exe"),
+            {QStringLiteral("/PID"), QString::number(process_.processId()),
+             QStringLiteral("/T"), QStringLiteral("/F")});
+        if (!terminateTree.waitForFinished(1500)) terminateTree.kill();
+    }
+#endif
+    process_.kill();
 }

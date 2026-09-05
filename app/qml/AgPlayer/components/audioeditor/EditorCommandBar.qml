@@ -10,6 +10,7 @@ Rectangle {
     signal importRequested()
     signal saveProjectRequested()
     property int actionRevision: 0
+    readonly property bool compactLayout: width < 1000
     readonly property real referenceCommandWidth: 1255
     readonly property real commandSpacingWidth: 14 * commandRow.spacing
     readonly property real availableCommandWidth: Math.max(0,
@@ -23,6 +24,7 @@ Rectangle {
     }
 
     component CommandButton: Button {
+        id: commandButton
         required property string commandName
         required property string label
         required property string iconName
@@ -35,8 +37,9 @@ Rectangle {
         focusPolicy: Qt.NoFocus
         Keys.onSpacePressed: function(event) { event.accepted = true }
         enabled: commandEnabled
-        Layout.fillWidth: false
-        Layout.preferredWidth: referenceWidth * bar.referenceScale
+        Layout.fillWidth: bar.compactLayout
+        Layout.preferredWidth: bar.compactLayout ? 0
+                                                  : referenceWidth * bar.referenceScale
         Layout.minimumWidth: 0
         Layout.fillHeight: true
         Accessible.name: label
@@ -44,32 +47,38 @@ Rectangle {
         ToolTip.text: label + "  (" + shortcutText + ")"
 
         contentItem: ColumnLayout {
-            spacing: 2
+            spacing: bar.compactLayout ? 0 : 2
             ThemedIcon {
+                id: commandIcon
+                readonly property int iconExtent: bar.compactLayout ? Theme.iconSizeMd : 24
                 source: Theme.icon(iconName)
-                tint: parent.parent.enabled ? Theme.textPrimary : Theme.textDisabled
-                sourceSize.width: 24
-                sourceSize.height: 24
-                Layout.preferredWidth: 24
-                Layout.preferredHeight: 24
+                tint: !commandButton.enabled ? Theme.textDisabled
+                                             : commandButton.selected ? Theme.accentText
+                                                                      : Theme.textPrimary
+                sourceSize: Qt.size(iconExtent, iconExtent)
+                Layout.preferredWidth: iconExtent
+                Layout.preferredHeight: iconExtent
                 Layout.alignment: Qt.AlignHCenter
                 transform: Scale {
-                    origin.x: 12
-                    xScale: parent.parent.mirrorIcon ? -1 : 1
+                    origin.x: commandIcon.width / 2
+                    xScale: commandButton.mirrorIcon ? -1 : 1
                 }
             }
             Text {
-                text: parent.parent.label
-                color: parent.parent.enabled ? Theme.textPrimary : Theme.textDisabled
+                visible: !bar.compactLayout
+                text: commandButton.label
+                color: !commandButton.enabled ? Theme.textDisabled
+                                              : commandButton.selected ? Theme.accentText
+                                                                       : Theme.textPrimary
                 font.family: Theme.fontPrimary
                 font.pixelSize: Theme.fontSizeBody
                 Layout.alignment: Qt.AlignHCenter
             }
         }
         background: Rectangle {
-            color: parent.selected ? Theme.accentPressed
-                : parent.hovered && parent.enabled ? Theme.surfaceHover : Theme.surface
-            border.color: parent.selected ? Theme.accentHover : Theme.borderStrong
+            color: commandButton.selected ? Theme.accentPressed
+                : commandButton.hovered && commandButton.enabled ? Theme.surfaceHover : Theme.surface
+            border.color: commandButton.selected ? Theme.accentHover : Theme.borderStrong
             border.width: 1
             radius: 6
         }
@@ -94,7 +103,7 @@ Rectangle {
     RowLayout {
         id: commandRow
         anchors.fill: parent
-        spacing: 8
+        spacing: bar.compactLayout ? Theme.spacingXs : Theme.spacingSm
 
         CommandButton {
             commandName: "importAudio"

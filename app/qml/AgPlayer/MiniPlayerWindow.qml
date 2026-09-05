@@ -60,7 +60,7 @@ Window {
             Item {
                 id: titleArea
                 Layout.fillWidth: true
-                Layout.preferredHeight: 30
+                Layout.preferredHeight: Theme.controlHeight
 
                 RowLayout {
                     anchors.fill: parent
@@ -85,75 +85,70 @@ Window {
                     }
                     Item { Layout.fillWidth: true }
 
-                    ToolButton {
+                    ThemedIconButton {
                         id: pinButton
                         objectName: "miniPinButton"
-                        Layout.preferredWidth: 32; Layout.preferredHeight: 32
-                        icon.source: Theme.icon("pushpin-line")
-                        icon.color: windows && windows.alwaysOnTop ? Theme.cyan
-                                                                   : Theme.secondaryText
-                        icon.width: 16
-                        icon.height: 16
-                        Accessible.name: windows && windows.alwaysOnTop
-                                         ? qsTr("Disable always on top")
-                                         : qsTr("Pin on top")
-                        onClicked: {
-                            if (windows)
-                                windows.setAlwaysOnTop(!windows.alwaysOnTop)
-                        }
-                        background: Rectangle {
-                            color: parent.hovered ? Theme.hoverSurface
-                                                  : "transparent"
-                            radius: Theme.radiusSm
-                        }
+                        Layout.preferredWidth: Theme.controlHeight
+                        Layout.preferredHeight: Theme.controlHeight
+                        iconSource: Theme.icon("pushpin-line")
+                        iconSize: Theme.iconSizeSm
+                        icon.source: iconSource
+                        icon.width: iconSize
+                        icon.height: iconSize
+                        checkable: true
+                        checked: windows && windows.alwaysOnTop
+                        accessibleName: checked ? qsTr("Disable always on top") : qsTr("Pin on top")
+                        ToolTip.text: accessibleName
+                        ToolTip.visible: hovered
+                        onClicked: if (windows) windows.setAlwaysOnTop(!windows.alwaysOnTop)
                     }
-                    ToolButton {
+                    ThemedIconButton {
                         id: restoreButton
                         objectName: "miniRestoreButton"
-                        Layout.preferredWidth: 32; Layout.preferredHeight: 32
-                        icon.source: Theme.icon("restore-line")
-                        icon.color: Theme.secondaryText
-                        icon.width: 16
-                        icon.height: 16
-                        Accessible.name: qsTr("Restore main window")
+                        Layout.preferredWidth: Theme.controlHeight
+                        Layout.preferredHeight: Theme.controlHeight
+                        iconSource: Theme.icon("restore-line")
+                        iconSize: Theme.iconSizeSm
+                        icon.source: iconSource
+                        icon.width: iconSize
+                        icon.height: iconSize
+                        accessibleName: qsTr("Restore main window")
+                        dangerOnHover: false
+                        ToolTip.text: accessibleName
+                        ToolTip.visible: hovered
                         onClicked: windows.showMain()
-                        background: Rectangle {
-                            color: parent.hovered ? Theme.hoverSurface
-                                                  : "transparent"
-                            radius: Theme.radiusSm
-                        }
                     }
-                    ToolButton {
+                    ThemedIconButton {
                         id: minimizeButton
                         objectName: "miniMinimizeButton"
-                        Layout.preferredWidth: 32; Layout.preferredHeight: 32
-                        icon.source: Theme.icon("subtract-line")
-                        icon.color: Theme.secondaryText
-                        icon.width: 16
-                        icon.height: 16
-                        Accessible.name: qsTr("Minimize")
+                        Layout.preferredWidth: Theme.controlHeight
+                        Layout.preferredHeight: Theme.controlHeight
+                        iconSource: Theme.icon("subtract-line")
+                        iconSize: Theme.iconSizeSm
+                        icon.source: iconSource
+                        icon.width: iconSize
+                        icon.height: iconSize
+                        accessibleName: qsTr("Minimize")
+                        dangerOnHover: false
+                        ToolTip.text: accessibleName
+                        ToolTip.visible: hovered
                         onClicked: miniWindow.showMinimized()
-                        background: Rectangle {
-                            color: parent.hovered ? Theme.hoverSurface
-                                                  : "transparent"
-                            radius: Theme.radiusSm
-                        }
                     }
-                    ToolButton {
+                    ThemedIconButton {
                         id: closeButton
                         objectName: "miniCloseButton"
-                        Layout.preferredWidth: 32; Layout.preferredHeight: 32
-                        icon.source: Theme.icon("close-line")
-                        icon.color: Theme.secondaryText
-                        icon.width: 16
-                        icon.height: 16
-                        Accessible.name: qsTr("Close")
+                        Layout.preferredWidth: Theme.controlHeight
+                        Layout.preferredHeight: Theme.controlHeight
+                        iconSource: Theme.icon("close-line")
+                        iconSize: Theme.iconSizeSm
+                        icon.source: iconSource
+                        icon.width: iconSize
+                        icon.height: iconSize
+                        accessibleName: qsTr("Close")
+                        dangerOnHover: true
+                        ToolTip.text: accessibleName
+                        ToolTip.visible: hovered
                         onClicked: windows.requestClose()
-                        background: Rectangle {
-                            color: parent.hovered ? Theme.danger
-                                                  : "transparent"
-                            radius: Theme.radiusSm
-                        }
                     }
                 }
 

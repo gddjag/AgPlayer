@@ -4,7 +4,7 @@
 #include "format_converter.hpp"
 #include "import_controller.hpp"
 #include "library_model.hpp"
-#include "library_manager_controller.hpp"
+#include "resource_folder_controller.hpp"
 #include "library_navigation_model.hpp"
 #include "metadata_editor.hpp"
 #include "native_drop_router.hpp"
@@ -491,16 +491,14 @@ public slots:
                 thumbnailProvider_->setCacheDirectory(
                     settings_->cacheDirectory());
             });
-        libraryManager_ = std::make_unique<LibraryManagerController>();
-        libraryManager_->setStoragePath(runtimeDataDirectory_.filePath(
+        resourceFolders_ = std::make_unique<ResourceFolderController>();
+        resourceFolders_->setStoragePath(runtimeDataDirectory_.filePath(
             QStringLiteral("resource-roots.json")));
-        libraryManager_->setLibraryDataPath(runtimeDataDirectory_.filePath(
-            QStringLiteral("library.json")));
-        libraryManager_->setLibraryModel(library_.get());
-        libraryManager_->setImportController(importer_.get());
+        resourceFolders_->setLibraryModel(library_.get());
+        resourceFolders_->setImportController(importer_.get());
         libraryNavigation_ = std::make_unique<LibraryNavigationModel>(
             library_.get(), playlists_.get(), tagModel_.get(),
-            libraryManager_.get());
+            resourceFolders_.get());
 
         register_agplayer_qml_types(library_.get(), playback_.get(),
                                     importer_.get(), windows_.get(),
@@ -511,7 +509,7 @@ public slots:
                                     AgPlayerQmlRuntimeModels{
                                         tagModel_.get(),
                                         libraryNavigation_.get(),
-                                        libraryManager_.get(),
+                                        resourceFolders_.get(),
                                         thumbnailProvider_.get(),
                                         nullptr,
                                         videoPlayback_.get()});
@@ -531,7 +529,7 @@ public slots:
         engine->rootContext()->setContextProperty(
             "expectedLibraryNavigationModel", libraryNavigation_.get());
         engine->rootContext()->setContextProperty(
-            "expectedLibraryManagerController", libraryManager_.get());
+            "expectedResourceFolderController", resourceFolders_.get());
         engine->rootContext()->setContextProperty(
             "expectedThumbnailProvider", thumbnailProvider_.get());
 
@@ -596,7 +594,7 @@ private:
     std::unique_ptr<SettingsController> settings_;
     std::unique_ptr<WaveformProvider> waveformProvider_;
     std::unique_ptr<TrackWaveformThumbnailProvider> thumbnailProvider_;
-    std::unique_ptr<LibraryManagerController> libraryManager_;
+    std::unique_ptr<ResourceFolderController> resourceFolders_;
     std::unique_ptr<LibraryNavigationModel> libraryNavigation_;
     std::unique_ptr<NativeDropRouter> nativeDrops_;
     std::unique_ptr<QQmlComponent> component_;

@@ -109,8 +109,8 @@ if ($table -notmatch 'objectName:[^\n]*"formatHeaderCell-"\s*\+\s*index' -or
     $table -notmatch 'anchors\.leftMargin:\s*index\s*===\s*1\s*\?\s*30\s*:\s*10') {
     throw 'The filename header must align with the reference column without moving task rows.'
 }
-if ($page -notmatch 'ColumnLayout\s*\{\s*anchors\.fill:\s*parent\s*spacing:\s*5' -or
-    $page -notmatch 'RowLayout\s*\{\s*Layout\.fillWidth:\s*true\s*Layout\.fillHeight:\s*true\s*spacing:\s*8') {
+if ($page -notmatch 'ColumnLayout\s*\{\s*anchors\.fill:\s*parent\s*spacing:\s*Theme\.spacingXs' -or
+    $page -notmatch 'RowLayout\s*\{\s*Layout\.fillWidth:\s*true\s*Layout\.fillHeight:\s*true\s*spacing:\s*Theme\.spacingSm') {
     throw 'The main row must move up while preserving the task/settings horizontal gap.'
 }
 if ($table -notmatch 'formatTaskFirstFileIconBadge' -or

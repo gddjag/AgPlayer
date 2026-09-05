@@ -1,4 +1,4 @@
-#include "library_manager_controller.hpp"
+#include "resource_folder_controller.hpp"
 #include "library_model.hpp"
 #include "library_navigation_model.hpp"
 #include "playlist_model.hpp"
@@ -58,7 +58,7 @@ void LibraryNavigationModelTest::buildsRequiredLibraryAndTopLevelHierarchy()
     LibraryModel library;
     PlaylistModel playlists(dir.filePath(QStringLiteral("playlists.json")));
     TagModel tags(&library, dir.filePath(QStringLiteral("tags.json")));
-    LibraryManagerController manager;
+    ResourceFolderController manager;
     manager.setStoragePath(dir.filePath(QStringLiteral("roots.json")));
     const QString firstPlaylist = playlists.createPlaylist(QStringLiteral("晨间"));
     const QString secondPlaylist = playlists.createPlaylist(QStringLiteral("夜间"));
@@ -121,7 +121,7 @@ void LibraryNavigationModelTest::keepsLibraryExpandableWhenThereAreNoCustomPlayl
     LibraryModel library;
     PlaylistModel playlists(dir.filePath(QStringLiteral("playlists.json")));
     TagModel tags(&library, dir.filePath(QStringLiteral("tags.json")));
-    LibraryManagerController manager;
+    ResourceFolderController manager;
     manager.setStoragePath(dir.filePath(QStringLiteral("roots.json")));
     LibraryNavigationModel navigation(&library, &playlists, &tags, &manager);
 
@@ -144,7 +144,7 @@ void LibraryNavigationModelTest::propagatesPlaylistRenameWithoutRebuildingNaviga
     LibraryModel library;
     PlaylistModel playlists(dir.filePath(QStringLiteral("playlists.json")));
     TagModel tags(&library, dir.filePath(QStringLiteral("tags.json")));
-    LibraryManagerController manager;
+    ResourceFolderController manager;
     manager.setStoragePath(dir.filePath(QStringLiteral("roots.json")));
     const QString playlistId = playlists.createPlaylist(QStringLiteral("Before"));
     QVERIFY(!playlistId.isEmpty());
@@ -184,7 +184,7 @@ void LibraryNavigationModelTest::expandsOnlyTheRequestedFolderRange()
     library.replaceAll({track});
     PlaylistModel playlists(dir.filePath(QStringLiteral("playlists.json")));
     TagModel tags(&library, dir.filePath(QStringLiteral("tags.json")));
-    LibraryManagerController manager;
+    ResourceFolderController manager;
     manager.setStoragePath(dir.filePath(QStringLiteral("roots.json")));
     QVERIFY(manager.addMonitoredFolder(root));
     LibraryNavigationModel navigation(&library, &playlists, &tags, &manager);
@@ -223,7 +223,7 @@ void LibraryNavigationModelTest::expandsThreeLevelsIndependentlyFromIndexedTopol
     library.replaceAll({track});
     PlaylistModel playlists(dir.filePath(QStringLiteral("playlists.json")));
     TagModel tags(&library, dir.filePath(QStringLiteral("tags.json")));
-    LibraryManagerController manager;
+    ResourceFolderController manager;
     manager.setStoragePath(dir.filePath(QStringLiteral("roots.json")));
     QVERIFY(manager.addMonitoredFolder(root));
     LibraryNavigationModel navigation(&library, &playlists, &tags, &manager);
@@ -263,7 +263,7 @@ void LibraryNavigationModelTest::addsAndRemovesTrackOnlyFolderTopology()
     LibraryModel library;
     PlaylistModel playlists(dir.filePath(QStringLiteral("playlists.json")));
     TagModel tags(&library, dir.filePath(QStringLiteral("tags.json")));
-    LibraryManagerController manager;
+    ResourceFolderController manager;
     manager.setStoragePath(dir.filePath(QStringLiteral("roots.json")));
     QVERIFY(manager.addMonitoredFolder(root));
     LibraryNavigationModel navigation(&library, &playlists, &tags, &manager);
@@ -319,7 +319,7 @@ void LibraryNavigationModelTest::updatesOnlyAffectedDirectoryCountsForTenThousan
     library.replaceAll(std::move(tracks));
     PlaylistModel playlists(dir.filePath(QStringLiteral("playlists.json")));
     TagModel tags(&library, dir.filePath(QStringLiteral("tags.json")));
-    LibraryManagerController manager;
+    ResourceFolderController manager;
     manager.setStoragePath(dir.filePath(QStringLiteral("roots.json")));
     QVERIFY(manager.addMonitoredFolder(root));
     LibraryNavigationModel navigation(&library, &playlists, &tags, &manager);

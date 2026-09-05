@@ -41,6 +41,14 @@ double AudioVisualFeatureController::energy() const noexcept { return energy_; }
 double AudioVisualFeatureController::spectralFlux() const noexcept { return spectralFlux_; }
 bool AudioVisualFeatureController::kickPulse() const noexcept { return kickPulse_; }
 bool AudioVisualFeatureController::snarePulse() const noexcept { return snarePulse_; }
+quint64 AudioVisualFeatureController::beatRevision() const noexcept
+{
+    return beatRevision_;
+}
+double AudioVisualFeatureController::beatStrength() const noexcept
+{
+    return beatStrength_;
+}
 quint64 AudioVisualFeatureController::impactRevision() const noexcept
 {
     return impactRevision_;
@@ -80,6 +88,7 @@ void AudioVisualFeatureController::setActive(bool active)
     if (active_) {
         previousSpectrum_.clear();
         resetTransientHistory();
+        resetBandEnvelopes();
         connectPlaybackSignals();
     } else {
         disconnectPlaybackSignals();
@@ -93,12 +102,12 @@ void AudioVisualFeatureController::setWaveformTiming(
     const QString& trackId, double bpm, qint64 durationMs,
     const QVariantList& mixPeaks)
 {
-    bool hasValidPeak = false;
+    bool hasAudiblePeak = false;
     for (const QVariant& peak : mixPeaks) {
         bool ok = false;
         const double value = peak.toDouble(&ok);
-        if (ok && std::isfinite(value)) {
-            hasValidPeak = true;
+        if (ok && std::isfinite(value) && std::abs(value) > 1e-4) {
+            hasAudiblePeak = true;
             break;
         }
     }
@@ -107,7 +116,7 @@ void AudioVisualFeatureController::setWaveformTiming(
         || playback_->currentTrackId() == trackId;
     const bool reliable = !trackId.isEmpty() && std::isfinite(bpm)
         && bpm >= 40.0 && bpm <= 300.0 && durationMs > 0
-        && hasValidPeak && matchesPlayback;
+        && hasAudiblePeak && matchesPlayback;
     const bool reliabilityChanged = beatReliable_ != reliable;
     timingTrackId_ = trackId;
     bpm_ = reliable ? bpm : 0.0;
@@ -116,6 +125,7 @@ void AudioVisualFeatureController::setWaveformTiming(
     fallbackDebounce_.invalidate();
     previousSpectrum_.clear();
     resetTransientHistory();
+    resetBandEnvelopes();
     resetBeatPosition();
     if (reliabilityChanged) emit beatReliableChanged();
 }
@@ -129,9 +139,11 @@ void AudioVisualFeatureController::processPlaybackPosition(qint64 positionMs)
 
     const double beatMs = 60000.0 / bpm_;
     const double groupMs = beatMs * 8.0;
+    const qint64 beat = static_cast<qint64>(std::floor(positionMs / beatMs));
     const qint64 group = static_cast<qint64>(std::floor(positionMs / groupMs));
     if (lastPositionMs_ < 0) {
         lastPositionMs_ = positionMs;
+        lastBeatIndex_ = beat;
         lastImpactGroup_ = group;
         return;
     }
@@ -140,14 +152,21 @@ void AudioVisualFeatureController::processPlaybackPosition(qint64 positionMs)
     constexpr qint64 SeekThresholdMs = 750;
     if (delta < 0 || delta > SeekThresholdMs) {
         lastPositionMs_ = positionMs;
+        lastBeatIndex_ = beat;
         lastImpactGroup_ = group;
         return;
     }
 
-    if (group > 0 && group > lastImpactGroup_) {
+    const bool majorImpact = group > 0 && group > lastImpactGroup_;
+    if (beat > lastBeatIndex_) {
+        triggerBeat(std::clamp(0.42 + energy_ * 0.34, 0.0, 0.76),
+                    !majorImpact);
+    }
+    if (majorImpact) {
         triggerImpact(std::clamp(0.68 + energy_ * 0.32, 0.0, 1.0));
     }
     lastPositionMs_ = positionMs;
+    lastBeatIndex_ = beat;
     lastImpactGroup_ = group;
 }
 
@@ -155,34 +174,57 @@ void AudioVisualFeatureController::processSpectrum(const QVariantList& spectrum)
 {
     if (!active_ || spectrum.size() != 128) return;
 
-    QVariantList nextBands;
-    nextBands.reserve(8);
-    double total = 0.0;
+    constexpr std::array<int, 9> bandEdges{0, 3, 7, 13, 22,
+                                           36, 56, 84, 128};
+    constexpr std::array<double, 8> energyWeights{
+        0.24, 0.19, 0.15, 0.13, 0.11, 0.08, 0.06, 0.04};
+    std::array<double, 128> current{};
     double flux = 0.0;
     double lowFlux = 0.0;
     double highFlux = 0.0;
-    for (int band = 0; band < 8; ++band) {
-        double sum = 0.0;
-        for (int offset = 0; offset < 16; ++offset) {
-            const int index = band * 16 + offset;
-            const double value = normalizedValue(spectrum.at(index));
-            sum += value;
-            total += value;
-            const double previous = previousSpectrum_.size() == 128
-                ? normalizedValue(previousSpectrum_.at(index)) : 0.0;
-            const double delta = std::max(0.0, value - previous);
-            flux += delta;
-            if (index < 32) lowFlux += delta;
-            if (index >= 64 && index < 96) highFlux += delta;
-        }
-        nextBands.append(sum / 16.0);
+    for (int index = 0; index < 128; ++index) {
+        const double value = normalizedValue(spectrum.at(index));
+        current[std::size_t(index)] = value;
+        const double previous = previousSpectrum_.size() == 128
+            ? normalizedValue(previousSpectrum_.at(index)) : 0.0;
+        const double delta = std::max(0.0, value - previous);
+        flux += delta;
+        if (index < 22) lowFlux += delta;
+        if (index >= 36 && index < 96) highFlux += delta;
     }
 
+    QVariantList nextBands;
+    nextBands.reserve(8);
+    double weightedEnergy = 0.0;
+    for (int band = 0; band < 8; ++band) {
+        double sumSquares = 0.0;
+        for (int index = bandEdges[std::size_t(band)];
+             index < bandEdges[std::size_t(band + 1)]; ++index) {
+            const double sample = current[std::size_t(index)];
+            sumSquares += sample * sample;
+        }
+        const double target = std::sqrt(
+            sumSquares / double(bandEdges[std::size_t(band + 1)]
+                                - bandEdges[std::size_t(band)]));
+        if (!bandsInitialized_) {
+            smoothedBands_[std::size_t(band)] = target;
+        } else {
+            const double previous = smoothedBands_[std::size_t(band)];
+            const double coefficient = target > previous ? 0.78 : 0.30;
+            smoothedBands_[std::size_t(band)] = previous
+                + (target - previous) * coefficient;
+        }
+        nextBands.append(smoothedBands_[std::size_t(band)]);
+        weightedEnergy += smoothedBands_[std::size_t(band)]
+            * energyWeights[std::size_t(band)];
+    }
+    bandsInitialized_ = true;
+
     bands_ = std::move(nextBands);
-    energy_ = total / 128.0;
+    energy_ = std::clamp(weightedEnergy, 0.0, 1.0);
     spectralFlux_ = flux / 128.0;
-    const double normalizedLowFlux = lowFlux / 32.0;
-    const double normalizedHighFlux = highFlux / 32.0;
+    const double normalizedLowFlux = lowFlux / 22.0;
+    const double normalizedHighFlux = highFlux / 60.0;
     const double kickThreshold = adaptiveThreshold(
         lowFluxHistory_, transientSampleCount_, 0.05);
     const double snareThreshold = adaptiveThreshold(
@@ -190,7 +232,8 @@ void AudioVisualFeatureController::processSpectrum(const QVariantList& spectrum)
     kickPulse_ = normalizedLowFlux >= kickThreshold
         && bands_.at(0).toDouble() + bands_.at(1).toDouble() >= 0.20;
     snarePulse_ = normalizedHighFlux >= snareThreshold
-        && bands_.at(4).toDouble() + bands_.at(5).toDouble() >= 0.20;
+        && bands_.at(5).toDouble() + bands_.at(6).toDouble()
+               + bands_.at(7).toDouble() >= 0.20;
     appendTransientSample(lowFluxHistory_, transientSampleCount_,
                           transientWriteIndex_, normalizedLowFlux);
     const int highWriteIndex = (transientWriteIndex_ + 23) % 24;
@@ -201,10 +244,15 @@ void AudioVisualFeatureController::processSpectrum(const QVariantList& spectrum)
     if (!beatReliable_ && (kickPulse_ || snarePulse_)
         && (!fallbackDebounce_.isValid()
             || fallbackDebounce_.elapsed() >= FallbackDebounceMs)) {
-        triggerImpact(std::clamp(0.55 + energy_ * 0.45
-                                     + (kickPulse_ ? 0.12 : 0.0),
-                                 0.0, 1.0),
-                      false);
+        const double strength = std::clamp(0.42 + energy_ * 0.38
+                                               + (kickPulse_ ? 0.10 : 0.0),
+                                           0.0, 0.82);
+        triggerBeat(strength, false);
+        ++fallbackBeatCount_;
+        if (fallbackBeatCount_ % 8 == 0) {
+            triggerImpact(std::clamp(0.68 + energy_ * 0.32, 0.0, 1.0),
+                          false);
+        }
         fallbackDebounce_.restart();
     }
     emit featuresChanged();
@@ -338,7 +386,9 @@ void AudioVisualFeatureController::resetOutputLevels()
 void AudioVisualFeatureController::resetBeatPosition() noexcept
 {
     lastPositionMs_ = -1;
+    lastBeatIndex_ = -1;
     lastImpactGroup_ = -1;
+    fallbackBeatCount_ = 0;
 }
 
 void AudioVisualFeatureController::resetTransientHistory() noexcept
@@ -347,6 +397,12 @@ void AudioVisualFeatureController::resetTransientHistory() noexcept
     highFluxHistory_.fill(0.0);
     transientSampleCount_ = 0;
     transientWriteIndex_ = 0;
+}
+
+void AudioVisualFeatureController::resetBandEnvelopes() noexcept
+{
+    smoothedBands_.fill(0.0);
+    bandsInitialized_ = false;
 }
 
 double AudioVisualFeatureController::adaptiveThreshold(
@@ -383,6 +439,13 @@ void AudioVisualFeatureController::triggerImpact(double strength, bool notify)
 {
     impactStrength_ = std::clamp(strength, 0.0, 1.0);
     ++impactRevision_;
+    if (notify) emit featuresChanged();
+}
+
+void AudioVisualFeatureController::triggerBeat(double strength, bool notify)
+{
+    beatStrength_ = std::clamp(strength, 0.0, 1.0);
+    ++beatRevision_;
     if (notify) emit featuresChanged();
 }
 

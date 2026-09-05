@@ -253,8 +253,27 @@ VocalSeparationController::VocalSeparationController(
       process_(options_.workerProgram, options_.workerArguments,
                options_.deadlines, this),
       downloader_(std::make_unique<VocalSeparationDownloader>(&network_, this)),
+      externalRuntime_(std::make_unique<ExternalSeparationRuntime>(
+          QDir(options_.dataRoot).filePath("runtime/python-vr-1"), &network_, this)),
       outputDirectory_(options_.outputDirectory)
 {
+    connect(externalRuntime_.get(), &ExternalSeparationRuntime::progress, this,
+            [this](double value, const QString& detail) {
+        downloadProgress_ = value;
+        downloadSource_ = detail;
+        emit downloadProgressChanged();
+        emit downloadStateChanged();
+    });
+    connect(externalRuntime_.get(), &ExternalSeparationRuntime::changed,
+            this, &VocalSeparationController::refreshModels);
+    connect(externalRuntime_.get(), &ExternalSeparationRuntime::finished, this,
+            [this](bool success, const QString& diagnostic) {
+        if (!success) failedDownloadModelId_ = downloadingModelId_;
+        downloadingModelId_.clear();
+        setError(diagnostic);
+        emit downloadStateChanged();
+        refreshModels();
+    });
     modelStorageDirectory_ = loadModelStorageDirectory(options_.dataRoot);
     QDir().mkpath(modelStorageDirectory_);
     modelDirectoryScanTimer_.setSingleShot(true);
@@ -468,6 +487,13 @@ QString VocalSeparationController::startDisabledReason() const
         return tr("请选择有效输入音频");
     const VocalModelCard* model = selectedModel();
     if (model == nullptr) return tr("请选择模型");
+    if (model->id == QStringLiteral("python-vr-5hp")) {
+        if (!modelFilesPresent(*model)) return tr("本地 VR 模型文件缺失，请重新检测目录");
+        if (!externalRuntime_->ready()) return tr("请点击模型卡片的一键配置，下载独立 Python / PyTorch 环境");
+        if (!verifiedModelIds_.contains(model->id)) return tr("本地 VR 模型未通过完整性校验，请重新检测目录");
+        if (selectedStemNames().isEmpty()) return tr("至少选择一个输出音轨");
+        return {};
+    }
     if (!modelInstalled(*model)
         && (verifiedOrRejectedModelIds_.contains(model->id)
             || !modelFilesPresent(*model))) {
@@ -582,14 +608,50 @@ bool VocalSeparationController::downloadModelFromMirror(const QString& modelId)
 
 bool VocalSeparationController::configureRuntime(const QString& modelIdForUi)
 {
+    if (modelIdForUi == QStringLiteral("python-vr-5hp")) {
+        if (requestInFlight() || downloadBusy()) return false;
+        downloadingModelId_ = modelIdForUi;
+        failedDownloadModelId_.clear();
+        setError({});
+        if (!externalRuntime_->start()) {
+            downloadingModelId_.clear();
+            setError(tr("无法启动外置环境配置，请检查模型缓存目录是否可写"));
+            return false;
+        }
+        emit downloadStateChanged();
+        return true;
+    }
     if (!downloadQueue_.isEmpty() || verificationWatcher_ != nullptr
         || runtimeInstallerWatcher_ != nullptr
         || downloader_->state() == VocalDownloadState::Downloading
         || downloader_->state() == VocalDownloadState::Paused
         || downloader_->state() == VocalDownloadState::Verifying) {
+        setError(tr("配置正在下载或校验，请等待当前进度完成"));
         return false;
     }
-    if (runtimeReady()) return true;
+    for (const QVariant& value : rejectedCustomModels_) {
+        const QVariantMap model = value.toMap();
+        if (model.value(QStringLiteral("id")).toString() != modelIdForUi) continue;
+        if (model.value(QStringLiteral("backend")).toString()
+            == QStringLiteral("external-python")) {
+            setError(tr("此模型需要专用 Python/PyTorch 推理适配器；当前版本未提供该适配器，安装 ONNX Runtime 无法运行 .pth/.th 模型。可选择已支持的 ONNX 模型。"));
+            return false;
+        }
+        if (runtimeReady()) {
+            setError(tr("ONNX Runtime 已就绪；此模型尚无匹配的张量与频谱配置，无法通过下载运行时自动适配。%1")
+                         .arg(model.value(QStringLiteral("failureReason")).toString()));
+            return false;
+        }
+    }
+    if (runtimeReady()) {
+        if (const VocalModelCard* model = modelForId(modelIdForUi)) {
+            setError({});
+            return beginVerification(VerificationPurpose::Refresh, model);
+        }
+        setError(modelIdForUi.isEmpty() ? tr("ONNX Runtime 已配置完成")
+                                      : tr("模型已变更，请重新检测模型目录"));
+        return modelIdForUi.isEmpty();
+    }
 
     const VocalRuntimePackage package =
         VocalSeparationCatalog::directMlRuntime();
@@ -662,11 +724,22 @@ bool VocalSeparationController::verifyInstalledModels()
         || verificationWatcher_ != nullptr;
 }
 
-void VocalSeparationController::pauseDownload() { downloader_->pause(); }
-void VocalSeparationController::resumeDownload() { downloader_->resume(); }
+void VocalSeparationController::pauseDownload() {
+    if (externalRuntime_->busy()) externalRuntime_->pause(); else downloader_->pause();
+}
+void VocalSeparationController::resumeDownload() {
+    if (externalRuntime_->busy()) externalRuntime_->resume(); else downloader_->resume();
+}
 
 void VocalSeparationController::cancelDownload()
 {
+    if (externalRuntime_->busy()) {
+        externalRuntime_->cancel();
+        downloadingModelId_.clear();
+        emit downloadStateChanged();
+        refreshModels();
+        return;
+    }
     if (downloader_) downloader_->cancel();
     if (verificationPurpose_ == VerificationPurpose::Download) {
         ++verificationGeneration_;
@@ -803,6 +876,7 @@ bool VocalSeparationController::selectDevice(DeviceMode mode)
 {
     if (requestInFlight()) return false;
     if (!deviceAvailable(mode)) return false;
+    deviceChosenByUser_ = true;
     if (deviceMode_ == mode) return true;
     deviceMode_ = mode;
     invalidateRetry();
@@ -837,8 +911,13 @@ bool VocalSeparationController::selectOutputDirectory(const QUrl& directory)
 
 bool VocalSeparationController::probeDevices()
 {
+    if (verificationWatcher_ != nullptr || modelDirectoryIndexWatcher_ != nullptr) {
+        deviceProbePending_ = true;
+        return true;
+    }
     if (requestInFlight() || !process_.canAcceptRequest()
         || verificationWatcher_ != nullptr) return false;
+    deviceProbePending_ = false;
     activeRequest_ = ActiveRequestContext{RequestKind::Probe};
     setError({});
     setJobState(JobState::Probing, QStringLiteral("runtime_verification"));
@@ -918,6 +997,11 @@ bool VocalSeparationController::beginSeparationRequest(
     emit progressChanged();
     setError({});
     setJobState(JobState::Running, QStringLiteral("model_verification"));
+    if (context.modelId == QStringLiteral("python-vr-5hp")) {
+        if (externalRuntime_->ready() && launchSeparation(context)) return true;
+        failRequest(context, tr("Python VR 环境缺失，请使用模型卡片的一键配置"), "runtime_verification");
+        return false;
+    }
     if (beginVerification(VerificationPurpose::Start,
                           modelForId(context.modelId))) return true;
     failRequest(context, tr("无法开始模型校验"),
@@ -1270,6 +1354,8 @@ QString VocalSeparationController::runtimeDirectory() const
 
 bool VocalSeparationController::modelInstalled(const VocalModelCard& model) const
 {
+    if (model.id == QStringLiteral("python-vr-5hp"))
+        return externalRuntime_->ready() && verifiedModelIds_.contains(model.id) && modelFilesPresent(model);
     return verifiedModelIds_.contains(model.id);
 }
 
@@ -1404,6 +1490,7 @@ void VocalSeparationController::finishVerification(
 
     if (purpose == VerificationPurpose::Refresh) {
         refreshModels();
+        if (deviceProbePending_) QTimer::singleShot(0, this, [this] { probeDevices(); });
         return;
     }
     if (purpose == VerificationPurpose::Download) {
@@ -1454,6 +1541,13 @@ void VocalSeparationController::finishVerification(
         return;
     }
     if (purpose == VerificationPurpose::Probe) {
+        if (!result.runtimeVerified) {
+            activeRequest_.reset();
+            failedRequest_.reset();
+            setError(tr("ONNX Runtime 尚未配置，请点击模型卡片的一键配置"));
+            setJobState(JobState::Idle, QStringLiteral("runtime_missing"));
+            return;
+        }
         if (!result.runtimeVerified || !launchProbe()) {
             const ActiveRequestContext context = activeRequest_.value_or(
                 ActiveRequestContext{RequestKind::Probe});
@@ -1478,6 +1572,7 @@ void VocalSeparationController::finishVerification(
 
 bool VocalSeparationController::launchProbe()
 {
+    if (!process_.setWorker(options_.workerProgram, options_.workerArguments)) return false;
     if (!process_.startProbe(
             {{QStringLiteral("runtimePath"), options_.runtimeLibraryPath}}))
         return false;
@@ -1490,6 +1585,9 @@ bool VocalSeparationController::launchSeparation(
 {
     const VocalModelCard* model = modelForId(context.modelId);
     if (model == nullptr) return false;
+    const bool external = context.modelId == QStringLiteral("python-vr-5hp");
+    if (!process_.setWorker(external ? externalRuntime_->python() : options_.workerProgram,
+            external ? QStringList{externalRuntime_->workerScript()} : options_.workerArguments)) return false;
     QJsonArray modelFiles;
     for (const QString& path : modelFilePaths(*model))
         modelFiles.push_back(path);
@@ -1511,7 +1609,9 @@ bool VocalSeparationController::launchSeparation(
         {QStringLiteral("extension"), context.outputFormat},
         {QStringLiteral("stems"), requestedStems},
         {QStringLiteral("stemLabels"), stemLabels},
-        {QStringLiteral("device"), deviceName(context.device)},
+        // Automatically highlighted GPU still uses the safe CPU fallback path.
+        {QStringLiteral("device"), deviceName(!deviceChosenByUser_
+             && context.device == DeviceMode::GPU ? DeviceMode::Auto : context.device)},
     };
     const auto custom = customModelBindings_.constFind(context.modelId);
     if (custom != customModelBindings_.cend()) {
@@ -1561,6 +1661,10 @@ void VocalSeparationController::refreshModels()
         }
         if (model.id == failedDownloadModelId_)
             state = ModelState::ModelFailed;
+        if (model.id == QStringLiteral("python-vr-5hp")) {
+            state = modelInstalled(model) ? ModelState::Installed : ModelState::ModelFailed;
+            if (externalRuntime_->busy()) state = externalRuntime_->paused() ? ModelState::Paused : ModelState::Downloading;
+        }
         QVariantList kinds;
         for (const QString& name : model.stems) kinds.push_back(int(stemKind(name)));
         qint64 totalBytes = 0;
@@ -1607,11 +1711,15 @@ void VocalSeparationController::refreshModels()
             {QStringLiteral("modelPath"), modelPaths.isEmpty()
                  ? QString() : modelPaths.constFirst()},
             {QStringLiteral("stemCount"), model.stems.size()},
-            {QStringLiteral("backend"), QStringLiteral("onnxruntime-native")},
+            {QStringLiteral("backend"), model.id == QStringLiteral("python-vr-5hp")
+                 ? QStringLiteral("external-python") : QStringLiteral("onnxruntime-native")},
             {QStringLiteral("available"),
-             state == ModelState::Installed && runtimeReady()},
+             state == ModelState::Installed && (model.id == QStringLiteral("python-vr-5hp")
+                ? externalRuntime_->ready() : runtimeReady())},
             {QStringLiteral("failureReason"),
-             state == ModelState::Installed && !runtimeReady()
+             model.id == QStringLiteral("python-vr-5hp") && !externalRuntime_->ready()
+                 ? tr("本地模型已找到，请一键配置外置 Python VR 环境")
+                 : model.id != QStringLiteral("python-vr-5hp") && state == ModelState::Installed && !runtimeReady()
                  ? tr("ONNX Runtime 尚未安装或未通过校验")
                  : state == ModelState::ModelFailed
                      ? tr("模型校验失败") : QString()},
@@ -1972,6 +2080,57 @@ void VocalSeparationController::discoverCustomModels(
             }
             rawPaths.insert(raw.absoluteFilePath());
             const QString lowered = raw.fileName().toLower();
+            if (lowered == QStringLiteral("5_hp-karaoke-uvr.pth") && raw.size() == 126782699) {
+                if (!knownIds.contains(QStringLiteral("python-vr-5hp"))) {
+                    options_.catalog.push_back(VocalModelCard{
+                        "python-vr-5hp", VocalModelFamily::Mdx,
+                        {{raw.fileName(), {}, 126782699, "fe00891defbb61f4261500af22f7624f1a3df8dc75fa3998d1aece02e6be4537"}},
+                        {"vocals", "instrumental"}, tr("UVR VR 架构 / 完整 SHA-256 校验"),
+                        tr("一键下载独立 Python 3.11、CPU PyTorch、audio-separator 和 FFmpeg。约 450 MB 下载 / 1.5 GB 磁盘；不修改系统 Python。当前适配 5_HP-Karaoke-UVR.pth，其他 .pth/.th/.ckpt 架构不会冒充兼容。"),
+                        raw.completeBaseName(), tr("人声 / 伴奏；外置 Python VR 推理"), tr("自定义模型"),
+                        tr("Python VR"), "UVR / audio-separator", "https://github.com/nomadkaraoke/python-audio-separator"});
+                    knownIds.insert(QStringLiteral("python-vr-5hp"));
+                }
+                continue;
+            }
+            struct LocalMdxContract {
+                const char* fileName;
+                const char* id;
+                qint64 bytes;
+                const char* sha256;
+            };
+            // Additional local UVR profiles: detected cheaply by file name and
+            // size, then SHA-256 verified asynchronously before execution.
+            static const LocalMdxContract localContracts[]{
+                {"kim_vocal_2.onnx", "kim-vocal-2", 66'759'214,
+                 "ce74ef3b6a6024ce44211a07be9cf8bc6d87728cc852a68ab34eb8e58cde9c8b"},
+                {"uvr-mdx-net-inst_hq_1.onnx", "uvr-mdx-net-inst-hq1", 66'759'214,
+                 "38a045c4ded87e3bf97b609ec5be7910e8a7cecec455f507227ab12b5e29f7f9"},
+                {"uvr-mdx-net-voc_ft.onnx", "uvr-mdx-net-voc-ft", 66'762'490,
+                 "534b2070fcc7df514b13ef660dc8cbb328679c2374d04354a5c42bb14ecce111"},
+            };
+            const auto contract = std::find_if(std::begin(localContracts),
+                std::end(localContracts), [&](const LocalMdxContract& entry) {
+                    return lowered == QLatin1String(entry.fileName)
+                        && raw.size() == entry.bytes;
+                });
+            if (contract != std::end(localContracts)) {
+                const QString localId = QString::fromLatin1(contract->id);
+                if (!knownIds.contains(localId)) {
+                    options_.catalog.push_back(VocalModelCard{
+                        localId, VocalModelFamily::Mdx,
+                        {{raw.fileName(), {}, contract->bytes,
+                          QString::fromLatin1(contract->sha256)}},
+                        {QStringLiteral("vocals"), QStringLiteral("instrumental")},
+                        tr("UVR 官方频谱参数与完整 SHA-256 指纹"),
+                        tr("已内置适配参数；校验本地模型后使用 ONNX Runtime 执行，无需重新下载模型"),
+                        raw.completeBaseName(), tr("本地人声 / 伴奏分离"),
+                        tr("自定义模型"), tr("自动适配"), QStringLiteral("UVR / TRvlvr"),
+                        QStringLiteral("https://github.com/TRvlvr/application_data")});
+                    knownIds.insert(localId);
+                }
+                continue;
+            }
             const bool demucs = suffix == QStringLiteral("th")
                 || lowered.contains(QStringLiteral("demucs"));
             const bool vr = suffix == QStringLiteral("pth");
@@ -2068,6 +2227,8 @@ void VocalSeparationController::scanModelDirectory()
             modelDirectoryRescanPending_, false);
         if (completeKnownModel)
             beginVerification(VerificationPurpose::Refresh);
+        else if (deviceProbePending_)
+            QTimer::singleShot(0, this, [this] { probeDevices(); });
         if (rescanRequested) scheduleModelDirectoryScan();
     });
     watcher->setFuture(QtConcurrent::run(
@@ -2106,6 +2267,10 @@ void VocalSeparationController::handleProbe(const QJsonObject& payload)
         {QStringLiteral("reason"), gpuReason},
     };
     emit availableDevicesChanged();
+    if (!deviceChosenByUser_) {
+        deviceMode_ = gpuAvailable ? DeviceMode::GPU : DeviceMode::Auto;
+        emit deviceModeChanged();
+    }
     emit startEligibilityChanged();
     activeRequest_.reset();
     failedRequest_.reset();
@@ -2203,6 +2368,10 @@ void VocalSeparationController::handleResult(const QJsonObject& payload)
         gpu.insert(QStringLiteral("available"), false);
         gpu.insert(QStringLiteral("reason"), fallbackReason);
         availableDevices_[2] = gpu;
+        if (!deviceChosenByUser_ && deviceMode_ == DeviceMode::GPU) {
+            deviceMode_ = DeviceMode::Auto;
+            emit deviceModeChanged();
+        }
         emit availableDevicesChanged();
         emit startEligibilityChanged();
     }

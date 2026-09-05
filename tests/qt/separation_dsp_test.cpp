@@ -40,6 +40,12 @@ void SeparationDspTest::periodicHannAndMdxGeometryAreExact()
     QCOMPARE(MdxProfile::hq3().frequencyBins, 3072);
     QCOMPARE(MdxProfile::hq3().primaryStem, QStringLiteral("instrumental"));
     QCOMPARE(MdxProfile::hq3().compensation, 1.022F);
+    const MdxProfile kim = MdxProfile::forModel(QStringLiteral("kim-vocal-2"));
+    QCOMPARE(kim.fftSize, 7680);
+    QCOMPARE(kim.trimSamples, 3840);
+    QCOMPARE(kim.primaryStem, QStringLiteral("vocals"));
+    QCOMPARE(kim.compensation, 1.009F);
+    QCOMPARE(MdxProfile::forModel(QStringLiteral("uvr-mdx-net-inst-hq1")).compensation, 1.035F);
 }
 
 void SeparationDspTest::mdxPackingClearsLowBinsAndRoundTripsLowFrequencyAudio()

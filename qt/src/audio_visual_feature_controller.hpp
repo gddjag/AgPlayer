@@ -22,6 +22,8 @@ class AudioVisualFeatureController final : public QObject {
     Q_PROPERTY(double spectralFlux READ spectralFlux NOTIFY featuresChanged)
     Q_PROPERTY(bool kickPulse READ kickPulse NOTIFY featuresChanged)
     Q_PROPERTY(bool snarePulse READ snarePulse NOTIFY featuresChanged)
+    Q_PROPERTY(quint64 beatRevision READ beatRevision NOTIFY featuresChanged)
+    Q_PROPERTY(double beatStrength READ beatStrength NOTIFY featuresChanged)
     Q_PROPERTY(quint64 impactRevision READ impactRevision NOTIFY featuresChanged)
     Q_PROPERTY(double impactStrength READ impactStrength NOTIFY featuresChanged)
     Q_PROPERTY(bool beatReliable READ beatReliable NOTIFY beatReliableChanged)
@@ -42,6 +44,8 @@ public:
     double spectralFlux() const noexcept;
     bool kickPulse() const noexcept;
     bool snarePulse() const noexcept;
+    quint64 beatRevision() const noexcept;
+    double beatStrength() const noexcept;
     quint64 impactRevision() const noexcept;
     double impactStrength() const noexcept;
     bool beatReliable() const noexcept;
@@ -77,6 +81,7 @@ private:
     void resetOutputLevels();
     void resetBeatPosition() noexcept;
     void resetTransientHistory() noexcept;
+    void resetBandEnvelopes() noexcept;
     static double adaptiveThreshold(const std::array<double, 24>& history,
                                     int sampleCount,
                                     double minimum) noexcept;
@@ -84,6 +89,7 @@ private:
                                       int& sampleCount, int& writeIndex,
                                       double value) noexcept;
     void triggerImpact(double strength, bool notify = true);
+    void triggerBeat(double strength, bool notify = true);
     static double normalizedValue(const QVariant& value) noexcept;
 
     QPointer<PlaybackController> playback_;
@@ -98,16 +104,22 @@ private:
     double spectralFlux_ = 0.0;
     bool kickPulse_ = false;
     bool snarePulse_ = false;
+    std::array<double, 8> smoothedBands_{};
+    bool bandsInitialized_ = false;
+    quint64 beatRevision_ = 0;
+    double beatStrength_ = 0.0;
     QString timingTrackId_;
     double bpm_ = 0.0;
     qint64 durationMs_ = 0;
     bool beatReliable_ = false;
     qint64 lastPositionMs_ = -1;
+    qint64 lastBeatIndex_ = -1;
     qint64 lastImpactGroup_ = -1;
     std::array<double, 24> lowFluxHistory_{};
     std::array<double, 24> highFluxHistory_{};
     int transientSampleCount_ = 0;
     int transientWriteIndex_ = 0;
+    int fallbackBeatCount_ = 0;
     QElapsedTimer fallbackDebounce_;
     quint64 impactRevision_ = 0;
     double impactStrength_ = 0.0;

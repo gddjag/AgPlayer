@@ -22,6 +22,16 @@ class PlayerExperienceController final : public QObject {
                    NOTIFY desktopMousePassthroughChanged)
     Q_PROPERTY(int qualityPreset READ qualityPreset WRITE setQualityPreset
                    NOTIFY qualityPresetChanged)
+    Q_PROPERTY(int materialMode READ materialMode WRITE setMaterialMode NOTIFY materialModeChanged)
+    Q_PROPERTY(int materialSoftness READ materialSoftness WRITE setMaterialSoftness NOTIFY materialSoftnessChanged)
+    Q_PROPERTY(int jellyElasticity READ jellyElasticity WRITE setJellyElasticity NOTIFY jellyElasticityChanged)
+    Q_PROPERTY(int inkDensity READ inkDensity WRITE setInkDensity NOTIFY inkDensityChanged)
+    Q_PROPERTY(int rippleStrength READ rippleStrength WRITE setRippleStrength NOTIFY rippleStrengthChanged)
+    Q_PROPERTY(int rippleWidth READ rippleWidth WRITE setRippleWidth NOTIFY rippleWidthChanged)
+    Q_PROPERTY(int rippleDecay READ rippleDecay WRITE setRippleDecay NOTIFY rippleDecayChanged)
+    Q_PROPERTY(int columnSize READ columnSize WRITE setColumnSize NOTIFY columnSizeChanged)
+    Q_PROPERTY(int columnOpacity READ columnOpacity WRITE setColumnOpacity NOTIFY columnOpacityChanged)
+    Q_PROPERTY(int reactorBrightness READ reactorBrightness WRITE setReactorBrightness NOTIFY reactorBrightnessChanged)
     Q_PROPERTY(int colorMode READ colorMode WRITE setColorMode NOTIFY colorModeChanged)
     Q_PROPERTY(QString coolColor READ coolColor WRITE setCoolColor
                    NOTIFY coolColorChanged)
@@ -133,6 +143,16 @@ public:
     bool desktopMousePassthrough() const noexcept;
     int qualityPreset() const noexcept;
     int colorMode() const noexcept;
+    int materialMode() const noexcept;
+    int materialSoftness() const noexcept;
+    int jellyElasticity() const noexcept;
+    int inkDensity() const noexcept;
+    int rippleStrength() const noexcept;
+    int rippleWidth() const noexcept;
+    int rippleDecay() const noexcept;
+    int columnSize() const noexcept;
+    int columnOpacity() const noexcept;
+    int reactorBrightness() const noexcept;
     QString coolColor() const;
     QString warmColor() const;
     QString accentColor() const;
@@ -178,6 +198,16 @@ public:
     void setDesktopMousePassthrough(bool value);
     void setQualityPreset(int value);
     void setColorMode(int value);
+    void setMaterialMode(int value);
+    void setMaterialSoftness(int value);
+    void setJellyElasticity(int value);
+    void setInkDensity(int value);
+    void setRippleStrength(int value);
+    void setRippleWidth(int value);
+    void setRippleDecay(int value);
+    void setColumnSize(int value);
+    void setColumnOpacity(int value);
+    void setReactorBrightness(int value);
     void setCoolColor(const QString& value);
     void setWarmColor(const QString& value);
     void setAccentColor(const QString& value);
@@ -231,6 +261,16 @@ signals:
     void desktopMousePassthroughChanged();
     void qualityPresetChanged();
     void colorModeChanged();
+    void materialModeChanged();
+    void materialSoftnessChanged();
+    void jellyElasticityChanged();
+    void inkDensityChanged();
+    void rippleStrengthChanged();
+    void rippleWidthChanged();
+    void rippleDecayChanged();
+    void columnSizeChanged();
+    void columnOpacityChanged();
+    void reactorBrightnessChanged();
     void coolColorChanged();
     void warmColorChanged();
     void accentColorChanged();
@@ -287,6 +327,16 @@ private:
     bool desktopMousePassthrough_ = false;
     int qualityPreset_ = Auto;
     int colorMode_ = MultiRegion;
+    int materialMode_ = 0;
+    int materialSoftness_ = 45;
+    int jellyElasticity_ = 35;
+    int inkDensity_ = 60;
+    int rippleStrength_ = 100;
+    int rippleWidth_ = 100;
+    int rippleDecay_ = 100;
+    int columnSize_ = 100;
+    int columnOpacity_ = 100;
+    int reactorBrightness_ = 100;
     QString coolColor_ = QStringLiteral("#8BDCFF");
     QString warmColor_ = QStringLiteral("#EB7894");
     QString accentColor_ = QStringLiteral("#FFD7DF");

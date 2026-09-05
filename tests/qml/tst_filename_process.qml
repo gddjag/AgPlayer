@@ -99,8 +99,21 @@ TestCase {
             verify(position.y + item.height <= candidate.height)
         }
         verify(scroller.contentWidth >= scroller.width)
-        if (candidate.compactLayout)
+        compare(candidate.compactLayout, data.w < 1500)
+        if (candidate.width < candidate.desktopWorkspaceWidth)
             verify(scroller.contentWidth > scroller.width)
+
+        for (const name of ["filenameReadySummaryCard",
+                            "filenameConflictSummaryCard",
+                            "filenameUndoSummaryCard",
+                            "filenameStartButton", "filenameCancelButton"]) {
+            const item = findChild(bottom, name)
+            verify(item, "missing " + name)
+            const position = item.mapToItem(bottom, 0, 0)
+            verify(position.x >= -0.5, name + " starts outside the footer")
+            verify(position.x + item.width <= bottom.width + 0.5,
+                   name + " overflows the footer")
+        }
     }
 
     function test_referenceLayoutAndInteractiveRules() {
@@ -125,10 +138,11 @@ TestCase {
         verify(previewTop.x >= rulesTop.x - 1)
         verify(previewTop.y > rulesTop.y + rulesPanel.height - 2)
         verify(bottomTop.y > fileTop.y + filePanel.height - 2)
-        compare(Math.round(commandBar.height), 60)
+        compare(Math.round(commandBar.height),
+                Theme.settingsRowHeight + Theme.spacingSm)
         verify(Math.abs(filePanel.width - 619) <= 3)
         verify(Math.abs(rulesPanel.height - 259) <= 1)
-        verify(Math.abs(bottomBar.height - 135) <= 1)
+        verify(Math.abs(bottomBar.height - 124) <= 1)
 
         const caseBox = findChild(page, "filenameCaseBox")
         const conflictBox = findChild(page, "filenameConflictBox")

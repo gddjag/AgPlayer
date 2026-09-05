@@ -62,7 +62,7 @@ Rectangle {
         RowLayout {
             objectName: "formatStatusFilters"
             Layout.fillWidth: true
-            Layout.preferredHeight: 44
+            Layout.preferredHeight: Theme.listRowHeight
             Layout.leftMargin: 18
             spacing: 12
             Text { text: qsTr("任务列表"); color: Theme.primaryText; font.pixelSize: Theme.fontSizeBody; font.weight: Font.DemiBold }
@@ -75,7 +75,7 @@ Rectangle {
                     { key: "Cancelled", text: qsTr("已取消"), count: converter.cancelledCount }
                 ]
                 Button {
-                    Layout.preferredHeight: 30
+                    Layout.preferredHeight: Theme.controlHeightCompact
                     text: modelData.text + "  " + modelData.count
                     checkable: true
                     checked: converter.filteredTaskModel.statusFilter === modelData.key
@@ -100,7 +100,7 @@ Rectangle {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 40
+            Layout.preferredHeight: Theme.tableHeaderHeight
             color: Theme.elevated
             Row {
                 anchors.fill: parent
@@ -109,7 +109,7 @@ Rectangle {
                     Item {
                         objectName: "formatHeaderCell-" + index
                         width: root.columnWidths[index]
-                        height: 40
+                        height: Theme.tableHeaderHeight
                         ReferenceCheckBox {
                             visible: index === 0
                             anchors.centerIn: parent
@@ -141,11 +141,11 @@ Rectangle {
             model: converter.filteredTaskModel
             clip: true
             columnWidthProvider: function(column) { return root.columnWidths[column] }
-            rowHeightProvider: function() { return 44 }
+            rowHeightProvider: function() { return Theme.listRowHeight }
             delegate: Rectangle {
                 objectName: column === 1 && row === 0 ? "formatTaskFirstFilenameCell" : ""
                 implicitWidth: root.columnWidths[column]
-                implicitHeight: 44
+                implicitHeight: Theme.listRowHeight
                 color: row % 2 ? Theme.panel : Theme.background
                 border.color: Theme.border
                 border.width: 1

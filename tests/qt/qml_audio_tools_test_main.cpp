@@ -12,6 +12,7 @@
 #include "settings_controller.hpp"
 #include "audio_preview_controller.hpp"
 #include "vocal_separation_controller.hpp"
+#include "lossless_analysis_controller.hpp"
 #include "waveform_provider.hpp"
 #include "window_controller.hpp"
 
@@ -40,6 +41,7 @@
 #include <QSignalSpy>
 #include <QThread>
 #include <QTest>
+#include <QTemporaryDir>
 #include <QUuid>
 #include <QtPlugin>
 #include <QtQuickTest/quicktest.h>
@@ -283,7 +285,8 @@ public:
     void bind(AudioToolsController* tools, FormatConverter* format,
               AudioEditorController* editor, MetadataEditor* metadata,
               FilenameProcessor* filenames,
-              VocalSeparationController* separation)
+              VocalSeparationController* separation,
+              LosslessAnalysisController* lossless)
     {
         tools_ = tools;
         format_ = format;
@@ -291,6 +294,7 @@ public:
         metadata_ = metadata;
         filenames_ = filenames;
         separation_ = separation;
+        lossless_ = lossless;
         connect(&router_, &NativeDropRouter::pathsDropped, this,
                 [this](NativeDropRouter::Target target,
                        const QStringList& paths) {
@@ -310,6 +314,12 @@ public:
             case 2: metadata_->loadFiles(urls); break;
             case 3: filenames_->loadFiles(urls); break;
             case 4: separation_->dropInput(urls); break;
+            case 5: {
+                QVariantList files;
+                for (const auto& url : urls) files.append(url);
+                lossless_->loadFiles(files);
+                break;
+            }
             default: return;
             }
             delivered_ = true;
@@ -323,6 +333,8 @@ public:
         editor_ = nullptr;
         metadata_ = nullptr;
         filenames_ = nullptr;
+        separation_ = nullptr;
+        lossless_ = nullptr;
     }
 
     Q_INVOKABLE bool prepareItem(QObject* target) const
@@ -595,6 +607,7 @@ private:
     MetadataEditor* metadata_ = nullptr;
     FilenameProcessor* filenames_ = nullptr;
     VocalSeparationController* separation_ = nullptr;
+    LosslessAnalysisController* lossless_ = nullptr;
     bool delivered_ = false;
 #ifdef Q_OS_WIN
     QList<HANDLE> lockedFiles_;
@@ -817,7 +830,8 @@ public:
 
     Q_INVOKABLE bool setCompletedWithAudio(const QUrl& source)
     {
-        if (controller_ == nullptr || !source.isLocalFile()) return false;
+        if (controller_ == nullptr || !source.isLocalFile()
+            || !audioResults_.isValid()) return false;
         const QString sourcePath = source.toLocalFile();
         if (!QFileInfo::exists(sourcePath)) return false;
         const quint64 generation = ++audioResultGeneration_;
@@ -826,13 +840,11 @@ public:
             if (stem.value(QStringLiteral("supported")).toBool()) {
                 const int kind = stem.value(QStringLiteral("kind")).toInt();
                 const QString suffix = QFileInfo(sourcePath).suffix();
-                const QString destination = QDir(
-                    QStandardPaths::writableLocation(QStandardPaths::TempLocation))
-                    .filePath(QStringLiteral("agplayer-qml-result-%1-%2.%3")
+                const QString destination = audioResults_.filePath(
+                    QStringLiteral("result-%1-%2.%3")
                                   .arg(generation)
                                   .arg(kind)
                                   .arg(suffix));
-                QFile::remove(destination);
                 if (!QFile::copy(sourcePath, destination)) return false;
                 stem.insert(QStringLiteral("selected"), true);
                 stem.insert(QStringLiteral("available"), true);
@@ -897,6 +909,7 @@ private:
 
     VocalSeparationController* controller_ = nullptr;
     QString runtimeLibraryPath_;
+    QTemporaryDir audioResults_;
     quint64 audioResultGeneration_ = 0;
 };
 
@@ -907,6 +920,7 @@ public:
     ~QmlAudioToolsSetup() override
     {
         nativeDropHelper_.clearBindings();
+        losslessAnalysis_.reset();
         // Test controllers own workers and several of them retain the player
         // handle.  Destroy them before the C core so parallel/serial QML test
         // processes cannot race their teardown against an already freed core.
@@ -965,9 +979,10 @@ public slots:
         vocalSeparation_ = std::make_unique<VocalSeparationController>(
             audioPreview_.get(), waveformProvider_.get(), library_.get(),
             importer_.get(), playlists_.get(), separationOptions);
+        losslessAnalysis_ = std::make_unique<LosslessAnalysisController>();
         nativeDropHelper_.bind(audioTools_.get(), formatConverter_.get(),
                                audioEditor_.get(), metadataEditor_.get(),
-                               filenameProcessor_.get(), vocalSeparation_.get());
+                               filenameProcessor_.get(), vocalSeparation_.get(), losslessAnalysis_.get());
         separationTestDriver_.bind(vocalSeparation_.get());
 
         register_agplayer_qml_types(library_.get(), playback_.get(),
@@ -976,7 +991,7 @@ public slots:
                                      formatConverter_.get(), filenameProcessor_.get(),
                                      settings_.get(), waveformProvider_.get(),
                                      playlists_.get(), nullptr, audioEditor_.get(),
-                                     AgPlayerQmlRuntimeModels{},
+                                     AgPlayerQmlRuntimeModels{nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, losslessAnalysis_.get()},
                                      nullptr, nullptr, nullptr,
                                      audioPreview_.get(),
                                      vocalSeparation_.get());
@@ -1015,10 +1030,12 @@ private:
     std::unique_ptr<WaveformProvider> waveformProvider_;
     std::unique_ptr<VisualFormatTaskModel> visualFormatTaskModel_;
     std::unique_ptr<PlaylistModel> playlists_;
+    // Result fixtures must outlive every controller that can hold them open.
+    VocalSeparationControllerTestDriver separationTestDriver_;
     std::unique_ptr<AudioPreviewController> audioPreview_;
     std::unique_ptr<VocalSeparationController> vocalSeparation_;
+    std::unique_ptr<LosslessAnalysisController> losslessAnalysis_;
     NativeDropHelper nativeDropHelper_;
-    VocalSeparationControllerTestDriver separationTestDriver_;
 };
 
 int main(int argc, char* argv[])

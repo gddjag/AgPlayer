@@ -1,5 +1,7 @@
 #pragma once
 
+#include "library_model.hpp"
+
 #include <QList>
 #include <QObject>
 #include <QPair>
@@ -63,6 +65,7 @@ struct MetadataApplySummary {
     QList<MetadataEntry> entries;
     QVariantList results;
     QList<int> supportedTargets;
+    QList<LibraryMetadataRefresh> libraryRefreshes;
 };
 
 class MetadataEditor final : public QObject {

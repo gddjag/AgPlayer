@@ -12,6 +12,23 @@ TestCase {
         ImportStatusPanel {}
     }
 
+    Component {
+        id: settingsHostComponent
+
+        Item {
+            width: 840
+            height: 640
+        }
+    }
+
+    function sourceComponent(relativePath) {
+        var component = Qt.createComponent(Qt.resolvedUrl(relativePath))
+        if (component.status === Component.Loading)
+            tryCompare(component, "status", Component.Ready, 3000)
+        compare(component.status, Component.Ready, component.errorString())
+        return component
+    }
+
     function initTestCase() {
         verify(typeof testHarness !== "undefined", "testHarness context property should exist")
         verify(typeof PlaybackController !== "undefined", "PlaybackController singleton should exist")
@@ -60,6 +77,33 @@ TestCase {
 
         panel.destroy()
         fakeController.destroy()
+    }
+
+    function test_settingsPageKeepsSearchAndAssociationsReadable() {
+        var host = settingsHostComponent.createObject(testCase)
+        verify(host)
+        var component = sourceComponent(
+                    "../../app/qml/AgPlayer/SettingsPage.qml")
+        var page = component.createObject(host)
+        verify(page)
+        page.open()
+        page.selectedSection = 0
+        wait(20)
+
+        var searchIcon = findChild(page, "settingsSearchIcon")
+        var associationFlow = findChild(page, "fileAssociationFlow")
+        var oggAssociation = findChild(page, "oggAssociationCheck")
+        verify(searchIcon, "settings search must expose a visible leading cue")
+        verify(associationFlow && oggAssociation)
+        verify(associationFlow.spacing >= Theme.spacingSm)
+        verify(associationFlow.height >= Theme.controlHeight)
+        verify(oggAssociation.x + oggAssociation.width
+               <= associationFlow.width + 0.5,
+               "all format associations must fit at the settings minimum width")
+
+        page.cancelAndClose()
+        page.destroy()
+        host.destroy()
     }
 
     function test_deviceLossSurfacesInPlaybackController() {

@@ -21,6 +21,7 @@ struct MdxProfile {
 
     [[nodiscard]] static MdxProfile kara();
     [[nodiscard]] static MdxProfile hq3();
+    [[nodiscard]] static MdxProfile forModel(const QString& profileId);
 };
 
 struct MdxSpectrogram {

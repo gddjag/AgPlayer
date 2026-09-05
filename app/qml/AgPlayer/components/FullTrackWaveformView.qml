@@ -11,7 +11,6 @@ Item {
     property string hoverGuideObjectName: "fullTrackWaveformHoverGuide"
     property string hoverCapsuleObjectName: "fullTrackWaveformHoverTimeCapsule"
     property string playbackGuideObjectName: "fullTrackWaveformPlaybackGuide"
-    property string leftMaskObjectName: "fullTrackWaveformLeftEdgeMask"
 
     property var layers: ({})
     property var peaks: []
@@ -133,16 +132,6 @@ Item {
             density: root.density
             lineWidth: root.lineWidth
         }
-    }
-
-    Rectangle {
-        objectName: root.leftMaskObjectName
-        x: 0
-        width: 1
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        color: Theme.isLight ? "#ffffff" : "#000000" // theme-color-allow: waveform edge mask
-        z: 4
     }
 
     MouseArea {

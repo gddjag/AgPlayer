@@ -74,19 +74,29 @@ constexpr double kFrequencyEdgeBrightness = 0.72;
 constexpr double kFrequencyCenterBrightness = 1.08;
 constexpr double kFrequencyEdgeOpacity = 0.55;
 
-unsigned char shadedChannel(const int channel, const double brightness)
-{
-    const double linear = agplayer::ui::detail::srgbToLinear(
-        static_cast<double>(channel) / 255.0);
-    return static_cast<unsigned char>(std::lround(
-        agplayer::ui::detail::linearToSrgb(linear * brightness) * 255.0));
-}
-
 Rgb shadedRgb(const Rgb& rgb, const double brightness)
 {
-    return {shadedChannel(rgb.red, brightness),
-            shadedChannel(rgb.green, brightness),
-            shadedChannel(rgb.blue, brightness)};
+    const std::array<double, 3> linear{
+        agplayer::ui::detail::srgbToLinear(rgb.red / 255.0),
+        agplayer::ui::detail::srgbToLinear(rgb.green / 255.0),
+        agplayer::ui::detail::srgbToLinear(rgb.blue / 255.0)};
+    const double peak = *std::max_element(linear.begin(), linear.end());
+    // Highlight the whole mixture with one in-gamut gain. Clipping each
+    // channel independently shifts hue when any channel is already full.
+    const double gain = peak > 0.0 ? std::min(brightness, 1.0 / peak) : brightness;
+    const auto encode = [gain](double value) {
+        return static_cast<int>(std::lround(
+            agplayer::ui::detail::linearToSrgb(value * gain) * 255.0));
+    };
+    return {encode(linear[0]), encode(linear[1]), encode(linear[2])};
+}
+
+Rgb premultipliedRgb(const Rgb& rgb, const unsigned char alpha)
+{
+    // QSGVertexColorMaterial consumes premultiplied vertex colors.
+    return {(rgb.red * alpha + 127) / 255,
+            (rgb.green * alpha + 127) / 255,
+            (rgb.blue * alpha + 127) / 255};
 }
 
 unsigned char scaledAlpha(const unsigned char alpha, const double opacity)
@@ -99,9 +109,10 @@ void writeVertexColor(QSGGeometry::ColoredPoint2D& vertex,
                       const Rgb& rgb,
                       const unsigned char alpha)
 {
-    vertex.r = static_cast<unsigned char>(rgb.red);
-    vertex.g = static_cast<unsigned char>(rgb.green);
-    vertex.b = static_cast<unsigned char>(rgb.blue);
+    const Rgb premultiplied = premultipliedRgb(rgb, alpha);
+    vertex.r = static_cast<unsigned char>(premultiplied.red);
+    vertex.g = static_cast<unsigned char>(premultiplied.green);
+    vertex.b = static_cast<unsigned char>(premultiplied.blue);
     vertex.a = alpha;
 }
 
@@ -417,19 +428,13 @@ void resampleSummary(const std::vector<float>& values,
     for (std::size_t i = 0; i < count; ++i) {
         const double begin = first + static_cast<double>(i) * stride;
         const double end = std::min(last, begin + stride);
-        if (stride < 1.0) {
-            // Samples represent bucket centers, not their left edges. Retain
-            // sub-bucket panning without blending past the track endpoints.
-            const double position = std::clamp((begin + end) * 0.5 - 0.5,
-                                               0.0, size - 1.0);
-            const auto left = static_cast<std::size_t>(position);
-            const auto right = std::min(left + 1U, values.size() - 1U);
-            result[i] = static_cast<float>(values[left]
-                + (values[right] - values[left]) * (position - left));
-        } else {
-            result[i] = preservePeaks ? summary.peak(begin, end)
-                                      : summary.rms(begin, end);
-        }
+        // These values summarize time intervals, not point samples. Linear
+        // interpolation invents cross-band energy outside the pixel interval
+        // and attenuates short peaks when zoomed beyond the source density.
+        // Fractional integration still gives smooth energy transitions at
+        // bucket boundaries without pretending to recover sub-bucket detail.
+        result[i] = preservePeaks ? summary.peak(begin, end)
+                                  : summary.rms(begin, end);
     }
 }
 
@@ -1200,9 +1205,11 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
             visibleEndMs_ - visibleStartMs_, 0);
 
         if (hasMix) {
-            resampleVisibleValues(snapshot->mix->values, visibleStartMs_,
-                                  visibleEndMs_, duration_, peakCount,
-                                  node->mixValues_);
+            if (!node->frequencyDetail_) {
+                resampleVisibleValues(snapshot->mix->values, visibleStartMs_,
+                                      visibleEndMs_, duration_, peakCount,
+                                      node->mixValues_);
+            }
             if (visualMode_ == 3) {
                 resampleSummary(snapshot->bass->values, snapshot->bass->summary, visibleStartMs_,
                                       visibleEndMs_, duration_, peakCount,
@@ -1331,12 +1338,12 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                             x, spectrumBaseline,
                             red, green, blue, color.alpha);
                     } else if (visualMode_ == 3) {
-                        const Rgb edge = shadedRgb(
-                            color.rgb, kFrequencyEdgeBrightness);
-                        const Rgb centerRgb = shadedRgb(color.rgb,
-                                                        kFrequencyCenterBrightness);
                         const auto edgeAlpha = scaledAlpha(color.alpha,
                                                            kFrequencyEdgeOpacity);
+                        const Rgb edge = premultipliedRgb(shadedRgb(
+                            color.rgb, kFrequencyEdgeBrightness), edgeAlpha);
+                        const Rgb centerRgb = shadedRgb(color.rgb,
+                                                        kFrequencyCenterBrightness);
                         vertices[vertex].set(
                             x, center - amplitude,
                             static_cast<unsigned char>(edge.red),

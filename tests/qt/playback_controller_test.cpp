@@ -12,11 +12,13 @@
 #include <QQmlEngine>
 #include <QtQml/qqml.h>
 #include <QFile>
+#include <QElapsedTimer>
 #include <QScopedPointer>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <algorithm>
 #include <cstdio>
 
 class PlaybackControllerTest final : public QObject {
@@ -32,6 +34,8 @@ private slots:
     void queuesSelectedTrackNextWithoutRestartingPlayback();
     void restoresSavedQueueOrderAndFiltersUnavailableTracks();
     void startsPlaybackFromVisibleListScope();
+    void largeVisibleQueuePreservesOrderAndDeduplicates_data();
+    void largeVisibleQueuePreservesOrderAndDeduplicates();
     void freshCoreCanBeAcquiredForEditorOutput();
     void editorOutputCanBeReacquiredAfterEmptySessionStream();
     void editorOutputRestoresExactScopedPlaybackSession();
@@ -833,6 +837,61 @@ void PlaybackControllerTest::startsPlaybackFromVisibleListScope()
                               QStringLiteral("track-1"),
                               QStringLiteral("track-5"),
                               QStringLiteral("track-6")}));
+    }
+    ag_player_destroy(core);
+}
+
+void PlaybackControllerTest::largeVisibleQueuePreservesOrderAndDeduplicates_data()
+{
+    QTest::addColumn<int>("count");
+    QTest::addColumn<bool>("fallback");
+    QTest::newRow("large-scope") << 12000 << false;
+    QTest::newRow("small-scope-large-library") << 12000 << true;
+}
+
+void PlaybackControllerTest::largeVisibleQueuePreservesOrderAndDeduplicates()
+{
+    QFETCH(int, count);
+    QFETCH(bool, fallback);
+    const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(QFile::exists(fixture));
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    LibraryModel model;
+    QList<TrackRecord> records;
+    QStringList expected;
+    for (int index = 0; index < count; ++index) {
+        TrackRecord record;
+        record.trackId = QStringLiteral("queue-%1").arg(index);
+        // Only the first item is decoded. Remaining records exercise queue
+        // construction, independently of disk size or decoder throughput.
+        record.path = index == 0 ? fixture
+            : directory.filePath(record.trackId + QStringLiteral(".wav"));
+        record.available = true;
+        expected.append(record.trackId);
+        records.append(std::move(record));
+    }
+    QCOMPARE(model.appendBatch(std::move(records)).size(), count);
+    QStringList requested = fallback ? expected.mid(0, 3) : expected;
+    requested.append(requested.first());
+    requested.append(QStringLiteral("missing"));
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core, &model);
+        QList<double> timings;
+        for (int sample = 0; sample < 5; ++sample) {
+            QElapsedTimer timer;
+            timer.start();
+            QVERIFY(controller.playTrackIds(requested, expected.first()));
+            timings.append(timer.nsecsElapsed() / 1000000.0);
+            QCOMPARE(controller.queueTrackIds(), expected);
+            controller.stop();
+        }
+        std::sort(timings.begin(), timings.end());
+        qInfo("queue setup count=%d fallback=%d median_ms=%.3f", count,
+              fallback ? 1 : 0, timings.at(timings.size() / 2));
     }
     ag_player_destroy(core);
 }

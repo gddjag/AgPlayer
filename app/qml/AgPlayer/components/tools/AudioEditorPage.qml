@@ -297,12 +297,13 @@ Rectangle {
             page.pendingSelectionExport = false
         }
     }
-    Dialog {
+    ThemedDialog {
         id: discardDialog
         objectName: "editorDiscardDialog"
         title: qsTr("舍弃未保存更改？")
         modal: true
         anchors.centerIn: parent
+        width: Math.min(420, page.width - 2 * Theme.spacing2Xl)
         standardButtons: Dialog.Yes | Dialog.No
         onAccepted: AudioEditorController.confirmDiscardAndOpen()
         onRejected: AudioEditorController.cancelDiscardAndOpen()
@@ -1168,7 +1169,7 @@ Rectangle {
             id: inspectorScroller
             objectName: "editorInspectorScroller"
             anchors.fill: parent
-            anchors.margins: 6
+            anchors.margins: Theme.spacingSm
             contentWidth: width
             contentHeight: inspectorGroups.height
             clip: true
@@ -1177,7 +1178,7 @@ Rectangle {
             Column {
                 id: inspectorGroups
                 width: inspectorScroller.width
-                spacing: 8
+                spacing: Theme.spacingSm
 
                 Rectangle {
                     id: tempoGroup
@@ -1226,7 +1227,7 @@ Rectangle {
                             ThemedTextField {
                                 objectName: "inspectorBpmInput"
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 34
+                                Layout.preferredHeight: Theme.controlHeight
                                 text: AudioEditorController.targetBpm > 0
                                     ? AudioEditorController.targetBpm.toFixed(0) : ""
                                 horizontalAlignment: TextInput.AlignHCenter
@@ -1240,7 +1241,7 @@ Rectangle {
                             ThemedButton {
                                 objectName: "inspectorDetectBpmButton"
                                 focusPolicy: Qt.TabFocus
-                                Layout.preferredHeight: 34
+                                Layout.preferredHeight: Theme.controlHeight
                                 Keys.onSpacePressed: function(event) {
                                     event.accepted = true
                                 }
@@ -1305,7 +1306,7 @@ Rectangle {
                                 objectName: "inspectorSpeedResetButton"
                                 compact: true
                                 focusPolicy: Qt.TabFocus
-                                Layout.preferredHeight: 34
+                                Layout.preferredHeight: Theme.controlHeight
                                 Keys.onSpacePressed: function(event) {
                                     event.accepted = true
                                 }

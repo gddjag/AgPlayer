@@ -247,7 +247,6 @@ Rectangle {
                     hoverGuideObjectName: "miniWaveformHoverGuide"
                     hoverCapsuleObjectName: "miniWaveformHoverTimeCapsule"
                     playbackGuideObjectName: "miniWaveformPlaybackGuide"
-                    leftMaskObjectName: "miniWaveformLeftEdgeMask"
                     duration: root.effectiveDurationMs
                     position: playback ? playback.positionMs : 0
                     playbackGuideColor: SettingsController.waveformSolidProgressColor

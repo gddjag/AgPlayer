@@ -112,6 +112,7 @@ TestCase {
         compare(primaryButton.implicitHeight, Theme.controlHeight)
         compare(iconButton.implicitWidth, Theme.controlHeightCompact)
         compare(iconButton.implicitHeight, Theme.controlHeightCompact)
+        compare(iconButton.iconSize, Theme.iconSizeMd)
         compare(textField.implicitHeight, Theme.controlHeight)
         compare(textField.font.pixelSize, Theme.fontSizeBody)
         compare(slider.implicitHeight, Theme.controlHeight)
@@ -121,6 +122,7 @@ TestCase {
         compare(standardRow.implicitHeight, Theme.listRowHeight)
         compare(mediaRow.implicitHeight, Theme.mediaListRowHeight)
         compare(tabButton.implicitHeight, Theme.navigationRowHeight)
+        compare(tabButton.iconSize, Theme.iconSizeMd)
         compare(checkBox.implicitHeight, Theme.controlHeight)
         compare(radioButton.implicitHeight, Theme.controlHeight)
         compare(radioButton.indicator.border.color.toString(),
@@ -129,9 +131,106 @@ TestCase {
         compare(rangeSlider.implicitHeight, Theme.controlHeight)
         compare(comboBox.implicitHeight, Theme.controlHeight)
         compare(themedDialog.background.radius, Theme.radiusMd)
+        compare(themedDialog.font.family, Theme.fontPrimary)
+        compare(themedDialog.font.pixelSize, Theme.fontSizeBody)
         compare(themedToolTip.background.radius, Theme.radiusSm)
         compare(themedScrollBar.implicitWidth,
                 Theme.minimumInteractionExtent)
+    }
+
+    function test_text_field_placeholder_tracks_empty_and_input_states() {
+        var component = Qt.createComponent(Qt.resolvedUrl(
+                    "../../app/qml/AgPlayer/components/ThemedTextField.qml"))
+        if (component.status === Component.Loading)
+            tryCompare(component, "status", Component.Ready, 3000)
+        compare(component.status, Component.Ready, component.errorString())
+        var field = component.createObject(testCase, {
+            "width": 180,
+            "placeholderText": "搜索歌曲、艺术家、专辑或文件夹"
+        })
+        verify(field)
+        try {
+            var placeholder = findChild(field, "themedTextFieldPlaceholder")
+            verify(placeholder)
+            compare(placeholder.visible, true)
+            compare(placeholder.text, field.placeholderText)
+            compare(placeholder.font.family, field.font.family)
+            compare(placeholder.width,
+                    field.width - field.leftPadding - field.rightPadding)
+            compare(placeholder.height,
+                    field.height - field.topPadding - field.bottomPadding)
+            verify(placeholder.truncated,
+                   "long placeholder text must elide inside the input padding")
+
+            field.text = "gapless"
+            wait(0)
+            compare(placeholder.visible, false)
+
+            field.clear()
+            wait(0)
+            compare(placeholder.visible, true)
+
+            field.enabled = false
+            compare(placeholder.color.toString(),
+                    Theme.textDisabled.toString())
+            field.enabled = true
+            field.errorMessage = "无效内容"
+            field.error = true
+            wait(0)
+            var errorLabel = findChild(field, "themedTextFieldErrorLabel")
+            verify(errorLabel && errorLabel.visible)
+            compare(placeholder.height,
+                    field.height - field.topPadding - field.bottomPadding)
+            verify(placeholder.y + placeholder.height <= errorLabel.y,
+                   "placeholder must stay above the error footer")
+        } finally {
+            field.destroy()
+        }
+    }
+
+    function test_button_label_inherits_font_and_elides_to_available_width() {
+        const originalText = primaryButton.text
+        const originalWidth = primaryButton.width
+        const originalPixelSize = primaryButton.font.pixelSize
+        const originalWeight = primaryButton.font.weight
+        const originalBold = primaryButton.font.bold
+        primaryButton.text = "这是一个需要在窄按钮内截断的很长操作名称"
+        primaryButton.width = 96
+        primaryButton.font.pixelSize = 18
+        wait(0)
+
+        let label = null
+        for (const child of primaryButton.contentItem.children) {
+            if (child.text !== undefined && child.text === primaryButton.text) {
+                label = child
+                break
+            }
+        }
+        verify(label, "ThemedButton must expose its rendered text label")
+        compare(label.font.pixelSize, primaryButton.font.pixelSize)
+
+        compare(label.font.weight, Font.Medium,
+                "primary buttons must keep their default medium label weight")
+        primaryButton.font.bold = true
+        wait(0)
+        verify(primaryButton.font.bold)
+        verify(label.font.bold,
+               "button labels must preserve a caller's font.bold override")
+
+        primaryButton.font.bold = false
+        primaryButton.font.weight = Font.DemiBold
+        wait(0)
+        compare(label.font.weight, primaryButton.font.weight)
+        verify(label.width <= primaryButton.availableWidth + 0.5,
+               "button label must stay inside the available content width")
+        verify(label.truncated,
+               "long button text must elide when the button is narrow")
+
+        primaryButton.text = originalText
+        primaryButton.width = originalWidth
+        primaryButton.font.pixelSize = originalPixelSize
+        primaryButton.font.weight = originalWeight
+        primaryButton.font.bold = originalBold
     }
 
     function test_primary_button_and_selection_follow_theme_states() {

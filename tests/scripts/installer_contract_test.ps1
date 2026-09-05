@@ -145,20 +145,6 @@ if ($appCmake -notmatch 'agplayer\.rc') {
 if ($appCmake -notmatch 'windeployqt') {
     throw "AgPlayer.exe must deploy the Qt runtime after a release link"
 }
-$stager = Join-Path $repo 'tools\stage_release.ps1'
-if (-not (Test-Path -LiteralPath $stager)) {
-    throw "Missing release staging script"
-}
-$stagerSource = Get-Content -Raw -Encoding UTF8 -LiteralPath $stager
-if ($stagerSource -notmatch 'platforms\\qwindows\.dll') {
-    throw "Release staging must verify the Windows platform plugin"
-}
-if ($stagerSource -notmatch "'AgSeparationWorker\.exe'") {
-    throw "Release staging must include and verify the on-demand separation Worker"
-}
-if ($stagerSource -match '\[string\]\$BuildDirectory\s*=\s*\(Join-Path\s+\$PSScriptRoot') {
-    throw "Release staging defaults must not evaluate PSScriptRoot inside the parameter block"
-}
 $packageScriptPath = Join-Path $repo 'scripts\package-windows.ps1'
 $packageScript = Get-Content -Raw -Encoding UTF8 -LiteralPath $packageScriptPath
 if ($packageScript -notmatch '\$worker\s*=\s*Join-Path\s+\$appDir\s+"AgSeparationWorker\.exe"' -or
@@ -230,3 +216,8 @@ foreach ($requiredAssociation in @(
 if ($installer -notmatch 'Tasks:\s*associateaudio') {
     throw "Audio associations must only be written after explicit user opt-in"
 }
+
+if ($packageScript -notmatch 'Remove-QmlToolingMetadata\s+-StageDirectory\s+\$stage') {
+    throw 'Windows runtime staging must omit QML development type descriptions'
+}
+& (Join-Path $PSScriptRoot 'package_qml_metadata_test.ps1') -PackageScript $packageScriptPath

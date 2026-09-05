@@ -10,7 +10,7 @@ bool AudioToolsController::visible() const noexcept { return visible_; }
 
 void AudioToolsController::setCurrentTool(int tool)
 {
-    if (tool < 0 || tool > 4 || tool == currentTool_) {
+    if (tool < 0 || tool > 5 || tool == currentTool_) {
         return;
     }
     currentTool_ = tool;

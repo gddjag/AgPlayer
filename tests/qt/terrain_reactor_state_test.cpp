@@ -13,11 +13,18 @@ class TerrainReactorStateTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void ecoOverloadReducesActualBudgetAtEveryStage();
+    void defaultAudioMappingPreservesMediumAndLoudDynamics();
+    void weakMusicRetainsVisualTravelWithoutLiftingSilence();
     void fixedSeedProducesStableLayoutAndColorZones();
+    void terrainCellsExposeSideFacesAtDefaultDensity();
     void terrainLayoutFormsCircularStageAndStarsStayOutsideCore();
+    void starfieldFormsBoundedSphericalShellAcrossTheHorizon();
+    void starfieldUsesDistanceWeightedDensityAndScale();
+    void starfieldCapsParticleBudget();
     void meteorsHaveFiniteTrailsAndCollisionEffects();
     void meteorGroupsKeepOneDeterministicPrimaryImpact();
-    void starfieldUsesLayeredDepthAndMeteorTrailsAreTapered();
+    void meteorTrailsAreTapered();
     void audioFeaturesDriveBoundedVisualParameters();
     void bassEnvelopeUsesFastAttackAndSlowRelease();
     void multiWaveSourcesAreStableDistributedAndBounded();
@@ -34,6 +41,8 @@ private slots:
     void punchRevisionClaimSurvivesRendererRebuild();
     void immersiveStyleControlsMapToBoundedDistinctDynamics();
     void impactEventsProduceOneBoundedPulsePerRevision();
+    void beatEventsProduceShortIndependentPulsePerRevision();
+    void dormantEventRevisionsAreDiscardedWithoutReplay();
     void explicitImpactRaisesCenterAndTravelingRing();
     void steadyMusicKeepsCenterVisiblyFocused();
     void nearbyRandomnessKeepsTerrainSoftWithoutThresholdSpikes();
@@ -48,9 +57,24 @@ private slots:
     void idleTerrainKeepsFineVisibleReliefWithoutMusic();
     void idleTerrainFadesOutsideResponseField();
     void trackIdentityProducesStableBoundedDistinctPalette();
+    void trackPaletteKeepsCoordinatedSemanticColorRoles();
     void ecoFramePacerLimitsWorkToThirtyFrames();
     void balancedFramePacerDoesNotCollapseToThirtyOnSixtyHertz();
 };
+
+void TerrainReactorStateTest::weakMusicRetainsVisualTravelWithoutLiftingSilence()
+{
+    AudioFeatures quiet;
+    quiet.bands.fill(0.025F);
+    const auto visual = mapVisualParameters(quiet, 0.0F, RenderStyleSnapshot{});
+    QVERIFY2(visual.bands[2] > 0.10F && visual.bands[2] < 0.30F,
+             "Quiet audible detail must survive the visual response curve");
+    AudioFeatures noise;
+    noise.bands.fill(0.001F);
+    const auto floor = mapVisualParameters(noise, 0.0F, RenderStyleSnapshot{});
+    QCOMPARE(floor.bands[2], 0.0F);
+    QCOMPARE(mapVisualParameters(AudioFeatures{}, 0.0F).energy, 0.0F);
+}
 
 void TerrainReactorStateTest::fixedSeedProducesStableLayoutAndColorZones()
 {
@@ -88,6 +112,22 @@ void TerrainReactorStateTest::fixedSeedProducesStableLayoutAndColorZones()
     QCOMPARE(center->zone, ColorZone::Peak);
 }
 
+void TerrainReactorStateTest::terrainCellsExposeSideFacesAtDefaultDensity()
+{
+    constexpr int gridSize = 32;
+    constexpr float spacing = 168.0F / float(gridSize);
+    const SceneLayout layout = makeSceneLayout(0x5eedU, gridSize, 0, 0, 0);
+    QVERIFY(!layout.terrain.isEmpty());
+    for (const SceneInstance& cell : layout.terrain) {
+        const float footprint = cell.scale.x() / spacing;
+        QVERIFY2(footprint >= 0.88F,
+                 "Terrain gaps became a distracting black grid");
+        QVERIFY2(footprint <= 0.92F,
+                 "Terrain columns must retain a narrow separation");
+        QCOMPARE(cell.scale.x(), cell.scale.z());
+    }
+}
+
 void TerrainReactorStateTest::terrainLayoutFormsCircularStageAndStarsStayOutsideCore()
 {
     const SceneLayout layout = makeSceneLayout(0x5eedU, 32, 8, 4, 48);
@@ -100,11 +140,74 @@ void TerrainReactorStateTest::terrainLayoutFormsCircularStageAndStarsStayOutside
         QVERIFY2(radius <= 84.01F, "terrain cell escaped the circular stage");
     }
     for (const SceneInstance& star : layout.particles) {
-        const float radius = std::hypot(star.position.x(), star.position.z());
-        QVERIFY2(radius >= 72.0F, "deep-space star leaked into the reactor core");
-        QVERIFY2(star.position.y() >= 10.0F,
-                 "deep-space star is too low to read as environment");
+        QVERIFY2(star.position.length() >= 240.0F,
+                 "deep-space star leaked into the reactor core");
     }
+}
+
+void TerrainReactorStateTest::starfieldFormsBoundedSphericalShellAcrossTheHorizon()
+{
+    const SceneLayout layout = makeSceneLayout(0x71b9U, 9, 0, 0, 800);
+    QCOMPARE(layout.particles.size(), 800);
+
+    int belowHorizon = 0;
+    int aboveHorizon = 0;
+    bool hasNegativeX = false;
+    bool hasPositiveX = false;
+    bool hasNegativeZ = false;
+    bool hasPositiveZ = false;
+    for (const SceneInstance& star : layout.particles) {
+        const float radius = star.position.length();
+        QVERIFY2(radius >= 240.0F && radius <= 560.0F,
+                 "Stars must stay inside the bounded deep-space shell");
+        belowHorizon += star.position.y() < -12.0F ? 1 : 0;
+        aboveHorizon += star.position.y() > 12.0F ? 1 : 0;
+        hasNegativeX = hasNegativeX || star.position.x() < -120.0F;
+        hasPositiveX = hasPositiveX || star.position.x() > 120.0F;
+        hasNegativeZ = hasNegativeZ || star.position.z() < -120.0F;
+        hasPositiveZ = hasPositiveZ || star.position.z() > 120.0F;
+    }
+
+    QVERIFY2(belowHorizon >= 120,
+             "The star shell must continue below the terrain horizon");
+    QVERIFY2(aboveHorizon >= 240,
+             "The upper dome needs broad vertical coverage");
+    QVERIFY(hasNegativeX && hasPositiveX && hasNegativeZ && hasPositiveZ);
+}
+
+void TerrainReactorStateTest::starfieldUsesDistanceWeightedDensityAndScale()
+{
+    const SceneLayout layout = makeSceneLayout(0x2f81U, 9, 0, 0, 800);
+    float nearSize = 0.0F;
+    float farSize = 0.0F;
+    int nearCount = 0;
+    int farCount = 0;
+    for (const SceneInstance& star : layout.particles) {
+        const float radius = star.position.length();
+        if (radius < 360.0F) {
+            nearSize += star.scale.x();
+            ++nearCount;
+        } else if (radius > 470.0F) {
+            farSize += star.scale.x();
+            ++farCount;
+        }
+        QCOMPARE(star.scale.x(), star.scale.y());
+        QCOMPARE(star.scale.x(), star.scale.z());
+    }
+
+    QVERIFY2(nearCount >= 40, "The shell needs a sparse readable near layer");
+    QVERIFY2(farCount > nearCount * 2,
+             "Far stars must outnumber near stars to create depth");
+    const float nearMean = nearSize / float(nearCount);
+    const float farMean = farSize / float(farCount);
+    QVERIFY2(nearMean > farMean * 1.5F,
+             "Near stars must be visibly larger than the dense far layer");
+}
+
+void TerrainReactorStateTest::starfieldCapsParticleBudget()
+{
+    QCOMPARE(makeSceneLayout(0x12abU, 9, 0, 0, 2400).particles.size(), 1600);
+    QCOMPARE(makeSceneLayout(0x12abU, 9, 0, 0, -1).particles.size(), 0);
 }
 
 void TerrainReactorStateTest::trackIdentityProducesStableBoundedDistinctPalette()
@@ -144,6 +247,32 @@ void TerrainReactorStateTest::trackIdentityProducesStableBoundedDistinctPalette(
     }
 }
 
+void TerrainReactorStateTest::trackPaletteKeepsCoordinatedSemanticColorRoles()
+{
+    for (quint32 seed = 1; seed <= 128; ++seed) {
+        const TrackPalette palette = trackPalette(seed * 0x9e3779b9U);
+        const QVector4D& dark = palette[0];
+        const QVector4D& cool = palette[1];
+        const QVector4D& warm = palette[2];
+        const QVector4D& peak = palette[4];
+
+        QVERIFY2(std::max({dark.x(), dark.y(), dark.z()}) <= 0.14F,
+                 "The background anchor must stay dark");
+        QVERIFY2(cool.z() >= cool.x() + 0.12F
+                     && cool.y() >= cool.x() + 0.08F,
+                 "Cool colors must remain in the blue-cyan family");
+        QVERIFY2(warm.x() >= warm.y() && warm.x() >= warm.z() + 0.12F
+                     && warm.y() >= 0.28F,
+                 "Warm colors must remain in the coral-amber family");
+        QVERIFY2(warm.y() <= 0.50F && warm.z() >= 0.28F,
+                 "Warm islands should read coral, not pale yellow");
+        const float peakMaximum = std::max({peak.x(), peak.y(), peak.z()});
+        const float peakMinimum = std::min({peak.x(), peak.y(), peak.z()});
+        QVERIFY2(peakMaximum - peakMinimum <= 0.28F,
+                 "Peak highlights must stay low-saturation and clean");
+    }
+}
+
 void TerrainReactorStateTest::meteorsHaveFiniteTrailsAndCollisionEffects()
 {
     const SceneLayout layout = makeSceneLayout(0x5eedU, 9, 3, 4, 8);
@@ -177,30 +306,9 @@ void TerrainReactorStateTest::meteorGroupsKeepOneDeterministicPrimaryImpact()
     QCOMPARE(int(std::floor(layout.collisionParticles.at(24).aux)), 2);
 }
 
-void TerrainReactorStateTest::starfieldUsesLayeredDepthAndMeteorTrailsAreTapered()
+void TerrainReactorStateTest::meteorTrailsAreTapered()
 {
-    const SceneLayout layout = makeSceneLayout(0x71b9U, 9, 0, 3, 180);
-    QVERIFY(layout.particles.size() >= 120);
-    float nearSize = 0.0F;
-    float farSize = 0.0F;
-    int nearCount = 0;
-    int farCount = 0;
-    for (const SceneInstance& star : layout.particles) {
-        if (star.position.y() < 34.0F) {
-            nearSize += star.scale.x();
-            ++nearCount;
-        } else if (star.position.y() > 60.0F) {
-            farSize += star.scale.x();
-            ++farCount;
-        }
-    }
-    QVERIFY(nearCount >= 20 && farCount >= 20);
-    const float nearMean = nearSize / float(nearCount);
-    const float farMean = farSize / float(farCount);
-    qInfo() << "star depth near/far mean size:" << nearMean << farMean;
-    QVERIFY2(nearMean > farMean * 1.35F,
-             "Near stars must read larger than the far star layer");
-
+    const SceneLayout layout = makeSceneLayout(0x71b9U, 9, 0, 3, 0);
     QCOMPARE(layout.meteorTrails.size(), 9);
     for (int meteor = 0; meteor < 3; ++meteor) {
         const SceneInstance& head = layout.meteors.at(meteor);
@@ -333,6 +441,66 @@ void TerrainReactorStateTest::impactEventsProduceOneBoundedPulsePerRevision()
     ImpactEventConsumer rebuilt(lifecycle);
     QVERIFY(!rebuilt.consume(clipped, 12.0F));
     QVERIFY(!rebuilt.snapshot(12.0F).active);
+}
+
+void TerrainReactorStateTest::beatEventsProduceShortIndependentPulsePerRevision()
+{
+    RendererResourceState lifecycle;
+    BeatEventConsumer consumer(lifecycle);
+    const BeatEvent beat{0.64F, 3};
+    QVERIFY(consumer.consume(beat, 10.0F));
+    QVERIFY(!consumer.consume(beat, 10.01F));
+
+    const BeatPulseSnapshot start = consumer.snapshot(10.0F);
+    QVERIFY(start.active);
+    QCOMPARE(start.strength, 0.64F);
+    QCOMPARE(start.age, 0.0F);
+    const BeatPulseSnapshot decay = consumer.snapshot(10.14F);
+    QVERIFY(decay.active);
+    QVERIFY(decay.strength < start.strength);
+    QVERIFY(decay.age > 0.0F && decay.age < 1.0F);
+    QVERIFY(!consumer.snapshot(10.40F).active);
+}
+
+void TerrainReactorStateTest::dormantEventRevisionsAreDiscardedWithoutReplay()
+{
+    RendererResourceState lifecycle;
+    PunchEventConsumer punches(lifecycle);
+    BeatEventConsumer beats(lifecycle);
+    ImpactEventConsumer impacts(lifecycle);
+
+    CameraMotion camera;
+    QVERIFY(punches.consume(PunchEvent{0.7F, 4}, camera));
+    QVERIFY(beats.consume(BeatEvent{0.7F, 4}, 10.0F));
+    QVERIFY(impacts.consume(ImpactEvent{0.8F, 4}, 10.0F));
+    QVERIFY(beats.snapshot(10.1F).active);
+    QVERIFY(impacts.snapshot(10.1F).active);
+    QVERIFY(camera.snapshot().punch > 0.0F);
+
+    QVERIFY(punches.discard(PunchEvent{0.9F, 5}, camera));
+    QVERIFY(beats.discard(BeatEvent{0.9F, 5}));
+    QVERIFY(impacts.discard(ImpactEvent{1.0F, 5}));
+    QVERIFY(!beats.snapshot(12.0F).active);
+    QVERIFY(!impacts.snapshot(12.0F).active);
+    QCOMPARE(camera.snapshot().punch, 0.0F);
+    QVERIFY(!beats.consume(BeatEvent{0.9F, 5}, 12.0F));
+    QVERIFY(!impacts.consume(ImpactEvent{1.0F, 5}, 12.0F));
+
+    QVERIFY(punches.consume(PunchEvent{0.6F, 6}, camera));
+    QVERIFY(beats.consume(BeatEvent{0.6F, 6}, 12.0F));
+    QVERIFY(impacts.consume(ImpactEvent{0.6F, 6}, 12.0F));
+    QVERIFY(beats.snapshot(12.0F).active);
+    QVERIFY(impacts.snapshot(12.0F).active);
+    QVERIFY(camera.snapshot().punch > 0.0F);
+
+    // An event already consumed before the renderer was gated must not leave
+    // its camera perturbation visible when that unchanged revision returns.
+    QVERIFY(!punches.discard(PunchEvent{0.6F, 6}, camera));
+    QCOMPARE(camera.snapshot().punch, 0.0F);
+    QVERIFY(!beats.discard(BeatEvent{0.6F, 6}));
+    QVERIFY(!impacts.discard(ImpactEvent{0.6F, 6}));
+    QVERIFY(!beats.snapshot(12.01F).active);
+    QVERIFY(!impacts.snapshot(12.01F).active);
 }
 
 void TerrainReactorStateTest::explicitImpactRaisesCenterAndTravelingRing()
@@ -478,6 +646,26 @@ void TerrainReactorStateTest::equalStrengthHighsRemainHeightSubordinateToLowMids
              "High-frequency detail must not become taller terrain relief than low/mids");
 }
 
+void TerrainReactorStateTest::defaultAudioMappingPreservesMediumAndLoudDynamics()
+{
+    RenderStyleSnapshot style;
+    AudioFeatures features;
+    float previous = 0.0F;
+    for (const float input : {0.15F, 0.35F, 0.55F, 0.70F, 0.85F, 0.95F}) {
+        features.bands.fill(input);
+        features.energy = input;
+        const auto mapped = mapVisualParameters(features, 0.0F, style);
+        QVERIFY2(mapped.bands[0] > previous + 0.015F,
+                 "Medium/loud spectrum values collapsed to the same full-height plateau");
+        QVERIFY2(mapped.bands[0] < 1.0F,
+                 "Default gain must retain headroom below a full-scale input");
+        QCOMPARE(mapped.energy, mapped.bands[0]);
+        previous = mapped.bands[0];
+    }
+    features.bands.fill(0.0F);
+    QCOMPARE(mapVisualParameters(features, 0.0F, style).bands[0], 0.0F);
+}
+
 void TerrainReactorStateTest::defaultCameraStartsAtHighObliqueView()
 {
     const CameraSnapshot camera;
@@ -485,7 +673,8 @@ void TerrainReactorStateTest::defaultCameraStartsAtHighObliqueView()
              "The initial immersive camera must be a high oblique God view");
     QVERIFY2(camera.pitch <= 0.66F,
              "The initial view must retain enough side elevation to read column height");
-    QVERIFY(camera.distance >= 138.0F && camera.distance <= 175.0F);
+    // Leave a dark-space margin around the circular terrain and waveform.
+    QVERIFY(camera.distance >= 175.0F && camera.distance <= 185.0F);
 }
 
 void TerrainReactorStateTest::terrainAmplitudeProducesClearlyVisibleColumnTravel()
@@ -827,6 +1016,32 @@ void TerrainReactorStateTest::idleTerrainFadesOutsideResponseField()
              "Idle relief must fade to a fine dark floor outside the reactor field");
 }
 
+void TerrainReactorStateTest::ecoOverloadReducesActualBudgetAtEveryStage()
+{
+    AutomaticQualityController quality;
+    auto previous = quality.configuration(true);
+    QCOMPARE(previous.sampleCount, 1);
+    for (int stage = 1; stage <= 5; ++stage) {
+        quality.observeWorkSample(60.0);
+        if (stage > 1) quality.advanceWallClock(5.0);
+        quality.advanceWallClock(2.0);
+        QCOMPARE(int(quality.stage()), stage);
+        const auto next = quality.configuration(true);
+        QVERIFY(next.particleCount <= previous.particleCount);
+        QVERIFY(next.meteorCount <= previous.meteorCount);
+        QVERIFY(next.rippleCount <= previous.rippleCount);
+        QVERIFY(next.gridSize <= previous.gridSize);
+        QVERIFY(next.internalScale <= previous.internalScale);
+        QVERIFY2(next.particleCount < previous.particleCount
+                     || next.meteorCount < previous.meteorCount
+                     || next.rippleCount < previous.rippleCount
+                     || next.gridSize < previous.gridSize
+                     || next.internalScale < previous.internalScale,
+                 "Eco clamp swallowed a degradation stage; overload received no relief");
+        previous = next;
+    }
+}
+
 void TerrainReactorStateTest::automaticQualityUsesHysteresisCooldownAndEffectFirstOrder()
 {
     AutomaticQualityController quality;
@@ -836,19 +1051,20 @@ void TerrainReactorStateTest::automaticQualityUsesHysteresisCooldownAndEffectFir
         quality.advanceWallClock(elapsedSeconds);
     };
     QCOMPARE(quality.stage(), DegradationStage::Full);
-    QVERIFY2(quality.configuration().particleCount >= 144,
-             "The full-quality environment needs a readable layered starfield");
+    QCOMPARE(quality.configuration().particleCount, 1600);
+    QCOMPARE(quality.configuration().sampleCount, 4);
 
     observe(40.0, 1.99);
     QCOMPARE(quality.stage(), DegradationStage::Full);
     observe(40.0, 0.01);
     QCOMPARE(quality.stage(), DegradationStage::ReducedParticles);
     const QualityConfiguration particlesReduced = quality.configuration();
-    QVERIFY(particlesReduced.particleCount < 96);
+    QCOMPARE(particlesReduced.particleCount, 240);
     QCOMPARE(particlesReduced.floatingCount, 52);
     QCOMPARE(particlesReduced.meteorCount, 10);
     QCOMPARE(particlesReduced.rippleCount, 4);
     QCOMPARE(particlesReduced.gridSize, 128);
+    QCOMPARE(particlesReduced.sampleCount, 4);
 
     observe(40.0, 4.99);
     QCOMPARE(quality.stage(), DegradationStage::ReducedParticles);
@@ -866,14 +1082,25 @@ void TerrainReactorStateTest::automaticQualityUsesHysteresisCooldownAndEffectFir
     observe(40.0, 5.0);
     observe(40.0, 2.0);
     QCOMPARE(quality.stage(), DegradationStage::ReducedGrid);
+    QCOMPARE(quality.configuration().particleCount, 240);
+    QCOMPARE(quality.configuration().sampleCount, 1);
     observe(40.0, 5.0);
     observe(40.0, 2.0);
     QCOMPARE(quality.stage(), DegradationStage::ReducedResolution);
+    QCOMPARE(quality.configuration().particleCount, 120);
+    QCOMPARE(quality.configuration().sampleCount, 1);
 
     observe(10.0, 7.99);
     QCOMPARE(quality.stage(), DegradationStage::ReducedResolution);
     observe(10.0, 0.01);
     QCOMPARE(quality.stage(), DegradationStage::ReducedGrid);
+    QCOMPARE(quality.configuration().sampleCount, 1);
+
+    while (quality.stage() != DegradationStage::Full) {
+        observe(10.0, 5.0);
+        observe(10.0, 8.0);
+    }
+    QCOMPARE(quality.configuration().sampleCount, 4);
 }
 
 void TerrainReactorStateTest::bassEnvelopeUsesFastAttackAndSlowRelease()
@@ -1259,7 +1486,7 @@ void TerrainReactorStateTest::manualCameraControlRecoversAfterFourSeconds()
 {
     CameraMotion camera;
     const CameraSnapshot initial = camera.snapshot();
-    QCOMPARE(initial.distance, 160.0F);
+    QCOMPARE(initial.distance, 180.0F);
     CameraMotion zoomedOut;
     zoomedOut.zoomBy(10000.0F, 1.0);
     QCOMPARE(zoomedOut.snapshot().distance, 220.0F);

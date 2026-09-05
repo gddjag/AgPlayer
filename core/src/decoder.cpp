@@ -8,12 +8,15 @@ extern "C" {
 #include <libavutil/dict.h>
 #include <libavutil/error.h>
 #include <libavutil/mathematics.h>
+#include <libavutil/samplefmt.h>
 #include <libswresample/swresample.h>
 }
 
 #include <algorithm>
+#include <array>
 #include <cerrno>
 #include <climits>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -461,25 +464,70 @@ public:
                    const DecoderOpenOptions& options)
     {
         reset();
-        if (utf8_path.empty()) {
+        if (utf8_path.empty()
+            || (options.custom_read != nullptr
+                && options.custom_io_context == nullptr)) {
             return AG_INVALID_ARGUMENT;
         }
 
         interrupt_handler_ = options.interrupt_callback;
         interrupt_context_ = options.interrupt_context;
+        custom_read_ = options.custom_read;
+        custom_seek_ = options.custom_seek;
+        custom_io_context_ = options.custom_io_context;
+        packet_callback_ = options.packet_callback;
+        packet_context_ = options.packet_context;
         interrupt_triggered_ = false;
-        if (interrupt_handler_ != nullptr) {
+        if (interrupt_handler_ != nullptr || custom_read_ != nullptr) {
             format_context_ = avformat_alloc_context();
             if (format_context_ == nullptr) {
                 reset();
                 return AG_INTERNAL_ERROR;
             }
+        }
+        if (interrupt_handler_ != nullptr) {
             format_context_->interrupt_callback.callback =
                 &Impl::ffmpeg_interrupt_callback;
             format_context_->interrupt_callback.opaque = this;
         }
 
-        int result = avformat_open_input(&format_context_, utf8_path.c_str(), nullptr, nullptr);
+        const AVInputFormat* input_format = nullptr;
+        if (!options.input_format_hint.empty()) {
+            input_format = av_find_input_format(options.input_format_hint.c_str());
+            // FFmpeg exposes DSDIFF/DSDIFF as the generic IFF demuxer. Keep
+            // the analysis-facing hint explicit while adapting it here.
+            if (input_format == nullptr
+                && options.input_format_hint == "dsdiff") {
+                input_format = av_find_input_format("iff");
+            }
+            if (input_format == nullptr) {
+                reset();
+                return AG_UNSUPPORTED_FORMAT;
+            }
+        }
+        if (custom_read_ != nullptr) {
+            constexpr int custom_io_buffer_size = 64 * 1024;
+            auto* const buffer = static_cast<unsigned char*>(
+                av_malloc(custom_io_buffer_size));
+            if (buffer == nullptr) {
+                reset();
+                return AG_INTERNAL_ERROR;
+            }
+            custom_io_ = avio_alloc_context(
+                buffer, custom_io_buffer_size, 0, this,
+                &Impl::ffmpeg_read_callback, nullptr,
+                custom_seek_ != nullptr ? &Impl::ffmpeg_seek_callback : nullptr);
+            if (custom_io_ == nullptr) {
+                av_free(buffer);
+                reset();
+                return AG_INTERNAL_ERROR;
+            }
+            format_context_->pb = custom_io_;
+            format_context_->flags |= AVFMT_FLAG_CUSTOM_IO;
+        }
+
+        int result = avformat_open_input(&format_context_, utf8_path.c_str(),
+                                         input_format, nullptr);
         if (result < 0) {
             const bool interrupted = interrupt_triggered_;
             reset();
@@ -554,6 +602,7 @@ public:
         }
 
         populate_metadata(*stream);
+        populate_native_format(*stream);
         return AG_OK;
     }
 
@@ -640,10 +689,70 @@ public:
                 continue;
             }
 
+            notify_packet();
             const int send_result = avcodec_send_packet(codec_context_, packet_);
             av_packet_unref(packet_);
             if (send_result < 0) {
                 return AG_DECODE_ERROR;
+            }
+        }
+    }
+
+    ag_result read_analysis(DecodedAnalysisBlock& block)
+    {
+        block = {};
+        if (silent_video_clock_ || codec_context_ == nullptr || frame_ == nullptr
+            || packet_ == nullptr) {
+            return AG_INVALID_ARGUMENT;
+        }
+
+        for (;;) {
+            const int receive_result = avcodec_receive_frame(codec_context_, frame_);
+            if (receive_result == 0) {
+                const ag_result convert_result = convert_analysis_frame(block);
+                av_frame_unref(frame_);
+                return convert_result;
+            }
+            if (receive_result == AVERROR_EOF) {
+                block.end_of_stream = true;
+                return AG_OK;
+            }
+            if (receive_result != AVERROR(EAGAIN)) {
+                return interrupt_triggered_ ? AG_CANCELLED : AG_DECODE_ERROR;
+            }
+
+            if (input_eof_) {
+                if (drain_sent_) {
+                    block.end_of_stream = true;
+                    return AG_OK;
+                }
+                const int send_result = avcodec_send_packet(codec_context_, nullptr);
+                if (send_result < 0 && send_result != AVERROR_EOF) {
+                    return interrupt_triggered_ ? AG_CANCELLED : AG_DECODE_ERROR;
+                }
+                drain_sent_ = true;
+                continue;
+            }
+
+            int read_result = 0;
+            do {
+                av_packet_unref(packet_);
+                read_result = av_read_frame(format_context_, packet_);
+                if (read_result == AVERROR_EOF) {
+                    input_eof_ = true;
+                    break;
+                }
+                if (read_result < 0) {
+                    return interrupt_triggered_ ? AG_CANCELLED : AG_DECODE_ERROR;
+                }
+            } while (packet_->stream_index != audio_stream_index_);
+
+            if (input_eof_) continue;
+            notify_packet();
+            const int send_result = avcodec_send_packet(codec_context_, packet_);
+            av_packet_unref(packet_);
+            if (send_result < 0) {
+                return interrupt_triggered_ ? AG_CANCELLED : AG_DECODE_ERROR;
             }
         }
     }
@@ -710,6 +819,11 @@ public:
         return output_format_;
     }
 
+    [[nodiscard]] const DecodedNativeFormat& native_format() const noexcept
+    {
+        return native_format_;
+    }
+
     void clear_interrupt_callback() noexcept
     {
         if (format_context_ != nullptr) {
@@ -728,9 +842,18 @@ public:
         av_frame_free(&frame_);
         av_packet_free(&packet_);
         avcodec_free_context(&codec_context_);
+        if (format_context_ != nullptr && custom_io_ != nullptr) {
+            format_context_->pb = nullptr;
+        }
         avformat_close_input(&format_context_);
+        avio_context_free(&custom_io_);
         interrupt_handler_ = nullptr;
         interrupt_context_ = nullptr;
+        custom_read_ = nullptr;
+        custom_seek_ = nullptr;
+        custom_io_context_ = nullptr;
+        packet_callback_ = nullptr;
+        packet_context_ = nullptr;
         interrupt_triggered_ = false;
         audio_stream_index_ = -1;
         output_sample_rate_ = 0;
@@ -749,6 +872,7 @@ public:
         silent_cursor_frame_ = 0;
         metadata_ = {};
         output_format_ = {};
+        native_format_ = {};
     }
 
 private:
@@ -759,6 +883,43 @@ private:
         if (!self->interrupt_handler_(self->interrupt_context_)) return 0;
         self->interrupt_triggered_ = true;
         return 1;
+    }
+
+    static int ffmpeg_read_callback(void* const opaque,
+                                    std::uint8_t* const buffer,
+                                    const int size) noexcept
+    {
+        auto* const self = static_cast<Impl*>(opaque);
+        if (self == nullptr || self->custom_read_ == nullptr
+            || buffer == nullptr || size <= 0) {
+            return AVERROR(EINVAL);
+        }
+        const int result = self->custom_read_(self->custom_io_context_, buffer,
+                                              size);
+        if (result > 0) return result;
+        if (result == 0) return AVERROR_EOF;
+        return result;
+    }
+
+    static std::int64_t ffmpeg_seek_callback(void* const opaque,
+                                             const std::int64_t offset,
+                                             const int whence) noexcept
+    {
+        auto* const self = static_cast<Impl*>(opaque);
+        if (self == nullptr || self->custom_seek_ == nullptr) {
+            return AVERROR(ENOSYS);
+        }
+        const std::int64_t result = self->custom_seek_(
+            self->custom_io_context_, offset, whence);
+        return result;
+    }
+
+    void notify_packet() const noexcept
+    {
+        if (packet_callback_ != nullptr && packet_ != nullptr
+            && packet_->data != nullptr && packet_->size > 0) {
+            packet_callback_(packet_context_, packet_->data, packet_->size);
+        }
     }
 
     ag_result seek_to(const std::int64_t target_timestamp,
@@ -963,6 +1124,7 @@ private:
                                && format_context_->iformat->name != nullptr
                            ? format_context_->iformat->name
                            : "";
+        metadata_.codec = avcodec_get_name(codec_context_->codec_id);
         metadata_.sample_rate = codec_context_->sample_rate;
         metadata_.channels = codec_context_->ch_layout.nb_channels;
         metadata_.bits_per_sample = parameters->bits_per_raw_sample > 0
@@ -996,6 +1158,181 @@ private:
             metadata_.cover_mime_type = image_mime_type(stream->codecpar->codec_id);
             break;
         }
+    }
+
+    void populate_native_format(const AVStream& audio_stream)
+    {
+        const AVCodecParameters* const parameters = audio_stream.codecpar;
+        const AVSampleFormat packed = av_get_packed_sample_fmt(
+            codec_context_->sample_fmt);
+        native_format_.sample_rate = codec_context_->sample_rate;
+        native_format_.channels = codec_context_->ch_layout.nb_channels;
+        std::array<char, 256> channel_layout{};
+        if (av_channel_layout_describe(&codec_context_->ch_layout,
+                                       channel_layout.data(),
+                                       channel_layout.size()) >= 0) {
+            native_format_.channel_layout = channel_layout.data();
+        }
+        native_format_.storage_bits = av_get_bytes_per_sample(packed) * 8;
+        native_format_.valid_bits = parameters->bits_per_raw_sample > 0
+            ? parameters->bits_per_raw_sample
+            : parameters->bits_per_coded_sample > 0
+                ? parameters->bits_per_coded_sample
+                : native_format_.storage_bits;
+        switch (packed) {
+        case AV_SAMPLE_FMT_U8:
+        case AV_SAMPLE_FMT_S16:
+        case AV_SAMPLE_FMT_S32:
+        case AV_SAMPLE_FMT_S64:
+            native_format_.representation = NativeSampleRepresentation::SignedInteger;
+            break;
+        case AV_SAMPLE_FMT_FLT:
+        case AV_SAMPLE_FMT_DBL:
+            native_format_.representation = NativeSampleRepresentation::FloatingPoint;
+            break;
+        default:
+            native_format_.representation = NativeSampleRepresentation::Unknown;
+            break;
+        }
+        const std::string codec_name = avcodec_get_name(codec_context_->codec_id);
+        native_format_.is_dsd = codec_name.rfind("dsd_", 0) == 0;
+        native_format_.is_dst = codec_name == "dst";
+        if (native_format_.is_dsd || native_format_.is_dst) {
+            constexpr int dsd_bits_per_decoded_sample = 8;
+            if (codec_context_->sample_rate
+                <= (std::numeric_limits<int>::max)()
+                       / dsd_bits_per_decoded_sample) {
+                native_format_.raw_dsd_sample_rate =
+                    codec_context_->sample_rate * dsd_bits_per_decoded_sample;
+            }
+        }
+        const AVCodecDescriptor* const descriptor =
+            avcodec_descriptor_get(codec_context_->codec_id);
+        native_format_.codec_is_lossless = descriptor != nullptr
+            && (descriptor->props & AV_CODEC_PROP_LOSSLESS) != 0;
+    }
+
+    ag_result convert_analysis_frame(DecodedAnalysisBlock& block)
+    {
+        const int frame_sample_rate = frame_->sample_rate > 0
+            ? frame_->sample_rate : codec_context_->sample_rate;
+        if (frame_->format != codec_context_->sample_fmt
+            || frame_sample_rate != codec_context_->sample_rate
+            || !frame_layout_matches() || frame_->nb_samples < 0) {
+            return AG_DECODE_ERROR;
+        }
+        const std::size_t frames = static_cast<std::size_t>(frame_->nb_samples);
+        const std::size_t channels = static_cast<std::size_t>(
+            codec_context_->ch_layout.nb_channels);
+        if (channels == 0U || frames > (std::numeric_limits<std::size_t>::max)()
+                                         / channels) {
+            return AG_INTERNAL_ERROR;
+        }
+        const std::size_t sample_count = frames * channels;
+        block.samples.resize(sample_count);
+        block.representation = native_format_.representation;
+        block.storage_bits = native_format_.storage_bits;
+        block.valid_bits = native_format_.valid_bits;
+        if (block.representation == NativeSampleRepresentation::SignedInteger) {
+            block.integer_samples.resize(sample_count);
+        }
+
+        const AVSampleFormat packed = av_get_packed_sample_fmt(
+            codec_context_->sample_fmt);
+        const int bytes_per_sample = av_get_bytes_per_sample(packed);
+        const bool planar = av_sample_fmt_is_planar(codec_context_->sample_fmt) != 0;
+        if (bytes_per_sample <= 0 || frame_->extended_data == nullptr) {
+            return AG_UNSUPPORTED_FORMAT;
+        }
+        const auto sample_pointer = [&](const std::size_t frame_index,
+                                        const std::size_t channel) {
+            const std::size_t plane = planar ? channel : 0U;
+            const std::size_t sample_index = planar
+                ? frame_index : frame_index * channels + channel;
+            return frame_->extended_data[plane]
+                + sample_index * static_cast<std::size_t>(bytes_per_sample);
+        };
+        for (std::size_t frame_index = 0; frame_index < frames; ++frame_index) {
+            for (std::size_t channel = 0; channel < channels; ++channel) {
+                const std::size_t index = frame_index * channels + channel;
+                const std::uint8_t* const source = sample_pointer(frame_index,
+                                                                  channel);
+                std::int64_t integer = 0;
+                double normalized = 0.0;
+                switch (packed) {
+                case AV_SAMPLE_FMT_U8: {
+                    integer = static_cast<std::int64_t>(*source) - 128;
+                    normalized = static_cast<double>(integer) / 128.0;
+                    break;
+                }
+                case AV_SAMPLE_FMT_S16: {
+                    std::int16_t value = 0;
+                    std::memcpy(&value, source, sizeof(value));
+                    integer = value;
+                    normalized = static_cast<double>(value) / 32'768.0;
+                    break;
+                }
+                case AV_SAMPLE_FMT_S32: {
+                    std::int32_t value = 0;
+                    std::memcpy(&value, source, sizeof(value));
+                    integer = value;
+                    normalized = static_cast<double>(value) / 2'147'483'648.0;
+                    break;
+                }
+                case AV_SAMPLE_FMT_S64: {
+                    std::int64_t value = 0;
+                    std::memcpy(&value, source, sizeof(value));
+                    integer = value;
+                    normalized = std::ldexp(static_cast<double>(value), -63);
+                    break;
+                }
+                case AV_SAMPLE_FMT_FLT: {
+                    float value = 0.0F;
+                    std::memcpy(&value, source, sizeof(value));
+                    normalized = static_cast<double>(value);
+                    break;
+                }
+                case AV_SAMPLE_FMT_DBL:
+                    std::memcpy(&normalized, source, sizeof(normalized));
+                    break;
+                default:
+                    return AG_UNSUPPORTED_FORMAT;
+                }
+                if (std::isfinite(normalized)) {
+                    block.samples[index] = normalized;
+                } else {
+                    block.samples[index] = 0.0;
+                    ++block.invalid_samples;
+                }
+                if (!block.integer_samples.empty()) {
+                    block.integer_samples[index] = integer;
+                }
+            }
+        }
+
+        const AVStream* const stream = format_context_->streams[audio_stream_index_];
+        const std::int64_t timestamp = frame_->best_effort_timestamp != AV_NOPTS_VALUE
+            ? frame_->best_effort_timestamp
+            : frame_->pts != AV_NOPTS_VALUE ? frame_->pts : AV_NOPTS_VALUE;
+        if (timestamp != AV_NOPTS_VALUE) {
+            const std::int64_t origin = stream->start_time == AV_NOPTS_VALUE
+                ? 0 : stream->start_time;
+            block.timestamp_frame = av_rescale_q(
+                timestamp - origin, stream->time_base,
+                AVRational{1, codec_context_->sample_rate});
+            fallback_frame_valid_ = true;
+        } else if (fallback_frame_valid_) {
+            block.timestamp_frame = fallback_frame_;
+        } else {
+            return AG_DECODE_ERROR;
+        }
+        block.timestamp_ms = av_rescale_q(
+            block.timestamp_frame, AVRational{1, codec_context_->sample_rate},
+            AVRational{1, 1'000});
+        block.frames = frames;
+        fallback_frame_ = block.timestamp_frame
+            + static_cast<std::int64_t>(block.frames);
+        return AG_OK;
     }
 
     ag_result convert_frame(DecodedAudioBlock& block)
@@ -1171,6 +1508,7 @@ private:
     }
 
     AVFormatContext* format_context_ = nullptr;
+    AVIOContext* custom_io_ = nullptr;
     AVCodecContext* codec_context_ = nullptr;
     SwrContext* swr_context_ = nullptr;
     AVChannelLayout input_layout_{};
@@ -1194,9 +1532,15 @@ private:
     std::int64_t silent_cursor_frame_ = 0;
     DecoderInterruptCallback interrupt_handler_ = nullptr;
     void* interrupt_context_ = nullptr;
+    DecoderReadCallback custom_read_ = nullptr;
+    DecoderSeekCallback custom_seek_ = nullptr;
+    void* custom_io_context_ = nullptr;
+    DecoderPacketCallback packet_callback_ = nullptr;
+    void* packet_context_ = nullptr;
     bool interrupt_triggered_ = false;
     MediaMetadata metadata_;
     DecodedAudioFormat output_format_;
+    DecodedNativeFormat native_format_;
 };
 
 Decoder::Decoder()
@@ -1252,6 +1596,16 @@ ag_result Decoder::read(DecodedAudioBlock& block) noexcept
     }
 }
 
+ag_result Decoder::readAnalysis(DecodedAnalysisBlock& block) noexcept
+{
+    try {
+        return impl_->read_analysis(block);
+    } catch (...) {
+        block = {};
+        return AG_INTERNAL_ERROR;
+    }
+}
+
 ag_result Decoder::seek(const std::int64_t target_ms) noexcept
 {
     return impl_->seek(target_ms);
@@ -1275,6 +1629,11 @@ void Decoder::clearInterruptCallback() noexcept
 const DecodedAudioFormat& Decoder::output_format() const noexcept
 {
     return impl_->output_format();
+}
+
+const DecodedNativeFormat& Decoder::native_format() const noexcept
+{
+    return impl_->native_format();
 }
 
 } // namespace agplayer

@@ -1,6 +1,6 @@
 #include "library_navigation_model.hpp"
 
-#include "library_manager_controller.hpp"
+#include "resource_folder_controller.hpp"
 #include "library_model.hpp"
 #include "playlist_model.hpp"
 #include "resource_path.hpp"
@@ -15,7 +15,7 @@
 
 LibraryNavigationModel::LibraryNavigationModel(
     LibraryModel* library, PlaylistModel* playlists, TagModel* tags,
-    LibraryManagerController* manager, QObject* parent)
+    ResourceFolderController* manager, QObject* parent)
     : QAbstractListModel(parent)
     , library_(library)
     , playlists_(playlists)
@@ -62,7 +62,7 @@ LibraryNavigationModel::LibraryNavigationModel(
                 [this] { updateTagCount(); });
     }
     if (manager_ != nullptr) {
-        connect(manager_, &LibraryManagerController::resourceTopologyChanged,
+        connect(manager_, &ResourceFolderController::resourceTopologyChanged,
                 this, [this] { rebuildBaseRows(); });
     }
 }

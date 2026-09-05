@@ -196,7 +196,8 @@ Rectangle {
             anchors.verticalCenter: root.secondaryActionHost
                                     ? parent.verticalCenter : undefined
             objectName: "themeModeButton"
-            width: root.denseTransport ? 32 : Math.max(32, implicitWidth)
+            width: root.secondaryActionHost ? 32
+                   : root.denseTransport ? 32 : Math.max(32, implicitWidth)
             height: root.denseTransport ? 32 : Math.max(32, implicitHeight)
             visible: PlayerPresentation.hasAction(root.actionProfile,
                                                   "themeModeButton")
@@ -222,7 +223,7 @@ Rectangle {
             visible: true
             anchors.verticalCenter: parent.verticalCenter
             presentationProfile: root.actionProfile
-            compact: root.denseTransport
+            compact: root.secondaryActionHost !== null || root.denseTransport
             width: implicitWidth
             height: implicitHeight
             allowImmersive: true
@@ -237,7 +238,8 @@ Rectangle {
             anchors.verticalCenter: root.secondaryActionHost
                                     ? parent.verticalCenter : undefined
             objectName: "miniPlayerButton"
-            width: root.denseTransport ? 32 : Math.max(32, implicitWidth)
+            width: root.secondaryActionHost ? 32
+                   : root.denseTransport ? 32 : Math.max(32, implicitWidth)
             height: root.denseTransport ? 32 : Math.max(32, implicitHeight)
             visible: PlayerPresentation.hasAction(root.actionProfile,
                                                   "miniPlayerButton")

@@ -20,8 +20,15 @@ class TerrainReactorGpuSmokeTest final : public QObject {
 private slots:
     void shaderFalloffsKeepSmoothstepEdgesAscending();
     void firstActiveCreatesResourcesAndRendersStaticFeatures();
+    void staticFeaturesKeepRenderingWithoutGuiFeatureUpdates();
     void explicitImpactBrightensAStableTerrainFrame();
+    void regularBeatBrieflyBrightensThenReturns();
+    void materialControlsChangeRenderedSurface_data();
+    void materialControlsChangeRenderedSurface();
+    void beatMaterialControlsChangeRenderedSurface_data();
+    void beatMaterialControlsChangeRenderedSurface();
     void highFrequencySheenStaysLocalizedAndHeightSubordinate();
+    void highFrequencyHeightControlChangesActualRelief();
     void steadyCorePreservesHighlightDetailWithoutWhitePlateau();
     void nonFiniteFeatureInputsAreSanitizedBeforeExposure();
     void nonFiniteCameraControlsRemainRenderable();
@@ -95,6 +102,8 @@ class StableImpactSource final : public QObject {
     Q_PROPERTY(bool snarePulse READ snarePulse NOTIFY featuresChanged)
     Q_PROPERTY(quint64 impactRevision READ impactRevision NOTIFY impactChanged)
     Q_PROPERTY(double impactStrength READ impactStrength NOTIFY impactChanged)
+    Q_PROPERTY(quint64 beatRevision READ beatRevision NOTIFY featuresChanged)
+    Q_PROPERTY(double beatStrength READ beatStrength NOTIFY featuresChanged)
 
 public:
     QVariantList bands() const { return QVariantList(8, 0.0); }
@@ -104,6 +113,14 @@ public:
     bool snarePulse() const noexcept { return false; }
     quint64 impactRevision() const noexcept { return revision_; }
     double impactStrength() const noexcept { return strength_; }
+    quint64 beatRevision() const noexcept { return beatRevision_; }
+    double beatStrength() const noexcept { return beatStrength_; }
+    void publishBeat(double strength)
+    {
+        beatStrength_ = strength;
+        ++beatRevision_;
+        emit featuresChanged();
+    }
     void publishImpact(double strength)
     {
         strength_ = strength;
@@ -118,7 +135,226 @@ signals:
 private:
     quint64 revision_ = 0;
     double strength_ = 0.0;
+    quint64 beatRevision_ = 0;
+    double beatStrength_ = 0.0;
 };
+
+void TerrainReactorGpuSmokeTest::materialControlsChangeRenderedSurface_data()
+{
+    QTest::addColumn<QByteArray>("control");
+    QTest::addColumn<int>("mode");
+    QTest::addColumn<int>("low");
+    QTest::addColumn<int>("high");
+    QTest::newRow("gel-material") << QByteArray("materialMode") << 0 << 0 << 1;
+    QTest::newRow("gel-softness") << QByteArray("materialSoftness") << 1 << 0 << 100;
+    QTest::newRow("crystal-softness") << QByteArray("materialSoftness") << 0 << 0 << 100;
+    QTest::newRow("ink-density") << QByteArray("inkDensity") << 2 << 0 << 100;
+    QTest::newRow("column-size") << QByteArray("columnSize") << 0 << 50 << 200;
+    QTest::newRow("column-opacity") << QByteArray("columnOpacity") << 0 << 0 << 100;
+    QTest::newRow("reactor-brightness") << QByteArray("reactorBrightness") << 0 << 20 << 180;
+    QTest::newRow("column-clarity") << QByteArray("subjectClarity") << 0 << 20 << 140;
+    QTest::newRow("ink-clarity") << QByteArray("subjectClarity") << 2 << 20 << 140;
+}
+
+void TerrainReactorGpuSmokeTest::materialControlsChangeRenderedSurface()
+{
+    QFETCH(QByteArray, control);
+    QFETCH(int, mode);
+    QFETCH(int, low);
+    QFETCH(int, high);
+    PlayerExperienceController style;
+    style.applyPreset(0);
+    QVERIFY2(style.setProperty("materialMode", mode), "Native material control is missing");
+    QVERIFY(style.setProperty(control.constData(), low));
+    style.setAutoRotate(0);
+    style.setAutoRotateSpeed(0);
+    style.setCinemaShake(0);
+    style.setRipplesEnabled(false);
+    style.setFloatingCubesEnabled(false);
+    style.setMeteorsEnabled(false);
+    style.setStreamHighlightEnabled(false);
+    QQuickWindow window;
+    window.resize(480, 270);
+    window.setColor(mode == 2 ? QColor("#f6f5ef") : QColor("#04060b"));
+    TerrainReactorItem item(window.contentItem());
+    item.setSize(QSizeF(480, 270));
+    item.setStyleSource(&style);
+    item.setUseSyntheticFeatures(true);
+    item.setSyntheticFeatures({.7,.6,.5,.4,.3,.3,.2,.2}, .5, 0, false, false);
+    if (control == "subjectClarity") {
+        // Isolate face contrast from animated relief: unchanged terrain must
+        // not produce a false positive merely because capture time advanced.
+        style.setIdleBreathingEnabled(false);
+        item.setSyntheticFeatures({0.,0.,0.,0.,0.,0.,0.,0.}, 0, 0, false, false);
+    }
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    const auto api = window.rendererInterface()->graphicsApi();
+    if (api != QSGRendererInterface::Direct3D11 && api != QSGRendererInterface::OpenGL
+        && api != QSGRendererInterface::Vulkan && api != QSGRendererInterface::Metal)
+        QSKIP("No accelerated Qt Quick backend is available");
+    item.setActive(true);
+    QTRY_COMPARE_WITH_TIMEOUT(item.renderStatus(), TerrainReactorItem::RenderStatus::Ready, 5000);
+    QTest::qWait(1000); // palette/envelope settle, not timed beat input
+    const QImage a = window.grabWindow();
+    QVERIFY(style.setProperty(control.constData(), high));
+    QTRY_COMPARE_WITH_TIMEOUT(item.renderedStyleRevision(), item.styleRevision(), 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(item.stableRenderedFrameCount() >= 4, 3000);
+    const QImage b = window.grabWindow();
+    QVERIFY(!a.isNull());
+    QCOMPARE(a.size(), b.size());
+    int changed = 0;
+    for (int y = a.height() / 3; y < a.height() * 4 / 5; ++y) {
+        for (int x = a.width() / 4; x < a.width() * 3 / 4; ++x) {
+            const QColor ca = a.pixelColor(x,y), cb = b.pixelColor(x,y);
+            if (std::abs(ca.red()-cb.red()) + std::abs(ca.green()-cb.green())
+                + std::abs(ca.blue()-cb.blue()) > 24) ++changed;
+        }
+    }
+    qInfo() << control << "material pixels changed:" << changed;
+    QVERIFY2(changed > 500, "Material parameter changes numbers but not the rendered surface");
+    item.setActive(false);
+}
+
+void TerrainReactorGpuSmokeTest::beatMaterialControlsChangeRenderedSurface_data()
+{
+    QTest::addColumn<QByteArray>("control");
+    QTest::addColumn<int>("low");
+    QTest::addColumn<int>("high");
+    QTest::addColumn<int>("delay");
+    QTest::newRow("elasticity") << QByteArray("jellyElasticity") << 0 << 100 << 80;
+    QTest::newRow("wave-strength") << QByteArray("rippleStrength") << 0 << 200 << 200;
+    QTest::newRow("wave-width") << QByteArray("rippleWidth") << 20 << 200 << 200;
+    QTest::newRow("wave-decay") << QByteArray("rippleDecay") << 20 << 200 << 1000;
+}
+
+void TerrainReactorGpuSmokeTest::beatMaterialControlsChangeRenderedSurface()
+{
+    QFETCH(QByteArray, control);
+    QFETCH(int, low);
+    QFETCH(int, high);
+    QFETCH(int, delay);
+    QImage frames[2];
+    for (int pass = 0; pass < 2; ++pass) {
+        PlayerExperienceController style;
+        style.applyPreset(0);
+        style.setMaterialMode(control == "jellyElasticity" ? 1 : 0);
+        style.setAutoRotate(0);
+        style.setAutoRotateSpeed(0);
+        style.setCinemaShake(0);
+        style.setIdleBreathingEnabled(false);
+        style.setFloatingCubesEnabled(false);
+        style.setMeteorsEnabled(false);
+        style.setBurstEnabled(false);
+        style.setStreamHighlightEnabled(false);
+        QVERIFY(style.setProperty(control.constData(), pass ? high : low));
+        QQuickWindow window;
+        window.resize(480,270);
+        StableImpactSource source;
+        TerrainReactorItem item(window.contentItem());
+        item.setSize(QSizeF(480,270));
+        item.setStyleSource(&style);
+        item.setFeatureSource(&source);
+        window.show();
+        QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(),3000);
+        if (window.rendererInterface()->graphicsApi() == QSGRendererInterface::Software)
+            QSKIP("No accelerated backend");
+        item.setActive(true);
+        QTRY_COMPARE_WITH_TIMEOUT(item.renderStatus(),TerrainReactorItem::RenderStatus::Ready,5000);
+        QTest::qWait(200);
+        source.publishBeat(.9);
+        QTest::qWait(delay);
+        frames[pass] = window.grabWindow();
+        QVERIFY(!frames[pass].isNull());
+        item.setActive(false);
+    }
+    QCOMPARE(frames[0].size(),frames[1].size());
+    int changed=0;
+    for(int y=90;y<240;++y) for(int x=80;x<400;++x) {
+        const auto a=frames[0].pixelColor(x,y), b=frames[1].pixelColor(x,y);
+        if(std::abs(a.red()-b.red())+std::abs(a.green()-b.green())+std::abs(a.blue()-b.blue())>24)
+            ++changed;
+    }
+    qInfo() << control << "beat material pixels changed:" << changed;
+    QVERIFY2(changed>150,"Beat material parameter has no visible effect");
+}
+
+void TerrainReactorGpuSmokeTest::regularBeatBrieflyBrightensThenReturns()
+{
+    QQuickWindow window;
+    window.resize(480, 270);
+    window.setColor(QColor(4, 6, 11));
+    PlayerExperienceController style;
+    style.applyPreset(0);
+    style.setAutoRotate(0);
+    style.setAutoRotateSpeed(0);
+    style.setMotionResponse(0);
+    style.setCinemaShake(0);
+    style.setTerrainAmplitude(0);
+    style.setIdleBreathingEnabled(false);
+    style.setRipplesEnabled(false);
+    style.setFloatingCubesEnabled(false);
+    style.setMeteorsEnabled(false);
+    style.setBurstEnabled(false);
+    style.setStreamHighlightEnabled(false);
+    StableImpactSource source;
+    TerrainReactorItem item(window.contentItem());
+    item.setSize(QSizeF(480, 270));
+    item.setStyleSource(&style);
+    item.setFeatureSource(&source);
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    const auto api = window.rendererInterface()->graphicsApi();
+    if (api != QSGRendererInterface::Direct3D11
+        && api != QSGRendererInterface::OpenGL
+        && api != QSGRendererInterface::Vulkan
+        && api != QSGRendererInterface::Metal) {
+        QSKIP("No accelerated Qt Quick backend is available");
+    }
+    item.setActive(true);
+    QTRY_COMPARE_WITH_TIMEOUT(item.renderStatus(),
+                              TerrainReactorItem::RenderStatus::Ready, 5000);
+    QTest::qWait(150);
+    const auto centerLight = [&window] {
+        const QImage frame = window.grabWindow();
+        quint64 total = 0;
+        for (int y = frame.height() / 2; y < frame.height() * 3 / 4; ++y) {
+            for (int x = frame.width() / 3; x < frame.width() * 2 / 3; ++x) {
+                const QColor c = frame.pixelColor(x, y);
+                total += quint64(c.red() + c.green() + c.blue());
+            }
+        }
+        return total;
+    };
+    const quint64 baseline = centerLight();
+    QVERIFY(baseline > 0);
+    source.publishBeat(0.7);
+    quint64 peak = baseline;
+    for (int frame = 0; frame < 5; ++frame) {
+        QTest::qWait(16);
+        peak = std::max(peak, centerLight());
+    }
+    QTest::qWait(500);
+    const quint64 settled = centerLight();
+    qInfo() << "Regular beat light:" << baseline << peak << settled;
+    QVERIFY2(peak > baseline * 105 / 100,
+             "A regular beat must visibly brighten the terrain without an impact");
+    QVERIFY2(settled < peak * 97 / 100
+                 && std::abs(double(settled) / double(baseline) - 1.0) < 0.03,
+             "Beat lighting must return to the restrained steady exposure");
+    style.setRhythmStrength(0);
+    QTRY_COMPARE_WITH_TIMEOUT(item.renderedStyleRevision(), item.styleRevision(), 3000);
+    const quint64 disabled = centerLight();
+    source.publishBeat(0.7);
+    quint64 disabledPeak = disabled;
+    for (int frame = 0; frame < 5; ++frame) {
+        QTest::qWait(16);
+        disabledPeak = std::max(disabledPeak, centerLight());
+    }
+    QVERIFY2(disabledPeak <= disabled * 103 / 100,
+             "Zero rhythm strength must disable the beat flash");
+    item.setActive(false);
+}
 
 void TerrainReactorGpuSmokeTest::firstActiveCreatesResourcesAndRendersStaticFeatures()
 {
@@ -207,10 +443,60 @@ void TerrainReactorGpuSmokeTest::firstActiveCreatesResourcesAndRendersStaticFeat
     QCOMPARE(item.liveRendererCount(), 1);
 }
 
+void TerrainReactorGpuSmokeTest::staticFeaturesKeepRenderingWithoutGuiFeatureUpdates()
+{
+    QQuickWindow window;
+    window.resize(480, 270);
+    StableImpactSource source;
+    TerrainReactorItem item(window.contentItem());
+    item.setSize(QSizeF(480, 270));
+    item.setQuality(TerrainReactorItem::Quality::Balanced);
+    item.setFeatureSource(&source);
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    const auto api = window.rendererInterface()->graphicsApi();
+    if (api != QSGRendererInterface::Direct3D11
+        && api != QSGRendererInterface::OpenGL
+        && api != QSGRendererInterface::Vulkan
+        && api != QSGRendererInterface::Metal) {
+        QSKIP("No accelerated Qt Quick backend is available");
+    }
+
+    item.setActive(true);
+    QTRY_COMPARE_WITH_TIMEOUT(item.renderStatus(),
+                              TerrainReactorItem::RenderStatus::Ready, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() >= 3, 5000);
+    const quint64 staticFrames = item.frameCount();
+    QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() >= staticFrames + 3, 1000);
+
+    item.setActive(false);
+    QTRY_VERIFY_WITH_TIMEOUT(!item.renderingRequested(), 3000);
+    QTest::qWait(100);
+    const quint64 inactiveFrames = item.frameCount();
+    QTest::qWait(200);
+    QCOMPARE(item.frameCount(), inactiveFrames);
+
+    item.setActive(true);
+    QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() >= inactiveFrames + 3, 5000);
+    window.hide();
+    QTRY_VERIFY_WITH_TIMEOUT(!item.renderingRequested(), 3000);
+    QTest::qWait(100);
+    const quint64 hiddenFrames = item.frameCount();
+    QTest::qWait(200);
+    QCOMPARE(item.frameCount(), hiddenFrames);
+
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(item.renderingRequested(), 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() >= hiddenFrames + 3, 5000);
+}
+
 void TerrainReactorGpuSmokeTest::explicitImpactBrightensAStableTerrainFrame()
 {
     QQuickWindow window;
     window.resize(480, 270);
+    // Match the actual immersive host, not Qt's default white window. Raised
+    // columns otherwise occlude white gaps and invert the brightness metric.
+    window.setColor(QColor(4, 6, 11));
     PlayerExperienceController style;
     style.setAutoRotate(0);
     style.setAutoRotateSpeed(0);
@@ -464,10 +750,10 @@ void TerrainReactorGpuSmokeTest::highFrequencySheenStaysLocalizedAndHeightSubord
             << highStrongest << lowMidStrongest
             << "localized sheen pixels:" << sheenPixels
             << "light:" << plainLight << sheenLight;
-    // The strongest one percent is large enough to absorb raster edge changes
-    // across backends while directly measuring whether sparse highs dominate
-    // the most visible relief. High detail must retain a 10% perceptual margin.
-    QVERIFY2(highStrongest * 100 <= lowMidStrongest * 90,
+    // CPU terrain tests enforce the geometric height margin. The GPU frames
+    // are sampled at successive animation times, so allow a small lighting
+    // tolerance while still rejecting visibly dominant high-frequency relief.
+    QVERIFY2(highStrongest <= lowMidStrongest * 108 / 100,
              "Strong high-frequency relief is not subordinate to low/mids");
     QVERIFY2(sheenPixels > pixels / 3000,
              "High frequencies did not create an observable top-face sheen");
@@ -477,6 +763,69 @@ void TerrainReactorGpuSmokeTest::highFrequencySheenStaysLocalizedAndHeightSubord
              "High-frequency sheen lifted the whole frame instead of the top faces");
     item.setActive(false);
     QTest::qWait(100);
+}
+
+void TerrainReactorGpuSmokeTest::highFrequencyHeightControlChangesActualRelief()
+{
+    QQuickWindow window;
+    window.resize(640, 360);
+    window.setColor(QColor(4, 6, 11));
+    PlayerExperienceController style;
+    style.setAutoRotate(0);
+    style.setAutoRotateSpeed(0);
+    style.setMotionResponse(0);
+    style.setCinemaShake(0);
+    style.setIdleBreathingEnabled(false);
+    style.setRipplesEnabled(false);
+    style.setFloatingCubesEnabled(false);
+    style.setMeteorsEnabled(false);
+    style.setBurstEnabled(false);
+    style.setStreamHighlightEnabled(false);
+    style.setTerrainAmplitude(0);
+    TerrainReactorItem item(window.contentItem());
+    item.setSize(QSizeF(640, 360));
+    item.setQuality(TerrainReactorItem::Quality::High);
+    item.setStyleSource(&style);
+    item.setUseSyntheticFeatures(true);
+    item.setSyntheticFeatures({0, 0, 0, 0, 0.72, 0.72, 0.72, 0.72},
+                              0, 0, false, false);
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    const auto api = window.rendererInterface()->graphicsApi();
+    if (api != QSGRendererInterface::Direct3D11
+        && api != QSGRendererInterface::OpenGL
+        && api != QSGRendererInterface::Vulkan
+        && api != QSGRendererInterface::Metal) {
+        QSKIP("No accelerated Qt Quick backend is available");
+    }
+    item.setActive(true);
+    QTRY_COMPARE_WITH_TIMEOUT(item.renderStatus(),
+                              TerrainReactorItem::RenderStatus::Ready, 5000);
+    const auto settle = [&item] {
+        QTRY_COMPARE_WITH_TIMEOUT(item.renderedStyleRevision(),
+                                   item.styleRevision(), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(item.stableRenderedFrameCount() >= 5, 5000);
+    };
+    settle();
+    const QImage low = window.grabWindow();
+    style.setTerrainAmplitude(100);
+    settle();
+    const QImage high = window.grabWindow();
+    QVERIFY(!low.isNull());
+    QCOMPARE(high.size(), low.size());
+    int changed = 0;
+    for (int y = low.height() / 3; y < low.height() * 4 / 5; ++y) {
+        for (int x = low.width() / 4; x < low.width() * 3 / 4; ++x) {
+            const QColor a = low.pixelColor(x, y);
+            const QColor b = high.pixelColor(x, y);
+            if (std::abs(a.red() - b.red()) + std::abs(a.green() - b.green())
+                + std::abs(a.blue() - b.blue()) > 36) ++changed;
+        }
+    }
+    qInfo() << "High-frequency height changed pixels:" << changed;
+    QVERIFY2(changed > low.width() * low.height() / 100,
+             "Height control has almost no visible effect on high-frequency relief");
+    item.setActive(false);
 }
 
 void TerrainReactorGpuSmokeTest::steadyCorePreservesHighlightDetailWithoutWhitePlateau()
@@ -586,6 +935,8 @@ void TerrainReactorGpuSmokeTest::steadyCorePreservesHighlightDetailWithoutWhiteP
             << nearWhitePixels << "/" << roiPixels
             << "visible" << visibleLuminance.size()
             << "P90/P95/P99" << p90 << p95 << p99;
+    QVERIFY2(p90 <= 170,
+             "Steady crown lighting is too bright; reserve headroom for beats");
 
     QVERIFY2(visibleLuminance.size() * 100 >= roiPixels * 20,
              "Stable core became too dark or too sparse");

@@ -129,12 +129,12 @@ const std::array<StylePreset, 9>& visualPresets()
 {
     static const std::array<StylePreset, 9> presets = {{
         {0, "#8BDCFF", "#EB7894", "#FFD7DF", "#FFF7FB", "#050206",
-         62, 56, 74, 38, 0.30, 54, 58, true, true, true, true, true, true, true,
+         62, 56, 74, 38, 0.30, 54, 58, true, true, true, true, true, false, true,
          {90, 92, 50, 50, 50, 50, 50, 48}, 82, 136, 100, 64, 30, 86, 112, 42, 80},
         {2, "#7F5CFF", "#FF4FD8", "#22F0FF", "#F7F2FF", "#070310",
          70, 80, 84, 58, 0.48, 64, 72, true, true, true, true, false, true, true,
          {92, 84, 58, 48, 54, 72, 96, 100}, 84, 144, 178, 68, 106, 94, 108, 48, 84},
-        {1, "#6F8DB8", "#D2645E", "#E9D7D1", "#F6F0E8", "#111317",
+        {1, "#19282B", "#343B3B", "#B4CDCA", "#7F8D89", "#F4F1E8",
          48, 36, 42, 22, 0.12, 30, 36, true, true, false, false, true, false, true,
          {62, 58, 54, 50, 48, 44, 42, 40}, 88, 122, 160, 48, 82, 116, 120, 30, 72},
         {1, "#8EDFFF", "#D9B9FF", "#9EF2D1", "#F7FFFF", "#0B1117",
@@ -178,6 +178,16 @@ bool PlayerExperienceController::desktopMousePassthrough() const noexcept
 }
 int PlayerExperienceController::qualityPreset() const noexcept { return qualityPreset_; }
 int PlayerExperienceController::colorMode() const noexcept { return colorMode_; }
+int PlayerExperienceController::materialMode() const noexcept { return materialMode_; }
+int PlayerExperienceController::materialSoftness() const noexcept { return materialSoftness_; }
+int PlayerExperienceController::jellyElasticity() const noexcept { return jellyElasticity_; }
+int PlayerExperienceController::inkDensity() const noexcept { return inkDensity_; }
+int PlayerExperienceController::rippleStrength() const noexcept { return rippleStrength_; }
+int PlayerExperienceController::rippleWidth() const noexcept { return rippleWidth_; }
+int PlayerExperienceController::rippleDecay() const noexcept { return rippleDecay_; }
+int PlayerExperienceController::columnSize() const noexcept { return columnSize_; }
+int PlayerExperienceController::columnOpacity() const noexcept { return columnOpacity_; }
+int PlayerExperienceController::reactorBrightness() const noexcept { return reactorBrightness_; }
 QString PlayerExperienceController::coolColor() const { return coolColor_; }
 QString PlayerExperienceController::warmColor() const { return warmColor_; }
 QString PlayerExperienceController::accentColor() const { return accentColor_; }
@@ -234,6 +244,96 @@ int PlayerExperienceController::autoRotateSpeed() const noexcept { return autoRo
 int PlayerExperienceController::rhythmSensitivity() const noexcept
 {
     return rhythmSensitivity_;
+}
+
+void PlayerExperienceController::setMaterialMode(int value)
+{
+    value = enumOrDefault(value, 0, 2, 0);
+    if (materialMode_ == value) return;
+    materialMode_ = value;
+    persist(QStringLiteral("materialMode"), value);
+    emit materialModeChanged();
+}
+
+void PlayerExperienceController::setMaterialSoftness(int value)
+{
+    value = clampRange(value, 0, 100);
+    if (materialSoftness_ == value) return;
+    materialSoftness_ = value;
+    persist(QStringLiteral("materialSoftness"), value);
+    emit materialSoftnessChanged();
+}
+
+void PlayerExperienceController::setJellyElasticity(int value)
+{
+    value = clampRange(value, 0, 100);
+    if (jellyElasticity_ == value) return;
+    jellyElasticity_ = value;
+    persist(QStringLiteral("jellyElasticity"), value);
+    emit jellyElasticityChanged();
+}
+
+void PlayerExperienceController::setInkDensity(int value)
+{
+    value = clampRange(value, 0, 100);
+    if (inkDensity_ == value) return;
+    inkDensity_ = value;
+    persist(QStringLiteral("inkDensity"), value);
+    emit inkDensityChanged();
+}
+
+void PlayerExperienceController::setRippleStrength(int value)
+{
+    value = clampRange(value, 0, 200);
+    if (rippleStrength_ == value) return;
+    rippleStrength_ = value;
+    persist(QStringLiteral("rippleStrength"), value);
+    emit rippleStrengthChanged();
+}
+
+void PlayerExperienceController::setRippleWidth(int value)
+{
+    value = clampRange(value, 20, 200);
+    if (rippleWidth_ == value) return;
+    rippleWidth_ = value;
+    persist(QStringLiteral("rippleWidth"), value);
+    emit rippleWidthChanged();
+}
+
+void PlayerExperienceController::setRippleDecay(int value)
+{
+    value = clampRange(value, 20, 200);
+    if (rippleDecay_ == value) return;
+    rippleDecay_ = value;
+    persist(QStringLiteral("rippleDecay"), value);
+    emit rippleDecayChanged();
+}
+
+void PlayerExperienceController::setColumnSize(int value)
+{
+    value = clampRange(value, 50, 200);
+    if (columnSize_ == value) return;
+    columnSize_ = value;
+    persist(QStringLiteral("columnSize"), value);
+    emit columnSizeChanged();
+}
+
+void PlayerExperienceController::setColumnOpacity(int value)
+{
+    value = clampRange(value, 0, 100);
+    if (columnOpacity_ == value) return;
+    columnOpacity_ = value;
+    persist(QStringLiteral("columnOpacity"), value);
+    emit columnOpacityChanged();
+}
+
+void PlayerExperienceController::setReactorBrightness(int value)
+{
+    value = clampRange(value, 0, 200);
+    if (reactorBrightness_ == value) return;
+    reactorBrightness_ = value;
+    persist(QStringLiteral("reactorBrightness"), value);
+    emit reactorBrightnessChanged();
 }
 
 void PlayerExperienceController::setImmersiveMode(int value)
@@ -624,7 +724,36 @@ void PlayerExperienceController::setRhythmSensitivity(int value)
 bool PlayerExperienceController::applyPreset(int preset)
 {
     if (preset < AudioRangeEcho || preset > AmberCinema) return false;
+    // Mode, softness, elasticity, ink density, ripple strength, width, decay.
+    // Higher decay fades a ring sooner; low values give slow waves a longer tail.
+    static constexpr std::array<std::array<int, 7>, 9> materials = {{
+        {0, 45, 35, 60, 100, 100, 100}, // balanced crystal
+        {1, 60, 82, 45, 125, 65, 175},  // short, fast neon jelly
+        {2, 88, 12, 78, 72, 155, 75},   // spreading ink
+        {1, 72, 58, 35, 82, 115, 110},  // soft, moist stage
+        {0, 22, 10, 50, 35, 130, 125},  // quiet crystal
+        {0, 34, 28, 52, 155, 145, 120}, // broad, strong galactic rings
+        {1, 52, 72, 42, 145, 45, 145},  // narrow overlapping neon
+        {1, 85, 42, 68, 65, 180, 55},   // broad, lingering sea waves
+        {0, 58, 20, 65, 78, 125, 90},   // softened amber crystal
+    }};
+    const auto& material = materials.at(static_cast<size_t>(preset));
+    setMaterialMode(material[0]);
+    setMaterialSoftness(material[1]);
+    setJellyElasticity(material[2]);
+    setInkDensity(material[3]);
+    setRippleStrength(material[4]);
+    setRippleWidth(material[5]);
+    setRippleDecay(material[6]);
+    static constexpr std::array<int, 9> columnSizes =
+        {120, 110, 95, 125, 150, 110, 100, 130, 140};
+    setColumnSize(columnSizes.at(static_cast<size_t>(preset)));
+    setColumnOpacity(100);
+    setReactorBrightness(100);
     const StylePreset& values = visualPresets().at(static_cast<size_t>(preset));
+    // An explicit preset selection owns the palette until automatic track
+    // colors are enabled again by the user.
+    setSongAdaptiveColorEnabled(false);
     setColorMode(values.colorMode);
     setCoolColor(QLatin1String(values.coolColor));
     setWarmColor(QLatin1String(values.warmColor));
@@ -737,6 +866,16 @@ void PlayerExperienceController::load()
                                              QStringLiteral("#050206")),
                                  QStringLiteral("#050206"));
     terrainAmplitude_ = clampPercent(integer(QStringLiteral("terrainAmplitude"), 62));
+    materialMode_ = enumOrDefault(integer(QStringLiteral("materialMode"), 0), 0, 2, 0);
+    materialSoftness_ = clampRange(integer(QStringLiteral("materialSoftness"), 45), 0, 100);
+    jellyElasticity_ = clampRange(integer(QStringLiteral("jellyElasticity"), 35), 0, 100);
+    inkDensity_ = clampRange(integer(QStringLiteral("inkDensity"), 60), 0, 100);
+    rippleStrength_ = clampRange(integer(QStringLiteral("rippleStrength"), 100), 0, 200);
+    rippleWidth_ = clampRange(integer(QStringLiteral("rippleWidth"), 100), 20, 200);
+    rippleDecay_ = clampRange(integer(QStringLiteral("rippleDecay"), 100), 20, 200);
+    columnSize_ = clampRange(integer(QStringLiteral("columnSize"), 100), 50, 200);
+    columnOpacity_ = clampRange(integer(QStringLiteral("columnOpacity"), 100), 0, 100);
+    reactorBrightness_ = clampRange(integer(QStringLiteral("reactorBrightness"), 100), 0, 200);
     motionResponse_ = clampPercent(integer(QStringLiteral("motionResponse"), 56));
     gradientLayers_ = clampPercent(integer(QStringLiteral("gradientLayers"), 74));
     glowIntensity_ = clampPercent(integer(QStringLiteral("glowIntensity"), 38));
@@ -783,6 +922,16 @@ void PlayerExperienceController::load()
     settings_.setValue(QStringLiteral("desktopMousePassthrough"), desktopMousePassthrough_);
     settings_.setValue(QStringLiteral("qualityPreset"), qualityPreset_);
     settings_.setValue(QStringLiteral("colorMode"), colorMode_);
+    settings_.setValue(QStringLiteral("materialMode"), materialMode_);
+    settings_.setValue(QStringLiteral("materialSoftness"), materialSoftness_);
+    settings_.setValue(QStringLiteral("jellyElasticity"), jellyElasticity_);
+    settings_.setValue(QStringLiteral("inkDensity"), inkDensity_);
+    settings_.setValue(QStringLiteral("rippleStrength"), rippleStrength_);
+    settings_.setValue(QStringLiteral("rippleWidth"), rippleWidth_);
+    settings_.setValue(QStringLiteral("rippleDecay"), rippleDecay_);
+    settings_.setValue(QStringLiteral("columnSize"), columnSize_);
+    settings_.setValue(QStringLiteral("columnOpacity"), columnOpacity_);
+    settings_.setValue(QStringLiteral("reactorBrightness"), reactorBrightness_);
     settings_.setValue(QStringLiteral("coolColor"), coolColor_);
     settings_.setValue(QStringLiteral("warmColor"), warmColor_);
     settings_.setValue(QStringLiteral("accentColor"), accentColor_);

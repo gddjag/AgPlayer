@@ -7,7 +7,7 @@ T.Button {
 
     property url iconSource
     property string accessibleName: ""
-    property int iconSize: 18
+    property int iconSize: Theme.iconSizeMd
     property bool primary: false
     property bool danger: false
     property bool dangerOnHover: false
@@ -29,6 +29,8 @@ T.Button {
                 ? Theme.accentText : Theme.iconPrimary
         width: control.iconSize
         height: control.iconSize
+        sourceSize.width: control.iconSize
+        sourceSize.height: control.iconSize
         anchors.centerIn: parent
     }
 

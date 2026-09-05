@@ -6,6 +6,7 @@
 #include <QMetaObject>
 #include <QPointer>
 #include <QQuickRhiItem>
+#include <QTimer>
 #include <QVariantList>
 
 #include <array>
@@ -43,6 +44,8 @@ class TerrainReactorItem : public QQuickRhiItem {
     Q_PROPERTY(qreal cameraDistance READ cameraDistance NOTIFY cameraChanged)
     Q_PROPERTY(qreal cameraPunch READ cameraPunch NOTIFY cameraChanged)
     Q_PROPERTY(quint64 punchRevision READ punchRevision NOTIFY cameraChanged)
+    Q_PROPERTY(qreal beatStrength READ beatStrength NOTIFY beatChanged)
+    Q_PROPERTY(quint64 beatRevision READ beatRevision NOTIFY beatChanged)
     Q_PROPERTY(qreal impactStrength READ impactStrength NOTIFY impactChanged)
     Q_PROPERTY(quint64 impactRevision READ impactRevision NOTIFY impactChanged)
     Q_PROPERTY(QVariantList featureBands READ featureBands
@@ -129,6 +132,8 @@ public:
     qreal cameraDistance() const noexcept;
     qreal cameraPunch() const noexcept;
     quint64 punchRevision() const noexcept;
+    qreal beatStrength() const noexcept;
+    quint64 beatRevision() const noexcept;
     qreal impactStrength() const noexcept;
     quint64 impactRevision() const noexcept;
 
@@ -164,6 +169,7 @@ signals:
     void featureRevisionChanged();
     void styleRevisionChanged();
     void cameraChanged();
+    void beatChanged();
     void impactChanged();
     void countersChanged();
     void renderStatusChanged();
@@ -171,7 +177,7 @@ signals:
 protected:
     QQuickRhiItemRenderer* createRenderer() override;
     bool eventFilter(QObject* watched, QEvent* event) override;
-    void applyInternalScale(float scale);
+    void applyInternalScale(float scale, int sampleCount);
 
 private slots:
     void copyFeatureSource();
@@ -192,6 +198,7 @@ private:
         agplayer::terrain::RenderStyleSnapshot style;
         agplayer::terrain::CameraSnapshot camera;
         agplayer::terrain::PunchEvent punchEvent;
+        agplayer::terrain::BeatEvent beatEvent;
         agplayer::terrain::ImpactEvent impactEvent;
         double cameraManualUntilSeconds = 0.0;
         quint64 cameraRevision = 0;
@@ -201,6 +208,7 @@ private:
         bool trackPaletteActive = false;
         Quality quality = Quality::Eco;
         bool running = false;
+        quint64 activityRevision = 0;
         float timeSeconds = 0.0F;
         quint64 featureRevision = 0;
         quint64 styleRevision = 0;
@@ -218,6 +226,9 @@ private:
     bool active_ = false;
     bool hostExposed_ = true;
     bool windowExposed_ = true;
+    bool lastScheduledRunning_ = false;
+    QTimer renderTick_;
+    quint64 activityRevision_ = 0;
     bool useSyntheticFeatures_ = false;
     quint32 deterministicSeed_ = 0x5eedU;
     QString trackIdentity_;
@@ -238,7 +249,9 @@ private:
     quint64 styleRevision_ = 0;
     quint64 cameraRevision_ = 0;
     agplayer::terrain::PunchEvent pendingPunch_;
+    agplayer::terrain::BeatEvent pendingBeat_;
     agplayer::terrain::ImpactEvent pendingImpact_;
+    bool featureSourceProvidesBeat_ = false;
     bool featureSourceProvidesImpact_ = false;
     float internalScale_ = 1.0F;
     agplayer::terrain::CameraMotion camera_;

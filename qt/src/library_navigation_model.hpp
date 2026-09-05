@@ -6,7 +6,7 @@
 #include <QSet>
 #include <QUrl>
 
-class LibraryManagerController;
+class ResourceFolderController;
 class LibraryModel;
 class PlaylistModel;
 class TagModel;
@@ -21,7 +21,7 @@ public:
     Q_ENUM(Role)
 
     explicit LibraryNavigationModel(LibraryModel* library, PlaylistModel* playlists,
-                                    TagModel* tags, LibraryManagerController* manager,
+                                    TagModel* tags, ResourceFolderController* manager,
                                     QObject* parent = nullptr);
 
     int rowCount(const QModelIndex& parent = {}) const override;
@@ -79,7 +79,7 @@ private:
     QPointer<LibraryModel> library_;
     QPointer<PlaylistModel> playlists_;
     QPointer<TagModel> tags_;
-    QPointer<LibraryManagerController> manager_;
+    QPointer<ResourceFolderController> manager_;
     QList<Node> nodes_;
     QHash<QString, TrackState> trackStates_;
     QHash<QString, QString> folderPathByKey_;

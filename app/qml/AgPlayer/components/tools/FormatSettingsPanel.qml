@@ -151,7 +151,7 @@ Rectangle {
 
     color: Theme.panel
     border.color: Theme.border
-    radius: 6
+    radius: Theme.radiusSm
     clip: true
 
     component ReferenceCheckBox: CheckBox {
@@ -219,9 +219,9 @@ Rectangle {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.leftMargin: 16
-        anchors.rightMargin: 8
-        spacing: 8
+        anchors.leftMargin: Theme.spacingLg
+        anchors.rightMargin: Theme.spacingSm
+        spacing: Theme.spacingSm
 
         Text {
             visible: root.isExpanded
@@ -260,16 +260,22 @@ Rectangle {
 
         ColumnLayout {
             width: settingsScroll.availableWidth
-            spacing: 4
+            spacing: Theme.spacingXs
 
             ColumnLayout {
                 id: formatGroup
                 objectName: "formatOutputFormatGroup"
                 Layout.fillWidth: true
-                Layout.leftMargin: 16
-                Layout.rightMargin: 16
-                spacing: 4
-                Text { text: qsTr("A. 输出格式"); color: Theme.primaryText; font.pixelSize: Theme.fontSizeBody }
+                Layout.leftMargin: Theme.spacingLg
+                Layout.rightMargin: Theme.spacingLg
+                spacing: Theme.spacingXs
+                Text {
+                    text: qsTr("A. 输出格式")
+                    color: Theme.primaryText
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: Theme.fontSizeBody
+                    font.weight: Font.DemiBold
+                }
                 GridLayout {
                     id: outputFormatGrid
                     objectName: "formatOutputFormatGrid"
@@ -320,12 +326,19 @@ Rectangle {
                 id: encodingGroup
                 objectName: "formatEncodingSettingsGroup"
                 Layout.fillWidth: true
-                Layout.leftMargin: 16
-                Layout.rightMargin: 16
+                Layout.leftMargin: Theme.spacingLg
+                Layout.rightMargin: Theme.spacingLg
                 columns: 2
                 columnSpacing: 11
                 rowSpacing: 4
-                Text { text: qsTr("B. 编码参数"); color: Theme.primaryText; font.pixelSize: Theme.fontSizeBody; Layout.columnSpan: 2 }
+                Text {
+                    text: qsTr("B. 编码参数")
+                    color: Theme.primaryText
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: Theme.fontSizeBody
+                    font.weight: Font.DemiBold
+                    Layout.columnSpan: 2
+                }
                 Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("编码器"); color: Theme.secondaryText }
                 ReferenceComboBox { objectName: "formatEncoderBox"; Layout.fillWidth: true; Layout.preferredHeight: 32; model: [converter.currentCapability.encoderLabel || "--"] }
                 Text { visible: bitrateModeRow.visible; Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("码率模式"); color: Theme.secondaryText }
@@ -469,12 +482,19 @@ Rectangle {
                 id: outputOptions
                 objectName: "formatOutputOptionsGroup"
                 Layout.fillWidth: true
-                Layout.leftMargin: 16
-                Layout.rightMargin: 16
+                Layout.leftMargin: Theme.spacingLg
+                Layout.rightMargin: Theme.spacingLg
                 columns: 2
                 columnSpacing: 11
                 rowSpacing: 4
-                Text { text: qsTr("C. 输出选项"); color: Theme.primaryText; font.pixelSize: Theme.fontSizeBody; Layout.columnSpan: 2 }
+                Text {
+                    text: qsTr("C. 输出选项")
+                    color: Theme.primaryText
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: Theme.fontSizeBody
+                    font.weight: Font.DemiBold
+                    Layout.columnSpan: 2
+                }
                 Text { Layout.minimumWidth: 122; Layout.preferredWidth: 122; Layout.maximumWidth: 122; text: qsTr("输出目录"); color: Theme.secondaryText }
                 RowLayout {
                     ThemedTextField {

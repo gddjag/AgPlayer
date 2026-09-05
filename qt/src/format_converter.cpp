@@ -1213,24 +1213,19 @@ void FormatConverter::removeChecked()
     if (busy()) return;
     const QSet<QString> checked = [&] {
         QSet<QString> ids;
-        for (const QString& taskId : taskModel_->taskIds()) {
-            for (int row = 0; row < taskModel_->rowCount(); ++row) {
-                if (taskModel_->taskIdAt(row) == taskId
-                    && taskModel_->taskAt(row)
-                           .value(QStringLiteral("checked")).toBool()) {
-                    ids.insert(taskId);
-                }
+        for (int row = 0; row < taskModel_->rowCount(); ++row) {
+            if (taskModel_->data(taskModel_->index(row, 0),
+                                 FormatConversionTaskModel::CheckedRole).toBool()) {
+                ids.insert(taskModel_->taskIdAt(row));
             }
         }
         return ids;
     }();
     {
         QMutexLocker lock(&mutex_);
-        for (int index = entries_.size() - 1; index >= 0; --index) {
-            if (checked.contains(entries_.at(index).taskId)) {
-                entries_.removeAt(index);
-            }
-        }
+        entries_.removeIf([&checked](const FileEntry& entry) {
+            return checked.contains(entry.taskId);
+        });
     }
     emit fileCountChanged();
     emit filesChanged();

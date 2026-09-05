@@ -265,7 +265,7 @@ TestCase {
         for (var mode = 0; mode < 3; ++mode) {
             var names = mode === 2
                     ? ["previousButton", "playPauseButton", "nextButton",
-                       "modeButton", "waveformModeButton", "equalizerButton",
+                       "modeButton", "equalizerButton",
                        "audioToolsButton", "mainVolumeControl",
                        "themeModeButton", "immersiveActionButton",
                        "miniPlayerButton"]
@@ -305,9 +305,13 @@ TestCase {
                 previousX = mapped
             }
             var waveformMode = findChild(controls, "waveformModeButton")
-            verify(waveformMode)
-            compare(waveformMode.visible, true,
-                    "every player shell exposes the shared waveform action")
+            if (mode === 2) {
+                compare(waveformMode, null,
+                        "rolling must not instantiate a waveform style action")
+            } else {
+                verify(waveformMode && waveformMode.visible,
+                       "classic and integrated retain waveform style switching")
+            }
             var transport = findChild(controls,
                                       mode === 1
                                       ? "integratedTransportControls"
@@ -369,22 +373,36 @@ TestCase {
         menu.close()
     }
 
+    function test_rolling_keeps_frequency_rendering_without_changing_other_shell_preferences() {
+        var rolling = rollingWithFakes()
+        var overview = findChild(rolling, "rollingOverviewWaveform")
+        var waveform = findChild(rolling, "rollingMainWaveform")
+        verify(overview && waveform)
+        for (var mode = 0; mode < 4; ++mode) {
+            SettingsController.waveformMode = mode
+            wait(0)
+            compare(overview.visualMode, 3)
+            compare(waveform.visualMode, 3)
+            compare(SettingsController.waveformMode, mode,
+                    "rolling must not overwrite the other players' waveform preference")
+        }
+    }
+
     function test_overview_click_seeks_once_and_starts_playback() {
         var rolling = rollingWithFakes()
         var overview = findChild(rolling, "rollingOverviewWaveform")
         var interaction = findChild(rolling, "rollingOverviewInteraction")
         var progress = findChild(rolling, "rollingOverviewProgress")
-        var playedClip = findChild(rolling, "rollingOverviewPlayedClip")
         var playhead = findChild(rolling, "rollingOverviewPlayhead")
         var hoverCapsule = findChild(rolling, "rollingOverviewHoverCapsule")
         var hoverText = findChild(rolling, "rollingOverviewHoverText")
-        verify(overview && interaction && progress && playedClip && playhead
+        verify(overview && interaction && progress && playhead
                && hoverCapsule && hoverText)
         compare(overview.visibleStartMs, 0)
         compare(overview.visibleEndMs, 120000)
         compare(overview.visualMode, 3)
         compare(overview.position, 0)
-        compare(playedClip.width, overview.width * 0.5)
+        compare(progress.width, overview.width * 0.5)
         compare(progress.color.toString(), Theme.waveformMagenta.toString())
         compare(playhead.color.toString(),
                 Theme.onBrandGradientText.toString())
@@ -420,7 +438,7 @@ TestCase {
         tryCompare(waveform, "position", fakePlayback.positionMs)
         rolling.syncWaveformViewport()
         var firstStart = waveform.visibleStartMs
-        var referenceX = waveform.pixelForTime(59000)
+        var referenceX = waveform.pixelForTime(60000)
         compare(Math.round(playhead.mapToItem(canvas,
                                              playhead.width / 2, 0).x),
                 Math.round(canvas.width / 2))
@@ -429,7 +447,7 @@ TestCase {
         rolling.syncWaveformViewport()
         compare(waveform.position, 61000)
         verify(waveform.visibleStartMs > firstStart)
-        verify(waveform.pixelForTime(59000) < referenceX,
+        verify(waveform.pixelForTime(60000) < referenceX,
                "a fixed source point must move left during playback")
         compare(Math.round(playhead.mapToItem(canvas,
                                              playhead.width / 2, 0).x),
@@ -460,9 +478,13 @@ TestCase {
         verify(fakePlayback.lastScratchRate > 0)
         verify(rolling.viewStartTimeSec > viewStartBeforeDrag,
                "left drag continuously advances the visible time window")
+        var releasedCenter = Math.round(rolling.viewportCenterMs)
         mouseRelease(surface, surface.width / 2 - 18,
                      surface.height / 2, Qt.LeftButton)
         compare(fakePlayback.endCount, 1)
+        compare(fakePlayback.lastSeek, releasedCenter,
+                "release must commit the visible center, not the rate-integrated audio position")
+        compare(fakePlayback.playCount, 1)
 
         mousePress(surface, surface.width / 2, surface.height / 2,
                    Qt.LeftButton)
@@ -470,6 +492,7 @@ TestCase {
         verify(fakePlayback.lastScratchRate < 0)
         rolling.cancelScratchGesture()
         compare(fakePlayback.cancelCount, 1)
+        compare(fakePlayback.seekCount, 1, "cancel must not commit a second seek")
 
         fakePlayback.scratchBuffering = true
         tryCompare(buffering, "visible", true)
@@ -558,7 +581,8 @@ TestCase {
 
         SettingsController.themeMode = 1
         tryCompare(overview, "frequencyUnplayedOpacity",
-                   Theme.nonImmersiveSpectralUnplayedOpacity)
+                   1.0)
+        compare(mainWaveform.frequencyUnplayedOpacity, 1.0)
         compare(String(overview.lowColor), low)
         compare(String(mainWaveform.highColor), high)
         SettingsController.themeMode = 0
@@ -568,6 +592,8 @@ TestCase {
 
     function test_rolling_tempo_meter_and_zoom_controls_are_live() {
         var rolling = rollingWithFakes()
+        compare(rolling.viewTimeSpanSec, 2.0,
+                "fresh rolling viewport shows four beats at 120 BPM")
         var sourceBpm = findChild(rolling, "rollingSourceBpm")
         var targetBpm = findChild(rolling, "rollingTargetBpm")
         var keepPitch = findChild(rolling, "rollingKeepPitchControl")
@@ -594,17 +620,17 @@ TestCase {
         rolling.zoomIn()
         compare(rolling.visibleBeats, 4)
         rolling.zoomIn()
-        compare(rolling.visibleBeats, 4)
+        compare(rolling.visibleBeats, 2)
         rolling.zoomOut()
-        compare(rolling.visibleBeats, 6)
+        compare(rolling.visibleBeats, 4)
         rolling.visibleBeats = 64
         rolling.zoomOut()
         compare(rolling.visibleBeats, 64)
         rolling.resetZoom()
-        compare(rolling.visibleBeats, 8)
+        compare(rolling.viewTimeSpanSec, 2.0)
 
-        rolling.visibleBeats = 2
-        tryCompare(rolling, "visibleBeats", 4)
+        rolling.visibleBeats = 1
+        tryCompare(rolling, "visibleBeats", 2)
         rolling.visibleBeats = 100
         tryCompare(rolling, "visibleBeats", 64)
     }
@@ -658,8 +684,27 @@ TestCase {
         fakeLibrary.trackTags = []
         fakeLibrary.dataChanged()
         tryCompare(subtitle, "text", "测试艺术家 · 测试专辑")
-        compare(findChild(rolling, "rollingFavoriteButton"), null)
-        compare(findChild(rolling, "rollingTrackRating"), null)
+        verify(findChild(rolling, "rollingFavoriteButton").visible)
+        verify(findChild(rolling, "rollingTrackRating").visible)
+    }
+
+    function test_header_three_rows_are_evenly_spaced_and_cover_centered() {
+        var rolling = rollingWithFakes()
+        var cover = findChild(rolling, "rollingTrackCover")
+        var info = findChild(rolling, "rollingHeaderInfo")
+        var title = findChild(rolling, "rollingTitleRow")
+        var subtitle = findChild(rolling, "rollingSubtitleRow")
+        var badges = findChild(rolling, "rollingMetadataBadges")
+        verify(cover && info && title && subtitle && badges)
+        var center = info.mapToItem(rolling, 0, info.height / 2).y
+        verify(Math.abs(center - cover.mapToItem(rolling, 0, cover.height / 2).y) < 1)
+        var firstGap = subtitle.mapToItem(rolling, 0, 0).y
+                     - title.mapToItem(rolling, 0, title.height).y
+        var secondGap = badges.mapToItem(rolling, 0, 0).y
+                      - subtitle.mapToItem(rolling, 0, subtitle.height).y
+        verify(firstGap >= 3 && Math.abs(firstGap - secondGap) < 1)
+        verify(findChild(rolling, "rollingOverviewWaveform")
+               .mapToItem(rolling, 0, 0).y >= badges.mapToItem(rolling, 0, badges.height).y)
     }
 
     function test_rolling_reuses_collapsible_tag_and_lyrics_side_panel() {
@@ -740,13 +785,16 @@ TestCase {
                    minimumWidthSharedActions[actionIndex]
                    + " stays available at the rolling minimum width")
         }
-        compare(findChild(controls, "waveformModeButton").visible, true)
+        compare(findChild(controls, "waveformModeButton"), null)
         compare(findChild(controls, "listWindowButton").visible, false)
         var transport = findChild(controls, "centerPlaybackControls")
         verify(transport)
         verify(transport.mapToItem(controls, 0, 0).x < controls.width * 0.30,
                "rolling transport belongs on the left side")
         compare(bottom.height, 64)
+        var miniAction = findChild(controls, "miniPlayerButton")
+        verify(miniAction.mapToItem(bottom, miniAction.width, 0).x
+               <= bottom.width - 15, "shell actions retain the right inset")
 
         mainWindow.width = 1800
         mainWindow.height = 600

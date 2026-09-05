@@ -382,8 +382,7 @@ BackendResult runMdx(const NativeStartRequest& request,
                      const ProgressCallback& progress,
                      OutputTransaction& transaction)
 {
-    const MdxProfile profile = trusted.id == QStringLiteral("uvr-mdxnet-kara")
-        ? MdxProfile::kara() : MdxProfile::hq3();
+    const MdxProfile profile = MdxProfile::forModel(trusted.id);
     QString error;
     const qint64 totalFrames = countDecodedFrames(request.inputPath, cancelled, &error);
     if (totalFrames == -2) return fail(QStringLiteral("cancelled"),
@@ -629,6 +628,9 @@ BackendResult runDemucs(const NativeStartRequest& request,
         if (cancelled.isCancelled()) return fail(QStringLiteral("cancelled"),
                                           QStringLiteral("Separation cancelled"));
         const QString modelPath = request.modelFiles.at(modelIndex);
+        progress(nativeInferenceProgress(modelIndex * starts.size(),
+                                         request.modelFiles.size() * starts.size()),
+                 QStringLiteral("model_loading"));
         ModelArtifactReadResult artifact;
         BackendResult loaded = loadTrustedModelArtifact(
             modelPath, trusted, cancelled, &artifact);
@@ -658,6 +660,9 @@ BackendResult runDemucs(const NativeStartRequest& request,
         BackendResult streamed = streamPcmChunks(
             request.inputPath, starts, profile.chunkSamples, cancelled,
             [&](qint64 start, const QVector<float>& mix, qsizetype chunkIndex) {
+                progress(nativeInferenceProgress(modelIndex * starts.size() + chunkIndex,
+                                                  request.modelFiles.size() * starts.size()),
+                         QStringLiteral("inference"));
                 const QVector<float> planar = interleavedToPlanar(mix);
                 const OrtOperationResult inference = session->run(
                     planar, profile.inputShape, profile.outputShape, cancelled);

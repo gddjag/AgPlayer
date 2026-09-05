@@ -12,10 +12,13 @@ T.Button {
     property bool prominent: false
     property bool loading: false
     property bool available: true
+    property int labelPixelSize: Theme.fontSizeBody
 
     enabled: available && !loading
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
+    font.family: Theme.fontPrimary
+    font.pixelSize: labelPixelSize
     implicitHeight: compact ? Theme.controlHeightCompact
                             : prominent ? Theme.controlHeightProminent
                                         : Theme.controlHeight
@@ -47,14 +50,21 @@ T.Button {
             text: control.text
             color: !control.enabled ? Theme.textDisabled
                    : control.primary || control.danger ? Theme.accentText
-                                                      : Theme.textPrimary
-            font.family: Theme.fontPrimary
-            font.pixelSize: Theme.fontSizeBody
-            font.weight: control.primary ? Font.Medium : Font.Normal
+                                                       : Theme.textPrimary
+            font.family: control.font.family
+            font.pixelSize: control.font.pixelSize
+            font.weight: control.font.weight !== Font.Normal
+                         ? control.font.weight
+                         : control.primary ? Font.Medium : Font.Normal
+            font.italic: control.font.italic
+            font.underline: control.font.underline
             visible: !control.loading
+            width: parent.width
             anchors.centerIn: parent
+            horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
+            wrapMode: Text.NoWrap
         }
     }
 

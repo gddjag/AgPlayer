@@ -29,7 +29,7 @@ var profiles = {
         actions: ({
             "previousButton": true, "playPauseButton": true,
             "nextButton": true, "modeButton": true,
-            "waveformModeButton": true, "equalizerButton": true,
+            "waveformModeButton": false, "equalizerButton": true,
             "audioToolsButton": true, "themeModeButton": true,
             "immersiveActionButton": true, "miniPlayerButton": true,
             "mainVolumeControl": true

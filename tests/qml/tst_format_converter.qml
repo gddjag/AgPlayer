@@ -26,6 +26,63 @@ TestCase {
         }
     }
 
+    Component {
+        id: dialogBehaviorWindowComponent
+
+        Window {
+            id: dialogHost
+            width: 880
+            height: 560
+            visible: true
+
+            property alias preflightDialog: preflightDialog
+            property alias errorDialog: errorDialog
+            property alias converterStub: converterStub
+            property int preflightAcceptedCount: 0
+            property int preflightRejectedCount: 0
+            property int errorRejectedCount: 0
+
+            QtObject {
+                id: converterStub
+                property int confirmCount: 0
+                property int rejectCount: 0
+                property int copyCount: 0
+                property var pendingPlan: ({
+                    taskCount: 12,
+                    requiresConfirmation: true
+                })
+                function confirmPendingPlan() { ++confirmCount }
+                function rejectPendingPlan() { ++rejectCount }
+                function copyText(text) { ++copyCount }
+            }
+
+            FormatPreflightDialog {
+                id: preflightDialog
+                parent: dialogHost.contentItem
+                converter: converterStub
+            }
+
+            FormatErrorDialog {
+                id: errorDialog
+                parent: dialogHost.contentItem
+                converter: converterStub
+                summary: qsTr("2 个任务转换失败，请检查输出目录与编码参数。")
+                detail: (qsTr("长错误详情") + "\n").repeat(40)
+            }
+
+            Connections {
+                target: preflightDialog
+                function onAccepted() { ++dialogHost.preflightAcceptedCount }
+                function onRejected() { ++dialogHost.preflightRejectedCount }
+            }
+
+            Connections {
+                target: errorDialog
+                function onRejected() { ++dialogHost.errorRejectedCount }
+            }
+        }
+    }
+
     function verifyAscendingX(parent, names) {
         let previousX = -1
         for (let index = 0; index < names.length; ++index) {
@@ -46,6 +103,51 @@ TestCase {
         compare(first.mapToItem(nav, 0, 0).x, 12)
         verifyAscendingX(nav, ["audioToolNav_0", "audioToolNav_4", "audioToolNav_1",
                                "audioToolNav_2", "audioToolNav_3"])
+    }
+
+    function test_dialogButtonRolesAndScrollableDetail() {
+        const host = createTemporaryObject(dialogBehaviorWindowComponent, testCase)
+        verify(host)
+        tryVerify(function() { return host.visible }, 1000)
+
+        const confirmButton = findChild(host, "formatPreflightConfirmButton")
+        const cancelButton = findChild(host, "formatPreflightCancelButton")
+        const copyButton = findChild(host, "formatErrorCopyButton")
+        const closeButton = findChild(host, "formatErrorCloseButton")
+        const detail = findChild(host, "formatErrorDetailTextArea")
+        verify(confirmButton && cancelButton && copyButton && closeButton && detail)
+        verify(detail.contentHeight > 180,
+               "long error details must overflow the fixed viewport and remain scrollable")
+
+        host.preflightDialog.open()
+        tryVerify(function() { return host.preflightDialog.visible }, 1000)
+        mouseClick(confirmButton, confirmButton.width / 2, confirmButton.height / 2)
+        tryVerify(function() { return !host.preflightDialog.visible }, 1000)
+        compare(host.preflightAcceptedCount, 1)
+        compare(host.converterStub.confirmCount, 1)
+        compare(host.preflightRejectedCount, 0)
+        compare(host.converterStub.rejectCount, 0)
+
+        host.preflightDialog.open()
+        tryVerify(function() { return host.preflightDialog.visible }, 1000)
+        mouseClick(cancelButton, cancelButton.width / 2, cancelButton.height / 2)
+        tryVerify(function() { return !host.preflightDialog.visible }, 1000)
+        compare(host.preflightAcceptedCount, 1)
+        compare(host.converterStub.confirmCount, 1)
+        compare(host.preflightRejectedCount, 1)
+        compare(host.converterStub.rejectCount, 1)
+
+        host.errorDialog.open()
+        tryVerify(function() { return host.errorDialog.visible }, 1000)
+        mouseClick(copyButton, copyButton.width / 2, copyButton.height / 2)
+        compare(host.converterStub.copyCount, 1)
+        compare(host.errorRejectedCount, 0)
+        verify(host.errorDialog.visible, "copying details must not close the dialog")
+        mouseClick(closeButton, closeButton.width / 2, closeButton.height / 2)
+        tryVerify(function() { return !host.errorDialog.visible }, 1000)
+        compare(host.errorRejectedCount, 1)
+
+        host.destroy()
     }
 
     function init() {
@@ -93,8 +195,30 @@ TestCase {
             verify(position.y + item.height <= page.height + 0.5)
         }
         verify(tasks.width > 0 && tasks.height > 0)
+        compare(page.compactLayout, data.w < 1500)
         if (page.compactLayout)
             verify(settings.width <= 40.5)
+
+        const bottomItems = ["converterParallelJobsGroup", "formatSummaryCard",
+                             "convertAllButton", "cancelAllButton"]
+        for (const name of bottomItems) {
+            const item = findChild(bottom, name)
+            verify(item, "missing " + name)
+            const position = item.mapToItem(bottom, 0, 0)
+            verify(position.x >= -0.5, name + " starts outside the footer")
+            verify(position.x + item.width <= bottom.width + 0.5,
+                   name + " overflows the footer")
+        }
+
+        for (const name of ["formatAddFileButton", "formatToolbarButton-folder",
+                            "formatToolbarButton-playlist", "formatToolbarButton-remove",
+                            "formatToolbarButton-clear"]) {
+            const action = findChild(toolbar, name)
+            verify(action && action.visible, "missing toolbar action " + name)
+            const position = action.mapToItem(toolbar, 0, 0)
+            verify(position.x >= -0.5 && position.x + action.width <= toolbar.width + 0.5,
+                   name + " must remain reachable")
+        }
     }
 
     function test_referenceGeometryAndControls() {
@@ -104,12 +228,14 @@ TestCase {
         const bottomBar = findChild(page, "formatBottomBar")
         verify(toolbar && taskPanel && settingsPanel && bottomBar, "reference panels")
         compare(testCase.height, 941)
-        compare(Math.round(toolbar.height), 60)
-        compare(Math.round(bottomBar.height), 72)
+        compare(Math.round(toolbar.height),
+                Theme.settingsRowHeight + Theme.spacingSm)
+        compare(Math.round(bottomBar.height),
+                Theme.settingsRowHeight + Theme.spacingLg)
         tryVerify(function() {
-            return Math.round(taskPanel.mapToItem(page, 0, 0).y) === 65
-                   && Math.round(settingsPanel.mapToItem(page, 0, 0).y) === 65
-                   && Math.round(bottomBar.mapToItem(page, 0, 0).y) === 869
+            return Math.round(taskPanel.mapToItem(page, 0, 0).y) === 60
+                   && Math.round(settingsPanel.mapToItem(page, 0, 0).y) === 60
+                   && Math.round(bottomBar.mapToItem(page, 0, 0).y) === 877
         }, 1000, "reference vertical geometry")
         verify(settingsPanel.width >= 443 && settingsPanel.width <= 447,
                "settings width=" + settingsPanel.width)

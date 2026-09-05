@@ -19,10 +19,13 @@ Window {
         AudioToolsController.currentTool === 2
     readonly property bool separationWorkbench:
         AudioToolsController.currentTool === 4
+    readonly property bool losslessWorkbench: AudioToolsController.currentTool === 5
     readonly property bool referenceWorkbench:
-        metadataWorkbench || separationWorkbench
+        metadataWorkbench || separationWorkbench || losslessWorkbench
+    property int previousTool: -1
 
     function pageIndexForTool(toolId) {
+        if (toolId === 5) return 5
         if (toolId === 4) return 1
         if (toolId === 1) return 2
         if (toolId === 2) return 3
@@ -53,6 +56,8 @@ Window {
         WindowController.hideAudioTools()
     }
     onVisibleChanged: {
+        if (!visible && losslessWorkbench && LosslessAnalysisController.running)
+            LosslessAnalysisController.cancel()
         if (visible && AudioToolsController.currentTool === 0)
             AudioEditorController.activate()
         else if (!visible)
@@ -76,12 +81,19 @@ Window {
     Connections {
         target: AudioToolsController
         function onCurrentToolChanged() {
+            const current = AudioToolsController.currentTool
+            if (window.previousTool === 5 && current !== 5
+                    && LosslessAnalysisController.running)
+                LosslessAnalysisController.cancel()
+            window.previousTool = current
             if (AudioToolsController.currentTool === 0)
                 AudioEditorController.activate()
             else
                 AudioEditorController.deactivate()
         }
     }
+
+    Component.onCompleted: previousTool = AudioToolsController.currentTool
 
     Shortcut {
         objectName: "audioToolsSpaceShortcut"
@@ -95,7 +107,7 @@ Window {
         onActivated: window.playPauseFromSpace()
     }
 
-    Dialog {
+    ThemedDialog {
         id: unsavedCloseDialog
         parent: window.contentItem
         anchors.centerIn: parent
@@ -106,8 +118,12 @@ Window {
             WindowController.hideAudioTools()
         }
         Label {
+            width: Math.min(420, window.width - 2 * Theme.spacing2Xl)
             text: qsTr("当前音频尚未保存。关闭窗口将舍弃这些更改。")
             color: Theme.primaryText
+            font.family: Theme.fontPrimary
+            font.pixelSize: Theme.fontSizeBody
+            wrapMode: Text.WordWrap
         }
     }
 
@@ -127,12 +143,23 @@ Window {
                 objectName: "audioToolsTitleBar"
                 Layout.fillWidth: true
                 Layout.preferredHeight: Theme.titleBarHeight
+                Layout.minimumHeight: window.losslessWorkbench
+                                      ? Theme.losslessTitleBarHeight
+                                      : Theme.titleBarHeight
+                Layout.maximumHeight: Layout.minimumHeight
                 color: Theme.titleBarSurface
+
+                Rectangle {
+                    anchors.fill: parent
+                    visible: window.losslessWorkbench
+                    color: Theme.losslessWorkspaceSurface
+                }
 
                 RowLayout {
                     z: 1
                     anchors.fill: parent
-                    anchors.leftMargin: Theme.spacingXl
+                    anchors.leftMargin: window.losslessWorkbench
+                                        ? Theme.spacingLg : Theme.spacingXl
                     anchors.rightMargin: Theme.spacingSm
                     spacing: Theme.spacingMd
 
@@ -152,8 +179,10 @@ Window {
                         objectName: "audioToolsWindowTitle"
                         text: qsTr("AgPlayer · 音频工具")
                         color: Theme.primaryText
-                        font.family: Theme.fontFallback
-                        font.pixelSize: Theme.fontSizeSection
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: window.losslessWorkbench
+                                        ? Theme.losslessFontSizeSection
+                                        : Theme.fontSizeSection
                         font.weight: Font.Medium
                     }
 
@@ -163,8 +192,8 @@ Window {
                         objectName: "audioToolsMinimizeButton"
                         focusPolicy: Qt.NoFocus
                         Keys.onSpacePressed: function(event) { event.accepted = true }
-                        Layout.preferredWidth: 24
-                        Layout.preferredHeight: 24
+                        Layout.preferredWidth: Theme.navigationActionExtent
+                        Layout.preferredHeight: Theme.navigationActionExtent
                         iconSize: 14
                         iconSource: Theme.icon("subtract-line")
                         accessibleName: qsTr("最小化")
@@ -174,8 +203,8 @@ Window {
                         objectName: "audioToolsMaximizeButton"
                         focusPolicy: Qt.NoFocus
                         Keys.onSpacePressed: function(event) { event.accepted = true }
-                        Layout.preferredWidth: 24
-                        Layout.preferredHeight: 24
+                        Layout.preferredWidth: Theme.navigationActionExtent
+                        Layout.preferredHeight: Theme.navigationActionExtent
                         iconSize: 14
                         iconSource: Theme.icon(window.visibility === Window.Maximized
                                                ? "fullscreen-exit-fill"
@@ -189,8 +218,8 @@ Window {
                         objectName: "audioToolsCloseButton"
                         focusPolicy: Qt.NoFocus
                         Keys.onSpacePressed: function(event) { event.accepted = true }
-                        Layout.preferredWidth: 24
-                        Layout.preferredHeight: 24
+                        Layout.preferredWidth: Theme.navigationActionExtent
+                        Layout.preferredHeight: Theme.navigationActionExtent
                         iconSize: 14
                         iconSource: Theme.icon("close-fill")
                         accessibleName: qsTr("关闭")
@@ -209,7 +238,7 @@ Window {
                     // controls: 3 button extents, 2 RowLayout gaps, and the
                     // title row's trailing margin.
                     anchors.rightMargin: 3 * Theme.navigationActionExtent
-                        + 2 * 14 + 8
+                        + 2 * Theme.spacingMd + Theme.spacingSm
                     z: 2
                     acceptedButtons: Qt.LeftButton
                     onPressed: function(mouse) {
@@ -222,11 +251,14 @@ Window {
 
             ToolSidebar {
                 Layout.fillWidth: true
-                Layout.preferredHeight: Theme.settingsRowHeight
+                Layout.preferredHeight: window.losslessWorkbench
+                                        ? Theme.losslessNavigationHeight
+                                        : Theme.settingsRowHeight
                 window: window
                 currentTool: AudioToolsController.currentTool
                 referenceWorkbench: window.referenceWorkbench
                 separationWorkbench: window.separationWorkbench
+                losslessWorkbench: window.losslessWorkbench
                 onToolSelected: function(toolId) {
                     AudioToolsController.selectTool(toolId)
                 }
@@ -278,6 +310,17 @@ Window {
                         active: AudioToolsController.currentTool === 3
                         sourceComponent: Component {
                             FilenameProcessPage { objectName: "filenameProcessPage" }
+                        }
+                    }
+                    Loader {
+                        objectName: "losslessIdentifyPageLoader"
+                        active: window.losslessWorkbench
+                        sourceComponent: Component {
+                            LosslessIdentifyPage {
+                                objectName: "losslessIdentifyPage"
+                                onAddPlaylistRequested: AudioToolsController.addCurrentListToLossless()
+                                onLocateRequested: function(path) { AudioToolsController.locateLosslessFile(path) }
+                            }
                         }
                     }
                 }

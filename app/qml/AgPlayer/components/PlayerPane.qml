@@ -234,9 +234,10 @@ Rectangle {
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignVCenter
+                Layout.maximumHeight: implicitHeight
                 // At the native minimum height all metadata rows remain in
                 // the layout; only their spacing and font scale contract.
-                spacing: root.minimalHeight ? 1 : Theme.spacingSm
+                spacing: root.minimalHeight ? Theme.spacingXs : Theme.spacingSm
 
                 Item {
                     id: titleRow
@@ -332,7 +333,8 @@ Rectangle {
                     id: artistRatingRow
                     objectName: "trackArtistRatingRow"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: root.minimalHeight ? 13 : 18
+                    Layout.preferredHeight: Math.max(artistAlbumText.implicitHeight,
+                                                    trackRating.implicitHeight)
                     visible: true
 
                     Item {
@@ -483,7 +485,6 @@ Rectangle {
                 hoverGuideObjectName: "waveformHoverGuide"
                 hoverCapsuleObjectName: "waveformHoverTimeCapsule"
                 playbackGuideObjectName: "waveformPlaybackGuide"
-                leftMaskObjectName: "waveformLeftEdgeMask"
                 duration: root.effectiveDurationMs
                 position: root.visualPlaybackPositionMs
                 analysisProgress: WaveformProvider.analysisProgress

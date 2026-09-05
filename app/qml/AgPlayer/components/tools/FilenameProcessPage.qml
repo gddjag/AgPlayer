@@ -16,7 +16,7 @@ Control {
     readonly property color panelColor: Theme.panel
     readonly property color neutralActionColor: Theme.elevated
     readonly property color actionBlue: Theme.accent
-    readonly property bool compactLayout: width < 1000
+    readonly property bool compactLayout: width < 1500
     readonly property real desktopWorkspaceWidth: 1012
 
     component AccentCheckBox: ThemedCheckBox {}
@@ -26,9 +26,8 @@ Control {
         property int status: 0 // 0 ready, 1 warning, 2 error
         property bool square: false
         property real markSize: 15
-        property real fontSize: Theme.fontSizeCaption // typography-size-allow: decorative preview glyph
-        implicitWidth: 18
-        implicitHeight: 18
+        implicitWidth: Theme.iconSizeMd
+        implicitHeight: Theme.iconSizeMd
         Rectangle {
             anchors.centerIn: parent
             width: glyph.markSize
@@ -38,55 +37,32 @@ Control {
             color: "transparent"
             border.width: 1.5
             border.color: glyph.status === 2 ? Theme.error : Theme.success
-            Text {
+            ThemedIcon {
                 anchors.centerIn: parent
-                visible: glyph.status === 2
-                text: "×"
-                color: parent.border.color
-                font.family: "Segoe UI Symbol"
-                font.pixelSize: glyph.fontSize
-                font.weight: Font.DemiBold
-            }
-            Item {
-                anchors.centerIn: parent
-                width: glyph.markSize * 0.62
-                height: glyph.markSize * 0.48
-                visible: glyph.status === 0
-                Rectangle {
-                    x: 0
-                    y: parent.height * 0.46
-                    width: parent.width * 0.42
-                    height: 1.5
-                    radius: 1
-                    rotation: 43
-                    color: Theme.success
-                    transformOrigin: Item.Left
-                }
-                Rectangle {
-                    x: parent.width * 0.31
-                    y: parent.height * 0.58
-                    width: parent.width * 0.74
-                    height: 1.5
-                    radius: 1
-                    rotation: -47
-                    color: Theme.success
-                    transformOrigin: Item.Left
-                }
+                width: glyph.markSize * 0.72
+                height: width
+                sourceSize.width: width
+                sourceSize.height: height
+                source: Theme.icon(glyph.status === 2 ? "close-line" : "check-line")
+                tint: parent.border.color
             }
         }
-        Text {
+        ThemedIcon {
             anchors.centerIn: parent
             visible: glyph.status === 1
-            text: "⚠"
-            color: Theme.warning
-            font.pixelSize: glyph.fontSize + 5 // typography-size-allow: decorative preview glyph
+            width: glyph.markSize
+            height: width
+            sourceSize.width: width
+            sourceSize.height: height
+            source: Theme.icon("error-warning-line")
+            tint: Theme.warning
         }
     }
 
     component CompactSpinBox: SpinBox {
         id: compactSpin
         editable: true
-        implicitHeight: 36
+        implicitHeight: Theme.controlHeight
         contentItem: TextInput {
             z: 2
             text: Number(compactSpin.value).toLocaleString(
@@ -108,7 +84,13 @@ Control {
             width: 26
             height: compactSpin.height / 2 - 1
             color: compactSpin.up.pressed ? Theme.hoverSurface : "transparent"
-            Text { anchors.centerIn: parent; text: "⌃"; color: Theme.secondaryText; font.pixelSize: Theme.fontSizeCaption }
+            ThemedIcon {
+                anchors.centerIn: parent
+                source: Theme.icon("arrow-up-s-line")
+                tint: Theme.iconSecondary
+                sourceSize.width: 14
+                sourceSize.height: 14
+            }
         }
         down.indicator: Rectangle {
             x: compactSpin.width - width - 1
@@ -116,7 +98,13 @@ Control {
             width: 26
             height: compactSpin.height / 2 - 1
             color: compactSpin.down.pressed ? Theme.hoverSurface : "transparent"
-            Text { anchors.centerIn: parent; text: "⌄"; color: Theme.secondaryText; font.pixelSize: Theme.fontSizeCaption }
+            ThemedIcon {
+                anchors.centerIn: parent
+                source: Theme.icon("arrow-down-s-line")
+                tint: Theme.iconSecondary
+                sourceSize.width: 14
+                sourceSize.height: 14
+            }
         }
         background: Rectangle {
             color: Theme.background
@@ -318,7 +306,7 @@ Control {
         id: folderDialog
         onAccepted: FilenameProcessor.loadFiles([selectedFolder])
     }
-    Dialog {
+    ThemedDialog {
         id: overwriteConfirmation
         modal: true
         anchors.centerIn: parent
@@ -327,12 +315,15 @@ Control {
         onAccepted: FilenameProcessor.apply(
             page.rules(), page.selectedIndices, conflictBox.currentValue)
         ColumnLayout {
-            width: 420
+            width: Math.min(420, page.width - 2 * Theme.spacing2Xl)
+            spacing: Theme.spacingMd
             Label {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: qsTr("覆盖策略会先备份目标文件；重命名成功后仍可安全撤销。是否继续？")
                 color: Theme.primaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: Theme.fontSizeBody
             }
         }
     }
@@ -346,16 +337,16 @@ Control {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.leftMargin: 4
-        anchors.rightMargin: 8
-        anchors.topMargin: 7
-        anchors.bottomMargin: 3
-        spacing: 6
+        anchors.leftMargin: Theme.spacingXs
+        anchors.rightMargin: Theme.spacingSm
+        anchors.topMargin: Theme.spacingSm
+        anchors.bottomMargin: Theme.spacingXs
+        spacing: Theme.spacingXs
 
         Rectangle {
             objectName: "filenameCommandBar"
             Layout.fillWidth: true
-            Layout.preferredHeight: 60
+            Layout.preferredHeight: Theme.settingsRowHeight + Theme.spacingSm
             color: page.panelColor
             border.color: Theme.border
             border.width: 1
@@ -363,9 +354,9 @@ Control {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 18
-                anchors.rightMargin: 16
-                spacing: 16
+                anchors.leftMargin: Theme.spacingLg
+                anchors.rightMargin: Theme.spacingLg
+                spacing: Theme.spacingMd
             ActionButton {
                 Layout.preferredWidth: 124
                 Layout.preferredHeight: Theme.controlHeightProminent
@@ -427,7 +418,7 @@ Control {
             RowLayout {
                 width: workspaceScroller.contentWidth
                 height: workspaceScroller.height
-                spacing: 6
+                spacing: Theme.spacingXs
 
             Rectangle {
                 id: filePanel
@@ -446,7 +437,7 @@ Control {
                     spacing: 0
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 47
+                        Layout.preferredHeight: Theme.listRowHeight
                         color: page.panelColor
                         Label {
                             anchors.verticalCenter: parent.verticalCenter
@@ -460,7 +451,7 @@ Control {
                     }
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 48
+                        Layout.preferredHeight: Theme.tableHeaderHeight
                         color: Theme.background
                         RowLayout {
                             anchors.fill: parent
@@ -500,7 +491,7 @@ Control {
                             required property int index
                             readonly property var fileEntry: page.entry(index)
                             width: fileList.width
-                            height: 43
+                            height: Theme.listRowHeight
                             color: rowHover.hovered ? Theme.hoverSurface : "transparent"
                             HoverHandler { id: rowHover }
                             TapHandler {
@@ -911,7 +902,7 @@ Control {
                             spacing: 0
                             Rectangle {
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 47
+                            Layout.preferredHeight: Theme.listRowHeight
                                 color: page.panelColor
                                 Label {
                                     anchors.verticalCenter: parent.verticalCenter
@@ -925,7 +916,7 @@ Control {
                             }
                             Rectangle {
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 32
+                                Layout.preferredHeight: Theme.tableHeaderHeight
                                 color: Theme.background
                                 RowLayout {
                                     anchors.fill: parent
@@ -951,7 +942,7 @@ Control {
                                     required property int index
                                     required property var modelData
                                     width: previewList.width
-                                    height: 28
+                                    height: Theme.listRowHeight
                                     color: index % 2 === 0 ? "transparent" : Theme.background
                                     RowLayout {
                                         anchors.fill: parent
@@ -1015,22 +1006,18 @@ Control {
                                 delegate: RowLayout {
                                     required property var modelData
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 35
+                                    Layout.preferredHeight: Theme.tableHeaderHeight
                                     spacing: 9
                                     Item {
                                         visible: modelData.status < 0
                                         Layout.preferredWidth: 18
                                         Layout.preferredHeight: 18
-                                        Rectangle {
+                                        ThemedIcon {
                                             anchors.centerIn: parent
-                                            width: 13
-                                            height: 16
-                                            radius: 1
-                                            color: "transparent"
-                                            border.width: 1.5
-                                            border.color: Theme.primaryText
-                                            Rectangle { x: 3; y: 6; width: 7; height: 1; color: Theme.primaryText }
-                                            Rectangle { x: 3; y: 10; width: 7; height: 1; color: Theme.primaryText }
+                                            source: Theme.icon("file-copy-line")
+                                            tint: Theme.iconPrimary
+                                            sourceSize.width: Theme.iconSizeMd
+                                            sourceSize.height: Theme.iconSizeMd
                                         }
                                     }
                                     StatusGlyph {
@@ -1066,7 +1053,7 @@ Control {
                 Rectangle {
                     visible: page.width < 1500
                     Layout.fillWidth: true
-                    Layout.preferredHeight: visible ? 56 : 0
+                    Layout.preferredHeight: visible ? Theme.settingsRowHeight : 0
                     color: page.panelColor
                     border.color: Theme.border
                     border.width: 1
@@ -1095,7 +1082,7 @@ Control {
             id: bottomBar
             objectName: "filenameBottomBar"
             Layout.fillWidth: true
-            Layout.preferredHeight: 135
+            Layout.preferredHeight: page.compactLayout ? 112 : 124
             color: page.panelColor
             border.color: Theme.border
             border.width: 1
@@ -1103,14 +1090,18 @@ Control {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.topMargin: 34
-                anchors.bottomMargin: 16
-                anchors.leftMargin: 18
-                anchors.rightMargin: 28
-                spacing: 20
+                anchors.topMargin: 32
+                anchors.bottomMargin: Theme.spacingSm
+                anchors.leftMargin: page.compactLayout ? Theme.spacingMd
+                                                       : Theme.spacingLg
+                anchors.rightMargin: page.compactLayout ? Theme.spacingMd
+                                                        : Theme.spacingLg
+                spacing: page.compactLayout ? Theme.spacingSm
+                                            : Theme.spacingLg
                 Rectangle {
-                    Layout.preferredWidth: 278
-                    Layout.preferredHeight: 82
+                    objectName: "filenameReadySummaryCard"
+                    Layout.preferredWidth: page.compactLayout ? 150 : 236
+                    Layout.preferredHeight: page.compactLayout ? 64 : 72
                     Layout.alignment: Qt.AlignTop
                     Layout.topMargin: 2
                     color: Theme.background
@@ -1118,11 +1109,9 @@ Control {
                     radius: Theme.radiusSm
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 24
-                        anchors.rightMargin: 24
-                        anchors.topMargin: 10
-                        anchors.bottomMargin: 10
-                        spacing: 10
+                        anchors.margins: page.compactLayout ? Theme.spacingMd
+                                                           : Theme.spacingLg
+                        spacing: Theme.spacingSm
                         ColumnLayout {
                             spacing: 1
                             Label { text: qsTr("成功预览数量"); color: Theme.secondaryText; font.pixelSize: Theme.fontSizeBody }
@@ -1133,12 +1122,18 @@ Control {
                             }
                         }
                         Item { Layout.fillWidth: true }
-                        StatusGlyph { status: 0; markSize: 36; fontSize: 26; Layout.preferredWidth: 42; Layout.preferredHeight: 42 }
+                        StatusGlyph {
+                            status: 0
+                            markSize: page.compactLayout ? 24 : 30
+                            Layout.preferredWidth: markSize + 4
+                            Layout.preferredHeight: markSize + 4
+                        }
                     }
                 }
                 Rectangle {
-                    Layout.preferredWidth: 266
-                    Layout.preferredHeight: 82
+                    objectName: "filenameConflictSummaryCard"
+                    Layout.preferredWidth: page.compactLayout ? 145 : 226
+                    Layout.preferredHeight: page.compactLayout ? 64 : 72
                     Layout.alignment: Qt.AlignTop
                     Layout.topMargin: 2
                     color: Theme.background
@@ -1146,11 +1141,9 @@ Control {
                     radius: Theme.radiusSm
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 24
-                        anchors.rightMargin: 20
-                        anchors.topMargin: 10
-                        anchors.bottomMargin: 10
-                        spacing: 10
+                        anchors.margins: page.compactLayout ? Theme.spacingMd
+                                                           : Theme.spacingLg
+                        spacing: Theme.spacingSm
                         ColumnLayout {
                             spacing: 1
                             Label { text: qsTr("冲突数量"); color: Theme.secondaryText; font.pixelSize: Theme.fontSizeBody }
@@ -1161,12 +1154,18 @@ Control {
                             }
                         }
                         Item { Layout.fillWidth: true }
-                        StatusGlyph { status: 1; markSize: 36; fontSize: 26; Layout.preferredWidth: 42; Layout.preferredHeight: 42 }
+                        StatusGlyph {
+                            status: 1
+                            markSize: page.compactLayout ? 24 : 30
+                            Layout.preferredWidth: markSize + 4
+                            Layout.preferredHeight: markSize + 4
+                        }
                     }
                 }
                 Rectangle {
-                    Layout.preferredWidth: 244
-                    Layout.preferredHeight: 82
+                    objectName: "filenameUndoSummaryCard"
+                    Layout.preferredWidth: page.compactLayout ? 140 : 208
+                    Layout.preferredHeight: page.compactLayout ? 64 : 72
                     Layout.alignment: Qt.AlignTop
                     Layout.topMargin: 2
                     color: Theme.background
@@ -1174,18 +1173,21 @@ Control {
                     radius: Theme.radiusSm
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 24
-                        anchors.rightMargin: 16
-                        anchors.topMargin: 10
-                        anchors.bottomMargin: 10
-                        spacing: 10
+                        anchors.margins: page.compactLayout ? Theme.spacingMd
+                                                           : Theme.spacingLg
+                        spacing: Theme.spacingSm
                         ColumnLayout {
                             spacing: 1
                             Label { text: qsTr("可撤销本次重命名"); color: Theme.secondaryText; font.pixelSize: Theme.fontSizeBody }
                             Label { text: FilenameProcessor.canUndo ? qsTr("是") : qsTr("否"); color: Theme.cyan; font.pixelSize: Theme.fontSizePageTitle }
                         }
                         Item { Layout.fillWidth: true }
-                        ThemedIcon { source: Theme.icon("restore-line"); tint: Theme.cyan; sourceSize.width: 42; sourceSize.height: 42 }
+                        ThemedIcon {
+                            source: Theme.icon("restore-line")
+                            tint: Theme.cyan
+                            sourceSize: Qt.size(page.compactLayout ? 28 : 32,
+                                                page.compactLayout ? 28 : 32)
+                        }
                     }
                     TapHandler {
                         enabled: FilenameProcessor.canUndo && !FilenameProcessor.busy
@@ -1199,11 +1201,11 @@ Control {
                     value: FilenameProcessor.progress
                 }
                 Label {
-                    Layout.preferredWidth: 298
-                    Layout.leftMargin: 18
+                    Layout.preferredWidth: page.compactLayout ? 0 : 260
+                    Layout.leftMargin: page.compactLayout ? 0 : Theme.spacingSm
                     Layout.alignment: Qt.AlignTop
                     Layout.topMargin: 4
-                    visible: !FilenameProcessor.busy
+                    visible: !page.compactLayout && !FilenameProcessor.busy
                     text: qsTr("重命名操作将在处理后生成日志，\n如需退回，可通过撤销恢复原名列表进行还原。")
                     color: Theme.secondaryText
                     font.pixelSize: Theme.fontSizeCaption
@@ -1211,7 +1213,8 @@ Control {
                 }
                 ActionButton {
                     id: startRenameButton
-                    Layout.preferredWidth: 222
+                    objectName: "filenameStartButton"
+                    Layout.preferredWidth: page.compactLayout ? 130 : 180
                     Layout.preferredHeight: Theme.controlHeightProminent
                     Layout.alignment: Qt.AlignVCenter
                     text: qsTr("开始重命名")
@@ -1237,7 +1240,7 @@ Control {
                     visible: true
                     enabled: FilenameProcessor.busy
                     Layout.leftMargin: -1
-                    Layout.preferredWidth: 184
+                    Layout.preferredWidth: page.compactLayout ? 100 : 150
                     Layout.preferredHeight: Theme.controlHeightProminent
                     Layout.alignment: Qt.AlignVCenter
                     text: qsTr("取消")

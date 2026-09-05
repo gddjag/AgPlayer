@@ -901,7 +901,7 @@ foreach(qt_test IN ITEMS
     tag_filter_model_test
     library_store_test
     playlist_model_test
-    library_manager_controller_test
+    resource_folder_controller_test
     library_navigation_model_test
     resource_path_test
     library_file_operations_test

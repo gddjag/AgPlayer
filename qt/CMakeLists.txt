@@ -84,8 +84,8 @@ add_library(agplayer_qt STATIC
     src/unison_lyrics_provider.hpp
     src/lyrics_service.cpp
     src/lyrics_service.hpp
-    src/library_manager_controller.cpp
-    src/library_manager_controller.hpp
+    src/resource_folder_controller.cpp
+    src/resource_folder_controller.hpp
     src/library_navigation_model.cpp
     src/library_navigation_model.hpp
     src/library_store.cpp
@@ -110,6 +110,8 @@ add_library(agplayer_qt STATIC
     src/vocal_separation_catalog.hpp
     src/vocal_separation_installer.cpp
     src/vocal_separation_installer.hpp
+    src/external_separation_runtime.cpp
+    src/external_separation_runtime.hpp
     src/vocal_separation_history.cpp
     src/vocal_separation_history.hpp
     src/vocal_separation_controller.cpp
@@ -159,6 +161,8 @@ add_library(agplayer_qt STATIC
 )
 
 set_target_properties(agplayer_qt PROPERTIES AUTOMOC ON)
+qt_add_resources(agplayer_qt agplayer_separation_python
+    PREFIX "/separation" BASE "resources" FILES resources/external_separation_worker.py)
 if(BUILD_TESTING)
     target_compile_definitions(agplayer_qt PUBLIC
         AGPLAYER_VIDEO_FRAME_ITEM_TESTING=1

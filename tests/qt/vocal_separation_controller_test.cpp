@@ -19,6 +19,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTranslator>
+#include <algorithm>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -125,9 +126,11 @@ private slots:
     void downloadFailureRetriesMirrorBeforeReportingExhaustion();
     void queuedDownloadRouteAndCancellationUseProductionControllerState();
     void runtimeCanBeConfiguredWithoutCatalogModelLookup();
+    void configuredRuntimeDoesNotPretendUnknownModelsAreConfigured();
     void installedMappingUsesCheapDiscoveryThenExplicitAsyncHashing();
     void customModelDirectoryPersistsAndRecognizesTrustedNestedFiles();
     void customModelDirectoryListsNestedRawModelsWithBackendDiagnostics();
+    void knownLocalMdxProfileIsDiscoveredButStillRequiresItsFingerprint();
     void customSidecarManifestUsesTrustedFingerprintAndReportsRejection();
     void cancellingVerificationImmediatelyRestoresCheapModelStates();
     void deletingDuringRefreshVerificationCannotResurrectTheModel();
@@ -150,6 +153,9 @@ private slots:
     void historySaveFailureDoesNotPublishAResult();
     void workerOutputOutsideTheSelectedDirectoryIsRejected();
     void providerProbeRetryRemainsInTheProbingState();
+    void pageProbeWaitsForVerificationAndSelectsGpu();
+    void knownVrModelOffersExternalConfigurationWithPause();
+    void externalRuntimeRealInstallAndCachedRepair();
     void immediateCancellationBeforeHelloNeverCompletesTheJob();
     void runningRequestRejectsMutationsThatWouldChangeItsMeaning();
     void publishedStemReplacementWithJunctionIsRejectedByEveryAction();
@@ -703,6 +709,32 @@ customModelDirectoryListsNestedRawModelsWithBackendDiagnostics()
              QStringLiteral("onnxruntime-native"));
     QCOMPARE(discovered.value(QStringLiteral("available")).toBool(), false);
     QVERIFY(!discovered.value(QStringLiteral("failureReason")).toString().isEmpty());
+}
+
+void VocalSeparationControllerTest::knownLocalMdxProfileIsDiscoveredButStillRequiresItsFingerprint()
+{
+    QTemporaryDir temporary;
+    const auto options = optionsFor(temporary, QStringLiteral("stale"), QByteArray("model"));
+    const QString root = temporary.filePath(QStringLiteral("models/nested/mdx"));
+    QVERIFY(QDir().mkpath(root));
+    QFile spoof(QDir(root).filePath(QStringLiteral("Kim_Vocal_2.onnx")));
+    QVERIFY(spoof.open(QIODevice::WriteOnly));
+    QVERIFY(spoof.resize(66'759'214));
+    spoof.close();
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(&preview, &waveforms, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.selectModelDirectory(QUrl::fromLocalFile(temporary.filePath(QStringLiteral("models")))));
+    QTRY_VERIFY_WITH_TIMEOUT(controller.models().size() > options.catalog.size(), 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(VocalSeparationControllerTestDriver::downloadPipelineIdle(controller), 5000);
+    const auto models = controller.models();
+    const auto found = std::find_if(models.cbegin(), models.cend(), [](const QVariant& value) {
+        return value.toMap().value(QStringLiteral("id")).toString() == QStringLiteral("kim-vocal-2");
+    });
+    QVERIFY(found != models.cend());
+    QCOMPARE(found->toMap().value(QStringLiteral("origin")).toString(), QStringLiteral("custom"));
+    QVERIFY(!found->toMap().value(QStringLiteral("available")).toBool());
+    QVERIFY(!controller.downloadBusy());
 }
 
 void VocalSeparationControllerTest::
@@ -1336,6 +1368,81 @@ workerOutputOutsideTheSelectedDirectoryIsRejected()
                               VocalSeparationController::JobState::JobFailed, 5000);
     QVERIFY(!controller.error().isEmpty());
     QCOMPARE(controller.history().size(), 0);
+}
+
+void VocalSeparationControllerTest::externalRuntimeRealInstallAndCachedRepair()
+{
+    const QString root = qEnvironmentVariable("AGPLAYER_EXTERNAL_RUNTIME_SMOKE_ROOT");
+    if (root.isEmpty()) QSKIP("Opt-in: installs an isolated optional Python environment");
+    QNetworkAccessManager network;
+    ExternalSeparationRuntime runtime(root, &network);
+    QSignalSpy completed(&runtime, &ExternalSeparationRuntime::finished);
+    QVERIFY(runtime.start());
+    runtime.pause(); // Includes the cache-verification / completed-download boundary.
+    QTest::qWait(250);
+    QVERIFY(runtime.busy());
+    QVERIFY(runtime.paused());
+    runtime.resume();
+    QTRY_VERIFY_WITH_TIMEOUT(!completed.isEmpty(), 600000);
+    QVERIFY2(completed.first().first().toBool(), qPrintable(completed.first().at(1).toString()));
+    QVERIFY(runtime.ready());
+    completed.clear();
+    QVERIFY(runtime.start()); // Existing verified uv.zip must be reused, not rejected on activation.
+    QVERIFY(!runtime.ready()); // No stale readiness while repair/reverification is running.
+    QTRY_VERIFY_WITH_TIMEOUT(!completed.isEmpty(), 600000);
+    QVERIFY2(completed.first().first().toBool(), qPrintable(completed.first().at(1).toString()));
+    QVERIFY(runtime.ready());
+}
+
+void VocalSeparationControllerTest::knownVrModelOffersExternalConfigurationWithPause()
+{
+    QTemporaryDir temporary;
+    auto options = optionsFor(temporary, QStringLiteral("success"), QByteArray("test"));
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(&preview, &waveforms, nullptr, nullptr, nullptr, options);
+    const QString directory = temporary.filePath(QStringLiteral("local-vr"));
+    QVERIFY(QDir().mkpath(directory));
+    QFile model(QDir(directory).filePath(QStringLiteral("5_HP-Karaoke-UVR.pth")));
+    QVERIFY(model.open(QIODevice::WriteOnly));
+    QVERIFY(model.resize(126782699));
+    model.close();
+    QVERIFY(controller.selectModelDirectory(QUrl::fromLocalFile(directory)));
+    QTRY_VERIFY_WITH_TIMEOUT(controller.selectModel(QStringLiteral("python-vr-5hp")), 5000);
+    QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
+    QVERIFY(!controller.canStart()); // A matching filename is not an installed Python environment.
+    QVERIFY(controller.configureRuntime(QStringLiteral("python-vr-5hp")));
+    QVERIFY(controller.downloadBusy());
+    controller.pauseDownload();
+    QCOMPARE(modelStateFor(controller.models(), QStringLiteral("python-vr-5hp")), int(VocalSeparationController::ModelState::Paused));
+    controller.cancelDownload();
+    QVERIFY(!controller.downloadBusy());
+    QVERIFY(!controller.canStart());
+}
+
+void VocalSeparationControllerTest::pageProbeWaitsForVerificationAndSelectsGpu()
+{
+    QTemporaryDir temporary;
+    const QByteArray bytes("trusted-test-model");
+    auto options = optionsFor(temporary, QStringLiteral("gpu-probe"), bytes);
+    installTestModel(options, QStringLiteral("two-stem"), bytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, QByteArrayLiteral("runtime")));
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(&preview, &waveforms, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.verifyInstalledModels());
+    QVERIFY(controller.probeDevices()); // Page-open request must survive the ongoing hash check.
+    QTRY_COMPARE_WITH_TIMEOUT(controller.deviceMode(), VocalSeparationController::DeviceMode::GPU, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(), VocalSeparationController::JobState::Idle, 5000);
+    QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
+    // The probe result sets Idle before its worker finishes graceful shutdown.
+    // Match the UI's start-eligibility gate instead of racing that process exit.
+    QTRY_VERIFY_WITH_TIMEOUT(controller.canStart(), 5000);
+    QVERIFY(controller.start());
+    QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(), VocalSeparationController::JobState::Completed, 5000);
+    // A real Auto-provider fallback must not leave an unavailable GPU selected,
+    // otherwise the next job is disabled after the successful CPU fallback.
+    QCOMPARE(controller.deviceMode(), VocalSeparationController::DeviceMode::Auto);
 }
 
 void VocalSeparationControllerTest::providerProbeRetryRemainsInTheProbingState()
@@ -2139,6 +2246,25 @@ void VocalSeparationControllerTest::runtimeCanBeConfiguredWithoutCatalogModelLoo
     QCOMPARE(controller.downloadSource(), QStringLiteral("官方线路"));
 
     controller.cancelDownload();
+    QVERIFY(!controller.downloadBusy());
+}
+
+void VocalSeparationControllerTest::configuredRuntimeDoesNotPretendUnknownModelsAreConfigured()
+{
+    QTemporaryDir temporary;
+    const auto options = optionsFor(temporary, QStringLiteral("stale"), QByteArray("model"));
+    QVERIFY(writeBytes(options.runtimeLibraryPath, QByteArray("runtime")));
+    const QString root = temporary.filePath(QStringLiteral("models"));
+    QVERIFY(writeBytes(QDir(root).filePath(QStringLiteral("unknown.onnx")), QByteArray("unknown")));
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(&preview, &waveforms, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.selectModelDirectory(QUrl::fromLocalFile(root)));
+    QTRY_VERIFY_WITH_TIMEOUT(controller.models().size() > options.catalog.size(), 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(VocalSeparationControllerTestDriver::downloadPipelineIdle(controller), 3000);
+    const QVariantMap unknown = controller.models().last().toMap();
+    QVERIFY(!controller.configureRuntime(unknown.value(QStringLiteral("id")).toString()));
+    QVERIFY(controller.error().contains(QStringLiteral("张量与频谱配置")));
     QVERIFY(!controller.downloadBusy());
 }
 

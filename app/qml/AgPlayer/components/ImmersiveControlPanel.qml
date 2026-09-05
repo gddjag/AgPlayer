@@ -25,7 +25,7 @@ Rectangle {
     height: collapsed ? 52 : Math.min(expandedHeight,
                                       parent ? parent.height - 108
                                              : expandedHeight)
-    radius: 22
+    radius: Theme.radiusLg
     color: Theme.glassSurfaceElevated
     border.width: 1
     border.color: Theme.glassBorder
@@ -53,21 +53,45 @@ Rectangle {
     ]
     readonly property var dynamicsGroups: [
         {
-            "key": "Terrain", "title": qsTr("地形"),
+            "key": "Material", "title": qsTr("材质"),
             "sliders": [
-                { "label": qsTr("柱体跳动高度"), "key": "terrainAmplitude", "from": 0, "to": 100 },
-                { "label": qsTr("输入压制"), "key": "inputCompression", "from": 20, "to": 150 },
-                { "label": qsTr("音频响应"), "key": "audioResponse", "from": 20, "to": 200, "scale": 100, "decimals": 2 },
-                { "label": qsTr("响应范围"), "key": "responseRange", "from": 50, "to": 220, "scale": 100, "decimals": 2 },
-                { "label": qsTr("主体清晰度"), "key": "subjectClarity", "from": 20, "to": 140 }
+                { "label": qsTr("材质柔和度"), "key": "materialSoftness", "from": 0, "to": 100 },
+                { "label": qsTr("果冻弹性"), "key": "jellyElasticity", "from": 0, "to": 100 },
+                { "label": qsTr("水墨浓度"), "key": "inkDensity", "from": 0, "to": 100 }
             ],
             "effects": []
         },
         {
-            "key": "Light", "title": qsTr("光影"),
+            "key": "Ripple", "title": qsTr("波纹"),
             "sliders": [
+                { "label": qsTr("波纹强度"), "key": "rippleStrength", "from": 0, "to": 200 },
+                { "label": qsTr("波纹宽度"), "key": "rippleWidth", "from": 20, "to": 200 },
+                { "label": qsTr("衰减速度"), "key": "rippleDecay", "from": 20, "to": 200 }
+            ],
+            "effects": []
+        },
+        {
+            "key": "Terrain", "title": qsTr("柱体与地形"),
+            "sliders": [
+                { "label": qsTr("柱体大小"), "key": "columnSize", "from": 50, "to": 200, "scale": 100, "decimals": 2 },
+                { "label": qsTr("柱体高度"), "key": "terrainAmplitude", "from": 0, "to": 100 },
+                { "label": qsTr("柱体不透明度"), "key": "columnOpacity", "from": 0, "to": 100 },
+                { "label": qsTr("柱体清晰度"), "key": "subjectClarity", "from": 20, "to": 140 },
+                { "label": qsTr("弱音细节"), "key": "inputCompression", "from": 20, "to": 150 },
+                { "label": qsTr("音频响应"), "key": "audioResponse", "from": 20, "to": 200, "scale": 100, "decimals": 2 },
+                { "label": qsTr("起伏速度"), "key": "motionResponse", "from": 0, "to": 100 },
+                { "label": qsTr("高频细节"), "key": "peakBoost", "from": 0, "to": 100 },
+                { "label": qsTr("响应范围"), "key": "responseRange", "from": 50, "to": 220, "scale": 100, "decimals": 2 }
+            ],
+            "effects": []
+        },
+        {
+            "key": "Light", "title": qsTr("反应堆光影"),
+            "sliders": [
+                { "label": qsTr("整体亮度"), "key": "reactorBrightness", "from": 0, "to": 200, "scale": 100, "decimals": 2 },
                 { "label": qsTr("中心高光"), "key": "centerHighlight", "from": 0, "to": 100, "scale": 100, "decimals": 2 },
-                { "label": qsTr("画面景深"), "key": "depthOfField", "from": 0, "to": 150, "scale": 100, "decimals": 2 }
+                { "label": qsTr("表面流光"), "key": "glowIntensity", "from": 0, "to": 100 },
+                { "label": qsTr("远近层次"), "key": "depthOfField", "from": 0, "to": 150, "scale": 100, "decimals": 2 }
             ],
             "effects": [
                 { "label": qsTr("歌曲换色"), "key": "songAdaptiveColorEnabled" },
@@ -78,6 +102,7 @@ Rectangle {
             "key": "Motion", "title": qsTr("运动"),
             "sliders": [
                 { "label": qsTr("自动旋转速度"), "key": "autoRotateSpeed", "from": 0, "to": 100, "scale": 100, "decimals": 2 },
+                { "label": qsTr("镜头冲击"), "key": "cinemaShake", "from": 0, "to": 1.8, "decimals": 2 },
                 { "label": qsTr("律动灵敏度"), "key": "rhythmSensitivity", "from": 0, "to": 100, "scale": 100, "decimals": 2 }
             ],
             "effects": [
@@ -87,9 +112,9 @@ Rectangle {
             ]
         },
         {
-            "key": "Impact", "title": qsTr("冲击"),
+            "key": "Impact", "title": qsTr("节奏与冲击"),
             "sliders": [
-                { "label": qsTr("律动强度"), "key": "rhythmStrength", "from": 0, "to": 140, "scale": 100, "decimals": 2 }
+                { "label": qsTr("节奏强度"), "key": "rhythmStrength", "from": 0, "to": 140, "scale": 100, "decimals": 2 }
             ],
             "effects": [
                 { "label": qsTr("彩色冲击波"), "key": "ripplesEnabled" },
@@ -106,13 +131,16 @@ Rectangle {
     }
 
     function setControllerValue(key, value) {
-        PlayerExperienceController[key] = Math.round(value)
+        PlayerExperienceController[key] = key === "cinemaShake"
+                ? value : Math.round(value)
     }
 
     function displayValue(item) {
         var value = Number(PlayerExperienceController[item.key])
         if (item.scale)
             return (value / item.scale).toFixed(item.decimals || 2)
+        if (item.decimals)
+            return value.toFixed(item.decimals)
         return Math.round(value).toString()
     }
 
@@ -178,13 +206,13 @@ Rectangle {
             Text {
                 text: qsTr("视觉反应控制")
                 color: Theme.textPrimary
-                font.pixelSize: Theme.fontSizeBody
+                font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeBody
                 font.weight: Font.DemiBold
             }
             Text {
                 text: "VISUAL REACTOR"
                 color: Theme.textTertiary
-                font.pixelSize: Theme.fontSizeCaption
+                font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption
                 font.letterSpacing: 1.1
             }
         }
@@ -239,22 +267,22 @@ Rectangle {
                 objectName: ["immersivePresetTab", "immersiveLyricsTab",
                              "immersiveDynamicsTab"][index]
                 Layout.fillWidth: true
-                implicitHeight: 30
+                implicitHeight: Theme.controlHeight
                 text: modelData
                 flat: true
                 checkable: true
                 checked: root.currentTab === index
-                font.pixelSize: Theme.fontSizeCaption
+                font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption
                 onClicked: root.currentTab = index
                 background: Rectangle {
-                    radius: 9
+                    radius: Theme.radiusSm
                     color: parent.checked ? Theme.selectionGlassFill
                                           : "transparent"
                 }
                 contentItem: Text {
                     text: parent.text
-                    color: parent.checked ? Theme.textPrimary
-                                          : Theme.textTertiary
+                    color: parent.checked ? Theme.accentText
+                                          : Theme.textSecondary
                     font: parent.font
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
@@ -272,7 +300,7 @@ Rectangle {
         anchors.top: tabs.bottom
         anchors.bottom: parent.bottom
         anchors.leftMargin: 14
-        anchors.rightMargin: 10
+        anchors.rightMargin: 14
         anchors.bottomMargin: 12
         clip: true
         contentWidth: availableWidth
@@ -286,26 +314,27 @@ Rectangle {
 
         ColumnLayout {
             width: scroll.availableWidth
-            spacing: 9
+            spacing: Theme.spacingSm
 
             ColumnLayout {
+                id: presetPage
                 visible: root.currentTab === 0
                 Layout.fillWidth: true
-                spacing: 9
+                spacing: Theme.spacingSm
                 RowLayout {
                     Layout.fillWidth: true
-                    Text { Layout.fillWidth: true; text: qsTr("预设与存储"); color: Theme.textSecondary; font.pixelSize: Theme.fontSizeCaption }
-                    Text { text: "Recent"; color: Theme.textTertiary; font.pixelSize: Theme.fontSizeCaption }
+                    Text { Layout.fillWidth: true; text: qsTr("预设与存储"); color: Theme.textSecondary; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption }
                 }
                 GridLayout {
                     id: presetGrid
                     Layout.fillWidth: true
                     columns: 3
-                    rowSpacing: 7
-                    columnSpacing: 7
+                    rowSpacing: Theme.spacingSm
+                    columnSpacing: Theme.spacingSm
                     Repeater {
                         model: root.presetCards
                         Button {
+                            id: presetCard
                             required property int index
                             required property var modelData
                             objectName: "immersivePresetCard" + index
@@ -313,12 +342,16 @@ Rectangle {
                             Layout.column: index % 3
                             Layout.fillWidth: true
                             Layout.minimumWidth: 0
-                            Layout.preferredHeight: 70
-                            padding: 0
+                            Layout.preferredWidth: (scroll.availableWidth - presetGrid.columnSpacing * 2) / 3
+                            Layout.maximumWidth: Layout.preferredWidth
+                            Layout.preferredHeight: 84
+                            padding: 6
                             flat: true
+                            ToolTip.visible: hovered
+                            ToolTip.text: modelData.title + " · " + modelData.sub
                             onClicked: PlayerExperienceController.applyPreset(index)
                             background: Rectangle {
-                                radius: 12
+                                radius: Theme.radiusSm
                                 border.width: 1
                                 border.color: parent.hovered ? Theme.borderStrong
                                                              : Theme.glassBorder
@@ -328,25 +361,32 @@ Rectangle {
                                     GradientStop { position: 1; color: modelData.to }
                                 }
                             }
-                            contentItem: Column {
-                                spacing: 4
-                                Text {
+                            contentItem: Item {
+                                Column {
+                                    anchors.centerIn: parent
                                     width: parent.width
-                                    text: modelData.title
-                                    color: Theme.onBrandGradientText
-                                    font.pixelSize: Theme.fontSizeCaption
-                                    font.weight: Font.DemiBold
-                                    horizontalAlignment: Text.AlignHCenter
-                                    elide: Text.ElideRight
-                                }
-                                Text {
-                                    width: parent.width
-                                    text: modelData.sub
-                                    color: Theme.onBrandGradientText
-                                    opacity: 0.65
-                                    font.pixelSize: Theme.fontSizeCaption
-                                    horizontalAlignment: Text.AlignHCenter
-                                    elide: Text.ElideRight
+                                    spacing: 4
+                                    Text {
+                                        objectName: "immersivePresetTitle" + presetCard.index
+                                        width: parent.width
+                                        text: presetCard.modelData.title
+                                        color: Theme.onBrandGradientText
+                                        font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption
+                                        font.weight: Font.DemiBold
+                                        horizontalAlignment: Text.AlignHCenter
+                                    }
+                                    Text {
+                                        objectName: "immersivePresetSubtitle" + presetCard.index
+                                        width: parent.width
+                                        text: presetCard.modelData.sub
+                                        color: Theme.onBrandGradientText
+                                        opacity: 0.8
+                                        font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption
+                                        horizontalAlignment: Text.AlignHCenter
+                                        wrapMode: Text.Wrap
+                                        maximumLineCount: 2
+                                        elide: Text.ElideRight
+                                    }
                                 }
                             }
                         }
@@ -354,7 +394,7 @@ Rectangle {
                 }
                 RowLayout {
                     Layout.fillWidth: true
-                    Text { Layout.fillWidth: true; text: qsTr("歌曲自适应配色"); color: Theme.textSecondary; font.pixelSize: Theme.fontSizeCaption }
+                    Text { Layout.fillWidth: true; text: qsTr("歌曲自适应配色"); color: Theme.textSecondary; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption }
                     ThemedCheckBox {
                         objectName: "songColorToggle"
                         text: qsTr("自动")
@@ -364,9 +404,9 @@ Rectangle {
                 }
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 7
+                    spacing: Theme.spacingSm
                     Repeater {
-                        model: ["coolColor", "warmColor", "accentColor", "peakColor"]
+                        model: ["coolColor", "warmColor", "accentColor", "peakColor", "baseColor"]
                         AbstractButton {
                             id: colorSwatch
                             required property string modelData
@@ -409,10 +449,10 @@ Rectangle {
                     }
                     onRejected: root.editingColorProperty = ""
                 }
-                Text { text: qsTr("显示宿主与性能"); color: Theme.textSecondary; font.pixelSize: Theme.fontSizeCaption }
+                Text { text: qsTr("显示宿主与性能"); color: Theme.textSecondary; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption }
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 6
+                    spacing: Theme.spacingSm
                     Repeater {
                         model: [qsTr("窗口"), qsTr("全屏"), qsTr("桌面")]
                         Button {
@@ -423,8 +463,15 @@ Rectangle {
                             text: modelData
                             checkable: true
                             checked: PlayerExperienceController.hostMode === index
-                            font.pixelSize: Theme.fontSizeCaption
+                            font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption
                             onClicked: PlayerExperienceController.hostMode = index
+                            contentItem: Text {
+                                text: parent.text
+                                color: Theme.textPrimary
+                                font: parent.font
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
                             background: Rectangle {
                                 radius: 8
                                 color: parent.checked ? Theme.accentSoft
@@ -457,14 +504,14 @@ Rectangle {
             ColumnLayout {
                 visible: root.currentTab === 1
                 Layout.fillWidth: true
-                spacing: 9
+                spacing: Theme.spacingSm
                 RowLayout {
                     Layout.fillWidth: true
                     Column {
                         Layout.fillWidth: true
                         spacing: 2
-                        Text { text: qsTr("歌词显示"); color: Theme.textPrimary; font.pixelSize: Theme.fontSizeCaption; font.weight: Font.DemiBold }
-                        Text { text: qsTr("三行同步歌词 · 空间纵深"); color: Theme.textTertiary; font.pixelSize: Theme.fontSizeCaption }
+                        Text { text: qsTr("歌词显示"); color: Theme.textPrimary; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption; font.weight: Font.DemiBold }
+                        Text { text: qsTr("三行同步歌词 · 空间纵深"); color: Theme.textTertiary; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption }
                     }
                     ThemedSwitch {
                         objectName: "immersiveLyricsVisibleSwitch"
@@ -472,10 +519,10 @@ Rectangle {
                         onToggled: PlayerExperienceController.lyricsVisible = checked
                     }
                 }
-                Text { text: qsTr("显示位置"); color: Theme.textSecondary; font.pixelSize: Theme.fontSizeCaption }
+                Text { text: qsTr("显示位置"); color: Theme.textSecondary; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption }
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 6
+                    spacing: Theme.spacingSm
                     Repeater {
                         model: [qsTr("左"), qsTr("中"), qsTr("右")]
                         Button {
@@ -511,8 +558,8 @@ Rectangle {
                     RowLayout {
                         required property var modelData
                         Layout.fillWidth: true
-                        spacing: 7
-                        Text { Layout.preferredWidth: 62; text: modelData.label; color: Theme.textSecondary; font.pixelSize: Theme.fontSizeCaption }
+                        spacing: Theme.spacingSm
+                        Text { Layout.preferredWidth: 62; text: modelData.label; color: Theme.textSecondary; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption }
                         ThemedSlider {
                             objectName: "lyricSlider_" + modelData.key
                             Layout.fillWidth: true
@@ -522,7 +569,7 @@ Rectangle {
                             value: Number(PlayerExperienceController[modelData.key])
                             onMoved: root.setControllerValue(modelData.key, value)
                         }
-                        Text { Layout.preferredWidth: 28; horizontalAlignment: Text.AlignRight; text: Math.round(PlayerExperienceController[modelData.key]); color: Theme.textPrimary; font.pixelSize: Theme.fontSizeCaption }
+                        Text { Layout.preferredWidth: 28; horizontalAlignment: Text.AlignRight; text: Math.round(PlayerExperienceController[modelData.key]); color: Theme.textPrimary; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption }
                     }
                 }
             }
@@ -530,8 +577,8 @@ Rectangle {
             ColumnLayout {
                 visible: root.currentTab === 2
                 Layout.fillWidth: true
-                spacing: 7
-                Text { text: qsTr("声音响应"); color: Theme.textSecondary; font.pixelSize: Theme.fontSizeCaption }
+                spacing: Theme.spacingSm
+                Text { text: qsTr("声音响应"); color: Theme.textSecondary; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption }
                 Repeater {
                     model: root.dynamicsGroups
                     ColumnLayout {
@@ -543,18 +590,32 @@ Rectangle {
                         Text {
                             text: groupData.title
                             color: Theme.textSecondary
-                            font.pixelSize: Theme.fontSizeCaption
+                            font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption
                             font.weight: Font.DemiBold
+                        }
+                        ThemedComboBox {
+                            objectName: groupData.key === "Material" ? "immersiveMaterialCombo" : ""
+                            visible: groupData.key === "Material"
+                            Layout.fillWidth: true
+                            implicitHeight: 30
+                            model: [qsTr("晶体"), qsTr("果冻"), qsTr("水墨")]
+                            currentIndex: PlayerExperienceController.materialMode
+                            onActivated: PlayerExperienceController.materialMode = currentIndex
                         }
                         Repeater {
                             model: groupData.sliders
                             RowLayout {
                                 required property var modelData
                                 Layout.fillWidth: true
-                                spacing: 7
-                                Text { Layout.preferredWidth: 62; text: modelData.label; color: Theme.textSecondary; font.pixelSize: Theme.fontSizeCaption }
+                                spacing: Theme.spacingSm
+                                Text { Layout.preferredWidth: 62; text: modelData.label; color: Theme.textSecondary; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption }
                                 ThemedSlider {
                                     objectName: "dynamicSlider_" + modelData.key
+                                    enabled: modelData.key === "jellyElasticity"
+                                             ? PlayerExperienceController.materialMode === 1
+                                             : modelData.key === "inkDensity"
+                                               ? PlayerExperienceController.materialMode === 2
+                                               : true
                                     Layout.fillWidth: true
                                     implicitHeight: 20
                                     from: modelData.from
@@ -562,7 +623,7 @@ Rectangle {
                                     value: Number(PlayerExperienceController[modelData.key])
                                     onMoved: root.setControllerValue(modelData.key, value)
                                 }
-                                Text { Layout.preferredWidth: 34; horizontalAlignment: Text.AlignRight; text: root.displayValue(modelData); color: Theme.textPrimary; font.pixelSize: Theme.fontSizeCaption }
+                                Text { objectName: "dynamicValue_" + modelData.key; Layout.preferredWidth: 34; horizontalAlignment: Text.AlignRight; text: root.displayValue(modelData); color: Theme.textPrimary; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption }
                             }
                         }
                         Flow {
@@ -589,19 +650,19 @@ Rectangle {
                         }
                     }
                 }
-                Text { text: qsTr("视觉 EQ · 8 音域"); color: Theme.textSecondary; font.pixelSize: Theme.fontSizeCaption }
+                Text { text: qsTr("视觉 EQ · 8 音域"); color: Theme.textSecondary; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption }
                 RowLayout {
                     Layout.fillWidth: true
                     Text {
                         Layout.fillWidth: true
-                        text: qsTr("音乐语义特征")
+                        text: qsTr("音乐视觉概览")
                         color: Theme.textSecondary
-                        font.pixelSize: Theme.fontSizeCaption
+                        font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption
                     }
                     Text {
-                        text: qsTr("自动计算")
+                        text: qsTr("频带估计")
                         color: Theme.textTertiary
-                        font.pixelSize: Theme.fontSizeCaption
+                        font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption
                     }
                 }
                 GridLayout {
@@ -634,12 +695,12 @@ Rectangle {
                                         Layout.fillWidth: true
                                         text: modelData
                                         color: Theme.textSecondary
-                                        font.pixelSize: Theme.fontSizeCaption
+                                        font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption
                                     }
                                     Text {
                                         text: root.semanticFeatureValue(index).toFixed(2)
                                         color: Theme.textTertiary
-                                        font.pixelSize: Theme.fontSizeCaption
+                                        font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption
                                     }
                                 }
                                 ProgressBar {

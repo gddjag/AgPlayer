@@ -35,6 +35,7 @@ public:
     QString activeRequestId() const;
 
     bool startProbe(const QJsonObject& payload);
+    bool setWorker(QString program, QStringList arguments = {});
     bool startJob(const QJsonObject& payload);
     void cancel();
 
@@ -60,6 +61,7 @@ private:
     void finishFailure(const QString& message);
     void finishCancellation();
     void requestShutdown();
+    void terminateProcess();
 
     QString program_;
     QStringList arguments_;

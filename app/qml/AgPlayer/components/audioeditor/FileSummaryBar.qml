@@ -54,7 +54,7 @@ Rectangle {
         anchors.fill: parent
         anchors.leftMargin: 14
         anchors.rightMargin: 14
-        spacing: root.width >= 1000 ? 18 : 10
+        spacing: root.width >= 1000 ? Theme.spacingLg : Theme.spacingSm
 
         Rectangle {
             objectName: "fileSummaryIcon"
@@ -85,7 +85,7 @@ Rectangle {
         Repeater {
             model: root.summaryItems()
             RowLayout {
-                spacing: 18
+                spacing: Theme.spacingLg
                 Rectangle {
                     Layout.preferredWidth: 1
                     Layout.preferredHeight: 20

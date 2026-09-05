@@ -17,12 +17,16 @@ public:
     Q_INVOKABLE void show();
     Q_INVOKABLE void hide();
     Q_INVOKABLE void selectTool(int tool);
+    Q_INVOKABLE void addCurrentListToLossless() { emit losslessPlaylistRequested(); }
+    Q_INVOKABLE void locateLosslessFile(const QString& path) { emit losslessLocateRequested(path); }
 
 signals:
     void currentToolChanged();
     void visibleChanged();
     void showRequested();
     void hideRequested();
+    void losslessPlaylistRequested();
+    void losslessLocateRequested(const QString& path);
 
 private:
     int currentTool_ = 0;  // Default: Light Editor

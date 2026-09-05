@@ -345,13 +345,12 @@ QStringList LibraryModel::insertBatch(int row, QList<TrackRecord> tracks)
     }
     std::rotate(tracks_.begin() + firstRow,
                 tracks_.end() - accepted.size(), tracks_.end());
-    pathKeys_.clear();
-    pathRows_.clear();
-    trackRows_.clear();
     pathKeys_.reserve(tracks_.size());
     pathRows_.reserve(tracks_.size());
     trackRows_.reserve(tracks_.size());
-    for (int index = 0; index < tracks_.size(); ++index) {
+    // The prefix before the insertion did not move. In particular, import
+    // batches appended to an empty library should update only their new rows.
+    for (int index = firstRow; index < tracks_.size(); ++index) {
         const QString key = normalizedCanonicalKey(tracks_.at(index).path);
         pathKeys_.insert(key);
         pathRows_.insert(key, index);
@@ -725,62 +724,6 @@ int LibraryModel::reorderTracks(const QStringList& trackIds,
     return selected.size();
 }
 
-bool LibraryModel::applyMaintenanceResult(const QString& trackId, bool available,
-                                          const QString& fileStatus,
-                                          const QString& contentHash)
-{
-    const int row = indexForTrackId(trackId);
-    if (row < 0) {
-        return false;
-    }
-    TrackRecord& track = tracks_[row];
-    if (track.available == available && track.fileStatus == fileStatus
-        && track.contentHash == contentHash) {
-        return false;
-    }
-    track.available = available;
-    track.fileStatus = fileStatus;
-    track.contentHash = contentHash;
-    const QModelIndex changed = index(row, 0);
-    emit dataChanged(changed, changed,
-                     {AvailableRole, FileStatusRole, ContentHashRole});
-    emit flushRequested();
-    return true;
-}
-
-int LibraryModel::applyMaintenanceResults(const QVariantList& results)
-{
-    int changedCount = 0;
-    int firstChangedRow = tracks_.size();
-    int lastChangedRow = -1;
-    for (const QVariant& value : results) {
-        const QVariantMap result = value.toMap();
-        const int row = indexForTrackId(
-            result.value(QStringLiteral("trackId")).toString());
-        if (row < 0) continue;
-
-        TrackRecord& track = tracks_[row];
-        const bool available = result.value(QStringLiteral("exists")).toBool();
-        const QString status = result.value(QStringLiteral("status")).toString();
-        const QString hash = result.value(QStringLiteral("hash")).toString();
-        if (track.available == available && track.fileStatus == status
-            && track.contentHash == hash) {
-            continue;
-        }
-        track.available = available;
-        track.fileStatus = status;
-        track.contentHash = hash;
-        firstChangedRow = qMin(firstChangedRow, row);
-        lastChangedRow = qMax(lastChangedRow, row);
-        ++changedCount;
-    }
-    if (changedCount == 0) return 0;
-    emit dataChanged(index(firstChangedRow, 0), index(lastChangedRow, 0),
-                     {AvailableRole, FileStatusRole, ContentHashRole});
-    emit flushRequested();
-    return changedCount;
-}
-
 std::optional<MetadataProbeClaim> LibraryModel::beginMetadataProbe(
     const QString& trackId)
 {
@@ -790,6 +733,15 @@ std::optional<MetadataProbeClaim> LibraryModel::beginMetadataProbe(
         || metadataProbeInFlight_.contains(trackId)) {
         return std::nullopt;
     }
+    return beginMetadataRefresh(trackId);
+}
+
+std::optional<MetadataProbeClaim> LibraryModel::beginMetadataRefresh(
+    const QString& trackId)
+{
+    if (QThread::currentThread() != thread()) return std::nullopt;
+    const int row = indexForTrackId(trackId);
+    if (row < 0) return std::nullopt;
     if (nextMetadataProbeGeneration_ == 0) return std::nullopt;
     const quint64 generation = nextMetadataProbeGeneration_;
     nextMetadataProbeGeneration_ = generation
@@ -869,17 +821,12 @@ bool LibraryModel::completeMediaKindProbe(const MetadataProbeClaim& claim,
     return true;
 }
 
-bool LibraryModel::refreshMetadataForPath(const QString& path)
+TrackRecord readLibraryMetadata(const QString& path, const ag_metadata* metadata,
+                               const QUrl& previousCover)
 {
-    const int row = indexForLocalFile(path);
-    if (row < 0) return false;
-    ag_metadata* metadata = nullptr;
-    const QByteArray utf8 = canonicalLibraryPath(path).toUtf8();
-    if (ag_metadata_open(utf8.constData(), &metadata) != AG_OK
-        || metadata == nullptr) {
-        return false;
-    }
-    TrackRecord& track = tracks_[row];
+    TrackRecord track;
+    track.path = path;
+    track.coverUrl = previousCover;
     track.title = copiedMetadata(ag_metadata_title(metadata));
     track.artist = copiedMetadata(ag_metadata_artist(metadata));
     track.album = copiedMetadata(ag_metadata_album(metadata));
@@ -916,16 +863,78 @@ bool LibraryModel::refreshMetadataForPath(const QString& path)
             track.coverUrl = refreshed;
         }
     }
-    ag_metadata_destroy(metadata);
-    metadataProbeInFlight_.remove(track.trackId);
-    const QModelIndex changed = index(row, 0);
-    emit dataChanged(changed, changed,
+    return track;
+}
+
+int LibraryModel::completeMetadataRefreshes(
+    const QList<LibraryMetadataRefresh>& updates)
+{
+    if (QThread::currentThread() != thread()) return 0;
+    int changedCount = 0;
+    int firstChanged = tracks_.size();
+    int lastChanged = -1;
+    for (const LibraryMetadataRefresh& update : updates) {
+        const MetadataProbeClaim& claim = update.claim;
+        const auto inFlight = metadataProbeInFlight_.constFind(claim.trackId);
+        if (inFlight == metadataProbeInFlight_.cend()
+            || inFlight.value() != claim.generation) continue;
+        const int row = indexForTrackId(claim.trackId);
+        // Model and claim paths are stored canonical identities. Comparing
+        // them must not trigger another filesystem probe on the GUI thread.
+        if (row < 0 || normalizedCanonicalKey(tracks_.at(row).path)
+                         != normalizedCanonicalKey(claim.path)
+            || normalizedCanonicalKey(update.record.path)
+                         != normalizedCanonicalKey(claim.path)) continue;
+        metadataProbeInFlight_.remove(claim.trackId);
+        TrackRecord& track = tracks_[row];
+        const TrackRecord& source = update.record;
+        track.title = source.title;
+        track.artist = source.artist;
+        track.album = source.album;
+        track.albumArtist = source.albumArtist;
+        track.genre = source.genre;
+        track.year = source.year;
+        track.date = source.date;
+        track.composer = source.composer;
+        track.format = source.format;
+        track.sampleRate = source.sampleRate;
+        track.bitDepth = source.bitDepth;
+        track.channels = source.channels;
+        track.metadataProbeAttempted = true;
+        track.bitRate = source.bitRate;
+        track.durationMs = source.durationMs;
+        track.fileSize = source.fileSize;
+        track.bpm = source.bpm;
+        track.coverUrl = source.coverUrl;
+        firstChanged = qMin(firstChanged, row);
+        lastChanged = qMax(lastChanged, row);
+        ++changedCount;
+    }
+    if (changedCount == 0) return 0;
+    emit dataChanged(index(firstChanged, 0), index(lastChanged, 0),
                      {TitleRole, ArtistRole, AlbumRole, AlbumArtistRole,
                       GenreRole, YearRole, DateRole, ComposerRole, FormatRole,
                       SampleRateRole, BitDepthRole, ChannelsRole,
                       MetadataProbeAttemptedRole, BitRateRole, DurationMsRole,
                       FileSizeRole, CoverUrlRole, BpmRole});
     emit flushRequested();
+    return changedCount;
+}
+
+bool LibraryModel::refreshMetadataForPath(const QString& path)
+{
+    const int row = indexForLocalFile(path);
+    if (row < 0) return false;
+    ag_metadata* metadata = nullptr;
+    const QByteArray utf8 = canonicalLibraryPath(path).toUtf8();
+    if (ag_metadata_open(utf8.constData(), &metadata) != AG_OK
+        || metadata == nullptr) return false;
+    const TrackRecord snapshot = readLibraryMetadata(
+        tracks_.at(row).path, metadata, tracks_.at(row).coverUrl);
+    ag_metadata_destroy(metadata);
+    const auto claim = beginMetadataRefresh(tracks_.at(row).trackId);
+    if (!claim) return false;
+    completeMetadataRefreshes({{*claim, snapshot}});
     return true;
 }
 

@@ -58,7 +58,7 @@
 #include "import_controller.hpp"
 #include "library_model.hpp"
 #include "lyrics_service.hpp"
-#include "library_manager_controller.hpp"
+#include "resource_folder_controller.hpp"
 #include "library_navigation_model.hpp"
 #include "library_store.hpp"
 #include "metadata_editor.hpp"
@@ -76,6 +76,7 @@
 #include "translation_manager.hpp"
 #include "waveform_provider.hpp"
 #include "vocal_separation_controller.hpp"
+#include "lossless_analysis_controller.hpp"
 #include "video_playback_controller.hpp"
 #include "window_controller.hpp"
 
@@ -220,6 +221,23 @@ void applyWindowsShellIdentity(QWindow* window, const QIcon& icon,
     properties->Release();
 }
 
+#if QT_VERSION == QT_VERSION_CHECK(6, 7, 0)
+class QuickWindowDpiTeardownGuard final : public QObject {
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        // Qt 6.7.0 forcePolish() dereferences a destroyed contentItem during
+        // late DPI notifications. Live windows must still receive DPI changes.
+        if (event->type() == QEvent::DevicePixelRatioChange) {
+            const auto* window = qobject_cast<QQuickWindow*>(watched);
+            if (window && !window->contentItem())
+                return true;
+        }
+        return QObject::eventFilter(watched, event);
+    }
+};
+#endif
+
 class WindowsShellIdentityFilter final : public QObject {
 public:
     explicit WindowsShellIdentityFilter(QIcon icon,
@@ -268,6 +286,11 @@ int main(int argc, char* argv[])
     // Theme.qml still follows the host system palette when requested.
     QQuickStyle::setStyle(QStringLiteral("Basic"));
     QApplication app(argc, argv);
+#if defined(Q_OS_WIN) && QT_VERSION == QT_VERSION_CHECK(6, 7, 0)
+    // Declared before the QML engine so the guard covers its entire teardown.
+    QuickWindowDpiTeardownGuard dpiTeardownGuard;
+    app.installEventFilter(&dpiTeardownGuard);
+#endif
 #ifdef Q_OS_WIN
     QFont interfaceFont = app.font();
     interfaceFont.setFamilies({QStringLiteral("Microsoft YaHei UI"),
@@ -303,6 +326,9 @@ int main(int argc, char* argv[])
     //   --qa-equalizer-size <w> <h> resize the EQ visual target
     //   --qa-tag <name>              seed a tag in --qa-test-mode only
     //   --qa-selected-tag <name>     select a seeded tag in --qa-test-mode only
+    //   --qa-immersive-preset <0..8> select a preset in QA mode
+    //   --qa-lyric-placement <0..2>  enable and position QA lyrics
+    //   --qa-capture-delay-ms <ms>  QA capture delay, 2500..60000
     bool qaTestMode = false;
     QString qaLogPath;
     QString qaPlayPath;
@@ -313,6 +339,9 @@ int main(int argc, char* argv[])
     int qaWaveformMode = -1;
     int qaMainWidth = 0;
     int qaMainHeight = 0;
+    int qaImmersivePreset = -1;
+    int qaLyricPlacement = -1;
+    int qaCaptureDelayMs = 2500;
     bool qaIntegratedShellLifecycleProbe = false;
     QString qaScreenshotMini;
     QString qaScreenshotTools;
@@ -322,7 +351,6 @@ int main(int argc, char* argv[])
     QString qaListCategory;
     QStringList qaSeedTags;
     QString qaSelectedTag;
-    bool qaShowTrackDetails = false;
     QString qaTheme;
     QString qaLanguage;
     bool qaOpenSettings = false;
@@ -377,6 +405,21 @@ int main(int argc, char* argv[])
                 bool ok = false;
                 const int value = cliArgs.at(++i).toInt(&ok);
                 if (ok && value > 0) qaMainHeight = value;
+            } else if (arg == QStringLiteral("--qa-immersive-preset")
+                       && i + 1 < cliArgs.size()) {
+                bool ok = false;
+                const int value = cliArgs.at(++i).toInt(&ok);
+                if (ok && value >= 0 && value <= 8) qaImmersivePreset = value;
+            } else if (arg == QStringLiteral("--qa-lyric-placement")
+                       && i + 1 < cliArgs.size()) {
+                bool ok = false;
+                const int value = cliArgs.at(++i).toInt(&ok);
+                if (ok && value >= 0 && value <= 2) qaLyricPlacement = value;
+            } else if (arg == QStringLiteral("--qa-capture-delay-ms")
+                       && i + 1 < cliArgs.size()) {
+                bool ok = false;
+                const int value = cliArgs.at(++i).toInt(&ok);
+                if (ok) qaCaptureDelayMs = std::clamp(value, 2500, 60000);
             } else if (arg == QStringLiteral("--qa-integrated-shell-lifecycle-probe")) {
                 qaIntegratedShellLifecycleProbe = true;
             } else if (arg == QStringLiteral("--qa-screenshot-mini")
@@ -389,7 +432,7 @@ int main(int argc, char* argv[])
                        && i + 1 < cliArgs.size()) {
                 bool ok = false;
                 const int requestedTool = cliArgs.at(++i).toInt(&ok);
-                if (ok && requestedTool >= 0 && requestedTool <= 4) {
+                if (ok && requestedTool >= 0 && requestedTool <= 5) {
                     qaTool = requestedTool;
                 }
             } else if (arg == QStringLiteral("--qa-tools-size")
@@ -412,8 +455,6 @@ int main(int argc, char* argv[])
             } else if (arg == QStringLiteral("--qa-selected-tag")
                        && i + 1 < cliArgs.size()) {
                 qaSelectedTag = cliArgs.at(++i);
-            } else if (arg == QStringLiteral("--qa-show-track-details")) {
-                qaShowTrackDetails = true;
             } else if (arg == QStringLiteral("--qa-theme")
                        && i + 1 < cliArgs.size()) {
                 qaTheme = cliArgs.at(++i).toLower();
@@ -707,6 +748,13 @@ int main(int argc, char* argv[])
         PlayerExperienceController playerExperience(&settings);
         AudioVisualFeatureController audioVisualFeatures(&playback);
         LyricsService lyricsService(&library, &playback, &settings);
+        if (qaTestMode) {
+            if (qaImmersivePreset >= 0) playerExperience.applyPreset(qaImmersivePreset);
+            if (qaLyricPlacement >= 0) {
+                playerExperience.setLyricPosition(qaLyricPlacement);
+                playerExperience.setLyricsVisible(true);
+            }
+        }
         if (qaPlayerShell == QStringLiteral("integrated")) {
             settings.setPlayerShellMode(1);
         } else if (qaPlayerShell == QStringLiteral("rolling")) {
@@ -883,14 +931,13 @@ int main(int argc, char* argv[])
         ImportController importer(&library, [autoReadBpmFlag](const QString& path) {
             return probeMetadata(path, autoReadBpmFlag->load(std::memory_order_relaxed));
         });
-        LibraryManagerController libraryManager;
-        libraryManager.setStoragePath(libraryDataDirectory.filePath(
+        ResourceFolderController resourceFolders;
+        resourceFolders.setStoragePath(libraryDataDirectory.filePath(
             QStringLiteral("resource-roots.json")));
-        libraryManager.setLibraryDataPath(libraryPath);
-        libraryManager.setLibraryModel(&library);
-        libraryManager.setImportController(&importer);
+        resourceFolders.setLibraryModel(&library);
+        resourceFolders.setImportController(&importer);
         LibraryNavigationModel libraryNavigation(
-            &library, &playlists, &tagModel, &libraryManager);
+            &library, &playlists, &tagModel, &resourceFolders);
         QObject::connect(&settings, &SettingsController::autoReadBpmChanged, &app,
                          [autoReadBpmFlag, &settings]() {
             autoReadBpmFlag->store(settings.autoReadBpm(), std::memory_order_relaxed);
@@ -927,6 +974,9 @@ int main(int argc, char* argv[])
         FilenameProcessor filenameProcessor;
         filenameProcessor.setLibraryModel(&library);
         FormatConverter formatConverter;
+        LosslessAnalysisController losslessAnalysis;
+        QObject::connect(&translations, &TranslationManager::languageChanged,
+                         &losslessAnalysis, &LosslessAnalysisController::refreshTranslations);
         AudioPreviewController audioPreview(
             AG_AUDIO_BACKEND_DEFAULT, &playback);
         WaveformProvider separationWaveformProvider(&settings);
@@ -964,6 +1014,10 @@ int main(int argc, char* argv[])
             case 4:
                 vocalSeparation.selectInput(qaToolUrls.constFirst());
                 break;
+            case 5:
+                losslessAnalysis.loadFiles({qaToolUrls.constFirst()});
+                losslessAnalysis.start();
+                break;
             default:
                 break;
             }
@@ -984,10 +1038,11 @@ int main(int argc, char* argv[])
                                     AgPlayerQmlRuntimeModels{
                                         &tagModel,
                                         &libraryNavigation,
-                                        &libraryManager,
+                                        &resourceFolders,
                                         &trackWaveformThumbnailProvider,
                                         &playbackClipDrag,
-                                        &videoPlayback},
+                                        &videoPlayback,
+                                        &losslessAnalysis},
                                     &playerExperience, &audioVisualFeatures,
                                     &lyricsService, &audioPreview,
                                     &vocalSeparation);
@@ -1351,6 +1406,77 @@ int main(int argc, char* argv[])
                 delete listWindow;
                 listWindow = nullptr;
             };
+            QObject::connect(&audioTools, &AudioToolsController::losslessPlaylistRequested,
+                             mainWindow, [&]() {
+                auto* currentModel = qobject_cast<QAbstractItemModel*>(filterModel);
+                if (currentModel == nullptr) {
+                    losslessAnalysis.notifyError(QObject::tr("当前播放列表不可用"));
+                    return;
+                }
+                QVariantList files;
+                const QString category = filterModel->property("category").toString();
+                if (!playlists.nameForId(category).isEmpty()) {
+                    const auto ids = playlists.trackIdsForPlaylist(category);
+                    for (const auto& id : ids) {
+                        const auto path = library.trackForId(id).value(QStringLiteral("path")).toString();
+                        if (!path.isEmpty()) files.append(QUrl::fromLocalFile(path));
+                    }
+                } else {
+                    for (int row = 0; row < currentModel->rowCount(); ++row) {
+                        const auto path = currentModel->data(currentModel->index(row, 0), LibraryModel::PathRole).toString();
+                        if (!path.isEmpty()) files.append(QUrl::fromLocalFile(path));
+                    }
+                }
+                if (files.isEmpty()) losslessAnalysis.notifyError(QObject::tr("当前播放列表没有可分析的文件"));
+                else losslessAnalysis.loadFiles(files);
+            });
+            QObject::connect(&audioTools, &AudioToolsController::losslessLocateRequested,
+                             mainWindow, [&](const QString& path) {
+                QString id;
+                const QString wanted = QFileInfo(path).absoluteFilePath();
+                for (int row = 0; row < library.rowCount(); ++row) {
+                    const auto index = library.index(row, 0);
+                    if (QFileInfo(library.data(index, LibraryModel::PathRole).toString()).absoluteFilePath()
+                            .compare(wanted, Qt::CaseInsensitive) == 0) {
+                        id = library.data(index, LibraryModel::TrackIdRole).toString();
+                        break;
+                    }
+                }
+                if (id.isEmpty()) {
+                    losslessAnalysis.notifyError(QObject::tr("此文件尚未加入播放器曲库，无法定位"));
+                    return;
+                }
+                if (filterModel != nullptr) {
+                    filterModel->setProperty("category", QStringLiteral("all"));
+                    filterModel->setProperty("searchText", QString{});
+                    filterModel->setProperty("exactRating", 0);
+                    filterModel->setProperty("minBpm", 60.0);
+                    filterModel->setProperty("maxBpm", 160.0);
+                    filterModel->setProperty("tagKey", QString{});
+                    filterModel->setProperty("resourceFolder", QString{});
+                }
+                QObject* surface = mainWindow;
+                if (settings.playerShellMode() == 0) {
+                    surface = ensureListWindow();
+                    windows.showListWindow();
+                }
+                const QPointer<QObject> target = surface;
+                QTimer::singleShot(0, mainWindow, [target, id, &losslessAnalysis]() {
+                    if (target == nullptr) return;
+                    QObject* list = target->findChild<QObject*>(QStringLiteral("sharedTrackList"));
+                    if (list == nullptr)
+                        list = target->findChild<QObject*>(QStringLiteral("integratedTrackList"));
+                    if (list == nullptr)
+                        list = target->findChild<QObject*>(QStringLiteral("rollingTrackList"));
+                    QVariant located;
+                    if (list == nullptr || !QMetaObject::invokeMethod(list, "locateTrack",
+                            Q_RETURN_ARG(QVariant, located), Q_ARG(QVariant, id)) || !located.toBool())
+                        losslessAnalysis.notifyError(QObject::tr("播放器列表尚未就绪，无法定位"));
+                    if (auto* win = qobject_cast<QWindow*>(target.data())) {
+                        win->show();win->raise();win->requestActivate();
+                    }
+                });
+            });
             if (settings.playerShellMode() != 1) {
                 (void)ensureListWindow();
             }
@@ -1441,6 +1567,12 @@ int main(int argc, char* argv[])
                         case 4:
                             vocalSeparation.dropInput(urls);
                             break;
+                        case 5: {
+                            QVariantList files;
+                            for (const auto& url : urls) files.append(url);
+                            losslessAnalysis.loadFiles(files);
+                            break;
+                        }
                         default:
                             break;
                         }
@@ -1760,6 +1892,9 @@ int main(int argc, char* argv[])
                 } else if (qaTool == 2 && !qaImportFolder.isEmpty()) {
                     metadataEditor.loadFiles(
                         {QUrl::fromLocalFile(qaImportFolder)});
+                } else if (qaTool == 5 && !qaImportFolder.isEmpty()) {
+                    losslessAnalysis.loadFiles({QUrl::fromLocalFile(qaImportFolder)});
+                    losslessAnalysis.start();
                 } else if (qaTool == 3 && !qaImportFolder.isEmpty()) {
                     if (QObject* filenamePage = audioToolsWindow->findChild<QObject*>(
                             QStringLiteral("filenameProcessPage"))) {
@@ -1804,7 +1939,7 @@ int main(int argc, char* argv[])
                 const auto captureWindow = [targetWindow, screenshotPath,
                                             mainWindow, &playback,
                                             &videoPlayback,
-                                            wantScreenshotImmersive]() {
+                                            wantScreenshotImmersive, wantScreenshotTools, qaTool]() {
                     QWindow* captureTarget = targetWindow;
                     if (wantScreenshotImmersive) {
                         captureTarget = mainWindow->findChild<QWindow*>(
@@ -1848,7 +1983,8 @@ int main(int argc, char* argv[])
                             auto* const terrainItem = qobject_cast<QQuickItem*>(terrain);
                             for (int attempt = 0;
                                  attempt < 20
-                                 && terrain->property("stableRenderedFrameCount")
+                                 && terrain->property(terrain->property("useSyntheticFeatures").toBool()
+                                                       ? "stableRenderedFrameCount" : "frameCount")
                                         .toULongLong() < 3;
                                  ++attempt) {
                                 if (terrainItem != nullptr) terrainItem->update();
@@ -1871,9 +2007,10 @@ int main(int argc, char* argv[])
                                 << terrain->property("stableRenderedFrameCount").toULongLong()
                                 << "resources="
                                 << terrain->property("resourceGeneration").toULongLong();
-                            if (terrain->property("stableRenderedFrameCount")
+                            if (terrain->property(terrain->property("useSyntheticFeatures").toBool()
+                                                    ? "stableRenderedFrameCount" : "frameCount")
                                     .toULongLong() < 3) {
-                                qWarning("Immersive renderer did not reach a stable QA frame");
+                                qWarning("Immersive renderer did not present sufficient QA frames");
                                 QCoreApplication::quit();
                                 return;
                             }
@@ -1902,11 +2039,15 @@ int main(int argc, char* argv[])
                         quickWin->update();
                         QCoreApplication::processEvents(QEventLoop::AllEvents, 500);
                         QImage screenshot = quickWin->grabWindow();
+                        qInfo().noquote()
+                            << "QA capture scaling: dpr=" << quickWin->devicePixelRatio()
+                            << "logical=" << quickWin->size()
+                            << "pixels=" << screenshot.size();
                         // grabWindow() returns device pixels on a high-DPI
                         // monitor. Normalize QA artifacts to the window's
                         // logical size so the same 1228x399 contract is stable
                         // across monitors and DPI settings.
-                        if (!screenshot.isNull()
+                        if (!(wantScreenshotTools && qaTool == 5) && !screenshot.isNull()
                             && screenshot.size() != quickWin->size()) {
                             screenshot = screenshot.scaled(
                                 quickWin->size(), Qt::IgnoreAspectRatio,
@@ -1932,7 +2073,8 @@ int main(int argc, char* argv[])
                 };
 
                 if (wantScreenshotImmersive) {
-                    QTimer::singleShot(2500, captureWindow);
+                    QTimer::singleShot(qaTestMode ? qaCaptureDelayMs : 2500,
+                                       captureWindow);
                 } else if (wantScreenshotTools && qaTool == 0
                            && !qaImportFolder.isEmpty()) {
                     // The editor waveform is generated asynchronously.  A fixed capture
@@ -1958,46 +2100,43 @@ int main(int argc, char* argv[])
                         }
                     });
                     waveformReadyTimer->start();
+                } else if (wantScreenshotTools && qaTool == 5
+                           && (!qaPlayPath.isEmpty() || !qaImportFolder.isEmpty())) {
+                    auto* readyTimer = new QTimer(&app);
+                    readyTimer->setInterval(100);
+                    auto attempts = std::make_shared<int>(0);
+                    const bool captureRunning = QCoreApplication::arguments().contains(QStringLiteral("--qa-lossless-running"));
+                    QObject::connect(readyTimer, &QTimer::timeout, &app,
+                        [readyTimer, attempts, captureRunning, &losslessAnalysis, captureWindow]() {
+                            ++*attempts;
+                            const bool ready = captureRunning
+                                ? losslessAnalysis.running()
+                                : !losslessAnalysis.running() && losslessAnalysis.totalCount() > 0;
+                            if (ready && *attempts > 5) {
+                                readyTimer->stop();readyTimer->deleteLater();captureWindow();
+                            } else if (*attempts > 1800) {
+                                readyTimer->stop();readyTimer->deleteLater();
+                                qWarning("Timed out waiting for lossless analysis QA state");
+                                QCoreApplication::exit(2);
+                            }
+                        });
+                    readyTimer->start();
                 } else if (wantScreenshotTools
                            || (wantScreenshotMain && library.count() == 0
                                && qaPlayPath.isEmpty())) {
-                    QTimer::singleShot(1500, captureWindow);
+                    const bool measureLosslessIdle = wantScreenshotTools && qaTool == 5
+                        && QCoreApplication::arguments().contains(QStringLiteral("--qa-lossless-idle"));
+                    QTimer::singleShot(measureLosslessIdle ? 12000 : 1500, captureWindow);
                 } else if (wantScreenshotList
                            && qaListCategory == QStringLiteral("tags")) {
                     QTimer::singleShot(1500, captureWindow);
                 } else if (wantScreenshotList) {
                     auto attempts = std::make_shared<int>(0);
                     auto pollFunc = std::make_shared<std::function<void()>>();
-                    *pollFunc = [&importer, &library, listWindow,
-                                 qaShowTrackDetails,
+                    *pollFunc = [&importer, &library,
                                  attempts, pollFunc,
                                  captureWindow]() {
                         if (!importer.busy() && library.count() > 0) {
-                            if (qaShowTrackDetails) {
-                                QObject* const trackList = listWindow == nullptr
-                                    ? nullptr
-                                    : listWindow->findChild<QObject*>(
-                                        QStringLiteral("sharedTrackList"));
-                                QVariant detailsOpened;
-                                const bool invoked = trackList != nullptr
-                                    && QMetaObject::invokeMethod(
-                                        trackList, "openFirstDetailsForQa",
-                                        Q_RETURN_ARG(QVariant, detailsOpened));
-                                QCoreApplication::processEvents(
-                                    QEventLoop::AllEvents, 500);
-                                QObject* const detailsPanel = trackList == nullptr
-                                    ? nullptr
-                                    : trackList->findChild<QObject*>(
-                                        QStringLiteral("audioFileInfoPanel"));
-                                if (!invoked || !detailsOpened.toBool()
-                                    || detailsPanel == nullptr
-                                    || !detailsPanel->property("visible").toBool()) {
-                                    qWarning(
-                                        "QA track details panel could not be opened");
-                                    QCoreApplication::exit(6);
-                                    return;
-                                }
-                            }
                             QTimer::singleShot(1500, captureWindow);
                             return;
                         }

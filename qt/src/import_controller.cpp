@@ -509,13 +509,16 @@ void ImportController::handleBatch(QList<Outcome> outcomes, int completed, int t
 {
     LibraryModel* const model = model_.data();
     QList<TrackRecord> tracks;
+    QStringList successfulPaths;
     bool errorsChangedInBatch = false;
     tracks.reserve(outcomes.size());
+    successfulPaths.reserve(outcomes.size());
     for (Outcome& outcome : outcomes) {
         if (outcome.result.result == AG_OK) {
-            outcome.result.track.path = canonicalLibraryPath(
-                outcome.result.track.path.isEmpty()
-                    ? outcome.path : outcome.result.track.path);
+            if (outcome.result.track.path.isEmpty()) {
+                outcome.result.track.path = outcome.path;
+            }
+            successfulPaths.append(outcome.result.track.path);
             outcome.result.track.metadataProbeAttempted = true;
             tracks.append(std::move(outcome.result.track));
             continue;
@@ -542,14 +545,21 @@ void ImportController::handleBatch(QList<Outcome> outcomes, int completed, int t
             emit skippedCountChanged();
         }
         bool idsChanged = false;
-        for (const Outcome& outcome : outcomes) {
-            if (outcome.result.result != AG_OK) continue;
-            const QString importedPath = canonicalLibraryPath(
-                outcome.result.track.path.isEmpty() ? outcome.path
-                                                     : outcome.result.track.path);
-            const int row = model->indexForLocalFile(importedPath);
-            const QString trackId = row < 0 ? QString{}
-                : model->data(model->index(row, 0), LibraryModel::TrackIdRole).toString();
+        // insertBatch already canonicalizes every path and returns accepted
+        // IDs in input order. Only duplicates need a model lookup; avoid
+        // another filesystem canonicalization for every newly inserted row.
+        QStringList importedIds = insertedIds;
+        if (skipped > 0) {
+            importedIds.clear();
+            importedIds.reserve(successfulPaths.size());
+            for (const QString& path : successfulPaths) {
+                const int row = model->indexForLocalFile(path);
+                importedIds.append(row < 0 ? QString{}
+                    : model->data(model->index(row, 0),
+                                  LibraryModel::TrackIdRole).toString());
+            }
+        }
+        for (const QString& trackId : importedIds) {
             if (!trackId.isEmpty() && !importedTrackIdSet_.contains(trackId)) {
                 importedTrackIdSet_.insert(trackId);
                 importedTrackIds_.append(trackId);

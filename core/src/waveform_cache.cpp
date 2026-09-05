@@ -1,5 +1,6 @@
 #include "waveform_cache.hpp"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -238,8 +239,27 @@ bool validate_layer(const std::vector<float>& layer) noexcept
     return true;
 }
 
+bool native_little_endian() noexcept
+{
+    const std::uint32_t value = 1U;
+    return *reinterpret_cast<const unsigned char*>(&value) == 1U;
+}
+
 bool write_layer(std::ostream& stream, const std::vector<float>& layer)
 {
+    if (native_little_endian()) {
+        // The on-disk IEEE-754 little-endian representation matches native
+        // float bytes. Bound each transfer and avoid one stream call per float.
+        constexpr std::size_t chunk_floats = 65536U / sizeof(float);
+        for (std::size_t offset = 0; offset < layer.size();) {
+            const auto count = std::min(chunk_floats, layer.size() - offset);
+            stream.write(reinterpret_cast<const char*>(layer.data() + offset),
+                         static_cast<std::streamsize>(count * sizeof(float)));
+            if (!stream) return false;
+            offset += count;
+        }
+        return true;
+    }
     for (const float value : layer) {
         if (!write_float(stream, value)) {
             return false;
@@ -254,6 +274,27 @@ bool read_layer(std::istream& stream,
 {
     layer.clear();
     if (count == 0U) {
+        return true;
+    }
+    if (native_little_endian()) {
+        layer.resize(static_cast<std::size_t>(count));
+        constexpr std::size_t chunk_floats = 65536U / sizeof(float);
+        for (std::size_t offset = 0; offset < layer.size();) {
+            const auto chunk = std::min(chunk_floats, layer.size() - offset);
+            stream.read(reinterpret_cast<char*>(layer.data() + offset),
+                        static_cast<std::streamsize>(chunk * sizeof(float)));
+            if (!stream) {
+                layer.clear();
+                return false;
+            }
+            for (std::size_t index = offset; index < offset + chunk; ++index) {
+                if (!std::isfinite(layer[index])) {
+                    layer.clear();
+                    return false;
+                }
+            }
+            offset += chunk;
+        }
         return true;
     }
     layer.reserve(static_cast<std::size_t>(count));

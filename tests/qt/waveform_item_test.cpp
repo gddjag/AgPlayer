@@ -80,6 +80,10 @@ private slots:
     void subBucketPanMovesWaveformContinuously();
     void frequencyDetailUsesPeakOutlineAndRmsBody();
     void frequencyOverviewIntegratesEnergyInsteadOfIndependentMaxima();
+    void frequencyZoomPreservesImpulsePeakAndBucketEnergy();
+    void frequencyZoomDoesNotMixOutsidePixelInterval();
+    void frequencyEdgesUsePremultipliedAlphaAfterRecolor();
+    void frequencyHighlightPreservesMixedChroma();
 };
 
 namespace {
@@ -1317,6 +1321,114 @@ void WaveformItemTest::frequencyOverviewIntegratesEnergyInsteadOfIndependentMaxi
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node);
     QVERIFY(vertices(node)[1].b > vertices(node)[1].r);
+    delete node;
+}
+
+void WaveformItemTest::frequencyZoomPreservesImpulsePeakAndBucketEnergy()
+{
+    TestableWaveformItem item;
+    item.setWidth(16);
+    item.setHeight(100);
+    item.setDensity(1);
+    item.setLineWidth(1);
+    item.setVisualMode(3);
+    item.setDuration(4000);
+    auto layers = makeLayers(peaks({0, 1, 0, 0}), peaks({0, 1, 0, 0}),
+                             peaks({0, 0, 0, 0}), peaks({0, 0, 0, 0}));
+    layers[QStringLiteral("peak")] = peaks({0, 1, 0, 0});
+    layers[QStringLiteral("rms")] = peaks({0, 0.5, 0, 0});
+    item.setLayers(layers);
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node);
+    // Eight columns cover four buckets. Both columns inside the impulse
+    // retain its measured peak (1) and RMS (0.5), not interpolated values.
+    QCOMPARE(vertices(node)[2 * 8].y, 0.0F);
+    QCOMPARE(vertices(node)[3 * 8].y, 0.0F);
+    QCOMPARE(vertices(node)[2 * 8 + 1].y, 25.0F);
+    delete node;
+}
+
+void WaveformItemTest::frequencyZoomDoesNotMixOutsidePixelInterval()
+{
+    TestableWaveformItem item;
+    item.setWidth(16);
+    item.setHeight(100);
+    item.setDensity(1);
+    item.setLineWidth(1);
+    item.setVisualMode(3);
+    item.setFrequencyUnplayedOpacity(1);
+    item.setDuration(4000);
+    auto layers = makeLayers(peaks({1, 1, 1, 1}), peaks({0, 1, 0, 0}),
+                             peaks({0, 0, 0, 0}), peaks({1, 0, 1, 1}));
+    layers[QStringLiteral("peak")] = peaks({1, 1, 1, 1});
+    layers[QStringLiteral("rms")] = peaks({0.5, 0.5, 0.5, 0.5});
+    item.setLayers(layers);
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node);
+    // Column 1 covers 500..1000 ms: all blue, no red from 1000..2000 ms.
+    QCOMPARE(vertices(node)[8 + 1].r, static_cast<unsigned char>(0));
+    QVERIFY(vertices(node)[8 + 1].b > 0);
+    delete node;
+}
+
+void WaveformItemTest::frequencyEdgesUsePremultipliedAlphaAfterRecolor()
+{
+    for (const bool detailed : {false, true}) {
+        TestableWaveformItem item;
+        item.setWidth(2);
+        item.setHeight(100);
+        item.setDensity(1);
+        item.setLineWidth(1);
+        item.setVisualMode(3);
+        item.setFrequencyUnplayedOpacity(1);
+        auto layers = makeLayers(peaks({1}), peaks({1}), peaks({0}), peaks({0}));
+        if (detailed) {
+            layers[QStringLiteral("peak")] = peaks({1});
+            layers[QStringLiteral("rms")] = peaks({0.5});
+        }
+        item.setLayers(layers);
+        QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+        QVERIFY(node);
+        // 72% linear red is sRGB 220; premultiplication by 140/255 yields 121.
+        QCOMPARE(vertices(node)[0].a, static_cast<unsigned char>(140));
+        QVERIFY(std::abs(static_cast<int>(vertices(node)[0].r) - 121) <= 1);
+        QVERIFY(vertices(node)[0].r <= vertices(node)[0].a);
+        item.setLowColor(Qt::blue);
+        QCOMPARE(item.updatePaintNode(node, nullptr), node);
+        QVERIFY(std::abs(static_cast<int>(vertices(node)[0].b) - 121) <= 1);
+        QVERIFY(vertices(node)[0].b <= vertices(node)[0].a);
+        delete node;
+    }
+}
+
+void WaveformItemTest::frequencyHighlightPreservesMixedChroma()
+{
+    TestableWaveformItem item;
+    item.setWidth(2);
+    item.setHeight(100);
+    item.setDensity(1);
+    item.setLineWidth(1);
+    item.setVisualMode(3);
+    item.setFrequencyUnplayedOpacity(1);
+    auto layers = makeLayers(peaks({1}), peaks({0.2}), peaks({0}), peaks({1}));
+    layers[QStringLiteral("peak")] = peaks({1});
+    layers[QStringLiteral("rms")] = peaks({0.5});
+    item.setLayers(layers);
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node);
+    const auto linear = [](unsigned char value) {
+        const double x = static_cast<double>(value) / 255.0;
+        return x <= 0.04045 ? x / 12.92 : std::pow((x + 0.055) / 1.055, 2.4);
+    };
+    for (const QColor& palette : {QColor(Qt::red), QColor("#e00000")}) {
+        item.setLowColor(palette);
+        QCOMPARE(item.updatePaintNode(node, nullptr), node);
+        const auto* data = vertices(node);
+        const double bodyRatio = linear(data[1].r) / linear(data[1].b);
+        const double centerRatio = linear(data[3].r) / linear(data[3].b);
+        QVERIFY2(std::abs(bodyRatio - centerRatio) < 0.01,
+                 "Center shading must not clip channels independently and change hue");
+    }
     delete node;
 }
 

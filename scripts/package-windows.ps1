@@ -6,6 +6,30 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+function Remove-QmlToolingMetadata {
+    param([Parameter(Mandatory = $true)][string]$StageDirectory)
+
+    $root = [IO.Path]::GetFullPath($StageDirectory).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+    $qmlDirectory = Join-Path $root 'qml'
+    $removedBytes = 0L
+    $removedFiles = 0
+    if (Test-Path -LiteralPath $qmlDirectory -PathType Container) {
+        # qmltypes describe types to development tools; qmldir, QML and plugins
+        # remain intact for runtime imports. Never trim the Qt installation.
+        foreach ($file in Get-ChildItem -LiteralPath $qmlDirectory -Recurse -File -Filter '*.qmltypes') {
+            $target = [IO.Path]::GetFullPath($file.FullName)
+            if (-not $target.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) {
+                throw "QML metadata cleanup escaped the staging directory: $target"
+            }
+            Remove-Item -LiteralPath $target -Force
+            $removedBytes += $file.Length
+            ++$removedFiles
+        }
+    }
+    [pscustomobject]@{ Files = $removedFiles; Bytes = $removedBytes }
+}
+
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $build = Join-Path $repo $BuildDirectory
 $appDir = Join-Path $build "app"
@@ -162,6 +186,10 @@ foreach ($relativePath in $unusedDeploymentPaths) {
         Remove-Item -LiteralPath $target -Recurse -Force
     }
 }
+
+$qmlMetadataSavings = Remove-QmlToolingMetadata -StageDirectory $stage
+Write-Verbose ("Removed {0} QML tooling files ({1} bytes) from runtime staging" -f
+    $qmlMetadataSavings.Files, $qmlMetadataSavings.Bytes)
 
 $crtDirectory = Join-Path $env:VCToolsRedistDir "x64/Microsoft.VC143.CRT"
 if (-not (Test-Path -LiteralPath $crtDirectory)) {

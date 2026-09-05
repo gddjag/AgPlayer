@@ -7,6 +7,8 @@ import AgPlayer
 ApplicationWindow {
     id: mainWindow
     objectName: "mainWindow"
+    font.family: Theme.fontPrimary
+    font.pixelSize: Theme.fontSizeBody
     visible: true
     width: 863
     height: 266
@@ -252,10 +254,10 @@ ApplicationWindow {
             return false
         var accepted = []
         for (var index = 0; index < urls.length; ++index) {
-            var classified = LibraryManagerController.classifyDropUrl(urls[index])
-            if (classified.kind === LibraryManagerController.Directory
-                    || classified.kind === LibraryManagerController.AudioFile
-                    || classified.kind === LibraryManagerController.VideoFile)
+            var classified = ResourceFolderController.classifyDropUrl(urls[index])
+            if (classified.kind === ResourceFolderController.Directory
+                    || classified.kind === ResourceFolderController.AudioFile
+                    || classified.kind === ResourceFolderController.VideoFile)
                 accepted.push(classified.url)
         }
         if (accepted.length === 0)
@@ -300,7 +302,7 @@ ApplicationWindow {
         id: importDialogComponent
         FileDialog {
             fileMode: FileDialog.OpenFiles
-            nameFilters: [LibraryManagerController.audioFileNameFilter]
+            nameFilters: [ResourceFolderController.audioFileNameFilter]
             onAccepted: mainWindow.importFiles(selectedFiles)
         }
     }

@@ -38,6 +38,25 @@ MdxProfile MdxProfile::hq3()
     return profile;
 }
 
+MdxProfile MdxProfile::forModel(const QString& profileId)
+{
+    if (profileId == QStringLiteral("uvr-mdxnet-kara")) return kara();
+    MdxProfile profile = hq3();
+    // Parameters verified against the UVR publisher's hash-indexed model_data:
+    // https://github.com/TRvlvr/application_data/blob/main/mdx_model_data/model_data.json
+    if (profileId == QStringLiteral("uvr-mdx-net-inst-hq1")) {
+        profile.compensation = 1.035F;
+    } else if (profileId == QStringLiteral("kim-vocal-2")
+               || profileId == QStringLiteral("uvr-mdx-net-voc-ft")) {
+        profile.fftSize = 7680;
+        profile.trimSamples = profile.fftSize / 2;
+        profile.primaryStem = QStringLiteral("vocals");
+        profile.compensation = profileId == QStringLiteral("kim-vocal-2")
+            ? 1.009F : 1.021F;
+    }
+    return profile;
+}
+
 float MdxSpectrogram::at(int channel, int bin, int frame) const
 {
     return values.at(spectrumIndex(channel, bin, frame, bins, frames));

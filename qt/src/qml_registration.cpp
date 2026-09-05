@@ -14,7 +14,7 @@
 #include "library_file_operations.hpp"
 #include "library_model.hpp"
 #include "lyrics_service.hpp"
-#include "library_manager_controller.hpp"
+#include "resource_folder_controller.hpp"
 #include "library_navigation_model.hpp"
 #include "metadata_editor.hpp"
 #include "playback_controller.hpp"
@@ -33,6 +33,8 @@
 #include "video_playback_controller.hpp"
 #include "video_frame_item.hpp"
 #include "window_controller.hpp"
+#include "lossless_analysis_controller.hpp"
+#include "lossless_evidence_item.hpp"
 
 #include <qqml.h>
 
@@ -60,6 +62,15 @@ void register_agplayer_qml_types(LibraryModel* library,
     static EqualizerController fallbackEqualizer(nullptr);
     PlaylistModel* const playlists = playlistModel != nullptr
         ? playlistModel : &fallbackPlaylistModel;
+    if (runtime.losslessAnalysisController != nullptr) {
+        qmlRegisterSingletonInstance("AgPlayer", 1, 0, "LosslessAnalysisController",
+                                     runtime.losslessAnalysisController);
+    } else {
+        qmlRegisterSingletonType<LosslessAnalysisController>(
+            "AgPlayer", 1, 0, "LosslessAnalysisController",
+            [](QQmlEngine*, QJSEngine*) -> QObject* { return new LosslessAnalysisController(); });
+    }
+    qmlRegisterType<LosslessEvidenceItem>("AgPlayer", 1, 0, "LosslessEvidenceItem");
     if (audioPreview != nullptr) {
         qmlRegisterSingletonInstance(
             "AgPlayer", 1, 0, "AudioPreviewController", audioPreview);
@@ -110,10 +121,10 @@ void register_agplayer_qml_types(LibraryModel* library,
                                      "LibraryNavigationModel",
                                      runtime.libraryNavigationModel);
     }
-    if (runtime.libraryManagerController != nullptr) {
+    if (runtime.resourceFolderController != nullptr) {
         qmlRegisterSingletonInstance("AgPlayer", 1, 0,
-                                     "LibraryManagerController",
-                                     runtime.libraryManagerController);
+                                     "ResourceFolderController",
+                                     runtime.resourceFolderController);
     }
     if (runtime.trackWaveformThumbnailProvider != nullptr) {
         qmlRegisterSingletonInstance("AgPlayer", 1, 0,

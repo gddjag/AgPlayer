@@ -59,7 +59,7 @@ int main(int argc, char* argv[])
             } else if (message.type == ProtocolType::Probe) {
                 send(ProtocolType::Probe, message.requestId,
                      {{QStringLiteral("cpu"), true},
-                      {QStringLiteral("gpu"), false},
+                      {QStringLiteral("gpu"), scenario == QStringLiteral("gpu-probe")},
                       {QStringLiteral("gpuReason"), QStringLiteral("No tested GPU")}});
             } else if (message.type == ProtocolType::Start) {
                 if (scenario.startsWith(QStringLiteral("capture-payload"))

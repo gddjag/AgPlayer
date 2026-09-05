@@ -72,7 +72,7 @@ ListView {
     // share avoids the old 320-DIP title ceiling while preserving a useful
     // waveform region at every supported width.
     readonly property int singleWindowTitleWidth: Math.max(
-        titleMinimumWidth, Math.floor(singleWindowFlexibleWidth * 0.42))
+        titleMinimumWidth, Math.floor(singleWindowFlexibleWidth * 0.56))
     readonly property int singleWindowMediaHeight: 34
     readonly property int singleWindowWaveformHeight: 26
     readonly property int singleWindowSubtitleFontSize:
@@ -169,6 +169,17 @@ ListView {
         }
     }
     function selectOnly(trackId, row) { selectedTrackIds = trackId ? [trackId] : []; selectionAnchor = row }
+    function locateTrack(trackId) {
+        for (var row = 0; row < count; ++row) {
+            if (trackIdAt(row) === trackId) {
+                selectOnly(trackId, row)
+                positionViewAtIndex(row, ListView.Contain)
+                forceActiveFocus()
+                return true
+            }
+        }
+        return false
+    }
     function updateSelection(trackId, row, modifiers) {
         forceActiveFocus()
         if ((modifiers & Qt.ShiftModifier) && selectionAnchor >= 0) {
@@ -295,7 +306,7 @@ ListView {
                 LibraryModel.removeFromHistory(ids[historyIndex])
         } else if (selectedCategory === "all") {
             for (var libraryIndex = 0; libraryIndex < ids.length; ++libraryIndex)
-                LibraryManagerController.removeTrackFromLibrary(ids[libraryIndex])
+                ResourceFolderController.removeTrackFromLibrary(ids[libraryIndex])
         }
         selectedTrackIds = []
         selectionAnchor = -1
@@ -311,46 +322,6 @@ ListView {
         var details = fileOps.trackDetails(trackMenu.targetTrackId)
         renameField.text = String(details.fileName || "").replace(/\.[^.]+$/, "")
         renameDialog.open(); renameField.forceActiveFocus(); renameField.selectAll()
-    }
-    function openDetails() {
-        detailsPanel.trackId = trackMenu.targetTrackId
-        refreshDetailsPanel(detailsPanel.trackId)
-        detailsPanel.open()
-        fileOps.requestTrackDetailsHydration(detailsPanel.trackId)
-    }
-    function refreshDetailsPanel(trackId) {
-        detailsPanel.details = fileOps.trackDetails(trackId)
-        detailsPanel.fullPath = String(detailsPanel.details.path || "")
-        detailsPanel.coverUrl = detailsPanel.details.coverUrl || ""
-        detailsPanel.rows = fileDetailRows(detailsPanel.details)
-    }
-    function fileDetailRows(details) {
-        return [
-            { key: "fileName", label: qsTr("文件名"), value: details.fileName || "", copyable: false },
-            { key: "format", label: qsTr("格式"), value: details.format || "", copyable: false },
-            { key: "sampleRate", label: qsTr("采样率"), value: details.sampleRate ? details.sampleRate + " Hz" : "", copyable: false },
-            { key: "bitDepth", label: qsTr("位深"), value: details.bitDepth ? details.bitDepth + " bit" : "", copyable: false },
-            { key: "channels", label: qsTr("声道"), value: details.channels || details.channelCount || "", copyable: false },
-            { key: "bitRate", label: qsTr("比特率"), value: details.bitRate ? Math.round(details.bitRate / 1000) + " kbps" : "", copyable: false },
-            { key: "duration", label: qsTr("时长"), value: root.formatTime(details.durationMs || 0), copyable: false },
-            { key: "fileSize", label: qsTr("大小"), value: details.fileSize ? (details.fileSize / 1048576).toFixed(2) + " MB" : "", copyable: false },
-            { key: "bpm", label: "BPM", value: root.formatBpm(details.bpm), copyable: false },
-            { key: "modifiedAt", label: qsTr("修改时间"), value: details.modifiedAt ? Qt.formatDateTime(details.modifiedAt, "yyyy-MM-dd HH:mm:ss") : "", copyable: false },
-            { key: "directory", label: qsTr("目录"), value: details.directory || "", copyable: false },
-            { key: "path", label: qsTr("完整路径"), value: details.path || "", copyable: true },
-            { key: "tags", label: qsTr("标签"), value: (details.tags || []).join(", "), copyable: false }
-        ]
-    }
-    function openFirstDetailsForQa() {
-        var trackId = trackIdAt(0)
-        if (!trackId) return false
-        trackMenu.targetTrackId = trackId
-        trackMenu.targetTrackIds = [trackId]
-        openDetails()
-        // Opening the panel is synchronous, while file probing/hydration is
-        // deliberately asynchronous.  The QA hook reports the interaction
-        // result here; callers wait for hydrated fields separately.
-        return detailsPanel.visible && detailsPanel.trackId === trackId
     }
     function applyTagsToTracks(trackIds, values) {
         return LibraryModel.setTagsForTracks(trackIds, values)
@@ -389,6 +360,8 @@ ListView {
         } else if (toolIndex === 2) {
             if (typeof MetadataEditor.loadFiles === "function") MetadataEditor.loadFiles(urls)
             else MetadataEditor.loadFile(urls[0])
+        } else if (toolIndex === 5) {
+            LosslessAnalysisController.loadFiles(urls)
         } else {
             if (typeof FilenameProcessor.loadFiles === "function") FilenameProcessor.loadFiles(urls)
             else FilenameProcessor.loadFile(urls[0])
@@ -433,7 +406,7 @@ ListView {
         id: relocateDialog
         title: qsTr("重新定位文件")
         fileMode: FileDialog.OpenFile
-        nameFilters: [LibraryManagerController.audioFileNameFilter]
+        nameFilters: [ResourceFolderController.audioFileNameFilter]
         onAccepted: fileOps.relocateTrackToUrl(trackMenu.targetTrackId, selectedFile)
     }
     Dialog {
@@ -796,8 +769,9 @@ ListView {
                                ? Math.round((parent.height - height
                                              - singleWindowTrackSubtitle.implicitHeight
                                              - 1) / 2)
-                               : (root && root.waveformThumbnailsVisible
-                                  ? 8 : (parent.height - height) / 2)
+                               : Math.round((parent.height - height
+                                     - (root && root.waveformThumbnailsVisible
+                                        ? waveformWrapperLoader.height + 3 : 0)) / 2)
                             height: implicitHeight
                             text: rowItem.title || qsTr("未知歌曲")
                             trackAvailable: rowItem.available
@@ -1174,6 +1148,7 @@ ListView {
             SystemMenuItem { objectName: "trackMenuFormatConverter"; text: qsTr("格式转换"); onClicked: root.openInAudioTool(1) }
             SystemMenuItem { objectName: "trackMenuMetadataEditor"; text: qsTr("元数据修改"); onClicked: root.openInAudioTool(2) }
             SystemMenuItem { objectName: "trackMenuFilenameProcessor"; text: qsTr("文件名处理"); onClicked: root.openInAudioTool(3) }
+            SystemMenuItem { objectName: "trackMenuLosslessIdentify"; text: qsTr("无损鉴别"); onClicked: root.openInAudioTool(5) }
         }
         MenuSeparator {}
         SystemMenuItem { objectName: "trackMenuShowFolder"; text: qsTr("在文件夹中显示"); enabled: trackMenu.targetTrackIds.length === 1; onTriggered: fileOps.showInFolder(trackMenu.targetTrackId) }
@@ -1192,22 +1167,6 @@ ListView {
     }
 
     component SystemMenuItem: ThemedMenuItem { width: 186 }
-
-    AudioFileInfoPanel {
-        id: detailsPanel
-        parent: Overlay.overlay
-        property string trackId: ""
-        x: parent ? Math.max(12, parent.width - width - 12) : 12
-        y: parent ? Math.max(12, (parent.height - height) / 2) : 12
-        onCopyRequested: fileOps.copyPath(trackId)
-    }
-    Connections {
-        target: fileOps
-        function onTrackDetailsChanged(trackId) {
-            if (detailsPanel.visible && detailsPanel.trackId === trackId)
-                root.refreshDetailsPanel(trackId)
-        }
-    }
 
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
     Connections {

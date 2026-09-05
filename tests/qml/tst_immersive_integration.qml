@@ -279,6 +279,20 @@ TestCase {
             "lyricOpacity": PlayerExperienceController.lyricOpacity
         }
         originalDynamicsSettings = {
+            "colorMode": PlayerExperienceController.colorMode,
+            "coolColor": PlayerExperienceController.coolColor,
+            "warmColor": PlayerExperienceController.warmColor,
+            "accentColor": PlayerExperienceController.accentColor,
+            "peakColor": PlayerExperienceController.peakColor,
+            "baseColor": PlayerExperienceController.baseColor,
+            "terrainAmplitude": PlayerExperienceController.terrainAmplitude,
+            "motionResponse": PlayerExperienceController.motionResponse,
+            "gradientLayers": PlayerExperienceController.gradientLayers,
+            "glowIntensity": PlayerExperienceController.glowIntensity,
+            "cinemaShake": PlayerExperienceController.cinemaShake,
+            "autoRotate": PlayerExperienceController.autoRotate,
+            "peakBoost": PlayerExperienceController.peakBoost,
+            "visualEqGains": PlayerExperienceController.visualEqGains,
             "inputCompression": PlayerExperienceController.inputCompression,
             "audioResponse": PlayerExperienceController.audioResponse,
             "responseRange": PlayerExperienceController.responseRange,
@@ -287,6 +301,16 @@ TestCase {
             "depthOfField": PlayerExperienceController.depthOfField,
             "autoRotateSpeed": PlayerExperienceController.autoRotateSpeed,
             "rhythmSensitivity": PlayerExperienceController.rhythmSensitivity,
+            "materialMode": PlayerExperienceController.materialMode,
+            "materialSoftness": PlayerExperienceController.materialSoftness,
+            "jellyElasticity": PlayerExperienceController.jellyElasticity,
+            "inkDensity": PlayerExperienceController.inkDensity,
+            "rippleStrength": PlayerExperienceController.rippleStrength,
+            "rippleWidth": PlayerExperienceController.rippleWidth,
+            "rippleDecay": PlayerExperienceController.rippleDecay,
+            "columnSize": PlayerExperienceController.columnSize,
+            "columnOpacity": PlayerExperienceController.columnOpacity,
+            "reactorBrightness": PlayerExperienceController.reactorBrightness,
             "rhythmStrength": PlayerExperienceController.rhythmStrength,
             "streamHighlightEnabled": PlayerExperienceController.streamHighlightEnabled,
             "songAdaptiveColorEnabled": PlayerExperienceController.songAdaptiveColorEnabled,
@@ -300,6 +324,33 @@ TestCase {
         PlayerExperienceController.immersiveMode = PlayerExperienceController.Off
         PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
         wait(50)
+    }
+
+    function windowedPresetPanel() {
+        PlayerExperienceController.immersiveMode =
+                PlayerExperienceController.TerrainReactor
+        PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
+        var coordinator = findChild(mainWindow, "immersiveCoordinator")
+        tryCompare(coordinator, "attachedHostMode",
+                   PlayerExperienceController.Windowed, 2000)
+        var panel = coordinator.surface
+                ? findChild(coordinator.surface, "immersiveControlPanelHost")
+                : null
+        verify(panel)
+        PlayerExperienceController.panelVisible = true
+        coordinator.surface.notePointerActivity()
+        panel.collapsed = false
+        panel.currentTab = 0
+        tryCompare(panel, "currentTab", 0)
+        tryCompare(panel, "opacity", 1)
+        tryCompare(panel, "visible", true)
+        // The page is lazily laid out, then opens with a 180 ms height animation.
+        wait(220)
+        tryVerify(function() {
+            return Math.abs(panel.height - Math.min(panel.expandedHeight,
+                                      panel.parent.height - 108)) < 0.5
+        })
+        return panel
     }
 
     function cleanup() {
@@ -752,6 +803,10 @@ TestCase {
         var delegate = list.itemAtIndex(1)
         verify(delegate)
         var delegateHeight = delegate.height
+        var coverImage = findChild(delegate, "queueCoverImage")
+        verify(coverImage)
+        compare(coverImage.asynchronous, true)
+        verify(coverImage.sourceSize.width > 0 && coverImage.sourceSize.width <= 128)
         delegate.hoveredForQa = true
         tryCompare(delegate, "scale", 1.12)
         compare(delegate.height, delegateHeight)
@@ -760,6 +815,84 @@ TestCase {
         compare(queuePlayback.lastQueue.length, 3)
         compare(queuePlayback.lastQueue[0], "one")
         drawer.destroy()
+    }
+
+    function test_preset_cards_fit_readable_text_in_a_three_by_three_grid() {
+        var panel = windowedPresetPanel()
+        var cards = []
+        for (var preset = 0; preset < 9; ++preset) {
+            var card = findChild(panel, "immersivePresetCard" + preset)
+            verify(card)
+            cards.push(card)
+            compare(card.height, 84,
+                   "preset " + preset + " height=" + card.height)
+
+            var title = findChild(card, "immersivePresetTitle" + preset)
+            var subtitle = findChild(card, "immersivePresetSubtitle" + preset)
+            verify(title && subtitle)
+            var titleBounds = mappedBounds(title, card)
+            var subtitleBounds = mappedBounds(subtitle, card)
+            verify(titleBounds.left >= -0.5
+                   && titleBounds.right <= card.width + 0.5)
+            verify(subtitleBounds.left >= -0.5
+                   && subtitleBounds.right <= card.width + 0.5)
+            verify(titleBounds.top >= 5
+                   && subtitleBounds.bottom <= card.height - 5,
+                   "preset " + preset + " text=" + titleBounds.top
+                   + ".." + subtitleBounds.bottom
+                   + " cardHeight=" + card.height)
+            verify(subtitleBounds.top >= titleBounds.bottom)
+            var textCenter = (titleBounds.top + subtitleBounds.bottom) / 2
+            verify(Math.abs(textCenter - card.height / 2) <= 1.5,
+                   "preset " + preset + " textCenter=" + textCenter
+                   + " cardCenter=" + card.height / 2)
+            var twoLineHeight = title.implicitHeight + subtitle.implicitHeight
+            verify(card.height >= twoLineHeight + 12,
+                   "preset " + preset + " textHeight=" + twoLineHeight
+                   + " cardHeight=" + card.height)
+        }
+
+        compare(cards[0].y, cards[1].y)
+        compare(cards[1].y, cards[2].y)
+        compare(cards[3].y, cards[4].y)
+        compare(cards[4].y, cards[5].y)
+        compare(cards[6].y, cards[7].y)
+        compare(cards[7].y, cards[8].y)
+        verify(cards[3].y > cards[0].y)
+        verify(cards[6].y > cards[3].y)
+        verify(cards[2].x > cards[1].x && cards[1].x > cards[0].x)
+        verify(cards[5].x > cards[4].x && cards[4].x > cards[3].x)
+        verify(cards[8].x > cards[7].x && cards[7].x > cards[6].x)
+        compare(cards[8].y + cards[8].height - cards[0].y, 3 * 84 + 2 * 8,
+               "preset grid height="
+               + (cards[8].y + cards[8].height - cards[0].y))
+    }
+
+    function test_readable_preset_page_keeps_quality_control_visible() {
+        var panel = windowedPresetPanel()
+        compare(panel.expandedHeight, 700,
+               "preset expandedHeight=" + panel.expandedHeight)
+        var panelScroll = findChild(panel, "immersivePanelScroll")
+        var qualityCombo = findChild(panel, "immersiveQualityCombo")
+        verify(panelScroll && qualityCombo)
+        compare(panelScroll.contentItem.contentY, 0)
+        var qualityBounds = mappedBounds(qualityCombo, panelScroll)
+        verify(qualityBounds.top >= -0.5
+               && qualityBounds.bottom <= panelScroll.height + 0.5,
+               "quality bounds=" + qualityBounds.top + ".."
+               + qualityBounds.bottom
+               + " viewportHeight=" + panelScroll.height)
+    }
+
+    function test_compact_preset_card_click_applies_selected_preset() {
+        var panel = windowedPresetPanel()
+        var amberCinema = findChild(panel, "immersivePresetCard8")
+        verify(amberCinema)
+        PlayerExperienceController.terrainAmplitude = 0
+        compare(PlayerExperienceController.terrainAmplitude, 0)
+        mouseClick(amberCinema, amberCinema.width / 2,
+                   amberCinema.height / 2, Qt.LeftButton)
+        tryCompare(PlayerExperienceController, "terrainAmplitude", 56)
     }
 
     function test_v46_panel_exposes_nine_presets_lyrics_and_real_dynamics() {
@@ -901,10 +1034,86 @@ TestCase {
         compare(miniWindow.waveformSession, session)
         compare(miniControls.waveformSession, session)
         compare(immersiveWaveform.waveformSession, session)
-        compare(String(nativeWaveform.lowColor), "#fc0909")
-        compare(String(nativeWaveform.midColor), "#03ff00")
-        compare(String(nativeWaveform.highColor), "#0048ff")
-        compare(nativeWaveform.frequencyUnplayedOpacity, 0.28)
+        compare(String(nativeWaveform.lowColor), "#ff0000")
+        compare(String(nativeWaveform.midColor), "#00ff00")
+        compare(String(nativeWaveform.highColor), "#0000ff")
+        var settings = SettingsController.frequencyColorWaveform
+        var previousDimness = settings.unplayedDimness
+        try {
+            settings.unplayedDimness = 0.30
+            compare(nativeWaveform.frequencyUnplayedOpacity, 0.70)
+            settings.unplayedDimness = 0.72
+            fuzzyCompare(nativeWaveform.frequencyUnplayedOpacity, 0.28, 0.000001)
+        } finally {
+            settings.unplayedDimness = previousDimness
+        }
+    }
+
+    function test_environment_palette_exposes_valid_live_color_channels() {
+        PlayerExperienceController.immersiveMode = PlayerExperienceController.TerrainReactor
+        PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
+        var coordinator = findChild(mainWindow, "immersiveCoordinator")
+        verify(coordinator)
+        tryCompare(coordinator, "attachedHostMode", PlayerExperienceController.Windowed, 2000)
+        var surface = coordinator.surface
+        verify(surface)
+        PlayerExperienceController.coolColor = "#204080"
+        PlayerExperienceController.warmColor = "#804020"
+        var colors = [surface.environmentCoolColor, surface.environmentWarmColor]
+        var expected = [[32, 64, 128], [128, 64, 32]]
+        var channels = ["r", "g", "b"]
+        for (var i = 0; i < colors.length; ++i) {
+            verify(colors[i] !== undefined, "Environment color must expose numeric channels")
+            for (var j = 0; j < channels.length; ++j) {
+                var channel = colors[i][channels[j]]
+                verify(isFinite(channel))
+                verify(Math.abs(channel - expected[i][j] / 255) < 0.001)
+            }
+        }
+    }
+
+    function test_ink_contrast_tracks_preset_without_replacing_frequency_waveform() {
+        PlayerExperienceController.immersiveMode =
+                PlayerExperienceController.TerrainReactor
+        PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
+        PlayerExperienceController.lyricsVisible = true
+        var coordinator = findChild(mainWindow, "immersiveCoordinator")
+        verify(coordinator)
+        tryCompare(coordinator, "attachedHostMode",
+                   PlayerExperienceController.Windowed, 2000)
+        var surface = coordinator.surface
+        var waveform = findChild(surface, "immersiveWaveformHost")
+        var lyrics = findChild(surface, "immersiveLyricsPanel")
+        var session = findChild(mainWindow, "sharedWaveformSession")
+        verify(surface && waveform && lyrics && session)
+        var frequencyWaveform = findChild(waveform, "immersiveWaveform")
+        verify(frequencyWaveform)
+        for (var preset = 0; preset < 9; ++preset) {
+            if (preset === 2)
+                continue
+            verify(PlayerExperienceController.applyPreset(2))
+            compare(surface.inkMode, true)
+            compare(waveform.lightBackground, true)
+            compare(lyrics.lightBackground, true)
+            compare(frequencyWaveform.visualMode, 3)
+            compare(waveform.waveformSession, session)
+            verify(PlayerExperienceController.applyPreset(preset))
+            compare(surface.inkMode, false)
+            compare(waveform.lightBackground, false)
+            compare(lyrics.lightBackground, false)
+            compare(frequencyWaveform.visualMode, 3)
+            compare(waveform.waveformSession, session)
+        }
+        verify(PlayerExperienceController.applyPreset(0))
+        PlayerExperienceController.materialMode = 2
+        compare(surface.inkMode, true)
+        compare(waveform.lightBackground, true)
+        compare(lyrics.lightBackground, true)
+        var paper = surface.inkPaper
+        var paperLuminance = paper.r * 0.2126 + paper.g * 0.7152 + paper.b * 0.0722
+        verify(paperLuminance > 0.9,
+               "Selecting ink material on a dark preset must produce light paper; got "
+               + paperLuminance)
     }
 
     function test_three_line_spatial_lyrics_support_position_and_scale() {
@@ -940,28 +1149,60 @@ TestCase {
         var previousLine = findChild(panel, "previousLyricLine")
         var currentLine = findChild(panel, "currentLyricLine")
         var nextLine = findChild(panel, "nextLyricLine")
+        var previousDepth = findChild(panel, "previousLyricDepthTransform")
+        var nextDepth = findChild(panel, "nextLyricDepthTransform")
         verify(stage && perspective)
         verify(previousLine && currentLine && nextLine)
+        verify(previousDepth && nextDepth)
         verify(currentLine.scale > previousLine.scale)
         verify(currentLine.scale > nextLine.scale)
         verify(currentLine.opacity > previousLine.opacity)
         verify(currentLine.opacity > nextLine.opacity)
-        compare(previousLine.color.toString().toLowerCase(),
-                Theme.onBrandGradientText.toString().toLowerCase())
-        compare(nextLine.color.toString().toLowerCase(),
-                Theme.onBrandGradientText.toString().toLowerCase())
-        panel.placement = PlayerExperienceController.Center
-        compare(currentLine.color.toString().toLowerCase(),
-                Theme.onBrandGradientText.toString().toLowerCase())
+        verify(previousDepth.y < 0)
+        verify(nextDepth.y > 0)
+        compare(currentLine.font.pixelSize, Theme.fontSizePageTitle)
+        compare(previousLine.font.pixelSize, Theme.fontSizeBody)
+        compare(nextLine.font.pixelSize, Theme.fontSizeBody)
+        PlayerExperienceController.warmColor = "#6f3516"
         panel.placement = PlayerExperienceController.Left
-        compare(currentLine.color.toString().toLowerCase(),
-                PlayerExperienceController.warmColor.toString().toLowerCase())
+        var currentLuma = 0.2126 * currentLine.color.r
+                + 0.7152 * currentLine.color.g
+                + 0.0722 * currentLine.color.b
+        var previousEffectiveLuma = previousLine.opacity
+                * (0.2126 * previousLine.color.r
+                   + 0.7152 * previousLine.color.g
+                   + 0.0722 * previousLine.color.b)
+        var nextEffectiveLuma = nextLine.opacity
+                * (0.2126 * nextLine.color.r
+                   + 0.7152 * nextLine.color.g
+                   + 0.0722 * nextLine.color.b)
+        verify(currentLine.color.a > 0.99)
+        verify(previousLine.color.a > 0.99)
+        verify(nextLine.color.a > 0.99)
+        verify(currentLuma >= 0.58)
+        verify(previousEffectiveLuma >= 0.25)
+        verify(nextEffectiveLuma >= 0.22)
+        verify(panel.implicitHeight >= stage.implicitHeight)
+        tryVerify(function() {
+            return previousLine.y + previousLine.height <= currentLine.y
+                    && currentLine.y + currentLine.height <= nextLine.y
+        }, 500)
 
+        lyricsFake.previousLine = "这是一段用于验证上一行沉浸歌词在狭窄空间中保持两行以内的很长歌词文本"
         lyricsFake.currentLine = "这是一段用于验证沉浸歌词在狭窄空间中最多显示两行并在末尾省略的很长歌词文本"
+        lyricsFake.nextLine = "这是一段用于验证下一行沉浸歌词在狭窄空间中保持两行以内的很长歌词文本"
         compare(currentLine.wrapMode, Text.Wrap)
         compare(currentLine.maximumLineCount, 2)
         compare(currentLine.elide, Text.ElideRight)
-        tryVerify(function() { return currentLine.lineCount <= 2 }, 500)
+        tryVerify(function() {
+            return previousLine.lineCount <= 2
+                    && currentLine.lineCount <= 2
+                    && nextLine.lineCount <= 2
+        }, 500)
+        tryVerify(function() {
+            return previousLine.y + previousLine.height <= currentLine.y
+                    && currentLine.y + currentLine.height <= nextLine.y
+        }, 500)
         panel.destroy()
     }
 
@@ -976,22 +1217,35 @@ TestCase {
         var nextLine = findChild(panel, "nextLyricLine")
         verify(perspective && previousLine && currentLine && nextLine)
 
+        panel.depth = 0
+        panel.placement = PlayerExperienceController.Center
+        compare(perspective.angle, 0)
+        compare(findChild(panel, "previousLyricDepthTransform").y, 0)
+        compare(findChild(panel, "nextLyricDepthTransform").y, 0)
+        panel.depth = 100
+
         panel.placement = PlayerExperienceController.Left
         var leftAngle = perspective.angle
         compare(currentLine.horizontalAlignment, Text.AlignLeft)
         verify(leftAngle < 0)
-        verify(Math.abs(leftAngle) <= 18)
+        verify(Math.abs(leftAngle) >= 18)
+        verify(Math.abs(leftAngle) <= 28)
 
         panel.placement = PlayerExperienceController.Right
         var rightAngle = perspective.angle
         compare(currentLine.horizontalAlignment, Text.AlignRight)
         verify(rightAngle > 0)
-        verify(Math.abs(rightAngle) <= 18)
+        verify(Math.abs(rightAngle) >= 18)
+        verify(Math.abs(rightAngle) <= 28)
         verify(Math.abs(leftAngle + rightAngle) < 0.001)
 
         panel.placement = PlayerExperienceController.Center
         compare(currentLine.horizontalAlignment, Text.AlignHCenter)
-        compare(perspective.angle, 0)
+        verify(perspective.axis.x > 0.99)
+        verify(Math.abs(perspective.axis.y) < 0.01)
+        verify(perspective.angle < 0)
+        verify(Math.abs(perspective.angle) >= 8)
+        verify(Math.abs(perspective.angle) <= 10)
 
         panel.spatialMode = false
         panel.placement = PlayerExperienceController.Left
@@ -999,9 +1253,13 @@ TestCase {
         compare(currentLine.wrapMode, Text.Wrap)
         compare(currentLine.maximumLineCount, 3)
         compare(currentLine.scale, 1)
+        compare(currentLine.font.pixelSize, Theme.fontSizePageTitle)
+        compare(previousLine.font.pixelSize, Theme.fontSizeBody)
+        compare(nextLine.font.pixelSize, Theme.fontSizeBody)
         compare(previousLine.opacity, 1)
         compare(currentLine.opacity, 1)
         compare(nextLine.opacity, 1)
+        compare(perspective.angle, 0)
         verify(Math.abs(previousLine.scale - 0.92) < 0.001)
         verify(Math.abs(nextLine.scale - 0.86) < 0.001)
         panel.destroy()
@@ -1047,7 +1305,9 @@ TestCase {
         var previousLine = findChild(panel, "previousLyricLine")
         var nextLine = findChild(panel, "nextLyricLine")
         var settle = findChild(panel, "cinematicLyricsSettleAnimation")
+        var entrance = findChild(panel, "currentLyricEntranceTransform")
         verify(currentLine && previousLine && nextLine && settle)
+        verify(entrance)
         var stableScale = currentLine.scale
 
         lyricsFake.currentLine = "进入的新歌词"
@@ -1055,9 +1315,11 @@ TestCase {
         tryCompare(settle, "running", true, 50)
         verify(currentLine.opacity < 1)
         verify(currentLine.scale < stableScale)
+        verify(entrance.y > 0)
         tryCompare(settle, "running", false, 400)
         verify(Math.abs(currentLine.opacity - 1) < 0.001)
         verify(Math.abs(currentLine.scale - stableScale) < 0.001)
+        verify(Math.abs(entrance.y) < 0.001)
 
         lyricsFake.currentLine = "快速一"
         wait(20)
@@ -1099,10 +1361,12 @@ TestCase {
         panel.enabled = false
         lyricsFake.currentLine = "禁用时歌词"
         compare(settle.running, false)
+        verify(Math.abs(entrance.y) < 0.001)
         panel.enabled = true
         lyricsFake.enabled = false
         lyricsFake.currentLine = "隐藏时歌词"
         compare(settle.running, false)
+        verify(Math.abs(entrance.y) < 0.001)
         panel.destroy()
     }
 
@@ -1161,6 +1425,111 @@ TestCase {
         transientLyricsPanel = null
     }
 
+    function test_panel_tabs_keep_contrast_and_readable_presets_in_both_themes() {
+        var previousTheme = SettingsController.themeMode
+        var panel = createTemporaryObject(immersiveControlPanelComponent,
+                                         mainWindow.contentItem,
+                                         { currentTab: 0 })
+        verify(panel)
+        try {
+            for (var mode = 0; mode <= 1; ++mode) {
+                SettingsController.themeMode = mode
+                wait(0)
+                var tab = findChild(panel, "immersivePresetTab")
+                verify(tab && tab.checked)
+                compare(tab.contentItem.color.toString(), Theme.accentText.toString())
+                compare(tab.font.family, Theme.fontPrimary)
+                var title = findChild(panel, "immersivePresetTitle0")
+                compare(title.font.family, Theme.fontPrimary)
+                verify(title.font.pixelSize >= Theme.fontSizeCaption)
+                var card = findChild(panel, "immersivePresetCard8")
+                verify(card && card.visible)
+            }
+        } finally {
+            SettingsController.themeMode = previousTheme
+        }
+    }
+
+    function test_column_and_reactor_controls_are_independent_and_live() {
+        var panel = createTemporaryObject(immersiveControlPanelComponent,
+                                          mainWindow.contentItem, { currentTab: 2 })
+        verify(panel)
+        var keys = ["columnSize", "terrainAmplitude", "columnOpacity",
+                    "subjectClarity", "reactorBrightness", "rhythmStrength"]
+        for (var i = 0; i < keys.length; ++i) {
+            var slider = findChild(panel, "dynamicSlider_" + keys[i])
+            verify(slider, keys[i])
+            var others = {}
+            for (var j = 0; j < keys.length; ++j)
+                others[keys[j]] = PlayerExperienceController[keys[j]]
+            PlayerExperienceController[keys[i]] = 66
+            compare(slider.value, 66)
+            slider.value = 74
+            slider.moved()
+            compare(PlayerExperienceController[keys[i]], 74)
+            for (var k = 0; k < keys.length; ++k)
+                if (k !== i)
+                    compare(PlayerExperienceController[keys[k]], others[keys[k]])
+        }
+        compare(findChild(panel, "dynamicValue_columnSize").text, "0.74")
+        compare(findChild(panel, "dynamicValue_columnOpacity").text, "74")
+        compare(findChild(panel, "dynamicValue_reactorBrightness").text, "0.74")
+    }
+
+    function test_material_and_ripple_controls_use_live_controller_values() {
+        var panel = createTemporaryObject(immersiveControlPanelComponent,
+                                          mainWindow.contentItem, { currentTab: 2 })
+        verify(panel)
+        var material = findChild(panel, "dynamicsMaterialGroup")
+        var ripple = findChild(panel, "dynamicsRippleGroup")
+        verify(material && ripple)
+        var mode = findChild(material, "immersiveMaterialCombo")
+        verify(mode)
+        PlayerExperienceController.materialMode = 2
+        compare(mode.currentIndex, 2)
+        mode.currentIndex = 1
+        mode.activated(1)
+        compare(PlayerExperienceController.materialMode, 1)
+        var elasticity = findChild(material, "dynamicSlider_jellyElasticity")
+        var density = findChild(material, "dynamicSlider_inkDensity")
+        var softness = findChild(material, "dynamicSlider_materialSoftness")
+        verify(elasticity && density && softness)
+        PlayerExperienceController.jellyElasticity = 57
+        PlayerExperienceController.inkDensity = 68
+        compare(elasticity.enabled, true)
+        compare(density.enabled, false)
+        PlayerExperienceController.materialMode = 2
+        compare(elasticity.enabled, false)
+        compare(density.enabled, true)
+        PlayerExperienceController.materialMode = 0
+        compare(elasticity.enabled, false)
+        compare(density.enabled, false)
+        compare(elasticity.value, 57)
+        compare(density.value, 68)
+        compare(findChild(panel, "dynamicValue_jellyElasticity").text, "57")
+        compare(findChild(panel, "dynamicValue_inkDensity").text, "68")
+        for (var materialMode = 0; materialMode < 3; ++materialMode) {
+            PlayerExperienceController.materialMode = materialMode
+            compare(softness.enabled, true)
+        }
+        var keys = ["materialSoftness", "jellyElasticity", "inkDensity",
+                    "rippleStrength", "rippleWidth", "rippleDecay"]
+        for (var i = 0; i < keys.length; ++i) {
+            var slider = findChild(i < 3 ? material : ripple, "dynamicSlider_" + keys[i])
+            verify(slider)
+            PlayerExperienceController.materialMode = keys[i] === "inkDensity" ? 2 : 1
+            compare(slider.enabled, true)
+            PlayerExperienceController[keys[i]] = 63
+            compare(slider.value, 63)
+            slider.value = 79
+            slider.moved()
+            compare(PlayerExperienceController[keys[i]], 79)
+            var readout = findChild(panel, "dynamicValue_" + keys[i])
+            verify(readout)
+            compare(readout.text, "79")
+        }
+    }
+
     function test_dynamics_controls_are_grouped_by_meaning_and_remain_wired() {
         var panel = immersiveControlPanelComponent.createObject(
                     mainWindow.contentItem)
@@ -1182,6 +1551,19 @@ TestCase {
         var presetRight = lastPreset.mapToItem(presetScroll, lastPreset.width, 0).x
         verify(presetRight <= presetScroll.width + 0.5,
                "preset and color controls must stay inside the narrow panel")
+        for (var cardIndex = 0; cardIndex < 9; ++cardIndex) {
+            var card = findChild(panel, "immersivePresetCard" + cardIndex)
+            var title = findChild(card, "immersivePresetTitle" + cardIndex)
+            verify(title, "each preset must expose a visible name")
+            compare(title.text, panel.presetCards[cardIndex].title)
+            verify(title.width >= title.implicitWidth,
+                   "preset names must fit without truncation: " + title.text
+                   + " width=" + title.width + " implicit=" + title.implicitWidth
+                   + " card=" + card.width)
+            var titleOrigin = title.mapToItem(card, 0, 0)
+            verify(titleOrigin.y >= 0 && titleOrigin.y + title.height <= card.height)
+            verify(titleOrigin.x >= 0 && titleOrigin.x + title.width <= card.width)
+        }
         panel.currentTab = 2
         wait(0)
 

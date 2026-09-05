@@ -152,6 +152,32 @@ QtObject {
     readonly property color playRingPlaying: waveformGreen
     readonly property color playRingPaused: "#FFB020"
 
+    // Lossless identification is a dense forensic workbench. These local
+    // semantic colours reproduce its blue-black hierarchy without changing
+    // the shared surfaces used by the other audio tools.
+    readonly property color losslessWorkspaceSurface: isLight ? "#F3F7FA" : "#09141D"
+    readonly property color losslessPanelSurface: isLight ? "#FFFFFF" : "#0D1B25"
+    readonly property color losslessPanelHeaderSurface: isLight ? "#EAF0F5" : "#10212D"
+    readonly property color losslessTableAlternateSurface: isLight ? "#F7FAFC" : "#0B1821"
+    readonly property color losslessGrid: isLight ? "#CAD6DF" : "#203441"
+    readonly property color losslessSpectrum: isLight ? "#0087B8" : "#19C4F1"
+    readonly property color losslessSpectrumFill: isLight ? "#260087B8" : "#4219C4F1"
+    readonly property color losslessVerdictCredible: "#35C759"
+    readonly property color losslessVerdictTranscode: "#FF5757"
+    readonly property color losslessVerdictUpsample: "#F3A51B"
+    readonly property color losslessVerdictInconclusive: isLight ? "#647481" : "#9BACB8"
+    readonly property int losslessTitleBarHeight: 50
+    readonly property int losslessNavigationHeight: 56
+    readonly property int losslessNavigationItemWidth: 160
+    readonly property int losslessToolbarHeight: 60
+    readonly property int losslessBottomBarHeight: 96
+    readonly property int losslessControlHeight: 40
+    readonly property int losslessProminentControlHeight: 60
+    readonly property int losslessFontSizeMeta: 14
+    readonly property int losslessFontSizeBody: 16
+    readonly property int losslessFontSizeSection: 20
+    readonly property int losslessFontSizeTitle: 24
+
     readonly property color favoriteRed: "#FF334D"
     readonly property color ratingGold: "#FF9800"
     readonly property color listWorkspaceSurface: contentSurface

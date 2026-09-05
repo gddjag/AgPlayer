@@ -33,13 +33,10 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/crop-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/cursor-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/delete-bin-line.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/download-line.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/equalizer-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/equalizer-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/error-warning-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/file-copy-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/file-music-fill.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/filter-3-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/folder-open-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/folder-open-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/folder-add-line.svg
@@ -47,16 +44,11 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/fullscreen-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/heart-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/heart-line.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/heart-outline.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/information-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/immersive-visual-mode.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/keyboard-box-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/list-unordered.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/lyrics.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/lock-line.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/lock-unlock-line.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/merge-cells-horizontal.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/mic-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/lucide-audio-lines.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/lucide-box.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/lucide-drum.svg
@@ -64,28 +56,20 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/lucide-mic.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/music-2-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/music-2-fill.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/more-2-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/pause-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/picture-in-picture-2-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/play-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/play-order-line.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/player-shell-mode.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/price-tag-3-line.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/pulse-line.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/playlist-2-fill.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/pushpin-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/pushpin-line.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/repeat-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/repeat-list-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/repeat-one-line-alt.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/repeat-one-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/rewind-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/restore-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/save-3-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/search-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/scissors-cut-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/settings-3-fill.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/shuffle-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/shuffle-arrows-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/side-panel-toggle.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/skip-back-fill.svg
@@ -94,14 +78,11 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/speed-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/star-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/star-line.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/split-cells-horizontal.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/subtract-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/sound-module-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/theme-skin.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/time-line.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/volume-mute-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-mute-line.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/volume-up-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/volume-up-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/waveform-switch.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/user-playlist.svg
@@ -115,7 +96,6 @@ set(ICON_FILES
 
 set(BRAND_FILES
     ${CMAKE_SOURCE_DIR}/assets/brand/agplayer.ico
-    ${CMAKE_SOURCE_DIR}/assets/brand/logo-lockup.png
     ${CMAKE_SOURCE_DIR}/assets/brand/logo-mark.png
 )
 
@@ -177,7 +157,6 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/EqualizerResponseCurve.qml
         qml/AgPlayer/components/TrackList.qml
         qml/AgPlayer/components/TrackSubtitle.qml
-        qml/AgPlayer/components/AudioFileInfoPanel.qml
         qml/AgPlayer/components/TrackWaveformThumbnail.qml
         qml/AgPlayer/components/TagManagementPanel.qml
         qml/AgPlayer/components/EmptyLibrary.qml
@@ -188,7 +167,6 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/MiniPlayerControls.qml
         qml/AgPlayer/components/SideNavigation.qml
         qml/AgPlayer/components/SearchFilter.qml
-        qml/AgPlayer/components/LibraryManagerPage.qml
         qml/AgPlayer/components/ColorField.qml
         qml/AgPlayer/components/ThemedIcon.qml
         qml/AgPlayer/components/ThemedMenuItem.qml
@@ -217,6 +195,12 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/tools/VocalSeparationPage.qml
         qml/AgPlayer/components/tools/MetadataEditPage.qml
         qml/AgPlayer/components/tools/AudioEditorPage.qml
+        qml/AgPlayer/components/tools/LosslessIdentifyPage.qml
+        qml/AgPlayer/components/tools/LosslessTaskPanel.qml
+        qml/AgPlayer/components/tools/LosslessEvidencePanel.qml
+        qml/AgPlayer/components/tools/LosslessConclusionPanel.qml
+        qml/AgPlayer/components/tools/LosslessConfidenceRing.qml
+        qml/AgPlayer/components/tools/LosslessProgressBar.qml
         qml/AgPlayer/components/audioeditor/EditorCommandBar.qml
         qml/AgPlayer/components/audioeditor/FileSummaryBar.qml
         qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml

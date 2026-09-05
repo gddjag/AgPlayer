@@ -1,0 +1,146 @@
+[
+  {
+    "Path": "app/qml/AgPlayer/components/ImmersiveControlPanel.qml",
+    "SHA256": "A829947AAD52983D559992B6B2C33E4901811794DEAD377CB241BF1C1287F19C"
+  },
+  {
+    "Path": "app/qml/AgPlayer/components/ImmersiveSurface.qml",
+    "SHA256": "A65A7597F5E3CD699A6B3CA0AC83B18DF7CFB84218A3A7F0560955EA40F32D72"
+  },
+  {
+    "Path": "app/qml/AgPlayer/components/PlayerControls.qml",
+    "SHA256": "5C09810432C4A8C0DC771C13B995EF51BF7208031ED1B6999AFC3F341CB12A39"
+  },
+  {
+    "Path": "app/qml/AgPlayer/components/RollingPlayerShell.qml",
+    "SHA256": "7E3D4F6D3B00FDD15C4593AB68CF8F6162D91E10B7297DD62B3A13D62A833300"
+  },
+  {
+    "Path": "app/qml/AgPlayer/components/TrackList.qml",
+    "SHA256": "A53AE01FD3194DF477C3E740A374772133A7A35D39EFD51BB38C90AF4E33DC16"
+  },
+  {
+    "Path": "app/qml/AgPlayer/components/tools/VocalSeparationPage.qml",
+    "SHA256": "2104B630AB4C579F4C4CB238D79ED8600B0D22FDF723FC253F410FBBCE6ADF3B"
+  },
+  {
+    "Path": "core/src/waveform_cache.cpp",
+    "SHA256": "BDE2380A31FA1E58A6D4CCC09707982D71548045A46AC67D22BA2C293BE27719"
+  },
+  {
+    "Path": "docs/development/2026-09-05-player-runtime-polish.md",
+    "SHA256": "24EFB4791CDDF1ADDBD4F0885B6446F0AC92BFA59CAE871EDD9BC74E83419496"
+  },
+  {
+    "Path": "docs/qa/2026-08-29-immersive-visual-license-audit.md",
+    "SHA256": "E580DA4FC138DFC94C13CD32E236FCC96D6DD617FFEE00D2A0969F1AAAE49E89"
+  },
+  {
+    "Path": "qt/shaders/terrain_reactor.frag",
+    "SHA256": "4064C38D13CBB0CA3D78DFF289F9ABA9D7D892162C6B4B2EF40F4BD074CCF009"
+  },
+  {
+    "Path": "qt/shaders/terrain_reactor.vert",
+    "SHA256": "8CA0A496A333410330DA22C15532ADF670C21466A57FE7659CFA6E86165F412D"
+  },
+  {
+    "Path": "qt/src/player_experience_controller.cpp",
+    "SHA256": "3642D658E937B61767685D73BD854691FF52DB415244A79E2CD71BAA11E93C62"
+  },
+  {
+    "Path": "qt/src/terrain_reactor_item.cpp",
+    "SHA256": "82F4577B02712AEC6B57193D805F284B554D0D2862A60369CCE72EBA553152DB"
+  },
+  {
+    "Path": "qt/src/vocal_separation_controller.cpp",
+    "SHA256": "95BDB8BF76C7C805E9BC4BFD307703D78C037AF62AAF72837D612F28A511C172"
+  },
+  {
+    "Path": "qt/src/waveform_item.cpp",
+    "SHA256": "D56CD3C1B2C0D1A9FF14B7DB17BFB10F0E0B1EF5FACE221A603492A8BB8C7403"
+  },
+  {
+    "Path": "qt/src/waveform_provider.cpp",
+    "SHA256": "D6A349E126283E8B13C941173BB5255E824D140643DEE43A7288CA3F9A8EAC3E"
+  },
+  {
+    "Path": "tests/qml/tst_immersive_integration.qml",
+    "SHA256": "19A7FC711668F777C39F88ABADBD06D3B72C835C3C3D1875B145240CF302B96B"
+  },
+  {
+    "Path": "tests/qml/tst_rolling_theme.qml",
+    "SHA256": "21A0C3722B95C3143A6BF84106B1E85CBDF61AC5CC106AF7F6FC27F8EF2C349C"
+  },
+  {
+    "Path": "tests/qml/tst_vocal_separation.qml",
+    "SHA256": "0F0D8C124903EC2926425DE0073227C28D5B48EC368D80B5457430A1ECE86EFE"
+  },
+  {
+    "Path": "tests/qt/player_experience_controller_test.cpp",
+    "SHA256": "B9AB2CAFFA1172365B04505CF495F61A0BC4167CB2E16643686D98B8F27EEEE4"
+  },
+  {
+    "Path": "tests/qt/separation_dsp_test.cpp",
+    "SHA256": "213791EC5F8A97E19791ED305C7546F487D0C25F47E764DFD491A9D446B592E7"
+  },
+  {
+    "Path": "tests/qt/separation_real_model_test.cpp",
+    "SHA256": "E7403BD96761A2F1AE6E0B5598FA72C308D2C80FF6CD027AC7E19805EC321291"
+  },
+  {
+    "Path": "tests/qt/separation_worker_engine_test.cpp",
+    "SHA256": "0FD4C570B09769EF95496C48061153DE2E98F30792489BBDB46D677D91F5F999"
+  },
+  {
+    "Path": "tests/qt/vocal_separation_controller_test.cpp",
+    "SHA256": "EF73CC76EDF6A7D87DB5ACFA12F38C50C7513E1E1447583E71020BCBD65ABA08"
+  },
+  {
+    "Path": "tests/qt/waveform_item_test.cpp",
+    "SHA256": "BD6A982F6E9E23636AEEF4A2471E3A1B3CF54299C42C100251AD4375170DBB54"
+  },
+  {
+    "Path": "tests/qt/waveform_provider_test.cpp",
+    "SHA256": "DB63E17ACB9B572A9BA580DBBC34F8633A4BAE32DDE6D921F88D49EBDEE4E97E"
+  },
+  {
+    "Path": "tests/scripts/library_list_layout_contract_test.ps1",
+    "SHA256": "4442A60F8465FF89A1E75599798D8C92B42267A0F9CE602D4C93CCFD7FFBE708"
+  },
+  {
+    "Path": "worker/src/mdx_adapter.cpp",
+    "SHA256": "F63535228904FBCB4926433F07E18D9BD29BBB79E8E6915BC1C28886955E5FE5"
+  },
+  {
+    "Path": "worker/src/mdx_adapter.hpp",
+    "SHA256": "0744B23311551CBB4C6ABBC6460896AFA66E12FC566701A405774990A9DC2728"
+  },
+  {
+    "Path": "worker/src/native_worker_backend.cpp",
+    "SHA256": "D9DEC09D5C07A5ACD89B70E324D388F45CE77D11B5C4F50E91090E0F3D55459D"
+  },
+  {
+    "Path": "worker/src/ort_session.cpp",
+    "SHA256": "888595BB145070DE83B2F0006DBA1F67A947375021AD3361F1F171EAEDBEDB74"
+  },
+  {
+    "Path": "worker/src/trusted_profiles.cpp",
+    "SHA256": "87E1FA934AF556E0195238C381ECABCDF305B81CD1905D2D149E243C03212AE4"
+  },
+  {
+    "Path": "worker/src/worker_engine.cpp",
+    "SHA256": "7C040DADBAB9844505DFE4F8319CB32ABEEF445759D13EBC31ACE320D0BA50AF"
+  },
+  {
+    "Path": "worker/src/worker_engine.hpp",
+    "SHA256": "E39D31AC96CC0E8A5BEB9CD94DB52D66C6341CACDDC27DD8FACCC73FB3B95C24"
+  },
+  {
+    "Path": "docs/development/2026-09-05-lossless-identification-design.md",
+    "SHA256": "E80525816F1BC2C935A1508780F5E1C4931AB6155CDD3AE31FE875402827EC43"
+  },
+  {
+    "Path": "scripts/qa-long-waveform.ps1",
+    "SHA256": "67A685FAC502DD5B3FE75C94C7DDE8259D19B312A56BCA9D261A3AD91139CF57"
+  }
+]

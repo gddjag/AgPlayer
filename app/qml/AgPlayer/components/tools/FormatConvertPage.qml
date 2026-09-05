@@ -13,7 +13,7 @@ Rectangle {
 
     property var converter: FormatConverter
     property string outputDirectory: SettingsController.defaultOutputDirectory
-    function usesCompactLayout(availableWidth) { return availableWidth <= 1000 }
+    function usesCompactLayout(availableWidth) { return availableWidth < 1500 }
     readonly property bool compactLayout: usesCompactLayout(width)
 
     Component.onCompleted: {
@@ -127,22 +127,22 @@ Rectangle {
 
     ColumnLayout {
         anchors.fill: parent
-        spacing: 5
+        spacing: Theme.spacingXs
 
         Rectangle {
             id: toolbar
             objectName: "formatToolbar"
             Layout.fillWidth: true
-            Layout.preferredHeight: 60
+            Layout.preferredHeight: Theme.settingsRowHeight + Theme.spacingSm
             color: Theme.panel
             border.color: Theme.border
-            radius: 6
+            radius: Theme.radiusSm
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                spacing: 12
+                anchors.leftMargin: Theme.spacingLg
+                anchors.rightMargin: Theme.spacingLg
+                spacing: Theme.spacingMd
 
                 Repeater {
                     model: [
@@ -153,12 +153,13 @@ Rectangle {
                         { text: qsTr("清空列表"), icon: "delete-bin-line", action: "clear" }
                     ]
                     ThemedButton {
-                        objectName: modelData.action === "file" ? "formatAddFileButton" : ""
+                        objectName: modelData.action === "file"
+                                    ? "formatAddFileButton"
+                                    : "formatToolbarButton-" + modelData.action
                         prominent: true
-                        visible: !page.compactLayout
-                                 || modelData.action === "file"
-                                 || modelData.action === "folder"
-                        Layout.preferredWidth: modelData.action === "playlist" ? 158
+                        Layout.preferredWidth: page.compactLayout
+                                               ? (modelData.action === "playlist" ? 142 : 120)
+                                               : modelData.action === "playlist" ? 158
                                                : modelData.action === "file" ? 130
                                                : modelData.action === "folder" ? 142
                                                : 128
@@ -207,7 +208,7 @@ Rectangle {
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 8
+            spacing: Theme.spacingSm
 
             FormatTaskTable {
                 id: taskTable
@@ -240,26 +241,29 @@ Rectangle {
             id: bottomBar
             objectName: "formatBottomBar"
             Layout.fillWidth: true
-            Layout.preferredHeight: 72
+            Layout.preferredHeight: Theme.settingsRowHeight + Theme.spacingLg
             color: Theme.panel
             border.color: Theme.border
-            radius: 6
+            radius: Theme.radiusSm
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 20
-                anchors.rightMargin: 20
-                spacing: 16
+                anchors.leftMargin: page.compactLayout ? Theme.spacingMd
+                                                       : Theme.spacingLg
+                anchors.rightMargin: page.compactLayout ? Theme.spacingMd
+                                                        : Theme.spacingLg
+                spacing: page.compactLayout ? Theme.spacingSm
+                                            : Theme.spacingLg
 
                 ColumnLayout {
-                    Layout.preferredWidth: page.compactLayout ? 220 : 430
-                    spacing: 8
+                    Layout.preferredWidth: page.compactLayout ? 190 : 430
+                    spacing: Theme.spacingXs
                     RowLayout {
                         Text { text: qsTr("总进度"); color: Theme.primaryText; font.pixelSize: Theme.fontSizeBody }
                         ProgressBar {
                             id: totalProgress
                             objectName: "formatTotalProgress"
-                            Layout.preferredWidth: page.compactLayout ? 130 : 320
+                            Layout.preferredWidth: page.compactLayout ? 108 : 320
                             from: 0; to: 1; value: converter.progress
                             background: Rectangle { implicitHeight: 10; color: Theme.hoverSurface; radius: 5 }
                             contentItem: Item {
@@ -282,13 +286,20 @@ Rectangle {
                     }
                 }
 
-                Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; Layout.topMargin: 22; Layout.bottomMargin: 22; color: Theme.border }
+                Rectangle {
+                    visible: !page.compactLayout
+                    Layout.preferredWidth: visible ? 1 : 0
+                    Layout.fillHeight: visible
+                    Layout.topMargin: 18
+                    Layout.bottomMargin: 18
+                    color: Theme.border
+                }
 
                 Item { Layout.fillWidth: true }
 
                 RowLayout {
                     objectName: "converterParallelJobsGroup"
-                    spacing: 8
+                    spacing: Theme.spacingXs
                     Text {
                         text: qsTr("并发")
                         color: Theme.secondaryText
@@ -297,7 +308,7 @@ Rectangle {
                     ThemedComboBox {
                         id: converterParallelJobsBox
                         objectName: "converterParallelJobsBox"
-                        Layout.preferredWidth: 72
+                        Layout.preferredWidth: page.compactLayout ? 64 : 72
                         model: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
                         currentIndex: Math.max(0, model.indexOf(SettingsController.parallelJobs))
                         enabled: !converter.busy
@@ -314,17 +325,17 @@ Rectangle {
 
                 Rectangle {
                     objectName: "formatSummaryCard"
-                    Layout.preferredWidth: 230
-                    Layout.preferredHeight: 46
+                    Layout.preferredWidth: page.compactLayout ? 150 : 230
+                    Layout.preferredHeight: 42
                     color: Theme.elevated
                     border.color: Theme.border
-                    radius: 6
+                    radius: Theme.radiusSm
                     RowLayout {
                         anchors.centerIn: parent
-                        spacing: 18
-                        ThemedIcon { objectName: "formatSummaryCompleteIcon"; source: Theme.icon("checkbox-circle-line"); tint: Theme.success; sourceSize.width: 18; sourceSize.height: 18 }
+                        spacing: page.compactLayout ? Theme.spacingSm : Theme.spacingLg
+                        ThemedIcon { visible: !page.compactLayout; objectName: "formatSummaryCompleteIcon"; source: Theme.icon("checkbox-circle-line"); tint: Theme.success; sourceSize.width: 18; sourceSize.height: 18 }
                         Text { text: qsTr("已完成 %1").arg(converter.doneCount); color: Theme.success }
-                        ThemedIcon { objectName: "formatSummaryFailedIcon"; source: Theme.icon("error-warning-line"); tint: Theme.error; sourceSize.width: 18; sourceSize.height: 18 }
+                        ThemedIcon { visible: !page.compactLayout; objectName: "formatSummaryFailedIcon"; source: Theme.icon("error-warning-line"); tint: Theme.error; sourceSize.width: 18; sourceSize.height: 18 }
                         Text { text: qsTr("失败 %1").arg(converter.failedCount); color: Theme.error }
                     }
                     MouseArea {
@@ -354,7 +365,7 @@ Rectangle {
                     objectName: "convertAllButton"
                     primary: true
                     prominent: true
-                    Layout.preferredWidth: page.compactLayout ? 125 : 174
+                    Layout.preferredWidth: page.compactLayout ? 110 : 174
                     Layout.preferredHeight: Theme.controlHeightProminent
                     available: converter.checkedCount > 0 && !converter.busy
                     text: qsTr("开始处理")
@@ -370,7 +381,7 @@ Rectangle {
                 ThemedButton {
                     objectName: "cancelAllButton"
                     prominent: true
-                    Layout.preferredWidth: page.compactLayout ? 115 : 168
+                    Layout.preferredWidth: page.compactLayout ? 105 : 168
                     Layout.preferredHeight: Theme.controlHeightProminent
                     available: converter.busy
                     text: qsTr("取消全部")

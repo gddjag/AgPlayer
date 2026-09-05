@@ -80,14 +80,6 @@ TestCase {
     }
 
     Component {
-        id: libraryManagerPageComponent
-        LibraryManagerPage {
-            width: 900
-            height: 600
-        }
-    }
-
-    Component {
         id: listWindowComponent
         ListWindow {
             visible: true
@@ -454,80 +446,6 @@ TestCase {
         }
     }
 
-    function verifyFileInfoPanel(panel, expectedPath) {
-        var expectedKeys = [
-            "fileName", "format", "sampleRate", "bitDepth", "channels",
-            "bitRate", "duration", "fileSize", "bpm", "modifiedAt",
-            "directory", "path", "tags"
-        ]
-        var requiredValueKeys = [
-            "format", "sampleRate", "bitDepth", "channels", "bitRate",
-            "duration", "fileSize", "path"
-        ]
-        verify(panel !== null, "file information panel must exist")
-        compare(panel.objectName, "audioFileInfoPanel")
-        compare(panel.width, 130)
-        compare(panel.height, 438)
-        var scrollView = findChild(panel, "audioFileInfoScroll")
-        verify(scrollView !== null)
-        compare(panel.rows.length, expectedKeys.length,
-                "file information must retain the complete shared field contract")
-        for (var rowIndex = 0; rowIndex < expectedKeys.length; ++rowIndex) {
-            var key = expectedKeys[rowIndex]
-            compare(panel.rows[rowIndex].key, key,
-                    "file information fields must remain ordered consistently")
-            var label = findChild(panel.contentItem, "audioFileInfoLabel-" + key)
-            var value = findChild(panel.contentItem, "audioFileInfoValue-" + key)
-            verify(label !== null, "missing file information label for " + key)
-            verify(value !== null, "missing file information value for " + key)
-            if (requiredValueKeys.indexOf(key) >= 0) {
-                verify(String(panel.rows[rowIndex].value || "").length > 0,
-                       "required raw file information value must not be empty: " + key)
-            }
-        }
-        compare(panel.fullPath, expectedPath)
-
-        var path = findChild(panel.contentItem, "audioFileInfoValue-path")
-        verify(path !== null, "full path value must be addressable")
-        compare(path.elide, Text.ElideMiddle)
-        compare(path.Accessible.name, panel.fullPath)
-
-        var copySpy = signalSpyComponent.createObject(testCase,
-                                                      { "target": panel,
-                                                        "signalName": "copyRequested" })
-        verify(copySpy.valid)
-        var copyTarget = findChild(panel.contentItem, "audioFileInfoCopy-path")
-        verify(copyTarget !== null, "full path must expose a copy target")
-        compare(copyTarget.enabled, true)
-        verify(copyTarget.visible && copyTarget.width > 0 && copyTarget.height > 0,
-               "full path copy target must be visible and sized: visible="
-               + copyTarget.visible + ", width=" + copyTarget.width
-               + ", height=" + copyTarget.height)
-        var targetPosition = copyTarget.mapToItem(scrollView, 0, 0)
-        if (targetPosition.y < 0
-                || targetPosition.y + copyTarget.height > scrollView.height) {
-            var flickable = scrollView.contentItem
-            verify(flickable && flickable.contentY !== undefined,
-                   "file information scroll view must expose its flickable viewport")
-            flickable.contentY += targetPosition.y
-                            - (scrollView.height - copyTarget.height) / 2
-            wait(0)
-            targetPosition = copyTarget.mapToItem(scrollView, 0, 0)
-        }
-        verify(targetPosition.x >= 0
-               && targetPosition.x + copyTarget.width <= scrollView.width
-               && targetPosition.y >= 0
-               && targetPosition.y + copyTarget.height <= scrollView.height,
-               "full path copy target must be inside the scroll viewport: x="
-               + targetPosition.x + ", y=" + targetPosition.y
-               + ", width=" + copyTarget.width + ", height=" + copyTarget.height
-               + ", viewportWidth=" + scrollView.width
-               + ", viewportHeight=" + scrollView.height)
-        mouseClick(copyTarget, copyTarget.width / 2, copyTarget.height / 2)
-        compare(copySpy.count, 1)
-        compare(copySpy.signalArguments[0][0], panel.fullPath)
-        copySpy.destroy()
-    }
 
     function requiredFileInfoRowsAreHydrated(panel) {
         if (!panel || !panel.rows)
@@ -1228,76 +1146,6 @@ TestCase {
         SettingsController.listWaveformThumbnailEnabled = previousEnabled
     }
 
-    function test_qa_track_details_capture_opens_real_details_panel() {
-        var trackIds = nativeDropHelper.ensureSortableTracks()
-        compare(trackIds.length, 3)
-        var filterModel = findChild(mainWindow, "filterModel")
-        filterModel.category = "all"
-        filterModel.tagKey = ""
-        filterModel.resourceFolder = ""
-        filterModel.searchText = ""
-        var listWindow = createTemporaryObject(defaultListWindowComponent,
-                                               testCase,
-                                               { "filterModel": filterModel })
-        verify(listWindow)
-        var trackList = findChild(listWindow, "sharedTrackList")
-        verify(trackList)
-        tryVerify(function() { return trackList.count > 0 }, 500)
-
-        trackList.openFirstDetailsForQa()
-
-        var detailsPanel = findChild(trackList, "audioFileInfoPanel")
-        verify(detailsPanel,
-               "QA capture must expose the real track-details popup")
-        tryVerify(function() { return detailsPanel.visible }, 500)
-        compare(detailsPanel.parent, trackList.popupOverlay,
-                "file details must not be clipped by the scrolling track list")
-        verify(String(detailsPanel.details.fileName || "").length > 0,
-               "the opened popup must contain a real track filename")
-        verify(String(detailsPanel.details.format || "").length > 0,
-               "the opened popup must contain a real track format")
-
-        var sampleRateLabel = findChild(detailsPanel.contentItem,
-                                        "audioFileInfoLabel-sampleRate")
-        var sampleRateValue = findChild(detailsPanel.contentItem,
-                                        "audioFileInfoValue-sampleRate")
-        var directoryLabel = findChild(detailsPanel.contentItem,
-                                       "audioFileInfoLabel-directory")
-        var directoryValue = findChild(detailsPanel.contentItem,
-                                       "audioFileInfoValue-directory")
-        var pathLabel = findChild(detailsPanel.contentItem,
-                                  "audioFileInfoLabel-path")
-        var pathValue = findChild(detailsPanel.contentItem,
-                                  "audioFileInfoValue-path")
-        verify(sampleRateLabel && sampleRateValue)
-        verify(directoryLabel && directoryValue)
-        verify(pathLabel && pathValue)
-
-        sampleRateLabel.text = "อัตราสุ่มตัวอย่าง"
-        directoryLabel.text = "Thư mục"
-        pathLabel.text = "Đường dẫn đầy đủ"
-        wait(0)
-        verify(sampleRateLabel.contentWidth <= sampleRateLabel.width,
-               "sample rate content=" + sampleRateLabel.contentWidth
-               + " width=" + sampleRateLabel.width)
-        verify(pathLabel.contentWidth <= pathLabel.width,
-               "path content=" + pathLabel.contentWidth
-               + " width=" + pathLabel.width)
-
-        var labels = [sampleRateLabel, directoryLabel, pathLabel]
-        var values = [sampleRateValue, directoryValue, pathValue]
-        for (var detailIndex = 0; detailIndex < labels.length; ++detailIndex) {
-            var labelPosition = labels[detailIndex].mapToItem(
-                        detailsPanel.contentItem, 0, 0)
-            var valuePosition = values[detailIndex].mapToItem(
-                        detailsPanel.contentItem, 0, 0)
-            verify(labelPosition.y + labels[detailIndex].height
-                   <= valuePosition.y,
-                   "portrait information rows must stack label above value")
-        }
-        detailsPanel.close()
-        listWindow.destroy()
-    }
 
     function test_track_list_context_menu_omits_file_information() {
         var trackIds = nativeDropHelper.ensureSortableTracks()
@@ -1324,58 +1172,37 @@ TestCase {
         }
     }
 
-    function test_library_manager_context_menu_omits_file_information() {
+    function test_legacy_library_category_returns_to_tracks_and_keeps_playlist_navigation() {
         var trackIds = nativeDropHelper.ensureSortableTracks()
         verify(trackIds.length > 0)
-        var page = libraryManagerPageComponent.createObject(mainWindow.contentItem)
-        verify(page)
-        page.z = 1000
-        page.height = Math.max(page.height, page.implicitHeight)
-        wait(30)
-
-        var menu = null
+        var filter = findChild(mainWindow, "filterModel")
+        filter.category = "all"
+        filter.searchText = ""
+        filter.tagKey = ""
+        filter.resourceFolder = ""
+        var playlistId = PlaylistModel.createPlaylist("legacy-route-" + Date.now())
+        verify(playlistId.length > 0)
+        verify(PlaylistModel.addTracks(playlistId, [trackIds[0]]))
+        var window = listWindowComponent.createObject(null, { "filterModel": filter })
+        verify(window)
         try {
-            var trackList = findChild(page, "libraryManagerTrackList")
-            verify(trackList, "library manager must expose its track list")
-            tryVerify(function() { return trackList.count > 0 }, 500)
-            trackList.positionViewAtBeginning()
-            wait(30)
-            mainWindow.requestActivate()
-            tryVerify(function() { return mainWindow.active }, 1000)
-            trackList.forceActiveFocus()
-            verify(trackList.activeFocus,
-                   "library manager track list must receive pointer input focus")
-            var firstRow = trackList.itemAtIndex(0)
-            verify(firstRow, "a visible library manager track row should exist")
-            verify(firstRow.width > 20 && firstRow.height > 20,
-                   "first library manager row must expose a clickable hit target")
-            var pagePosition = firstRow.mapToItem(page, 0, 0)
-            page.y = Math.round((mainWindow.contentItem.height - firstRow.height) / 2
-                                - pagePosition.y)
-            wait(0)
-            var firstRowPosition = firstRow.mapToItem(trackList, 0, 0)
-            verify(firstRowPosition.y >= 0
-                   && firstRowPosition.y + firstRow.height <= trackList.height,
-                   "first library manager row must be inside its visible viewport")
-            var windowPosition = firstRow.mapToItem(mainWindow.contentItem, 0, 0)
-            verify(windowPosition.x >= 0
-                   && windowPosition.x + firstRow.width <= mainWindow.contentItem.width
-                   && windowPosition.y >= 0
-                   && windowPosition.y + firstRow.height <= mainWindow.contentItem.height,
-                   "first library manager row must be inside the host window: y="
-                   + windowPosition.y + ", height=" + firstRow.height
-                   + ", hostHeight=" + mainWindow.contentItem.height)
-            mouseClick(firstRow, firstRow.width / 2, firstRow.height / 2,
-                       Qt.RightButton)
-            menu = findChild(page, "libraryManagerTrackMenu")
-            tryVerify(function() { return menu && menu.visible }, 500)
-            compare(findChild(menu, "libraryTrackDetails"), null)
+            filter.category = "library"
+            tryCompare(filter, "category", "all", 500)
+            var list = findChild(window, "sharedTrackList")
+            tryVerify(function() { return list.visible && list.count > 0 }, 500)
+            verify(findChild(window, "librarySearchFilter").visible)
+            verify(window.routeNavigationNode("favorites", "favorites:favorites", ""))
+            compare(filter.category, "favorites")
+            verify(window.routeNavigationNode("playlist", "playlist:" + playlistId, ""))
+            compare(filter.category, playlistId)
+            tryVerify(function() { return list.visible && list.count === 1 }, 500)
         } finally {
-            if (menu)
-                menu.close()
-            page.destroy()
+            window.destroy()
+            filter.category = "all"
+            PlaylistModel.removePlaylist(playlistId)
         }
     }
+
 
     function test_sidebar_exposes_required_top_level_nodes_and_linear_icons() {
         var side = sideNavigationComponent.createObject(mainWindow.contentItem)
@@ -2063,7 +1890,7 @@ TestCase {
         var mixedAudio = nativeDropHelper.copyForNativeDrop(testAudioUrl)
         var busyFolder = nativeDropHelper.createDropDirectory()
         verify(firstAudio && rejectedAudio && mixedAudio && busyFolder)
-        var initialFolderCount = LibraryManagerController.monitoredFolders.length
+        var initialFolderCount = ResourceFolderController.monitoredFolders.length
         var initialLibraryCount = LibraryModel.count
         var importFinished = signalSpyComponent.createObject(testCase, {
             "target": ImportController,
@@ -2082,7 +1909,7 @@ TestCase {
                 "a busy audio-only drop must remain unaccepted")
         compare(mixedAccepted, true,
                 "a mixed resource drop must accept its directory")
-        compare(LibraryManagerController.monitoredFolders.length,
+        compare(ResourceFolderController.monitoredFolders.length,
                 initialFolderCount + 1,
                 "audio import state must not block resource directories")
 
@@ -2102,7 +1929,7 @@ TestCase {
         var folderPath = decodeURIComponent(busyFolder.toString()
                                            .replace(/^file:\/\/\//, ""))
         folderPath = folderPath.replace(/\\/g, "/")
-        verify(LibraryManagerController.removeMonitoredFolder(folderPath))
+        verify(ResourceFolderController.removeMonitoredFolder(folderPath))
         LibraryModel.removeTrack(firstImportedId)
         importFinished.destroy()
         window.close()
@@ -2149,7 +1976,7 @@ TestCase {
         compare(filterModel.resourceFolder, "")
 
         var rootUrl = nativeDropHelper.createDropDirectory()
-        var rootPath = LibraryManagerController.classifyDropUrl(rootUrl).path
+        var rootPath = ResourceFolderController.classifyDropUrl(rootUrl).path
         verify(rootPath)
         window.enterResource("resourceRoot", rootPath)
         compare(filterModel.category, "all")
@@ -2445,21 +2272,17 @@ TestCase {
                "the C++ waveform item must own hover and seek input")
     }
 
-    function test_main_waveform_masks_the_clipped_first_peak_at_the_left_edge() {
+    function test_main_waveform_preserves_first_peak_without_an_opaque_edge_mask() {
         var sharedView = findChild(mainWindow, "mainFullTrackWaveform")
         var waveform = findChild(mainWindow, "mainWaveform")
         var playedClip = findChild(mainWindow, "waveformPlayedClip")
         var playedWaveform = findChild(mainWindow, "playedWaveform")
         var mask = findChild(mainWindow, "waveformLeftEdgeMask")
-        verify(sharedView && waveform && playedClip && playedWaveform && mask)
+        verify(sharedView && waveform && playedClip && playedWaveform)
         compare(waveform.width, sharedView.width)
         compare(playedWaveform.width, sharedView.width)
-        compare(mask.x, 0)
-        compare(mask.width, 1)
-        compare(mask.height, waveform.height)
-        compare(mask.color.toString(),
-                Theme.isLight ? "#ffffff" : "#000000",
-                "the one-pixel edge mask follows the requested light/dark canvas colour")
+        verify(!mask || !mask.visible || mask.opacity === 0,
+               "the first peak must not be covered by a black/white vertical strip")
         compare(playedWaveform.progressColor.toString(),
                 waveform.progressColor.toString(),
                 "the edge fix must preserve the configured played-progress colour")
@@ -3155,13 +2978,13 @@ TestCase {
         compare(window.handleResourceDropUrls([folder]), false,
                 "an already registered directory must not report success")
         compare(window.handleResourceDropUrls([invalid]), false)
-        var path = LibraryManagerController.classifyDropUrl(folder).path
-        verify(LibraryManagerController.removeMonitoredFolder(path))
+        var path = ResourceFolderController.classifyDropUrl(folder).path
+        verify(ResourceFolderController.removeMonitoredFolder(path))
         window.destroy()
     }
 
     function test_task1b_resource_drop_reports_completion_only_after_refresh() {
-        tryVerify(function() { return !LibraryManagerController.scanning }, 3000)
+        tryVerify(function() { return !ResourceFolderController.scanning }, 3000)
         var filterModel = findChild(mainWindow, "filterModel")
         var window = listWindowComponent.createObject(null, {
             "filterModel": filterModel,
@@ -3173,7 +2996,7 @@ TestCase {
         var folder = nativeDropHelper.createDropDirectory()
         verify(folder)
         var scanFinished = signalSpyComponent.createObject(testCase, {
-            "target": LibraryManagerController,
+            "target": ResourceFolderController,
             "signalName": "scanFinished"
         })
         verify(scanFinished)
@@ -3187,15 +3010,15 @@ TestCase {
         tryCompare(scanFinished, "count", 1, 3000)
         tryCompare(window, "resourceDropStatus", "completed", 1000)
         verify(statusLabel.text.indexOf("完成") >= 0)
-        var path = LibraryManagerController.classifyDropUrl(folder).path
-        verify(LibraryManagerController.removeMonitoredFolder(path))
+        var path = ResourceFolderController.classifyDropUrl(folder).path
+        verify(ResourceFolderController.removeMonitoredFolder(path))
         scanFinished.destroy()
         window.destroy()
     }
 
     function test_task1b_resource_drop_waits_for_scan_started_import() {
         tryVerify(function() {
-            return !LibraryManagerController.scanning
+            return !ResourceFolderController.scanning
                     && !ImportController.busy
         }, 3000)
         var filterModel = findChild(mainWindow, "filterModel")
@@ -3219,8 +3042,8 @@ TestCase {
         compare(importFinished.count, 0)
         tryCompare(importFinished, "count", 1, 5000)
         tryCompare(window, "resourceDropStatus", "completed", 1000)
-        var path = LibraryManagerController.classifyDropUrl(folder).path
-        verify(LibraryManagerController.removeMonitoredFolder(path))
+        var path = ResourceFolderController.classifyDropUrl(folder).path
+        verify(ResourceFolderController.removeMonitoredFolder(path))
         var importedIds = ImportController.importedTrackIds.slice(0)
         for (var index = 0; index < importedIds.length; ++index)
             LibraryModel.removeTrack(importedIds[index])
@@ -3230,7 +3053,7 @@ TestCase {
 
     function test_task1b_resource_drop_reports_import_failure() {
         tryVerify(function() {
-            return !LibraryManagerController.scanning
+            return !ResourceFolderController.scanning
                     && !ImportController.busy
         }, 3000)
         var filterModel = findChild(mainWindow, "filterModel")
@@ -3252,8 +3075,8 @@ TestCase {
         tryCompare(window, "resourceDropStatus", "failed", 1000)
         var statusLabel = findChild(window, "resourceDropStatusLabel")
         verify(statusLabel && statusLabel.text.indexOf("失败") >= 0)
-        var path = LibraryManagerController.classifyDropUrl(folder).path
-        verify(LibraryManagerController.removeMonitoredFolder(path))
+        var path = ResourceFolderController.classifyDropUrl(folder).path
+        verify(ResourceFolderController.removeMonitoredFolder(path))
         ImportController.clearErrors()
         importFinished.destroy()
         window.destroy()
@@ -4173,10 +3996,10 @@ TestCase {
         window.destroy()
         SettingsController.listWaveformThumbnailEnabled = previousEnabled
 
-        verify(stackCountBefore === 4 && stackCountAfter === 4
+        verify(stackCountBefore === 3 && stackCountAfter === 3
                && stackIndexBefore === 0 && stackIndexAfter === 0
                && dragStarted && dragFollowed,
-               "ListWindow drag input must preserve the four page stack and "
+               "ListWindow drag input must preserve the three page stack and "
                + "track the pointer: count=" + stackCountBefore + "->"
                + stackCountAfter + ", index=" + stackIndexBefore + "->"
                + stackIndexAfter + ", started=" + dragStarted
@@ -4399,13 +4222,13 @@ TestCase {
         var ignoredFile = nativeDropHelper.createNonAudioDropFile()
         var invalidUrl = nativeDropHelper.missingDropUrl()
         verify(ignoredFile && invalidUrl)
-        var initialFolderCount = LibraryManagerController.monitoredFolders.length
+        var initialFolderCount = ResourceFolderController.monitoredFolders.length
         var initialLibraryCount = LibraryModel.count
 
         var centralFolder = nativeDropHelper.createDropDirectory()
         verify(nativeDropHelper.sendUrls(centerTarget, [centralFolder]))
         tryVerify(function() { return !ImportController.busy }, 3000)
-        compare(LibraryManagerController.monitoredFolders.length,
+        compare(ResourceFolderController.monitoredFolders.length,
                 initialFolderCount,
                 "a central directory drop must not become a monitored root")
         ImportController.clearErrors()
@@ -4413,7 +4236,7 @@ TestCase {
         var tagFolder = nativeDropHelper.createDropDirectory()
         verify(nativeDropHelper.sendUrls(tagTarget, [tagFolder]))
         tryVerify(function() { return !ImportController.busy }, 3000)
-        compare(LibraryManagerController.monitoredFolders.length,
+        compare(ResourceFolderController.monitoredFolders.length,
                 initialFolderCount,
                 "a tag-column directory drop must not become a monitored root")
         ImportController.clearErrors()
@@ -4425,7 +4248,7 @@ TestCase {
             "signalName": "finished"
         })
         var rootsChanged = signalSpyComponent.createObject(testCase, {
-            "target": LibraryManagerController,
+            "target": ResourceFolderController,
             "signalName": "monitoredFoldersChanged"
         })
         verify(importFinished && rootsChanged)
@@ -4448,7 +4271,7 @@ TestCase {
                                           copiedAudio, copiedAudio,
                                           ignoredFile, invalidUrl]))
         tryVerify(function() {
-            return LibraryManagerController.monitoredFolders.length
+            return ResourceFolderController.monitoredFolders.length
                     === initialFolderCount + 1
         }, 1000)
         compare(ImportController.busy, false,
@@ -4501,7 +4324,7 @@ TestCase {
         verify(secondFolderUrl && nativeDropHelper.pathExists(secondFolderUrl))
         nativeDropHelper.sendUrls(dropTarget, [secondFolderUrl])
         tryVerify(function() {
-            return LibraryManagerController.monitoredFolders.length
+            return ResourceFolderController.monitoredFolders.length
                     === initialFolderCount + 2
         }, 1000)
         var secondFolderPath = decodeURIComponent(secondFolderUrl.toString()
@@ -4546,11 +4369,11 @@ TestCase {
         navigation.activeNodeType = "resourceRoot"
         confirm.accept()
         tryVerify(function() {
-            return LibraryManagerController.monitoredFolders.length
+            return ResourceFolderController.monitoredFolders.length
                     === initialFolderCount + 1
         }, 1000)
         verify(nativeDropHelper.pathExists(secondFolderUrl))
-        verify(LibraryManagerController.monitoredFolders.some(function(path) {
+        verify(ResourceFolderController.monitoredFolders.some(function(path) {
             return path.replace(/\\/g, "/").toLowerCase()
                     === folderPath.toLowerCase()
         }), "stale right-click context must not remove the selected root")
@@ -4573,9 +4396,9 @@ TestCase {
                    Qt.RightButton)
         tryVerify(function() { return menu.visible }, 500)
         wait(500)
-        tryVerify(function() { return !LibraryManagerController.scanning }, 3000)
+        tryVerify(function() { return !ResourceFolderController.scanning }, 3000)
         var scanFinished = signalSpyComponent.createObject(testCase, {
-            "target": LibraryManagerController,
+            "target": ResourceFolderController,
             "signalName": "scanFinished"
         })
         verify(scanFinished)
@@ -4596,7 +4419,7 @@ TestCase {
         verify(warning.text.indexOf("不删除电脑磁盘中的实际文件夹和音乐文件") >= 0)
         confirm.accept()
         tryVerify(function() {
-            return LibraryManagerController.monitoredFolders.length
+            return ResourceFolderController.monitoredFolders.length
                     === initialFolderCount
         }, 1000)
         verify(nativeDropHelper.pathExists(folderUrl))
@@ -4929,6 +4752,14 @@ TestCase {
             compare(Math.round(thumbnail.y - (title.y + title.height)), 3,
                     "the waveform thumbnail must sit 2-4px below the title")
             compare(thumbnail.height, 16)
+
+            var cover = findChild(firstRow, "trackCover")
+            verify(cover)
+            var infoTop = title.mapToItem(firstRow, 0, 0).y
+            var infoBottom = thumbnail.mapToItem(firstRow, 0, thumbnail.height).y
+            var coverCenter = cover.mapToItem(firstRow, 0, cover.height / 2).y
+            verify(Math.abs((infoTop + infoBottom) / 2 - coverCenter) <= 1,
+                   "the title and thumbnail block must share the cover's vertical center")
 
             verify(TagModel.createTag(tagName))
             for (var tagRow = 0; tagRow < TagModel.rowCount(); ++tagRow) {
@@ -5666,11 +5497,11 @@ TestCase {
         compare(SettingsController.frequencyColorWaveform.unplayedDimness, 0.38)
         compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.62)
         resetButton.clicked()
-        compare(String(SettingsController.frequencyColorWaveform.lowColor), "#fc0909")
-        compare(String(SettingsController.frequencyColorWaveform.midColor), "#03ff00")
-        compare(String(SettingsController.frequencyColorWaveform.highColor), "#0048ff")
-        compare(SettingsController.frequencyColorWaveform.unplayedDimness, 0.68)
-        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.32)
+        compare(String(SettingsController.frequencyColorWaveform.lowColor), "#ff0000")
+        compare(String(SettingsController.frequencyColorWaveform.midColor), "#00ff00")
+        compare(String(SettingsController.frequencyColorWaveform.highColor), "#0000ff")
+        compare(SettingsController.frequencyColorWaveform.unplayedDimness, 0.30)
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.70)
 
         page.cancelAndClose()
         SettingsController.waveformMode = previousWaveformMode
@@ -5777,9 +5608,9 @@ TestCase {
         compare(SettingsController.frequencyColorWaveform.unplayedDimness, 0.38)
         compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.62)
         frequencyResetButton.clicked()
-        compare(String(SettingsController.frequencyColorWaveform.lowColor), "#fc0909")
-        compare(SettingsController.frequencyColorWaveform.unplayedDimness, 0.68)
-        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.32)
+        compare(String(SettingsController.frequencyColorWaveform.lowColor), "#ff0000")
+        compare(SettingsController.frequencyColorWaveform.unplayedDimness, 0.30)
+        compare(SettingsController.frequencyColorWaveform.unplayedOpacity, 0.70)
 
         resetButton.clicked()
         tryCompare(SettingsController, "waveformHeight", 0.8)
@@ -5925,9 +5756,9 @@ TestCase {
         compare(findChild(mainWindow, "playButtonBody").border.color.toString(),
                 (PlaybackController.state === PlaybackController.Playing
                  ? Theme.playRingPlaying : Theme.playRingPaused).toString())
-        compare(String(waveform.lowColor), "#fc0909")
-        compare(String(waveform.midColor), "#03ff00")
-        compare(String(waveform.highColor), "#0048ff")
+        compare(String(waveform.lowColor), "#ff0000")
+        compare(String(waveform.midColor), "#00ff00")
+        compare(String(waveform.highColor), "#0000ff")
         compare(waveform.frequencyUnplayedOpacity,
                 Theme.nonImmersiveSpectralUnplayedOpacity)
         compare(playedClip.visible, true)
@@ -5943,8 +5774,8 @@ TestCase {
         verify(Theme.primaryText.toString() !== darkText)
         compare(findChild(mainWindow, "settingsButton").icon.color.toString(),
                 Theme.iconSecondary.toString())
-        compare(String(waveform.lowColor), "#fc0909")
-        compare(String(waveform.highColor), "#0048ff")
+        compare(String(waveform.lowColor), "#ff0000")
+        compare(String(waveform.highColor), "#0000ff")
 
         SettingsController.themeMode = 2
         tryCompare(Theme, "followsSystem", true)

@@ -7,12 +7,13 @@ T.CheckBox {
 
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
+    property int indicatorSize: 18
     implicitHeight: Theme.controlHeight
     implicitWidth: Math.max(Theme.controlHeight, contentItem.implicitWidth)
 
     indicator: Rectangle {
-        implicitWidth: 18
-        implicitHeight: 18
+        implicitWidth: control.indicatorSize
+        implicitHeight: control.indicatorSize
         x: 0
         y: (control.height - height) / 2
         radius: Theme.radiusXs

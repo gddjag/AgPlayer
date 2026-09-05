@@ -2991,6 +2991,22 @@
         <source>请至少设置、清除一个字段，或修改封面。</source>
         <translation>请至少设置、清除一个字段，或修改封面。</translation>
     </message>
+    <message>
+        <source>当前播放列表不可用</source>
+        <translation>当前播放列表不可用</translation>
+    </message>
+    <message>
+        <source>当前播放列表没有可分析的文件</source>
+        <translation>当前播放列表没有可分析的文件</translation>
+    </message>
+    <message>
+        <source>此文件尚未加入播放器曲库，无法定位</source>
+        <translation>此文件尚未加入播放器曲库，无法定位</translation>
+    </message>
+    <message>
+        <source>播放器列表尚未就绪，无法定位</source>
+        <translation>播放器列表尚未就绪，无法定位</translation>
+    </message>
 </context>
 <context>
     <name>SearchFilter</name>
@@ -3929,6 +3945,10 @@
         <source>人声伴奏分离</source>
         <translation>人声伴奏分离</translation>
     </message>
+    <message>
+        <source>无损鉴别</source>
+        <translation>无损鉴别</translation>
+    </message>
 </context>
 <context>
     <name>TrackList</name>
@@ -4123,6 +4143,10 @@
         <source>评分</source>
         <translation>评分</translation>
     </message>
+    <message>
+        <source>无损鉴别</source>
+        <translation>无损鉴别</translation>
+    </message>
 </context>
 <context>
     <name>LibraryNavigationModel</name>
@@ -4152,5 +4176,923 @@
     <message><source>请求过于频繁</source><translation>请求过于频繁</translation></message>
     <message><source>网络不可用</source><translation>网络不可用</translation></message>
     <message><source>服务暂时不可用</source><translation>服务暂时不可用</translation></message>
+</context>
+<context>
+    <name>LosslessTaskPanel</name>
+    <message>
+        <source>采样率 / 位深</source>
+        <translation>采样率 / 位深</translation>
+    </message>
+    <message>
+        <source>格式</source>
+        <translation>格式</translation>
+    </message>
+    <message>
+        <source>共 %1 个文件（已选择 %2 个）</source>
+        <translation>共 %1 个文件（已选择 %2 个）</translation>
+    </message>
+    <message>
+        <source>可信无损</source>
+        <translation>可信无损</translation>
+    </message>
+    <message>
+        <source>没有符合当前筛选的任务</source>
+        <translation>没有符合当前筛选的任务</translation>
+    </message>
+    <message>
+        <source>判定</source>
+        <translation>判定</translation>
+    </message>
+    <message>
+        <source>清空任务列表</source>
+        <translation>清空任务列表</translation>
+    </message>
+    <message>
+        <source>全部</source>
+        <translation>全部</translation>
+    </message>
+    <message>
+        <source>任务列表</source>
+        <translation>任务列表</translation>
+    </message>
+    <message>
+        <source>搜索鉴别任务</source>
+        <translation>搜索鉴别任务</translation>
+    </message>
+    <message>
+        <source>搜索任务</source>
+        <translation>搜索任务</translation>
+    </message>
+    <message>
+        <source>搜索文件名或判定结果</source>
+        <translation>搜索文件名或判定结果</translation>
+    </message>
+    <message>
+        <source>添加音频文件以开始无损鉴别</source>
+        <translation>添加音频文件以开始无损鉴别</translation>
+    </message>
+    <message>
+        <source>文件名</source>
+        <translation>文件名</translation>
+    </message>
+    <message>
+        <source>无法确定</source>
+        <translation>无法确定</translation>
+    </message>
+    <message>
+        <source>移除选中任务</source>
+        <translation>移除选中任务</translation>
+    </message>
+    <message>
+        <source>疑似升频</source>
+        <translation>疑似升频</translation>
+    </message>
+    <message>
+        <source>疑似转码</source>
+        <translation>疑似转码</translation>
+    </message>
+    <message>
+        <source>置信度</source>
+        <translation>置信度</translation>
+    </message>
+    <message>
+        <source>重试选中任务</source>
+        <translation>重试选中任务</translation>
+    </message>
+    <message>
+        <source>按文件名排序</source>
+        <translation>按文件名排序</translation>
+    </message>
+    <message>
+        <source>按置信度排序</source>
+        <translation>按置信度排序</translation>
+    </message>
+    <message>
+        <source>不确定</source>
+        <translation>不确定</translation>
+    </message>
+    <message>
+        <source>可信</source>
+        <translation>可信</translation>
+    </message>
+    <message>
+        <source>升频</source>
+        <translation>升频</translation>
+    </message>
+    <message>
+        <source>转码</source>
+        <translation>转码</translation>
+    </message>
+</context>
+<context>
+    <name>LibraryManagerPage</name>
+    <message>
+        <source>无损鉴别</source>
+        <translation>无损鉴别</translation>
+    </message>
+</context>
+<context>
+    <name>LosslessProgressBar</name>
+</context>
+<context>
+    <name>LosslessConfidenceRing</name>
+</context>
+<context>
+    <name>LosslessEvidencePanel</name>
+    <message>
+        <source>--</source>
+        <translation>--</translation>
+    </message>
+    <message>
+        <source>%1 截止</source>
+        <translation>%1 截止</translation>
+    </message>
+    <message>
+        <source>0 Hz</source>
+        <translation>0 Hz</translation>
+    </message>
+    <message>
+        <source>编码频谱空洞</source>
+        <translation>编码频谱空洞</translation>
+    </message>
+    <message>
+        <source>此项证据尚不可用</source>
+        <translation>此项证据尚不可用</translation>
+    </message>
+    <message>
+        <source>高频硬截止</source>
+        <translation>高频硬截止</translation>
+    </message>
+    <message>
+        <source>频谱证据</source>
+        <translation>频谱证据</translation>
+    </message>
+    <message>
+        <source>时频图</source>
+        <translation>时频图</translation>
+    </message>
+    <message>
+        <source>选择已完成任务以查看频谱证据</source>
+        <translation>选择已完成任务以查看频谱证据</translation>
+    </message>
+    <message>
+        <source>有效位深</source>
+        <translation>有效位深</translation>
+    </message>
+    <message>
+        <source>约 %1 bit</source>
+        <translation>约 %1 bit</translation>
+    </message>
+    <message>
+        <source>重采样痕迹</source>
+        <translation>重采样痕迹</translation>
+    </message>
+</context>
+<context>
+    <name>LosslessIdentifyPage</name>
+    <message>
+        <source>＋  添加文件</source>
+        <translation>＋  添加文件</translation>
+    </message>
+    <message>
+        <source>▶  开始批量分析</source>
+        <translation>▶  开始批量分析</translation>
+    </message>
+    <message>
+        <source>并发</source>
+        <translation>并发</translation>
+    </message>
+    <message>
+        <source>从播放列表添加</source>
+        <translation>从播放列表添加</translation>
+    </message>
+    <message>
+        <source>导出鉴别报告</source>
+        <translation>导出鉴别报告</translation>
+    </message>
+    <message>
+        <source>等待开始分析</source>
+        <translation>等待开始分析</translation>
+    </message>
+    <message>
+        <source>结论</source>
+        <translation>结论</translation>
+    </message>
+    <message>
+        <source>开始分析</source>
+        <translation>开始分析</translation>
+    </message>
+    <message>
+        <source>取消全部</source>
+        <translation>取消全部</translation>
+    </message>
+    <message>
+        <source>所有文件 (*)</source>
+        <translation>所有文件 (*)</translation>
+    </message>
+    <message>
+        <source>添加待鉴别文件</source>
+        <translation>添加待鉴别文件</translation>
+    </message>
+    <message>
+        <source>添加待鉴别文件夹</source>
+        <translation>添加待鉴别文件夹</translation>
+    </message>
+    <message>
+        <source>添加文件夹</source>
+        <translation>添加文件夹</translation>
+    </message>
+    <message>
+        <source>停止</source>
+        <translation>停止</translation>
+    </message>
+    <message>
+        <source>音频与媒体文件 (*.wav *.rf64 *.bwf *.aif *.aiff *.flac *.alac *.ape *.wv *.mp3 *.aac *.m4a *.ogg *.opus *.dsf *.dff *.dsd *.dst *.iso *.mp4 *.mkv *.mov *.webm)</source>
+        <translation>音频与媒体文件 (*.wav *.rf64 *.bwf *.aif *.aiff *.flac *.alac *.ape *.wv *.mp3 *.aac *.m4a *.ogg *.opus *.dsf *.dff *.dsd *.dst *.iso *.mp4 *.mkv *.mov *.webm)</translation>
+    </message>
+    <message>
+        <source>正在批量分析</source>
+        <translation>正在批量分析</translation>
+    </message>
+    <message>
+        <source>正在停止</source>
+        <translation>正在停止</translation>
+    </message>
+    <message>
+        <source>证据</source>
+        <translation>证据</translation>
+    </message>
+    <message>
+        <source>总进度  %1 / %2</source>
+        <translation>总进度  %1 / %2</translation>
+    </message>
+    <message>
+        <source>CSV 表格 (*.csv)</source>
+        <translation>CSV 表格 (*.csv)</translation>
+    </message>
+    <message>
+        <source>JSON 报告 (*.json)</source>
+        <translation>JSON 报告 (*.json)</translation>
+    </message>
+    <message>
+        <source>添加文件</source>
+        <translation>添加文件</translation>
+    </message>
+</context>
+<context>
+    <name>LosslessConclusionPanel</name>
+    <message>
+        <source> 声道</source>
+        <translation> 声道</translation>
+    </message>
+    <message>
+        <source>--</source>
+        <translation>--</translation>
+    </message>
+    <message>
+        <source>比率</source>
+        <translation>比率</translation>
+    </message>
+    <message>
+        <source>大小</source>
+        <translation>大小</translation>
+    </message>
+    <message>
+        <source>导出报告</source>
+        <translation>导出报告</translation>
+    </message>
+    <message>
+        <source>等待选择分析结果</source>
+        <translation>等待选择分析结果</translation>
+    </message>
+    <message>
+        <source>分析结论</source>
+        <translation>分析结论</translation>
+    </message>
+    <message>
+        <source>分析完整度</source>
+        <translation>分析完整度</translation>
+    </message>
+    <message>
+        <source>格式</source>
+        <translation>格式</translation>
+    </message>
+    <message>
+        <source>警告：%1</source>
+        <translation>警告：%1</translation>
+    </message>
+    <message>
+        <source>可能来源</source>
+        <translation>可能来源</translation>
+    </message>
+    <message>
+        <source>路径</source>
+        <translation>路径</translation>
+    </message>
+    <message>
+        <source>判定依据</source>
+        <translation>判定依据</translation>
+    </message>
+    <message>
+        <source>评分</source>
+        <translation>评分</translation>
+    </message>
+    <message>
+        <source>时长</source>
+        <translation>时长</translation>
+    </message>
+    <message>
+        <source>推测转换链</source>
+        <translation>推测转换链</translation>
+    </message>
+    <message>
+        <source>未知来源</source>
+        <translation>未知来源</translation>
+    </message>
+    <message>
+        <source>文件信息</source>
+        <translation>文件信息</translation>
+    </message>
+    <message>
+        <source>无法确定</source>
+        <translation>无法确定</translation>
+    </message>
+    <message>
+        <source>修改</source>
+        <translation>修改</translation>
+    </message>
+    <message>
+        <source>音频</source>
+        <translation>音频</translation>
+    </message>
+    <message>
+        <source>在播放器中定位</source>
+        <translation>在播放器中定位</translation>
+    </message>
+    <message>
+        <source>综合置信度</source>
+        <translation>综合置信度</translation>
+    </message>
+    <message>
+        <source>ⓘ 结果为信号特征推断，不代表可恢复原始文件。</source>
+        <translation>ⓘ 结果为信号特征推断，不代表可恢复原始文件。</translation>
+    </message>
+    <message>
+        <source>归一化熵</source>
+        <translation>归一化熵</translation>
+    </message>
+    <message>
+        <source>参考阈值：%1</source>
+        <translation>参考阈值：%1</translation>
+    </message>
+    <message>
+        <source>分析区间：%1–%2 秒</source>
+        <translation>分析区间：%1–%2 秒</translation>
+    </message>
+</context>
+<context>
+    <name>LosslessAnalysisController</name>
+    <message>
+        <source>可信无损</source>
+        <translation>可信无损</translation>
+    </message>
+    <message>
+        <source>疑似有损转码</source>
+        <translation>疑似有损转码</translation>
+    </message>
+    <message>
+        <source>疑似升频</source>
+        <translation>疑似升频</translation>
+    </message>
+    <message>
+        <source>疑似扩位</source>
+        <translation>疑似扩位</translation>
+    </message>
+    <message>
+        <source>疑似有损转码后升频</source>
+        <translation>疑似有损转码后升频</translation>
+    </message>
+    <message>
+        <source>DSD 来源可信</source>
+        <translation>DSD 来源可信</translation>
+    </message>
+    <message>
+        <source>疑似 PCM 转 DSD</source>
+        <translation>疑似 PCM 转 DSD</translation>
+    </message>
+    <message>
+        <source>无法可靠判定</source>
+        <translation>无法可靠判定</translation>
+    </message>
+    <message>
+        <source>分析失败</source>
+        <translation>分析失败</translation>
+    </message>
+    <message>
+        <source>已取消</source>
+        <translation>已取消</translation>
+    </message>
+    <message>
+        <source>等待</source>
+        <translation>等待</translation>
+    </message>
+    <message>
+        <source>探测中</source>
+        <translation>探测中</translation>
+    </message>
+    <message>
+        <source>解码中</source>
+        <translation>解码中</translation>
+    </message>
+    <message>
+        <source>分析中</source>
+        <translation>分析中</translation>
+    </message>
+    <message>
+        <source>汇总中</source>
+        <translation>汇总中</translation>
+    </message>
+    <message>
+        <source>已完成</source>
+        <translation>已完成</translation>
+    </message>
+    <message>
+        <source>失败</source>
+        <translation>失败</translation>
+    </message>
+    <message>
+        <source>正在取消</source>
+        <translation>正在取消</translation>
+    </message>
+    <message>
+        <source> · %1 声道</source>
+        <translation> · %1 声道</translation>
+    </message>
+    <message>
+        <source>仅支持本地文件：%1</source>
+        <translation>仅支持本地文件：%1</translation>
+    </message>
+    <message>
+        <source>文件或文件夹不存在：%1</source>
+        <translation>文件或文件夹不存在：%1</translation>
+    </message>
+    <message>
+        <source>任务数量已达到 %1 项上限，已停止继续发现</source>
+        <translation>任务数量已达到 %1 项上限，已停止继续发现</translation>
+    </message>
+    <message>
+        <source>单次导入数量超过 %1 项上限</source>
+        <translation>单次导入数量超过 %1 项上限</translation>
+    </message>
+    <message>
+        <source>文件发现请求过多，请等待当前发现完成</source>
+        <translation>文件发现请求过多，请等待当前发现完成</translation>
+    </message>
+    <message>
+        <source>任务数量已达到 %1 项上限</source>
+        <translation>任务数量已达到 %1 项上限</translation>
+    </message>
+    <message>
+        <source>正在发现文件…</source>
+        <translation>正在发现文件…</translation>
+    </message>
+    <message>
+        <source>分析失败：%1</source>
+        <translation>分析失败：%1</translation>
+    </message>
+    <message>
+        <source>分析发生未知错误</source>
+        <translation>分析发生未知错误</translation>
+    </message>
+    <message>
+        <source>已完成（缓存）</source>
+        <translation>已完成（缓存）</translation>
+    </message>
+    <message>
+        <source>镜像评分 %1</source>
+        <translation>镜像评分 %1</translation>
+    </message>
+    <message>
+        <source>结构空洞评分 %1</source>
+        <translation>结构空洞评分 %1</translation>
+    </message>
+    <message>
+        <source>正在停止…</source>
+        <translation>正在停止…</translation>
+    </message>
+    <message>
+        <source>正在分析 %1/%2</source>
+        <translation>正在分析 %1/%2</translation>
+    </message>
+    <message>
+        <source>尚未添加文件</source>
+        <translation>尚未添加文件</translation>
+    </message>
+    <message>
+        <source>已完成 %1/%2</source>
+        <translation>已完成 %1/%2</translation>
+    </message>
+    <message>
+        <source>没有可开始的已选任务</source>
+        <translation>没有可开始的已选任务</translation>
+    </message>
+    <message>
+        <source>分析进行中，无法移除活动任务</source>
+        <translation>分析进行中，无法移除活动任务</translation>
+    </message>
+    <message>
+        <source>报告正在导出，请稍候</source>
+        <translation>报告正在导出，请稍候</translation>
+    </message>
+    <message>
+        <source>报告必须保存到本地文件</source>
+        <translation>报告必须保存到本地文件</translation>
+    </message>
+    <message>
+        <source>没有可导出的分析结果</source>
+        <translation>没有可导出的分析结果</translation>
+    </message>
+    <message>
+        <source>正在导出报告…</source>
+        <translation>正在导出报告…</translation>
+    </message>
+    <message>
+        <source>报告已导出</source>
+        <translation>报告已导出</translation>
+    </message>
+    <message>
+        <source>报告导出失败</source>
+        <translation>报告导出失败</translation>
+    </message>
+    <message>
+        <source>请先完成该文件的基础分析</source>
+        <translation>请先完成该文件的基础分析</translation>
+    </message>
+    <message>
+        <source>分析期间源文件已发生变化，请重试</source>
+        <translation>分析期间源文件已发生变化，请重试</translation>
+    </message>
+    <message>
+        <source>已处理 %1/%2（成功 %3，失败 %4，取消 %5）</source>
+        <translation>已处理 %1/%2（成功 %3，失败 %4，取消 %5）</translation>
+    </message>
+</context>
+<context>
+    <name>LosslessReport</name>
+    <message>
+        <source>报告路径为空</source>
+        <translation>报告路径为空</translation>
+    </message>
+    <message>
+        <source>报告路径不能覆盖源音频文件</source>
+        <translation>报告路径不能覆盖源音频文件</translation>
+    </message>
+    <message>
+        <source>报告路径指向文件夹</source>
+        <translation>报告路径指向文件夹</translation>
+    </message>
+    <message>
+        <source>不支持的报告格式：%1</source>
+        <translation>不支持的报告格式：%1</translation>
+    </message>
+    <message>
+        <source>无法创建报告：%1</source>
+        <translation>无法创建报告：%1</translation>
+    </message>
+    <message>
+        <source>报告写入不完整：%1</source>
+        <translation>报告写入不完整：%1</translation>
+    </message>
+    <message>
+        <source>无法原子保存报告：%1</source>
+        <translation>无法原子保存报告：%1</translation>
+    </message>
+    <message>
+        <source>报告写入失败：%1</source>
+        <translation>报告写入失败：%1</translation>
+    </message>
+    <message>
+        <source>报告写入发生未知错误</source>
+        <translation>报告写入发生未知错误</translation>
+    </message>
+    <message>
+        <source>报告导出已取消</source>
+        <translation>报告导出已取消</translation>
+    </message>
+</context>
+<context>
+    <name>LosslessEvidence</name>
+    <message>
+        <source>&gt; 0.72且需稳定截止共同支持</source>
+        <translation>&gt; 0.72且需稳定截止共同支持</translation>
+    </message>
+    <message>
+        <source>按源有效位对齐后的最低8位</source>
+        <translation>按源有效位对齐后的最低8位</translation>
+    </message>
+    <message>
+        <source>比较常见源Nyquist两侧的镜像相关性。</source>
+        <translation>比较常见源Nyquist两侧的镜像相关性。</translation>
+    </message>
+    <message>
+        <source>当前编解码器是文件事实；更早的编码历史仍无法恢复。</source>
+        <translation>当前编解码器是文件事实；更早的编码历史仍无法恢复。</translation>
+    </message>
+    <message>
+        <source>当前流编解码器</source>
+        <translation>当前流编解码器</translation>
+    </message>
+    <message>
+        <source>当前音频流使用有损编解码器；这不等同于识别出更早的源文件。</source>
+        <translation>当前音频流使用有损编解码器；这不等同于识别出更早的源文件。</translation>
+    </message>
+    <message>
+        <source>低采样率 PCM（推测）</source>
+        <translation>低采样率 PCM（推测）</translation>
+    </message>
+    <message>
+        <source>分析参数超出有界范围。</source>
+        <translation>分析参数超出有界范围。</translation>
+    </message>
+    <message>
+        <source>分析过程中发生内部错误。</source>
+        <translation>分析过程中发生内部错误。</translation>
+    </message>
+    <message>
+        <source>分析内存不足。</source>
+        <translation>分析内存不足。</translation>
+    </message>
+    <message>
+        <source>检测到非有限浮点样本；已按静音处理并降低证据可信度。</source>
+        <translation>检测到非有限浮点样本；已按静音处理并降低证据可信度。</translation>
+    </message>
+    <message>
+        <source>较低采样率 PCM（推测）</source>
+        <translation>较低采样率 PCM（推测）</translation>
+    </message>
+    <message>
+        <source>较低位深 PCM（推测）</source>
+        <translation>较低位深 PCM（推测）</translation>
+    </message>
+    <message>
+        <source>截止仅描述跨时间频谱，不单独证明有损来源。</source>
+        <translation>截止仅描述跨时间频谱，不单独证明有损来源。</translation>
+    </message>
+    <message>
+        <source>解码过程中出现错误。</source>
+        <translation>解码过程中出现错误。</translation>
+    </message>
+    <message>
+        <source>跨有效窗口-60 dB相对阈值中位数</source>
+        <translation>跨有效窗口-60 dB相对阈值中位数</translation>
+    </message>
+    <message>
+        <source>统计来自解码器原始整数表示，未先降低为float32。</source>
+        <translation>统计来自解码器原始整数表示，未先降低为float32。</translation>
+    </message>
+    <message>
+        <source>文件路径为空。</source>
+        <translation>文件路径为空。</translation>
+    </message>
+    <message>
+        <source>无法打开或解码音频流。</source>
+        <translation>无法打开或解码音频流。</translation>
+    </message>
+    <message>
+        <source>需与解码频谱交叉判断</source>
+        <translation>需与解码频谱交叉判断</translation>
+    </message>
+    <message>
+        <source>需与稳定性及带宽交叉判断</source>
+        <translation>需与稳定性及带宽交叉判断</translation>
+    </message>
+    <message>
+        <source>音频流参数无效。</source>
+        <translation>音频流参数无效。</translation>
+    </message>
+    <message>
+        <source>有损编码（推测）</source>
+        <translation>有损编码（推测）</translation>
+    </message>
+    <message>
+        <source>有效声音窗口不足，无法形成可靠取证结论。</source>
+        <translation>有效声音窗口不足，无法形成可靠取证结论。</translation>
+    </message>
+    <message>
+        <source>原始1-bit包统计与解码后的超声频谱相互独立。</source>
+        <translation>原始1-bit包统计与解码后的超声频谱相互独立。</translation>
+    </message>
+    <message>
+        <source>DSD（信号特征支持，仍非来源证明）</source>
+        <translation>DSD（信号特征支持，仍非来源证明）</translation>
+    </message>
+    <message>
+        <source>DSD使用独立的超声噪声整形证据，不套用PCM固定截止规则。</source>
+        <translation>DSD使用独立的超声噪声整形证据，不套用PCM固定截止规则。</translation>
+    </message>
+    <message>
+        <source>DST压缩包不能当作原始1-bit统计，可信原生DSD结论被保守禁用。</source>
+        <translation>DST压缩包不能当作原始1-bit统计，可信原生DSD结论被保守禁用。</translation>
+    </message>
+    <message>
+        <source>NaN或Inf样本不参与频谱与统计计算。</source>
+        <translation>NaN或Inf样本不参与频谱与统计计算。</translation>
+    </message>
+    <message>
+        <source>PCM（推测）</source>
+        <translation>PCM（推测）</translation>
+    </message>
+    <message>
+        <source>&gt;= 0.80且需高采样率、稳定低带宽及&gt;=24 dB边缘</source>
+        <translation>&gt;= 0.80且需高采样率、稳定低带宽及&gt;=24 dB边缘</translation>
+    </message>
+    <message>
+        <source>&gt;= 45 dB且需跨窗稳定截止、边缘位置一致</source>
+        <translation>&gt;= 45 dB且需跨窗稳定截止、边缘位置一致</translation>
+    </message>
+    <message>
+        <source>陡峭低带宽频谱也可能来自母带数字低通；没有来源参考时无法排除此反例。</source>
+        <translation>陡峭低带宽频谱也可能来自母带数字低通；没有来源参考时无法排除此反例。</translation>
+    </message>
+    <message>
+        <source>多数有效窗口出现与截止位置相符的深陡频谱边缘；有损编码、升频抗镜像滤波和母带数字低通均可能形成此特征。</source>
+        <translation>多数有效窗口出现与截止位置相符的深陡频谱边缘；有损编码、升频抗镜像滤波和母带数字低通均可能形成此特征。</translation>
+    </message>
+    <message>
+        <source>高采样率信号在多数有效窗口保留一致的低带宽陡峭边缘，支持较低采样率来源推断，但无法排除母带数字低通。</source>
+        <translation>高采样率信号在多数有效窗口保留一致的低带宽陡峭边缘，支持较低采样率来源推断，但无法排除母带数字低通。</translation>
+    </message>
+    <message>
+        <source>噪声整形与原始1-bit统计只能确认有效DSD表示，无法证明录音为原生DSD采集。</source>
+        <translation>噪声整形与原始1-bit统计只能确认有效DSD表示，无法证明录音为原生DSD采集。</translation>
+    </message>
+    <message>
+        <source>原始1-bit包统计用于与解码后的超声频谱交叉比对。</source>
+        <translation>原始1-bit包统计用于与解码后的超声频谱交叉比对。</translation>
+    </message>
+    <message>
+        <source>前置能量也可来自声学起音、混响或编辑，不单独证明编码前回声。</source>
+        <translation>前置能量也可来自声学起音、混响或编辑，不单独证明编码前回声。</translation>
+    </message>
+    <message>
+        <source>瞬态前3-20ms能量减去30-50ms背景，再除以瞬态能量</source>
+        <translation>瞬态前3-20ms能量减去30-50ms背景，再除以瞬态能量</translation>
+    </message>
+    <message>
+        <source>当前频谱与量化特征不足以确定来源；低带宽、前置能量或单一频谱边缘均不能单独证明转码。</source>
+        <translation>当前频谱与量化特征不足以确定来源；低带宽、前置能量或单一频谱边缘均不能单独证明转码。</translation>
+    </message>
+    <message>
+        <source>需要相互支持的来源证据</source>
+        <translation>需要相互支持的来源证据</translation>
+    </message>
+    <message>
+        <source>分析期间源文件已发生变化，请重试</source>
+        <translation>分析期间源文件已发生变化，请重试</translation>
+    </message>
+    <message>
+        <source> Hz PCM（推测）</source>
+        <translation> Hz PCM（推测）</translation>
+    </message>
+    <message>
+        <source>&gt;=2dB、峰值z&gt;=5、&gt;=3段帧相位在±2采样内一致</source>
+        <translation>&gt;=2dB、峰值z&gt;=5、&gt;=3段帧相位在±2采样内一致</translation>
+    </message>
+    <message>
+        <source>&gt;=6dB、峰值z&gt;=12、&gt;=3个不重叠片段</source>
+        <translation>&gt;=6dB、峰值z&gt;=12、&gt;=3个不重叠片段</translation>
+    </message>
+    <message>
+        <source>8阶残差能量的跨段采样栅格相位一致性</source>
+        <translation>8阶残差能量的跨段采样栅格相位一致性</translation>
+    </message>
+    <message>
+        <source>边缘两侧1.2kHz范围，排除中心200Hz</source>
+        <translation>边缘两侧1.2kHz范围，排除中心200Hz</translation>
+    </message>
+    <message>
+        <source>测量保留低于绘图显示下限的原始功率，频谱图可能无法显示这部分细节。</source>
+        <translation>测量保留低于绘图显示下限的原始功率，频谱图可能无法显示这部分细节。</translation>
+    </message>
+    <message>
+        <source>低电平频谱存在陡峭衰减；数字低通、重采样和编码均可能形成，不能单独确定来源。</source>
+        <translation>低电平频谱存在陡峭衰减；数字低通、重采样和编码均可能形成，不能单独确定来源。</translation>
+    </message>
+    <message>
+        <source>多个不重叠片段保留变换帧栅格，支持历史压缩推断；特殊变换处理仍可能形成类似结构。</source>
+        <translation>多个不重叠片段保留变换帧栅格，支持历史压缩推断；特殊变换处理仍可能形成类似结构。</translation>
+    </message>
+    <message>
+        <source>多相残差与较低采样栅格一致，支持重采样推断；特殊周期处理仍可能构成反例。</source>
+        <translation>多相残差与较低采样栅格一致，支持重采样推断；特殊周期处理仍可能构成反例。</translation>
+    </message>
+    <message>
+        <source>多相残差支持疑似重采样，不等于证明原始录音采样率；额外噪声可能使该证据消失。</source>
+        <translation>多相残差支持疑似重采样，不等于证明原始录音采样率；额外噪声可能使该证据消失。</translation>
+    </message>
+    <message>
+        <source>高采样率信号保留低带宽陡峭边缘；重采样与当前采样率数字低通均可形成，来源暂不确定。</source>
+        <translation>高采样率信号保留低带宽陡峭边缘；重采样与当前采样率数字低通均可形成，来源暂不确定。</translation>
+    </message>
+    <message>
+        <source>固定数量独立片段的MDCT邻移能量差分，需结合峰值显著性；无峰不证明未压缩。</source>
+        <translation>固定数量独立片段的MDCT邻移能量差分，需结合峰值显著性；无峰不证明未压缩。</translation>
+    </message>
+    <message>
+        <source>候选采样栅格循环能量相关</source>
+        <translation>候选采样栅格循环能量相关</translation>
+    </message>
+    <message>
+        <source>较低采样率PCM或数字低通母带</source>
+        <translation>较低采样率PCM或数字低通母带</translation>
+    </message>
+    <message>
+        <source>宽频带与量化统计正常不等于来源认证</source>
+        <translation>宽频带与量化统计正常不等于来源认证</translation>
+    </message>
+    <message>
+        <source>频谱边缘不能区分重采样与原生采样率滤波，候选不构成来源判定。</source>
+        <translation>频谱边缘不能区分重采样与原生采样率滤波，候选不构成来源判定。</translation>
+    </message>
+    <message>
+        <source>相位一致性&gt;=0.995、强度&gt;=0.02、&gt;=4段、残差熵&gt;=0.45、带外抑制&gt;=35dB</source>
+        <translation>相位一致性&gt;=0.995、强度&gt;=0.02、&gt;=4段、残差熵&gt;=0.45、带外抑制&gt;=35dB</translation>
+    </message>
+    <message>
+        <source>有损解码后添加噪声也能形成宽频带与有效低位，未发现压缩痕迹不能证明原始无损。</source>
+        <translation>有损解码后添加噪声也能形成宽频带与有效低位，未发现压缩痕迹不能证明原始无损。</translation>
+    </message>
+    <message>
+        <source>原始FFT功率时间均值，独立于绘图下限</source>
+        <translation>原始FFT功率时间均值，独立于绘图下限</translation>
+    </message>
+    <message>
+        <source>增益和任意起始相位不改变跨段一致性的定义。</source>
+        <translation>增益和任意起始相位不改变跨段一致性的定义。</translation>
+    </message>
+    <message>
+        <source>帧结构证据不能确定具体编码器、码率或完整历史；1152采样帧仅是混合编码结构的近似观测。</source>
+        <translation>帧结构证据不能确定具体编码器、码率或完整历史；1152采样帧仅是混合编码结构的近似观测。</translation>
+    </message>
+    <message>
+        <source>周期残差可能来自多相重采样，也可能由周期信号或处理形成；需结合带宽和残差谱分布。</source>
+        <translation>周期残差可能来自多相重采样，也可能由周期信号或处理形成；需结合带宽和残差谱分布。</translation>
+    </message>
+    <message>
+        <source>MDCT编码（推测）</source>
+        <translation>MDCT编码（推测）</translation>
+    </message>
+    <message>
+        <source>MDCT变换编码</source>
+        <translation>MDCT变换编码</translation>
+    </message>
+    <message>
+        <source>固定数量独立片段的低重叠变换帧扫描；仅适用于48kHz，缺失证据不证明无损。</source>
+        <translation>固定数量独立片段的低重叠变换帧扫描；仅适用于48kHz，缺失证据不证明无损。</translation>
+    </message>
+    <message>
+        <source>仅覆盖48kHz下的部分变换帧结构，不能确定具体编码器、码率或完整编码历史。</source>
+        <translation>仅覆盖48kHz下的部分变换帧结构，不能确定具体编码器、码率或完整编码历史。</translation>
+    </message>
+    <message>
+        <source>两频带z&gt;=8、峰宽&lt;=8采样、跨段一致性&gt;=0.9、&gt;=3段、频带相位差&lt;=2采样</source>
+        <translation>两频带z&gt;=8、峰宽&lt;=8采样、跨段一致性&gt;=0.9、&gt;=3段、频带相位差&lt;=2采样</translation>
+    </message>
+    <message>
+        <source>全频与18kHz以下频带共同保留窄变换帧峰，支持历史压缩推断；无峰不证明未压缩。</source>
+        <translation>全频与18kHz以下频带共同保留窄变换帧峰，支持历史压缩推断；无峰不证明未压缩。</translation>
+    </message>
+    <message>
+        <source>全频与18kHz以下频带中较低的稳健峰值显著性</source>
+        <translation>全频与18kHz以下频带中较低的稳健峰值显著性</translation>
+    </message>
+    <message>
+        <source>CELT变换帧（推测）</source>
+        <translation>CELT变换帧（推测）</translation>
+    </message>
+    <message>
+        <source>CELT帧结构</source>
+        <translation>CELT帧结构</translation>
+    </message>
+    <message>
+        <source>匹配的CELT帧长仅描述变换栅格，不等于编码器或码率认证。</source>
+        <translation>匹配的CELT帧长仅描述变换栅格，不等于编码器或码率认证。</translation>
+    </message>
+    <message>
+        <source>此帧证据来自独立降采样分析视图；原始格式与量化测量未改变，不单独证明完整升频链。</source>
+        <translation>此帧证据来自独立降采样分析视图；原始格式与量化测量未改变，不单独证明完整升频链。</translation>
+    </message>
+    <message>
+        <source>候选CELT帧长仅描述所检验的变换栅格，不等于编码器或码率认证。</source>
+        <translation>候选CELT帧长仅描述所检验的变换栅格，不等于编码器或码率认证。</translation>
+    </message>
+    <message>
+        <source>局部频谱凹口的跨窗出现比例</source>
+        <translation>局部频谱凹口的跨窗出现比例</translation>
+    </message>
+    <message>
+        <source>频谱凹口和截止可由同一滤波或谐波结构形成，不能单独证明有损编码历史。</source>
+        <translation>频谱凹口和截止可由同一滤波或谐波结构形成，不能单独证明有损编码历史。</translation>
+    </message>
 </context>
 </TS>

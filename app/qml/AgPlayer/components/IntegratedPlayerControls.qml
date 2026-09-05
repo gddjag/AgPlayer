@@ -128,7 +128,9 @@ Item {
             anchors.left: lyricsActions.right
             anchors.leftMargin: 2
             anchors.verticalCenter: parent.verticalCenter
-            emptyMode: root.emptyMode || root.denseLayout
+            emptyMode: root.emptyMode
+            maximumExpandedWidth: Math.min(196, Math.max(buttonExtent,
+                rightActions.x - centerGroup.x - x - root.actionSpacing))
         }
     }
 

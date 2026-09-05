@@ -11,6 +11,7 @@
 #include <QTemporaryFile>
 #include <QTest>
 #include <QThread>
+#include <QTimer>
 
 #include <atomic>
 #include <cmath>
@@ -42,6 +43,7 @@ private slots:
     void errorsCanBeDismissedWithoutStartingAnotherImport();
     void queuesDropsReceivedWhileAnImportIsBusy();
     void importsTenThousandLightweightRecordsWithinBudget();
+    void performanceRealImportResponsiveness();
     void alreadyImportedTracksAreSkippedWithoutFalseSuccess();
     void importedTracksAppearFirstInDiscoveryOrder();
     void metadataDecoderPreservesUtf8AndUsesCp936Fallback();
@@ -703,6 +705,53 @@ void ImportControllerTest::importsTenThousandLightweightRecordsWithinBudget()
     QVERIFY2(timer.elapsed() <= 30000,
              qPrintable(QStringLiteral("10K indexing took %1 ms")
                             .arg(timer.elapsed())));
+}
+
+void ImportControllerTest::performanceRealImportResponsiveness()
+{
+    if (!qEnvironmentVariableIsSet("AGPLAYER_RUN_PERFORMANCE"))
+        QSKIP("Opt-in real-file performance measurement");
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString source = dir.filePath(QStringLiteral("source.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(source, 120, 1));
+    QList<QUrl> urls;
+    for (int i = 0; i < 2000; ++i) {
+        const QString path = dir.filePath(QStringLiteral("track-%1.wav").arg(i));
+        QVERIFY(QFile::copy(source, path));
+        urls.append(QUrl::fromLocalFile(path));
+    }
+    LibraryModel model;
+    ImportController importer(&model);
+    QSignalSpy finished(&importer, &ImportController::finished);
+    QElapsedTimer elapsed;
+    elapsed.start();
+    qint64 previousTick = 0;
+    qint64 maxGap = 0;
+    int ticks = 0;
+    QTimer heartbeat;
+    heartbeat.setInterval(5);
+    connect(&heartbeat, &QTimer::timeout, this, [&] {
+        const qint64 now = elapsed.elapsed();
+        maxGap = qMax(maxGap, now - previousTick);
+        previousTick = now;
+        ++ticks;
+    });
+    heartbeat.start();
+    importer.importUrls(urls);
+    const qint64 dispatchMs = elapsed.elapsed();
+    QVERIFY(finished.wait(60000));
+    maxGap = qMax(maxGap, elapsed.elapsed() - previousTick);
+    qInfo("PERF real_import files=2000 pcm=16000Hz/mono/16bit/1s elapsed_ms=%lld dispatch_ms=%lld heartbeat_max_gap_ms=%lld ticks=%d",
+          elapsed.elapsed(), dispatchMs, maxGap, ticks);
+    QCOMPARE(model.rowCount(), 2000);
+    QCOMPARE(importer.importedTrackIds().size(), 2000);
+    QVERIFY(importer.errors().isEmpty());
+    QVERIFY(ticks > 0);
+    for (const TrackRecord& track : model.tracks()) {
+        QCOMPARE(track.durationMs, 1000);
+        QCOMPARE(track.sampleRate, 16000);
+    }
 }
 
 void ImportControllerTest::alreadyImportedTracksAreSkippedWithoutFalseSuccess()

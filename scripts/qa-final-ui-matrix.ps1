@@ -6,17 +6,15 @@ param(
     [string[]]$Languages = @("zh", "en"),
     [ValidateSet("dark", "light", "system")]
     [string[]]$Themes = @("dark", "light", "system"),
-    [ValidateSet("1", "1.25", "1.5")]
+    [ValidateSet("1", "1.25", "1.5", "2")]
     [string[]]$ScaleFactors = @("1"),
     [ValidateSet(
         "startup", "playback", "mini", "settings", "list",
-        "details",
-        "tool-0", "tool-1", "tool-2", "tool-3", "tool-4"
+        "tool-0", "tool-1", "tool-2", "tool-3", "tool-4", "tool-5"
     )]
     [string[]]$Surfaces = @(
         "startup", "playback", "mini", "settings", "list",
-        "details",
-        "tool-0", "tool-1", "tool-2", "tool-3", "tool-4"
+        "tool-0", "tool-1", "tool-2", "tool-3", "tool-4", "tool-5"
     )
 )
 
@@ -60,7 +58,7 @@ function Get-SurfaceExpectation {
         "^settings$" {
             return [pscustomobject]@{ Width = 860; Height = 900 }
         }
-        "^list$|^details$" {
+        "^list$" {
             # A fresh detached list uses its compact 590px geometry. Older
             # persisted QA state may still restore the previous 604px height,
             # while the desktop host may expand it to the 906px available height;
@@ -79,10 +77,15 @@ function Get-SurfaceExpectation {
 function Measure-Screenshot {
     param(
         [string]$Path,
-        [string]$Surface
+        [string]$Surface,
+        [double]$ScaleFactor = 1
     )
 
     $expected = Get-SurfaceExpectation $Surface
+    if ($Surface -eq 'tool-5') {
+        $expected.Width = [int][Math]::Round($expected.Width * $ScaleFactor)
+        $expected.Height = [int][Math]::Round($expected.Height * $ScaleFactor)
+    }
     $bitmap = [System.Drawing.Bitmap]::new($Path)
     try {
         $validHeights = if ($null -ne $expected.Heights) {
@@ -120,7 +123,7 @@ function Measure-Screenshot {
             $bitmap.GetPixel(0, $bitmap.Height - 1).A
             $bitmap.GetPixel($bitmap.Width - 1, $bitmap.Height - 1).A
         )
-        $outerCornerAlpha = if ($Surface -match "^(list|library|details|tool-\d+)$") {
+        $outerCornerAlpha = if ($Surface -match "^(list|tool-\d+)$") {
             # Borderless list and audio-tool workspaces intentionally fill
             # their native rectangles; no corner-alpha contract applies.
             @()
@@ -191,38 +194,6 @@ function Measure-ThemeDifference {
     }
 }
 
-function Measure-CaptureDifferencePercent {
-    param(
-        [string]$FirstPath,
-        [string]$SecondPath
-    )
-
-    $first = [System.Drawing.Bitmap]::new($FirstPath)
-    $second = [System.Drawing.Bitmap]::new($SecondPath)
-    try {
-        if ($first.Width -ne $second.Width -or
-            $first.Height -ne $second.Height) {
-            throw "Compared screenshots have different dimensions"
-        }
-
-        $changedSamples = 0
-        $samples = 0
-        for ($y = 0; $y -lt $first.Height; $y += 4) {
-            for ($x = 0; $x -lt $first.Width; $x += 4) {
-                $samples++
-                if ($first.GetPixel($x, $y).ToArgb() -ne
-                    $second.GetPixel($x, $y).ToArgb()) {
-                    $changedSamples++
-                }
-            }
-        }
-        return [Math]::Round(100.0 * $changedSamples / $samples, 2)
-    }
-    finally {
-        $first.Dispose()
-        $second.Dispose()
-    }
-}
 
 function New-QALibraryPath {
     param(
@@ -259,7 +230,7 @@ function Invoke-Capture {
     )
     $process = Start-Process -FilePath $appPath `
         -ArgumentList ($common + $Arguments + @($screenshot)) `
-        -Wait -PassThru
+        -WindowStyle Hidden -Wait -PassThru
     if ($process.ExitCode -ne 0) {
         throw "$stem exited with code $($process.ExitCode)"
     }
@@ -270,7 +241,7 @@ function Invoke-Capture {
     if (-not (Test-Path -LiteralPath $log)) {
         throw "$stem did not create a runtime log"
     }
-    $metrics = Measure-Screenshot -Path $screenshot -Surface $Surface
+    $metrics = Measure-Screenshot -Path $screenshot -Surface $Surface -ScaleFactor ([double]$ScaleFactor)
     $logText = Get-Content -Raw -Encoding UTF8 -LiteralPath $log
     if ($logText -match "\[(WARN|ERROR|FATAL)\]" -or
         $logText -match "QQml|ReferenceError|TypeError") {
@@ -356,30 +327,7 @@ try {
                     "--qa-screenshot-list"
                 )
             }
-            if ($Surfaces -contains "details") {
-                Invoke-Capture $language $theme $scaleFactor "details" @(
-                    "--qa-library", (New-QALibraryPath $stateRoot "details"),
-                    "--qa-import-folder", $formatFixtures,
-                    "--qa-show-track-details",
-                    "--qa-screenshot-list"
-                )
-                if ($Surfaces -contains "list") {
-                    $listPath = Join-Path $outputPath (
-                        (Get-CaptureStem -Language $language -Theme $theme `
-                            -ScaleFactor $scaleFactor -Surface "list") + ".png")
-                    $detailsPath = Join-Path $outputPath (
-                        (Get-CaptureStem -Language $language -Theme $theme `
-                            -ScaleFactor $scaleFactor -Surface "details") + ".png")
-                    $detailsDifference = Measure-CaptureDifferencePercent `
-                        -FirstPath $listPath -SecondPath $detailsPath
-                    if ($detailsDifference -lt 1) {
-                        throw (("{0}-{1} list/details differ at only {2}%; " +
-                                "the real details panel was not captured") -f
-                                $language, $theme, $detailsDifference)
-                    }
-                }
-            }
-            foreach ($tool in @(0, 4, 1, 2, 3)) {
+            foreach ($tool in @(0, 4, 1, 2, 3, 5)) {
                 $toolSurface = "tool-{0}" -f $tool
                 if ($Surfaces -notcontains $toolSurface) {
                     continue

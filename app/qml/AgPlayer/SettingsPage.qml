@@ -250,9 +250,23 @@ Item {
                 Layout.preferredWidth: 188
                 Layout.preferredHeight: Theme.controlHeight
                 placeholderText: qsTr("搜索设置...")
+                accessibleName: qsTr("搜索设置")
+                leftPadding: 34
                 verticalAlignment: Text.AlignVCenter
 
                 onTextChanged: root.searchText = text.toLowerCase()
+
+                ThemedIcon {
+                    objectName: "settingsSearchIcon"
+                    anchors.left: parent.left
+                    anchors.leftMargin: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    source: Theme.icon("search-line")
+                    tint: searchField.activeFocus ? Theme.iconAccent
+                                                  : Theme.iconSecondary
+                    sourceSize.width: 15
+                    sourceSize.height: 15
+                }
             }
 
             ThemedButton {
@@ -1119,8 +1133,8 @@ Item {
                     Flow {
                         objectName: "fileAssociationFlow"
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 24
-                        spacing: Theme.spacingXs
+                        Layout.preferredHeight: Theme.controlHeight
+                        spacing: Theme.spacingMd
 
                         FileAssociationCheck {
                             text: "MP3"

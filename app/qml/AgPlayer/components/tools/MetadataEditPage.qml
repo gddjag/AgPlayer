@@ -78,6 +78,7 @@ Rectangle {
     component ColumnHeader: ToolButton {
         property string sortField: ""
         flat: true
+        font.family: Theme.fontPrimary
         font.pixelSize: Theme.fontSizeBody
         palette.buttonText: page.mutedColor
         background: Rectangle { color: "transparent" }
@@ -512,53 +513,68 @@ Rectangle {
         }
     }
 
-    Dialog {
+    ThemedDialog {
         id: threeStateHelpDialog
         modal: true
         title: qsTr("三态编辑说明")
         anchors.centerIn: parent
-        width: 440
+        width: Math.min(440, page.width - 2 * Theme.spacing2Xl)
+        contentWidth: Math.max(0, width - leftPadding - rightPadding)
+        contentHeight: threeStateHelpContent.implicitHeight
         standardButtons: Dialog.Ok
         contentItem: Label {
-            width: 400
-            padding: 16
+            id: threeStateHelpContent
+            width: threeStateHelpDialog.contentWidth
             wrapMode: Text.WordWrap
             text: qsTr("保留：每个文件保持原值，不写入。\n\n设为：将输入值统一写入目标文件；空值无效，请使用清除。\n\n清除：删除该字段的所有已知别名标签。")
             color: Theme.primaryText
+            font.family: Theme.fontPrimary
+            font.pixelSize: Theme.fontSizeBody
         }
     }
 
-    Dialog {
+    ThemedDialog {
         id: metadataErrorDialog
         objectName: "metadataErrorDialog"
         modal: true
         title: qsTr("元数据修改失败")
         anchors.centerIn: parent
-        width: 480
+        width: Math.min(480, page.width - 2 * Theme.spacing2Xl)
+        contentWidth: Math.max(0, width - leftPadding - rightPadding)
+        contentHeight: metadataErrorContent.implicitHeight
         standardButtons: Dialog.Ok
         contentItem: Label {
-            width: 440
-            padding: 18
+            id: metadataErrorContent
+            width: metadataErrorDialog.contentWidth
             text: page.errorMessage
             color: Theme.primaryText
+            font.family: Theme.fontPrimary
+            font.pixelSize: Theme.fontSizeBody
             wrapMode: Text.WordWrap
         }
     }
 
-    Dialog {
+    ThemedDialog {
         id: preflightDecisionDialog
         objectName: "metadataPreflightDecisionDialog"
         modal: true
         title: qsTr("预检发现不支持项")
         anchors.centerIn: parent
-        width: 500
+        width: Math.min(500, page.width - 2 * Theme.spacing2Xl)
+        contentWidth: Math.max(0, width - leftPadding - rightPadding)
+        contentHeight: metadataPreflightContent.implicitHeight
         closePolicy: Popup.NoAutoClose
         contentItem: ColumnLayout {
-            spacing: 12
+            id: metadataPreflightContent
+            width: preflightDecisionDialog.contentWidth
+            implicitWidth: preflightDecisionDialog.contentWidth
+            spacing: Theme.spacingMd
             Label {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 color: Theme.primaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: Theme.fontSizeBody
                 text: qsTr("%1 个文件可安全修改，%2 个文件不支持。")
                       .arg(MetadataEditor.supportedCount)
                       .arg(MetadataEditor.unsupportedCount)
@@ -601,7 +617,7 @@ Rectangle {
             objectName: "metadataToolbar"
             Layout.fillWidth: true
             Layout.preferredHeight: Theme.controlHeightProminent
-            spacing: 14
+            spacing: page.compactLayout ? Theme.spacingSm : Theme.spacingMd
 
             ToolbarAction {
                 Layout.preferredWidth: page.compactLayout ? 104 : 136
@@ -675,14 +691,34 @@ Rectangle {
             }
         }
 
-        TabBar {
+        RowLayout {
             id: compactMetadataTabs
             objectName: "metadataCompactTabs"
+            property int currentIndex: 0
             visible: page.compactLayout
             Layout.fillWidth: true
             Layout.preferredHeight: visible ? 36 : 0
-            TabButton { text: qsTr("文件列表") }
-            TabButton { text: qsTr("编辑元数据") }
+            Layout.maximumHeight: Layout.preferredHeight
+            spacing: 0
+
+            ThemedTabButton {
+                objectName: "metadataCompactFilesTab"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                text: qsTr("文件列表")
+                iconSource: Theme.icon("file-copy-line")
+                selected: compactMetadataTabs.currentIndex === 0
+                onClicked: compactMetadataTabs.currentIndex = 0
+            }
+            ThemedTabButton {
+                objectName: "metadataCompactEditorTab"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                text: qsTr("编辑元数据")
+                iconSource: Theme.icon("equalizer-line")
+                selected: compactMetadataTabs.currentIndex === 1
+                onClicked: compactMetadataTabs.currentIndex = 1
+            }
         }
 
         Rectangle {
@@ -723,7 +759,7 @@ Rectangle {
                         RowLayout {
                             objectName: "metadataFileHeader"
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 43
+                            Layout.preferredHeight: Theme.listRowHeight
                             Layout.leftMargin: 16
                             Layout.rightMargin: 12
                             spacing: 10
@@ -765,7 +801,7 @@ Rectangle {
 
                         Rectangle {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 38
+                            Layout.preferredHeight: Theme.tableHeaderHeight
                             color: Theme.background
                             border.width: 1
                             border.color: page.lineColor
@@ -814,7 +850,7 @@ Rectangle {
                                 readonly property int sourceIndex: modelData
                                 readonly property var metadata: page.entry(sourceIndex)
                                 width: fileList.width
-                                height: 52
+                                height: Theme.mediaListRowHeight
                                 color: page.isSelected(sourceIndex)
                                       ? Theme.selectedTrackSelection
                                       : (rowHover.hovered ? Theme.hoverSurface
@@ -933,7 +969,7 @@ Rectangle {
                         RowLayout {
                             objectName: "metadataFileFooter"
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 43
+                            Layout.preferredHeight: Theme.listRowHeight
                             Layout.leftMargin: 10
                             Layout.rightMargin: 14
                             spacing: 10

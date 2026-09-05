@@ -58,6 +58,17 @@ struct MetadataProbeClaim {
     quint64 generation = 0;
 };
 
+struct LibraryMetadataRefresh {
+    MetadataProbeClaim claim;
+    TrackRecord record;
+};
+
+struct ag_metadata;
+// Read-only snapshot construction. May perform cover-cache I/O; use a worker
+// when the metadata handle was opened in the background.
+TrackRecord readLibraryMetadata(const QString& path, const ag_metadata* metadata,
+                               const QUrl& previousCover);
+
 QString canonicalLibraryPath(const QString& path);
 QString trackIdForPath(const QString& path);
 
@@ -149,11 +160,9 @@ public:
     Q_INVOKABLE bool moveTrack(int fromRow, int toRow);
     Q_INVOKABLE int reorderTracks(const QStringList& trackIds,
                                   const QString& beforeTrackId);
-    bool applyMaintenanceResult(const QString& trackId, bool available,
-                                const QString& fileStatus,
-                                const QString& contentHash);
-    int applyMaintenanceResults(const QVariantList& results);
     std::optional<MetadataProbeClaim> beginMetadataProbe(const QString& trackId);
+    std::optional<MetadataProbeClaim> beginMetadataRefresh(const QString& trackId);
+    int completeMetadataRefreshes(const QList<LibraryMetadataRefresh>& updates);
     bool completeMetadataProbe(const MetadataProbeClaim& claim, bool succeeded,
                                const TrackRecord& probed);
     bool completeMediaKindProbe(const MetadataProbeClaim& claim,

@@ -21,6 +21,8 @@ class FeatureSourceProbe final : public QObject {
     Q_PROPERTY(double spectralFlux READ spectralFlux NOTIFY featuresChanged)
     Q_PROPERTY(bool kickPulse READ kickPulse NOTIFY featuresChanged)
     Q_PROPERTY(bool snarePulse READ snarePulse NOTIFY featuresChanged)
+    Q_PROPERTY(quint64 beatRevision READ beatRevision NOTIFY featuresChanged)
+    Q_PROPERTY(double beatStrength READ beatStrength NOTIFY featuresChanged)
     Q_PROPERTY(quint64 impactRevision READ impactRevision NOTIFY featuresChanged)
     Q_PROPERTY(double impactStrength READ impactStrength NOTIFY featuresChanged)
 
@@ -30,8 +32,17 @@ public:
     double spectralFlux() const noexcept { return spectralFlux_; }
     bool kickPulse() const noexcept { return kick_; }
     bool snarePulse() const noexcept { return snare_; }
+    quint64 beatRevision() const noexcept { return beatRevision_; }
+    double beatStrength() const noexcept { return beatStrength_; }
     quint64 impactRevision() const noexcept { return impactRevision_; }
     double impactStrength() const noexcept { return impactStrength_; }
+
+    void publishBeat(quint64 revision, double strength)
+    {
+        beatRevision_ = revision;
+        beatStrength_ = strength;
+        emit featuresChanged();
+    }
 
     void publishImpact(quint64 revision, double strength)
     {
@@ -49,6 +60,8 @@ private:
     double spectralFlux_ = 0.0;
     bool kick_ = false;
     bool snare_ = false;
+    quint64 beatRevision_ = 0;
+    double beatStrength_ = 0.0;
     quint64 impactRevision_ = 0;
     double impactStrength_ = 0.0;
 };
@@ -68,6 +81,7 @@ private slots:
     void featureSourceImpactRevisionIsConsumedWithoutAnotherDecoder();
     void trackIdentitySelectsStablePaletteWithoutThemeCycling();
     void highDpiInternalScaleUsesPhysicalPixels();
+    void adaptiveRenderScaleChangesItemSampleCount();
     void duplicateRendererIsRejectedBySharedLifecycle();
     void cameraPropertiesSupportTaskFourInput();
     void nonFiniteCameraInvokablesPreserveExposedState();
@@ -283,10 +297,13 @@ void TerrainReactorItemTest::v46DynamicsAreCopiedAndRemainBounded()
 void TerrainReactorItemTest::featureSourceImpactRevisionIsConsumedWithoutAnotherDecoder()
 {
     FeatureSourceProbe features;
+    features.publishBeat(17, 0.62);
     features.publishImpact(41, 0.73);
 
     TerrainReactorItem item;
     item.setFeatureSource(&features);
+    QCOMPARE(item.beatRevision(), quint64{17});
+    QVERIFY(std::abs(item.beatStrength() - 0.62) < 0.00001);
     QCOMPARE(item.impactRevision(), quint64{41});
     QVERIFY(std::abs(item.impactStrength() - 0.73) < 0.00001);
 
@@ -302,14 +319,16 @@ void TerrainReactorItemTest::featureSourceImpactRevisionIsConsumedWithoutAnother
     fallback.setActive(true);
     TerrainReactorItem fallbackItem;
     fallbackItem.setFeatureSource(&fallback);
+    const quint64 beatBefore = fallbackItem.beatRevision();
     const quint64 fallbackBefore = fallbackItem.impactRevision();
     QVariantList spectrum(128, 0.0);
     for (int index = 0; index < 32; ++index) spectrum[index] = 1.0;
     fallback.processSpectrum(spectrum);
     QVERIFY(fallbackItem.featureKick());
     QVERIFY(fallbackItem.punchRevision() > 0);
-    QCOMPARE(fallbackItem.impactRevision(), fallbackBefore + 1);
-    QVERIFY(fallbackItem.impactStrength() > 0.0);
+    QCOMPARE(fallbackItem.beatRevision(), beatBefore + 1);
+    QVERIFY(fallbackItem.beatStrength() > 0.0);
+    QCOMPARE(fallbackItem.impactRevision(), fallbackBefore);
 }
 
 void TerrainReactorItemTest::highDpiInternalScaleUsesPhysicalPixels()
@@ -321,10 +340,29 @@ void TerrainReactorItemTest::highDpiInternalScaleUsesPhysicalPixels()
     window.setRenderTarget(target);
     TestableTerrainReactorItem item(window.contentItem());
     item.setSize(QSizeF(100, 50));
-    item.applyInternalScale(0.75F);
+    item.applyInternalScale(0.75F, 4);
     QCOMPARE(window.effectiveDevicePixelRatio(), 2.0);
     QCOMPARE(item.fixedColorBufferWidth(), 150);
     QCOMPARE(item.fixedColorBufferHeight(), 75);
+}
+
+void TerrainReactorItemTest::adaptiveRenderScaleChangesItemSampleCount()
+{
+    TestableTerrainReactorItem item;
+    QCOMPARE(item.sampleCount(), 1);
+
+    item.setQuality(TerrainReactorItem::Quality::Balanced);
+    QCOMPARE(item.sampleCount(), 4);
+    item.setQuality(TerrainReactorItem::Quality::High);
+    QCOMPARE(item.sampleCount(), 4);
+    item.setQuality(TerrainReactorItem::Quality::Eco);
+    QCOMPARE(item.sampleCount(), 1);
+
+    item.applyInternalScale(0.70F, 1);
+    QCOMPARE(item.sampleCount(), 1);
+
+    item.applyInternalScale(1.0F, 4);
+    QCOMPARE(item.sampleCount(), 4);
 }
 
 void TerrainReactorItemTest::duplicateRendererIsRejectedBySharedLifecycle()

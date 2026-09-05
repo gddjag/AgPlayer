@@ -7,6 +7,8 @@
 #include <QQueue>
 #include <QSet>
 #include <QThreadPool>
+#include <QElapsedTimer>
+#include <QTimer>
 
 #include <atomic>
 #include <functional>
@@ -56,6 +58,8 @@ private:
         quint64 generation = 0;
         std::shared_ptr<CancellationToken> cancelled;
         double lastProgress = 0.0;
+        QString lastStage = QStringLiteral("validation");
+        QElapsedTimer lastActivity;
     };
 
     void sendError(const QString& requestId, const QString& code,
@@ -74,6 +78,7 @@ private:
 
     std::shared_ptr<WorkerBackend> backend_;
     QThreadPool threadPool_;
+    QTimer heartbeatTimer_;
     std::shared_ptr<JobContext> activeJob_;
     QSet<QString> cancelledRequests_;
     QQueue<QString> cancelledRequestOrder_;

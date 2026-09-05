@@ -55,6 +55,29 @@ T.TextField {
         }
 
         Text {
+            id: placeholderLabel
+            objectName: "themedTextFieldPlaceholder"
+            x: control.leftPadding
+            y: control.topPadding
+            width: Math.max(0, control.width - control.leftPadding
+                            - control.rightPadding)
+            height: Math.max(0, control.height - control.topPadding
+                             - control.bottomPadding)
+            text: control.placeholderText
+            color: control.enabled ? control.placeholderTextColor
+                                   : Theme.textDisabled
+            font: control.font
+            horizontalAlignment: control.horizontalAlignment
+            verticalAlignment: control.verticalAlignment
+            elide: Text.ElideRight
+            maximumLineCount: 1
+            clip: true
+            visible: control.placeholderText.length > 0
+                     && control.text.length === 0
+                     && control.preeditText.length === 0
+        }
+
+        Text {
             id: errorLabel
             objectName: "themedTextFieldErrorLabel"
             anchors.left: parent.left

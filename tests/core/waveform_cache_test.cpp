@@ -8,6 +8,7 @@
 #include <agplayer/c_api.h>
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <chrono>
 #include <cmath>
@@ -17,6 +18,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iterator>
+#include <iostream>
 #include <limits>
 #include <sstream>
 #include <string>
@@ -172,6 +174,53 @@ std::string recorded_schema_key_fixture(const std::filesystem::path& path,
     std::ostringstream key;
     key << std::hex << std::setfill('0') << std::setw(16) << hash;
     return key.str();
+}
+
+void test_maximum_six_layer_cache_io(const std::filesystem::path& cache_path,
+                                   const std::filesystem::path& source_path)
+{
+    constexpr std::size_t count = 524288U;
+    agplayer::WaveformCacheData data;
+    data.mix.assign(count, 0.25F);
+    data.bass.assign(count, 0.125F);
+    data.mid.assign(count, 0.0625F);
+    data.high.assign(count, 0.5F);
+    data.peak.assign(count, 0.75F);
+    data.rms.assign(count, 0.5F);
+    data.duration_ms = 2000;
+    data.total_samples = 88200;
+    data.sample_rate = 44100;
+    std::array<double, 5U> write_ms{}, read_ms{};
+    for (std::size_t run = 0; run < write_ms.size(); ++run) {
+        auto start = std::chrono::steady_clock::now();
+        assert(agplayer::WaveformCache::save_v4(cache_path, source_path, data));
+        write_ms[run] = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - start).count();
+        agplayer::WaveformCacheData loaded;
+        start = std::chrono::steady_clock::now();
+        assert(agplayer::WaveformCache::load_v4(cache_path, source_path, loaded));
+        read_ms[run] = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - start).count();
+        assert(loaded.mix == data.mix && loaded.bass == data.bass
+               && loaded.mid == data.mid && loaded.high == data.high
+               && loaded.peak == data.peak && loaded.rms == data.rms);
+    }
+    std::sort(write_ms.begin(), write_ms.end());
+    std::sort(read_ms.begin(), read_ms.end());
+    std::cout << "waveform_cache_6x524288 write_median_ms=" << write_ms[2]
+              << " read_median_ms=" << read_ms[2] << '\n';
+
+    // Reject a corrupt final layer after reading earlier complete layers.
+    // IEEE-754 +infinity and NaN are written explicitly in the file format's
+    // little-endian order, independently of the production serializer.
+    const auto rms_start = static_cast<std::streamoff>(104U + 5U * count * sizeof(float));
+    for (const auto& bytes : {std::vector<unsigned char>{0, 0, 128, 127},
+                              std::vector<unsigned char>{1, 0, 192, 127}}) {
+        overwrite_bytes(cache_path, rms_start + 65536, bytes);
+        agplayer::WaveformCacheData loaded;
+        assert(!agplayer::WaveformCache::load_v4(cache_path, source_path, loaded));
+        assert(loaded.mix.empty() && loaded.rms.empty());
+    }
 }
 
 } // namespace
@@ -393,6 +442,21 @@ int main(const int argc, char** argv)
         assert(loaded_v4.total_samples == data.total_samples);
         assert(loaded_v4.sample_rate == data.sample_rate);
 
+        // Known little-endian amplitudes in all six layers must remain
+        // byte-compatible, including readers of caches created before bulk I/O.
+        data.mix = {0.25F, 0.5F, 1.0F, 0.0F};
+        const auto wire_cache = case_dir / "v4-wire.agwf";
+        assert(agplayer::WaveformCache::save_v4(wire_cache, source_path, data));
+        const auto wire = read_bytes(wire_cache);
+        const std::vector<unsigned char> expected_mix{
+            0, 0, 128, 62, 0, 0, 0, 63, 0, 0, 128, 63, 0, 0, 0, 0};
+        assert(std::equal(expected_mix.begin(), expected_mix.end(), wire.begin() + 104));
+        const std::vector<unsigned char> replacement_mix{
+            0, 0, 0, 63, 0, 0, 128, 62, 0, 0, 128, 63, 0, 0, 0, 0};
+        overwrite_bytes(wire_cache, 104, replacement_mix);
+        assert(agplayer::WaveformCache::load_v4(wire_cache, source_path, loaded_v4));
+        assert(loaded_v4.mix == std::vector<float>({0.5F, 0.25F, 1.0F, 0.0F}));
+
         data.high.pop_back();
         assert(!agplayer::WaveformCache::save_v4(
             case_dir / "v4-mismatch.agwf", source_path, data));
@@ -509,5 +573,6 @@ int main(const int argc, char** argv)
     assert(!agplayer::WaveformCache::save(impossible_cache, source_path, peaks));
     assert(!path_exists(temporary_path_for(impossible_cache)));
 
+    test_maximum_six_layer_cache_io(case_dir / "v4-maximum.agwf", source_path);
     robust_remove_all(case_dir);
 }

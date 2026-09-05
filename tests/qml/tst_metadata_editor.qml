@@ -53,7 +53,7 @@ TestCase {
 
     Component {
         id: compactPageComponent
-        MetadataEditPage { width: 880; height: 620 }
+        MetadataEditPage { width: 880; height: 560 }
     }
 
     Component {
@@ -209,14 +209,27 @@ TestCase {
         const files = findChild(compactPage, "metadataFilePanel")
         const inspector = findChild(compactPage, "metadataInspectorPanel")
         const tabs = findChild(compactPage, "metadataCompactTabs")
-        verify(files && inspector && tabs)
-        verify(files.visible)
-        tabs.currentIndex = 1
+        const filesTab = findChild(compactPage, "metadataCompactFilesTab")
+        const editorTab = findChild(compactPage, "metadataCompactEditorTab")
+        verify(files && inspector && tabs && filesTab && editorTab)
+        compare(tabs.currentIndex, 0)
+        compare(tabs.height, 36)
+        tryVerify(function() {
+            return files.visible && files.width > 0 && files.height > 0
+        })
+        verify(!inspector.visible)
+
+        mouseClick(editorTab, editorTab.width / 2, editorTab.height / 2)
+        compare(tabs.currentIndex, 1)
         tryVerify(function() { return inspector.visible && inspector.width > 0 })
         tryVerify(function() {
             return inspector.mapToItem(compactPage, inspector.width, 0).x
                     <= compactPage.width
         })
+
+        mouseClick(filesTab, filesTab.width / 2, filesTab.height / 2)
+        compare(tabs.currentIndex, 0)
+        tryVerify(function() { return files.visible && !inspector.visible })
     }
 
     function test_responsiveThresholdUsesBothPanelMinimumWidths() {

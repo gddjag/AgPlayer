@@ -14,6 +14,16 @@ Item {
     property bool panelAutoHidden: false
     property bool manualCameraActive: false
     property bool qaSyntheticFeatures: false
+    readonly property bool inkMode: PlayerExperienceController.materialMode === 2
+    readonly property color materialBaseColor: PlayerExperienceController.baseColor
+    readonly property color environmentCoolColor: PlayerExperienceController.coolColor
+    readonly property color environmentWarmColor: PlayerExperienceController.warmColor
+    readonly property color inkPaper: {
+        var c = materialBaseColor
+        return c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722 < 0.5
+                ? Qt.rgba(0.95 + c.r * 0.03, 0.95 + c.g * 0.03,
+                          0.95 + c.b * 0.03, 1) : c
+    }
     readonly property var terrainItem: terrainLoader.item
     property string platformPlugin: String(Qt.platform.pluginName || "")
     readonly property bool waylandFallback:
@@ -66,26 +76,27 @@ Item {
         gradient: Gradient {
             GradientStop {
                 position: 0.0
-                color: Qt.tint("#08090f", // theme-color-allow: immersive media visual contract
+                color: root.inkMode ? root.inkPaper : Qt.tint(PlayerExperienceController.baseColor,
                                Qt.rgba( // theme-color-allow: immersive media visual contract
-                                   PlayerExperienceController.coolColor.r,
-                                   PlayerExperienceController.coolColor.g,
-                                   PlayerExperienceController.coolColor.b, 0.075))
+                                   root.environmentCoolColor.r,
+                                   root.environmentCoolColor.g,
+                                   root.environmentCoolColor.b, 0.035))
             }
             GradientStop {
                 position: 0.58
-                color: Qt.tint("#05060a", // theme-color-allow: immersive media visual contract
+                color: root.inkMode ? root.inkPaper : Qt.tint(Qt.darker(PlayerExperienceController.baseColor, 1.7),
                                Qt.rgba( // theme-color-allow: immersive media visual contract
-                                   PlayerExperienceController.warmColor.r,
-                                   PlayerExperienceController.warmColor.g,
-                                   PlayerExperienceController.warmColor.b, 0.045))
+                                   root.environmentWarmColor.r,
+                                   root.environmentWarmColor.g,
+                                   root.environmentWarmColor.b, 0.025))
             }
-            GradientStop { position: 1.0; color: "#020305" } // theme-color-allow: immersive media visual contract
+            GradientStop { position: 1.0; color: root.inkMode ? root.inkPaper : "#020305" } // theme-color-allow: immersive media visual contract
         }
     }
 
     Item {
         id: ambientColorField
+        visible: !root.inkMode
         anchors.fill: parent
         opacity: 0.72
 
@@ -117,7 +128,7 @@ Item {
     Item {
         id: reactorSoftBloom
         anchors.fill: parent
-        visible: root.active && root.hostExposed
+        visible: root.active && root.hostExposed && !root.inkMode
         opacity: 0.14 + (root.terrainItem
                          ? Math.min(1, root.terrainItem.featureEnergy) * 0.18 : 0)
 
@@ -262,6 +273,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         color: "transparent"
+        visible: !root.inkMode
         border.width: 0
         gradient: Gradient {
             GradientStop { position: 0.00; color: Qt.rgba(0, 0, 0, 0.10) } // theme-color-allow: immersive media visual contract
@@ -352,9 +364,9 @@ Item {
     ImmersiveControlPanel {
         id: controlPanel
         objectName: "immersiveControlPanelHost"
-        anchors.left: parent.left
+        anchors.right: parent.right
         anchors.top: parent.top
-        anchors.leftMargin: 14
+        anchors.rightMargin: 14
         anchors.topMargin: 58
         visible: opacity > 0
         enabled: opacity > 0.05
@@ -382,7 +394,7 @@ Item {
         anchors.bottom: waveform.top
         anchors.bottomMargin: 2
         text: root.currentTitle()
-        color: Qt.rgba(0.88, 0.92, 0.97, root.panelIdle ? 0.42 : 0.72) // theme-color-allow: immersive media visual contract
+        color: root.inkMode ? "#293D40" : Qt.rgba(0.88, 0.92, 0.97, root.panelIdle ? 0.42 : 0.72) // theme-color-allow: immersive media visual contract
         font.pixelSize: Theme.fontSizeCaption
         elide: Text.ElideRight
         width: Math.min(parent.width * 0.68, implicitWidth)
@@ -401,6 +413,7 @@ Item {
         anchors.bottomMargin: 10
         height: 52
         waveformSession: root.waveformSession
+        lightBackground: root.inkMode
         opacityScale: root.panelIdle ? 0.55 : 1.0
         z: 9
     }
@@ -409,16 +422,14 @@ Item {
         id: lyricsPanel
         objectName: "immersiveLyricsPanel"
         spatialMode: true
+        lightBackground: root.inkMode
         fullscreen: root.hostMode === PlayerExperienceController.Fullscreen
         placement: PlayerExperienceController.lyricPosition
         width: Math.min(placement === PlayerExperienceController.Center ? 700 : 560,
                         parent.width * (placement === PlayerExperienceController.Center
                                         ? 0.62 : 0.42))
-        // The semantic type scale has a 12 px readability floor. Keep enough
-        // camera-safe height for three wrapped lyric lines at the smallest
-        // user scale instead of shrinking the container below its content.
-        height: Math.max(112,
-                         128 * (PlayerExperienceController.lyricSize / 100.0))
+        height: Math.max(112, implicitHeight + 24,
+                        128 * (PlayerExperienceController.lyricSize / 100.0))
         x: {
             var travel = Math.max(0, parent.width - width)
             var fine = (PlayerExperienceController.lyricPositionX - 50)
@@ -430,7 +441,8 @@ Item {
                                 parent.width - width - parent.width * 0.055 + fine)
             return travel / 2 + fine
         }
-        y: Math.max(72, Math.min(waveform.y - height - 20,
+        y: Math.max(72 + perspectiveTopInset,
+                    Math.min(waveform.y - height - 20,
                     (parent.height - height - waveform.height - 42)
                     * PlayerExperienceController.lyricPositionY / 100.0))
         z: 10

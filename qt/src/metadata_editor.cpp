@@ -13,6 +13,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QFutureWatcher>
+#include <QHash>
 #include <QImage>
 #include <QImageReader>
 #include <QJsonArray>
@@ -48,6 +49,16 @@ QString normalizedPathKey(const QString& path)
     return normalized.toCaseFolded();
 #else
     return normalized;
+#endif
+}
+
+QString storedMetadataPathKey(const QString& path)
+{
+    const QString key = QDir::fromNativeSeparators(path);
+#ifdef Q_OS_WIN
+    return key.toCaseFolded();
+#else
+    return key;
 #endif
 }
 
@@ -674,27 +685,61 @@ void MetadataEditor::startApply(const QVariantMap& fields,
     }
 
     auto* watcher = new QFutureWatcher<MetadataApplySummary>(this);
+    const QPointer<LibraryModel> refreshModel = libraryModel_;
+    QHash<QString, LibraryMetadataRefresh> libraryTargets;
+    if (refreshModel != nullptr && refreshModel->thread() == thread()) {
+        QSet<QString> targetPaths;
+        for (const int target : targets) {
+            if (target >= 0 && target < snapshot.size())
+                targetPaths.insert(storedMetadataPathKey(snapshot.at(target).path));
+        }
+        for (const TrackRecord& track : refreshModel->tracks()) {
+            const QString key = storedMetadataPathKey(track.path);
+            if (!targetPaths.contains(key)) continue;
+            const auto claim = refreshModel->beginMetadataRefresh(track.trackId);
+            if (claim) {
+                TrackRecord previous;
+                previous.coverUrl = track.coverUrl;
+                libraryTargets.insert(key, {*claim, std::move(previous)});
+            }
+        }
+        // Also runs when the editor is destroyed before delivery. Exact
+        // generations prevent cleanup from abandoning a later request.
+        connect(watcher, &QObject::destroyed, refreshModel.data(),
+                [refreshModel, libraryTargets] {
+            if (refreshModel == nullptr) return;
+            for (const LibraryMetadataRefresh& target : libraryTargets)
+                refreshModel->abandonMetadataProbe(target.claim);
+        });
+    }
     operationWatcher_ = watcher;
     connect(watcher, &QFutureWatcher<MetadataApplySummary>::finished, this,
-        [this, watcher]() {
+        [this, watcher, refreshModel]() {
             operationWatcher_.clear();
             const auto result = watcher->result();
+            // Paths were canonicalized when entries were loaded; the worker
+            // copies those paths into both its snapshot and result rows.
+            // Merge by the stored identity without touching the filesystem.
             QSet<QString> updatedPaths;
             for (const QVariant& value : result.results) {
                 const QVariantMap row = value.toMap();
                 if (row.value(QStringLiteral("success")).toBool()) {
-                    updatedPaths.insert(normalizedPathKey(
+                    updatedPaths.insert(storedMetadataPathKey(
                         row.value(QStringLiteral("path")).toString()));
                 }
             }
+            QHash<QString, qsizetype> rowByPath;
+            rowByPath.reserve(entries_.size());
+            for (qsizetype row = 0; row < entries_.size(); ++row) {
+                const QString key = storedMetadataPathKey(entries_.at(row).path);
+                if (!rowByPath.contains(key)) rowByPath.insert(key, row);
+            }
             for (const MetadataEntry& updated : result.entries) {
-                if (!updatedPaths.contains(normalizedPathKey(updated.path))) continue;
-                for (MetadataEntry& current : entries_) {
-                    if (normalizedPathKey(current.path)
-                        == normalizedPathKey(updated.path)) {
-                        current = updated;
-                        break;
-                    }
+                const QString key = storedMetadataPathKey(updated.path);
+                if (!updatedPaths.contains(key)) continue;
+                const auto row = rowByPath.constFind(key);
+                if (row != rowByPath.cend()) {
+                    entries_[row.value()] = updated;
                 }
             }
             results_ = pendingUnsupportedResults_;
@@ -708,15 +753,8 @@ void MetadataEditor::startApply(const QVariantMap& fields,
                 }
             }
             cancelledCount_ = result.cancelledCount;
-            if (libraryModel_ != nullptr) {
-                QStringList refreshedPaths;
-                for (const QVariant& value : result.results) {
-                    const QVariantMap row = value.toMap();
-                    if (row.value(QStringLiteral("success")).toBool()) {
-                        refreshedPaths.append(row.value(QStringLiteral("path")).toString());
-                    }
-                }
-                libraryModel_->refreshMetadataForPaths(refreshedPaths);
+            if (refreshModel != nullptr && refreshModel == libraryModel_) {
+                refreshModel->completeMetadataRefreshes(result.libraryRefreshes);
             }
             setBusy(false);
             setProgress(1.0);
@@ -731,7 +769,7 @@ void MetadataEditor::startApply(const QVariantMap& fields,
     const QByteArray coverMime = coverMime_.toUtf8();
     const QVariantMap coverDetails = replacementCoverDetails_;
     watcher->setFuture(QtConcurrent::run(
-        [fields, targets, coverData, coverMime, coverDetails, coverMode, snapshot,
+        [fields, targets, coverData, coverMime, coverDetails, coverMode, snapshot, libraryTargets,
           this]() mutable {
             MetadataApplySummary summary;
             summary.entries = snapshot;
@@ -865,6 +903,13 @@ void MetadataEditor::startApply(const QVariantMap& fields,
                         e.date = agplayer::qt::decodeMetadataText(ag_metadata_date(refreshed));
                         e.composer = agplayer::qt::decodeMetadataText(ag_metadata_composer(refreshed));
                         e.bpm = agplayer::qt::decodeMetadataText(ag_metadata_bpm_tag(refreshed));
+                        const auto target = libraryTargets.constFind(
+                            storedMetadataPathKey(e.path));
+                        if (target != libraryTargets.cend()) {
+                            summary.libraryRefreshes.append({target->claim,
+                                readLibraryMetadata(e.path, refreshed,
+                                                    target->record.coverUrl)});
+                        }
                         ag_metadata_destroy(refreshed);
                     }
                     if (plan.cover_action == agplayer::CoverAction::Set) {
@@ -1082,6 +1127,7 @@ void MetadataEditor::startPreflight(const QVariantMap& fields,
             }
             watcher->deleteLater();
             results_ = summary.results;
+            pendingEntrySnapshot_ = summary.entries;
             supportedCount_ = summary.supportedCount;
             unsupportedCount_ = summary.unsupportedCount;
             failedCount_ = summary.failureCount;
@@ -1112,22 +1158,24 @@ void MetadataEditor::startPreflight(const QVariantMap& fields,
         });
 
     QList<MetadataEntry> snapshot = entries_;
-    for (MetadataEntry& entry : snapshot) {
-        const QFileInfo source(entry.path);
-        entry.canonicalPath = normalizedLocalPath(entry.path);
-        entry.fileSize = source.size();
-        entry.sourceLastModifiedMs = source.lastModified().toMSecsSinceEpoch();
-        entry.stableSourceId = QStringLiteral("%1|%2|%3")
-            .arg(entry.canonicalPath)
-            .arg(entry.fileSize)
-            .arg(entry.sourceLastModifiedMs);
-    }
-    pendingEntrySnapshot_ = snapshot;
     const QByteArray coverData = coverData_;
     const QByteArray coverMime = coverMime_.toUtf8();
     watcher->setFuture(QtConcurrent::run(
-        [this, fields, targets, snapshot, coverData, coverMime, coverMode]() {
+        [this, fields, targets, snapshot, coverData, coverMime, coverMode]() mutable {
             MetadataApplySummary summary;
+            // File identity is part of preflight, so gather it on the same
+            // worker as validation rather than blocking the caller per file.
+            for (MetadataEntry& entry : snapshot) {
+                const QFileInfo source(entry.path);
+                entry.canonicalPath = normalizedLocalPath(entry.path);
+                entry.fileSize = source.size();
+                entry.sourceLastModifiedMs = source.lastModified().toMSecsSinceEpoch();
+                entry.stableSourceId = QStringLiteral("%1|%2|%3")
+                    .arg(entry.canonicalPath)
+                    .arg(entry.fileSize)
+                    .arg(entry.sourceLastModifiedMs);
+            }
+            summary.entries = snapshot;
             const auto appendInternalFailure = [&summary, &snapshot](
                                                    int index,
                                                    const QString& message) {

@@ -73,6 +73,25 @@ add_subdirectory(app)
 add_subdirectory(tools)
 add_subdirectory(tests)
 
+include(cmake/LosslessSacd.cmake)
+include(cmake/LosslessCore.cmake)
+agplayer_enable_lossless_core()
+add_executable(lossless_scan_cli tests/core/lossless_scan_cli.cpp)
+target_include_directories(lossless_scan_cli PRIVATE ${CMAKE_SOURCE_DIR}/core/src)
+target_link_libraries(lossless_scan_cli PRIVATE agplayer_core Qt6::Core)
+if(MSVC)
+    target_compile_options(lossless_scan_cli PRIVATE /utf-8)
+endif()
+include(cmake/LosslessQt.cmake)
+include(cmake/LosslessUi.cmake)
+add_test(NAME qml_lossless_identification_test
+    COMMAND qml_audio_tools_test -o ${CMAKE_BINARY_DIR}/qml-lossless-identification.txt,txt
+        -input ${CMAKE_SOURCE_DIR}/tests/qml/tst_lossless_identification.qml)
+set_tests_properties(qml_lossless_identification_test PROPERTIES
+    TIMEOUT 60 RESOURCE_LOCK qml_audio_tools_runtime
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic"
+    ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<IF:$<CONFIG:Debug>,debug/bin,bin>")
+
 qt_add_translations(
     TARGETS AgPlayer translation_manager_test
     SOURCE_TARGETS agplayer_app_qml agplayer_qt AgPlayer

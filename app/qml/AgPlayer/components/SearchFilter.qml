@@ -7,9 +7,10 @@ Rectangle {
     id: root
     color: "transparent"
     border.width: 0
-    implicitHeight: 32
+    implicitHeight: Theme.controlHeight
     readonly property int contentTopMargin: 3
     readonly property int contentBottomMargin: integratedStyle ? 1 : 5
+    readonly property bool compactLayout: width < 640
 
     property string searchText: ""
     property int exactRating: 0
@@ -61,11 +62,12 @@ Rectangle {
         anchors.rightMargin: Theme.spacingSm
         anchors.topMargin: root.contentTopMargin
         anchors.bottomMargin: root.contentBottomMargin
-        spacing: 10
+        spacing: Theme.spacingSm
 
         Rectangle {
             objectName: "keywordModule"
-            Layout.preferredWidth: 184
+            Layout.preferredWidth: root.compactLayout ? 136 : 184
+            Layout.minimumWidth: 112
             Layout.fillHeight: true
             color: root.moduleColor
             border.color: root.moduleBorder
@@ -77,8 +79,8 @@ Rectangle {
                 anchors.left: parent.left
                 anchors.leftMargin: 10
                 anchors.verticalCenter: parent.verticalCenter
-                width: 16
-                height: 16
+                width: Theme.iconSizeSm
+                height: Theme.iconSizeSm
                 source: Theme.icon("search-line")
                 tint: Theme.secondaryText
                 opacity: 0.55
@@ -101,9 +103,12 @@ Rectangle {
 
         Rectangle {
             objectName: "ratingModule"
-            Layout.preferredWidth: visible ? 132 : 0
+            Layout.preferredWidth: visible
+                                   ? (root.compactLayout ? 96 : 132) : 0
+            Layout.minimumWidth: visible ? 88 : 0
             Layout.fillHeight: true
             visible: SettingsController.autoReadRating
+            Accessible.name: qsTr("评分筛选")
             color: root.moduleColor
             border.color: root.moduleBorder
             border.width: 1
@@ -114,7 +119,7 @@ Rectangle {
                 anchors.leftMargin: 8
                 anchors.rightMargin: 8
                 spacing: 5
-                Label { text: qsTr("评分"); color: Theme.secondaryText; font.pixelSize: Theme.fontSizeCaption }
+                Label { visible: !root.compactLayout; text: qsTr("评分"); color: Theme.secondaryText; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption }
                 RowLayout {
                     spacing: 1
                     Repeater {
@@ -144,7 +149,8 @@ Rectangle {
 
         Rectangle {
             objectName: "bpmModule"
-            Layout.preferredWidth: 216
+            Layout.preferredWidth: root.compactLayout ? 184 : 216
+            Layout.minimumWidth: 176
             Layout.fillHeight: true
             color: root.moduleColor
             border.color: root.moduleBorder
@@ -155,7 +161,7 @@ Rectangle {
                 anchors.leftMargin: 4
                 anchors.rightMargin: 4
                 spacing: 2
-                Label { text: "BPM"; color: Theme.primaryText; font.pixelSize: Theme.fontSizeCaption; Layout.preferredWidth: 28; Layout.alignment: Qt.AlignVCenter; verticalAlignment: Text.AlignVCenter }
+                Label { text: "BPM"; color: Theme.primaryText; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption; Layout.preferredWidth: 28; Layout.alignment: Qt.AlignVCenter; verticalAlignment: Text.AlignVCenter }
                 TextField {
                     id: minimumBpmField
                     objectName: "minimumBpmField"
@@ -165,6 +171,7 @@ Rectangle {
                     verticalAlignment: TextInput.AlignVCenter
                     text: Math.round(root.pendingMinBpm).toString()
                     color: Theme.primaryText
+                    font.family: Theme.fontPrimary
                     font.pixelSize: Theme.fontSizeCaption
                     horizontalAlignment: TextInput.AlignHCenter
                     validator: IntValidator { bottom: 60; top: 160 }
@@ -181,9 +188,9 @@ Rectangle {
                     id: bpmRange
                     objectName: "bpmRange"
                     glassStyle: root.integratedStyle
-                    Layout.preferredWidth: 104
-                    Layout.minimumWidth: 104
-                    Layout.maximumWidth: 104
+                    Layout.preferredWidth: root.compactLayout ? 72 : 104
+                    Layout.minimumWidth: root.compactLayout ? 72 : 104
+                    Layout.maximumWidth: root.compactLayout ? 72 : 104
                     Layout.alignment: Qt.AlignVCenter
                     from: 60; to: 160; stepSize: 1
                     first.value: root.pendingMinBpm
@@ -200,6 +207,7 @@ Rectangle {
                     verticalAlignment: TextInput.AlignVCenter
                     text: Math.round(root.pendingMaxBpm).toString()
                     color: Theme.primaryText
+                    font.family: Theme.fontPrimary
                     font.pixelSize: Theme.fontSizeCaption
                     horizontalAlignment: TextInput.AlignHCenter
                     validator: IntValidator { bottom: 60; top: 160 }
@@ -218,7 +226,10 @@ Rectangle {
         Button {
             objectName: "clearFiltersButton"
             Layout.fillHeight: true
+            Layout.minimumWidth: 44
             text: qsTr("清空")
+            font.family: Theme.fontPrimary
+            font.pixelSize: Theme.fontSizeCaption
             onClicked: root.clearFilters()
             palette.buttonText: Theme.primaryText
             background: Rectangle {

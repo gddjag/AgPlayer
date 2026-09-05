@@ -8,16 +8,21 @@ Rectangle {
 
     property bool referenceWorkbench: false
     property bool separationWorkbench: false
+    property bool losslessWorkbench: false
     property int currentTool: 0
     property Window window
     readonly property color activeLabelColor: Theme.primaryText
-    readonly property var visibleToolOrder: [0, 4, 1, 2, 3]
+    readonly property bool compactLayout: width < Math.max(960,
+        visibleTools.length * (losslessWorkbench ? Theme.losslessNavigationItemWidth : 150)
+        + Theme.spacingMd + Theme.spacingLg + Theme.spacingSm * (visibleTools.length - 1))
+    readonly property var visibleToolOrder: [0, 4, 1, 2, 3, 5]
     readonly property var visibleTools: [
         { toolId: 0, name: qsTr("音频编辑"), icon: "equalizer-line" },
         { toolId: 4, name: qsTr("人声伴奏分离"), icon: "music-2-line" },
         { toolId: 1, name: qsTr("格式转换"), icon: "briefcase-4-line" },
         { toolId: 2, name: qsTr("元数据编辑"), icon: "information-line" },
-        { toolId: 3, name: qsTr("文件名处理"), icon: "file-copy-line" }
+        { toolId: 3, name: qsTr("文件名处理"), icon: "file-copy-line" },
+        { toolId: 5, name: qsTr("无损鉴别"), icon: "equalizer-line" }
     ]
 
     signal toolSelected(int toolId)
@@ -27,6 +32,13 @@ Rectangle {
     border.width: 1
     radius: 0
     implicitHeight: Theme.settingsRowHeight
+
+    Rectangle {
+        anchors.fill: parent
+        anchors.margins: 1
+        visible: navigation.losslessWorkbench
+        color: Theme.losslessPanelSurface
+    }
 
     RowLayout {
         anchors.left: parent.left
@@ -43,12 +55,25 @@ Rectangle {
             ThemedTabButton {
                 id: navButton
                 objectName: "audioToolNav_" + modelData.toolId
-                Layout.preferredWidth: 150
-                Layout.preferredHeight: navigation.implicitHeight
+                Layout.fillWidth: navigation.compactLayout
+                Layout.preferredWidth: navigation.compactLayout ? 0
+                                       : navigation.losslessWorkbench
+                                         ? Theme.losslessNavigationItemWidth : 150
+                Layout.minimumWidth: navigation.compactLayout ? 0 : 112
+                Layout.preferredHeight: navigation.losslessWorkbench
+                                        ? navigation.height : navigation.implicitHeight
                 Layout.maximumHeight: Layout.preferredHeight
                 text: modelData.name
                 iconSource: Theme.icon(modelData.icon)
                 selected: navigation.currentTool === modelData.toolId
+                underlineSelection: navigation.losslessWorkbench
+                labelPixelSize: navigation.losslessWorkbench
+                                ? Theme.losslessFontSizeBody : Theme.fontSizeBody
+                leftPadding: navigation.compactLayout ? Theme.spacingSm
+                                                      : Theme.spacingMd
+                rightPadding: leftPadding
+                iconSize: navigation.compactLayout ? Theme.iconSizeSm
+                                                   : Theme.iconSizeMd
 
                 onClicked: navigation.toolSelected(modelData.toolId)
             }

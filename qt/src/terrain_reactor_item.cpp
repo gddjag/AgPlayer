@@ -59,14 +59,18 @@ struct alignas(16) UniformBlock {
     float stylePresentation[4]{}; // rhythm, depth, clarity, rotation speed
     float impact[4]{}; // strength, age, active, sensitivity
     float waveSources[8][4]{}; // stage x/z, normalized phase, strength
-    float audioEnvelope[4]{}; // fast bass, slow bass, reserved
+    float audioEnvelope[4]{}; // fast bass, slow bass, beat strength, beat age
+    float cameraPosition[4]{}; // world-space eye position
+    float materialParameters[4]{}; // mode, softness, elasticity, ink density
+    float sceneControls[4]{}; // column opacity, terrain exposure, reserved
+    float waveParameters[4]{}; // strength, width, lifetime factor, reserved
 };
 
 static_assert(alignof(UniformBlock) == 16);
 static_assert(sizeof(UniformBlock) % 16 == 0);
 
 constexpr quint32 maximumInstances = 192U * 192U + 120U
-    + 28U * (1U + 3U + 16U + 12U) + 180U;
+    + 28U * (1U + 3U + 16U + 12U) + 1600U;
 
 constexpr std::array<Vertex, cubeVertexCount> cubeVertices{{
     {{-0.5F, -0.5F,  0.5F}, { 0.0F,  0.0F,  1.0F}},
@@ -151,6 +155,7 @@ public:
           resourceState_(std::move(resourceState)),
           rendererId_(++nextRendererId_),
           punchEvents_(*resourceState_),
+          beatEvents_(*resourceState_),
           impactEvents_(*resourceState_),
           softwareBackend_(softwareBackend)
     {
@@ -206,15 +211,36 @@ protected:
         auto* terrainItem = static_cast<TerrainReactorItem*>(item);
         item_ = terrainItem;
         const auto next = terrainItem->snapshotForRenderer();
-        if (!snapshot_.running && next.running) frameTimer_.restart();
+        const bool resuming = next.running && (!snapshot_.running
+            || next.activityRevision != snapshot_.activityRevision);
+        if (resuming) {
+            frameTimer_.restart();
+            renderTimeEpochSeconds_ = next.timeSeconds;
+            renderTimeTimer_.restart();
+            renderTimeAnchored_ = true;
+            // Events raised while rendering was gated (including a source's
+            // pre-existing revisions on first attach) are historical state,
+            // not a new foreground cue.
+            punchEvents_.discard(next.punchEvent, camera_);
+            beatEvents_.discard(next.beatEvent);
+            impactEvents_.discard(next.impactEvent);
+        }
         if (next.running || failed_) publishStatus();
         const bool seedChanged = next.seed != snapshot_.seed;
         const bool layoutChanged = seedChanged
+            || next.style.materialMode != snapshot_.style.materialMode
+            || next.style.columnSize != snapshot_.style.columnSize
             || next.quality != snapshot_.quality
-            || next.styleRevision != snapshot_.styleRevision
+            || next.style.floatingCubesEnabled != snapshot_.style.floatingCubesEnabled
+            || next.style.meteorsEnabled != snapshot_.style.meteorsEnabled
+            || next.style.ripplesEnabled != snapshot_.style.ripplesEnabled
             || quality_.stage() != lastStage_;
-        const TrackPalette nextPalette = next.trackPaletteActive
-            ? next.trackPalette : next.style.colors;
+        TrackPalette nextPalette = next.style.colors;
+        if (next.trackPaletteActive && next.style.materialMode != 2) {
+            // Keep the preset's art direction when applying a song accent.
+            nextPalette = blendTrackPalettes(next.style.colors, next.trackPalette, 0.18F);
+            nextPalette[0] = next.style.colors[0];
+        }
         if (!paletteInitialized_) {
             currentPalette_ = nextPalette;
             fromPalette_ = nextPalette;
@@ -254,8 +280,12 @@ protected:
             ? 30.0
             : snapshot_.quality == TerrainReactorItem::Quality::Balanced
                 ? 45.0 : 60.0;
-        if (!framePacer_.shouldRender(snapshot_.timeSeconds, targetFps)) {
-            update();
+        const double renderTimeSeconds = renderTimeAnchored_
+            ? renderTimeEpochSeconds_ + std::max(0.0,
+                static_cast<double>(renderTimeTimer_.nsecsElapsed())
+                    / 1'000'000'000.0)
+            : snapshot_.timeSeconds;
+        if (!framePacer_.shouldRender(renderTimeSeconds, targetFps)) {
             return;
         }
 
@@ -278,18 +308,35 @@ protected:
 
         buildInstancesIfNeeded();
         VisualParameters visual = mapVisualParameters(snapshot_.features,
-            snapshot_.timeSeconds, snapshot_.style);
+            renderTimeSeconds, snapshot_.style);
         bassEnvelope_.advance(visual.bands[0] * 0.72F
                                   + visual.bands[1] * 0.28F,
                               float(animationElapsedSeconds));
         punchEvents_.consume(snapshot_.punchEvent, camera_);
-        impactEvents_.consume(snapshot_.impactEvent, snapshot_.timeSeconds);
+        const bool newBeat = beatEvents_.consume(snapshot_.beatEvent,
+                                                renderTimeSeconds);
+        if (!snapshot_.style.ripplesEnabled) {
+            travelingWaves_.fill(QVector4D());
+        } else if (newBeat) {
+            const int slot = nextWave_ % std::max(1, currentRippleCount_);
+            nextWave_ = (slot + 1) % std::max(1, currentRippleCount_);
+            const QVector4D& origin = waveSources_[std::size_t(slot)];
+            travelingWaves_[std::size_t(slot)] = QVector4D(
+                origin.x(), origin.y(), renderTimeSeconds,
+                finiteUnit(snapshot_.beatEvent.strength));
+        }
+        impactEvents_.consume(snapshot_.impactEvent, renderTimeSeconds);
+        const BeatPulseSnapshot beat = beatEvents_.snapshot(
+            renderTimeSeconds);
         const ImpactPulseSnapshot impact = impactEvents_.snapshot(
-            snapshot_.timeSeconds);
+            renderTimeSeconds);
+        visual.beatStrength = beat.strength * snapshot_.style.rhythmSensitivity
+            * snapshot_.style.rhythmStrength;
+        visual.beatAge = beat.age;
         visual.impactStrength = impact.strength;
         visual.impactAge = impact.age;
         const RenderDynamics dynamics = mapRenderDynamics(snapshot_.style);
-        camera_.advance(snapshot_.timeSeconds, float(animationElapsedSeconds),
+        camera_.advance(renderTimeSeconds, float(animationElapsedSeconds),
                         dynamics.autoRotateSpeed * snapshot_.style.motionResponse);
         UniformBlock uniforms = buildUniforms(visual, camera_.snapshot());
         QRhiResourceUpdateBatch* updates = rhi()->nextResourceUpdateBatch();
@@ -307,7 +354,9 @@ protected:
                 std::exchange(pendingStaticUploads_, nullptr));
         }
 
-        commandBuffer->beginPass(renderTarget(), QColor(4, 6, 11, 0),
+        // QQuickRhiItem textures use premultiplied alpha, including the clear
+        // color; see Qt's BSD-3-Clause rhitextureitem example.
+        commandBuffer->beginPass(renderTarget(), QColor(0, 0, 0, 0),
                                  {1.0F, 0}, updates);
         commandBuffer->setGraphicsPipeline(pipeline_.get());
         commandBuffer->setShaderResources(bindings_.get());
@@ -341,7 +390,6 @@ protected:
         telemetry_->uploads.fetch_add(1, std::memory_order_relaxed);
         publishRenderedRevisions();
         notifyCounters();
-        if (snapshot_.running) update();
     }
 
 private:
@@ -420,22 +468,20 @@ private:
     void buildInstancesIfNeeded()
     {
         if (!instancesDirty_) return;
-        QualityConfiguration config = quality_.configuration();
+        QualityConfiguration config = quality_.configuration(
+            snapshot_.quality == TerrainReactorItem::Quality::Eco);
         switch (snapshot_.quality) {
         case TerrainReactorItem::Quality::Eco:
-            config.gridSize = std::min(config.gridSize, 96);
-            config.floatingCount = std::min(config.floatingCount, 36);
-            config.particleCount = std::min(config.particleCount, 52);
-            config.meteorCount = std::min(config.meteorCount, 5);
             config.rippleCount = std::min(config.rippleCount, 2);
-            config.internalScale = std::min(config.internalScale, 0.75F);
             break;
         case TerrainReactorItem::Quality::Balanced:
             config.rippleCount = std::min(config.rippleCount, 4);
+            config.gridSize = std::min(config.gridSize, 128);
+            config.particleCount = std::min(config.particleCount, 960);
             break;
         case TerrainReactorItem::Quality::High:
             if (quality_.stage() < DegradationStage::ReducedGrid) {
-                config.gridSize = 160;
+                config.gridSize = 144;
                 config.internalScale = 1.0F;
             }
             if (quality_.stage() < DegradationStage::ReducedRipples)
@@ -445,6 +491,11 @@ private:
         if (!snapshot_.style.floatingCubesEnabled) config.floatingCount = 0;
         if (!snapshot_.style.meteorsEnabled) config.meteorCount = 0;
         if (!snapshot_.style.ripplesEnabled) config.rippleCount = 0;
+        if (snapshot_.style.materialMode == 2) config.particleCount = 0;
+        // Keep radius fixed and respect the selected quality's detail ceiling.
+        // Small cells cannot undo Eco or automatic grid degradation.
+        config.gridSize = std::clamp(qRound(config.gridSize / (0.5F + snapshot_.style.columnSize)),
+                                     32, config.gridSize);
         const SceneLayout layout = makeSceneLayout(snapshot_.seed,
             config.gridSize, config.floatingCount, config.meteorCount,
             config.particleCount);
@@ -482,11 +533,16 @@ private:
         instancesDirty_ = false;
         instancesDirtyUpload_ = true;
         currentRippleCount_ = config.rippleCount;
-        if (!qFuzzyCompare(currentInternalScale_, config.internalScale)) {
+        const bool scaleChanged = !qFuzzyCompare(
+            currentInternalScale_, config.internalScale);
+        const bool sampleCountChanged = currentSampleCount_ != config.sampleCount;
+        if (scaleChanged || sampleCountChanged) {
             currentInternalScale_ = config.internalScale;
+            currentSampleCount_ = config.sampleCount;
             TerrainReactorItem* const target = item_;
-            QMetaObject::invokeMethod(target, [target, scale = currentInternalScale_] {
-                target->applyInternalScale(scale);
+            QMetaObject::invokeMethod(target, [target, scale = currentInternalScale_,
+                                                sampleCount = currentSampleCount_] {
+                target->applyInternalScale(scale, sampleCount);
             }, Qt::QueuedConnection);
         }
     }
@@ -506,12 +562,12 @@ private:
             finiteOr(camera.pitch, defaults.pitch), 0.12F, 1.15F);
         const float distance = std::clamp(
             finiteOr(camera.distance, defaults.distance), 42.0F, 220.0F);
-        const float punch = finiteUnit(camera.punch);
+        const float punch = finiteUnit(camera.punch * snapshot_.style.cinemaShake);
         projection.perspective(48.0F - punch * 2.15F,
-                               aspect, 0.1F, 400.0F);
+                               aspect, 0.1F, 800.0F);
         const float radius = distance - punch * 0.6F;
         const RenderDynamics dynamics = mapRenderDynamics(snapshot_.style);
-        const float lowAngleLift = 0.72F + dynamics.depthOfField * 0.08F;
+        const float lowAngleLift = 0.96F;
         QVector3D eye(radius * std::cos(pitch) * std::sin(yaw),
                       9.0F + radius * std::sin(pitch) * lowAngleLift,
                       radius * std::cos(pitch) * std::cos(yaw));
@@ -521,7 +577,7 @@ private:
                         std::cos(visual.timeSeconds * 17.0F) * shake * 0.55F,
                         std::sin(visual.timeSeconds * 13.0F) * shake * 0.7F);
         QMatrix4x4 view;
-        view.lookAt(eye, QVector3D(0.0F, -1.5F, 0.0F),
+        view.lookAt(eye, QVector3D(0.0F, 8.0F, 0.0F),
                     QVector3D(0.0F, 1.0F, 0.0F));
         const QMatrix4x4 mvp = rhi()->clipSpaceCorrMatrix() * projection * view;
 
@@ -576,15 +632,32 @@ private:
         result.impact[2] = visual.impactStrength > 0.001F ? 1.0F : 0.0F;
         result.impact[3] = dynamics.rhythmSensitivity;
         for (std::size_t index = 0; index < waveSources_.size(); ++index) {
-            const QVector4D& source = waveSources_[index];
+            const QVector4D& source = travelingWaves_[index];
             result.waveSources[index][0] = source.x();
             result.waveSources[index][1] = source.y();
-            result.waveSources[index][2] = source.z();
-            result.waveSources[index][3] = source.w();
+            const float age = std::max(0.0F, visual.timeSeconds - source.z());
+            result.waveSources[index][2] = age;
+            result.waveSources[index][3] = age < 2.8F / snapshot_.style.rippleDecay
+                ? source.w() * dynamics.rhythmStrength : 0.0F;
         }
         const BassEnvelopeSnapshot envelope = bassEnvelope_.snapshot();
         result.audioEnvelope[0] = envelope.fast;
         result.audioEnvelope[1] = envelope.slow;
+        result.audioEnvelope[2] = visual.beatStrength;
+        result.audioEnvelope[3] = visual.beatAge;
+        result.cameraPosition[0] = eye.x();
+        result.cameraPosition[1] = eye.y();
+        result.cameraPosition[2] = eye.z();
+        result.cameraPosition[3] = dynamics.depthOfField;
+        result.materialParameters[0] = float(snapshot_.style.materialMode);
+        result.sceneControls[0] = snapshot_.style.columnOpacity;
+        result.sceneControls[1] = snapshot_.style.reactorBrightness;
+        result.materialParameters[1] = snapshot_.style.materialSoftness;
+        result.materialParameters[2] = snapshot_.style.jellyElasticity;
+        result.materialParameters[3] = snapshot_.style.inkDensity;
+        result.waveParameters[0] = snapshot_.style.rippleStrength;
+        result.waveParameters[1] = snapshot_.style.rippleWidth;
+        result.waveParameters[2] = snapshot_.style.rippleDecay;
         return result;
     }
 
@@ -670,9 +743,13 @@ private:
     TerrainReactorItem::RenderSnapshot snapshot_;
     CameraMotion camera_;
     PunchEventConsumer punchEvents_;
+    BeatEventConsumer beatEvents_;
     ImpactEventConsumer impactEvents_;
     BassEnvelopeFollower bassEnvelope_;
     MultiWaveSources waveSources_{};
+    MultiWaveSources travelingWaves_{};
+    int nextWave_ = 0;
+    int currentSampleCount_ = 4;
     bool waveSourcesInitialized_ = false;
     TrackPalette currentPalette_{};
     TrackPalette fromPalette_{};
@@ -684,6 +761,9 @@ private:
     quint64 syncedCameraRevision_ = std::numeric_limits<quint64>::max();
     TerrainReactorItem* item_ = nullptr;
     QElapsedTimer frameTimer_;
+    QElapsedTimer renderTimeTimer_;
+    double renderTimeEpochSeconds_ = 0.0;
+    bool renderTimeAnchored_ = false;
     QElapsedTimer counterTimer_;
     FramePacer framePacer_;
     QVector<GpuInstance> instances_;
@@ -716,6 +796,15 @@ TerrainReactorItem::TerrainReactorItem(QQuickItem* parent)
     setSampleCount(1);
     setAlphaBlending(true);
     clock_.start();
+    // A bounded GUI-thread heartbeat avoids a renderer self-update busy loop
+    // when the native backend does not block on presentation. The existing
+    // FramePacer still chooses 60 / 45 / 30 FPS from these opportunities.
+    renderTick_.setTimerType(Qt::PreciseTimer);
+    renderTick_.setInterval(16);
+    connect(&renderTick_, &QTimer::timeout, this, [this] {
+        if (renderingRequested()) update();
+        else scheduleIfRunnable();
+    });
     connect(this, &QQuickItem::visibleChanged, this, [this] {
         emit renderingRequestedChanged();
         scheduleIfRunnable();
@@ -750,6 +839,16 @@ void TerrainReactorItem::setStyleSource(QObject* source)
     styleSource_ = typed;
     if (styleSource_ != nullptr) {
         const auto capture = [this] { copyStyleSource(); };
+        styleConnections_.append(connect(styleSource_, &PlayerExperienceController::materialModeChanged, this, capture));
+        styleConnections_.append(connect(styleSource_, &PlayerExperienceController::materialSoftnessChanged, this, capture));
+        styleConnections_.append(connect(styleSource_, &PlayerExperienceController::columnSizeChanged, this, capture));
+        styleConnections_.append(connect(styleSource_, &PlayerExperienceController::columnOpacityChanged, this, capture));
+        styleConnections_.append(connect(styleSource_, &PlayerExperienceController::reactorBrightnessChanged, this, capture));
+        styleConnections_.append(connect(styleSource_, &PlayerExperienceController::jellyElasticityChanged, this, capture));
+        styleConnections_.append(connect(styleSource_, &PlayerExperienceController::inkDensityChanged, this, capture));
+        styleConnections_.append(connect(styleSource_, &PlayerExperienceController::rippleStrengthChanged, this, capture));
+        styleConnections_.append(connect(styleSource_, &PlayerExperienceController::rippleWidthChanged, this, capture));
+        styleConnections_.append(connect(styleSource_, &PlayerExperienceController::rippleDecayChanged, this, capture));
         styleConnections_.append(connect(styleSource_,
             &PlayerExperienceController::colorModeChanged, this, capture));
         styleConnections_.append(connect(styleSource_,
@@ -869,6 +968,8 @@ void TerrainReactorItem::setFeatureSource(QObject* source)
     if (impactConnection_) disconnect(impactConnection_);
     if (sourceDestroyedConnection_) disconnect(sourceDestroyedConnection_);
     featureSource_ = accepted;
+    featureSourceProvidesBeat_ = featureSource_ != nullptr
+        && featureSource_->metaObject()->indexOfProperty("beatRevision") >= 0;
     featureSourceProvidesImpact_ = featureSource_ != nullptr
         && featureSource_->metaObject()->indexOfProperty("impactRevision") >= 0;
     if (featureSource_ != nullptr) {
@@ -937,6 +1038,7 @@ void TerrainReactorItem::setQuality(Quality quality)
 {
     if (quality_ == quality) return;
     quality_ = quality;
+    applyInternalScale(internalScale_, quality_ == Quality::Eco ? 1 : 4);
     emit qualityChanged();
     scheduleIfRunnable();
 }
@@ -980,6 +1082,14 @@ qreal TerrainReactorItem::cameraPunch() const noexcept { return pendingPunch_.st
 quint64 TerrainReactorItem::punchRevision() const noexcept
 {
     return pendingPunch_.revision;
+}
+qreal TerrainReactorItem::beatStrength() const noexcept
+{
+    return pendingBeat_.strength;
+}
+quint64 TerrainReactorItem::beatRevision() const noexcept
+{
+    return pendingBeat_.revision;
 }
 qreal TerrainReactorItem::impactStrength() const noexcept
 {
@@ -1103,6 +1213,7 @@ TerrainReactorItem::RenderSnapshot TerrainReactorItem::snapshotForRenderer() con
     result.style = renderStyle_;
     result.camera = camera_.snapshot();
     result.punchEvent = pendingPunch_;
+    result.beatEvent = pendingBeat_;
     result.impactEvent = pendingImpact_;
     result.cameraManualUntilSeconds = camera_.manualUntilSeconds();
     result.cameraRevision = cameraRevision_;
@@ -1112,6 +1223,7 @@ TerrainReactorItem::RenderSnapshot TerrainReactorItem::snapshotForRenderer() con
     result.paletteRevision = paletteRevision_;
     result.quality = quality_;
     result.running = renderingRequested();
+    result.activityRevision = activityRevision_;
     result.timeSeconds = float(clock_.elapsed()) / 1000.0F;
     result.featureRevision = featureRevision_;
     result.styleRevision = styleRevision_;
@@ -1127,6 +1239,16 @@ void TerrainReactorItem::copyStyleSource()
                          float(color.blueF()), float(color.alphaF()));
     };
     RenderStyleSnapshot next;
+    next.materialMode = styleSource_->materialMode();
+    next.materialSoftness = float(styleSource_->materialSoftness()) / 100.0F;
+    next.columnSize = float(styleSource_->columnSize()) / 100.0F;
+    next.columnOpacity = float(styleSource_->columnOpacity()) / 100.0F;
+    next.reactorBrightness = float(styleSource_->reactorBrightness()) / 100.0F;
+    next.jellyElasticity = float(styleSource_->jellyElasticity()) / 100.0F;
+    next.inkDensity = float(styleSource_->inkDensity()) / 100.0F;
+    next.rippleStrength = float(styleSource_->rippleStrength()) / 100.0F;
+    next.rippleWidth = float(styleSource_->rippleWidth()) / 100.0F;
+    next.rippleDecay = float(styleSource_->rippleDecay()) / 100.0F;
     next.colors[0] = colorVector(styleSource_->baseColor());
     next.colors[1] = colorVector(styleSource_->coolColor());
     next.colors[2] = colorVector(styleSource_->warmColor());
@@ -1183,6 +1305,16 @@ void TerrainReactorItem::copyFeatureSource()
         ->property("spectralFlux").toDouble()));
     next.kick = featureSource_->property("kickPulse").toBool() ? 1.0F : 0.0F;
     next.snare = featureSource_->property("snarePulse").toBool() ? 1.0F : 0.0F;
+    if (featureSourceProvidesBeat_) {
+        const quint64 revision = featureSource_->property("beatRevision")
+            .toULongLong();
+        if (revision > pendingBeat_.revision) {
+            pendingBeat_.revision = revision;
+            pendingBeat_.strength = finiteUnit(float(featureSource_
+                ->property("beatStrength").toDouble()));
+            emit beatChanged();
+        }
+    }
     if (featureSourceProvidesImpact_) {
         const quint64 revision = featureSource_->property("impactRevision")
             .toULongLong();
@@ -1206,6 +1338,12 @@ void TerrainReactorItem::applyCurrentFeatures(const AudioFeatures& features)
         ++pendingPunch_.revision;
         emit cameraChanged();
     }
+    if ((useSyntheticFeatures_ || !featureSourceProvidesBeat_)
+        && punch > 0.0F) {
+        pendingBeat_.strength = punch;
+        ++pendingBeat_.revision;
+        emit beatChanged();
+    }
     if ((useSyntheticFeatures_ || !featureSourceProvidesImpact_)
         && punch > 0.0F) {
         pendingImpact_.strength = punch;
@@ -1219,15 +1357,29 @@ void TerrainReactorItem::applyCurrentFeatures(const AudioFeatures& features)
 
 void TerrainReactorItem::scheduleIfRunnable()
 {
-    if (renderingRequested()) update();
+    const bool running = renderingRequested();
+    if (running && !renderTick_.isActive()) renderTick_.start();
+    else if (!running) renderTick_.stop();
+    if (running != lastScheduledRunning_) {
+        lastScheduledRunning_ = running;
+        ++activityRevision_;
+        update();
+    } else if (running) {
+        update();
+    }
 }
 
-void TerrainReactorItem::applyInternalScale(float scale)
+void TerrainReactorItem::applyInternalScale(float scale, int sampleCount)
 {
     const float bounded = std::clamp(scale, 0.5F, 1.0F);
-    if (qFuzzyCompare(internalScale_, bounded)) return;
-    internalScale_ = bounded;
-    updateColorBufferSize();
+    if (!qFuzzyCompare(internalScale_, bounded)) {
+        internalScale_ = bounded;
+        updateColorBufferSize();
+    }
+    const int boundedSamples = sampleCount == 1 ? 1 : 4;
+    if (this->sampleCount() != boundedSamples) {
+        setSampleCount(boundedSamples);
+    }
 }
 
 void TerrainReactorItem::updateColorBufferSize()

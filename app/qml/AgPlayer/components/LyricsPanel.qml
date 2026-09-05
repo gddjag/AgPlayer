@@ -12,6 +12,7 @@ Item {
     property var service: LyricsService
     property bool fullscreen: false
     property bool spatialMode: false
+    property bool lightBackground: false
     property int placement: PlayerExperienceController.lyricPosition
     property int clarity: PlayerExperienceController.lyricClarity
     property int depth: PlayerExperienceController.lyricDepth
@@ -38,6 +39,37 @@ Item {
         && service.currentLineIndex !== undefined
         && service.status === LyricsService.Ready
         && service.synchronizedLyrics
+
+    component LyricsActionButton: ToolButton {
+        implicitWidth: Theme.controlHeightCompact
+        implicitHeight: Theme.controlHeightCompact
+        flat: true
+        hoverEnabled: true
+        focusPolicy: Qt.StrongFocus
+        icon.color: Theme.iconSecondary
+        icon.width: Theme.iconSizeMd
+        icon.height: Theme.iconSizeMd
+        ToolTip.text: Accessible.name
+        ToolTip.visible: hovered
+        background: Rectangle {
+            color: parent.down ? Theme.surfacePressed
+                               : parent.hovered ? Theme.hoverSurface
+                                                : "transparent"
+            border.width: parent.activeFocus ? 2 : 0
+            border.color: Theme.focus
+            radius: Theme.radiusSm
+        }
+    }
+    readonly property real perspectiveTopInset:
+        spatialMode ? Math.ceil(16 * sizeScale * depthScale) : 0
+    readonly property color spatialThemeColor: PlayerExperienceController.warmColor
+    readonly property color spatialForegroundColor: Qt.rgba(
+        0.58 + spatialThemeColor.r * 0.42,
+        0.58 + spatialThemeColor.g * 0.42,
+        0.58 + spatialThemeColor.b * 0.42,
+        1)
+
+    implicitHeight: lyricStack.implicitHeight + (spatialMode ? 0 : 16)
 
     visible: service && service.enabled
     opacity: lyricOpacity / 100.0
@@ -79,6 +111,7 @@ Item {
         currentLineSettle.stop()
         currentLine.settleOpacity = 1
         currentLine.settleScale = 1
+        currentLine.settleOffsetY = 0
     }
 
     function startCinematicSettle() {
@@ -89,6 +122,7 @@ Item {
             return
         currentLine.settleOpacity = 0.62
         currentLine.settleScale = 0.94
+        currentLine.settleOffsetY = 7
         currentLineSettle.start()
     }
 
@@ -179,21 +213,35 @@ Item {
                       ? lyricStack.width : root.placement === PlayerExperienceController.Left
                                            ? 0 : lyricStack.width / 2
             origin.y: lyricStack.height / 2
-            axis { x: 0; y: 1; z: 0 }
-            angle: !root.spatialMode || !root.sidePlacement ? 0
-                   : (root.placement === PlayerExperienceController.Left ? -1 : 1)
-                     * (6 + root.depthScale * 10)
+            axis {
+                x: root.sidePlacement ? 0 : 1
+                y: root.sidePlacement ? 1 : 0
+                z: 0
+            }
+            angle: !root.spatialMode || root.depthScale <= 0 ? 0
+                   : root.sidePlacement
+                     ? (root.placement === PlayerExperienceController.Left ? -1 : 1)
+                       * root.depthScale * 24
+                     : -root.depthScale * 10
         }
 
         Text {
+            id: previousLine
             objectName: "previousLyricLine"
             width: parent.width
             text: root.service ? root.service.previousLine : ""
-            color: root.spatialMode
+            color: root.lightBackground ? "#293D40" : root.spatialMode // theme-color-allow: immersive ink material foreground
                    ? Theme.onBrandGradientText
                    : Theme.textSecondary
+            font.family: Theme.fontPrimary
             font.pixelSize: Math.max(Theme.fontSizeCaption,
                                      Math.round(Theme.fontSizeBody * root.sizeScale))
+            fontSizeMode: root.spatialMode ? Text.Fit : Text.FixedSize
+            minimumPixelSize: Theme.fontSizeCaption
+            lineHeight: 1.12
+            lineHeightMode: Text.ProportionalHeight
+            height: root.spatialMode ? Math.ceil(font.pixelSize * 2.35)
+                                     : implicitHeight
             horizontalAlignment: root.lineAlignment
             wrapMode: Text.Wrap
             maximumLineCount: root.spatialMode ? 2 : 3
@@ -207,6 +255,18 @@ Item {
             transformOrigin: root.placement === PlayerExperienceController.Right
                              ? Item.Right : root.placement === PlayerExperienceController.Left
                                             ? Item.Left : Item.Center
+            transform: [
+                Translate {
+                    objectName: "previousLyricDepthTransform"
+                    y: root.spatialMode ? -root.depthScale * 6 : 0
+                },
+                Rotation {
+                    origin.x: previousLine.width / 2
+                    origin.y: previousLine.height
+                    axis { x: 1; y: 0; z: 0 }
+                    angle: root.spatialMode ? root.depthScale * 6 : 0
+                }
+            ]
         }
 
         Text {
@@ -214,16 +274,24 @@ Item {
             objectName: "currentLyricLine"
             property real settleOpacity: 1
             property real settleScale: 1
+            property real settleOffsetY: 0
             width: parent.width
             text: root.service && root.service.currentLine.length > 0
                   ? root.service.currentLine : root.statusText()
-            color: root.spatialMode
+            color: root.lightBackground ? "#182D30" : root.spatialMode // theme-color-allow: immersive ink material foreground
                    ? (root.sidePlacement
-                      ? PlayerExperienceController.warmColor
+                      ? root.spatialForegroundColor
                       : Theme.onBrandGradientText)
                    : Theme.primaryText
+            font.family: Theme.fontPrimary
             font.pixelSize: Math.max(Theme.fontSizeSection,
                                      Math.round(Theme.fontSizePageTitle * root.sizeScale))
+            fontSizeMode: root.spatialMode ? Text.Fit : Text.FixedSize
+            minimumPixelSize: Theme.fontSizeSection
+            lineHeight: 1.12
+            lineHeightMode: Text.ProportionalHeight
+            height: root.spatialMode ? Math.ceil(font.pixelSize * 2.35)
+                                     : implicitHeight
             font.weight: root.clarity >= 64 ? Font.DemiBold : Font.Medium
             horizontalAlignment: root.lineAlignment
             wrapMode: Text.Wrap
@@ -235,17 +303,29 @@ Item {
             transformOrigin: root.placement === PlayerExperienceController.Right
                              ? Item.Right : root.placement === PlayerExperienceController.Left
                                             ? Item.Left : Item.Center
+            transform: Translate {
+                objectName: "currentLyricEntranceTransform"
+                y: currentLine.settleOffsetY
+            }
         }
 
         Text {
+            id: nextLine
             objectName: "nextLyricLine"
             width: parent.width
             text: root.service ? root.service.nextLine : ""
-            color: root.spatialMode
+            color: root.lightBackground ? "#293D40" : root.spatialMode // theme-color-allow: immersive ink material foreground
                    ? Theme.onBrandGradientText
                    : Theme.textSecondary
+            font.family: Theme.fontPrimary
             font.pixelSize: Math.max(Theme.fontSizeCaption,
                                      Math.round(Theme.fontSizeBody * root.sizeScale))
+            fontSizeMode: root.spatialMode ? Text.Fit : Text.FixedSize
+            minimumPixelSize: Theme.fontSizeCaption
+            lineHeight: 1.12
+            lineHeightMode: Text.ProportionalHeight
+            height: root.spatialMode ? Math.ceil(font.pixelSize * 2.35)
+                                     : implicitHeight
             horizontalAlignment: root.lineAlignment
             wrapMode: Text.Wrap
             maximumLineCount: root.spatialMode ? 2 : 3
@@ -259,6 +339,18 @@ Item {
             transformOrigin: root.placement === PlayerExperienceController.Right
                              ? Item.Right : root.placement === PlayerExperienceController.Left
                                             ? Item.Left : Item.Center
+            transform: [
+                Translate {
+                    objectName: "nextLyricDepthTransform"
+                    y: root.spatialMode ? root.depthScale * 6 : 0
+                },
+                Rotation {
+                    origin.x: nextLine.width / 2
+                    origin.y: 0
+                    axis { x: 1; y: 0; z: 0 }
+                    angle: root.spatialMode ? -root.depthScale * 6 : 0
+                }
+            ]
         }
     }
 
@@ -334,6 +426,13 @@ Item {
             duration: 220
             easing.type: Easing.OutCubic
         }
+        NumberAnimation {
+            target: currentLine
+            property: "settleOffsetY"
+            to: 0
+            duration: 220
+            easing.type: Easing.OutCubic
+        }
     }
 
     Connections {
@@ -385,13 +484,17 @@ Item {
         anchors.margins: 10
         z: 2
         color: Theme.textSecondary
+        font.family: Theme.fontPrimary
         font.pixelSize: Theme.fontSizeCaption
+        width: Math.max(0, parent.width - closeButton.width - 36)
+        elide: Text.ElideRight
+        maximumLineCount: 1
         opacity: root.spatialMode ? 0.72 : 1
         text: attribution.length > 0
               ? attribution : qsTr("来源：%1").arg(providerName)
     }
 
-    ToolButton {
+    LyricsActionButton {
         id: closeButton
         objectName: "lyricsCloseButton"
         visible: !root.spatialMode && root.chromeVisible
@@ -400,20 +503,12 @@ Item {
         anchors.margins: 6
         width: 28
         height: 28
-        flat: true
         z: 5
         icon.source: Theme.icon("close-line")
-        icon.color: Theme.iconSecondary
         icon.width: 18
         icon.height: 18
         Accessible.name: qsTr("关闭歌词窗口")
-        ToolTip.text: Accessible.name
-        ToolTip.visible: hovered
         onClicked: root.closeRequested()
-        background: Rectangle {
-            color: closeButton.hovered ? Theme.hoverSurface : "transparent"
-            radius: Theme.radiusSm
-        }
     }
 
     Flickable {
@@ -446,6 +541,7 @@ Item {
             wrapMode: Text.Wrap
             color: root.spatialMode ? Theme.onBrandGradientText
                                     : Theme.primaryText
+            font.family: Theme.fontPrimary
             font.pixelSize: Math.max(Theme.fontSizeBody,
                                      Math.round(Theme.fontSizeSection * root.sizeScale))
             horizontalAlignment: Text.AlignHCenter
@@ -458,9 +554,12 @@ Item {
                  && untimedFlickable.visible
         anchors.left: parent.left
         anchors.bottom: parent.bottom
-        anchors.margins: 10
+        anchors.leftMargin: 10
+        anchors.bottomMargin: root.spatialMode
+                              ? 10 : Theme.controlHeightCompact + 10
         z: 2
         color: Theme.textSecondary
+        font.family: Theme.fontPrimary
         font.pixelSize: Theme.fontSizeCaption
         text: qsTr("纯文本歌词，无时间轴")
     }
@@ -472,19 +571,30 @@ Item {
                      && root.service.routeNotice.providerName)
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
-        anchors.topMargin: sourceText.visible ? 30 : 6
+        anchors.topMargin: Math.max(
+            sourceText.visible ? sourceText.y + sourceText.height + 6 : 6,
+            closeButton.visible ? closeButton.y + closeButton.height + 6 : 6)
         radius: 8
         color: Theme.glassSurface
         border.color: Theme.glassBorder
         z: 3
-        width: Math.min(parent.width - 24, routeNoticeText.implicitWidth + 20)
-        height: routeNoticeText.implicitHeight + 10
+        width: Math.max(0, Math.min(parent.width - 24,
+                                   routeNoticeText.implicitWidth + 20))
+        height: Math.max(Theme.controlHeight,
+                         routeNoticeText.implicitHeight + 10)
         Text {
             id: routeNoticeText
             objectName: "lyricsRouteNoticeText"
-            anchors.centerIn: parent
+            anchors.fill: parent
+            anchors.margins: 5
             color: Theme.textSecondary
+            font.family: Theme.fontPrimary
             font.pixelSize: Theme.fontSizeCaption
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            wrapMode: Text.Wrap
+            maximumLineCount: 2
+            elide: Text.ElideRight
             text: root.service && root.service.routeNotice
                   ? root.service.routeNotice.providerName + ": "
                     + root.routeReason(root.service.routeNotice.diagnostic) : ""
@@ -492,6 +602,7 @@ Item {
     }
 
     Column {
+        id: routeAttemptsColumn
         objectName: "lyricsRouteAttempts"
         Accessible.name: root.routeAttemptsSummary()
         visible: (root.spatialMode || root.chromeVisible)
@@ -501,17 +612,24 @@ Item {
                                   || root.service.status === LyricsService.Error)
                  && root.service.routeAttempts.length > 0
         anchors.left: parent.left
+        anchors.right: parent.right
         anchors.leftMargin: 12
+        anchors.rightMargin: 12
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 8
+        anchors.bottomMargin: root.spatialMode
+                              ? 8 : Theme.controlHeightCompact + 12
         z: 2
         Repeater {
             objectName: "lyricsRouteAttemptRepeater"
             model: root.service ? root.service.routeAttempts : []
             delegate: Text {
                 objectName: "lyricsRouteAttemptText"
+                width: routeAttemptsColumn.width
                 color: Theme.textSecondary
+                font.family: Theme.fontPrimary
                 font.pixelSize: Theme.fontSizeCaption
+                elide: Text.ElideRight
+                maximumLineCount: 1
                 text: modelData.providerName + ": " + root.routeReason(modelData.diagnostic)
             }
         }
@@ -526,53 +644,29 @@ Item {
         anchors.rightMargin: 8
         anchors.bottomMargin: 5
         spacing: 2
-        ToolButton {
+        LyricsActionButton {
             objectName: "lyricsOffsetEarlierButton"
-            width: 28; height: 28; flat: true
             icon.source: Theme.icon("subtract-line")
-            icon.color: Theme.iconSecondary
-            icon.width: 18; icon.height: 18
             Accessible.name: qsTr("歌词提前 100 毫秒")
-            ToolTip.text: Accessible.name
-            ToolTip.visible: hovered
             onClicked: if (root.service) root.service.offsetMs -= 100
-            background: null
         }
-        ToolButton {
+        LyricsActionButton {
             objectName: "lyricsOffsetLaterButton"
-            width: 28; height: 28; flat: true
             icon.source: Theme.icon("add-line")
-            icon.color: Theme.iconSecondary
-            icon.width: 18; icon.height: 18
             Accessible.name: qsTr("歌词延后 100 毫秒")
-            ToolTip.text: Accessible.name
-            ToolTip.visible: hovered
             onClicked: if (root.service) root.service.offsetMs += 100
-            background: null
         }
-        ToolButton {
+        LyricsActionButton {
             objectName: "lyricsRetryButton"
-            width: 28; height: 28; flat: true
             icon.source: Theme.icon("restore-line")
-            icon.color: Theme.iconSecondary
-            icon.width: 18; icon.height: 18
             Accessible.name: qsTr("刷新歌词")
-            ToolTip.text: Accessible.name
-            ToolTip.visible: hovered
             onClicked: if (root.service) root.service.retry()
-            background: null
         }
-        ToolButton {
+        LyricsActionButton {
             objectName: "lyricsImportButton"
-            width: 28; height: 28; flat: true
             icon.source: Theme.icon("folder-open-line")
-            icon.color: Theme.iconSecondary
-            icon.width: 18; icon.height: 18
             Accessible.name: qsTr("导入 LRC")
-            ToolTip.text: Accessible.name
-            ToolTip.visible: hovered
             onClicked: lrcDialog.open()
-            background: null
         }
     }
 

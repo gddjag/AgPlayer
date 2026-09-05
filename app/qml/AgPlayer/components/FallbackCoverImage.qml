@@ -14,7 +14,15 @@ Image {
 
     onRequestedSourceChanged: fallbackActive = false
     onStatusChanged: {
-        if (status === Image.Error && !fallbackActive)
-            fallbackActive = true
+        if (status !== Image.Error || fallbackActive
+                || requestedSource.toString().length === 0)
+            return
+
+        const failedSource = requestedSource.toString()
+        Qt.callLater(function() {
+            if (requestedSource.toString() === failedSource
+                    && status === Image.Error && !fallbackActive)
+                fallbackActive = true
+        })
     }
 }

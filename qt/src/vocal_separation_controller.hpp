@@ -4,6 +4,7 @@
 #include "vocal_separation_catalog.hpp"
 #include "vocal_separation_history.hpp"
 #include "vocal_separation_installer.hpp"
+#include "external_separation_runtime.hpp"
 
 #include <QHash>
 #include <QFutureWatcher>
@@ -341,6 +342,7 @@ private:
     SeparationProcessClient process_;
     QNetworkAccessManager network_;
     std::unique_ptr<VocalSeparationDownloader> downloader_;
+    std::unique_ptr<ExternalSeparationRuntime> externalRuntime_;
     QFileSystemWatcher modelDirectoryWatcher_;
     QTimer modelDirectoryScanTimer_;
     QFutureWatcher<VerificationResult>* verificationWatcher_ = nullptr;
@@ -378,6 +380,8 @@ private:
     QString modelStorageDirectory_;
     QHash<QString, QStringList> indexedModelFiles_;
     bool modelDirectoryRescanPending_ = false;
+    bool deviceProbePending_ = false;
+    bool deviceChosenByUser_ = false;
     DeviceMode deviceMode_ = DeviceMode::Auto;
     JobState jobState_ = JobState::Idle;
     QString stage_;

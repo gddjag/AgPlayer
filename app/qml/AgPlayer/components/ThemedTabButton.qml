@@ -7,8 +7,10 @@ T.Button {
     id: control
 
     property url iconSource
-    property int iconSize: 18
+    property int iconSize: Theme.iconSizeMd
     property bool selected: false
+    property bool underlineSelection: false
+    property int labelPixelSize: Theme.fontSizeBody
 
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
@@ -34,7 +36,7 @@ T.Button {
             text: control.text
             color: control.enabled ? Theme.textPrimary : Theme.textDisabled
             font.family: Theme.fontPrimary
-            font.pixelSize: Theme.fontSizeBody
+            font.pixelSize: control.labelPixelSize
             font.weight: control.selected ? Font.DemiBold : Font.Normal
             elide: Text.ElideRight
             Layout.fillWidth: true
@@ -45,11 +47,14 @@ T.Button {
         radius: Theme.radiusSm
         color: !control.enabled ? Theme.disabled
                : control.down ? Theme.surfacePressed
-               : control.selected ? Theme.selectedSurface
+               : control.selected && !control.underlineSelection
+                   ? Theme.selectedSurface
                : control.hovered ? Theme.surfaceHover : "transparent"
         border.color: control.activeFocus ? Theme.focus
-                      : control.selected ? Theme.accent : "transparent"
-        border.width: control.activeFocus ? 2 : control.selected ? 1 : 0
+                      : control.selected && !control.underlineSelection
+                          ? Theme.accent : "transparent"
+        border.width: control.activeFocus ? 2
+                      : control.selected && !control.underlineSelection ? 1 : 0
 
         Rectangle {
             visible: control.selected

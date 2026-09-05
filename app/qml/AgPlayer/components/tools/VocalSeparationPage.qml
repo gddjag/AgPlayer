@@ -592,6 +592,7 @@ Rectangle {
                     selectionColor: page.primary
                     selectedTextColor: "white"
                     text: qsTr("支持与环境：\n• MDX / MDXC ONNX、HTDemucs ONNX：使用 AgPlayer 一键配置的 ONNX Runtime（CPU / DirectML GPU）。\n• Demucs .th、UVR .pth：需要可选的外置 Python / PyTorch 运行环境，不会塞入轻量主安装包。\n\n模型来源：\n1. 官方线路：模型卡的“下载”按钮。\n2. 国内公益镜像：HTDemucs 支持 HF-Mirror 自动线路，官方失败会自动切换。\n3. 第三方公益服务：百度网盘人声伴奏分离模型。\n4. 用户自行下载：放入模型目录后点击“检测”。\n\n放置方法：模型可以直接放在模型根目录，也可以放在任意层级的分类子目录；检测会递归扫描全部子目录。内置模型须保留原文件名和完整文件组。其他兼容 ONNX 模型请附带同名 .agmodel.json 描述文件。\n\n本地文件不会再次下载。“已识别 · 待配置”表示文件已经找到；ONNX 模型可点击“一键配置”自动安装运行组件，未知张量契约仍需可信 sidecar。悬停模型介绍可查看具体原因。\n\n百度网盘链接: https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888\n提取码: 8888")
+                          + qsTr("\n\n一键 Python 配置：当前已适配 5_HP-Karaoke-UVR.pth，模型卡片可直接下载独立 Python 3.11、CPU PyTorch、audio-separator 与 FFmpeg。约 450 MB 下载 / 1.5 GB 磁盘，可暂停后使用缓存续装，官方包源失败会切换清华 PyPI 镜像。环境位于 separation/runtime/python-vr-1，不修改系统 Python，不进入主安装包。其他 .pth / .th / .ckpt 架构仍显示诊断，不会仅凭扩展名标为可运行。\n组件许可与来源：uv（MIT / Apache-2.0）：https://docs.astral.sh/uv/；audio-separator（MIT）：https://github.com/nomadkaraoke/python-audio-separator；PyTorch（BSD）：https://pytorch.org/；FFmpeg 构建许可随外置 imageio-ffmpeg 包附带。")
                     background: Rectangle {
                         color: page.input
                         border.color: page.border
@@ -1097,6 +1098,7 @@ Rectangle {
                                              from: 0
                                              to: 1
                                              value: VocalSeparationController.downloadProgress
+                                             indeterminate: VocalSeparationController.downloadProgress < 0
                                              Layout.fillWidth: true
                                              Layout.preferredHeight: 4
                                              background: Rectangle {
@@ -1118,8 +1120,12 @@ Rectangle {
                                              objectName: "separationDownloadPercentage-" + cardData.id
                                              Layout.minimumWidth: 0
                                              Layout.maximumWidth: 116
-                                             text: Math.round(VocalSeparationController.downloadProgress * 100)
-                                                   + "% · " + VocalSeparationController.downloadSource
+                                             text: (VocalSeparationController.downloadProgress < 0 ? qsTr("配置中") : Math.round(VocalSeparationController.downloadProgress * 100) + "%")
+                                                   + " · " + VocalSeparationController.downloadSource
+                                             elide: Text.ElideRight
+                                             ToolTip.visible: pythonProgressHover.hovered
+                                             ToolTip.text: VocalSeparationController.downloadSource
+                                             HoverHandler { id: pythonProgressHover }
                                              color: page.success
                                              font.pixelSize: Theme.fontSizeCaption
                                              font.bold: true
@@ -1147,7 +1153,8 @@ Rectangle {
                                           }
                                           WorkbenchButton {
                                               objectName: "separationInstallRuntime-" + cardData.id
-                                              visible: (cardData.state === VocalSeparationController.Installed
+                                              visible: cardData.backend === "external-python"
+                                                       || (cardData.state === VocalSeparationController.Installed
                                                         && !VocalSeparationController.runtimeReady)
                                                        || (cardData.origin === "custom"
                                                            && cardData.compatibility === "diagnostic"
@@ -1157,16 +1164,26 @@ Rectangle {
                                               rightPadding: 6
                                               topPadding: 3
                                               bottomPadding: 3
-                                              text: qsTr("一键配置")
+                                              text: cardData.state === VocalSeparationController.Downloading ? qsTr("暂停")
+                                                  : cardData.state === VocalSeparationController.Paused ? qsTr("继续配置")
+                                                  : qsTr("一键配置")
                                               enabled: !page.contextLocked
-                                                       && !VocalSeparationController.downloadBusy
+                                                       && (!VocalSeparationController.downloadBusy
+                                                           || cardData.id === VocalSeparationController.downloadingModelId)
                                               Accessible.name: qsTr("安装 ONNX Runtime")
                                               Accessible.role: Accessible.Button
-                                              onClicked: VocalSeparationController.configureRuntime(cardData.id)
+                                              onClicked: {
+                                                  if (cardData.state === VocalSeparationController.Downloading)
+                                                      VocalSeparationController.pauseDownload()
+                                                  else if (cardData.state === VocalSeparationController.Paused)
+                                                      VocalSeparationController.resumeDownload()
+                                                  else VocalSeparationController.configureRuntime(cardData.id)
+                                              }
                                           }
                                           WorkbenchButton {
                                               objectName: "separationDomesticMirror-" + cardData.id
                                               visible: cardData.state !== VocalSeparationController.Installed
+                                                       && cardData.backend !== "external-python"
                                                        && !(cardData.origin === "custom"
                                                             && cardData.compatibility === "diagnostic")
                                               implicitHeight: 24
@@ -1186,6 +1203,7 @@ Rectangle {
                                           }
                                           WorkbenchButton {
                                               visible: cardData.state !== VocalSeparationController.Installed
+                                                       && cardData.backend !== "external-python"
                                                        && !(cardData.origin === "custom"
                                                             && cardData.compatibility === "diagnostic")
                                                implicitHeight: 24
@@ -1496,7 +1514,8 @@ Rectangle {
                         id: timeline
                         objectName: "separationTimeline"
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 350
+                        Layout.preferredHeight: page.compact ? 350
+                                                        : page.fullDesktop ? 280 : 320
                         color: page.input; border.color: page.border; radius: 7
                         ColumnLayout {
                             anchors.fill: parent; anchors.margins: 8; spacing: 3
@@ -1505,7 +1524,17 @@ Rectangle {
                                 Label { text: page.jobStateText(); color: VocalSeparationController.jobState === VocalSeparationController.Completed ? page.success : page.textPrimary; font.bold: true }
                                  Label {
                                      text: VocalSeparationController.stage.length > 0
-                                           ? " · " + VocalSeparationController.stage : ""
+                                           ? " · " + ({"validation": qsTr("校验模型"),
+                                                      "provider_probe": qsTr("验证处理设备"),
+                                                      "runtime_verification": qsTr("校验运行环境"),
+                                                      "runtime_missing": qsTr("待配置运行环境"),
+                                                      "model_loading": qsTr("加载模型"),
+                                                      "inference": qsTr("分段推理"),
+                                                      "verification": qsTr("验证输出"),
+                                                      "cpu_fallback": qsTr("切换 CPU"),
+                                                      "starting": qsTr("准备分离"),
+                                                      "ready": qsTr("就绪")}[VocalSeparationController.stage]
+                                                      || VocalSeparationController.stage) : ""
                                      color: page.muted
                                      font.pixelSize: Theme.fontSizeCaption
                                  }
@@ -1570,9 +1599,12 @@ Rectangle {
                                 }
                             }
                             Repeater {
-                                model: VocalSeparationController.stems
+                                // Keep delegates alive while volume changes update the
+                                // QVariantList; replacing its model would cancel mouse grabs.
+                                model: VocalSeparationController.stems.length
                                 Rectangle {
-                                    required property var modelData
+                                    required property int index
+                                    readonly property var modelData: VocalSeparationController.stems[index] || ({})
                                     readonly property color accent: page.stemColor(modelData.kind)
                                     objectName: "separationTimelineStem-" + modelData.kind
                                     Layout.fillWidth: true; Layout.fillHeight: true

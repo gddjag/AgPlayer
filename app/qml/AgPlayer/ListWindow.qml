@@ -84,7 +84,7 @@ Window {
     function handleResourceFolderRemoved(folder) {
         if (!filterModel || !filterModel.resourceFolder)
             return false
-        if (!LibraryManagerController.pathIsWithin(
+        if (!ResourceFolderController.pathIsWithin(
                     filterModel.resourceFolder, folder))
             return false
         return enterCategory("all", "library")
@@ -118,25 +118,16 @@ Window {
     Connections {
         target: filterModel
         function onCategoryChanged() {
-            listWindow.ensureLibraryManagerHeight()
+            listWindow.normalizeLegacyCategory()
         }
     }
 
-    function ensureLibraryManagerHeight() {
-        if (!filterModel || filterModel.category !== "library") {
-            listWindow.minimumHeight = 420
-            return
-        }
-        var geometry = listWindow.screen
-                       ? listWindow.screen.availableGeometry : null
-        var available = geometry && geometry.height > 0
-                        ? geometry.height : 1080
-        var targetHeight = Math.min(available,
-                                    libraryManagerPage.preferredWindowHeight)
-        listWindow.minimumHeight = targetHeight
-        if (listWindow.height < targetHeight)
-            listWindow.height = targetHeight
+    function normalizeLegacyCategory() {
+        if (filterModel && filterModel.category === "library")
+            filterModel.category = "all"
     }
+    onFilterModelChanged: normalizeLegacyCategory()
+    Component.onCompleted: normalizeLegacyCategory()
     Connections {
         target: ImportController
         function onBusyChanged() {
@@ -147,7 +138,7 @@ Window {
         function onFinished() {
             if (listWindow.resourceDropStatus === "waiting") {
                 listWindow.resourceDropStatus = "pending"
-                LibraryManagerController.rescan()
+                ResourceFolderController.rescan()
             } else if (listWindow.resourceDropStatus === "importing") {
                 listWindow.finishResourceDrop()
             }
@@ -196,9 +187,9 @@ Window {
             return false
         var accepted = []
         for (var index = 0; index < urls.length; ++index) {
-            var classified = LibraryManagerController.classifyDropUrl(urls[index])
-            if (classified.kind === LibraryManagerController.Directory
-                    || classified.kind === LibraryManagerController.AudioFile)
+            var classified = ResourceFolderController.classifyDropUrl(urls[index])
+            if (classified.kind === ResourceFolderController.Directory
+                    || classified.kind === ResourceFolderController.AudioFile)
                 accepted.push(classified.url)
         }
         return accepted.length > 0 && beginImport(accepted)
@@ -209,7 +200,7 @@ Window {
         var seenPaths = ({})
         var directoryPaths = []
         for (var index = 0; index < urls.length; ++index) {
-            var classified = LibraryManagerController.classifyDropUrl(urls[index])
+            var classified = ResourceFolderController.classifyDropUrl(urls[index])
             var path = String(classified.path || "")
             if (!path)
                 continue
@@ -218,13 +209,13 @@ Window {
             if (seenPaths[identity])
                 continue
             seenPaths[identity] = true
-            if (classified.kind === LibraryManagerController.Directory)
+            if (classified.kind === ResourceFolderController.Directory)
                 directoryPaths.push(path)
         }
         var registeredCount = 0
         for (var pathIndex = 0; pathIndex < directoryPaths.length;
              ++pathIndex) {
-            if (LibraryManagerController.addMonitoredFolder(
+            if (ResourceFolderController.addMonitoredFolder(
                         directoryPaths[pathIndex]))
                 ++registeredCount
         }
@@ -279,7 +270,7 @@ Window {
             id: dialog
             objectName: "importAudioDialog"
             fileMode: FileDialog.OpenFiles
-            nameFilters: [LibraryManagerController.audioFileNameFilter]
+            nameFilters: [ResourceFolderController.audioFileNameFilter]
             onAccepted: {
                 var started = listWindow.importSelectedUrls(selectedFiles)
                 if (!started && !listWindow.importBatchActive)
@@ -581,8 +572,7 @@ Window {
                         StackLayout {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            currentIndex: filterModel && filterModel.category === "library" ? 3
-                                          : LibraryModel.count === 0
+                            currentIndex: LibraryModel.count === 0
                                             || listWindow.customPlaylistEmpty() ? 1
                                           : filterModel && filterModel.count > 0
                                             ? 0 : 2
@@ -631,14 +621,6 @@ Window {
                                     }
                                 }
                             }
-                            LibraryManagerPage {
-                                id: libraryManagerPage
-                                objectName: "libraryManagerPageInList"
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                onPreferredWindowHeightChanged:
-                                    listWindow.ensureLibraryManagerHeight()
-                            }
                         }
 
                         Item {
@@ -646,7 +628,6 @@ Window {
                             objectName: "centerTrackFooter"
                             Layout.fillWidth: true
                             Layout.preferredHeight: listWindow.filterBarHeight
-                            visible: !filterModel || filterModel.category !== "library"
 
                             SearchFilter {
                                 id: searchFilter
@@ -1003,7 +984,7 @@ Window {
         }
     }
     Connections {
-        target: LibraryManagerController
+        target: ResourceFolderController
         function onScanFinished() {
             if (!listWindow.resourceDropActive)
                 return

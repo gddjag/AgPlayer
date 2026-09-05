@@ -33,7 +33,7 @@ Item {
     property var currentTrack: null
     // Rolling viewport state. Waveform samples/layers remain owned and
     // rendered by WaveformItem; only the visible time interval changes.
-    property real visibleBeats: 8.0
+    property real visibleBeats: 4.0
     property bool scratchGestureActive: false
     property real scratchVisualPositionMs: 0
     property real scratchAnchorPositionMs: 0
@@ -223,7 +223,7 @@ Item {
     }
 
     function zoomIn() {
-        visibleBeats = Math.max(4.0, visibleBeats - 2.0)
+        visibleBeats = Math.max(2.0, visibleBeats - 2.0)
     }
 
     function zoomOut() {
@@ -231,18 +231,28 @@ Item {
     }
 
     function resetZoom() {
-        visibleBeats = 8.0
+        visibleBeats = 4.0
     }
 
     function finishScratchGesture(cancelled) {
         scratchIdleTimer.stop()
         if (!scratchSurface.scratchStarted)
             return
+        var releasePositionMs = Math.round(clamp(scratchVisualPositionMs,
+                                                 0, effectiveDurationMs))
         if (playback) {
             if (cancelled && playback.cancelScratch !== undefined)
                 playback.cancelScratch()
             else if (!cancelled && playback.endScratch !== undefined)
                 playback.endScratch()
+            // Scratch audio follows rate samples; the visible deck follows
+            // pointer distance. Commit its center exactly when the drag ends.
+            if (!cancelled) {
+                if (playback.seek !== undefined)
+                    playback.seek(releasePositionMs)
+                if (playback.play !== undefined)
+                    playback.play()
+            }
         }
         scratchSurface.scratchStarted = false
         scratchGestureActive = false
@@ -284,7 +294,7 @@ Item {
     }
 
     onVisibleBeatsChanged: {
-        var boundedBeats = clamp(visibleBeats, 4.0, 64.0)
+        var boundedBeats = clamp(visibleBeats, 2.0, 64.0)
         if (visibleBeats !== boundedBeats) {
             visibleBeats = boundedBeats
             return
@@ -376,8 +386,8 @@ Item {
             objectName: "rollingOverviewRegion"
             Layout.fillWidth: true
             Layout.preferredHeight: root.height < 700
-                                    ? Theme.rollingOverviewHeightCompact
-                                    : Theme.rollingOverviewHeight
+                                    ? Theme.rollingOverviewHeightCompact + 24
+                                    : Theme.rollingOverviewHeight + 24
             Layout.leftMargin: 10
             Layout.rightMargin: 10
 
@@ -387,8 +397,7 @@ Item {
                 anchors.left: parent.left
                 anchors.top: parent.top
                 anchors.topMargin: 8
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: 8
+                height: root.height < 700 ? 76 : 92
                 width: height
                 color: Theme.panel
                 border.color: Theme.border
@@ -410,14 +419,16 @@ Item {
 
             Item {
                 id: headerInfo
+                objectName: "rollingHeaderInfo"
                 anchors.left: coverFrame.right
                 anchors.leftMargin: 16
                 anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.topMargin: 8
-                height: 52
+                anchors.verticalCenter: coverFrame.verticalCenter
+                height: 78
 
                 Row {
+                    id: titleRow
+                    objectName: "rollingTitleRow"
                     anchors.left: parent.left
                     anchors.right: meters.left
                     anchors.rightMargin: 12
@@ -428,7 +439,8 @@ Item {
 
                     Text {
                         objectName: "rollingTrackTitle"
-                        width: Math.min(implicitWidth, Math.max(120, parent.width))
+                        width: Math.min(implicitWidth, Math.max(0, parent.width - 36))
+                        height: parent.height
                         text: root.currentTrack && root.currentTrack.title
                               ? root.currentTrack.title : qsTr("未选择歌曲")
                         color: Theme.primaryText
@@ -439,12 +451,26 @@ Item {
                         verticalAlignment: Text.AlignVCenter
                     }
 
+                    DeckToolButton {
+                        objectName: "rollingFavoriteButton"
+                        width: 28
+                        height: 28
+                        icon.source: root.currentTrack && root.currentTrack.favorite
+                                     ? Theme.icon("heart-fill") : Theme.icon("heart-line")
+                        icon.color: root.currentTrack && root.currentTrack.favorite
+                                    ? Theme.favoriteRed : Theme.secondaryText
+                        icon.width: 18
+                        icon.height: 18
+                        Accessible.name: qsTr("收藏歌曲")
+                        onClicked: root.toggleFavorite()
+                    }
                 }
 
                 Row {
+                    objectName: "rollingSubtitleRow"
                     anchors.left: parent.left
-                    anchors.top: parent.top
-                    anchors.topMargin: 30
+                    anchors.top: titleRow.bottom
+                    anchors.topMargin: 4
                     anchors.right: meters.left
                     anchors.rightMargin: 12
                     height: 20
@@ -452,7 +478,8 @@ Item {
 
                     TrackSubtitle {
                         objectName: "rollingTrackSubtitle"
-                        width: Math.min(implicitWidth, Math.max(0, parent.width))
+                        width: Math.min(implicitWidth,
+                                        Math.max(0, parent.width - headerRating.width - 6))
                         height: parent.height
                         artist: root.currentTrack && root.currentTrack.artist
                                 ? root.currentTrack.artist : ""
@@ -463,6 +490,23 @@ Item {
                         font.pixelSize: Theme.fontSizeCaption
                     }
 
+                    Row {
+                        id: headerRating
+                        objectName: "rollingTrackRating"
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 1
+                        Repeater {
+                            model: 5
+                            ThemedIcon {
+                                width: 12
+                                height: 12
+                                source: index < Number(root.currentTrack && root.currentTrack.rating || 0)
+                                        ? Theme.icon("star-fill") : Theme.icon("star-line")
+                                tint: index < Number(root.currentTrack && root.currentTrack.rating || 0)
+                                      ? Theme.ratingColor(index) : Theme.iconSecondary
+                            }
+                        }
+                    }
                 }
 
                 Column {
@@ -548,8 +592,8 @@ Item {
                 objectName: "rollingMetadataBadges"
                 anchors.left: coverFrame.right
                 anchors.leftMargin: 16
-                anchors.top: parent.top
-                anchors.topMargin: 54
+                anchors.top: headerInfo.top
+                anchors.topMargin: 56
                 height: 22
                 spacing: 5
                 Repeater {
@@ -578,8 +622,8 @@ Item {
                 anchors.left: coverFrame.right
                 anchors.leftMargin: 16
                 anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.topMargin: 76
+                anchors.top: headerInfo.bottom
+                anchors.topMargin: 4
                 anchors.bottom: parent.bottom
 
                 WaveformItem {
@@ -601,43 +645,10 @@ Item {
                     lowColor: root.frequencyWaveformSettings.lowColor
                     midColor: root.frequencyWaveformSettings.midColor
                     highColor: root.frequencyWaveformSettings.highColor
-                    frequencyUnplayedOpacity: Theme.nonImmersiveSpectralUnplayedOpacity
+                    frequencyUnplayedOpacity: 1.0
                     amplitudeScale: SettingsController.waveformHeight
                     density: SettingsController.waveformDensity
                     lineWidth: SettingsController.waveformThickness
-                }
-
-                Item {
-                    id: overviewPlayedClip
-                    objectName: "rollingOverviewPlayedClip"
-                    anchors.left: overviewWaveform.left
-                    anchors.top: overviewWaveform.top
-                    width: root.effectiveDurationMs > 0
-                           ? overviewWaveform.pixelForTime(
-                                 root.playbackPositionMs) : 0
-                    height: overviewWaveform.height
-                    clip: true
-                    enabled: false
-
-                    WaveformItem {
-                        width: overviewWaveform.width
-                        height: overviewWaveform.height
-                        layers: overviewWaveform.layers
-                        duration: overviewWaveform.duration
-                        position: duration
-                        cursorPosition: -1
-                        pointerInteractionEnabled: false
-                        visualMode: 3
-                        baseColor: overviewWaveform.baseColor
-                        lowColor: overviewWaveform.lowColor
-                        midColor: overviewWaveform.midColor
-                        highColor: overviewWaveform.highColor
-                        frequencyUnplayedOpacity:
-                            Theme.nonImmersiveSpectralUnplayedOpacity
-                        amplitudeScale: overviewWaveform.amplitudeScale
-                        density: overviewWaveform.density
-                        lineWidth: overviewWaveform.lineWidth
-                    }
                 }
 
                 Rectangle {
@@ -770,8 +781,8 @@ Item {
                 lowColor: root.frequencyWaveformSettings.lowColor
                 midColor: root.frequencyWaveformSettings.midColor
                 highColor: root.frequencyWaveformSettings.highColor
-                frequencyUnplayedOpacity: Theme.nonImmersiveSpectralUnplayedOpacity
-                amplitudeScale: SettingsController.waveformHeight
+                frequencyUnplayedOpacity: 1.0
+                amplitudeScale: Math.min(1.0, SettingsController.waveformHeight * 1.2)
                 density: SettingsController.waveformDensity
                 // The analyser already provides a bounded, high-detail source.
                 // Fill the physical-pixel budget from the visible time slice so
@@ -960,8 +971,8 @@ Item {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 4
-                anchors.rightMargin: 10
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
                 spacing: 8
 
                 PlayerControls {
@@ -980,15 +991,13 @@ Item {
                 RowLayout {
                     id: rollingControls
                     objectName: "rollingTempoControls"
-                    // At the 1000 DIP minimum, reserve the full width for
-                    // the shared controls rather than silently hiding their
-                    // waveform/EQ/skin/mini entry points. The rolling-only
-                    // extension returns once both groups fit side by side.
+                    // Keep tempo, zoom and shell actions available at the
+                    // 1000-DIP minimum; tighten only the group spacing.
                     visible: true
-                    Layout.preferredWidth: root.width < 1360 ? 394 : 488
-                    Layout.maximumWidth: Layout.preferredWidth
+                    Layout.preferredWidth: implicitWidth
+                    Layout.minimumWidth: implicitWidth
                     Layout.fillHeight: true
-                    spacing: root.width < 1360 ? 4 : 7
+                    spacing: root.width < 1180 ? Theme.spacingXs : Theme.spacingSm
 
                     ColumnLayout {
                         spacing: 2
@@ -1035,17 +1044,18 @@ Item {
                             color: Theme.secondaryText
                             font.pixelSize: Theme.fontSizeCaption
                         }
-                        TextField {
+                        ThemedTextField {
                             id: targetBpm
                             objectName: "rollingTargetBpm"
                             Layout.preferredWidth: 72
-                            Layout.preferredHeight: 32
+                            Layout.preferredHeight: Theme.controlHeight
                             horizontalAlignment: Text.AlignHCenter
                             text: root.formatBpm(
                                       root.playback
                                       ? root.playback.targetBpm : 0)
                             color: Theme.primaryText
                             font.pixelSize: Theme.fontSizeBody
+                            font.family: Theme.fontPrimary
                             validator: DoubleValidator {
                                 bottom: 20
                                 top: 400
@@ -1130,12 +1140,12 @@ Item {
                     Item {
                         id: rollingShellActions
                         objectName: "rollingShellActions"
-                        Layout.preferredWidth: 116
-                        Layout.minimumWidth: 116
-                        Layout.maximumWidth: 116
+                        Layout.preferredWidth: 104
+                        Layout.minimumWidth: 104
+                        Layout.maximumWidth: 104
                         Layout.fillHeight: true
                         Layout.leftMargin: 12
-                        Layout.rightMargin: 4
+                        Layout.rightMargin: 0
                     }
                 }
             }

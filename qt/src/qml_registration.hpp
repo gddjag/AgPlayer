@@ -8,7 +8,7 @@ class FormatConverter;
 class FilenameProcessor;
 class ImportController;
 class LibraryFilterModel;
-class LibraryManagerController;
+class ResourceFolderController;
 class LibraryNavigationModel;
 class LibraryModel;
 class LyricsService;
@@ -25,14 +25,16 @@ class WaveformProvider;
 class VocalSeparationController;
 class VideoPlaybackController;
 class WindowController;
+class LosslessAnalysisController;
 
 struct AgPlayerQmlRuntimeModels final {
     TagModel* tagModel = nullptr;
     LibraryNavigationModel* libraryNavigationModel = nullptr;
-    LibraryManagerController* libraryManagerController = nullptr;
+    ResourceFolderController* resourceFolderController = nullptr;
     TrackWaveformThumbnailProvider* trackWaveformThumbnailProvider = nullptr;
     PlaybackClipDragAdapter* playbackClipDragAdapter = nullptr;
     VideoPlaybackController* videoPlaybackController = nullptr;
+    LosslessAnalysisController* losslessAnalysisController = nullptr;
 };
 
 // Registers all AgPlayer QML singletons and the WaveformItem type into the

@@ -66,7 +66,7 @@ TestCase {
         const navigation = createTemporaryObject(navigationComponent, testCase)
         verify(navigation)
         compare(navigation.visibleTools.map(function(tool) { return tool.toolId }),
-                [0, 4, 1, 2, 3])
+                [0, 4, 1, 2, 3, 5])
         navigation.currentTool = 4
         compare(navigation.currentTool, 4)
     }
@@ -524,8 +524,12 @@ TestCase {
         const pointer = findChild(page, "stemPreviewVolumePointer-" + kind)
         verify(volume && pointer && volume.enabled)
 
-        page.setStemVolumeFromPointer(kind, pointer.width * 0.3, pointer.width)
-        page.setStemVolumeFromPointer(kind, pointer.width * 0.7, pointer.width)
+        mousePress(pointer, pointer.width * 0.3, pointer.height / 2, Qt.LeftButton)
+        wait(0) // let the controller's stemsChanged binding update during the grab
+        compare(findChild(page, "stemPreviewVolumePointer-" + kind), pointer,
+                "volume changes must retain the grabbed delegate")
+        mouseMove(pointer, pointer.width * 0.7, pointer.height / 2, 20)
+        mouseRelease(pointer, pointer.width * 0.7, pointer.height / 2, Qt.LeftButton)
         tryVerify(function() {
             return page.stemInfo(kind).previewVolume >= 0.65
                    && page.stemInfo(kind).previewVolume <= 0.75

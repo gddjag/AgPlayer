@@ -112,7 +112,9 @@ Item {
         opacity: width > 0 ? 1 : 0; visible: !root.emptyMode
         horizontalAlignment: Text.AlignRight
         text: Math.round((root.playback ? root.playback.volume : 0) * 100) + "%"
-        color: Theme.primaryText; font.pixelSize: Theme.fontSizeCaption
+        color: Theme.primaryText
+        font.family: Theme.fontPrimary
+        font.pixelSize: Theme.fontSizeCaption
         Behavior on width { NumberAnimation { duration: root.expanded ? 160 : 220; easing.type: Easing.OutCubic } }
         Behavior on opacity { NumberAnimation { duration: 140 } }
     }

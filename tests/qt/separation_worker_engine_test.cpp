@@ -135,6 +135,7 @@ private slots:
     void backendErrorDiagnosticsReachNdjson();
     void requestIdReuseClearsStaleCancellationForEveryMessageType();
     void progressIsMonotonicAtTheProcessBoundary();
+    void slowInferencePublishesLivenessWithoutInventingProgress();
     void cancelAfterAtomicCommitIsRejectedAndResultRemainsVisible();
 };
 
@@ -435,6 +436,28 @@ void SeparationWorkerEngineTest::progressIsMonotonicAtTheProcessBoundary()
         QVERIFY(fraction >= previous);
         previous = fraction;
     }
+}
+
+void SeparationWorkerEngineTest::slowInferencePublishesLivenessWithoutInventingProgress()
+{
+    auto backend = std::make_shared<ControlledBackend>();
+    WorkerEngine engine(backend);
+    QSignalSpy output(&engine, &WorkerEngine::messageReady);
+    engine.acceptLine(message(ProtocolType::Start, QStringLiteral("slow-model")));
+    QVERIFY(backend->entered.tryAcquire(1, 2000));
+    const auto releaseBackend = qScopeGuard([&] { backend->release.release(); });
+    QTRY_VERIFY_WITH_TIMEOUT(output.size() >= 2, 3500);
+    for (const auto& arguments : output) {
+        const ProtocolMessage event = decode(arguments.at(0));
+        QCOMPARE(event.type, ProtocolType::Progress);
+        QCOMPARE(event.payload.value(QStringLiteral("fraction")).toDouble(), 0.5);
+        QCOMPARE(event.payload.value(QStringLiteral("stage")).toString(),
+                 QStringLiteral("inference"));
+    }
+    engine.acceptLine(message(ProtocolType::Cancel, QStringLiteral("slow-model")));
+    output.clear();
+    QTest::qWait(2200);
+    QVERIFY(output.isEmpty());
 }
 
 void SeparationWorkerEngineTest::cancelAfterAtomicCommitIsRejectedAndResultRemainsVisible()

@@ -80,6 +80,32 @@ TestCase {
                "volume control must remain inside a 1000 DIP player")
     }
 
+    function test_classic_information_block_stays_centered_on_cover() {
+        SettingsController.playerShellMode = 0
+        tryVerify(function() { return findControl("classicPlayerShell") !== null }, 1500)
+        var sizes = [[863, 266], [1000, 320], [1280, 480]]
+        for (var index = 0; index < sizes.length; ++index) {
+            mainWindow.width = sizes[index][0]
+            mainWindow.height = sizes[index][1]
+            wait(60)
+            var cover = findControl("playerCover")
+            var subtitle = findControl("trackArtistRatingRow")
+            var title = findControl("trackTitleViewport").parent
+            var badges = findControl("trackMetadataBadges")
+            var block = subtitle.parent
+            verify(cover && subtitle && title && badges && block)
+            var coverCenter = cover.mapToItem(block, 0, cover.height / 2).y
+            verify(Math.abs(block.height / 2 - coverCenter) <= 1,
+                   "the complete title/subtitle/metadata block must be centered on the cover")
+            verify(Math.abs((subtitle.y - title.y - title.height)
+                            - (badges.y - subtitle.y - subtitle.height)) <= 1,
+                   "all three information rows must have equal spacing")
+            var artistText = findControl("trackArtistAlbum")
+            verify(subtitle.height >= artistText.implicitHeight,
+                   "subtitle row cannot compress below its actual text height")
+        }
+    }
+
     function test_expanded_volume_keeps_all_1000_dip_controls_separate() {
         nativeDropHelper.ensureSortableTracks()
         tryVerify(function() { return LibraryModel.count > 0 }, 1500)

@@ -25,14 +25,102 @@ private slots:
     void removesOneTagOnlyFromRequestedTracks();
     void removesTrackWithoutDeletingTheFile();
     void appendsLargeBatchesWithSingleModelNotification();
-    void appliesMaintenanceResultsWithSingleModelNotification();
+    void insertBatchPreservesPrefixAndUpdatesShiftedIndexes();
     void stampsNewImportsWithoutOverwritingExistingTimestamps();
     void exposesLiveRecentAndNeverPlayedCounts();
     void missingLocalCoverFallsBackToPackagedArtwork();
     void mediaKindProbePublishesOneAtomicChange();
     void staleMetadataProbeCannotOverwriteRelocatedTrack();
     void staleMetadataProbeCannotStealRecreatedTrackClaim();
+    void metadataRefreshRejectsStaleClaimsAndPreservesUserState();
 };
+
+void LibraryModelTest::insertBatchPreservesPrefixAndUpdatesShiftedIndexes()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const auto track = [&temp](int id) {
+        TrackRecord record;
+        record.trackId = QString::number(id);
+        record.path = temp.filePath(QStringLiteral("track-%1.wav").arg(id));
+        record.available = true;
+        return record;
+    };
+    LibraryModel model;
+    model.appendBatch({track(0), track(3), track(4)});
+    QCOMPARE(model.insertBatch(1, {track(1), track(2), track(3)}),
+             QStringList({QStringLiteral("1"), QStringLiteral("2")}));
+    for (int i = 0; i < 5; ++i) {
+        QCOMPARE(model.indexForTrackId(QString::number(i)), i);
+        QCOMPARE(model.indexForLocalFile(track(i).path), i);
+        QVERIFY(model.containsPath(track(i).path));
+    }
+    QCOMPARE(model.appendBatch({track(5), track(0)}), QStringList{QStringLiteral("5")});
+    QCOMPARE(model.indexForTrackId(QStringLiteral("0")), 0);
+    QCOMPARE(model.indexForTrackId(QStringLiteral("5")), 5);
+    QCOMPARE(model.indexForLocalFile(track(5).path), 5);
+}
+
+void LibraryModelTest::metadataRefreshRejectsStaleClaimsAndPreservesUserState()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    TrackRecord original;
+    original.trackId = QStringLiteral("refresh");
+    original.path = temp.filePath(QStringLiteral("original.flac"));
+    original.title = QStringLiteral("Before");
+    original.rating = 4;
+    original.favorite = true;
+    original.playCount = 17;
+    original.tags = {QStringLiteral("user-tag")};
+    LibraryModel model;
+    QVERIFY(model.append(original));
+    const auto older = model.beginMetadataRefresh(original.trackId);
+    const auto newer = model.beginMetadataRefresh(original.trackId);
+    QVERIFY(older && newer);
+    TrackRecord metadata;
+    metadata.path = newer->path;
+    metadata.title = QStringLiteral("After");
+    metadata.sampleRate = 96000;
+    metadata.coverUrl = QUrl(QStringLiteral("qrc:/new-cover.png"));
+    QSignalSpy changed(&model, &QAbstractItemModel::dataChanged);
+    QSignalSpy flushed(&model, &LibraryModel::flushRequested);
+    QCOMPARE(model.completeMetadataRefreshes({{*older, metadata}}), 0);
+    QVERIFY(!model.abandonMetadataProbe(*older));
+    // A result with the right generation and wrong source identity is rejected.
+    TrackRecord wrongPath = metadata;
+    wrongPath.path = temp.filePath(QStringLiteral("other.flac"));
+    QCOMPARE(model.completeMetadataRefreshes({{*newer, wrongPath}}), 0);
+    QCOMPARE(model.completeMetadataRefreshes({{*newer, metadata}}), 1);
+    QCOMPARE(changed.count(), 1);
+    QCOMPARE(flushed.count(), 1);
+    const TrackRecord* updated = model.recordForId(original.trackId);
+    QVERIFY(updated);
+    QCOMPARE(updated->title, metadata.title);
+    QCOMPARE(updated->sampleRate, 96000);
+    QCOMPARE(updated->coverUrl, metadata.coverUrl);
+    QCOMPARE(updated->rating, 4);
+    QVERIFY(updated->favorite);
+    QCOMPARE(updated->playCount, 17);
+    QCOMPARE(updated->tags, original.tags);
+    QCOMPARE(model.completeMetadataRefreshes({{*newer, metadata}}), 0);
+
+    const auto beforeMove = model.beginMetadataRefresh(original.trackId);
+    QVERIFY(beforeMove);
+    const QString relocated = temp.filePath(QStringLiteral("relocated.flac"));
+    QVERIFY(model.updateTrackPath(original.trackId, relocated));
+    QCOMPARE(model.completeMetadataRefreshes({{*beforeMove, metadata}}), 0);
+    const auto beforeRemoval = model.beginMetadataRefresh(original.trackId);
+    QVERIFY(beforeRemoval);
+    QVERIFY(model.removeTrack(original.trackId));
+    QVERIFY(model.append(original));
+    const auto recreated = model.beginMetadataRefresh(original.trackId);
+    QVERIFY(recreated);
+    metadata.path = beforeRemoval->path;
+    QCOMPARE(model.completeMetadataRefreshes({{*beforeRemoval, metadata}}), 0);
+    metadata.path = recreated->path;
+    QCOMPARE(model.completeMetadataRefreshes({{*recreated, metadata}}), 1);
+}
 
 void LibraryModelTest::mediaKindProbePublishesOneAtomicChange()
 {
@@ -230,37 +318,6 @@ void LibraryModelTest::stampsNewImportsWithoutOverwritingExistingTimestamps()
     QCOMPARE(model.tracks().at(1).addedAtMs,
              model.tracks().at(0).addedAtMs);
     QCOMPARE(model.tracks().at(2).addedAtMs, Q_INT64_C(123456));
-}
-
-void LibraryModelTest::appliesMaintenanceResultsWithSingleModelNotification()
-{
-    LibraryModel model;
-    QList<TrackRecord> tracks;
-    for (int index = 0; index < 200; ++index) {
-        TrackRecord track;
-        track.path = QStringLiteral("C:/music/maintenance-%1.flac").arg(index);
-        track.available = true;
-        tracks.append(track);
-    }
-    model.appendBatch(std::move(tracks));
-
-    QVariantList results;
-    for (int index = 0; index < 200; ++index) {
-        results.append(QVariantMap{
-            {QStringLiteral("trackId"), model.tracks().at(index).trackId},
-            {QStringLiteral("exists"), index % 2 == 0},
-            {QStringLiteral("status"), index % 2 == 0
-                 ? QStringLiteral("normal") : QStringLiteral("missing")},
-            {QStringLiteral("hash"), QStringLiteral("hash-%1").arg(index)}});
-    }
-
-    QSignalSpy changed(&model, &QAbstractItemModel::dataChanged);
-    QSignalSpy flushRequested(&model, &LibraryModel::flushRequested);
-    QCOMPARE(model.applyMaintenanceResults(results), 200);
-    QCOMPARE(changed.count(), 1);
-    QCOMPARE(flushRequested.count(), 1);
-    QVERIFY(!model.tracks().at(1).available);
-    QCOMPARE(model.tracks().at(1).fileStatus, QStringLiteral("missing"));
 }
 
 void LibraryModelTest::appendsLargeBatchesWithSingleModelNotification()

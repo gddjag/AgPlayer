@@ -7,6 +7,8 @@
 
 #include <QCoreApplication>
 #include <QSettings>
+#include <QMetaProperty>
+#include <QSet>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTest>
@@ -15,6 +17,11 @@ class PlayerExperienceControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void columnControlsNormalizeNotifyAndPersist();
+    void columnPresetsRestoreIndependentControls();
+    void materialControlsNormalizeNotifyAndPersist();
+    void materialPresetsRestoreAfterInk();
+    void defaultPresetDoesNotOverrideSongPaletteWithTimeCycling();
     void initTestCase();
     void defaultsAreIndependent();
     void persistsAndNormalizesValues();
@@ -31,6 +38,150 @@ private slots:
     void eventThresholdsIncludeBoundaries();
 };
 
+void PlayerExperienceControllerTest::columnControlsNormalizeNotifyAndPersist()
+{
+    struct Control { const char* name; int minimum; int maximum; };
+    const Control controls[] = {
+        {"columnSize", 50, 200}, {"columnOpacity", 0, 100},
+        {"reactorBrightness", 0, 200},
+    };
+    QSettings().clear();
+    for (const auto& control : controls) {
+        PlayerExperienceController experience;
+        const int index = experience.metaObject()->indexOfProperty(control.name);
+        QVERIFY2(index >= 0, control.name);
+        const auto property = experience.metaObject()->property(index);
+        QCOMPARE(property.read(&experience).toInt(), 100);
+        QSignalSpy changed(&experience, property.notifySignal());
+        QVERIFY(changed.isValid());
+        QVERIFY(property.write(&experience, -50));
+        QCOMPARE(property.read(&experience).toInt(), control.minimum);
+        QCOMPARE(changed.count(), 1);
+        QVERIFY(property.write(&experience, -50));
+        QCOMPARE(changed.count(), 1);
+        QVERIFY(property.write(&experience, 999));
+        QCOMPARE(property.read(&experience).toInt(), control.maximum);
+        QCOMPARE(changed.count(), 2);
+        QCOMPARE(experience.terrainAmplitude(), 62);
+        QCOMPARE(experience.subjectClarity(), 110);
+        QCOMPARE(experience.rhythmStrength(), 30);
+        PlayerExperienceController reloaded;
+        QCOMPARE(reloaded.property(control.name).toInt(), control.maximum);
+        QSettings settings;
+        const QString key = QStringLiteral("immersiveVisual/") + control.name;
+        settings.setValue(key, QStringLiteral("invalid"));
+        PlayerExperienceController invalid;
+        QCOMPARE(invalid.property(control.name).toInt(), 100);
+        settings.setValue(key, -99);
+        PlayerExperienceController low;
+        QCOMPARE(low.property(control.name).toInt(), control.minimum);
+        settings.setValue(key, 999);
+        PlayerExperienceController high;
+        QCOMPARE(high.property(control.name).toInt(), control.maximum);
+    }
+}
+
+void PlayerExperienceControllerTest::columnPresetsRestoreIndependentControls()
+{
+    QSettings().clear();
+    PlayerExperienceController experience;
+    const char* keys[] = {"columnSize", "columnOpacity", "reactorBrightness"};
+    for (const char* key : keys)
+        QVERIFY2(experience.metaObject()->indexOfProperty(key) >= 0, key);
+    const int sizes[] = {120, 110, 95, 125, 150, 110, 100, 130, 140};
+    for (int preset = 0; preset < 9; ++preset) {
+        for (const char* key : keys) QVERIFY(experience.setProperty(key, 51));
+        QVERIFY(experience.applyPreset(preset));
+        QCOMPARE(experience.property("columnSize").toInt(), sizes[preset]);
+        QCOMPARE(experience.property("columnOpacity").toInt(), 100);
+        QCOMPARE(experience.property("reactorBrightness").toInt(), 100);
+        PlayerExperienceController reloaded;
+        for (const char* key : keys)
+            QCOMPARE(reloaded.property(key), experience.property(key));
+    }
+}
+
+void PlayerExperienceControllerTest::materialControlsNormalizeNotifyAndPersist()
+{
+    struct Control { const char* name; int minimum; int maximum; int fallback; };
+    const Control controls[] = {
+        {"materialMode", 0, 2, 0}, {"materialSoftness", 0, 100, 45},
+        {"jellyElasticity", 0, 100, 35}, {"inkDensity", 0, 100, 60},
+        {"rippleStrength", 0, 200, 100}, {"rippleWidth", 20, 200, 100},
+        {"rippleDecay", 20, 200, 100},
+    };
+    QSettings().clear();
+    for (const auto& control : controls) {
+        PlayerExperienceController experience;
+        const int index = experience.metaObject()->indexOfProperty(control.name);
+        QVERIFY2(index >= 0, control.name);
+        const auto property = experience.metaObject()->property(index);
+        QCOMPARE(property.read(&experience).toInt(), control.fallback);
+        QSignalSpy changed(&experience, property.notifySignal());
+        QVERIFY(changed.isValid());
+        QVERIFY(property.write(&experience, control.maximum));
+        QCOMPARE(property.read(&experience).toInt(), control.maximum);
+        QCOMPARE(changed.count(), 1);
+        QVERIFY(property.write(&experience, control.maximum));
+        QCOMPARE(changed.count(), 1);
+        QVERIFY(property.write(&experience, -50));
+        QCOMPARE(property.read(&experience).toInt(), control.minimum);
+        QVERIFY(property.write(&experience, 999));
+        QCOMPARE(property.read(&experience).toInt(),
+                 QByteArray(control.name) == "materialMode" ? 0 : control.maximum);
+        QVERIFY(property.write(&experience, control.maximum));
+        PlayerExperienceController reloaded;
+        QCOMPARE(reloaded.property(control.name).toInt(), control.maximum);
+        QSettings settings;
+        const QString key = QStringLiteral("immersiveVisual/") + control.name;
+        settings.setValue(key, QStringLiteral("invalid"));
+        PlayerExperienceController invalid;
+        QCOMPARE(invalid.property(control.name).toInt(), control.fallback);
+        settings.setValue(key, -99);
+        PlayerExperienceController clamped;
+        QCOMPARE(clamped.property(control.name).toInt(), control.minimum);
+    }
+}
+
+void PlayerExperienceControllerTest::materialPresetsRestoreAfterInk()
+{
+    QSettings().clear();
+    PlayerExperienceController experience;
+    QVERIFY2(experience.metaObject()->indexOfProperty("materialMode") >= 0,
+             "materialMode property missing");
+    const char* keys[] = {"materialMode", "materialSoftness", "jellyElasticity",
+                         "inkDensity", "rippleStrength", "rippleWidth", "rippleDecay"};
+    const int modes[] = {0, 1, 2, 1, 0, 0, 1, 1, 0};
+    QSet<QString> configurations;
+    for (int preset = 0; preset < 9; ++preset) {
+        QVERIFY(experience.applyPreset(preset));
+        QVariantList expected;
+        QString signature;
+        for (const auto* key : keys) {
+            QVERIFY2(experience.metaObject()->indexOfProperty(key) >= 0, key);
+            expected.append(experience.property(key));
+            signature += experience.property(key).toString() + '/';
+        }
+        configurations.insert(signature);
+        QCOMPARE(experience.property("materialMode").toInt(), modes[preset]);
+        const QString color = experience.coolColor();
+        const bool cycling = experience.themeCycleEnabled();
+        for (int repeat = 0; repeat < 3; ++repeat) {
+            QVERIFY(experience.applyPreset(PlayerExperienceController::InkWash));
+            QCOMPARE(experience.baseColor(), QStringLiteral("#F4F1E8"));
+            QVERIFY(!experience.floatingCubesEnabled());
+            QVERIFY(!experience.meteorsEnabled());
+            QVERIFY(!experience.themeCycleEnabled());
+            QVERIFY(experience.applyPreset(preset));
+            for (int index = 0; index < 7; ++index)
+                QCOMPARE(experience.property(keys[index]), expected[index]);
+            QCOMPARE(experience.coolColor(), color);
+            QCOMPARE(experience.themeCycleEnabled(), cycling);
+        }
+    }
+    QCOMPARE(configurations.size(), 9);
+}
+
 void PlayerExperienceControllerTest::initTestCase()
 {
     QStandardPaths::setTestModeEnabled(true);
@@ -38,6 +189,18 @@ void PlayerExperienceControllerTest::initTestCase()
     QCoreApplication::setApplicationName(
         QStringLiteral("AgPlayer-player-experience-controller-test"));
     QSettings().clear();
+}
+
+void PlayerExperienceControllerTest::defaultPresetDoesNotOverrideSongPaletteWithTimeCycling()
+{
+    QSettings().clear();
+    PlayerExperienceController experience;
+    QVERIFY(experience.applyPreset(PlayerExperienceController::NeonRainNight));
+    QVERIFY(experience.themeCycleEnabled());
+    QVERIFY(experience.applyPreset(PlayerExperienceController::AudioRangeEcho));
+    QVERIFY2(!experience.themeCycleEnabled(),
+             "Default song colors are overwritten by time-based rainbow cycling");
+    QCOMPARE(experience.colorMode(), 0);
 }
 
 void PlayerExperienceControllerTest::defaultsAreIndependent()
@@ -301,7 +464,10 @@ void PlayerExperienceControllerTest::appliesDistinctCompleteVisualPresetSnapshot
     QList<QVariantList> snapshots;
 
     for (const int preset : presets) {
+        experience.setSongAdaptiveColorEnabled(true);
         QVERIFY(experience.applyPreset(preset));
+        QVERIFY2(!experience.songAdaptiveColorEnabled(),
+                 "Selecting a preset must display its own palette, not the track-derived palette");
         snapshots.append({
             experience.colorMode(), experience.coolColor(), experience.warmColor(),
             experience.accentColor(), experience.peakColor(), experience.baseColor(),
@@ -326,14 +492,14 @@ void PlayerExperienceControllerTest::appliesDistinctCompleteVisualPresetSnapshot
     }
     const QList<QVariantList> expected = {
         {0, "#8BDCFF", "#EB7894", "#FFD7DF", "#FFF7FB", "#050206", 62, 56, 74,
-         38, 0.30, 54, 58, true, true, true, true, true,
+         38, 0.30, 54, 58, true, true, true, true, false,
          QVariantList({90, 92, 50, 50, 50, 50, 50, 48}), 82, 136, 100, 64, 30, 86,
          112, 42, 80},
         {2, "#7F5CFF", "#FF4FD8", "#22F0FF", "#F7F2FF", "#070310", 70, 80, 84,
          58, 0.48, 64, 72, true, true, true, false, true,
          QVariantList({92, 84, 58, 48, 54, 72, 96, 100}), 84, 144, 178, 68, 106, 94,
          108, 48, 84},
-        {1, "#6F8DB8", "#D2645E", "#E9D7D1", "#F6F0E8", "#111317", 48, 36, 42,
+        {1, "#19282B", "#343B3B", "#B4CDCA", "#7F8D89", "#F4F1E8", 48, 36, 42,
          22, 0.12, 30, 36, true, false, false, true, false,
          QVariantList({62, 58, 54, 50, 48, 44, 42, 40}), 88, 122, 160, 48, 82, 116,
          120, 30, 72},
@@ -569,29 +735,29 @@ void PlayerExperienceControllerTest::eventThresholdsIncludeBoundaries()
         AudioVisualFeatureController features;
         QVariantList spectrum(128, 0.0);
         features.setActive(true);
-        for (int index = 0; index < 32; ++index) spectrum[index] = baseline;
+        for (int index = 0; index < 22; ++index) spectrum[index] = baseline;
         features.processSpectrum(spectrum);
-        for (int index = 0; index < 32; ++index) spectrum[index] = 0.1;
+        for (int index = 0; index < 22; ++index) spectrum[index] = 0.2;
         features.processSpectrum(spectrum);
         return features.kickPulse();
     };
-    QVERIFY(!hasKick(0.051)); // Positive delta is just below 0.05.
-    QVERIFY(hasKick(0.05));   // Positive delta is exactly 0.05.
-    QVERIFY(hasKick(0.049));  // Positive delta is just above 0.05.
+    QVERIFY(!hasKick(0.151)); // Positive delta is just below 0.05.
+    QVERIFY(hasKick(0.150));  // Positive delta is exactly 0.05.
+    QVERIFY(hasKick(0.149));  // Positive delta is just above 0.05.
 
     const auto hasSnare = [](double baseline) {
         AudioVisualFeatureController features;
         QVariantList spectrum(128, 0.0);
         features.setActive(true);
-        for (int index = 64; index < 96; ++index) spectrum[index] = baseline;
+        for (int index = 36; index < 96; ++index) spectrum[index] = baseline;
         features.processSpectrum(spectrum);
-        for (int index = 64; index < 96; ++index) spectrum[index] = 0.1;
+        for (int index = 36; index < 96; ++index) spectrum[index] = 0.2;
         features.processSpectrum(spectrum);
         return features.snarePulse();
     };
-    QVERIFY(!hasSnare(0.061)); // Positive delta is just below 0.04.
-    QVERIFY(hasSnare(0.06));   // Positive delta is exactly 0.04.
-    QVERIFY(hasSnare(0.059));  // Positive delta is just above 0.04.
+    QVERIFY(!hasSnare(0.161)); // Positive delta is just below 0.04.
+    QVERIFY(hasSnare(0.160));  // Positive delta is exactly 0.04.
+    QVERIFY(hasSnare(0.159));  // Positive delta is just above 0.04.
 }
 
 QTEST_MAIN(PlayerExperienceControllerTest)

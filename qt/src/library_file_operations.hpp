@@ -1,6 +1,5 @@
 #pragma once
 
-#include "import_controller.hpp"
 #include "library_model.hpp"
 
 #include <QObject>
@@ -17,7 +16,6 @@ public:
     Q_ENUM(ConflictMode)
 
     explicit LibraryFileOperations(QObject* parent = nullptr);
-    LibraryFileOperations(ProbeFunction probe, QObject* parent = nullptr);
     LibraryModel* libraryModel() const noexcept;
     void setLibraryModel(LibraryModel* model);
 
@@ -37,17 +35,13 @@ public:
     Q_INVOKABLE bool relocateTrack(const QString& trackId, const QString& newPath);
     Q_INVOKABLE bool relocateTrackToUrl(const QString& trackId, const QUrl& newFile);
     Q_INVOKABLE QVariantMap trackDetails(const QString& trackId) const;
-    Q_INVOKABLE bool requestTrackDetailsHydration(const QString& trackId);
 
 signals:
     void libraryModelChanged();
     void operationFailed(const QString& message);
-    void trackDetailsChanged(const QString& trackId);
 
 private:
     QString resolvedDestination(const QString& sourcePath, const QString& folder,
                                 ConflictMode mode) const;
     QPointer<LibraryModel> library_;
-    ProbeFunction probe_;
-    QMetaObject::Connection detailsConnection_;
 };

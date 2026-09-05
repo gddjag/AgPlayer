@@ -71,12 +71,11 @@ Item {
         anchors.bottomMargin: Math.max(72, parent.height * 0.10)
         width: Math.min(326, Math.max(270, parent.width * 0.20))
         x: root.opened ? root.width - width - 14 : root.width + 8
-        radius: 20
+        radius: Theme.radiusLg
         color: Theme.glassSurfaceElevated
         border.width: 1
         border.color: Theme.glassBorder
         clip: true
-        layer.enabled: root.opened
         z: 4
 
         Behavior on x {
@@ -101,9 +100,10 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            anchors.margins: 18
+            anchors.margins: Theme.spacingLg
             text: qsTr("当前播放队列")
             color: Theme.primaryText
+            font.family: Theme.fontPrimary
             font.pixelSize: Theme.fontSizeBody
             font.weight: Font.DemiBold
         }
@@ -115,16 +115,16 @@ Item {
             anchors.right: parent.right
             anchors.top: drawerTitle.bottom
             anchors.bottom: parent.bottom
-            anchors.topMargin: 10
-            anchors.bottomMargin: 14
-            anchors.leftMargin: 10
-            anchors.rightMargin: 10
+            anchors.topMargin: Theme.spacingSm
+            anchors.bottomMargin: Theme.spacingMd
+            anchors.leftMargin: Theme.spacingMd
+            anchors.rightMargin: Theme.spacingMd
             clip: true
             spacing: 2
             model: root.playback ? root.playback.queueTrackIds : []
             cacheBuffer: 180
             boundsBehavior: Flickable.StopAtBounds
-            ScrollBar.vertical: ScrollBar {}
+            ScrollBar.vertical: ThemedScrollBar { id: queueScrollBar }
             onMovementStarted: queueHideTimer.stop()
             onMovementEnded: if (!drawerHover.hovered) root.requestClose()
 
@@ -136,7 +136,7 @@ Item {
                 property var details: root.library
                                       ? root.library.trackForId(trackId) : ({})
                 property bool hoveredForQa: rowMouse.containsMouse
-                width: ListView.view.width
+                width: Math.max(0, ListView.view.width - queueScrollBar.width)
                 height: 56
                 transformOrigin: Item.Center
                 scale: hoveredForQa ? 1.12
@@ -157,7 +157,7 @@ Item {
                     anchors.fill: parent
                     anchors.leftMargin: 5
                     anchors.rightMargin: 5
-                    radius: 11
+                    radius: Theme.radiusSm
                     color: row.hoveredForQa ? Theme.subtleGlassHover
                                              : Theme.subtleGlassFill
                     border.width: row.trackId === (root.playback
@@ -172,11 +172,14 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     width: 38
                     height: 38
-                    radius: 7
+                    radius: Theme.radiusSm
                     color: Theme.panel
                     clip: true
                     Image {
+                        objectName: "queueCoverImage"
                         anchors.fill: parent
+                        asynchronous: true
+                        sourceSize: Qt.size(64, 64)
                         source: row.details && row.details.coverUrl
                                 ? row.details.coverUrl
                                 : "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
@@ -197,6 +200,7 @@ Item {
                                             ? root.playback.currentTrackId : "")
                            ? Theme.iconAccent : Theme.primaryText
                     font.pixelSize: Theme.fontSizeCaption
+                    font.family: Theme.fontPrimary
                     font.weight: Font.Medium
                     elide: Text.ElideRight
                 }
@@ -210,6 +214,7 @@ Item {
                                             ? row.details.durationMs : 0)
                     color: Theme.secondaryText
                     font.pixelSize: Theme.fontSizeCaption
+                    font.family: Theme.fontPrimary
                 }
 
                 MouseArea {

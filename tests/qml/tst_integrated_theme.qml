@@ -507,6 +507,164 @@ TestCase {
         }, 1000)
     }
 
+    function test_search_filter_compacts_without_hiding_controls() {
+        var previousAutoRating = SettingsController.autoReadRating
+        SettingsController.autoReadRating = true
+        var component = Qt.createComponent(Qt.resolvedUrl(
+                    "../../app/qml/AgPlayer/components/SearchFilter.qml"))
+        if (component.status === Component.Loading)
+            tryCompare(component, "status", Component.Ready, 3000)
+        compare(component.status, Component.Ready, component.errorString())
+        var filter = component.createObject(testCase, {
+            "width": 543,
+            "height": Theme.controlHeight,
+            "integratedStyle": true
+        })
+        verify(filter)
+        try {
+            wait(0)
+            var keyword = findChild(filter, "keywordModule")
+            var rating = findChild(filter, "ratingModule")
+            var bpm = findChild(filter, "bpmModule")
+            var range = findChild(filter, "bpmRange")
+            var clear = findChild(filter, "clearFiltersButton")
+            verify(keyword && rating && bpm && range && clear)
+            compare(filter.compactLayout, true)
+            verify(keyword.width >= 112)
+            verify(rating.visible && rating.width >= 88)
+            verify(bpm.width >= 176)
+            compare(range.width, 72)
+            verify(clear.mapToItem(filter, clear.width, 0).x
+                   <= filter.width + 0.5,
+                   "all filter controls must fit the narrow center column")
+        } finally {
+            filter.destroy()
+            SettingsController.autoReadRating = previousAutoRating
+        }
+    }
+
+    function test_lyrics_diagnostics_and_actions_fit_narrow_panel() {
+        var service = Qt.createQmlObject(
+                    'import QtQuick; import AgPlayer; QtObject {'
+                    + ' property bool enabled: true;'
+                    + ' property int status: LyricsService.Error;'
+                    + ' property string previousLine: "";'
+                    + ' property string currentLine: "";'
+                    + ' property string nextLine: "";'
+                    + ' property var lines: []; property int currentLineIndex: -1;'
+                    + ' property bool synchronizedLyrics: false;'
+                    + ' property bool instrumental: false;'
+                    + ' property string untimedLyrics: "";'
+                    + ' property string sourceProvider: "";'
+                    + ' property string sourceAttribution: "";'
+                    + ' property var routeNotice: ({ providerName: "A very long lyrics provider route name", diagnostic: "network-error" });'
+                    + ' property var routeAttempts: [{ providerName: "Another very long provider route name", diagnostic: "timeout" }];'
+                    + ' property int offsetMs: 0;'
+                    + ' function retry() {} function pauseFollow(value) {}'
+                    + ' function importLrc(url) { return true }'
+                    + '}', testCase)
+        var component = Qt.createComponent(Qt.resolvedUrl(
+                    "../../app/qml/AgPlayer/components/LyricsPanel.qml"))
+        compare(component.status, Component.Ready, component.errorString())
+        var panel = component.createObject(testCase, {
+            "width": 280,
+            "height": 360,
+            "service": service
+        })
+        verify(panel)
+        try {
+            wait(0)
+            var notice = findChild(panel, "lyricsRouteNotice")
+            var noticeText = findChild(panel, "lyricsRouteNoticeText")
+            var attempt = findChild(panel, "lyricsRouteAttemptText")
+            var close = findChild(panel, "lyricsCloseButton")
+            verify(notice && noticeText && attempt && close)
+            verify(notice.width <= panel.width - 24 + 0.5)
+            verify(notice.mapToItem(panel, 0, 0).y
+                   >= close.mapToItem(panel, 0, close.height).y,
+                   "route diagnostics must start below the close action")
+            verify(noticeText.width <= notice.width)
+            compare(noticeText.maximumLineCount, 2)
+            compare(noticeText.font.family, Theme.fontPrimary)
+            compare(attempt.font.family, Theme.fontPrimary)
+            verify(attempt.width <= panel.width - 24 + 0.5)
+            compare(close.focusPolicy, Qt.StrongFocus)
+            verify(close.background)
+
+            var actions = ["lyricsOffsetEarlierButton",
+                           "lyricsOffsetLaterButton",
+                           "lyricsRetryButton", "lyricsImportButton"]
+            for (var index = 0; index < actions.length; ++index) {
+                var action = findChild(panel, actions[index])
+                verify(action && action.background)
+                compare(action.focusPolicy, Qt.StrongFocus)
+                verify(action.hoverEnabled)
+                verify(action.icon.source.toString().length > 0)
+            }
+        } finally {
+            panel.destroy()
+            service.destroy()
+        }
+    }
+
+    function createFallbackCover(properties) {
+        var component = Qt.createComponent(Qt.resolvedUrl(
+                    "../../app/qml/AgPlayer/components/FallbackCoverImage.qml"))
+        if (component.status === Component.Loading)
+            tryCompare(component, "status", Component.Ready, 3000)
+        compare(component.status, Component.Ready, component.errorString())
+        var cover = component.createObject(testCase, properties || {})
+        verify(cover)
+        return cover
+    }
+
+    function test_cover_falls_back_after_a_real_image_decode_error() {
+        var invalidImage = Qt.resolvedUrl("tst_integrated_theme.qml")
+        var validImage = Qt.resolvedUrl("../../assets/brand/logo-mark.png")
+        var cover = createFallbackCover({
+            "width": 96,
+            "height": 96,
+            "fallbackSource": validImage,
+            "requestedSource": invalidImage
+        })
+        try {
+            tryCompare(cover, "usingFallback", true, 3000)
+            tryCompare(cover, "status", Image.Ready, 3000)
+            compare(cover.source.toString(), validImage.toString())
+        } finally {
+            cover.destroy()
+        }
+    }
+
+    function test_stale_cover_error_cannot_replace_a_new_valid_source() {
+        var invalidImage = Qt.resolvedUrl("tst_integrated_theme.qml")
+        var fallbackImage = Qt.resolvedUrl("../../assets/brand/logo-mark.png")
+        var validImage = Qt.resolvedUrl("../../assets/brand/logo-lockup.png")
+        var cover = createFallbackCover({
+            "width": 96,
+            "height": 96,
+            "fallbackSource": fallbackImage,
+            "requestedSource": invalidImage
+        })
+        try {
+            // Prime the invalid URL so its next decode failure can be delivered
+            // immediately while the deferred fallback is still pending.
+            tryCompare(cover, "usingFallback", true, 3000)
+            tryCompare(cover, "status", Image.Ready, 3000)
+            cover.requestedSource = ""
+            cover.requestedSource = invalidImage
+            cover.requestedSource = validImage
+            tryCompare(cover, "requestedSource", validImage, 3000)
+            tryCompare(cover, "status", Image.Ready, 3000)
+            wait(0)
+            compare(cover.usingFallback, false,
+                    "the deferred error from the old URL must be ignored")
+            compare(cover.source.toString(), validImage.toString())
+        } finally {
+            cover.destroy()
+        }
+    }
+
     function test_integrated_hierarchy_uses_flat_columns_and_framed_media() {
         var shell = enterIntegratedShell()
         var flatNames = ["integratedLibraryColumn", "integratedTrackColumn"]
@@ -739,7 +897,7 @@ TestCase {
         }, 1000)
     }
 
-    function test_dense_bottom_bar_keeps_volume_icon_only_and_groups_separate() {
+    function test_dense_bottom_bar_expands_volume_on_hover_and_allows_dragging() {
         var shell = enterIntegratedShell()
         var previousWidth = mainWindow.width
         mainWindow.width = 1180
@@ -754,7 +912,7 @@ TestCase {
         verify(controls && listWindow && centerGroup && transport
                && volume && rightActions)
         compare(controls.denseLayout, true)
-        compare(volume.emptyMode, true)
+        compare(volume.emptyMode, false)
         compare(volume.width, 44)
         verify(!listWindow.visible)
         verify(transport.mapToItem(
@@ -762,6 +920,34 @@ TestCase {
                <= volume.mapToItem(controls, 0, 0).x)
         verify(volume.mapToItem(controls, volume.width, 0).x
                <= rightActions.mapToItem(controls, 0, 0).x)
+
+        var mute = findChild(volume, "muteButton")
+        var slider = findChild(volume, "volumeSlider")
+        var handle = findChild(volume, "volumeSliderHandle")
+        verify(mute && slider && handle)
+        var originalVolume = PlaybackController.volume
+        var originalMuted = PlaybackController.muted
+        if (originalMuted)
+            PlaybackController.toggleMuted()
+        PlaybackController.setVolume(0.2)
+        tryVerify(function() { return Math.abs(slider.value - 0.2) < 0.01 }, 500)
+        mouseMove(mute, mute.width / 2, mute.height / 2)
+        tryVerify(function() { return slider.width >= 64 }, 800,
+                  "the dense player must expose a draggable volume slider")
+        tryCompare(slider, "width", volume.expandedSliderWidth, 800)
+        verify(volume.mapToItem(controls, volume.width, 0).x
+               <= rightActions.mapToItem(controls, 0, 0).x)
+        mousePress(handle, handle.width / 2, handle.height / 2)
+        mouseMove(slider, slider.width - slider.rightPadding - handle.width / 2,
+                  slider.height / 2, 30)
+        mouseRelease(slider, slider.width - slider.rightPadding - handle.width / 2,
+                     slider.height / 2)
+        tryVerify(function() { return PlaybackController.volume > 0.9 }, 500)
+        mouseMove(controls, 1, 1)
+        tryCompare(volume, "expanded", false, 800)
+        PlaybackController.setVolume(originalVolume)
+        if (originalMuted)
+            PlaybackController.toggleMuted()
 
         mainWindow.width = previousWidth
         wait(20)

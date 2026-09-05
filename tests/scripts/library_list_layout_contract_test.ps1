@@ -24,7 +24,6 @@ $trackList = Read-RequiredFile 'app/qml/AgPlayer/components/TrackList.qml'
 $navigation = Read-RequiredFile 'app/qml/AgPlayer/components/SideNavigation.qml'
 $tagPanel = Read-RequiredFile 'app/qml/AgPlayer/components/TagManagementPanel.qml'
 $mini = Read-RequiredFile 'app/qml/AgPlayer/components/MiniPlayerControls.qml'
-$managerPage = Read-RequiredFile 'app/qml/AgPlayer/components/LibraryManagerPage.qml'
 $libraryIcon = Read-RequiredFile 'assets/icons/user-library.svg'
 
 Assert-Matches $window '(?s)id:\s*centerColumn.*id:\s*centerTrackFooter.*objectName:\s*"centerTrackFooter".*Layout\.fillWidth:\s*true' `
@@ -41,8 +40,8 @@ Assert-Matches $trackList '(?s)objectName:\s*"singleWindowTrackSubtitle".*artist
     'Single-window rows must show artist, album, and optional tags beneath the title'
 Assert-Matches $trackList '(?s)objectName:\s*"singleWindowWaveformThumbnailLoader".*Layout\.fillWidth:\s*true.*Layout\.preferredHeight:\s*root\.singleWindowWaveformHeight.*Layout\.alignment:\s*Qt\.AlignVCenter' `
     'Single-window and rolling waveform thumbnails must occupy their own shorter, vertically centered column'
-Assert-Matches $trackList '(?s)readonly property int titleMinimumWidth:\s*singleWindowLayout \? 180 : \(compactColumns \? 150 : 180\).*readonly property int singleWindowFlexibleWidth:\s*Math\.max\(.*readonly property int singleWindowTitleWidth:\s*Math\.max\(\s*titleMinimumWidth,\s*Math\.floor\(singleWindowFlexibleWidth \* 0\.42\)\)' `
-    'Single-window rows need responsive title and waveform regions without changing the ordinary/tag floor'
+Assert-Matches $trackList '(?s)readonly property int titleMinimumWidth:\s*singleWindowLayout \? 180 : \(compactColumns \? 150 : 180\).*readonly property int singleWindowFlexibleWidth:\s*Math\.max\(.*readonly property int singleWindowTitleWidth:\s*Math\.max\(\s*titleMinimumWidth,\s*Math\.floor\(singleWindowFlexibleWidth \* 0\.56\)\)' `
+    'Shared rows must allocate 56% of flexible space to the title without changing the ordinary/tag floor'
 Assert-Matches $trackList '(?s)readonly property bool showBpmColumn:\s*singleWindowLayout \? false.*relaxedClassicColumns \? !tagManagementLayout : !tagFilterActive.*readonly property bool showDurationColumn:\s*singleWindowLayout \|\| relaxedClassicColumns \|\| !tagFilterActive' `
     'Single-window lists must show duration without BPM while classic tag mode keeps its existing policy'
 
@@ -58,21 +57,6 @@ Assert-Matches $tagPanel '(?s)TagFilterModel\s*\{.*sourceModel:\s*root\.tagModel
 
 Assert-Matches $mini '(?s)objectName:\s*"miniMetadataRow".*Layout\.preferredHeight:\s*26.*objectName:\s*"miniArtist".*wrapMode:\s*Text\.NoWrap.*objectName:\s*"miniAlbum".*wrapMode:\s*Text\.NoWrap.*objectName:\s*"miniTagSeparator".*visible:\s*miniTags\.visible.*objectName:\s*"miniRating".*objectName:\s*"miniFavoriteButton".*Layout\.preferredWidth:\s*16.*Layout\.preferredHeight:\s*16' `
     'Mini metadata must be one non-wrapping artist/album/tag/rating/favorite row'
-
-Assert-Matches $managerPage '(?s)function\s+removeTracksFromLibrary\(trackIds\).*manager\.removeTrackFromLibrary.*objectName:\s*"libraryTrackRemove".*removeTracksFromLibrary' `
-    'Library manager menu removal must persist a controller tombstone'
-Assert-Matches $managerPage '(?s)Keys\.onDeletePressed:.*removeTracksFromLibrary' `
-    'Library manager Delete key removal must persist a controller tombstone'
-if ($managerPage -match 'libraryTrackRename|renameTrackDialog|libraryTrackRelocate|relocateTrackDialog') {
-    throw 'Library manager must not expose rename or relocate actions'
-}
-if ($managerPage -match 'objectName:\s*"libraryTrackDetails"' -or
-    $managerPage -match 'text:\s*qsTr\("查看音频文件信息"\)' -or
-    $managerPage -match 'function\s+openFileDetails') {
-    throw 'Library manager must not expose the removed audio file details action'
-}
-Assert-Matches $managerPage 'lastPersistenceError' `
-    'Library manager must surface tombstone persistence errors'
 
 Assert-Matches $libraryIcon 'viewBox="-125 -125 250 250"' `
     'The library entry must use the supplied blob icon geometry'

@@ -249,7 +249,7 @@ Item {
         SystemMenuItem {
             objectName: "resourceFolderMenuRescan"
             text: qsTr("重新扫描全部资源文件夹")
-            onTriggered: LibraryManagerController.rescan()
+            onTriggered: ResourceFolderController.rescan()
         }
     }
 

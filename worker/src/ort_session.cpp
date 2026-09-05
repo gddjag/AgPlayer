@@ -1,5 +1,7 @@
 #include "ort_session.hpp"
 
+#include <QThread>
+
 #include <onnxruntime_c_api.h>
 
 #ifdef Q_OS_WIN
@@ -8,6 +10,7 @@
 #endif
 
 #include <chrono>
+#include <algorithm>
 #include <condition_variable>
 #include <cstring>
 #include <mutex>
@@ -146,7 +149,9 @@ OrtOperationResult OrtModelSession::open(const QString& runtimePath,
     for (OrtStatus* status : {
              impl_->api->SetSessionExecutionMode(options, ORT_SEQUENTIAL),
              impl_->api->DisableMemPattern(options),
-             impl_->api->SetIntraOpNumThreads(options, 1),
+             impl_->api->SetIntraOpNumThreads(options,
+                 provider == ExecutionProvider::Cpu
+                     ? std::clamp(QThread::idealThreadCount() / 2, 1, 4) : 1),
              impl_->api->SetInterOpNumThreads(options, 1)}) {
         error = statusMessage(impl_->api, status);
         if (!error.isEmpty()) {

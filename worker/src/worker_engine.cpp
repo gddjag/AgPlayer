@@ -25,6 +25,33 @@ WorkerEngine::WorkerEngine(std::shared_ptr<WorkerBackend> backend,
 {
     threadPool_.setMaxThreadCount(1);
     threadPool_.setExpiryTimeout(-1);
+    heartbeatTimer_.setInterval(2000);
+    connect(&heartbeatTimer_, &QTimer::timeout, this, [this] {
+        if (!activeJob_ || shuttingDown_) {
+            heartbeatTimer_.stop();
+            return;
+        }
+        // Session loading and a Demucs chunk can legitimately take longer
+        // than the client's 30-second transport watchdog. Report liveness
+        // without inventing progress; keep a separate bounded stage deadline.
+        if (activeJob_->lastActivity.elapsed() >= 5 * 60 * 1000) {
+            const auto expired = activeJob_;
+            if (expired->cancelled->cancel()) {
+                activeJob_.reset();
+                heartbeatTimer_.stop();
+                ++generation_;
+                sendError(expired->requestId, QStringLiteral("stage_timeout"),
+                          QStringLiteral("Model stage exceeded five minutes: %1")
+                              .arg(expired->lastStage),
+                          {{QStringLiteral("stage"), expired->lastStage}});
+                return;
+            }
+        }
+        emit messageReady(encodeProtocolMessage(
+            ProtocolType::Progress, activeJob_->requestId,
+            {{QStringLiteral("fraction"), activeJob_->lastProgress},
+             {QStringLiteral("stage"), activeJob_->lastStage}}));
+    });
 }
 
 WorkerEngine::~WorkerEngine()
@@ -98,6 +125,7 @@ void WorkerEngine::acceptLine(const QByteArray& line)
             if (accepted) {
                 rememberCancelledRequest(message.requestId);
                 activeJob_.reset();
+                heartbeatTimer_.stop();
                 ++generation_;
             }
         }
@@ -113,6 +141,7 @@ void WorkerEngine::acceptLine(const QByteArray& line)
             if (activeJob_) {
                 activeJob_->cancelled->cancel();
                 activeJob_.reset();
+                heartbeatTimer_.stop();
                 ++generation_;
             }
             emit messageReady(encodeProtocolMessage(
@@ -157,7 +186,9 @@ void WorkerEngine::startJob(const QString& requestId,
     context->requestId = requestId;
     context->generation = ++generation_;
     context->cancelled = std::make_shared<CancellationToken>();
+    context->lastActivity.start();
     activeJob_ = context;
+    heartbeatTimer_.start();
     forgetCancelledRequest(requestId);
     ++pendingTasks_;
 
@@ -201,6 +232,8 @@ void WorkerEngine::deliverProgress(const QString& requestId,
     const double monotonicFraction = std::max(
         activeJob_->lastProgress, std::clamp(fraction, 0.0, 1.0));
     activeJob_->lastProgress = monotonicFraction;
+    activeJob_->lastStage = stage;
+    activeJob_->lastActivity.restart();
     emit messageReady(encodeProtocolMessage(
         ProtocolType::Progress, requestId,
         {{QStringLiteral("fraction"), monotonicFraction},
@@ -229,6 +262,7 @@ void WorkerEngine::finishJob(const QString& requestId, quint64 generation,
         && activeJob_->generation == generation;
     if (current) {
         activeJob_.reset();
+        heartbeatTimer_.stop();
         if (result.ok) {
             emit messageReady(encodeProtocolMessage(ProtocolType::Result,
                                                     requestId, result.payload));

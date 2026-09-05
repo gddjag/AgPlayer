@@ -9,6 +9,8 @@ Item {
     property real opacityScale: 1.0
     readonly property var frequencyWaveformSettings:
         SettingsController.frequencyColorWaveform
+    property bool lightBackground: false
+    readonly property color timelineColor: lightBackground ? "#293D40" : "#DCE8F5" // theme-color-allow: immersive media visual contract
     readonly property real effectiveDurationMs:
         waveformSession && Number(waveformSession.durationMs) > 0
         ? Number(waveformSession.durationMs)
@@ -38,7 +40,7 @@ Item {
         width: 38
         horizontalAlignment: Text.AlignHCenter
         text: root.formatTime(root.playback ? root.playback.positionMs : 0)
-        color: "#DBE8F5" // theme-color-allow: immersive waveform time label
+        color: root.timelineColor // theme-color-allow: immersive waveform time label
         opacity: 0.72 * root.opacityScale
         font.pixelSize: Theme.fontSizeCaption
     }
@@ -84,7 +86,7 @@ Item {
         width: 38
         horizontalAlignment: Text.AlignHCenter
         text: root.formatTime(root.effectiveDurationMs)
-        color: "#DBE8F5" // theme-color-allow: immersive waveform time label
+        color: root.timelineColor // theme-color-allow: immersive waveform time label
         opacity: 0.72 * root.opacityScale
         font.pixelSize: Theme.fontSizeCaption
     }

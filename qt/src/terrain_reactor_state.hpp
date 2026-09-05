@@ -88,6 +88,16 @@ struct RenderStyleSnapshot {
     std::array<float, 8> visualEqGains{0.9F, 0.92F, 0.5F, 0.5F,
                                        0.5F, 0.5F, 0.5F, 0.48F};
     RenderColorMode colorMode = RenderColorMode::MultiRegion;
+    int materialMode = 0;
+    float columnSize = 1.0F;
+    float columnOpacity = 1.0F;
+    float reactorBrightness = 1.0F;
+    float materialSoftness = 0.45F;
+    float jellyElasticity = 0.35F;
+    float inkDensity = 0.60F;
+    float rippleStrength = 1.0F;
+    float rippleWidth = 1.0F;
+    float rippleDecay = 1.0F;
     float terrainAmplitude = 0.62F;
     float motionResponse = 0.56F;
     float gradientLayers = 0.74F;
@@ -129,6 +139,8 @@ struct VisualParameters {
     float particleActivity = 0.0F;
     float meteorActivity = 0.0F;
     float cameraPunch = 0.0F;
+    float beatStrength = 0.0F;
+    float beatAge = 0.0F;
     float impactStrength = 0.0F;
     float impactAge = 0.0F;
     float timeSeconds = 0.0F;
@@ -186,10 +198,11 @@ enum class DegradationStage : quint8 {
 struct QualityConfiguration {
     int gridSize = 128;
     int floatingCount = 52;
-    int particleCount = 144;
+    int particleCount = 1600;
     int meteorCount = 10;
     int rippleCount = 4;
     float internalScale = 0.90F;
+    int sampleCount = 4;
 };
 
 class AutomaticQualityController final {
@@ -200,7 +213,7 @@ public:
                             double targetFrameMilliseconds) noexcept;
     void advanceWallClock(double elapsedSeconds) noexcept;
     DegradationStage stage() const noexcept;
-    QualityConfiguration configuration() const noexcept;
+    QualityConfiguration configuration(bool eco = false) const noexcept;
 
 private:
     static constexpr double frameBudgetMilliseconds_ = 33.333;
@@ -257,6 +270,7 @@ public:
     int liveRendererCount() const noexcept;
     quint64 generation() const noexcept;
     bool claimPunchRevision(quint64 revision) noexcept;
+    bool claimBeatRevision(quint64 revision) noexcept;
     bool claimImpactRevision(quint64 revision) noexcept;
 
 private:
@@ -264,6 +278,7 @@ private:
     std::atomic<quint64> rendererId_{0};
     std::atomic<quint64> generation_{0};
     std::atomic<quint64> consumedPunchRevision_{0};
+    std::atomic<quint64> consumedBeatRevision_{0};
     std::atomic<quint64> consumedImpactRevision_{0};
     std::atomic_bool resourcesReady_{false};
 };
@@ -280,7 +295,7 @@ private:
 struct CameraSnapshot {
     float yaw = 2.6075219F;
     float pitch = 0.62F;
-    float distance = 160.0F;
+    float distance = 180.0F;
     float punch = 0.0F;
 };
 
@@ -290,6 +305,7 @@ public:
                  double nowSeconds) noexcept;
     void zoomBy(float wheelDelta, double nowSeconds) noexcept;
     void applyBeatPunch(float strength) noexcept;
+    void clearBeatPunch() noexcept;
     void advance(double nowSeconds, float elapsedSeconds,
                  float autoRotateSpeed) noexcept;
     CameraSnapshot snapshot() const noexcept;
@@ -316,9 +332,36 @@ class PunchEventConsumer final {
 public:
     explicit PunchEventConsumer(RendererResourceState& lifecycle) noexcept;
     bool consume(const PunchEvent& event, CameraMotion& camera) noexcept;
+    bool discard(const PunchEvent& event, CameraMotion& camera) noexcept;
 
 private:
     RendererResourceState& lifecycle_;
+};
+
+struct BeatEvent {
+    float strength = 0.0F;
+    quint64 revision = 0;
+};
+
+struct BeatPulseSnapshot {
+    float strength = 0.0F;
+    float age = 0.0F;
+    bool active = false;
+};
+
+class BeatEventConsumer final {
+public:
+    explicit BeatEventConsumer(RendererResourceState& lifecycle) noexcept;
+    bool consume(const BeatEvent& event, float nowSeconds) noexcept;
+    bool discard(const BeatEvent& event) noexcept;
+    BeatPulseSnapshot snapshot(float nowSeconds) const noexcept;
+
+private:
+    static constexpr float durationSeconds_ = 0.34F;
+    RendererResourceState& lifecycle_;
+    float startSeconds_ = 0.0F;
+    float baseStrength_ = 0.0F;
+    bool active_ = false;
 };
 
 struct ImpactEvent {
@@ -336,6 +379,7 @@ class ImpactEventConsumer final {
 public:
     explicit ImpactEventConsumer(RendererResourceState& lifecycle) noexcept;
     bool consume(const ImpactEvent& event, float nowSeconds) noexcept;
+    bool discard(const ImpactEvent& event) noexcept;
     ImpactPulseSnapshot snapshot(float nowSeconds) const noexcept;
 
 private:
