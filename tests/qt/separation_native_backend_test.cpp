@@ -74,6 +74,7 @@ private slots:
     void gpuSelectionTriesEveryAdapterUntilOnePasses();
     void gpuSelectionReportsEveryAdapterFailure();
     void autoSelectionTriesEveryGpuBeforeCpuFallback();
+    void demucsAutoAvoidsUnboundedDirectMlCompilation();
     void probeReportsHardwareGpuCandidateWithoutClaimingInferenceValidation();
 };
 
@@ -405,6 +406,26 @@ void SeparationNativeBackendTest::gpuSelectionReportsEveryAdapterFailure()
     QVERIFY(selection.message.contains(QStringLiteral("adapter 11 rejected")));
     QVERIFY(selection.message.contains(QStringLiteral("Secondary GPU")));
     QVERIFY(selection.message.contains(QStringLiteral("adapter 22 rejected")));
+}
+
+void SeparationNativeBackendTest::demucsAutoAvoidsUnboundedDirectMlCompilation()
+{
+    SequencedNativeProviderProbe probe;
+    probe.successfulGpuAdapter = 11;
+    NativeStartRequest request;
+    request.device = DeviceMode::Auto;
+    TrustedModelProfile profile;
+    profile.family = QStringLiteral("demucs");
+    CancellationToken cancelled;
+    const auto automatic = selectNativeProvider(request, profile, cancelled, probe);
+    QVERIFY(automatic.ok);
+    QCOMPARE(automatic.provider, ExecutionProvider::Cpu);
+    QVERIFY(!automatic.fallbackReason.isEmpty());
+    QVERIFY(probe.gpuAttempts.isEmpty());
+    request.device = DeviceMode::Gpu;
+    const auto forced = selectNativeProvider(request, profile, cancelled, probe);
+    QVERIFY(!forced.ok);
+    QCOMPARE(forced.code, QStringLiteral("demucs_directml_unsupported"));
 }
 
 void SeparationNativeBackendTest::autoSelectionTriesEveryGpuBeforeCpuFallback()

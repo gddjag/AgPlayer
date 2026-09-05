@@ -941,6 +941,12 @@ bool VocalSeparationController::start()
         setJobState(JobState::JobFailed, QStringLiteral("validation"));
         return false;
     }
+    if ((model->family == VocalModelFamily::Demucs || model->id == QStringLiteral("python-vr-5hp"))
+        && !deviceChosenByUser_
+        && deviceMode_ == DeviceMode::GPU) {
+        deviceMode_ = DeviceMode::Auto;
+        emit deviceModeChanged();
+    }
     ActiveRequestContext context;
     context.kind = RequestKind::Separation;
     context.inputPath = inputPath;
@@ -2141,7 +2147,7 @@ void VocalSeparationController::discoverCustomModels(
                 : QStringLiteral("external-python");
             const QString reason = suffix == QStringLiteral("onnx")
                 ? tr("已识别 ONNX 文件；需要兼容的 sidecar 配置并通过张量与运行时探测后才能执行")
-                : tr("已识别模型文件；需要安装可选外置 Python 运行时后才能执行");
+                : tr("已识别模型文件，但当前没有适配此架构的推理模块；仅安装 Python 环境不能使其运行。当前 Python 模式支持 5_HP-Karaoke-UVR.pth");
             const QString id = QStringLiteral("local-%1").arg(
                 QString::fromLatin1(QCryptographicHash::hash(
                     raw.absoluteFilePath().toUtf8(),
@@ -2364,10 +2370,14 @@ void VocalSeparationController::handleResult(const QJsonObject& payload)
     emit stemsChanged();
     publishedOutputRoot_ = context.outputRoot;
     if (!fallbackReason.isEmpty()) {
-        QVariantMap gpu = availableDevices_.at(2).toMap();
-        gpu.insert(QStringLiteral("available"), false);
-        gpu.insert(QStringLiteral("reason"), fallbackReason);
-        availableDevices_[2] = gpu;
+        const VocalModelCard* resultModel = modelForId(context.modelId);
+        if (resultModel == nullptr || (resultModel->family != VocalModelFamily::Demucs
+            && resultModel->id != QStringLiteral("python-vr-5hp"))) {
+            QVariantMap gpu = availableDevices_.at(2).toMap();
+            gpu.insert(QStringLiteral("available"), false);
+            gpu.insert(QStringLiteral("reason"), fallbackReason);
+            availableDevices_[2] = gpu;
+        }
         if (!deviceChosenByUser_ && deviceMode_ == DeviceMode::GPU) {
             deviceMode_ = DeviceMode::Auto;
             emit deviceModeChanged();
@@ -2419,9 +2429,13 @@ void VocalSeparationController::handleWaveform(
         value = stem;
         break;
     }
-    waveformQueue_.removeFirst();
     emit stemsChanged();
-    analyzeNextWaveform();
+    // The provider also emits progressive snapshots. Starting another track
+    // here cancels the active decoder and loses the remaining waveform.
+    if (layers.value(QStringLiteral("_complete"), true).toBool()) {
+        waveformQueue_.removeFirst();
+        QTimer::singleShot(0, this, &VocalSeparationController::analyzeNextWaveform);
+    }
 }
 
 void VocalSeparationController::handleWaveformFailure(

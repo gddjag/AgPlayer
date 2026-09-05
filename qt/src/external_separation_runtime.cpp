@@ -9,8 +9,11 @@
 #include "vocal_separation_path_safety.hpp"
 
 static void initializePythonResources() { Q_INIT_RESOURCE(agplayer_separation_python); }
-static VocalDownloadFile uvArchive() {
-    return {"uv.zip", QUrl("https://github.com/astral-sh/uv/releases/download/0.8.22/uv-x86_64-pc-windows-msvc.zip"),
+static VocalDownloadFile uvArchive(bool mirror = false) {
+    const QString official = QStringLiteral("https://github.com/astral-sh/uv/releases/download/0.8.22/uv-x86_64-pc-windows-msvc.zip");
+    // The relay changes transport only; both routes must match the same pinned
+    // official release size and SHA-256 before any archive is extracted.
+    return {"uv.zip", QUrl(mirror ? QStringLiteral("https://ghfast.top/") + official : official),
             20716936, "5049375aa2a5162f132b2c1cb992e25d42d47d934cab8c174dbe6f60973dcc12"};
 }
 
@@ -19,6 +22,14 @@ ExternalSeparationRuntime::ExternalSeparationRuntime(QString root,
     : QObject(parent), root_(std::move(root)), downloader_(network)
 {
     initializePythonResources();
+    QFile bundled(":/separation/external_separation_worker.py");
+    if (bundled.open(QIODevice::ReadOnly)) bundledWorker_ = bundled.readAll();
+    // Updating the application updates its bridge, not the optional Python
+    // installation. Reuse a verified environment without any network/process.
+    if (vocal_separation_paths::safeExistingFileWithin(python(), root_)
+        && vocal_separation_paths::safeExistingFileWithin(
+            QDir(root_).filePath("verified-vr-1"), root_))
+        synchronizeWorker();
     connect(&downloader_, &VocalSeparationDownloader::progressChanged, this,
             [this](qint64 received, qint64 total) {
         emit progress(total > 0 ? 0.1 * double(received) / double(total) : 0,
@@ -27,7 +38,16 @@ ExternalSeparationRuntime::ExternalSeparationRuntime(QString root,
     connect(&downloader_, &VocalSeparationDownloader::finished, this,
             [this](const VocalInstallResult& result) {
         if (!busy_) return;
-        if (!result.ok) { fail(result.error); return; }
+        if (!result.ok) {
+            if (!archiveMirror_) {
+                archiveMirror_ = true;
+                emit progress(0, tr("官方配置器线路失败，切换国内备用线路（仍验证官方 SHA-256）"));
+                downloader_.start(uvArchive(true), QDir(root_).filePath("uv.zip"));
+                return;
+            }
+            fail(tr("配置器官方及国内备用线路均失败：%1").arg(result.error));
+            return;
+        }
         step_ = 1;
         if (!paused_) advance();
     });
@@ -61,15 +81,18 @@ ExternalSeparationRuntime::ExternalSeparationRuntime(QString root,
             [this](int code, QProcess::ExitStatus status) {
         if (!busy_ || paused_) return;
         if (code != 0 || status != QProcess::NormalExit) {
-            if (step_ == 3 && !mirror_) {
+            if ((step_ == 2 || step_ == 3) && !mirror_) {
                 mirror_ = true;
-                emit progress(-1, tr("官方包源连接失败，切换清华 PyPI 镜像继续配置"));
+                emit progress(-1, step_ == 2
+                    ? tr("Python 官方线路失败，切换国内备用线路（保留官方发行校验）")
+                    : tr("官方包源连接失败，切换清华 PyPI 镜像继续配置"));
                 advance();
                 return;
             }
             fail(tr("Python 配置阶段 %1 失败：%2").arg(step_).arg(QString::fromUtf8(output_).right(1800)));
             return;
         }
+        mirror_ = false;
         ++step_;
         advance();
     });
@@ -86,8 +109,38 @@ QString ExternalSeparationRuntime::python() const { return QDir(root_).filePath(
 QString ExternalSeparationRuntime::workerScript() const { return QDir(root_).filePath("external_separation_worker.py"); }
 bool ExternalSeparationRuntime::ready() const
 {
-    return QFileInfo(python()).isFile() && QFileInfo(workerScript()).isFile()
-        && QFileInfo(QDir(root_).filePath("verified-vr-1")).isFile();
+    return vocal_separation_paths::safeExistingDirectory(root_)
+        && vocal_separation_paths::safeExistingFileWithin(python(), root_)
+        && vocal_separation_paths::safeExistingFileWithin(
+            QDir(root_).filePath("verified-vr-1"), root_)
+        && workerMatchesBundle();
+}
+
+bool ExternalSeparationRuntime::workerMatchesBundle() const
+{
+    if (bundledWorker_.isEmpty()) return false;
+    QFile worker(workerScript());
+    return vocal_separation_paths::openRegularFileForReadWithin(&worker, root_)
+        && worker.read(bundledWorker_.size() + 1) == bundledWorker_;
+}
+
+bool ExternalSeparationRuntime::synchronizeWorker()
+{
+    using namespace vocal_separation_paths;
+    const auto safeDestination = [this] {
+        const auto kind = safePathKind(workerScript());
+        return safeExistingDirectory(root_)
+            && (kind == SafePathKind::Missing
+                || safeExistingFileWithin(workerScript(), root_));
+    };
+    if (bundledWorker_.isEmpty() || !safeDestination()) return false;
+    if (workerMatchesBundle()) return true;
+    QSaveFile target(workerScript());
+    target.setDirectWriteFallback(false);
+    if (!target.open(QIODevice::WriteOnly)
+        || target.write(bundledWorker_) != bundledWorker_.size()
+        || !safeDestination() || !target.commit()) return false;
+    return workerMatchesBundle();
 }
 
 bool ExternalSeparationRuntime::start()
@@ -97,15 +150,12 @@ bool ExternalSeparationRuntime::start()
     if (!vocal_separation_paths::safeExistingDirectory(root_)) return false;
     const QString marker = QDir(root_).filePath("verified-vr-1");
     if (QFileInfo::exists(marker) && !QFile::remove(marker)) return false;
-    QFile source(":/separation/external_separation_worker.py");
-    QSaveFile target(workerScript());
-    if (!source.open(QIODevice::ReadOnly) || !target.open(QIODevice::WriteOnly)) return false;
-    const QByteArray script = source.readAll();
-    if (target.write(script) != script.size() || !target.commit()) return false;
+    if (!synchronizeWorker()) return false;
     busy_ = true;
     paused_ = false;
     step_ = 0;
     mirror_ = false;
+    archiveMirror_ = false;
     emit changed();
     emit progress(0, tr("外置 Python / PyTorch，约 450 MB 下载，约 1.5 GB 磁盘；不修改系统环境"));
     const QString archive = QDir(root_).filePath("uv.zip");
@@ -123,7 +173,16 @@ void ExternalSeparationRuntime::launch(const QString& program, const QStringList
     environment.insert("UV_PYTHON_INSTALL_DIR", QDir(root_).filePath("python"));
     environment.insert("UV_CACHE_DIR", QDir(root_).filePath("cache"));
     environment.insert("UV_NO_CONFIG", "1");
-    environment.insert("UV_HTTP_TIMEOUT", "180");
+    environment.insert("UV_HTTP_TIMEOUT", "15");
+    environment.insert("UV_HTTP_RETRIES", "1");
+    environment.insert("UV_PYTHON_INSTALL_REGISTRY", "false");
+    // uv's pinned binary contains official Python release URLs and checksums.
+    // Never replace its download metadata with data supplied by the relay.
+    environment.remove("UV_PYTHON_DOWNLOADS_JSON_URL");
+    environment.remove("UV_PYTHON_INSTALL_MIRROR");
+    if (step_ == 2 && mirror_)
+        environment.insert("UV_PYTHON_INSTALL_MIRROR",
+            "https://ghfast.top/https://github.com/astral-sh/python-build-standalone/releases/download");
     environment.insert("RUST_LOG", "error");
     environment.insert("AGPLAYER_PYTHON_ROOT", root_);
     process_.setProcessEnvironment(environment);
@@ -183,7 +242,7 @@ void ExternalSeparationRuntime::resume()
     if (step_ == 0) {
         if (downloader_.state() == VocalDownloadState::Paused) downloader_.resume();
         else if (downloader_.state() != VocalDownloadState::Verifying)
-            downloader_.start(uvArchive(), QDir(root_).filePath("uv.zip"));
+            downloader_.start(uvArchive(archiveMirror_), QDir(root_).filePath("uv.zip"));
     } else if (step_ > 0) advance();
 }
 void ExternalSeparationRuntime::cancel()

@@ -137,7 +137,7 @@ require_text("app/qml/AgPlayer/components/IntegratedPlayerShell.qml"
 require_text("app/qml/AgPlayer/components/RollingPlayerShell.qml"
     "Layout.preferredHeight: Theme.titleBarHeight")
 require_text("app/qml/AgPlayer/components/RollingPlayerShell.qml"
-    "Layout.preferredWidth: Theme.navigationWidthCompact")
+    "Layout.preferredWidth: Theme.navigationWidth")
 require_text("app/qml/AgPlayer/SettingsPage.qml"
     "Layout.preferredHeight: Theme.settingsRowHeight")
 require_text("app/qml/AgPlayer/SettingsPage.qml"

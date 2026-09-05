@@ -29,6 +29,9 @@ with open(Path(destination) / 'worker.log', 'w', encoding='utf8') as log:
             print('elapsed:', round(time.monotonic()-start, 2), 'evidence:', destination, flush=True)
             if event['type'] == 'error':
                 raise SystemExit(1)
+            assert event['payload']['device'] == 'cpu'
+            assert event['payload']['provider'] == 'python-vr-cpu'
+            assert 'CPU' in event['payload']['fallbackReason']
             import soundfile as sf
             import numpy as np
             for output in event['payload']['outputs']:

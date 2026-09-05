@@ -232,6 +232,21 @@ TestCase {
         }
     }
 
+    function test_rolling_default_window_is_1386_wide_and_shows_ten_rows() {
+        var rolling = rollingWithFakes()
+        mainWindow.width = rolling.defaultWindowWidth
+        mainWindow.height = rolling.defaultWindowHeight
+        wait(0)
+
+        var list = findChild(rolling, "rollingTrackList")
+        verify(list && list.headerItem)
+        compare(mainWindow.width, 1386)
+        compare(list.mapToItem(rolling, 0, 0).x, 233)
+        compare(list.width, 856)
+        compare(list.height, 516)
+        compare((list.height - list.headerItem.height) / list.rowHeight, 10)
+    }
+
     function test_waveform_mode_reuses_single_three_band_analysis() {
         var trackIds = nativeDropHelper.ensureSortableTracks()
         verify(trackIds.length > 0)
@@ -592,8 +607,8 @@ TestCase {
 
     function test_rolling_tempo_meter_and_zoom_controls_are_live() {
         var rolling = rollingWithFakes()
-        compare(rolling.viewTimeSpanSec, 2.0,
-                "fresh rolling viewport shows four beats at 120 BPM")
+        compare(rolling.viewTimeSpanSec, 4.0,
+                "fresh rolling viewport shows eight beats at 120 BPM")
         var sourceBpm = findChild(rolling, "rollingSourceBpm")
         var targetBpm = findChild(rolling, "rollingTargetBpm")
         var keepPitch = findChild(rolling, "rollingKeepPitchControl")
@@ -627,7 +642,7 @@ TestCase {
         rolling.zoomOut()
         compare(rolling.visibleBeats, 64)
         rolling.resetZoom()
-        compare(rolling.viewTimeSpanSec, 2.0)
+        compare(rolling.viewTimeSpanSec, 4.0)
 
         rolling.visibleBeats = 1
         tryCompare(rolling, "visibleBeats", 2)
@@ -654,7 +669,7 @@ TestCase {
         verify(Math.abs(rolling.pxPerSec - canvas.width / 4.0) < 0.0001)
         verify(Math.abs(rolling.timeToX(fakePlayback.positionMs / 1000)
                         - canvas.width * 0.5) < 0.0001)
-        compare(capsule.text, "01:00")
+        compare(capsule.text, "01:00:00")
         verify(capsule.mapToItem(canvas, capsule.width, 0).x
                < playhead.mapToItem(canvas, 0, 0).x,
                "the current-time capsule stays on the top-left of the needle")
@@ -686,6 +701,64 @@ TestCase {
         tryCompare(subtitle, "text", "测试艺术家 · 测试专辑")
         verify(findChild(rolling, "rollingFavoriteButton").visible)
         verify(findChild(rolling, "rollingTrackRating").visible)
+    }
+
+    function test_default_scroll_speed_and_centisecond_readout() {
+        var rolling = rollingWithFakes()
+        var canvas = findChild(rolling, "rollingMainWaveformCanvas")
+        var time = findChild(rolling, "rollingCurrentTimeCapsule")
+        verify(canvas && time)
+        compare(rolling.pxPerSec, canvas.width / 4,
+                "at 120 BPM the default viewport crosses in four seconds, not two")
+        fakePlayback.positionMs = 72009
+        tryCompare(time, "text", "01:12:00")
+        fakePlayback.positionMs = 72010
+        tryCompare(time, "text", "01:12:01")
+        fakePlayback.positionMs = 71999
+        tryCompare(time, "text", "01:11:99")
+    }
+
+    function test_rolling_waveform_retains_vertical_clearance() {
+        var savedHeight = SettingsController.waveformHeight
+        try {
+            SettingsController.waveformHeight = 1.5
+            var rolling = rollingWithFakes()
+            var canvas = findChild(rolling, "rollingMainWaveformCanvas")
+            var waveform = findChild(rolling, "rollingMainWaveform")
+            verify(canvas && waveform)
+            verify(waveform.y >= 12,
+                   "waveform must leave room below the needle time readout")
+            verify(waveform.y + waveform.height <= canvas.height - 12,
+                   "even high-amplitude settings must retain the bottom inset")
+            verify(waveform.amplitudeScale <= 0.8,
+                   "rolling must not magnify peaks into the viewport boundaries")
+            compare(waveform.preserveSourcePeakDensity, false)
+        } finally {
+            SettingsController.waveformHeight = savedHeight
+        }
+    }
+
+    function test_header_four_rows_align_as_one_cover_centered_block() {
+        var rolling = rollingWithFakes()
+        var cover = findChild(rolling, "rollingTrackCover")
+        var rows = [findChild(rolling, "rollingTitleRow"),
+                    findChild(rolling, "rollingSubtitleRow"),
+                    findChild(rolling, "rollingMetadataBadges"),
+                    findChild(rolling, "rollingOverviewInteraction")]
+        for (var index = 0; index < rows.length; ++index)
+            verify(rows[index])
+        var top = rows[0].mapToItem(rolling, 0, 0).y
+        var bottom = rows[3].mapToItem(rolling, 0, rows[3].height).y
+        verify(Math.abs((top + bottom) / 2
+                        - cover.mapToItem(rolling, 0, cover.height / 2).y) < 1,
+               "title, subtitle, metadata and overview together must center on the cover")
+        verify(bottom - top <= cover.height,
+               "the overview belongs inside the cover-aligned information block")
+        for (var row = 1; row < rows.length; ++row) {
+            var gap = rows[row].mapToItem(rolling, 0, 0).y
+                    - rows[row - 1].mapToItem(rolling, 0, rows[row - 1].height).y
+            verify(Math.abs(gap - 4) < 1, "all four information rows use the same gap")
+        }
     }
 
     function test_header_three_rows_are_evenly_spaced_and_cover_centered() {
@@ -721,7 +794,7 @@ TestCase {
         verify(navigation && column && tagTab && lyricsTab && tagContent
                && lyricsContent && lyricsPanel && toggle)
         compare(navigation.showTagManagementEntry, false)
-        compare(column.width, 264)
+        compare(column.width, Theme.playerInspectorWidth)
         verify(tagContent.visible)
         compare(lyricsContent.visible, false)
 
@@ -734,7 +807,7 @@ TestCase {
         mouseClick(toggle)
         tryCompare(column, "width", 42)
         mouseClick(toggle)
-        tryCompare(column, "width", 264)
+        tryCompare(column, "width", Theme.playerInspectorWidth)
         verify(lyricsContent.visible)
     }
 

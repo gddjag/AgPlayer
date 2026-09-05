@@ -445,6 +445,21 @@ TestCase {
         compare(title.font.weight, Font.DemiBold)
     }
 
+    function test_integrated_default_window_is_1386_wide_and_shows_ten_rows() {
+        var shell = enterIntegratedShell()
+        mainWindow.width = shell.defaultWindowWidth
+        mainWindow.height = shell.defaultWindowHeight
+        wait(0)
+
+        var list = findChild(shell, "integratedTrackList")
+        verify(list && list.headerItem)
+        compare(mainWindow.width, 1386)
+        compare(list.mapToItem(shell, 0, 0).x, 233)
+        compare(list.width, 856)
+        compare(list.height, 516)
+        compare((list.height - list.headerItem.height) / list.rowHeight, 10)
+    }
+
     function test_integrated_host_keeps_trailing_cells_inside_content_width() {
         var shell = enterIntegratedShell()
         mainWindow.width = 1180

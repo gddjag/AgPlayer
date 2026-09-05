@@ -296,6 +296,19 @@ NativeProviderSelection selectNativeProvider(
             QStringLiteral("Provider probe cancelled")};
     };
     if (cancelled.isCancelled()) return cancelledResult();
+    // This pinned HTDemucs export expands dramatically during DirectML graph
+    // compilation (over 20 GiB on a 4070 Ti SUPER before the first chunk).
+    // A provider probe compiles that same graph, so do not attempt it first.
+    if (profile.family == QStringLiteral("demucs") && request.device != DeviceMode::Cpu) {
+        const QString reason = QStringLiteral(
+            "当前标准五轨模型的 DirectML 图编译内存占用过高，使用 CPU 分离；GPU 模式请改选自动或 CPU");
+        if (request.device == DeviceMode::Gpu)
+            return {false, ExecutionProvider::DirectMl, 0, {},
+                    QStringLiteral("demucs_directml_unsupported"), reason};
+        const BackendResult cpu = probe.prove(request, profile, ExecutionProvider::Cpu, 0, cancelled);
+        if (cancelled.isCancelled()) return cancelledResult();
+        return {cpu.ok, ExecutionProvider::Cpu, 0, reason, cpu.code, cpu.message};
+    }
     if (request.device == DeviceMode::Cpu) {
         const BackendResult cpu = probe.prove(request, profile,
                                               ExecutionProvider::Cpu, 0,

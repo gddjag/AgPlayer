@@ -231,7 +231,9 @@ void WindowController::setMainWindowShellMode(int mode)
     persistGeometry(mainWindow_, mainWindowGeometryKey());
     persistListWindowState();
     mainWindowShellMode_ = mode;
-    loadPersistedListWindowState();
+    if (mainWindowShellMode_ == 0) {
+        loadPersistedListWindowState();
+    }
     if (mainWindow_ != nullptr) {
         restoreMainWindowGeometry(mainWindow_, true);
         if (mainWindowShellMode_ == 0) {
@@ -260,7 +262,7 @@ void WindowController::setMainWindowShellMode(int mode)
         persistGeometry(mainWindow_, mainWindowGeometryKey());
         emit mainWindowGeometryChanged();
     }
-    if (listWindow_ != nullptr && mainWindowShellMode_ != 1) {
+    if (listWindow_ != nullptr && mainWindowShellMode_ == 0) {
         listWindowGeometryInitialized_ = false;
         restoreGeometry(listWindow_, listWindowGeometryKey());
         setListDockEdge(listWindowDetached_ ? QStringLiteral("none") : listDockEdge_);
@@ -273,6 +275,8 @@ void WindowController::setMainWindowShellMode(int mode)
             setListWindowY(listWindow_->y());
         }
         applyListWindowVisible(shouldShowListWindow());
+    } else {
+        applyListWindowVisible(false);
     }
 }
 
@@ -797,7 +801,8 @@ void WindowController::shutdown()
 
 bool WindowController::shouldShowListWindow() const
 {
-    return listWindowPanelAllowed_ && listWindowRequestedVisible_ && mainVisible_
+    return mainWindowShellMode_ == 0
+        && listWindowPanelAllowed_ && listWindowRequestedVisible_ && mainVisible_
         && !isMinimized(mainWindow_)
         && (listWindowDetached_ || !isMaximized(mainWindow_));
 }
@@ -822,6 +827,10 @@ void WindowController::setAlwaysOnTop(bool alwaysOnTop)
 
 void WindowController::showListWindow()
 {
+    if (mainWindowShellMode_ != 0) {
+        applyListWindowVisible(false);
+        return;
+    }
     listWindowRequestedVisible_ = true;
     settings_.setValue(listWindowRequestedVisibleKey(), true);
     scheduleWindowStateSync();
@@ -830,6 +839,10 @@ void WindowController::showListWindow()
 
 void WindowController::hideListWindow()
 {
+    if (mainWindowShellMode_ != 0) {
+        applyListWindowVisible(false);
+        return;
+    }
     listWindowRequestedVisible_ = false;
     settings_.setValue(listWindowRequestedVisibleKey(), false);
     scheduleWindowStateSync();
@@ -1368,12 +1381,13 @@ void WindowController::loadPersistedListWindowState()
 
 void WindowController::persistListWindowState()
 {
+    if (mainWindowShellMode_ != 0) {
+        return;
+    }
     settings_.setValue(listWindowRequestedVisibleKey(), listWindowRequestedVisible_);
     settings_.setValue(listWindowDockEdgeKey(), listDockEdge_);
     persistGeometry(listWindow_, listWindowGeometryKey());
-    if (mainWindowShellMode_ != 1) {
-        settings_.setValue(listWindowGeometryVersionKey(), 1);
-    }
+    settings_.setValue(listWindowGeometryVersionKey(), 1);
 }
 
 bool WindowController::restoreGeometry(QWindow* window, const QString& key)
@@ -1490,30 +1504,22 @@ QString WindowController::mainWindowGeometryKey() const
 
 QString WindowController::listWindowGeometryKey() const
 {
-    return mainWindowShellMode_ == 2
-        ? QStringLiteral("windows/rollingListGeometry")
-        : QStringLiteral("windows/listGeometry");
+    return QStringLiteral("windows/listGeometry");
 }
 
 QString WindowController::listWindowGeometryVersionKey() const
 {
-    return mainWindowShellMode_ == 2
-        ? QStringLiteral("windows/rollingListGeometryVersion")
-        : QStringLiteral("windows/listGeometryVersion");
+    return QStringLiteral("windows/listGeometryVersion");
 }
 
 QString WindowController::listWindowRequestedVisibleKey() const
 {
-    return mainWindowShellMode_ == 2
-        ? QStringLiteral("windows/rollingListRequestedVisible")
-        : QStringLiteral("windows/listRequestedVisible");
+    return QStringLiteral("windows/listRequestedVisible");
 }
 
 QString WindowController::listWindowDockEdgeKey() const
 {
-    return mainWindowShellMode_ == 2
-        ? QStringLiteral("windows/rollingListDockEdge")
-        : QStringLiteral("windows/listDockEdge");
+    return QStringLiteral("windows/listDockEdge");
 }
 
 bool WindowController::restoreMainWindowGeometry(QWindow* window,
@@ -1537,8 +1543,8 @@ bool WindowController::restoreMainWindowGeometry(QWindow* window,
     }
     const QRect available = screen->availableGeometry();
     const QSize preferred = mainWindowShellMode_ == 1
-        ? QSize(1386, 941)
-        : mainWindowShellMode_ == 2 ? QSize(1386, 820) : QSize(863, 266);
+        ? QSize(1386, 832)
+        : mainWindowShellMode_ == 2 ? QSize(1386, 972) : QSize(863, 266);
     const QSize size = preferred.boundedTo(available.size());
     QRect geometry(QPoint(), size);
     geometry.moveCenter(available.center());

@@ -5,8 +5,8 @@ import AgPlayer
 Item {
     id: root
     objectName: "integratedPlayerShell"
-    implicitWidth: 1672
-    implicitHeight: 941
+    implicitWidth: defaultWindowWidth
+    implicitHeight: defaultWindowHeight
 
     // The shell never creates a second model.  Its host injects the same
     // filter state owned by Classic; singleton defaults only preserve the
@@ -40,6 +40,15 @@ Item {
     property int waveformNavigatorHeight: 8
     property int bottomBarHeight: Theme.playerBottomBarHeight
     property int contentSpacing: Theme.spacingSm
+    readonly property int defaultWindowWidth: 1386
+    readonly property int defaultTrackListHeight:
+        Theme.tableHeaderHeight + 10 * Theme.mediaListRowHeight
+    readonly property int defaultWindowHeight:
+        topBarHeight
+        + 2 * contentSpacing + defaultTrackListHeight
+        + Theme.spacingXs + 32
+        + waveformHeight + waveformNavigatorHeight + 2 * Theme.spacingXs
+        + bottomBarHeight + contentSpacing
     property bool _waveformViewportResetPending: false
     readonly property real effectiveDurationMs: waveformDurationMs > 0
                                                 ? waveformDurationMs
@@ -273,6 +282,7 @@ Item {
                             objectName: "integratedTrackList"
                             Layout.fillWidth: true
                             Layout.fillHeight: true
+                            Layout.preferredHeight: root.defaultTrackListHeight
                             trackModel: root.filterModel || root.libraryModel
                             playlistModel: root.playlistModel
                             selectedCategory: root.filterModel

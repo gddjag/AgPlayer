@@ -236,7 +236,7 @@ private:
     int listWindowX_ = 0;
     int listWindowY_ = 0;
     int listWindowWidth_ = 960;
-    int listWindowHeight_ = 568;
+    int listWindowHeight_ = 592;
     bool listWindowGeometryInitialized_ = false;
     bool updatingWindowGeometry_ = false;
     bool updatingWindowZOrder_ = false;

@@ -14,6 +14,7 @@
 #include <QJsonDocument>
 #include <QMetaEnum>
 #include <QProcess>
+#include <QNetworkReply>
 #include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -31,6 +32,25 @@
 
 class VocalSeparationControllerTestDriver {
 public:
+    static void publishGpuCandidate(VocalSeparationController& controller)
+    {
+        controller.handleProbe({{"cpu", true}, {"gpu", true}});
+    }
+    static void prepareResultWaveform(VocalSeparationController& controller)
+    {
+        controller.stems_ = {QVariantMap{{"kind", int(VocalSeparationController::StemKind::Vocals)},
+                                        {"path", "result.wav"}, {"waveform", QVariantList{}}}};
+        controller.waveformQueue_ = {{"result.wav", "result-track",
+            VocalSeparationController::StemKind::Vocals, controller.resultGeneration_}};
+    }
+
+    static void deliverResultWaveform(VocalSeparationController& controller,
+                                      const QVariantList& peaks, bool complete)
+    {
+        controller.handleWaveform("result.wav", {{"_trackId", "result-track"},
+                                                  {"mix", peaks}, {"_complete", complete}});
+    }
+
     static QByteArray lifecycleDiagnostic(
         const VocalSeparationController& controller)
     {
@@ -140,6 +160,7 @@ private slots:
     void exposesStartEligibilityAndAnAlwaysSelectableAutoDevice();
     void workerPayloadUsesCurrentLanguageStemLabelsAndCatalogDisplayName();
     void successfulWorkerResultPublishesExistingOutputsWaveformsAndFallbackReason();
+    void progressiveResultWaveformKeepsTheRequestUntilComplete();
     void stemPreviewVolumesRemainIndependentAndDriveTheSharedPreview();
     void mdxResultPreviewSwitchesBetweenMixAndSoloAtTheSharedPosition();
     void demucsResultMixExcludesTheDerivedAccompanimentWhenComponentsAreComplete();
@@ -154,8 +175,12 @@ private slots:
     void workerOutputOutsideTheSelectedDirectoryIsRejected();
     void providerProbeRetryRemainsInTheProbingState();
     void pageProbeWaitsForVerificationAndSelectsGpu();
+    void automaticDemucsShowsCpuCompatibilityAndPreservesGpuForOtherModels();
     void knownVrModelOffersExternalConfigurationWithPause();
     void externalRuntimeRealInstallAndCachedRepair();
+    void externalRuntimeRetriesThePinnedArchiveThroughTheBackupRoute();
+    void existingPythonEnvironmentUpgradesTheBundledWorkerWithoutDownloading();
+    void pythonWorkerUpgradeRejectsARedirectedRuntimeRoot();
     void immediateCancellationBeforeHelloNeverCompletesTheJob();
     void runningRequestRejectsMutationsThatWouldChangeItsMeaning();
     void publishedStemReplacementWithJunctionIsRejectedByEveryAction();
@@ -174,6 +199,33 @@ private slots:
 };
 
 namespace {
+
+class UnavailableDownloadReply final : public QNetworkReply {
+public:
+    UnavailableDownloadReply(const QNetworkRequest& request, QObject* parent) : QNetworkReply(parent)
+    {
+        setRequest(request);
+        setUrl(request.url());
+        open(QIODevice::ReadOnly);
+        QTimer::singleShot(0, this, [this] {
+            setError(QNetworkReply::TimeoutError, "route timed out");
+            setFinished(true);
+            emit finished();
+        });
+    }
+    void abort() override {}
+    qint64 readData(char*, qint64) override { return -1; }
+};
+
+class UnavailableDownloadNetwork final : public QNetworkAccessManager {
+public:
+    QStringList hosts;
+    QNetworkReply* createRequest(Operation, const QNetworkRequest& request, QIODevice*) override
+    {
+        hosts.append(request.url().host());
+        return new UnavailableDownloadReply(request, this);
+    }
+};
 
 bool writeBytes(const QString& path, const QByteArray& bytes)
 {
@@ -909,6 +961,17 @@ workerPayloadUsesCurrentLanguageStemLabelsAndCatalogDisplayName()
              QJsonArray({QStringLiteral("人声"), QStringLiteral("伴奏")}));
 }
 
+void VocalSeparationControllerTest::progressiveResultWaveformKeepsTheRequestUntilComplete()
+{
+    QTemporaryDir temporary;
+    auto options = optionsFor(temporary, QStringLiteral("success"), QByteArray("test"));
+    VocalSeparationController controller(nullptr, nullptr, nullptr, nullptr, nullptr, options);
+    VocalSeparationControllerTestDriver::prepareResultWaveform(controller);
+    VocalSeparationControllerTestDriver::deliverResultWaveform(controller, {0.2, 0.0}, false);
+    VocalSeparationControllerTestDriver::deliverResultWaveform(controller, {0.2, 0.8}, true);
+    QCOMPARE(controller.stems().first().toMap().value("waveform").toList(), QVariantList({0.2, 0.8}));
+}
+
 void VocalSeparationControllerTest::
 successfulWorkerResultPublishesExistingOutputsWaveformsAndFallbackReason()
 {
@@ -1376,6 +1439,8 @@ void VocalSeparationControllerTest::externalRuntimeRealInstallAndCachedRepair()
     if (root.isEmpty()) QSKIP("Opt-in: installs an isolated optional Python environment");
     QNetworkAccessManager network;
     ExternalSeparationRuntime runtime(root, &network);
+    connect(&runtime, &ExternalSeparationRuntime::progress, &runtime,
+            [](double fraction, const QString& detail) { qInfo() << fraction << detail; });
     QSignalSpy completed(&runtime, &ExternalSeparationRuntime::finished);
     QVERIFY(runtime.start());
     runtime.pause(); // Includes the cache-verification / completed-download boundary.
@@ -1392,6 +1457,74 @@ void VocalSeparationControllerTest::externalRuntimeRealInstallAndCachedRepair()
     QTRY_VERIFY_WITH_TIMEOUT(!completed.isEmpty(), 600000);
     QVERIFY2(completed.first().first().toBool(), qPrintable(completed.first().at(1).toString()));
     QVERIFY(runtime.ready());
+}
+
+void VocalSeparationControllerTest::existingPythonEnvironmentUpgradesTheBundledWorkerWithoutDownloading()
+{
+    QTemporaryDir temporary;
+    const QString root = temporary.filePath("installed-runtime");
+    const QString python = QDir(root).filePath("env/Scripts/python.exe");
+    const QString marker = QDir(root).filePath("verified-vr-1");
+    const QString worker = QDir(root).filePath("external_separation_worker.py");
+    QVERIFY(writeBytes(python, "existing interpreter - never executed by this test"));
+    QVERIFY(writeBytes(marker, "audio-separator=0.30.2"));
+    QVERIFY(writeBytes(worker, "# worker from the previous application version\n"));
+    UnavailableDownloadNetwork network;
+    ExternalSeparationRuntime runtime(root, &network);
+    QFile bundled(":/separation/external_separation_worker.py");
+    QFile installed(worker);
+    QVERIFY(bundled.open(QIODevice::ReadOnly));
+    QVERIFY(installed.open(QIODevice::ReadOnly));
+    QCOMPARE(installed.readAll(), bundled.readAll());
+    QVERIFY(runtime.ready());
+    QVERIFY(!runtime.busy());
+    QVERIFY(network.hosts.isEmpty());
+    QFile interpreter(python);
+    QVERIFY(interpreter.open(QIODevice::ReadOnly));
+    QCOMPARE(interpreter.readAll(), QByteArray("existing interpreter - never executed by this test"));
+    // Refuse a worker changed after construction instead of accepting the old
+    // environment marker as permission to execute arbitrary stale contents.
+    installed.close();
+    QVERIFY(writeBytes(worker, "# stale or replaced worker\n"));
+    QVERIFY(!runtime.ready());
+}
+
+void VocalSeparationControllerTest::pythonWorkerUpgradeRejectsARedirectedRuntimeRoot()
+{
+#ifndef Q_OS_WIN
+    QSKIP("NTFS junction coverage is Windows-only");
+#else
+    QTemporaryDir temporary;
+    QTemporaryDir outside;
+    QVERIFY(writeBytes(outside.filePath("env/Scripts/python.exe"), "interpreter"));
+    QVERIFY(writeBytes(outside.filePath("verified-vr-1"), "audio-separator=0.30.2"));
+    const QString worker = outside.filePath("external_separation_worker.py");
+    QVERIFY(writeBytes(worker, "outside worker must not be replaced"));
+    const QString redirectedRoot = temporary.filePath("redirected-runtime");
+    QVERIFY(createJunction(redirectedRoot, outside.path()));
+    JunctionGuard guard(redirectedRoot);
+    UnavailableDownloadNetwork network;
+    ExternalSeparationRuntime runtime(redirectedRoot, &network);
+    QVERIFY(!runtime.ready());
+    QFile original(worker);
+    QVERIFY(original.open(QIODevice::ReadOnly));
+    QCOMPARE(original.readAll(), QByteArray("outside worker must not be replaced"));
+    QVERIFY(network.hosts.isEmpty());
+#endif
+}
+
+void VocalSeparationControllerTest::externalRuntimeRetriesThePinnedArchiveThroughTheBackupRoute()
+{
+    QTemporaryDir temporary;
+    UnavailableDownloadNetwork network;
+    ExternalSeparationRuntime runtime(temporary.filePath("runtime"), &network);
+    QSignalSpy completed(&runtime, &ExternalSeparationRuntime::finished);
+    QVERIFY(runtime.start());
+    QTRY_VERIFY_WITH_TIMEOUT(!completed.isEmpty(), 10000);
+    QVERIFY(!completed.first().first().toBool());
+    QVERIFY(network.hosts.contains(QStringLiteral("github.com")));
+    QVERIFY(network.hosts.contains(QStringLiteral("ghfast.top")));
+    QVERIFY(!runtime.ready());
 }
 
 void VocalSeparationControllerTest::knownVrModelOffersExternalConfigurationWithPause()
@@ -1411,6 +1544,10 @@ void VocalSeparationControllerTest::knownVrModelOffersExternalConfigurationWithP
     QTRY_VERIFY_WITH_TIMEOUT(controller.selectModel(QStringLiteral("python-vr-5hp")), 5000);
     QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
     QVERIFY(!controller.canStart()); // A matching filename is not an installed Python environment.
+    VocalSeparationControllerTestDriver::publishGpuCandidate(controller);
+    QCOMPARE(controller.deviceMode(), VocalSeparationController::DeviceMode::GPU);
+    QVERIFY(!controller.start()); // Still no environment; device display must already reflect the CPU adapter.
+    QCOMPARE(controller.deviceMode(), VocalSeparationController::DeviceMode::Auto);
     QVERIFY(controller.configureRuntime(QStringLiteral("python-vr-5hp")));
     QVERIFY(controller.downloadBusy());
     controller.pauseDownload();
@@ -1418,6 +1555,25 @@ void VocalSeparationControllerTest::knownVrModelOffersExternalConfigurationWithP
     controller.cancelDownload();
     QVERIFY(!controller.downloadBusy());
     QVERIFY(!controller.canStart());
+}
+
+void VocalSeparationControllerTest::automaticDemucsShowsCpuCompatibilityAndPreservesGpuForOtherModels()
+{
+    QTemporaryDir temporary;
+    const QByteArray bytes("trusted-test-model");
+    auto options = optionsFor(temporary, QStringLiteral("success"), bytes);
+    installTestModel(options, QStringLiteral("five-stem"), bytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, QByteArrayLiteral("runtime")));
+    VocalSeparationController controller(nullptr, nullptr, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.selectModel(QStringLiteral("five-stem")));
+    QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
+    VocalSeparationControllerTestDriver::publishGpuCandidate(controller);
+    QCOMPARE(controller.deviceMode(), VocalSeparationController::DeviceMode::GPU);
+    QVERIFY(controller.start());
+    QCOMPARE(controller.deviceMode(), VocalSeparationController::DeviceMode::Auto);
+    QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(), VocalSeparationController::JobState::Completed, 5000);
+    QVERIFY(controller.availableDevices().at(2).toMap().value("available").toBool());
+    QCOMPARE(controller.history().first().toMap().value("provider").toString(), QStringLiteral("cpu"));
 }
 
 void VocalSeparationControllerTest::pageProbeWaitsForVerificationAndSelectsGpu()

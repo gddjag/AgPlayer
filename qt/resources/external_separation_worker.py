@@ -46,6 +46,8 @@ def run(request, payload):
             emit('progress', request, dict(fraction=0, stage=stage[0]))
     threading.Thread(target=heartbeat, daemon=True).start()
     try:
+        if payload.get('device', 'auto') == 'gpu':
+            raise ValueError('当前 Python VR 适配器仅支持 CPU，请选择自动或 CPU 后重试')
         with contextlib.redirect_stdout(sys.stderr):
             print('Initializing FFmpeg and Python imports', file=sys.stderr, flush=True)
             prepare_environment()
@@ -115,7 +117,9 @@ def run(request, payload):
                     raise RuntimeError('分离输出音轨缺失：' + stem)
                 outputs.append(str(matches[0]))
         DONE.set()
-        emit('result', request, dict(outputs=outputs, device='cpu', provider='python-vr-cpu'))
+        emit('result', request, dict(outputs=outputs, device='cpu', provider='python-vr-cpu',
+                                    fallbackReason='当前 Python VR 适配器仅支持 CPU，已使用 CPU 分离'
+                                    if payload.get('device', 'auto') == 'auto' else ''))
     except Exception as error:
         DONE.set()
         emit('error', request, dict(code='external_runtime', message=str(error), retryable=True))

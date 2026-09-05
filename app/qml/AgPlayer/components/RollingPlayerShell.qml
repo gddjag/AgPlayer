@@ -6,6 +6,8 @@ import AgPlayer
 Item {
     id: root
     objectName: "rollingPlayerShell"
+    implicitWidth: defaultWindowWidth
+    implicitHeight: defaultWindowHeight
 
     component DeckToolButton: ToolButton {
         flat: true
@@ -33,7 +35,8 @@ Item {
     property var currentTrack: null
     // Rolling viewport state. Waveform samples/layers remain owned and
     // rendered by WaveformItem; only the visible time interval changes.
-    property real visibleBeats: 4.0
+    // Eight beats halve the default visual travel speed without changing audio tempo.
+    property real visibleBeats: 8.0
     property bool scratchGestureActive: false
     property real scratchVisualPositionMs: 0
     property real scratchAnchorPositionMs: 0
@@ -45,6 +48,14 @@ Item {
     property alias tagSearchText: rollingSidePanel.tagSearchText
     property int sidePanelPage: 0
     property bool sidePanelExpanded: true
+    readonly property int defaultWindowWidth: 1386
+    readonly property int defaultTrackListHeight:
+        Theme.tableHeaderHeight + 10 * Theme.mediaListRowHeight
+    readonly property int defaultWindowHeight:
+        Theme.titleBarHeight + Theme.rollingOverviewHeight + 24
+        + Theme.rollingWaveformHeight + 64 + 2
+        + 4 * 4
+        + 2 * 6 + defaultTrackListHeight + 4 + 32 + 8
 
     readonly property real effectiveDurationMs:
         waveformSession && Number(waveformSession.durationMs) > 0
@@ -146,6 +157,14 @@ Item {
                 + (seconds < 10 ? "0" : "") + seconds
     }
 
+    function formatPreciseTime(milliseconds) {
+        var value = Number(milliseconds)
+        var bounded = isFinite(value) ? Math.max(0, value) : 0
+        var centiseconds = Math.floor(bounded / 10) % 100
+        return formatTime(bounded) + ":"
+                + (centiseconds < 10 ? "0" : "") + centiseconds
+    }
+
     function formatMetadataNumber(value) {
         return Math.abs(value - Math.round(value)) < 0.01
                 ? Math.round(value).toString() : value.toFixed(1)
@@ -231,7 +250,7 @@ Item {
     }
 
     function resetZoom() {
-        visibleBeats = 4.0
+        visibleBeats = 8.0
     }
 
     function finishScratchGesture(cancelled) {
@@ -385,9 +404,7 @@ Item {
             id: overviewRegion
             objectName: "rollingOverviewRegion"
             Layout.fillWidth: true
-            Layout.preferredHeight: root.height < 700
-                                    ? Theme.rollingOverviewHeightCompact + 24
-                                    : Theme.rollingOverviewHeight + 24
+            Layout.preferredHeight: coverFrame.height + 16
             Layout.leftMargin: 10
             Layout.rightMargin: 10
 
@@ -397,7 +414,7 @@ Item {
                 anchors.left: parent.left
                 anchors.top: parent.top
                 anchors.topMargin: 8
-                height: root.height < 700 ? 76 : 92
+                height: root.height < 700 ? 100 : 116
                 width: height
                 color: Theme.panel
                 border.color: Theme.border
@@ -424,7 +441,8 @@ Item {
                 anchors.leftMargin: 16
                 anchors.right: parent.right
                 anchors.verticalCenter: coverFrame.verticalCenter
-                height: 78
+                height: titleRow.height + subtitleRow.height + badgeRow.height
+                        + overviewWaveformHost.height + 3 * Theme.spacingXs
 
                 Row {
                     id: titleRow
@@ -433,7 +451,7 @@ Item {
                     anchors.right: meters.left
                     anchors.rightMargin: 12
                     anchors.top: parent.top
-                    height: 28
+                    height: root.height < 700 ? 24 : 28
                     spacing: 8
                     clip: true
 
@@ -454,7 +472,7 @@ Item {
                     DeckToolButton {
                         objectName: "rollingFavoriteButton"
                         width: 28
-                        height: 28
+                        height: parent.height
                         icon.source: root.currentTrack && root.currentTrack.favorite
                                      ? Theme.icon("heart-fill") : Theme.icon("heart-line")
                         icon.color: root.currentTrack && root.currentTrack.favorite
@@ -467,13 +485,14 @@ Item {
                 }
 
                 Row {
+                    id: subtitleRow
                     objectName: "rollingSubtitleRow"
                     anchors.left: parent.left
                     anchors.top: titleRow.bottom
                     anchors.topMargin: 4
                     anchors.right: meters.left
                     anchors.rightMargin: 12
-                    height: 20
+                    height: root.height < 700 ? 18 : 20
                     spacing: 6
 
                     TrackSubtitle {
@@ -593,14 +612,15 @@ Item {
                 anchors.left: coverFrame.right
                 anchors.leftMargin: 16
                 anchors.top: headerInfo.top
-                anchors.topMargin: 56
-                height: 22
+                anchors.topMargin: titleRow.height + subtitleRow.height
+                                   + 2 * Theme.spacingXs
+                height: root.height < 700 ? 18 : 22
                 spacing: 5
                 Repeater {
                     model: root.metadataBadges
                     Rectangle {
                         width: badgeText.implicitWidth + 12
-                        height: 22
+                        height: badgeRow.height
                         color: Theme.panel
                         border.color: Theme.border
                         border.width: 1
@@ -622,9 +642,9 @@ Item {
                 anchors.left: coverFrame.right
                 anchors.leftMargin: 16
                 anchors.right: parent.right
-                anchors.top: headerInfo.bottom
-                anchors.topMargin: 4
-                anchors.bottom: parent.bottom
+                anchors.top: badgeRow.bottom
+                anchors.topMargin: Theme.spacingXs
+                height: root.height < 700 ? 24 : 30
 
                 WaveformItem {
                     id: overviewWaveform
@@ -766,10 +786,10 @@ Item {
                 id: mainWaveform
                 objectName: "rollingMainWaveform"
                 x: root.waveformContentX
-                y: 1
+                y: 16
                 width: Math.max(0, (parent.width - 2)
                                 * root.waveformContentWidthFraction)
-                height: Math.max(0, parent.height - 2)
+                height: Math.max(0, parent.height - 32)
                 layers: root.waveformSession
                         ? root.waveformSession.layers : ({})
                 duration: root.effectiveDurationMs
@@ -782,7 +802,7 @@ Item {
                 midColor: root.frequencyWaveformSettings.midColor
                 highColor: root.frequencyWaveformSettings.highColor
                 frequencyUnplayedOpacity: 1.0
-                amplitudeScale: Math.min(1.0, SettingsController.waveformHeight * 1.2)
+                amplitudeScale: Math.min(0.8, SettingsController.waveformHeight * 0.8)
                 density: SettingsController.waveformDensity
                 // The analyser already provides a bounded, high-detail source.
                 // Fill the physical-pixel budget from the visible time slice so
@@ -859,7 +879,7 @@ Item {
                 anchors.rightMargin: 6
                 anchors.top: parent.top
                 anchors.topMargin: 8
-                text: root.formatTime(root.viewportCenterMs)
+                text: root.formatPreciseTime(root.viewportCenterMs)
                 color: Theme.primaryText
                 font.pixelSize: Theme.fontSizeCaption
                 padding: 0
@@ -1157,8 +1177,8 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.minimumHeight: 250
-            Layout.leftMargin: 10
-            Layout.rightMargin: 10
+            Layout.leftMargin: Theme.spacingSm
+            Layout.rightMargin: Theme.spacingSm
             Layout.bottomMargin: 8
             color: Theme.listWorkspaceSurface
             border.color: Qt.rgba(Theme.border.r, Theme.border.g,
@@ -1179,9 +1199,9 @@ Item {
                     SideNavigation {
                         id: rollingNavigation
                         objectName: "rollingLibraryNavigation"
-                        Layout.preferredWidth: Theme.navigationWidthCompact
-                        Layout.minimumWidth: Theme.navigationWidthCompact
-                        Layout.maximumWidth: Theme.navigationWidthCompact
+                        Layout.preferredWidth: Theme.navigationWidth
+                        Layout.minimumWidth: Theme.navigationWidth
+                        Layout.maximumWidth: Theme.navigationWidth
                         Layout.fillHeight: true
                         navigationModel: root.navigationModel
                         playlistModel: root.playlistModel
@@ -1219,13 +1239,17 @@ Item {
                     ColumnLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        Layout.margins: 6
+                        Layout.leftMargin: Theme.spacingSm
+                        Layout.rightMargin: Theme.spacingSm
+                        Layout.topMargin: 6
+                        Layout.bottomMargin: 6
                         spacing: 4
 
                         TrackList {
                             objectName: "rollingTrackList"
                             Layout.fillWidth: true
                             Layout.fillHeight: true
+                            Layout.preferredHeight: root.defaultTrackListHeight
                             trackModel: root.filterModel || root.libraryModel
                             playlistModel: root.playlistModel
                             selectedCategory: root.filterModel
@@ -1267,7 +1291,8 @@ Item {
                     LibrarySidePanel {
                         id: rollingSidePanel
                         objectNamePrefix: "rolling"
-                        expandedWidth: Theme.playerTagPanelWidth
+                        Layout.leftMargin: 1
+                        expandedWidth: Theme.playerInspectorWidth
                         tagModel: root.tagModel
                         filterModel: root.filterModel
                         lyricsService: root.lyricsService

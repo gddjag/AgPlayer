@@ -528,6 +528,7 @@ void VocalSeparationDownloader::issueRequest(quint64 operation)
         return;
     }
     QNetworkRequest request(m_file.url);
+    request.setTransferTimeout(15'000); // No incoming data: retry, then try the backup route.
     if (m_resumeOffset > 0) {
         request.setRawHeader("Range", "bytes=" + QByteArray::number(m_resumeOffset) + "-");
     }

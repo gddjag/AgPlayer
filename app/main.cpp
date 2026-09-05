@@ -948,7 +948,8 @@ int main(int argc, char* argv[])
         windows.setPreferredDockEdge(settings.listWindowPosition());
         windows.setCloseBehavior(settings.closeBehavior());
         windows.setListWindowPanelAllowed(
-            library.count() > 0 && settings.showListWindowPanel());
+            settings.playerShellMode() == 0
+            && library.count() > 0 && settings.showListWindowPanel());
 
         QObject::connect(&settings, &SettingsController::windowMagneticSnapChanged,
                          &windows, [&settings, &windows]() {
@@ -1324,13 +1325,13 @@ int main(int argc, char* argv[])
             }
 
             // The audio-tools window is loaded on first use.  Keeping only the
-            // component here avoids constructing its four comparatively heavy
+            // component here avoids constructing comparatively heavy
             // tool pages during ordinary player startup.
             QQmlComponent audioToolsComponent(&engine);
             QObject* audioToolsWindow = nullptr;
 
-            // Classic and rolling shells share the stand-alone playlist
-            // window. Integrated keeps the same filter model inside Main.qml.
+            // Only Classic uses the stand-alone playlist window. Integrated
+            // and rolling keep the same filter model inside Main.qml.
             QObject* filterModel = mainWindow->findChild<QObject*>(
                 QStringLiteral("filterModel"));
             QQmlComponent listComponent(&engine);
@@ -1477,7 +1478,7 @@ int main(int argc, char* argv[])
                     }
                 });
             });
-            if (settings.playerShellMode() != 1) {
+            if (settings.playerShellMode() == 0) {
                 (void)ensureListWindow();
             }
             const auto ensureAudioToolsWindow = [&]() -> QObject* {
@@ -1580,16 +1581,28 @@ int main(int argc, char* argv[])
                     }
                 });
 
-            QObject::connect(&library, &LibraryModel::countChanged, &app,
-                             [&library, &settings, &windows]() {
-                windows.setListWindowPanelAllowed(
-                    settings.playerShellMode() != 1
-                    && library.count() > 0 && settings.showListWindowPanel());
-            });
+            const int initialLibraryCount = library.count();
+            QObject::connect(
+                &library, &LibraryModel::countChanged, &app,
+                [&library, &settings, &windows,
+                 observedLibraryCount = initialLibraryCount]() mutable {
+                    const int currentLibraryCount = library.count();
+                    const bool tracksWereAdded =
+                        currentLibraryCount > observedLibraryCount;
+                    observedLibraryCount = currentLibraryCount;
+                    const bool classicListAllowed =
+                        settings.playerShellMode() == 0
+                        && currentLibraryCount > 0
+                        && settings.showListWindowPanel();
+                    windows.setListWindowPanelAllowed(classicListAllowed);
+                    if (tracksWereAdded && classicListAllowed) {
+                        windows.showListWindow();
+                    }
+                });
             QObject::connect(&settings, &SettingsController::showListWindowPanelChanged,
                              &app, [&library, &settings, &windows]() {
                 windows.setListWindowPanelAllowed(
-                    settings.playerShellMode() != 1
+                    settings.playerShellMode() == 0
                     && library.count() > 0 && settings.showListWindowPanel());
             });
             QObject::connect(
@@ -1597,18 +1610,18 @@ int main(int argc, char* argv[])
                 [&library, &settings, &windows, &ensureListWindow,
                  &destroyListWindow]() {
                     windows.setMainWindowShellMode(settings.playerShellMode());
-                    if (settings.playerShellMode() != 1) {
+                    if (settings.playerShellMode() == 0) {
                         (void)ensureListWindow();
                     } else {
                         destroyListWindow();
                     }
                     windows.setListWindowPanelAllowed(
-                        settings.playerShellMode() != 1
+                        settings.playerShellMode() == 0
                         && library.count() > 0
                         && settings.showListWindowPanel());
                 });
             windows.setListWindowPanelAllowed(
-                settings.playerShellMode() != 1
+                settings.playerShellMode() == 0
                 && library.count() > 0 && settings.showListWindowPanel());
             if (qaIntegratedShellLifecycleProbe) {
                 QTimer::singleShot(
@@ -1649,30 +1662,28 @@ int main(int argc, char* argv[])
 
                         settings.setPlayerShellMode(2);
                         settleLoader();
-                        const bool rollingReusedInitialList = listWindow != nullptr
-                            && listWindow == initialListWindow
-                            && usesSharedFilterModel(listWindow);
+                        const bool rollingHasNoList = listWindow == nullptr
+                            && initialListWindow == nullptr
+                            && countShells("rollingPlayerShell") == 1;
 
                         settings.setPlayerShellMode(1);
                         settleLoader();
                         const bool integratedLoaded = listWindow == nullptr
-                            && initialListWindow == nullptr
                             && countShells("classicPlayerShell") == 0
                             && countShells("integratedPlayerShell") == 1;
 
                         settings.setPlayerShellMode(2);
                         settleLoader();
-                        QObject* const rebuiltRollingList = listWindow;
-                        const bool rollingRebuilt = rebuiltRollingList != nullptr
-                            && usesSharedFilterModel(rebuiltRollingList);
+                        const bool rollingStillHasNoList = listWindow == nullptr
+                            && countShells("rollingPlayerShell") == 1;
 
                         settings.setPlayerShellMode(0);
                         settleLoader();
-                        const bool classicReusedRollingList = listWindow != nullptr
-                            && listWindow == rebuiltRollingList
+                        const bool classicRebuiltList = listWindow != nullptr
                             && usesSharedFilterModel(listWindow)
                             && countShells("classicPlayerShell") == 1
-                            && countShells("integratedPlayerShell") == 0;
+                            && countShells("integratedPlayerShell") == 0
+                            && countShells("rollingPlayerShell") == 0;
                         const qint64 positionDrift = qAbs(
                             playback.positionMs() - originalPositionMs);
                         const bool playbackPreserved =
@@ -1684,17 +1695,17 @@ int main(int argc, char* argv[])
                             && qFuzzyCompare(playback.volume(), originalVolume)
                             && playback.mode() == originalMode
                             && playback.queueTrackIds() == originalQueue;
-                        const bool passed = classicInitial && rollingReusedInitialList
-                            && integratedLoaded && rollingRebuilt
-                            && classicReusedRollingList && playbackPreserved;
+                        const bool passed = classicInitial && rollingHasNoList
+                            && integratedLoaded && rollingStillHasNoList
+                            && classicRebuiltList && playbackPreserved;
                         qInfo().noquote()
                             << "Integrated shell lifecycle probe:"
                             << (passed ? "passed" : "failed")
                             << "classicInitial=" << classicInitial
-                            << "rollingReusedInitialList=" << rollingReusedInitialList
+                            << "rollingHasNoList=" << rollingHasNoList
                             << "integratedLoaded=" << integratedLoaded
-                            << "rollingRebuilt=" << rollingRebuilt
-                            << "classicReusedRollingList=" << classicReusedRollingList
+                            << "rollingStillHasNoList=" << rollingStillHasNoList
+                            << "classicRebuiltList=" << classicRebuiltList
                             << "playbackPreserved=" << playbackPreserved
                             << "positionDriftMs=" << positionDrift;
                         app.exit(passed ? 0 : 7);

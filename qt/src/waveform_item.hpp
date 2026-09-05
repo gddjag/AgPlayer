@@ -204,8 +204,6 @@ private:
         std::shared_ptr<const LayerSnapshot> bass;
         std::shared_ptr<const LayerSnapshot> mid;
         std::shared_ptr<const LayerSnapshot> high;
-        std::shared_ptr<const LayerSnapshot> peak;
-        std::shared_ptr<const LayerSnapshot> rms;
         std::shared_ptr<const LayerSnapshot> spectrumPeakHold;
         std::uint64_t revision = 0;
         qint64 totalSamples = 0;

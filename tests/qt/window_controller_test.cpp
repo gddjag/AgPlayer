@@ -31,7 +31,7 @@ private slots:
     void switchingWindowsDoesNotRecreatePlayback();
     void immersivePresentationTemporarilyHidesAndRestoresPlayerWindows();
     void immersivePresentationHonorsDeferredShellRequestWithoutPersistingTemporaryState();
-    void immersivePresentationDeferredRollingShellLoadsIndependentListWindowState();
+    void immersivePresentationDeferredRollingShellKeepsIndependentListHidden();
     void immersivePresentationRestoresMiniGeometry();
     void immersivePresentationRestoresFirstRunIntegratedGeometryWithoutCreatingASetting();
     void immersivePresentationRestoresFirstRunMiniGeometryWithoutCreatingASetting();
@@ -42,6 +42,8 @@ private slots:
     void shutdownIsOrderedAndIdempotent();
     void missingShutdownCollaboratorsRemainIdempotent();
     void listWindowVisibilityCanBeToggled();
+    void firstRunClassicListAppearsWhenLibraryBecomesAvailable();
+    void rollingShellCannotShowIndependentList();
     void listAvailabilityDoesNotOverwriteUserVisibilityRequest();
     void listWindowMagneticSnappingToMainWindowEdges();
     void listWindowExplicitSnapToEachEdge();
@@ -82,7 +84,7 @@ private slots:
     void legacyMiniGeometryMigratesToReferenceDefault();
     void persistedClassicGeometrySurvivesReferenceDefaultChange();
     void switchingBackToClassicRestoresReferenceSize();
-    void classicAndRollingListWindowStateRemainIndependent();
+    void classicListVisibilitySurvivesAVisitToRollingShell();
     void switchingBackWithoutClassicGeometryUsesCompactDefault();
     void persistedDockEdgeSurvivesInitialPreferenceWiring();
     void restoredGeometryBalancesMinimumAndAvailableScreen();
@@ -118,7 +120,9 @@ void WindowControllerTest::defaultListSizeMatchesReference()
 {
     WindowController windows;
     QCOMPARE(windows.listWindowWidth(), 960);
-    QCOMPARE(windows.listWindowHeight(), 568);
+    // Fresh settings enable 48-DIP waveform rows.  The complete list window
+    // is 40 title + 36 header + 10 rows + 36 filter.
+    QCOMPARE(windows.listWindowHeight(), 592);
 }
 
 void WindowControllerTest::availableGeometryForWindowUsesScreenWorkArea()
@@ -315,7 +319,7 @@ void WindowControllerTest::immersivePresentationHonorsDeferredShellRequestWithou
              integratedGeometry);
 }
 
-void WindowControllerTest::immersivePresentationDeferredRollingShellLoadsIndependentListWindowState()
+void WindowControllerTest::immersivePresentationDeferredRollingShellKeepsIndependentListHidden()
 {
     const QRect classicMainGeometry(100, 120, 640, 320);
     const QRect rollingMainGeometry(60, 90, 720, 360);
@@ -355,10 +359,9 @@ void WindowControllerTest::immersivePresentationDeferredRollingShellLoadsIndepen
     windows.leaveImmersivePresentation();
 
     QCOMPARE(mainWindow.geometry(), rollingMainGeometry);
-    QCOMPARE(listWindow.geometry(), rollingListGeometry);
-    QCOMPARE(windows.listDockEdge(), QStringLiteral("none"));
-    QVERIFY(windows.listWindowDetached());
-    QVERIFY(windows.listWindowVisible());
+    QCOMPARE(listWindow.geometry(), classicListGeometry);
+    QVERIFY(!windows.listWindowVisible());
+    QVERIFY(!listWindow.isVisible());
 
     settings.sync();
     QCOMPARE(settings.value(QStringLiteral("windows/listGeometry")).toRect(),
@@ -549,7 +552,7 @@ void WindowControllerTest::switchingBackToClassicRestoresReferenceSize()
     mainWindow.setGeometry(20, 30, 700, 320);
 
     windows.setMainWindowShellMode(1);
-    QCOMPARE(mainWindow.size(), QSize(1386, 941).boundedTo(
+    QCOMPARE(mainWindow.size(), QSize(1386, 832).boundedTo(
                  mainWindow.screen()->availableGeometry().size()));
     mainWindow.setGeometry(20, 40, 760, 700);
 
@@ -561,7 +564,7 @@ void WindowControllerTest::switchingBackToClassicRestoresReferenceSize()
     QCOMPARE(mainWindow.geometry(), QRect(20, 40, 760, 700));
 
     windows.setMainWindowShellMode(2);
-    QCOMPARE(mainWindow.size(), QSize(1386, 820).boundedTo(
+    QCOMPARE(mainWindow.size(), QSize(1386, 972).boundedTo(
                  mainWindow.screen()->availableGeometry().size()));
     mainWindow.setGeometry(30, 50, 760, 460);
 
@@ -581,7 +584,7 @@ void WindowControllerTest::switchingBackToClassicRestoresReferenceSize()
              QRect(30, 50, 760, 460));
 }
 
-void WindowControllerTest::classicAndRollingListWindowStateRemainIndependent()
+void WindowControllerTest::classicListVisibilitySurvivesAVisitToRollingShell()
 {
     QWindow mainWindow;
     mainWindow.setGeometry(100, 120, 640, 320);
@@ -591,52 +594,23 @@ void WindowControllerTest::classicAndRollingListWindowStateRemainIndependent()
     WindowController windows;
     windows.setWindows(&mainWindow, nullptr);
     windows.setListWindow(&listWindow);
-    windows.moveListWindow(20, 30);
-    QVERIFY(windows.listWindowDetached());
-    listWindow.setGeometry(20, 30, 420, 240);
-    QCOMPARE(windows.listDockEdge(), QStringLiteral("none"));
-    QCOMPARE(listWindow.geometry(), QRect(20, 30, 420, 240));
-    QVERIFY(!windows.listWindowVisible());
-
-    windows.setMainWindowShellMode(2);
     windows.showListWindow();
-    windows.snapListWindow(QStringLiteral("right"));
-    QCOMPARE(windows.listDockEdge(), QStringLiteral("right"));
-    QVERIFY(!windows.listWindowDetached());
     QVERIFY(windows.listWindowVisible());
+    QVERIFY(listWindow.isVisible());
 
-    QSignalSpy classicDockSpy(&windows, &WindowController::listDockEdgeChanged);
-    QSignalSpy classicDetachedSpy(&windows,
-                                  &WindowController::listWindowDetachedChanged);
-    windows.setMainWindowShellMode(0);
-    QCOMPARE(windows.listDockEdge(), QStringLiteral("none"));
-    QVERIFY(windows.listWindowDetached());
-    QCOMPARE(listWindow.geometry(), QRect(20, 30, 420, 240));
-    QVERIFY(!windows.listWindowVisible());
-    QCOMPARE(classicDockSpy.count(), 1);
-    QCOMPARE(classicDetachedSpy.count(), 1);
-    QVERIFY(!QSettings().value(QStringLiteral("windows/listRequestedVisible")).toBool());
-    QCOMPARE(QSettings().value(QStringLiteral("windows/listDockEdge")).toString(),
-             QStringLiteral("none"));
-    QCOMPARE(QSettings().value(QStringLiteral("windows/listGeometry")).toRect(),
-             QRect(20, 30, 420, 240));
-
-    QSignalSpy rollingDockSpy(&windows, &WindowController::listDockEdgeChanged);
-    QSignalSpy rollingDetachedSpy(&windows,
-                                  &WindowController::listWindowDetachedChanged);
     windows.setMainWindowShellMode(2);
-    QCOMPARE(windows.listDockEdge(), QStringLiteral("right"));
-    QVERIFY(!windows.listWindowDetached());
+    QVERIFY(!windows.listWindowVisible());
+    QVERIFY(!listWindow.isVisible());
+
+    // Even a stale or accidental rolling-shell request must not materialize
+    // the classic-only top-level list.
+    windows.showListWindow();
+    QVERIFY(!windows.listWindowVisible());
+    QVERIFY(!listWindow.isVisible());
+
+    windows.setMainWindowShellMode(0);
     QVERIFY(windows.listWindowVisible());
-    QCOMPARE(rollingDockSpy.count(), 1);
-    QCOMPARE(rollingDetachedSpy.count(), 1);
-    QVERIFY(QSettings().value(
-                QStringLiteral("windows/rollingListRequestedVisible")).toBool());
-    QCOMPARE(QSettings().value(
-                 QStringLiteral("windows/rollingListDockEdge")).toString(),
-             QStringLiteral("right"));
-    QCOMPARE(QSettings().value(
-                 QStringLiteral("windows/rollingListGeometryVersion")).toInt(), 1);
+    QVERIFY(listWindow.isVisible());
 }
 
 void WindowControllerTest::switchingBackWithoutClassicGeometryUsesCompactDefault()
@@ -761,6 +735,45 @@ void WindowControllerTest::listWindowVisibilityCanBeToggled()
 
     windows.toggleListWindow();
     QVERIFY(!windows.listWindowDetached());
+    QVERIFY(!windows.listWindowVisible());
+    QVERIFY(!listWindow.isVisible());
+}
+
+void WindowControllerTest::firstRunClassicListAppearsWhenLibraryBecomesAvailable()
+{
+    // init() normally installs an explicit hidden preference.  A true first
+    // run has no visibility key and should request the classic companion list.
+    QSettings settings;
+    settings.clear();
+    settings.sync();
+
+    QWindow mainWindow;
+    QWindow listWindow;
+    WindowController windows;
+    windows.setListWindowPanelAllowed(false);
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setListWindow(&listWindow);
+    QVERIFY(!windows.listWindowVisible());
+    QVERIFY(!listWindow.isVisible());
+
+    // This is the controller boundary exercised when the empty library gains
+    // its first successfully imported track.
+    windows.setListWindowPanelAllowed(true);
+    QVERIFY(windows.listWindowVisible());
+    QVERIFY(listWindow.isVisible());
+}
+
+void WindowControllerTest::rollingShellCannotShowIndependentList()
+{
+    QWindow mainWindow;
+    QWindow listWindow;
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setListWindow(&listWindow);
+
+    windows.setMainWindowShellMode(2);
+    windows.showListWindow();
+
     QVERIFY(!windows.listWindowVisible());
     QVERIFY(!listWindow.isVisible());
 }

@@ -13,6 +13,9 @@ Rectangle {
     readonly property bool fullDesktop: width >= 1440
     readonly property bool desktop: width >= 1100
     readonly property bool compact: !desktop
+    readonly property bool cpuCompatibilityModel: VocalSeparationController.models.some(
+        function(model) { return model.id === VocalSeparationController.selectedModelId
+                             && (model.family === "demucs" || model.id === "python-vr-5hp") })
     readonly property int sidePanelWidth: desktop
                                          ? Math.max(336, Math.min(560,
                                                                   Math.round((width - 28) * 0.29)))
@@ -489,7 +492,7 @@ Rectangle {
 
     function modelStateText(card) {
         if (card.origin === "custom" && card.compatibility === "diagnostic")
-            return qsTr("已识别 · 待配置")
+            return qsTr("已识别 · 尚未适配")
         if (card.origin === "custom" && card.compatibility === "rejected")
             return qsTr("配置无效")
         switch (card.state) {
@@ -560,6 +563,21 @@ Rectangle {
         context: Qt.WindowShortcut
         enabled: page.visible && page.hasAvailableResultStem()
         onActivated: page.toggleResultPreview()
+    }
+
+    ThemedDialog {
+        id: configurationDialog
+        objectName: "separationConfigurationDiagnostic"
+        anchors.centerIn: Overlay.overlay
+        modal: true
+        width: Math.min(520, page.width - 32)
+        title: qsTr("模型适配说明")
+        standardButtons: Dialog.Close
+        contentItem: Label {
+            id: configurationDiagnostic
+            color: page.textPrimary
+            wrapMode: Text.Wrap
+        }
     }
 
     Dialog {
@@ -924,7 +942,7 @@ Rectangle {
                         id: modelDeck
                         objectName: "separationModelDeck"
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 194
+                        Layout.preferredHeight: VocalSeparationController.downloadBusy ? 234 : 194
                         color: "transparent"
 
                         ListView {
@@ -1109,7 +1127,8 @@ Rectangle {
                                              contentItem: Item {
                                                  implicitHeight: 4
                                                  Rectangle {
-                                                     width: parent.width * parent.parent.visualPosition
+                                                     width: parent.width * (parent.parent.indeterminate ? 1 : parent.parent.visualPosition)
+                                                     opacity: parent.parent.indeterminate ? 0.35 : 1
                                                      height: parent.height
                                                      radius: 2
                                                      color: page.success
@@ -1164,20 +1183,27 @@ Rectangle {
                                               rightPadding: 6
                                               topPadding: 3
                                               bottomPadding: 3
-                                              text: cardData.state === VocalSeparationController.Downloading ? qsTr("暂停")
+                                              text: cardData.compatibility === "diagnostic" ? qsTr("查看原因")
+                                                  : cardData.state === VocalSeparationController.Downloading ? qsTr("暂停")
                                                   : cardData.state === VocalSeparationController.Paused ? qsTr("继续配置")
                                                   : qsTr("一键配置")
                                               enabled: !page.contextLocked
                                                        && (!VocalSeparationController.downloadBusy
                                                            || cardData.id === VocalSeparationController.downloadingModelId)
-                                              Accessible.name: qsTr("安装 ONNX Runtime")
+                                              Accessible.name: text
                                               Accessible.role: Accessible.Button
                                               onClicked: {
-                                                  if (cardData.state === VocalSeparationController.Downloading)
+                                                  if (cardData.compatibility === "diagnostic") {
+                                                      configurationDiagnostic.text = cardData.failureReason || cardData.description
+                                                      configurationDialog.open()
+                                                  } else if (cardData.state === VocalSeparationController.Downloading)
                                                       VocalSeparationController.pauseDownload()
                                                   else if (cardData.state === VocalSeparationController.Paused)
                                                       VocalSeparationController.resumeDownload()
-                                                  else VocalSeparationController.configureRuntime(cardData.id)
+                                                  else if (!VocalSeparationController.configureRuntime(cardData.id)) {
+                                                      configurationDiagnostic.text = VocalSeparationController.error
+                                                      configurationDialog.open()
+                                                  }
                                               }
                                           }
                                           WorkbenchButton {
@@ -1796,7 +1822,7 @@ Rectangle {
                                          objectName: "separationDevice-" + deviceKey
                                          implicitHeight: 24
                                         text: modelData.mode === VocalSeparationController.Auto
-                                              ? qsTr("自动")
+                                              ? (page.cpuCompatibilityModel ? qsTr("自动 · CPU") : qsTr("自动"))
                                               : modelData.mode === VocalSeparationController.GPU
                                                 ? qsTr("GPU") : qsTr("CPU")
                                         checkable: true

@@ -24,6 +24,8 @@ signals:
     void changed();
     void finished(bool success, const QString& error);
 private:
+    bool workerMatchesBundle() const;
+    bool synchronizeWorker();
     void advance();
     void launch(const QString& program, const QStringList& arguments);
     void fail(const QString& error);
@@ -33,8 +35,10 @@ private:
     QProcess process_;
     QFutureWatcher<bool> cacheVerification_;
     QByteArray output_;
+    QByteArray bundledWorker_;
     int step_ = 0;
     bool busy_ = false;
     bool paused_ = false;
     bool mirror_ = false;
+    bool archiveMirror_ = false;
 };
