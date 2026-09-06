@@ -219,7 +219,9 @@ window.AG_COPY = {
       "windows": {
         "name": "Windows",
         "status": "暂未提供下载",
-        "description": "下载地址与系统要求将在发布时更新。"
+        "github": "GitHub 下载",
+        "r2": "R2 下载",
+        "description": "正式版本准备中，GitHub 与 R2 下载即将开放。"
       },
       "macos": {
         "name": "macOS",
@@ -541,7 +543,9 @@ window.AG_COPY = {
       "windows": {
         "name": "Windows",
         "status": "Not yet available",
-        "description": "Links and system requirements at release."
+        "github": "GitHub download",
+        "r2": "R2 download",
+        "description": "The official release is being prepared. GitHub and R2 downloads are coming soon."
       },
       "macos": {
         "name": "macOS",
