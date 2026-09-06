@@ -24,7 +24,7 @@ window.AG_COPY = {
       "description": "极简、纯净而强大的本地音频播放器。",
       "primaryAction": "免费下载",
       "secondaryAction": "探索波形 →",
-      "screenshotAlt": "AgPlayer 滚动播放主题，展示大幅波形与音乐列表",
+      "screenshotAlt": "AgPlayer 专业模式主题，展示大幅波形与音乐列表",
       "descriptionDetail": "用波形呈现声音细节，让播放、管理与编辑保持简单。"
     },
     "themes": {
@@ -42,9 +42,9 @@ window.AG_COPY = {
         "imageAlt": "单窗口主题中的波形与音乐管理界面"
       },
       "scrolling": {
-        "name": "滚动播放",
+        "name": "专业模式",
         "description": "加速播放、BPM 调整与节拍网格，直观看清音乐节奏。",
-        "imageAlt": "滚动播放主题的大幅波形与播放控制",
+        "imageAlt": "专业模式主题的大幅波形与播放控制",
         "mobileDescription": "加速播放、调整 BPM，用节拍网格把握节奏。"
       }
     },
@@ -151,7 +151,7 @@ window.AG_COPY = {
     "tools": {
       "title": "轻便工具，留给音乐更多可能",
       "localNote": "所有处理均在本地完成，不影响音乐正常播放。",
-      "sceneAlt": "暗色工作室中，侧脸人物面对双屏；左屏显示滚动播放器，右屏显示伴奏分离",
+      "sceneAlt": "暗色工作室中，侧脸人物面对双屏；左屏显示专业模式播放器，右屏显示伴奏分离",
       "separation": {
         "title": "伴奏分离",
         "description": "分离人声与伴奏，专注每一层声音。"
@@ -348,7 +348,7 @@ window.AG_COPY = {
       "description": "A minimal, clean, and powerful local audio player.",
       "primaryAction": "Free download",
       "secondaryAction": "Explore waveforms →",
-      "screenshotAlt": "AgPlayer scrolling theme showing a large waveform and music library",
+      "screenshotAlt": "AgPlayer Pro mode showing a large waveform and music library",
       "descriptionDetail": "Reveal the detail in sound through waveforms. Keep playback, organization, and editing simple."
     },
     "themes": {
@@ -366,9 +366,9 @@ window.AG_COPY = {
         "imageAlt": "Waveform and library controls in the single-window theme"
       },
       "scrolling": {
-        "name": "Scrolling",
+        "name": "Pro mode",
         "description": "Speed up playback, adjust BPM, and follow the rhythm with a beat grid.",
-        "imageAlt": "Large waveform and playback controls in the scrolling theme",
+        "imageAlt": "Large waveform and playback controls in the Pro mode",
         "mobileDescription": "Speed up playback, adjust BPM, and follow the beat grid."
       }
     },
@@ -475,7 +475,7 @@ window.AG_COPY = {
     "tools": {
       "title": "Small tools. More ways to work with music.",
       "localNote": "All processing takes place locally, while your music keeps playing.",
-      "sceneAlt": "A person in profile at a dark studio desk, with the scrolling player on the left monitor and stem separation on the right",
+      "sceneAlt": "A person in profile at a dark studio desk, with the Pro mode player on the left monitor and stem separation on the right",
       "separation": {
         "title": "Vocal and stem separation",
         "description": "Separate vocals and accompaniment to focus on each layer of sound."
