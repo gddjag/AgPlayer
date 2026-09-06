@@ -4,11 +4,13 @@
 
 AgPlayer 是一款以轻量、简洁为设计方向的本地音频播放器，通过波形展示声音细节，将音乐播放、曲库管理和常用音频工具放在一起。
 
-[访问官网](https://agplayer.pages.dev) · [版本发布](https://github.com/gddjag/AgPlayer/releases)
+[访问官网](https://agplayer.com) · [版本发布](https://github.com/gddjag/AgPlayer/releases)
 
-官网已上线，独立域名 `agplayer.com` 正在接入中。
+官网已上线，`agplayer.com` 与 `www.agplayer.com` 均已绑定 Cloudflare Pages 并启用 HTTPS。
 
 首个正式版本 **v1.0.0** 正在准备中，Windows 安装包尚未开放下载。后续正式安装包将按版本号发布到 GitHub Releases，并提供 R2 下载地址。
+
+R2 下载域名为 `download.agplayer.com`；当前尚未发布安装包。发布时先上传 EXE 附件，再发布 GitHub Release，工作流会自动同步到 R2；若发布后补充附件，在 Actions 的同步工作流中手动输入对应 tag 重跑。
 
 ## 主要特点
 
@@ -56,4 +58,4 @@ Cloudflare Pages 项目 `agplayer` 已连接 GitHub 仓库 `gddjag/AgPlayer` 的
 
 提交到 GitHub `main` 的网页更新会自动触发 Cloudflare 构建和部署，具体结果可在 Pages 项目中查看。
 
-仓库原有 `CNAME` 保留；独立域名 `agplayer.com` 仍在接入中，当前通过上述 Pages 地址访问官网。
+仓库原有 `CNAME` 保留；官网通过 `agplayer.com` 和 `www.agplayer.com` 访问，Pages 地址 `agplayer.pages.dev` 也可使用。
