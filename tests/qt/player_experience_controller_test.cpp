@@ -42,6 +42,7 @@ void PlayerExperienceControllerTest::columnControlsNormalizeNotifyAndPersist()
 {
     struct Control { const char* name; int minimum; int maximum; int fallback; };
     const Control controls[] = {
+        {"columnDensity", 50, 200, 125},
         {"columnSize", 50, 200, 50}, {"columnOpacity", 0, 100, 72},
         {"reactorBrightness", 0, 200, 100},
     };
@@ -91,8 +92,10 @@ void PlayerExperienceControllerTest::columnPresetsRestoreIndependentControls()
         QVERIFY2(experience.metaObject()->indexOfProperty(key) >= 0, key);
     const int sizes[] = {120, 110, 95, 125, 150, 110, 100, 130, 140};
     for (int preset = 0; preset < 9; ++preset) {
+        experience.setProperty("columnDensity", 175);
         for (const char* key : keys) QVERIFY(experience.setProperty(key, 51));
         QVERIFY(experience.applyPreset(preset));
+        QCOMPARE(experience.property("columnDensity").toInt(), 175);
         QCOMPARE(experience.property("columnSize").toInt(), sizes[preset]);
         QCOMPARE(experience.property("columnOpacity").toInt(), 100);
         QCOMPARE(experience.property("reactorBrightness").toInt(), 100);

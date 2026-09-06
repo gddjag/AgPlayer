@@ -23,6 +23,7 @@ $window = Read-RequiredFile 'app/qml/AgPlayer/ListWindow.qml'
 $trackList = Read-RequiredFile 'app/qml/AgPlayer/components/TrackList.qml'
 $navigation = Read-RequiredFile 'app/qml/AgPlayer/components/SideNavigation.qml'
 $tagPanel = Read-RequiredFile 'app/qml/AgPlayer/components/TagManagementPanel.qml'
+$theme = Read-RequiredFile 'app/qml/AgPlayer/theme/Theme.qml'
 $mini = Read-RequiredFile 'app/qml/AgPlayer/components/MiniPlayerControls.qml'
 $libraryIcon = Read-RequiredFile 'assets/icons/user-library.svg'
 
@@ -50,8 +51,12 @@ Assert-Matches $navigation '(?s)readonly property int navigationIconVisualSize:\
 Assert-Matches $navigation 'anchors\.leftMargin:\s*6 \+ nodeRow\.depth \* 12' `
     'Sidebar indentation must remain compact'
 
-Assert-Matches $tagPanel '(?s)id:\s*tagPill.*implicitHeight:\s*28.*height:\s*implicitHeight.*radius:\s*Theme\.radiusSm' `
-    'Tag capsules must be 28 px high and vertically centered'
+Assert-Matches $tagPanel '(?s)id:\s*tagPill.*implicitHeight:\s*Theme\.tagCapsuleHeight.*height:\s*implicitHeight.*radius:\s*Theme\.tagCapsuleRadius' `
+    'Tag capsules must use the shared compact height and rounded outline'
+Assert-Matches $theme 'readonly property int tagCapsuleHeight:\s*28\b' `
+    'Shared tag capsules must remain 28 px high'
+Assert-Matches $theme 'readonly property int tagCapsuleRadius:\s*11\b' `
+    'Shared tag capsules must use the approved 11 px radius'
 Assert-Matches $tagPanel '(?s)TagFilterModel\s*\{.*sourceModel:\s*root\.tagModel.*query:\s*root\.searchText' `
     'Tag panel must retain the quantity-descending stable-name proxy sorting'
 

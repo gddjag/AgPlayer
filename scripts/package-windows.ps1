@@ -2,10 +2,66 @@
 param(
     [string]$BuildDirectory = "build/msvc-release",
     [string]$Configuration = "Release",
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [switch]$NewRelease,
+    [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+$')]
+    [string]$FromVersion,
+    [ValidateSet('Patch', 'Minor', 'Major')]
+    [string]$Bump = 'Patch'
 )
 
 $ErrorActionPreference = "Stop"
+if ($NewRelease -and $SkipBuild) { throw '-NewRelease cannot be combined with -SkipBuild' }
+if ($NewRelease -and -not $FromVersion) { throw '-NewRelease requires -FromVersion to make retries idempotent' }
+if (-not $NewRelease -and ($FromVersion -or $PSBoundParameters.ContainsKey('Bump'))) {
+    throw '-FromVersion and -Bump require -NewRelease'
+}
+
+function Publish-Installer {
+    param(
+        [string]$Iscc,
+        [string]$InstallerScript,
+        [string]$AppVersion,
+        [string]$OutputDirectory
+    )
+    # Keep candidate and destination on one volume for atomic publication.
+    $outputRoot = [IO.Path]::GetFullPath($OutputDirectory).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+    $transactionId = [guid]::NewGuid().ToString('N')
+    $temporary = Join-Path $outputRoot ('.pending-' + $transactionId)
+    New-Item -ItemType Directory -Path $temporary | Out-Null
+    try {
+        & $Iscc "/DAppVersion=$AppVersion" "/O$temporary" $InstallerScript
+        if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compilation failed' }
+        $name = "AgPlayer-Setup-$AppVersion-x64.exe"
+        $candidate = Get-Item -LiteralPath (Join-Path $temporary $name)
+        if ($candidate.VersionInfo.FileVersion.Trim() -ne "$AppVersion.0") {
+            throw 'Installer PE version does not match release version'
+        }
+        $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $candidate.FullName
+        if ($hash.Hash -notmatch '^[0-9A-Fa-f]{64}$') { throw 'Installer SHA256 validation failed' }
+        $destination = Join-Path $outputRoot $name
+        $previous = if (Test-Path -LiteralPath $destination) {
+            Join-Path $outputRoot ("$name.previous-$transactionId.bak")
+        } else { $null }
+        $result = [pscustomobject]@{
+            Installer = $destination
+            SizeMB = [math]::Round($candidate.Length / 1MB, 2)
+            SHA256 = $hash.Hash
+            PreviousInstaller = $previous
+        }
+        if ($previous) {
+            [IO.File]::Replace($candidate.FullName, $destination, $previous)
+        } else {
+            [IO.File]::Move($candidate.FullName, $destination)
+        }
+        $result
+    } finally {
+        # Cleanup cannot turn an already committed publication into a failure.
+        if ([IO.Path]::GetFullPath($temporary).StartsWith($outputRoot, [StringComparison]::OrdinalIgnoreCase)) {
+            Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
 
 function Remove-QmlToolingMetadata {
     param([Parameter(Mandatory = $true)][string]$StageDirectory)
@@ -57,23 +113,16 @@ if ($null -eq $qtDirEntry) {
 $qtCmakeDir = $qtDirEntry.Matches[0].Groups[1].Value
 $qtRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $qtCmakeDir))
 $windeployqt = Join-Path $qtRoot "bin/windeployqt.exe"
-$vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
-if (-not (Test-Path -LiteralPath $vswhere)) {
-    throw "Visual Studio locator was not found: $vswhere"
+$compilerEntry = Select-String -LiteralPath $cmakeCache `
+    -Pattern '^CMAKE_CXX_COMPILER:[^=]+=(.+)$' | Select-Object -First 1
+if ($null -eq $compilerEntry) { throw "CMAKE_CXX_COMPILER was not found in $cmakeCache" }
+$configuredCompiler = [IO.Path]::GetFullPath($compilerEntry.Matches[0].Groups[1].Value)
+if ($configuredCompiler -notmatch '^(.*)[\\/]VC[\\/]Tools[\\/]MSVC[\\/]([0-9.]+)[\\/]bin[\\/]Hostx64[\\/]x64[\\/]cl\.exe$') {
+    throw "The package build requires a cached x64 MSVC compiler: $configuredCompiler"
 }
-$vsInstall = & $vswhere -latest `
-    -products Microsoft.VisualStudio.Product.BuildTools `
-    -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
-    -property installationPath
-if (-not $vsInstall) {
-    $vsInstall = & $vswhere -latest -products * `
-        -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
-        -property installationPath
-}
-if (-not $vsInstall) {
-    throw "A complete Visual C++ Build Tools installation was not found"
-}
-$vsShell = Join-Path $vsInstall "Common7\Tools\Launch-VsDevShell.ps1"
+$vsInstall = $Matches[1]
+$msvcVersion = $Matches[2]
+$vcvars = Join-Path $vsInstall 'VC/Auxiliary/Build/vcvars64.bat'
 $isccCandidates = @(
     "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
     "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
@@ -84,7 +133,7 @@ $iscc = $isccCandidates | Where-Object { Test-Path -LiteralPath $_ } |
 if (-not $iscc) { throw "Inno Setup compiler was not found" }
 
 foreach ($required in @(
-    $build, $windeployqt, $vsShell, $iscc,
+    $build, $windeployqt, $vcvars, $configuredCompiler, $iscc,
     $thirdPartyNotices, $licenseSource
 )) {
     if (-not (Test-Path -LiteralPath $required)) {
@@ -92,7 +141,40 @@ foreach ($required in @(
     }
 }
 
-& $vsShell -Arch amd64 -HostArch amd64
+$versionTransactionStarted = $false
+try {
+if ($NewRelease) {
+    $versionPath = Join-Path $repo 'cmake/AgPlayerVersion.cmake'
+    $manifestPath = Join-Path $repo 'deployment/updates/latest.json'
+    $originalVersion = [IO.File]::ReadAllBytes($versionPath)
+    $originalManifest = [IO.File]::ReadAllBytes($manifestPath)
+    $versionTransactionStarted = $true
+    $versionOutput = (& $versionTool -SourceRoot $repo -Bump $Bump -FromVersion $FromVersion | Out-String).Trim()
+    if ($versionOutput -notmatch '^AgPlayer release version: ([0-9]+\.[0-9]+\.[0-9]+)$') {
+        throw "Release version validation failed: $versionOutput"
+    }
+    $appVersion = $Matches[1]
+}
+# Use the installation and exact toolset already selected by CMake. A newer
+# Build Tools installation must not silently replace this compiler environment.
+$environmentCommand = 'call "{0}" -vcvars_ver={1} >nul && set' -f $vcvars, $msvcVersion
+$compilerEnvironment = & $env:ComSpec /d /c $environmentCommand
+if ($LASTEXITCODE -ne 0) { throw 'Unable to initialize the configured MSVC environment' }
+foreach ($entry in $compilerEnvironment) {
+    if ($entry -match '^([^=]+)=(.*)$') {
+        [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2], 'Process')
+    }
+}
+$activeCompiler = (Get-Command cl.exe -CommandType Application | Select-Object -First 1).Source
+if ([IO.Path]::GetFullPath($activeCompiler) -ne $configuredCompiler) {
+    throw "Active compiler $activeCompiler does not match CMake compiler $configuredCompiler"
+}
+if ($NewRelease) {
+    # Regenerate the version header, manifest and PE resources from this source,
+    # rather than trusting cached project version values from an older build.
+    cmake -S $repo -B $build
+    if ($LASTEXITCODE -ne 0) { throw 'Release version reconfiguration failed' }
+}
 if (-not $SkipBuild) {
     cmake --build $build --config $Configuration --target AgPlayer --parallel
     if ($LASTEXITCODE -ne 0) { throw "Release build failed" }
@@ -227,18 +309,14 @@ foreach ($relativePath in $requiredRuntime) {
     }
 }
 
-& $iscc "/DAppVersion=$appVersion" (Join-Path $repo "installer/AgPlayer.iss")
-if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed" }
-
-$installer = Get-Item -LiteralPath (Join-Path $installerOutput `
-    "AgPlayer-Setup-$appVersion-x64.exe") -ErrorAction SilentlyContinue
-if ($null -eq $installer) {
-    throw "Versioned installer was not produced for $appVersion"
-}
-
-$hash = Get-FileHash -Algorithm SHA256 -LiteralPath $installer.FullName
-[pscustomobject]@{
-    Installer = $installer.FullName
-    SizeMB = [math]::Round($installer.Length / 1MB, 2)
-    SHA256 = $hash.Hash
+Publish-Installer -Iscc $iscc -InstallerScript (Join-Path $repo 'installer/AgPlayer.iss') `
+    -AppVersion $appVersion -OutputDirectory $installerOutput
+} catch {
+    if ($versionTransactionStarted) {
+        # Restore sources only. Keep prior installers and build artifacts; the
+        # PE version guard rejects artifacts that no longer match these sources.
+        [IO.File]::WriteAllBytes($versionPath, $originalVersion)
+        [IO.File]::WriteAllBytes($manifestPath, $originalManifest)
+    }
+    throw
 }

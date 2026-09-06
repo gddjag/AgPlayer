@@ -67,6 +67,7 @@ Rectangle {
         {
             "key": "Terrain", "title": qsTr("柱体与地形"),
             "sliders": [
+                { "label": qsTr("柱体数量"), "key": "columnDensity", "from": 50, "to": 200, "step": 5, "suffix": "%" },
                 { "label": qsTr("柱体高度"), "key": "terrainAmplitude", "from": 0, "to": 100 },
                 { "label": qsTr("柱体清晰度"), "key": "subjectClarity", "from": 20, "to": 140 },
                 { "label": qsTr("弱音细节"), "key": "inputCompression", "from": 20, "to": 150 },
@@ -132,7 +133,7 @@ Rectangle {
             return (value / item.scale).toFixed(item.decimals || 2)
         if (item.decimals)
             return value.toFixed(item.decimals)
-        return Math.round(value).toString()
+        return Math.round(value).toString() + (item.suffix || "")
     }
 
     function clampFeature(value) {
@@ -570,11 +571,43 @@ Rectangle {
                                     implicitHeight: 20
                                     from: modelData.from
                                     to: modelData.to
+                                    stepSize: modelData.step || 0
                                     value: Number(PlayerExperienceController[modelData.key])
                                     onMoved: root.setControllerValue(modelData.key, value)
                                 }
                                 Text { objectName: "dynamicValue_" + modelData.key; Layout.preferredWidth: 34; horizontalAlignment: Text.AlignRight; text: root.displayValue(modelData); color: Theme.textPrimary; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption }
+                                ThemedButton {
+                                    objectName: modelData.key === "columnDensity" ? "densityDecrease" : ""
+                                    visible: modelData.key === "columnDensity"
+                                    Layout.preferredWidth: 24
+                                    Layout.preferredHeight: 24
+                                    leftPadding: 0; rightPadding: 0
+                                    text: "−"
+                                    Accessible.name: qsTr("减少柱体数量")
+                                    enabled: PlayerExperienceController.columnDensity > 50
+                                    onClicked: PlayerExperienceController.columnDensity -= 5
+                                }
+                                ThemedButton {
+                                    objectName: modelData.key === "columnDensity" ? "densityIncrease" : ""
+                                    visible: modelData.key === "columnDensity"
+                                    Layout.preferredWidth: 24
+                                    Layout.preferredHeight: 24
+                                    leftPadding: 0; rightPadding: 0
+                                    text: "+"
+                                    Accessible.name: qsTr("增加柱体数量")
+                                    enabled: PlayerExperienceController.columnDensity < 200
+                                    onClicked: PlayerExperienceController.columnDensity += 5
+                                }
                             }
+                        }
+                        Text {
+                            visible: groupData.key === "Terrain"
+                            Layout.fillWidth: true
+                            text: qsTr("数量为相对密度，实际柱数受画质与性能预算限制")
+                            wrapMode: Text.WordWrap
+                            color: Theme.textTertiary
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: Theme.fontSizeCaption
                         }
                         Flow {
                             Layout.fillWidth: true

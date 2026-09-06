@@ -17,11 +17,13 @@
 #include "window_controller.hpp"
 
 #include "../core/bpm_fixture.hpp"
+#include "../../core/src/decoder.hpp"
 
 #include <agplayer/c_api.h>
 
 #include <QCoreApplication>
 #include <QAbstractTableModel>
+#include <QCryptographicHash>
 #include <QDragEnterEvent>
 #include <QDir>
 #include <QDropEvent>
@@ -30,6 +32,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QMimeData>
 #include <QPointer>
 #include <QQmlContext>
@@ -51,6 +54,8 @@
 #include <windows.h>
 #endif
 
+#include <array>
+#include <limits>
 #include <memory>
 
 namespace {
@@ -621,9 +626,10 @@ class VocalSeparationControllerTestDriver final : public QObject {
     Q_OBJECT
 
 public:
-    void bind(VocalSeparationController* controller)
+    void bind(VocalSeparationController* controller, PlaybackController* playback)
     {
         controller_ = controller;
+        playback_ = playback;
         if (controller_ != nullptr)
             runtimeLibraryPath_ = controller_->options_.runtimeLibraryPath;
     }
@@ -664,6 +670,71 @@ public:
     Q_INVOKABLE bool setInput(const QUrl& input)
     {
         return controller_ != nullptr && controller_->selectInput(input);
+    }
+
+    Q_INVOKABLE bool validateRetainedCudaStem(const QString& role,
+                                               const QString& path) const
+    {
+        for (const RetainedAudioFile& stem : retainedCudaStems()) {
+            if (role == QString::fromLatin1(stem.role))
+                return retainedAudioFileMatches(path, stem);
+        }
+        return false;
+    }
+
+    Q_INVOKABLE bool validateRetainedCudaManifest(const QUrl& input,
+                                                   const QString& directory) const
+    {
+        if (!input.isLocalFile() || directory.isEmpty()
+            || !retainedAudioFileMatches(input.toLocalFile(), retainedCudaSource())) {
+            return false;
+        }
+        const QDir outputDirectory(directory);
+        for (const RetainedAudioFile& stem : retainedCudaStems()) {
+            if (!retainedAudioFileMatches(
+                    outputDirectory.absoluteFilePath(QString::fromLatin1(stem.fileName)), stem)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Opt-in acceptance replays already verified files through the real result
+    // publication and waveform queue. It does not run or simulate inference.
+    Q_INVOKABLE bool replayRealFiveStemResult(const QUrl& input, const QString& directory,
+                                               double outputGain)
+    {
+        if (!controller_ || directory.isEmpty() || outputGain <= 0.0 || outputGain > 1.0)
+            return false;
+        if (!validateRetainedCudaManifest(input, directory)) return false;
+        if (controller_->inputInfo_.value(QStringLiteral("path")).toString() != input.toLocalFile()
+            || !controller_->selectModel(QStringLiteral("htdemucs-ft-fp16"))) return false;
+        using Kind = VocalSeparationController::StemKind;
+        const QList<Kind> kinds{Kind::Vocals, Kind::Accompaniment, Kind::Drums, Kind::Bass, Kind::Other};
+        QJsonArray outputs;
+        for (int index = 0; index < kinds.size(); ++index) {
+            const QString path = QDir(directory).absoluteFilePath(QString::fromLatin1(
+                retainedCudaStems().at(static_cast<std::size_t>(index)).fileName));
+            if (!controller_->setStemSelected(kinds.at(index), true)) return false;
+            outputs.append(path);
+        }
+        VocalSeparationController::ActiveRequestContext context;
+        context.kind = VocalSeparationController::RequestKind::Separation;
+        context.inputPath = input.toLocalFile();
+        context.modelId = controller_->selectedModelId_;
+        context.outputRoot = QDir(directory).absolutePath();
+        context.stemKinds = kinds;
+        context.resultGeneration = controller_->resultGeneration_;
+        controller_->activeRequest_ = context;
+        controller_->handleResult({{"outputs", outputs}, {"provider", "retained-cuda-result"},
+                                    {"device", "QA replay (no inference)"}, {"outputGain", outputGain}});
+        return controller_->jobState() == VocalSeparationController::JobState::Completed;
+    }
+
+    Q_INVOKABLE bool loadMainSource(const QUrl& source)
+    {
+        return playback_ && source.isLocalFile()
+            && ag_player_load(playback_->playerHandle(), source.toLocalFile().toUtf8().constData()) == AG_OK;
     }
 
     Q_INVOKABLE void setHistoryRecord()
@@ -886,6 +957,109 @@ public:
     }
 
 private:
+    struct RetainedAudioFile final {
+        const char* role;
+        const char* fileName;
+        const char* sha256;
+        const char* container;
+        const char* codecPrefix;
+        qint64 bytes;
+        qint64 frames;
+        int sampleRate;
+        int channels;
+        int bitsPerSample;
+    };
+
+    static const RetainedAudioFile& retainedCudaSource()
+    {
+        static constexpr RetainedAudioFile source{
+            "source", "", "68B9C3DE962838B262106278A83B21010DD2FF88F935EF335B066E8D3AB8AB8B",
+            "mp3", "mp3", 9'923'360, 10'463'663, 44'100, 2, 0};
+        return source;
+    }
+
+    static const std::array<RetainedAudioFile, 5>& retainedCudaStems()
+    {
+        static constexpr std::array<RetainedAudioFile, 5> stems{{
+            {"vocals", "demucs-vocals-demucs.wav",
+             "9A9D5FB3BA2D822D1015F8D06A41DF52B1F27AD5EDA45C553186AC9DDCA24718",
+             "wav", "pcm_s16le", 41'854'730, 10'463'663, 44'100, 2, 16},
+            {"instrumental", "demucs-instrumental-demucs.wav",
+             "C0BB0F6D342144F2CADCC333056E62F853AA5E6E70F2A0A6CDAE3EA3505992D5",
+             "wav", "pcm_s16le", 41'854'730, 10'463'663, 44'100, 2, 16},
+            {"drums", "demucs-drums-demucs.wav",
+             "B44E9C4F7E02AF4002CFD40161310D8C5E78515552BD7D5827A0A4205DC1DF86",
+             "wav", "pcm_s16le", 41'854'730, 10'463'663, 44'100, 2, 16},
+            {"bass", "demucs-bass-demucs.wav",
+             "FE53353BE22AF9C63638C11CEF4229F545DB4332C991045C90FEB15B43A0A2E4",
+             "wav", "pcm_s16le", 41'854'730, 10'463'663, 44'100, 2, 16},
+            {"other", "demucs-other-demucs.wav",
+             "5E4AC6F41D8E32B8CC4463EB0A440A7223DE8ACE22C7482D60316F089C4B80FD",
+             "wav", "pcm_s16le", 41'854'730, 10'463'663, 44'100, 2, 16},
+        }};
+        return stems;
+    }
+
+    static QByteArray sha256(const QString& path)
+    {
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly)) return {};
+        QCryptographicHash hash(QCryptographicHash::Sha256);
+        while (!file.atEnd()) {
+            const QByteArray block = file.read(1024 * 1024);
+            if (block.isEmpty() && file.error() != QFileDevice::NoError) return {};
+            hash.addData(block);
+        }
+        return hash.result().toHex();
+    }
+
+    static bool retainedAudioFileMatches(const QString& path,
+                                         const RetainedAudioFile& expected)
+    {
+        const QFileInfo file(path);
+        if (!file.isFile() || file.size() != expected.bytes
+            || file.suffix().compare(QString::fromLatin1(expected.container),
+                                     Qt::CaseInsensitive) != 0
+            || sha256(file.absoluteFilePath()) != QByteArray(expected.sha256).toLower()) {
+            return false;
+        }
+
+        agplayer::MediaMetadata metadata;
+        const QByteArray utf8Path = file.absoluteFilePath().toUtf8();
+        if (agplayer::probe_media_metadata(utf8Path.constData(), metadata) != AG_OK
+            || QString::fromStdString(metadata.format).compare(
+                   QString::fromLatin1(expected.container), Qt::CaseInsensitive) != 0
+            || metadata.sample_rate != expected.sampleRate
+            || metadata.channels != expected.channels
+            || (expected.bitsPerSample > 0
+                && metadata.bits_per_sample != expected.bitsPerSample)) {
+            return false;
+        }
+
+        agplayer::Decoder decoder;
+        if (decoder.open(utf8Path.constData(), expected.sampleRate,
+                         expected.channels) != AG_OK) {
+            return false;
+        }
+        if (!QString::fromStdString(decoder.metadata().codec).startsWith(
+                QString::fromLatin1(expected.codecPrefix), Qt::CaseInsensitive)) {
+            return false;
+        }
+        qint64 decodedFrames = 0;
+        for (;;) {
+            agplayer::DecodedAudioBlock block;
+            if (decoder.read(block) != AG_OK
+                || block.frames > static_cast<std::size_t>(
+                    (std::numeric_limits<qint64>::max)() - decodedFrames)) {
+                return false;
+            }
+            decodedFrames += static_cast<qint64>(block.frames);
+            if (block.end_of_stream) break;
+        }
+        return decodedFrames == expected.frames;
+    }
+
+    QPointer<PlaybackController> playback_;
     static QVariantMap device(VocalSeparationController::DeviceMode mode,
                               const QString& name, bool available,
                               const QString& reason)
@@ -950,7 +1124,9 @@ public slots:
         QCoreApplication::setOrganizationName("AgPlayer");
         QCoreApplication::setApplicationName("AgPlayer-test-audio-tools");
 
-        ag_player_config config{AG_AUDIO_BACKEND_NULL, 2048};
+        const auto audioBackend = qEnvironmentVariableIsSet("AGPLAYER_QA_REAL_AUDIO")
+            ? AG_AUDIO_BACKEND_DEFAULT : AG_AUDIO_BACKEND_NULL;
+        ag_player_config config{audioBackend, 2048};
         if (ag_player_create_with_config(&config, &core_) != AG_OK) {
             return;
         }
@@ -970,7 +1146,7 @@ public slots:
         visualFormatTaskModel_ = std::make_unique<VisualFormatTaskModel>();
         playlists_ = std::make_unique<PlaylistModel>();
         audioPreview_ = std::make_unique<AudioPreviewController>(
-            AG_AUDIO_BACKEND_NULL, playback_.get());
+            audioBackend, playback_.get());
         VocalSeparationControllerOptions separationOptions;
         separationOptions.dataRoot = QDir(QStandardPaths::writableLocation(
             QStandardPaths::AppDataLocation)).filePath(QStringLiteral("separation"));
@@ -983,7 +1159,7 @@ public slots:
         nativeDropHelper_.bind(audioTools_.get(), formatConverter_.get(),
                                audioEditor_.get(), metadataEditor_.get(),
                                filenameProcessor_.get(), vocalSeparation_.get(), losslessAnalysis_.get());
-        separationTestDriver_.bind(vocalSeparation_.get());
+        separationTestDriver_.bind(vocalSeparation_.get(), playback_.get());
 
         register_agplayer_qml_types(library_.get(), playback_.get(),
                                     importer_.get(), windows_.get(),
@@ -1004,6 +1180,12 @@ public slots:
                                                   &nativeDropHelper_);
         engine->rootContext()->setContextProperty("separationTestDriver",
                                                   &separationTestDriver_);
+        engine->rootContext()->setContextProperty("realSeparationDirectory", qEnvironmentVariable("AGPLAYER_QA_REAL_STEMS_DIR"));
+        engine->rootContext()->setContextProperty("realSeparationGain", qEnvironmentVariable("AGPLAYER_QA_REAL_STEMS_GAIN").toDouble());
+        engine->rootContext()->setContextProperty(
+            "realSeparationSourceUrl",
+            QUrl::fromLocalFile(QString::fromLocal8Bit(
+                qgetenv("AGPLAYER_QA_REAL_SOURCE"))));
         engine->rootContext()->setContextProperty(
             "testAudioUrl",
             QUrl::fromLocalFile(QString::fromLocal8Bit(

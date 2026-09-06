@@ -52,16 +52,25 @@ Assert-Matches $tagPanel '(?s)Flow\s*\{.*id:\s*tagFlow' `
     'Tag panel must lay capsules out with Flow'
 Assert-Matches $tagPanel 'contentHeight:\s*tagFlow\.height' `
     'Tag Flickable content height must follow the natural Flow height'
-Assert-Matches $tagPanel '(?s)id:\s*tagPill.*countSectionWidth:.*tagCount\.implicitWidth.*nameSectionWidth:.*tagNameMeasure\.implicitWidth.*implicitWidth:\s*Math\.min\(tagFlow\.width,.*implicitHeight:\s*28.*height:\s*implicitHeight.*radius:\s*Theme\.radiusSm' `
+Assert-Matches $tagPanel '(?s)id:\s*tagPill.*countSectionWidth:.*tagCount\.implicitWidth.*nameSectionWidth:.*tagNameMeasure\.implicitWidth.*implicitWidth:\s*Math\.min\(tagFlow\.width,.*implicitHeight:\s*Theme\.tagCapsuleHeight.*height:\s*implicitHeight.*radius:\s*Theme\.tagCapsuleRadius' `
     'Tag capsules must preserve compact natural width in 28 px reference capsules'
 Assert-Matches $tagPanel 'selectedVisual|hoveredVisual|pressedVisual|tagDropTarget\.containsDrag' `
     'Tag capsules must expose selected, hover and drop visual states'
-Assert-Matches $tagPanel 'objectName:\s*"tagCapsuleLeft-"' `
-    'Tag capsules must expose a colored name section'
-Assert-Matches $tagPanel 'objectName:\s*"tagCapsuleRight-"' `
-    'Tag capsules must expose a separate count section'
-Assert-Matches $tagPanel '(?s)objectName:\s*"tagCapsuleNotch-".*width:\s*8.*height:\s*8.*rotation:\s*45' `
-    'Tag capsules must reproduce the centered triangular divider notch'
+Assert-Matches $tagPanel '(?s)id:\s*tagName.*objectName:\s*"tagCapsuleName-".*text:\s*tagCell\.displayName' `
+    'Tag capsules must display the tag name'
+Assert-Matches $tagPanel '(?s)id:\s*tagCount.*objectName:\s*"tagCapsuleCount-".*text:\s*tagCell\.trackCount' `
+    'Tag capsules must display the live track count'
+Assert-Matches $tagPanel 'filledVisual:\s*hoveredVisual\s*\|\|\s*pressedVisual\s*[\r\n]' `
+    'Only hover or press may fill a tag; selected tags must remain hollow when the pointer leaves'
+Assert-Matches $tagPanel 'color:\s*filledVisual\s*\?\s*baseAccent\s*:\s*"transparent"' `
+    'Tag capsules must switch between a transparent interior and their own solid color'
+Assert-Matches $tagPanel '(?s)border\.color:\s*baseAccent.*border\.width:\s*Theme\.tagCapsuleBorderWidth\s*\+\s*\(selectedVisual\s*\?\s*0\.8\s*:\s*0\)' `
+    'Selected tags must use a stronger same-color outline'
+Assert-Matches $tagPanel '(?s)contentColor:\s*filledVisual\s*\?\s*Theme\.tagCapsuleFilledText\(baseAccent\)\s*:\s*Theme\.primaryText' `
+    'Tag text must use readable theme foreground when hollow and contrasting text when filled'
+if ($tagPanel -match 'tagCapsule(?:Left|Right|Notch)-|tagCapsuleCountSurface') {
+    throw 'Tag capsules must not restore split color blocks, a white count half, or an arrow notch'
+}
 Assert-Matches $tagPanel '(?s)Flickable\s*\{.*contentHeight:\s*tagFlow\.height.*Flow\s*\{.*width:\s*tagFlickable\.width.*height:\s*childrenRect\.height' `
     'Tag capsules must wrap naturally and expose their full height to scrolling'
 if ($tagPanel -match 'Keys\.onSpacePressed') {
@@ -83,10 +92,14 @@ if ($tagPanel -match '\bGridView\s*\{') {
     throw 'Tag capsules must not use a fixed GridView'
 }
 
-Assert-Matches $theme 'tagCapsuleCountSurface' `
-    'Theme must expose the shared light count surface'
-Assert-Matches $theme 'tagCapsuleNameText' `
-    'Theme must expose the shared capsule name text color'
+Assert-Matches $theme 'readonly property int tagCapsuleHeight:\s*28\b' `
+    'Shared tag capsules must remain 28 px high'
+Assert-Matches $theme 'readonly property int tagCapsuleRadius:\s*11\b' `
+    'Shared tag capsules must use the approved 11 px radius'
+Assert-Matches $theme 'readonly property real tagCapsuleBorderWidth:\s*2\.4\b' `
+    'Shared tag capsules must use the compact 0.2em-equivalent outline'
+Assert-Matches $theme 'function tagCapsuleFilledText\(fill\)' `
+    'Theme must supply contrasting foreground for arbitrary filled tag colors'
 Assert-Matches $theme 'tagPillDropSurface' `
     'Theme must expose a tag drop surface'
 

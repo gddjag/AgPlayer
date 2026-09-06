@@ -1474,6 +1474,36 @@ TestCase {
         }
     }
 
+    function test_column_density_buttons_change_and_bound_quantity() {
+        var saved = PlayerExperienceController.columnDensity
+        var panel = windowedPresetPanel()
+        panel.currentTab = 2
+        wait(220)
+        try {
+            var slider = findChild(panel, "dynamicSlider_columnDensity")
+            verify(slider)
+            var row = slider.parent
+            var decrease = findChild(row, "densityDecrease")
+            var increase = findChild(row, "densityIncrease")
+            verify(decrease && increase)
+            PlayerExperienceController.columnDensity = 125
+            mouseClick(increase)
+            compare(PlayerExperienceController.columnDensity, 130)
+            mouseClick(decrease)
+            compare(PlayerExperienceController.columnDensity, 125)
+            compare(findChild(row, "dynamicValue_columnDensity").text, "125%")
+            PlayerExperienceController.columnDensity = 50
+            compare(decrease.enabled, false)
+            PlayerExperienceController.columnDensity = 200
+            compare(increase.enabled, false)
+            slider.value = 100
+            slider.moved()
+            compare(PlayerExperienceController.columnDensity, 100)
+        } finally {
+            PlayerExperienceController.columnDensity = saved
+        }
+    }
+
     function test_fixed_column_geometry_is_not_exposed_as_a_dynamic_control() {
         var panel = createTemporaryObject(immersiveControlPanelComponent,
                                           mainWindow.contentItem, { currentTab: 2 })

@@ -231,18 +231,18 @@ Rectangle {
                 }
             }
 
-            ColumnLayout {
+            Column {
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignVCenter
-                Layout.maximumHeight: implicitHeight
+                Layout.preferredHeight: implicitHeight
                 // At the native minimum height all metadata rows remain in
                 // the layout; only their spacing and font scale contract.
                 spacing: root.minimalHeight ? Theme.spacingXs : Theme.spacingSm
 
                 Item {
                     id: titleRow
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: root.minimalHeight ? 24 : 36
+                    width: parent.width
+                    height: root.minimalHeight ? 24 : 32
 
                     Item {
                         id: titleViewport
@@ -332,9 +332,9 @@ Rectangle {
                 Item {
                     id: artistRatingRow
                     objectName: "trackArtistRatingRow"
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: Math.max(artistAlbumText.implicitHeight,
-                                                    trackRating.implicitHeight)
+                    width: parent.width
+                    height: Math.max(artistAlbumText.implicitHeight,
+                                     trackRating.implicitHeight)
                     visible: true
 
                     Item {
@@ -380,7 +380,7 @@ Rectangle {
                             id: trackRating
                             objectName: "trackRating"
                             readonly property int iconSize:
-                                root.minimalHeight ? 12 : 19
+                                root.minimalHeight ? 12 : 17
                             anchors.left: artistAlbumClip.right
                             anchors.leftMargin: Theme.spacingMd
                             anchors.verticalCenter: parent.verticalCenter
@@ -409,8 +409,8 @@ Rectangle {
                 RowLayout {
                     id: metadataBadges
                     objectName: "trackMetadataBadges"
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: root.minimalHeight ? 14 : 22
+                    width: parent.width
+                    height: Math.max(root.minimalHeight ? 14 : 18, implicitHeight)
                     spacing: root.minimalHeight ? 2 : Theme.spacingSm
                     visible: true
 
@@ -444,9 +444,9 @@ Rectangle {
                             border.width: 1
                             radius: Theme.radiusSm
                             implicitWidth: badgeText.implicitWidth
-                                           + (root.minimalHeight ? 6 : Theme.spacingMd * 2)
+                                           + (root.minimalHeight ? 6 : 12)
                             implicitHeight: badgeText.implicitHeight
-                                            + (root.minimalHeight ? 2 : Theme.spacingXs * 2)
+                                            + (root.minimalHeight ? 2 : 4)
 
                             Text {
                                 id: badgeText

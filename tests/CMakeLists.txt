@@ -2075,4 +2075,8 @@ if(WIN32)
     set_tests_properties(windows_shell_runtime_test PROPERTIES
         TIMEOUT 20
         RUN_SERIAL TRUE)
+    add_test(NAME windows_install_preflight_test
+        COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+            -File ${CMAKE_CURRENT_SOURCE_DIR}/scripts/windows_install_preflight_test.ps1)
+    set_tests_properties(windows_install_preflight_test PROPERTIES TIMEOUT 30)
 endif()

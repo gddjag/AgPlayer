@@ -2835,7 +2835,33 @@ TestCase {
     function test_classic_player_rating_uses_reference_icon_size() {
         var rating = findChild(mainWindow, "trackRating")
         verify(rating, "the classic player must expose its rating row")
-        compare(rating.iconSize, 19)
+        compare(rating.iconSize, 17)
+    }
+
+    function test_classic_header_rows_are_compact_and_centered() {
+        nativeDropHelper.ensureSortableTracks()
+        var cover = findChild(mainWindow, "playerCover")
+        var title = findChild(mainWindow, "trackTitleViewport").parent
+        var artist = findChild(mainWindow, "trackArtistRatingRow")
+        var metadata = findChild(mainWindow, "trackMetadataBadges")
+        var oldHeight = mainWindow.height
+        try {
+            for (var h of [266, 360, 500]) {
+                mainWindow.height = h
+                wait(50)
+                var top = title.mapToItem(cover, 0, 0).y
+                var middle = artist.mapToItem(cover, 0, 0).y
+                var bottom = metadata.mapToItem(cover, 0, metadata.height).y
+                verify(Math.abs((top + bottom) / 2 - cover.height / 2) <= 1,
+                       "three rows must center on the cover: " + [h, top, bottom, cover.height])
+                var gap1 = middle - top - title.height
+                var gap2 = metadata.mapToItem(cover, 0, 0).y - middle - artist.height
+                verify(Math.abs(gap1 - gap2) <= 1, "row gaps must be equal")
+                verify(metadata.height <= 20, "metadata chips should stay compact")
+            }
+        } finally {
+            mainWindow.height = oldHeight
+        }
     }
 
     function test_z_playing_row_uses_three_independent_spectrum_bars() {
@@ -3303,22 +3329,27 @@ TestCase {
         var secondPill = findChild(panel, "tagPill-" + keys[1])
         var longPill = findChild(panel, "tagPill-" + keys[keys.length - 1])
         verify(firstPill && secondPill && longPill)
+        mouseMove(window.contentItem, window.width - 2, window.height - 2)
+        tryCompare(firstPill, "color", Qt.rgba(0, 0, 0, 0), 1000)
         compare(firstPill.height, 28)
-        compare(firstPill.radius, Theme.radiusSm)
+        compare(firstPill.radius, 11)
+        compare(firstPill.color.a, 0)
+        verify(firstPill.border.width >= 2)
+        compare(firstPill.border.color, firstPill.baseAccent)
         compare(panel.pillHorizontalPadding, 6)
         compare(panel.pillCountHorizontalPadding, 5)
         compare(panel.pillCountMinimumWidth, 0)
-        var firstLeft = findChild(firstPill, "tagCapsuleLeft-" + keys[0])
-        var firstRight = findChild(firstPill, "tagCapsuleRight-" + keys[0])
+        var firstName = findChild(firstPill, "tagCapsuleName-" + keys[0])
+        var firstCount = findChild(firstPill, "tagCapsuleCount-" + keys[0])
         var firstNotch = findChild(firstPill, "tagCapsuleNotch-" + keys[0])
-        verify(firstLeft && firstRight && firstNotch)
-        compare(firstRight.height, 28)
-        verify(firstRight.width >= 14)
-        verify(firstRight.width < 32,
-               "the count half must follow the number without broad white padding")
-        compare(firstNotch.width, 8)
-        compare(firstNotch.height, 8)
-        compare(firstNotch.rotation, 45)
+        verify(firstName && firstCount)
+        compare(firstNotch, null)
+        compare(findChild(firstPill, "tagCapsuleLeft-" + keys[0]), null)
+        compare(findChild(firstPill, "tagCapsuleRight-" + keys[0]), null)
+        compare(firstName.text, names[0])
+        compare(firstCount.text, String(firstPill.parent.trackCount))
+        compare(firstName.color, Theme.primaryText)
+        compare(firstCount.color, Theme.primaryText)
         verify(longPill.width > firstPill.width,
                "long labels must retain a larger natural capsule width")
         var shortPills = [firstPill, secondPill,
@@ -3354,9 +3385,10 @@ TestCase {
 
         panel.selectTag(keys[0])
         tryVerify(function() { return firstPill.selectedVisual }, 500)
-        verify(firstPill.resolvedAccent.toString()
-               !== firstPill.baseAccent.toString(),
-               "selected tags must darken their own stable palette color")
+        mouseMove(window.contentItem, window.width - 2, window.height - 2)
+        tryCompare(firstPill, "color", Qt.rgba(0, 0, 0, 0), 1000)
+        verify(firstPill.border.width > 2.4,
+               "selected tags stay hollow and use a stronger outline")
 
         var pointer = findChild(firstPill, "tagPillPointerArea-" + keys[0])
         verify(pointer)
@@ -3371,29 +3403,32 @@ TestCase {
         // both in isolation and after the full suite.
         mouseMove(window.contentItem, window.width - 2, window.height - 2)
         tryVerify(function() { return !firstPill.hoveredVisual }, 500)
+        tryCompare(firstPill, "color", Qt.rgba(0, 0, 0, 0), 1000)
         mouseMove(pointer, pointer.width / 2, pointer.height / 2)
         tryVerify(function() { return firstPill.hoveredVisual }, 500)
-        verify(firstPill.resolvedAccent.toString()
-               !== firstPill.baseAccent.toString())
+        compare(firstPill.color, firstPill.baseAccent)
+        verify(colorContrast(firstName.color, firstPill.color) >= 4.5)
         mousePress(pointer, pointer.width / 2, pointer.height / 2,
                    Qt.LeftButton)
         tryVerify(function() { return firstPill.pressedVisual }, 500)
-        verify(firstPill.resolvedAccent.toString()
-               !== firstPill.baseAccent.toString())
+        compare(firstPill.color, firstPill.baseAccent)
         mouseRelease(pointer, pointer.width / 2, pointer.height / 2,
                      Qt.LeftButton)
 
         var previousMode = SettingsController.themeMode
         SettingsController.themeMode = 1
-        verify(colorContrast(Theme.tagCapsuleNameText,
-                             firstPill.baseAccent) >= 3)
-        verify(colorContrast(firstPill.baseAccent,
-                             Theme.tagCapsuleCountSurface) >= 3)
+        verify(colorContrast(firstName.color, firstPill.baseAccent) >= 4.5)
+        compare(firstCount.color, firstName.color)
         SettingsController.themeMode = 0
-        verify(colorContrast(Theme.tagCapsuleNameText,
-                             firstPill.baseAccent) >= 3)
-        verify(colorContrast(firstPill.baseAccent,
-                             Theme.tagCapsuleCountSurface) >= 3)
+        verify(colorContrast(firstName.color, firstPill.baseAccent) >= 4.5)
+        var stableAccent = firstPill.baseAccent
+        for (var manualColor of ["#ffffff", "#000000", "#ffff00", "#3654ff"]) {
+            firstPill.baseAccent = manualColor
+            tryCompare(firstPill, "color", firstPill.baseAccent, 1000)
+            verify(colorContrast(firstName.color, firstPill.color) >= 4.5,
+                   "hover text must remain readable on custom tag colors")
+        }
+        firstPill.baseAccent = stableAccent
         SettingsController.themeMode = previousMode
 
         panel.searchText = names[names.length - 1]

@@ -80,11 +80,15 @@ void TagModelTest::assignsStableRandomPaletteColors()
 
     QVERIFY(tags.colorForKey(QStringLiteral("rock")).isValid());
     QVERIFY(tags.colorForKey(QStringLiteral("jazz")).isValid());
-    const QStringList names{QStringLiteral("热"), QStringLiteral("新品"),
+    QStringList names{QStringLiteral("热"), QStringLiteral("新品"),
         QStringLiteral("高推荐"), QStringLiteral("限时折扣"),
         QStringLiteral("官方精选款"), QStringLiteral("会员专属福利"),
         QStringLiteral("平台爆款热销单品"), QStringLiteral("春季上新限定活动专区"),
         QStringLiteral("HOT"), QStringLiteral("NEW 2026年度限定好物推荐")};
+    // Crossing the initial twenty swatches must allocate new stable colors,
+    // not silently reuse the least-used swatch.
+    for (int index = 0; index < 54; ++index)
+        names.append(QStringLiteral("overflow-%1").arg(index));
     LibraryModel firstLibrary;
     TagModel firstOrder(&firstLibrary, dir.filePath(QStringLiteral("palette-first.json")));
     QHash<QString, QColor> firstColors;
@@ -98,6 +102,12 @@ void TagModelTest::assignsStableRandomPaletteColors()
         usedColors.insert(colorName);
     }
     QCOMPARE(usedColors.size(), names.size());
+    // Explicit user choices may deliberately share a color; allocation must
+    // not recolor those tags to enforce uniqueness retroactively.
+    for (const QString& name : {names.at(0), names.at(1)}) {
+        QVERIFY(firstOrder.setTagColor(name, QStringLiteral("#3654FF")));
+        firstColors[name] = QColor(QStringLiteral("#3654FF"));
+    }
     QVERIFY(firstOrder.flush());
     TagModel restored(&firstLibrary, dir.filePath(QStringLiteral("palette-first.json")));
     for (const QString& name : names) {

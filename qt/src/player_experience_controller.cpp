@@ -186,6 +186,7 @@ int PlayerExperienceController::rippleStrength() const noexcept { return rippleS
 int PlayerExperienceController::rippleWidth() const noexcept { return rippleWidth_; }
 int PlayerExperienceController::rippleDecay() const noexcept { return rippleDecay_; }
 int PlayerExperienceController::columnSize() const noexcept { return columnSize_; }
+int PlayerExperienceController::columnDensity() const noexcept { return columnDensity_; }
 int PlayerExperienceController::columnOpacity() const noexcept { return columnOpacity_; }
 int PlayerExperienceController::reactorBrightness() const noexcept { return reactorBrightness_; }
 QString PlayerExperienceController::coolColor() const { return coolColor_; }
@@ -307,6 +308,15 @@ void PlayerExperienceController::setRippleDecay(int value)
     rippleDecay_ = value;
     persist(QStringLiteral("rippleDecay"), value);
     emit rippleDecayChanged();
+}
+
+void PlayerExperienceController::setColumnDensity(int value)
+{
+    value = clampRange(value, 50, 200);
+    if (columnDensity_ == value) return;
+    columnDensity_ = value;
+    persist(QStringLiteral("columnDensity"), value);
+    emit columnDensityChanged();
 }
 
 void PlayerExperienceController::setColumnSize(int value)
@@ -874,6 +884,7 @@ void PlayerExperienceController::load()
     rippleWidth_ = clampRange(integer(QStringLiteral("rippleWidth"), 100), 20, 200);
     rippleDecay_ = clampRange(integer(QStringLiteral("rippleDecay"), 100), 20, 200);
     columnSize_ = clampRange(integer(QStringLiteral("columnSize"), 50), 50, 200);
+    columnDensity_ = clampRange(integer(QStringLiteral("columnDensity"), 125), 50, 200);
     columnOpacity_ = clampRange(integer(QStringLiteral("columnOpacity"), 72), 0, 100);
     reactorBrightness_ = clampRange(integer(QStringLiteral("reactorBrightness"), 100), 0, 200);
     motionResponse_ = clampPercent(integer(QStringLiteral("motionResponse"), 34));
@@ -930,6 +941,7 @@ void PlayerExperienceController::load()
     settings_.setValue(QStringLiteral("rippleWidth"), rippleWidth_);
     settings_.setValue(QStringLiteral("rippleDecay"), rippleDecay_);
     settings_.setValue(QStringLiteral("columnSize"), columnSize_);
+    settings_.setValue(QStringLiteral("columnDensity"), columnDensity_);
     settings_.setValue(QStringLiteral("columnOpacity"), columnOpacity_);
     settings_.setValue(QStringLiteral("reactorBrightness"), reactorBrightness_);
     settings_.setValue(QStringLiteral("coolColor"), coolColor_);

@@ -262,6 +262,7 @@ protected:
         const bool layoutChanged = seedChanged
             || next.style.materialMode != snapshot_.style.materialMode
             || next.style.columnSize != snapshot_.style.columnSize
+            || next.style.columnDensity != snapshot_.style.columnDensity
             || next.quality != snapshot_.quality
             || next.style.floatingCubesEnabled != snapshot_.style.floatingCubesEnabled
             || next.style.meteorsEnabled != snapshot_.style.meteorsEnabled
@@ -407,6 +408,7 @@ protected:
         commandBuffer->drawIndexed(cubeIndexCount,
                                    static_cast<quint32>(instances_.size()));
         commandBuffer->endPass();
+        telemetry_->terrainCount.store(currentTerrainCount_, std::memory_order_release);
 
         const double workMilliseconds = static_cast<double>(workTimer.nsecsElapsed())
             / 1'000'000.0;
@@ -505,6 +507,7 @@ private:
         if (!instancesDirty_) return;
         QualityConfiguration config = quality_.configuration(
             snapshot_.quality == TerrainReactorItem::Quality::Eco);
+        int gridCeiling = config.gridSize;
         switch (snapshot_.quality) {
         case TerrainReactorItem::Quality::Eco:
             config.rippleCount = std::min(config.rippleCount, 2);
@@ -512,11 +515,13 @@ private:
         case TerrainReactorItem::Quality::Balanced:
             config.rippleCount = std::min(config.rippleCount, 4);
             config.gridSize = std::min(config.gridSize, 128);
+            if (quality_.stage() < DegradationStage::ReducedGrid) gridCeiling = 160;
             config.particleCount = std::min(config.particleCount, 960);
             break;
         case TerrainReactorItem::Quality::High:
             if (quality_.stage() < DegradationStage::ReducedGrid) {
                 config.gridSize = 144;
+                gridCeiling = 192;
                 config.internalScale = 1.0F;
             }
             if (quality_.stage() < DegradationStage::ReducedRipples)
@@ -529,12 +534,15 @@ private:
         if (snapshot_.style.materialMode == 2) config.particleCount = 0;
         // Keep radius fixed and respect the selected quality's detail ceiling.
         // Small cells cannot undo Eco or automatic grid degradation.
-        config.gridSize = std::clamp(qRound(config.gridSize / (0.5F + snapshot_.style.columnSize)),
-                                     32, config.gridSize);
+        const float density = float(std::clamp(snapshot_.style.columnDensity, 50, 200)) / 100.0F;
+        config.gridSize = std::clamp(qRound(config.gridSize * std::sqrt(density)
+                                            / (0.5F + snapshot_.style.columnSize)),
+                                     32, gridCeiling);
         const SceneLayout layout = makeSceneLayout(snapshot_.seed,
             config.gridSize, config.floatingCount, config.meteorCount,
             config.particleCount);
         instances_.clear();
+        currentTerrainCount_ = int(layout.terrain.size());
         instances_.reserve(layout.terrain.size() + layout.floating.size()
                            + layout.meteors.size() + layout.meteorTrails.size()
                            + layout.collisionRipples.size()
@@ -700,6 +708,7 @@ private:
     void releaseResources()
     {
         telemetry_->stableRenderedFrames.store(0, std::memory_order_release);
+        telemetry_->terrainCount.store(0, std::memory_order_release);
         telemetry_->renderedFeatureRevision.store(0, std::memory_order_release);
         telemetry_->renderedStyleRevision.store(0, std::memory_order_release);
         if (pendingStaticUploads_ != nullptr) {
@@ -807,6 +816,7 @@ private:
     bool instancesDirty_ = true;
     bool instancesDirtyUpload_ = false;
     int currentRippleCount_ = 4;
+    int currentTerrainCount_ = 0;
     // Mirrors QQuickRhiItem's initial full-resolution buffer. The first
     // Balanced/Auto layout must therefore schedule the 0.90 scale update.
     float currentInternalScale_ = 1.0F;
@@ -879,6 +889,7 @@ void TerrainReactorItem::setStyleSource(QObject* source)
         styleConnections_.append(connect(styleSource_, &PlayerExperienceController::materialModeChanged, this, capture));
         styleConnections_.append(connect(styleSource_, &PlayerExperienceController::materialSoftnessChanged, this, capture));
         styleConnections_.append(connect(styleSource_, &PlayerExperienceController::columnSizeChanged, this, capture));
+        styleConnections_.append(connect(styleSource_, &PlayerExperienceController::columnDensityChanged, this, capture));
         styleConnections_.append(connect(styleSource_, &PlayerExperienceController::columnOpacityChanged, this, capture));
         styleConnections_.append(connect(styleSource_, &PlayerExperienceController::reactorBrightnessChanged, this, capture));
         styleConnections_.append(connect(styleSource_, &PlayerExperienceController::jellyElasticityChanged, this, capture));
@@ -1149,6 +1160,11 @@ quint64 TerrainReactorItem::uploadCount() const noexcept
 {
     return telemetry_->uploads.load(std::memory_order_relaxed);
 }
+int TerrainReactorItem::renderedTerrainCount() const noexcept
+{
+    return telemetry_->terrainCount.load(std::memory_order_acquire);
+}
+
 quint64 TerrainReactorItem::renderedFeatureRevision() const noexcept
 {
     return telemetry_->renderedFeatureRevision.load(std::memory_order_acquire);
@@ -1279,6 +1295,7 @@ void TerrainReactorItem::copyStyleSource()
     next.materialMode = styleSource_->materialMode();
     next.materialSoftness = float(styleSource_->materialSoftness()) / 100.0F;
     next.columnSize = float(styleSource_->columnSize()) / 100.0F;
+    next.columnDensity = styleSource_->columnDensity();
     next.columnOpacity = float(styleSource_->columnOpacity()) / 100.0F;
     next.reactorBrightness = float(styleSource_->reactorBrightness()) / 100.0F;
     next.jellyElasticity = float(styleSource_->jellyElasticity()) / 100.0F;

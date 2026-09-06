@@ -30,6 +30,7 @@ class PlayerExperienceController final : public QObject {
     Q_PROPERTY(int rippleWidth READ rippleWidth WRITE setRippleWidth NOTIFY rippleWidthChanged)
     Q_PROPERTY(int rippleDecay READ rippleDecay WRITE setRippleDecay NOTIFY rippleDecayChanged)
     Q_PROPERTY(int columnSize READ columnSize WRITE setColumnSize NOTIFY columnSizeChanged)
+    Q_PROPERTY(int columnDensity READ columnDensity WRITE setColumnDensity NOTIFY columnDensityChanged)
     Q_PROPERTY(int columnOpacity READ columnOpacity WRITE setColumnOpacity NOTIFY columnOpacityChanged)
     Q_PROPERTY(int reactorBrightness READ reactorBrightness WRITE setReactorBrightness NOTIFY reactorBrightnessChanged)
     Q_PROPERTY(int colorMode READ colorMode WRITE setColorMode NOTIFY colorModeChanged)
@@ -151,6 +152,7 @@ public:
     int rippleWidth() const noexcept;
     int rippleDecay() const noexcept;
     int columnSize() const noexcept;
+    int columnDensity() const noexcept;
     int columnOpacity() const noexcept;
     int reactorBrightness() const noexcept;
     QString coolColor() const;
@@ -206,6 +208,7 @@ public:
     void setRippleWidth(int value);
     void setRippleDecay(int value);
     void setColumnSize(int value);
+    void setColumnDensity(int value);
     void setColumnOpacity(int value);
     void setReactorBrightness(int value);
     void setCoolColor(const QString& value);
@@ -269,6 +272,7 @@ signals:
     void rippleWidthChanged();
     void rippleDecayChanged();
     void columnSizeChanged();
+    void columnDensityChanged();
     void columnOpacityChanged();
     void reactorBrightnessChanged();
     void coolColorChanged();
@@ -335,6 +339,7 @@ private:
     int rippleWidth_ = 100;
     int rippleDecay_ = 100;
     int columnSize_ = 50;
+    int columnDensity_ = 125;
     int columnOpacity_ = 72;
     int reactorBrightness_ = 100;
     QString coolColor_ = QStringLiteral("#8BDCFF");

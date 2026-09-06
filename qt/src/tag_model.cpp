@@ -42,22 +42,27 @@ QColor nextColor(const QString& key, const QList<TagEntry>& entries)
         hash ^= character.unicode();
         hash *= 16777619U;
     }
-    // Keep the randomized starting point, but reserve unused colours first.
+    // Keep the key-derived starting point, but reserve unused colours first.
     // Existing / explicitly edited colours never change when a tag is added.
+    QSet<QRgb> usedColors;
+    for (const TagEntry& entry : entries) usedColors.insert(entry.color.rgb());
     const int start = static_cast<int>(hash % static_cast<quint32>(palette.size()));
-    int best = start;
-    int minimumUsage = entries.size() + 1;
     for (int offset = 0; offset < palette.size(); ++offset) {
         const int candidate = (start + offset) % palette.size();
-        const int usage = std::count_if(entries.cbegin(), entries.cend(),
-            [&](const TagEntry& entry) { return entry.color == palette[candidate]; });
-        if (usage < minimumUsage) {
-            best = candidate;
-            minimumUsage = usage;
-            if (usage == 0) break;
-        }
+        if (!usedColors.contains(palette[candidate].rgb())) return palette[candidate];
     }
-    return palette[best];
+    // Extend the initial swatches deterministically, without recoloring stored
+    // tags. RGB comparison also avoids duplicate rendered colors from HSV rounding.
+    constexpr quint32 colorCount = 360U * 64U * 64U;
+    for (quint32 attempt = 0; attempt < colorCount; ++attempt) {
+        const quint32 slot = (hash % colorCount + attempt * 137U) % colorCount;
+        const QColor candidate = QColor::fromRgb(QColor::fromHsv(static_cast<int>(slot % 360U),
+            160 + static_cast<int>((slot / 360U) % 64U),
+            192 + static_cast<int>(slot / (360U * 64U))).rgb());
+        if (!usedColors.contains(candidate.rgb())) return candidate;
+    }
+    // The finite display-color space may eventually be exhausted.
+    return palette[start];
 }
 }
 

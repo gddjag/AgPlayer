@@ -435,16 +435,13 @@ Item {
                             property bool focusedVisual: tagPointer.activeFocus
                             property bool dropVisual: tagDropTarget.containsDrag
                             property color baseAccent: tagCell.color.a > 0
-                                                       ? tagCell.color
+                                                       ? Qt.rgba(tagCell.color.r, tagCell.color.g,
+                                                                 tagCell.color.b, 1)
                                                        : Theme.accent
-                            property color resolvedAccent: pressedVisual
-                                                           || selectedVisual
-                                                           ? Qt.darker(baseAccent, 1.22)
-                                                           : dropVisual
-                                                             ? Qt.lighter(baseAccent, 1.10)
-                                                             : hoveredVisual || focusedVisual
-                                                               ? Qt.darker(baseAccent, 1.10)
-                                                               : baseAccent
+                            readonly property bool filledVisual: hoveredVisual || pressedVisual
+                            readonly property color contentColor: filledVisual
+                                                                  ? Theme.tagCapsuleFilledText(baseAccent)
+                                                                  : Theme.primaryText
                             readonly property real countSectionWidth: Math.max(
                                                                           root.pillCountMinimumWidth,
                                                                           tagCount.implicitWidth
@@ -458,38 +455,30 @@ Item {
                                                     Math.max(root.pillMinimumWidth,
                                                              nameSectionWidth
                                                              + countSectionWidth))
-                            implicitHeight: 28
+                            implicitHeight: Theme.tagCapsuleHeight
                             width: implicitWidth
                             height: implicitHeight
-                            radius: Theme.radiusSm
+                            radius: Theme.tagCapsuleRadius
                             clip: true
-                            color: "transparent"
-                            border.width: 0
+                            color: filledVisual ? baseAccent : "transparent"
+                            border.color: baseAccent // theme-color-allow: persisted tag color
+                            border.width: Theme.tagCapsuleBorderWidth
+                                          + (selectedVisual ? 0.8 : 0)
 
-                            Rectangle {
-                                id: tagCapsuleLeft
-                                objectName: "tagCapsuleLeft-" + tagCell.key
-                                x: 0
-                                y: 0
-                                width: Math.min(tagPill.width,
-                                                tagPill.nameSectionWidth + 4)
-                                height: tagPill.height
-                                color: tagPill.resolvedAccent // theme-color-allow: persisted tag color
-
-                                Text {
+                            Text {
                                     id: tagName
+                                    objectName: "tagCapsuleName-" + tagCell.key
                                     anchors.left: parent.left
                                     anchors.leftMargin: root.pillHorizontalPadding
-                                    anchors.right: parent.right
-                                    anchors.rightMargin: root.pillHorizontalPadding + 4
+                                    width: Math.max(0, tagPill.nameSectionWidth
+                                                    - root.pillHorizontalPadding * 2)
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: tagCell.displayName
-                                    color: Theme.tagCapsuleNameText
+                                    color: tagPill.contentColor
                                     font.family: Theme.fontPrimary
                                     font.pixelSize: Theme.fontSizeTagCapsule
                                     font.weight: Font.DemiBold
                                     elide: Text.ElideRight
-                                }
                             }
 
                             Text {
@@ -501,35 +490,27 @@ Item {
                                 font.weight: Font.DemiBold
                             }
 
-                            Rectangle {
-                                id: tagCapsuleRight
-                                objectName: "tagCapsuleRight-" + tagCell.key
-                                x: Math.min(tagPill.width, tagPill.nameSectionWidth)
-                                y: 0
-                                width: Math.max(0, tagPill.width - x)
-                                height: tagPill.height
-                                color: Theme.tagCapsuleCountSurface
-
-                                Rectangle {
-                                    id: tagCapsuleNotch
-                                    objectName: "tagCapsuleNotch-" + tagCell.key
-                                    x: -4
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: 8
-                                    height: 8
-                                    rotation: 45
-                                    color: parent.color
-                                }
-
-                                Text {
+                            Text {
                                     id: tagCount
-                                    anchors.centerIn: parent
+                                    objectName: "tagCapsuleCount-" + tagCell.key
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: root.pillCountHorizontalPadding
+                                    anchors.verticalCenter: parent.verticalCenter
                                     text: tagCell.trackCount
-                                    color: tagPill.resolvedAccent // theme-color-allow: persisted tag color
+                                    color: tagPill.contentColor
                                     font.family: Theme.fontPrimary
                                     font.pixelSize: Theme.fontSizeTagCapsule
                                     font.weight: Font.DemiBold
-                                }
+                            }
+                            Rectangle {
+                                objectName: "tagCapsuleFocus-" + tagCell.key
+                                anchors.fill: parent
+                                anchors.margins: Theme.tagCapsuleBorderWidth + 1
+                                radius: Math.max(0, parent.radius - anchors.margins)
+                                color: "transparent"
+                                border.color: tagPill.contentColor
+                                border.width: 1
+                                visible: tagPill.focusedVisual
                             }
                             HoverHandler { id: tagHover }
                             MouseArea {

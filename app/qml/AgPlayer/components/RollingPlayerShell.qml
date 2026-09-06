@@ -1207,6 +1207,9 @@ Item {
                     Layout.alignment: Qt.AlignVCenter
                     spacing: root.width < 1180 ? Theme.spacingXs : Theme.spacingSm
 
+                    readonly property real groupHeight:
+                        sourceBpm.implicitHeight + Theme.controlHeightCompact + 2
+
                     readonly property real singleRowContentWidth:
                         gridToggleGroup.width + gridGroupingGroup.width
                         + viewportGroup.width + speedGroup.width
@@ -1225,7 +1228,7 @@ Item {
                     ColumnLayout {
                         id: gridToggleGroup
                         width: implicitWidth
-                        height: 56
+                        height: rollingControls.groupHeight
                         spacing: 2
                         Label {
                             Layout.fillWidth: true
@@ -1249,7 +1252,7 @@ Item {
                     ColumnLayout {
                         id: calibrationGroup
                         width: implicitWidth
-                        height: 56
+                        height: rollingControls.groupHeight
                         spacing: 2
                         Label {
                             Layout.fillWidth: true
@@ -1278,7 +1281,7 @@ Item {
                     ColumnLayout {
                         id: gridGroupingGroup
                         width: implicitWidth
-                        height: 56
+                        height: rollingControls.groupHeight
                         spacing: 2
                         Label {
                             Layout.fillWidth: true
@@ -1306,7 +1309,7 @@ Item {
                     ColumnLayout {
                         id: viewportGroup
                         width: implicitWidth
-                        height: 56
+                        height: rollingControls.groupHeight
                         spacing: 2
                         Label {
                             Layout.fillWidth: true
@@ -1368,7 +1371,7 @@ Item {
                     ColumnLayout {
                         id: speedGroup
                         width: implicitWidth
-                        height: 56
+                        height: rollingControls.groupHeight
                         spacing: 2
                         Label {
                             Layout.fillWidth: true
@@ -1411,7 +1414,7 @@ Item {
                     ColumnLayout {
                         id: targetBpmGroup
                         width: implicitWidth
-                        height: 56
+                        height: rollingControls.groupHeight
                         spacing: 2
                         Label {
                             id: sourceBpm
@@ -1427,7 +1430,7 @@ Item {
                             id: targetBpm
                             objectName: "rollingTargetBpm"
                             Layout.preferredWidth: 72
-                            Layout.preferredHeight: 26
+                            Layout.preferredHeight: Theme.controlHeightCompact
                             horizontalAlignment: Text.AlignHCenter
                             text: root.formatBpm(
                                       root.playback
@@ -1447,7 +1450,7 @@ Item {
 
                     ColumnLayout {
                         width: implicitWidth
-                        height: 56
+                        height: rollingControls.groupHeight
                         spacing: 2
                         Item {
                             Layout.preferredWidth: 28
@@ -1469,7 +1472,7 @@ Item {
                     ColumnLayout {
                         id: keepPitchGroup
                         width: implicitWidth
-                        height: 56
+                        height: rollingControls.groupHeight
                         spacing: 2
                         Label {
                             Layout.fillWidth: true
@@ -1499,7 +1502,7 @@ Item {
                         id: rollingShellActions
                         objectName: "rollingShellActions"
                         width: 104
-                        height: 56
+                        height: rollingControls.groupHeight
                     }
                 }
             }

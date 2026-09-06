@@ -92,6 +92,7 @@ struct RenderStyleSnapshot {
     RenderColorMode colorMode = RenderColorMode::MultiRegion;
     int materialMode = 0;
     float columnSize = 1.0F;
+    int columnDensity = 125;
     float columnOpacity = 1.0F;
     float reactorBrightness = 1.0F;
     float materialSoftness = 0.45F;

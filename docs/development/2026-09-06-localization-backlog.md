@@ -1,12 +1,12 @@
-# 英文翻译待办（2026-09-06）
+# 英文本地化闭环记录（2026-09-06）
 
-当前发布目录以既有完整目录为兼容基底，仅合并已经人工审校且没有
-`unfinished` 标记的新译文。运行 `AgPlayer_lupdate` 后发现的其余 584 条
-英文新增源文案尚未完成审校，因此没有写入发布用 `agplayer_en.ts`，也不能
-视为已经翻译完成。
+本轮没有直接用 `lupdate` 覆盖发布目录，而是通过 Release 构建生成的
+`AgPlayer_lupdate_project.json` 将当前源码语义提取到临时 TS，再按
+`context + source` 合并回既有兼容目录。提取结果共有 1561 个当前 source；
+合并前英文目录缺少 584 条，中文目录缺少 0 条。584 条英文译文已逐上下文
+完成并检查占位符，且没有 `unfinished` 标记。
 
-后续翻译时应重新运行 `AgPlayer_lupdate` 提取最新 source，逐上下文完成英文
-翻译并检查 `%1`、`%2`、`%n` 等占位符，再合并回兼容目录。待办分布如下：
+合并前的缺项分布如下：
 
 | 上下文 | 条数 |
 | --- | ---: |
@@ -56,6 +56,25 @@
 | WaveSelectionOverlay | 1 |
 | **合计** | **584** |
 
-本轮已完成并纳入英文目录的新增范围为 `RollingPlayerShell`、
-`ImmersiveControlPanel`、`SettingsPage` 和 `UpdateChecker`；中文目录已覆盖本次
-提取的全部 1557 条当前 source，同时保留旧兼容条目。
+合并后的发布目录状态：
+
+- `agplayer_en.ts`：1865 个唯一消息键，覆盖全部 1561 个当前 source，缺项 0；
+- `agplayer_zh.ts`：1867 个唯一消息键，覆盖全部 1561 个当前 source，缺项 0；
+- 英文 304 条、中文 306 条不再出现在当前源码中的兼容消息仍原样保留，没有
+  因源覆盖检查被删除；
+- `%1`、`%2`、`%n` 等 Qt 占位符按源文案保持一致。
+
+回归测试 `phase6_translation_coverage_test.ps1` 现在会调用与
+`AgPlayer_lupdate` 目标相同的工程描述，将实际源码提取到一次性临时目录，
+再验证中英文发布目录的语义源覆盖、完成状态、英文中文回退和占位符。因此，
+只更新既有目录而漏掉新 `tr()` / `qsTr()` 文案会直接失败。
+
+验证证据：
+
+- RED：`build/qa/translation-source-coverage-red.txt`，英文目录首先报告
+  `[PlayerVolumeControl] 取消静音` 缺失；
+- GREEN：`build/qa/translation-source-coverage-green.txt`，当前源码覆盖通过；
+- 目录规则：`build/qa/translation-catalog-source-complete.txt`，发布目录完整性通过。
+
+当前源码待译条目为 **0**。若其他并行改动在本次提取之后新增用户可见文案，
+仍须重新执行语义源覆盖测试；本记录不把尚未重新提取的未来字符串算作已翻译。

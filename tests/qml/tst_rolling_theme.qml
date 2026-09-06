@@ -319,10 +319,46 @@ TestCase {
         }
     }
 
-    function test_rolling_bpm_input_has_vertical_clearance() {
-        var target = findChild(rollingWithFakes(), "rollingTargetBpm")
-        verify(target.height <= 26,
-               "BPM input must leave a little more clearance in the group")
+    function test_rolling_bpm_input_matches_grouping_height() {
+        var rolling = rollingWithFakes()
+        var target = findChild(rolling, "rollingTargetBpm")
+        var grouping = findChild(rolling, "rollingBeatGridGrouping")
+        compare(target.height, grouping.height,
+                "BPM and grouping must use the same compact control height")
+    }
+
+    function test_rolling_wrapped_controls_center_without_overflow() {
+        var rolling = rollingWithFakes()
+        var bottom = findChild(rolling, "rollingBottomBar")
+        var flow = findChild(rolling, "rollingTempoControls")
+        for (var width of [1180, 1386, 1600]) {
+            mainWindow.width = width
+            mainWindow.height = rolling.defaultWindowHeight
+            wait(0)
+            var top = Number.POSITIVE_INFINITY
+            var end = 0
+            for (var i = 0; i < flow.children.length; ++i) {
+                var group = flow.children[i]
+                if (!group.visible || group.height <= 1) continue
+                var pos = group.mapToItem(bottom, 0, 0)
+                var contentTop = Number.POSITIVE_INFINITY
+                var contentEnd = 0
+                for (var child of group.children) {
+                    if (!child.visible || child.height <= 0) continue
+                    contentTop = Math.min(contentTop, child.y)
+                    contentEnd = Math.max(contentEnd, child.y + child.height)
+                }
+                verify(Math.abs((contentTop + contentEnd) / 2
+                                - group.height / 2) <= 1,
+                       "visible group contents, not only their container, must center vertically")
+                top = Math.min(top, pos.y)
+                end = Math.max(end, pos.y + group.height)
+                verify(pos.x >= 0 && pos.x + group.width <= bottom.width + 1)
+                verify(pos.y >= 0 && pos.y + group.height <= bottom.height + 1)
+            }
+            verify(Math.abs(top - (bottom.height - end)) <= 1,
+                   "all wrapped rows must have balanced top and bottom clearance")
+        }
     }
 
     function test_classic_favorite_icon_is_compact() {
@@ -879,7 +915,7 @@ TestCase {
             compare(minus.height, 28)
             compare(plus.height, 28)
             compare(zoomReset.height, 28)
-            compare(targetBpm.height, 26)
+            compare(targetBpm.height, grouping.height)
             compare(tempoReset.height, 28)
             compare(calibration.height, 28)
             compare(zoomReset.icon.width, 18)
@@ -1285,7 +1321,10 @@ TestCase {
         verify(transport)
         verify(transport.mapToItem(controls, 0, 0).x < controls.width * 0.30,
                "rolling transport belongs on the left side")
-        verify(bottom.height >= 120,
+        var firstGroup = findChild(rolling, "rollingBeatGridSwitch").parent
+        var lastGroup = findChild(rolling, "rollingShellActions")
+        verify(lastGroup.mapToItem(bottom, 0, 0).y
+               >= firstGroup.mapToItem(bottom, 0, firstGroup.height).y,
                 "narrow rolling controls wrap to a second row instead of clipping")
         var rightControls = findChild(rolling, "rollingTempoControls")
         verify(rightControls && rightControls.height > 64)

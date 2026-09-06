@@ -4,6 +4,102 @@
 <context>
         <name>AudioEditorController</name>
         <message>
+            <source>未检测到可导入的音频文件</source>
+            <translation>No importable audio files were detected</translation>
+        </message>
+        <message>
+            <source>音频编辑器一次只能打开一个文件</source>
+            <translation>The audio editor can open only one file at a time</translation>
+        </message>
+        <message>
+            <source>保存工程路径无效</source>
+            <translation>Invalid project save path</translation>
+        </message>
+        <message>
+            <source>请选择本地工程文件</source>
+            <translation>Please select a local project file</translation>
+        </message>
+        <message>
+            <source>WAV 位深仅支持 16、24 或 32-bit</source>
+            <translation>WAV bit depth must be 16, 24, or 32-bit</translation>
+        </message>
+        <message>
+            <source>不支持的导出格式</source>
+            <translation>Unsupported export format</translation>
+        </message>
+        <message>
+            <source>无法创建输出目录</source>
+            <translation>Unable to create the output folder</translation>
+        </message>
+        <message>
+            <source>无法创建工程媒体目录</source>
+            <translation>Unable to create the project media folder</translation>
+        </message>
+        <message>
+            <source>无法提交降噪结果</source>
+            <translation>Unable to commit the noise-reduction result</translation>
+        </message>
+        <message>
+            <source>音量控制点已不存在</source>
+            <translation>The volume control point no longer exists</translation>
+        </message>
+        <message>
+            <source>音量控制点不能与现有控制点重合</source>
+            <translation>A volume control point cannot overlap an existing point</translation>
+        </message>
+        <message>
+            <source>BPM 检测仅支持单声道或立体声</source>
+            <translation>BPM detection supports only mono or stereo audio</translation>
+        </message>
+        <message>
+            <source>编辑预览仅支持单声道或立体声</source>
+            <translation>Editing preview supports only mono or stereo audio</translation>
+        </message>
+        <message>
+            <source>播放核心不可用</source>
+            <translation>The playback engine is unavailable</translation>
+        </message>
+        <message>
+            <source>无法暂停编辑预览</source>
+            <translation>Unable to pause the editing preview</translation>
+        </message>
+        <message>
+            <source>无法开始编辑预览</source>
+            <translation>Unable to start the editing preview</translation>
+        </message>
+        <message>
+            <source>无法停止编辑预览</source>
+            <translation>Unable to stop the editing preview</translation>
+        </message>
+        <message>
+            <source>无法定位编辑预览</source>
+            <translation>Unable to seek in the editing preview</translation>
+        </message>
+        <message>
+            <source>无法继续编辑预览</source>
+            <translation>Unable to resume the editing preview</translation>
+        </message>
+        <message>
+            <source>无法读取编辑预览状态</source>
+            <translation>Unable to read the editing preview state</translation>
+        </message>
+        <message>
+            <source>无法循环编辑预览</source>
+            <translation>Unable to loop the editing preview</translation>
+        </message>
+        <message>
+            <source>无法恢复循环编辑预览</source>
+            <translation>Unable to resume the editing preview loop</translation>
+        </message>
+        <message>
+            <source>编辑预览解码失败</source>
+            <translation>Failed to decode the editing preview</translation>
+        </message>
+        <message>
+            <source>工程音频源离线或已变更，请重新链接后再继续</source>
+            <translation>The project audio source is offline or has changed. Relink it before continuing.</translation>
+        </message>
+        <message>
             <location filename="../qt/src/audio_editor/audio_editor_controller.cpp" line="139" />
             <source>WAV PCM 24-bit</source>
             <translation>WAV PCM 24-bit</translation>
@@ -764,6 +860,22 @@
 <context>
         <name>ColorField</name>
         <message>
+            <source>颜色 %1</source>
+            <translation>Color %1</translation>
+        </message>
+        <message>
+            <source>恢复默认</source>
+            <translation>Restore defaults</translation>
+        </message>
+        <message>
+            <source>取消</source>
+            <translation>Cancel</translation>
+        </message>
+        <message>
+            <source>确定</source>
+            <translation>OK</translation>
+        </message>
+        <message>
             <source>Color %1</source>
             <translation>Color %1</translation>
         </message>
@@ -1096,6 +1208,18 @@
 <context>
         <name>EqualizerWindow</name>
         <message>
+            <source>当前 %1 Hz 不支持均衡器</source>
+            <translation>The equalizer does not support the current %1 Hz sample rate</translation>
+        </message>
+        <message>
+            <source>实际输出 · %1 Hz</source>
+            <translation>Actual output · %1 Hz</translation>
+        </message>
+        <message>
+            <source>48 kHz 设计预览</source>
+            <translation>48 kHz design preview</translation>
+        </message>
+        <message>
             <location filename="../app/qml/AgPlayer/EqualizerWindow.qml" line="17" />
             <location filename="../app/qml/AgPlayer/EqualizerWindow.qml" line="82" />
             <source>18 段图形均衡器</source>
@@ -1336,6 +1460,34 @@
 <context>
         <name>FileAssociationController</name>
         <message>
+            <source>Failed to register OpenWith ProgID for .%1</source>
+            <translation>Failed to register OpenWith ProgID for .%1</translation>
+        </message>
+        <message>
+            <source>Failed to remove stale ProgID for .%1</source>
+            <translation>Failed to remove stale ProgID for .%1</translation>
+        </message>
+        <message>
+            <source>Failed to remove RegisteredApplications entry and default-app capabilities</source>
+            <translation>Failed to remove RegisteredApplications entry and default-app capabilities</translation>
+        </message>
+        <message>
+            <source>Failed to remove RegisteredApplications entry</source>
+            <translation>Failed to remove RegisteredApplications entry</translation>
+        </message>
+        <message>
+            <source>Failed to remove default-app capabilities</source>
+            <translation>Failed to remove default-app capabilities</translation>
+        </message>
+        <message>
+            <source>Failed to read default-app file associations</source>
+            <translation>Failed to read default-app file associations</translation>
+        </message>
+        <message>
+            <source>Failed to enumerate default-app file associations</source>
+            <translation>Failed to enumerate default-app file associations</translation>
+        </message>
+        <message>
             <location filename="../qt/src/file_association_controller.cpp" line="264" />
             <source>Failed to remove ProgID registry key</source>
             <translation>Failed to remove ProgID registry key</translation>
@@ -1447,6 +1599,78 @@
     </context>
 <context>
         <name>FilenameProcessPage</name>
+        <message>
+            <source>添加前缀</source>
+            <translation>Add prefix</translation>
+        </message>
+        <message>
+            <source>留空则清理已有前缀</source>
+            <translation>Leave blank to remove the existing prefix</translation>
+        </message>
+        <message>
+            <source>填写时添加；留空时删除可识别的原前缀和序号</source>
+            <translation>Add when filled in; when blank, remove the recognized existing prefix and sequence number</translation>
+        </message>
+        <message>
+            <source>删除前缀</source>
+            <translation>Remove prefix</translation>
+        </message>
+        <message>
+            <source>输入要删除的前缀</source>
+            <translation>Enter the prefix to remove</translation>
+        </message>
+        <message>
+            <source>仅删除文件名开头完全匹配的文字，不区分大小写</source>
+            <translation>Remove only text that exactly matches the start of the filename, ignoring case</translation>
+        </message>
+        <message>
+            <source>添加后缀</source>
+            <translation>Add suffix</translation>
+        </message>
+        <message>
+            <source>留空则清理已有后缀</source>
+            <translation>Leave blank to remove the existing suffix</translation>
+        </message>
+        <message>
+            <source>填写时添加；留空时删除可识别的原后缀</source>
+            <translation>Add when filled in; when blank, remove the recognized existing suffix</translation>
+        </message>
+        <message>
+            <source>删除后缀</source>
+            <translation>Remove suffix</translation>
+        </message>
+        <message>
+            <source>输入要删除的后缀</source>
+            <translation>Enter the suffix to remove</translation>
+        </message>
+        <message>
+            <source>仅删除扩展名前完全匹配的文字，不区分大小写</source>
+            <translation>Remove only text that exactly matches immediately before the extension, ignoring case</translation>
+        </message>
+        <message>
+            <source>删除序号</source>
+            <translation>Remove sequence number</translation>
+        </message>
+        <message>
+            <source>全部文件</source>
+            <translation>All files</translation>
+        </message>
+        <message>
+            <source>提示</source>
+            <translation>Note</translation>
+        </message>
+        <message>
+            <source>文件名长度建议不超过 255 个字符；
+某些字符在 Windows 系统中不可用：
+ / : * ? &quot; &lt; &gt; |</source>
+            <translation>Keep filenames within 255 characters;
+these characters are unavailable on Windows:
+ / : * ? &quot; &lt; &gt; |</translation>
+        </message>
+        <message>
+            <source>个文件</source>
+            <translation>files</translation>
+        </message>
         <message>
             <location filename="../app/qml/AgPlayer/components/tools/FilenameProcessPage.qml" line="182" />
             <source>音频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
@@ -1901,6 +2125,34 @@ To roll back, use Undo to restore the original filenames.</translation>
 <context>
         <name>FormatConvertPage</name>
         <message>
+            <source>转换预检失败</source>
+            <translation>Conversion preflight failed</translation>
+        </message>
+        <message>
+            <source>音频与视频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.aif *.aiff *.mp4 *.mkv *.avi *.mov *.webm)</source>
+            <translation>Audio and video files (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.aif *.aiff *.mp4 *.mkv *.avi *.mov *.webm)</translation>
+        </message>
+        <message>
+            <source>并发</source>
+            <translation>Concurrency</translation>
+        </message>
+        <message>
+            <source>已完成 %1</source>
+            <translation>Completed %1</translation>
+        </message>
+        <message>
+            <source>失败 %1</source>
+            <translation>Failed %1</translation>
+        </message>
+        <message>
+            <source>开始处理</source>
+            <translation>Start processing</translation>
+        </message>
+        <message>
+            <source>取消全部</source>
+            <translation>Cancel all</translation>
+        </message>
+        <message>
             <location filename="../app/qml/AgPlayer/components/tools/FormatConvertPage.qml" line="113" />
             <source>添加文件</source>
             <translation>Add file</translation>
@@ -2019,6 +2271,62 @@ To roll back, use Undo to restore the original filenames.</translation>
 <context>
         <name>FormatConverter</name>
         <message>
+            <source>没有已选择的转换任务</source>
+            <translation>No conversion tasks are selected</translation>
+        </message>
+        <message>
+            <source>输入文件不包含音频流：%1</source>
+            <translation>The input file contains no audio stream: %1</translation>
+        </message>
+        <message>
+            <source>预检计划已失效，请重新预检后再开始</source>
+            <translation>The preflight plan is no longer valid. Run preflight again before starting.</translation>
+        </message>
+        <message>
+            <source>源文件在预检后发生变化，请重新预检</source>
+            <translation>The source file changed after preflight. Run preflight again.</translation>
+        </message>
+        <message>
+            <source>预检输出路径无效，请重新预检</source>
+            <translation>The preflight output path is invalid. Run preflight again.</translation>
+        </message>
+        <message>
+            <source>输出路径在预检后发生变化，请重新预检</source>
+            <translation>The output path changed after preflight. Run preflight again.</translation>
+        </message>
+        <message>
+            <source>转换任务运行时不能更改元数据计划</source>
+            <translation>The metadata plan cannot be changed while conversion tasks are running</translation>
+        </message>
+        <message>
+            <source>元数据转换计划只能绑定本地文件</source>
+            <translation>A metadata conversion plan can only reference local files</translation>
+        </message>
+        <message>
+            <source>元数据转换计划没有目标文件</source>
+            <translation>The metadata conversion plan has no target file</translation>
+        </message>
+        <message>
+            <source>没有可重试的冻结转换任务</source>
+            <translation>There are no frozen conversion tasks to retry</translation>
+        </message>
+        <message>
+            <source>冻结计划与任务队列不一致，请重新预检</source>
+            <translation>The frozen plan no longer matches the task queue. Run preflight again.</translation>
+        </message>
+        <message>
+            <source>采样率必须在自动到 384 kHz 之间</source>
+            <translation>The sample rate must be between Auto and 384 kHz</translation>
+        </message>
+        <message>
+            <source>输出格式不支持当前元数据修改：%1</source>
+            <translation>The output format does not support the current metadata changes: %1</translation>
+        </message>
+        <message>
+            <source>转换结果验证失败：%1</source>
+            <translation>Conversion result verification failed: %1</translation>
+        </message>
+        <message>
             <location filename="../qt/src/format_converter.cpp" line="336" />
             <source>计算中</source>
             <translation>Calculating</translation>
@@ -2116,6 +2424,10 @@ To roll back, use Undo to restore the original filenames.</translation>
 <context>
         <name>FormatErrorDialog</name>
         <message>
+            <source>关闭</source>
+            <translation>Close</translation>
+        </message>
+        <message>
             <location filename="../app/qml/AgPlayer/components/tools/FormatErrorDialog.qml" line="14" />
             <source>转换失败详情</source>
             <translation>Conversion Failure Details</translation>
@@ -2128,6 +2440,14 @@ To roll back, use Undo to restore the original filenames.</translation>
     </context>
 <context>
         <name>FormatPreflightDialog</name>
+        <message>
+            <source>取消</source>
+            <translation>Cancel</translation>
+        </message>
+        <message>
+            <source>确认转换</source>
+            <translation>Confirm conversion</translation>
+        </message>
         <message>
             <location filename="../app/qml/AgPlayer/components/tools/FormatPreflightDialog.qml" line="12" />
             <source>转换计划确认</source>
@@ -2151,6 +2471,30 @@ To roll back, use Undo to restore the original filenames.</translation>
     </context>
 <context>
         <name>FormatSettingsPanel</name>
+        <message>
+            <source>收起转换设置</source>
+            <translation>Collapse conversion settings</translation>
+        </message>
+        <message>
+            <source>展开转换设置</source>
+            <translation>Expand conversion settings</translation>
+        </message>
+        <message>
+            <source>压缩等级</source>
+            <translation>Compression level</translation>
+        </message>
+        <message>
+            <source>质量等级</source>
+            <translation>Quality level</translation>
+        </message>
+        <message>
+            <source>高级设置</source>
+            <translation>Advanced settings</translation>
+        </message>
+        <message>
+            <source>并发数可在任务总进度旁调整</source>
+            <translation>Concurrency can be adjusted beside the overall task progress</translation>
+        </message>
         <message>
             <location filename="../app/qml/AgPlayer/components/tools/FormatSettingsPanel.qml" line="43" />
             <source>转换设置</source>
@@ -2288,6 +2632,22 @@ Actual encoding parameters may vary with system performance.</translation>
 <context>
         <name>FormatTaskTable</name>
         <message>
+            <source>移除任务</source>
+            <translation>Remove task</translation>
+        </message>
+        <message>
+            <source>重试失败任务</source>
+            <translation>Retry failed tasks</translation>
+        </message>
+        <message>
+            <source>取消任务</source>
+            <translation>Cancel task</translation>
+        </message>
+        <message>
+            <source>复制错误详情</source>
+            <translation>Copy error details</translation>
+        </message>
+        <message>
             <location filename="../app/qml/AgPlayer/components/tools/FormatTaskTable.qml" line="26" />
             <source>任务列表</source>
             <translation>Task list</translation>
@@ -2374,6 +2734,10 @@ Actual encoding parameters may vary with system performance.</translation>
     </context>
 <context>
         <name>ImmersiveControlPanel</name>
+        <message><source>柱体数量</source><translation>Column quantity</translation></message>
+        <message><source>减少柱体数量</source><translation>Decrease column quantity</translation></message>
+        <message><source>增加柱体数量</source><translation>Increase column quantity</translation></message>
+        <message><source>数量为相对密度，实际柱数受画质与性能预算限制</source><translation>Relative density; the actual count is limited by quality and performance budgets.</translation></message>
         <message>
             <location filename="../app/qml/AgPlayer/components/ImmersiveControlPanel.qml" line="33" />
             <source>音域回响</source>
@@ -2797,7 +3161,7 @@ Actual encoding parameters may vary with system performance.</translation>
         <name>LibraryNavigationModel</name>
         <message>
             <source>我的音乐库</source>
-            <translation>My Music Library</translation>
+            <translation>Library</translation>
         </message>
         <message>
             <source>我的收藏</source>
@@ -2814,6 +3178,26 @@ Actual encoding parameters may vary with system performance.</translation>
     </context>
 <context>
         <name>ListWindow</name>
+        <message>
+            <source>资源文件夹刷新完成</source>
+            <translation>Resource folder refresh completed</translation>
+        </message>
+        <message>
+            <source>资源文件夹刷新失败</source>
+            <translation>Resource folder refresh failed</translation>
+        </message>
+        <message>
+            <source>正在导入资源文件夹…</source>
+            <translation>Importing resource folder…</translation>
+        </message>
+        <message>
+            <source>正在刷新资源文件夹…</source>
+            <translation>Refreshing resource folder…</translation>
+        </message>
+        <message>
+            <source>AgPlayer · 歌词</source>
+            <translation>AgPlayer · Lyrics</translation>
+        </message>
         <message>
             <location filename="../app/qml/AgPlayer/ListWindow.qml" line="187" />
             <source>重命名歌单</source>
@@ -3223,6 +3607,10 @@ Actual encoding parameters may vary with system performance.</translation>
 <context>
         <name>LosslessIdentifyPage</name>
         <message>
+            <source>实验性，仅供参考；鉴别结果不代表专业认证。</source>
+            <translation>Experimental, for reference only; results are not professional certification.</translation>
+        </message>
+        <message>
             <source>＋  添加文件</source>
             <translation>＋  Add files</translation>
         </message>
@@ -3357,6 +3745,14 @@ Actual encoding parameters may vary with system performance.</translation>
 <context>
         <name>LosslessTaskPanel</name>
         <message>
+            <source>删除选中</source>
+            <translation>Remove selected</translation>
+        </message>
+        <message>
+            <source>清除全部</source>
+            <translation>Clear all</translation>
+        </message>
+        <message>
             <source>采样率 / 位深</source>
             <translation>Sample rate / bit depth</translation>
         </message>
@@ -3464,6 +3860,102 @@ Actual encoding parameters may vary with system performance.</translation>
 <context>
         <name>LyricsPanel</name>
         <message>
+            <source>正在查找歌词…</source>
+            <translation>Searching for lyrics…</translation>
+        </message>
+        <message>
+            <source>未找到歌词，可手动导入 LRC</source>
+            <translation>No lyrics found. You can import an LRC file manually.</translation>
+        </message>
+        <message>
+            <source>歌词服务暂时离线，可重试或导入 LRC</source>
+            <translation>The lyrics service is temporarily offline. Retry or import an LRC file.</translation>
+        </message>
+        <message>
+            <source>歌词读取失败，可重试</source>
+            <translation>Failed to load lyrics. You can retry.</translation>
+        </message>
+        <message>
+            <source>请求超时</source>
+            <translation>Request timed out</translation>
+        </message>
+        <message>
+            <source>网络请求失败</source>
+            <translation>Network request failed</translation>
+        </message>
+        <message>
+            <source>返回内容无效</source>
+            <translation>The response is invalid</translation>
+        </message>
+        <message>
+            <source>DNS 解析失败</source>
+            <translation>DNS lookup failed</translation>
+        </message>
+        <message>
+            <source>TLS 安全连接失败</source>
+            <translation>TLS secure connection failed</translation>
+        </message>
+        <message>
+            <source>服务端异常</source>
+            <translation>Server error</translation>
+        </message>
+        <message>
+            <source>所有线路均不可用</source>
+            <translation>All routes are unavailable</translation>
+        </message>
+        <message>
+            <source>线路暂时熔断</source>
+            <translation>The route is temporarily suspended</translation>
+        </message>
+        <message>
+            <source>线路不可用</source>
+            <translation>The route is unavailable</translation>
+        </message>
+        <message>
+            <source>未知线路</source>
+            <translation>Unknown route</translation>
+        </message>
+        <message>
+            <source>关闭歌词窗口</source>
+            <translation>Close lyrics window</translation>
+        </message>
+        <message>
+            <source>歌词提前 100 毫秒</source>
+            <translation>Move lyrics 100 ms earlier</translation>
+        </message>
+        <message>
+            <source>歌词延后 100 毫秒</source>
+            <translation>Move lyrics 100 ms later</translation>
+        </message>
+        <message>
+            <source>刷新歌词</source>
+            <translation>Refresh lyrics</translation>
+        </message>
+        <message>
+            <source>导入 LRC</source>
+            <translation>Import LRC</translation>
+        </message>
+        <message>
+            <source>字号</source>
+            <translation>Font size</translation>
+        </message>
+        <message>
+            <source>歌词字号</source>
+            <translation>Lyrics font size</translation>
+        </message>
+        <message>
+            <source>导入歌词</source>
+            <translation>Import lyrics</translation>
+        </message>
+        <message>
+            <source>LRC 歌词 (*.lrc)</source>
+            <translation>LRC lyrics (*.lrc)</translation>
+        </message>
+        <message>
+            <source>文本文件 (*.txt)</source>
+            <translation>Text files (*.txt)</translation>
+        </message>
+        <message>
             <source>纯文本歌词，无时间轴</source>
             <translation>Plain-text lyrics, no timeline</translation>
         </message>
@@ -3498,6 +3990,278 @@ Actual encoding parameters may vary with system performance.</translation>
     </context>
 <context>
         <name>MetadataEditPage</name>
+        <message>
+            <source>自定义标签</source>
+            <translation>Custom tags</translation>
+        </message>
+        <message>
+            <source>预检</source>
+            <translation>Preflight</translation>
+        </message>
+        <message>
+            <source>准备</source>
+            <translation>Prepare</translation>
+        </message>
+        <message>
+            <source>写入</source>
+            <translation>Write</translation>
+        </message>
+        <message>
+            <source>回读验证</source>
+            <translation>Read-back validation</translation>
+        </message>
+        <message>
+            <source>处理</source>
+            <translation>Process</translation>
+        </message>
+        <message>
+            <source>修改内容无效或字段值不符合要求。</source>
+            <translation>The changes are invalid or a field value does not meet the requirements.</translation>
+        </message>
+        <message>
+            <source>检查输入内容后重试。</source>
+            <translation>Check the input and try again.</translation>
+        </message>
+        <message>
+            <source>多个字段映射到同一个物理标签，无法同时写入。</source>
+            <translation>Multiple fields map to the same physical tag and cannot be written together.</translation>
+        </message>
+        <message>
+            <source>只保留其中一个冲突字段后重试。</source>
+            <translation>Keep only one of the conflicting fields and try again.</translation>
+        </message>
+        <message>
+            <source>目标目录没有写入权限。</source>
+            <translation>The destination folder is not writable.</translation>
+        </message>
+        <message>
+            <source>更换可写目录，或为当前用户授予写入权限。</source>
+            <translation>Choose a writable folder or grant the current user write permission.</translation>
+        </message>
+        <message>
+            <source>音频文件是只读文件。</source>
+            <translation>The audio file is read-only.</translation>
+        </message>
+        <message>
+            <source>取消文件的只读属性后重试。</source>
+            <translation>Remove the read-only attribute from the file and try again.</translation>
+        </message>
+        <message>
+            <source>文件正在被占用，无法安全替换。</source>
+            <translation>The file is in use and cannot be safely replaced.</translation>
+        </message>
+        <message>
+            <source>关闭正在播放该文件的播放器或其他占用程序后重试。</source>
+            <translation>Close the player or any other program using the file, then try again.</translation>
+        </message>
+        <message>
+            <source>磁盘空间不足，无法创建安全临时副本。</source>
+            <translation>There is not enough disk space to create a safe temporary copy.</translation>
+        </message>
+        <message>
+            <source>释放目标磁盘空间后重试。</source>
+            <translation>Free up space on the destination disk and try again.</translation>
+        </message>
+        <message>
+            <source>当前音频容器不支持所选元数据修改。</source>
+            <translation>The current audio container does not support the selected metadata changes.</translation>
+        </message>
+        <message>
+            <source>减少不支持的字段，或先转换为 MP3、FLAC 等受支持格式。</source>
+            <translation>Remove unsupported fields or convert the file to a supported format such as MP3 or FLAC first.</translation>
+        </message>
+        <message>
+            <source>当前格式没有可用的安全写入器。</source>
+            <translation>No safe writer is available for the current format.</translation>
+        </message>
+        <message>
+            <source>转换为受支持格式后再修改。</source>
+            <translation>Convert to a supported format before editing.</translation>
+        </message>
+        <message>
+            <source>当前格式不支持至少一个所选字段。</source>
+            <translation>The current format does not support at least one selected field.</translation>
+        </message>
+        <message>
+            <source>根据预检提示取消不支持的字段后重试。</source>
+            <translation>Deselect unsupported fields as indicated by the preflight check, then try again.</translation>
+        </message>
+        <message>
+            <source>当前格式或封面类型不支持写入。</source>
+            <translation>The current format or cover-art type cannot be written.</translation>
+        </message>
+        <message>
+            <source>改用 JPG/PNG 封面，或转换为支持封面的格式。</source>
+            <translation>Use JPG/PNG cover art or convert to a format that supports cover art.</translation>
+        </message>
+        <message>
+            <source>文件包含暂不支持安全保留的流或结构。</source>
+            <translation>The file contains streams or structures that cannot yet be preserved safely.</translation>
+        </message>
+        <message>
+            <source>先备份文件，再转换为标准音频结构后修改。</source>
+            <translation>Back up the file, convert it to a standard audio structure, and then edit it.</translation>
+        </message>
+        <message>
+            <source>无法读取音频文件或其元数据。</source>
+            <translation>Unable to read the audio file or its metadata.</translation>
+        </message>
+        <message>
+            <source>确认文件存在、可读取且未损坏。</source>
+            <translation>Make sure the file exists, is readable, and is not corrupted.</translation>
+        </message>
+        <message>
+            <source>无法在目标目录创建临时输出文件。</source>
+            <translation>Unable to create a temporary output file in the destination folder.</translation>
+        </message>
+        <message>
+            <source>检查目录权限、文件占用和可用空间。</source>
+            <translation>Check folder permissions, file usage, and available space.</translation>
+        </message>
+        <message>
+            <source>写入容器头或标签头失败。</source>
+            <translation>Failed to write the container or tag header.</translation>
+        </message>
+        <message>
+            <source>检查文件是否损坏，或改用受支持格式。</source>
+            <translation>Check whether the file is corrupted or use a supported format.</translation>
+        </message>
+        <message>
+            <source>读取原音频数据包失败。</source>
+            <translation>Failed to read the original audio packets.</translation>
+        </message>
+        <message>
+            <source>文件可能损坏；请先确认它能完整播放。</source>
+            <translation>The file may be corrupted. Confirm that it plays completely first.</translation>
+        </message>
+        <message>
+            <source>复制音频数据包到临时文件时失败。</source>
+            <translation>Failed to copy audio packets to the temporary file.</translation>
+        </message>
+        <message>
+            <source>检查磁盘、文件系统和剩余空间后重试。</source>
+            <translation>Check the disk, file system, and available space, then try again.</translation>
+        </message>
+        <message>
+            <source>完成临时文件封装时失败。</source>
+            <translation>Failed to finalize the temporary file container.</translation>
+        </message>
+        <message>
+            <source>检查磁盘状态，或转换为标准格式后重试。</source>
+            <translation>Check the disk status or convert to a standard format and try again.</translation>
+        </message>
+        <message>
+            <source>写入后的元数据或音频流回读验证失败，原文件已尽量恢复。</source>
+            <translation>Read-back validation of the written metadata or audio stream failed. The original file was restored where possible.</translation>
+        </message>
+        <message>
+            <source>不要继续批量处理；检查该文件后单独重试。</source>
+            <translation>Do not continue batch processing. Check this file and retry it separately.</translation>
+        </message>
+        <message>
+            <source>源文件在预检后发生变化。</source>
+            <translation>The source file changed after preflight.</translation>
+        </message>
+        <message>
+            <source>重新加载文件后再试。</source>
+            <translation>Reload the file and try again.</translation>
+        </message>
+        <message>
+            <source>临时文件验证通过，但无法安全替换原文件。</source>
+            <translation>The temporary file passed validation, but the original file could not be safely replaced.</translation>
+        </message>
+        <message>
+            <source>关闭文件占用程序并检查目录权限后重试。</source>
+            <translation>Close programs using the file, check folder permissions, and try again.</translation>
+        </message>
+        <message>
+            <source>操作已被取消。</source>
+            <translation>The operation was canceled.</translation>
+        </message>
+        <message>
+            <source>需要时重新应用修改。</source>
+            <translation>Reapply the changes if needed.</translation>
+        </message>
+        <message>
+            <source>元数据处理发生内部错误。</source>
+            <translation>An internal metadata-processing error occurred.</translation>
+        </message>
+        <message>
+            <source>保留此错误信息并重新启动 AgPlayer 后重试。</source>
+            <translation>Keep this error information, restart AgPlayer, and try again.</translation>
+        </message>
+        <message>
+            <source>未返回可识别的失败原因。</source>
+            <translation>No recognizable failure reason was returned.</translation>
+        </message>
+        <message>
+            <source>请保留文件名、阶段和错误码用于排查。</source>
+            <translation>Keep the filename, stage, and error code for troubleshooting.</translation>
+        </message>
+        <message>
+            <source>原因：未返回处理结果。</source>
+            <translation>Reason: No processing result was returned.</translation>
+        </message>
+        <message>
+            <source>处理完成。</source>
+            <translation>Processing complete.</translation>
+        </message>
+        <message>
+            <source>失败阶段：%1</source>
+            <translation>Failure stage: %1</translation>
+        </message>
+        <message>
+            <source>原因：%1</source>
+            <translation>Reason: %1</translation>
+        </message>
+        <message>
+            <source>技术详情：%1</source>
+            <translation>Technical details: %1</translation>
+        </message>
+        <message>
+            <source>错误码：%1</source>
+            <translation>Error code: %1</translation>
+        </message>
+        <message>
+            <source>建议：%1</source>
+            <translation>Suggestion: %1</translation>
+        </message>
+        <message>
+            <source>请先直接编辑至少一项元数据，或选择新的封面图片。</source>
+            <translation>Edit at least one metadata field or select a new cover image first.</translation>
+        </message>
+        <message>
+            <source>标签</source>
+            <translation>Tags</translation>
+        </message>
+        <message>
+            <source>未修改字段保持原值；点击清空会删除字段。</source>
+            <translation>Unchanged fields keep their original values. Click Clear to delete a field.</translation>
+        </message>
+        <message>
+            <source>清空</source>
+            <translation>Clear</translation>
+        </message>
+        <message>
+            <source>单击选择图片；聚焦后按 Delete 可移除封面</source>
+            <translation>Click to select an image. When focused, press Delete to remove the cover art.</translation>
+        </message>
+        <message>
+            <source>成功 %1 · 失败 %2 · 不支持 %3 · 取消 %4</source>
+            <translation>Succeeded %1 · Failed %2 · Unsupported %3 · Canceled %4</translation>
+        </message>
+        <message>
+            <source>未知文件</source>
+            <translation>Unknown file</translation>
+        </message>
+        <message>
+            <source> · 成功</source>
+            <translation> · Succeeded</translation>
+        </message>
+        <message>
+            <source> · 失败</source>
+            <translation> · Failed</translation>
+        </message>
         <message>
             <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="37" />
             <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="710" />
@@ -3987,6 +4751,14 @@ Clear: Remove all known aliases for this field.</translation>
 <context>
         <name>MetadataEditor</name>
         <message>
+            <source>源文件在预检后发生变化，请重新预检</source>
+            <translation>The source file changed after preflight. Run preflight again.</translation>
+        </message>
+        <message>
+            <source>Metadata target is no longer available.</source>
+            <translation>Metadata target is no longer available.</translation>
+        </message>
+        <message>
             <location filename="../qt/src/metadata_editor.cpp" line="277" />
             <source>Could not open the cover image: %1</source>
             <translation>Could not open the cover image: %1</translation>
@@ -4198,6 +4970,30 @@ Clear: Remove all known aliases for this field.</translation>
 <context>
         <name>PlayerControls</name>
         <message>
+            <source>播放列表</source>
+            <translation>Playlist</translation>
+        </message>
+        <message>
+            <source>打开音频工具</source>
+            <translation>Open audio tools</translation>
+        </message>
+        <message>
+            <source>切换主题</source>
+            <translation>Switch theme</translation>
+        </message>
+        <message>
+            <source>切换到迷你播放器</source>
+            <translation>Switch to mini player</translation>
+        </message>
+        <message>
+            <source>经典双窗口</source>
+            <translation>Classic dual-window mode</translation>
+        </message>
+        <message>
+            <source>集成单窗口</source>
+            <translation>Integrated single-window mode</translation>
+        </message>
+        <message>
             <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="20" />
             <source>单曲循环</source>
             <translation>Repeat one</translation>
@@ -4300,6 +5096,26 @@ Clear: Remove all known aliases for this field.</translation>
     </context>
 <context>
         <name>PlayerPane</name>
+        <message>
+            <source>未载入歌曲</source>
+            <translation>No track loaded</translation>
+        </message>
+        <message>
+            <source>取消收藏</source>
+            <translation>Remove from favorites</translation>
+        </message>
+        <message>
+            <source>添加收藏</source>
+            <translation>Add to favorites</translation>
+        </message>
+        <message>
+            <source>未知艺术家</source>
+            <translation>Unknown artist</translation>
+        </message>
+        <message>
+            <source>未知专辑</source>
+            <translation>Unknown album</translation>
+        </message>
         <message>
             <location filename="../app/qml/AgPlayer/components/PlayerPane.qml" line="311" />
             <source>Remove from favorites</source>
@@ -4415,12 +5231,12 @@ Clear: Remove all known aliases for this field.</translation>
         <message>
             <location filename="../app/qml/AgPlayer/components/RollingPlayerShell.qml" line="1273" />
             <source>估算 120</source>
-            <translation>Estimated 120</translation>
+            <translation>Est. 120</translation>
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/components/RollingPlayerShell.qml" line="1273" />
             <source>估算…</source>
-            <translation>Estimated…</translation>
+            <translation>Est.…</translation>
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/components/RollingPlayerShell.qml" line="1285" />
@@ -4470,6 +5286,10 @@ Clear: Remove all known aliases for this field.</translation>
     </context>
 <context>
         <name>SearchFilter</name>
+        <message>
+            <source>评分筛选</source>
+            <translation>Rating filter</translation>
+        </message>
         <message>
             <location filename="../app/qml/AgPlayer/components/SearchFilter.qml" line="72" />
             <source>歌曲/艺术家/专辑/标签/</source>
@@ -5485,6 +6305,26 @@ Clear: Remove all known aliases for this field.</translation>
 <context>
         <name>SideNavigation</name>
         <message>
+            <source>移除文件夹引用</source>
+            <translation>Remove folder reference</translation>
+        </message>
+        <message>
+            <source>重新扫描全部资源文件夹</source>
+            <translation>Rescan all resource folders</translation>
+        </message>
+        <message>
+            <source>添加资源文件夹</source>
+            <translation>Add resource folder</translation>
+        </message>
+        <message>
+            <source>移除资源文件夹</source>
+            <translation>Remove resource folder</translation>
+        </message>
+        <message>
+            <source>只从 AgPlayer 移除此目录引用和监控，不删除电脑磁盘中的实际文件夹和音乐文件。</source>
+            <translation>Remove only this folder reference and its monitoring from AgPlayer. The actual folder and music files on disk will not be deleted.</translation>
+        </message>
+        <message>
             <location filename="../app/qml/AgPlayer/components/SideNavigation.qml" line="357" />
             <source>资源文件夹</source>
             <translation>Resource Folders</translation>
@@ -5645,6 +6485,20 @@ Clear: Remove all known aliases for this field.</translation>
 <context>
         <name>TrackList</name>
         <message>
+            <source>部分文件未删除</source>
+            <translation>Some files were not deleted</translation>
+        </message>
+        <message>
+            <source>已移入回收站 %1 个，失败 %2 个。
+%3</source>
+            <translation>Moved %1 item(s) to the Recycle Bin; %2 failed.
+%3</translation>
+        </message>
+        <message>
+            <source>%1 首</source>
+            <translation>%1 tracks</translation>
+        </message>
+        <message>
             <location filename="../app/qml/AgPlayer/components/TrackList.qml" line="288" />
             <source>艺术家</source>
             <translation>Artist</translation>
@@ -5717,7 +6571,7 @@ Clear: Remove all known aliases for this field.</translation>
         <message>
             <location filename="../app/qml/AgPlayer/components/TrackList.qml" line="285" />
             <source>收藏</source>
-            <translation>Collection</translation>
+            <translation>Fav.</translation>
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/components/TrackList.qml" line="287" />
@@ -5875,6 +6729,402 @@ Clear: Remove all known aliases for this field.</translation>
     </context>
 <context>
         <name>VocalSeparationController</name>
+        <message>
+            <source>自动选择已验证的可用设备</source>
+            <translation>Automatically select a verified, available device</translation>
+        </message>
+        <message>
+            <source>尚未探测</source>
+            <translation>Not checked yet</translation>
+        </message>
+        <message>
+            <source>请先完成或取消当前模型/运行时配置</source>
+            <translation>Finish or cancel the current model or runtime setup first</translation>
+        </message>
+        <message>
+            <source>当前任务尚未结束</source>
+            <translation>The current task is still running</translation>
+        </message>
+        <message>
+            <source>请选择有效输入音频</source>
+            <translation>Select a valid audio input</translation>
+        </message>
+        <message>
+            <source>请选择模型</source>
+            <translation>Select a model</translation>
+        </message>
+        <message>
+            <source>本地 VR 模型文件缺失，请重新检测目录</source>
+            <translation>The local VR model file is missing. Scan the directory again.</translation>
+        </message>
+        <message>
+            <source>请点击模型卡片的一键配置，下载独立 Python / PyTorch 环境</source>
+            <translation>Click One-click setup on the model card to download a standalone Python / PyTorch environment</translation>
+        </message>
+        <message>
+            <source>本地 VR 模型未通过完整性校验，请重新检测目录</source>
+            <translation>The local VR model failed integrity verification. Scan the directory again.</translation>
+        </message>
+        <message>
+            <source>至少选择一个输出音轨</source>
+            <translation>Select at least one output stem</translation>
+        </message>
+        <message>
+            <source>所选模型尚未安装或未通过校验</source>
+            <translation>The selected model is not installed or has not passed verification</translation>
+        </message>
+        <message>
+            <source>标准五轨 GPU 分离需要 NVIDIA CUDA；%1</source>
+            <translation>Standard five-stem GPU separation requires NVIDIA CUDA; %1</translation>
+        </message>
+        <message>
+            <source>；标准五轨 GPU 需要应用专用 CUDA 组件，请点击模型卡片“CUDA · 1.51 GB”，无需重装显卡驱动</source>
+            <translation>; standard five-stem GPU separation requires app-specific CUDA components. Click “CUDA · 1.51 GB” on the model card. You do not need to reinstall your graphics driver.</translation>
+        </message>
+        <message>
+            <source>ONNX Runtime 尚未安装</source>
+            <translation>ONNX Runtime is not installed</translation>
+        </message>
+        <message>
+            <source>所选设备不可用</source>
+            <translation>The selected device is unavailable</translation>
+        </message>
+        <message>
+            <source>输入音频不存在</source>
+            <translation>The input audio file does not exist</translation>
+        </message>
+        <message>
+            <source>正在异步校验 CUDA 组件和 NVIDIA 驱动，请稍候</source>
+            <translation>Checking CUDA components and the NVIDIA driver in the background. Please wait.</translation>
+        </message>
+        <message>
+            <source>未检测到可用 NVIDIA 驱动；CUDA 环境仅适用于 NVIDIA 显卡，不会补齐未知模型适配器</source>
+            <translation>No usable NVIDIA driver was found. The CUDA environment requires an NVIDIA GPU and does not provide adapters for unsupported models.</translation>
+        </message>
+        <message>
+            <source>CUDA 配置无法开始：请等待环境检查完成，并保留至少 5 GB 可用磁盘空间</source>
+            <translation>CUDA setup cannot start. Wait for the environment check to finish and ensure at least 5 GB of free disk space.</translation>
+        </message>
+        <message>
+            <source>无法启动外置环境配置，请检查模型缓存目录是否可写</source>
+            <translation>Cannot start external environment setup. Check that the model cache directory is writable.</translation>
+        </message>
+        <message>
+            <source>配置正在下载或校验，请等待当前进度完成</source>
+            <translation>Setup files are being downloaded or verified. Wait for the current operation to finish.</translation>
+        </message>
+        <message>
+            <source>此模型需要专用 Python/PyTorch 推理适配器；当前版本未提供该适配器，安装 ONNX Runtime 无法运行 .pth/.th 模型。可选择已支持的 ONNX 模型。</source>
+            <translation>This model requires a dedicated Python/PyTorch inference adapter that is not included in this version. Installing ONNX Runtime cannot run .pth/.th models. Select a supported ONNX model instead.</translation>
+        </message>
+        <message>
+            <source>ONNX Runtime 已就绪；此模型尚无匹配的张量与频谱配置，无法通过下载运行时自动适配。%1</source>
+            <translation>ONNX Runtime is ready, but this model has no matching tensor and spectrogram configuration. Downloading a runtime cannot add model support automatically. %1</translation>
+        </message>
+        <message>
+            <source>ONNX Runtime 已配置完成</source>
+            <translation>ONNX Runtime setup is complete</translation>
+        </message>
+        <message>
+            <source>模型已变更，请重新检测模型目录</source>
+            <translation>The model has changed. Scan the model directory again.</translation>
+        </message>
+        <message>
+            <source>官方线路</source>
+            <translation>Official source</translation>
+        </message>
+        <message>
+            <source>当前模型没有可自动下载的国内镜像，请使用备用公益地址</source>
+            <translation>No automatic China mirror is available for this model. Use the alternative community download link.</translation>
+        </message>
+        <message>
+            <source>国内镜像</source>
+            <translation>China mirror</translation>
+        </message>
+        <message>
+            <source>此诊断项没有可安全删除的本地模型文件</source>
+            <translation>This diagnostic entry has no local model file that can be safely deleted</translation>
+        </message>
+        <message>
+            <source>无法删除本地模型文件：%1</source>
+            <translation>Cannot delete the local model file: %1</translation>
+        </message>
+        <message>
+            <source>根目录中的手动模型请在模型目录中删除</source>
+            <translation>Delete manually added models in the root directory directly from the model folder</translation>
+        </message>
+        <message>
+            <source>请选择有效输入音频和至少一个输出音轨</source>
+            <translation>Select a valid audio input and at least one output stem</translation>
+        </message>
+        <message>
+            <source>，请点击所选模型的“一键配置”并等待下载完成</source>
+            <translation>. Click “One-click setup” for the selected model and wait for the download to finish</translation>
+        </message>
+        <message>
+            <source>，请先下载或配置所选模型</source>
+            <translation>. Download or configure the selected model first</translation>
+        </message>
+        <message>
+            <source>无法创建安全的分离输出目录</source>
+            <translation>Cannot create a safe separation output directory</translation>
+        </message>
+        <message>
+            <source>无法规范化分离输出目录</source>
+            <translation>Cannot resolve the canonical path of the separation output directory</translation>
+        </message>
+        <message>
+            <source>Python VR 环境缺失，请使用模型卡片的一键配置</source>
+            <translation>The Python VR environment is missing. Use One-click setup on the model card.</translation>
+        </message>
+        <message>
+            <source>无法开始模型校验</source>
+            <translation>Cannot start model verification</translation>
+        </message>
+        <message>
+            <source>无法开始运行时校验</source>
+            <translation>Cannot start runtime verification</translation>
+        </message>
+        <message>
+            <source>导出失败：源文件不安全、目标已存在或写入失败</source>
+            <translation>Export failed: the source file is unsafe, the destination already exists, or writing failed</translation>
+        </message>
+        <message>
+            <source>批量导出目录不存在或不安全</source>
+            <translation>The batch export directory does not exist or is unsafe</translation>
+        </message>
+        <message>
+            <source>批量导出失败：至少一个已选音轨不存在或不安全</source>
+            <translation>Batch export failed: at least one selected stem is missing or unsafe</translation>
+        </message>
+        <message>
+            <source>无法创建安全的批量导出暂存目录</source>
+            <translation>Cannot create a safe staging directory for batch export</translation>
+        </message>
+        <message>
+            <source>批量导出失败，未发布任何音轨</source>
+            <translation>Batch export failed. No stems were saved to the destination.</translation>
+        </message>
+        <message>
+            <source>批量导出提交失败，未发布不完整结果</source>
+            <translation>Cannot finalize the batch export. No incomplete results were saved to the destination.</translation>
+        </message>
+        <message>
+            <source>无法加入播放列表：至少一个已选音轨不存在或不安全</source>
+            <translation>Cannot add to the playlist: at least one selected stem is missing or unsafe</translation>
+        </message>
+        <message>
+            <source>请选择可访问的本地模型目录</source>
+            <translation>Select an accessible local model directory</translation>
+        </message>
+        <message>
+            <source>无法保存模型目录设置</source>
+            <translation>Cannot save the model directory setting</translation>
+        </message>
+        <message>
+            <source>ONNX Runtime 尚未配置，请点击模型卡片的一键配置</source>
+            <translation>ONNX Runtime is not configured. Click One-click setup on the model card.</translation>
+        </message>
+        <message>
+            <source>ONNX Runtime 尚未安装或校验失败</source>
+            <translation>ONNX Runtime is not installed or failed verification</translation>
+        </message>
+        <message>
+            <source>所选模型或 ONNX Runtime 尚未完成校验安装</source>
+            <translation>Installation and verification of the selected model or ONNX Runtime are not complete</translation>
+        </message>
+        <message>
+            <source>此 VR 适配器仅支持 CPU</source>
+            <translation>This VR adapter supports CPU only</translation>
+        </message>
+        <message>
+            <source>；此模型可检测 DirectML，无需 CUDA。可选 CUDA 配置约 1.51 GB 下载、5 GB 可用磁盘</source>
+            <translation>; this model can check for DirectML support and does not require CUDA. Optional CUDA setup requires an approximately 1.51 GB download and 5 GB of free disk space.</translation>
+        </message>
+        <message>
+            <source>；标准五轨缺少应用专用 CUDA 组件（不是缺显卡驱动）。一键配置约 1.51 GB 下载、5 GB 可用磁盘，安装后验证当前模型</source>
+            <translation>; standard five-stem separation is missing app-specific CUDA components, not the graphics driver. One-click setup requires an approximately 1.51 GB download and 5 GB of free disk space. The current model will be verified after installation.</translation>
+        </message>
+        <message>
+            <source>当前模型已通过真实 GPU 推理验证</source>
+            <translation>The current model has passed an actual GPU inference test</translation>
+        </message>
+        <message>
+            <source>CUDA 组件已校验，等待当前模型 GPU 推理验证</source>
+            <translation>CUDA components are verified. GPU inference verification for the current model is pending.</translation>
+        </message>
+        <message>
+            <source>本地模型已找到，请一键配置外置 Python VR 环境</source>
+            <translation>Local model found. Use One-click setup to configure the external Python VR environment.</translation>
+        </message>
+        <message>
+            <source>ONNX Runtime 尚未安装或未通过校验</source>
+            <translation>ONNX Runtime is not installed or has not passed verification</translation>
+        </message>
+        <message>
+            <source>模型校验失败</source>
+            <translation>Model verification failed</translation>
+        </message>
+        <message>
+            <source>官方线路失败，已自动切换国内镜像</source>
+            <translation>The official source failed. Switched to a China mirror automatically.</translation>
+        </message>
+        <message>
+            <source>无法创建模型下载目录</source>
+            <translation>Cannot create the model download directory</translation>
+        </message>
+        <message>
+            <source>本地 sidecar 清单</source>
+            <translation>Local sidecar manifest</translation>
+        </message>
+        <message>
+            <source>自定义模型</source>
+            <translation>Custom model</translation>
+        </message>
+        <message>
+            <source>未通过</source>
+            <translation>Failed</translation>
+        </message>
+        <message>
+            <source>本地文件</source>
+            <translation>Local file</translation>
+        </message>
+        <message>
+            <source>模型清单不是安全的普通文件</source>
+            <translation>The model manifest is not a safe regular file</translation>
+        </message>
+        <message>
+            <source>模型清单 JSON 无效</source>
+            <translation>The model manifest contains invalid JSON</translation>
+        </message>
+        <message>
+            <source>模型标识与现有模型重复</source>
+            <translation>The model ID duplicates an existing model</translation>
+        </message>
+        <message>
+            <source>模型执行配置或音轨角色不受支持，已拒绝执行</source>
+            <translation>The model execution configuration or stem roles are unsupported. Execution was rejected.</translation>
+        </message>
+        <message>
+            <source>模型文件缺失、越界或是链接文件</source>
+            <translation>The model file is missing, outside the allowed directory, or a linked file</translation>
+        </message>
+        <message>
+            <source>本地 sidecar 清单（受信指纹）</source>
+            <translation>Local sidecar manifest (trusted fingerprint)</translation>
+        </message>
+        <message>
+            <source>启动前仍会由 Worker 校验张量与 opset</source>
+            <translation>The worker will still verify tensors and the opset before execution</translation>
+        </message>
+        <message>
+            <source>用户提供的兼容 ONNX 模型</source>
+            <translation>User-provided compatible ONNX model</translation>
+        </message>
+        <message>
+            <source>受信指纹</source>
+            <translation>Trusted fingerprint</translation>
+        </message>
+        <message>
+            <source>UVR VR 架构 / 完整 SHA-256 校验</source>
+            <translation>UVR VR architecture / full SHA-256 verification</translation>
+        </message>
+        <message>
+            <source>一键下载独立 Python 3.11、CPU PyTorch、audio-separator 和 FFmpeg。约 450 MB 下载 / 1.5 GB 磁盘；不修改系统 Python。当前适配 5_HP-Karaoke-UVR.pth，其他 .pth/.th/.ckpt 架构不会冒充兼容。</source>
+            <translation>Download standalone Python 3.11, CPU PyTorch, audio-separator, and FFmpeg with one click. Approximately 450 MB to download / 1.5 GB on disk; system Python is unchanged. Currently supports 5_HP-Karaoke-UVR.pth. Other .pth/.th/.ckpt architectures are not marked as compatible without support.</translation>
+        </message>
+        <message>
+            <source>人声 / 伴奏；外置 Python VR 推理</source>
+            <translation>Vocals / instrumental; external Python VR inference</translation>
+        </message>
+        <message>
+            <source>Python VR</source>
+            <translation>Python VR</translation>
+        </message>
+        <message>
+            <source>UVR 官方频谱参数与完整 SHA-256 指纹</source>
+            <translation>Official UVR spectrogram parameters and full SHA-256 fingerprint</translation>
+        </message>
+        <message>
+            <source>已内置适配参数；校验本地模型后使用 ONNX Runtime 执行，无需重新下载模型</source>
+            <translation>Compatibility parameters are built in. After the local model is verified, it runs with ONNX Runtime without downloading the model again.</translation>
+        </message>
+        <message>
+            <source>本地人声 / 伴奏分离</source>
+            <translation>Local vocal / instrumental separation</translation>
+        </message>
+        <message>
+            <source>自动适配</source>
+            <translation>Automatic model support</translation>
+        </message>
+        <message>
+            <source>已识别 ONNX 文件；需要兼容的 sidecar 配置并通过张量与运行时探测后才能执行</source>
+            <translation>ONNX file recognized. Execution requires a compatible sidecar configuration and successful tensor and runtime checks.</translation>
+        </message>
+        <message>
+            <source>已识别模型文件，但当前没有适配此架构的推理模块；仅安装 Python 环境不能使其运行。当前 Python 模式支持 5_HP-Karaoke-UVR.pth</source>
+            <translation>Model file recognized, but no inference module currently supports this architecture. Installing Python alone will not make it runnable. Python mode currently supports 5_HP-Karaoke-UVR.pth.</translation>
+        </message>
+        <message>
+            <source>用户模型目录递归扫描</source>
+            <translation>Recursive scan of the user model directory</translation>
+        </message>
+        <message>
+            <source>待配置</source>
+            <translation>Setup required</translation>
+        </message>
+        <message>
+            <source>自动优先使用 %1 GPU，失败时安全回退 CPU</source>
+            <translation>Automatically prefer the %1 GPU, with a safe CPU fallback on failure</translation>
+        </message>
+        <message>
+            <source>自动使用 CPU</source>
+            <translation>Automatically use CPU</translation>
+        </message>
+        <message>
+            <source>CPU 和 GPU 均未通过设备探测</source>
+            <translation>Neither CPU nor GPU passed the device check</translation>
+        </message>
+        <message>
+            <source>Worker 结果没有匹配的活动请求</source>
+            <translation>The worker result does not match any active request</translation>
+        </message>
+        <message>
+            <source>当前界面选择与 Worker 请求不匹配</source>
+            <translation>The current UI selection does not match the worker request</translation>
+        </message>
+        <message>
+            <source>Worker 返回的输出数量无效</source>
+            <translation>The worker returned an invalid number of outputs</translation>
+        </message>
+        <message>
+            <source>Worker 输出不存在、为空或超出输出目录</source>
+            <translation>A worker output is missing, empty, or outside the output directory</translation>
+        </message>
+        <message>
+            <source>无法保存分离历史记录</source>
+            <translation>Cannot save separation history</translation>
+        </message>
+        <message>
+            <source>播放列表在导入完成前已不可用</source>
+            <translation>The playlist became unavailable before import completed</translation>
+        </message>
+        <message>
+            <source>导入期间分离结果已变得不可用</source>
+            <translation>The separation results became unavailable during import</translation>
+        </message>
+        <message>
+            <source>音轨导入失败，播放列表没有保留部分结果</source>
+            <translation>Stem import failed. No partial results were kept in the playlist.</translation>
+        </message>
+        <message>
+            <source>导入的音轨缺少有效标识</source>
+            <translation>An imported stem has no valid ID</translation>
+        </message>
+        <message>
+            <source>无法将全部分离结果加入播放列表</source>
+            <translation>Cannot add all separation results to the playlist</translation>
+        </message>
         <message>
             <source>已发现 DirectML 硬件候选；开始分离时将用所选模型验证</source>
             <translation>A DirectML hardware candidate was found; it will be validated with the selected model when separation starts</translation>
@@ -6258,4 +7508,1208 @@ Clear: Remove all known aliases for this field.</translation>
             <translation>Spectral notches and a cutoff can share the same filtering or harmonic cause; they alone do not prove lossy coding history.</translation>
         </message>
     </context>
+<context>
+        <name>VocalSeparationPage</name>
+        <message>
+            <source>正在探测设备，请稍候</source>
+            <translation>Checking devices. Please wait.</translation>
+        </message>
+        <message>
+            <source>分离任务进行中，暂不能更改输入或设置</source>
+            <translation>Separation is in progress. Input and settings cannot be changed yet.</translation>
+        </message>
+        <message>
+            <source>人声</source>
+            <translation>Vocals</translation>
+        </message>
+        <message>
+            <source>伴奏</source>
+            <translation>Instrumental</translation>
+        </message>
+        <message>
+            <source>鼓组</source>
+            <translation>Drums</translation>
+        </message>
+        <message>
+            <source>贝斯</source>
+            <translation>Bass</translation>
+        </message>
+        <message>
+            <source>其他</source>
+            <translation>Other</translation>
+        </message>
+        <message>
+            <source>音轨</source>
+            <translation>Stem</translation>
+        </message>
+        <message>
+            <source>暂停</source>
+            <translation>Pause</translation>
+        </message>
+        <message>
+            <source>继续</source>
+            <translation>Resume</translation>
+        </message>
+        <message>
+            <source>试听</source>
+            <translation>Preview</translation>
+        </message>
+        <message>
+            <source>已识别 · 尚未适配</source>
+            <translation>Recognized · Not yet supported</translation>
+        </message>
+        <message>
+            <source>配置无效</source>
+            <translation>Invalid configuration</translation>
+        </message>
+        <message>
+            <source>未下载</source>
+            <translation>Not downloaded</translation>
+        </message>
+        <message>
+            <source>待校验</source>
+            <translation>Verification pending</translation>
+        </message>
+        <message>
+            <source>下载中</source>
+            <translation>Downloading</translation>
+        </message>
+        <message>
+            <source>已暂停</source>
+            <translation>Paused</translation>
+        </message>
+        <message>
+            <source>校验中</source>
+            <translation>Verifying</translation>
+        </message>
+        <message>
+            <source>已安装</source>
+            <translation>Installed</translation>
+        </message>
+        <message>
+            <source>下载失败</source>
+            <translation>Download failed</translation>
+        </message>
+        <message>
+            <source>未知状态</source>
+            <translation>Unknown status</translation>
+        </message>
+        <message>
+            <source>已完成</source>
+            <translation>Completed</translation>
+        </message>
+        <message>
+            <source>失败</source>
+            <translation>Failed</translation>
+        </message>
+        <message>
+            <source>已取消</source>
+            <translation>Canceled</translation>
+        </message>
+        <message>
+            <source>未知</source>
+            <translation>Unknown</translation>
+        </message>
+        <message>
+            <source>正在探测设备</source>
+            <translation>Checking devices</translation>
+        </message>
+        <message>
+            <source>正在分离</source>
+            <translation>Separating</translation>
+        </message>
+        <message>
+            <source>正在取消</source>
+            <translation>Cancelling</translation>
+        </message>
+        <message>
+            <source>分离完成</source>
+            <translation>Separation complete</translation>
+        </message>
+        <message>
+            <source>分离失败</source>
+            <translation>Separation failed</translation>
+        </message>
+        <message>
+            <source>等待输入</source>
+            <translation>Waiting for input</translation>
+        </message>
+        <message>
+            <source>选择音频或视频文件</source>
+            <translation>Select an audio or video file</translation>
+        </message>
+        <message>
+            <source>音频和视频文件 (*.wav *.flac *.m4a *.aac *.mp3 *.ogg *.opus *.mp4 *.mkv *.mov *.webm *.avi *.m4v *.mpeg *.mpg *.ts)</source>
+            <translation>Audio and video files (*.wav *.flac *.m4a *.aac *.mp3 *.ogg *.opus *.mp4 *.mkv *.mov *.webm *.avi *.m4v *.mpeg *.mpg *.ts)</translation>
+        </message>
+        <message>
+            <source>选择输出目录</source>
+            <translation>Select output folder</translation>
+        </message>
+        <message>
+            <source>选择模型存放目录</source>
+            <translation>Select the model storage directory</translation>
+        </message>
+        <message>
+            <source>模型适配说明</source>
+            <translation>Model compatibility guide</translation>
+        </message>
+        <message>
+            <source>备用模型下载地址</source>
+            <translation>Alternative model download links</translation>
+        </message>
+        <message>
+            <source>支持与环境：
+• MDX / MDXC ONNX、HTDemucs ONNX：使用 AgPlayer 一键配置的 ONNX Runtime（CPU / DirectML GPU）。
+• Demucs .th、UVR .pth：需要可选的外置 Python / PyTorch 运行环境，不会塞入轻量主安装包。
+
+模型来源：
+1. 官方线路：模型卡的“下载”按钮。
+2. 国内公益镜像：HTDemucs 支持 HF-Mirror 自动线路，官方失败会自动切换。
+3. 第三方公益服务：百度网盘人声伴奏分离模型。
+4. 用户自行下载：放入模型目录后点击“检测”。
+
+放置方法：模型可以直接放在模型根目录，也可以放在任意层级的分类子目录；检测会递归扫描全部子目录。内置模型须保留原文件名和完整文件组。其他兼容 ONNX 模型请附带同名 .agmodel.json 描述文件。
+
+本地文件不会再次下载。“已识别 · 待配置”表示文件已经找到；ONNX 模型可点击“一键配置”自动安装运行组件，未知张量契约仍需可信 sidecar。悬停模型介绍可查看具体原因。
+
+百度网盘链接: https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888
+提取码: 8888</source>
+            <translation>Support and runtime requirements:
+• MDX / MDXC ONNX and HTDemucs ONNX use ONNX Runtime installed through AgPlayer One-click setup (CPU / DirectML GPU).
+• Demucs .th and UVR .pth require an optional external Python / PyTorch environment, which is not bundled with the lightweight main installer.
+
+Model sources:
+1. Official source: use the Download button on the model card.
+2. Community mirrors in China: HTDemucs supports automatic HF-Mirror downloads, with automatic fallback if the official source fails.
+3. Third-party community service: vocal and instrumental separation models on Baidu Netdisk.
+4. Manual downloads: place files in the model directory, then click Scan.
+
+File placement: models may be placed directly in the model root directory or in nested category folders. Scanning includes all subdirectories. Built-in models require their original filenames and complete file sets. Other compatible ONNX models require a matching .agmodel.json descriptor with the same base name.
+
+Local files are not downloaded again. “Recognized · Setup required” means the files have been found. For ONNX models, One-click setup installs the runtime components automatically; unknown tensor contracts still require a trusted sidecar. Hover over the model description for details.
+
+Baidu Netdisk link: https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888
+Access code: 8888</translation>
+        </message>
+        <message>
+            <source>
+
+一键 Python 配置：当前已适配 5_HP-Karaoke-UVR.pth，模型卡片可直接下载独立 Python 3.11、CPU PyTorch、audio-separator 与 FFmpeg。约 450 MB 下载 / 1.5 GB 磁盘，可暂停后使用缓存续装，官方包源失败会切换清华 PyPI 镜像。环境位于 separation/runtime/python-vr-1，不修改系统 Python，不进入主安装包。其他 .pth / .th / .ckpt 架构仍显示诊断，不会仅凭扩展名标为可运行。
+组件许可与来源：uv（MIT / Apache-2.0）：https://docs.astral.sh/uv/；audio-separator（MIT）：https://github.com/nomadkaraoke/python-audio-separator；PyTorch（BSD）：https://pytorch.org/；FFmpeg 构建许可随外置 imageio-ffmpeg 包附带。</source>
+            <translation>
+
+One-click Python setup: 5_HP-Karaoke-UVR.pth is currently supported. The model card can download standalone Python 3.11, CPU PyTorch, audio-separator, and FFmpeg. Approximately 450 MB to download / 1.5 GB on disk. Setup can be paused and resumed using cached files. If the official package source fails, setup switches to the Tsinghua PyPI mirror. The environment is stored in separation/runtime/python-vr-1, leaves system Python unchanged, and is not bundled with the main installer. Other .pth / .th / .ckpt architectures still show diagnostics and are not marked as runnable based solely on their file extensions.
+Component licenses and sources: uv (MIT / Apache-2.0): https://docs.astral.sh/uv/; audio-separator (MIT): https://github.com/nomadkaraoke/python-audio-separator; PyTorch (BSD): https://pytorch.org/; the FFmpeg build license is included with the external imageio-ffmpeg package.</translation>
+        </message>
+        <message>
+            <source>复制说明</source>
+            <translation>Copy guide</translation>
+        </message>
+        <message>
+            <source>关闭</source>
+            <translation>Close</translation>
+        </message>
+        <message>
+            <source>工作台</source>
+            <translation>Workspace</translation>
+        </message>
+        <message>
+            <source>输出设置</source>
+            <translation>Output settings</translation>
+        </message>
+        <message>
+            <source>分离记录</source>
+            <translation>Separation history</translation>
+        </message>
+        <message>
+            <source>重试</source>
+            <translation>Retry</translation>
+        </message>
+        <message>
+            <source>当前错误不可重试</source>
+            <translation>This error cannot be retried</translation>
+        </message>
+        <message>
+            <source>音频或视频文件拖放区域；键盘用户请使用选择文件按钮</source>
+            <translation>Audio or video drop area. Keyboard users can use the Select file button.</translation>
+        </message>
+        <message>
+            <source>已选择输入</source>
+            <translation>Input selected</translation>
+        </message>
+        <message>
+            <source>拖拽音频或视频文件到此处</source>
+            <translation>Drop an audio or video file here</translation>
+        </message>
+        <message>
+            <source>音频 / MP4 / MKV / MOV / WebM</source>
+            <translation>Audio / MP4 / MKV / MOV / WebM</translation>
+        </message>
+        <message>
+            <source>选择文件</source>
+            <translation>Select file</translation>
+        </message>
+        <message>
+            <source>选择一个包含音频流的本地音频或视频文件</source>
+            <translation>Select a local audio or video file containing an audio stream</translation>
+        </message>
+        <message>
+            <source>尚未选择输入文件</source>
+            <translation>No input file selected</translation>
+        </message>
+        <message>
+            <source>清除</source>
+            <translation>Clear</translation>
+        </message>
+        <message>
+            <source>选择文件后将分析真实波形</source>
+            <translation>The waveform will be analyzed from the selected file</translation>
+        </message>
+        <message>
+            <source>输入播放或暂停</source>
+            <translation>Play or pause input</translation>
+        </message>
+        <message>
+            <source>播放或暂停输入音频</source>
+            <translation>Play or pause the input audio</translation>
+        </message>
+        <message>
+            <source>请先选择输入文件</source>
+            <translation>Select an input file first</translation>
+        </message>
+        <message>
+            <source>正在分析真实波形…</source>
+            <translation>Analyzing the audio waveform…</translation>
+        </message>
+        <message>
+            <source>输入波形</source>
+            <translation>Input waveform</translation>
+        </message>
+        <message>
+            <source>自定义模型</source>
+            <translation>Custom model</translation>
+        </message>
+        <message>
+            <source>兼容 ONNX 模型</source>
+            <translation>Compatible ONNX models</translation>
+        </message>
+        <message>
+            <source>手动目录管理</source>
+            <translation>Manual folder management</translation>
+        </message>
+        <message>
+            <source>当前仅加载目录中的受信模型</source>
+            <translation>Only trusted models in the directory are currently loaded</translation>
+        </message>
+        <message>
+            <source>模型名称：</source>
+            <translation>Model name: </translation>
+        </message>
+        <message>
+            <source>提供商：</source>
+            <translation>Provider: </translation>
+        </message>
+        <message>
+            <source>模型介绍：</source>
+            <translation>Description: </translation>
+        </message>
+        <message>
+            <source>；输出：</source>
+            <translation>; outputs: </translation>
+        </message>
+        <message>
+            <source>官方仓库：</source>
+            <translation>Official repository: </translation>
+        </message>
+        <message>
+            <source>打开模型官方仓库</source>
+            <translation>Open the official model repository</translation>
+        </message>
+        <message>
+            <source>文件大小：</source>
+            <translation>File size: </translation>
+        </message>
+        <message>
+            <source>状态：</source>
+            <translation>Status: </translation>
+        </message>
+        <message>
+            <source>配置中</source>
+            <translation>Setting up</translation>
+        </message>
+        <message>
+            <source>检查 GPU</source>
+            <translation>Check GPU</translation>
+        </message>
+        <message>
+            <source>CUDA · 1.51 GB</source>
+            <translation>CUDA · 1.51 GB</translation>
+        </message>
+        <message>
+            <source>配置独立 GPU 运行环境</source>
+            <translation>Set up a standalone GPU runtime</translation>
+        </message>
+        <message>
+            <source>
+NVIDIA CUDA 固定版本独立安装，不修改现有 Python/CPU 环境。约 1.51 GB 下载；失败自动尝试备用线路。安装完成不代表模型已通过 GPU 推理验证。</source>
+            <translation>
+A pinned NVIDIA CUDA version is installed separately without changing the existing Python/CPU environment. Approximately 1.51 GB to download, with automatic fallback to an alternative source on failure. Installation alone does not verify that the model can run GPU inference.</translation>
+        </message>
+        <message>
+            <source>删除</source>
+            <translation>Delete</translation>
+        </message>
+        <message>
+            <source>删除模型</source>
+            <translation>Delete model</translation>
+        </message>
+        <message>
+            <source>查看原因</source>
+            <translation>View details</translation>
+        </message>
+        <message>
+            <source>继续配置</source>
+            <translation>Resume setup</translation>
+        </message>
+        <message>
+            <source>一键配置</source>
+            <translation>One-click setup</translation>
+        </message>
+        <message>
+            <source>国内镜像</source>
+            <translation>China mirror</translation>
+        </message>
+        <message>
+            <source>重新下载</source>
+            <translation>Download again</translation>
+        </message>
+        <message>
+            <source>校验</source>
+            <translation>Verify</translation>
+        </message>
+        <message>
+            <source>下载</source>
+            <translation>Download</translation>
+        </message>
+        <message>
+            <source>取消</source>
+            <translation>Cancel</translation>
+        </message>
+        <message>
+            <source>取消下载</source>
+            <translation>Cancel download</translation>
+        </message>
+        <message>
+            <source>兼容 ONNX 模型 / 自动识别支持的模型</source>
+            <translation>Compatible ONNX models / automatic recognition of supported models</translation>
+        </message>
+        <message>
+            <source>模型目录位置：</source>
+            <translation>Model directory: </translation>
+        </message>
+        <message>
+            <source>将兼容模型放入模型目录，AgPlayer 将自动识别并在此处列出可用模型介绍。未知或未通过校验的文件不会执行。</source>
+            <translation>Place compatible models in the model directory. AgPlayer will recognize them automatically and list descriptions of available models here. Unknown files and files that fail verification will not be executed.</translation>
+        </message>
+        <message>
+            <source>打开模型目录</source>
+            <translation>Open model directory</translation>
+        </message>
+        <message>
+            <source>更改目录</source>
+            <translation>Change directory</translation>
+        </message>
+        <message>
+            <source>模型下载或校验期间不能更改目录</source>
+            <translation>The directory cannot be changed while models are being downloaded or verified</translation>
+        </message>
+        <message>
+            <source>检测</source>
+            <translation>Scan</translation>
+        </message>
+        <message>
+            <source>检测模型目录</source>
+            <translation>Scan the model directory</translation>
+        </message>
+        <message>
+            <source>输出音轨</source>
+            <translation>Output stems</translation>
+        </message>
+        <message>
+            <source>请选择要生成的音轨（至少选择一个）</source>
+            <translation>Select the stems to generate (at least one)</translation>
+        </message>
+        <message>
+            <source>主唱与和声</source>
+            <translation>Lead and backing vocals</translation>
+        </message>
+        <message>
+            <source>无人声混音</source>
+            <translation>Mix without vocals</translation>
+        </message>
+        <message>
+            <source>鼓与打击乐</source>
+            <translation>Drums and percussion</translation>
+        </message>
+        <message>
+            <source>低频乐器</source>
+            <translation>Bass instruments</translation>
+        </message>
+        <message>
+            <source>其余乐器</source>
+            <translation>Remaining instruments</translation>
+        </message>
+        <message>
+            <source>当前模型不支持此音轨</source>
+            <translation>This stem is not supported by the current model</translation>
+        </message>
+        <message>
+            <source>（派生）</source>
+            <translation>(derived)</translation>
+        </message>
+        <message>
+            <source>当前模型不可用</source>
+            <translation>The current model is unavailable</translation>
+        </message>
+        <message>
+            <source>校验模型</source>
+            <translation>Verifying model</translation>
+        </message>
+        <message>
+            <source>验证处理设备</source>
+            <translation>Verifying processing device</translation>
+        </message>
+        <message>
+            <source>校验运行环境</source>
+            <translation>Verifying runtime</translation>
+        </message>
+        <message>
+            <source>待配置运行环境</source>
+            <translation>Runtime setup required</translation>
+        </message>
+        <message>
+            <source>加载模型</source>
+            <translation>Loading model</translation>
+        </message>
+        <message>
+            <source>分段推理</source>
+            <translation>Running segmented inference</translation>
+        </message>
+        <message>
+            <source>验证输出</source>
+            <translation>Verifying outputs</translation>
+        </message>
+        <message>
+            <source>切换 CPU</source>
+            <translation>Switching to CPU</translation>
+        </message>
+        <message>
+            <source>准备分离</source>
+            <translation>Preparing separation</translation>
+        </message>
+        <message>
+            <source>就绪</source>
+            <translation>Ready</translation>
+        </message>
+        <message>
+            <source>预览音量</source>
+            <translation>Preview volume</translation>
+        </message>
+        <message>
+            <source>调整此音轨的试听音量</source>
+            <translation>Adjust the preview volume for this stem</translation>
+        </message>
+        <message>
+            <source>当前模型不支持</source>
+            <translation>Not supported by the current model</translation>
+        </message>
+        <message>
+            <source>实际：</source>
+            <translation>Actual: </translation>
+        </message>
+        <message>
+            <source> · 已回退</source>
+            <translation> · Fallback used</translation>
+        </message>
+        <message>
+            <source> · 统一增益 </source>
+            <translation> · Shared gain </translation>
+        </message>
+        <message>
+            <source>尚未开始推理</source>
+            <translation>Inference has not started</translation>
+        </message>
+        <message>
+            <source>设备选中不代表模型已通过 GPU 推理验证</source>
+            <translation>Selecting a device does not verify that the model can run GPU inference</translation>
+        </message>
+        <message>
+            <source>格式</source>
+            <translation>Format</translation>
+        </message>
+        <message>
+            <source>WAV（无损）</source>
+            <translation>WAV (lossless)</translation>
+        </message>
+        <message>
+            <source>FLAC（无损）</source>
+            <translation>FLAC (lossless)</translation>
+        </message>
+        <message>
+            <source>MP3（兼容）</source>
+            <translation>MP3 (widely compatible)</translation>
+        </message>
+        <message>
+            <source>输出格式</source>
+            <translation>Output format</translation>
+        </message>
+        <message>
+            <source>输出目录</source>
+            <translation>Output folder</translation>
+        </message>
+        <message>
+            <source>选择</source>
+            <translation>Select</translation>
+        </message>
+        <message>
+            <source>处理设备</source>
+            <translation>Processing device</translation>
+        </message>
+        <message>
+            <source>自动</source>
+            <translation>Auto</translation>
+        </message>
+        <message>
+            <source>GPU</source>
+            <translation>GPU</translation>
+        </message>
+        <message>
+            <source>CPU</source>
+            <translation>CPU</translation>
+        </message>
+        <message>
+            <source>处理设备：</source>
+            <translation>Processing device: </translation>
+        </message>
+        <message>
+            <source>探测</source>
+            <translation>Check</translation>
+        </message>
+        <message>
+            <source>探测处理设备</source>
+            <translation>Check processing devices</translation>
+        </message>
+        <message>
+            <source>设备探测正在进行</source>
+            <translation>A device check is in progress</translation>
+        </message>
+        <message>
+            <source>导出后加入播放列表</source>
+            <translation>Add to playlist after export</translation>
+        </message>
+        <message>
+            <source>请先创建播放列表</source>
+            <translation>Create a playlist first</translation>
+        </message>
+        <message>
+            <source>完成后打开目录</source>
+            <translation>Open folder when finished</translation>
+        </message>
+        <message>
+            <source>打开输出目录</source>
+            <translation>Open output directory</translation>
+        </message>
+        <message>
+            <source>文件名</source>
+            <translation>Filename</translation>
+        </message>
+        <message>
+            <source>文件 / 模型</source>
+            <translation>File / Model</translation>
+        </message>
+        <message>
+            <source>模型</source>
+            <translation>Model</translation>
+        </message>
+        <message>
+            <source>时间</source>
+            <translation>Time</translation>
+        </message>
+        <message>
+            <source>时间 / 状态</source>
+            <translation>Time / Status</translation>
+        </message>
+        <message>
+            <source>状态</source>
+            <translation>Status</translation>
+        </message>
+        <message>
+            <source>目录</source>
+            <translation>Folder</translation>
+        </message>
+        <message>
+            <source>打开该记录输出目录</source>
+            <translation>Open the output directory for this history entry</translation>
+        </message>
+        <message>
+            <source>暂无真实分离记录</source>
+            <translation>No separation history yet</translation>
+        </message>
+        <message>
+            <source>返回结果音轨起点</source>
+            <translation>Return to the start of the output stem</translation>
+        </message>
+        <message>
+            <source>暂停结果音轨</source>
+            <translation>Pause the output stem</translation>
+        </message>
+        <message>
+            <source>播放结果音轨</source>
+            <translation>Play the output stem</translation>
+        </message>
+        <message>
+            <source>重新分离</source>
+            <translation>Separate again</translation>
+        </message>
+        <message>
+            <source>分离完成后可重新开始</source>
+            <translation>You can start again after separation finishes</translation>
+        </message>
+        <message>
+            <source>导出伴奏</source>
+            <translation>Export instrumental</translation>
+        </message>
+        <message>
+            <source>伴奏输出尚不可用</source>
+            <translation>Instrumental output is not yet available</translation>
+        </message>
+        <message>
+            <source>导出人声</source>
+            <translation>Export vocals</translation>
+        </message>
+        <message>
+            <source>人声输出尚不可用</source>
+            <translation>Vocal output is not yet available</translation>
+        </message>
+        <message>
+            <source>导出所有音轨</source>
+            <translation>Export all stems</translation>
+        </message>
+        <message>
+            <source>完成分离后可导出全部可用音轨</source>
+            <translation>Export all available stems after separation finishes</translation>
+        </message>
+        <message>
+            <source>取消分离</source>
+            <translation>Cancel separation</translation>
+        </message>
+        <message>
+            <source>开始分离</source>
+            <translation>Start separation</translation>
+        </message>
+        <message>
+            <source>正在取消分离任务</source>
+            <translation>Canceling separation</translation>
+        </message>
+        <message>
+            <source>选择导出目录</source>
+            <translation>Select an export directory</translation>
+        </message>
+        <message>
+            <source>选择所有音轨导出目录</source>
+            <translation>Select an export directory for all stems</translation>
+        </message>
+</context>
+<context>
+        <name>CudaSeparationRuntime</name>
+        <message>
+            <source>下载 CUDA 组件 %1 / %2：%3 / %4 MB</source>
+            <translation>Downloading CUDA component %1 of %2: %3 / %4 MB</translation>
+        </message>
+        <message>
+            <source>CUDA 官方及国内线路均失败：%1</source>
+            <translation>Both the official and domestic CUDA download routes failed: %1</translation>
+        </message>
+        <message>
+            <source>官方 CUDA 下载中断，切换清华镜像（保持官方 SHA-256）</source>
+            <translation>The official CUDA download was interrupted. Switching to the Tsinghua mirror while retaining the official SHA-256 verification.</translation>
+        </message>
+        <message>
+            <source>正在自动检测 NVIDIA 显卡、驱动及应用 CUDA 组件</source>
+            <translation>Automatically checking the NVIDIA GPU, driver, and app CUDA components</translation>
+        </message>
+        <message>
+            <source>已识别 %1 · 驱动 %2 已就绪</source>
+            <translation>Detected %1 · Driver %2 ready</translation>
+        </message>
+        <message>
+            <source>尚未确认可用的 NVIDIA 驱动（%1）；这不代表其他显卡或 DirectML 不可用</source>
+            <translation>No usable NVIDIA driver has been confirmed (%1); this does not mean other GPUs or DirectML are unavailable</translation>
+        </message>
+        <message>
+            <source>检查已下载 CUDA 缓存 %1 / %2</source>
+            <translation>Checking downloaded CUDA cache %1 of %2</translation>
+        </message>
+        <message>
+            <source>解压并验证 CUDA / cuDNN 原生组件；不修改系统或 Python VR 环境</source>
+            <translation>Extracting and verifying native CUDA / cuDNN components; the system and Python VR environments will not be modified</translation>
+        </message>
+        <message>
+            <source>正在结束当前校验，随后自动继续</source>
+            <translation>Stopping the current verification, then continuing automatically</translation>
+        </message>
+</context>
+<context>
+        <name>ExternalSeparationRuntime</name>
+        <message>
+            <source>下载配置器 %1 / %2 MB</source>
+            <translation>Downloading setup package %1 / %2 MB</translation>
+        </message>
+        <message>
+            <source>官方配置器线路失败，切换国内备用线路（仍验证官方 SHA-256）</source>
+            <translation>The official setup route failed. Switching to the domestic fallback while still verifying the official SHA-256.</translation>
+        </message>
+        <message>
+            <source>配置器官方及国内备用线路均失败：%1</source>
+            <translation>Both the official and domestic setup routes failed: %1</translation>
+        </message>
+        <message>
+            <source>拒绝替换不安全的 Python 配置器缓存</source>
+            <translation>Refused to replace an unsafe cached Python setup package</translation>
+        </message>
+        <message>
+            <source>安装阶段长时间无进展（inactivity timeout）</source>
+            <translation>The installation made no progress for too long (inactivity timeout)</translation>
+        </message>
+        <message>
+            <source>无法启动配置程序：%1</source>
+            <translation>Unable to start the setup program: %1</translation>
+        </message>
+        <message>
+            <source>外置 Python / PyTorch，约 450 MB 下载，约 1.5 GB 磁盘；不修改系统环境</source>
+            <translation>External Python / PyTorch: about 450 MB to download and 1.5 GB of disk space; the system environment is not modified</translation>
+        </message>
+        <message>
+            <source>解压已校验配置器</source>
+            <translation>Extracting the verified setup package</translation>
+        </message>
+        <message>
+            <source>无法安全恢复不完整的 Python 环境；请查看 install.log</source>
+            <translation>The incomplete Python environment cannot be recovered safely; see install.log</translation>
+        </message>
+        <message>
+            <source>下载独立 Python 3.11 环境</source>
+            <translation>Downloading the standalone Python 3.11 environment</translation>
+        </message>
+        <message>
+            <source>下载 / 安装 PyTorch、VR 适配器和 FFmpeg（保留缓存，可暂停续装）</source>
+            <translation>Downloading / installing PyTorch, the VR adapter, and FFmpeg (cache retained; setup can be paused and resumed)</translation>
+        </message>
+        <message>
+            <source>验证实际 Python / PyTorch / FFmpeg 导入</source>
+            <translation>Verifying actual Python / PyTorch / FFmpeg imports</translation>
+        </message>
+        <message>
+            <source>无法保存环境校验状态</source>
+            <translation>Unable to save the environment verification state</translation>
+        </message>
+        <message>
+            <source>Python VR 环境已就绪</source>
+            <translation>The Python VR environment is ready</translation>
+        </message>
+        <message>
+            <source>正在停止当前配置进程，随后自动继续</source>
+            <translation>Stopping the current setup process, then continuing automatically</translation>
+        </message>
+        <message>
+            <source>；安装日志：%1</source>
+            <translation>; installation log: %1</translation>
+        </message>
+        <message>
+            <source>Python 官方线路失败或超时，切换国内备用线路（保留官方发行校验）</source>
+            <translation>The official Python route failed or timed out. Switching to the domestic fallback while retaining official release verification.</translation>
+        </message>
+        <message>
+            <source>官方包源失败或超时，切换清华 PyPI 镜像继续配置</source>
+            <translation>The official package source failed or timed out. Continuing setup with the Tsinghua PyPI mirror.</translation>
+        </message>
+        <message>
+            <source>Python 配置阶段 %1 失败：%2</source>
+            <translation>Python setup stage %1 failed: %2</translation>
+        </message>
+</context>
+<context>
+        <name>SeparationProcessClient</name>
+        <message>
+            <source>分离 Worker 启动握手超时</source>
+            <translation>Separation Worker startup handshake timed out</translation>
+        </message>
+        <message>
+            <source>分离 Worker 响应超时</source>
+            <translation>Separation Worker response timed out</translation>
+        </message>
+        <message>
+            <source>无法启动分离 Worker：%1</source>
+            <translation>Unable to start Separation Worker: %1</translation>
+        </message>
+        <message>
+            <source>分离 Worker 意外退出</source>
+            <translation>Separation Worker exited unexpectedly</translation>
+        </message>
+        <message>
+            <source>无法安全启动分离 Worker：%1</source>
+            <translation>Unable to start Separation Worker safely: %1</translation>
+        </message>
+        <message>
+            <source>分离 Worker 消息超过大小限制</source>
+            <translation>The Separation Worker message exceeded the size limit</translation>
+        </message>
+        <message>
+            <source>分离 Worker 协议错误：%1</source>
+            <translation>Separation Worker protocol error: %1</translation>
+        </message>
+        <message>
+            <source>分离 Worker 握手无效</source>
+            <translation>The Separation Worker handshake is invalid</translation>
+        </message>
+        <message>
+            <source>分离 Worker 报告错误</source>
+            <translation>Separation Worker reported an error</translation>
+        </message>
+        <message>
+            <source>分离 Worker 返回了方向无效的消息</source>
+            <translation>Separation Worker returned a message in the invalid direction</translation>
+        </message>
+</context>
+<context>
+        <name>ImmersiveQueueDrawer</name>
+        <message>
+            <source>当前播放队列</source>
+            <translation>Current playback queue</translation>
+        </message>
+</context>
+<context>
+        <name>ImmersiveSurface</name>
+        <message>
+            <source>当前图形后端无法运行沉浸视觉，播放不受影响。</source>
+            <translation>The current graphics backend cannot run the immersive visual. Playback is unaffected.</translation>
+        </message>
+        <message>
+            <source>返回窗口主题</source>
+            <translation>Return to window theme</translation>
+        </message>
+        <message>
+            <source>最小化</source>
+            <translation>Minimize</translation>
+        </message>
+        <message>
+            <source>退出全屏</source>
+            <translation>Exit full screen</translation>
+        </message>
+        <message>
+            <source>全屏</source>
+            <translation>Full Screen</translation>
+        </message>
+        <message>
+            <source>Wayland 不支持桌面层级，已使用普通无边框透明窗口</source>
+            <translation>Wayland does not support the desktop layer; using a regular borderless transparent window</translation>
+        </message>
+</context>
+<context>
+        <name>ImmersiveWindow</name>
+        <message>
+            <source>AgPlayer 沉浸视觉</source>
+            <translation>AgPlayer Immersive Visual</translation>
+        </message>
+</context>
+<context>
+        <name>IntegratedPlayerControls</name>
+        <message>
+            <source>收起播放列表</source>
+            <translation>Collapse playlist</translation>
+        </message>
+        <message>
+            <source>展开播放列表</source>
+            <translation>Expand playlist</translation>
+        </message>
+        <message>
+            <source>打开音频工具</source>
+            <translation>Open audio tools</translation>
+        </message>
+        <message>
+            <source>切换主题皮肤</source>
+            <translation>Switch theme skin</translation>
+        </message>
+        <message>
+            <source>切换到迷你播放器</source>
+            <translation>Switch to mini player</translation>
+        </message>
+        <message>
+            <source>经典双窗口</source>
+            <translation>Classic dual-window mode</translation>
+        </message>
+        <message>
+            <source>集成单窗口</source>
+            <translation>Integrated single-window mode</translation>
+        </message>
+        <message>
+            <source>滚动播放模式</source>
+            <translation>Rolling playback mode</translation>
+        </message>
+</context>
+<context>
+        <name>IntegratedPlayerShell</name>
+        <message>
+            <source>未选择歌曲</source>
+            <translation>No track selected</translation>
+        </message>
+</context>
+<context>
+        <name>Main</name>
+        <message>
+            <source>AgPlayer 桌面沉浸</source>
+            <translation>AgPlayer Desktop Immersion</translation>
+        </message>
+        <message>
+            <source>Failed to save tag data during shutdown</source>
+            <translation>Failed to save tag data during shutdown</translation>
+        </message>
+        <message>
+            <source>Failed to save tag data after event loop exit</source>
+            <translation>Failed to save tag data after event loop exit</translation>
+        </message>
+</context>
+<context>
+        <name>PlayerVolumeControl</name>
+        <message>
+            <source>取消静音</source>
+            <translation>Unmute</translation>
+        </message>
+        <message>
+            <source>静音</source>
+            <translation>Mute</translation>
+        </message>
+        <message>
+            <source>音量</source>
+            <translation>Volume</translation>
+        </message>
+</context>
+<context>
+        <name>TransportControls</name>
+        <message>
+            <source>播放模式</source>
+            <translation>Playback mode</translation>
+        </message>
+        <message>
+            <source>顺序播放</source>
+            <translation>Play in order</translation>
+        </message>
+        <message>
+            <source>随机播放</source>
+            <translation>Shuffle</translation>
+        </message>
+        <message>
+            <source>单曲循环</source>
+            <translation>Repeat one</translation>
+        </message>
+        <message>
+            <source>列表循环</source>
+            <translation>Repeat playlist</translation>
+        </message>
+        <message>
+            <source>十八段图形均衡器</source>
+            <translation>18-Band Graphic Equalizer</translation>
+        </message>
+        <message>
+            <source>切换波形样式</source>
+            <translation>Switch waveform style</translation>
+        </message>
+        <message>
+            <source>上一首</source>
+            <translation>Previous track</translation>
+        </message>
+        <message>
+            <source>CUE 预听</source>
+            <translation>CUE audition</translation>
+        </message>
+        <message>
+            <source>暂停</source>
+            <translation>Pause</translation>
+        </message>
+        <message>
+            <source>播放</source>
+            <translation>Play</translation>
+        </message>
+        <message>
+            <source>下一首</source>
+            <translation>Next track</translation>
+        </message>
+</context>
+<context>
+        <name>VideoPlaybackView</name>
+        <message>
+            <source>正在加载视频画面…</source>
+            <translation>Loading video…</translation>
+        </message>
+</context>
+<context>
+        <name>VideoTransportBar</name>
+        <message>
+            <source>当前时间 %1</source>
+            <translation>Current time %1</translation>
+        </message>
+        <message>
+            <source>视频进度</source>
+            <translation>Video progress</translation>
+        </message>
+        <message>
+            <source>总时长 %1</source>
+            <translation>Total duration %1</translation>
+        </message>
+        <message>
+            <source>播放速度</source>
+            <translation>Playback speed</translation>
+        </message>
+        <message>
+            <source>退出全屏</source>
+            <translation>Exit full screen</translation>
+        </message>
+        <message>
+            <source>全屏</source>
+            <translation>Full Screen</translation>
+        </message>
+        <message>
+            <source>返回音频播放器</source>
+            <translation>Return to audio player</translation>
+        </message>
+</context>
+<context>
+        <name>LibraryFileOperations</name>
+        <message>
+            <source>文件不存在或路径无效</source>
+            <translation>The file does not exist or its path is invalid</translation>
+        </message>
+        <message>
+            <source>系统未能把文件移入回收站</source>
+            <translation>The system could not move the file to the Recycle Bin</translation>
+        </message>
+        <message>
+            <source>文件已移入回收站，但曲库记录移除失败</source>
+            <translation>The file was moved to the Recycle Bin, but its library record could not be removed</translation>
+        </message>
+</context>
+<context>
+        <name>LibrarySidePanel</name>
+        <message>
+            <source>标签管理</source>
+            <translation>Tags</translation>
+        </message>
+        <message>
+            <source>歌词</source>
+            <translation>Lyrics</translation>
+        </message>
+        <message>
+            <source>隐藏标签和歌词侧栏</source>
+            <translation>Hide the tags and lyrics sidebar</translation>
+        </message>
+        <message>
+            <source>显示标签和歌词侧栏</source>
+            <translation>Show the tags and lyrics sidebar</translation>
+        </message>
+</context>
+<context>
+        <name>ResourceFolderController</name>
+        <message>
+            <source>Audio files (%1)</source>
+            <translation>Audio files (%1)</translation>
+        </message>
+        <message>
+            <source>无法保存曲库排除记录：%1</source>
+            <translation>Unable to save the library exclusion record: %1</translation>
+        </message>
+        <message>
+            <source>无法写入曲库排除记录：%1</source>
+            <translation>Unable to write the library exclusion record: %1</translation>
+        </message>
+        <message>
+            <source>无法提交曲库排除记录：%1</source>
+            <translation>Unable to commit the library exclusion record: %1</translation>
+        </message>
+</context>
+<context>
+        <name>TagManagementPanel</name>
+        <message>
+            <source>标签管理</source>
+            <translation>Tag management</translation>
+        </message>
+        <message>
+            <source>添加标签</source>
+            <translation>Add tag</translation>
+        </message>
+        <message>
+            <source>标签名称</source>
+            <translation>Tag name</translation>
+        </message>
+        <message>
+            <source>重命名</source>
+            <translation>Rename</translation>
+        </message>
+        <message>
+            <source>修改颜色</source>
+            <translation>Change color</translation>
+        </message>
+        <message>
+            <source>删除标签</source>
+            <translation>Delete tag</translation>
+        </message>
+        <message>
+            <source>重命名标签</source>
+            <translation>Rename tag</translation>
+        </message>
+        <message>
+            <source>确定删除这个标签？此操作只解除标签关系，不删除歌曲或磁盘文件。</source>
+            <translation>Delete this tag? This only removes tag associations; it does not delete tracks or files from disk.</translation>
+        </message>
+        <message>
+            <source>搜索标签</source>
+            <translation>Search tags</translation>
+        </message>
+        <message>
+            <source>添加</source>
+            <translation>Add</translation>
+        </message>
+</context>
+<context>
+        <name>TagModel</name>
+        <message>
+            <source>无法保存标签数据</source>
+            <translation>Unable to save tag data</translation>
+        </message>
+</context>
+<context>
+        <name>ThemedButton</name>
+        <message>
+            <source>正在处理</source>
+            <translation>Processing</translation>
+        </message>
+</context>
+<context>
+        <name>TrackSubtitle</name>
+        <message>
+            <source>未知艺术家</source>
+            <translation>Unknown artist</translation>
+        </message>
+        <message>
+            <source>未知专辑</source>
+            <translation>Unknown album</translation>
+        </message>
+</context>
+<context>
+        <name>WaveSelectionOverlay</name>
+        <message>
+            <source>拖出片段</source>
+            <translation>Drag out clip</translation>
+        </message>
+</context>
 </TS>

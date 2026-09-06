@@ -5,6 +5,7 @@
 #include <QFile>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
+#include <QScopeGuard>
 #include <QTest>
 
 #include <algorithm>
@@ -150,6 +151,7 @@ void TerrainReactorGpuSmokeTest::materialControlsChangeRenderedSurface_data()
     QTest::newRow("crystal-softness") << QByteArray("materialSoftness") << 0 << 0 << 100;
     QTest::newRow("ink-density") << QByteArray("inkDensity") << 2 << 0 << 100;
     QTest::newRow("column-size") << QByteArray("columnSize") << 0 << 50 << 200;
+    QTest::newRow("column-density") << QByteArray("columnDensity") << 0 << 50 << 200;
     QTest::newRow("column-opacity") << QByteArray("columnOpacity") << 0 << 0 << 100;
     QTest::newRow("reactor-brightness") << QByteArray("reactorBrightness") << 0 << 20 << 180;
     QTest::newRow("column-clarity") << QByteArray("subjectClarity") << 0 << 20 << 140;
@@ -163,6 +165,8 @@ void TerrainReactorGpuSmokeTest::materialControlsChangeRenderedSurface()
     QFETCH(int, low);
     QFETCH(int, high);
     PlayerExperienceController style;
+    const QVariant previousDensity = style.property("columnDensity");
+    const auto restoreDensity = qScopeGuard([&] { style.setProperty("columnDensity", previousDensity); });
     style.applyPreset(0);
     QVERIFY2(style.setProperty("materialMode", mode), "Native material control is missing");
     QVERIFY(style.setProperty(control.constData(), low));
@@ -181,6 +185,7 @@ void TerrainReactorGpuSmokeTest::materialControlsChangeRenderedSurface()
     item.setStyleSource(&style);
     item.setUseSyntheticFeatures(true);
     item.setSyntheticFeatures({.7,.6,.5,.4,.3,.3,.2,.2}, .5, 0, false, false);
+    if (control == "columnDensity") item.setQuality(TerrainReactorItem::Quality::High);
     if (control == "subjectClarity") {
         // Isolate face contrast from animated relief: unchanged terrain must
         // not produce a false positive merely because capture time advanced.
@@ -197,10 +202,34 @@ void TerrainReactorGpuSmokeTest::materialControlsChangeRenderedSurface()
     QTRY_COMPARE_WITH_TIMEOUT(item.renderStatus(), TerrainReactorItem::RenderStatus::Ready, 5000);
     QTest::qWait(1000); // palette/envelope settle, not timed beat input
     const QImage a = window.grabWindow();
+    const int lowTerrainCount = item.property("renderedTerrainCount").toInt();
+    const quint64 generationBeforeDensity = item.resourceGeneration();
     QVERIFY(style.setProperty(control.constData(), high));
     QTRY_COMPARE_WITH_TIMEOUT(item.renderedStyleRevision(), item.styleRevision(), 3000);
     QTRY_VERIFY_WITH_TIMEOUT(item.stableRenderedFrameCount() >= 4, 3000);
     const QImage b = window.grabWindow();
+    if (control == "columnDensity") {
+        const int highTerrainCount = item.property("renderedTerrainCount").toInt();
+        QVERIFY(lowTerrainCount > 0);
+        QVERIFY(highTerrainCount > lowTerrainCount * 2);
+        QCOMPARE(item.resourceGeneration(), generationBeforeDensity);
+        QVERIFY(style.setProperty("columnDensity", 100));
+        QTRY_COMPARE_WITH_TIMEOUT(item.renderedStyleRevision(), item.styleRevision(), 3000);
+        const int standardCount = item.property("renderedTerrainCount").toInt();
+        QVERIFY(style.setProperty("columnDensity", 125));
+        QTRY_COMPARE_WITH_TIMEOUT(item.renderedStyleRevision(), item.styleRevision(), 3000);
+        const int defaultCount = item.property("renderedTerrainCount").toInt();
+        QVERIFY(defaultCount > standardCount * 115 / 100);
+        QVERIFY(defaultCount < standardCount * 135 / 100);
+        QVERIFY(style.setProperty("columnDensity", 200));
+        item.setQuality(TerrainReactorItem::Quality::Eco);
+        QTRY_COMPARE_WITH_TIMEOUT(item.renderedStyleRevision(), item.styleRevision(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(item.property("renderedTerrainCount").toInt() < highTerrainCount, 3000);
+        QVERIFY(item.property("renderedTerrainCount").toInt() <= 7500);
+        qInfo() << "Density actual columns:" << lowTerrainCount << highTerrainCount
+                << "standard/default:" << standardCount << defaultCount
+                << "Eco:" << item.property("renderedTerrainCount");
+    }
     QVERIFY(!a.isNull());
     QCOMPARE(a.size(), b.size());
     int changed = 0;

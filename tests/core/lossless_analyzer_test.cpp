@@ -684,7 +684,16 @@ int main(const int argc, char** argv)
         const auto resampled_result = lossless::analyzeFile(resampled.u8string(), options, cancelled, {});
         assert(resampled_result.measurements.resamplingPhaseSourceRate == 44'100.0);
         assert(resampled_result.measurements.resamplingPhaseCoherence > 0.995);
-        assert(resampled_result.verdict == lossless::Verdict::SuspectedUpsample);
+        // A real resampling grid remains measurable, but the same structure
+        // can be manufactured by native-rate AM; it alone is not causal proof.
+        assert(resampled_result.verdict == lossless::Verdict::Inconclusive);
+        assert(resampled_result.chain.empty());
+        const auto grid = std::find_if(resampled_result.evidence.begin(),
+            resampled_result.evidence.end(), [](const auto& evidence) {
+                return evidence.code == "resampling_polyphase_grid";
+            });
+        assert(grid != resampled_result.evidence.end());
+        assert(grid->direction == lossless::EvidenceDirection::Neutral);
     }
     const auto periodic = directory / "native-high-frequency-periodic.wav";
     write_pcm_wav(periodic, 96'000, 24, 384'000U,

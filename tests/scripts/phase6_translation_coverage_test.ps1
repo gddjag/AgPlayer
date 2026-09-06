@@ -145,6 +145,71 @@ $expected['PlayerControls'] = @(
     [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_))
 }
 
+# Extract the same source graph consumed by Qt's AgPlayer_lupdate target into a
+# disposable catalog.  This catches new tr()/qsTr() strings even when the
+# checked-in release catalogs have not been regenerated.
+$lupdateProject = if ($env:AGPLAYER_LUPDATE_PROJECT) {
+    $env:AGPLAYER_LUPDATE_PROJECT
+} else {
+    $null
+}
+if (-not $lupdateProject) {
+    $probe = [IO.Path]::GetFullPath((Get-Location).Path)
+    while ($probe) {
+        $candidate = Join-Path $probe '.lupdate\AgPlayer_lupdate_project.json'
+        if (Test-Path -LiteralPath $candidate) {
+            $lupdateProject = $candidate
+            break
+        }
+        $parent = Split-Path -Parent $probe
+        if (-not $parent -or $parent -eq $probe) { break }
+        $probe = $parent
+    }
+}
+if (-not $lupdateProject) {
+    $candidate = Join-Path $SourceRoot 'build\release\.lupdate\AgPlayer_lupdate_project.json'
+    if (Test-Path -LiteralPath $candidate) { $lupdateProject = $candidate }
+}
+if (-not $lupdateProject -or -not (Test-Path -LiteralPath $lupdateProject)) {
+    throw 'Unable to locate the generated AgPlayer lupdate project.'
+}
+$buildRoot = Split-Path -Parent (Split-Path -Parent $lupdateProject)
+$cmakeCache = Join-Path $buildRoot 'CMakeCache.txt'
+$qtDirEntry = Select-String -LiteralPath $cmakeCache -Pattern '^Qt6_DIR:[^=]+=(.+)$' |
+    Select-Object -First 1
+if ($null -eq $qtDirEntry) { throw "Qt6_DIR was not found in $cmakeCache" }
+$qtCmakeDir = $qtDirEntry.Matches[0].Groups[1].Value
+$qtRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $qtCmakeDir))
+$lupdate = Join-Path $qtRoot 'bin\lupdate.exe'
+if (-not (Test-Path -LiteralPath $lupdate)) { throw "lupdate was not found: $lupdate" }
+
+$extractionDirectory = Join-Path ([IO.Path]::GetTempPath()) (
+    'agplayer-source-translations-' + [guid]::NewGuid().ToString('N'))
+$sourceCatalogPath = Join-Path $extractionDirectory 'current-source.ts'
+New-Item -ItemType Directory -Path $extractionDirectory -Force | Out-Null
+try {
+    & $lupdate -project $lupdateProject -no-obsolete -locations none -silent `
+        -ts $sourceCatalogPath
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $sourceCatalogPath)) {
+        throw 'lupdate failed to extract the current application source catalog.'
+    }
+    [xml]$sourceCatalog = Get-Content -Raw -Encoding UTF8 -LiteralPath $sourceCatalogPath
+} finally {
+    if (Test-Path -LiteralPath $extractionDirectory) {
+        Remove-Item -LiteralPath $extractionDirectory -Recurse -Force
+    }
+}
+foreach ($contextNode in @($sourceCatalog.TS.context)) {
+    $context = [string]$contextNode.name
+    $currentSources = @($contextNode.message | ForEach-Object { [string]$_.source })
+    if ($expected.ContainsKey($context)) {
+        $expected[$context] = @(@($expected[$context]) + @($currentSources) |
+            Select-Object -Unique)
+    } else {
+        $expected[$context] = @($currentSources | Select-Object -Unique)
+    }
+}
+
 $catalogDirectory = Join-Path $SourceRoot 'translations'
 $actualCatalogNames = @(Get-ChildItem -LiteralPath $catalogDirectory -Filter 'agplayer_*.ts' |
     ForEach-Object Name | Sort-Object)
@@ -176,9 +241,9 @@ foreach ($locale in @('zh', 'en')) {
                 $translation -match '[\p{IsCJKUnifiedIdeographs}]') {
                 throw "$locale catalog falls back to Chinese for [$context] $source"
             }
-            $sourcePlaceholders = @([regex]::Matches($source, '%\d+') |
+            $sourcePlaceholders = @([regex]::Matches($source, '%(?:[1-9][0-9]?|n)') |
                 ForEach-Object { $_.Value } | Sort-Object)
-            $translationPlaceholders = @([regex]::Matches($translation, '%\d+') |
+            $translationPlaceholders = @([regex]::Matches($translation, '%(?:[1-9][0-9]?|n)') |
                 ForEach-Object { $_.Value } | Sort-Object)
             if (@(Compare-Object $sourcePlaceholders $translationPlaceholders).Count -ne 0) {
                 throw "$locale catalog changes placeholders for [$context] $source"

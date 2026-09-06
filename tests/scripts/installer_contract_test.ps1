@@ -84,10 +84,17 @@ if ($installer -match '(?m)^PinToTaskbar=' -or
     throw "Installer must not pin AgPlayer to the taskbar"
 }
 
+# Follow the compiler that configured this build, not whichever VS installation
+# happens to be newest. package_version_guard_test exercises this environment.
 if ($packageScript -match 'Visual Studio\\2022\\Community' -or
-    $packageScript -notmatch 'vswhere\.exe' -or
-    $packageScript -notmatch 'Microsoft\.VisualStudio\.Product\.BuildTools') {
-    throw "Release packaging must select the current complete MSVC Build Tools instead of a stale hard-coded IDE"
+    $packageScript -match 'vswhere\.exe' -or
+    $packageScript -notmatch 'CMAKE_CXX_COMPILER' -or
+    $packageScript -notmatch '-vcvars_ver=\{1\}' -or
+    $packageScript -notmatch '\$vcvars,\s*\$msvcVersion' -or
+    $packageScript -notmatch 'Get-Command cl\.exe' -or
+    $packageScript -notmatch 'GetFullPath\(\$activeCompiler\)\s*-ne\s*\$configuredCompiler' -or
+    $packageScript -notmatch 'throw "Active compiler') {
+    throw "Release packaging must initialize the cached CMake MSVC toolset and reject a mismatched active compiler"
 }
 
 if ($installer -notmatch '(?m)^UninstallDisplayName=\{#AppName\}\r?$') {

@@ -21,6 +21,108 @@ TestCase {
         VocalSeparationPage { }
     }
 
+    function test_retainedCudaManifestRejectsCrossStemHash() {
+        if (!realSeparationDirectory || realSeparationSourceUrl.toString().length === 0)
+            skip("Opt-in retained CUDA files were not supplied")
+        verify(separationTestDriver.validateRetainedCudaManifest(realSeparationSourceUrl,
+                                                                 realSeparationDirectory))
+        const vocals = realSeparationDirectory + "/demucs-vocals-demucs.wav"
+        const drums = realSeparationDirectory + "/demucs-drums-demucs.wav"
+        verify(separationTestDriver.validateRetainedCudaStem("vocals", vocals))
+        // Both files are stereo PCM16 WAVs with the same frame count. Only the
+        // fixed content hash distinguishes this substitution.
+        verify(!separationTestDriver.validateRetainedCudaStem("vocals", drums))
+    }
+
+    function test_retainedCudaFiveStemsRealApplicationFlow() {
+        if (!realSeparationDirectory || realSeparationSourceUrl.toString().length === 0)
+            skip("Opt-in retained CUDA files were not supplied")
+        const kinds = [VocalSeparationController.Vocals, VocalSeparationController.Accompaniment,
+                       VocalSeparationController.Drums, VocalSeparationController.Bass,
+                       VocalSeparationController.Other]
+        const oldVolume = AudioPreviewController.volume
+        try {
+            separationTestDriver.reset()
+            verify(separationTestDriver.setInput(realSeparationSourceUrl))
+            // Replaying a completed job must happen after the deferred source
+            // request, just as it does after a real separation has finished.
+            tryVerify(function() { return VocalSeparationController.inputInfo.waveform.length > 0
+                                          && VocalSeparationController.inputInfo.durationMs > 237000 }, 30000)
+            verify(separationTestDriver.replayRealFiveStemResult(realSeparationSourceUrl,
+                                                                 realSeparationDirectory, realSeparationGain))
+            tryVerify(function() {
+                return kinds.every(function(kind) {
+                    const stem = page.stemInfo(kind)
+                    return stem.available && stem.waveform && stem.waveform.length > 0
+                           && stem.waveform.some(function(value) { return value > 0 })
+                })
+            }, 120000)
+            for (const kind of kinds) {
+                const waveform = findChild(page, "separationStemWaveform-" + kind)
+                verify(waveform && waveform.peaks.length > 0)
+                console.log("Retained real waveform", kind, waveform.peaks.length, page.stemInfo(kind).path)
+            }
+            verify(VocalSeparationController.inputInfo.durationMs > 237000)
+            verify(VocalSeparationController.inputInfo.durationMs < 238000)
+            if (visualFixtureOutput) grabImage(page).save(visualFixtureOutput + "-waveforms.png")
+
+            AudioPreviewController.volume = 0.12
+            verify(separationTestDriver.loadMainSource(realSeparationSourceUrl))
+            PlaybackController.setVolume(0.12)
+            PlaybackController.play()
+            tryCompare(PlaybackController, "state", PlaybackController.Playing, 5000)
+            tryVerify(function() { return PlaybackController.positionMs > 200 }, 5000)
+            const play = findChild(page, "separationTransportPlay")
+            verify(play && play.enabled)
+            mouseClick(play)
+            tryCompare(AudioPreviewController, "playing", true, 5000)
+            tryCompare(PlaybackController, "state", PlaybackController.Stopped, 5000)
+            compare(separationTestDriver.activeResultMixKinds(), [kinds[0], kinds[2], kinds[3], kinds[4]])
+            tryVerify(function() { return page.resultPreviewPositionMs > 300 }, 5000)
+            console.log("Real device four-source mix position", page.resultPreviewPositionMs)
+            mouseClick(play)
+            tryCompare(AudioPreviewController, "playing", false)
+            const pausedPosition = AudioPreviewController.positionMs
+            wait(250)
+            verify(Math.abs(AudioPreviewController.positionMs - pausedPosition) < 100)
+            AudioPreviewController.seek(20000)
+            tryVerify(function() { return Math.abs(AudioPreviewController.positionMs - 20000) < 150 }, 3000)
+            mouseClick(play)
+            tryVerify(function() { return AudioPreviewController.playing && AudioPreviewController.positionMs > 20200 }, 5000)
+
+            for (const kind of kinds) {
+                const pointer = findChild(page, "stemPreviewVolumePointer-" + kind)
+                verify(pointer && pointer.enabled)
+                mousePress(pointer, pointer.width * 0.2, pointer.height / 2, Qt.LeftButton)
+                mouseMove(pointer, pointer.width * 0.45, pointer.height / 2, 20)
+                mouseRelease(pointer, pointer.width * 0.45, pointer.height / 2, Qt.LeftButton)
+                tryVerify(function() { return page.stemInfo(kind).previewVolume > 0.40
+                                              && page.stemInfo(kind).previewVolume < 0.50 })
+                verify(AudioPreviewController.playing)
+                const waveform = findChild(page, "separationStemWaveform-" + kind)
+                mouseClick(waveform, waveform.width * 0.3, waveform.height / 2, Qt.LeftButton)
+                tryCompare(VocalSeparationController, "resultPreviewSoloKind", kind)
+                const before = AudioPreviewController.positionMs
+                tryVerify(function() { return AudioPreviewController.playing
+                                             && AudioPreviewController.positionMs > before + 150 }, 5000)
+                console.log("Real stem solo and volume", kind, AudioPreviewController.positionMs,
+                            page.stemInfo(kind).previewVolume)
+            }
+            mouseClick(play)
+            tryCompare(VocalSeparationController, "resultPreviewMode", VocalSeparationController.Mix)
+            if (visualFixtureOutput) grabImage(page).save(visualFixtureOutput + "-playing.png")
+            PlaybackController.play()
+            tryCompare(PlaybackController, "state", PlaybackController.Playing, 5000)
+            tryCompare(AudioPreviewController, "playing", false, 5000)
+        } finally {
+            if (visualFixtureOutput) grabImage(page).save(visualFixtureOutput + "-final-state.png")
+            AudioPreviewController.stop()
+            AudioPreviewController.volume = oldVolume
+            PlaybackController.stop()
+            separationTestDriver.reset()
+        }
+    }
+
     Component {
         id: navigationComponent
         ToolSidebar { width: 1200; height: 55 }

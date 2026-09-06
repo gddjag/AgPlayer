@@ -1351,16 +1351,10 @@ void aggregate_verdict(AnalysisResult& result)
     }
     if (polyphase_structure) {
         add_evidence(result, "resampling_polyphase_grid", EvidenceFamily::Resampling,
-                     EvidenceDirection::SupportsUpsampling,
+                     EvidenceDirection::Neutral,
                      result.measurements.resamplingPhaseSourceRate, "Hz",
                      "相位一致性>=0.995、强度>=0.02、>=4段、残差熵>=0.45、带外抑制>=35dB", 2,
-                     "多相残差与较低采样栅格一致，支持重采样推断；特殊周期处理仍可能构成反例。");
-        result.verdict = Verdict::SuspectedUpsample;
-        result.confidence = AnalysisSupport::upsample;
-        result.chain = {std::to_string(static_cast<int>(result.measurements.resamplingPhaseSourceRate))
-            + " Hz PCM（推测）", result.source.container};
-        result.warnings.push_back("多相残差支持疑似重采样，不等于证明原始录音采样率；额外噪声可能使该证据消失。");
-        return;
+                     "多相残差与较低采样栅格一致；原生采样率的幅度调制也能形成，不能单独确定重采样历史。");
     }
     if (resampling_edge) {
         add_evidence(result, "persistent_resampling_edge",

@@ -137,6 +137,16 @@ Rectangle {
         anchors.margins: Theme.spacingXs
         spacing: Theme.spacingSm
 
+        Text {
+            objectName: "losslessExperimentalNotice"
+            Layout.fillWidth: true
+            text: qsTr("实验性，仅供参考；鉴别结果不代表专业认证。")
+            color: Theme.textSecondary
+            font.family: Theme.fontPrimary
+            font.pixelSize: Theme.losslessFontSizeBody
+            wrapMode: Text.Wrap
+        }
+
         Rectangle {
             id: toolbar
             objectName: "losslessToolbar"

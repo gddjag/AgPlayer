@@ -2976,6 +2976,10 @@
     </context>
 <context>
         <name>ImmersiveControlPanel</name>
+        <message><source>柱体数量</source><translation>柱体数量</translation></message>
+        <message><source>减少柱体数量</source><translation>减少柱体数量</translation></message>
+        <message><source>增加柱体数量</source><translation>增加柱体数量</translation></message>
+        <message><source>数量为相对密度，实际柱数受画质与性能预算限制</source><translation>数量为相对密度，实际柱数受画质与性能预算限制</translation></message>
         <message>
             <location filename="../app/qml/AgPlayer/components/ImmersiveControlPanel.qml" line="33" />
             <source>音域回响</source>
@@ -3991,6 +3995,10 @@
     </context>
 <context>
         <name>LosslessIdentifyPage</name>
+        <message>
+            <source>实验性，仅供参考；鉴别结果不代表专业认证。</source>
+            <translation>实验性，仅供参考；鉴别结果不代表专业认证。</translation>
+        </message>
         <message>
             <source>＋  添加文件</source>
             <translation>＋  添加文件</translation>

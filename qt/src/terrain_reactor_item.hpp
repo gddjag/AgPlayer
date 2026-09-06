@@ -65,6 +65,7 @@ class TerrainReactorItem : public QQuickRhiItem {
     Q_PROPERTY(quint64 frameCount READ frameCount NOTIFY countersChanged)
     Q_PROPERTY(quint64 animationCount READ animationCount NOTIFY countersChanged)
     Q_PROPERTY(quint64 uploadCount READ uploadCount NOTIFY countersChanged)
+    Q_PROPERTY(int renderedTerrainCount READ renderedTerrainCount NOTIFY countersChanged)
     Q_PROPERTY(quint64 renderedFeatureRevision READ renderedFeatureRevision
                    NOTIFY countersChanged)
     Q_PROPERTY(quint64 renderedStyleRevision READ renderedStyleRevision
@@ -140,6 +141,7 @@ public:
     quint64 frameCount() const noexcept;
     quint64 animationCount() const noexcept;
     quint64 uploadCount() const noexcept;
+    int renderedTerrainCount() const noexcept;
     quint64 renderedFeatureRevision() const noexcept;
     quint64 renderedStyleRevision() const noexcept;
     quint64 stableRenderedFrameCount() const noexcept;
@@ -187,6 +189,7 @@ private:
         std::atomic<quint64> frames{0};
         std::atomic<quint64> animations{0};
         std::atomic<quint64> uploads{0};
+        std::atomic<int> terrainCount{0};
         std::atomic<quint64> resourceGeneration{0};
         std::atomic<quint64> renderedFeatureRevision{0};
         std::atomic<quint64> renderedStyleRevision{0};

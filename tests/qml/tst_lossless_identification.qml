@@ -158,6 +158,11 @@ TestCase {
         taskModel.clear()
         wait(0)
         verify(findChild(page, "losslessToolbar"))
+        const notice = findChild(page, "losslessExperimentalNotice")
+        verify(notice && notice.visible)
+        verify(notice.text.indexOf("实验性") >= 0
+               || notice.text.indexOf("Experimental") >= 0)
+        verify(notice.width <= page.width)
         verify(findChild(page, "losslessTaskPanel"))
         verify(findChild(page, "losslessEvidencePanel"))
         verify(findChild(page, "losslessConclusionPanel"))
