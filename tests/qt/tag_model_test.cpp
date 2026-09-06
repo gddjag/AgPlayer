@@ -80,12 +80,6 @@ void TagModelTest::assignsStableRandomPaletteColors()
 
     QVERIFY(tags.colorForKey(QStringLiteral("rock")).isValid());
     QVERIFY(tags.colorForKey(QStringLiteral("jazz")).isValid());
-    const QSet<QString> expectedPalette{QStringLiteral("#EE0000"),
-        QStringLiteral("#007BFF"), QStringLiteral("#28A745"),
-        QStringLiteral("#FD7E14"), QStringLiteral("#6F42C1"),
-        QStringLiteral("#D63384"), QStringLiteral("#17A2B8"),
-        QStringLiteral("#809438"), QStringLiteral("#925B37"),
-        QStringLiteral("#495057")};
     const QStringList names{QStringLiteral("热"), QStringLiteral("新品"),
         QStringLiteral("高推荐"), QStringLiteral("限时折扣"),
         QStringLiteral("官方精选款"), QStringLiteral("会员专属福利"),
@@ -99,18 +93,15 @@ void TagModelTest::assignsStableRandomPaletteColors()
         QVERIFY(firstOrder.createTag(name));
         const QColor color = firstOrder.colorForKey(name);
         const QString colorName = color.name(QColor::HexRgb).toUpper();
-        QVERIFY(expectedPalette.contains(colorName));
+        QVERIFY(color.isValid());
         firstColors.insert(name, color);
         usedColors.insert(colorName);
     }
-    QVERIFY(usedColors.size() >= 5);
-
-    LibraryModel reverseLibrary;
-    TagModel reverseOrder(&reverseLibrary,
-                          dir.filePath(QStringLiteral("palette-reverse.json")));
-    for (auto iterator = names.crbegin(); iterator != names.crend(); ++iterator) {
-        QVERIFY(reverseOrder.createTag(*iterator));
-        QCOMPARE(reverseOrder.colorForKey(*iterator), firstColors.value(*iterator));
+    QCOMPARE(usedColors.size(), names.size());
+    QVERIFY(firstOrder.flush());
+    TagModel restored(&firstLibrary, dir.filePath(QStringLiteral("palette-first.json")));
+    for (const QString& name : names) {
+        QCOMPARE(restored.colorForKey(name), firstColors.value(name));
     }
 }
 

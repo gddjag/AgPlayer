@@ -46,6 +46,19 @@ Window {
     property bool importBatchActive: false
     property string exportPlaylistId: ""
     property string resourceDropStatus: "idle"
+    onResourceDropStatusChanged: {
+        if (resourceDropStatus === "completed") resourceDropDismiss.restart()
+        else resourceDropDismiss.stop()
+    }
+    Timer {
+        id: resourceDropDismiss
+        interval: 5000
+        repeat: false
+        onTriggered: {
+            if (listWindow.resourceDropStatus === "completed")
+                listWindow.resourceDropStatus = "idle"
+        }
+    }
     readonly property bool resourceDropActive:
         resourceDropStatus === "pending"
         || resourceDropStatus === "waiting"

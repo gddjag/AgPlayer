@@ -18,7 +18,7 @@ private slots:
     void weakMusicRetainsVisualTravelWithoutLiftingSilence();
     void fixedSeedProducesStableLayoutAndColorZones();
     void terrainCellsExposeSideFacesAtDefaultDensity();
-    void terrainLayoutFormsCircularStageAndStarsStayOutsideCore();
+    void terrainLayoutProvidesCenteredWideGroundAndStarsStayOutsideCore();
     void starfieldFormsBoundedSphericalShellAcrossTheHorizon();
     void starfieldUsesDistanceWeightedDensityAndScale();
     void starfieldCapsParticleBudget();
@@ -86,8 +86,7 @@ void TerrainReactorStateTest::fixedSeedProducesStableLayoutAndColorZones()
     QCOMPARE(first.floating, repeated.floating);
     QCOMPARE(first.meteors, repeated.meteors);
     QCOMPARE(first.particles, repeated.particles);
-    QVERIFY(first.terrain.size() < 81);
-    QVERIFY(first.terrain.size() > 48);
+    QCOMPARE(first.terrain.size(), 81);
     QCOMPARE(first.floating.size(), 12);
     QCOMPARE(first.meteors.size(), 4);
     QCOMPARE(first.particles.size(), 16);
@@ -115,30 +114,39 @@ void TerrainReactorStateTest::fixedSeedProducesStableLayoutAndColorZones()
 void TerrainReactorStateTest::terrainCellsExposeSideFacesAtDefaultDensity()
 {
     constexpr int gridSize = 32;
-    constexpr float spacing = 168.0F / float(gridSize);
+    constexpr float spacing = kTerrainStageExtent / float(gridSize + 1);
     const SceneLayout layout = makeSceneLayout(0x5eedU, gridSize, 0, 0, 0);
     QVERIFY(!layout.terrain.isEmpty());
     for (const SceneInstance& cell : layout.terrain) {
         const float footprint = cell.scale.x() / spacing;
-        QVERIFY2(footprint >= 0.88F,
-                 "Terrain gaps became a distracting black grid");
-        QVERIFY2(footprint <= 0.92F,
-                 "Terrain columns must retain a narrow separation");
+        QVERIFY2(footprint >= 0.99F,
+                 "The renderer must own the single, narrow terrain gutter");
+        QVERIFY2(footprint <= 1.01F,
+                 "Terrain cell scale must not compound a second black gap");
         QCOMPARE(cell.scale.x(), cell.scale.z());
     }
 }
 
-void TerrainReactorStateTest::terrainLayoutFormsCircularStageAndStarsStayOutsideCore()
+void TerrainReactorStateTest::terrainLayoutProvidesCenteredWideGroundAndStarsStayOutsideCore()
 {
     const SceneLayout layout = makeSceneLayout(0x5eedU, 32, 8, 4, 48);
     QVERIFY(!layout.terrain.isEmpty());
     QVERIFY(!layout.particles.isEmpty());
 
     for (const SceneInstance& instance : layout.terrain) {
-        const float radius = std::hypot(instance.position.x(),
-                                        instance.position.z());
-        QVERIFY2(radius <= 84.01F, "terrain cell escaped the circular stage");
+        QVERIFY2(std::abs(instance.position.x()) <= kTerrainStageExtent * 0.5F,
+                 "terrain cell escaped the widened ground extent");
+        QVERIFY2(std::abs(instance.position.z()) <= kTerrainStageExtent * 0.5F,
+                 "terrain cell escaped the widened ground extent");
     }
+    QCOMPARE(layout.terrain.size(), 33 * 33);
+    const auto center = std::find_if(layout.terrain.cbegin(), layout.terrain.cend(),
+                                     [](const SceneInstance& instance) {
+        return qFuzzyIsNull(instance.position.x())
+            && qFuzzyIsNull(instance.position.z());
+    });
+    QVERIFY2(center != layout.terrain.cend(),
+             "odd grid must put a terrain cell at the reactor center");
     for (const SceneInstance& star : layout.particles) {
         QVERIFY2(star.position.length() >= 240.0F,
                  "deep-space star leaked into the reactor core");
@@ -674,7 +682,7 @@ void TerrainReactorStateTest::defaultCameraStartsAtHighObliqueView()
     QVERIFY2(camera.pitch <= 0.66F,
              "The initial view must retain enough side elevation to read column height");
     // Leave a dark-space margin around the circular terrain and waveform.
-    QVERIFY(camera.distance >= 175.0F && camera.distance <= 185.0F);
+    QVERIFY(camera.distance >= 160.0F && camera.distance <= 168.0F);
 }
 
 void TerrainReactorStateTest::terrainAmplitudeProducesClearlyVisibleColumnTravel()
@@ -1486,7 +1494,7 @@ void TerrainReactorStateTest::manualCameraControlRecoversAfterFourSeconds()
 {
     CameraMotion camera;
     const CameraSnapshot initial = camera.snapshot();
-    QCOMPARE(initial.distance, 180.0F);
+    QCOMPARE(initial.distance, 164.0F);
     CameraMotion zoomedOut;
     zoomedOut.zoomBy(10000.0F, 1.0);
     QCOMPARE(zoomedOut.snapshot().distance, 220.0F);

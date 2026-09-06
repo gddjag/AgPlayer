@@ -737,6 +737,11 @@ TestCase {
         var coordinator = findChild(mainWindow, "immersiveCoordinator")
         var surface = coordinator ? coordinator.surface : null
         verify(surface)
+        var controlPanel = findChild(surface, "immersiveControlPanelHost")
+        var queueTrigger = findChild(surface, "queueTriggerZone")
+        verify(controlPanel && queueTrigger)
+        verify(controlPanel.x < surface.width / 2)
+        verify(queueTrigger.x >= surface.width - queueTrigger.width)
         compare(findChild(surface, "immersiveBrandTitle"), null)
         compare(findChild(surface, "immersivePanelToggleButton"), null)
         var fullscreenButton = findChild(surface, "immersiveFullscreenButton")
@@ -1006,19 +1011,14 @@ TestCase {
         verify(fallbackMessage)
         tryCompare(fallbackMessage, "visible", false, 1000)
 
-        var colorSwatch = findChild(panel, "immersiveColorSwatch0")
-        var colorPicker = findChild(panel, "immersiveColorPicker")
-        verify(colorSwatch && colorPicker)
+        var colorField = findChild(panel, "immersiveColorField0")
+        verify(colorField)
+        compare(findChild(panel, "immersiveColorPicker"), null)
         var originalCoolColor = PlayerExperienceController.coolColor
         PlayerExperienceController.songAdaptiveColorEnabled = true
-        colorSwatch.clicked()
-        compare(panel.editingColorProperty, "coolColor")
-        verify(colorPicker.visible)
-        colorPicker.selectedColor = "#123456"
-        colorPicker.accept()
+        colorField.colorEdited("#123456")
         compare(PlayerExperienceController.coolColor.toLowerCase(), "#123456")
         compare(PlayerExperienceController.songAdaptiveColorEnabled, false)
-        colorPicker.close()
         PlayerExperienceController.coolColor = originalCoolColor
 
         panel.currentTab = 2
@@ -1474,12 +1474,12 @@ TestCase {
         }
     }
 
-    function test_column_and_reactor_controls_are_independent_and_live() {
+    function test_fixed_column_geometry_is_not_exposed_as_a_dynamic_control() {
         var panel = createTemporaryObject(immersiveControlPanelComponent,
                                           mainWindow.contentItem, { currentTab: 2 })
         verify(panel)
-        var keys = ["columnSize", "terrainAmplitude", "columnOpacity",
-                    "subjectClarity", "reactorBrightness", "rhythmStrength"]
+        var keys = ["terrainAmplitude", "subjectClarity", "reactorBrightness",
+                    "rhythmStrength"]
         for (var i = 0; i < keys.length; ++i) {
             var slider = findChild(panel, "dynamicSlider_" + keys[i])
             verify(slider, keys[i])
@@ -1495,63 +1495,22 @@ TestCase {
                 if (k !== i)
                     compare(PlayerExperienceController[keys[k]], others[keys[k]])
         }
-        compare(findChild(panel, "dynamicValue_columnSize").text, "0.74")
-        compare(findChild(panel, "dynamicValue_columnOpacity").text, "74")
         compare(findChild(panel, "dynamicValue_reactorBrightness").text, "0.74")
+        compare(findChild(panel, "dynamicSlider_columnSize"), null)
+        compare(findChild(panel, "dynamicSlider_columnOpacity"), null)
     }
 
-    function test_material_and_ripple_controls_use_live_controller_values() {
+    function test_material_selection_is_not_exposed_in_dynamic_controls() {
         var panel = createTemporaryObject(immersiveControlPanelComponent,
                                           mainWindow.contentItem, { currentTab: 2 })
         verify(panel)
         var material = findChild(panel, "dynamicsMaterialGroup")
         var ripple = findChild(panel, "dynamicsRippleGroup")
-        verify(material && ripple)
-        var mode = findChild(material, "immersiveMaterialCombo")
-        verify(mode)
-        PlayerExperienceController.materialMode = 2
-        compare(mode.currentIndex, 2)
-        mode.currentIndex = 1
-        mode.activated(1)
-        compare(PlayerExperienceController.materialMode, 1)
-        var elasticity = findChild(material, "dynamicSlider_jellyElasticity")
-        var density = findChild(material, "dynamicSlider_inkDensity")
-        var softness = findChild(material, "dynamicSlider_materialSoftness")
-        verify(elasticity && density && softness)
-        PlayerExperienceController.jellyElasticity = 57
-        PlayerExperienceController.inkDensity = 68
-        compare(elasticity.enabled, true)
-        compare(density.enabled, false)
-        PlayerExperienceController.materialMode = 2
-        compare(elasticity.enabled, false)
-        compare(density.enabled, true)
-        PlayerExperienceController.materialMode = 0
-        compare(elasticity.enabled, false)
-        compare(density.enabled, false)
-        compare(elasticity.value, 57)
-        compare(density.value, 68)
-        compare(findChild(panel, "dynamicValue_jellyElasticity").text, "57")
-        compare(findChild(panel, "dynamicValue_inkDensity").text, "68")
-        for (var materialMode = 0; materialMode < 3; ++materialMode) {
-            PlayerExperienceController.materialMode = materialMode
-            compare(softness.enabled, true)
-        }
-        var keys = ["materialSoftness", "jellyElasticity", "inkDensity",
-                    "rippleStrength", "rippleWidth", "rippleDecay"]
-        for (var i = 0; i < keys.length; ++i) {
-            var slider = findChild(i < 3 ? material : ripple, "dynamicSlider_" + keys[i])
-            verify(slider)
-            PlayerExperienceController.materialMode = keys[i] === "inkDensity" ? 2 : 1
-            compare(slider.enabled, true)
-            PlayerExperienceController[keys[i]] = 63
-            compare(slider.value, 63)
-            slider.value = 79
-            slider.moved()
-            compare(PlayerExperienceController[keys[i]], 79)
-            var readout = findChild(panel, "dynamicValue_" + keys[i])
-            verify(readout)
-            compare(readout.text, "79")
-        }
+        verify(!material)
+        verify(!findChild(panel, "immersiveMaterialCombo"))
+        verify(ripple)
+        verify(PlayerExperienceController.applyPreset(PlayerExperienceController.InkWash))
+        compare(PlayerExperienceController.materialMode, 2)
     }
 
     function test_dynamics_controls_are_grouped_by_meaning_and_remain_wired() {

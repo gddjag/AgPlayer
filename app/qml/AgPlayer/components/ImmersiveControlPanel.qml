@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import AgPlayer
 
@@ -9,7 +8,6 @@ Rectangle {
     objectName: "immersiveControlPanel"
     property bool collapsed: false
     property int currentTab: 0
-    property string editingColorProperty: ""
     property var featureBands: []
     property real featureEnergy: 0
     property real featureSpectralFlux: 0
@@ -51,16 +49,12 @@ Rectangle {
         { "title": qsTr("琥珀电影"), "sub": qsTr("暖金顶光 · 克制旋转"),
           "from": "#351a10", "to": "#9b5c28" } // theme-color-allow: fixed immersive media preset thumbnail palette
     ]
+    readonly property var paletteDefaults: ({
+        "coolColor": "#8BDCFF", "warmColor": "#EB7894", // theme-color-allow: default immersive media palette, not UI chrome
+        "accentColor": "#FFD7DF", "peakColor": "#FFF7FB", // theme-color-allow: default immersive media palette, not UI chrome
+        "baseColor": "#050206" // theme-color-allow: default immersive media palette, not UI chrome
+    })
     readonly property var dynamicsGroups: [
-        {
-            "key": "Material", "title": qsTr("材质"),
-            "sliders": [
-                { "label": qsTr("材质柔和度"), "key": "materialSoftness", "from": 0, "to": 100 },
-                { "label": qsTr("果冻弹性"), "key": "jellyElasticity", "from": 0, "to": 100 },
-                { "label": qsTr("水墨浓度"), "key": "inkDensity", "from": 0, "to": 100 }
-            ],
-            "effects": []
-        },
         {
             "key": "Ripple", "title": qsTr("波纹"),
             "sliders": [
@@ -73,13 +67,10 @@ Rectangle {
         {
             "key": "Terrain", "title": qsTr("柱体与地形"),
             "sliders": [
-                { "label": qsTr("柱体大小"), "key": "columnSize", "from": 50, "to": 200, "scale": 100, "decimals": 2 },
                 { "label": qsTr("柱体高度"), "key": "terrainAmplitude", "from": 0, "to": 100 },
-                { "label": qsTr("柱体不透明度"), "key": "columnOpacity", "from": 0, "to": 100 },
                 { "label": qsTr("柱体清晰度"), "key": "subjectClarity", "from": 20, "to": 140 },
                 { "label": qsTr("弱音细节"), "key": "inputCompression", "from": 20, "to": 150 },
                 { "label": qsTr("音频响应"), "key": "audioResponse", "from": 20, "to": 200, "scale": 100, "decimals": 2 },
-                { "label": qsTr("起伏速度"), "key": "motionResponse", "from": 0, "to": 100 },
                 { "label": qsTr("高频细节"), "key": "peakBoost", "from": 0, "to": 100 },
                 { "label": qsTr("响应范围"), "key": "responseRange", "from": 50, "to": 220, "scale": 100, "decimals": 2 }
             ],
@@ -407,47 +398,20 @@ Rectangle {
                     spacing: Theme.spacingSm
                     Repeater {
                         model: ["coolColor", "warmColor", "accentColor", "peakColor", "baseColor"]
-                        AbstractButton {
-                            id: colorSwatch
+                        ColorField {
                             required property string modelData
                             required property int index
-                            objectName: "immersiveColorSwatch" + index
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 34
-                            hoverEnabled: true
-                            Accessible.role: Accessible.Button
-                            Accessible.name: qsTr("调整沉浸视觉颜色 %1").arg(index + 1)
-                            onClicked: {
-                                root.editingColorProperty = modelData
-                                immersiveColorPicker.selectedColor =
-                                        PlayerExperienceController[modelData]
-                                immersiveColorPicker.open()
-                            }
-                            background: Rectangle {
-                                radius: 8
-                                color: PlayerExperienceController[colorSwatch.modelData] // theme-color-allow: user-selected immersive media palette swatch
-                                border.width: colorSwatch.visualFocus ? 2 : 1
-                                border.color: colorSwatch.visualFocus
-                                              ? Theme.focus
-                                              : Theme.borderStrong
+                            objectName: "immersiveColorField" + index
+                            Layout.alignment: Qt.AlignHCenter
+                            showText: false
+                            colorValue: PlayerExperienceController[modelData]
+                            defaultColor: root.paletteDefaults[modelData]
+                            onColorEdited: function(value) {
+                                PlayerExperienceController[modelData] = value
+                                PlayerExperienceController.songAdaptiveColorEnabled = false
                             }
                         }
                     }
-                }
-
-                ColorDialog {
-                    id: immersiveColorPicker
-                    objectName: "immersiveColorPicker"
-                    title: qsTr("选择沉浸视觉颜色")
-                    onAccepted: function() {
-                        if (root.editingColorProperty.length === 0)
-                            return
-                        PlayerExperienceController[root.editingColorProperty]
-                                = selectedColor.toString()
-                        PlayerExperienceController.songAdaptiveColorEnabled = false
-                        root.editingColorProperty = ""
-                    }
-                    onRejected: root.editingColorProperty = ""
                 }
                 Text { text: qsTr("显示宿主与性能"); color: Theme.textSecondary; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption }
                 RowLayout {
@@ -593,15 +557,6 @@ Rectangle {
                             font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption
                             font.weight: Font.DemiBold
                         }
-                        ThemedComboBox {
-                            objectName: groupData.key === "Material" ? "immersiveMaterialCombo" : ""
-                            visible: groupData.key === "Material"
-                            Layout.fillWidth: true
-                            implicitHeight: 30
-                            model: [qsTr("晶体"), qsTr("果冻"), qsTr("水墨")]
-                            currentIndex: PlayerExperienceController.materialMode
-                            onActivated: PlayerExperienceController.materialMode = currentIndex
-                        }
                         Repeater {
                             model: groupData.sliders
                             RowLayout {
@@ -611,11 +566,6 @@ Rectangle {
                                 Text { Layout.preferredWidth: 62; text: modelData.label; color: Theme.textSecondary; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption }
                                 ThemedSlider {
                                     objectName: "dynamicSlider_" + modelData.key
-                                    enabled: modelData.key === "jellyElasticity"
-                                             ? PlayerExperienceController.materialMode === 1
-                                             : modelData.key === "inkDensity"
-                                               ? PlayerExperienceController.materialMode === 2
-                                               : true
                                     Layout.fillWidth: true
                                     implicitHeight: 20
                                     from: modelData.from

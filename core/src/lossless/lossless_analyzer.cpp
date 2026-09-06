@@ -526,7 +526,8 @@ public:
           spectrogram_frequency_bins_(spectrogram_frequency_bins)
     {
         buffer_.reserve(size * channels_);
-        if (capture_spectrogram_ && duration_ms > 0) {
+        if (capture_spectrogram_ && spectrogram_time_bins_ > 0U
+            && spectrogram_frequency_bins_ > 0U && duration_ms > 0) {
             const long double expected_samples =
                 static_cast<long double>(duration_ms)
                 * static_cast<long double>(sample_rate_) / 1'000.0L;
@@ -809,6 +810,7 @@ private:
         const SpectrumFrame frame = analyze_window(samples, size_, sample_rate_, channels_,
                                                    fft_plan_);
         ++window_count_;
+        accumulate_spectrogram(frame);
         if (frame.rms < kActiveRms) return;
         ++active_count_;
         for (std::size_t index = 0U; index < raw_spectrum_power_.size(); ++index)
@@ -902,20 +904,43 @@ private:
                     std::floor(frame.spectralEdgeDepthDb))));
             ++edge_depth_histogram_[depth_bin];
         }
-        if (capture_spectrogram_
-            && spectrogram_rows_.size() < spectrogram_time_bins_
-            && ((window_count_ - 1U) % spectrogram_stride_) == 0U) {
-            std::vector<float> row(spectrogram_frequency_bins_,
-                                   static_cast<float>(kSpectrumFloorDb));
-            for (std::size_t index = 0U; index < row.size(); ++index) {
-                const std::size_t source_bin = std::min(
-                    frame.power.size() - 1U,
-                    index * (frame.power.size() - 1U)
-                        / std::max<std::size_t>(1U, row.size() - 1U));
-                row[index] = static_cast<float>(std::max(
-                    kSpectrumFloorDb, power_to_db(frame.power[source_bin])));
+    }
+
+    void accumulate_spectrogram(const SpectrumFrame& frame)
+    {
+        if (!capture_spectrogram_ || spectrogram_time_bins_ == 0U
+            || spectrogram_frequency_bins_ == 0U || frame.power.empty()) {
+            return;
+        }
+        const std::size_t time_bin = static_cast<std::size_t>(
+            (window_count_ - 1U) / spectrogram_stride_);
+        if (time_bin >= spectrogram_time_bins_) return;
+
+        while (spectrogram_rows_.size() <= time_bin) {
+            const std::uint64_t first_window =
+                static_cast<std::uint64_t>(spectrogram_rows_.size())
+                * static_cast<std::uint64_t>(spectrogram_stride_);
+            spectrogram_rows_.emplace_back(
+                first_window,
+                std::vector<float>(spectrogram_frequency_bins_,
+                                   static_cast<float>(kSpectrumFloorDb)));
+        }
+        if (frame.rms < kActiveRms) return;
+
+        std::vector<float>& row = spectrogram_rows_[time_bin].second;
+        for (std::size_t index = 0U; index < row.size(); ++index) {
+            const std::size_t source_begin =
+                index * frame.power.size() / row.size();
+            const std::size_t source_end = std::max(
+                source_begin + 1U,
+                (index + 1U) * frame.power.size() / row.size());
+            double band_peak = 0.0;
+            for (std::size_t source_bin = source_begin;
+                 source_bin < source_end; ++source_bin) {
+                band_peak = std::max(band_peak, frame.power[source_bin]);
             }
-            spectrogram_rows_.emplace_back(window_count_ - 1U, std::move(row));
+            row[index] = std::max(row[index], static_cast<float>(std::max(
+                kSpectrumFloorDb, power_to_db(band_peak))));
         }
     }
 

@@ -607,7 +607,10 @@ void VocalSeparationDownloader::issueRequest(quint64 operation)
                 m_retryTimer.start(250 * m_attempt);
                 return;
             }
-            finishFailure(QStringLiteral("Download failed after retries"));
+            finishFailure(QStringLiteral("Download failed after retries (%1, HTTP %2, network %3): %4")
+                .arg(reply->url().host())
+                .arg(reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt())
+                .arg(int(networkError)).arg(reply->errorString()));
             return;
         }
         verifyAndActivate(operation);

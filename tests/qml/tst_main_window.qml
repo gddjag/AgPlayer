@@ -764,15 +764,16 @@ TestCase {
         SettingsController.themeMode = previousThemeMode
         var responseCurve = findChild(window, "equalizerResponseCurve")
         verify(responseCurve)
-        var responseEnvelope = responseCurve.envelopePoints()
-        compare(responseEnvelope.length, 18)
+        var responseEnvelope = responseCurve.responsePoints()
+        var dspResponse = EqualizerController.responseCurve(160)
+        compare(responseEnvelope.length, 160)
         compare(Math.round(responseEnvelope[0].x),
                 Math.round(responseCurve.plotLeft))
-        compare(Math.round(responseEnvelope[17].x),
+        compare(Math.round(responseEnvelope[159].x),
                 Math.round(responseCurve.width - responseCurve.plotRight))
         compare(Math.round(responseEnvelope[0].y * 1000),
                 Math.round(responseCurve.gainY(
-                               EqualizerController.bandGain(0)) * 1000))
+                               dspResponse[0]) * 1000))
         var presetBox = findChild(window, "equalizerPresetBox")
         verify(presetBox)
         for (var themeMode = 0; themeMode <= 1; ++themeMode) {
@@ -2214,7 +2215,7 @@ TestCase {
         var playbackGuide = findChild(mainWindow, "waveformPlaybackGuide")
         verify(playbackGuide, "the precise playback cursor must be present")
         compare(playbackGuide.width, 1)
-        compare(playbackGuide.color.toString(), "#002fa7")
+        compare(playbackGuide.color.toString(), "#8b5cf6")
         verify(Math.abs(playbackGuide.x - waveform.waveformCursorX) <= 0.5)
         var originalWidth = mainWindow.width
         mainWindow.width = Math.max(mainWindow.minimumWidth, originalWidth - 160)
@@ -2381,6 +2382,7 @@ TestCase {
         verify(guide && playedClip && waveform)
         SettingsController.waveformPlaybackGuide = true
         tryCompare(guide, "visible", true)
+        compare(guide.color.toString(), "#8b5cf6")
         SettingsController.waveformPlaybackGuide = false
         tryCompare(guide, "visible", false)
         verify(playedClip.visible,
@@ -3089,6 +3091,10 @@ TestCase {
         tryCompare(scanFinished, "count", 1, 3000)
         tryCompare(window, "resourceDropStatus", "completed", 1000)
         verify(statusLabel.text.indexOf("完成") >= 0)
+        wait(100)
+        compare(window.resourceDropStatus, "completed")
+        tryCompare(window, "resourceDropStatus", "idle", 5500)
+        compare(statusLabel.text, "")
         var path = ResourceFolderController.classifyDropUrl(folder).path
         verify(ResourceFolderController.removeMonitoredFolder(path))
         scanFinished.destroy()

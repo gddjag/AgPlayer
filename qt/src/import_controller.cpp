@@ -364,7 +364,16 @@ void ImportController::importUrls(const QList<QUrl>& urls)
     const std::shared_ptr<ImportCallbackState> callbackState = callbackState_;
     const ProbeFunction probe = probe_;
     const DiscoveryFunction discovery = discovery_;
-    future_ = QtConcurrent::run([callbackState, urls, probe, discovery] {
+    QHash<QString, TrackRecord> knownTracks;
+    knownTracks.reserve(model_->count());
+    for (const TrackRecord& track : model_->tracks()) {
+#ifdef Q_OS_WIN
+        knownTracks.insert(track.path.toCaseFolded(), track);
+#else
+        knownTracks.insert(track.path, track);
+#endif
+    }
+    future_ = QtConcurrent::run([callbackState, urls, probe, discovery, knownTracks] {
         QStringList discoveredPaths = discovery(urls);
         QSet<QString> seen;
         QStringList paths;
@@ -401,7 +410,7 @@ void ImportController::importUrls(const QList<QUrl>& urls)
         workers.reserve(workerCount);
         for (int worker = 0; worker < workerCount; ++worker) {
             workers.append(QtConcurrent::run(
-                &probePool, [callbackState, pipeline, paths, probe] {
+                &probePool, [callbackState, pipeline, paths, probe, knownTracks] {
                     while (!isCancelled(callbackState)) {
                         const qsizetype index = pipeline->next.fetch_add(1);
                         if (index >= paths.size()) {
@@ -410,7 +419,21 @@ void ImportController::importUrls(const QList<QUrl>& urls)
                         Outcome outcome;
                         outcome.ordinal = index;
                         outcome.path = paths[index];
-                        outcome.result = probe(outcome.path);
+#ifdef Q_OS_WIN
+                        const QString key = outcome.path.toCaseFolded();
+#else
+                        const QString& key = outcome.path;
+#endif
+                        const auto known = knownTracks.constFind(key);
+                        if (known != knownTracks.cend() && QFileInfo(outcome.path).isFile()) {
+                            // insertBatch still resolves duplicates on the model thread.
+                            // Do not reopen/decode every existing file on a folder drop.
+                            outcome.cachedDuplicate = true;
+                            outcome.result.result = AG_OK;
+                            outcome.result.track = known.value();
+                        } else {
+                            outcome.result = probe(outcome.path);
+                        }
                         {
                             std::lock_guard<std::mutex> lock(pipeline->mutex);
                             pipeline->ready.emplace(index, std::move(outcome));
@@ -511,10 +534,20 @@ void ImportController::handleBatch(QList<Outcome> outcomes, int completed, int t
     QList<TrackRecord> tracks;
     QStringList successfulPaths;
     bool errorsChangedInBatch = false;
+    int removedCachedDuplicates = 0;
     tracks.reserve(outcomes.size());
     successfulPaths.reserve(outcomes.size());
     for (Outcome& outcome : outcomes) {
         if (outcome.result.result == AG_OK) {
+            if (outcome.cachedDuplicate && model != nullptr
+                && model->thread() == thread()
+                && model->indexForLocalFile(outcome.path) < 0) {
+                // The track was deleted after the import snapshot was taken.
+                // Respect that model-thread decision instead of resurrecting
+                // the stale cached record without probing it.
+                ++removedCachedDuplicates;
+                continue;
+            }
             if (outcome.result.track.path.isEmpty()) {
                 outcome.result.track.path = outcome.path;
             }
@@ -539,7 +572,8 @@ void ImportController::handleBatch(QList<Outcome> outcomes, int completed, int t
         const int candidateCount = tracks.size();
         const QStringList insertedIds = model->insertBatch(
             importedTrackIds_.size(), std::move(tracks));
-        const int skipped = candidateCount - insertedIds.size();
+        const int skipped = candidateCount - insertedIds.size()
+            + removedCachedDuplicates;
         if (skipped > 0) {
             skippedCount_ += skipped;
             emit skippedCountChanged();

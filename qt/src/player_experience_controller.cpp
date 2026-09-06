@@ -865,7 +865,7 @@ void PlayerExperienceController::load()
     baseColor_ = normalizedColor(storedColor(settings_.value(QStringLiteral("baseColor")),
                                              QStringLiteral("#050206")),
                                  QStringLiteral("#050206"));
-    terrainAmplitude_ = clampPercent(integer(QStringLiteral("terrainAmplitude"), 62));
+    terrainAmplitude_ = clampPercent(integer(QStringLiteral("terrainAmplitude"), 42));
     materialMode_ = enumOrDefault(integer(QStringLiteral("materialMode"), 0), 0, 2, 0);
     materialSoftness_ = clampRange(integer(QStringLiteral("materialSoftness"), 45), 0, 100);
     jellyElasticity_ = clampRange(integer(QStringLiteral("jellyElasticity"), 35), 0, 100);
@@ -873,10 +873,10 @@ void PlayerExperienceController::load()
     rippleStrength_ = clampRange(integer(QStringLiteral("rippleStrength"), 100), 0, 200);
     rippleWidth_ = clampRange(integer(QStringLiteral("rippleWidth"), 100), 20, 200);
     rippleDecay_ = clampRange(integer(QStringLiteral("rippleDecay"), 100), 20, 200);
-    columnSize_ = clampRange(integer(QStringLiteral("columnSize"), 100), 50, 200);
-    columnOpacity_ = clampRange(integer(QStringLiteral("columnOpacity"), 100), 0, 100);
+    columnSize_ = clampRange(integer(QStringLiteral("columnSize"), 50), 50, 200);
+    columnOpacity_ = clampRange(integer(QStringLiteral("columnOpacity"), 72), 0, 100);
     reactorBrightness_ = clampRange(integer(QStringLiteral("reactorBrightness"), 100), 0, 200);
-    motionResponse_ = clampPercent(integer(QStringLiteral("motionResponse"), 56));
+    motionResponse_ = clampPercent(integer(QStringLiteral("motionResponse"), 34));
     gradientLayers_ = clampPercent(integer(QStringLiteral("gradientLayers"), 74));
     glowIntensity_ = clampPercent(integer(QStringLiteral("glowIntensity"), 38));
     cinemaShake_ = std::clamp(decimal(QStringLiteral("cinemaShake"), 0.40), 0.0, 1.8);

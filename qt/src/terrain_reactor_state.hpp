@@ -10,6 +10,8 @@
 
 namespace agplayer::terrain {
 
+inline constexpr float kTerrainStageExtent = 196.0F;
+
 enum class ColorZone : quint8 {
     Dark,
     Cool,
@@ -98,8 +100,8 @@ struct RenderStyleSnapshot {
     float rippleStrength = 1.0F;
     float rippleWidth = 1.0F;
     float rippleDecay = 1.0F;
-    float terrainAmplitude = 0.62F;
-    float motionResponse = 0.56F;
+    float terrainAmplitude = 0.42F;
+    float motionResponse = 0.34F;
     float gradientLayers = 0.74F;
     float glowIntensity = 0.38F;
     float cinemaShake = 0.4F;
@@ -295,7 +297,7 @@ private:
 struct CameraSnapshot {
     float yaw = 2.6075219F;
     float pitch = 0.62F;
-    float distance = 180.0F;
+    float distance = 164.0F;
     float punch = 0.0F;
 };
 

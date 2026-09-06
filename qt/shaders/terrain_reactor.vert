@@ -235,7 +235,9 @@ void main()
         float height = max(0.035,
             softCap * (1.0 - exp(-rawHeight / softCap)));
         scale.y = height;
-        scale.xz *= 0.90; // readable ink-block gutters, without changing radius
+        // The layout already leaves a small physical gutter. Keep only a
+        // hairline here so the centered tile grid cannot read as black seams.
+        scale.xz *= 0.98;
         if (material.x > 0.5 && material.x < 1.5) {
             // Bounded beat-driven squash/rebound: no independent simulation,
             // audio buffer, or free-running wobble during silence.
@@ -245,9 +247,19 @@ void main()
             scale.xz *= 1.0 - rebound * 0.035;
         }
         position.y += scale.y * 0.5;
-        float outerFieldStart = min(responseRadius * 0.84, 79.5);
-        float outerField = smoothstep(outerFieldStart, 84.0,
-                                      distanceFromCore);
+        float stageHalfExtent = max(1.0, ubuf.sceneControls.z);
+        float stageDistance = max(abs(instancePosition.x),
+                                  abs(instancePosition.z));
+        // A maximum response radius can outgrow the stage. Do not feed
+        // reversed edges to smoothstep: that is undefined and hid the wider
+        // field instead of letting it cover the expanded ground.
+        float outerField = 0.0;
+        if (responseRadius * 1.15 < stageHalfExtent) {
+            float outerFieldStart = max(responseRadius * 1.15,
+                                        stageHalfExtent * 0.72);
+            outerField = smoothstep(outerFieldStart, stageHalfExtent,
+                                    stageDistance);
+        }
         float coherentNoise = 0.5 + 0.5 * sin(instancePosition.x * 0.11
                                              + instancePosition.z * 0.075);
         float cellNoise = clamp(coherentNoise * 0.68
@@ -255,7 +267,8 @@ void main()
         float sparseCell = smoothstep(0.54 + outerField * 0.20,
                                       0.92, cellNoise);
         opacity *= mix(1.0, 0.18 + sparseCell * 0.58, outerField);
-        opacity *= 1.0 - smoothstep(79.5, 84.0, distanceFromCore);
+        opacity *= 1.0 - smoothstep(stageHalfExtent * 0.96,
+                                    stageHalfExtent, stageDistance);
         opacity *= ubuf.sceneControls.x;
         topSurface = smoothstep(0.72, 0.98, vertexNormal.y);
         float flowPhase = fract(t * (0.12 + highEnergy * 0.22)
@@ -266,7 +279,9 @@ void main()
                                            + randomValue * 47.0), 18.0);
         float presence = clamp(bandsHigh.y * 0.42 + bandsHigh.z * 0.36
                                + bandsHigh.w * 0.22, 0.0, 1.0);
-        float sheenMask = 0.35 + 0.65 * smoothstep(0.48, 0.94, randomValue);
+        // Keep the high-band stream cue on selected top facets. A non-zero
+        // floor made the cue brighten nearly every visible tile at once.
+        float sheenMask = smoothstep(0.48, 0.94, randomValue);
         streamSheen = ubuf.styleExtra.z * topSurface
                     * (0.075 + presence * 0.72 + beatPulse * 0.22)
                     * (flowingBand * 1.18 + sparkle * 1.36)

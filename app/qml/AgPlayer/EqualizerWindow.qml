@@ -393,6 +393,26 @@ Window {
                             anchors.fill: parent
                             gainRevision: window.gainRevision
                         }
+
+                        Label {
+                            objectName: "equalizerResponsePreviewLabel"
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.margins: 12
+                            text: EqualizerController.sampleRate > 0
+                                  && !EqualizerController.sampleRateSupported
+                                  ? qsTr("当前 %1 Hz 不支持均衡器")
+                                    .arg(EqualizerController.sampleRate)
+                                  : EqualizerController.sampleRate > 0
+                                    ? qsTr("实际输出 · %1 Hz")
+                                      .arg(EqualizerController.sampleRate)
+                                    : qsTr("48 kHz 设计预览")
+                            color: EqualizerController.sampleRate > 0
+                                   && !EqualizerController.sampleRateSupported
+                                   ? Theme.warning : Theme.textSecondary
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: Theme.fontSizeCaption
+                        }
                     }
 
                     Rectangle {

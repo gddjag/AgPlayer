@@ -12,7 +12,8 @@ Canvas {
     property int grouping: 4
     property color lineColor: Qt.rgba(Theme.primaryText.r, Theme.primaryText.g,
                                      Theme.primaryText.b, 0.3)
-    property color downbeatColor: Theme.danger
+    property color fourBeatColor: Theme.success
+    property color eightBeatColor: Theme.danger
     property int paintRequestCount: 0
     property int paintPassCount: 0
 
@@ -40,12 +41,16 @@ Canvas {
         return ((value % divisor) + divisor) % divisor
     }
 
-    function isDownbeat(beatIndex) {
+    function isFourBeat(beatIndex) {
         return normalizedModulo(beatIndex, 4) === 0
     }
 
-    function isGroupEmphasis(beatIndex) {
-        return grouping === 8 && normalizedModulo(beatIndex, 8) === 0
+    function isEightBeat(beatIndex) {
+        return normalizedModulo(beatIndex, 8) === 0
+    }
+
+    function isDownbeat(beatIndex) {
+        return isFourBeat(beatIndex)
     }
 
     function xForBeat(beatIndex) {
@@ -69,7 +74,8 @@ Canvas {
     onBpmChanged: requestGridPaint()
     onGroupingChanged: requestGridPaint()
     onLineColorChanged: requestGridPaint()
-    onDownbeatColorChanged: requestGridPaint()
+    onFourBeatColorChanged: requestGridPaint()
+    onEightBeatColorChanged: requestGridPaint()
     onWidthChanged: requestGridPaint()
     onHeightChanged: requestGridPaint()
     onVisibleChanged: requestGridPaint()
@@ -99,14 +105,15 @@ Canvas {
             context.stroke()
         }
 
-        strokeMatching(function(beat) { return !isDownbeat(beat) },
+        strokeMatching(function(beat) { return !isFourBeat(beat) },
                        lineColor, 1)
         strokeMatching(function(beat) {
-            return isDownbeat(beat) && !isGroupEmphasis(beat)
-        }, downbeatColor, 1.5)
+            return isFourBeat(beat)
+                    && (grouping !== 8 || !isEightBeat(beat))
+        }, fourBeatColor, 1.5)
         if (grouping === 8) {
-            strokeMatching(function(beat) { return isGroupEmphasis(beat) },
-                           downbeatColor, 2.5)
+            strokeMatching(function(beat) { return isEightBeat(beat) },
+                           eightBeatColor, 2.5)
         }
     }
 }

@@ -1508,7 +1508,7 @@ void SettingsController::load()
     settings_.setValue(QStringLiteral("windowLayoutTheme"), windowLayoutTheme_);
     settings_.setValue(QStringLiteral("playerShellMode"), playerShellMode_);
     rollingBeatGridEnabled_ = settings_
-        .value(QStringLiteral("rollingBeatGridEnabled"), true).toBool();
+        .value(QStringLiteral("rollingBeatGridEnabled"), false).toBool();
     const std::optional<int> storedRollingGridGrouping = storedInteger(
         settings_.value(QStringLiteral("rollingBeatGridGrouping")));
     rollingBeatGridGrouping_ = storedRollingGridGrouping.has_value()
@@ -2000,7 +2000,7 @@ void SettingsController::restoreDefaults(const bool includeMediaSettings)
     themeMode_ = 0;
     windowLayoutTheme_ = QStringLiteral("dual-window");
     playerShellMode_ = Classic;
-    rollingBeatGridEnabled_ = true;
+    rollingBeatGridEnabled_ = false;
     rollingBeatGridGrouping_ = 4;
     if (includeMediaSettings) {
         waveformMode_ = 0;

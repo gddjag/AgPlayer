@@ -743,7 +743,10 @@ Rectangle {
                         radius: 6
                         RowLayout {
                             anchors.fill: parent
-                            anchors.margins: 8
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            anchors.topMargin: 4
+                            anchors.bottomMargin: 4
                             Label {
                                 Layout.fillWidth: true
                                 text: VocalSeparationController.error
@@ -752,6 +755,7 @@ Rectangle {
                             }
                             WorkbenchButton {
                                 text: qsTr("重试")
+                                Layout.alignment: Qt.AlignVCenter
                                 enabled: VocalSeparationController.canRetry
                                 Accessible.name: text
                                 Accessible.role: Accessible.Button

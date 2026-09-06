@@ -2,6 +2,7 @@
 
 #include "vocal_separation_installer.hpp"
 #include <QProcess>
+#include <QTimer>
 
 // Optional environment, never installed into the player or the system Python.
 class ExternalSeparationRuntime final : public QObject {
@@ -24,15 +25,25 @@ signals:
     void changed();
     void finished(bool success, const QString& error);
 private:
+    friend class ExternalSeparationRuntimeTestDriver;
     bool workerMatchesBundle() const;
     bool synchronizeWorker();
     void advance();
     void launch(const QString& program, const QStringList& arguments);
     void fail(const QString& error);
     void stopInstaller();
+    void finishStoppedInstaller();
+    void stageFailed(const QString& error);
+    void queueAdvance();
+    void appendLog(const QString& detail);
+    bool recoverIncompletePython();
     QString root_;
     VocalSeparationDownloader downloader_;
     QProcess process_;
+    QProcess terminateTree_;
+    QTimer inactivity_;
+    QTimer ioPoll_;
+    QTimer stopDeadline_;
     QFutureWatcher<bool> cacheVerification_;
     QByteArray output_;
     QByteArray bundledWorker_;
@@ -41,6 +52,11 @@ private:
     bool paused_ = false;
     bool mirror_ = false;
     bool archiveMirror_ = false;
+    bool stopping_ = false;
+    bool resumeRequested_ = false;
+    QString stopError_;
+    quint64 generation_ = 0;
+    quint64 processIoBytes_ = 0;
 };
 
 // Pinned native CUDA DLLs only. No Python installation and no dependency on VR.
@@ -51,6 +67,10 @@ public:
     ~CudaSeparationRuntime() override;
     bool ready() const { return ready_; }
     bool nvidiaAvailable() const { return nvidiaAvailable_; }
+    QString hardwareSummary() const;
+    QString hardwareName() const { return hardware_.value("name").toString(); }
+    QString driverVersion() const { return hardware_.value("driverVersion").toString(); }
+    void refreshHardware();
     bool checking() const { return phase_ == -1 && work_.isRunning(); }
     bool busy() const { return busy_; }
     bool paused() const { return paused_; }
@@ -67,6 +87,7 @@ private:
     void advance();
     void fail(const QString& error);
     QString root_;
+    QVariantMap hardware_;
     QList<VocalDownloadFile> archives_;
     QString activeDirectory_ = QStringLiteral("native");
     QList<VocalDownloadFile> dlls_;

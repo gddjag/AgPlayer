@@ -187,7 +187,9 @@ struct SpectrumSummary final {
     std::vector<double> db;
 };
 
-// Row-major dB values. This is a bounded UI preview, never a full STFT matrix.
+// Row-major peak-hold dB evidence. Each cell is the strongest real STFT power
+// observed inside its bounded time/frequency bucket; values are never
+// interpolated and this remains a UI evidence summary, not a full STFT matrix.
 struct SpectrogramSummary final {
     std::size_t timeBins = 0;
     std::size_t frequencyBins = 0;
@@ -199,8 +201,8 @@ struct AnalysisOptions final {
     int isoTrackIndex = -1;
     std::size_t spectrumBins = 256;
     bool includeSpectrogram = false;
-    std::size_t maxSpectrogramTimeBins = 96;
-    std::size_t maxSpectrogramFrequencyBins = 128;
+    std::size_t maxSpectrogramTimeBins = 256;
+    std::size_t maxSpectrogramFrequencyBins = 256;
     // Optional virtual input. The callback context must outlive analyzeFile().
     DecoderOpenOptions decoderOpenOptions;
 };

@@ -249,7 +249,7 @@ Rectangle {
                     playbackGuideObjectName: "miniWaveformPlaybackGuide"
                     duration: root.effectiveDurationMs
                     position: playback ? playback.positionMs : 0
-                    playbackGuideColor: SettingsController.waveformSolidProgressColor
+                    playbackGuideColor: Theme.playbackGuide
                     onSeekRequested: function(positionMs) {
                         if (playback) playback.seek(positionMs)
                     }

@@ -6,7 +6,9 @@
 #include <QSGVertexColorMaterial>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <vector>
 
 namespace {
 
@@ -14,7 +16,7 @@ constexpr double kMinimumDb = -120.0;
 constexpr double kMaximumDb = 0.0;
 constexpr int kMaximumSpectrumPoints = 4096;
 constexpr int kMaximumSpectrogramFrames = 256;
-constexpr int kMaximumSpectrogramBins = 128;
+constexpr int kMaximumSpectrogramBins = 256;
 
 class FlatGeometryNode final : public QSGGeometryNode {
 public:
@@ -61,8 +63,8 @@ public:
           trace(QSGGeometry::DrawLineStrip),
           marker(QSGGeometry::DrawLines)
     {
-        appendChildNode(&grid);
         appendChildNode(&heatmap);
+        appendChildNode(&grid);
         appendChildNode(&fill);
         appendChildNode(&trace);
         appendChildNode(&marker);
@@ -103,16 +105,27 @@ void setPoint(QSGGeometry::Point2D& point, qreal x, qreal y)
     point.set(static_cast<float>(x), static_cast<float>(y));
 }
 
-QColor heatColor(const QColor& trace, double db)
+QColor heatColor(double db)
 {
     const double normalized = std::clamp(
         (db - kMinimumDb) / (kMaximumDb - kMinimumDb), 0.0, 1.0);
-    QColor color = trace;
-    color.setRedF(std::clamp(color.redF() * (0.28 + normalized * 0.72), 0.0, 1.0));
-    color.setGreenF(std::clamp(color.greenF() * (0.20 + normalized * 0.80), 0.0, 1.0));
-    color.setBlueF(std::clamp(0.16 + color.blueF() * normalized, 0.0, 1.0));
-    color.setAlphaF(std::clamp(0.16 + normalized * 0.84, 0.0, 1.0));
-    return color;
+    constexpr std::array<std::array<int, 3>, 5> colors{{
+        {{68, 1, 84}},
+        {{59, 82, 139}},
+        {{33, 145, 140}},
+        {{94, 201, 98}},
+        {{253, 231, 37}},
+    }};
+    const double scaled = normalized * static_cast<double>(colors.size() - 1U);
+    const std::size_t first = std::min(
+        static_cast<std::size_t>(scaled), colors.size() - 2U);
+    const double fraction = scaled - static_cast<double>(first);
+    const auto component = [&](const std::size_t index) {
+        return static_cast<int>(std::lround(
+            static_cast<double>(colors[first][index]) * (1.0 - fraction)
+            + static_cast<double>(colors[first + 1U][index]) * fraction));
+    };
+    return QColor(component(0U), component(1U), component(2U), 255);
 }
 
 void writeColoredPoint(QSGGeometry::ColoredPoint2D& point, qreal x, qreal y,
@@ -321,34 +334,51 @@ QSGNode* LosslessEvidenceItem::updatePaintNode(QSGNode* oldNode,
         const int frameCount = std::min(static_cast<int>(spectrogram_.size()),
                                         kMaximumSpectrogramFrames);
         int binCount = 0;
+        int sourceBinCount = 0;
         if (frameCount > 0) {
-            binCount = std::min(static_cast<int>(
-                                    spectrogram_.first().toList().size()),
-                                kMaximumSpectrogramBins);
+            sourceBinCount = static_cast<int>(
+                spectrogram_.first().toList().size());
+            binCount = std::min(sourceBinCount, kMaximumSpectrogramBins);
         }
         if (frameCount > 0 && binCount > 0) {
             node->heatmap.geometry.allocate(frameCount * binCount * 6);
             auto* points = node->heatmap.geometry.vertexDataAsColoredPoint2D();
             int vertex = 0;
             for (int frame = 0; frame < frameCount; ++frame) {
-                const int sourceFrame = frameCount <= 1 ? 0
-                    : static_cast<int>(std::llround(
-                          static_cast<double>(frame)
-                          * (spectrogram_.size() - 1) / (frameCount - 1)));
-                const QVariantList bins = spectrogram_.at(sourceFrame).toList();
+                const int sourceFrameBegin = static_cast<int>(
+                    static_cast<qsizetype>(frame) * spectrogram_.size()
+                    / frameCount);
+                const int sourceFrameEnd = std::max(
+                    sourceFrameBegin + 1,
+                    static_cast<int>(static_cast<qsizetype>(frame + 1)
+                                     * spectrogram_.size() / frameCount));
+                std::vector<QVariantList> sourceRows;
+                sourceRows.reserve(static_cast<std::size_t>(
+                    sourceFrameEnd - sourceFrameBegin));
+                for (int sourceFrame = sourceFrameBegin;
+                     sourceFrame < sourceFrameEnd; ++sourceFrame) {
+                    sourceRows.push_back(
+                        spectrogram_.at(sourceFrame).toList());
+                }
                 const qreal left = width() * frame / frameCount;
                 const qreal right = width() * (frame + 1) / frameCount;
                 for (int bin = 0; bin < binCount; ++bin) {
-                    const int sourceBin = binCount <= 1 ? 0
-                        : static_cast<int>(std::llround(
-                              static_cast<double>(bin) * (bins.size() - 1)
-                              / (binCount - 1)));
+                    const int sourceBinBegin = bin * sourceBinCount / binCount;
+                    const int sourceBinEnd = std::max(
+                        sourceBinBegin + 1,
+                        (bin + 1) * sourceBinCount / binCount);
+                    double peakDb = kMinimumDb;
+                    for (const QVariantList& sourceRow : sourceRows) {
+                        for (int sourceBin = sourceBinBegin;
+                             sourceBin < sourceBinEnd
+                             && sourceBin < sourceRow.size(); ++sourceBin) {
+                            peakDb = std::max(
+                                peakDb, finiteDb(sourceRow.at(sourceBin)));
+                        }
+                    }
                     const qreal top = height() * (binCount - bin - 1) / binCount;
                     const qreal bottom = height() * (binCount - bin) / binCount;
-                    const QColor color = heatColor(
-                        traceColor_, finiteDb(sourceBin >= 0
-                                             && sourceBin < bins.size()
-                                                 ? bins.at(sourceBin) : QVariant{}));
+                    const QColor color = heatColor(peakDb);
                     writeColoredPoint(points[vertex++], left, top, color);
                     writeColoredPoint(points[vertex++], left, bottom, color);
                     writeColoredPoint(points[vertex++], right, bottom, color);
@@ -379,6 +409,5 @@ void LosslessEvidenceItem::markGeometryDirty()
 void LosslessEvidenceItem::markMaterialDirty()
 {
     materialDirty_ = true;
-    if (mode_ == Mode::Spectrogram) geometryDirty_ = true;
     update();
 }

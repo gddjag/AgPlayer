@@ -22,6 +22,10 @@ class EqualizerController final : public QAbstractListModel {
                    NOTIFY preampDbChanged)
     Q_PROPERTY(double protectionDb READ protectionDb NOTIFY protectionDbChanged)
     Q_PROPERTY(double outputPeakDb READ outputPeakDb NOTIFY outputPeakDbChanged)
+    Q_PROPERTY(int sampleRate READ sampleRate NOTIFY sampleRateChanged)
+    Q_PROPERTY(bool active READ active NOTIFY activeChanged)
+    Q_PROPERTY(bool sampleRateSupported READ sampleRateSupported
+                   NOTIFY sampleRateSupportedChanged)
     Q_PROPERTY(double gainRangeDb READ gainRangeDb WRITE setGainRangeDb
                    NOTIFY gainRangeDbChanged)
     Q_PROPERTY(QString precisionMode READ precisionMode WRITE setPrecisionMode
@@ -63,6 +67,9 @@ public:
     void setPreampDb(double value);
     [[nodiscard]] double protectionDb() const noexcept;
     [[nodiscard]] double outputPeakDb() const noexcept;
+    [[nodiscard]] int sampleRate() const noexcept;
+    [[nodiscard]] bool active() const noexcept;
+    [[nodiscard]] bool sampleRateSupported() const noexcept;
     [[nodiscard]] double gainRangeDb() const noexcept;
     Q_INVOKABLE bool setGainRangeDb(double value);
     [[nodiscard]] QString precisionMode() const;
@@ -91,6 +98,9 @@ signals:
     void preampDbChanged();
     void protectionDbChanged();
     void outputPeakDbChanged();
+    void sampleRateChanged();
+    void activeChanged();
+    void sampleRateSupportedChanged();
     void gainRangeDbChanged();
     void precisionModeChanged();
     void gainStepDbChanged();
@@ -142,6 +152,9 @@ private:
     double preampDb_ = 0.0;
     double protectionDb_ = 0.0;
     double outputPeakDb_ = -120.0;
+    int sampleRate_ = 0;
+    bool active_ = false;
+    bool sampleRateSupported_ = true;
     double gainRangeDb_ = 12.0;
     QString precisionMode_ = QStringLiteral("high");
     std::array<double, AG_EQUALIZER_BAND_COUNT> gains_{};

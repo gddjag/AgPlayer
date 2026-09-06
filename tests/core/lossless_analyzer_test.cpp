@@ -151,6 +151,76 @@ void write_precise_pcm32(const std::filesystem::path& path,
                   });
 }
 
+void write_spectrogram_tone(const std::filesystem::path& path,
+                            const double frequency,
+                            const std::size_t frames,
+                            const std::size_t first_active_frame = 0U,
+                            const std::size_t last_active_frame =
+                                (std::numeric_limits<std::size_t>::max)())
+{
+    constexpr int sample_rate = 48'000;
+    const double pi = std::acos(-1.0);
+    write_pcm_wav(path, sample_rate, 16, frames,
+                  [=](std::ofstream& output, const std::size_t frame,
+                      const std::uint16_t) {
+                      const bool active = frame >= first_active_frame
+                          && frame < last_active_frame;
+                      const double sample = active
+                          ? std::sin(2.0 * pi * frequency
+                                     * static_cast<double>(frame)
+                                     / static_cast<double>(sample_rate))
+                                * 20'000.0
+                          : 0.0;
+                      write_le16(output, static_cast<std::uint16_t>(
+                          static_cast<std::int16_t>(std::lround(sample))));
+                  });
+}
+
+double spectrogram_bin(const agplayer::lossless::SpectrogramSummary& summary,
+                       const std::size_t time_bin,
+                       const std::size_t frequency_bin)
+{
+    assert(time_bin < summary.timeBins);
+    assert(frequency_bin < summary.frequencyBins);
+    return summary.db[time_bin * summary.frequencyBins + frequency_bin];
+}
+
+double spectrogram_row_peak(
+    const agplayer::lossless::SpectrogramSummary& summary,
+    const std::size_t time_bin)
+{
+    assert(time_bin < summary.timeBins);
+    const auto first = summary.db.begin()
+        + static_cast<std::ptrdiff_t>(time_bin * summary.frequencyBins);
+    return *std::max_element(
+        first, first + static_cast<std::ptrdiff_t>(summary.frequencyBins));
+}
+
+void assert_same_classification(
+    const agplayer::lossless::AnalysisResult& expected,
+    const agplayer::lossless::AnalysisResult& actual)
+{
+    assert(actual.verdict == expected.verdict);
+    assert(actual.confidence == expected.confidence);
+    assert(actual.evidence.size() == expected.evidence.size());
+    for (std::size_t index = 0U; index < expected.evidence.size(); ++index) {
+        assert(actual.evidence[index].code == expected.evidence[index].code);
+        assert(actual.evidence[index].family == expected.evidence[index].family);
+        assert(actual.evidence[index].direction
+               == expected.evidence[index].direction);
+        assert(actual.evidence[index].severity
+               == expected.evidence[index].severity);
+    }
+    assert(actual.candidates.size() == expected.candidates.size());
+    for (std::size_t index = 0U; index < expected.candidates.size(); ++index) {
+        assert(actual.candidates[index].format
+               == expected.candidates[index].format);
+        assert(actual.candidates[index].confidence
+               == expected.candidates[index].confidence);
+    }
+    assert(actual.chain == expected.chain);
+}
+
 void write_expanded_narrowband_pcm24(const std::filesystem::path& path)
 {
     constexpr int sample_rate = 96'000;
@@ -477,6 +547,76 @@ int main(const int argc, char** argv)
         assert(display.measurements.dominantFrequencyHz == precise_result.measurements.dominantFrequencyHz);
         assert(display.measurements.spectralEntropy == precise_result.measurements.spectralEntropy);
     }
+
+    // Catches reducing each displayed frequency band to one representative
+    // FFT bin. Bin 1016 is deliberately more than one Hann lobe away from
+    // every representative used by the old 128-bin point sampler.
+    constexpr double off_grid_frequency = 1'016.0 * 48'000.0 / 8'192.0;
+    const auto off_grid_tone = directory / "spectrogram-off-grid-tone.wav";
+    write_spectrogram_tone(off_grid_tone, off_grid_frequency, 96'000U);
+    const auto off_grid_baseline = lossless::analyzeFile(
+        off_grid_tone.u8string(), options, cancelled, {});
+    auto coarse_spectrogram_options = options;
+    coarse_spectrogram_options.includeSpectrogram = true;
+    coarse_spectrogram_options.maxSpectrogramTimeBins = 4U;
+    coarse_spectrogram_options.maxSpectrogramFrequencyBins = 128U;
+    const auto coarse_spectrogram = lossless::analyzeFile(
+        off_grid_tone.u8string(), coarse_spectrogram_options, cancelled, {});
+    assert(coarse_spectrogram.spectrogram.timeBins == 4U);
+    assert(coarse_spectrogram.spectrogram.frequencyBins == 128U);
+    bool off_grid_peak_preserved = true;
+    for (std::size_t time_bin = 0U;
+         time_bin < coarse_spectrogram.spectrogram.timeBins; ++time_bin) {
+        off_grid_peak_preserved = off_grid_peak_preserved
+            && spectrogram_bin(coarse_spectrogram.spectrogram,
+                               time_bin, 31U) > -20.0
+            && spectrogram_bin(coarse_spectrogram.spectrogram,
+                               time_bin, 30U) < -70.0
+            && spectrogram_bin(coarse_spectrogram.spectrogram,
+                               time_bin, 32U) < -70.0;
+    }
+
+    // Catches decimating time to one STFT frame per stride and then deleting
+    // silent rows. Both short bursts sit between the old sampled frames; the
+    // two silent middle buckets must remain present on the real time axis.
+    const auto intermittent = directory / "spectrogram-intermittent.wav";
+    constexpr std::size_t intermittent_frames = 48'000U * 8U;
+    write_pcm_wav(intermittent, 48'000, 16, intermittent_frames,
+        [](std::ofstream& output, const std::size_t frame,
+           const std::uint16_t) {
+            const bool active = (frame >= 31'200U && frame < 33'600U)
+                || (frame >= 312'000U && frame < 314'400U);
+            const double phase = 2.0 * std::acos(-1.0) * 4'000.0
+                * static_cast<double>(frame) / 48'000.0;
+            const auto sample = static_cast<std::int16_t>(std::lround(
+                active ? std::sin(phase) * 20'000.0 : 0.0));
+            write_le16(output, static_cast<std::uint16_t>(sample));
+        });
+    auto intermittent_options = options;
+    intermittent_options.includeSpectrogram = true;
+    intermittent_options.maxSpectrogramTimeBins = 4U;
+    intermittent_options.maxSpectrogramFrequencyBins = 64U;
+    const auto intermittent_result = lossless::analyzeFile(
+        intermittent.u8string(), intermittent_options, cancelled, {});
+    assert(intermittent_result.spectrogram.timeBins == 4U);
+    assert(intermittent_result.spectrogram.frequencyBins == 64U);
+    assert(spectrogram_row_peak(intermittent_result.spectrogram, 0U) > -20.0);
+    assert(spectrogram_row_peak(intermittent_result.spectrogram, 1U) < -100.0);
+    assert(spectrogram_row_peak(intermittent_result.spectrogram, 2U) < -100.0);
+    assert(spectrogram_row_peak(intermittent_result.spectrogram, 3U) > -20.0);
+
+    // Spectrogram detail is display evidence only. Requesting either preview
+    // or full bounded detail must not alter any classification output.
+    auto fine_spectrogram_options = options;
+    fine_spectrogram_options.includeSpectrogram = true;
+    const auto fine_spectrogram = lossless::analyzeFile(
+        off_grid_tone.u8string(), fine_spectrogram_options, cancelled, {});
+    assert(fine_spectrogram.spectrogram.frequencyBins == 256U);
+    assert(fine_spectrogram.spectrogram.timeBins > 0U);
+    assert(fine_spectrogram.spectrogram.timeBins <= 256U);
+    assert(off_grid_peak_preserved);
+    assert_same_classification(off_grid_baseline, coarse_spectrogram);
+    assert_same_classification(off_grid_baseline, fine_spectrogram);
     assert(!progress_values.empty());
     assert(progress_values.front() >= 0.0F);
     assert(progress_values.back() == 1.0F);

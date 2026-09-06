@@ -488,7 +488,7 @@ Rectangle {
                 duration: root.effectiveDurationMs
                 position: root.visualPlaybackPositionMs
                 analysisProgress: WaveformProvider.analysisProgress
-                playbackGuideColor: "#002fa7" // theme-color-allow: waveform playback guide
+                playbackGuideColor: Theme.playbackGuide
                 onSeekRequested: function(positionMs) {
                     PlaybackController.seek(positionMs)
                 }

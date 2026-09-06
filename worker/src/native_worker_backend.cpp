@@ -314,7 +314,7 @@ NativeProviderSelection selectNativeProvider(
     // A provider probe compiles that same graph, so do not attempt it first.
     if (profile.family == QStringLiteral("demucs") && request.device != DeviceMode::Cpu) {
         const QString reason = QStringLiteral(
-            "当前标准五轨模型的 DirectML 图编译内存占用过高，使用 CPU 分离；GPU 模式请改选自动或 CPU");
+            "标准五轨模型暂不兼容 DirectML；GPU 分离请在模型卡片配置 NVIDIA CUDA 组件（不需要重装显卡驱动）。自动模式本次回退 CPU，完整歌曲可能耗时很长");
         if (request.device == DeviceMode::Gpu)
             return {false, ExecutionProvider::DirectMl, 0, {},
                     QStringLiteral("demucs_directml_unsupported"), reason};

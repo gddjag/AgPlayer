@@ -846,6 +846,12 @@ TestCase {
         const retry = controlWithText(errorPanel, "重试")
         verify(errorPanel.visible)
         verify(retry && retry.enabled)
+        waitForRendering(page)
+        const retryPosition = retry.mapToItem(errorPanel, 0, 0)
+        verify(retryPosition.y >= 0)
+        verify(retryPosition.y + retry.height <= errorPanel.height)
+        verify(Math.abs(retryPosition.y + retry.height / 2 - errorPanel.height / 2) < 1,
+               "Retry must be vertically centered within the error panel")
         compare(VocalSeparationController.jobState, VocalSeparationController.JobFailed)
 
         separationTestDriver.selectModel("uvr-mdxnet-kara")

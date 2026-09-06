@@ -524,7 +524,7 @@ private:
     int themeMode_ = 0;
     QString windowLayoutTheme_ = QStringLiteral("dual-window");
     int playerShellMode_ = Classic;
-    bool rollingBeatGridEnabled_ = true;
+    bool rollingBeatGridEnabled_ = false;
     int rollingBeatGridGrouping_ = 4;
     int waveformMode_ = 0;
     double waveformHeight_ = 0.8;

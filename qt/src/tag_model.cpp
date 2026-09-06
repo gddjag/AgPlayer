@@ -27,11 +27,14 @@ const QList<QColor>& tagPalette()
     static const QList<QColor> palette{QColor("#EE0000"), QColor("#007BFF"),
         QColor("#28A745"), QColor("#FD7E14"), QColor("#6F42C1"),
         QColor("#D63384"), QColor("#17A2B8"), QColor("#809438"),
-        QColor("#925B37"), QColor("#495057")};
+        QColor("#925B37"), QColor("#495057"), QColor("#9C27B0"),
+        QColor("#008577"), QColor("#C44632"), QColor("#3F51B5"),
+        QColor("#B87400"), QColor("#57762F"), QColor("#A12758"),
+        QColor("#006A96"), QColor("#75613E"), QColor("#665A99")};
     return palette;
 }
 
-QColor nextColor(const QString& key)
+QColor nextColor(const QString& key, const QList<TagEntry>& entries)
 {
     const QList<QColor>& palette = tagPalette();
     quint32 hash = 2166136261U;
@@ -39,7 +42,22 @@ QColor nextColor(const QString& key)
         hash ^= character.unicode();
         hash *= 16777619U;
     }
-    return palette.at(static_cast<int>(hash % static_cast<quint32>(palette.size())));
+    // Keep the randomized starting point, but reserve unused colours first.
+    // Existing / explicitly edited colours never change when a tag is added.
+    const int start = static_cast<int>(hash % static_cast<quint32>(palette.size()));
+    int best = start;
+    int minimumUsage = entries.size() + 1;
+    for (int offset = 0; offset < palette.size(); ++offset) {
+        const int candidate = (start + offset) % palette.size();
+        const int usage = std::count_if(entries.cbegin(), entries.cend(),
+            [&](const TagEntry& entry) { return entry.color == palette[candidate]; });
+        if (usage < minimumUsage) {
+            best = candidate;
+            minimumUsage = usage;
+            if (usage == 0) break;
+        }
+    }
+    return palette[best];
 }
 }
 
@@ -259,7 +277,7 @@ int TagModel::rowForKey(const QString& key) const { return rowsByKey_.value(keyF
 
 QColor TagModel::nextColorFor(const QString& key) const
 {
-    return nextColor(key);
+    return nextColor(key, entries_);
 }
 
 void TagModel::rebuildFromLibrary()
@@ -295,7 +313,7 @@ void TagModel::rebuildFromLibrary()
                 const QString key = keyFor(tag);
                 int row = rowByKey.value(key, -1);
                 if (row < 0) {
-                    const QColor color = nextColor(key);
+                    const QColor color = nextColor(key, entries);
                     entries.append({key, tag, 0, color});
                     metadataChanged = true;
                     row = entries.size() - 1;

@@ -254,6 +254,15 @@ double EqualizerController::outputPeakDb() const noexcept
     return outputPeakDb_;
 }
 
+int EqualizerController::sampleRate() const noexcept { return sampleRate_; }
+
+bool EqualizerController::active() const noexcept { return active_; }
+
+bool EqualizerController::sampleRateSupported() const noexcept
+{
+    return sampleRateSupported_;
+}
+
 double EqualizerController::gainRangeDb() const noexcept
 {
     return gainRangeDb_;
@@ -429,6 +438,16 @@ bool EqualizerController::applyPreset(const QString& id)
         preampDb_ = preset->preampDb;
         emit preampDbChanged();
     }
+    if (id != QStringLiteral("flat")) {
+        if (!enabled_) {
+            enabled_ = true;
+            emit enabledChanged();
+        }
+        if (bypassed_) {
+            bypassed_ = false;
+            emit bypassedChanged();
+        }
+    }
     setCurrentPresetId(id);
     return submit();
 }
@@ -509,7 +528,11 @@ QVariantList EqualizerController::responseCurve(const int pointCount) const
     settings.auto_clip_protection = autoClipProtection_;
     settings.preamp_db = preampDb_;
     settings.band_gain_db = gains_;
-    const auto program = agplayer::prepare_graphic_eq(settings, 48'000, 1U);
+    const int responseRate = sampleRate_ > 0 ? sampleRate_ : 48'000;
+    if (!agplayer::is_graphic_eq_sample_rate_supported(responseRate)) {
+        return response;
+    }
+    const auto program = agplayer::prepare_graphic_eq(settings, responseRate, 1U);
     if (!program.has_value()) {
         return response;
     }
@@ -520,8 +543,8 @@ QVariantList EqualizerController::responseCurve(const int pointCount) const
         const double fraction = static_cast<double>(index)
                                 / static_cast<double>(pointCount - 1);
         const double frequency = minimumFrequency * std::pow(ratio, fraction);
-        response.push_back(
-            agplayer::graphic_eq_response_db(*program, frequency));
+        response.push_back(agplayer::graphic_eq_response_db(*program, frequency)
+                           + program->protection_db);
     }
     return response;
 }
@@ -544,6 +567,20 @@ void EqualizerController::refreshStatus()
                        status.output_peak_db + 121.0)) {
         outputPeakDb_ = status.output_peak_db;
         emit outputPeakDbChanged();
+    }
+    if (sampleRate_ != status.sample_rate) {
+        sampleRate_ = status.sample_rate;
+        emit sampleRateChanged();
+    }
+    const bool sampleRateSupported = status.sample_rate <= 0
+        || agplayer::is_graphic_eq_sample_rate_supported(status.sample_rate);
+    if (sampleRateSupported_ != sampleRateSupported) {
+        sampleRateSupported_ = sampleRateSupported;
+        emit sampleRateSupportedChanged();
+    }
+    if (active_ != bool(status.active)) {
+        active_ = bool(status.active);
+        emit activeChanged();
     }
 }
 

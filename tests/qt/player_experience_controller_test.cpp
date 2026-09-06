@@ -40,10 +40,10 @@ private slots:
 
 void PlayerExperienceControllerTest::columnControlsNormalizeNotifyAndPersist()
 {
-    struct Control { const char* name; int minimum; int maximum; };
+    struct Control { const char* name; int minimum; int maximum; int fallback; };
     const Control controls[] = {
-        {"columnSize", 50, 200}, {"columnOpacity", 0, 100},
-        {"reactorBrightness", 0, 200},
+        {"columnSize", 50, 200, 50}, {"columnOpacity", 0, 100, 72},
+        {"reactorBrightness", 0, 200, 100},
     };
     QSettings().clear();
     for (const auto& control : controls) {
@@ -51,18 +51,19 @@ void PlayerExperienceControllerTest::columnControlsNormalizeNotifyAndPersist()
         const int index = experience.metaObject()->indexOfProperty(control.name);
         QVERIFY2(index >= 0, control.name);
         const auto property = experience.metaObject()->property(index);
-        QCOMPARE(property.read(&experience).toInt(), 100);
+        QCOMPARE(property.read(&experience).toInt(), control.fallback);
         QSignalSpy changed(&experience, property.notifySignal());
         QVERIFY(changed.isValid());
         QVERIFY(property.write(&experience, -50));
         QCOMPARE(property.read(&experience).toInt(), control.minimum);
-        QCOMPARE(changed.count(), 1);
+        const int lowChangeCount = control.fallback == control.minimum ? 0 : 1;
+        QCOMPARE(changed.count(), lowChangeCount);
         QVERIFY(property.write(&experience, -50));
-        QCOMPARE(changed.count(), 1);
+        QCOMPARE(changed.count(), lowChangeCount);
         QVERIFY(property.write(&experience, 999));
         QCOMPARE(property.read(&experience).toInt(), control.maximum);
-        QCOMPARE(changed.count(), 2);
-        QCOMPARE(experience.terrainAmplitude(), 62);
+        QCOMPARE(changed.count(), lowChangeCount + 1);
+        QCOMPARE(experience.terrainAmplitude(), 42);
         QCOMPARE(experience.subjectClarity(), 110);
         QCOMPARE(experience.rhythmStrength(), 30);
         PlayerExperienceController reloaded;
@@ -71,7 +72,7 @@ void PlayerExperienceControllerTest::columnControlsNormalizeNotifyAndPersist()
         const QString key = QStringLiteral("immersiveVisual/") + control.name;
         settings.setValue(key, QStringLiteral("invalid"));
         PlayerExperienceController invalid;
-        QCOMPARE(invalid.property(control.name).toInt(), 100);
+        QCOMPARE(invalid.property(control.name).toInt(), control.fallback);
         settings.setValue(key, -99);
         PlayerExperienceController low;
         QCOMPARE(low.property(control.name).toInt(), control.minimum);
@@ -586,12 +587,12 @@ void PlayerExperienceControllerTest::strictlyParsesPersistedScalarTypes()
     settings.setValue(QStringLiteral("immersiveVisual/panelVisible"), 0);
 
     PlayerExperienceController malformed;
-    QCOMPARE(malformed.terrainAmplitude(), 62);
+    QCOMPARE(malformed.terrainAmplitude(), 42);
     QCOMPARE(malformed.qualityPreset(), 0);
     QCOMPARE(malformed.cinemaShake(), 0.40);
     QVERIFY(malformed.panelVisible());
     QCOMPARE(settings.value(QStringLiteral("immersiveVisual/terrainAmplitude")),
-             QVariant(62));
+             QVariant(42));
     QCOMPARE(settings.value(QStringLiteral("immersiveVisual/qualityPreset")),
              QVariant(0));
     QCOMPARE(settings.value(QStringLiteral("immersiveVisual/cinemaShake")),

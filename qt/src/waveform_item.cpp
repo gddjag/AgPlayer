@@ -402,6 +402,142 @@ void resampleSummary(const std::vector<float>& values,
     }
 }
 
+struct SourceAnchoredWindow {
+    std::size_t firstPoint = 0U;
+    std::size_t globalPointCount = 0U;
+    std::vector<double> normalizedX;
+};
+
+SourceAnchoredWindow sourceAnchoredWindow(const std::size_t pointCount,
+                                          const qint64 visibleStartMs,
+                                          const qint64 visibleEndMs,
+                                          const qint64 durationMs)
+{
+    SourceAnchoredWindow window;
+    const qint64 visibleDurationMs = visibleEndMs - visibleStartMs;
+    if (pointCount == 0U || durationMs <= 0 || visibleDurationMs <= 0) {
+        return window;
+    }
+
+    // Project the viewport's physical-pixel budget onto one global sample
+    // lattice anchored at source time zero. Panning then changes only x; the
+    // source interval (and therefore amplitude and frequency colour) assigned
+    // to an overlapping sample remains identical.
+    const double projectedCount = static_cast<double>(durationMs)
+                                  / static_cast<double>(visibleDurationMs)
+                                  * static_cast<double>(pointCount);
+    window.globalPointCount = std::max(
+        pointCount, static_cast<std::size_t>(std::llround(projectedCount)));
+    const double firstProjected = static_cast<double>(visibleStartMs)
+                                  / static_cast<double>(durationMs)
+                                  * window.globalPointCount;
+    const auto first = static_cast<std::int64_t>(
+        std::ceil(firstProjected - 0.5));
+    const std::size_t maximumFirst = window.globalPointCount - pointCount;
+    window.firstPoint = static_cast<std::size_t>(std::clamp<std::int64_t>(
+        first, 0, static_cast<std::int64_t>(maximumFirst)));
+
+    window.normalizedX.reserve(pointCount);
+    for (std::size_t index = 0U; index < pointCount; ++index) {
+        const double sourceFraction =
+            (static_cast<double>(window.firstPoint + index) + 0.5)
+            / static_cast<double>(window.globalPointCount);
+        const double sourceTimeMs = sourceFraction * durationMs;
+        window.normalizedX.push_back(std::clamp(
+            (sourceTimeMs - visibleStartMs)
+                / static_cast<double>(visibleDurationMs),
+            0.0, 1.0));
+    }
+    return window;
+}
+
+float sampleLinear(const std::vector<float>& values, double position)
+{
+    if (values.empty()) return 0.0F;
+    position = std::clamp(position, 0.0,
+                          static_cast<double>(values.size() - 1U));
+    const auto left = static_cast<std::size_t>(position);
+    const auto right = std::min(left + 1U, values.size() - 1U);
+    const double fraction = position - static_cast<double>(left);
+    return static_cast<float>(values[left]
+                              + (values[right] - values[left]) * fraction);
+}
+
+void resampleSourceAnchoredPeaks(
+    const std::vector<float>& values,
+    const SourceAnchoredWindow& window,
+    std::vector<float>& result)
+{
+    const std::size_t count = window.normalizedX.size();
+    if (values.empty() || count == 0U || window.globalPointCount == 0U) {
+        result.clear();
+        return;
+    }
+    const double sourceSize = static_cast<double>(values.size());
+    result.resize(count);
+    for (std::size_t index = 0U; index < count; ++index) {
+        const double begin = static_cast<double>(window.firstPoint + index)
+                             / static_cast<double>(window.globalPointCount)
+                             * sourceSize;
+        const double end = static_cast<double>(window.firstPoint + index + 1U)
+                           / static_cast<double>(window.globalPointCount)
+                           * sourceSize;
+        if (end - begin < 1.0) {
+            result[index] = sampleLinear(values, (begin + end) * 0.5);
+            continue;
+        }
+        float maximum = std::max(sampleLinear(values, begin),
+                                 sampleLinear(values, end));
+        for (std::size_t source = static_cast<std::size_t>(std::ceil(begin));
+             source < values.size() && static_cast<double>(source) < end;
+             ++source) {
+            maximum = std::max(maximum, values[source]);
+        }
+        result[index] = maximum;
+    }
+}
+
+void resampleSourceAnchoredEnergy(
+    const std::vector<float>& values,
+    const agplayer::ui::WaveformDisplaySummary& summary,
+    const SourceAnchoredWindow& window,
+    std::vector<float>& result)
+{
+    const std::size_t count = window.normalizedX.size();
+    if (values.empty() || count == 0U || window.globalPointCount == 0U) {
+        result.clear();
+        return;
+    }
+    const double sourceSize = static_cast<double>(values.size());
+    result.resize(count);
+    for (std::size_t index = 0U; index < count; ++index) {
+        const double begin = static_cast<double>(window.firstPoint + index)
+                             / static_cast<double>(window.globalPointCount)
+                             * sourceSize;
+        const double end = static_cast<double>(window.firstPoint + index + 1U)
+                           / static_cast<double>(window.globalPointCount)
+                           * sourceSize;
+        result[index] = summary.rms(begin, end);
+    }
+}
+
+std::size_t sourceAnchoredPlayedCount(const SourceAnchoredWindow& window,
+                                      const qint64 positionMs,
+                                      const qint64 durationMs)
+{
+    if (window.normalizedX.empty() || window.globalPointCount == 0U
+        || durationMs <= 0) {
+        return 0U;
+    }
+    const double projected = static_cast<double>(positionMs)
+                             / static_cast<double>(durationMs)
+                             * static_cast<double>(window.globalPointCount);
+    const auto count = static_cast<std::int64_t>(std::floor(projected + 0.5))
+                       - static_cast<std::int64_t>(window.firstPoint);
+    return static_cast<std::size_t>(std::clamp<std::int64_t>(
+        count, 0, static_cast<std::int64_t>(window.normalizedX.size())));
+}
+
 class WaveformNode final : public QSGGeometryNode {
 public:
     WaveformNode()
@@ -422,6 +558,7 @@ public:
     qreal devicePixelRatio_ = -1.0;
     qreal density_ = -1.0;
     bool preserveSourcePeakDensity_ = false;
+    bool sourceAnchoredSampling_ = false;
     qreal lineWidth_ = -1.0;
     qint64 position_ = -1;
     qint64 duration_ = -1;
@@ -444,6 +581,7 @@ public:
     std::vector<float> lowValues_;
     std::vector<float> midValues_;
     std::vector<float> highValues_;
+    std::vector<double> normalizedX_;
     QColor lowColor_;
     QColor midColor_;
     QColor highColor_;
@@ -530,7 +668,6 @@ void WaveformItem::setPeaks(const QVariantList& peaks)
     } else {
         mix->values = std::move(inputValues);
     }
-
     snapshot->mix = std::move(mix);
     peaks_ = std::move(normalizedPeaks);
     layers_.clear();
@@ -902,6 +1039,21 @@ void WaveformItem::setPreserveSourcePeakDensity(bool preserve)
     update();
 }
 
+bool WaveformItem::sourceAnchoredSampling() const noexcept
+{
+    return sourceAnchoredSampling_;
+}
+
+void WaveformItem::setSourceAnchoredSampling(const bool enabled)
+{
+    if (sourceAnchoredSampling_ == enabled) {
+        return;
+    }
+    sourceAnchoredSampling_ = enabled;
+    emit sourceAnchoredSamplingChanged();
+    update();
+}
+
 void WaveformItem::setDensity(qreal density)
 {
     const qreal finite = std::isfinite(density) ? density : 2.0;
@@ -1076,6 +1228,9 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
           // Downsampling is peak-preserving, while zooming in only interpolates
           // between the high-density source buckets supplied by the provider.
           : maxPoints;
+    const SourceAnchoredWindow anchoredWindow = sourceAnchoredSampling_
+        ? sourceAnchoredWindow(peakCount, visibleStartMs_, visibleEndMs_, duration_)
+        : SourceAnchoredWindow{};
 
     const unsigned char layerMask = hasMix ? 1U : 0U;
 
@@ -1086,6 +1241,8 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                                  || !qFuzzyCompare(node->density_, density_)
                                  || node->preserveSourcePeakDensity_
                                         != preserveSourcePeakDensity_
+                                 || node->sourceAnchoredSampling_
+                                        != sourceAnchoredSampling_
                                  || !qFuzzyCompare(node->lineWidth_, lineWidth_)
                                  || node->visibleStartMs_ != visibleStartMs_
                                  || node->visibleEndMs_ != visibleEndMs_
@@ -1150,26 +1307,48 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         auto* vertices = node->geometry_.vertexDataAsColoredPoint2D();
         const float center = static_cast<float>(height() * 0.5);
         const float spectrumBaseline = static_cast<float>(height());
-        const std::size_t playedCount = computePlayedCount(
-            peakCount, position_ - visibleStartMs_,
-            visibleEndMs_ - visibleStartMs_, 0);
+        const std::size_t playedCount = sourceAnchoredSampling_
+            ? sourceAnchoredPlayedCount(anchoredWindow, position_, duration_)
+            : computePlayedCount(peakCount, position_ - visibleStartMs_,
+                                 visibleEndMs_ - visibleStartMs_, 0);
 
         if (hasMix) {
             // All waveform modes share one amplitude contour. Frequency bands
             // affect color only, never override mix with a louder peak envelope.
-            resampleVisibleValues(snapshot->mix->values, visibleStartMs_,
-                                  visibleEndMs_, duration_, peakCount,
-                                  node->mixValues_);
+            if (sourceAnchoredSampling_) {
+                resampleSourceAnchoredPeaks(snapshot->mix->values,
+                                            anchoredWindow,
+                                            node->mixValues_);
+            } else {
+                resampleVisibleValues(snapshot->mix->values, visibleStartMs_,
+                                      visibleEndMs_, duration_, peakCount,
+                                      node->mixValues_);
+            }
             if (visualMode_ == 3) {
-                resampleSummary(snapshot->bass->values, snapshot->bass->summary, visibleStartMs_,
-                                      visibleEndMs_, duration_, peakCount,
-                                      node->lowValues_);
-                resampleSummary(snapshot->mid->values, snapshot->mid->summary, visibleStartMs_,
-                                      visibleEndMs_, duration_, peakCount,
-                                      node->midValues_);
-                resampleSummary(snapshot->high->values, snapshot->high->summary, visibleStartMs_,
-                                      visibleEndMs_, duration_, peakCount,
-                                      node->highValues_);
+                if (sourceAnchoredSampling_) {
+                    resampleSourceAnchoredEnergy(snapshot->bass->values,
+                                                 snapshot->bass->summary,
+                                                 anchoredWindow,
+                                                 node->lowValues_);
+                    resampleSourceAnchoredEnergy(snapshot->mid->values,
+                                                 snapshot->mid->summary,
+                                                 anchoredWindow,
+                                                 node->midValues_);
+                    resampleSourceAnchoredEnergy(snapshot->high->values,
+                                                 snapshot->high->summary,
+                                                 anchoredWindow,
+                                                 node->highValues_);
+                } else {
+                    resampleSummary(snapshot->bass->values, snapshot->bass->summary,
+                                    visibleStartMs_, visibleEndMs_, duration_, peakCount,
+                                    node->lowValues_);
+                    resampleSummary(snapshot->mid->values, snapshot->mid->summary,
+                                    visibleStartMs_, visibleEndMs_, duration_, peakCount,
+                                    node->midValues_);
+                    resampleSummary(snapshot->high->values, snapshot->high->summary,
+                                    visibleStartMs_, visibleEndMs_, duration_, peakCount,
+                                    node->highValues_);
+                }
             } else {
                 node->lowValues_.clear();
                 node->midValues_.clear();
@@ -1193,6 +1372,7 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         }
         auto& mixValues = node->mixValues_;
         auto& heldSpectrumValues = node->heldSpectrumValues_;
+        node->normalizedX_ = anchoredWindow.normalizedX;
 
         if (visualMode_ == 2 && !mixValues.empty()) {
             // Input magnitudes are already normalized by the analyser. Per-frame
@@ -1216,10 +1396,13 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                 const qreal offset = static_cast<qreal>(copy)
                                      - static_cast<qreal>(strokeCopies - 1U) * 0.5;
                 for (std::size_t index = 0U; index < peakCount; ++index) {
-                    const double normalizedX = peakCount == 1U
-                                                   ? 0.5
-                                                   : static_cast<double>(index)
-                                                         / static_cast<double>(peakCount - 1U);
+                    const double normalizedX = sourceAnchoredSampling_
+                        && index < node->normalizedX_.size()
+                        ? node->normalizedX_[index]
+                        : peakCount == 1U
+                          ? 0.5
+                          : static_cast<double>(index)
+                                / static_cast<double>(peakCount - 1U);
                     const double spectrumNaturalSpan =
                         static_cast<double>(peakCount) * spectrumBarWidth()
                         + static_cast<double>(peakCount - 1U) * spectrumBarGap();
@@ -1346,6 +1529,7 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         node->devicePixelRatio_ = devicePixelRatio;
         node->density_ = density_;
         node->preserveSourcePeakDensity_ = preserveSourcePeakDensity_;
+        node->sourceAnchoredSampling_ = sourceAnchoredSampling_;
         node->lineWidth_ = lineWidth_;
         node->position_ = position_;
         node->duration_ = duration_;
@@ -1371,8 +1555,10 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         return node;
     }
 
-    const std::size_t newPlayedCount = computePlayedCount(
-        peakCount, position_ - visibleStartMs_, visibleEndMs_ - visibleStartMs_, 0);
+    const std::size_t newPlayedCount = sourceAnchoredSampling_
+        ? sourceAnchoredPlayedCount(anchoredWindow, position_, duration_)
+        : computePlayedCount(peakCount, position_ - visibleStartMs_,
+                             visibleEndMs_ - visibleStartMs_, 0);
     const bool colorChanged = node->waveformColor_ != waveformColor_
                               || node->playedCount_ != newPlayedCount
                               || node->lowColor_ != lowColor_

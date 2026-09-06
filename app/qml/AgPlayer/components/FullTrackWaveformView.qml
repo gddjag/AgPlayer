@@ -49,7 +49,7 @@ Item {
                                && SettingsController.waveformRgbProgress
     property bool hoverPreviewEnabled: SettingsController.waveformHoverTimePreview
     property bool playbackGuideEnabled: SettingsController.waveformPlaybackGuide
-    property color playbackGuideColor: progressColor
+    property color playbackGuideColor: Theme.playbackGuide
 
     readonly property real hoverPosition: waveform.hoverPosition
     readonly property real waveformCursorX: waveform.waveformCursorX

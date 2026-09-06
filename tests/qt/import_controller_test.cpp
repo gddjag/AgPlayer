@@ -45,6 +45,7 @@ private slots:
     void importsTenThousandLightweightRecordsWithinBudget();
     void performanceRealImportResponsiveness();
     void alreadyImportedTracksAreSkippedWithoutFalseSuccess();
+    void cachedDuplicateRemovedDuringDiscoveryIsNotReinserted();
     void importedTracksAppearFirstInDiscoveryOrder();
     void metadataDecoderPreservesUtf8AndUsesCp936Fallback();
     void metadataDecoderRejectsAmbiguousMojibakeRepair();
@@ -127,7 +128,7 @@ void ImportControllerTest::deduplicatesCanonicalPathsAndContinuesAfterFailure()
     finished.clear();
     importer.importPaths({goodPath});
     QVERIFY(finished.wait(3000));
-    QCOMPARE(probeCalls.load(), 3);
+    QCOMPARE(probeCalls.load(), 2); // Existing canonical track reuses its metadata.
     QCOMPARE(model.rowCount(), 1);
     QCOMPARE(importer.importedTrackIds().size(), 1);
     QCOMPARE(importer.importedTrackIds().front(),
@@ -768,7 +769,9 @@ void ImportControllerTest::alreadyImportedTracksAreSkippedWithoutFalseSuccess()
     LibraryModel model;
     QVERIFY(model.append(existing));
 
-    ImportController importer(&model, [](const QString& candidate) {
+    std::atomic_int probeCalls{0};
+    ImportController importer(&model, [&probeCalls](const QString& candidate) {
+        ++probeCalls;
         TrackRecord track;
         track.path = candidate;
         track.title = QStringLiteral("Duplicate probe");
@@ -778,13 +781,58 @@ void ImportControllerTest::alreadyImportedTracksAreSkippedWithoutFalseSuccess()
     QSignalSpy finished(&importer, &ImportController::finished);
 
     importer.importPaths({path});
-
     QVERIFY(finished.wait(3000));
+    QCOMPARE(probeCalls.load(), 0);
     QCOMPARE(model.rowCount(), 1);
     QVERIFY(importer.errors().isEmpty());
     QCOMPARE(importer.property("skippedCount").toInt(), 1);
     QCOMPARE(importer.importedTrackIds().size(), 1);
     QCOMPARE(importer.importedTrackIds().front(), model.tracks().front().trackId);
+}
+
+void ImportControllerTest::cachedDuplicateRemovedDuringDiscoveryIsNotReinserted()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("removed-during-import.wav"));
+    createFile(path);
+
+    TrackRecord existing;
+    existing.path = path;
+    existing.title = QStringLiteral("Existing");
+    existing.available = true;
+    LibraryModel model;
+    QVERIFY(model.append(existing));
+    const QString trackId = model.tracks().front().trackId;
+
+    QSemaphore discoveryEntered;
+    QSemaphore releaseDiscovery;
+    const DiscoveryFunction discovery =
+        [&discoveryEntered, &releaseDiscovery, path](const QList<QUrl>&) {
+            discoveryEntered.release();
+            releaseDiscovery.acquire();
+            return QStringList{path};
+        };
+    std::atomic_int probeCalls{0};
+    const ProbeFunction probe = [&probeCalls](const QString& candidate) {
+        ++probeCalls;
+        TrackRecord track;
+        track.path = candidate;
+        track.available = true;
+        return ProbeResult{AG_OK, track, {}};
+    };
+    ImportController importer(&model, probe, discovery);
+    QSignalSpy finished(&importer, &ImportController::finished);
+
+    importer.importUrls({QUrl::fromLocalFile(dir.path())});
+    QVERIFY(discoveryEntered.tryAcquire(1, 3000));
+    QVERIFY(model.removeTrack(trackId));
+    releaseDiscovery.release();
+
+    QVERIFY(finished.wait(3000));
+    QCOMPARE(probeCalls.load(), 0);
+    QCOMPARE(model.rowCount(), 0);
+    QVERIFY(importer.importedTrackIds().isEmpty());
 }
 
 void ImportControllerTest::importedTracksAppearFirstInDiscoveryOrder()

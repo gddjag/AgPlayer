@@ -789,14 +789,14 @@ void SettingsControllerTest::rollingBeatGridSettingsDefaultPersistNormalizeAndRe
 
     {
         SettingsController settings;
-        QVERIFY(settings.rollingBeatGridEnabled());
+        QVERIFY(!settings.rollingBeatGridEnabled());
         QCOMPARE(settings.rollingBeatGridGrouping(), 4);
-        settings.setRollingBeatGridEnabled(false);
+        settings.setRollingBeatGridEnabled(true);
         settings.setRollingBeatGridGrouping(8);
         QCOMPARE(persisted.value(
                      QStringLiteral("appearance/rollingBeatGridEnabled"))
                      .toBool(),
-                 false);
+                 true);
         QCOMPARE(persisted.value(
                      QStringLiteral("appearance/rollingBeatGridGrouping"))
                      .toInt(),
@@ -804,7 +804,7 @@ void SettingsControllerTest::rollingBeatGridSettingsDefaultPersistNormalizeAndRe
     }
 
     SettingsController reloaded;
-    QVERIFY(!reloaded.rollingBeatGridEnabled());
+    QVERIFY(reloaded.rollingBeatGridEnabled());
     QCOMPARE(reloaded.rollingBeatGridGrouping(), 8);
 
     reloaded.setRollingBeatGridGrouping(3);
@@ -813,7 +813,7 @@ void SettingsControllerTest::rollingBeatGridSettingsDefaultPersistNormalizeAndRe
     QCOMPARE(reloaded.rollingBeatGridGrouping(), 4);
     reloaded.setRollingBeatGridGrouping(8);
     reloaded.resetToDefaults();
-    QVERIFY(reloaded.rollingBeatGridEnabled());
+    QVERIFY(!reloaded.rollingBeatGridEnabled());
     QCOMPARE(reloaded.rollingBeatGridGrouping(), 4);
 
     persisted.setValue(QStringLiteral("appearance/rollingBeatGridGrouping"),
@@ -979,7 +979,12 @@ void SettingsControllerTest::frequencyColorMixPreservesPastelAndChroma()
     QCOMPARE(mix(0, 1, 1), QColor(Qt::cyan));
     QCOMPARE(mix(1, 0, 1), QColor(Qt::magenta));
     const QColor pastel = mix(0.7, 0.8, 0.9);
-    QVERIFY(pastel.redF() > 0.90);
+    // Near-balanced bands remain light, but no longer wash toward white:
+    // the approved RGB contrast must retain their relative band differences.
+    QVERIFY(pastel.redF() > 0.85 && pastel.redF() < 0.90);
+    const QColor bassDominant = mix(1.0, 0.2, 0.05);
+    QVERIFY(bassDominant.red() >= 245);
+    QVERIFY(bassDominant.green() < 130 && bassDominant.blue() < 75);
     QVERIFY(pastel.redF() < pastel.greenF());
     QVERIFY(pastel.greenF() < pastel.blueF());
     // Scaling all energies equally must preserve linear-light chroma. A

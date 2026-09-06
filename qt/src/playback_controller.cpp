@@ -778,8 +778,13 @@ void PlaybackController::clearHotCue(const int slot)
 void PlaybackController::setBeatGridFirstBeat()
 {
     if (!hasPersistentCurrentTrack()) return;
+    ag_playback_snapshot snapshot{};
+    if (ag_player_snapshot(player_, &snapshot) != AG_OK
+        || snapshot.track_index >= static_cast<size_t>(queueTrackIds_.size())
+        || queueTrackIds_.at(static_cast<qsizetype>(snapshot.track_index))
+               != currentTrackId_) return;
     DeckState& current = deckStates_[currentTrackId_];
-    current.beatGridOffsetMs = std::max(qint64{0}, positionMs_);
+    current.beatGridOffsetMs = std::max(qint64{0}, qint64(snapshot.position_ms));
     current.beatGridCalibrated = true;
     if (!saveDeckStateStore()) {
         setErrorMessage(QStringLiteral("Unable to save deck state"));

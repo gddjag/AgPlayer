@@ -41,6 +41,7 @@ private slots:
     void buildsCenteredFiniteNormalizedLinePairs();
     void defaultFrequencyColorsUseFixedPalette();
     void threeBandMixerKeepsPureColorsAndCreatesCombinations();
+    void threeBandMixerPreservesDominantBandChroma();
     void frequencyModeUsesAmplitudeGeometryAndBrightnessOnlyProgress();
     void frequencyColorChangeDoesNotReplaceGeometryNode();
     void reusesNodeAndUpdatesGeometryAfterResize();
@@ -78,6 +79,7 @@ private slots:
     void fullTrackRangeFollowsLongerTrackAndDecodedDuration();
     void explicitViewportSurvivesDurationCorrection();
     void subBucketPanMovesWaveformContinuously();
+    void sourceAnchoredPanKeepsOverlappingSamplesStable();
     void frequencyIgnoresOptionalPeakRmsGeometry();
     void frequencyOverviewIntegratesEnergyInsteadOfIndependentMaxima();
     void frequencyZoomKeepsBucketColorOnPlainMixContour();
@@ -321,6 +323,27 @@ void WaveformItemTest::threeBandMixerKeepsPureColorsAndCreatesCombinations()
     QVERIFY(quietMidHigh != mid);
     QVERIFY2(quietMidHigh.blue() >= 150,
              "quiet High energy must remain visible in a Mid-heavy mix");
+}
+
+void WaveformItemTest::threeBandMixerPreservesDominantBandChroma()
+{
+    const QColor red("#ff0000"), green("#00ff00"), blue("#0000ff");
+    const QColor bass = agplayer::ui::mixFrequencyColor(
+        1.0, 0.2, 0.05, red, green, blue);
+    QVERIFY2(bass.red() >= 245 && bass.green() < 130 && bass.blue() < 75,
+             "weak secondary bands must not wash a bass-dominant sample pastel");
+    const QColor treble = agplayer::ui::mixFrequencyColor(
+        0.05, 0.2, 1.0, red, green, blue);
+    QCOMPARE(bass.red(), treble.blue());
+    QCOMPARE(bass.blue(), treble.red());
+    QCOMPARE(bass.green(), treble.green());
+    const QColor quiet = agplayer::ui::mixFrequencyColor(
+        0.1, 0.02, 0.005, red, green, blue);
+    QVERIFY(quiet.red() > 100);
+    QVERIFY(quiet.red() > quiet.green() && quiet.green() > quiet.blue());
+    const QColor adjacent = agplayer::ui::mixFrequencyColor(
+        1.0, 0.2001, 0.05, red, green, blue);
+    QVERIFY(std::abs(adjacent.green() - bass.green()) <= 1);
 }
 
 void WaveformItemTest::defaultFrequencyColorsUseFixedPalette()
@@ -1253,6 +1276,51 @@ void WaveformItemTest::subBucketPanMovesWaveformContinuously()
     item.setVisibleRange(21000, 25000);
     node = item.updatePaintNode(node, nullptr);
     QVERIFY(std::abs(vertices(node)[1].y - before) > 0.01F);
+    delete node;
+}
+
+void WaveformItemTest::sourceAnchoredPanKeepsOverlappingSamplesStable()
+{
+    TestableWaveformItem item;
+    item.setWidth(8);
+    item.setHeight(100);
+    item.setDensity(1);
+    item.setLineWidth(1);
+    item.setDuration(8000);
+    item.setPosition(3000);
+    item.setVisualMode(3);
+    item.setFrequencyUnplayedOpacity(1);
+    item.setSourceAnchoredSampling(true);
+    item.setLayers(makeLayers(
+        peaks({0.10, 0.25, 0.40, 0.55, 0.70, 0.85, 0.60, 0.35}),
+        peaks({1.00, 0.75, 0.50, 0.25, 0.00, 0.25, 0.50, 0.75}),
+        peaks({0.00, 0.25, 0.50, 0.75, 1.00, 0.75, 0.50, 0.25}),
+        peaks({0.20, 0.35, 0.50, 0.65, 0.80, 0.65, 0.50, 0.35})));
+
+    item.setVisibleRange(1000, 5000);
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node);
+    const int beforeCount = renderedPeakCount(node, item);
+    QCOMPARE(beforeCount, 4);
+    std::vector<QSGGeometry::ColoredPoint2D> before;
+    before.reserve(static_cast<std::size_t>(beforeCount));
+    for (int index = 0; index < beforeCount; ++index) {
+        before.push_back(vertices(node)[index * 2]);
+    }
+
+    item.setVisibleRange(1100, 5100);
+    node = item.updatePaintNode(node, nullptr);
+    QVERIFY(node);
+    QCOMPARE(renderedPeakCount(node, item), beforeCount);
+    for (int index = 0; index < beforeCount; ++index) {
+        const auto& after = vertices(node)[index * 2];
+        QCOMPARE(after.y, before[static_cast<std::size_t>(index)].y);
+        QCOMPARE(after.r, before[static_cast<std::size_t>(index)].r);
+        QCOMPARE(after.g, before[static_cast<std::size_t>(index)].g);
+        QCOMPARE(after.b, before[static_cast<std::size_t>(index)].b);
+        QCOMPARE(after.a, before[static_cast<std::size_t>(index)].a);
+        QVERIFY(after.x < before[static_cast<std::size_t>(index)].x);
+    }
     delete node;
 }
 

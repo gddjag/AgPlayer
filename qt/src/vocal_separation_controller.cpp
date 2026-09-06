@@ -522,6 +522,13 @@ QString VocalSeparationController::startDisabledReason() const
         return tr("所选模型尚未安装或未通过校验");
     }
     if (selectedStemNames().isEmpty()) return tr("至少选择一个输出音轨");
+    if (model->family == VocalModelFamily::Demucs && deviceChosenByUser_
+        && deviceMode_ == DeviceMode::GPU && !cudaRuntime_->ready()) {
+        if (!cudaRuntime_->nvidiaAvailable())
+            return tr("标准五轨 GPU 分离需要 NVIDIA CUDA；%1").arg(cudaRuntime_->hardwareSummary());
+        return cudaRuntime_->hardwareSummary()
+            + tr("；标准五轨 GPU 需要应用专用 CUDA 组件，请点击模型卡片“CUDA · 1.51 GB”，无需重装显卡驱动");
+    }
     if (!QFileInfo(options_.runtimeLibraryPath).isFile())
         return tr("ONNX Runtime 尚未安装");
     if (!deviceAvailable(deviceMode_)) {
@@ -953,6 +960,7 @@ bool VocalSeparationController::selectOutputDirectory(const QUrl& directory)
 
 bool VocalSeparationController::probeDevices()
 {
+    if (!cudaRuntime_->nvidiaAvailable() && !cudaRuntime_->ready()) cudaRuntime_->refreshHardware();
     if (verificationWatcher_ != nullptr || modelDirectoryIndexWatcher_ != nullptr) {
         deviceProbePending_ = true;
         return true;
@@ -981,6 +989,11 @@ bool VocalSeparationController::start()
         setError(tr("请选择有效输入音频和至少一个输出音轨"));
         failedRequest_.reset();
         setJobState(JobState::JobFailed, QStringLiteral("validation"));
+        return false;
+    }
+    if (model->family == VocalModelFamily::Demucs && deviceChosenByUser_
+        && deviceMode_ == DeviceMode::GPU && !cudaRuntime_->ready()) {
+        reportStartDisabledReason();
         return false;
     }
     if (((model->family == VocalModelFamily::Demucs && !cudaRuntime_->ready()) || model->id == QStringLiteral("python-vr-5hp"))
@@ -1740,6 +1753,8 @@ void VocalSeparationController::refreshModels()
         }
         models_.push_back(QVariantMap{
             {QStringLiteral("gpuRuntimeReady"), cudaRuntime_->ready()},
+            {QStringLiteral("gpuHardwareName"), cudaRuntime_->hardwareName()},
+            {QStringLiteral("gpuDriverVersion"), cudaRuntime_->driverVersion()},
             {QStringLiteral("gpuRuntimeConfigurable"), cudaRuntime_->nvidiaAvailable() && model.id != QStringLiteral("python-vr-5hp")},
             {QStringLiteral("gpuProvider"), validatedGpuProviders_.value(model.id,
                 cudaRuntime_->ready() ? QStringLiteral("cuda") : model.family == VocalModelFamily::Mdx ? QStringLiteral("directml") : QString())},
@@ -1747,9 +1762,11 @@ void VocalSeparationController::refreshModels()
                 : validatedGpuProviders_.contains(model.id) ? QStringLiteral("validated")
                 : !cudaRuntime_->ready() && model.family == VocalModelFamily::Demucs ? QStringLiteral("missing-runtime") : QStringLiteral("candidate")},
             {QStringLiteral("gpuReason"), model.id == QStringLiteral("python-vr-5hp") ? tr("此 VR 适配器仅支持 CPU")
-                : cudaRuntime_->checking() ? tr("正在检测 NVIDIA 驱动与 CUDA 组件")
-                : !cudaRuntime_->nvidiaAvailable() ? tr("未检测到可用 NVIDIA 驱动；CUDA 仅适用于 NVIDIA 显卡")
-                : !cudaRuntime_->ready() ? tr("可选 NVIDIA CUDA 环境：约 1.51 GB 下载，5 GB 可用磁盘；安装后验证当前模型")
+                : cudaRuntime_->checking() || !cudaRuntime_->nvidiaAvailable() ? cudaRuntime_->hardwareSummary()
+                : !cudaRuntime_->ready() ? cudaRuntime_->hardwareSummary()
+                    + (model.family == VocalModelFamily::Mdx
+                        ? tr("；此模型可检测 DirectML，无需 CUDA。可选 CUDA 配置约 1.51 GB 下载、5 GB 可用磁盘")
+                        : tr("；标准五轨缺少应用专用 CUDA 组件（不是缺显卡驱动）。一键配置约 1.51 GB 下载、5 GB 可用磁盘，安装后验证当前模型"))
                 : validatedGpuProviders_.contains(model.id) ? tr("当前模型已通过真实 GPU 推理验证") : tr("CUDA 组件已校验，等待当前模型 GPU 推理验证")},
             {QStringLiteral("id"), model.id},
             {QStringLiteral("family"), model.family == VocalModelFamily::Mdx

@@ -128,7 +128,7 @@ void main()
     finalColor *= 0.92 + focus * 0.18;
     // Darker steady material leaves headroom for the music pulse. Keep the
     // edge/specular definition; exposure does not alter column geometry.
-    finalColor *= mix(1.0, 0.82 - jelly * 0.12 + musicLight * 1.15, isTerrain);
+    finalColor *= mix(1.0, 0.755 - jelly * 0.12 + musicLight * 1.15, isTerrain);
     finalColor *= mix(1.0, material.z, isTerrain);
     // A continuous shoulder protects crown color on hard beats. No bloom pass,
     // full-screen blur or extra render target is needed to expose the facets.

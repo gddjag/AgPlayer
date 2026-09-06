@@ -60,7 +60,7 @@ Item {
     property var viewportBeatOptions: [2, 4, 8, 16, 32, 64]
     // Viewport zoom is deliberately local to a shell instance: re-entering
     // rolling mode starts wide, while track changes keep the user's choice.
-    property real visibleBeats: 64.0
+    property real visibleBeats: 32.0
     property bool scratchGestureActive: false
     property real scratchVisualPositionMs: 0
     property real scratchAnchorPositionMs: 0
@@ -300,7 +300,7 @@ Item {
     }
 
     function resetZoom() {
-        visibleBeats = 64.0
+        visibleBeats = 32.0
     }
 
     function commitGridBpm(text) {
@@ -315,7 +315,7 @@ Item {
     function beatGridStatusText() {
         if (beatGridFallback)
             return qsTr("估算 · 回退 120 BPM")
-        var value = beatGridBpmValue.toFixed(2) + " BPM"
+        var value = beatGridBpmValue.toFixed(3) + " BPM"
         if (playback && Boolean(playback.beatGridEstimatedBpm))
             return qsTr("估算 ") + value
         return playback && Boolean(playback.beatGridCalibrated)
@@ -883,7 +883,7 @@ Item {
             Layout.preferredHeight: root.height < 800
                                     ? Theme.rollingWaveformHeightCompact
                                     : Theme.rollingWaveformHeight
-            Layout.minimumHeight: 140
+            Layout.minimumHeight: Theme.rollingWaveformHeightCompact
             Layout.leftMargin: 10
             Layout.rightMargin: 10
             color: Theme.isLight ? Theme.panel : Qt.darker(Theme.panel, 1.12)
@@ -921,6 +921,7 @@ Item {
                 // spaced source bars. Max-preserving downsampling retains
                 // transients when the user zooms out.
                 preserveSourcePeakDensity: false
+                sourceAnchoredSampling: true
                 lineWidth: SettingsController.waveformThickness
             }
 
@@ -937,7 +938,8 @@ Item {
                 lineColor: Qt.rgba(Theme.primaryText.r, Theme.primaryText.g,
                                    Theme.primaryText.b,
                                    root.rollingLightTheme ? 0.34 : 0.25)
-                downbeatColor: Theme.danger
+                fourBeatColor: Theme.success
+                eightBeatColor: Theme.danger
                 enabled: false
                 z: 2
             }
@@ -1225,18 +1227,50 @@ Item {
                         height: 56
                         spacing: 2
                         Label {
+                            Layout.fillWidth: true
                             text: qsTr("网格")
                             color: Theme.secondaryText
+                            horizontalAlignment: Text.AlignHCenter
+                            font.family: Theme.fontPrimary
                             font.pixelSize: Theme.fontSizeCaption
                         }
                         ThemedSwitch {
                             id: beatGridSwitch
                             objectName: "rollingBeatGridSwitch"
                             Layout.preferredWidth: 40
-                            Layout.preferredHeight: 32
+                            Layout.preferredHeight: Theme.controlHeightCompact
                             checked: SettingsController.rollingBeatGridEnabled
                             onClicked:
                                 SettingsController.rollingBeatGridEnabled = checked
+                        }
+                    }
+
+                    ColumnLayout {
+                        id: calibrationGroup
+                        width: implicitWidth
+                        height: 56
+                        spacing: 2
+                        Label {
+                            Layout.fillWidth: true
+                            text: qsTr("网格校准")
+                            color: Theme.secondaryText
+                            horizontalAlignment: Text.AlignHCenter
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: Theme.fontSizeCaption
+                        }
+                        DeckToolButton {
+                            id: calibrationButton
+                            objectName: "rollingGridCalibrationButton"
+                            implicitWidth: 68
+                            implicitHeight: Theme.controlHeightCompact
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: Theme.fontSizeBody
+                            text: root.playback
+                                  && Boolean(root.playback.beatGridCalibrated)
+                                  ? qsTr("校准…")
+                                  : root.beatGridFallback
+                                    ? qsTr("估算 120") : qsTr("估算…")
+                            onClicked: calibrationPopup.open()
                         }
                     }
 
@@ -1246,15 +1280,18 @@ Item {
                         height: 56
                         spacing: 2
                         Label {
+                            Layout.fillWidth: true
                             text: qsTr("分组")
                             color: Theme.secondaryText
+                            horizontalAlignment: Text.AlignHCenter
+                            font.family: Theme.fontPrimary
                             font.pixelSize: Theme.fontSizeCaption
                         }
                         ThemedComboBox {
                             id: beatGridGrouping
                             objectName: "rollingBeatGridGrouping"
                             Layout.preferredWidth: 56
-                            Layout.preferredHeight: 32
+                            Layout.preferredHeight: Theme.controlHeightCompact
                             model: ["4", "8"]
                             currentIndex:
                                 SettingsController.rollingBeatGridGrouping === 8
@@ -1271,8 +1308,11 @@ Item {
                         height: 56
                         spacing: 2
                         Label {
+                            Layout.fillWidth: true
                             text: qsTr("视窗")
                             color: Theme.secondaryText
+                            horizontalAlignment: Text.AlignHCenter
+                            font.family: Theme.fontPrimary
                             font.pixelSize: Theme.fontSizeCaption
                         }
                         RowLayout {
@@ -1281,7 +1321,7 @@ Item {
                                 objectName: "rollingZoomMinus"
                                 text: "−"
                                 implicitWidth: 28
-                                implicitHeight: 32
+                                implicitHeight: Theme.controlHeightCompact
                                 enabled: root.viewportIndex()
                                          < root.viewportBeatOptions.length - 1
                                 onClicked: root.zoomOut()
@@ -1290,7 +1330,7 @@ Item {
                                 id: viewportBeats
                                 objectName: "rollingViewportBeats"
                                 Layout.preferredWidth: 62
-                                Layout.preferredHeight: 32
+                                Layout.preferredHeight: Theme.controlHeightCompact
                                 leftPadding: 0
                                 rightPadding: 20
                                 textLeftPadding: 6
@@ -1307,18 +1347,18 @@ Item {
                                 objectName: "rollingZoomPlus"
                                 text: "+"
                                 implicitWidth: 28
-                                implicitHeight: 32
+                                implicitHeight: Theme.controlHeightCompact
                                 enabled: root.viewportIndex() > 0
                                 onClicked: root.zoomIn()
                             }
                             DeckToolButton {
                                 objectName: "rollingZoomReset"
                                 implicitWidth: 28
-                                implicitHeight: 32
+                                implicitHeight: Theme.controlHeightCompact
                                 icon.source: Theme.icon("restore-line")
                                 icon.color: Theme.iconPrimary
-                                icon.width: 17
-                                icon.height: 17
+                                icon.width: 18
+                                icon.height: 18
                                 onClicked: root.resetZoom()
                             }
                         }
@@ -1330,8 +1370,11 @@ Item {
                         height: 56
                         spacing: 2
                         Label {
+                            Layout.fillWidth: true
                             text: qsTr("速度")
                             color: Theme.secondaryText
+                            horizontalAlignment: Text.AlignHCenter
+                            font.family: Theme.fontPrimary
                             font.pixelSize: Theme.fontSizeCaption
                         }
                         RowLayout {
@@ -1339,8 +1382,8 @@ Item {
                             DeckToolButton {
                                 objectName: "rollingSpeedMinus"
                                 text: "−"
-                                implicitWidth: 32
-                                implicitHeight: 32
+                                implicitWidth: 28
+                                implicitHeight: Theme.controlHeightCompact
                                 onClicked: root.adjustSpeed(-0.05)
                             }
                             Label {
@@ -1351,13 +1394,14 @@ Item {
                                           root.playback
                                           ? root.playback.speedRatio : 1)
                                 color: Theme.primaryText
+                                font.family: Theme.fontPrimary
                                 font.pixelSize: Theme.fontSizeBody
                             }
                             DeckToolButton {
                                 objectName: "rollingSpeedPlus"
                                 text: "+"
-                                implicitWidth: 32
-                                implicitHeight: 32
+                                implicitWidth: 28
+                                implicitHeight: Theme.controlHeightCompact
                                 onClicked: root.adjustSpeed(0.05)
                             }
                         }
@@ -1373,13 +1417,16 @@ Item {
                             objectName: "rollingSourceBpm"
                             text: qsTr("BPM")
                             color: Theme.secondaryText
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignHCenter
+                            font.family: Theme.fontPrimary
                             font.pixelSize: Theme.fontSizeCaption
                         }
                         ThemedTextField {
                             id: targetBpm
                             objectName: "rollingTargetBpm"
                             Layout.preferredWidth: 72
-                            Layout.preferredHeight: Theme.controlHeight
+                            Layout.preferredHeight: Theme.controlHeightCompact
                             horizontalAlignment: Text.AlignHCenter
                             text: root.formatBpm(
                                       root.playback
@@ -1397,17 +1444,25 @@ Item {
                         }
                     }
 
-                    DeckToolButton {
-                        id: tempoResetButton
-                        objectName: "rollingTempoReset"
-                        y: 22
-                        implicitWidth: 32
-                        implicitHeight: 32
-                        icon.source: Theme.icon("restore-line")
-                        icon.color: Theme.iconPrimary
-                        icon.width: 19
-                        icon.height: 19
-                        onClicked: root.resetRollingTempo()
+                    ColumnLayout {
+                        width: implicitWidth
+                        height: 56
+                        spacing: 2
+                        Item {
+                            Layout.preferredWidth: 28
+                            Layout.preferredHeight: sourceBpm.implicitHeight
+                        }
+                        DeckToolButton {
+                            id: tempoResetButton
+                            objectName: "rollingTempoReset"
+                            implicitWidth: 28
+                            implicitHeight: Theme.controlHeightCompact
+                            icon.source: Theme.icon("restore-line")
+                            icon.color: Theme.iconPrimary
+                            icon.width: 18
+                            icon.height: 18
+                            onClicked: root.resetRollingTempo()
+                        }
                     }
 
                     ColumnLayout {
@@ -1416,15 +1471,18 @@ Item {
                         height: 56
                         spacing: 2
                         Label {
+                            Layout.fillWidth: true
                             text: qsTr("保持音调")
                             color: Theme.secondaryText
+                            horizontalAlignment: Text.AlignHCenter
+                            font.family: Theme.fontPrimary
                             font.pixelSize: Theme.fontSizeCaption
                         }
                         ThemedSwitch {
                             id: keepPitchControl
                             objectName: "rollingKeepPitchControl"
                             Layout.preferredWidth: 40
-                            Layout.preferredHeight: 32
+                            Layout.preferredHeight: Theme.controlHeightCompact
                             checked: root.playback
                                      ? Boolean(root.playback.keepPitch) : true
                             onClicked: {
@@ -1433,30 +1491,6 @@ Item {
                                            !== undefined)
                                     root.playback.setKeepPitch(checked)
                             }
-                        }
-                    }
-
-                    ColumnLayout {
-                        id: calibrationGroup
-                        width: implicitWidth
-                        height: 56
-                        spacing: 2
-                        Label {
-                            text: qsTr("网格校准")
-                            color: Theme.secondaryText
-                            font.pixelSize: Theme.fontSizeCaption
-                        }
-                        DeckToolButton {
-                            id: calibrationButton
-                            objectName: "rollingGridCalibrationButton"
-                            implicitWidth: 70
-                            implicitHeight: 32
-                            text: root.playback
-                                  && Boolean(root.playback.beatGridCalibrated)
-                                  ? qsTr("校准…")
-                                  : root.beatGridFallback
-                                    ? qsTr("估算 120") : qsTr("估算…")
-                            onClicked: calibrationPopup.open()
                         }
                     }
 
@@ -1500,6 +1534,7 @@ Item {
                         Layout.fillWidth: true
                         text: root.beatGridStatusText()
                         color: Theme.secondaryText
+                        font.family: Theme.fontPrimary
                         font.pixelSize: Theme.fontSizeCaption
                     }
                     ThemedButton {
@@ -1546,18 +1581,23 @@ Item {
                             id: gridBpmField
                             objectName: "rollingGridBpmField"
                             Layout.fillWidth: true
-                            text: root.beatGridBpmValue.toFixed(2)
+                            Layout.preferredHeight: Theme.controlHeightCompact
+                            text: root.beatGridBpmValue.toFixed(3)
                             horizontalAlignment: Text.AlignHCenter
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: Theme.fontSizeBody
                             validator: DoubleValidator {
                                 bottom: 20
                                 top: 400
-                                decimals: 2
+                                decimals: 3
                             }
                             onEditingFinished: root.commitGridBpm(text)
                         }
                         Label {
                             text: "BPM"
                             color: Theme.secondaryText
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: Theme.fontSizeCaption
                         }
                     }
                     ThemedButton {

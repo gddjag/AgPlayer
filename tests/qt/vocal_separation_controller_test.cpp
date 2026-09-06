@@ -20,6 +20,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTranslator>
+#include <QTimer>
 #include <algorithm>
 
 #ifdef Q_OS_WIN
@@ -29,6 +30,23 @@
 #ifndef AG_SEPARATION_CONTROLLER_TEST_WORKER_PATH
 #error AG_SEPARATION_CONTROLLER_TEST_WORKER_PATH must name the test worker
 #endif
+
+class ExternalSeparationRuntimeTestDriver {
+public:
+    static void launchStage(ExternalSeparationRuntime& runtime, int stage,
+                            const QString& program, const QStringList& arguments)
+    {
+        runtime.busy_ = true;
+        runtime.step_ = stage;
+        runtime.launch(program, arguments);
+    }
+    static void preparePython(ExternalSeparationRuntime& runtime)
+    {
+        runtime.busy_ = true;
+        runtime.step_ = 2;
+        runtime.advance();
+    }
+};
 
 class VocalSeparationControllerTestDriver {
 public:
@@ -181,6 +199,13 @@ private slots:
     void cudaRuntimeRejectsUnverifiedComponents();
     void cudaRuntimeRealCachedInstall();
     void externalRuntimeRetriesThePinnedArchiveThroughTheBackupRoute();
+    void externalRuntimePersistsStageFailure();
+    void externalRuntimeStallSwitchesSourceAndStopsAfterBackup();
+    void externalRuntimeQuarantinesIncompletePythonWithoutDeletingIt();
+    void externalRuntimePauseThenImmediateResumeIsNonBlocking();
+    void externalRuntimeAlreadyVerifiedDoesNotInvalidateOrReinstall();
+    void gpuCardDistinguishesDetectedDriverFromMissingCuda();
+    void explicitDemucsGpuRequiresCudaBeforeStartingWorker();
     void existingPythonEnvironmentUpgradesTheBundledWorkerWithoutDownloading();
     void pythonWorkerUpgradeRejectsARedirectedRuntimeRoot();
     void immediateCancellationBeforeHelloNeverCompletesTheJob();
@@ -1451,6 +1476,161 @@ void VocalSeparationControllerTest::cudaRuntimeRejectsUnverifiedComponents()
     QVERIFY(!runtime.ready());
 }
 
+void VocalSeparationControllerTest::externalRuntimePersistsStageFailure()
+{
+    QTemporaryDir root;
+    UnavailableDownloadNetwork network;
+    ExternalSeparationRuntime runtime(root.path(), &network);
+    QSignalSpy finished(&runtime, &ExternalSeparationRuntime::finished);
+    ExternalSeparationRuntimeTestDriver::launchStage(runtime, 4, "cmd.exe",
+        {"/D", "/C", "echo controlled-import-failure & exit /b 7"});
+    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+    QVERIFY(!finished.first().first().toBool());
+    QFile log(root.filePath("install.log"));
+    QVERIFY2(log.open(QIODevice::ReadOnly), "Failed installation must retain diagnostics after app exit");
+    const auto bytes = log.readAll();
+    QVERIFY(bytes.contains("controlled-import-failure"));
+    QVERIFY(bytes.contains("stage=4"));
+    QVERIFY(!runtime.ready());
+    QVERIFY(network.hosts.isEmpty());
+}
+
+void VocalSeparationControllerTest::externalRuntimeStallSwitchesSourceAndStopsAfterBackup()
+{
+    QTemporaryDir root;
+    // The real service owns the process/timer/state machine; only its slow
+    // network tool is replaced by a local sleeping process and a failing exe.
+    QVERIFY(QFile::copy(qEnvironmentVariable("SystemRoot") + "/System32/cmd.exe",
+                        root.filePath("uv.exe")));
+    UnavailableDownloadNetwork network;
+    ExternalSeparationRuntime runtime(root.path(), &network);
+    QSignalSpy finished(&runtime, &ExternalSeparationRuntime::finished);
+    QSignalSpy progress(&runtime, &ExternalSeparationRuntime::progress);
+    ExternalSeparationRuntimeTestDriver::launchStage(runtime, 2, "powershell.exe",
+        {"-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 60"});
+    if (auto* watchdog = runtime.findChild<QTimer*>("pythonInstallerInactivity"))
+        watchdog->start(100);
+    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+    QVERIFY(!finished.first().first().toBool());
+    int switches = 0;
+    for (const auto& event : progress)
+        if (event.at(1).toString().contains(QStringLiteral("切换"))) ++switches;
+    QCOMPARE(switches, 1);
+    QFile log(root.filePath("install.log"));
+    QVERIFY(log.open(QIODevice::ReadOnly));
+    const auto bytes = log.readAll();
+    QVERIFY(bytes.contains("inactivity"));
+    QVERIFY(bytes.contains("source=backup"));
+    QVERIFY(!runtime.busy());
+}
+
+void VocalSeparationControllerTest::externalRuntimeQuarantinesIncompletePythonWithoutDeletingIt()
+{
+    QTemporaryDir root;
+    const QString managed = root.filePath("python/cpython-3.11.13-windows-x86_64-none");
+    QVERIFY(writeBytes(QDir(managed).filePath("BUILD"), "partial-install-evidence"));
+    QVERIFY(writeBytes(root.filePath("env/pyvenv.cfg"), "incomplete environment"));
+    QVERIFY(writeBytes(root.filePath("cache/keep.whl"), "download cache"));
+    UnavailableDownloadNetwork network;
+    ExternalSeparationRuntime runtime(root.path(), &network);
+    QSignalSpy finished(&runtime, &ExternalSeparationRuntime::finished);
+    ExternalSeparationRuntimeTestDriver::preparePython(runtime);
+    QVERIFY2(!QFileInfo::exists(managed), "Incomplete managed Python must not poison the next uv attempt");
+    QVERIFY(!QFileInfo::exists(root.filePath("env")));
+    QVERIFY(QFileInfo::exists(root.filePath("cache/keep.whl")));
+    const auto recovery = QDir(root.path()).entryList({".incomplete-*"}, QDir::Dirs | QDir::Hidden | QDir::NoDotAndDotDot);
+    QCOMPARE(recovery.size(), 2);
+    bool evidencePreserved = false;
+    for (const auto& path : recovery) {
+        QFile build(root.filePath(path + "/BUILD"));
+        if (build.open(QIODevice::ReadOnly)) evidencePreserved |= build.readAll() == "partial-install-evidence";
+    }
+    QVERIFY(evidencePreserved);
+    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+    QVERIFY(!runtime.ready());
+}
+
+void VocalSeparationControllerTest::explicitDemucsGpuRequiresCudaBeforeStartingWorker()
+{
+    QTemporaryDir temporary;
+    const QByteArray bytes("trusted-test-model");
+    auto options = optionsFor(temporary, QStringLiteral("success"), bytes);
+    installTestModel(options, QStringLiteral("five-stem"), bytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, "runtime"));
+    VocalSeparationController controller(nullptr, nullptr, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.selectModel("five-stem"));
+    QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
+    VocalSeparationControllerTestDriver::publishGpuCandidate(controller);
+    QVERIFY(controller.selectDevice(VocalSeparationController::DeviceMode::GPU));
+    QVERIFY(!controller.canStart());
+    QVERIFY(controller.startDisabledReason().contains("CUDA"));
+    QVERIFY(!controller.start());
+    QCOMPARE(controller.deviceMode(), VocalSeparationController::DeviceMode::GPU);
+    QCOMPARE(controller.history().size(), 0);
+    QVERIFY(controller.selectDevice(VocalSeparationController::DeviceMode::CPU));
+    QVERIFY(controller.canStart());
+}
+
+void VocalSeparationControllerTest::externalRuntimePauseThenImmediateResumeIsNonBlocking()
+{
+    QTemporaryDir root;
+    QVERIFY(QFile::copy(qEnvironmentVariable("SystemRoot") + "/System32/cmd.exe", root.filePath("uv.exe")));
+    UnavailableDownloadNetwork network;
+    ExternalSeparationRuntime runtime(root.path(), &network);
+    QSignalSpy finished(&runtime, &ExternalSeparationRuntime::finished);
+    ExternalSeparationRuntimeTestDriver::launchStage(runtime, 2, "powershell.exe",
+        {"-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 60"});
+    QElapsedTimer uiCall; uiCall.start();
+    runtime.pause();
+    runtime.resume();
+    QVERIFY2(uiCall.elapsed() < 250, "Pause/resume must not synchronously wait for installer processes");
+    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+    QVERIFY(!finished.first().first().toBool()); // Local fixture deliberately cannot provide Python.
+    QVERIFY(!runtime.busy());
+    QVERIFY(!runtime.paused());
+    QVERIFY(network.hosts.isEmpty());
+}
+
+void VocalSeparationControllerTest::externalRuntimeAlreadyVerifiedDoesNotInvalidateOrReinstall()
+{
+    QTemporaryDir root;
+    QVERIFY(writeBytes(root.filePath("env/Scripts/python.exe"), "verified interpreter - must not execute"));
+    QVERIFY(writeBytes(root.filePath("verified-vr-1"), "audio-separator=0.30.2"));
+    UnavailableDownloadNetwork network;
+    ExternalSeparationRuntime runtime(root.path(), &network);
+    QVERIFY(runtime.ready());
+    QSignalSpy finished(&runtime, &ExternalSeparationRuntime::finished);
+    QVERIFY(runtime.start());
+    QVERIFY2(runtime.ready(), "Repeated configure must not invalidate an already verified environment");
+    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+    QVERIFY(finished.first().first().toBool());
+    QVERIFY(!runtime.busy());
+    QVERIFY(network.hosts.isEmpty());
+}
+
+void VocalSeparationControllerTest::gpuCardDistinguishesDetectedDriverFromMissingCuda()
+{
+    // Read-only hardware integration: no model session, download or driver installation.
+    QTemporaryDir root;
+    auto options = optionsFor(root, "success", "model");
+    VocalSeparationController controller(nullptr, nullptr, nullptr, nullptr, nullptr, options);
+    QVariantMap card;
+    QTRY_VERIFY_WITH_TIMEOUT(([&] {
+        for (const auto& value : controller.models()) {
+            const auto model = value.toMap();
+            if (model.value("id") == "five-stem") card = model;
+        }
+        return !card.value("gpuReason").toString().contains(QStringLiteral("正在"));
+    })(), 10000);
+    if (!card.value("gpuRuntimeConfigurable").toBool()) QSKIP("No NVIDIA driver on this test host");
+    QVERIFY(!card.value("gpuRuntimeReady").toBool());
+    QVERIFY(!card.value("gpuHardwareName").toString().isEmpty());
+    QVERIFY(!card.value("gpuDriverVersion").toString().isEmpty());
+    QVERIFY(card.value("gpuReason").toString().contains(card.value("gpuHardwareName").toString()));
+    QVERIFY(card.value("gpuReason").toString().contains(card.value("gpuDriverVersion").toString()));
+    qInfo().noquote() << card.value("gpuReason").toString();
+}
+
 void VocalSeparationControllerTest::cudaRuntimeRealCachedInstall()
 {
     const QString root = qEnvironmentVariable("AGPLAYER_CUDA_RUNTIME_TEST_ROOT");
@@ -1488,8 +1668,8 @@ void VocalSeparationControllerTest::externalRuntimeRealInstallAndCachedRepair()
     QVERIFY2(completed.first().first().toBool(), qPrintable(completed.first().at(1).toString()));
     QVERIFY(runtime.ready());
     completed.clear();
-    QVERIFY(runtime.start()); // Existing verified uv.zip must be reused, not rejected on activation.
-    QVERIFY(!runtime.ready()); // No stale readiness while repair/reverification is running.
+    QVERIFY(runtime.start()); // Existing verified environment must be reused without reinstalling it.
+    QVERIFY(runtime.ready()); // Repeated configuration preserves the previously verified environment.
     QTRY_VERIFY_WITH_TIMEOUT(!completed.isEmpty(), 600000);
     QVERIFY2(completed.first().first().toBool(), qPrintable(completed.first().at(1).toString()));
     QVERIFY(runtime.ready());
@@ -1560,6 +1740,8 @@ void VocalSeparationControllerTest::externalRuntimeRetriesThePinnedArchiveThroug
     QVERIFY(!completed.first().first().toBool());
     QVERIFY(network.hosts.contains(QStringLiteral("github.com")));
     QVERIFY(network.hosts.contains(QStringLiteral("ghfast.top")));
+    QVERIFY2(completed.first().at(1).toString().contains("route timed out"),
+             "Final failure must retain the transport cause, not a generic retries message");
     QVERIFY(!runtime.ready());
 }
 

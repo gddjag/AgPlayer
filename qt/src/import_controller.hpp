@@ -65,6 +65,7 @@ private:
         qsizetype ordinal = 0;
         QString path;
         ProbeResult result;
+        bool cachedDuplicate = false;
     };
     void handleBatch(QList<Outcome> outcomes, int completed, int total);
     void completeImport();

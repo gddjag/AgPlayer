@@ -11,6 +11,9 @@
 #include <QElapsedTimer>
 #include <QUuid>
 #include <QScopeGuard>
+#include <QDateTime>
+#include <QStandardPaths>
+#include <utility>
 #include <QtConcurrent/QtConcurrentRun>
 #include "vocal_separation_path_safety.hpp"
 
@@ -25,7 +28,8 @@ static VocalDownloadFile uvArchive(bool mirror = false) {
 
 ExternalSeparationRuntime::ExternalSeparationRuntime(QString root,
     QNetworkAccessManager* network, QObject* parent)
-    : QObject(parent), root_(std::move(root)), downloader_(network)
+    : QObject(parent), root_(std::move(root)), downloader_(network),
+      inactivity_(this), ioPoll_(this), stopDeadline_(this)
 {
     initializePythonResources();
     QFile bundled(":/separation/external_separation_worker.py");
@@ -45,6 +49,8 @@ ExternalSeparationRuntime::ExternalSeparationRuntime(QString root,
             [this](const VocalInstallResult& result) {
         if (!busy_) return;
         if (!result.ok) {
+            appendLog(QStringLiteral("archive source=%1 error=%2")
+                          .arg(archiveMirror_ ? "backup" : "official", result.error));
             if (!archiveMirror_) {
                 archiveMirror_ = true;
                 emit progress(0, tr("官方配置器线路失败，切换国内备用线路（仍验证官方 SHA-256）"));
@@ -72,35 +78,92 @@ ExternalSeparationRuntime::ExternalSeparationRuntime(QString root,
         step_ = 0;
         if (!paused_) downloader_.start(uvArchive(), archive);
     });
+    // uv's HTTP timeout covers reads, not a stalled resolver/unpacker. Keep a
+    // separate no-progress deadline, including quiet disk I/O during wheels.
+    inactivity_.setObjectName("pythonInstallerInactivity");
+    inactivity_.setSingleShot(true);
+    inactivity_.setInterval(120000);
+    connect(&inactivity_, &QTimer::timeout, this, [this] {
+        if (!busy_ || paused_ || stopping_) return;
+        stopError_ = tr("安装阶段长时间无进展（inactivity timeout）");
+        appendLog(stopError_);
+        stopInstaller();
+    });
+    ioPoll_.setInterval(2000);
+    connect(&ioPoll_, &QTimer::timeout, this, [this] {
+#ifdef Q_OS_WIN
+        const auto pid = process_.processId();
+        if (!pid || stopping_ || paused_) return;
+        HANDLE handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, DWORD(pid));
+        if (!handle) return;
+        IO_COUNTERS counters{};
+        const bool ok = GetProcessIoCounters(handle, &counters);
+        CloseHandle(handle);
+        const quint64 bytes = counters.ReadTransferCount + counters.WriteTransferCount;
+        if (ok && bytes != processIoBytes_) {
+            processIoBytes_ = bytes;
+            inactivity_.start();
+        }
+#endif
+    });
+    stopDeadline_.setSingleShot(true);
+    stopDeadline_.setInterval(1500);
+    connect(&stopDeadline_, &QTimer::timeout, this, [this] {
+        terminateTree_.kill();
+        process_.kill();
+        finishStoppedInstaller();
+    });
+    connect(&terminateTree_, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+            this, [this] { process_.kill(); finishStoppedInstaller(); });
+    connect(&terminateTree_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart) {
+            process_.kill();
+            QTimer::singleShot(0, this, &ExternalSeparationRuntime::finishStoppedInstaller);
+        }
+    });
+    connect(&process_, &QProcess::started, this, [this] {
+        if (stopping_) {
+            stopping_ = false;
+            stopInstaller();
+        }
+    });
     process_.setProcessChannelMode(QProcess::MergedChannels);
     connect(&process_, &QProcess::readyReadStandardOutput, this, [this] {
-        output_.append(process_.readAllStandardOutput());
+        const auto bytes = process_.readAllStandardOutput();
+        output_.append(bytes);
+        if (!bytes.isEmpty()) {
+            appendLog(QString::fromUtf8(bytes));
+            if (busy_ && !paused_ && !stopping_) inactivity_.start();
+        }
         if (output_.size() > 16384) output_ = output_.right(16384);
         const QString text = QString::fromUtf8(output_).trimmed();
         const QString last = text.section(QLatin1Char('\n'), -1).left(160);
         if (!last.isEmpty()) emit progress(-1, last); // Unknown dependency total: don't invent percentages.
     });
     connect(&process_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
-        if (busy_ && !paused_ && error == QProcess::FailedToStart) fail(process_.errorString());
+        if (error != QProcess::FailedToStart) return;
+        inactivity_.stop(); ioPoll_.stop();
+        // FailedToStart may be delivered while QProcess is still unwinding.
+        const auto generation = generation_;
+        const auto diagnostic = process_.errorString();
+        QTimer::singleShot(0, this, [this, generation, diagnostic] {
+            if (generation != generation_) return;
+            if (stopping_) finishStoppedInstaller();
+            else if (busy_ && !paused_) fail(tr("无法启动配置程序：%1").arg(diagnostic));
+        });
     });
     connect(&process_, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
             [this](int code, QProcess::ExitStatus status) {
+        inactivity_.stop(); ioPoll_.stop();
+        if (stopping_) { finishStoppedInstaller(); return; }
         if (!busy_ || paused_) return;
         if (code != 0 || status != QProcess::NormalExit) {
-            if ((step_ == 2 || step_ == 3) && !mirror_) {
-                mirror_ = true;
-                emit progress(-1, step_ == 2
-                    ? tr("Python 官方线路失败，切换国内备用线路（保留官方发行校验）")
-                    : tr("官方包源连接失败，切换清华 PyPI 镜像继续配置"));
-                advance();
-                return;
-            }
-            fail(tr("Python 配置阶段 %1 失败：%2").arg(step_).arg(QString::fromUtf8(output_).right(1800)));
+            stageFailed(QStringLiteral("exit=%1 %2").arg(code).arg(QString::fromUtf8(output_).right(1800)));
             return;
         }
         mirror_ = false;
         ++step_;
-        advance();
+        queueAdvance();
     });
 }
 
@@ -108,6 +171,13 @@ ExternalSeparationRuntime::~ExternalSeparationRuntime()
 {
     busy_ = false;
     stopInstaller();
+    if (terminateTree_.state() != QProcess::NotRunning) {
+        if (!terminateTree_.waitForFinished(1500)) terminateTree_.kill();
+        terminateTree_.waitForFinished(500);
+    }
+    if (process_.state() != QProcess::NotRunning) {
+        process_.kill(); process_.waitForFinished(1500);
+    }
     cacheVerification_.waitForFinished();
 }
 
@@ -151,7 +221,15 @@ bool ExternalSeparationRuntime::synchronizeWorker()
 
 bool ExternalSeparationRuntime::start()
 {
-    if (busy_ || cacheVerification_.isRunning()) return false;
+    if (busy_ || stopping_ || process_.state() != QProcess::NotRunning || cacheVerification_.isRunning()) return false;
+    if (ready()) {
+        // A repeated configure action must never reinstall into a working VR
+        // environment. The bundled bridge has already been checked by ready().
+        busy_ = true; paused_ = false; step_ = 5; ++generation_;
+        emit changed();
+        queueAdvance();
+        return true;
+    }
     if (!QDir().mkpath(root_)) return false;
     if (!vocal_separation_paths::safeExistingDirectory(root_)) return false;
     const QString marker = QDir(root_).filePath("verified-vr-1");
@@ -162,6 +240,9 @@ bool ExternalSeparationRuntime::start()
     step_ = 0;
     mirror_ = false;
     archiveMirror_ = false;
+    resumeRequested_ = false;
+    stopError_.clear();
+    appendLog(QStringLiteral("begin optional Python configuration"));
     emit changed();
     emit progress(0, tr("外置 Python / PyTorch，约 450 MB 下载，约 1.5 GB 磁盘；不修改系统环境"));
     const QString archive = QDir(root_).filePath("uv.zip");
@@ -174,7 +255,11 @@ bool ExternalSeparationRuntime::start()
 
 void ExternalSeparationRuntime::launch(const QString& program, const QStringList& arguments)
 {
+    if (!busy_ || paused_ || stopping_) return;
+    ++generation_;
     output_.clear();
+    processIoBytes_ = 0;
+    appendLog(QStringLiteral("launch program=%1").arg(QFileInfo(program).fileName()));
     auto environment = QProcessEnvironment::systemEnvironment();
     environment.insert("UV_PYTHON_INSTALL_DIR", QDir(root_).filePath("python"));
     environment.insert("UV_CACHE_DIR", QDir(root_).filePath("cache"));
@@ -194,10 +279,13 @@ void ExternalSeparationRuntime::launch(const QString& program, const QStringList
     process_.setProcessEnvironment(environment);
     process_.start(program, arguments);
     process_.closeWriteChannel();
+    inactivity_.start();
+    ioPoll_.start();
 }
 
 void ExternalSeparationRuntime::advance()
 {
+    if (!busy_ || paused_ || stopping_ || process_.state() != QProcess::NotRunning) return;
     const QString uv = QDir(root_).filePath("uv.exe");
     if (step_ == 1) {
         emit progress(-1, tr("解压已校验配置器"));
@@ -207,6 +295,9 @@ void ExternalSeparationRuntime::advance()
             "try {$e=$z.GetEntry('uv.exe'); if(!$e){throw 'Missing uv.exe'}; "
             "[IO.Compression.ZipFileExtensions]::ExtractToFile($e,[IO.Path]::Combine($env:AGPLAYER_PYTHON_ROOT,'uv.exe'),$true) } finally {$z.Dispose()}"});
     } else if (step_ == 2) {
+        if (!recoverIncompletePython()) {
+            fail(tr("无法安全恢复不完整的 Python 环境；请查看 install.log")); return;
+        }
         emit progress(-1, tr("下载独立 Python 3.11 环境"));
         if (QFileInfo(python()).isFile()) { ++step_; advance(); return; }
         launch(uv, {"venv", "--python", "3.11.13", "--managed-python", QDir(root_).filePath("env")});
@@ -225,6 +316,7 @@ void ExternalSeparationRuntime::advance()
             fail(tr("无法保存环境校验状态")); return;
         }
         busy_ = false;
+        appendLog(QStringLiteral("verified Python environment ready"));
         emit progress(1, tr("Python VR 环境已就绪"));
         emit changed();
         emit finished(true, {});
@@ -235,6 +327,9 @@ void ExternalSeparationRuntime::pause()
 {
     if (!busy_ || paused_) return;
     paused_ = true;
+    resumeRequested_ = false;
+    stopError_.clear();
+    appendLog(QStringLiteral("paused; retaining cache and partial installation"));
     if (step_ == 0) downloader_.pause();
     else if (step_ > 0) stopInstaller();
     emit changed();
@@ -242,8 +337,13 @@ void ExternalSeparationRuntime::pause()
 void ExternalSeparationRuntime::resume()
 {
     if (!busy_ || !paused_) return;
-    if (process_.state() != QProcess::NotRunning) return;
+    if (stopping_ || process_.state() != QProcess::NotRunning) {
+        resumeRequested_ = true;
+        emit progress(-1, tr("正在停止当前配置进程，随后自动继续"));
+        return;
+    }
     paused_ = false;
+    appendLog(QStringLiteral("resumed"));
     emit changed();
     if (step_ == 0) {
         if (downloader_.state() == VocalDownloadState::Paused) downloader_.resume();
@@ -255,44 +355,146 @@ void ExternalSeparationRuntime::cancel()
 {
     busy_ = false;
     paused_ = false;
+    resumeRequested_ = false;
+    ++generation_;
+    appendLog(QStringLiteral("cancelled; retaining cache"));
     downloader_.cancel();
     stopInstaller();
     emit changed();
 }
 void ExternalSeparationRuntime::fail(const QString& error)
 {
+    inactivity_.stop(); ioPoll_.stop();
+    appendLog(QStringLiteral("failure: %1").arg(error));
     busy_ = false;
     emit changed();
-    emit finished(false, error);
+    emit finished(false, error + tr("；安装日志：%1").arg(QDir(root_).filePath("install.log")));
 }
 
 void ExternalSeparationRuntime::stopInstaller()
 {
-    if (process_.state() == QProcess::NotRunning) return;
+    inactivity_.stop(); ioPoll_.stop();
+    if (stopping_) return;
+    stopping_ = true;
+    if (process_.state() == QProcess::NotRunning) { finishStoppedInstaller(); return; }
+    if (!process_.processId()) return; // started/FailedToStart completes this transition.
 #ifdef Q_OS_WIN
-    // uv can have a wheel-build child. Kill only this owned process tree.
-    QProcess terminateTree;
-    terminateTree.start("taskkill.exe", {"/PID", QString::number(process_.processId()), "/T", "/F"});
-    if (!terminateTree.waitForFinished(1500)) terminateTree.kill();
-#endif
+    // No wait on the GUI thread. Do not reuse the process until tree termination
+    // finishes, so a late taskkill can never target a subsequent installation.
+    terminateTree_.start("taskkill.exe", {"/PID", QString::number(process_.processId()), "/T", "/F"});
+#else
     process_.kill();
-    process_.waitForFinished(1500);
+#endif
+    stopDeadline_.start();
+}
+
+void ExternalSeparationRuntime::finishStoppedInstaller()
+{
+    if (!stopping_ || process_.state() != QProcess::NotRunning
+        || terminateTree_.state() != QProcess::NotRunning) return;
+    stopDeadline_.stop();
+    stopping_ = false;
+    if (!busy_) return;
+    if (paused_) {
+        if (resumeRequested_) { resumeRequested_ = false; resume(); }
+        return;
+    }
+    if (!stopError_.isEmpty()) {
+        const auto error = std::exchange(stopError_, {});
+        stageFailed(error);
+    }
+}
+
+void ExternalSeparationRuntime::stageFailed(const QString& error)
+{
+    appendLog(QStringLiteral("stage failure: %1").arg(error));
+    if ((step_ == 2 || step_ == 3) && !mirror_) {
+        mirror_ = true;
+        emit progress(-1, step_ == 2
+            ? tr("Python 官方线路失败或超时，切换国内备用线路（保留官方发行校验）")
+            : tr("官方包源失败或超时，切换清华 PyPI 镜像继续配置"));
+        queueAdvance();
+    } else {
+        fail(tr("Python 配置阶段 %1 失败：%2").arg(step_).arg(error));
+    }
+}
+
+void ExternalSeparationRuntime::queueAdvance()
+{
+    const auto generation = generation_;
+    QTimer::singleShot(0, this, [this, generation] {
+        if (generation == generation_) advance();
+    });
+}
+
+void ExternalSeparationRuntime::appendLog(const QString& detail)
+{
+    using namespace vocal_separation_paths;
+    const QString path = QDir(root_).filePath("install.log");
+    if (!safeExistingDirectory(root_)
+        || (safePathKind(path) != SafePathKind::Missing && !safeExistingFileWithin(path, root_))) return;
+    // Keep bounded diagnostics locally, including both routes. No credentials,
+    // environment dump or user input audio is explicitly added to this log.
+    if (QFileInfo(path).size() > 1024 * 1024) {
+        QFile old(path);
+        if (!old.open(QIODevice::ReadOnly) || !old.seek(old.size() - 512 * 1024)) return;
+        const auto tail = old.readAll(); old.close();
+        QSaveFile trimmed(path); trimmed.setDirectWriteFallback(false);
+        if (!trimmed.open(QIODevice::WriteOnly) || trimmed.write(tail) != tail.size() || !trimmed.commit()) return;
+    }
+    QFile log(path);
+    if (!log.open(QIODevice::WriteOnly | QIODevice::Append)) return;
+    log.write(QStringLiteral("%1 stage=%2 source=%3 %4\n")
+        .arg(QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs))
+        .arg(step_).arg(mirror_ ? "backup" : "official", detail.left(65536)).toUtf8());
+}
+
+bool ExternalSeparationRuntime::recoverIncompletePython()
+{
+    using namespace vocal_separation_paths;
+    const auto quarantine = [this](const QString& directory, const QString& executable, const QString& label) {
+        if (safePathKind(directory) == SafePathKind::Missing) return true;
+        if (!safeExistingPathWithin(directory, root_, SafePathKind::Directory)) return false;
+        if (safeExistingFileWithin(executable, root_)) return true;
+        if (safePathKind(executable) != SafePathKind::Missing) return false;
+        const QString destination = QDir(root_).filePath(".incomplete-" + label + "-"
+            + QUuid::createUuid().toString(QUuid::WithoutBraces));
+        if (!lexicallyWithin(destination, root_) || !QDir().rename(directory, destination)) return false;
+        appendLog(QStringLiteral("preserved incomplete %1 as %2").arg(label, QFileInfo(destination).fileName()));
+        return true;
+    };
+    const QString managed = QDir(root_).filePath("python/cpython-3.11.13-windows-x86_64-none");
+    return quarantine(managed, QDir(managed).filePath("python.exe"), "python")
+        && quarantine(QDir(root_).filePath("env"), python(), "env");
 }
 
 namespace {
-QString nvidiaHardwareName()
+QJsonObject nvidiaHardware()
 {
-    // Driver identity is stable for this app process. Avoid repeatedly spawning
-    // nvidia-smi when controllers are recreated; model validation remains live.
-    static const QString name = [] {
-        QProcess hardware;
-        hardware.start("nvidia-smi.exe", {"--query-gpu=name", "--format=csv,noheader"});
-        if (hardware.waitForFinished(5000) && hardware.exitCode() == 0)
-            return QString::fromUtf8(hardware.readAllStandardOutput()).trimmed();
-        hardware.kill(); hardware.waitForFinished(1000);
-        return QString();
-    }();
-    return name;
+    QString program = QStandardPaths::findExecutable("nvidia-smi.exe");
+    if (program.isEmpty()) {
+        const auto standard = QDir(qEnvironmentVariable("SystemRoot")).filePath("System32/nvidia-smi.exe");
+        if (QFileInfo::exists(standard)) program = standard;
+    }
+    if (program.isEmpty()) return {{"available", false}, {"diagnostic", "nvidia-smi not found"}};
+    QProcess process;
+    process.start(program, {"--query-gpu=name,driver_version", "--format=csv,noheader"});
+    if (!process.waitForFinished(5000)) {
+        process.kill(); process.waitForFinished(1000);
+        return {{"available", false}, {"diagnostic", "NVIDIA driver query timed out"}};
+    }
+    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0)
+        return {{"available", false}, {"diagnostic", QString::fromUtf8(process.readAllStandardError()).trimmed().left(300)}};
+    QStringList names, versions;
+    for (const auto& line : QString::fromUtf8(process.readAllStandardOutput()).split('\n')) {
+        const auto comma = line.lastIndexOf(',');
+        if (comma <= 0 || line.mid(comma + 1).trimmed().isEmpty()) continue;
+        names.append(line.left(comma).trimmed());
+        const auto version = line.mid(comma + 1).trimmed();
+        if (!versions.contains(version)) versions.append(version);
+    }
+    return {{"available", !names.isEmpty()}, {"name", names.join(" / ")},
+            {"driverVersion", versions.join(" / ")}, {"diagnostic", names.isEmpty() ? "Empty NVIDIA driver response" : ""}};
 }
 bool verifyCudaFiles(const QString& root, const QList<VocalDownloadFile>& files,
                      const std::shared_ptr<std::atomic_bool>& cancellation)
@@ -348,7 +550,12 @@ CudaSeparationRuntime::CudaSeparationRuntime(QString root, QNetworkAccessManager
     });
     connect(&work_, &QFutureWatcher<VocalInstallResult>::finished, this, [this] {
         const auto result = work_.result();
-        if (phase_ == -1) { ready_ = result.ok; nvidiaAvailable_ = !result.error.isEmpty(); emit changed(); return; }
+        if (phase_ == -1) {
+            ready_ = result.ok;
+            hardware_ = QJsonDocument::fromJson(result.error.toUtf8()).object().toVariantMap();
+            nvidiaAvailable_ = hardware_.value("available").toBool();
+            emit changed(); return;
+        }
         if (resumeRequested_ && busy_) {
             resumeRequested_ = false; paused_ = false;
             cancellation_ = std::make_shared<std::atomic_bool>(false); emit changed(); advance(); return;
@@ -369,13 +576,28 @@ CudaSeparationRuntime::CudaSeparationRuntime(QString root, QNetworkAccessManager
         }
         downloader_.start(archive, QDir(root_).filePath("cache/" + archive.fileName));
     });
+    refreshHardware();
+}
+CudaSeparationRuntime::~CudaSeparationRuntime() { blockSignals(true); cancel(); work_.waitForFinished(); }
+void CudaSeparationRuntime::refreshHardware()
+{
+    if (busy_ || work_.isRunning()) return;
+    phase_ = -1;
     const QString native = QDir(root_).filePath(activeDirectory_);
     const auto dlls = dlls_; const auto cancellation = cancellation_;
     work_.setFuture(QtConcurrent::run([native, dlls, cancellation] {
-        return VocalInstallResult{verifyCudaFiles(native, dlls, cancellation), nvidiaHardwareName()};
+        return VocalInstallResult{verifyCudaFiles(native, dlls, cancellation),
+            QString::fromUtf8(QJsonDocument(nvidiaHardware()).toJson(QJsonDocument::Compact))};
     }));
 }
-CudaSeparationRuntime::~CudaSeparationRuntime() { blockSignals(true); cancel(); work_.waitForFinished(); }
+QString CudaSeparationRuntime::hardwareSummary() const
+{
+    if (checking()) return tr("正在自动检测 NVIDIA 显卡、驱动及应用 CUDA 组件");
+    if (nvidiaAvailable_)
+        return tr("已识别 %1 · 驱动 %2 已就绪").arg(hardwareName(), driverVersion());
+    return tr("尚未确认可用的 NVIDIA 驱动（%1）；这不代表其他显卡或 DirectML 不可用")
+        .arg(hardware_.value("diagnostic").toString());
+}
 QString CudaSeparationRuntime::libraryPath() const { return QDir(root_).filePath(activeDirectory_ + "/onnxruntime.dll"); }
 bool CudaSeparationRuntime::start()
 {

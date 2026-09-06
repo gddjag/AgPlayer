@@ -86,6 +86,7 @@ private slots:
     void cleanup();
     void exposesEighteenFixedBandsAndAppliesAtomicSnapshots();
     void resetAndBuiltInPresetUseTheRealBandParameters();
+    void nonFlatPresetActivatesTheEqualizer();
     void builtInPresetsExposeEightSafeReferenceCurves();
     void migratesSchemaTwoSeventeenBandSettingsAndCustomPreset();
     void migratesLegacyTenBandSettingsByLogFrequency();
@@ -101,6 +102,7 @@ private slots:
     void persistsSupportedGainRangesAndClampsInOneSnapshot();
     void precisionControlsFutureEditsWithoutRewritingStoredValues();
     void responseCurveReflectsTheActualDspProgram();
+    void responseCurveIncludesAutomaticProtectionAndActiveSampleRate();
     void refreshStatusPublishesOutputPeakOnlyWhenItChanges();
 };
 
@@ -179,6 +181,27 @@ void EqualizerControllerTest::resetAndBuiltInPresetUseTheRealBandParameters()
     }
     QCOMPARE(controller.preampDb(), 0.0);
     QCOMPARE(controller.currentPresetId(), QStringLiteral("flat"));
+    ag_player_destroy(player);
+}
+
+void EqualizerControllerTest::nonFlatPresetActivatesTheEqualizer()
+{
+    const ag_player_config config{AG_AUDIO_BACKEND_NULL, 4'096U};
+    ag_player* player = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &player), AG_OK);
+    EqualizerController controller(player);
+    QVERIFY(!controller.enabled());
+    controller.setBypassed(true);
+
+    QVERIFY(controller.applyPreset(QStringLiteral("bass")));
+    QVERIFY(controller.enabled());
+    QVERIFY(!controller.bypassed());
+    QCOMPARE(controller.currentPresetId(), QStringLiteral("bass"));
+
+    ag_equalizer_status status{};
+    QCOMPARE(ag_player_equalizer_status(player, &status), AG_OK);
+    QCOMPARE(status.enabled, 1);
+    QCOMPARE(status.bypassed, 0);
     ag_player_destroy(player);
 }
 
@@ -859,6 +882,33 @@ void EqualizerControllerTest::responseCurveReflectsTheActualDspProgram()
     QVERIFY(peak != boosted.cend());
     QVERIFY(peak->toDouble() > 4.5);
 
+    ag_player_destroy(player);
+}
+
+void EqualizerControllerTest::responseCurveIncludesAutomaticProtectionAndActiveSampleRate()
+{
+    const ag_player_config config{AG_AUDIO_BACKEND_NULL, 4'096U};
+    ag_player* player = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &player), AG_OK);
+    QCOMPARE(agplayer::editor::load_editor_playback_stream(
+                 player, std::make_shared<ConstantAudioStream>()),
+             AG_OK);
+    EqualizerController controller(player);
+    controller.setEnabled(true);
+    QVERIFY(controller.setBandGain(5, 6.0));
+    controller.refreshStatus();
+
+    QCOMPARE(controller.sampleRate(), 48'000);
+    QVERIFY(controller.active());
+    const QVariantList protectedCurve = controller.responseCurve(96);
+    QCOMPARE(protectedCurve.size(), 96);
+    const auto peak = std::max_element(
+        protectedCurve.cbegin(), protectedCurve.cend(),
+        [](const QVariant& left, const QVariant& right) {
+            return left.toDouble() < right.toDouble();
+        });
+    QVERIFY(peak != protectedCurve.cend());
+    QVERIFY(peak->toDouble() <= -0.49);
     ag_player_destroy(player);
 }
 

@@ -55,6 +55,9 @@ class WaveformItem : public QQuickItem {
     Q_PROPERTY(bool preserveSourcePeakDensity READ preserveSourcePeakDensity
                    WRITE setPreserveSourcePeakDensity
                    NOTIFY preserveSourcePeakDensityChanged)
+    Q_PROPERTY(bool sourceAnchoredSampling READ sourceAnchoredSampling
+                   WRITE setSourceAnchoredSampling
+                   NOTIFY sourceAnchoredSamplingChanged)
     Q_PROPERTY(qreal lineWidth READ lineWidth WRITE setLineWidth NOTIFY lineWidthChanged)
     Q_PROPERTY(qreal renderWidth READ renderWidth NOTIFY renderWidthChanged)
     Q_PROPERTY(qreal waveformCursorX READ waveformCursorX NOTIFY waveformCursorXChanged)
@@ -129,6 +132,8 @@ public:
     void setDensity(qreal density);
     bool preserveSourcePeakDensity() const noexcept;
     void setPreserveSourcePeakDensity(bool preserve);
+    bool sourceAnchoredSampling() const noexcept;
+    void setSourceAnchoredSampling(bool enabled);
 
     qreal lineWidth() const;
     void setLineWidth(qreal width);
@@ -176,6 +181,7 @@ signals:
     void analysisProgressChanged();
     void densityChanged();
     void preserveSourcePeakDensityChanged();
+    void sourceAnchoredSamplingChanged();
     void lineWidthChanged();
     void renderWidthChanged();
     void waveformCursorXChanged();
@@ -241,6 +247,7 @@ private:
     double analysisProgress_ = 0.0;
     qreal density_ = 1.0;
     bool preserveSourcePeakDensity_ = false;
+    bool sourceAnchoredSampling_ = false;
     qreal lineWidth_ = 2.0;
     qreal renderWidth_ = 0.0;
     bool pointerInteractionEnabled_ = true;

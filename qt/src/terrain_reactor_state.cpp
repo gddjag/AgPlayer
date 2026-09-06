@@ -232,7 +232,11 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
                             int meteorCount, int particleCount)
 {
     SceneLayout result;
-    const int boundedGrid = std::max(1, gridSize);
+    const int requestedGrid = std::max(1, gridSize);
+    // Center a real tile at the focal point so an even grid cannot reveal a
+    // dark crosshair through the reactor's middle.
+    const int boundedGrid = requestedGrid % 2 == 0
+        ? requestedGrid + 1 : requestedGrid;
     const int boundedParticleCount = std::clamp(particleCount, 0, 1600);
     const int terrainCount = boundedGrid * boundedGrid;
     result.terrain.reserve(terrainCount);
@@ -244,7 +248,7 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
     result.particles.reserve(boundedParticleCount);
 
     DeterministicRandom random(seed);
-    constexpr float extent = 168.0F;
+    constexpr float extent = kTerrainStageExtent;
     constexpr float stageRadius = extent * 0.5F;
     const float spacing = extent / static_cast<float>(boundedGrid);
     const float center = static_cast<float>(boundedGrid - 1) * 0.5F;
@@ -253,14 +257,12 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
             SceneInstance instance;
             const float worldX = (static_cast<float>(x) - center) * spacing;
             const float worldZ = (static_cast<float>(z) - center) * spacing;
-            const float distance = std::hypot(worldX, worldZ);
-            if (distance > stageRadius) {
-                continue;
-            }
             instance.position = QVector3D(worldX, 0.0F, worldZ);
-            instance.scale = QVector3D(spacing * 0.90F, 1.0F,
-                                       spacing * 0.90F);
+            // The vertex shader owns the single, hairline gutter. Applying a
+            // second gap here made the center read as a black seam.
+            instance.scale = QVector3D(spacing, 1.0F, spacing);
             instance.random = random.unit();
+            const float distance = std::hypot(worldX, worldZ);
             const float radius = distance / stageRadius;
             instance.zone = zoneFor(worldX, worldZ, radius, instance.random);
             result.terrain.append(instance);

@@ -364,9 +364,9 @@ Item {
     ImmersiveControlPanel {
         id: controlPanel
         objectName: "immersiveControlPanelHost"
-        anchors.right: parent.right
+        anchors.left: parent.left
         anchors.top: parent.top
-        anchors.rightMargin: 14
+        anchors.leftMargin: 14
         anchors.topMargin: 58
         visible: opacity > 0
         enabled: opacity > 0.05

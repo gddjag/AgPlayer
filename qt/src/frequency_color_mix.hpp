@@ -64,11 +64,23 @@ inline QColor mixFrequencyColor(const double lowEnergy,
                                 const QColor& highColor)
 {
     const std::array<QColor, 3> colors{lowColor, midColor, highColor};
-    const std::array<double, 3> weights{
-        detail::energyWeight(lowEnergy),
-        detail::energyWeight(midEnergy),
-        detail::energyWeight(highEnergy),
+    const auto boundedEnergy = [](double value) {
+        return std::clamp(std::isfinite(value) ? value : 0.0, 0.0, 1.0);
     };
+    const std::array<double, 3> energies{
+        boundedEnergy(lowEnergy), boundedEnergy(midEnergy), boundedEnergy(highEnergy)};
+    const double peakEnergy = *std::max_element(energies.begin(), energies.end());
+    const double peakWeight = detail::energyWeight(peakEnergy);
+    std::array<double, 3> weights{};
+    if (peakEnergy > 0.0) {
+        // Keep absolute energy brightness separate from chroma. Lifting every
+        // weak band with energy^0.66 washed bass/treble detail towards white.
+        // A continuous relative contrast retains mixed hues without gates,
+        // winner-take-all colours, or frame/viewport-dependent normalization.
+        for (std::size_t index = 0; index < weights.size(); ++index) {
+            weights[index] = peakWeight * std::pow(energies[index] / peakEnergy, 1.10);
+        }
+    }
     if (weights[0] == 0.0 && weights[1] == 0.0 && weights[2] == 0.0) {
         return lowColor;
     }

@@ -162,6 +162,11 @@ TestCase {
         verify(findChild(page, "losslessEvidencePanel"))
         verify(findChild(page, "losslessConclusionPanel"))
         verify(findChild(page, "losslessBottomBar"))
+        compare(page.color, Theme.background)
+        verify(!findChild(page, "losslessSearchToggle"))
+        verify(!findChild(page, "losslessRetryButton"))
+        verify(findChild(page, "losslessRemoveButton"))
+        verify(findChild(page, "losslessClearButton"))
         // ListView applies model removals during its next polish pass.
         tryCompare(findChild(page, "losslessEmptyState"), "visible", true)
         verify(!findChild(page, "losslessStartButton").enabled)
@@ -173,6 +178,22 @@ TestCase {
             stateText: "已完成", checked: true, progress: 1.0
         })
         mockController.totalCount = 1
+    }
+
+    function test_taskActionsAndFiltersStayInsideAtDefaultWidth() {
+        const oldWidth = testCase.width
+        testCase.width = 1386
+        wait(50)
+        const panel = findChild(page, "losslessTaskPanel")
+        for (const name of ["losslessRemoveButton", "losslessClearButton",
+                            "losslessFilter_all", "losslessFilter_inconclusive"]) {
+            const item = findChild(page, name)
+            verify(item)
+            const point = item.mapToItem(panel, 0, 0)
+            verify(point.x >= 0 && point.x + item.width <= panel.width + 1,
+                   name + " must stay inside the task panel")
+        }
+        testCase.width = oldWidth
     }
 
     function test_referenceWidthUsesMeasuredThreeColumnRatio() {
@@ -305,12 +326,6 @@ TestCase {
         verify(upsampleFilter)
         mouseClick(upsampleFilter)
         compare(mockController.filter, "upsample")
-
-        const search = findChild(page, "losslessSearchField")
-        mouseClick(findChild(page, "losslessSearchToggle"))
-        verify(search.visible)
-        search.text = "测试音频"
-        compare(mockController.searchText, "测试音频")
 
         const start = findChild(page, "losslessStartButton")
         verify(start.enabled)

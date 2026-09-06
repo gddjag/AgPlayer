@@ -1,4 +1,5 @@
 #include "lossless_analysis_controller.hpp"
+#include "lossless_evidence_item.hpp"
 #include "lossless_report.hpp"
 #include "lossless_task_model.hpp"
 
@@ -15,6 +16,8 @@
 #include <QMutex>
 #include <QScopeGuard>
 #include <QSemaphore>
+#include <QSGGeometry>
+#include <QSGGeometryNode>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -22,6 +25,7 @@
 #include <QTranslator>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <cmath>
@@ -30,6 +34,41 @@
 #include <vector>
 
 namespace {
+
+class TestableLosslessEvidenceItem final : public LosslessEvidenceItem {
+public:
+    using LosslessEvidenceItem::updatePaintNode;
+};
+
+QSGGeometry* spectrogramGeometry(QSGNode* root)
+{
+    if (root == nullptr || root->childCount() < 1) return nullptr;
+    QSGNode* heatmap = root->firstChild();
+    return static_cast<QSGGeometryNode*>(heatmap)->geometry();
+}
+
+QVariantList spectrogramMatrix(const int frames, const int bins,
+                               const int peakFrame = -1,
+                               const int peakBin = -1)
+{
+    QVariantList matrix;
+    matrix.reserve(frames);
+    for (int frame = 0; frame < frames; ++frame) {
+        QVariantList row;
+        row.reserve(bins);
+        for (int bin = 0; bin < bins; ++bin) {
+            row.append(frame == peakFrame && bin == peakBin ? 0.0 : -120.0);
+        }
+        matrix.append(QVariant::fromValue(row));
+    }
+    return matrix;
+}
+
+std::array<uchar, 4> firstSpectrogramColor(QSGGeometry* geometry)
+{
+    const auto* vertices = geometry->vertexDataAsColoredPoint2D();
+    return {vertices[0].r, vertices[0].g, vertices[0].b, vertices[0].a};
+}
 
 QString writeFile(const QTemporaryDir& directory, const QString& name,
                   const QByteArray& bytes = QByteArray("audio"))
@@ -226,6 +265,8 @@ private slots:
     void realWavPublishesSpectrumAndCacheKeepsIt();
     void requestsSpectrogramOnDemandAndFormatsListColumns();
     void spectrogramRequestsDoNotCacheStrippedMatrices();
+    void spectrogramRendererUsesFixedOpaqueDbScale();
+    void spectrogramRendererPeakReducesIntoFullBudget();
     void sourceChangesDuringAnalysisFailWithoutCaching();
     void terminalStatusSummarizesAllOutcomes();
     void dsdSelectedResultUsesRawRateAndHidesPcmDiagnostics();
@@ -629,9 +670,9 @@ void LosslessAnalysisControllerTest::realWavPublishesSpectrumAndCacheKeepsIt()
     const QVariantList frames = controller.selectedResult()
                                     .value(QStringLiteral("spectrogram")).toList();
     QVERIFY(!frames.isEmpty());
-    QVERIFY(frames.size() <= 96);
+    QVERIFY(frames.size() <= 256);
     const qsizetype bins = frames.constFirst().toList().size();
-    QVERIFY(bins > 0 && bins <= 128);
+    QCOMPARE(bins, 256);
     for (const QVariant& frame : frames) {
         const QVariantList row = frame.toList();
         QCOMPARE(row.size(), bins);
@@ -732,6 +773,83 @@ void LosslessAnalysisControllerTest::spectrogramRequestsDoNotCacheStrippedMatric
     QTRY_VERIFY_WITH_TIMEOUT(!controller.running(), 3000);
     QCOMPARE(controller.selectedResult()
                  .value(QStringLiteral("spectrogram")).toList().size(), 2);
+}
+
+void LosslessAnalysisControllerTest::spectrogramRendererUsesFixedOpaqueDbScale()
+{
+    // Catches a heatmap whose evidence colors change with Theme.trace or with
+    // the background showing through a dB-dependent alpha channel.
+    TestableLosslessEvidenceItem item;
+    item.setWidth(100.0);
+    item.setHeight(100.0);
+    item.setMode(LosslessEvidenceItem::Mode::Spectrogram);
+    item.setSpectrogram({QVariant(QVariantList{-30.0})});
+    item.setTraceColor(QColor(QStringLiteral("#ff0000")));
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node != nullptr);
+    // Opaque evidence cells must be behind the grid, otherwise the scale grid
+    // is fully covered even though its geometry still exists.
+    const auto* firstLayer = static_cast<const QSGGeometryNode*>(
+        node->firstChild());
+    const auto* secondLayer = static_cast<const QSGGeometryNode*>(
+        node->firstChild()->nextSibling());
+    QCOMPARE(firstLayer->geometry()->drawingMode(), QSGGeometry::DrawTriangles);
+    QCOMPARE(secondLayer->geometry()->drawingMode(), QSGGeometry::DrawLines);
+    QSGGeometry* geometry = spectrogramGeometry(node);
+    QVERIFY(geometry != nullptr);
+    const auto redThemeColor = firstSpectrogramColor(geometry);
+
+    item.setTraceColor(QColor(QStringLiteral("#00ffff")));
+    node = item.updatePaintNode(node, nullptr);
+    geometry = spectrogramGeometry(node);
+    QVERIFY(geometry != nullptr);
+    const auto cyanThemeColor = firstSpectrogramColor(geometry);
+    QCOMPARE(cyanThemeColor, redThemeColor);
+    QCOMPARE(static_cast<int>(cyanThemeColor[3]), 255);
+
+    item.setSpectrogram({QVariant(QVariantList{
+        -120.0, -90.0, -60.0, -30.0, 0.0})});
+    node = item.updatePaintNode(node, nullptr);
+    geometry = spectrogramGeometry(node);
+    QVERIFY(geometry != nullptr);
+    const auto* vertices = geometry->vertexDataAsColoredPoint2D();
+    int previousLuminance = -1;
+    for (int bin = 0; bin < 5; ++bin) {
+        const auto& vertex = vertices[bin * 6];
+        const int luminance = 2'126 * vertex.r + 7'152 * vertex.g
+            + 722 * vertex.b;
+        QVERIFY(luminance > previousLuminance);
+        QCOMPARE(static_cast<int>(vertex.a), 255);
+        previousLuminance = luminance;
+    }
+    delete node;
+}
+
+void LosslessAnalysisControllerTest::spectrogramRendererPeakReducesIntoFullBudget()
+{
+    // Catches both the former 128-bin renderer ceiling and nearest-neighbor
+    // decimation, which discarded a narrow cell between selected samples.
+    TestableLosslessEvidenceItem item;
+    item.setWidth(256.0);
+    item.setHeight(256.0);
+    item.setMode(LosslessEvidenceItem::Mode::Spectrogram);
+    item.setSpectrogram(spectrogramMatrix(512, 512));
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node != nullptr);
+    QSGGeometry* geometry = spectrogramGeometry(node);
+    QVERIFY(geometry != nullptr);
+    QCOMPARE(geometry->vertexCount(), 256 * 256 * 6);
+    const auto floorColor = firstSpectrogramColor(geometry);
+    delete node;
+
+    item.setSpectrogram(spectrogramMatrix(512, 512, 1, 1));
+    node = item.updatePaintNode(nullptr, nullptr);
+    geometry = spectrogramGeometry(node);
+    QVERIFY(geometry != nullptr);
+    const auto preservedPeakColor = firstSpectrogramColor(geometry);
+    QVERIFY(preservedPeakColor != floorColor);
+    QCOMPARE(static_cast<int>(preservedPeakColor[3]), 255);
+    delete node;
 }
 
 void LosslessAnalysisControllerTest::sourceChangesDuringAnalysisFailWithoutCaching()
@@ -1283,6 +1401,6 @@ void LosslessAnalysisControllerTest::unknownWorkerExceptionsBecomeExplicitFailur
              QStringLiteral("failed"));
 }
 
-QTEST_GUILESS_MAIN(LosslessAnalysisControllerTest)
+QTEST_MAIN(LosslessAnalysisControllerTest)
 
 #include "lossless_analysis_controller_test.moc"

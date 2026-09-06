@@ -910,10 +910,13 @@ void PlaybackControllerTest::beatGridStateUsesSourceFallbackAndPersistsPerTrack(
         QCOMPARE(controller.cuePositionMs(), qint64{420});
         QVERIFY(!controller.cueAuditioning());
         QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        // The grid command must use the core transport position, even before
+        // the next UI poll delivers it (e.g. keyboard calibration while busy).
+        QCOMPARE(ag_player_seek(firstCore, 460), AG_OK);
         controller.setBeatGridFirstBeat();
-        QCOMPARE(controller.beatGridOffsetMs(), qint64{420});
+        QCOMPARE(controller.beatGridOffsetMs(), qint64{460});
         QVERIFY(controller.beatGridCalibrated());
-        controller.nudgeBeatGrid(15);
+        controller.nudgeBeatGrid(-25);
         QCOMPARE(controller.beatGridOffsetMs(), qint64{435});
         controller.setBeatGridBpm(130.25);
         QCOMPARE(controller.beatGridBpm(), 130.25);

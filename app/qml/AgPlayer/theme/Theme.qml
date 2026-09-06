@@ -140,6 +140,7 @@ QtObject {
     readonly property color waveformViolet: "#7B2FF7"
     readonly property color waveformMagenta: "#E62E9B"
     readonly property color waveformRed: "#FF4057"
+    readonly property color playbackGuide: "#8B5CF6"
     readonly property color editorCanvas: isLight ? "#F7FAFA" : "#11191B"
     readonly property color editorRuler: isLight ? "#EEF3F3" : "#151F21"
     readonly property color editorOverview: isLight ? "#EAF2F2" : "#132124"
@@ -152,14 +153,12 @@ QtObject {
     readonly property color playRingPlaying: waveformGreen
     readonly property color playRingPaused: "#FFB020"
 
-    // Lossless identification is a dense forensic workbench. These local
-    // semantic colours reproduce its blue-black hierarchy without changing
-    // the shared surfaces used by the other audio tools.
-    readonly property color losslessWorkspaceSurface: isLight ? "#F3F7FA" : "#09141D"
-    readonly property color losslessPanelSurface: isLight ? "#FFFFFF" : "#0D1B25"
-    readonly property color losslessPanelHeaderSurface: isLight ? "#EAF0F5" : "#10212D"
-    readonly property color losslessTableAlternateSurface: isLight ? "#F7FAFC" : "#0B1821"
-    readonly property color losslessGrid: isLight ? "#CAD6DF" : "#203441"
+    // The analysis workbench shares the same surfaces as every audio tool.
+    readonly property color losslessWorkspaceSurface: background
+    readonly property color losslessPanelSurface: surface
+    readonly property color losslessPanelHeaderSurface: surfaceElevated
+    readonly property color losslessTableAlternateSurface: surface
+    readonly property color losslessGrid: opaqueDivider
     readonly property color losslessSpectrum: isLight ? "#0087B8" : "#19C4F1"
     readonly property color losslessSpectrumFill: isLight ? "#260087B8" : "#4219C4F1"
     readonly property color losslessVerdictCredible: "#35C759"
@@ -230,7 +229,7 @@ QtObject {
     readonly property int playerBottomBarHeight: 80
     readonly property int rollingOverviewHeight: 108
     readonly property int rollingOverviewHeightCompact: 92
-    readonly property int rollingWaveformHeight: 146
+    readonly property int rollingWaveformHeight: 136
     readonly property int rollingWaveformHeightCompact: 124
     readonly property int controlHeightCompact: 28
     readonly property int controlHeight: 32

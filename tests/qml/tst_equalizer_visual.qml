@@ -322,57 +322,57 @@ TestCase {
         }
     }
 
-    function test_response_curve_uses_equal_band_slots_and_real_gain_envelope() {
+    function test_response_curve_uses_actual_dsp_samples_and_design_preview() {
         equalizer.width = 1672
         equalizer.height = 941
         EqualizerController.setBandGain(0, -12)
         EqualizerController.setBandGain(14, 2.3)
         EqualizerController.setBandGain(17, 12)
+        EqualizerController.autoClipProtection = true
         wait(80)
         var curve = findChild(equalizer, "equalizerResponseCurve")
+        var preview = findChild(equalizer, "equalizerResponsePreviewLabel")
         verify(curve)
-        var envelope = curve.envelopePoints()
-        compare(envelope.length, 18)
+        verify(preview)
+        var response = curve.responsePoints()
+        compare(response.length, 160)
         compare(Math.round(curve.bandX(0)), Math.round(curve.plotLeft))
         compare(Math.round(curve.bandX(17)),
                 Math.round(curve.width - curve.plotRight))
-        var slotWidth = curve.bandX(1) - curve.bandX(0)
-        for (var index = 0; index < envelope.length; ++index) {
-            compare(Math.round(envelope[index].x * 1000),
-                    Math.round(curve.bandX(index) * 1000))
-            compare(Math.round(envelope[index].y * 1000),
-                    Math.round(curve.gainY(
-                                   EqualizerController.bandGain(index)) * 1000))
-            if (index > 0) {
-                verify(Math.abs((curve.bandX(index)
-                                 - curve.bandX(index - 1)) - slotWidth) < 0.1,
-                       "adjacent control bands must use equal visual slots")
-            }
-        }
-        compare(Math.round(envelope[0].y * 1000),
-                Math.round(curve.gainY(-12) * 1000))
-        compare(Math.round(envelope[14].y * 1000),
-                Math.round(curve.gainY(2.3) * 1000))
-        compare(Math.round(envelope[17].y * 1000),
-                Math.round(curve.gainY(12) * 1000))
+        verify(Math.abs(response[response.length - 1].y
+                        - curve.gainY(EqualizerController.bandGain(17))) > 2,
+               "the plotted response must include the DSP output compensation")
 
+        var wideVisibleIndices = [0, 2, 4, 6, 8, 10, 12, 14, 17]
         var wideLabels = []
-        for (var band = 13; band <= 17; ++band) {
+        for (var band = 0; band < 18; ++band) {
             var label = findChild(curve,
                                   "equalizerResponseFrequency-" + band)
             verify(label)
-            compare(Math.round(label.x + label.width / 2),
-                    Math.round(curve.bandX(band)))
-            compare(label.y, findChild(curve,
-                        "equalizerResponseFrequency-13").y)
-            wideLabels.push(label)
+            var expectedVisible = wideVisibleIndices.indexOf(band) >= 0
+            compare(label.visible, expectedVisible,
+                    "wide curve labels keep only the primary frequency landmarks")
+            if (label.visible) {
+                compare(Math.round(label.x + label.width / 2),
+                        Math.round(curve.bandX(band)))
+                wideLabels.push(label)
+            }
         }
-        for (var labelIndex = 1; labelIndex < wideLabels.length;
-             ++labelIndex) {
-            verify(wideLabels[labelIndex - 1].x
-                   + wideLabels[labelIndex - 1].width
-                   <= wideLabels[labelIndex].x,
-                   "8k through 20k labels must remain readable on one wide row")
+        for (var rowIndex = 1; rowIndex < wideLabels.length; ++rowIndex)
+            compare(wideLabels[rowIndex].y, wideLabels[0].y,
+                    "wide curve labels use one orderly baseline")
+        for (var first = 0; first < wideLabels.length; ++first) {
+            for (var second = first + 1; second < wideLabels.length;
+                 ++second) {
+                var a = wideLabels[first]
+                var b = wideLabels[second]
+                var overlaps = a.x < b.x + b.width
+                               && a.x + a.width > b.x
+                               && a.y < b.y + b.height
+                               && a.y + a.height > b.y
+                verify(!overlaps,
+                       "8k through 20k labels must remain readable without overlap")
+            }
         }
     }
 
@@ -538,37 +538,43 @@ TestCase {
         verify(!findChild(equalizer, "equalizerFooterScrollBar").visible)
         verifyFooterOutputReachable(860, 520)
         var compactCurve = findChild(equalizer, "equalizerResponseCurve")
-        var highFrequencyLabels = []
-        for (var highBand = 13; highBand <= 17; ++highBand) {
-            var highLabel = findChild(
-                        compactCurve,
-                        "equalizerResponseFrequency-" + highBand)
-            verify(highLabel.x >= 0
-                   && highLabel.x + highLabel.width <= compactCurve.width,
-                   "band " + highBand + " horizontal bounds: x="
-                   + highLabel.x + " width=" + highLabel.width
+        var compactVisibleIndices = [0, 3, 6, 9, 12, 14, 17]
+        var compactFrequencyLabels = []
+        for (var band = 0; band < 18; ++band) {
+            var label = findChild(compactCurve,
+                                  "equalizerResponseFrequency-" + band)
+            verify(label)
+            var expectedVisible = compactVisibleIndices.indexOf(band) >= 0
+            compare(label.visible, expectedVisible,
+                    "compact mode keeps only landmark frequency labels")
+            if (!label.visible)
+                continue
+            verify(label.x >= 0
+                   && label.x + label.width <= compactCurve.width,
+                   "band " + band + " horizontal bounds: x="
+                   + label.x + " width=" + label.width
                    + " curve=" + compactCurve.width)
-            verify(highLabel.y >= 0
-                   && highLabel.y + highLabel.height <= compactCurve.height,
-                   "band " + highBand + " vertical bounds: y="
-                   + highLabel.y + " height=" + highLabel.height
+            verify(label.y >= 0
+                   && label.y + label.height <= compactCurve.height,
+                   "band " + band + " vertical bounds: y="
+                   + label.y + " height=" + label.height
                    + " curve=" + compactCurve.height)
-            highFrequencyLabels.push(highLabel)
+            compactFrequencyLabels.push(label)
         }
-        for (var first = 0; first < highFrequencyLabels.length; ++first) {
+        for (var first = 0; first < compactFrequencyLabels.length; ++first) {
             for (var second = first + 1;
-                 second < highFrequencyLabels.length; ++second) {
-                var a = highFrequencyLabels[first]
-                var b = highFrequencyLabels[second]
+                 second < compactFrequencyLabels.length; ++second) {
+                var a = compactFrequencyLabels[first]
+                var b = compactFrequencyLabels[second]
                 var overlaps = a.x < b.x + b.width
                                && a.x + a.width > b.x
                                && a.y < b.y + b.height
                                && a.y + a.height > b.y
                 verify(!overlaps,
                        "compact frequency labels must remain legible: "
-                       + (first + 13) + " [" + a.x + "," + a.y + ","
+                       + "[" + a.x + "," + a.y + ","
                        + a.width + "," + a.height + "] vs "
-                       + (second + 13) + " [" + b.x + "," + b.y + ","
+                       + "[" + b.x + "," + b.y + ","
                        + b.width + "," + b.height + "]")
             }
         }

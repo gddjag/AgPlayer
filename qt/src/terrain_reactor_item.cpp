@@ -127,6 +127,37 @@ float finiteUnit(float value, float fallback = 0.0F) noexcept
     return std::clamp(finiteOr(value, fallback), 0.0F, 1.0F);
 }
 
+float smoothReactorFeature(float current, float target,
+                           float elapsedSeconds) noexcept
+{
+    const float boundedCurrent = finiteUnit(current);
+    const float boundedTarget = finiteUnit(target);
+    const float elapsed = std::clamp(elapsedSeconds, 0.0F, 0.25F);
+    const float timeConstant = boundedTarget > boundedCurrent ? 0.18F : 0.52F;
+    const float amount = 1.0F - std::exp(-elapsed / timeConstant);
+    return boundedCurrent + (boundedTarget - boundedCurrent) * amount;
+}
+
+AudioFeatures smoothReactorFeatures(const AudioFeatures& current,
+                                    const AudioFeatures& target,
+                                    float elapsedSeconds) noexcept
+{
+    AudioFeatures result;
+    for (std::size_t index = 0; index < result.bands.size(); ++index) {
+        result.bands[index] = smoothReactorFeature(
+            current.bands[index], target.bands[index], elapsedSeconds);
+    }
+    result.energy = smoothReactorFeature(current.energy, target.energy,
+                                         elapsedSeconds);
+    result.spectralFlux = smoothReactorFeature(current.spectralFlux,
+                                               target.spectralFlux,
+                                               elapsedSeconds);
+    // Keep onset events prompt; only the continuous terrain field is eased.
+    result.kick = finiteUnit(target.kick);
+    result.snare = finiteUnit(target.snare);
+    return result;
+}
+
 GpuInstance toGpuInstance(const SceneInstance& source, float type)
 {
     GpuInstance result{};
@@ -224,6 +255,7 @@ protected:
             punchEvents_.discard(next.punchEvent, camera_);
             beatEvents_.discard(next.beatEvent);
             impactEvents_.discard(next.impactEvent);
+            smoothedFeatures_ = AudioFeatures{};
         }
         if (next.running || failed_) publishStatus();
         const bool seedChanged = next.seed != snapshot_.seed;
@@ -307,7 +339,10 @@ protected:
         workTimer.start();
 
         buildInstancesIfNeeded();
-        VisualParameters visual = mapVisualParameters(snapshot_.features,
+        smoothedFeatures_ = smoothReactorFeatures(smoothedFeatures_,
+                                                   snapshot_.features,
+                                                   float(animationElapsedSeconds));
+        VisualParameters visual = mapVisualParameters(smoothedFeatures_,
             renderTimeSeconds, snapshot_.style);
         bassEnvelope_.advance(visual.bands[0] * 0.72F
                                   + visual.bands[1] * 0.28F,
@@ -563,7 +598,7 @@ private:
         const float distance = std::clamp(
             finiteOr(camera.distance, defaults.distance), 42.0F, 220.0F);
         const float punch = finiteUnit(camera.punch * snapshot_.style.cinemaShake);
-        projection.perspective(48.0F - punch * 2.15F,
+        projection.perspective(46.0F - punch * 2.15F,
                                aspect, 0.1F, 800.0F);
         const float radius = distance - punch * 0.6F;
         const RenderDynamics dynamics = mapRenderDynamics(snapshot_.style);
@@ -652,6 +687,7 @@ private:
         result.materialParameters[0] = float(snapshot_.style.materialMode);
         result.sceneControls[0] = snapshot_.style.columnOpacity;
         result.sceneControls[1] = snapshot_.style.reactorBrightness;
+        result.sceneControls[2] = kTerrainStageExtent * 0.5F;
         result.materialParameters[1] = snapshot_.style.materialSoftness;
         result.materialParameters[2] = snapshot_.style.jellyElasticity;
         result.materialParameters[3] = snapshot_.style.inkDensity;
@@ -741,6 +777,7 @@ private:
     AutomaticQualityController quality_;
     DegradationStage lastStage_ = DegradationStage::Full;
     TerrainReactorItem::RenderSnapshot snapshot_;
+    AudioFeatures smoothedFeatures_;
     CameraMotion camera_;
     PunchEventConsumer punchEvents_;
     BeatEventConsumer beatEvents_;

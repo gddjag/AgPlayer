@@ -8,7 +8,6 @@ Rectangle {
     objectName: "losslessTaskPanel"
     property var controller
     property bool compact: false
-    property bool searchMode: false
     readonly property bool englishUi: SettingsController.language
                                        && SettingsController.language.toLowerCase()
                                           .startsWith("en")
@@ -117,28 +116,13 @@ Rectangle {
                         font.pixelSize: Theme.losslessFontSizeSection
                         font.weight: Font.Normal
                         Layout.fillWidth: true
-                    }
-                    ThemedIconButton {
-                        id: searchToggle
-                        objectName: "losslessSearchToggle"
-                        iconSource: Theme.icon("search-line")
-                        accessibleName: qsTr("搜索任务")
-                        checkable: true
-                        checked: root.searchMode
-                        onClicked: root.searchMode = checked
-                    }
-                    ThemedIconButton {
-                        objectName: "losslessRetryButton"
-                        iconSource: Theme.icon("restore-line")
-                        accessibleName: qsTr("重试选中任务")
-                        enabled: root.controller && root.controller.selectedCount > 0
-                                 && !root.controller.running
-                        onClicked: root.controller.retrySelected()
+                        Layout.minimumWidth: 0
+                        elide: Text.ElideRight
                     }
                     ThemedIconButton {
                         objectName: "losslessRemoveButton"
                         iconSource: Theme.icon("delete-bin-line")
-                        accessibleName: qsTr("移除选中任务")
+                        accessibleName: qsTr("删除选中")
                         dangerOnHover: true
                         enabled: root.controller && root.controller.selectedCount > 0
                                  && !root.controller.running
@@ -147,7 +131,7 @@ Rectangle {
                     ThemedIconButton {
                         objectName: "losslessClearButton"
                         iconSource: Theme.icon("close-line")
-                        accessibleName: qsTr("清空任务列表")
+                        accessibleName: qsTr("清除全部")
                         enabled: root.controller && root.controller.totalCount > 0
                                  && !root.controller.running
                         onClicked: root.controller.clear()
@@ -156,8 +140,7 @@ Rectangle {
 
                 RowLayout {
                     Layout.fillWidth: true
-                    visible: !root.searchMode
-                    spacing: root.compact ? Theme.spacingXs : Theme.spacingLg
+                    spacing: Theme.spacingXs
                     Repeater {
                         model: [
                             { code: "all", label: qsTr("全部"), shortLabel: qsTr("全部") },
@@ -176,12 +159,13 @@ Rectangle {
                             Layout.preferredHeight: 30
                             text: root.compact
                                   ? String(root.countAt(index))
-                                  : (root.englishUi && modelData.shortLabel
+                                  : ((root.englishUi || root.width < 600) && modelData.shortLabel
                                      ? modelData.shortLabel : modelData.label)
                                     + "  " + root.countAt(index)
                             primary: root.controller
                                      && root.controller.filter === modelData.code
-                            Layout.fillWidth: false
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
                             Layout.preferredWidth: root.compact ? 40
                                                    : Math.min(118,
                                                      Math.max(84,
@@ -224,35 +208,8 @@ Rectangle {
                             }
                         }
                     }
-                    Item {
-                        Layout.fillWidth: true
-                    }
                 }
 
-                ThemedTextField {
-                    id: searchField
-                    objectName: "losslessSearchField"
-                    Layout.fillWidth: true
-                    visible: root.searchMode
-                    placeholderText: qsTr("搜索文件名或判定结果")
-                    accessibleName: qsTr("搜索鉴别任务")
-                    text: root.controller ? root.controller.searchText : ""
-                    onTextChanged: {
-                        if (root.controller
-                                && root.controller.searchText !== text)
-                            root.controller.searchText = text
-                    }
-                    Connections {
-                        target: root.controller
-                        ignoreUnknownSignals: true
-                        function onSearchTextChanged() {
-                            const next = root.controller
-                                         ? root.controller.searchText : ""
-                            if (searchField.text !== next)
-                                searchField.text = next
-                        }
-                    }
-                }
             }
         }
 

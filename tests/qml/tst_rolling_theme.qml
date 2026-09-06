@@ -646,6 +646,10 @@ TestCase {
         compare(mainWaveform.preserveSourcePeakDensity, false,
                 "the rolling viewport must keep dense waveform detail instead of "
                 + "stretching sparse source peaks across the canvas")
+        compare(mainWaveform.sourceAnchoredSampling, true,
+                "rolling must keep each source sample's amplitude and colour stable while panning")
+        compare(overview.sourceAnchoredSampling, false,
+                "source-anchored sampling stays local to the rolling viewport")
 
         var low = String(rolling.frequencyWaveformSettings.lowColor)
         var high = String(rolling.frequencyWaveformSettings.highColor)
@@ -663,9 +667,9 @@ TestCase {
 
     function test_rolling_tempo_meter_and_zoom_controls_are_live() {
         var rolling = rollingWithFakes()
-        compare(rolling.visibleBeats, 64,
-                "each rolling entry starts at the approved 64-beat viewport")
-        compare(rolling.viewTimeSpanSec, 30.0,
+        compare(rolling.visibleBeats, 32,
+                "each rolling entry starts at the approved 32-beat viewport")
+        compare(rolling.viewTimeSpanSec, 15.0,
                 "grid BPM, not target playback BPM, maps the rolling viewport")
         var sourceBpm = findChild(rolling, "rollingSourceBpm")
         var targetBpm = findChild(rolling, "rollingTargetBpm")
@@ -698,7 +702,7 @@ TestCase {
         rolling.zoomOut()
         compare(rolling.visibleBeats, 64)
         rolling.resetZoom()
-        compare(rolling.visibleBeats, 64)
+        compare(rolling.visibleBeats, 32)
 
         rolling.visibleBeats = 1
         tryCompare(rolling, "visibleBeats", 2)
@@ -765,8 +769,8 @@ TestCase {
         var canvas = findChild(rolling, "rollingMainWaveformCanvas")
         var time = findChild(rolling, "rollingCurrentTimeCapsule")
         verify(canvas && time)
-        compare(rolling.pxPerSec, canvas.width / 30,
-                "the 64-beat default uses grid BPM without changing audio speed")
+        compare(rolling.pxPerSec, canvas.width / 15,
+                "the 32-beat default uses grid BPM without changing audio speed")
         fakePlayback.positionMs = 72009
         tryCompare(time, "text", "01:12:00")
         fakePlayback.positionMs = 72010
@@ -783,6 +787,7 @@ TestCase {
             var canvas = findChild(rolling, "rollingMainWaveformCanvas")
             var waveform = findChild(rolling, "rollingMainWaveform")
             verify(canvas && waveform)
+            compare(canvas.height, rolling.height < 800 ? 124 : 136)
             compare(waveform.y, 8)
             compare(waveform.y + waveform.height, canvas.height - 8)
             compare(waveform.amplitudeScale, 1.5,
@@ -805,26 +810,69 @@ TestCase {
             var viewport = findChild(rolling, "rollingViewportBeats")
             var minus = findChild(rolling, "rollingZoomMinus")
             var plus = findChild(rolling, "rollingZoomPlus")
-            verify(gridSwitch && grouping && viewport && minus && plus)
+            var zoomReset = findChild(rolling, "rollingZoomReset")
+            var targetBpm = findChild(rolling, "rollingTargetBpm")
+            var tempoReset = findChild(rolling, "rollingTempoReset")
+            var calibration = findChild(
+                        rolling, "rollingGridCalibrationButton")
+            verify(gridSwitch && grouping && viewport && minus && plus
+                   && zoomReset && targetBpm && tempoReset && calibration)
             compare(gridSwitch.checked, true)
             compare(grouping.currentText, "4")
-            compare(viewport.currentText, "64")
-            compare(viewport.displayText, "64")
-            compare(viewport.contentItem.text, "64")
+            compare(viewport.currentText, "32")
+            compare(viewport.displayText, "32")
+            compare(viewport.contentItem.text, "32")
             verify(viewport.contentItem.paintedWidth > 0)
             verify(viewport.contentItem.width
                    - viewport.contentItem.leftPadding
                    - viewport.contentItem.rightPadding
                    >= viewport.contentItem.paintedWidth)
             compare(viewport.contentItem.truncated, false)
-            compare(minus.enabled, false)
+            compare(minus.enabled, true)
             compare(plus.enabled, true)
+            compare(gridSwitch.height, 28)
+            compare(grouping.height, 28)
+            compare(viewport.height, 28)
+            compare(minus.height, 28)
+            compare(plus.height, 28)
+            compare(zoomReset.height, 28)
+            compare(targetBpm.height, 28)
+            compare(tempoReset.height, 28)
+            compare(calibration.height, 28)
+            compare(zoomReset.icon.width, 18)
+            compare(zoomReset.icon.height, 18)
+            compare(tempoReset.icon.width, 18)
+            compare(tempoReset.icon.height, 18)
+
+            var gridRight = gridSwitch.mapToItem(
+                        rolling, gridSwitch.width, 0).x
+            var calibrationLeft = calibration.mapToItem(rolling, 0, 0).x
+            var calibrationRight = calibration.mapToItem(
+                        rolling, calibration.width, 0).x
+            var groupingLeft = grouping.mapToItem(rolling, 0, 0).x
+            verify(calibrationLeft >= gridRight,
+                   "calibration belongs immediately after the grid switch")
+            verify(groupingLeft >= calibrationRight,
+                   "grouping follows calibration in the same control flow")
+
+            var controlCenters = [gridSwitch, calibration, grouping, viewport,
+                                  targetBpm, tempoReset]
+            var firstCenter = controlCenters[0].mapToItem(
+                        rolling, 0, controlCenters[0].height / 2).y
+            for (var centerIndex = 1; centerIndex < controlCenters.length;
+                 ++centerIndex) {
+                var center = controlCenters[centerIndex].mapToItem(
+                            rolling, 0,
+                            controlCenters[centerIndex].height / 2).y
+                verify(Math.abs(center - firstCenter) <= 1,
+                       "rolling control centres share one baseline")
+            }
 
             mouseClick(plus)
-            compare(rolling.visibleBeats, 32)
-            compare(viewport.currentText, "32")
-            compare(viewport.displayText, "32")
-            compare(viewport.contentItem.text, "32")
+            compare(rolling.visibleBeats, 16)
+            compare(viewport.currentText, "16")
+            compare(viewport.displayText, "16")
+            compare(viewport.contentItem.text, "16")
             verify(viewport.contentItem.paintedWidth > 0)
             compare(viewport.contentItem.truncated, false)
             while (plus.enabled)
@@ -834,7 +882,7 @@ TestCase {
             mouseClick(minus)
             compare(rolling.visibleBeats, 4)
             rolling.resetZoom()
-            compare(rolling.visibleBeats, 64)
+            compare(rolling.visibleBeats, 32)
 
             rolling.visibleBeats = 8
             enterMode(0)
@@ -842,7 +890,7 @@ TestCase {
                 return shell("rollingPlayerShell") === null
             }, 1000, "rolling shell must finish unloading before re-entry")
             rolling = rollingWithFakes()
-            compare(rolling.visibleBeats, 64,
+            compare(rolling.visibleBeats, 32,
                     "re-entering rolling resets the viewport while track changes do not")
 
             gridSwitch = findChild(rolling, "rollingBeatGridSwitch")
@@ -872,10 +920,14 @@ TestCase {
         compare(grid.firstBeatMs, 250)
         compare(grid.bpm, 128)
         compare(grid.grouping, SettingsController.rollingBeatGridGrouping)
+        compare(grid.fourBeatColor, Theme.success)
+        compare(grid.eightBeatColor, Theme.danger)
         verify(grid.visibleBeatCount() <= 12,
                "renderer enumerates only beats intersecting the viewport")
-        compare(grid.isDownbeat(4), true)
-        compare(grid.isDownbeat(5), false)
+        compare(grid.isFourBeat(4), true)
+        compare(grid.isFourBeat(5), false)
+        compare(grid.isEightBeat(8), true)
+        compare(grid.isEightBeat(4), false)
 
         var expectedMainX = rolling.timeToX(fakePlayback.cuePositionMs / 1000)
         compare(Math.round(cue.mapToItem(canvas, cue.width / 2, 0).x),
@@ -1006,6 +1058,8 @@ TestCase {
         verify(cueButton && setFirst && nudgeLeft && nudgeRight
                && bpm && reset && status && calibrationButton
                && calibrationPopup)
+        compare(bpm.height, 28)
+        compare(bpm.text, "128.000")
         var play = findChild(rolling, "playPauseButton")
         var playBody = findChild(rolling, "playButtonBody")
         verify(playBody)

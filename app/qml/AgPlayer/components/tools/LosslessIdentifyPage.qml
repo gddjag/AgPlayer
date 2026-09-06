@@ -400,16 +400,16 @@ Rectangle {
                 }
 
                 Rectangle {
-                    Layout.preferredWidth: page.compactLayout ? 66 : 190
-                    Layout.preferredHeight: page.compactLayout
-                                            ? Theme.losslessControlHeight : 54
-                    color: Theme.losslessWorkspaceSurface
+                    Layout.preferredWidth: page.compactLayout ? 64 : 132
+                    Layout.preferredHeight: Theme.controlHeight
+                    Layout.alignment: Qt.AlignVCenter
+                    color: Theme.surface
                     border.color: Theme.opaqueBorder
                     border.width: 1
                     radius: Theme.radiusSm
 
                     Text {
-                        width: 88
+                        width: 56
                         height: parent.height
                         visible: !page.compactLayout
                         horizontalAlignment: Text.AlignHCenter
@@ -420,16 +420,17 @@ Rectangle {
                         font.pixelSize: Theme.losslessFontSizeMeta
                     }
                     Rectangle {
-                        x: 88
+                        x: 56
                         width: 1
-                        height: parent.height
+                        anchors.verticalCenter: parent.verticalCenter
+                        height: parent.height - Theme.spacingSm * 2
                         visible: !page.compactLayout
                         color: Theme.opaqueDivider
                     }
                     ThemedComboBox {
                         id: concurrencyBox
                         objectName: "losslessConcurrencyBox"
-                        x: page.compactLayout ? 0 : 89
+                        x: page.compactLayout ? 0 : 57
                         width: parent.width - x
                         height: parent.height
                         model: ["1", "2", "3", "4"]

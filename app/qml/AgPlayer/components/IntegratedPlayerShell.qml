@@ -453,7 +453,7 @@ Item {
                 y: waveform.y
                 width: 1
                 height: waveform.height
-                color: "#002fa7" // theme-color-allow: playback guide
+                color: Theme.playbackGuide
                 z: 10
             }
 
