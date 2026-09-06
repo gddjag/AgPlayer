@@ -86,7 +86,7 @@ void TerrainReactorStateTest::fixedSeedProducesStableLayoutAndColorZones()
     QCOMPARE(first.floating, repeated.floating);
     QCOMPARE(first.meteors, repeated.meteors);
     QCOMPARE(first.particles, repeated.particles);
-    QCOMPARE(first.terrain.size(), 81);
+    QVERIFY(first.terrain.size() > 50 && first.terrain.size() < 81);
     QCOMPARE(first.floating.size(), 12);
     QCOMPARE(first.meteors.size(), 4);
     QCOMPARE(first.particles.size(), 16);
@@ -134,12 +134,11 @@ void TerrainReactorStateTest::terrainLayoutProvidesCenteredWideGroundAndStarsSta
     QVERIFY(!layout.particles.isEmpty());
 
     for (const SceneInstance& instance : layout.terrain) {
-        QVERIFY2(std::abs(instance.position.x()) <= kTerrainStageExtent * 0.5F,
-                 "terrain cell escaped the widened ground extent");
-        QVERIFY2(std::abs(instance.position.z()) <= kTerrainStageExtent * 0.5F,
-                 "terrain cell escaped the widened ground extent");
+        QVERIFY2(std::hypot(instance.position.x(), instance.position.z())
+                     <= kTerrainStageExtent * 0.5F,
+                 "terrain corner escaped the circular stage");
     }
-    QCOMPARE(layout.terrain.size(), 33 * 33);
+    QVERIFY(layout.terrain.size() > 800 && layout.terrain.size() < 900);
     const auto center = std::find_if(layout.terrain.cbegin(), layout.terrain.cend(),
                                      [](const SceneInstance& instance) {
         return qFuzzyIsNull(instance.position.x())

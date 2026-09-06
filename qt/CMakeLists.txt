@@ -145,6 +145,8 @@ add_library(agplayer_qt STATIC
     src/frequency_color_waveform_settings.hpp
     src/settings_controller.cpp
     src/settings_controller.hpp
+    src/update_checker.cpp
+    src/update_checker.hpp
     src/translation_manager.cpp
     src/translation_manager.hpp
     src/track_waveform_thumbnail_provider.cpp

@@ -248,8 +248,7 @@ void main()
         }
         position.y += scale.y * 0.5;
         float stageHalfExtent = max(1.0, ubuf.sceneControls.z);
-        float stageDistance = max(abs(instancePosition.x),
-                                  abs(instancePosition.z));
+        float stageDistance = distanceFromCore;
         // A maximum response radius can outgrow the stage. Do not feed
         // reversed edges to smoothstep: that is undefined and hid the wider
         // field instead of letting it cover the expanded ground.
@@ -267,7 +266,7 @@ void main()
         float sparseCell = smoothstep(0.54 + outerField * 0.20,
                                       0.92, cellNoise);
         opacity *= mix(1.0, 0.18 + sparseCell * 0.58, outerField);
-        opacity *= 1.0 - smoothstep(stageHalfExtent * 0.96,
+        opacity *= 1.0 - smoothstep(stageHalfExtent * 0.86,
                                     stageHalfExtent, stageDistance);
         opacity *= ubuf.sceneControls.x;
         topSurface = smoothstep(0.72, 0.98, vertexNormal.y);

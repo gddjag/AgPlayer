@@ -42,6 +42,8 @@ private slots:
     void defaultFrequencyColorsUseFixedPalette();
     void threeBandMixerKeepsPureColorsAndCreatesCombinations();
     void threeBandMixerPreservesDominantBandChroma();
+    void threeBandMixerKeepsModerateDominanceVivid_data();
+    void threeBandMixerKeepsModerateDominanceVivid();
     void frequencyModeUsesAmplitudeGeometryAndBrightnessOnlyProgress();
     void frequencyColorChangeDoesNotReplaceGeometryNode();
     void reusesNodeAndUpdatesGeometryAfterResize();
@@ -344,6 +346,37 @@ void WaveformItemTest::threeBandMixerPreservesDominantBandChroma()
     const QColor adjacent = agplayer::ui::mixFrequencyColor(
         1.0, 0.2001, 0.05, red, green, blue);
     QVERIFY(std::abs(adjacent.green() - bass.green()) <= 1);
+}
+
+void WaveformItemTest::threeBandMixerKeepsModerateDominanceVivid_data()
+{
+    QTest::addColumn<double>("low");
+    QTest::addColumn<double>("mid");
+    QTest::addColumn<double>("high");
+    QTest::newRow("bass") << 0.8 << 0.35 << 0.2;
+    QTest::newRow("treble") << 0.2 << 0.35 << 0.8;
+    QTest::newRow("quiet-bass") << 0.08 << 0.035 << 0.02;
+    QTest::newRow("quiet-treble") << 0.02 << 0.035 << 0.08;
+}
+
+void WaveformItemTest::threeBandMixerKeepsModerateDominanceVivid()
+{
+    QFETCH(double, low);
+    QFETCH(double, mid);
+    QFETCH(double, high);
+    const QColor mixed = agplayer::ui::mixFrequencyColor(
+        low, mid, high, Qt::red, Qt::green, Qt::blue);
+    qInfo() << "moderate frequency RGB" << mixed.red() << mixed.green()
+            << mixed.blue() << "saturation" << mixed.hsvSaturationF();
+    // A four-to-one dominant/weak-band ratio should remain visibly colored
+    // even with a substantial middle band, at both normal and quiet levels.
+    QVERIFY2(mixed.hsvSaturationF() >= 0.51,
+             "moderate band dominance must not fade into a pastel mixture");
+    const int dominant = low > high ? mixed.red() : mixed.blue();
+    const int weakest = low > high ? mixed.blue() : mixed.red();
+    QVERIFY(dominant > mixed.green() && mixed.green() > weakest);
+    QVERIFY2(weakest >= 90, "weaker frequency energy must remain visible");
+    QVERIFY(dominant >= 190);
 }
 
 void WaveformItemTest::defaultFrequencyColorsUseFixedPalette()

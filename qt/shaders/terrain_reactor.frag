@@ -85,11 +85,18 @@ void main()
     specularPower *= 1.45 - material.y;
     specularPower = mix(specularPower, mix(110.0, 16.0, material.y), jelly);
     float specular = pow(max(dot(normal, halfVector), 0.0), specularPower);
+    // A broad restrained coat under the tighter key reflection gives the
+    // rounded facets depth without another pass or a bloom surface.
+    float coat = pow(max(dot(normal, halfVector), 0.0),
+                     max(8.0, specularPower * 0.28));
     float fresnel = pow(1.0 - max(dot(normal, view), 0.0), 3.0);
     vec3 specularTint = mix(vec3(0.82, 0.90, 1.0),
                             vec3(1.0, 0.96, 0.91), topSurface);
-    lit += specularTint * specular * (0.12 + topSurface * 0.32);
+    lit += specularTint * (specular * (0.12 + topSurface * 0.29)
+                          + coat * isTerrain * 0.025);
     lit += vec3(0.16, 0.34, 0.46) * fillDiffuse * sideFace * 0.14;
+    float backRim = pow(max(dot(normal, normalize(fillDirection + view)), 0.0), 36.0);
+    lit += vec3(0.24, 0.48, 0.62) * backRim * sideFace * 0.10;
     lit += color * fresnel * (0.035 + sideFace * 0.06);
     // Colored body fill suggests a soft translucent solid without blending
     // thousands of transparent columns or allocating a refraction pass.

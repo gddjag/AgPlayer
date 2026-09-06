@@ -217,10 +217,41 @@ TestCase {
         verify(toolsWindow)
         wait(0)
         const titleBar = findChild(toolsWindow.contentItem, "audioToolsTitleBar")
+        const titleText = findChild(toolsWindow.contentItem,
+                                    "audioToolsWindowTitle")
+        const logo = findChild(toolsWindow.contentItem, "audioToolsLogo")
+        const minimize = findChild(toolsWindow.contentItem,
+                                   "audioToolsMinimizeButton")
+        const maximize = findChild(toolsWindow.contentItem,
+                                   "audioToolsMaximizeButton")
+        const close = findChild(toolsWindow.contentItem,
+                                "audioToolsCloseButton")
         const navigation = findChild(toolsWindow.contentItem, "audioToolsTopNav")
         const firstTab = findChild(toolsWindow.contentItem, "audioToolNav_0")
-        verify(titleBar && navigation && firstTab)
-        compare(titleBar.height, 50)
+        verify(titleBar && titleText && logo && minimize && maximize && close
+               && navigation && firstTab)
+        compare(titleBar.height, Theme.titleBarHeight)
+        compare(titleBar.color.toString(), Theme.titleBarSurface.toString())
+        compare(titleText.font.pixelSize, Theme.fontSizeSection)
+        fuzzyCompare(logo.mapToItem(titleBar, 0, 0).x,
+                     Theme.spacingXl, 0.5)
+        for (const control of [minimize, maximize, close]) {
+            compare(control.width, Theme.navigationActionExtent)
+            compare(control.height, Theme.navigationActionExtent)
+            fuzzyCompare(control.y,
+                         (titleBar.height - Theme.navigationActionExtent) / 2,
+                         0.5)
+        }
+        for (const child of titleBar.children) {
+            if (child !== titleBar && child.visible
+                    && child.color !== undefined
+                    && Math.abs(child.width - titleBar.width) <= 0.5
+                    && Math.abs(child.height - titleBar.height) <= 0.5) {
+                compare(child.color.toString(),
+                        Theme.titleBarSurface.toString(),
+                        "lossless mode must not cover the shared title surface")
+            }
+        }
         compare(navigation.height, Theme.settingsRowHeight)
         const initialWidth = firstTab.width
         const initialFont = firstTab.labelPixelSize

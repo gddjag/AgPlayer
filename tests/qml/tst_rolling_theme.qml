@@ -12,6 +12,8 @@ TestCase {
     property int savedThemeMode: 0
     property int savedWaveformMode: 0
 
+    Component { id: trackListFixture; TrackList { width: 900; height: 300 } }
+
     QtObject {
         id: fakePlayback
         property int positionMs: 60000
@@ -286,6 +288,47 @@ TestCase {
         } finally {
             SettingsController.listWaveformThumbnailEnabled = previousEnabled
         }
+    }
+
+    function test_single_window_duration_header_centers_over_values() {
+        for (var mode = 1; mode <= 2; ++mode) {
+            var currentShell = enterMode(mode)
+            var list = findChild(currentShell, mode === 2
+                                 ? "rollingTrackList" : "integratedTrackList")
+            verify(list)
+            var header = findChild(list, "trackHeaderDuration")
+            verify(header)
+            compare(header.horizontalAlignment, Text.AlignHCenter,
+                    "duration heading must share the centered values alignment")
+        }
+    }
+
+    function test_rolling_control_groups_center_in_transport_bar() {
+        var rolling = rollingWithFakes()
+        mainWindow.width = rolling.defaultWindowWidth
+        mainWindow.height = rolling.defaultWindowHeight
+        wait(0)
+        var bottom = findChild(rolling, "rollingBottomBar")
+        var groups = [findChild(rolling, "rollingBeatGridSwitch").parent,
+                      findChild(rolling, "rollingKeepPitchControl").parent,
+                      findChild(rolling, "rollingShellActions")]
+        for (var i = 0; i < groups.length; ++i) {
+            var center = groups[i].mapToItem(bottom, 0, groups[i].height / 2).y
+            verify(Math.abs(center - bottom.height / 2) <= 1,
+                   "control group must center within the whole transport bar")
+        }
+    }
+
+    function test_rolling_bpm_input_has_vertical_clearance() {
+        var target = findChild(rollingWithFakes(), "rollingTargetBpm")
+        verify(target.height <= 26,
+               "BPM input must leave a little more clearance in the group")
+    }
+
+    function test_classic_favorite_icon_is_compact() {
+        var list = createTemporaryObject(trackListFixture, testCase)
+        verify(list)
+        compare(list.favoriteIconSize, 20)
     }
 
     function test_rolling_default_window_is_1386_wide_and_shows_ten_rows() {
@@ -788,8 +831,8 @@ TestCase {
             var waveform = findChild(rolling, "rollingMainWaveform")
             verify(canvas && waveform)
             compare(canvas.height, rolling.height < 800 ? 124 : 136)
-            compare(waveform.y, 8)
-            compare(waveform.y + waveform.height, canvas.height - 8)
+            compare(waveform.y, 6)
+            compare(waveform.y + waveform.height, canvas.height - 6)
             compare(waveform.amplitudeScale, 1.5,
                     "rolling preserves the configured amplitude without a hidden cap")
             compare(waveform.preserveSourcePeakDensity, false)
@@ -836,7 +879,7 @@ TestCase {
             compare(minus.height, 28)
             compare(plus.height, 28)
             compare(zoomReset.height, 28)
-            compare(targetBpm.height, 28)
+            compare(targetBpm.height, 26)
             compare(tempoReset.height, 28)
             compare(calibration.height, 28)
             compare(zoomReset.icon.width, 18)

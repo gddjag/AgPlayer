@@ -13,6 +13,7 @@
 
 class FileAssociationController;
 class SettingsControllerTest;
+class UpdateChecker;
 
 class SettingsController final : public QObject {
     Q_OBJECT
@@ -182,6 +183,7 @@ class SettingsController final : public QObject {
 
     // About
     Q_PROPERTY(QString version READ version CONSTANT)
+    Q_PROPERTY(QObject* updateChecker READ updateChecker CONSTANT)
     Q_PROPERTY(QString releaseDate READ releaseDate CONSTANT)
 
 public:
@@ -283,6 +285,7 @@ public:
 
     // About getters
     QString version() const;
+    QObject* updateChecker() const;
     QString releaseDate() const;
 
     // General setters
@@ -470,6 +473,7 @@ signals:
     void cacheTrimReport(qint64 bytesFreed, int filesRemoved);
 
 private:
+    UpdateChecker* updateChecker_ = nullptr;
     friend class SettingsControllerTest;
 
     void load();

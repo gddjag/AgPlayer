@@ -2434,7 +2434,13 @@ Item {
     }
 
     component AboutSection: ColumnLayout {
+        id: aboutSection
         spacing: Theme.spacingLg
+        readonly property var updateService: SettingsController.updateChecker
+        onVisibleChanged: {
+            if (visible && root.visible)
+                updateService.check()
+        }
 
         SectionHeader {
             title: qsTr("关于")
@@ -2511,6 +2517,38 @@ Item {
             }
         }
 
+        SettingCard {
+            title: qsTr("软件更新")
+            Layout.fillWidth: true
+            Text {
+                objectName: "aboutUpdateStatus"
+                Layout.fillWidth: true
+                text: aboutSection.updateService.statusText
+                textFormat: Text.PlainText
+                wrapMode: Text.WordWrap
+                color: aboutSection.updateService.updateAvailable ? Theme.accent : Theme.secondaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: Theme.fontSizeBody
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacingSm
+                ThemedButton {
+                    objectName: "aboutCheckUpdates"
+                    text: aboutSection.updateService.busy ? qsTr("正在检查…") : qsTr("检查更新")
+                    enabled: !aboutSection.updateService.busy
+                    onClicked: aboutSection.updateService.check()
+                }
+                ThemedButton {
+                    objectName: "aboutDownloadUpdate"
+                    visible: aboutSection.updateService.updateAvailable
+                    prominent: true
+                    text: qsTr("前往官网下载")
+                    onClicked: SettingsController.openOfficialWebsite()
+                }
+                Item { Layout.fillWidth: true }
+            }
+        }
         Item { Layout.fillHeight: true }
     }
 

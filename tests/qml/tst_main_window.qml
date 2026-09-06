@@ -2943,10 +2943,11 @@ TestCase {
             var rowFavorite = findChild(row, "trackFavoriteCell")
             var rowStar = findChild(row, "trackRatingStar0")
             verify(rowFavorite && rowStar)
-            compare(rowFavorite.icon.width, 22)
-            compare(rowFavorite.icon.height, 22)
+            compare(rowFavorite.icon.width, 20)
+            compare(rowFavorite.icon.height, 20)
             compare(rowStar.sourceSize.width, 15)
             compare(rowStar.sourceSize.height, 15)
+            verify(rowFavorite.icon.width > rowStar.sourceSize.width)
 
             var navigation = findChild(window, "referenceSideNavigation")
             verify(navigation)
@@ -5508,6 +5509,18 @@ TestCase {
         verify(versionLine && promiseLine)
         compare(versionLine.text, qsTr("版本号：") + SettingsController.version)
         compare(promiseLine.text, qsTr("免费、轻便、纯净"))
+        var updateStatus = findChild(page, "aboutUpdateStatus")
+        var checkUpdates = findChild(page, "aboutCheckUpdates")
+        var downloadUpdate = findChild(page, "aboutDownloadUpdate")
+        verify(updateStatus && checkUpdates && downloadUpdate)
+        compare(updateStatus.text, SettingsController.updateChecker.statusText)
+        compare(downloadUpdate.visible, SettingsController.updateChecker.updateAvailable)
+        if (SettingsController.updateChecker.state === "unconfigured") {
+            verify(checkUpdates.enabled)
+            checkUpdates.clicked()
+            compare(SettingsController.updateChecker.state, "unconfigured")
+            verify(!downloadUpdate.visible)
+        }
         page.close()
     }
 

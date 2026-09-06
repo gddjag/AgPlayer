@@ -123,8 +123,8 @@ Assert-Matches $trackList '(?s)trackHeaderTitle.*Layout\.column:\s*1.*trackHeade
     'Classic headers must render title, duration, rating, favorite, and BPM in reference order'
 Assert-Matches $trackList 'readonly property int ratingIconSize:\s*relaxedClassicColumns \? 15' `
     'Classic and tag list stars must use the smaller reference size'
-Assert-Matches $trackList 'readonly property int favoriteIconSize:\s*relaxedClassicColumns \? 22' `
-    'Classic and tag favorites must remain visually stronger than row rating stars'
+Assert-Matches $trackList 'readonly property int favoriteIconSize:\s*relaxedClassicColumns \? 20' `
+    'Classic and tag favorites must use the requested compact 20 px size, above 15 px row rating stars'
 Assert-Matches $trackList '(?s)id:\s*titleCell.*Layout\.fillWidth:\s*!root\.singleWindowLayout.*Layout\.maximumWidth:\s*root\.singleWindowLayout.*Number\.POSITIVE_INFINITY' `
     'Classic title and waveform column must grow while trailing metadata columns keep fixed widths'
 Assert-Matches $window 'objectName:\s*"leftWorkspaceDivider"[\s\S]*opacity:\s*0\.3' `

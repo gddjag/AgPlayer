@@ -9,6 +9,11 @@ endif()
 project(AgPlayer VERSION "${AGPLAYER_VERSION}" LANGUAGES C CXX)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/generated")
+set(AGPLAYER_UPDATE_MANIFEST_URL "" CACHE STRING "Direct HTTPS URL of the official release manifest; empty disables update requests")
+if(AGPLAYER_UPDATE_MANIFEST_URL AND NOT AGPLAYER_UPDATE_MANIFEST_URL MATCHES "^https://[A-Za-z0-9][A-Za-z0-9./_?=&%:+~-]*$")
+    message(FATAL_ERROR "AGPLAYER_UPDATE_MANIFEST_URL must be a safe direct HTTPS URL")
+endif()
+configure_file(cmake/agplayer_update_config.hpp.in generated/agplayer_update_config.hpp @ONLY)
 configure_file(
     "${CMAKE_SOURCE_DIR}/cmake/agplayer_version.hpp.in"
     "${CMAKE_BINARY_DIR}/generated/agplayer_version.hpp"

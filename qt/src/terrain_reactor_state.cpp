@@ -263,6 +263,9 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
             instance.scale = QVector3D(spacing, 1.0F, spacing);
             instance.random = random.unit();
             const float distance = std::hypot(worldX, worldZ);
+            // Retain the centered Cartesian cells and their random sequence,
+            // but submit only the circular stage. The shader softens its rim.
+            if (distance > stageRadius) continue;
             const float radius = distance / stageRadius;
             instance.zone = zoneFor(worldX, worldZ, radius, instance.random);
             result.terrain.append(instance);

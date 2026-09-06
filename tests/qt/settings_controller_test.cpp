@@ -11,6 +11,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileDevice>
+#include <QRegularExpression>
 #include <QSettings>
 #include <QScopeGuard>
 #include <QSignalSpy>
@@ -89,6 +90,7 @@ class SettingsControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void aboutUpdateServiceIsExplicitlyUnconfigured();
     void initTestCase();
     void defaultCacheDirectoryUsesStandardPaths();
     void emptyTestCacheLocationFallsBackBeforeAppending();
@@ -966,6 +968,31 @@ void SettingsControllerTest::rollingKeyboardShortcutsRejectLegacyConflictsBothDi
     QCOMPARE(legacyReloaded.rollingKeyboardShortcuts()
                  .value(QStringLiteral("cue")).toString(), QString());
     persisted.clear();
+}
+
+void SettingsControllerTest::aboutUpdateServiceIsExplicitlyUnconfigured()
+{
+    SettingsController settings;
+    const QVariant serviceProperty = settings.property("updateChecker");
+    QVERIFY2(serviceProperty.isValid(), "About must expose a real update service, not a static latest-version label");
+    QObject* service = serviceProperty.value<QObject*>();
+    QVERIFY(service);
+    const QString currentVersion = service->property("currentVersion").toString();
+    QVERIFY(QRegularExpression(QStringLiteral("^[0-9]+\\.[0-9]+\\.[0-9]+$")).match(currentVersion).hasMatch());
+    // Configured builds must also run offline tests without contacting production.
+    if (service->property("state").toString() == QStringLiteral("unconfigured")) {
+        QVERIFY(QMetaObject::invokeMethod(service, "check"));
+        QCOMPARE(service->property("state").toString(), QStringLiteral("unconfigured"));
+    } else {
+        QCOMPARE(service->property("state").toString(), QStringLiteral("idle"));
+    }
+    QCOMPARE(service->property("updateAvailable").toBool(), false);
+    QSignalSpy translatedStatus(service, SIGNAL(changed()));
+    const QString previousLanguage = settings.language();
+    const auto restoreLanguage = qScopeGuard([&] { settings.setLanguage(previousLanguage); });
+    settings.setLanguage(settings.language() == QStringLiteral("en")
+                             ? QStringLiteral("zh") : QStringLiteral("en"));
+    QTRY_VERIFY(translatedStatus.count() > 0);
 }
 
 void SettingsControllerTest::frequencyColorMixPreservesPastelAndChroma()

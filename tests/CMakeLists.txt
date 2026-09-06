@@ -934,6 +934,7 @@ foreach(qt_test IN ITEMS
     shutdown_test
     runtime_log_test
     settings_controller_test
+    update_checker_test
     replay_gain_scanner_test
     translation_manager_test
     audio_preview_controller_test
@@ -972,6 +973,9 @@ endforeach()
 target_compile_definitions(terrain_reactor_gpu_smoke_test PRIVATE
     AGPLAYER_TERRAIN_SHADER_SOURCE="${CMAKE_SOURCE_DIR}/qt/shaders/terrain_reactor.vert"
 )
+
+# Includes the real ten-second network deadline, not a shortened test-only timeout.
+set_tests_properties(update_checker_test PROPERTIES TIMEOUT 20)
 
 # This GPU suite runs seven targeted cases, each with its own
 # discriminating QTRY deadline. Give only the outer CTest watchdog enough time

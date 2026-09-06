@@ -84,7 +84,7 @@ ListView {
         singleWindowLayout || relaxedClassicColumns || !tagFilterActive
     readonly property int ratingIconSize:
         relaxedClassicColumns ? 15 : (compactColumns ? 15 : 17)
-    readonly property int favoriteIconSize: relaxedClassicColumns ? 22 : 18
+    readonly property int favoriteIconSize: relaxedClassicColumns ? 20 : 18
     readonly property int headerHeight: Theme.tableHeaderHeight
     readonly property int headerFontWeight: Font.DemiBold
     readonly property bool waveformThumbnailsVisible:
@@ -491,7 +491,7 @@ ListView {
             Item { objectName: "trackHeaderAlbumRatingGap"; visible: root.showAlbumColumn; Layout.column: 7; Layout.minimumWidth: visible ? root.albumRatingGap : 0; Layout.preferredWidth: visible ? root.albumRatingGap : 0; Layout.maximumWidth: visible ? root.albumRatingGap : 0 }
             HeaderText { objectName: "trackHeaderRating"; text: qsTr("评分"); Layout.column: root.singleWindowLayout ? 4 : (root.relaxedClassicColumns ? 3 : 8); Layout.leftMargin: root.singleWindowLayout ? root.trailingColumnGap : (root.relaxedClassicColumns ? 12 : 0); horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: root.ratingWidth; Layout.preferredWidth: root.ratingWidth; Layout.maximumWidth: root.ratingWidth }
             HeaderText { objectName: "trackHeaderBpm"; text: "BPM"; visible: root.showBpmColumn; Layout.column: root.relaxedClassicColumns ? 5 : 9; horizontalAlignment: Text.AlignHCenter; Layout.minimumWidth: visible ? root.bpmWidth : 0; Layout.preferredWidth: visible ? root.bpmWidth : 0; Layout.maximumWidth: visible ? root.bpmWidth : 0 }
-            HeaderText { objectName: "trackHeaderDuration"; text: qsTr("时长"); visible: root.showDurationColumn; Layout.column: root.singleWindowLayout ? 3 : (root.relaxedClassicColumns ? 2 : 10); Layout.leftMargin: root.singleWindowLayout ? root.trailingColumnGap : 0; horizontalAlignment: Text.AlignRight; Layout.minimumWidth: visible ? root.durationWidth : 0; Layout.preferredWidth: visible ? root.durationWidth : 0; Layout.maximumWidth: visible ? root.durationWidth : 0 }
+            HeaderText { objectName: "trackHeaderDuration"; text: qsTr("时长"); visible: root.showDurationColumn; Layout.column: root.singleWindowLayout ? 3 : (root.relaxedClassicColumns ? 2 : 10); Layout.leftMargin: root.singleWindowLayout ? root.trailingColumnGap : 0; horizontalAlignment: root.singleWindowLayout ? Text.AlignHCenter : Text.AlignRight; Layout.minimumWidth: visible ? root.durationWidth : 0; Layout.preferredWidth: visible ? root.durationWidth : 0; Layout.maximumWidth: visible ? root.durationWidth : 0 }
         }
     }
 

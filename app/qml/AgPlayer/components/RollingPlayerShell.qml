@@ -897,10 +897,10 @@ Item {
                 id: mainWaveform
                 objectName: "rollingMainWaveform"
                 x: root.waveformContentX
-                y: 8
+                y: 6
                 width: Math.max(0, (parent.width - 2)
                                 * root.waveformContentWidthFraction)
-                height: Math.max(0, parent.height - 16)
+                height: Math.max(0, parent.height - 12)
                 layers: root.waveformSession
                         ? root.waveformSession.layers : ({})
                 duration: root.effectiveDurationMs
@@ -1203,7 +1203,8 @@ Item {
                     visible: true
                     Layout.fillWidth: true
                     Layout.minimumWidth: 0
-                    Layout.fillHeight: true
+                    Layout.preferredHeight: childrenRect.height
+                    Layout.alignment: Qt.AlignVCenter
                     spacing: root.width < 1180 ? Theme.spacingXs : Theme.spacingSm
 
                     readonly property real singleRowContentWidth:
@@ -1426,7 +1427,7 @@ Item {
                             id: targetBpm
                             objectName: "rollingTargetBpm"
                             Layout.preferredWidth: 72
-                            Layout.preferredHeight: Theme.controlHeightCompact
+                            Layout.preferredHeight: 26
                             horizontalAlignment: Text.AlignHCenter
                             text: root.formatBpm(
                                       root.playback

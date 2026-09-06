@@ -1,4 +1,6 @@
 #include "settings_controller.hpp"
+#include "update_checker.hpp"
+#include "agplayer_update_config.hpp"
 
 #include "agplayer_version.hpp"
 #include "frequency_color_waveform_settings.hpp"
@@ -170,6 +172,11 @@ SettingsController::SettingsController(QObject* parent)
     fileAssociations_ = agplayer::qt::supportedAudioExtensions();
     retireLegacySmartPlaylists();
     load();
+    updateChecker_ = new UpdateChecker(QUrl(QString::fromUtf8(agplayer::updates::kEndpoint)),
+                                      QString::fromUtf8(agplayer::version::kVersion), this);
+    // Refresh translated C++ status after the application has installed its translator.
+    connect(this, &SettingsController::languageChanged, updateChecker_,
+            &UpdateChecker::changed, Qt::QueuedConnection);
     applyAutoStartWithWindows();
     applyFileAssociations();
     recalculateCacheSize();
@@ -177,6 +184,8 @@ SettingsController::SettingsController(QObject* parent)
 }
 
 SettingsController::~SettingsController() = default;
+
+QObject* SettingsController::updateChecker() const { return updateChecker_; }
 
 // General getters
 bool SettingsController::autoStartWithWindows() const noexcept { return autoStartWithWindows_; }

@@ -143,23 +143,14 @@ Window {
                 objectName: "audioToolsTitleBar"
                 Layout.fillWidth: true
                 Layout.preferredHeight: Theme.titleBarHeight
-                Layout.minimumHeight: window.losslessWorkbench
-                                      ? Theme.losslessTitleBarHeight
-                                      : Theme.titleBarHeight
+                Layout.minimumHeight: Theme.titleBarHeight
                 Layout.maximumHeight: Layout.minimumHeight
                 color: Theme.titleBarSurface
-
-                Rectangle {
-                    anchors.fill: parent
-                    visible: window.losslessWorkbench
-                    color: Theme.losslessWorkspaceSurface
-                }
 
                 RowLayout {
                     z: 1
                     anchors.fill: parent
-                    anchors.leftMargin: window.losslessWorkbench
-                                        ? Theme.spacingLg : Theme.spacingXl
+                    anchors.leftMargin: Theme.spacingXl
                     anchors.rightMargin: Theme.spacingSm
                     spacing: Theme.spacingMd
 
@@ -180,9 +171,7 @@ Window {
                         text: qsTr("AgPlayer · 音频工具")
                         color: Theme.primaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: window.losslessWorkbench
-                                        ? Theme.losslessFontSizeSection
-                                        : Theme.fontSizeSection
+                        font.pixelSize: Theme.fontSizeSection
                         font.weight: Font.Medium
                     }
 

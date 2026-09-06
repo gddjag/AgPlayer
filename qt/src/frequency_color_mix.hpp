@@ -78,7 +78,7 @@ inline QColor mixFrequencyColor(const double lowEnergy,
         // A continuous relative contrast retains mixed hues without gates,
         // winner-take-all colours, or frame/viewport-dependent normalization.
         for (std::size_t index = 0; index < weights.size(); ++index) {
-            weights[index] = peakWeight * std::pow(energies[index] / peakEnergy, 1.10);
+            weights[index] = peakWeight * std::pow(energies[index] / peakEnergy, 1.15);
         }
     }
     if (weights[0] == 0.0 && weights[1] == 0.0 && weights[2] == 0.0) {
