@@ -32,20 +32,20 @@ window.AG_COPY = {
       "tabLabel": "选择播放主题",
       "classic": {
         "name": "经典双窗口",
-        "description": "播放器与列表自由拆分，磁吸组合。",
+        "description": "简洁轻便，播放器与列表自由拆分、磁吸组合。",
         "imageAlt": "经典双窗口主题的播放器与播放列表",
         "shortName": "双窗口"
       },
       "single": {
         "name": "单窗口",
-        "description": "音乐库与波形一屏掌握，框选导出片段。",
+        "description": "一键框选波形，将片段拖到桌面或剪辑软件时间线。",
         "imageAlt": "单窗口主题中的波形与音乐管理界面"
       },
       "scrolling": {
         "name": "滚动播放",
-        "description": "放大波形细节，灵活调整播放速度。",
+        "description": "加速播放、BPM 调整与节拍网格，直观看清音乐节奏。",
         "imageAlt": "滚动播放主题的大幅波形与播放控制",
-        "mobileDescription": "看清大波形细节，灵活调整播放速度。"
+        "mobileDescription": "加速播放、调整 BPM，用节拍网格把握节奏。"
       }
     },
     "waveforms": {
@@ -187,7 +187,7 @@ window.AG_COPY = {
     },
     "mini": {
       "title": "专注音乐，不打扰工作",
-      "description": "封面、波形、播放控制与音量，精简而完整。",
+      "description": "小窗口，少占空间；封面、波形与播放控制，精简而完整。",
       "return": "一键返回完整播放器",
       "imageAlt": "AgPlayer 迷你播放器，含封面、波形和播放按钮",
       "positionAndPin": "窗口置顶与位置记忆"
@@ -354,20 +354,20 @@ window.AG_COPY = {
       "tabLabel": "Choose a player theme",
       "classic": {
         "name": "Classic dual window",
-        "description": "Separate the player and playlist, or snap them together.",
+        "description": "Simple and lightweight. Separate the player and playlist, or snap them together.",
         "imageAlt": "The classic theme with separate player and playlist windows",
         "shortName": "Dual window"
       },
       "single": {
         "name": "Single window",
-        "description": "Keep your library and waveform in one view. Select and export a clip.",
+        "description": "Select a waveform region and drag the clip to your desktop or an editing timeline.",
         "imageAlt": "Waveform and library controls in the single-window theme"
       },
       "scrolling": {
         "name": "Scrolling",
-        "description": "See waveform details up close and adjust playback speed.",
+        "description": "Speed up playback, adjust BPM, and follow the rhythm with a beat grid.",
         "imageAlt": "Large waveform and playback controls in the scrolling theme",
-        "mobileDescription": "Explore a large, detailed waveform and adjust playback speed."
+        "mobileDescription": "Speed up playback, adjust BPM, and follow the beat grid."
       }
     },
     "waveforms": {
@@ -509,7 +509,7 @@ window.AG_COPY = {
     },
     "mini": {
       "title": "Keep music close. Stay focused.",
-      "description": "Artwork, waveform, playback & volume.",
+      "description": "A compact window with artwork, waveform, and playback controls.",
       "return": "Return to the full player in one click",
       "imageAlt": "AgPlayer mini player with artwork, waveform, and playback controls",
       "positionAndPin": "Always-on-top mode and position memory"

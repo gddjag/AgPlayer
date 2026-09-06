@@ -4,7 +4,9 @@
 
 AgPlayer 是一款以轻量、简洁为设计方向的本地音频播放器，通过波形展示声音细节，将音乐播放、曲库管理和常用音频工具放在一起。
 
-[官网（部署准备中）](https://agplayer.com) · [版本发布](https://github.com/gddjag/AgPlayer/releases)
+[访问官网](https://agplayer.pages.dev) · [版本发布](https://github.com/gddjag/AgPlayer/releases)
+
+官网已上线，独立域名 `agplayer.com` 正在接入中。
 
 首个正式版本 **v1.0.0** 正在准备中，Windows 安装包尚未开放下载。后续正式安装包将按版本号发布到 GitHub Releases，并提供 R2 下载地址。
 
@@ -19,25 +21,25 @@ AgPlayer 是一款以轻量、简洁为设计方向的本地音频播放器，�
 
 ### 经典双窗口
 
-播放器与音乐列表分开呈现，兼顾播放控制和曲库浏览。
+简洁轻便，播放器与音乐列表可自由拆分、磁吸组合，兼顾播放控制和曲库浏览。
 
 ![AgPlayer 经典双窗口：上方播放器与波形，下方曲库、评分和收藏](assets/images/player-classic.png)
 
 ### 滚动播放
 
-大幅波形与播放速度、BPM、波形缩放控件集中显示，便于查看声音细节。
+支持加速播放、BPM 调整与节拍网格，结合大幅滚动波形查看声音细节、把握节奏。
 
 ![AgPlayer 滚动播放：大幅彩色波形、播放控制、音乐列表和标签面板](assets/images/player-scrolling.png)
 
 ### 单窗口
 
-音乐库、标签面板、整曲波形和播放控制集中在一个窗口中。
+音乐库与整曲波形集中在一个窗口中。一键框选波形，即可将片段拖到桌面或剪辑软件时间线，让选段与剪辑更直接。
 
 ![AgPlayer 单窗口：音乐列表、标签面板与底部整曲波形](assets/images/player-single.png)
 
 ### 迷你播放器
 
-紧凑窗口保留封面、歌曲信息、可视化和常用播放控制。
+小窗口也能完整聆听：保留封面、歌曲信息、可视化和常用播放控制，少占空间，专注音乐。
 
 ![AgPlayer 迷你播放器：封面、歌曲信息、频谱和播放按钮](assets/images/player-mini.png)
 
@@ -47,11 +49,11 @@ AgPlayer 是一款以轻量、简洁为设计方向的本地音频播放器，�
 
 源文件为 `index.html`、`download.html`、`about.html` 和 `assets/`。构建只将这些文件复制到 `public/`，Cloudflare 仅发布该目录。
 
-将 Cloudflare Pages 项目 `agplayer` 连接到 GitHub 仓库 `gddjag/AgPlayer`，生产分支设为 `main`，项目根目录使用仓库根目录：
+Cloudflare Pages 项目 `agplayer` 已连接 GitHub 仓库 `gddjag/AgPlayer` 的 `main` 分支，并已完成首次部署。项目根目录为仓库根目录：
 
 - 构建命令：`node scripts/build-site.mjs`
 - 构建输出目录：`public`
 
-连接并完成首次部署后，提交到 GitHub `main` 的网页更新将触发 Cloudflare 自动构建和部署。上述配置文件不代表线上部署已经完成，实际状态以 Cloudflare 构建结果为准。
+提交到 GitHub `main` 的网页更新会自动触发 Cloudflare 构建和部署，具体结果可在 Pages 项目中查看。
 
-仓库原有 `CNAME` 保留；Cloudflare 的自定义域名仍需在项目和域名管理中绑定。
+仓库原有 `CNAME` 保留；独立域名 `agplayer.com` 仍在接入中，当前通过上述 Pages 地址访问官网。
