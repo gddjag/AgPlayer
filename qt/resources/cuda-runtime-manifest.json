@@ -1,0 +1,28 @@
+{
+  "version": "ort-1.24.4-cuda12-cudnn9-1",
+  "source": "https://pypi.org/pypi/{package}/{version}/json",
+  "dlls": [
+    {"name":"cublas64_12.dll","bytes":100033536,"sha256":"e40202fe4223c1cd2d2dce7beec59e1ed61c7801bd827309183be9b50e358f4c"},
+    {"name":"cublasLt64_12.dll","bytes":473551360,"sha256":"2a896460bef60ed57ef32b0875812f355a6984e671d638bb632f5e8c1d7a831f"},
+    {"name":"cudart64_12.dll","bytes":553984,"sha256":"d28e42265da7462162a54da6b7a99ea4fa2caf8139d862bb500db875d0b32dfc"},
+    {"name":"cudnn_adv64_9.dll","bytes":282445872,"sha256":"f202e8ff36209ac4292fe2ef79d4539487495b3b948f0c978cc63298f43a1850"},
+    {"name":"cudnn_cnn64_9.dll","bytes":4618272,"sha256":"3f03dec3b81f137f049e1d1c06ff469248eef54ff9424b3b9045fc0f69559d1a"},
+    {"name":"cudnn_engines_precompiled64_9.dll","bytes":513926688,"sha256":"ebc2c1f74366b029a4350f7f9a3b109ccd5aa9b4ae02527950793dd29f7b74fb"},
+    {"name":"cudnn_engines_runtime_compiled64_9.dll","bytes":20201008,"sha256":"93ab6351ca0f2b6ca842f83d284e56c427525778c14657229801a13cf8121bd8"},
+    {"name":"cudnn_graph64_9.dll","bytes":2420256,"sha256":"a933efeb280a3252297f92d79f7e83003bcbc6f665872d11645d1dbbab9cb598"},
+    {"name":"cudnn_heuristic64_9.dll","bytes":56823328,"sha256":"458175f12771a35de0ea39c04250d727c2424d42a7ffe0bc987ae81204748fba"},
+    {"name":"cudnn_ops64_9.dll","bytes":126508576,"sha256":"851d8f4191a24b322b0be738d191a3159455f0da4db47a19f5cc7ad6e55edf61"},
+    {"name":"cudnn64_9.dll","bytes":266288,"sha256":"9edbcdff73b0af070eb160b2ce66e59feca04aa017351d8eedcc5e8e149967d2"},
+    {"name":"cufft64_11.dll","bytes":291784192,"sha256":"67f6fa9488c3b2bf15a126ddd3a823c5540764095c80aca4f2b165228c721f5e"},
+    {"name":"onnxruntime_providers_cuda.dll","bytes":312608800,"sha256":"6a02338c8fcf9e913767c1eb57033959f69076567d5290cee59c541793d16354"},
+    {"name":"onnxruntime_providers_shared.dll","bytes":22040,"sha256":"93f33380e5819cb9befbfe0e5212394dcb0c9983970c73a01bf51100bb1f13ee"},
+    {"name":"onnxruntime.dll","bytes":15431712,"sha256":"844463e9d67973a002050179a5f19d4b9255d25c4d31fa520745222bc55f9e49"}
+  ],
+  "files": [
+    {"name":"onnxruntime_gpu-1.24.4-cp311-cp311-win_amd64.whl","url":"https://files.pythonhosted.org/packages/d2/07/036825cbe30f91ea8574a18a759beccd0ea31b7b71e17f6a9ee9304b51d2/onnxruntime_gpu-1.24.4-cp311-cp311-win_amd64.whl","bytes":207193563,"sha256":"1a799a16e5f1ff4d6a9e5f72d750849ab0fe534da8d323ae4a5d8d8bb7daeca8"},
+    {"name":"nvidia_cuda_runtime_cu12-12.4.127-py3-none-win_amd64.whl","url":"https://files.pythonhosted.org/packages/a8/8b/450e93fab75d85a69b50ea2d5fdd4ff44541e0138db16f9cd90123ef4de4/nvidia_cuda_runtime_cu12-12.4.127-py3-none-win_amd64.whl","bytes":878808,"sha256":"09c2e35f48359752dfa822c09918211844a3d93c100a715d79b59591130c5e1e"},
+    {"name":"nvidia_cublas_cu12-12.4.5.8-py3-none-win_amd64.whl","url":"https://files.pythonhosted.org/packages/e2/2a/4f27ca96232e8b5269074a72e03b4e0d43aa68c9b965058b1684d07c6ff8/nvidia_cublas_cu12-12.4.5.8-py3-none-win_amd64.whl","bytes":396895858,"sha256":"5a796786da89203a0657eda402bcdcec6180254a8ac22d72213abc42069522dc"},
+    {"name":"nvidia_cufft_cu12-11.2.1.3-py3-none-win_amd64.whl","url":"https://files.pythonhosted.org/packages/f6/ee/3f3f8e9874f0be5bbba8fb4b62b3de050156d159f8b6edc42d6f1074113b/nvidia_cufft_cu12-11.2.1.3-py3-none-win_amd64.whl","bytes":210576476,"sha256":"d802f4954291101186078ccbe22fc285a902136f974d369540fd4a5333d1440b"},
+    {"name":"nvidia_cudnn_cu12-9.10.2.21-py3-none-win_amd64.whl","url":"https://files.pythonhosted.org/packages/3d/90/0bd6e586701b3a890fd38aa71c387dab4883d619d6e5ad912ccbd05bfd67/nvidia_cudnn_cu12-9.10.2.21-py3-none-win_amd64.whl","bytes":692992268,"sha256":"c6288de7d63e6cf62988f0923f96dc339cea362decb1bf5b3141883392a7d65e"}
+  ]
+}

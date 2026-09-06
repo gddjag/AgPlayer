@@ -117,6 +117,9 @@ private slots:
     void visualizerCanvasAndReplayGainSettingsPersist();
     void glassFeatureIsAbsentFromSettingsContract();
     void playerShellModeDefaultsPersistsAndNormalizes();
+    void rollingBeatGridSettingsDefaultPersistNormalizeAndReset();
+    void rollingKeyboardShortcutsNormalizeRejectConflictsPersistAndCancel();
+    void rollingKeyboardShortcutsRejectLegacyConflictsBothDirections();
     void windowLayoutThemeDefaultsAndNormalizesToDualWindow();
     void appearanceDefaultsToDarkAndPreservesLegacyModes();
     void appearanceDefaultResetDoesNotTouchMediaSettingsOutsideEdit();
@@ -777,6 +780,192 @@ void SettingsControllerTest::frequencyColorPaletteUpgradesPreviousRgbPreset()
             QCOMPARE(reloaded.highColor(), settings.highColor());
         }
     }
+}
+
+void SettingsControllerTest::rollingBeatGridSettingsDefaultPersistNormalizeAndReset()
+{
+    QSettings persisted;
+    persisted.clear();
+
+    {
+        SettingsController settings;
+        QVERIFY(settings.rollingBeatGridEnabled());
+        QCOMPARE(settings.rollingBeatGridGrouping(), 4);
+        settings.setRollingBeatGridEnabled(false);
+        settings.setRollingBeatGridGrouping(8);
+        QCOMPARE(persisted.value(
+                     QStringLiteral("appearance/rollingBeatGridEnabled"))
+                     .toBool(),
+                 false);
+        QCOMPARE(persisted.value(
+                     QStringLiteral("appearance/rollingBeatGridGrouping"))
+                     .toInt(),
+                 8);
+    }
+
+    SettingsController reloaded;
+    QVERIFY(!reloaded.rollingBeatGridEnabled());
+    QCOMPARE(reloaded.rollingBeatGridGrouping(), 8);
+
+    reloaded.setRollingBeatGridGrouping(3);
+    QCOMPARE(reloaded.rollingBeatGridGrouping(), 4);
+    reloaded.setRollingBeatGridGrouping(12);
+    QCOMPARE(reloaded.rollingBeatGridGrouping(), 4);
+    reloaded.setRollingBeatGridGrouping(8);
+    reloaded.resetToDefaults();
+    QVERIFY(reloaded.rollingBeatGridEnabled());
+    QCOMPARE(reloaded.rollingBeatGridGrouping(), 4);
+
+    persisted.setValue(QStringLiteral("appearance/rollingBeatGridGrouping"),
+                       QStringLiteral("invalid"));
+    SettingsController malformed;
+    QCOMPARE(malformed.rollingBeatGridGrouping(), 4);
+    QCOMPARE(persisted.value(
+                 QStringLiteral("appearance/rollingBeatGridGrouping"))
+                 .toInt(),
+             4);
+}
+
+void SettingsControllerTest::rollingKeyboardShortcutsNormalizeRejectConflictsPersistAndCancel()
+{
+    QSettings persisted;
+    persisted.clear();
+
+    SettingsController settings;
+    QVariantMap shortcuts = settings.rollingKeyboardShortcuts();
+    QCOMPARE(shortcuts.size(), 22);
+    QCOMPARE(shortcuts.value(QStringLiteral("cue")).toString(),
+             QStringLiteral("C"));
+    QCOMPARE(shortcuts.value(QStringLiteral("cueJump")).toString(),
+             QStringLiteral("Shift+C"));
+    QCOMPARE(shortcuts.value(QStringLiteral("cueDelete")).toString(),
+             QStringLiteral("Alt+C"));
+    QCOMPARE(shortcuts.value(QStringLiteral("gridOrigin")).toString(),
+             QStringLiteral("Q"));
+    QCOMPARE(shortcuts.value(QStringLiteral("gridLeft")).toString(),
+             QStringLiteral("Left"));
+    QCOMPARE(shortcuts.value(QStringLiteral("gridRight")).toString(),
+             QStringLiteral("Right"));
+    for (int index = 1; index <= 8; ++index) {
+        QCOMPARE(shortcuts.value(QStringLiteral("hotCue%1").arg(index)).toString(),
+                 QString::number(index));
+        QCOMPARE(shortcuts.value(
+                     QStringLiteral("hotCueDelete%1").arg(index)).toString(),
+                 QStringLiteral("Alt+%1").arg(index));
+    }
+
+    QVERIFY(!settings.setRollingKeyboardShortcut(QStringLiteral("unknown"),
+                                                  QStringLiteral("Ctrl+K")));
+    QVERIFY(!settings.setRollingKeyboardShortcut(QStringLiteral("cue"),
+                                                  QStringLiteral("1")));
+    QVERIFY(!settings.setRollingKeyboardShortcut(
+        QStringLiteral("cue"), QStringLiteral("Ctrl+K, Ctrl+C")));
+    QVERIFY(!settings.setRollingKeyboardShortcut(
+        QStringLiteral("cue"), QStringLiteral("Ctrl + K , Ctrl + C")));
+    QVERIFY(settings.setRollingKeyboardShortcut(QStringLiteral("cue"),
+                                                 QStringLiteral(" Ctrl + K ")));
+    QCOMPARE(settings.rollingKeyboardShortcuts()
+                 .value(QStringLiteral("cue")).toString(),
+             QStringLiteral("Ctrl+K"));
+    QVERIFY(settings.setRollingKeyboardShortcut(QStringLiteral("cueJump"),
+                                                 QString()));
+    QVERIFY(settings.setRollingKeyboardShortcut(QStringLiteral("cue"),
+                                                 QStringLiteral("Shift+C")));
+
+    SettingsController reloaded;
+    QCOMPARE(reloaded.rollingKeyboardShortcuts()
+                 .value(QStringLiteral("cue")).toString(),
+             QStringLiteral("Shift+C"));
+    QCOMPARE(reloaded.rollingKeyboardShortcuts()
+                 .value(QStringLiteral("cueJump")).toString(), QString());
+
+    reloaded.beginEdit();
+    QVERIFY(reloaded.setRollingKeyboardShortcut(QStringLiteral("gridOrigin"),
+                                                 QStringLiteral("Ctrl+G")));
+    reloaded.resetRollingKeyboardShortcuts();
+    QCOMPARE(reloaded.rollingKeyboardShortcuts()
+                 .value(QStringLiteral("cue")).toString(),
+             QStringLiteral("C"));
+    reloaded.cancelEdit();
+    QCOMPARE(reloaded.rollingKeyboardShortcuts()
+                 .value(QStringLiteral("cue")).toString(),
+             QStringLiteral("Shift+C"));
+    QCOMPARE(reloaded.rollingKeyboardShortcuts()
+                 .value(QStringLiteral("cueJump")).toString(), QString());
+
+    reloaded.resetRollingKeyboardShortcuts();
+    QCOMPARE(reloaded.rollingKeyboardShortcuts()
+                 .value(QStringLiteral("hotCueDelete8")).toString(),
+             QStringLiteral("Alt+8"));
+    SettingsController defaultsReloaded;
+    QCOMPARE(defaultsReloaded.rollingKeyboardShortcuts()
+                 .value(QStringLiteral("cueJump")).toString(),
+             QStringLiteral("Shift+C"));
+    QVERIFY(defaultsReloaded.setRollingKeyboardShortcut(
+        QStringLiteral("cue"), QString()));
+    QVERIFY(defaultsReloaded.setRollingKeyboardShortcut(
+        QStringLiteral("cueJump"), QString()));
+    QVERIFY(defaultsReloaded.setRollingKeyboardShortcut(
+        QStringLiteral("cue"), QStringLiteral("Shift+C")));
+    QVERIFY(defaultsReloaded.setRollingKeyboardShortcut(
+        QStringLiteral("cueJump"), QStringLiteral("C")));
+    SettingsController swappedReloaded;
+    QCOMPARE(swappedReloaded.rollingKeyboardShortcuts()
+                 .value(QStringLiteral("cue")).toString(),
+             QStringLiteral("Shift+C"));
+    QCOMPARE(swappedReloaded.rollingKeyboardShortcuts()
+                 .value(QStringLiteral("cueJump")).toString(),
+             QStringLiteral("C"));
+    persisted.clear();
+}
+
+void SettingsControllerTest::rollingKeyboardShortcutsRejectLegacyConflictsBothDirections()
+{
+    QSettings persisted;
+    persisted.clear();
+
+    SettingsController settings;
+    QVERIFY(!settings.setRollingKeyboardShortcut(
+        QStringLiteral("cue"), QStringLiteral("Ctrl+F")));
+    QVERIFY(!settings.setRollingKeyboardShortcut(
+        QStringLiteral("cue"), QStringLiteral("Tab")));
+    QVERIFY(!settings.setRollingKeyboardShortcut(
+        QStringLiteral("cue"), QStringLiteral("Alt+D")));
+    QVERIFY(!settings.setRollingKeyboardShortcut(
+        QStringLiteral("cue"), QStringLiteral("MediaPlayPause")));
+    QVERIFY(!settings.setRollingKeyboardShortcut(
+        QStringLiteral("cue"), QStringLiteral("MediaPrevTrack")));
+    QCOMPARE(settings.rollingKeyboardShortcuts()
+                 .value(QStringLiteral("cue")).toString(),
+             QStringLiteral("C"));
+
+    settings.setHkSearch(QStringLiteral("C"));
+    QCOMPARE(settings.hkSearch(), QStringLiteral("Ctrl + F"));
+    settings.setHkSearch(QStringLiteral("Ctrl + G"));
+    QCOMPARE(settings.hkSearch(), QStringLiteral("Ctrl + G"));
+    QVERIFY(!settings.setRollingKeyboardShortcut(
+        QStringLiteral("cue"), QStringLiteral("Ctrl+G")));
+
+    QVERIFY(settings.setRollingKeyboardShortcut(QStringLiteral("cue"),
+                                                 QString()));
+    settings.setHkPlayPause(QStringLiteral("Alt + X"));
+    QCOMPARE(settings.hkPlayPause(), QStringLiteral("Alt + X"));
+    QVERIFY(!settings.setRollingKeyboardShortcut(
+        QStringLiteral("cue"), QStringLiteral("Space")));
+
+    settings.setHkSearch(QStringLiteral("C"));
+    QCOMPARE(settings.hkSearch(), QStringLiteral("C"));
+    settings.resetRollingKeyboardShortcuts();
+    QCOMPARE(settings.rollingKeyboardShortcuts()
+                 .value(QStringLiteral("cue")).toString(), QString());
+
+    persisted.clear();
+    persisted.setValue(QStringLiteral("hotkeys/search"), QStringLiteral("C"));
+    SettingsController legacyReloaded;
+    QCOMPARE(legacyReloaded.hkSearch(), QStringLiteral("C"));
+    QCOMPARE(legacyReloaded.rollingKeyboardShortcuts()
+                 .value(QStringLiteral("cue")).toString(), QString());
+    persisted.clear();
 }
 
 void SettingsControllerTest::frequencyColorMixPreservesPastelAndChroma()

@@ -4,6 +4,8 @@ import AgPlayer
 
 ComboBox {
     id: control
+    property real textLeftPadding: 10
+    property real textRightPadding: 28
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
     implicitHeight: Theme.controlHeight
@@ -16,8 +18,8 @@ ComboBox {
     palette.highlightedText: Theme.activeSelectionText
 
     contentItem: Text {
-        leftPadding: 10
-        rightPadding: 28
+        leftPadding: control.textLeftPadding
+        rightPadding: control.textRightPadding
         text: control.displayText
         color: control.enabled ? Theme.primaryText : Theme.secondaryText
         opacity: control.enabled ? 1.0 : 0.55

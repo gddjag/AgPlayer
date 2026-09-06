@@ -178,6 +178,8 @@ private slots:
     void automaticDemucsShowsCpuCompatibilityAndPreservesGpuForOtherModels();
     void knownVrModelOffersExternalConfigurationWithPause();
     void externalRuntimeRealInstallAndCachedRepair();
+    void cudaRuntimeRejectsUnverifiedComponents();
+    void cudaRuntimeRealCachedInstall();
     void externalRuntimeRetriesThePinnedArchiveThroughTheBackupRoute();
     void existingPythonEnvironmentUpgradesTheBundledWorkerWithoutDownloading();
     void pythonWorkerUpgradeRejectsARedirectedRuntimeRoot();
@@ -1431,6 +1433,40 @@ workerOutputOutsideTheSelectedDirectoryIsRejected()
                               VocalSeparationController::JobState::JobFailed, 5000);
     QVERIFY(!controller.error().isEmpty());
     QCOMPARE(controller.history().size(), 0);
+    QVERIFY(controller.actualProvider().isEmpty());
+    QVERIFY(controller.actualDevice().isEmpty());
+    QCOMPARE(controller.outputGain(), 1.0);
+}
+
+void VocalSeparationControllerTest::cudaRuntimeRejectsUnverifiedComponents()
+{
+    QTemporaryDir root;
+    QDir().mkpath(root.filePath("native"));
+    QFile dll(root.filePath("native/onnxruntime.dll"));
+    QVERIFY(dll.open(QIODevice::WriteOnly)); dll.write("untrusted"); dll.close();
+    QNetworkAccessManager network;
+    CudaSeparationRuntime runtime(root.path(), &network);
+    QSignalSpy changed(&runtime, &CudaSeparationRuntime::changed);
+    QTRY_VERIFY_WITH_TIMEOUT(changed.count() > 0, 10000);
+    QVERIFY(!runtime.ready());
+}
+
+void VocalSeparationControllerTest::cudaRuntimeRealCachedInstall()
+{
+    const QString root = qEnvironmentVariable("AGPLAYER_CUDA_RUNTIME_TEST_ROOT");
+    if (root.isEmpty()) QSKIP("Opt-in: verifies and installs isolated pinned CUDA runtime");
+    QNetworkAccessManager network;
+    CudaSeparationRuntime runtime(root, &network);
+    QSignalSpy changed(&runtime, &CudaSeparationRuntime::changed);
+    QSignalSpy finished(&runtime, &CudaSeparationRuntime::finished);
+    QTRY_VERIFY_WITH_TIMEOUT(changed.count() > 0, 90000);
+    QVERIFY(runtime.start());
+    runtime.pause(); QVERIFY(runtime.paused());
+    QTRY_VERIFY_WITH_TIMEOUT(([&] { runtime.resume(); return !runtime.paused(); })(), 90000);
+    QTRY_VERIFY_WITH_TIMEOUT(finished.count() > 0, 300000);
+    QVERIFY2(finished.first().first().toBool(), qPrintable(finished.first().at(1).toString()));
+    QVERIFY(runtime.ready());
+    QVERIFY(QFileInfo::exists(runtime.libraryPath()));
 }
 
 void VocalSeparationControllerTest::externalRuntimeRealInstallAndCachedRepair()

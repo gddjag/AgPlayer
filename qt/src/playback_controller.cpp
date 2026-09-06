@@ -6,7 +6,15 @@
 #include <agplayer/c_api.h>
 
 #include <QByteArray>
+#include <QDir>
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
+#include <QSaveFile>
 #include <QSet>
+#include <QStandardPaths>
 
 #include <algorithm>
 #include <array>
@@ -89,6 +97,7 @@ PlaybackController::PlaybackController(ag_player* player,
     : QObject(parent), player_(player)
 {
     spectrum_.fill(0.0F, 64);
+    loadDeckStateStore();
     setLibraryModel(library);
     pollTimer_.setInterval(PollIntervalMs);
     pollTimer_.setTimerType(Qt::PreciseTimer);
@@ -163,6 +172,50 @@ bool PlaybackController::scratchBuffering() const noexcept
     return scratchBuffering_;
 }
 
+qint64 PlaybackController::cuePositionMs() const noexcept
+{
+    return currentDeckState().cuePositionMs;
+}
+
+bool PlaybackController::cueAuditioning() const noexcept
+{
+    return cueAuditioning_;
+}
+
+double PlaybackController::beatGridBpm() const noexcept
+{
+    const double overrideBpm = currentDeckState().beatGridBpmOverride;
+    if (validBeatGridBpm(overrideBpm)) return overrideBpm;
+    if (validBeatGridBpm(sourceBpm_)) return sourceBpm_;
+    return 120.0;
+}
+
+qint64 PlaybackController::beatGridOffsetMs() const noexcept
+{
+    return currentDeckState().beatGridOffsetMs;
+}
+
+bool PlaybackController::beatGridCalibrated() const noexcept
+{
+    return currentDeckState().beatGridCalibrated;
+}
+
+bool PlaybackController::beatGridEstimatedBpm() const noexcept
+{
+    return !validBeatGridBpm(currentDeckState().beatGridBpmOverride)
+        && !validBeatGridBpm(sourceBpm_);
+}
+
+QVariantList PlaybackController::hotCuePositions() const
+{
+    QVariantList positions;
+    positions.reserve(8);
+    for (const qint64 position : currentDeckState().hotCuePositions) {
+        positions.push_back(position);
+    }
+    return positions;
+}
+
 void PlaybackController::setLibraryModel(LibraryModel* library)
 {
     disconnect(playRequestedConnection_);
@@ -194,6 +247,7 @@ void PlaybackController::setLibraryModel(LibraryModel* library)
 
 void PlaybackController::setPlayer(ag_player* player)
 {
+    invalidateCueHoldForTrackChange();
     editorOutputOwned_ = false;
     editorRestorePending_ = false;
     editorSessionSnapshot_.reset();
@@ -451,7 +505,15 @@ bool PlaybackController::shouldFailEditorOutputStep(
 void PlaybackController::play()
 {
     if (editorOutputOwned_) return;
-    runCommand(player_ != nullptr ? ag_player_play(player_) : AG_INVALID_ARGUMENT);
+    const ag_result result = player_ != nullptr
+        ? ag_player_play(player_) : AG_INVALID_ARGUMENT;
+    runCommand(result);
+    if (result == AG_OK && cueHeld_ && cueAuditioning_) {
+        cueAuditioning_ = false;
+        cueAuditionTrackId_.clear();
+        cueAuditionReturnMs_ = -1;
+        emit cueChanged();
+    }
 }
 
 void PlaybackController::pause()
@@ -468,6 +530,10 @@ void PlaybackController::stop()
 
 void PlaybackController::togglePlayback()
 {
+    if (cueHeld_) {
+        play();
+        return;
+    }
     if (state_ == Playing) {
         pause();
     } else {
@@ -556,6 +622,229 @@ void PlaybackController::clearSelection()
     }
 }
 
+void PlaybackController::cuePress()
+{
+    if (cueHeld_ || player_ == nullptr || editorOutputOwned_
+        || !hasPersistentCurrentTrack()) {
+        return;
+    }
+
+    ag_playback_snapshot snapshot{};
+    const ag_result snapshotResult = ag_player_snapshot(player_, &snapshot);
+    if (snapshotResult != AG_OK) {
+        runCommand(snapshotResult);
+        return;
+    }
+    if (snapshot.track_index >= static_cast<size_t>(queueTrackIds_.size())
+        || queueTrackIds_.at(static_cast<qsizetype>(snapshot.track_index))
+            != currentTrackId_) {
+        return;
+    }
+
+    cueHeld_ = true;
+    const DeckState deck = currentDeckState();
+    const State activeState = toState(snapshot.state);
+    if (activeState == Playing) {
+        const ag_result pauseResult = ag_player_pause(player_);
+        runCommand(pauseResult);
+        if (pauseResult == AG_OK) {
+            seek(deck.cuePositionMs >= 0 ? deck.cuePositionMs : 0);
+        }
+        return;
+    }
+    if (activeState != Paused && activeState != Stopped) {
+        cueHeld_ = false;
+        return;
+    }
+
+    constexpr qint64 cuePositionToleranceMs = 2;
+    if (deck.cuePositionMs >= 0
+        && qAbs(snapshot.position_ms - deck.cuePositionMs)
+            <= cuePositionToleranceMs) {
+        cueAuditioning_ = true;
+        cueAuditionTrackId_ = currentTrackId_;
+        cueAuditionReturnMs_ = deck.cuePositionMs;
+        emit cueChanged();
+        const ag_result playResult = ag_player_play(player_);
+        runCommand(playResult);
+        if (playResult != AG_OK) {
+            invalidateCueHoldForTrackChange();
+        }
+        return;
+    }
+
+    DeckState& current = deckStates_[currentTrackId_];
+    current.cuePositionMs = std::max(qint64{0}, snapshot.position_ms);
+    if (!saveDeckStateStore()) {
+        setErrorMessage(QStringLiteral("Unable to save deck state"));
+    }
+    emit cueChanged();
+}
+
+void PlaybackController::cueRelease()
+{
+    finishCueAudition(true);
+}
+
+void PlaybackController::cancelCue()
+{
+    finishCueAudition(true);
+}
+
+void PlaybackController::clearCue()
+{
+    finishCueAudition(true);
+    if (!hasPersistentCurrentTrack()) return;
+    DeckState& current = deckStates_[currentTrackId_];
+    if (current.cuePositionMs < 0) return;
+    current.cuePositionMs = -1;
+    if (deckStateIsEmpty(current)) deckStates_.remove(currentTrackId_);
+    if (!saveDeckStateStore()) {
+        setErrorMessage(QStringLiteral("Unable to save deck state"));
+    }
+    emit cueChanged();
+}
+
+void PlaybackController::jumpToCue()
+{
+    if (player_ == nullptr || editorOutputOwned_
+        || !hasPersistentCurrentTrack()) {
+        return;
+    }
+    ag_playback_snapshot snapshot{};
+    const ag_result snapshotResult = ag_player_snapshot(player_, &snapshot);
+    if (snapshotResult != AG_OK) {
+        runCommand(snapshotResult);
+        return;
+    }
+    if (snapshot.track_index >= static_cast<size_t>(queueTrackIds_.size())
+        || queueTrackIds_.at(static_cast<qsizetype>(snapshot.track_index))
+            != currentTrackId_) {
+        return;
+    }
+    finishCueAudition(false);
+    const qint64 target = std::max(qint64{0}, currentDeckState().cuePositionMs);
+    const ag_result pauseResult = ag_player_pause(player_);
+    runCommand(pauseResult);
+    if (pauseResult == AG_OK) seek(target);
+}
+
+void PlaybackController::activateHotCue(const int slot)
+{
+    if (slot < 0 || slot >= 8 || player_ == nullptr || editorOutputOwned_
+        || !hasPersistentCurrentTrack()) {
+        return;
+    }
+
+    ag_playback_snapshot snapshot{};
+    const ag_result snapshotResult = ag_player_snapshot(player_, &snapshot);
+    if (snapshotResult != AG_OK) {
+        runCommand(snapshotResult);
+        return;
+    }
+    if (snapshot.track_index >= static_cast<size_t>(queueTrackIds_.size())
+        || queueTrackIds_.at(static_cast<qsizetype>(snapshot.track_index))
+            != currentTrackId_) {
+        return;
+    }
+
+    DeckState& current = deckStates_[currentTrackId_];
+    const qint64 savedPosition = current.hotCuePositions[slot];
+    if (savedPosition >= 0) {
+        seek(savedPosition);
+        play();
+        return;
+    }
+    current.hotCuePositions[slot] = std::max(qint64{0}, snapshot.position_ms);
+    if (!saveDeckStateStore()) {
+        setErrorMessage(QStringLiteral("Unable to save deck state"));
+    }
+    emit hotCuePositionsChanged();
+}
+
+void PlaybackController::clearHotCue(const int slot)
+{
+    if (slot < 0 || slot >= 8 || !hasPersistentCurrentTrack()) return;
+    DeckState& current = deckStates_[currentTrackId_];
+    if (current.hotCuePositions[slot] < 0) return;
+    current.hotCuePositions[slot] = -1;
+    if (deckStateIsEmpty(current)) deckStates_.remove(currentTrackId_);
+    if (!saveDeckStateStore()) {
+        setErrorMessage(QStringLiteral("Unable to save deck state"));
+    }
+    emit hotCuePositionsChanged();
+}
+
+void PlaybackController::setBeatGridFirstBeat()
+{
+    if (!hasPersistentCurrentTrack()) return;
+    DeckState& current = deckStates_[currentTrackId_];
+    current.beatGridOffsetMs = std::max(qint64{0}, positionMs_);
+    current.beatGridCalibrated = true;
+    if (!saveDeckStateStore()) {
+        setErrorMessage(QStringLiteral("Unable to save deck state"));
+    }
+    emit beatGridChanged();
+}
+
+void PlaybackController::nudgeBeatGrid(const qint64 deltaMs)
+{
+    if (!hasPersistentCurrentTrack() || deltaMs == 0) return;
+    DeckState& current = deckStates_[currentTrackId_];
+    if (deltaMs > 0
+        && current.beatGridOffsetMs
+            > std::numeric_limits<qint64>::max() - deltaMs) {
+        current.beatGridOffsetMs = std::numeric_limits<qint64>::max();
+    } else if (deltaMs < 0
+               && current.beatGridOffsetMs
+                   < std::numeric_limits<qint64>::min() - deltaMs) {
+        current.beatGridOffsetMs = std::numeric_limits<qint64>::min();
+    } else {
+        current.beatGridOffsetMs += deltaMs;
+    }
+    current.beatGridCalibrated = true;
+    if (!saveDeckStateStore()) {
+        setErrorMessage(QStringLiteral("Unable to save deck state"));
+    }
+    emit beatGridChanged();
+}
+
+void PlaybackController::setBeatGridBpm(const double bpm)
+{
+    if (!hasPersistentCurrentTrack() || !validBeatGridBpm(bpm)) return;
+    DeckState& current = deckStates_[currentTrackId_];
+    if (qFuzzyCompare(current.beatGridBpmOverride + 1.0, bpm + 1.0)
+        && current.beatGridCalibrated) {
+        return;
+    }
+    current.beatGridBpmOverride = bpm;
+    current.beatGridCalibrated = true;
+    if (!saveDeckStateStore()) {
+        setErrorMessage(QStringLiteral("Unable to save deck state"));
+    }
+    emit beatGridChanged();
+}
+
+void PlaybackController::resetBeatGrid()
+{
+    if (!hasPersistentCurrentTrack()) return;
+    DeckState& current = deckStates_[currentTrackId_];
+    if (!validBeatGridBpm(current.beatGridBpmOverride)
+        && current.beatGridOffsetMs == 0 && !current.beatGridCalibrated) {
+        return;
+    }
+    current.beatGridBpmOverride = 0.0;
+    current.beatGridOffsetMs = 0;
+    current.beatGridCalibrated = false;
+    if (deckStateIsEmpty(current)) {
+        deckStates_.remove(currentTrackId_);
+    }
+    if (!saveDeckStateStore()) {
+        setErrorMessage(QStringLiteral("Unable to save deck state"));
+    }
+    emit beatGridChanged();
+}
+
 bool PlaybackController::applyWaveformDuration(const QString& trackId,
                                                qint64 durationMs)
 {
@@ -637,13 +926,19 @@ bool PlaybackController::setSelection(qint64 startMs,
 void PlaybackController::next()
 {
     if (editorOutputOwned_) return;
-    runCommand(player_ != nullptr ? ag_player_next(player_) : AG_INVALID_ARGUMENT);
+    const ag_result result = player_ != nullptr
+        ? ag_player_next(player_) : AG_INVALID_ARGUMENT;
+    runCommand(result);
+    if (result == AG_OK) invalidateCueHoldForTrackChange();
 }
 
 void PlaybackController::previous()
 {
     if (editorOutputOwned_) return;
-    runCommand(player_ != nullptr ? ag_player_previous(player_) : AG_INVALID_ARGUMENT);
+    const ag_result result = player_ != nullptr
+        ? ag_player_previous(player_) : AG_INVALID_ARGUMENT;
+    runCommand(result);
+    if (result == AG_OK) invalidateCueHoldForTrackChange();
 }
 
 bool PlaybackController::queueNext(const QString& trackId)
@@ -728,6 +1023,7 @@ bool PlaybackController::restoreQueue(const QStringList& trackIds,
     if (result != AG_OK) {
         return false;
     }
+    invalidateCueHoldForTrackChange();
     queueTrackIds_ = std::move(validIds);
     activeScopeSize_ = queueTrackIds_.size();
     activeScopeAllowsFallback_ = false;
@@ -797,6 +1093,7 @@ bool PlaybackController::playTrackIds(const QStringList& trackIds,
     if (result != AG_OK) {
         return false;
     }
+    invalidateCueHoldForTrackChange();
     queueTrackIds_ = std::move(queueIds);
     activeScopeSize_ = scopeIds.size();
     activeScopeAllowsFallback_ = allowFallback;
@@ -889,6 +1186,7 @@ bool PlaybackController::prepareRow(int row)
         runCommand(queueResult);
         return false;
     }
+    invalidateCueHoldForTrackChange();
     queueTrackIds_ = std::move(trackIds);
     activeScopeSize_ = queueTrackIds_.size();
     activeScopeAllowsFallback_ = false;
@@ -1028,6 +1326,8 @@ void PlaybackController::syncTimePitchFromCore()
 
 void PlaybackController::refreshSourceBpm()
 {
+    const double oldGridBpm = beatGridBpm();
+    const bool oldEstimated = beatGridEstimatedBpm();
     double nextBpm = 0.0;
     if (library_ != nullptr && !currentTrackId_.isEmpty()) {
         const TrackRecord* const track = library_->recordForId(currentTrackId_);
@@ -1039,6 +1339,183 @@ void PlaybackController::refreshSourceBpm()
     if (qFuzzyCompare(sourceBpm_ + 1.0, nextBpm + 1.0)) return;
     sourceBpm_ = nextBpm;
     emit tempoChanged();
+    if (!qFuzzyCompare(oldGridBpm + 1.0, beatGridBpm() + 1.0)
+        || oldEstimated != beatGridEstimatedBpm()) {
+        emit beatGridChanged();
+    }
+}
+
+bool PlaybackController::validBeatGridBpm(const double bpm) noexcept
+{
+    return std::isfinite(bpm) && bpm >= 20.0 && bpm <= 400.0;
+}
+
+bool PlaybackController::deckStateIsEmpty(const DeckState& deck) noexcept
+{
+    return deck.cuePositionMs < 0
+        && !validBeatGridBpm(deck.beatGridBpmOverride)
+        && deck.beatGridOffsetMs == 0 && !deck.beatGridCalibrated
+        && std::none_of(deck.hotCuePositions.cbegin(),
+                        deck.hotCuePositions.cend(),
+                        [](const qint64 position) { return position >= 0; });
+}
+
+QString PlaybackController::deckStateFilePath() const
+{
+    return QDir(QStandardPaths::writableLocation(
+        QStandardPaths::AppLocalDataLocation)).filePath(
+            QStringLiteral("deck-state.json"));
+}
+
+PlaybackController::DeckState PlaybackController::currentDeckState() const noexcept
+{
+    if (currentTrackId_.isEmpty()) return {};
+    return deckStates_.value(currentTrackId_);
+}
+
+bool PlaybackController::hasPersistentCurrentTrack() const noexcept
+{
+    return library_ != nullptr && !currentTrackId_.isEmpty()
+        && library_->recordForId(currentTrackId_) != nullptr;
+}
+
+void PlaybackController::loadDeckStateStore()
+{
+    QFile input(deckStateFilePath());
+    if (!input.open(QIODevice::ReadOnly)) return;
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(
+        input.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError
+        || !document.isObject()) {
+        return;
+    }
+    const QJsonObject tracks = document.object()
+        .value(QStringLiteral("tracks")).toObject();
+    for (auto iterator = tracks.constBegin(); iterator != tracks.constEnd();
+         ++iterator) {
+        if (!iterator.value().isObject() || iterator.key().isEmpty()) continue;
+        const QJsonObject saved = iterator.value().toObject();
+        DeckState deck;
+        const qint64 cue = saved.value(
+            QStringLiteral("cuePositionMs")).toInteger(-1);
+        if (cue >= 0) deck.cuePositionMs = cue;
+        const double bpm = saved.value(
+            QStringLiteral("beatGridBpm")).toDouble(0.0);
+        if (validBeatGridBpm(bpm)) deck.beatGridBpmOverride = bpm;
+        deck.beatGridOffsetMs = saved.value(
+            QStringLiteral("beatGridOffsetMs")).toInteger(0);
+        deck.beatGridCalibrated = saved.value(
+            QStringLiteral("beatGridCalibrated")).toBool(false);
+        const QJsonArray hotCues = saved.value(
+            QStringLiteral("hotCuePositions")).toArray();
+        const qsizetype hotCueCount = std::min(
+            hotCues.size(), static_cast<qsizetype>(deck.hotCuePositions.size()));
+        for (qsizetype slot = 0; slot < hotCueCount; ++slot) {
+            const qint64 position = hotCues.at(slot).toInteger(-1);
+            if (position >= 0) {
+                deck.hotCuePositions[static_cast<size_t>(slot)] =
+                    position;
+            }
+        }
+        if (!deckStateIsEmpty(deck)) {
+            deckStates_.insert(iterator.key(), deck);
+        }
+    }
+}
+
+bool PlaybackController::saveDeckStateStore()
+{
+    const QString path = deckStateFilePath();
+    const QFileInfo destination(path);
+    if (!QDir().mkpath(destination.absolutePath())) return false;
+
+    QJsonObject tracks;
+    QStringList trackIds = deckStates_.keys();
+    std::sort(trackIds.begin(), trackIds.end());
+    for (const QString& trackId : trackIds) {
+        const DeckState deck = deckStates_.value(trackId);
+        QJsonObject saved;
+        if (deck.cuePositionMs >= 0) {
+            saved.insert(QStringLiteral("cuePositionMs"), deck.cuePositionMs);
+        }
+        if (validBeatGridBpm(deck.beatGridBpmOverride)) {
+            saved.insert(QStringLiteral("beatGridBpm"),
+                         deck.beatGridBpmOverride);
+        }
+        if (deck.beatGridOffsetMs != 0) {
+            saved.insert(QStringLiteral("beatGridOffsetMs"),
+                         deck.beatGridOffsetMs);
+        }
+        if (deck.beatGridCalibrated) {
+            saved.insert(QStringLiteral("beatGridCalibrated"), true);
+        }
+        QJsonArray hotCues;
+        const bool hasHotCues = std::any_of(
+            deck.hotCuePositions.cbegin(), deck.hotCuePositions.cend(),
+            [](const qint64 position) { return position >= 0; });
+        if (hasHotCues) {
+            for (const qint64 position : deck.hotCuePositions) {
+                hotCues.push_back(position);
+            }
+            saved.insert(QStringLiteral("hotCuePositions"), hotCues);
+        }
+        if (!saved.isEmpty()) tracks.insert(trackId, saved);
+    }
+    QJsonObject root;
+    root.insert(QStringLiteral("version"), 1);
+    root.insert(QStringLiteral("tracks"), tracks);
+    const QByteArray payload = QJsonDocument(root).toJson(
+        QJsonDocument::Compact);
+
+    QSaveFile output(path);
+    if (!output.open(QIODevice::WriteOnly)
+        || output.write(payload) != payload.size()) {
+        output.cancelWriting();
+        return false;
+    }
+    return output.commit();
+}
+
+void PlaybackController::invalidateCueHoldForTrackChange()
+{
+    cueHeld_ = false;
+    if (!cueAuditioning_) {
+        cueAuditionTrackId_.clear();
+        cueAuditionReturnMs_ = -1;
+        return;
+    }
+    cueAuditioning_ = false;
+    cueAuditionTrackId_.clear();
+    cueAuditionReturnMs_ = -1;
+    emit cueChanged();
+}
+
+void PlaybackController::finishCueAudition(const bool returnToCue)
+{
+    if (!cueHeld_) return;
+    cueHeld_ = false;
+    const bool wasAuditioning = cueAuditioning_;
+    const QString auditionTrack = cueAuditionTrackId_;
+    const qint64 returnPosition = cueAuditionReturnMs_;
+    cueAuditioning_ = false;
+    cueAuditionTrackId_.clear();
+    cueAuditionReturnMs_ = -1;
+    if (wasAuditioning) emit cueChanged();
+    if (!returnToCue || !wasAuditioning || player_ == nullptr
+        || auditionTrack != currentTrackId_ || returnPosition < 0) {
+        return;
+    }
+    ag_playback_snapshot snapshot{};
+    if (ag_player_snapshot(player_, &snapshot) != AG_OK
+        || snapshot.track_index >= static_cast<size_t>(queueTrackIds_.size())
+        || queueTrackIds_.at(static_cast<qsizetype>(snapshot.track_index))
+            != auditionTrack) {
+        return;
+    }
+    const ag_result pauseResult = ag_player_pause(player_);
+    runCommand(pauseResult);
+    if (pauseResult == AG_OK) seek(returnPosition);
 }
 
 bool PlaybackController::applyReplayGainForTrack(const QString& trackId)
@@ -1286,6 +1763,7 @@ void PlaybackController::pollSnapshot()
     }
     const bool trackChanged = currentTrackId_ != nextTrackId;
     if (trackChanged) {
+        invalidateCueHoldForTrackChange();
         clearSelection();
     }
     if (!trackChanged && selectionLoopEnabled_ && nextState == Playing
@@ -1337,6 +1815,9 @@ void PlaybackController::pollSnapshot()
         applyReplayGainForTrack(currentTrackId_);
         refreshSourceBpm();
         emit currentTrackIdChanged();
+        emit cueChanged();
+        emit beatGridChanged();
+        emit hotCuePositionsChanged();
 
         QString nextLyrics;
         if (!currentTrackId_.isEmpty() && library_ != nullptr) {

@@ -24,6 +24,28 @@ Item {
 
     property var hostWindow: null
     property var playback: PlaybackController
+    RollingKeyboardHandler {
+        objectName: "rollingKeyboardHandler"
+        shortcuts: SettingsController.rollingKeyboardShortcuts
+        enabled: root.visible
+        onActionPressed: function(action) {
+            if (!root.playback) return
+            if (action === "cue") root.playback.cuePress()
+            else if (action === "cueJump") root.playback.jumpToCue()
+            else if (action === "cueDelete") root.playback.clearCue()
+            else if (action === "gridOrigin") root.playback.setBeatGridFirstBeat()
+            else if (action === "gridLeft") root.playback.nudgeBeatGrid(-1)
+            else if (action === "gridRight") root.playback.nudgeBeatGrid(1)
+            else if (action.indexOf("hotCueDelete") === 0)
+                root.playback.clearHotCue(Number(action.slice(12)) - 1)
+            else if (action.indexOf("hotCue") === 0)
+                root.playback.activateHotCue(Number(action.slice(6)) - 1)
+        }
+        onActionReleased: function(action) {
+            if (action === "cue" && root.playback) root.playback.cueRelease()
+        }
+        onCancelled: { if (root.playback) root.playback.cancelCue() }
+    }
     property var waveformSession: null
     property var libraryModel: LibraryModel
     property var filterModel: null
@@ -35,8 +57,10 @@ Item {
     property var currentTrack: null
     // Rolling viewport state. Waveform samples/layers remain owned and
     // rendered by WaveformItem; only the visible time interval changes.
-    // Eight beats halve the default visual travel speed without changing audio tempo.
-    property real visibleBeats: 8.0
+    property var viewportBeatOptions: [2, 4, 8, 16, 32, 64]
+    // Viewport zoom is deliberately local to a shell instance: re-entering
+    // rolling mode starts wide, while track changes keep the user's choice.
+    property real visibleBeats: 64.0
     property bool scratchGestureActive: false
     property real scratchVisualPositionMs: 0
     property real scratchAnchorPositionMs: 0
@@ -69,12 +93,17 @@ Item {
         ? Number(playback.sourceBpm)
         : currentTrack && Number(currentTrack.bpm) > 0
           ? Number(currentTrack.bpm) : 0
-    readonly property real effectiveBpm: {
-        var bpm = playback ? Number(playback.targetBpm) : 0
-        if (!(bpm > 0))
-            bpm = sourceBpmValue
-        return bpm > 0 ? bpm : 120.0
-    }
+    readonly property real beatGridBpmValue:
+        playback && Number(playback.beatGridBpm) > 0
+        ? Number(playback.beatGridBpm)
+        : sourceBpmValue > 0 ? sourceBpmValue : 120.0
+    readonly property bool beatGridFallback:
+        playback && Boolean(playback.beatGridEstimatedBpm)
+    readonly property real beatGridFirstBeatMs:
+        playback ? Number(playback.beatGridOffsetMs) || 0 : 0
+    readonly property real cuePositionValue:
+        playback ? Number(playback.cuePositionMs) : -1
+    readonly property real effectiveBpm: beatGridBpmValue
     readonly property real beatSec: 60.0 / effectiveBpm
     readonly property real viewTimeSpanSec: visibleBeats * beatSec
     readonly property real canvasWidth:
@@ -241,16 +270,61 @@ Item {
             playback.resetTempo()
     }
 
+    function viewportIndex() {
+        var bestIndex = 0
+        var bestDistance = Number.POSITIVE_INFINITY
+        for (var index = 0; index < viewportBeatOptions.length; ++index) {
+            if (viewportBeatOptions[index] === visibleBeats)
+                return index
+            var distance = Math.abs(viewportBeatOptions[index] - visibleBeats)
+            if (distance < bestDistance) {
+                bestDistance = distance
+                bestIndex = index
+            }
+        }
+        return bestIndex
+    }
+
+    function setViewportIndex(index) {
+        var bounded = Math.max(0, Math.min(viewportBeatOptions.length - 1,
+                                          Math.round(index)))
+        visibleBeats = viewportBeatOptions[bounded]
+    }
+
     function zoomIn() {
-        visibleBeats = Math.max(2.0, visibleBeats - 2.0)
+        setViewportIndex(viewportIndex() - 1)
     }
 
     function zoomOut() {
-        visibleBeats = Math.min(64.0, visibleBeats + 2.0)
+        setViewportIndex(viewportIndex() + 1)
     }
 
     function resetZoom() {
-        visibleBeats = 8.0
+        visibleBeats = 64.0
+    }
+
+    function commitGridBpm(text) {
+        if (!playback || playback.setBeatGridBpm === undefined)
+            return
+        var value = Number(text)
+        if (!isFinite(value) || value < 20 || value > 400)
+            return
+        playback.setBeatGridBpm(value)
+    }
+
+    function beatGridStatusText() {
+        if (beatGridFallback)
+            return qsTr("估算 · 回退 120 BPM")
+        var value = beatGridBpmValue.toFixed(2) + " BPM"
+        if (playback && Boolean(playback.beatGridEstimatedBpm))
+            return qsTr("估算 ") + value
+        return playback && Boolean(playback.beatGridCalibrated)
+                ? qsTr("已校准 ") + value : value
+    }
+
+    function cancelCueHold() {
+        if (playerControls.cancelCueHold !== undefined)
+            playerControls.cancelCueHold()
     }
 
     function finishScratchGesture(cancelled) {
@@ -313,9 +387,9 @@ Item {
     }
 
     onVisibleBeatsChanged: {
-        var boundedBeats = clamp(visibleBeats, 2.0, 64.0)
-        if (visibleBeats !== boundedBeats) {
-            visibleBeats = boundedBeats
+        var normalizedBeats = viewportBeatOptions[viewportIndex()]
+        if (visibleBeats !== normalizedBeats) {
+            visibleBeats = normalizedBeats
             return
         }
         syncWaveformViewport()
@@ -337,8 +411,10 @@ Item {
         target: root.hostWindow
         ignoreUnknownSignals: true
         function onActiveChanged() {
-            if (root.hostWindow && !root.hostWindow.active)
+            if (root.hostWindow && !root.hostWindow.active) {
                 root.cancelScratchGesture()
+                root.cancelCueHold()
+            }
         }
     }
 
@@ -671,6 +747,41 @@ Item {
                     lineWidth: SettingsController.waveformThickness
                 }
 
+                Item {
+                    id: overviewCueMarker
+                    objectName: "rollingOverviewCueMarker"
+                    visible: root.cuePositionValue >= 0
+                             && root.cuePositionValue <= root.effectiveDurationMs
+                    x: root.effectiveDurationMs > 0
+                       ? root.clamp(
+                             overviewWaveform.pixelForTime(
+                                 root.cuePositionValue) - width / 2,
+                             0, Math.max(0, overviewWaveform.width - width))
+                       : 0
+                    anchors.top: overviewWaveform.top
+                    width: 28
+                    height: overviewWaveform.height
+                    enabled: false
+                    z: 7
+
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.top: parent.top
+                        text: "▼"
+                        color: Theme.warning
+                        font.pixelSize: 9 // typography-size-allow: overview waveform position annotation
+                    }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.bottom: parent.bottom
+                        text: "CUE"
+                        color: Theme.warning
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: 8 // typography-size-allow: overview waveform position annotation
+                        font.weight: Font.Bold
+                    }
+                }
+
                 Rectangle {
                     id: overviewPlayhead
                     objectName: "rollingOverviewPlayhead"
@@ -786,10 +897,10 @@ Item {
                 id: mainWaveform
                 objectName: "rollingMainWaveform"
                 x: root.waveformContentX
-                y: 16
+                y: 8
                 width: Math.max(0, (parent.width - 2)
                                 * root.waveformContentWidthFraction)
-                height: Math.max(0, parent.height - 32)
+                height: Math.max(0, parent.height - 16)
                 layers: root.waveformSession
                         ? root.waveformSession.layers : ({})
                 duration: root.effectiveDurationMs
@@ -802,7 +913,7 @@ Item {
                 midColor: root.frequencyWaveformSettings.midColor
                 highColor: root.frequencyWaveformSettings.highColor
                 frequencyUnplayedOpacity: 1.0
-                amplitudeScale: Math.min(0.8, SettingsController.waveformHeight * 0.8)
+                amplitudeScale: SettingsController.waveformHeight
                 density: SettingsController.waveformDensity
                 // The analyser already provides a bounded, high-detail source.
                 // Fill the physical-pixel budget from the visible time slice so
@@ -811,6 +922,77 @@ Item {
                 // transients when the user zooms out.
                 preserveSourcePeakDensity: false
                 lineWidth: SettingsController.waveformThickness
+            }
+
+            BeatGridOverlay {
+                id: beatGrid
+                objectName: "rollingBeatGrid"
+                anchors.fill: parent
+                visible: SettingsController.rollingBeatGridEnabled
+                viewStartMs: root.viewportStartMs
+                viewEndMs: root.viewportEndMs
+                firstBeatMs: root.beatGridFirstBeatMs
+                bpm: root.beatGridBpmValue
+                grouping: SettingsController.rollingBeatGridGrouping
+                lineColor: Qt.rgba(Theme.primaryText.r, Theme.primaryText.g,
+                                   Theme.primaryText.b,
+                                   root.rollingLightTheme ? 0.34 : 0.25)
+                downbeatColor: Theme.danger
+                enabled: false
+                z: 2
+            }
+
+            Repeater {
+                model: root.playback && root.playback.hotCuePositions !== undefined
+                       ? root.playback.hotCuePositions : []
+                delegate: Text {
+                    required property int index
+                    required property var modelData
+                    objectName: "rollingHotCueMarker" + (index + 1)
+                    visible: Number(modelData) >= 0
+                             && Number(modelData) >= root.viewportStartMs
+                             && Number(modelData) <= root.viewportEndMs
+                    x: root.timeToX(Number(modelData) / 1000) - width / 2
+                    y: parent.height - height - 2
+                    text: "▲" + (index + 1)
+                    color: Theme.warning
+                    font.pixelSize: Theme.fontSizeCaption
+                    font.weight: Font.Bold
+                    enabled: false
+                    z: 6
+                }
+            }
+
+            Item {
+                id: mainCueMarker
+                objectName: "rollingMainCueMarker"
+                visible: root.cuePositionValue >= 0
+                         && root.cuePositionValue >= root.viewportStartMs
+                         && root.cuePositionValue <= root.viewportEndMs
+                x: root.timeToX(root.cuePositionValue / 1000) - width / 2
+                anchors.top: parent.top
+                anchors.topMargin: 2
+                width: 32
+                height: 28
+                enabled: false
+                z: 6
+
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.top: parent.top
+                    text: "▼"
+                    color: Theme.warning
+                    font.pixelSize: Theme.fontSizeTagCapsule
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.bottom: parent.bottom
+                    text: "CUE"
+                    color: Theme.warning
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: Theme.fontSizeCaption
+                    font.weight: Font.Bold
+                }
             }
 
             Rectangle {
@@ -979,7 +1161,9 @@ Item {
             id: bottomBar
             objectName: "rollingBottomBar"
             Layout.fillWidth: true
-            Layout.preferredHeight: 64
+            Layout.preferredHeight: Math.max(
+                                        64,
+                                        rollingControls.childrenRect.height + 8)
             Layout.leftMargin: 10
             Layout.rightMargin: 10
             Layout.bottomMargin: 2
@@ -996,30 +1180,154 @@ Item {
                 spacing: 8
 
                 PlayerControls {
+                    id: playerControls
                     objectName: "playerControls"
-                    Layout.fillWidth: true
+                    Layout.preferredWidth: 430
                     Layout.minimumWidth: 430
                     Layout.fillHeight: true
+                    playback: root.playback
                     shellMode: 2
                     centerTransport: false
                     showWaveformMode: true
+                    showCueButton: true
                     secondaryActionHost: rollingShellActions
                     onOpenEqualizerRequested:
                         root.openEqualizerRequested()
                 }
 
-                RowLayout {
+                Flow {
                     id: rollingControls
                     objectName: "rollingTempoControls"
-                    // Keep tempo, zoom and shell actions available at the
-                    // 1000-DIP minimum; tighten only the group spacing.
                     visible: true
-                    Layout.preferredWidth: implicitWidth
-                    Layout.minimumWidth: implicitWidth
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                     Layout.fillHeight: true
                     spacing: root.width < 1180 ? Theme.spacingXs : Theme.spacingSm
 
+                    readonly property real singleRowContentWidth:
+                        gridToggleGroup.width + gridGroupingGroup.width
+                        + viewportGroup.width + speedGroup.width
+                        + targetBpmGroup.width + tempoResetButton.width
+                        + keepPitchGroup.width + calibrationGroup.width
+                        + rollingShellActions.width + spacing * 8
+
+                    Item {
+                        width: Math.max(0, rollingControls.width
+                                        - rollingControls.singleRowContentWidth
+                                        - rollingControls.spacing)
+                        height: 1
+                        visible: width > 0
+                    }
+
                     ColumnLayout {
+                        id: gridToggleGroup
+                        width: implicitWidth
+                        height: 56
+                        spacing: 2
+                        Label {
+                            text: qsTr("网格")
+                            color: Theme.secondaryText
+                            font.pixelSize: Theme.fontSizeCaption
+                        }
+                        ThemedSwitch {
+                            id: beatGridSwitch
+                            objectName: "rollingBeatGridSwitch"
+                            Layout.preferredWidth: 40
+                            Layout.preferredHeight: 32
+                            checked: SettingsController.rollingBeatGridEnabled
+                            onClicked:
+                                SettingsController.rollingBeatGridEnabled = checked
+                        }
+                    }
+
+                    ColumnLayout {
+                        id: gridGroupingGroup
+                        width: implicitWidth
+                        height: 56
+                        spacing: 2
+                        Label {
+                            text: qsTr("分组")
+                            color: Theme.secondaryText
+                            font.pixelSize: Theme.fontSizeCaption
+                        }
+                        ThemedComboBox {
+                            id: beatGridGrouping
+                            objectName: "rollingBeatGridGrouping"
+                            Layout.preferredWidth: 56
+                            Layout.preferredHeight: 32
+                            model: ["4", "8"]
+                            currentIndex:
+                                SettingsController.rollingBeatGridGrouping === 8
+                                ? 1 : 0
+                            onActivated:
+                                SettingsController.rollingBeatGridGrouping =
+                                    currentIndex === 1 ? 8 : 4
+                        }
+                    }
+
+                    ColumnLayout {
+                        id: viewportGroup
+                        width: implicitWidth
+                        height: 56
+                        spacing: 2
+                        Label {
+                            text: qsTr("视窗")
+                            color: Theme.secondaryText
+                            font.pixelSize: Theme.fontSizeCaption
+                        }
+                        RowLayout {
+                            spacing: 1
+                            DeckToolButton {
+                                objectName: "rollingZoomMinus"
+                                text: "−"
+                                implicitWidth: 28
+                                implicitHeight: 32
+                                enabled: root.viewportIndex()
+                                         < root.viewportBeatOptions.length - 1
+                                onClicked: root.zoomOut()
+                            }
+                            ThemedComboBox {
+                                id: viewportBeats
+                                objectName: "rollingViewportBeats"
+                                Layout.preferredWidth: 62
+                                Layout.preferredHeight: 32
+                                leftPadding: 0
+                                rightPadding: 20
+                                textLeftPadding: 6
+                                textRightPadding: 0
+                                model: ["2", "4", "8", "16", "32", "64"]
+                                currentIndex: root.viewportIndex()
+                                // Do not index ComboBox.model here: the native
+                                // model wrapper can expose currentText to
+                                // accessibility while yielding no paint text.
+                                displayText: String(root.visibleBeats)
+                                onActivated: root.setViewportIndex(currentIndex)
+                            }
+                            DeckToolButton {
+                                objectName: "rollingZoomPlus"
+                                text: "+"
+                                implicitWidth: 28
+                                implicitHeight: 32
+                                enabled: root.viewportIndex() > 0
+                                onClicked: root.zoomIn()
+                            }
+                            DeckToolButton {
+                                objectName: "rollingZoomReset"
+                                implicitWidth: 28
+                                implicitHeight: 32
+                                icon.source: Theme.icon("restore-line")
+                                icon.color: Theme.iconPrimary
+                                icon.width: 17
+                                icon.height: 17
+                                onClicked: root.resetZoom()
+                            }
+                        }
+                    }
+
+                    ColumnLayout {
+                        id: speedGroup
+                        width: implicitWidth
+                        height: 56
                         spacing: 2
                         Label {
                             text: qsTr("速度")
@@ -1056,6 +1364,9 @@ Item {
                     }
 
                     ColumnLayout {
+                        id: targetBpmGroup
+                        width: implicitWidth
+                        height: 56
                         spacing: 2
                         Label {
                             id: sourceBpm
@@ -1087,8 +1398,9 @@ Item {
                     }
 
                     DeckToolButton {
+                        id: tempoResetButton
                         objectName: "rollingTempoReset"
-                        Layout.alignment: Qt.AlignBottom
+                        y: 22
                         implicitWidth: 32
                         implicitHeight: 32
                         icon.source: Theme.icon("restore-line")
@@ -1099,6 +1411,9 @@ Item {
                     }
 
                     ColumnLayout {
+                        id: keepPitchGroup
+                        width: implicitWidth
+                        height: 56
                         spacing: 2
                         Label {
                             text: qsTr("保持音调")
@@ -1122,50 +1437,138 @@ Item {
                     }
 
                     ColumnLayout {
+                        id: calibrationGroup
+                        width: implicitWidth
+                        height: 56
                         spacing: 2
                         Label {
-                            text: qsTr("波形缩放")
+                            text: qsTr("网格校准")
                             color: Theme.secondaryText
                             font.pixelSize: Theme.fontSizeCaption
                         }
-                        RowLayout {
-                            spacing: 1
-                            DeckToolButton {
-                                objectName: "rollingZoomMinus"
-                                text: "−"
-                                implicitWidth: 32
-                                implicitHeight: 32
-                                onClicked: root.zoomOut()
-                            }
-                            DeckToolButton {
-                                objectName: "rollingZoomPlus"
-                                text: "+"
-                                implicitWidth: 32
-                                implicitHeight: 32
-                                onClicked: root.zoomIn()
-                            }
-                            DeckToolButton {
-                                objectName: "rollingZoomReset"
-                                implicitWidth: 32
-                                implicitHeight: 32
-                                icon.source: Theme.icon("restore-line")
-                                icon.color: Theme.iconPrimary
-                                icon.width: 19
-                                icon.height: 19
-                                onClicked: root.resetZoom()
-                            }
+                        DeckToolButton {
+                            id: calibrationButton
+                            objectName: "rollingGridCalibrationButton"
+                            implicitWidth: 70
+                            implicitHeight: 32
+                            text: root.playback
+                                  && Boolean(root.playback.beatGridCalibrated)
+                                  ? qsTr("校准…")
+                                  : root.beatGridFallback
+                                    ? qsTr("估算 120") : qsTr("估算…")
+                            onClicked: calibrationPopup.open()
                         }
                     }
 
                     Item {
                         id: rollingShellActions
                         objectName: "rollingShellActions"
-                        Layout.preferredWidth: 104
-                        Layout.minimumWidth: 104
-                        Layout.maximumWidth: 104
-                        Layout.fillHeight: true
-                        Layout.leftMargin: 12
-                        Layout.rightMargin: 0
+                        width: 104
+                        height: 56
+                    }
+                }
+            }
+
+            Popup {
+                id: calibrationPopup
+                objectName: "rollingGridCalibrationPopup"
+                parent: Overlay.overlay
+                x: {
+                    var point = calibrationButton.mapToItem(parent, 0, 0)
+                    return Math.max(8, Math.min(parent.width - width - 8,
+                                                point.x + calibrationButton.width
+                                                - width))
+                }
+                y: {
+                    var point = calibrationButton.mapToItem(parent, 0, 0)
+                    return Math.max(8, point.y - height - 4)
+                }
+                width: 228
+                padding: 10
+                modal: false
+                closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+                background: Rectangle {
+                    color: Theme.surfaceElevated
+                    border.color: Theme.border
+                    border.width: 1
+                    radius: Theme.radiusSm
+                }
+                contentItem: ColumnLayout {
+                    spacing: 6
+                    Label {
+                        objectName: "rollingGridStatusLabel"
+                        Layout.fillWidth: true
+                        text: root.beatGridStatusText()
+                        color: Theme.secondaryText
+                        font.pixelSize: Theme.fontSizeCaption
+                    }
+                    ThemedButton {
+                        objectName: "rollingGridSetFirstBeat"
+                        Layout.fillWidth: true
+                        text: qsTr("将播放位置设为第一拍")
+                        onClicked: {
+                            if (root.playback
+                                    && root.playback.setBeatGridFirstBeat
+                                       !== undefined)
+                                root.playback.setBeatGridFirstBeat()
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+                        ThemedButton {
+                            objectName: "rollingGridNudgeLeft"
+                            Layout.fillWidth: true
+                            text: qsTr("−1 ms")
+                            onClicked: {
+                                if (root.playback
+                                        && root.playback.nudgeBeatGrid
+                                           !== undefined)
+                                    root.playback.nudgeBeatGrid(-1)
+                            }
+                        }
+                        ThemedButton {
+                            objectName: "rollingGridNudgeRight"
+                            Layout.fillWidth: true
+                            text: qsTr("+1 ms")
+                            onClicked: {
+                                if (root.playback
+                                        && root.playback.nudgeBeatGrid
+                                           !== undefined)
+                                    root.playback.nudgeBeatGrid(1)
+                            }
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+                        ThemedTextField {
+                            id: gridBpmField
+                            objectName: "rollingGridBpmField"
+                            Layout.fillWidth: true
+                            text: root.beatGridBpmValue.toFixed(2)
+                            horizontalAlignment: Text.AlignHCenter
+                            validator: DoubleValidator {
+                                bottom: 20
+                                top: 400
+                                decimals: 2
+                            }
+                            onEditingFinished: root.commitGridBpm(text)
+                        }
+                        Label {
+                            text: "BPM"
+                            color: Theme.secondaryText
+                        }
+                    }
+                    ThemedButton {
+                        objectName: "rollingGridReset"
+                        Layout.fillWidth: true
+                        text: qsTr("重置为估算值")
+                        onClicked: {
+                            if (root.playback
+                                    && root.playback.resetBeatGrid !== undefined)
+                                root.playback.resetBeatGrid()
+                        }
                     }
                 }
             }

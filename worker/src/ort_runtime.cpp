@@ -1,6 +1,10 @@
 #include "ort_runtime.hpp"
 
 #include <QFileInfo>
+#include <QDir>
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 namespace agplayer::separation {
 
@@ -13,6 +17,16 @@ bool DynamicOrtRuntime::load(const QString& libraryPath)
         return false;
     }
     library_.setFileName(libraryPath);
+#ifdef Q_OS_WIN
+    // CUDA dependencies are confined to the selected optional runtime directory.
+    // This affects the isolated worker only, never the system PATH or drivers.
+    if (QFileInfo(QDir(QFileInfo(libraryPath).absolutePath())
+                     .filePath("onnxruntime_providers_cuda.dll")).isFile()) {
+        const QString directory = QDir::toNativeSeparators(QFileInfo(libraryPath).absolutePath());
+        SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+        SetDllDirectoryW(reinterpret_cast<LPCWSTR>(directory.utf16()));
+    }
+#endif
     library_.setLoadHints(QLibrary::ResolveAllSymbolsHint);
     if (!library_.load()) {
         errorCode_ = QStringLiteral("runtime_load_failed");

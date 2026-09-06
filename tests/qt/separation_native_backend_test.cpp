@@ -29,6 +29,8 @@ public:
     bool cpuSucceeds = true;
     QVector<int> gpuAttempts;
     int cpuCalls = 0;
+    int cudaCalls = 0;
+    bool cudaSucceeds = true;
 
     QVector<DxgiAdapterInfo> hardwareAdapters() override
     {
@@ -39,6 +41,11 @@ public:
                         ExecutionProvider provider, int adapterId,
                         const CancellationToken&) override
     {
+        if (provider == ExecutionProvider::Cuda) {
+            ++cudaCalls;
+            return cudaSucceeds ? BackendResult{true, {}, {}, {}}
+                : BackendResult{false, QStringLiteral("cuda_failed"), QStringLiteral("CUDA rejected the model"), {}};
+        }
         if (provider == ExecutionProvider::DirectMl) {
             gpuAttempts.push_back(adapterId);
             if (adapterId == successfulGpuAdapter) {
@@ -75,8 +82,39 @@ private slots:
     void gpuSelectionReportsEveryAdapterFailure();
     void autoSelectionTriesEveryGpuBeforeCpuFallback();
     void demucsAutoAvoidsUnboundedDirectMlCompilation();
+    void demucsGpuUsesAnIsolatedCudaRuntime();
     void probeReportsHardwareGpuCandidateWithoutClaimingInferenceValidation();
 };
+
+void SeparationNativeBackendTest::demucsGpuUsesAnIsolatedCudaRuntime()
+{
+    QTemporaryDir runtime;
+    QFile provider(runtime.filePath("onnxruntime_providers_cuda.dll"));
+    QVERIFY(provider.open(QIODevice::WriteOnly));
+    provider.write("test provider presence");
+    provider.close();
+    NativeStartRequest request;
+    request.runtimePath = runtime.filePath("onnxruntime.dll");
+    request.device = DeviceMode::Gpu;
+    TrustedModelProfile profile;
+    profile.family = QStringLiteral("demucs");
+    SequencedNativeProviderProbe probe;
+    CancellationToken cancellation;
+    const auto result = selectNativeProvider(request, profile, cancellation, probe);
+    QVERIFY2(result.ok, qPrintable(result.message));
+    QCOMPARE(result.provider, ExecutionProvider::Cuda);
+    QCOMPARE(probe.cudaCalls, 1);
+    QCOMPARE(probe.cpuCalls, 0);
+    probe.cudaSucceeds = false;
+    const auto forced = selectNativeProvider(request, profile, cancellation, probe);
+    QVERIFY(!forced.ok);
+    QCOMPARE(probe.cpuCalls, 0);
+    request.device = DeviceMode::Auto;
+    const auto automatic = selectNativeProvider(request, profile, cancellation, probe);
+    QVERIFY(automatic.ok);
+    QCOMPARE(automatic.provider, ExecutionProvider::Cpu);
+    QVERIFY(automatic.fallbackReason.contains("CUDA"));
+}
 
 void SeparationNativeBackendTest::startRequestRequiresBoundedNativeFields()
 {

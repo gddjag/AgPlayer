@@ -672,6 +672,30 @@ TestCase {
         compare(rendered.position, 75000)
     }
 
+    function test_reopening_before_renderer_release_does_not_close_window_later() {
+        var coordinator = findChild(mainWindow, "immersiveCoordinator")
+        PlayerExperienceController.immersiveMode = PlayerExperienceController.TerrainReactor
+        tryCompare(coordinator, "attachedHostMode", PlayerExperienceController.Windowed)
+        var window = coordinator.fullscreenWindow
+        var terrain = coordinator.surface.terrainItem
+        // Model Qt retaining the renderer while its window is hidden.
+        terrain.liveRendererCount = 1
+        try {
+            PlayerExperienceController.immersiveMode = PlayerExperienceController.Off
+            // Resume near the real release deadline without a wall-clock race.
+            coordinator.releasePolls = coordinator.releasePollLimit - 1
+            PlayerExperienceController.immersiveMode = PlayerExperienceController.TerrainReactor
+            tryCompare(window, "visible", true)
+            wait(1000)
+            compare(PlayerExperienceController.immersiveMode,
+                    PlayerExperienceController.TerrainReactor)
+            compare(window.visible, true)
+            compare(coordinator.surface.terrainItem, terrain)
+        } finally {
+            terrain.liveRendererCount = 0
+        }
+    }
+
     function test_one_terrain_item_stays_in_independent_window_for_all_hosts() {
         var coordinator = findChild(mainWindow, "immersiveCoordinator")
         verify(coordinator)

@@ -585,6 +585,12 @@ ApplicationWindow {
         function attachRequestedHost() {
             if (!ensureSurface())
                 return false
+            // A pending detach timeout belongs to the previous presentation.
+            // It must not turn a rapidly reopened immersive window off.
+            releaseTimer.stop()
+            releaseTimer.interval = 16
+            releasePolls = 0
+            handoffTimedOut = false
             handoffPhase = 2
             surface.hostMode = requestedHostMode
             surface.visible = true

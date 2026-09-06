@@ -5,6 +5,12 @@
 #include <QProcessEnvironment>
 #include <QSaveFile>
 #include <QTimer>
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QElapsedTimer>
+#include <QUuid>
+#include <QScopeGuard>
 #include <QtConcurrent/QtConcurrentRun>
 #include "vocal_separation_path_safety.hpp"
 
@@ -272,3 +278,189 @@ void ExternalSeparationRuntime::stopInstaller()
     process_.kill();
     process_.waitForFinished(1500);
 }
+
+namespace {
+QString nvidiaHardwareName()
+{
+    // Driver identity is stable for this app process. Avoid repeatedly spawning
+    // nvidia-smi when controllers are recreated; model validation remains live.
+    static const QString name = [] {
+        QProcess hardware;
+        hardware.start("nvidia-smi.exe", {"--query-gpu=name", "--format=csv,noheader"});
+        if (hardware.waitForFinished(5000) && hardware.exitCode() == 0)
+            return QString::fromUtf8(hardware.readAllStandardOutput()).trimmed();
+        hardware.kill(); hardware.waitForFinished(1000);
+        return QString();
+    }();
+    return name;
+}
+bool verifyCudaFiles(const QString& root, const QList<VocalDownloadFile>& files,
+                     const std::shared_ptr<std::atomic_bool>& cancellation)
+{
+    if (!vocal_separation_paths::safeExistingDirectory(root)) return false;
+    for (const auto& file : files) {
+        const QString path = QDir(root).filePath(file.fileName);
+        if (!vocal_separation_paths::safeExistingFileWithin(path, root)
+            || !VocalSeparationInstaller::isVerifiedFile(file, path, cancellation)) return false;
+    }
+    return !files.isEmpty();
+}
+}
+
+CudaSeparationRuntime::CudaSeparationRuntime(QString root, QNetworkAccessManager* network, QObject* parent)
+    : QObject(parent), root_(std::move(root)), downloader_(network),
+      cancellation_(std::make_shared<std::atomic_bool>(false))
+{
+    initializePythonResources();
+    QFile active(QDir(root_).filePath("active-cuda"));
+    if (vocal_separation_paths::openRegularFileForReadWithin(&active, root_)) {
+        const QString name = QString::fromUtf8(active.read(200)).trimmed();
+        if (name.startsWith("native-") && name.size() < 100 && !name.contains('/') && !name.contains('\\')) activeDirectory_ = name;
+    }
+    QFile file(":/separation/cuda-runtime-manifest.json");
+    if (file.open(QIODevice::ReadOnly)) {
+        const auto manifest = QJsonDocument::fromJson(file.readAll()).object();
+        const auto parse = [](const QJsonArray& values) {
+            QList<VocalDownloadFile> result;
+            for (const auto& value : values) {
+                const auto entry = value.toObject();
+                result.push_back({entry.value("name").toString(), QUrl(entry.value("url").toString()),
+                    entry.value("bytes").toInteger(), entry.value("sha256").toString()});
+            }
+            return result;
+        };
+        archives_ = parse(manifest.value("files").toArray());
+        dlls_ = parse(manifest.value("dlls").toArray());
+    }
+    connect(&downloader_, &VocalSeparationDownloader::progressChanged, this, [this](qint64 received, qint64 total) {
+        qint64 previous = 0, all = 0;
+        for (int i = 0; i < archives_.size(); ++i) { all += archives_[i].bytes; if (i < index_) previous += archives_[i].bytes; }
+        emit progress(all > 0 ? double(previous + received) / double(all) : -1,
+            tr("下载 CUDA 组件 %1 / %2：%3 / %4 MB").arg(index_ + 1).arg(archives_.size()).arg(received / 1048576).arg(total / 1048576));
+    });
+    connect(&downloader_, &VocalSeparationDownloader::finished, this, [this](const VocalInstallResult& result) {
+        if (!busy_) return;
+        if (!result.ok) {
+            if (!mirror_) { mirror_ = true; advance(); return; }
+            fail(tr("CUDA 官方及国内线路均失败：%1").arg(result.error)); return;
+        }
+        ++index_; mirror_ = false; if (!paused_) advance();
+    });
+    connect(&work_, &QFutureWatcher<VocalInstallResult>::finished, this, [this] {
+        const auto result = work_.result();
+        if (phase_ == -1) { ready_ = result.ok; nvidiaAvailable_ = !result.error.isEmpty(); emit changed(); return; }
+        if (resumeRequested_ && busy_) {
+            resumeRequested_ = false; paused_ = false;
+            cancellation_ = std::make_shared<std::atomic_bool>(false); emit changed(); advance(); return;
+        }
+        if (!busy_ || paused_) return;
+        if (phase_ == 1) {
+            if (!result.ok) { fail(result.error); return; }
+            activeDirectory_ = result.error;
+            ready_ = true; busy_ = false; emit changed(); emit finished(true, {}); return;
+        }
+        if (result.ok) { ++index_; mirror_ = false; advance(); return; }
+        auto archive = archives_.at(index_);
+        if (mirror_) {
+            QString url = archive.url.toString();
+            url.replace("https://files.pythonhosted.org/packages/", "https://pypi.tuna.tsinghua.edu.cn/packages/");
+            archive.url = QUrl(url);
+            emit progress(-1, tr("官方 CUDA 下载中断，切换清华镜像（保持官方 SHA-256）"));
+        }
+        downloader_.start(archive, QDir(root_).filePath("cache/" + archive.fileName));
+    });
+    const QString native = QDir(root_).filePath(activeDirectory_);
+    const auto dlls = dlls_; const auto cancellation = cancellation_;
+    work_.setFuture(QtConcurrent::run([native, dlls, cancellation] {
+        return VocalInstallResult{verifyCudaFiles(native, dlls, cancellation), nvidiaHardwareName()};
+    }));
+}
+CudaSeparationRuntime::~CudaSeparationRuntime() { blockSignals(true); cancel(); work_.waitForFinished(); }
+QString CudaSeparationRuntime::libraryPath() const { return QDir(root_).filePath(activeDirectory_ + "/onnxruntime.dll"); }
+bool CudaSeparationRuntime::start()
+{
+    if (busy_ || work_.isRunning() || archives_.isEmpty() || dlls_.isEmpty()) return false;
+    if (!QDir().mkpath(QDir(root_).filePath("cache"))
+        || !vocal_separation_paths::safeExistingDirectory(root_)) return false;
+    if (!VocalSeparationInstaller::hasDiskSpace(root_, 5LL * 1024 * 1024 * 1024)) return false;
+    cancellation_ = std::make_shared<std::atomic_bool>(false);
+    busy_ = true; paused_ = false; resumeRequested_ = false; index_ = 0; mirror_ = false;
+    emit changed(); advance(); return true;
+}
+void CudaSeparationRuntime::advance()
+{
+    if (!busy_ || paused_ || work_.isRunning()) return;
+    const auto cancellation = cancellation_;
+    if (index_ < archives_.size()) {
+        phase_ = 0;
+        const auto archive = archives_.at(index_);
+        const QString path = QDir(root_).filePath("cache/" + archive.fileName);
+        emit progress(-1, tr("检查已下载 CUDA 缓存 %1 / %2").arg(index_ + 1).arg(archives_.size()));
+        work_.setFuture(QtConcurrent::run([archive, path, cancellation] {
+            return VocalInstallResult{vocal_separation_paths::safeExistingFile(path)
+                && VocalSeparationInstaller::isVerifiedFile(archive, path, cancellation), {}};
+        })); return;
+    }
+    phase_ = 1;
+    emit progress(-1, tr("解压并验证 CUDA / cuDNN 原生组件；不修改系统或 Python VR 环境"));
+    const QString root = root_; const auto dlls = dlls_; const auto archives = archives_;
+    work_.setFuture(QtConcurrent::run([root, dlls, archives, cancellation] {
+        const QString name = "native-" + QUuid::createUuid().toString(QUuid::WithoutBraces);
+        const QString staging = ".staging-" + name;
+        const QString native = QDir(root).filePath(staging);
+        if (!QDir().mkpath(native)) return VocalInstallResult{false, "Cannot create CUDA staging directory"};
+        QSet<QString> allowedNames;
+        for (const auto& dll : dlls) allowedNames.insert(dll.fileName);
+        const auto cleanStaging = qScopeGuard([native, allowedNames] {
+            if (QFileInfo::exists(native)) vocal_separation_paths::removeKnownFlatDirectory(native, allowedNames);
+        });
+        if (!vocal_separation_paths::safeExistingDirectory(native)) return VocalInstallResult{false, "Unsafe CUDA directory"};
+        for (const auto& dll : dlls) {
+            const auto path = QDir(native).filePath(dll.fileName);
+            if (QFileInfo::exists(path) && !vocal_separation_paths::safeExistingFileWithin(path, native))
+                return VocalInstallResult{false, "Unsafe CUDA component path"};
+        }
+        QStringList names, paths;
+        for (const auto& dll : dlls) names.push_back(dll.fileName);
+        for (const auto& archive : archives) paths.push_back(QDir(root).filePath("cache/" + archive.fileName));
+        QProcess process;
+        auto env = QProcessEnvironment::systemEnvironment();
+        env.insert("AGPLAYER_CUDA_TARGET", native); env.insert("AGPLAYER_CUDA_NAMES", names.join('|'));
+        env.insert("AGPLAYER_CUDA_ARCHIVES", paths.join('|')); process.setProcessEnvironment(env);
+        process.start("powershell.exe", {"-NoProfile", "-NonInteractive", "-Command",
+            "$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.IO.Compression.FileSystem; "
+            "$names=$env:AGPLAYER_CUDA_NAMES.Split('|'); foreach($archive in $env:AGPLAYER_CUDA_ARCHIVES.Split('|')) { "
+            "$z=[IO.Compression.ZipFile]::OpenRead($archive); try {foreach($e in $z.Entries) {if($names -contains $e.Name) {"
+            "[IO.Compression.ZipFileExtensions]::ExtractToFile($e,[IO.Path]::Combine($env:AGPLAYER_CUDA_TARGET,$e.Name),$true)"
+            "}}} finally {$z.Dispose()} }"});
+        process.closeWriteChannel();
+        QElapsedTimer timer; timer.start();
+        while (!process.waitForFinished(250)) {
+            if (cancellation->load() || timer.elapsed() > 180000) { process.kill(); process.waitForFinished(); return VocalInstallResult{false, "CUDA extraction cancelled or timed out"}; }
+        }
+        if (process.exitCode() != 0 || process.exitStatus() != QProcess::NormalExit)
+            return VocalInstallResult{false, QString::fromUtf8(process.readAllStandardError()).right(1200)};
+        if (!verifyCudaFiles(native, dlls, cancellation)) return VocalInstallResult{false, "CUDA component integrity verification failed"};
+        if (cancellation->load()) return VocalInstallResult{false, "CUDA installation cancelled"};
+        const QString version = QDir(root).filePath(name);
+        if (!QDir().rename(native, version)) return VocalInstallResult{false, "Cannot activate CUDA version"};
+        QSaveFile marker(QDir(root).filePath("active-cuda")); marker.setDirectWriteFallback(false);
+        if (!marker.open(QIODevice::WriteOnly) || marker.write(name.toUtf8()) < 0 || !marker.commit())
+            return VocalInstallResult{false, "Cannot publish CUDA activation marker"};
+        return VocalInstallResult{true, name};
+    }));
+}
+void CudaSeparationRuntime::pause() {
+    if (!busy_ || paused_) return;
+    paused_ = true; cancellation_->store(true); downloader_.pause(); emit changed();
+}
+void CudaSeparationRuntime::resume() {
+    if (!busy_ || !paused_) return;
+    if (work_.isRunning()) { resumeRequested_ = true; emit progress(-1, tr("正在结束当前校验，随后自动继续")); return; }
+    paused_ = false; cancellation_ = std::make_shared<std::atomic_bool>(false); emit changed();
+    if (downloader_.state() == VocalDownloadState::Paused) downloader_.resume(); else advance();
+}
+void CudaSeparationRuntime::cancel() {
+    busy_ = false; paused_ = false; resumeRequested_ = false; cancellation_->store(true); downloader_.cancel(); emit changed();
+}
+void CudaSeparationRuntime::fail(const QString& error) { busy_ = false; emit changed(); emit finished(false, error); }

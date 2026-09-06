@@ -3,9 +3,12 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QSaveFile>
+#include <QElapsedTimer>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QProcess>
 #include <QTimer>
 
 #include <cstdio>
@@ -32,6 +35,22 @@ int main(int argc, char* argv[])
     QCoreApplication app(argc, argv);
     const QString scenario = app.arguments().value(1);
     const QString markerPath = app.arguments().value(2);
+    if (scenario == QStringLiteral("delayed-marker-child")) {
+        QSaveFile ready(markerPath + QStringLiteral(".ready"));
+        if (!ready.open(QIODevice::WriteOnly)) return 10;
+        ready.write(QByteArray::number(QCoreApplication::applicationPid()));
+        if (!ready.commit()) return 11;
+        // Stay alive until the owning Job terminates us. The parent test
+        // observes the process handle, not a scheduling-sensitive delayed file.
+        return app.exec();
+    }
+    if (scenario == QStringLiteral("spawn-child-and-fail")) {
+        if (!QProcess::startDetached(
+                QCoreApplication::applicationFilePath(),
+                {QStringLiteral("delayed-marker-child"), markerPath})) {
+            return 9;
+        }
+    }
     std::thread([&app, scenario, markerPath] {
         std::string line;
         while (std::getline(std::cin, line)) {
@@ -75,7 +94,19 @@ int main(int argc, char* argv[])
                     QFile marker(markerPath);
                     if (marker.open(QIODevice::WriteOnly)) marker.write("started");
                 }
-                if (scenario == QStringLiteral("wrong-direction")) {
+                if (scenario == QStringLiteral("wrong-direction")
+                    || scenario == QStringLiteral("spawn-child-and-fail")) {
+                    if (scenario == QStringLiteral("spawn-child-and-fail")) {
+                        const QString trigger = markerPath + QStringLiteral(".fail");
+                        QElapsedTimer preparation;
+                        preparation.start();
+                        while (preparation.elapsed() < 5000
+                               && !QFileInfo::exists(trigger)) {
+                            std::this_thread::sleep_for(
+                                std::chrono::milliseconds(5));
+                        }
+                        if (!QFileInfo::exists(trigger)) return;
+                    }
                     send(ProtocolType::Start, message.requestId);
                     continue;
                 }

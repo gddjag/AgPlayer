@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QHash>
 #include <QMetaObject>
 #include <QPointer>
 #include <QString>
@@ -8,6 +9,7 @@
 #include <QTimer>
 #include <QVariantList>
 
+#include <array>
 #include <optional>
 
 struct ag_player;
@@ -54,6 +56,17 @@ class PlaybackController final : public QObject {
                    NOTIFY scratchStatusChanged)
     Q_PROPERTY(bool scratchBuffering READ scratchBuffering
                    NOTIFY scratchStatusChanged)
+    Q_PROPERTY(qint64 cuePositionMs READ cuePositionMs NOTIFY cueChanged)
+    Q_PROPERTY(bool cueAuditioning READ cueAuditioning NOTIFY cueChanged)
+    Q_PROPERTY(double beatGridBpm READ beatGridBpm NOTIFY beatGridChanged)
+    Q_PROPERTY(qint64 beatGridOffsetMs READ beatGridOffsetMs
+                   NOTIFY beatGridChanged)
+    Q_PROPERTY(bool beatGridCalibrated READ beatGridCalibrated
+                   NOTIFY beatGridChanged)
+    Q_PROPERTY(bool beatGridEstimatedBpm READ beatGridEstimatedBpm
+                   NOTIFY beatGridChanged)
+    Q_PROPERTY(QVariantList hotCuePositions READ hotCuePositions
+                   NOTIFY hotCuePositionsChanged)
 
 public:
     static constexpr int PollIntervalMs = 17;
@@ -97,6 +110,13 @@ public:
     bool scratchActive() const noexcept;
     bool scratchReady() const noexcept;
     bool scratchBuffering() const noexcept;
+    qint64 cuePositionMs() const noexcept;
+    bool cueAuditioning() const noexcept;
+    double beatGridBpm() const noexcept;
+    qint64 beatGridOffsetMs() const noexcept;
+    bool beatGridCalibrated() const noexcept;
+    bool beatGridEstimatedBpm() const noexcept;
+    QVariantList hotCuePositions() const;
 
     void setLibraryModel(LibraryModel* library);
     void setPlayer(ag_player* player);
@@ -149,6 +169,17 @@ public:
     Q_INVOKABLE bool updateScratch(double signedRate);
     Q_INVOKABLE bool endScratch();
     Q_INVOKABLE bool cancelScratch();
+    Q_INVOKABLE void cuePress();
+    Q_INVOKABLE void cueRelease();
+    Q_INVOKABLE void cancelCue();
+    Q_INVOKABLE void clearCue();
+    Q_INVOKABLE void jumpToCue();
+    Q_INVOKABLE void activateHotCue(int slot);
+    Q_INVOKABLE void clearHotCue(int slot);
+    Q_INVOKABLE void setBeatGridFirstBeat();
+    Q_INVOKABLE void nudgeBeatGrid(qint64 deltaMs);
+    Q_INVOKABLE void setBeatGridBpm(double bpm);
+    Q_INVOKABLE void resetBeatGrid();
 
 signals:
     void stateChanged();
@@ -174,6 +205,9 @@ signals:
     void seekCommitted(qint64 positionMs);
     void tempoChanged();
     void scratchStatusChanged();
+    void cueChanged();
+    void beatGridChanged();
+    void hotCuePositionsChanged();
 
 private:
     friend class PlaybackControllerTest;
@@ -203,6 +237,15 @@ private:
         bool keepPitch{true};
     };
 
+    struct DeckState final {
+        qint64 cuePositionMs{-1};
+        double beatGridBpmOverride{};
+        qint64 beatGridOffsetMs{};
+        bool beatGridCalibrated{};
+        std::array<qint64, 8> hotCuePositions{
+            -1, -1, -1, -1, -1, -1, -1, -1};
+    };
+
     void pollSnapshot();
     void pollSpectrum();
     bool prepareRow(int row);
@@ -212,6 +255,15 @@ private:
     bool shouldFailEditorOutputStep(EditorOutputStep step) noexcept;
     void syncTimePitchFromCore();
     void refreshSourceBpm();
+    void loadDeckStateStore();
+    bool saveDeckStateStore();
+    QString deckStateFilePath() const;
+    DeckState currentDeckState() const noexcept;
+    bool hasPersistentCurrentTrack() const noexcept;
+    void invalidateCueHoldForTrackChange();
+    void finishCueAudition(bool returnToCue);
+    static bool validBeatGridBpm(double bpm) noexcept;
+    static bool deckStateIsEmpty(const DeckState& deck) noexcept;
     bool setSelection(qint64 startMs, qint64 endMs, bool loopEnabled);
     void setErrorMessage(QString message);
     void runCommand(int result);
@@ -252,6 +304,11 @@ private:
     bool scratchActive_ = false;
     bool scratchReady_ = false;
     bool scratchBuffering_ = false;
+    QHash<QString, DeckState> deckStates_;
+    bool cueHeld_ = false;
+    bool cueAuditioning_ = false;
+    QString cueAuditionTrackId_;
+    qint64 cueAuditionReturnMs_ = -1;
     bool editorOutputOwned_ = false;
     bool editorRestorePending_ = false;
     qsizetype activeScopeSize_{};

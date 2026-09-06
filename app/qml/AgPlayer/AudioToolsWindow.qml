@@ -251,9 +251,7 @@ Window {
 
             ToolSidebar {
                 Layout.fillWidth: true
-                Layout.preferredHeight: window.losslessWorkbench
-                                        ? Theme.losslessNavigationHeight
-                                        : Theme.settingsRowHeight
+                Layout.preferredHeight: Theme.settingsRowHeight
                 window: window
                 currentTool: AudioToolsController.currentTool
                 referenceWorkbench: window.referenceWorkbench

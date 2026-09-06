@@ -49,14 +49,25 @@ constexpr double fixture_frequency = 440.0;
 void wait_for_frames(const agplayer::AudioEngine& engine,
                      const std::size_t frames)
 {
-    for (int attempt = 0; attempt < 2'000; ++attempt) {
+    const auto deadline = std::chrono::steady_clock::now()
+                          + std::chrono::seconds(2);
+    while (std::chrono::steady_clock::now() < deadline) {
         if (engine.buffered_frames() >= frames) {
             return;
         }
         AG_CHECK(engine.snapshot().state != agplayer::EngineState::Error);
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
+    std::fprintf(stderr, "[queue-gapless] buffer wait exceeded 2 s: requested=%zu available=%zu\n",
+                 frames, engine.buffered_frames());
+    std::fflush(stderr);
     AG_CHECK(false);
+}
+
+void stage(const char* name)
+{
+    std::fprintf(stderr, "[queue-gapless] %s\n", name);
+    std::fflush(stderr);
 }
 
 std::vector<float> capture(agplayer::AudioEngine& engine,
@@ -159,6 +170,7 @@ int main(const int argc, char** argv)
     AG_CHECK(argc == 4);
     (void)argc;
     {
+        stage("duration fixture and EOF begin");
         const std::filesystem::path vbr_fixture =
             write_vbr_fixture_with_incorrect_duration(argv[3]);
         {
@@ -168,9 +180,10 @@ int main(const int argc, char** argv)
             AG_CHECK(duration_engine.snapshot().duration_ms > 10'000);
             AG_CHECK(duration_engine.play() == AG_OK);
             std::array<float, 512U * channels> final_block{};
-            for (int attempt = 0; attempt < 2'000
-                 && duration_engine.snapshot().state != agplayer::EngineState::Stopped;
-                 ++attempt) {
+            const auto deadline = std::chrono::steady_clock::now()
+                                  + std::chrono::seconds(2);
+            while (std::chrono::steady_clock::now() < deadline
+                   && duration_engine.snapshot().state != agplayer::EngineState::Stopped) {
                 if (duration_engine.buffered_frames() == 0U) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 }
@@ -181,12 +194,20 @@ int main(const int argc, char** argv)
                 duration_engine.render(final_block.data(), 512U);
             }
             const auto final = duration_engine.snapshot();
+            if (final.state != agplayer::EngineState::Stopped) {
+                std::fprintf(stderr, "[queue-gapless] EOF wait exceeded 2 s: state=%d position_ms=%lld available=%zu\n",
+                             static_cast<int>(final.state),
+                             static_cast<long long>(final.position_ms),
+                             duration_engine.buffered_frames());
+                std::fflush(stderr);
+            }
             AG_CHECK(final.state == agplayer::EngineState::Stopped);
             AG_CHECK(final.position_ms < 3'000);
             AG_CHECK(std::abs(final.duration_ms - final.position_ms) <= 1);
         }
         std::filesystem::remove(vbr_fixture);
     }
+    stage("duration fixture and EOF complete; gapless capture begin");
 
     agplayer::AudioEngine engine(agplayer::AudioBackend::Manual, 4'096U);
     AG_CHECK(engine.set_transition_fade_ms(0) == AG_OK);
@@ -222,6 +243,7 @@ int main(const int argc, char** argv)
     AG_CHECK(internal_snapshot.sample_rate == static_cast<int>(sample_rate));
 
     {
+        stage("matched sample-rate transition begin");
         agplayer::AudioEngine matched_engine(agplayer::AudioBackend::Manual,
                                              4'096U);
         AG_CHECK(matched_engine.set_match_track_sample_rate(true) == AG_OK);
@@ -298,6 +320,7 @@ int main(const int argc, char** argv)
     }
 
     {
+        stage("concurrent lifecycle begin");
         agplayer::AudioEngine lifecycle_engine(
             agplayer::AudioBackend::Null, 4'096U);
         AG_CHECK(lifecycle_engine.set_match_track_sample_rate(true) == AG_OK);
@@ -337,6 +360,7 @@ int main(const int argc, char** argv)
     }
 
     {
+        stage("serialized next/pause begin");
         agplayer::AudioEngine serialized_engine(
             agplayer::AudioBackend::Null, 4'096U);
         AG_CHECK(serialized_engine.set_queue({argv[1], argv[2]}, 0U)
@@ -372,6 +396,7 @@ int main(const int argc, char** argv)
     }
 
     {
+        stage("realtime fades begin");
         agplayer::AudioEngine fade_engine(agplayer::AudioBackend::Manual,
                                           8'192U);
         AG_CHECK(fade_engine.set_transition_fade_ms(200) == AG_OK);
@@ -442,6 +467,7 @@ int main(const int argc, char** argv)
     }
 
     {
+        stage("snapshot consistency begin");
         const std::vector<std::string> alternating_queue{
             argv[3], argv[1], argv[3], argv[1], argv[3], argv[1],
         };
@@ -470,6 +496,7 @@ int main(const int argc, char** argv)
     }
 
     agplayer::AudioEngine repeat_engine(agplayer::AudioBackend::Manual, 4'096U);
+    stage("repeat, shuffle and seek begin");
     AG_CHECK(repeat_engine.set_queue({argv[1], argv[2]}, 0U) == AG_OK);
     AG_CHECK(repeat_engine.set_mode(agplayer::PlaybackMode::RepeatOne) == AG_OK);
     AG_CHECK(repeat_engine.play() == AG_OK);
@@ -578,6 +605,7 @@ int main(const int argc, char** argv)
     AG_CHECK(failure_engine.snapshot().state == agplayer::EngineState::Stopped);
 
     ag_player_config config{AG_AUDIO_BACKEND_NULL, 4'096U};
+    stage("C API scoped queue begin");
     ag_player* player = nullptr;
     AG_CHECK(ag_player_create_with_config(&config, &player) == AG_OK);
     const char* queue[] = {argv[1], argv[2]};
@@ -652,4 +680,5 @@ int main(const int argc, char** argv)
     AG_CHECK(ag_player_snapshot(player, &snapshot) == AG_OK);
     AG_CHECK(snapshot.track_index != 0U);
     ag_player_destroy(player);
+    stage("all assertions complete; final engine destruction begin");
 }

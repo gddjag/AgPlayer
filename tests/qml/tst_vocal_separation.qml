@@ -604,7 +604,21 @@ TestCase {
         mouseClick(gpu)
         compare(VocalSeparationController.deviceMode,
                 VocalSeparationController.GPU)
+        verify(gpu.checked)
+        compare(gpu.background.color, page.primary)
+        gpu.focus = false
+        wait(0)
+        compare(gpu.background.color, page.primary)
         separationTestDriver.reset()
+    }
+
+    function test_gpuSetupAndActualExecutionAreVisibleWithoutStartingDownload() {
+        const status = findChild(page, "separationActualExecution")
+        verify(status)
+        verify(status.text.length > 0)
+        const setup = findChild(page, "separationConfigureGpu-uvr-mdxnet-kara")
+        verify(setup)
+        verify(setup.Accessible.name.length > 0)
     }
 
     function test_narrowDesktopHistoryUsesAReadableStack() {

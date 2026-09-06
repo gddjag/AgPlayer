@@ -91,6 +91,8 @@ Item {
     function shortcutConflicts(candidate, original) {
         if (!candidate || candidate === original)
             return false
+        const comparableCandidate = String(candidate).trim()
+                .replace(/\s*\+\s*/g, "+")
         const shortcuts = [
             SettingsController.hkPlayPause,
             SettingsController.hkPrevNext,
@@ -100,7 +102,17 @@ Item {
             SettingsController.hkWaveformMode,
             SettingsController.hkAudioTools
         ]
-        return shortcuts.indexOf(candidate) >= 0
+        const rolling = SettingsController.rollingKeyboardShortcuts
+        for (var action in rolling)
+            shortcuts.push(rolling[action])
+        return shortcuts.some(function(shortcut) {
+            if (shortcut === original)
+                return false
+            return String(shortcut).split("/").some(function(member) {
+                return member.trim().replace(/\s*\+\s*/g, "+")
+                        === comparableCandidate
+            })
+        })
     }
 
     function isAllowedGlobalShortcut(candidate) {
@@ -160,7 +172,7 @@ Item {
             { index: 1, text: qsTr("播放与音频"), subtitle: qsTr("播放"), icon: "play-fill" },
             { index: 2, text: qsTr("外观与波形"), subtitle: qsTr("外观"), icon: "waveform-switch" },
             { index: 3, text: qsTr("音频工具预设"), subtitle: qsTr("音频工具"), icon: "equalizer-line" },
-            { index: 4, text: qsTr("快捷键设置"), subtitle: qsTr("快捷键"), icon: "list-unordered" },
+            { index: 4, text: qsTr("键盘"), subtitle: qsTr("键盘"), icon: "list-unordered" },
             { index: 5, text: qsTr("缓存与数据"), subtitle: qsTr("缓存"), icon: "folder-open-line" },
             { index: 6, text: qsTr("关于"), subtitle: qsTr("关于"), icon: "information-line" }
         ]
@@ -2063,7 +2075,7 @@ Item {
         spacing: Theme.spacingSm
 
         SectionHeader {
-            title: qsTr("快捷键设置")
+            title: qsTr("键盘")
             subtitle: qsTr("快捷键")
         }
 
@@ -2121,15 +2133,91 @@ Item {
                     onCommitted: text => SettingsController.hkAudioTools = text
                 }
             }
+
+            SettingCard {
+                title: qsTr("滚动播放器键盘")
+
+                Text {
+                    Layout.fillWidth: true
+                    text: qsTr("macOS 的 Option 键在快捷键中显示为 Alt；清空输入可禁用动作。")
+                    color: Theme.secondaryText
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: Theme.fontSizeCaption
+                    wrapMode: Text.Wrap
+                }
+
+                Repeater {
+                    model: [
+                        { action: "cue", label: qsTr("CUE 设置 / 预听") },
+                        { action: "cueJump", label: qsTr("跳到 CUE") },
+                        { action: "cueDelete", label: qsTr("删除 CUE") },
+                        { action: "gridOrigin", label: qsTr("设置网格第一拍") },
+                        { action: "gridLeft", label: qsTr("网格左移 1 ms") },
+                        { action: "gridRight", label: qsTr("网格右移 1 ms") }
+                    ]
+                    delegate: HotkeyRow {
+                        required property var modelData
+                        objectName: "rollingShortcut-" + modelData.action
+                        label: modelData.label
+                        settingsAction: modelData.action
+                        value: SettingsController.rollingKeyboardShortcuts[
+                                   modelData.action] || ""
+                    }
+                }
+
+                ThemedButton {
+                    objectName: "rollingShortcutResetButton"
+                    text: qsTr("恢复滚动播放器默认快捷键")
+                    onClicked: SettingsController.resetRollingKeyboardShortcuts()
+                }
+            }
+
+            SettingCard {
+                title: qsTr("Hot Cue 1–8")
+
+                Repeater {
+                    model: 8
+                    delegate: HotkeyRow {
+                        required property int index
+                        readonly property string actionName:
+                            "hotCue" + (index + 1)
+                        objectName: "rollingShortcut-" + actionName
+                        label: qsTr("Hot Cue %1").arg(index + 1)
+                        settingsAction: actionName
+                        value: SettingsController.rollingKeyboardShortcuts[
+                                   actionName] || ""
+                    }
+                }
+            }
+
+            SettingCard {
+                title: qsTr("删除 Hot Cue")
+
+                Repeater {
+                    model: 8
+                    delegate: HotkeyRow {
+                        required property int index
+                        readonly property string actionName:
+                            "hotCueDelete" + (index + 1)
+                        objectName: "rollingShortcut-" + actionName
+                        label: qsTr("删除 Hot Cue %1").arg(index + 1)
+                        settingsAction: actionName
+                        value: SettingsController.rollingKeyboardShortcuts[
+                                   actionName] || ""
+                    }
+                }
+            }
         }
 
         Item { Layout.fillHeight: true }
     }
 
     component HotkeyRow: RowLayout {
+        id: hotkeyRow
         property alias label: labelText.text
         property string value
         property bool globalShortcut: false
+        property string settingsAction: ""
         property bool invalidShortcut: false
         signal committed(string text)
 
@@ -2159,7 +2247,7 @@ Item {
                 anchors.fill: parent
                 anchors.leftMargin: Theme.spacingMd
                 anchors.rightMargin: Theme.spacingMd
-                text: parent.parent.value
+                text: hotkeyRow.value
                 color: Theme.primaryText
                 font.family: Theme.fontPrimary
                 font.pixelSize: Theme.fontSizeBody
@@ -2173,6 +2261,15 @@ Item {
                     if (!candidate)
                         return
                     event.accepted = true
+                    if (settingsAction) {
+                        invalidShortcut =
+                                !SettingsController.setRollingKeyboardShortcut(
+                                    settingsAction, candidate)
+                        text = Qt.binding(function() {
+                            return hotkeyRow.value
+                        })
+                        return
+                    }
                     invalidShortcut =
                             root.shortcutConflicts(candidate, value)
                             || (globalShortcut
@@ -2180,18 +2277,31 @@ Item {
                     if (!invalidShortcut) {
                         text = candidate
                         committed(candidate)
+                        text = Qt.binding(function() {
+                            return hotkeyRow.value
+                        })
                     }
                 }
                 onEditingFinished: {
                     const candidate = text.trim()
+                    if (settingsAction) {
+                        invalidShortcut =
+                                !SettingsController.setRollingKeyboardShortcut(
+                                    settingsAction, candidate)
+                        text = Qt.binding(function() {
+                            return hotkeyRow.value
+                        })
+                        return
+                    }
                     invalidShortcut =
                             root.shortcutConflicts(candidate, value)
                             || (globalShortcut
                                 && !root.isAllowedGlobalShortcut(candidate))
                     if (!invalidShortcut && candidate)
                         committed(candidate)
-                    else
-                        text = value
+                    text = Qt.binding(function() {
+                        return hotkeyRow.value
+                    })
                 }
             }
         }

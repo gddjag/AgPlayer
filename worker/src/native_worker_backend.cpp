@@ -16,6 +16,7 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QDebug>
 #include <QSet>
 #include <QtEndian>
 
@@ -296,6 +297,18 @@ NativeProviderSelection selectNativeProvider(
             QStringLiteral("Provider probe cancelled")};
     };
     if (cancelled.isCancelled()) return cancelledResult();
+    const bool cudaRuntime = QFileInfo(QDir(QFileInfo(request.runtimePath).absolutePath())
+        .filePath(QStringLiteral("onnxruntime_providers_cuda.dll"))).isFile();
+    if (cudaRuntime && request.device != DeviceMode::Cpu) {
+        const BackendResult gpu = probe.prove(request, profile, ExecutionProvider::Cuda, 0, cancelled);
+        if (cancelled.isCancelled()) return cancelledResult();
+        if (gpu.ok) return {true, ExecutionProvider::Cuda, 0, {}, {}, {}};
+        if (request.device == DeviceMode::Gpu)
+            return {false, ExecutionProvider::Cuda, 0, {}, gpu.code, gpu.message};
+        const BackendResult cpu = probe.prove(request, profile, ExecutionProvider::Cpu, 0, cancelled);
+        return {cpu.ok, ExecutionProvider::Cpu, 0,
+                QStringLiteral("CUDA 模型验证失败，自动回退 CPU：%1").arg(gpu.message), cpu.code, cpu.message};
+    }
     // This pinned HTDemucs export expands dramatically during DirectML graph
     // compilation (over 20 GiB on a 4070 Ti SUPER before the first chunk).
     // A provider probe compiles that same graph, so do not attempt it first.
@@ -361,21 +374,50 @@ NativeProviderSelection selectNativeProvider(
 namespace {
 
 bool encodeStagingWave(const QString& stagingPath, const QString& outputPath,
-                       const CancellationToken& cancelled, QString* error)
+                       const CancellationToken& cancelled, QString* error,
+                       float outputGain = 1.0F)
 {
+    QString encodePath = stagingPath;
+    if (outputGain < 1.0F) {
+        encodePath = stagingPath + QStringLiteral(".gain.wav");
+        agplayer::Decoder decoder;
+        FfmpegWaveWriter writer;
+        if (decoder.open(stagingPath.toUtf8().toStdString(), 44100, 2) != AG_OK
+            || !writer.open(encodePath, 44100, 2)) {
+            *error = QStringLiteral("Could not open common-gain staging audio");
+            return false;
+        }
+        for (;;) {
+            if (cancelled.isCancelled()) return false;
+            agplayer::DecodedAudioBlock block;
+            if (decoder.read(block) != AG_OK) {
+                *error = QStringLiteral("Could not decode common-gain staging audio");
+                return false;
+            }
+            QVector<float> samples(static_cast<qsizetype>(block.frames * 2));
+            for (qsizetype i = 0; i < samples.size(); ++i)
+                samples[i] = block.samples[static_cast<size_t>(i)] * outputGain;
+            if (!samples.isEmpty() && !writer.write(samples)) {
+                *error = writer.errorString(); return false;
+            }
+            if (block.end_of_stream) break;
+        }
+        if (!writer.finish()) { *error = writer.errorString(); return false; }
+    }
     agplayer::TranscodeConfig config;
     config.output_path = outputPath.toUtf8().toStdString();
     config.sample_rate = 44100;
     config.channels = 2;
     std::string coreError;
     const ag_result result = agplayer::transcode(
-        stagingPath.toUtf8().toStdString(), config, &cancelled.atomicFlag(),
+        encodePath.toUtf8().toStdString(), config, &cancelled.atomicFlag(),
         [](float) {}, coreError);
     if (result != AG_OK) {
         *error = coreError.empty() ? utf8Error(result) : QString::fromUtf8(coreError);
         return false;
     }
     QFile::remove(stagingPath);
+    if (encodePath != stagingPath) QFile::remove(encodePath);
     return true;
 }
 
@@ -519,7 +561,7 @@ QVector<float> interleavedToPlanar(const QVector<float>& interleaved)
 bool deriveAccompanimentWave(const QStringList& contributors,
                              const QString& destination,
                              const CancellationToken& cancelled,
-                             QString* error)
+                             QString* error, float* rawPeak)
 {
     if (contributors.size() != 3) return false;
     const auto openDecoder = [&](int index,
@@ -587,7 +629,7 @@ bool deriveAccompanimentWave(const QStringList& contributors,
         *error = writer.errorString();
         return false;
     }
-    const float scale = peak > 1.0F ? 1.0F / peak : 1.0F;
+    *rawPeak = peak;
     for (;;) {
         if (cancelled.isCancelled()) {
             *error = QStringLiteral("Separation cancelled");
@@ -607,7 +649,7 @@ bool deriveAccompanimentWave(const QStringList& contributors,
             return false;
         }
         const QVector<float> summed = sumAccompaniment(
-            asVector(d), asVector(b), asVector(o), scale);
+            asVector(d), asVector(b), asVector(o), 1.0F);
         if (!summed.isEmpty() && !writer.write(summed)) {
             *error = writer.errorString();
             return false;
@@ -636,6 +678,8 @@ BackendResult runDemucs(const NativeStartRequest& request,
     const DemucsProfile profile = DemucsProfile::trusted();
     const QVector<qint64> starts = demucsChunkStarts(totalFrames);
     QHash<QString, QString> staging;
+    QJsonObject rawPeaks;
+    float maximumPeak = 0.0F;
 
     for (qsizetype modelIndex = 0; modelIndex < request.modelFiles.size(); ++modelIndex) {
         if (cancelled.isCancelled()) return fail(QStringLiteral("cancelled"),
@@ -668,8 +712,15 @@ BackendResult runDemucs(const NativeStartRequest& request,
         if (!opened.ok) return opened;
         artifact.bytes.clear();
         artifact.bytes.squeeze();
-        StreamingOverlapAdd publisher(
-            [&](const QVector<float>& published) { return writer.write(published); });
+        float publishedPeak = 0.0F;
+        StreamingOverlapAdd publisher([&](const QVector<float>& published) {
+            for (float sample : published) {
+                if (!std::isfinite(sample)) return false;
+                publishedPeak = std::max(publishedPeak, std::abs(sample));
+            }
+            return writer.write(published);
+        });
+        float rawModelPeak = 0.0F;
         BackendResult streamed = streamPcmChunks(
             request.inputPath, starts, profile.chunkSamples, cancelled,
             [&](qint64 start, const QVector<float>& mix, qsizetype chunkIndex) {
@@ -682,6 +733,7 @@ BackendResult runDemucs(const NativeStartRequest& request,
                 if (!inference.ok) return fail(inference.code, inference.message);
                 const QVector<float> rowPlanar = selectDemucsRow(inference.output, row);
                 const QVector<float> rowInterleaved = planarToInterleaved(rowPlanar);
+                for (const float value : rowInterleaved) rawModelPeak = std::max(rawModelPeak, std::abs(value));
                 const QVector<float> weights = demucsPublisherWeights(
                     static_cast<int>(chunkIndex), static_cast<int>(starts.size()));
                 if (!publisher.add(start, rowInterleaved, weights)) {
@@ -700,30 +752,40 @@ BackendResult runDemucs(const NativeStartRequest& request,
         }
         session.reset(); // at most one Demucs session is resident
         staging.insert(stem, stagingPath);
+        rawPeaks.insert(stem, publishedPeak);
+        maximumPeak = std::max(maximumPeak, publishedPeak);
+        qInfo().noquote() << "Demucs raw model peak" << stem << rawModelPeak << "overlap peak" << publishedPeak;
     }
 
     if (request.stems.contains(QStringLiteral("instrumental"))) {
+        float instrumentalPeak = 0.0F;
         const QString instrumental = QDir(transaction.temporaryDirectory())
             .filePath(QStringLiteral(".instrumental.float.wav"));
         if (!deriveAccompanimentWave(
                 {staging.value(QStringLiteral("drums")),
                  staging.value(QStringLiteral("bass")),
                  staging.value(QStringLiteral("other"))},
-                instrumental, cancelled, &error)) {
+                instrumental, cancelled, &error, &instrumentalPeak)) {
             return fail(cancelled.isCancelled() ? QStringLiteral("cancelled")
                                                  : QStringLiteral("output_write_failed"),
                         error);
         }
         staging.insert(QStringLiteral("instrumental"), instrumental);
+        rawPeaks.insert(QStringLiteral("instrumental"), instrumentalPeak);
+        maximumPeak = std::max(maximumPeak, instrumentalPeak);
     }
+    // One shared gain preserves all stem relationships; never normalize a row alone.
+    const float outputGain = maximumPeak > 0.99F ? 0.99F / maximumPeak : 1.0F;
+    qInfo() << "Demucs shared output gain" << outputGain << "raw peaks" << rawPeaks;
     for (const QString& stem : request.stems) {
         if (!encodeStagingWave(staging.value(stem), transaction.temporaryPath(stem),
-                               cancelled, &error)) {
+                               cancelled, &error, outputGain)) {
             return fail(cancelled.isCancelled() ? QStringLiteral("cancelled")
                                          : QStringLiteral("encode_failed"), error);
         }
     }
-    return {true, {}, {}, {}};
+    return {true, {}, {}, {{QStringLiteral("outputGain"), outputGain},
+                           {QStringLiteral("rawPeaks"), rawPeaks}}};
 }
 
 } // namespace
@@ -1071,6 +1133,12 @@ QString FfmpegWaveWriter::errorString() const { return impl_->error; }
 
 BackendResult NativeWorkerBackend::probe(const QJsonObject& payload)
 {
+    CancellationToken cancelled;
+    return probeCancellable(payload, cancelled);
+}
+
+BackendResult NativeWorkerBackend::probeCancellable(const QJsonObject& payload, const CancellationToken& cancelled)
+{
     const QString runtimePath = payload.value(QStringLiteral("runtimePath")).toString();
     DynamicOrtRuntime runtime;
     if (!runtime.load(runtimePath)) {
@@ -1085,6 +1153,37 @@ BackendResult NativeWorkerBackend::probe(const QJsonObject& payload)
              static_cast<double>(adapter.dedicatedVideoMemory)}});
     }
     const bool hasHardwareCandidate = !adapters.isEmpty();
+    const bool cuda = QFileInfo(QDir(QFileInfo(runtimePath).absolutePath()).filePath("onnxruntime_providers_cuda.dll")).isFile();
+    const QString family = payload.value("family").toString();
+    if (!family.isEmpty()) {
+        const QString provider = cuda ? QStringLiteral("cuda") : QStringLiteral("directml");
+        QString reason;
+        bool compatible = false;
+        bool validated = false;
+        if (family == "vr") reason = QStringLiteral("当前 VR 适配器仅支持 CPU");
+        else if (family == "demucs" && !cuda) reason = QStringLiteral("标准五轨需要可选 NVIDIA CUDA 环境；此固定图不支持 DirectML");
+        else if (payload.value("modelFiles").toArray().isEmpty()) reason = QStringLiteral("模型尚未校验，GPU 兼容性待验证");
+        else {
+            NativeStartRequest request; request.runtimePath = runtimePath; request.device = DeviceMode::Gpu;
+            QStringList hashes;
+            for (const auto& value : payload.value("modelFiles").toArray()) {
+                if (request.modelFiles.size() >= 4) break;
+                const QString path = value.toString(); request.modelFiles.push_back(path);
+                const auto artifact = readModelArtifact(path, false, allTrustedModelFiles(), cancelled);
+                if (!artifact.ok) { reason = artifact.message; break; }
+                hashes.push_back(artifact.sha256);
+            }
+            const auto profile = trustedProfileForHashes(hashes);
+            if (profile && hashes.size() == request.modelFiles.size()) {
+                OrtNativeProviderProbe probe;
+                const auto selection = selectNativeProvider(request, *profile, cancelled, probe);
+                compatible = selection.ok; validated = selection.ok;
+                reason = selection.ok ? QStringLiteral("当前模型已通过 %1 GPU 推理验证").arg(provider.toUpper()) : selection.message;
+            } else if (reason.isEmpty()) reason = QStringLiteral("模型缺少受信 GPU 推理契约");
+        }
+        return {true, {}, {}, {{"cpu", true}, {"gpu", compatible}, {"provider", provider},
+            {"modelValidated", validated}, {"gpuReason", reason}, {"adapters", adapters}}};
+    }
     return {true, {}, {},
             {{QStringLiteral("cpu"), true},
              {QStringLiteral("gpu"), hasHardwareCandidate},
@@ -1169,7 +1268,7 @@ BackendResult NativeWorkerBackend::separate(const QJsonObject& payload,
         ? runMdx(request, *trusted, provider, cancelled, progress, *transaction)
         : runDemucs(request, *trusted, provider, cancelled, progress, *transaction);
     if (!separated.ok && request.device == DeviceMode::Auto
-        && provider.provider == ExecutionProvider::DirectMl
+        && provider.provider != ExecutionProvider::Cpu
         && !cancelled.isCancelled()) {
         // A lightweight provider probe can succeed even when a large model
         // exceeds a driver's DirectML limits. Auto mode promises a usable
@@ -1213,9 +1312,13 @@ BackendResult NativeWorkerBackend::separate(const QJsonObject& payload,
     return {true, {}, {},
             {{QStringLiteral("outputs"), outputs},
              {QStringLiteral("provider"),
-              provider.provider == ExecutionProvider::DirectMl
+              provider.provider == ExecutionProvider::Cuda ? QStringLiteral("cuda") : provider.provider == ExecutionProvider::DirectMl
                   ? QStringLiteral("directml") : QStringLiteral("cpu")},
-             {QStringLiteral("fallbackReason"), provider.fallbackReason}}};
+             {QStringLiteral("device"), provider.provider == ExecutionProvider::Cpu
+                  ? QStringLiteral("CPU") : QStringLiteral("GPU %1").arg(provider.adapterId)},
+             {QStringLiteral("fallbackReason"), provider.fallbackReason},
+             {QStringLiteral("outputGain"), separated.payload.value(QStringLiteral("outputGain")).toDouble(1.0)},
+             {QStringLiteral("rawPeaks"), separated.payload.value(QStringLiteral("rawPeaks"))}}};
 }
 
 } // namespace agplayer::separation

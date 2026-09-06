@@ -5,6 +5,11 @@
 #include <QPointer>
 
 #include <algorithm>
+#ifdef Q_OS_WIN
+#define NOMINMAX
+#include <windows.h>
+#include <psapi.h>
+#endif
 
 namespace agplayer::separation {
 namespace {
@@ -31,6 +36,18 @@ WorkerEngine::WorkerEngine(std::shared_ptr<WorkerBackend> backend,
             heartbeatTimer_.stop();
             return;
         }
+#ifdef Q_OS_WIN
+        PROCESS_MEMORY_COUNTERS_EX memory{};
+        if (K32GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&memory), sizeof(memory))
+            && memory.PrivateUsage > 12ULL * 1024 * 1024 * 1024) {
+            const auto excessive = activeJob_;
+            if (excessive->cancelled->cancel()) {
+                activeJob_.reset(); heartbeatTimer_.stop(); ++generation_;
+                sendError(excessive->requestId, QStringLiteral("resource_limit"),
+                    QStringLiteral("分离进程超过 12 GB 内存保护上限，已取消任务")); return;
+            }
+        }
+#endif
         // Session loading and a Demucs chunk can legitimately take longer
         // than the client's 30-second transport watchdog. Report liveness
         // without inventing progress; keep a separate bounded stage deadline.
@@ -98,7 +115,8 @@ void WorkerEngine::acceptLine(const QByteArray& line)
         break;
     case ProtocolType::Probe:
         if (activeJob_) {
-            sendError(message.requestId, QStringLiteral("worker_busy"),
+            sendError(message.requestId, activeJob_->lastStage == QStringLiteral("provider_probe")
+                          ? QStringLiteral("worker_queue_full") : QStringLiteral("worker_busy"),
                       QStringLiteral("A separation request is already active"));
         } else if (pendingTasks_ >= 2) {
             sendError(message.requestId, QStringLiteral("worker_queue_full"),
@@ -166,14 +184,19 @@ void WorkerEngine::acceptLine(const QByteArray& line)
 void WorkerEngine::startProbe(const QString& requestId,
                               const QJsonObject& payload)
 {
+    auto context = std::make_shared<JobContext>();
+    context->requestId = requestId; context->generation = ++generation_;
+    context->cancelled = std::make_shared<CancellationToken>();
+    context->lastStage = QStringLiteral("provider_probe"); context->lastActivity.start();
+    activeJob_ = context; heartbeatTimer_.start();
     ++pendingTasks_;
     const QPointer<WorkerEngine> self(this);
     const std::shared_ptr<WorkerBackend> backend = backend_;
-    threadPool_.start([self, backend, requestId, payload] {
-        const BackendResult result = backend->probe(payload);
+    threadPool_.start([self, backend, requestId, payload, context] {
+        const BackendResult result = backend->probeCancellable(payload, *context->cancelled);
         if (self) {
-            QMetaObject::invokeMethod(self, [self, requestId, result] {
-                if (self) self->finishProbe(requestId, result);
+            QMetaObject::invokeMethod(self, [self, requestId, generation = context->generation, result] {
+                if (self) self->finishProbe(requestId, generation, result);
             });
         }
     });
@@ -240,10 +263,12 @@ void WorkerEngine::deliverProgress(const QString& requestId,
          {QStringLiteral("stage"), stage}}));
 }
 
-void WorkerEngine::finishProbe(const QString& requestId,
+void WorkerEngine::finishProbe(const QString& requestId, quint64 generation,
                                const BackendResult& result)
 {
-    if (!shuttingDown_) {
+    if (!shuttingDown_ && activeJob_ && activeJob_->requestId == requestId
+        && activeJob_->generation == generation) {
+        activeJob_.reset(); heartbeatTimer_.stop();
         if (result.ok) {
             emit messageReady(encodeProtocolMessage(ProtocolType::Probe,
                                                     requestId, result.payload));

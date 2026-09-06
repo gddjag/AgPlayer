@@ -12,7 +12,9 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QList>
+#include <QKeySequence>
 #include <QMetaType>
+#include <QRegularExpression>
 #include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
@@ -27,6 +29,68 @@
 #include <optional>
 
 namespace {
+
+QVariantMap defaultRollingKeyboardShortcuts()
+{
+    QVariantMap shortcuts{
+        {QStringLiteral("cue"), QStringLiteral("C")},
+        {QStringLiteral("cueJump"), QStringLiteral("Shift+C")},
+        {QStringLiteral("cueDelete"), QStringLiteral("Alt+C")},
+        {QStringLiteral("gridOrigin"), QStringLiteral("Q")},
+        {QStringLiteral("gridLeft"), QStringLiteral("Left")},
+        {QStringLiteral("gridRight"), QStringLiteral("Right")},
+    };
+    for (int index = 1; index <= 8; ++index) {
+        shortcuts.insert(QStringLiteral("hotCue%1").arg(index),
+                         QString::number(index));
+        shortcuts.insert(QStringLiteral("hotCueDelete%1").arg(index),
+                         QStringLiteral("Alt+%1").arg(index));
+    }
+    return shortcuts;
+}
+
+QString normalizedSingleShortcut(const QString& value)
+{
+    QString parseable = value.trimmed();
+    if (parseable.isEmpty()) return {};
+    static const QRegularExpression plusWhitespace(
+        QStringLiteral("\\s*\\+\\s*"));
+    static const QRegularExpression commaWhitespace(
+        QStringLiteral("\\s*,\\s*"));
+    parseable.replace(plusWhitespace, QStringLiteral("+"));
+    parseable.replace(commaWhitespace, QStringLiteral(","));
+    const QKeySequence parsed = QKeySequence::fromString(
+        parseable, QKeySequence::PortableText);
+    if (parsed.count() != 1) return {};
+    const QString normalized = parsed.toString(QKeySequence::PortableText);
+    if (normalized.isEmpty() || normalized.endsWith(QLatin1Char('+')))
+        return {};
+    return normalized;
+}
+
+QStringList normalizedShortcutMembers(const QString& value)
+{
+    QStringList members;
+    const QStringList rawMembers = value.split(QLatin1Char('/'));
+    for (const QString& rawMember : rawMembers) {
+        const QString normalized = normalizedSingleShortcut(rawMember);
+        if (!normalized.isEmpty()) members.append(normalized);
+    }
+    return members;
+}
+
+bool rollingShortcutConflicts(const QVariantMap& shortcuts,
+                              const QString& action,
+                              const QString& sequence)
+{
+    if (sequence.isEmpty()) return false;
+    for (auto iterator = shortcuts.constBegin();
+         iterator != shortcuts.constEnd(); ++iterator) {
+        if (iterator.key() != action && iterator.value().toString() == sequence)
+            return true;
+    }
+    return false;
+}
 
 template<typename T>
 T clampValue(T value, T min, T max) noexcept
@@ -138,6 +202,14 @@ bool SettingsController::autoReadRating() const noexcept { return autoReadRating
 int SettingsController::themeMode() const noexcept { return themeMode_; }
 QString SettingsController::windowLayoutTheme() const { return windowLayoutTheme_; }
 int SettingsController::playerShellMode() const noexcept { return playerShellMode_; }
+bool SettingsController::rollingBeatGridEnabled() const noexcept
+{
+    return rollingBeatGridEnabled_;
+}
+int SettingsController::rollingBeatGridGrouping() const noexcept
+{
+    return rollingBeatGridGrouping_;
+}
 int SettingsController::waveformMode() const noexcept { return waveformMode_; }
 double SettingsController::waveformHeight() const noexcept { return waveformHeight_; }
 double SettingsController::waveformDensity() const noexcept { return waveformDensity_; }
@@ -201,6 +273,10 @@ QString SettingsController::hkToggleMiniPlayer() const { return hkToggleMiniPlay
 QString SettingsController::hkSearch() const { return hkSearch_; }
 QString SettingsController::hkWaveformMode() const { return hkWaveformMode_; }
 QString SettingsController::hkAudioTools() const { return hkAudioTools_; }
+QVariantMap SettingsController::rollingKeyboardShortcuts() const
+{
+    return rollingKeyboardShortcuts_;
+}
 
 // Cache & Storage getters
 QString SettingsController::cacheDirectory() const { return cacheDirectory_; }
@@ -436,6 +512,23 @@ void SettingsController::setPlayerShellMode(int value)
     if (layoutChanged) {
         emit windowLayoutThemeChanged();
     }
+}
+
+void SettingsController::setRollingBeatGridEnabled(const bool value)
+{
+    if (rollingBeatGridEnabled_ == value) return;
+    rollingBeatGridEnabled_ = value;
+    persistValue(QStringLiteral("appearance/rollingBeatGridEnabled"), value);
+    emit rollingBeatGridEnabledChanged();
+}
+
+void SettingsController::setRollingBeatGridGrouping(int value)
+{
+    value = value == 8 ? 8 : 4;
+    if (rollingBeatGridGrouping_ == value) return;
+    rollingBeatGridGrouping_ = value;
+    persistValue(QStringLiteral("appearance/rollingBeatGridGrouping"), value);
+    emit rollingBeatGridGroupingChanged();
 }
 
 void SettingsController::setWindowLayoutTheme(const QString& value)
@@ -804,11 +897,43 @@ void SettingsController::setVocalProtection(bool value)
 }
 
 // Hotkeys setters
+bool SettingsController::conflictsWithLegacyKeyboardShortcuts(
+    const QString& sequence) const
+{
+    const QString normalized = normalizedSingleShortcut(sequence);
+    if (normalized.isEmpty()) return false;
+    // Main.qml owns Space as an unconditional window-local transport key;
+    // it remains reserved even when the configurable global key changes.
+    if (normalized == QStringLiteral("Space")) return true;
+    const QStringList legacyValues{
+        hkPlayPause_, hkPrevNext_, hkVolumeUpDown_, hkToggleMiniPlayer_,
+        hkSearch_, hkWaveformMode_, hkAudioTools_};
+    for (const QString& legacyValue : legacyValues) {
+        if (normalizedShortcutMembers(legacyValue).contains(normalized))
+            return true;
+    }
+    return false;
+}
+
+bool SettingsController::conflictsWithRollingKeyboardShortcuts(
+    const QString& value) const
+{
+    const QStringList candidates = normalizedShortcutMembers(value);
+    for (const QString& candidate : candidates) {
+        for (auto iterator = rollingKeyboardShortcuts_.constBegin();
+             iterator != rollingKeyboardShortcuts_.constEnd(); ++iterator) {
+            if (iterator.value().toString() == candidate) return true;
+        }
+    }
+    return false;
+}
+
 void SettingsController::setHkPlayPause(const QString& value)
 {
     if (hkPlayPause_ == value) {
         return;
     }
+    if (conflictsWithRollingKeyboardShortcuts(value)) return;
     hkPlayPause_ = value;
     persistValue(QStringLiteral("hotkeys/playPause"), value);
     emit hkPlayPauseChanged();
@@ -819,6 +944,7 @@ void SettingsController::setHkPrevNext(const QString& value)
     if (hkPrevNext_ == value) {
         return;
     }
+    if (conflictsWithRollingKeyboardShortcuts(value)) return;
     hkPrevNext_ = value;
     persistValue(QStringLiteral("hotkeys/prevNext"), value);
     emit hkPrevNextChanged();
@@ -829,6 +955,7 @@ void SettingsController::setHkVolumeUpDown(const QString& value)
     if (hkVolumeUpDown_ == value) {
         return;
     }
+    if (conflictsWithRollingKeyboardShortcuts(value)) return;
     hkVolumeUpDown_ = value;
     persistValue(QStringLiteral("hotkeys/volumeUpDown"), value);
     emit hkVolumeUpDownChanged();
@@ -839,6 +966,7 @@ void SettingsController::setHkToggleMiniPlayer(const QString& value)
     if (hkToggleMiniPlayer_ == value) {
         return;
     }
+    if (conflictsWithRollingKeyboardShortcuts(value)) return;
     hkToggleMiniPlayer_ = value;
     persistValue(QStringLiteral("hotkeys/toggleMiniPlayer"), value);
     emit hkToggleMiniPlayerChanged();
@@ -849,6 +977,7 @@ void SettingsController::setHkSearch(const QString& value)
     if (hkSearch_ == value) {
         return;
     }
+    if (conflictsWithRollingKeyboardShortcuts(value)) return;
     hkSearch_ = value;
     persistValue(QStringLiteral("hotkeys/search"), value);
     emit hkSearchChanged();
@@ -859,6 +988,7 @@ void SettingsController::setHkWaveformMode(const QString& value)
     if (hkWaveformMode_ == value) {
         return;
     }
+    if (conflictsWithRollingKeyboardShortcuts(value)) return;
     hkWaveformMode_ = value;
     persistValue(QStringLiteral("hotkeys/waveformMode"), value);
     emit hkWaveformModeChanged();
@@ -869,9 +999,47 @@ void SettingsController::setHkAudioTools(const QString& value)
     if (hkAudioTools_ == value) {
         return;
     }
+    if (conflictsWithRollingKeyboardShortcuts(value)) return;
     hkAudioTools_ = value;
     persistValue(QStringLiteral("hotkeys/audioTools"), value);
     emit hkAudioToolsChanged();
+}
+
+bool SettingsController::setRollingKeyboardShortcut(const QString& action,
+                                                     const QString& sequence)
+{
+    const QVariantMap defaults = defaultRollingKeyboardShortcuts();
+    if (!defaults.contains(action)) return false;
+    const QString trimmed = sequence.trimmed();
+    const QString normalized = normalizedSingleShortcut(trimmed);
+    if (!trimmed.isEmpty() && normalized.isEmpty()) return false;
+    if (rollingShortcutConflicts(rollingKeyboardShortcuts_, action,
+                                 normalized)
+        || conflictsWithLegacyKeyboardShortcuts(normalized)) {
+        return false;
+    }
+    if (rollingKeyboardShortcuts_.value(action).toString() == normalized)
+        return true;
+    rollingKeyboardShortcuts_.insert(action, normalized);
+    persistValue(QStringLiteral("hotkeys/rollingKeyboardShortcuts"),
+                 rollingKeyboardShortcuts_);
+    emit rollingKeyboardShortcutsChanged();
+    return true;
+}
+
+void SettingsController::resetRollingKeyboardShortcuts()
+{
+    QVariantMap defaults = defaultRollingKeyboardShortcuts();
+    for (auto iterator = defaults.begin(); iterator != defaults.end();
+         ++iterator) {
+        if (conflictsWithLegacyKeyboardShortcuts(iterator.value().toString()))
+            iterator.value() = QString();
+    }
+    if (rollingKeyboardShortcuts_ == defaults) return;
+    rollingKeyboardShortcuts_ = defaults;
+    persistValue(QStringLiteral("hotkeys/rollingKeyboardShortcuts"),
+                 rollingKeyboardShortcuts_);
+    emit rollingKeyboardShortcutsChanged();
 }
 
 // Cache & Storage setters
@@ -1048,6 +1216,8 @@ void SettingsController::emitAllChanged(const bool includeMediaSettings)
     emit themeModeChanged();
     emit windowLayoutThemeChanged();
     emit playerShellModeChanged();
+    emit rollingBeatGridEnabledChanged();
+    emit rollingBeatGridGroupingChanged();
     if (includeMediaSettings) {
         emit waveformModeChanged();
         emit waveformHeightChanged();
@@ -1098,6 +1268,7 @@ void SettingsController::emitAllChanged(const bool includeMediaSettings)
     emit hkSearchChanged();
     emit hkWaveformModeChanged();
     emit hkAudioToolsChanged();
+    emit rollingKeyboardShortcutsChanged();
 
     emit cacheDirectoryChanged();
     emit autoCleanCacheChanged();
@@ -1336,6 +1507,17 @@ void SettingsController::load()
     }
     settings_.setValue(QStringLiteral("windowLayoutTheme"), windowLayoutTheme_);
     settings_.setValue(QStringLiteral("playerShellMode"), playerShellMode_);
+    rollingBeatGridEnabled_ = settings_
+        .value(QStringLiteral("rollingBeatGridEnabled"), true).toBool();
+    const std::optional<int> storedRollingGridGrouping = storedInteger(
+        settings_.value(QStringLiteral("rollingBeatGridGrouping")));
+    rollingBeatGridGrouping_ = storedRollingGridGrouping.has_value()
+            && *storedRollingGridGrouping == 8 ? 8 : 4;
+    if (!storedRollingGridGrouping.has_value()
+        || (*storedRollingGridGrouping != 4
+            && *storedRollingGridGrouping != 8)) {
+        settings_.setValue(QStringLiteral("rollingBeatGridGrouping"), 4);
+    }
     settings_.remove(QStringLiteral("glassEffect"));
     waveformMode_ = settings_.value(QStringLiteral("waveformMode"), waveformMode_).toInt();
     waveformHeight_ =
@@ -1530,6 +1712,46 @@ void SettingsController::load()
     hkSearch_ = settings_.value(QStringLiteral("search"), hkSearch_).toString();
     hkWaveformMode_ = settings_.value(QStringLiteral("waveformMode"), hkWaveformMode_).toString();
     hkAudioTools_ = settings_.value(QStringLiteral("audioTools"), hkAudioTools_).toString();
+    const QVariantMap storedRollingShortcuts = settings_
+        .value(QStringLiteral("rollingKeyboardShortcuts")).toMap();
+    rollingKeyboardShortcuts_ = defaultRollingKeyboardShortcuts();
+    for (auto iterator = storedRollingShortcuts.constBegin();
+         iterator != storedRollingShortcuts.constEnd(); ++iterator) {
+        if (!rollingKeyboardShortcuts_.contains(iterator.key())) continue;
+        const QString raw = iterator.value().toString().trimmed();
+        if (raw.isEmpty()) {
+            rollingKeyboardShortcuts_.insert(iterator.key(), QString());
+            continue;
+        }
+        const QString normalized = normalizedSingleShortcut(raw);
+        if (!normalized.isEmpty()) {
+            rollingKeyboardShortcuts_.insert(iterator.key(), normalized);
+        }
+    }
+    QStringList assignedRollingShortcuts;
+    const QVariantMap rollingDefaults = defaultRollingKeyboardShortcuts();
+    for (auto iterator = rollingKeyboardShortcuts_.begin();
+         iterator != rollingKeyboardShortcuts_.end(); ++iterator) {
+        QString sequence = iterator.value().toString();
+        if (sequence.isEmpty()) continue;
+        if (assignedRollingShortcuts.contains(sequence)) {
+            const QString fallback = rollingDefaults
+                .value(iterator.key()).toString();
+            sequence = assignedRollingShortcuts.contains(fallback)
+                ? QString() : fallback;
+            iterator.value() = sequence;
+        }
+        if (!sequence.isEmpty()) assignedRollingShortcuts.append(sequence);
+    }
+    for (auto iterator = rollingKeyboardShortcuts_.begin();
+         iterator != rollingKeyboardShortcuts_.end(); ++iterator) {
+        if (conflictsWithLegacyKeyboardShortcuts(iterator.value().toString()))
+            iterator.value() = QString();
+    }
+    if (storedRollingShortcuts != rollingKeyboardShortcuts_) {
+        settings_.setValue(QStringLiteral("rollingKeyboardShortcuts"),
+                           rollingKeyboardShortcuts_);
+    }
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("cache"));
@@ -1676,6 +1898,10 @@ void SettingsController::saveAll(const bool includeMediaSettings)
     persistValue(QStringLiteral("windowLayoutTheme"), windowLayoutTheme_);
     persistValue(QStringLiteral("themeMode"), themeMode_);
     persistValue(QStringLiteral("playerShellMode"), playerShellMode_);
+    persistValue(QStringLiteral("rollingBeatGridEnabled"),
+                 rollingBeatGridEnabled_);
+    persistValue(QStringLiteral("rollingBeatGridGrouping"),
+                 rollingBeatGridGrouping_);
     if (includeMediaSettings) {
         persistValue(QStringLiteral("waveformMode"), waveformMode_);
         persistValue(QStringLiteral("waveformHeight"), waveformHeight_);
@@ -1736,6 +1962,8 @@ void SettingsController::saveAll(const bool includeMediaSettings)
     persistValue(QStringLiteral("search"), hkSearch_);
     persistValue(QStringLiteral("waveformMode"), hkWaveformMode_);
     persistValue(QStringLiteral("audioTools"), hkAudioTools_);
+    persistValue(QStringLiteral("rollingKeyboardShortcuts"),
+                 rollingKeyboardShortcuts_);
     settings_.endGroup();
 
     settings_.beginGroup(QStringLiteral("cache"));
@@ -1772,6 +2000,8 @@ void SettingsController::restoreDefaults(const bool includeMediaSettings)
     themeMode_ = 0;
     windowLayoutTheme_ = QStringLiteral("dual-window");
     playerShellMode_ = Classic;
+    rollingBeatGridEnabled_ = true;
+    rollingBeatGridGrouping_ = 4;
     if (includeMediaSettings) {
         waveformMode_ = 0;
         waveformHeight_ = 0.8;
@@ -1823,6 +2053,7 @@ void SettingsController::restoreDefaults(const bool includeMediaSettings)
     hkSearch_ = QStringLiteral("Ctrl + F");
     hkWaveformMode_ = QStringLiteral("Tab");
     hkAudioTools_ = QStringLiteral("Alt + D");
+    rollingKeyboardShortcuts_ = defaultRollingKeyboardShortcuts();
 
     cacheDirectory_ = defaultCacheDirectory();
     autoCleanCache_ = true;

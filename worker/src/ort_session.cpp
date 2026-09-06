@@ -1,6 +1,7 @@
 #include "ort_session.hpp"
 
 #include <QThread>
+#include <QFileInfo>
 
 #include <onnxruntime_c_api.h>
 
@@ -175,6 +176,24 @@ OrtOperationResult OrtModelSession::open(const QString& runtimePath,
         if (!error.isEmpty()) {
             return {false, QStringLiteral("directml_session_failed"), error, {}};
         }
+    }
+    if (provider == ExecutionProvider::Cuda) {
+        OrtCUDAProviderOptionsV2* cuda = nullptr;
+        error = statusMessage(impl_->api, impl_->api->CreateCUDAProviderOptions(&cuda));
+        if (!error.isEmpty()) return {false, QStringLiteral("cuda_options_failed"), error, {}};
+        const auto releaseCuda = qScopeGuard([this, cuda] { impl_->api->ReleaseCUDAProviderOptions(cuda); });
+        const QByteArray device = QByteArray::number(directMlDeviceId);
+        // Bound arena and convolution workspaces; never let exhaustive cuDNN
+        // algorithm search consume all VRAM on the first fixed-size chunk.
+        const char* keys[] = {"device_id", "gpu_mem_limit", "arena_extend_strategy",
+                              "cudnn_conv_algo_search", "cudnn_conv_use_max_workspace"};
+        const char* values[] = {device.constData(), "6442450944", "kSameAsRequested", "HEURISTIC", "0"};
+        error = statusMessage(impl_->api, impl_->api->UpdateCUDAProviderOptions(cuda, keys, values, 5));
+        if (error.isEmpty()) error = statusMessage(impl_->api,
+            impl_->api->SessionOptionsAppendExecutionProvider_CUDA_V2(options, cuda));
+        if (error.isEmpty()) error = statusMessage(impl_->api, impl_->api->AddSessionConfigEntry(
+            options, "session.disable_cpu_ep_fallback", "1"));
+        if (!error.isEmpty()) return {false, QStringLiteral("cuda_session_failed"), error, {}};
     }
     if (impl_->api->SessionOptionsSetLoadCancellationFlag == nullptr) {
         return {false, QStringLiteral("runtime_api_mismatch"),

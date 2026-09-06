@@ -5,6 +5,7 @@
 #include <QString>
 #include <QStringList>
 #include <QVariant>
+#include <QVariantMap>
 
 #include "frequency_color_waveform_settings.hpp"
 
@@ -58,6 +59,12 @@ class SettingsController final : public QObject {
                    WRITE setWindowLayoutTheme NOTIFY windowLayoutThemeChanged)
     Q_PROPERTY(int playerShellMode READ playerShellMode WRITE setPlayerShellMode
                    NOTIFY playerShellModeChanged)
+    Q_PROPERTY(bool rollingBeatGridEnabled READ rollingBeatGridEnabled
+                   WRITE setRollingBeatGridEnabled
+                   NOTIFY rollingBeatGridEnabledChanged)
+    Q_PROPERTY(int rollingBeatGridGrouping READ rollingBeatGridGrouping
+                   WRITE setRollingBeatGridGrouping
+                   NOTIFY rollingBeatGridGroupingChanged)
     Q_PROPERTY(int waveformMode READ waveformMode WRITE setWaveformMode NOTIFY waveformModeChanged)
     Q_PROPERTY(double waveformHeight READ waveformHeight WRITE setWaveformHeight
                    NOTIFY waveformHeightChanged)
@@ -159,6 +166,8 @@ class SettingsController final : public QObject {
                    NOTIFY hkWaveformModeChanged)
     Q_PROPERTY(QString hkAudioTools READ hkAudioTools WRITE setHkAudioTools
                    NOTIFY hkAudioToolsChanged)
+    Q_PROPERTY(QVariantMap rollingKeyboardShortcuts READ rollingKeyboardShortcuts
+                   NOTIFY rollingKeyboardShortcutsChanged)
 
     // Cache & Storage
     Q_PROPERTY(QString cacheDirectory READ cacheDirectory WRITE setCacheDirectory
@@ -210,6 +219,8 @@ public:
     int themeMode() const noexcept;
     QString windowLayoutTheme() const;
     int playerShellMode() const noexcept;
+    bool rollingBeatGridEnabled() const noexcept;
+    int rollingBeatGridGrouping() const noexcept;
     int waveformMode() const noexcept;
     double waveformHeight() const noexcept;
     double waveformDensity() const noexcept;
@@ -261,6 +272,7 @@ public:
     QString hkSearch() const;
     QString hkWaveformMode() const;
     QString hkAudioTools() const;
+    QVariantMap rollingKeyboardShortcuts() const;
 
     // Cache & Storage getters
     QString cacheDirectory() const;
@@ -297,6 +309,8 @@ public:
     void setThemeMode(int value);
     void setWindowLayoutTheme(const QString& value);
     void setPlayerShellMode(int value);
+    void setRollingBeatGridEnabled(bool value);
+    void setRollingBeatGridGrouping(int value);
     void setWaveformMode(int value);
     void setWaveformHeight(double value);
     void setWaveformDensity(double value);
@@ -360,6 +374,9 @@ public:
     Q_INVOKABLE void beginEdit();
     Q_INVOKABLE void commitEdit();
     Q_INVOKABLE void cancelEdit();
+    Q_INVOKABLE bool setRollingKeyboardShortcut(const QString& action,
+                                                const QString& sequence);
+    Q_INVOKABLE void resetRollingKeyboardShortcuts();
     Q_INVOKABLE void rebindFileAssociations();
     Q_INVOKABLE bool openDefaultAppsSettings();
     Q_INVOKABLE void clearWaveformCache();
@@ -393,6 +410,8 @@ signals:
     void themeModeChanged();
     void windowLayoutThemeChanged();
     void playerShellModeChanged();
+    void rollingBeatGridEnabledChanged();
+    void rollingBeatGridGroupingChanged();
     void waveformModeChanged();
     void waveformHeightChanged();
     void waveformDensityChanged();
@@ -441,6 +460,7 @@ signals:
     void hkSearchChanged();
     void hkWaveformModeChanged();
     void hkAudioToolsChanged();
+    void rollingKeyboardShortcutsChanged();
 
     void cacheDirectoryChanged();
     void autoCleanCacheChanged();
@@ -457,6 +477,8 @@ private:
     void restoreDefaults(bool includeMediaSettings = true);
     void emitAllChanged(bool includeMediaSettings = true);
     void persistValue(const QString& key, const QVariant& value);
+    bool conflictsWithLegacyKeyboardShortcuts(const QString& sequence) const;
+    bool conflictsWithRollingKeyboardShortcuts(const QString& value) const;
     void applyAutoStartWithWindows();
     void applyCommittedEffects();
     void recalculateCacheSize();
@@ -502,6 +524,8 @@ private:
     int themeMode_ = 0;
     QString windowLayoutTheme_ = QStringLiteral("dual-window");
     int playerShellMode_ = Classic;
+    bool rollingBeatGridEnabled_ = true;
+    int rollingBeatGridGrouping_ = 4;
     int waveformMode_ = 0;
     double waveformHeight_ = 0.8;
     double waveformDensity_ = 2.0;
@@ -552,6 +576,7 @@ private:
     QString hkSearch_ = QStringLiteral("Ctrl + F");
     QString hkWaveformMode_ = QStringLiteral("Tab");
     QString hkAudioTools_ = QStringLiteral("Alt + D");
+    QVariantMap rollingKeyboardShortcuts_;
 
     // Cache & Storage
     QString cacheDirectory_;

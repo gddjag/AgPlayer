@@ -37,6 +37,7 @@ enum class DeviceMode {
 enum class ExecutionProvider {
     Cpu,
     DirectMl,
+    Cuda,
 };
 
 } // namespace agplayer::separation

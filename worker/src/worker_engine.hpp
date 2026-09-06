@@ -29,6 +29,7 @@ class WorkerBackend {
 public:
     virtual ~WorkerBackend() = default;
     virtual BackendResult probe(const QJsonObject& payload) = 0;
+    virtual BackendResult probeCancellable(const QJsonObject& payload, const CancellationToken&) { return probe(payload); }
     virtual BackendResult separate(const QJsonObject& payload,
                                    const CancellationToken& cancelled,
                                    const ProgressCallback& progress) = 0;
@@ -69,7 +70,8 @@ private:
     void startJob(const QString& requestId, const QJsonObject& payload);
     void deliverProgress(const QString& requestId, quint64 generation,
                          double fraction, const QString& stage);
-    void finishProbe(const QString& requestId, const BackendResult& result);
+    void finishProbe(const QString& requestId, quint64 generation,
+                     const BackendResult& result);
     void finishJob(const QString& requestId, quint64 generation,
                    const BackendResult& result);
     void taskFinished();

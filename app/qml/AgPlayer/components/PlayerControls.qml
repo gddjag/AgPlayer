@@ -18,9 +18,11 @@ Rectangle {
     }
 
     property bool emptyMode: false
+    property var playback: PlaybackController
     property bool showListWindowButton: true
     property bool centerTransport: true
     property bool showWaveformMode: true
+    property bool showCueButton: false
     property Item secondaryActionHost: null
     property int shellMode: SettingsController.playerShellMode
     readonly property bool rollingLayout: shellMode === 2
@@ -52,6 +54,8 @@ Rectangle {
         var point = themePopupPositionForDpr(themePopupDevicePixelRatio)
         playerShellMenu.popup(point.x, point.y)
     }
+
+    function cancelCueHold() { centerControls.cancelCueHold() }
 
     ToolButton {
         id: listWindowButton
@@ -90,6 +94,8 @@ Rectangle {
             var toolWidth = root.compactTransport ? 32 : 40
             var playWidth = root.compactTransport ? 46 : 52
             var leadingCount = 1 // previous
+            if (showCueButton)
+                ++leadingCount
             if (showEqualizer && waveformPlacement === "beforePrevious")
                 ++leadingCount
             if (showWaveformMode && waveformPlacement === "beforePrevious")
@@ -109,11 +115,13 @@ Rectangle {
                     : leftLimit
         }
         compact: root.compactTransport
+        playback: root.playback
         dense: root.denseTransport
         showWaveformMode: root.showWaveformMode
                           && PlayerPresentation.hasAction(
                               root.actionProfile, "waveformModeButton")
         waveformPlacement: root.actionProfile.waveformPlacement
+        showCueButton: root.showCueButton
         spacing: root.emptyMode && !root.denseTransport
                  ? 28 : (compact ? 4 : dense ? 8 : 16)
         onOpenEqualizerRequested: root.openEqualizerRequested()

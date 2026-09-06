@@ -727,7 +727,7 @@ void wait_for_buffer(agplayer::AudioEngine& engine,
         + std::chrono::seconds(3);
     while (engine.buffered_frames() < minimumFrames
            && std::chrono::steady_clock::now() < deadline) {
-        std::this_thread::yield();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     require(engine.buffered_frames() >= minimumFrames,
             "decode thread did not prepare enough PCM");

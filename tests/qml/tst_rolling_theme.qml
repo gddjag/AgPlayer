@@ -20,6 +20,13 @@ TestCase {
         property real speedRatio: 1.0
         property real sourceBpm: 120.0
         property real targetBpm: sourceBpm * speedRatio
+        property real beatGridBpm: 128.0
+        property int beatGridOffsetMs: 250
+        property bool beatGridCalibrated: true
+        property bool beatGridEstimatedBpm: false
+        property int cuePositionMs: 45000
+        property var hotCuePositions: [-1, -1, -1, -1, -1, -1, -1, -1]
+        property bool cueAuditioning: false
         property bool keepPitch: true
         property bool scratchActive: false
         property bool scratchReady: false
@@ -32,6 +39,14 @@ TestCase {
         property int cancelCount: 0
         property int resetCount: 0
         property int keepPitchCount: 0
+        property int cuePressCount: 0
+        property int cueReleaseCount: 0
+        property int cueCancelCount: 0
+        property int gridFirstBeatCount: 0
+        property int gridNudgeTotal: 0
+        property int gridBpmCount: 0
+        property int gridResetCount: 0
+        property int toggleCount: 0
         property real lastSeek: -1
         property real lastScratchRate: 0
 
@@ -41,6 +56,13 @@ TestCase {
             speedRatio = 1.0
             sourceBpm = 120.0
             keepPitch = true
+            beatGridBpm = 128.0
+            beatGridOffsetMs = 250
+            beatGridCalibrated = true
+            beatGridEstimatedBpm = false
+            cuePositionMs = 45000
+            hotCuePositions = [-1, -1, -1, -1, -1, -1, -1, -1]
+            cueAuditioning = false
             scratchActive = false
             scratchReady = false
             scratchBuffering = false
@@ -52,6 +74,14 @@ TestCase {
             cancelCount = 0
             resetCount = 0
             keepPitchCount = 0
+            cuePressCount = 0
+            cueReleaseCount = 0
+            cueCancelCount = 0
+            gridFirstBeatCount = 0
+            gridNudgeTotal = 0
+            gridBpmCount = 0
+            gridResetCount = 0
+            toggleCount = 0
             lastSeek = -1
             lastScratchRate = 0
         }
@@ -88,6 +118,32 @@ TestCase {
             ++keepPitchCount
             keepPitch = value
         }
+        function cuePress() { ++cuePressCount; cueAuditioning = true }
+        function cueRelease() { ++cueReleaseCount; cueAuditioning = false }
+        function cancelCue() { ++cueCancelCount; cueAuditioning = false }
+        function setBeatGridFirstBeat() {
+            ++gridFirstBeatCount
+            beatGridOffsetMs = positionMs
+            beatGridCalibrated = true
+        }
+        function nudgeBeatGrid(deltaMs) {
+            gridNudgeTotal += deltaMs
+            beatGridOffsetMs += deltaMs
+        }
+        function setBeatGridBpm(value) {
+            ++gridBpmCount
+            beatGridBpm = value
+            beatGridCalibrated = true
+            beatGridEstimatedBpm = false
+        }
+        function resetBeatGrid() {
+            ++gridResetCount
+            beatGridBpm = sourceBpm > 0 ? sourceBpm : 120
+            beatGridOffsetMs = 0
+            beatGridCalibrated = false
+            beatGridEstimatedBpm = sourceBpm > 0
+        }
+        function togglePlayback() { ++toggleCount }
     }
 
     QtObject {
@@ -607,8 +663,10 @@ TestCase {
 
     function test_rolling_tempo_meter_and_zoom_controls_are_live() {
         var rolling = rollingWithFakes()
-        compare(rolling.viewTimeSpanSec, 4.0,
-                "fresh rolling viewport shows eight beats at 120 BPM")
+        compare(rolling.visibleBeats, 64,
+                "each rolling entry starts at the approved 64-beat viewport")
+        compare(rolling.viewTimeSpanSec, 30.0,
+                "grid BPM, not target playback BPM, maps the rolling viewport")
         var sourceBpm = findChild(rolling, "rollingSourceBpm")
         var targetBpm = findChild(rolling, "rollingTargetBpm")
         var keepPitch = findChild(rolling, "rollingKeepPitchControl")
@@ -631,8 +689,6 @@ TestCase {
 
         rolling.visibleBeats = 8
         rolling.zoomIn()
-        compare(rolling.visibleBeats, 6)
-        rolling.zoomIn()
         compare(rolling.visibleBeats, 4)
         rolling.zoomIn()
         compare(rolling.visibleBeats, 2)
@@ -642,7 +698,7 @@ TestCase {
         rolling.zoomOut()
         compare(rolling.visibleBeats, 64)
         rolling.resetZoom()
-        compare(rolling.viewTimeSpanSec, 4.0)
+        compare(rolling.visibleBeats, 64)
 
         rolling.visibleBeats = 1
         tryCompare(rolling, "visibleBeats", 2)
@@ -661,12 +717,12 @@ TestCase {
 
         rolling.visibleBeats = 8
         compare(rolling.visibleBeats, 8)
-        compare(rolling.effectiveBpm, 120)
-        verify(Math.abs(rolling.beatSec - 0.5) < 0.0001)
-        verify(Math.abs(rolling.viewTimeSpanSec - 4.0) < 0.0001)
-        verify(Math.abs(rolling.viewStartTimeSec - 58.0) < 0.0001)
-        verify(Math.abs(rolling.viewEndTimeSec - 62.0) < 0.0001)
-        verify(Math.abs(rolling.pxPerSec - canvas.width / 4.0) < 0.0001)
+        compare(rolling.effectiveBpm, 128)
+        verify(Math.abs(rolling.beatSec - 0.46875) < 0.0001)
+        verify(Math.abs(rolling.viewTimeSpanSec - 3.75) < 0.0001)
+        verify(Math.abs(rolling.viewStartTimeSec - 58.125) < 0.0001)
+        verify(Math.abs(rolling.viewEndTimeSec - 61.875) < 0.0001)
+        verify(Math.abs(rolling.pxPerSec - canvas.width / 3.75) < 0.0001)
         verify(Math.abs(rolling.timeToX(fakePlayback.positionMs / 1000)
                         - canvas.width * 0.5) < 0.0001)
         compare(capsule.text, "01:00:00")
@@ -676,14 +732,15 @@ TestCase {
 
         fakePlayback.speedRatio = 1.25
         tryVerify(function() {
-            return Math.abs(rolling.effectiveBpm - 150) < 0.0001
-                    && Math.abs(rolling.viewTimeSpanSec - 3.2) < 0.0001
-                    && Math.abs(rolling.viewStartTimeSec - 58.4) < 0.0001
-                    && Math.abs(rolling.viewEndTimeSec - 61.6) < 0.0001
+            return Math.abs(rolling.effectiveBpm - 128) < 0.0001
+                    && Math.abs(rolling.viewTimeSpanSec - 3.75) < 0.0001
+                    && Math.abs(rolling.viewStartTimeSec - 58.125) < 0.0001
+                    && Math.abs(rolling.viewEndTimeSec - 61.875) < 0.0001
         })
         verify(Math.abs(rolling.timeToX(fakePlayback.positionMs / 1000)
                         - canvas.width * 0.5) < 0.0001)
 
+        fakePlayback.beatGridBpm = 0
         fakePlayback.sourceBpm = 0
         tryCompare(rolling, "effectiveBpm", 120)
         verify(Math.abs(rolling.beatSec - 0.5) < 0.0001)
@@ -708,8 +765,8 @@ TestCase {
         var canvas = findChild(rolling, "rollingMainWaveformCanvas")
         var time = findChild(rolling, "rollingCurrentTimeCapsule")
         verify(canvas && time)
-        compare(rolling.pxPerSec, canvas.width / 4,
-                "at 120 BPM the default viewport crosses in four seconds, not two")
+        compare(rolling.pxPerSec, canvas.width / 30,
+                "the 64-beat default uses grid BPM without changing audio speed")
         fakePlayback.positionMs = 72009
         tryCompare(time, "text", "01:12:00")
         fakePlayback.positionMs = 72010
@@ -726,16 +783,283 @@ TestCase {
             var canvas = findChild(rolling, "rollingMainWaveformCanvas")
             var waveform = findChild(rolling, "rollingMainWaveform")
             verify(canvas && waveform)
-            verify(waveform.y >= 12,
-                   "waveform must leave room below the needle time readout")
-            verify(waveform.y + waveform.height <= canvas.height - 12,
-                   "even high-amplitude settings must retain the bottom inset")
-            verify(waveform.amplitudeScale <= 0.8,
-                   "rolling must not magnify peaks into the viewport boundaries")
+            compare(waveform.y, 8)
+            compare(waveform.y + waveform.height, canvas.height - 8)
+            compare(waveform.amplitudeScale, 1.5,
+                    "rolling preserves the configured amplitude without a hidden cap")
             compare(waveform.preserveSourcePeakDensity, false)
         } finally {
             SettingsController.waveformHeight = savedHeight
         }
+    }
+
+    function test_grid_controls_step_exact_viewports_and_persist_display_choices() {
+        var savedGridEnabled = SettingsController.rollingBeatGridEnabled
+        var savedGrouping = SettingsController.rollingBeatGridGrouping
+        try {
+            SettingsController.rollingBeatGridEnabled = true
+            SettingsController.rollingBeatGridGrouping = 4
+            var rolling = rollingWithFakes()
+            var gridSwitch = findChild(rolling, "rollingBeatGridSwitch")
+            var grouping = findChild(rolling, "rollingBeatGridGrouping")
+            var viewport = findChild(rolling, "rollingViewportBeats")
+            var minus = findChild(rolling, "rollingZoomMinus")
+            var plus = findChild(rolling, "rollingZoomPlus")
+            verify(gridSwitch && grouping && viewport && minus && plus)
+            compare(gridSwitch.checked, true)
+            compare(grouping.currentText, "4")
+            compare(viewport.currentText, "64")
+            compare(viewport.displayText, "64")
+            compare(viewport.contentItem.text, "64")
+            verify(viewport.contentItem.paintedWidth > 0)
+            verify(viewport.contentItem.width
+                   - viewport.contentItem.leftPadding
+                   - viewport.contentItem.rightPadding
+                   >= viewport.contentItem.paintedWidth)
+            compare(viewport.contentItem.truncated, false)
+            compare(minus.enabled, false)
+            compare(plus.enabled, true)
+
+            mouseClick(plus)
+            compare(rolling.visibleBeats, 32)
+            compare(viewport.currentText, "32")
+            compare(viewport.displayText, "32")
+            compare(viewport.contentItem.text, "32")
+            verify(viewport.contentItem.paintedWidth > 0)
+            compare(viewport.contentItem.truncated, false)
+            while (plus.enabled)
+                mouseClick(plus)
+            compare(rolling.visibleBeats, 2)
+            compare(plus.enabled, false)
+            mouseClick(minus)
+            compare(rolling.visibleBeats, 4)
+            rolling.resetZoom()
+            compare(rolling.visibleBeats, 64)
+
+            rolling.visibleBeats = 8
+            enterMode(0)
+            tryVerify(function() {
+                return shell("rollingPlayerShell") === null
+            }, 1000, "rolling shell must finish unloading before re-entry")
+            rolling = rollingWithFakes()
+            compare(rolling.visibleBeats, 64,
+                    "re-entering rolling resets the viewport while track changes do not")
+
+            gridSwitch = findChild(rolling, "rollingBeatGridSwitch")
+            grouping = findChild(rolling, "rollingBeatGridGrouping")
+            verify(gridSwitch && grouping)
+
+            mouseClick(gridSwitch)
+            compare(SettingsController.rollingBeatGridEnabled, false)
+            grouping.currentIndex = 1
+            grouping.activated(grouping.currentIndex)
+            compare(SettingsController.rollingBeatGridGrouping, 8)
+        } finally {
+            SettingsController.rollingBeatGridEnabled = savedGridEnabled
+            SettingsController.rollingBeatGridGrouping = savedGrouping
+        }
+    }
+
+    function test_visible_grid_and_cue_share_source_time_geometry() {
+        var rolling = rollingWithFakes()
+        rolling.visibleBeats = 8
+        var canvas = findChild(rolling, "rollingMainWaveformCanvas")
+        var grid = findChild(rolling, "rollingBeatGrid")
+        var cue = findChild(rolling, "rollingMainCueMarker")
+        var overview = findChild(rolling, "rollingOverviewWaveform")
+        var overviewCue = findChild(rolling, "rollingOverviewCueMarker")
+        verify(canvas && grid && cue && overview && overviewCue)
+        compare(grid.firstBeatMs, 250)
+        compare(grid.bpm, 128)
+        compare(grid.grouping, SettingsController.rollingBeatGridGrouping)
+        verify(grid.visibleBeatCount() <= 12,
+               "renderer enumerates only beats intersecting the viewport")
+        compare(grid.isDownbeat(4), true)
+        compare(grid.isDownbeat(5), false)
+
+        var expectedMainX = rolling.timeToX(fakePlayback.cuePositionMs / 1000)
+        compare(Math.round(cue.mapToItem(canvas, cue.width / 2, 0).x),
+                Math.round(expectedMainX))
+        compare(Math.round(overviewCue.mapToItem(overview, overviewCue.width / 2, 0).x),
+                Math.round(overview.pixelForTime(fakePlayback.cuePositionMs)))
+    }
+
+    function test_unset_cue_is_hidden_and_hot_cues_share_source_time_geometry() {
+        var rolling = rollingWithFakes()
+        rolling.visibleBeats = 8
+        fakePlayback.cuePositionMs = -1
+        fakePlayback.hotCuePositions = [59000, 60500, -1, -1, -1, -1, -1, -1]
+
+        var canvas = findChild(rolling, "rollingMainWaveformCanvas")
+        var cue = findChild(rolling, "rollingMainCueMarker")
+        var overviewCue = findChild(rolling, "rollingOverviewCueMarker")
+        tryVerify(function() {
+            return findChild(rolling, "rollingHotCueMarker1") !== null
+                   && findChild(rolling, "rollingHotCueMarker2") !== null
+                   && findChild(rolling, "rollingHotCueMarker3") !== null
+        })
+        var hotCue1 = findChild(rolling, "rollingHotCueMarker1")
+        var hotCue2 = findChild(rolling, "rollingHotCueMarker2")
+        var unsetHotCue = findChild(rolling, "rollingHotCueMarker3")
+        verify(canvas && cue && overviewCue && hotCue1 && hotCue2 && unsetHotCue)
+
+        compare(cue.visible, false, "an unset CUE must not appear in a negative viewport")
+        compare(overviewCue.visible, false, "an unset CUE must not appear in the overview")
+        compare(hotCue1.visible, true)
+        compare(hotCue2.visible, true)
+        compare(unsetHotCue.visible, false)
+        compare(hotCue1.text, "▲1")
+        compare(hotCue1.color, Theme.warning)
+        compare(Math.round(hotCue1.mapToItem(canvas, hotCue1.width / 2, 0).x),
+                Math.round(rolling.timeToX(59)))
+        compare(Math.round(hotCue2.mapToItem(canvas, hotCue2.width / 2, 0).x),
+                Math.round(rolling.timeToX(60.5)))
+        compare(Math.round(hotCue1.mapToItem(canvas, 0, hotCue1.height).y),
+                canvas.height - 2, "Hot Cue markers sit at the waveform bottom")
+    }
+
+    function test_hidden_grid_stops_paint_requests_and_repaints_when_enabled() {
+        var savedGridEnabled = SettingsController.rollingBeatGridEnabled
+        try {
+            SettingsController.rollingBeatGridEnabled = false
+            var rolling = rollingWithFakes()
+            var grid = findChild(rolling, "rollingBeatGrid")
+            verify(grid)
+            wait(50)
+            var hiddenRequests = grid.paintRequestCount
+            var hiddenPaints = grid.paintPassCount
+            fakePlayback.positionMs += 1000
+            wait(50)
+            compare(grid.paintRequestCount, hiddenRequests,
+                    "hidden grid must not schedule work as playback advances")
+            compare(grid.paintPassCount, hiddenPaints,
+                    "hidden grid must not draw as playback advances")
+
+            SettingsController.rollingBeatGridEnabled = true
+            tryVerify(function() {
+                return grid.paintRequestCount > hiddenRequests
+            }, 500, "showing the grid must request a fresh frame")
+            tryVerify(function() {
+                return grid.paintPassCount > hiddenPaints
+            }, 500, "showing the grid must draw a fresh frame")
+        } finally {
+            SettingsController.rollingBeatGridEnabled = savedGridEnabled
+        }
+    }
+
+    function test_profile_grid_on_off_canvas_work() {
+        var savedGridEnabled = SettingsController.rollingBeatGridEnabled
+        var iterations = 10000
+        try {
+            SettingsController.rollingBeatGridEnabled = false
+            var rolling = rollingWithFakes()
+            var grid = findChild(rolling, "rollingBeatGrid")
+            verify(grid)
+            wait(50)
+
+            var disabledRequests = grid.paintRequestCount
+            var disabledPaints = grid.paintPassCount
+            var disabledStart = Date.now()
+            for (var offIndex = 0; offIndex < iterations; ++offIndex)
+                fakePlayback.positionMs = 1000 + offIndex
+            var disabledMs = Date.now() - disabledStart
+            wait(50)
+            compare(grid.paintRequestCount, disabledRequests)
+            compare(grid.paintPassCount, disabledPaints)
+
+            SettingsController.rollingBeatGridEnabled = true
+            wait(50)
+            var enabledRequests = grid.paintRequestCount
+            var enabledPaints = grid.paintPassCount
+            var enabledStart = Date.now()
+            for (var onIndex = 0; onIndex < iterations; ++onIndex)
+                fakePlayback.positionMs = 20000 + onIndex
+            var enabledMs = Date.now() - enabledStart
+            wait(50)
+            var requestDelta = grid.paintRequestCount - enabledRequests
+            var paintDelta = grid.paintPassCount - enabledPaints
+            verify(requestDelta >= iterations)
+            verify(paintDelta > 0)
+            console.info("GRID_CANVAS_PROFILE iterations=" + iterations
+                         + " disabledUiMs=" + disabledMs
+                         + " enabledUiMs=" + enabledMs
+                         + " enabledRequests=" + requestDelta
+                         + " enabledPaintPasses=" + paintDelta)
+        } finally {
+            SettingsController.rollingBeatGridEnabled = savedGridEnabled
+        }
+    }
+
+    function test_cue_hold_release_cancel_and_grid_calibration_actions() {
+        var rolling = rollingWithFakes()
+        var cueButton = findChild(rolling, "rollingCueButton")
+        var setFirst = findChild(rolling, "rollingGridSetFirstBeat")
+        var nudgeLeft = findChild(rolling, "rollingGridNudgeLeft")
+        var nudgeRight = findChild(rolling, "rollingGridNudgeRight")
+        var bpm = findChild(rolling, "rollingGridBpmField")
+        var reset = findChild(rolling, "rollingGridReset")
+        var status = findChild(rolling, "rollingGridStatusLabel")
+        var calibrationButton = findChild(
+                    rolling, "rollingGridCalibrationButton")
+        var calibrationPopup = findChild(
+                    rolling, "rollingGridCalibrationPopup")
+        verify(cueButton && setFirst && nudgeLeft && nudgeRight
+               && bpm && reset && status && calibrationButton
+               && calibrationPopup)
+        var play = findChild(rolling, "playPauseButton")
+        var playBody = findChild(rolling, "playButtonBody")
+        verify(playBody)
+        compare(cueButton.width, play.width)
+        compare(cueButton.height, play.height)
+        compare(playBody.border.color, Theme.success,
+                "rolling play ring stays green while paused")
+        verify(cueButton.mapToItem(play.parent, cueButton.width, 0).x
+               <= play.x + 1)
+
+        mousePress(cueButton, cueButton.width / 2, cueButton.height / 2,
+                   Qt.LeftButton)
+        compare(fakePlayback.cuePressCount, 1)
+        mouseRelease(cueButton, cueButton.width / 2, cueButton.height / 2,
+                     Qt.LeftButton)
+        compare(fakePlayback.cueReleaseCount, 1)
+
+        mousePress(cueButton, cueButton.width / 2, cueButton.height / 2,
+                   Qt.LeftButton)
+        compare(fakePlayback.cuePressCount, 2)
+        play.clicked()
+        compare(fakePlayback.toggleCount, 1)
+        compare(fakePlayback.cueCancelCount, 0,
+                "moving focus to play must let playback latch the audition")
+        rolling.cancelCueHold()
+        compare(fakePlayback.cueCancelCount, 1,
+                "window/cancel lifecycle ends an outstanding cue hold")
+        mouseRelease(cueButton, cueButton.width / 2, cueButton.height / 2,
+                     Qt.LeftButton)
+
+        mouseClick(calibrationButton)
+        tryCompare(calibrationPopup, "visible", true)
+        mouseClick(setFirst)
+        compare(fakePlayback.gridFirstBeatCount, 1)
+        mouseClick(nudgeLeft)
+        mouseClick(nudgeRight)
+        compare(fakePlayback.gridNudgeTotal, 0)
+        bpm.text = "126.5"
+        var speedBeforeGridEdit = fakePlayback.speedRatio
+        bpm.editingFinished()
+        compare(fakePlayback.gridBpmCount, 1)
+        compare(fakePlayback.beatGridBpm, 126.5)
+        compare(fakePlayback.speedRatio, speedBeforeGridEdit,
+                "grid calibration must not alter playback speed")
+
+        fakePlayback.beatGridEstimatedBpm = true
+        tryVerify(function() { return status.text.indexOf("估算") === 0 })
+        fakePlayback.beatGridCalibrated = false
+        tryCompare(calibrationButton, "text", "估算 120")
+        fakePlayback.beatGridBpm = 0
+        fakePlayback.sourceBpm = 0
+        tryCompare(status, "text", "估算 · 回退 120 BPM")
+        mouseClick(reset)
+        compare(fakePlayback.gridResetCount, 1)
     }
 
     function test_header_four_rows_align_as_one_cover_centered_block() {
@@ -864,7 +1188,34 @@ TestCase {
         verify(transport)
         verify(transport.mapToItem(controls, 0, 0).x < controls.width * 0.30,
                "rolling transport belongs on the left side")
-        compare(bottom.height, 64)
+        verify(bottom.height >= 120,
+                "narrow rolling controls wrap to a second row instead of clipping")
+        var rightControls = findChild(rolling, "rollingTempoControls")
+        verify(rightControls && rightControls.height > 64)
+        var boundedControlNames = [
+            "rollingBeatGridSwitch", "rollingBeatGridGrouping",
+            "rollingViewportBeats", "rollingZoomMinus", "rollingZoomPlus",
+            "rollingZoomReset", "rollingSpeedMinus", "rollingSpeedPlus",
+            "rollingTargetBpm", "rollingTempoReset",
+            "rollingKeepPitchControl", "rollingGridCalibrationButton",
+            "themeModeButton", "immersiveActionButton", "miniPlayerButton"
+        ]
+        for (var boundedIndex = 0;
+             boundedIndex < boundedControlNames.length; ++boundedIndex) {
+            var boundedControl = findChild(
+                        rolling, boundedControlNames[boundedIndex])
+            verify(boundedControl)
+            var topLeft = boundedControl.mapToItem(bottom, 0, 0)
+            var bottomRight = boundedControl.mapToItem(
+                        bottom, boundedControl.width, boundedControl.height)
+            verify(topLeft.x >= 15 && topLeft.y >= -1
+                   && bottomRight.x <= bottom.width - 15
+                   && bottomRight.y <= bottom.height + 1,
+                   boundedControlNames[boundedIndex]
+                   + " must stay inside the wrapped bottom bar: "
+                   + topLeft + " -> " + bottomRight
+                   + " in " + bottom.width + "x" + bottom.height)
+        }
         var miniAction = findChild(controls, "miniPlayerButton")
         verify(miniAction.mapToItem(bottom, miniAction.width, 0).x
                <= bottom.width - 15, "shell actions retain the right inset")

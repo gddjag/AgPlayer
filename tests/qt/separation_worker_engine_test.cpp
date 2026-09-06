@@ -40,13 +40,14 @@ public:
     std::atomic_int running{0};
     std::atomic_int maximumRunning{0};
 
-    BackendResult probe(const QJsonObject&) override
+    BackendResult probe(const QJsonObject& payload) override
     {
         if (blockProbe.load()) {
             probeEntered.release();
             probeRelease.acquire();
         }
-        return {true, {}, {}, QJsonObject{{QStringLiteral("cpu"), true}}};
+        return {true, {}, {}, QJsonObject{{QStringLiteral("cpu"), true},
+                                        {QStringLiteral("token"), payload.value(QStringLiteral("token"))}}};
     }
 
     BackendResult separate(const QJsonObject& payload,
@@ -82,7 +83,9 @@ public:
 class CommitBlockingBackend final : public WorkerBackend {
 public:
     QSemaphore committed;
+    QSemaphore attempted;
     QSemaphore release;
+    QString diagnostic;
 
     BackendResult probe(const QJsonObject&) override
     {
@@ -93,24 +96,30 @@ public:
                            const CancellationToken& cancellation,
                            const ProgressCallback&) override
     {
+        const auto failed = [&](const QString& code, const QString& detail) {
+            diagnostic = code + QStringLiteral(": ") + detail;
+            attempted.release();
+            return BackendResult{false, code, detail, {}};
+        };
         OutputTransaction transaction(
             {payload.value(QStringLiteral("outputDirectory")).toString(),
              QStringLiteral("race"), QStringLiteral("wav"),
              {QStringLiteral("vocals")}});
         const TransactionResult begun = transaction.begin();
-        if (!begun.ok) return {false, begun.code, begun.message, {}};
+        if (!begun.ok) return failed(begun.code, begun.message);
         QFile staged(transaction.temporaryPath(QStringLiteral("vocals")));
         if (!staged.open(QIODevice::WriteOnly) || staged.write("audio") != 5) {
-            return {false, QStringLiteral("test_write_failed"),
-                    QStringLiteral("Could not stage output"), {}};
+            return failed(QStringLiteral("test_write_failed"),
+                          QStringLiteral("Could not stage output: ") + staged.errorString());
         }
         staged.close();
         const TransactionResult published = transaction.commit(
             [](const QString&) { return true; }, cancellation);
         if (!published.ok) {
-            return {false, published.code, published.message, {}};
+            return failed(published.code, published.message);
         }
         committed.release();
+        attempted.release();
         release.acquire();
         QJsonArray outputs;
         for (const QString& path : published.outputs) outputs.push_back(path);
@@ -127,6 +136,7 @@ private slots:
     void helloAndProbeRouteTheirRequestIds();
     void startRunsOffCallerThreadAndAllowsOnlyOneActiveRequest();
     void probeQueueIsBounded();
+    void cancelledProbeCannotCompleteAReusedRequestId();
     void cancellationIsIdempotentAndStaleResultsCannotLeak();
     void cancellationAcknowledgementHistoryIsBounded();
     void cancelledRestartLoopCannotGrowTheQueueWithoutBound();
@@ -214,6 +224,37 @@ void SeparationWorkerEngineTest::probeQueueIsBounded()
                 == QStringLiteral("worker_queue_full");
     }
     QVERIFY(queueFull);
+}
+
+void SeparationWorkerEngineTest::cancelledProbeCannotCompleteAReusedRequestId()
+{
+    auto backend = std::make_shared<ControlledBackend>();
+    backend->blockProbe.store(true);
+    WorkerEngine engine(backend);
+    const auto releaseProbes = qScopeGuard([&] { backend->probeRelease.release(2); });
+    QSignalSpy output(&engine, &WorkerEngine::messageReady);
+    const QString id = QStringLiteral("reused-probe");
+    engine.acceptLine(message(ProtocolType::Probe, id, {{QStringLiteral("token"), 1}}));
+    QVERIFY(backend->probeEntered.tryAcquire(1, 2000));
+    engine.acceptLine(message(ProtocolType::Cancel, id));
+    engine.acceptLine(message(ProtocolType::Probe, id, {{QStringLiteral("token"), 2}}));
+    output.clear();
+    backend->probeRelease.release();
+    // The single worker has queued the old completion before entering this
+    // second probe. Drain that callback while the new probe is still blocked.
+    QVERIFY(backend->probeEntered.tryAcquire(1, 2000));
+    QCoreApplication::processEvents();
+    for (const auto& arguments : output)
+        QVERIFY(decode(arguments.at(0)).type != ProtocolType::Probe);
+    backend->probeRelease.release();
+    QTRY_VERIFY_WITH_TIMEOUT([&] {
+        for (const auto& arguments : output) {
+            const auto event = decode(arguments.at(0));
+            if (event.type == ProtocolType::Probe && event.payload.value(QStringLiteral("token")).toInt() == 2)
+                return true;
+        }
+        return false;
+    }(), 2000);
 }
 
 void SeparationWorkerEngineTest::cancellationIsIdempotentAndStaleResultsCannotLeak()
@@ -463,17 +504,27 @@ void SeparationWorkerEngineTest::slowInferencePublishesLivenessWithoutInventingP
 void SeparationWorkerEngineTest::cancelAfterAtomicCommitIsRejectedAndResultRemainsVisible()
 {
     QTemporaryDir outputDirectory;
+    QVERIFY(outputDirectory.isValid());
     auto backend = std::make_shared<CommitBlockingBackend>();
     WorkerEngine engine(backend);
+    const auto releaseBackend = qScopeGuard([&] { backend->release.release(); });
     QSignalSpy output(&engine, &WorkerEngine::messageReady);
     const QString requestId = QStringLiteral("commit-race");
     engine.acceptLine(message(
         ProtocolType::Start, requestId,
         {{QStringLiteral("outputDirectory"), outputDirectory.path()}}));
-    QVERIFY(backend->committed.tryAcquire(1, 2000));
+    // Filesystem setup exceeded 2 seconds under concurrent CTest I/O. Wait for
+    // its completion without blocking heartbeat delivery or relaxing commit semantics.
+    bool attemptReady = false;
+    QTRY_VERIFY_WITH_TIMEOUT(attemptReady || (attemptReady = backend->attempted.tryAcquire(1, 0)), 10000);
+    QVERIFY2(backend->committed.tryAcquire(), qPrintable(backend->diagnostic));
     QVERIFY(QFileInfo::exists(outputDirectory.filePath(
         QStringLiteral("race/race-vocals.wav"))));
 
+    // Only liveness progress is legal while the committed backend is held.
+    for (const auto& arguments : output)
+        QCOMPARE(decode(arguments.at(0)).type, ProtocolType::Progress);
+    output.clear();
     engine.acceptLine(message(ProtocolType::Cancel, requestId));
     QCOMPARE(output.size(), 1);
     const ProtocolMessage cancel = decode(output.front().at(0));

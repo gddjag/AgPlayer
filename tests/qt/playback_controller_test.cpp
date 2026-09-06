@@ -12,9 +12,12 @@
 #include <QQmlEngine>
 #include <QtQml/qqml.h>
 #include <QFile>
+#include <QFileInfo>
 #include <QElapsedTimer>
+#include <QDir>
 #include <QScopedPointer>
 #include <QSignalSpy>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -52,6 +55,16 @@ private slots:
     void libraryRequestsShareQueueAndFavoriteState();
     void tempoAndBpmShareOneClampedRatio();
     void bpmUpdatesAndTrackChangesResetTempo();
+    void beatGridStateUsesSourceFallbackAndPersistsPerTrack();
+    void deckStateStoreRejectsInvalidIntegerFields();
+    void beatGridEditsDoNotChangeTempoMetadataOrCue();
+    void cuePressReleaseAndPlayLatchFollowDeckContract();
+    void cuePressIgnoresTrackSnapshotMismatchBeforePoll_data();
+    void cuePressIgnoresTrackSnapshotMismatchBeforePoll();
+    void clearAndJumpCueFollowTransportContract();
+    void hotCuesPersistPerTrackAndKeepTransportState();
+    void cuePlayFailureKeepsReleaseContract();
+    void cueCancellationAndTrackChangeInvalidateHeldCue();
     void keepPitchSettingInitializesAndTracksRuntimeChanges();
     void playbackControllerIsAnAgPlayerQmlSingleton();
 };
@@ -837,6 +850,676 @@ void PlaybackControllerTest::startsPlaybackFromVisibleListScope()
                               QStringLiteral("track-1"),
                               QStringLiteral("track-5"),
                               QStringLiteral("track-6")}));
+    }
+    ag_player_destroy(core);
+}
+
+void PlaybackControllerTest::beatGridStateUsesSourceFallbackAndPersistsPerTrack()
+{
+    const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(!fixture.isEmpty());
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+
+    const QString oldOrganization = QCoreApplication::organizationName();
+    const QString oldApplication = QCoreApplication::applicationName();
+    QStandardPaths::setTestModeEnabled(true);
+    QCoreApplication::setOrganizationName(QStringLiteral("AgPlayer"));
+    QCoreApplication::setApplicationName(
+        QStringLiteral("AgPlayer-playback-deck-state-test"));
+    const QString statePath = QDir(QStandardPaths::writableLocation(
+        QStandardPaths::AppLocalDataLocation)).filePath(
+            QStringLiteral("deck-state.json"));
+    QVERIFY(QFile::remove(statePath) || !QFile::exists(statePath));
+
+    LibraryModel model;
+    TrackRecord known;
+    known.trackId = QStringLiteral("grid-known-bpm");
+    known.path = directory.filePath(QStringLiteral("known.wav"));
+    QVERIFY(QFile::copy(fixture, known.path));
+    known.available = true;
+    known.bpm = 128.5;
+    QVERIFY(model.append(known));
+    TrackRecord unknown;
+    unknown.trackId = QStringLiteral("grid-unknown-bpm");
+    unknown.path = directory.filePath(QStringLiteral("unknown.wav"));
+    QVERIFY(QFile::copy(fixture, unknown.path));
+    unknown.available = true;
+    unknown.bpm = 0.0;
+    QVERIFY(model.append(unknown));
+
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2'048};
+    ag_player* firstCore = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &firstCore), AG_OK);
+    {
+        PlaybackController controller(firstCore, &model);
+        controller.loadRow(0);
+        QTRY_COMPARE(controller.currentTrackId(), known.trackId);
+        QCOMPARE(controller.cuePositionMs(), qint64{-1});
+        QCOMPARE(controller.beatGridBpm(), 128.5);
+        QCOMPARE(controller.beatGridOffsetMs(), qint64{0});
+        QVERIFY(!controller.beatGridCalibrated());
+        QVERIFY(!controller.beatGridEstimatedBpm());
+
+        controller.play();
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+        controller.pause();
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        controller.seek(420);
+        controller.cuePress();
+        QCOMPARE(controller.cuePositionMs(), qint64{420});
+        QVERIFY(!controller.cueAuditioning());
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        controller.setBeatGridFirstBeat();
+        QCOMPARE(controller.beatGridOffsetMs(), qint64{420});
+        QVERIFY(controller.beatGridCalibrated());
+        controller.nudgeBeatGrid(15);
+        QCOMPARE(controller.beatGridOffsetMs(), qint64{435});
+        controller.setBeatGridBpm(130.25);
+        QCOMPARE(controller.beatGridBpm(), 130.25);
+        QVERIFY(QFile::exists(statePath));
+
+        controller.loadRow(1);
+        QTRY_COMPARE(controller.currentTrackId(), unknown.trackId);
+        QCOMPARE(controller.cuePositionMs(), qint64{-1});
+        QCOMPARE(controller.beatGridBpm(), 120.0);
+        QCOMPARE(controller.beatGridOffsetMs(), qint64{0});
+        QVERIFY(!controller.beatGridCalibrated());
+        QVERIFY(controller.beatGridEstimatedBpm());
+    }
+    ag_player_destroy(firstCore);
+
+    ag_player* secondCore = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &secondCore), AG_OK);
+    {
+        PlaybackController restored(secondCore, &model);
+        restored.loadRow(0);
+        QTRY_COMPARE(restored.currentTrackId(), known.trackId);
+        QCOMPARE(restored.cuePositionMs(), qint64{420});
+        QCOMPARE(restored.beatGridBpm(), 130.25);
+        QCOMPARE(restored.beatGridOffsetMs(), qint64{435});
+        QVERIFY(restored.beatGridCalibrated());
+        QVERIFY(!restored.beatGridEstimatedBpm());
+    }
+    ag_player_destroy(secondCore);
+
+    QVERIFY(QFile::remove(statePath) || !QFile::exists(statePath));
+    QCoreApplication::setOrganizationName(oldOrganization);
+    QCoreApplication::setApplicationName(oldApplication);
+    QStandardPaths::setTestModeEnabled(false);
+}
+
+void PlaybackControllerTest::deckStateStoreRejectsInvalidIntegerFields()
+{
+    const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(!fixture.isEmpty());
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+
+    const QString oldOrganization = QCoreApplication::organizationName();
+    const QString oldApplication = QCoreApplication::applicationName();
+    QStandardPaths::setTestModeEnabled(true);
+    QCoreApplication::setOrganizationName(QStringLiteral("AgPlayer"));
+    QCoreApplication::setApplicationName(
+        QStringLiteral("AgPlayer-playback-deck-state-integer-test"));
+    const QString statePath = QDir(QStandardPaths::writableLocation(
+        QStandardPaths::AppLocalDataLocation)).filePath(
+            QStringLiteral("deck-state.json"));
+    QVERIFY(QFile::remove(statePath) || !QFile::exists(statePath));
+
+    QFile stateStore(statePath);
+    QVERIFY(QDir().mkpath(QFileInfo(statePath).absolutePath()));
+    QVERIFY(stateStore.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    const QByteArray payload =
+        R"({"version":1,"tracks":{"invalid-upper":{"cuePositionMs":9223372036854775808,"beatGridOffsetMs":9223372036854775808,"hotCuePositions":[9223372036854775808,12.5,-4,250]},"invalid-lower":{"cuePositionMs":-4,"beatGridOffsetMs":-1e100,"hotCuePositions":[-1e100]},"valid-min":{"beatGridOffsetMs":-9223372036854775808},"valid-max":{"cuePositionMs":9223372036854775807,"beatGridOffsetMs":9223372036854775807,"hotCuePositions":[9223372036854775807]}}})";
+    QCOMPARE(stateStore.write(payload), payload.size());
+    stateStore.close();
+
+    LibraryModel model;
+    const QStringList trackIds{
+        QStringLiteral("invalid-upper"), QStringLiteral("invalid-lower"),
+        QStringLiteral("valid-min"), QStringLiteral("valid-max")};
+    for (qsizetype index = 0; index < trackIds.size(); ++index) {
+        TrackRecord track;
+        track.trackId = trackIds.at(index);
+        track.path = directory.filePath(
+            QStringLiteral("deck-state-%1.wav").arg(index));
+        QVERIFY(QFile::copy(fixture, track.path));
+        track.available = true;
+        QVERIFY(model.append(track));
+    }
+
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2'048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core, &model);
+        controller.loadRow(0);
+        QTRY_COMPARE(controller.currentTrackId(), trackIds.at(0));
+        QCOMPARE(controller.cuePositionMs(), qint64{-1});
+        QCOMPARE(controller.beatGridOffsetMs(), qint64{0});
+        const QVariantList invalidHotCues = controller.hotCuePositions();
+        QCOMPARE(invalidHotCues.at(0).toLongLong(), qint64{-1});
+        QCOMPARE(invalidHotCues.at(1).toLongLong(), qint64{-1});
+        QCOMPARE(invalidHotCues.at(2).toLongLong(), qint64{-1});
+        QCOMPARE(invalidHotCues.at(3).toLongLong(), qint64{250});
+
+        controller.loadRow(1);
+        QTRY_COMPARE(controller.currentTrackId(), trackIds.at(1));
+        QCOMPARE(controller.cuePositionMs(), qint64{-1});
+        QCOMPARE(controller.beatGridOffsetMs(), qint64{0});
+        QCOMPARE(controller.hotCuePositions().at(0).toLongLong(), qint64{-1});
+
+        controller.loadRow(2);
+        QTRY_COMPARE(controller.currentTrackId(), trackIds.at(2));
+        QCOMPARE(controller.beatGridOffsetMs(),
+                 std::numeric_limits<qint64>::min());
+
+        controller.loadRow(3);
+        QTRY_COMPARE(controller.currentTrackId(), trackIds.at(3));
+        QCOMPARE(controller.cuePositionMs(),
+                 std::numeric_limits<qint64>::max());
+        QCOMPARE(controller.beatGridOffsetMs(),
+                 std::numeric_limits<qint64>::max());
+        QCOMPARE(controller.hotCuePositions().at(0).toLongLong(),
+                 std::numeric_limits<qint64>::max());
+    }
+    ag_player_destroy(core);
+
+    QVERIFY(QFile::remove(statePath) || !QFile::exists(statePath));
+    QCoreApplication::setOrganizationName(oldOrganization);
+    QCoreApplication::setApplicationName(oldApplication);
+    QStandardPaths::setTestModeEnabled(false);
+}
+
+void PlaybackControllerTest::beatGridEditsDoNotChangeTempoMetadataOrCue()
+{
+    const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(!fixture.isEmpty());
+    LibraryModel model;
+    TrackRecord track;
+    track.trackId = QStringLiteral("grid-isolation");
+    track.path = fixture;
+    track.available = true;
+    track.bpm = 100.0;
+    QVERIFY(model.append(track));
+
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2'048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core, &model);
+        controller.loadRow(0);
+        QTRY_COMPARE(controller.currentTrackId(), track.trackId);
+        controller.play();
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+        controller.pause();
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        controller.seek(250);
+        controller.cuePress();
+        QCOMPARE(controller.cuePositionMs(), qint64{250});
+        controller.setSpeedRatio(1.25);
+        QCOMPARE(controller.speedRatio(), 1.25);
+
+        controller.setBeatGridFirstBeat();
+        controller.nudgeBeatGrid(-10);
+        controller.setBeatGridBpm(140.0);
+        QCOMPARE(controller.speedRatio(), 1.25);
+        QCOMPARE(model.recordForId(track.trackId)->bpm, 100.0);
+        QCOMPARE(controller.cuePositionMs(), qint64{250});
+
+        controller.setBeatGridBpm(10.0);
+        QCOMPARE(controller.beatGridBpm(), 140.0);
+        controller.resetBeatGrid();
+        QCOMPARE(controller.beatGridBpm(), 100.0);
+        QCOMPARE(controller.beatGridOffsetMs(), qint64{0});
+        QVERIFY(!controller.beatGridCalibrated());
+        QCOMPARE(controller.speedRatio(), 1.25);
+        QCOMPARE(model.recordForId(track.trackId)->bpm, 100.0);
+        QCOMPARE(controller.cuePositionMs(), qint64{250});
+    }
+    ag_player_destroy(core);
+}
+
+void PlaybackControllerTest::cuePressReleaseAndPlayLatchFollowDeckContract()
+{
+    const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(!fixture.isEmpty());
+    LibraryModel model;
+    TrackRecord track;
+    track.trackId = QStringLiteral("cue-contract");
+    track.path = fixture;
+    track.available = true;
+    QVERIFY(model.append(track));
+
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2'048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core, &model);
+        controller.loadRow(0);
+        QTRY_COMPARE(controller.currentTrackId(), track.trackId);
+        controller.play();
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+        controller.pause();
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        controller.seek(300);
+
+        controller.cuePress();
+        QCOMPARE(controller.cuePositionMs(), qint64{300});
+        QVERIFY(!controller.cueAuditioning());
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+
+        controller.cueRelease();
+        controller.cuePress();
+        QVERIFY(controller.cueAuditioning());
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+        QTest::qWait(80);
+        QVERIFY(controller.positionMs() > 300);
+        controller.cueRelease();
+        QVERIFY(!controller.cueAuditioning());
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        QVERIFY(qAbs(controller.positionMs() - qint64{300}) <= 2);
+
+        controller.cuePress();
+        QVERIFY(controller.cueAuditioning());
+        controller.play();
+        QVERIFY(!controller.cueAuditioning());
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+        QTest::qWait(80);
+        const qint64 latchedPosition = controller.positionMs();
+        controller.cueRelease();
+        QTest::qWait(PlaybackController::PollIntervalMs * 3);
+        QCOMPARE(controller.state(), PlaybackController::Playing);
+        QVERIFY(controller.positionMs() >= latchedPosition);
+
+        controller.seek(900);
+        controller.cuePress();
+        QVERIFY(!controller.cueAuditioning());
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        QVERIFY(qAbs(controller.positionMs() - qint64{300}) <= 2);
+        controller.cueRelease();
+
+        controller.cuePress();
+        QVERIFY(controller.cueAuditioning());
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+        controller.togglePlayback();
+        QVERIFY(!controller.cueAuditioning());
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+        const qint64 toggleLatchedPosition = controller.positionMs();
+        controller.cueRelease();
+        QTest::qWait(PlaybackController::PollIntervalMs * 3);
+        QCOMPARE(controller.state(), PlaybackController::Playing);
+        QVERIFY(controller.positionMs() >= toggleLatchedPosition);
+
+        controller.seek(700);
+        controller.pause();
+        controller.cuePress();
+        QCOMPARE(controller.cuePositionMs(), qint64{700});
+        QVERIFY(!controller.cueAuditioning());
+        controller.cueRelease();
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+
+        controller.play();
+        controller.cuePress();
+        QVERIFY(!controller.cueAuditioning());
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        QVERIFY(qAbs(controller.positionMs() - qint64{700}) <= 2);
+        controller.cueRelease();
+    }
+    ag_player_destroy(core);
+}
+
+void PlaybackControllerTest::cuePressIgnoresTrackSnapshotMismatchBeforePoll_data()
+{
+    QTest::addColumn<bool>("playing");
+    QTest::newRow("paused") << false;
+    QTest::newRow("playing") << true;
+}
+
+void PlaybackControllerTest::cuePressIgnoresTrackSnapshotMismatchBeforePoll()
+{
+    QFETCH(bool, playing);
+    const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(!fixture.isEmpty());
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    LibraryModel model;
+    for (int index = 0; index < 2; ++index) {
+        TrackRecord track;
+        track.trackId = QStringLiteral("cue-mismatch-track-%1").arg(index);
+        track.path = directory.filePath(QStringLiteral("cue-mismatch-%1.wav").arg(index));
+        QVERIFY(QFile::copy(fixture, track.path));
+        track.available = true;
+        QVERIFY(model.append(track));
+    }
+
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2'048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core, &model);
+        controller.playRow(0);
+        QTRY_COMPARE(controller.currentTrackId(),
+                     QStringLiteral("cue-mismatch-track-0"));
+        controller.pause();
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        constexpr qint64 savedCueMs = 1'200;
+        controller.seek(savedCueMs);
+        controller.cuePress();
+        controller.cueRelease();
+        QCOMPARE(controller.cuePositionMs(), savedCueMs);
+
+        if (playing) {
+            controller.play();
+            QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+        }
+        controller.next();
+        QCOMPARE(controller.currentTrackId(),
+                 QStringLiteral("cue-mismatch-track-0"));
+        ag_playback_snapshot beforeCue{};
+        QCOMPARE(ag_player_snapshot(core, &beforeCue), AG_OK);
+        QCOMPARE(beforeCue.track_index, size_t{1});
+        QCOMPARE(beforeCue.state, playing ? AG_PLAYING : AG_PAUSED);
+
+        controller.cuePress();
+        ag_playback_snapshot afterCue{};
+        QCOMPARE(ag_player_snapshot(core, &afterCue), AG_OK);
+        controller.cueRelease();
+        QCOMPARE(afterCue.track_index, size_t{1});
+        QCOMPARE(afterCue.state, beforeCue.state);
+        QCOMPARE(controller.cuePositionMs(), savedCueMs);
+        if (playing) {
+            QVERIFY(afterCue.position_ms < savedCueMs / 2);
+        }
+    }
+    ag_player_destroy(core);
+}
+
+void PlaybackControllerTest::clearAndJumpCueFollowTransportContract()
+{
+    const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(!fixture.isEmpty());
+    LibraryModel model;
+    TrackRecord track;
+    track.trackId = QStringLiteral("cue-jump-clear");
+    track.path = fixture;
+    track.available = true;
+    QVERIFY(model.append(track));
+
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2'048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core, &model);
+        controller.loadRow(0);
+        QTRY_COMPARE(controller.currentTrackId(), track.trackId);
+        controller.play();
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+        controller.pause();
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        controller.seek(360);
+        controller.cuePress();
+        controller.cueRelease();
+        QCOMPARE(controller.cuePositionMs(), qint64{360});
+
+        controller.seek(900);
+        controller.play();
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+        controller.jumpToCue();
+        QVERIFY(!controller.cueAuditioning());
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        QVERIFY(qAbs(controller.positionMs() - qint64{360}) <= 2);
+
+        controller.clearCue();
+        QCOMPARE(controller.cuePositionMs(), qint64{-1});
+        controller.seek(700);
+        controller.jumpToCue();
+        QVERIFY(!controller.cueAuditioning());
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        QVERIFY(qAbs(controller.positionMs()) <= 2);
+    }
+    ag_player_destroy(core);
+}
+
+void PlaybackControllerTest::hotCuesPersistPerTrackAndKeepTransportState()
+{
+    const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(!fixture.isEmpty());
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+
+    const QString oldOrganization = QCoreApplication::organizationName();
+    const QString oldApplication = QCoreApplication::applicationName();
+    QStandardPaths::setTestModeEnabled(true);
+    QCoreApplication::setOrganizationName(QStringLiteral("AgPlayer"));
+    QCoreApplication::setApplicationName(
+        QStringLiteral("AgPlayer-playback-hot-cue-test"));
+    const QString statePath = QDir(QStandardPaths::writableLocation(
+        QStandardPaths::AppLocalDataLocation)).filePath(
+            QStringLiteral("deck-state.json"));
+    QVERIFY(QFile::remove(statePath) || !QFile::exists(statePath));
+
+    LibraryModel model;
+    for (int index = 0; index < 2; ++index) {
+        TrackRecord track;
+        track.trackId = QStringLiteral("hot-cue-track-%1").arg(index);
+        track.path = directory.filePath(QStringLiteral("hot-cue-%1.wav").arg(index));
+        QVERIFY(QFile::copy(fixture, track.path));
+        track.available = true;
+        QVERIFY(model.append(track));
+    }
+
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2'048};
+    ag_player* firstCore = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &firstCore), AG_OK);
+    {
+        PlaybackController controller(firstCore, &model);
+        controller.loadRow(0);
+        QTRY_COMPARE(controller.currentTrackId(), QStringLiteral("hot-cue-track-0"));
+        QCOMPARE(controller.hotCuePositions().size(), 8);
+        for (const QVariant& position : controller.hotCuePositions()) {
+            QCOMPARE(position.toLongLong(), qint64{-1});
+        }
+
+        controller.play();
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+        controller.pause();
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        controller.seek(240);
+        controller.activateHotCue(0);
+        QCOMPARE(controller.state(), PlaybackController::Paused);
+        QCOMPARE(controller.hotCuePositions().at(0).toLongLong(), qint64{240});
+
+        const QVariantList beforeInvalidSlots = controller.hotCuePositions();
+        controller.activateHotCue(-1);
+        controller.activateHotCue(8);
+        controller.clearHotCue(-1);
+        controller.clearHotCue(8);
+        QCOMPARE(controller.hotCuePositions(), beforeInvalidSlots);
+
+        controller.seek(700);
+        controller.activateHotCue(0);
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+        QVERIFY(controller.positionMs() >= 240);
+
+        QCOMPARE(ag_player_next(firstCore), AG_OK);
+        controller.activateHotCue(2);
+        QTRY_COMPARE(controller.currentTrackId(), QStringLiteral("hot-cue-track-1"));
+        for (const QVariant& position : controller.hotCuePositions()) {
+            QCOMPARE(position.toLongLong(), qint64{-1});
+        }
+        controller.play();
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+        controller.seek(480);
+        controller.activateHotCue(1);
+        QCOMPARE(controller.state(), PlaybackController::Playing);
+        QCOMPARE(controller.hotCuePositions().at(1).toLongLong(), qint64{480});
+        controller.clearHotCue(1);
+        QCOMPARE(controller.hotCuePositions().at(1).toLongLong(), qint64{-1});
+        QCOMPARE(controller.state(), PlaybackController::Playing);
+
+        controller.loadRow(0);
+        QTRY_COMPARE(controller.currentTrackId(), QStringLiteral("hot-cue-track-0"));
+        QCOMPARE(controller.hotCuePositions().at(0).toLongLong(), qint64{240});
+        QCOMPARE(controller.hotCuePositions().at(2).toLongLong(), qint64{-1});
+    }
+    ag_player_destroy(firstCore);
+
+    ag_player* secondCore = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &secondCore), AG_OK);
+    {
+        PlaybackController restored(secondCore, &model);
+        restored.loadRow(0);
+        QTRY_COMPARE(restored.currentTrackId(), QStringLiteral("hot-cue-track-0"));
+        QCOMPARE(restored.hotCuePositions().size(), 8);
+        QCOMPARE(restored.hotCuePositions().at(0).toLongLong(), qint64{240});
+        for (int slot = 1; slot < 8; ++slot) {
+            QCOMPARE(restored.hotCuePositions().at(slot).toLongLong(), qint64{-1});
+        }
+        restored.loadRow(1);
+        QTRY_COMPARE(restored.currentTrackId(), QStringLiteral("hot-cue-track-1"));
+        for (const QVariant& position : restored.hotCuePositions()) {
+            QCOMPARE(position.toLongLong(), qint64{-1});
+        }
+    }
+    ag_player_destroy(secondCore);
+
+    QFile legacyStore(statePath);
+    QVERIFY(legacyStore.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    const QByteArray legacyPayload =
+        R"({"version":1,"tracks":{"hot-cue-track-0":{"cuePositionMs":125,"beatGridBpm":128}}})";
+    QCOMPARE(legacyStore.write(legacyPayload), legacyPayload.size());
+    legacyStore.close();
+
+    ag_player* legacyCore = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &legacyCore), AG_OK);
+    {
+        PlaybackController legacy(legacyCore, &model);
+        legacy.loadRow(0);
+        QTRY_COMPARE(legacy.currentTrackId(), QStringLiteral("hot-cue-track-0"));
+        QCOMPARE(legacy.cuePositionMs(), qint64{125});
+        QCOMPARE(legacy.beatGridBpm(), 128.0);
+        QCOMPARE(legacy.hotCuePositions().size(), 8);
+        for (const QVariant& position : legacy.hotCuePositions()) {
+            QCOMPARE(position.toLongLong(), qint64{-1});
+        }
+    }
+    ag_player_destroy(legacyCore);
+
+    QVERIFY(QFile::remove(statePath) || !QFile::exists(statePath));
+    QCoreApplication::setOrganizationName(oldOrganization);
+    QCoreApplication::setApplicationName(oldApplication);
+    QStandardPaths::setTestModeEnabled(false);
+}
+
+void PlaybackControllerTest::cuePlayFailureKeepsReleaseContract()
+{
+    const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(!fixture.isEmpty());
+    LibraryModel model;
+    TrackRecord track;
+    track.trackId = QStringLiteral("cue-play-failure");
+    track.path = fixture;
+    track.available = true;
+    QVERIFY(model.append(track));
+
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2'048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core, &model);
+        controller.loadRow(0);
+        QTRY_COMPARE(controller.currentTrackId(), track.trackId);
+        controller.seek(420);
+        controller.cuePress();
+        controller.cueRelease();
+        controller.cuePress();
+        QVERIFY(controller.cueAuditioning());
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+
+        QCOMPARE(ag_player_simulate_device_loss(core), AG_OK);
+        controller.play();
+        QVERIFY(controller.cueAuditioning());
+        controller.cueRelease();
+        QVERIFY(!controller.cueAuditioning());
+    }
+    ag_player_destroy(core);
+}
+
+void PlaybackControllerTest::cueCancellationAndTrackChangeInvalidateHeldCue()
+{
+    const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(!fixture.isEmpty());
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    LibraryModel model;
+    for (int index = 0; index < 2; ++index) {
+        TrackRecord track;
+        track.trackId = QStringLiteral("cue-track-%1").arg(index);
+        track.path = directory.filePath(QStringLiteral("cue-%1.wav").arg(index));
+        QVERIFY(QFile::copy(fixture, track.path));
+        track.available = true;
+        QVERIFY(model.append(track));
+    }
+
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2'048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    {
+        PlaybackController controller(core, &model);
+        controller.playRow(0);
+        QTRY_COMPARE(controller.currentTrackId(), QStringLiteral("cue-track-0"));
+        controller.pause();
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        controller.seek(240);
+        controller.cuePress();
+        controller.cueRelease();
+        controller.cuePress();
+        QVERIFY(controller.cueAuditioning());
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+
+        controller.cancelCue();
+        QVERIFY(!controller.cueAuditioning());
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        QVERIFY(qAbs(controller.positionMs() - qint64{240}) <= 2);
+        controller.cueRelease();
+        QTest::qWait(PlaybackController::PollIntervalMs * 2);
+        QCOMPARE(controller.state(), PlaybackController::Paused);
+
+        controller.cuePress();
+        QVERIFY(controller.cueAuditioning());
+        controller.playRow(1);
+        QTRY_COMPARE(controller.currentTrackId(), QStringLiteral("cue-track-1"));
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+        QVERIFY(!controller.cueAuditioning());
+        const qint64 newTrackPosition = controller.positionMs();
+        controller.cueRelease();
+        QTest::qWait(PlaybackController::PollIntervalMs * 3);
+        QCOMPARE(controller.currentTrackId(), QStringLiteral("cue-track-1"));
+        QCOMPARE(controller.state(), PlaybackController::Playing);
+        QVERIFY(controller.positionMs() >= newTrackPosition);
+
+        controller.seek(700);
+        controller.cuePress();
+        QVERIFY(!controller.cueAuditioning());
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        QVERIFY(qAbs(controller.positionMs()) <= 2);
+        QCOMPARE(controller.cuePositionMs(), qint64{-1});
+        controller.cueRelease();
+
+        controller.playRow(0);
+        QTRY_COMPARE(controller.currentTrackId(), QStringLiteral("cue-track-0"));
+        controller.pause();
+        QTRY_COMPARE(controller.state(), PlaybackController::Paused);
+        controller.seek(240);
+        controller.cuePress();
+        QVERIFY(controller.cueAuditioning());
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
+        QCOMPARE(ag_player_next(core), AG_OK);
+        controller.cueRelease();
+        QTRY_COMPARE(controller.currentTrackId(), QStringLiteral("cue-track-1"));
+        QTRY_COMPARE(controller.state(), PlaybackController::Playing);
     }
     ag_player_destroy(core);
 }

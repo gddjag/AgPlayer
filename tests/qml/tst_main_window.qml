@@ -10,6 +10,7 @@ TestCase {
     when: windowShown
 
     property var mainWindow: null
+    property var suiteWindowState: null
     property var task4StateSnapshot: null
     property var task4TemporaryTagKeys: []
     Component {
@@ -414,9 +415,46 @@ TestCase {
         mainWindow = testMainWindow
         verify(mainWindow, "Failed to create Main window")
         wait(50)
+        suiteWindowState = {
+            "width": mainWindow.width,
+            "height": mainWindow.height,
+            "visibility": mainWindow.visibility,
+            "playerShellMode": SettingsController.playerShellMode,
+            "windowLayoutTheme": SettingsController.windowLayoutTheme,
+            "playback": mainWindow.playback,
+            "videoPlayback": mainWindow.videoPlayback
+        }
+    }
+
+    function restoreMainWindowState() {
+        if (!mainWindow || !suiteWindowState)
+            return
+
+        var settingsWindow = findChild(mainWindow, "settingsWindow")
+        if (settingsWindow && settingsWindow.visible)
+            settingsWindow.close()
+        if (mainWindow.videoFullscreen)
+            mainWindow.exitVideoFullscreen()
+        mainWindow.playback = suiteWindowState.playback
+        mainWindow.videoPlayback = suiteWindowState.videoPlayback
+        PlaybackController.pause()
+        SettingsController.playerShellMode = suiteWindowState.playerShellMode
+        SettingsController.windowLayoutTheme = suiteWindowState.windowLayoutTheme
+
+        if (suiteWindowState.visibility === Window.Maximized)
+            mainWindow.showMaximized()
+        else
+            mainWindow.showNormal()
+        if (suiteWindowState.visibility !== Window.Maximized) {
+            mainWindow.width = suiteWindowState.width
+            mainWindow.height = suiteWindowState.height
+        }
+        mainWindow.requestActivate()
+        wait(0)
     }
 
     function init() {
+        restoreMainWindowState()
         failOnWarning(/.?/)
         var filter = findChild(mainWindow, "filterModel")
         task4StateSnapshot = {
@@ -490,24 +528,25 @@ TestCase {
     function cleanup() {
         for (var index = 0; index < task4TemporaryTagKeys.length; ++index)
             TagModel.removeTag(task4TemporaryTagKeys[index])
-        if (!task4StateSnapshot)
-            return
-        var filter = findChild(mainWindow, "filterModel")
-        if (filter) {
-            filter.tagKey = task4StateSnapshot.tagKey
-            filter.category = task4StateSnapshot.category
-            filter.resourceFolder = task4StateSnapshot.resourceFolder
-            filter.searchText = task4StateSnapshot.searchText
-            filter.exactRating = task4StateSnapshot.exactRating
-            filter.minBpm = task4StateSnapshot.minBpm
-            filter.maxBpm = task4StateSnapshot.maxBpm
+        if (task4StateSnapshot) {
+            var filter = findChild(mainWindow, "filterModel")
+            if (filter) {
+                filter.tagKey = task4StateSnapshot.tagKey
+                filter.category = task4StateSnapshot.category
+                filter.resourceFolder = task4StateSnapshot.resourceFolder
+                filter.searchText = task4StateSnapshot.searchText
+                filter.exactRating = task4StateSnapshot.exactRating
+                filter.minBpm = task4StateSnapshot.minBpm
+                filter.maxBpm = task4StateSnapshot.maxBpm
+            }
+            TagModel.selectedKey = task4StateSnapshot.selectedTagKey
+            SettingsController.listWaveformThumbnailMode =
+                    task4StateSnapshot.thumbnailMode
+            SettingsController.listWaveformThumbnailEnabled =
+                    task4StateSnapshot.thumbnailEnabled
+            task4StateSnapshot = null
         }
-        TagModel.selectedKey = task4StateSnapshot.selectedTagKey
-        SettingsController.listWaveformThumbnailMode =
-                task4StateSnapshot.thumbnailMode
-        SettingsController.listWaveformThumbnailEnabled =
-                task4StateSnapshot.thumbnailEnabled
-        task4StateSnapshot = null
+        restoreMainWindowState()
     }
 
     function countObjectsNamed(parentObject, expectedName) {
@@ -1569,6 +1608,7 @@ TestCase {
                    LibraryModel.data(LibraryModel.index(playableIndex, 0),
                                      LibraryModel.TrackIdRole))
         list.destroy()
+        PlaybackController.pause()
         SettingsController.listWaveformThumbnailEnabled = previousEnabled
     }
 
@@ -2369,6 +2409,44 @@ TestCase {
         compare(typeof SettingsController.playButtonRgbGlow, "undefined")
     }
 
+    function test_play_button_tracks_real_playback_state() {
+        mainWindow.importFiles([testAudioUrl])
+        tryVerify(function() { return !ImportController.busy }, 5000)
+        var playablePath = decodeURIComponent(testAudioUrl.toString()
+                                              .replace(/^file:\/\/\//, ""))
+        var playableIndex = -1
+        for (var row = 0; row < LibraryModel.count; ++row) {
+            var path = String(LibraryModel.data(LibraryModel.index(row, 0),
+                                                LibraryModel.PathRole))
+                    .replace(/\\/g, "/")
+            if (path.toLowerCase() === playablePath.toLowerCase()) {
+                playableIndex = row
+                break
+            }
+        }
+        verify(playableIndex >= 0)
+        var play = findChild(mainWindow, "playPauseButton")
+        var body = findChild(mainWindow, "playButtonBody")
+        verify(play && body)
+
+        PlaybackController.playRow(playableIndex)
+        tryCompare(PlaybackController, "state", PlaybackController.Playing,
+                   5000)
+        verify(play.icon.source.toString().endsWith("/pause-fill.svg"))
+        compare(play.Accessible.name, qsTr("暂停"))
+        compare(body.border.color.toString(),
+                Theme.playRingPlaying.toString())
+
+        PlaybackController.pause()
+        tryVerify(function() {
+            return PlaybackController.state !== PlaybackController.Playing
+        }, 1000)
+        verify(play.icon.source.toString().endsWith("/play-fill.svg"))
+        compare(play.Accessible.name, qsTr("播放"))
+        compare(body.border.color.toString(),
+                Theme.playRingPaused.toString())
+    }
+
     function test_volume_control_uses_compact_white_handle_and_percentage() {
         var mute = findChild(mainWindow, "muteButton")
         var slider = findChild(mainWindow, "volumeSlider")
@@ -2400,8 +2478,9 @@ TestCase {
                         mainWindow.contentItem, controls.width / 2, 0).x
             var playCenter = play.mapToItem(
                         mainWindow.contentItem, play.width / 2, 0).x
-            compare(Math.round(playCenter), Math.round(controlsCenter),
-                    "the play button must stay centered in the player")
+            verify(Math.abs(playCenter - controlsCenter) <= 0.5,
+                   "the play button must stay centered to the nearest pixel: "
+                   + "delta=" + (playCenter - controlsCenter))
         }
 
         wait(300)

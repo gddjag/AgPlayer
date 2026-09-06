@@ -838,13 +838,16 @@ ListView {
                         }
                     }
                 }
-                TapHandler {
+                MouseArea {
+                    anchors.fill: parent
                     acceptedButtons: Qt.LeftButton
-                    gesturePolicy: TapHandler.ReleaseWithinBounds
-                    onTapped: root.updateSelection(rowItem.trackId,
-                                                   rowItem.index,
-                                                   point.modifiers)
-                    onDoubleTapped: {
+                    preventStealing: false
+                    onClicked: function(mouse) {
+                        root.updateSelection(rowItem.trackId,
+                                             rowItem.index,
+                                             mouse.modifiers)
+                    }
+                    onDoubleClicked: {
                         if (rowItem.available) {
                             PlaybackController.playTrackIds(
                                         root.visibleTrackIds(), rowItem.trackId)
@@ -923,14 +926,16 @@ ListView {
                         provider: root.thumbnailProvider
                     }
                 }
-                TapHandler {
+                MouseArea {
                     objectName: "singleWindowWaveformActivation"
+                    anchors.fill: parent
                     acceptedButtons: Qt.LeftButton
-                    gesturePolicy: TapHandler.ReleaseWithinBounds
-                    onTapped: root.updateSelection(rowItem.trackId,
-                                                   rowItem.index,
-                                                   point.modifiers)
-                    onDoubleTapped: {
+                    onClicked: function(mouse) {
+                        root.updateSelection(rowItem.trackId,
+                                             rowItem.index,
+                                             mouse.modifiers)
+                    }
+                    onDoubleClicked: {
                         if (rowItem.available) {
                             PlaybackController.playTrackIds(
                                         root.visibleTrackIds(), rowItem.trackId)

@@ -156,16 +156,6 @@ private:
     int seek_count_{};
 };
 
-void waitForBufferedFrames(agplayer::AudioEngine& engine,
-                           const std::size_t minimum)
-{
-    for (int attempt = 0; attempt < 20'000; ++attempt) {
-        if (engine.buffered_frames() >= minimum) return;
-        std::this_thread::yield();
-    }
-    assert(false && "decode thread did not prepare PCM");
-}
-
 constexpr double kMeterFloorDb = -120.0;
 
 bool waitForBufferedFrames(agplayer::AudioEngine& engine,
@@ -984,7 +974,8 @@ int main(const int argc, char** argv)
         agplayer::AudioEngine engine(agplayer::AudioBackend::Manual, 4'096U);
         assert(engine.load_stream(stream) == AG_OK);
         assert(engine.play() == AG_OK);
-        waitForBufferedFrames(engine, 2'048U);
+        assert(waitForBufferedFrames(engine, 2'048U,
+                                     std::chrono::milliseconds(2'000)));
 
         TimelineBarrier barrier;
         barrier.blockNext(false);
@@ -1023,7 +1014,8 @@ int main(const int argc, char** argv)
         fastSeek.join();
         assert(seekDone.load(std::memory_order_acquire));
 
-        waitForBufferedFrames(engine, 512U);
+        assert(waitForBufferedFrames(engine, 512U,
+                                     std::chrono::milliseconds(2'000)));
         barrier.blockNext(false);
         std::thread deviceWriter([&] { engine.simulate_device_loss(); });
         barrier.waitUntilEntered();

@@ -111,6 +111,7 @@ private:
 class NativeWorkerBackend final : public WorkerBackend {
 public:
     BackendResult probe(const QJsonObject& payload) override;
+    BackendResult probeCancellable(const QJsonObject& payload, const CancellationToken& cancelled) override;
     BackendResult separate(const QJsonObject& payload,
                            const CancellationToken& cancelled,
                            const ProgressCallback& progress) override;

@@ -68,6 +68,7 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/restore-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/save-3-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/search-line.svg
+    ${CMAKE_SOURCE_DIR}/assets/icons/file-search-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/scissors-cut-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/settings-3-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/shuffle-arrows-line.svg
@@ -133,7 +134,8 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/theme/Theme.qml
         qml/AgPlayer/components/TitleBar.qml
         qml/AgPlayer/components/IntegratedPlayerShell.qml
-        qml/AgPlayer/components/RollingPlayerShell.qml
+    qml/AgPlayer/components/RollingPlayerShell.qml
+    qml/AgPlayer/components/BeatGridOverlay.qml
         qml/AgPlayer/components/WaveSelectionOverlay.qml
         qml/AgPlayer/components/WaveformSession.qml
         qml/AgPlayer/components/SharedWaveformView.qml

@@ -64,6 +64,11 @@ class VocalSeparationController final : public QObject {
     Q_PROPERTY(QString modelStorageDirectory READ modelStorageDirectory
                    NOTIFY modelStorageDirectoryChanged)
     Q_PROPERTY(bool runtimeReady READ runtimeReady NOTIFY startEligibilityChanged)
+    Q_PROPERTY(bool cudaRuntimeReady READ cudaRuntimeReady NOTIFY startEligibilityChanged)
+    Q_PROPERTY(QString actualProvider READ actualProvider NOTIFY actualExecutionChanged)
+    Q_PROPERTY(QString actualDevice READ actualDevice NOTIFY actualExecutionChanged)
+    Q_PROPERTY(QString fallbackReason READ fallbackReason NOTIFY actualExecutionChanged)
+    Q_PROPERTY(double outputGain READ outputGain NOTIFY actualExecutionChanged)
     Q_PROPERTY(bool canStart READ canStart NOTIFY startEligibilityChanged)
     Q_PROPERTY(QString startDisabledReason READ startDisabledReason
                    NOTIFY startEligibilityChanged)
@@ -76,6 +81,12 @@ class VocalSeparationController final : public QObject {
                    NOTIFY resultPreviewChanged)
 
 public:
+    bool cudaRuntimeReady() const { return cudaRuntime_->ready(); }
+    QString actualProvider() const { return actualProvider_; }
+    QString actualDevice() const { return actualDevice_; }
+    QString fallbackReason() const { return fallbackReason_; }
+    double outputGain() const { return outputGain_; }
+    Q_INVOKABLE bool configureGpuRuntime(const QString& modelId);
     enum class ModelState {
         NotInstalled,
         PendingVerification,
@@ -189,6 +200,7 @@ public:
     Q_INVOKABLE bool selectModelDirectory(const QUrl& directory);
 
 signals:
+    void actualExecutionChanged();
     void inputInfoChanged();
     void modelsChanged();
     void selectedModelIdChanged();
@@ -343,6 +355,10 @@ private:
     QNetworkAccessManager network_;
     std::unique_ptr<VocalSeparationDownloader> downloader_;
     std::unique_ptr<ExternalSeparationRuntime> externalRuntime_;
+    std::unique_ptr<CudaSeparationRuntime> cudaRuntime_;
+    QString actualProvider_, actualDevice_, fallbackReason_;
+    double outputGain_ = 1.0;
+    QHash<QString, QString> validatedGpuProviders_;
     QFileSystemWatcher modelDirectoryWatcher_;
     QTimer modelDirectoryScanTimer_;
     QFutureWatcher<VerificationResult>* verificationWatcher_ = nullptr;

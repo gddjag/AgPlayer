@@ -22,6 +22,7 @@
 #include "replay_gain_scanner.hpp"
 #include "playlist_model.hpp"
 #include "settings_controller.hpp"
+#include "rolling_keyboard_handler.hpp"
 #include "tag_model.hpp"
 #include "tag_filter_model.hpp"
 #include "terrain_reactor_item.hpp"
@@ -59,6 +60,7 @@ void register_agplayer_qml_types(LibraryModel* library,
                                  VocalSeparationController* vocalSeparation)
 {
     static PlaylistModel fallbackPlaylistModel;
+    qmlRegisterType<RollingKeyboardHandler>("AgPlayer", 1, 0, "RollingKeyboardHandler");
     static EqualizerController fallbackEqualizer(nullptr);
     PlaylistModel* const playlists = playlistModel != nullptr
         ? playlistModel : &fallbackPlaylistModel;

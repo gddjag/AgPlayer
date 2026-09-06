@@ -72,6 +72,7 @@ Rectangle {
     component WorkbenchButton: Button {
         id: control
         property bool primaryAction: false
+        property bool emphasizeSelection: false
         implicitHeight: 30
         leftPadding: 10
         rightPadding: 10
@@ -81,7 +82,8 @@ Rectangle {
         focusPolicy: Qt.StrongFocus
         background: Rectangle {
             radius: 5
-            color: control.primaryAction
+            color: control.emphasizeSelection && control.checked ? page.primary
+                   : control.primaryAction
                    ? (control.enabled ? page.primary : page.divider)
                    : control.down ? Theme.surfacePressed
                                   : control.checked ? Theme.accentSoft
@@ -95,7 +97,8 @@ Rectangle {
         }
         contentItem: Text {
             text: control.text
-            color: control.enabled ? page.textPrimary : page.muted
+            color: control.emphasizeSelection && control.checked ? "white"
+                   : control.enabled ? page.textPrimary : page.muted
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
@@ -1156,8 +1159,30 @@ Rectangle {
                                          objectName: "separationModelAction-" + cardData.id
                                          Layout.fillWidth: true
                                          Layout.bottomMargin: 4
-                                          spacing: 4
-                                          Item { Layout.fillWidth: true; Layout.minimumWidth: 0 }
+                                         spacing: 4
+                                         Item { Layout.fillWidth: true; Layout.minimumWidth: 0 }
+                                        WorkbenchButton {
+                                            objectName: "separationConfigureGpu-" + cardData.id
+                                            visible: !!cardData.gpuRuntimeConfigurable
+                                                     && cardData.state === VocalSeparationController.Installed
+                                            implicitHeight: 24
+                                            leftPadding: 6
+                                            rightPadding: 6
+                                            text: cardData.gpuRuntimeReady ? qsTr("检查 GPU") : qsTr("CUDA · 1.51 GB")
+                                            Accessible.name: qsTr("配置独立 GPU 运行环境")
+                                            ToolTip.visible: hovered
+                                            ToolTip.text: (cardData.gpuReason || "")
+                                                          + qsTr("\nNVIDIA CUDA 固定版本独立安装，不修改现有 Python/CPU 环境。约 1.51 GB 下载；失败自动尝试备用线路。安装完成不代表模型已通过 GPU 推理验证。")
+                                            enabled: !page.contextLocked && !VocalSeparationController.downloadBusy
+                                            onClicked: {
+                                                if (cardData.gpuRuntimeReady)
+                                                    VocalSeparationController.probeDevices()
+                                                else if (!VocalSeparationController.configureGpuRuntime(cardData.id)) {
+                                                    configurationDiagnostic.text = VocalSeparationController.error
+                                                    configurationDialog.open()
+                                                }
+                                            }
+                                        }
                                           WorkbenchButton {
                                               visible: cardData.state === VocalSeparationController.Installed
                                                        || cardData.state === VocalSeparationController.ModelFailed
@@ -1770,7 +1795,29 @@ Rectangle {
                         color: page.surface; border.color: page.border; radius: 7
                         ColumnLayout {
                             anchors.fill: parent; anchors.margins: 10; spacing: 4
-                            Label { text: qsTr("输出设置"); color: page.textPrimary; font.bold: true; font.pixelSize: Theme.fontSizeBody }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Label { text: qsTr("输出设置"); color: page.textPrimary; font.bold: true; font.pixelSize: Theme.fontSizeBody }
+                                Label {
+                                    objectName: "separationActualExecution"
+                                    Layout.fillWidth: true
+                                    Layout.minimumWidth: 0
+                                    text: VocalSeparationController.actualProvider
+                                          ? qsTr("实际：") + VocalSeparationController.actualDevice
+                                              + " · " + VocalSeparationController.actualProvider
+                                              + (VocalSeparationController.fallbackReason ? qsTr(" · 已回退") : "")
+                                              + (VocalSeparationController.outputGain < 0.999
+                                                 ? qsTr(" · 统一增益 ") + (VocalSeparationController.outputGain * 100).toFixed(1) + "%" : "")
+                                          : qsTr("尚未开始推理")
+                                    color: page.muted
+                                    font.pixelSize: Theme.fontSizeCaption
+                                    horizontalAlignment: Text.AlignRight
+                                    elide: Text.ElideRight
+                                    ToolTip.visible: executionHover.hovered
+                                    ToolTip.text: text + "\n" + (VocalSeparationController.fallbackReason || qsTr("设备选中不代表模型已通过 GPU 推理验证"))
+                                    HoverHandler { id: executionHover }
+                                }
+                            }
                             RowLayout {
                                 Layout.fillWidth: true
                                 Label { text: qsTr("格式"); color: page.muted; Layout.preferredWidth: 68; font.pixelSize: Theme.fontSizeCaption }
@@ -1822,10 +1869,11 @@ Rectangle {
                                          objectName: "separationDevice-" + deviceKey
                                          implicitHeight: 24
                                         text: modelData.mode === VocalSeparationController.Auto
-                                              ? (page.cpuCompatibilityModel ? qsTr("自动 · CPU") : qsTr("自动"))
+                                              ? qsTr("自动")
                                               : modelData.mode === VocalSeparationController.GPU
                                                 ? qsTr("GPU") : qsTr("CPU")
                                         checkable: true
+                                        emphasizeSelection: true
                                         checked: VocalSeparationController.deviceMode === modelData.mode
                                          enabled: !page.contextLocked && modelData.available
                                          Accessible.name: qsTr("处理设备：") + text; Accessible.role: Accessible.RadioButton

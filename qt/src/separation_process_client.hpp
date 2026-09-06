@@ -6,6 +6,8 @@
 #include <QStringList>
 #include <QTimer>
 
+#include <memory>
+
 namespace agplayer::separation {
 enum class ProtocolType;
 }
@@ -50,6 +52,10 @@ signals:
     void staleMessageIgnored(const QString& requestId);
 
 private:
+#ifdef Q_OS_WIN
+    struct WindowsJob;
+#endif
+
     bool begin(agplayer::separation::ProtocolType type,
                const QJsonObject& payload);
     void setState(State state);
@@ -81,4 +87,9 @@ private:
     bool completing_ = false;
     bool failureEmitted_ = false;
     bool shutdownSent_ = false;
+    QString pendingFailure_;
+    quint64 processGeneration_ = 0;
+#ifdef Q_OS_WIN
+    std::unique_ptr<WindowsJob> windowsJob_;
+#endif
 };

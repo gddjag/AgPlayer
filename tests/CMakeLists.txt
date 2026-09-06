@@ -832,6 +832,19 @@ set_tests_properties(pitch_shifter_test PROPERTIES
         "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
+add_executable(rolling_keyboard_handler_test
+    qt/rolling_keyboard_handler_test.cpp
+    ../qt/src/rolling_keyboard_handler.cpp
+    ../qt/src/rolling_keyboard_handler.hpp
+)
+set_target_properties(rolling_keyboard_handler_test PROPERTIES AUTOMOC ON)
+target_include_directories(rolling_keyboard_handler_test PRIVATE "${CMAKE_SOURCE_DIR}/qt/src")
+target_link_libraries(rolling_keyboard_handler_test PRIVATE Qt6::Quick Qt6::Test)
+add_test(NAME rolling_keyboard_handler_test COMMAND rolling_keyboard_handler_test)
+set_tests_properties(rolling_keyboard_handler_test PROPERTIES TIMEOUT 15
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic"
+    ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
+
 add_executable(metadata_writer_test
     core/metadata_writer_test.cpp
 )
@@ -952,7 +965,7 @@ foreach(qt_test IN ITEMS
     set_tests_properties(${qt_test} PROPERTIES
         TIMEOUT 10
         ENVIRONMENT_MODIFICATION
-            "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<IF:$<CONFIG:Debug>,debug/bin,bin>"
     )
 endforeach()
 
@@ -1146,7 +1159,9 @@ add_dependencies(separation_process_client_test separation_controller_test_worke
 agplayer_enable_warnings(separation_process_client_test)
 add_test(NAME separation_process_client_test COMMAND separation_process_client_test)
 set_tests_properties(separation_process_client_test PROPERTIES
-    TIMEOUT 15
+    # Aggregate budget for roughly twenty real Windows process launches.
+    # Per-action cancellation/event-loop deadlines remain asserted in the test.
+    TIMEOUT 60
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
 )
@@ -1740,7 +1755,7 @@ set_tests_properties(playback_controller_test PROPERTIES
     TIMEOUT 30
     ENVIRONMENT "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
-        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/bin"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<IF:$<CONFIG:Debug>,debug/bin,bin>"
 )
 set_tests_properties(video_playback_controller_test PROPERTIES
     TIMEOUT 60

@@ -190,7 +190,7 @@ TestCase {
         verify(right.x + right.width <= right.parent.width + 0.5)
     }
 
-    function test_losslessShellUsesReferenceTitleAndNavigationGeometryOnly() {
+    function test_toolNavigationKeepsGeometryWhenSwitchingTools() {
         AudioToolsController.selectTool(5)
         const toolsWindow = createTemporaryObject(toolsWindowComponent, testCase)
         verify(toolsWindow)
@@ -200,8 +200,21 @@ TestCase {
         const firstTab = findChild(toolsWindow.contentItem, "audioToolNav_0")
         verify(titleBar && navigation && firstTab)
         compare(titleBar.height, 50)
-        compare(navigation.height, 56)
-        verify(firstTab.width >= 156 && firstTab.width <= 162)
+        compare(navigation.height, Theme.settingsRowHeight)
+        const initialWidth = firstTab.width
+        const initialFont = firstTab.labelPixelSize
+        const losslessTab = findChild(navigation, "audioToolNav_5")
+        verify(losslessTab)
+        verify(losslessTab.iconSource.toString() !== firstTab.iconSource.toString())
+        for (let tool of [0, 4, 1, 2, 3, 5]) {
+            AudioToolsController.selectTool(tool)
+            wait(0)
+            compare(navigation.height, Theme.settingsRowHeight)
+            fuzzyCompare(firstTab.width, initialWidth, 0.5)
+            compare(firstTab.labelPixelSize, initialFont)
+            compare(firstTab.underlineSelection, false)
+            compare(findChild(navigation, "audioToolNav_" + tool).selected, true)
+        }
 
         AudioToolsController.selectTool(0)
         wait(0)

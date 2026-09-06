@@ -5,8 +5,126 @@
 #include <QUuid>
 
 #include <algorithm>
+#include <utility>
+
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <qt_windows.h>
+#endif
 
 using namespace agplayer::separation;
+
+#ifdef Q_OS_WIN
+namespace {
+
+QString windowsErrorMessage(DWORD error)
+{
+    wchar_t* buffer = nullptr;
+    const DWORD length = FormatMessageW(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM
+            | FORMAT_MESSAGE_IGNORE_INSERTS,
+        nullptr, error, 0, reinterpret_cast<wchar_t*>(&buffer), 0, nullptr);
+    const QString detail = length > 0
+        ? QString::fromWCharArray(buffer, static_cast<qsizetype>(length)).trimmed()
+        : QString::number(error);
+    if (buffer) LocalFree(buffer);
+    return detail;
+}
+
+} // namespace
+
+struct SeparationProcessClient::WindowsJob {
+    ~WindowsJob()
+    {
+        releaseLaunchAttributes();
+        if (handle) CloseHandle(handle);
+    }
+
+    bool initialize(QString* error)
+    {
+        handle = CreateJobObjectW(nullptr, nullptr);
+        if (!handle) return fail(error, QStringLiteral("CreateJobObject"));
+
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
+        limits.BasicLimitInformation.LimitFlags =
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        if (!SetInformationJobObject(handle, JobObjectExtendedLimitInformation,
+                                     &limits, sizeof(limits))) {
+            return fail(error, QStringLiteral("SetInformationJobObject"));
+        }
+
+        SIZE_T bytes = 0;
+        InitializeProcThreadAttributeList(nullptr, 1, 0, &bytes);
+        if (bytes == 0) {
+            return fail(error,
+                        QStringLiteral("InitializeProcThreadAttributeList(size)"));
+        }
+        attributeList = static_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(
+            HeapAlloc(GetProcessHeap(), 0, bytes));
+        if (!attributeList) {
+            if (error) *error = QStringLiteral("HeapAlloc: insufficient memory");
+            return false;
+        }
+        if (!InitializeProcThreadAttributeList(attributeList, 1, 0, &bytes)) {
+            return fail(error, QStringLiteral("InitializeProcThreadAttributeList"));
+        }
+        attributeListInitialized = true;
+        if (!UpdateProcThreadAttribute(attributeList, 0,
+                                       PROC_THREAD_ATTRIBUTE_JOB_LIST, &handle,
+                                       sizeof(handle), nullptr, nullptr)) {
+            return fail(error, QStringLiteral("UpdateProcThreadAttribute(JOB_LIST)"));
+        }
+        return true;
+    }
+
+    void apply(QProcess::CreateProcessArguments* arguments)
+    {
+        startupInfo.StartupInfo = *arguments->startupInfo;
+        startupInfo.StartupInfo.cb = sizeof(startupInfo);
+        startupInfo.lpAttributeList = attributeList;
+        arguments->startupInfo = &startupInfo.StartupInfo;
+        arguments->flags |= EXTENDED_STARTUPINFO_PRESENT;
+    }
+
+    void releaseLaunchAttributes()
+    {
+        if (!attributeList) return;
+        if (attributeListInitialized)
+            DeleteProcThreadAttributeList(attributeList);
+        HeapFree(GetProcessHeap(), 0, attributeList);
+        attributeList = nullptr;
+        attributeListInitialized = false;
+        startupInfo.lpAttributeList = nullptr;
+    }
+
+    void terminate()
+    {
+        if (!handle || terminationRequested) return;
+        terminationRequested = true;
+        TerminateJobObject(handle, ERROR_PROCESS_ABORTED);
+    }
+
+private:
+    bool fail(QString* error, const QString& operation)
+    {
+        const DWORD code = GetLastError();
+        if (error) {
+            *error = QStringLiteral("%1: %2 (Windows error %3)")
+                         .arg(operation, windowsErrorMessage(code))
+                         .arg(code);
+        }
+        return false;
+    }
+
+    HANDLE handle = nullptr;
+    LPPROC_THREAD_ATTRIBUTE_LIST attributeList = nullptr;
+    STARTUPINFOEXW startupInfo{};
+    bool attributeListInitialized = false;
+    bool terminationRequested = false;
+};
+#endif
 
 SeparationProcessClient::SeparationProcessClient(
     QString program, QStringList arguments, Deadlines deadlines, QObject* parent)
@@ -52,7 +170,14 @@ SeparationProcessClient::SeparationProcessClient(
     connect(&process_, &QProcess::errorOccurred, this,
             [this](QProcess::ProcessError error) {
         if (error == QProcess::FailedToStart && !completing_) {
-            finishFailure(tr("无法启动分离 Worker：%1").arg(process_.errorString()));
+            const quint64 generation = processGeneration_;
+            const QString message = tr("无法启动分离 Worker：%1")
+                                        .arg(process_.errorString());
+            QMetaObject::invokeMethod(this, [this, generation, message] {
+                if (generation != processGeneration_ || failureEmitted_)
+                    return;
+                finishFailure(message);
+            }, Qt::QueuedConnection);
         }
     });
     connect(&process_, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
@@ -61,7 +186,12 @@ SeparationProcessClient::SeparationProcessClient(
         heartbeatTimer_.stop();
         exitTimer_.stop();
         buffer_.clear();
-        if (!timeoutFailure_.isEmpty()) {
+#ifdef Q_OS_WIN
+        windowsJob_.reset();
+#endif
+        if (!pendingFailure_.isEmpty()) {
+            finishFailure(pendingFailure_);
+        } else if (!timeoutFailure_.isEmpty()) {
             const QString message = std::exchange(timeoutFailure_, {});
             finishFailure(message);
         } else if (userCancellation_) {
@@ -80,8 +210,10 @@ SeparationProcessClient::~SeparationProcessClient()
     process_.disconnect(this);
     if (process_.state() != QProcess::NotRunning) {
         terminateProcess();
-        process_.waitForFinished(1000);
     }
+#ifdef Q_OS_WIN
+    windowsJob_.reset();
+#endif
 }
 
 SeparationProcessClient::State SeparationProcessClient::state() const noexcept
@@ -96,7 +228,8 @@ bool SeparationProcessClient::isProcessRunning() const noexcept
 
 bool SeparationProcessClient::canAcceptRequest() const noexcept
 {
-    return (state_ == Stopped || state_ == Error) && !isProcessRunning();
+    return (state_ == Stopped || state_ == Error) && !isProcessRunning()
+        && pendingFailure_.isEmpty();
 }
 
 QString SeparationProcessClient::activeRequestId() const
@@ -125,11 +258,11 @@ bool SeparationProcessClient::startJob(const QJsonObject& payload)
 bool SeparationProcessClient::begin(ProtocolType type,
                                     const QJsonObject& payload)
 {
-    if (program_.isEmpty() || (state_ != Stopped && state_ != Error)
-        || process_.state() != QProcess::NotRunning) {
+    if (program_.isEmpty() || !canAcceptRequest()) {
         return false;
     }
     pendingType_ = type;
+    ++processGeneration_;
     pendingPayload_ = payload;
     activeRequestId_ = QStringLiteral("request-")
         + QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -138,12 +271,30 @@ bool SeparationProcessClient::begin(ProtocolType type,
     completing_ = false;
     failureEmitted_ = false;
     shutdownSent_ = false;
+    pendingFailure_.clear();
     buffer_.clear();
     process_.setProgram(program_);
     process_.setArguments(arguments_);
     process_.setProcessChannelMode(QProcess::SeparateChannels);
     setState(Starting);
+#ifdef Q_OS_WIN
+    windowsJob_ = std::make_unique<WindowsJob>();
+    QString jobError;
+    if (!windowsJob_->initialize(&jobError)) {
+        windowsJob_.reset();
+        finishFailure(tr("无法安全启动分离 Worker：%1").arg(jobError));
+        return true;
+    }
+    process_.setCreateProcessArgumentsModifier([this](
+            QProcess::CreateProcessArguments* arguments) {
+        windowsJob_->apply(arguments);
+    });
+#endif
     process_.start();
+#ifdef Q_OS_WIN
+    process_.setCreateProcessArgumentsModifier({});
+    if (windowsJob_) windowsJob_->releaseLaunchAttributes();
+#endif
     return true;
 }
 
@@ -284,16 +435,27 @@ void SeparationProcessClient::beginTimeoutFailure(const QString& message)
 void SeparationProcessClient::finishFailure(const QString& message)
 {
     if (failureEmitted_) return;
+    if (pendingFailure_.isEmpty()) {
+        pendingFailure_ = message;
+        helloTimer_.stop();
+        heartbeatTimer_.stop();
+        exitTimer_.stop();
+        timeoutFailure_.clear();
+        userCancellation_ = false;
+        completing_ = false;
+        setState(Error);
+    }
+    if (process_.state() != QProcess::NotRunning) {
+        terminateProcess();
+        return;
+    }
+#ifdef Q_OS_WIN
+    windowsJob_.reset();
+#endif
     failureEmitted_ = true;
-    helloTimer_.stop();
-    heartbeatTimer_.stop();
-    exitTimer_.stop();
-    timeoutFailure_.clear();
-    userCancellation_ = false;
-    completing_ = false;
-    setState(Error);
-    if (process_.state() != QProcess::NotRunning) terminateProcess();
-    emit failed(message, true);
+    const QString failure = std::exchange(pendingFailure_, {});
+    emit failed(failure, true);
+    emit requestAvailabilityChanged();
 }
 
 void SeparationProcessClient::finishCancellation()
@@ -317,15 +479,7 @@ void SeparationProcessClient::requestShutdown()
 void SeparationProcessClient::terminateProcess()
 {
 #ifdef Q_OS_WIN
-    // A Windows venv launcher owns a second Python process; cancelling only
-    // the launcher would leave inference and file writes running invisibly.
-    if (process_.state() != QProcess::NotRunning) {
-        QProcess terminateTree;
-        terminateTree.start(QStringLiteral("taskkill.exe"),
-            {QStringLiteral("/PID"), QString::number(process_.processId()),
-             QStringLiteral("/T"), QStringLiteral("/F")});
-        if (!terminateTree.waitForFinished(1500)) terminateTree.kill();
-    }
+    if (windowsJob_) windowsJob_->terminate();
 #endif
     process_.kill();
 }

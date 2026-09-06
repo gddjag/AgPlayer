@@ -60,6 +60,8 @@ add_library(agplayer_qt STATIC
     src/format_conversion_filter_model.hpp
     src/global_hotkey_manager.cpp
     src/global_hotkey_manager.hpp
+    src/rolling_keyboard_handler.cpp
+    src/rolling_keyboard_handler.hpp
     src/import_controller.cpp
     src/import_controller.hpp
     src/library_filter_model.cpp
@@ -162,7 +164,9 @@ add_library(agplayer_qt STATIC
 
 set_target_properties(agplayer_qt PROPERTIES AUTOMOC ON)
 qt_add_resources(agplayer_qt agplayer_separation_python
-    PREFIX "/separation" BASE "resources" FILES resources/external_separation_worker.py)
+    PREFIX "/separation" BASE "resources" FILES
+    resources/external_separation_worker.py
+    resources/cuda-runtime-manifest.json)
 if(BUILD_TESTING)
     target_compile_definitions(agplayer_qt PUBLIC
         AGPLAYER_VIDEO_FRAME_ITEM_TESTING=1
