@@ -10,8 +10,6 @@ AgPlayer 是一款以轻量、简洁为设计方向的本地音频播放器，�
 
 首个正式版本 **v1.0.0** 正在准备中，Windows 安装包尚未开放下载。后续正式安装包将按版本号发布到 GitHub Releases，并提供 R2 下载地址。
 
-R2 下载域名为 `download.agplayer.com`；当前尚未发布安装包。发布时先上传 EXE 附件，再发布 GitHub Release，工作流会自动同步到 R2；若发布后补充附件，在 Actions 的同步工作流中手动输入对应 tag 重跑。
-
 ## 主要特点
 
 - **四种波形显示模式**：纯色波形、频彩波形、RGB 渐变与动态频谱，从振幅和频段等不同角度观察音乐。
@@ -39,23 +37,17 @@ R2 下载域名为 `download.agplayer.com`；当前尚未发布安装包。发�
 
 ![AgPlayer 单窗口：音乐列表、标签面板与底部整曲波形](assets/images/player-single.png)
 
-### 迷你播放器
+## 六大音频工具
 
-小窗口也能完整聆听：保留封面、歌曲信息、可视化和常用播放控制，少占空间，专注音乐。
+从声音处理到文件整理，常用工具集中在一个窗口中。
 
-![AgPlayer 迷你播放器：封面、歌曲信息、频谱和播放按钮](assets/images/player-mini.png)
+![AgPlayer 六大音频工具卡片展示](docs/images/audio-tools-showcase.png)
 
-## Cloudflare Pages 自动部署配置
-
-此仓库包含官网静态页面和发布说明。网站使用 HTML、CSS 和原生 JavaScript；构建脚本仅依赖 Node.js 标准库。
-
-源文件为 `index.html`、`download.html`、`about.html` 和 `assets/`。构建只将这些文件复制到 `public/`，Cloudflare 仅发布该目录。
-
-Cloudflare Pages 项目 `agplayer` 已连接 GitHub 仓库 `gddjag/AgPlayer` 的 `main` 分支，并已完成首次部署。项目根目录为仓库根目录：
-
-- 构建命令：`node scripts/build-site.mjs`
-- 构建输出目录：`public`
-
-提交到 GitHub `main` 的网页更新会自动触发 Cloudflare 构建和部署，具体结果可在 Pages 项目中查看。
-
-仓库原有 `CNAME` 保留；官网通过 `agplayer.com` 和 `www.agplayer.com` 访问，Pages 地址 `agplayer.pages.dev` 也可使用。
+| 工具 | 主要用途 |
+| --- | --- |
+| 人声与伴奏分离 | 分离人声与伴奏，并按所选模型提取鼓组、贝斯等音轨，方便试听与导出。 |
+| 格式转换 | 批量转换常见音频格式，调整采样率、声道等参数，并可保留封面和元数据。 |
+| 音频编辑 | 在波形中选段、分割、裁剪，添加淡入淡出，调整播放速度与音调并导出音频。 |
+| 元数据修改 | 批量整理标题、艺术家、专辑、标签和封面，让音乐信息更完整。 |
+| 文件名处理 | 批量添加或移除前后缀、调整序号，先预览结果，再统一重命名。 |
+| 无损鉴别 | 结合频谱与音频特征分析疑似有损转码、升频等情况，为音源质量提供判断参考。 |
