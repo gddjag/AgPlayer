@@ -41,16 +41,16 @@ AgPlayer 是一款以轻量、简洁为设计方向的本地音频播放器，�
 
 ![AgPlayer 迷你播放器：封面、歌曲信息、频谱和播放按钮](assets/images/player-mini.png)
 
-## Cloudflare 自动部署配置
+## Cloudflare Pages 自动部署配置
 
 此仓库包含官网静态页面和发布说明。网站使用 HTML、CSS 和原生 JavaScript；构建脚本仅依赖 Node.js 标准库。
 
 源文件为 `index.html`、`download.html`、`about.html` 和 `assets/`。构建只将这些文件复制到 `public/`，Cloudflare 仅发布该目录。
 
-将 Cloudflare Workers 项目 `agplayer` 连接到 GitHub 仓库 `gddjag/AgPlayer`，生产分支设为 `main`，项目根目录使用仓库根目录：
+将 Cloudflare Pages 项目 `agplayer` 连接到 GitHub 仓库 `gddjag/AgPlayer`，生产分支设为 `main`，项目根目录使用仓库根目录：
 
 - 构建命令：`node scripts/build-site.mjs`
-- 部署命令：`npx wrangler deploy`
+- 构建输出目录：`public`
 
 连接并完成首次部署后，提交到 GitHub `main` 的网页更新将触发 Cloudflare 自动构建和部署。上述配置文件不代表线上部署已经完成，实际状态以 Cloudflare 构建结果为准。
 
