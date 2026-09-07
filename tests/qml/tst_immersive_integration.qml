@@ -310,6 +310,9 @@ TestCase {
             "rippleDecay": PlayerExperienceController.rippleDecay,
             "columnSize": PlayerExperienceController.columnSize,
             "columnOpacity": PlayerExperienceController.columnOpacity,
+            "columnInnerLight": PlayerExperienceController.columnInnerLight,
+            "columnLightSpill": PlayerExperienceController.columnLightSpill,
+            "columnLightRadius": PlayerExperienceController.columnLightRadius,
             "reactorBrightness": PlayerExperienceController.reactorBrightness,
             "rhythmStrength": PlayerExperienceController.rhythmStrength,
             "streamHighlightEnabled": PlayerExperienceController.streamHighlightEnabled,
@@ -784,6 +787,88 @@ TestCase {
                 PlayerExperienceController.Windowed)
     }
 
+    function test_local_glow_lifecycle_stays_unloaded_on_software_backend() {
+        mainWindow.immersiveRenderingEnabled = false
+        PlayerExperienceController.glowIntensity = 38
+        PlayerExperienceController.columnInnerLight = 100
+        PlayerExperienceController.columnLightSpill = 60
+        PlayerExperienceController.columnLightRadius = 100
+        PlayerExperienceController.materialMode = 0
+        PlayerExperienceController.immersiveMode =
+                PlayerExperienceController.TerrainReactor
+        PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
+
+        var coordinator = findChild(mainWindow, "immersiveCoordinator")
+        verify(coordinator)
+        tryCompare(coordinator, "attachedHostMode",
+                   PlayerExperienceController.Windowed, 2000)
+        var surface = coordinator.surface
+        verify(surface && surface.terrainItem)
+        compare(surface.terrainItem.renderStatus, TerrainReactorItem.Inactive)
+        compare(surface.localGlowLifecycleEligible, false)
+        compare(surface.localGlowRequested, false)
+        tryCompare(findChild(surface, "immersiveColumnGlowLoader"),
+                   "item", null, 1000)
+
+        mainWindow.immersiveRenderingEnabled = true
+        tryVerify(function() {
+            return surface.terrainItem
+                    && surface.terrainItem.renderStatus
+                       === TerrainReactorItem.SoftwareBackend
+        }, 6000)
+        tryCompare(surface, "localGlowLifecycleEligible", true, 1000)
+        compare(surface.localGlowRequested, false)
+        tryCompare(findChild(surface, "immersiveColumnGlowLoader"),
+                   "item", null, 1000)
+
+        PlayerExperienceController.immersiveMode = PlayerExperienceController.Off
+        tryCompare(surface, "active", false, 1000)
+        tryCompare(surface, "localGlowLifecycleEligible", false, 1000)
+        compare(findChild(surface, "immersiveColumnGlowLoader").item, null)
+
+        PlayerExperienceController.immersiveMode =
+                PlayerExperienceController.TerrainReactor
+        tryCompare(coordinator, "attachedHostMode",
+                   PlayerExperienceController.Windowed, 2000)
+        tryCompare(surface, "localGlowLifecycleEligible", true, 1000)
+
+        var immersiveWindow = findChild(mainWindow, "immersiveVisualWindow")
+        verify(immersiveWindow)
+        immersiveWindow.showMinimized()
+        tryCompare(surface, "hostExposed", false, 1500)
+        tryCompare(surface, "localGlowLifecycleEligible", false, 1000)
+        tryCompare(surface, "localGlowRequested", false, 1000)
+        tryCompare(findChild(surface, "immersiveColumnGlowLoader"),
+                   "item", null, 1000)
+
+        immersiveWindow.showNormal()
+        tryCompare(surface, "hostExposed", true, 1500)
+        tryCompare(surface, "localGlowLifecycleEligible", true, 1000)
+        compare(surface.localGlowRequested, false)
+        compare(findChild(surface, "immersiveColumnGlowLoader").item, null)
+
+        PlayerExperienceController.materialMode = 2
+        tryCompare(surface, "localGlowLifecycleEligible", false, 1000)
+        tryCompare(surface, "localGlowRequested", false, 1000)
+        tryCompare(findChild(surface, "immersiveColumnGlowLoader"),
+                   "item", null, 1000)
+
+        PlayerExperienceController.materialMode = 0
+        tryCompare(surface, "localGlowLifecycleEligible", true, 1000)
+        PlayerExperienceController.columnLightSpill = 0
+        tryCompare(surface, "localGlowLifecycleEligible", false, 1000)
+        compare(surface.localGlowRequested, false)
+        compare(findChild(surface, "immersiveColumnGlowLoader").item, null)
+
+        PlayerExperienceController.columnLightSpill = 60
+        tryCompare(surface, "localGlowLifecycleEligible", true, 1000)
+        PlayerExperienceController.glowIntensity = 0
+        tryCompare(surface, "localGlowLifecycleEligible", false, 1000)
+        tryCompare(surface, "localGlowRequested", false, 1000)
+        tryCompare(findChild(surface, "immersiveColumnGlowLoader"),
+                   "item", null, 1000)
+    }
+
     function test_windowed_immersive_host_exposes_native_move_region_only_before_fullscreen() {
         PlayerExperienceController.immersiveMode =
                 PlayerExperienceController.TerrainReactor
@@ -853,32 +938,29 @@ TestCase {
             var card = findChild(panel, "immersivePresetCard" + preset)
             verify(card)
             cards.push(card)
-            compare(card.height, 84,
-                   "preset " + preset + " height=" + card.height)
-
             var title = findChild(card, "immersivePresetTitle" + preset)
-            var subtitle = findChild(card, "immersivePresetSubtitle" + preset)
-            verify(title && subtitle)
+            verify(title)
+            verify(card.height >= title.implicitHeight + 8
+                   && card.height <= title.implicitHeight + 20,
+                   "preset must fit one title with compact padding: " + card.height)
+            compare(card.height, cards[0].height)
+            verify(Math.abs(card.width - cards[0].width) <= 1)
+            compare(title.lineCount, 1)
+            verify(title.contentWidth <= title.width + 0.5)
+            compare(card.ToolTip.text,
+                    panel.presetCards[preset].title + " · " + panel.presetCards[preset].sub)
             var titleBounds = mappedBounds(title, card)
-            var subtitleBounds = mappedBounds(subtitle, card)
             verify(titleBounds.left >= -0.5
                    && titleBounds.right <= card.width + 0.5)
-            verify(subtitleBounds.left >= -0.5
-                   && subtitleBounds.right <= card.width + 0.5)
-            verify(titleBounds.top >= 5
-                   && subtitleBounds.bottom <= card.height - 5,
+            verify(titleBounds.top >= 4
+                   && titleBounds.bottom <= card.height - 4,
                    "preset " + preset + " text=" + titleBounds.top
-                   + ".." + subtitleBounds.bottom
+                   + ".." + titleBounds.bottom
                    + " cardHeight=" + card.height)
-            verify(subtitleBounds.top >= titleBounds.bottom)
-            var textCenter = (titleBounds.top + subtitleBounds.bottom) / 2
+            var textCenter = (titleBounds.top + titleBounds.bottom) / 2
             verify(Math.abs(textCenter - card.height / 2) <= 1.5,
                    "preset " + preset + " textCenter=" + textCenter
                    + " cardCenter=" + card.height / 2)
-            var twoLineHeight = title.implicitHeight + subtitle.implicitHeight
-            verify(card.height >= twoLineHeight + 12,
-                   "preset " + preset + " textHeight=" + twoLineHeight
-                   + " cardHeight=" + card.height)
         }
 
         compare(cards[0].y, cards[1].y)
@@ -892,7 +974,7 @@ TestCase {
         verify(cards[2].x > cards[1].x && cards[1].x > cards[0].x)
         verify(cards[5].x > cards[4].x && cards[4].x > cards[3].x)
         verify(cards[8].x > cards[7].x && cards[7].x > cards[6].x)
-        compare(cards[8].y + cards[8].height - cards[0].y, 3 * 84 + 2 * 8,
+        verify(cards[8].y + cards[8].height - cards[0].y <= 150,
                "preset grid height="
                + (cards[8].y + cards[8].height - cards[0].y))
     }

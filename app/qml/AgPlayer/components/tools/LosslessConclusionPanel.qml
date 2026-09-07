@@ -166,7 +166,7 @@ Rectangle {
             Layout.fillHeight: true
             contentWidth: width
             contentHeight: detailsColumn.y + detailsColumn.implicitHeight
-                           + Theme.spacingSm
+                           + Theme.spacingXs
             clip: true
             boundsBehavior: Flickable.StopAtBounds
             ScrollBar.vertical: ThemedScrollBar {
@@ -178,9 +178,9 @@ Rectangle {
             Column {
                 id: detailsColumn
                 x: Theme.spacingMd
-                y: Theme.spacingSm
+                y: Theme.spacingXs
                 width: detailsFlick.width - Theme.spacingMd * 2
-                spacing: 6
+                spacing: Theme.spacingXs
 
                 Text {
                     id: verdictText
@@ -352,7 +352,7 @@ Rectangle {
 
                 Column {
                     width: parent.width
-                    spacing: Theme.spacingSm
+                    spacing: Theme.spacingXs
                     visible: !!(root.hasResult && root.result.evidence
                                 && root.result.evidence.length > 0)
                     Text {

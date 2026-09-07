@@ -28,8 +28,24 @@ layout(std140, binding = 0) uniform buf {
     vec4 materialParameters;
     vec4 sceneControls;
     vec4 waveParameters;
+    vec4 sceneLighting;
+    mat4 lightMvp;
+    vec4 shadowParameters;
 } ubuf;
 
+#ifdef TERRAIN_SHADOW_PASS
+// Keep the shared deformation below, but give D3D a matching one-value
+// VS/PS signature instead of linking a sparse subset of the material outputs.
+layout(location = 0) out float opacity;
+vec3 color;
+float light, fog, glow, focus, impactLight, topSurface, streamSheen;
+vec3 worldNormal, viewDirection;
+float objectKind;
+vec3 columnExtent, surfacePosition;
+float musicLight;
+vec4 material;
+vec3 worldPosition;
+#else
 layout(location = 0) out vec3 color;
 layout(location = 1) out float light;
 layout(location = 2) out float fog;
@@ -42,10 +58,12 @@ layout(location = 8) out float streamSheen;
 layout(location = 9) out vec3 worldNormal;
 layout(location = 10) out vec3 viewDirection;
 layout(location = 11) flat out float objectKind;
-layout(location = 12) out float columnHeight;
+layout(location = 12) out vec3 columnExtent;
 layout(location = 13) out vec3 surfacePosition;
 layout(location = 14) out float musicLight;
 layout(location = 15) out vec4 material;
+layout(location = 16) out vec3 worldPosition;
+#endif
 
 void main()
 {
@@ -87,7 +105,7 @@ void main()
         float core = pow(center, 1.18);
         // Existing short beat/onset envelope drives illumination separately
         // from sustained band energy. No oscillator masquerades as a beat.
-        musicLight = clamp(beatPulse * (0.45 + core * 0.55)
+        musicLight = clamp(beatPulse * (0.18 + pow(core, 1.15) * 0.82)
                             * ubuf.styleAudio.w, 0.0, 1.0);
         float terrainField = 1.0 - smoothstep(responseRadius * 0.45,
                                               responseRadius * 1.15,
@@ -216,10 +234,15 @@ void main()
         float ridgeUnion = max(ridgeMaskA, ridgeMaskB * 0.78);
         // Separated shelves and troughs expose side faces instead of joining
         // every frequency region into one smooth dome.
-        float localContour = 0.10 + pow(ridgeUnion, 3.2) * 1.15;
-        float swellPhase = distanceFromCore * 0.18 - flowTime * 1.05;
-        float swells = pow(0.5 + 0.5 * sin(swellPhase), 2.0)
-                     * (bandsLow.x + bandsLow.y) * terrainField * 2.3;
+        // Warped concentric shelves leave readable troughs between waves.
+        // The broad bass bed must not bridge them into one continuous dome.
+        float swellPhase = distanceFromCore * 0.34 - flowTime * 1.05
+                         + (ridgeA - ridgeB) * 1.4;
+        float crest = pow(0.5 + 0.5 * sin(swellPhase), 3.0);
+        float localContour = (0.10 + pow(ridgeUnion, 3.2) * 1.15)
+                           * (0.22 + crest * 0.78);
+        float swells = crest * (bandsLow.x + bandsLow.y)
+                     * terrainField * 3.2;
         float printRelief = (0.25 + 0.75 * smoothstep(0.3, 0.8, randomValue))
                           * (bandsLow.z + bandsLow.w) * center * 1.8;
         frequencyTowers *= 0.58 + coherentDetail * 0.42;
@@ -228,23 +251,21 @@ void main()
             idle + (((bass + mids) * localContour + highDetail)
                     * terrainField + ripple + swells + printRelief) * amplitude
             + midSpire * amplitude
-            + frequencyTowers * amplitude
-            + coreLift * amplitude + centerShoulders
+            + frequencyTowers * amplitude * (0.35 + crest * 0.65)
+            + coreLift * amplitude * (0.30 + crest * 0.70) + centerShoulders
             + impactWave + coreGlow * 1.55);
         float softCap = mix(42.0, 48.0, step(0.001, impactStrength));
         float height = max(0.035,
             softCap * (1.0 - exp(-rawHeight / softCap)));
         scale.y = height;
-        // The layout already leaves a small physical gutter. Keep only a
-        // hairline here so the centered tile grid cannot read as black seams.
-        scale.xz *= 0.98;
+        // Straight boxes occupy 98.5% of the layout spacing, leaving a hairline.
+        scale.xz *= 0.985 * clamp(ubuf.sceneControls.w, 0.5, 2.0);
         if (material.x > 0.5 && material.x < 1.5) {
-            // Bounded beat-driven squash/rebound: no independent simulation,
+            // Bounded vertical beat response: no cross-section deformation,
             // audio buffer, or free-running wobble during silence.
             float rebound = sin(ubuf.audioEnvelope.w * 12.56637)
                           * beatPulse * material.z;
             scale.y *= 1.0 + rebound * 0.18;
-            scale.xz *= 1.0 - rebound * 0.035;
         }
         position.y += scale.y * 0.5;
         float stageHalfExtent = max(1.0, ubuf.sceneControls.z);
@@ -266,9 +287,13 @@ void main()
         float sparseCell = smoothstep(0.54 + outerField * 0.20,
                                       0.92, cellNoise);
         opacity *= mix(1.0, 0.18 + sparseCell * 0.58, outerField);
-        opacity *= 1.0 - smoothstep(stageHalfExtent * 0.86,
+        // The terrain remains a large disk, but its outer apron dissolves
+        // gradually even when the musical response radius covers the stage.
+        opacity *= 1.0 - smoothstep(stageHalfExtent * 0.74,
                                     stageHalfExtent, stageDistance);
+#ifndef TERRAIN_SHADOW_PASS
         opacity *= ubuf.sceneControls.x;
+#endif
         topSurface = smoothstep(0.72, 0.98, vertexNormal.y);
         float flowPhase = fract(t * (0.12 + highEnergy * 0.22)
                                 + position.x * 0.018 + position.z * 0.011
@@ -278,10 +303,11 @@ void main()
                                            + randomValue * 47.0), 18.0);
         float presence = clamp(bandsHigh.y * 0.42 + bandsHigh.z * 0.36
                                + bandsHigh.w * 0.22, 0.0, 1.0);
-        // Keep the high-band stream cue on selected top facets. A non-zero
-        // floor made the cue brighten nearly every visible tile at once.
-        float sheenMask = smoothstep(0.48, 0.94, randomValue);
-        streamSheen = ubuf.styleExtra.z * topSurface
+        // Every column can catch a glint, with different timing and strength.
+        // The fragment shader confines it to a small crown facet, so this
+        // weight is not a constant light floor across the full top surface.
+        float sheenMask = mix(0.60, 1.0, randomValue);
+        streamSheen = ubuf.styleExtra.z
                     * (0.075 + presence * 0.72 + beatPulse * 0.22)
                     * (flowingBand * 1.18 + sparkle * 1.36)
                     * sheenMask * (0.25 + ubuf.styleParameters.z * 1.9);
@@ -401,7 +427,7 @@ void main()
     float layerCount = mix(2.0, 12.0, ubuf.styleDynamics.w);
     float layeredDistance = floor(clamp(distanceFromCore / 118.0, 0.0, 1.0)
                                 * layerCount) / max(1.0, layerCount - 1.0);
-    color = mix(color, peak, layeredDistance * 0.14);
+    color = mix(color, peak, layeredDistance * 0.035);
     if (ubuf.styleDynamics.z > 1.5 || ubuf.styleExtra.x > 0.5) {
         // Sweep through the preset's palette rather than replacing every
         // preset with the same absolute rainbow.
@@ -437,6 +463,7 @@ void main()
     }
     if (type > 4.5 && type < 5.5) color = mix(cool, accent, randomValue);
 
+    if (type < 0.5) scale = max(scale, vec3(0.001));
     vec3 localVertex = vertexPosition * scale;
     vec3 normal = vertexNormal;
     if (type > 0.5 && type < 1.5) {
@@ -464,13 +491,15 @@ void main()
         localVertex = flightFrame * localVertex;
         normal = flightFrame * normal;
     }
-    vec3 worldPosition = position + localVertex;
+    worldPosition = position + localVertex;
     gl_Position = ubuf.mvp * vec4(worldPosition, 1.0);
     worldNormal = normalize(normal);
-    viewDirection = normalize(ubuf.cameraPosition.xyz - worldPosition);
+    // Interpolate the actual eye vector, not six normalized vertex rays.
+    // The fragment material converts it through the nonuniform column scale.
+    viewDirection = ubuf.cameraPosition.xyz - worldPosition;
     objectKind = type;
-    columnHeight = scale.y;
-    surfacePosition = vertexPosition;
+    columnExtent = scale;
+    surfacePosition = type < 0.5 ? localVertex / scale : vertexPosition;
     light = ubuf.stylePresentation.z; // face/edge clarity, not exposure
     fog = 1.0 - smoothstep(42.0, 100.0, distanceFromCore) * 0.88;
     float focusBand = exp(-pow(distanceFromCore - responseRadius * 0.34, 2.0)
@@ -494,6 +523,10 @@ void main()
     // Elasticity is consumed in the vertex stage only. Reuse that varying
     // component for exposure instead of increasing the interpolator budget.
     material.z = ubuf.sceneControls.y;
+    // Ink density is unused by non-ink material. Reuse its varying lane as a
+    // signed rainbow-emission flag instead of adding an interpolator/uniform.
+    if (type < 0.5 && material.x < 1.5 && ubuf.styleDynamics.z > 2.5)
+        material.w = -1.0;
     // Add depth behind the focal center without attenuating its highlights
     // again: the radial fog above already controls the scene's exposure.
     fog *= exp(-max(0.0, length(ubuf.cameraPosition.xyz - worldPosition)

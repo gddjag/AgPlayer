@@ -42,7 +42,7 @@ Rectangle {
           "from": "#17303c", "to": "#176a7b" }, // theme-color-allow: fixed immersive media preset thumbnail palette
         { "title": qsTr("星河"), "sub": qsTr("深空主题 · 流星冲击"),
           "from": "#442037", "to": "#91356d" }, // theme-color-allow: fixed immersive media preset thumbnail palette
-        { "title": qsTr("多源霓虹"), "sub": qsTr("多点涟漪 · 清透流光"),
+        { "title": qsTr("多源霓虹"), "sub": qsTr("彩虹内光 · 多点涟漪"),
           "from": "#123a58", "to": "#7c316d" }, // theme-color-allow: fixed immersive media preset thumbnail palette
         { "title": qsTr("深海柔波"), "sub": qsTr("低负载 · 深蓝呼吸"),
           "from": "#082238", "to": "#176b72" }, // theme-color-allow: fixed immersive media preset thumbnail palette
@@ -81,6 +81,9 @@ Rectangle {
             "key": "Light", "title": qsTr("反应堆光影"),
             "sliders": [
                 { "label": qsTr("整体亮度"), "key": "reactorBrightness", "from": 0, "to": 200, "scale": 100, "decimals": 2 },
+                { "label": qsTr("柱内光芯"), "key": "columnInnerLight", "from": 0, "to": 200, "suffix": "%" },
+                { "label": qsTr("照亮周围"), "key": "columnLightSpill", "from": 0, "to": 200, "suffix": "%" },
+                { "label": qsTr("照明范围"), "key": "columnLightRadius", "from": 20, "to": 200, "suffix": "%" },
                 { "label": qsTr("中心高光"), "key": "centerHighlight", "from": 0, "to": 100, "scale": 100, "decimals": 2 },
                 { "label": qsTr("表面流光"), "key": "glowIntensity", "from": 0, "to": 100 },
                 { "label": qsTr("远近层次"), "key": "depthOfField", "from": 0, "to": 150, "scale": 100, "decimals": 2 }
@@ -336,8 +339,8 @@ Rectangle {
                             Layout.minimumWidth: 0
                             Layout.preferredWidth: (scroll.availableWidth - presetGrid.columnSpacing * 2) / 3
                             Layout.maximumWidth: Layout.preferredWidth
-                            Layout.preferredHeight: 84
-                            padding: 6
+                            Layout.preferredHeight: contentItem.implicitHeight + topPadding + bottomPadding
+                            padding: Theme.spacingSm
                             flat: true
                             ToolTip.visible: hovered
                             ToolTip.text: modelData.title + " · " + modelData.sub
@@ -353,33 +356,16 @@ Rectangle {
                                     GradientStop { position: 1; color: modelData.to }
                                 }
                             }
-                            contentItem: Item {
-                                Column {
-                                    anchors.centerIn: parent
-                                    width: parent.width
-                                    spacing: 4
-                                    Text {
-                                        objectName: "immersivePresetTitle" + presetCard.index
-                                        width: parent.width
-                                        text: presetCard.modelData.title
-                                        color: Theme.onBrandGradientText
-                                        font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption
-                                        font.weight: Font.DemiBold
-                                        horizontalAlignment: Text.AlignHCenter
-                                    }
-                                    Text {
-                                        objectName: "immersivePresetSubtitle" + presetCard.index
-                                        width: parent.width
-                                        text: presetCard.modelData.sub
-                                        color: Theme.onBrandGradientText
-                                        opacity: 0.8
-                                        font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption
-                                        horizontalAlignment: Text.AlignHCenter
-                                        wrapMode: Text.Wrap
-                                        maximumLineCount: 2
-                                        elide: Text.ElideRight
-                                    }
-                                }
+                            contentItem: Text {
+                                objectName: "immersivePresetTitle" + presetCard.index
+                                text: presetCard.modelData.title
+                                color: Theme.onBrandGradientText
+                                font.family: Theme.fontPrimary
+                                font.pixelSize: Theme.fontSizeCaption
+                                font.weight: Font.DemiBold
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                                wrapMode: Text.NoWrap
                             }
                         }
                     }

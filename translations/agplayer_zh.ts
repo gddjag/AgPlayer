@@ -2976,6 +2976,10 @@
     </context>
 <context>
         <name>ImmersiveControlPanel</name>
+        <message><source>彩虹内光 · 多点涟漪</source><translation>彩虹内光 · 多点涟漪</translation></message>
+        <message><source>柱内光芯</source><translation>柱内光芯</translation></message>
+        <message><source>照亮周围</source><translation>照亮周围</translation></message>
+        <message><source>照明范围</source><translation>照明范围</translation></message>
         <message><source>柱体数量</source><translation>柱体数量</translation></message>
         <message><source>减少柱体数量</source><translation>减少柱体数量</translation></message>
         <message><source>增加柱体数量</source><translation>增加柱体数量</translation></message>
