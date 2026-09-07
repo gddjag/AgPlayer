@@ -98,3 +98,6 @@ body[data-page="about"] .qr-crop { background: #fff; }
 }
 
 .about-content .about-brand-copy h1 { white-space: pre-line; text-wrap: initial; }
+/* QR-only preview: retain the original 240px frame and a clear quiet zone. */
+.wechat .qr-crop img{width:243.379791%;left:-71.777003%;top:-80.487805%}
+.alipay .qr-crop img{width:196.124031%;left:-48.062016%;top:-110.271318%}
