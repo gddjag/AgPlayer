@@ -233,7 +233,7 @@ void columnMedium(vec3 normal, vec3 view, float ior, float roughness,
     float luminousHeight = mix(height, clamp(surfacePosition.y + 0.5, 0.0, 1.0), 0.75);
     emittedLight = exp(-absorption * innerStart)
                  * ((vec3(1.0) - exp(-absorption * opticalLength)) / absorption)
-                 * tint * sourcePower * (0.45 + 0.55 * luminousHeight) * 2.3;
+                 * tint * sourcePower * (0.12 + 0.88 * luminousHeight * luminousHeight) * 2.3;
     // The distant environment is a dim background behind the emitting core,
     // not another white studio panel painted across the entire front face.
     transmittedLight = transmission * studioEnvironment(-view, roughness * 0.7) * 0.08;
@@ -295,8 +295,10 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
     vec3 externalLight = direct + (reflection * fresnel
                   + (transmitted * 0.82 + albedo * 0.006)
                     * (vec3(1.0) - fresnel)) * (0.38 + visibility * 0.62);
+    // Clear gel transmits neighbouring colored light; multiplying it by a
+    // strongly colored opaque albedo a second time erased spill/radius changes.
     externalLight += receivedColumnLight(normal)
-                   * mix(vec3(0.16), albedo, 0.84) * 5.0;
+                   * mix(vec3(1.0), albedo, 0.25) * 2.0;
     externalLight *= 0.65 + clarity * 0.45;
 
     // A shallow audio-excited layer remains visible on the thinnest ground
@@ -328,7 +330,7 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
     float cap = smoothstep(0.70, 0.98, normal.y);
     // Upward light escape distinguishes the flat cap from the clear walls
     // without an opaque border or an added external lamp.
-    emission *= 1.0 + cap * 0.65;
+    emission *= 1.0 + cap * 0.85;
     float flash = clamp(streamSheen, 0.0, 4.0);
     flash *= smoothstep(0.015, 0.15, flash);
     float flashEnergy = dot(highBands, vec4(0.0, 0.42, 0.36, 0.22)) * 2.0
