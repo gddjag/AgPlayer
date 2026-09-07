@@ -170,6 +170,17 @@ QString sampleRateText(const int sampleRate)
         .arg(static_cast<double>(sampleRate) / 1000.0, 0, 'f', 1);
 }
 
+QString resamplingGridText(const double sourceRate, const int targetRate)
+{
+    if (!std::isfinite(sourceRate) || sourceRate <= 0.0
+        || targetRate <= 0 || sourceRate >= targetRate
+        || std::floor(sourceRate) != sourceRate) {
+        return {};
+    }
+    return QStringLiteral("%1 → %2")
+        .arg(sampleRateText(static_cast<int>(sourceRate)), sampleRateText(targetRate));
+}
+
 QString audioFormatText(const agplayer::lossless::SourceFormat& source)
 {
     using agplayer::lossless::SourceKind;
@@ -321,17 +332,24 @@ QVariantList stringList(const std::vector<std::string>& values)
     return result;
 }
 
-QString translatedEvidence(const std::string& value)
-{
-    return value.empty() ? QString{} : QCoreApplication::translate(
-        "LosslessEvidence", value.c_str());
-}
-
 QString translatedEvidence(const QString& value)
 {
+    const QString suffix = QStringLiteral(" Hz PCM（推测）");
+    if (value.endsWith(suffix)) {
+        const QString rate = value.left(value.size() - suffix.size());
+        bool valid = false;
+        const int numericRate = rate.toInt(&valid);
+        if (valid && numericRate > 0)
+            return QCoreApplication::translate("LosslessEvidence", "%1 Hz PCM（推测）").arg(rate);
+    }
     const QByteArray utf8 = value.toUtf8();
     return value.isEmpty() ? QString{} : QCoreApplication::translate(
         "LosslessEvidence", utf8.constData());
+}
+
+QString translatedEvidence(const std::string& value)
+{
+    return translatedEvidence(QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size())));
 }
 
 QVariantList translatedEvidenceList(const std::vector<std::string>& values)
@@ -1158,8 +1176,17 @@ public:
         const agplayer::lossless::AnalysisResult& result)
     {
         QVariantList evidence;
+        QString gridText;
         evidence.reserve(static_cast<qsizetype>(result.evidence.size()));
         for (const auto& item : result.evidence) {
+            if (gridText.isEmpty()
+                && result.source.kind != agplayer::lossless::SourceKind::Dsd
+                && result.source.kind != agplayer::lossless::SourceKind::Dst
+                && item.code == "resampling_polyphase_grid"
+                && item.family == agplayer::lossless::EvidenceFamily::Resampling
+                && item.direction == agplayer::lossless::EvidenceDirection::SupportsUpsampling) {
+                gridText = resamplingGridText(item.value, result.source.sampleRate);
+            }
             const QString explanation = translatedEvidence(item.explanation);
             evidence.append(QVariantMap{
                 {QStringLiteral("text"),
@@ -1241,7 +1268,8 @@ public:
             {QStringLiteral("effectiveBits"),
              result.measurements.effectiveBits},
             {QStringLiteral("resamplingText"),
-             result.source.kind != agplayer::lossless::SourceKind::Dsd
+             !gridText.isEmpty() ? gridText
+             : result.source.kind != agplayer::lossless::SourceKind::Dsd
                      && result.source.kind != agplayer::lossless::SourceKind::Dst
                      && result.measurements.resamplingMirrorScore > 0.0
                  ? QCoreApplication::translate(
@@ -1357,7 +1385,11 @@ public:
             {QStringLiteral("verdictCode"), verdictCodeString(result.verdict)},
             {QStringLiteral("verdictText"),
              reportVerdictText(result.verdict)},
+            // Legacy confidence is an ordinal score, never a calibrated probability.
             {QStringLiteral("confidence"), result.confidence},
+            {QStringLiteral("confidenceKind"), QStringLiteral("ordinal_evidence_score")},
+            {QStringLiteral("calibrationStatus"), QStringLiteral("uncalibrated")},
+            {QStringLiteral("calibratedProbability"), QVariant{}},
             {QStringLiteral("coverage"),
              QVariantMap{
                  {QStringLiteral("decodedFrames"),
@@ -1454,6 +1486,10 @@ public:
                  {QStringLiteral("celtFrameSamples"),
                   result.measurements.celtFrameBlocks > 0
                       ? QVariant::fromValue(static_cast<qulonglong>(result.measurements.celtFrameSamples))
+                      : QVariant{}},
+                 {QStringLiteral("celtFramesPerAnchor"),
+                  result.measurements.celtFrameBlocks > 0
+                      ? QVariant::fromValue(static_cast<qulonglong>(result.measurements.celtFramesPerAnchor))
                       : QVariant{}},
                  {QStringLiteral("celtFrameMinimumBandZ"),
                   finiteMeasurement(
@@ -2256,8 +2292,24 @@ void LosslessAnalysisController::refreshTranslations()
                     QStringLiteral("resamplingMirrorScore")).toDouble();
                 const double holes = measurements.value(
                     QStringLiteral("codecHoleScore")).toDouble();
+                QString gridText;
+                if (!dsdLike) {
+                    const int targetRate = report.value(QStringLiteral("source"))
+                        .toMap().value(QStringLiteral("sampleRate")).toInt();
+                    for (const QVariant& value : report.value(QStringLiteral("evidence")).toList()) {
+                        const QVariantMap item = value.toMap();
+                        if (item.value(QStringLiteral("code")).toString() == QStringLiteral("resampling_polyphase_grid")
+                            && item.value(QStringLiteral("family")).toString() == QStringLiteral("resampling")
+                            && item.value(QStringLiteral("direction")).toString() == QStringLiteral("supports_upsampling")) {
+                            gridText = resamplingGridText(
+                                item.value(QStringLiteral("value")).toDouble(), targetRate);
+                            if (!gridText.isEmpty()) break;
+                        }
+                    }
+                }
                 selected.insert(QStringLiteral("resamplingText"),
-                    !dsdLike && mirror > 0.0
+                    !gridText.isEmpty() ? gridText
+                    : !dsdLike && mirror > 0.0
                         ? QCoreApplication::translate(
                               "LosslessAnalysisController", "镜像评分 %1")
                               .arg(mirror, 0, 'f', 3)

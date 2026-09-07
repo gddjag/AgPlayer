@@ -10,6 +10,10 @@ function(agplayer_enable_lossless_core)
         "${CMAKE_SOURCE_DIR}/core/src/lossless/lossless_analyzer.hpp"
         "${CMAKE_SOURCE_DIR}/core/src/lossless/lossless_mdct.cpp"
         "${CMAKE_SOURCE_DIR}/core/src/lossless/lossless_mdct.hpp"
+        "${CMAKE_SOURCE_DIR}/core/src/lossless/lossless_mp3_hybrid.cpp"
+        "${CMAKE_SOURCE_DIR}/core/src/lossless/lossless_mp3_hybrid.hpp"
+        "${CMAKE_SOURCE_DIR}/core/src/lossless/lossless_mp3_hybrid_detail.hpp"
+        "${CMAKE_SOURCE_DIR}/core/src/lossless/lossless_mp3_hybrid_window.hpp"
         "${CMAKE_SOURCE_DIR}/core/src/lossless/lossless_resampled_mdct.cpp"
         "${CMAKE_SOURCE_DIR}/core/src/lossless/lossless_resampled_mdct.hpp"
         "${CMAKE_SOURCE_DIR}/core/src/lossless/lossless_celt.cpp"
@@ -23,6 +27,15 @@ function(agplayer_enable_lossless_core)
     endif()
 
     if(BUILD_TESTING)
+        add_executable(lossless_mp3_hybrid_test "${CMAKE_SOURCE_DIR}/tests/core/lossless_mp3_hybrid_test.cpp")
+        target_include_directories(lossless_mp3_hybrid_test PRIVATE "${CMAKE_SOURCE_DIR}/core/src")
+        target_include_directories(lossless_mp3_hybrid_test SYSTEM PRIVATE ${FFMPEG_INCLUDE_DIRS})
+        target_link_libraries(lossless_mp3_hybrid_test PRIVATE agplayer_core)
+        agplayer_enable_warnings(lossless_mp3_hybrid_test)
+        add_test(NAME lossless_mp3_hybrid_test COMMAND lossless_mp3_hybrid_test)
+        set_tests_properties(lossless_mp3_hybrid_test PROPERTIES TIMEOUT 90
+            ENVIRONMENT_MODIFICATION
+                "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<IF:$<CONFIG:Debug>,debug/bin,bin>")
         add_executable(lossless_resampled_mdct_test "${CMAKE_SOURCE_DIR}/tests/core/lossless_resampled_mdct_test.cpp")
         target_include_directories(lossless_resampled_mdct_test PRIVATE "${CMAKE_SOURCE_DIR}/core/src")
         target_link_libraries(lossless_resampled_mdct_test PRIVATE agplayer_core)
@@ -39,6 +52,27 @@ function(agplayer_enable_lossless_core)
         set_tests_properties(lossless_celt_test PROPERTIES TIMEOUT 90
             ENVIRONMENT_MODIFICATION
                 "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<IF:$<CONFIG:Debug>,debug/bin,bin>")
+        # Keep the legacy profile suite independently bounded. Deep refinement
+        # cases have their own suite budgets, not a per-file analysis SLA.
+        foreach(celt_deep_profile IN ITEMS 120 240 960)
+            add_test(NAME lossless_celt_deep_${celt_deep_profile}_test
+                COMMAND lossless_celt_test --deep-${celt_deep_profile})
+            set_tests_properties(lossless_celt_deep_${celt_deep_profile}_test PROPERTIES
+                TIMEOUT 180
+                ENVIRONMENT_MODIFICATION
+                    "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<IF:$<CONFIG:Debug>,debug/bin,bin>")
+        endforeach()
+        add_test(NAME lossless_celt_cancel_running_test COMMAND lossless_celt_test --cancel-running)
+        set_tests_properties(lossless_celt_cancel_running_test PROPERTIES TIMEOUT 180
+            ENVIRONMENT_MODIFICATION
+                "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<IF:$<CONFIG:Debug>,debug/bin,bin>")
+        foreach(celt_extended_mode IN ITEMS extended-192 extended-768 cancel-extended)
+            add_test(NAME lossless_celt_${celt_extended_mode}_test
+                COMMAND lossless_celt_test --${celt_extended_mode})
+            set_tests_properties(lossless_celt_${celt_extended_mode}_test PROPERTIES TIMEOUT 180
+                ENVIRONMENT_MODIFICATION
+                    "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<IF:$<CONFIG:Debug>,debug/bin,bin>")
+        endforeach()
         add_executable(lossless_mdct_test "${CMAKE_SOURCE_DIR}/tests/core/lossless_mdct_test.cpp")
         target_include_directories(lossless_mdct_test PRIVATE "${CMAKE_SOURCE_DIR}/core/src")
         target_link_libraries(lossless_mdct_test PRIVATE agplayer_core)

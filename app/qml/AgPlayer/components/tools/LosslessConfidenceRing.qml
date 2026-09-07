@@ -6,7 +6,7 @@ Item {
     id: root
     property real value: 0
     property color ringColor: Theme.accent
-    property string valueText: Math.round(Math.max(0, Math.min(100, value))) + "%"
+    property string valueText: qsTr("%1分").arg(Math.round(Math.max(0, Math.min(100, value))))
     implicitWidth: 72
     implicitHeight: 72
 

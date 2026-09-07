@@ -4,6 +4,7 @@
 #include "lossless_mdct.hpp"
 #include "lossless_celt.hpp"
 #include "lossless_resampled_mdct.hpp"
+#include "lossless_mp3_hybrid.hpp"
 
 #include <algorithm>
 #include <array>
@@ -136,7 +137,6 @@ struct AnalysisSupport final {
     static constexpr int dsdInconclusive = 35;
     static constexpr int knownLossyCodec = 82;
     static constexpr int lossyUpsample = 78;
-    static constexpr int upsample = 66;
     static constexpr int lossyTranscode = 64;
     static constexpr int bitDepthExpansion = 68;
     static constexpr int credibleLossless = 64;
@@ -147,7 +147,7 @@ struct AnalysisSupport final {
 bool supports_mdct_framing(std::string_view window, double peak_db, double peak_z,
                           std::uint64_t blocks, std::uint64_t aligned_blocks) noexcept
 {
-    if (window == "sine1152") {
+    if (window == "sine1152" || window == "mp3_hybrid_36") {
         return peak_db >= AnalysisThresholds::mdctHybridMinimumCoherentPeakDb
             && peak_z >= AnalysisThresholds::mdctHybridMinimumPeakZ
             && aligned_blocks >= AnalysisThresholds::mdctHybridMinimumAlignedBlocks;
@@ -229,25 +229,42 @@ struct SpectrumFrame final {
     double spectralEdgeDepthDb = 0.0;
 };
 
+struct HannWindow final {
+    explicit HannWindow(const std::size_t size)
+        : window(size)
+    {
+        double window_sum = 0.0;
+        for (std::size_t index = 0U; index < size; ++index) {
+            window[index] = 0.5 - 0.5 * std::cos(
+                2.0 * kPi * static_cast<double>(index)
+                / static_cast<double>(size - 1U));
+            window_sum += window[index];
+        }
+        amplitudeScale = window_sum > 0.0 ? 2.0 / window_sum : 0.0;
+    }
+
+    void release() noexcept
+    {
+        std::vector<double>().swap(window);
+    }
+
+    std::vector<double> window;
+    double amplitudeScale = 0.0;
+};
+
 SpectrumFrame analyze_window(const double* samples,
                              const std::size_t size,
                              const int sample_rate,
                              const std::size_t channels,
-                             FftPlan& fft_plan)
+                             FftPlan& fft_plan,
+                             const HannWindow& cached)
 {
     SpectrumFrame result;
     result.power.resize(size / 2U + 1U);
     std::vector<AVComplexDouble> input(size);
     std::vector<AVComplexDouble> transformed(size);
-    double window_sum = 0.0;
-    std::vector<double> window(size);
-    for (std::size_t index = 0U; index < size; ++index) {
-        window[index] = 0.5 - 0.5 * std::cos(
-            2.0 * kPi * static_cast<double>(index)
-            / static_cast<double>(size - 1U));
-        window_sum += window[index];
-    }
-    const double amplitude_scale = window_sum > 0.0 ? 2.0 / window_sum : 0.0;
+    const auto& window = cached.window;
+    const double amplitude_scale = cached.amplitudeScale;
     std::size_t active_channels = 0U;
     // Combine powers, never signed samples. Phase inversion and silent channels
     // cannot erase another channel's spectrum. Every channel stays continuous.
@@ -513,7 +530,7 @@ public:
                     const std::size_t spectrogram_frequency_bins,
                     const std::int64_t duration_ms)
         : size_(size), hop_(size / 2U), sample_rate_(sample_rate), channels_(channels),
-          fft_plan_(size),
+          fft_plan_(size), hann_window_(size),
           spectrum_power_(spectrum_bins, 0.0),
           raw_spectrum_power_(size == kStftSizes.back() ? size / 2U + 1U : 0U, 0.0),
           cutoff_histogram_(spectrum_bins, 0U),
@@ -569,6 +586,8 @@ public:
         }
         buffer_.clear();
         buffer_.shrink_to_fit();
+        // The Hann window is no longer needed during the deferred probes.
+        hann_window_.release();
         return true;
     }
 
@@ -807,7 +826,7 @@ private:
     void consume(const double* samples)
     {
         const SpectrumFrame frame = analyze_window(samples, size_, sample_rate_, channels_,
-                                                   fft_plan_);
+                                                   fft_plan_, hann_window_);
         ++window_count_;
         if (frame.rms < kActiveRms) return;
         ++active_count_;
@@ -924,6 +943,7 @@ private:
     int sample_rate_ = 0;
     std::size_t channels_ = 1U;
     FftPlan fft_plan_;
+    HannWindow hann_window_;
     std::vector<double> buffer_;
     std::vector<double> spectrum_power_;
     std::vector<double> raw_spectrum_power_;
@@ -1274,6 +1294,15 @@ void aggregate_verdict(AnalysisResult& result)
             || result.measurements.spectralFlatness
                 >= AnalysisThresholds::bitExpansionMinimumSpectralFlatness);
 
+    if (polyphase_structure) {
+        add_evidence(result, "resampling_polyphase_grid", EvidenceFamily::Resampling,
+                     EvidenceDirection::Neutral,
+                     result.measurements.resamplingPhaseSourceRate, "Hz",
+                     "相位一致性>=0.995、强度>=0.02、>=4段、残差熵>=0.45、带外抑制>=35dB", 1,
+                     "检测到稳定周期结构；重采样与周期调制均可形成，不能单独确定升频历史。");
+        result.candidates.push_back({"重采样或周期调制", 33,
+            "周期、镜像和带外抑制仍可由同一种调制处理形成，候选不构成来源判定。"});
+    }
     if (known_lossy) {
         result.verdict = Verdict::SuspectedLossyTranscode;
         result.confidence = AnalysisSupport::knownLossyCodec;
@@ -1291,13 +1320,15 @@ void aggregate_verdict(AnalysisResult& result)
         result.measurements.mdctFrameBlocks, result.measurements.mdctFrameAlignedBlocks)) {
         result.verdict = Verdict::SuspectedLossyTranscode;
         result.confidence = AnalysisSupport::lossyTranscode;
-        result.chain = {"MDCT编码（推测）", result.source.container};
-        result.candidates.push_back({"MDCT变换编码", AnalysisSupport::lossyTranscode,
-            "帧结构证据不能确定具体编码器、码率或完整历史；1152采样帧仅是混合编码结构的近似观测。"});
+        const bool hybrid = result.measurements.mdctFrameWindow == "mp3_hybrid_36";
+        result.chain = {hybrid ? "MP3长块编码（推测）" : "MDCT编码（推测）", result.source.container};
+        result.candidates.push_back({hybrid ? "MP3混合变换结构" : "MDCT变换编码", AnalysisSupport::lossyTranscode,
+            hybrid ? "检测到与MP3长块混合滤波器一致的帧结构；尚未验证短块、混合块及完整编码历史。"
+                   : "帧结构证据不能确定具体编码器、码率或完整历史；1152采样帧仅是混合编码结构的近似观测。"});
         add_evidence(result, "mdct_framing_structure", EvidenceFamily::CodecStructure,
                      EvidenceDirection::SupportsLossySource,
                      result.measurements.mdctFrameCoherentPeakDb, "dB",
-                     result.measurements.mdctFrameWindow == "sine1152"
+                     (result.measurements.mdctFrameWindow == "sine1152" || hybrid)
                          ? ">=2dB、峰值z>=5、>=3段帧相位在±2采样内一致"
                          : ">=6dB、峰值z>=12、>=3个不重叠片段", 2,
                      "多个不重叠片段保留变换帧栅格，支持历史压缩推断；特殊变换处理仍可能形成类似结构。");
@@ -1324,19 +1355,6 @@ void aggregate_verdict(AnalysisResult& result)
                      "全频与18kHz以下频带共同保留窄变换帧峰，支持历史压缩推断；无峰不证明未压缩。");
         return;
     }
-    if (polyphase_structure) {
-        add_evidence(result, "resampling_polyphase_grid", EvidenceFamily::Resampling,
-                     EvidenceDirection::SupportsUpsampling,
-                     result.measurements.resamplingPhaseSourceRate, "Hz",
-                     "相位一致性>=0.995、强度>=0.02、>=4段、残差熵>=0.45、带外抑制>=35dB", 2,
-                     "多相残差与较低采样栅格一致，支持重采样推断；特殊周期处理仍可能构成反例。");
-        result.verdict = Verdict::SuspectedUpsample;
-        result.confidence = AnalysisSupport::upsample;
-        result.chain = {std::to_string(static_cast<int>(result.measurements.resamplingPhaseSourceRate))
-            + " Hz PCM（推测）", result.source.container};
-        result.warnings.push_back("多相残差支持疑似重采样，不等于证明原始录音采样率；额外噪声可能使该证据消失。");
-        return;
-    }
     if (resampling_edge) {
         add_evidence(result, "persistent_resampling_edge",
                      EvidenceFamily::Resampling,
@@ -1347,13 +1365,11 @@ void aggregate_verdict(AnalysisResult& result)
         if (!mirrored) result.candidates.push_back({"较低采样率PCM或数字低通母带", 33,
             "频谱边缘不能区分重采样与原生采样率滤波，候选不构成来源判定。"});
     }
-    if (stable_cutoff && resampling_structure) {
-        result.verdict = Verdict::SuspectedUpsample;
-        result.confidence = AnalysisSupport::upsample;
-        result.chain = {"较低采样率 PCM（推测）", result.source.container};
-        result.warnings.push_back(
-            "陡峭低带宽频谱也可能来自母带数字低通；没有来源参考时无法排除此反例。");
-        return;
+    if (stable_cutoff && resampling_structure && !polyphase_structure) {
+        add_evidence(result, "resampling_mirror_unattributed", EvidenceFamily::Resampling,
+                     EvidenceDirection::Neutral, result.measurements.resamplingMirrorScore,
+                     "score", "镜像相关不能区分重采样与周期调制", 1,
+                     "频移副本也可能来自周期调制，不能单独确定升频历史。");
     }
     if (codec_structure) {
         // Both are spectral-shape observations, not independent codec evidence.
@@ -1569,16 +1585,31 @@ AnalysisResult analyzeFile(const std::string& utf8Path,
                 inverse_probes[i] = std::make_unique<ResampledMdctProbe>(native.sample_rate,
                     native.channels, expected_frames, inverse_rates[i]);
         }
-        constexpr std::array<std::size_t, 3> celt_frame_sizes{960, 480, 240};
-        std::array<std::unique_ptr<CeltFramingProbe>, 3> celt_probes;
+        constexpr std::array<std::size_t, 4> celt_frame_sizes{960, 480, 240, 120};
+        std::array<std::unique_ptr<CeltFramingProbe>, 4> celt_probes, celt_deep_probes;
+        constexpr std::array<std::size_t, 2> extended_depths{192, 768};
+        std::array<std::unique_ptr<CeltFramingProbe>, 2> celt_extended_probes;
+        std::unique_ptr<Mp3HybridProbe> hybrid_probe;
         if (!native.is_dsd && !native.is_dst && !is_lossy_codec(result.source.codec)
             && native.sample_rate >= 32'000 && native.sample_rate <= 48'000) {
             mdct_probe = std::make_unique<MdctFramingProbe>(native.sample_rate, native.channels,
                                                          expected_frames);
+            hybrid_probe = std::make_unique<Mp3HybridProbe>(native.sample_rate, native.channels, expected_frames);
             if (native.sample_rate == 48'000) {
-                for (std::size_t i = 0; i < celt_probes.size(); ++i)
+                for (std::size_t i = 0; i < celt_probes.size(); ++i) {
                     celt_probes[i] = std::make_unique<CeltFramingProbe>(native.sample_rate, native.channels,
                                                                      expected_frames, celt_frame_sizes[i]);
+                    celt_deep_probes[i] = std::make_unique<CeltFramingProbe>(native.sample_rate, native.channels,
+                        expected_frames, celt_frame_sizes[i], 48);
+                }
+                for (std::size_t i = 0; i < extended_depths.size(); ++i) {
+                    // Bound the extra interleaved capture for high channel counts.
+                    if (native.channels > 32) continue;
+                    if (extended_depths[i] == 768 && native.channels > 8) continue;
+                    if (expected_frames > 0 && expected_frames < 3 * (extended_depths[i] + 2) * 120) continue;
+                    celt_extended_probes[i] = std::make_unique<CeltFramingProbe>(48000,
+                        native.channels, expected_frames, 120, extended_depths[i]);
+                }
             }
         }
 
@@ -1657,9 +1688,14 @@ AnalysisResult analyzeFile(const std::string& utf8Path,
                 std::clamp(std::lround(block_db + 120.0), 0L, 120L));
             ++rms_histogram[histogram_index];
             if (mdct_probe) mdct_probe->consume(block.samples.data(), block.frames, cancelled);
+            if (hybrid_probe) hybrid_probe->consume(block.samples.data(), block.frames, cancelled);
             for (auto& probe : inverse_probes)
                 if (probe) probe->consume(block.samples.data(), block.frames, cancelled);
             for (auto& probe : celt_probes)
+                if (probe) probe->consume(block.samples.data(), block.frames, cancelled);
+            for (auto& probe : celt_deep_probes)
+                if (probe) probe->consume(block.samples.data(), block.frames, cancelled);
+            for (auto& probe : celt_extended_probes)
                 if (probe) probe->consume(block.samples.data(), block.frames, cancelled);
             for (auto& accumulator : stft) {
                 if (!accumulator.add(block.samples, cancelled)) {
@@ -1688,9 +1724,7 @@ AnalysisResult analyzeFile(const std::string& utf8Path,
         }
 
         const StftAccumulator& primary = stft.back();
-        for (std::size_t i = 0; i < celt_probes.size(); ++i) {
-            if (!celt_probes[i]) continue;
-            const auto measured = celt_probes[i]->result();
+        const auto select_celt = [&](const CeltFrameEvidence& measured, std::size_t i, std::size_t frames) {
             AnalysisMeasurements candidate;
             candidate.celtFrameBlocks = std::min(measured.fullBand.activeBlocks, measured.lowBand.activeBlocks);
             candidate.celtFrameMinimumBandZ = std::min(measured.fullBand.robustZ, measured.lowBand.robustZ);
@@ -1703,25 +1737,16 @@ AnalysisResult analyzeFile(const std::string& utf8Path,
                 && candidate.celtFrameBlocks > 0 && candidate.celtFrameMinimumBandZ > result.measurements.celtFrameMinimumBandZ)) {
                 result.measurements.celtFrameBlocks = candidate.celtFrameBlocks;
                 result.measurements.celtFrameSamples = celt_frame_sizes[i];
+                result.measurements.celtFramesPerAnchor = frames;
                 result.measurements.celtFrameMinimumBandZ = candidate.celtFrameMinimumBandZ;
                 result.measurements.celtFrameMinimumAnchorCoherence = candidate.celtFrameMinimumAnchorCoherence;
                 result.measurements.celtFrameMaximumPeakWidth = candidate.celtFrameMaximumPeakWidth;
                 result.measurements.celtFrameBandPhaseDifference = candidate.celtFrameBandPhaseDifference;
             }
-        }
-        {
-            if (result.measurements.celtFrameBlocks > 0U) {
-                add_evidence(result, "celt_framing_peak", EvidenceFamily::CodecStructure,
-                             EvidenceDirection::Neutral, result.measurements.celtFrameMinimumBandZ,
-                             "z", "全频与18kHz以下频带中较低的稳健峰值显著性", 1,
-                             "固定数量独立片段的低重叠变换帧扫描；仅适用于48kHz，缺失证据不证明无损。");
-                add_evidence(result, "celt_frame_samples", EvidenceFamily::CodecStructure,
-                             EvidenceDirection::Neutral, static_cast<double>(result.measurements.celtFrameSamples),
-                             "samples", "240 / 480 / 960", 1,
-                             "候选CELT帧长仅描述所检验的变换栅格，不等于编码器或码率认证。");
-            }
-        }
-        const auto select_mdct = [&](const std::array<MdctFrameEvidence, 4>& candidates, int rate) {
+        };
+        for (std::size_t i = 0; i < celt_probes.size(); ++i)
+            if (celt_probes[i]) select_celt(celt_probes[i]->result(), i, 12);
+        const auto select_mdct = [&](const auto& candidates, int rate) {
             for (const auto& measured : candidates) {
                 if (measured.activeBlocks == 0U) continue;
                 // The hybrid 1152 approximation has not been validated through
@@ -1746,6 +1771,59 @@ AnalysisResult analyzeFile(const std::string& utf8Path,
         if (mdct_probe) select_mdct(mdct_probe->result(), native.sample_rate);
         for (std::size_t i = 0; i < inverse_probes.size(); ++i)
             if (inverse_probes[i]) select_mdct(inverse_probes[i]->result(), inverse_rates[i]);
+        if (hybrid_probe && !supports_celt_framing(result.measurements)
+            && !supports_mdct_framing(result.measurements.mdctFrameWindow,
+                result.measurements.mdctFrameCoherentPeakDb, result.measurements.mdctFramePeakZ,
+                result.measurements.mdctFrameBlocks, result.measurements.mdctFrameAlignedBlocks)) {
+            hybrid_probe->refine(cancelled);
+            if (cancelled.load(std::memory_order_relaxed)) return cancelled_result(std::move(result));
+            select_mdct(std::array<MdctFrameEvidence, 1>{hybrid_probe->result()}, native.sample_rate);
+            if (!supports_mdct_framing(result.measurements.mdctFrameWindow,
+                    result.measurements.mdctFrameCoherentPeakDb, result.measurements.mdctFramePeakZ,
+                    result.measurements.mdctFrameBlocks, result.measurements.mdctFrameAlignedBlocks)) {
+                // Stereo channels can retain different coding evidence. Keep
+                // each complete measurement separate; do not combine scores.
+                hybrid_probe->refineAlternate(cancelled);
+                if (cancelled.load(std::memory_order_relaxed)) return cancelled_result(std::move(result));
+                select_mdct(std::array<MdctFrameEvidence, 1>{hybrid_probe->alternateResult()}, native.sample_rate);
+            }
+        }
+        // Dense transforms are deferred until both ordinary framing probes
+        // abstain. Four bounded mono excerpts were retained during decoding.
+        if (!supports_celt_framing(result.measurements)
+            && !supports_mdct_framing(result.measurements.mdctFrameWindow,
+                result.measurements.mdctFrameCoherentPeakDb, result.measurements.mdctFramePeakZ,
+                result.measurements.mdctFrameBlocks, result.measurements.mdctFrameAlignedBlocks)) {
+            for (std::size_t i = 0; i < celt_deep_probes.size(); ++i) {
+                if (!celt_deep_probes[i]) continue;
+                celt_deep_probes[i]->refine(cancelled);
+                if (cancelled.load(std::memory_order_relaxed)) return cancelled_result(std::move(result));
+                select_celt(celt_deep_probes[i]->result(), i, 48);
+                if (supports_celt_framing(result.measurements)) break;
+            }
+        }
+        for (std::size_t i = 0; i < celt_extended_probes.size(); ++i) {
+            if (supports_celt_framing(result.measurements)
+                || supports_mdct_framing(result.measurements.mdctFrameWindow,
+                    result.measurements.mdctFrameCoherentPeakDb, result.measurements.mdctFramePeakZ,
+                    result.measurements.mdctFrameBlocks, result.measurements.mdctFrameAlignedBlocks)) break;
+            if (!celt_extended_probes[i]) continue;
+            celt_extended_probes[i]->refine(cancelled);
+            if (cancelled.load(std::memory_order_relaxed)) return cancelled_result(std::move(result));
+            select_celt(celt_extended_probes[i]->result(), 3, extended_depths[i]);
+        }
+        {
+            if (result.measurements.celtFrameBlocks > 0U) {
+                add_evidence(result, "celt_framing_peak", EvidenceFamily::CodecStructure,
+                             EvidenceDirection::Neutral, result.measurements.celtFrameMinimumBandZ,
+                             "z", "全频与18kHz以下频带中较低的稳健峰值显著性", 1,
+                             "固定数量独立片段的低重叠变换帧扫描；仅适用于48kHz，缺失证据不证明无损。");
+                add_evidence(result, "celt_frame_samples", EvidenceFamily::CodecStructure,
+                             EvidenceDirection::Neutral, static_cast<double>(result.measurements.celtFrameSamples),
+                             "samples", "120 / 240 / 480 / 960", 1,
+                             "候选CELT帧长仅描述所检验的变换栅格，不等于编码器或码率认证。");
+            }
+        }
         {
             if (result.measurements.mdctFrameBlocks > 0U) {
                 add_evidence(result, "mdct_framing_peak", EvidenceFamily::CodecStructure,

@@ -24,7 +24,8 @@ add_test(NAME lossless_analysis_controller_test
     COMMAND lossless_analysis_controller_test
 )
 set_tests_properties(lossless_analysis_controller_test PROPERTIES
-    TIMEOUT 30
+    # Two real DSP passes allow up to 60s each in Debug, plus controller cases.
+    TIMEOUT 180
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<IF:$<CONFIG:Debug>,debug/bin,bin>"

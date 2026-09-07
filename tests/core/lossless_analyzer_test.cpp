@@ -386,6 +386,39 @@ int main(const int argc, char** argv)
         assert(result.spectrum.db == channel_reference.spectrum.db);
     }
 
+    // Cached Hann windows must preserve strong and silent spectra. The two
+    // tones are separated by complete silent windows, including when the active
+    // channel moves. Reordering the separated tones preserves their spectrum.
+    lossless::AnalysisResult window_reference;
+    constexpr std::size_t segment_frames = 16'384U;
+    for (int variant = 0; variant < 3; ++variant) {
+        const auto file = directory / ("window-history-" + std::to_string(variant) + ".wav");
+        write_pcm_wav(file, 32'000, 16, segment_frames * 5U,
+            [variant](std::ofstream& out, std::size_t frame, std::uint16_t channel) {
+                const auto segment = frame / segment_frames;
+                double value = 0.0;
+                if (segment == 1U || segment == 3U) {
+                    const bool high = (segment == 1U) != (variant == 2);
+                    const bool active_channel = variant != 1
+                        || channel == (segment == 1U ? 0U : 5U);
+                    if (active_channel) value = (high ? 12000.0 : 750.0)
+                        * std::sin(2.0 * std::acos(-1.0) * (high ? 4000.0 : 1000.0)
+                            * static_cast<double>(frame % segment_frames) / 32000.0);
+                }
+                write_le16(out, static_cast<std::uint16_t>(
+                    static_cast<std::int16_t>(std::lround(value))));
+            }, 1U, variant == 1 ? 6U : 1U);
+        const auto result = lossless::analyzeFile(file.u8string(), options, cancelled, {});
+        assert(result.error.empty());
+        assert(result.coverage.decodedFrames == segment_frames * 5U);
+        assert(result.coverage.analyzedWindows == 9U);
+        assert(result.coverage.activeWindows == 6U);
+        if (variant == 0) { window_reference = result; continue; }
+        assert(result.spectrum.db.size() == window_reference.spectrum.db.size());
+        for (std::size_t i = 0; i < result.spectrum.db.size(); ++i)
+            assert(std::abs(result.spectrum.db[i] - window_reference.spectrum.db[i]) < 1.0e-9);
+    }
+
     const auto silence = directory / "silence-44100.wav";
     write_silence(silence, 44'100);
     const auto silence_result = lossless::analyzeFile(
@@ -544,7 +577,16 @@ int main(const int argc, char** argv)
         const auto resampled_result = lossless::analyzeFile(resampled.u8string(), options, cancelled, {});
         assert(resampled_result.measurements.resamplingPhaseSourceRate == 44'100.0);
         assert(resampled_result.measurements.resamplingPhaseCoherence > 0.995);
-        assert(resampled_result.verdict == lossless::Verdict::SuspectedUpsample);
+        // The grid is measured, but native periodic modulation can reproduce it.
+        // Keep the positive signal measurement without certifying its history.
+        assert(resampled_result.verdict == lossless::Verdict::Inconclusive);
+        const auto grid = std::find_if(resampled_result.evidence.begin(),
+            resampled_result.evidence.end(), [](const auto& item) {
+                return item.code == "resampling_polyphase_grid";
+            });
+        assert(grid != resampled_result.evidence.end());
+        assert(grid->direction == lossless::EvidenceDirection::Neutral);
+        assert(!resampled_result.candidates.empty());
     }
     const auto periodic = directory / "native-high-frequency-periodic.wav";
     write_pcm_wav(periodic, 96'000, 24, 384'000U,
