@@ -17,7 +17,7 @@
       gradient.addColorStop(0, 'rgba(120,61,190,.19)'); gradient.addColorStop(1, 'rgba(38,15,65,0)');
       context.fillStyle = gradient; context.fillRect(0, 0, width, height);
       const hero = canvas.closest('.hero');
-      for (let line = 0; line < 15; line++) {
+      for (let line = 0; line < 18; line++) {
         context.beginPath();
         for (let x = 0; x <= width + 8; x += 8) {
           const u = x / width;
@@ -25,7 +25,7 @@
           const y = height * .5 + Math.sin(u * 7.5 + time * .00012 + line * .12) * height * (hero ? .24 : .32) * envelope + Math.cos(u * 13 - time * .00007 + line * .1) * height * .045 + (line - 7) * 5;
           if (x === 0) context.moveTo(x, y); else context.lineTo(x, y);
         }
-        context.strokeStyle = `rgba(${line > 9 ? '173,111,233' : '128,76,210'},${(hero ? .055 : .09) + line * .004})`;
+        context.strokeStyle = `rgba(${line > 9 ? '173,111,233' : '128,76,210'},${(hero ? .085 : .09) + line * .004})`;
         context.lineWidth = hero ? 1 : 1.25; context.stroke();
       }
     }

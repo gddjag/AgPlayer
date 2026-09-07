@@ -1,0 +1,100 @@
+/* About-page composition: original brand artwork blends into the dark canvas. */
+body[data-page="about"] .about-software {
+  display: block;
+  min-height: 0;
+  padding: clamp(135px, 12vw, 185px) 0 88px;
+  background: #08060d;
+}
+body[data-page="about"] .about-content { max-width: 1280px; }
+.about-brand-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(24px, 4vw, 70px);
+}
+.about-brand-copy { min-width: 0; }
+.about-brand-copy .about-eyebrow {
+  color: #c4a0f5;
+  font-size: 13px;
+  letter-spacing: .16em;
+  margin-bottom: 28px;
+}
+.about-content .about-brand-copy h1 {
+  max-width: 10em;
+  margin: 0 0 30px;
+  font-size: clamp(44px, 4.6vw, 62px);
+  line-height: 1.3;
+  letter-spacing: -.045em;
+  text-wrap: balance;
+  color: #f6f1fc;
+}
+.about-brand-copy .about-description {
+  max-width: 34em;
+  margin-bottom: 19px;
+  font-size: 18px;
+  line-height: 1.95;
+  color: #c8bfd5;
+}
+.about-brand-copy .about-detail {
+  max-width: 37em;
+  font-size: 15px;
+  line-height: 1.95;
+  color: #a79bb8;
+}
+.about-brand-visual {
+  width: min(100%, 490px);
+  justify-self: center;
+  aspect-ratio: 1;
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+.about-brand-visual img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  mix-blend-mode: screen;
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 43%, transparent 73%);
+  mask-image: radial-gradient(ellipse at center, #000 43%, transparent 73%);
+}
+body[data-page="about"] .about-values {
+  gap: 32px;
+  margin-top: 72px;
+  padding-top: 34px;
+  border-top-color: #b991e524;
+}
+body[data-page="about"] .about-values article {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+body[data-page="about"] .about-values h2 { font-size: 20px; color: #eee4fa; }
+body[data-page="about"] .about-values p { font-size: 14px; color: #a79bb8; }
+body[data-page="about"] .about-feedback { margin-top: 42px; font-size: 14px; }
+body[data-page="about"] .about-support { background: #0b0811; border-top-color: #b991e524; }
+body[data-page="about"] .support-content { max-width: 1040px; }
+body[data-page="about"] .support-code { background: #110c1b; border-color: #b991e529; box-shadow: none; }
+body[data-page="about"] .qr-crop { background: #fff; }
+@media (max-width: 950px) {
+  .about-brand-hero { gap: 22px; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+  .about-content .about-brand-copy h1 { font-size: 44px; }
+  .about-brand-copy .about-description { font-size: 17px; }
+}
+@media (max-width: 700px) {
+  body[data-page="about"] .about-software { padding: 128px 0 66px; }
+  .about-brand-hero { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .about-content .about-brand-copy h1 { font-size: clamp(40px, 10.8vw, 54px); max-width: 10em; }
+  .about-brand-copy .about-eyebrow { margin-bottom: 23px; }
+  .about-brand-copy .about-description { font-size: 17px; }
+  .about-brand-visual { width: min(88%, 350px); }
+  body[data-page="about"] .about-values { margin-top: 18px; gap: 32px 24px; }
+  body[data-page="about"] .about-values h2 { font-size: 18px; }
+  body[data-page="about"] .about-feedback { margin-top: 34px; font-size: 13px; }
+}
+@media (max-width: 370px) {
+  body[data-page="about"] .about-values { grid-template-columns: 1fr; }
+}
+
+.about-content .about-brand-copy h1 { white-space: pre-line; text-wrap: initial; }

@@ -3,7 +3,7 @@
   const root = document.getElementById('audio-demo');
   if (!root) return;
   const input = document.getElementById('audio-file'), audio = document.getElementById('local-audio'), play = document.getElementById('audio-play'), seek = document.getElementById('audio-seek'), canvas = document.getElementById('audio-canvas'), filename = document.getElementById('audio-filename'), clock = document.getElementById('audio-time'), status = document.getElementById('audio-status'), placeholder = document.getElementById('audio-placeholder');
-  let context, analyser, source, url, generation = 0, data, mode = 'gradient', state = 'empty', name = '', frame = 0, lastFrame = 0, inView = true;
+  let context, analyser, source, url, generation = 0, data, mode = 'solid', state = 'empty', name = '', frame = 0, lastFrame = 0, inView = true;
   const spectrum = new AgWaveform.Spectrum(), samples = new Float32Array(512);
   const visual = canvas.parentElement;
   const orbit = document.createElement('div');
@@ -83,11 +83,18 @@
     data = undefined; hoverRatio = null; name = file.name; spectrum.engine.fill(0); spectrum.shown.fill(0); spectrum.held.fill(0); setState('loading'); sync();
     try {
       initAudio();
+      url = URL.createObjectURL(file); audio.src = url; audio.load();
       const buffer = await context.decodeAudioData(await file.arrayBuffer());
       if (task !== generation) return;
-      const analyzed = await AgWaveform.analyze(buffer, () => task !== generation);
+      const analyzed = await AgWaveform.analyze(buffer, () => task !== generation, true);
       if (task !== generation) return;
-      data = analyzed; url = URL.createObjectURL(file); audio.src = url; audio.load(); setState('ready'); draw();
+      data = analyzed; setState('ready'); draw();
+      // Make the default waveform usable before calculating the three frequency bands.
+      await new Promise(resolve => setTimeout(resolve, 0));
+      if (task !== generation) return;
+      const detailed = await AgWaveform.analyze(buffer, () => task !== generation);
+      if (task !== generation) return;
+      data = detailed; draw();
     } catch (error) { if (task === generation && error.name !== 'AbortError') { data = undefined; setState('error'); draw(); } }
   });
   play.addEventListener('click', async () => {

@@ -10,7 +10,7 @@
     let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
     return x => { const y = b0 * x + b1 * x1 + b0 * x2 - a1 * y1 - a2 * y2; x2 = x1; x1 = x; y2 = y1; y1 = y; return y; };
   }
-  async function analyze(buffer, cancelled) {
+  async function analyze(buffer, cancelled, mixOnly = false) {
     const count = Math.min(buffer.length, 2000);
     const result = Object.fromEntries(bands.map(key => [key, new Float32Array(count)]));
     const channels = Array.from({ length: buffer.numberOfChannels }, (_, i) => buffer.getChannelData(i));
@@ -23,7 +23,7 @@
         const samples = channels[channel], f = filters[channel];
         for (let i = from; i < to; i++) {
           const x = Number.isFinite(samples[i]) ? samples[i] : 0;
-          mix += Math.abs(x); bass += Math.abs(f[0](x)); mid += Math.abs(f[2](f[1](x))); high += Math.abs(f[3](x));
+          mix += Math.abs(x); if (mixOnly) continue; bass += Math.abs(f[0](x)); mid += Math.abs(f[2](f[1](x))); high += Math.abs(f[3](x));
         }
       }
       const divisor = (to - from) * channels.length;

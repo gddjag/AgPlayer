@@ -49,10 +49,10 @@
     slides.forEach((slide, i) => {
       let offset = (i - activeTheme + slides.length) % slides.length;
       if (offset > 1) offset -= slides.length;
-      slide.style.setProperty('--card-x', `${offset * 53}%`);
-      slide.style.setProperty('--card-turn', `${offset * -32}deg`);
+      slide.style.setProperty('--card-x', `${offset * 35}%`);
+      slide.style.setProperty('--card-turn', `${offset * -24}deg`);
       slide.style.setProperty('--card-depth', `${offset ? -75 : 15}px`);
-      slide.style.setProperty('--card-scale', offset ? '.76' : '1');
+      slide.style.setProperty('--card-scale', offset ? '.82' : '1');
       slide.style.zIndex = offset ? '1' : '3';
       slide.classList.toggle('is-active', i === activeTheme);
       slide.setAttribute('aria-hidden', String(i !== activeTheme));

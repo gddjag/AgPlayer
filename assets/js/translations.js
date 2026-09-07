@@ -298,7 +298,7 @@ window.AG_COPY = {
     "aboutIntro": {
       "feedbackLabel": "意见反馈邮箱：",
       "eyebrow": "关于 AgPlayer",
-      "title": "让音乐，回到音乐本身。",
+      "title": "让音乐，\n回到音乐本身。",
       "description": "AgPlayer 是一款极简、纯净而强大的本地音频播放器。用波形看见声音的细节，用清晰直接的操作，让聆听、整理与音频处理保持简单。",
       "detail": "从三种播放主题、四种波形视图，到标签、评分、BPM 筛选与轻便音频工具，AgPlayer 陪你重新发现自己的本地音乐收藏。",
       "free": "永久免费",
@@ -674,4 +674,3 @@ window.AG_COPY = {
     }
   }
 };
-
