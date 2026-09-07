@@ -18,7 +18,9 @@ private slots:
     void weakMusicRetainsVisualTravelWithoutLiftingSilence();
     void fixedSeedProducesStableLayoutAndColorZones();
     void terrainCellsExposeSideFacesAtDefaultDensity();
-    void terrainLayoutProvidesCenteredWideGroundAndStarsStayOutsideCore();
+    void terrainLayoutKeepsTheRequestedCompleteCartesianGrid();
+    void referenceGridContains25600CellsAcross168WorldUnits();
+    void referenceDensityPreservesEachQualityGridBudget();
     void starfieldFormsBoundedSphericalShellAcrossTheHorizon();
     void starfieldUsesDistanceWeightedDensityAndScale();
     void starfieldCapsParticleBudget();
@@ -41,6 +43,7 @@ private slots:
     void punchRevisionClaimSurvivesRendererRebuild();
     void immersiveStyleControlsMapToBoundedDistinctDynamics();
     void impactEventsProduceOneBoundedPulsePerRevision();
+    void impactTailReachesZeroContinuouslyAtItsExistingDeadline();
     void beatEventsProduceShortIndependentPulsePerRevision();
     void dormantEventRevisionsAreDiscardedWithoutReplay();
     void explicitImpactRaisesCenterAndTravelingRing();
@@ -86,7 +89,7 @@ void TerrainReactorStateTest::fixedSeedProducesStableLayoutAndColorZones()
     QCOMPARE(first.floating, repeated.floating);
     QCOMPARE(first.meteors, repeated.meteors);
     QCOMPARE(first.particles, repeated.particles);
-    QVERIFY(first.terrain.size() > 50 && first.terrain.size() < 81);
+    QCOMPARE(first.terrain.size(), 81);
     QCOMPARE(first.floating.size(), 12);
     QCOMPARE(first.meteors.size(), 4);
     QCOMPARE(first.particles.size(), 16);
@@ -114,7 +117,7 @@ void TerrainReactorStateTest::fixedSeedProducesStableLayoutAndColorZones()
 void TerrainReactorStateTest::terrainCellsExposeSideFacesAtDefaultDensity()
 {
     constexpr int gridSize = 32;
-    constexpr float spacing = kTerrainStageExtent / float(gridSize + 1);
+    constexpr float spacing = kTerrainStageExtent / float(gridSize);
     const SceneLayout layout = makeSceneLayout(0x5eedU, gridSize, 0, 0, 0);
     QVERIFY(!layout.terrain.isEmpty());
     for (const SceneInstance& cell : layout.terrain) {
@@ -127,29 +130,59 @@ void TerrainReactorStateTest::terrainCellsExposeSideFacesAtDefaultDensity()
     }
 }
 
-void TerrainReactorStateTest::terrainLayoutProvidesCenteredWideGroundAndStarsStayOutsideCore()
+void TerrainReactorStateTest::terrainLayoutKeepsTheRequestedCompleteCartesianGrid()
 {
     const SceneLayout layout = makeSceneLayout(0x5eedU, 32, 8, 4, 48);
     QVERIFY(!layout.terrain.isEmpty());
     QVERIFY(!layout.particles.isEmpty());
 
-    for (const SceneInstance& instance : layout.terrain) {
-        QVERIFY2(std::hypot(instance.position.x(), instance.position.z())
-                     <= kTerrainStageExtent * 0.5F,
-                 "terrain corner escaped the circular stage");
-    }
-    QVERIFY(layout.terrain.size() > 800 && layout.terrain.size() < 900);
+    QCOMPARE(layout.terrain.size(), 32 * 32);
     const auto center = std::find_if(layout.terrain.cbegin(), layout.terrain.cend(),
                                      [](const SceneInstance& instance) {
         return qFuzzyIsNull(instance.position.x())
             && qFuzzyIsNull(instance.position.z());
     });
-    QVERIFY2(center != layout.terrain.cend(),
-             "odd grid must put a terrain cell at the reactor center");
+    QVERIFY2(center == layout.terrain.cend(),
+             "an even reference grid must not be silently converted to an odd grid");
+    const float halfCell = layout.terrain.front().scale.x() * 0.5F;
+    const SceneInstance& firstCorner = layout.terrain.front();
+    const SceneInstance& lastCorner = layout.terrain.back();
+    QVERIFY(std::hypot(firstCorner.position.x(), firstCorner.position.z())
+            > kTerrainStageExtent * 0.5F);
+    QVERIFY(std::abs(firstCorner.position.x() - halfCell
+                     + kTerrainStageExtent * 0.5F) < 0.0001F);
+    QVERIFY(std::abs(lastCorner.position.x() + halfCell
+                     - kTerrainStageExtent * 0.5F) < 0.0001F);
     for (const SceneInstance& star : layout.particles) {
         QVERIFY2(star.position.length() >= 240.0F,
-                 "deep-space star leaked into the reactor core");
+                  "deep-space star leaked into the reactor core");
     }
+}
+
+void TerrainReactorStateTest::referenceGridContains25600CellsAcross168WorldUnits()
+{
+    constexpr int referenceGridSize = 160;
+    const SceneLayout layout = makeSceneLayout(0x160U, referenceGridSize, 80, 0, 0);
+
+    QCOMPARE(kTerrainStageExtent, 168.0F);
+    QCOMPARE(layout.terrain.size(), 25600);
+    QCOMPARE(layout.floating.size(), 80);
+    const float expectedSpacing = 168.0F / 160.0F;
+    QVERIFY(std::abs(layout.terrain.front().scale.x() - expectedSpacing) < 0.0001F);
+    const float coveredWidth = layout.terrain.back().position.x()
+        - layout.terrain.front().position.x() + expectedSpacing;
+    QVERIFY(std::abs(coveredWidth - 168.0F) < 0.0001F);
+}
+
+void TerrainReactorStateTest::referenceDensityPreservesEachQualityGridBudget()
+{
+    QCOMPARE(terrainGridSizeForDensity(160, 125, 192), 160);
+    QCOMPARE(terrainGridSizeForDensity(128, 125, 160), 128);
+    QCOMPARE(terrainGridSizeForDensity(96, 125, 96), 96);
+    QCOMPARE(terrainGridSizeForDensity(96, 200, 96), 96);
+    QVERIFY(terrainGridSizeForDensity(160, 50, 192) < 160);
+    QVERIFY(terrainGridSizeForDensity(160, 200, 192) > 160);
+    QCOMPARE(terrainGridSizeForDensity(160, 200, 192), 192);
 }
 
 void TerrainReactorStateTest::starfieldFormsBoundedSphericalShellAcrossTheHorizon()
@@ -423,6 +456,34 @@ void TerrainReactorStateTest::immersiveStyleControlsMapToBoundedDistinctDynamics
     QVERIFY(reactive.rippleStrength <= 1.0F);
 }
 
+void TerrainReactorStateTest::impactTailReachesZeroContinuouslyAtItsExistingDeadline()
+{
+    RendererResourceState lifecycle;
+    ImpactEventConsumer consumer(lifecycle);
+    QVERIFY(consumer.consume(ImpactEvent{0.8F, 1}, 0.0F));
+    QCOMPARE(consumer.snapshot(0.0F).strength, 0.8F);
+    const auto before = consumer.snapshot(1.19F);
+    const auto atDeadline = consumer.snapshot(1.2F);
+    const auto after = consumer.snapshot(1.21F);
+    QVERIFY(before.active);
+    QVERIFY(before.strength > 0.0F);
+    QVERIFY2(before.strength < 0.02F,
+             "The last 10 ms must not retain a bright impact that vanishes at the deadline");
+    QVERIFY(!atDeadline.active && !after.active);
+    QCOMPARE(atDeadline.strength, 0.0F);
+    QCOMPARE(after.strength, 0.0F);
+    float previous = 0.8F;
+    for (int millisecond = 10; millisecond <= 1200; millisecond += 10) {
+        const float strength = consumer.snapshot(float(millisecond) / 1000).strength;
+        QVERIFY(strength <= previous && strength >= 0.0F);
+        QVERIFY2(previous - strength < 0.02F, "Impact darkening must not contain an abrupt tail step");
+        previous = strength;
+    }
+    QVERIFY(!consumer.consume(ImpactEvent{0.8F, 1}, 1.3F));
+    QVERIFY(consumer.consume(ImpactEvent{0.6F, 2}, 1.3F));
+    QCOMPARE(consumer.snapshot(1.3F).strength, 0.6F);
+}
+
 void TerrainReactorStateTest::impactEventsProduceOneBoundedPulsePerRevision()
 {
     RendererResourceState lifecycle;
@@ -676,12 +737,12 @@ void TerrainReactorStateTest::defaultAudioMappingPreservesMediumAndLoudDynamics(
 void TerrainReactorStateTest::defaultCameraStartsAtHighObliqueView()
 {
     const CameraSnapshot camera;
-    QVERIFY2(camera.pitch >= 0.60F,
-             "The initial immersive camera must be a high oblique God view");
-    QVERIFY2(camera.pitch <= 0.66F,
+    QVERIFY2(camera.pitch >= 0.75F,
+             "The initial immersive camera must retain an oblique overview");
+    QVERIFY2(camera.pitch <= 0.88F,
              "The initial view must retain enough side elevation to read column height");
-    // Leave a dark-space margin around the circular terrain and waveform.
-    QVERIFY(camera.distance >= 160.0F && camera.distance <= 168.0F);
+    QVERIFY2(camera.distance >= 135.0F && camera.distance <= 150.0F,
+             "The initial overview must bring the wide stage into the foreground");
 }
 
 void TerrainReactorStateTest::terrainAmplitudeProducesClearlyVisibleColumnTravel()
@@ -1059,6 +1120,8 @@ void TerrainReactorStateTest::automaticQualityUsesHysteresisCooldownAndEffectFir
     };
     QCOMPARE(quality.stage(), DegradationStage::Full);
     QCOMPARE(quality.configuration().particleCount, 1600);
+    QCOMPARE(quality.configuration().gridSize, 160);
+    QCOMPARE(quality.configuration().floatingCount, 80);
     QCOMPARE(quality.configuration().sampleCount, 4);
 
     observe(40.0, 1.99);
@@ -1070,7 +1133,7 @@ void TerrainReactorStateTest::automaticQualityUsesHysteresisCooldownAndEffectFir
     QCOMPARE(particlesReduced.floatingCount, 52);
     QCOMPARE(particlesReduced.meteorCount, 10);
     QCOMPARE(particlesReduced.rippleCount, 4);
-    QCOMPARE(particlesReduced.gridSize, 128);
+    QCOMPARE(particlesReduced.gridSize, 160);
     QCOMPARE(particlesReduced.sampleCount, 4);
 
     observe(40.0, 4.99);
@@ -1493,7 +1556,9 @@ void TerrainReactorStateTest::manualCameraControlRecoversAfterFourSeconds()
 {
     CameraMotion camera;
     const CameraSnapshot initial = camera.snapshot();
-    QCOMPARE(initial.distance, 164.0F);
+    // A broad ground view, while retaining readable vertical side faces.
+    QVERIFY(initial.distance >= 135.0F && initial.distance <= 150.0F);
+    QVERIFY(initial.pitch >= 0.75F && initial.pitch <= 0.88F);
     CameraMotion zoomedOut;
     zoomedOut.zoomBy(10000.0F, 1.0);
     QCOMPARE(zoomedOut.snapshot().distance, 220.0F);
@@ -1510,6 +1575,11 @@ void TerrainReactorStateTest::manualCameraControlRecoversAfterFourSeconds()
     QCOMPARE(camera.snapshot().yaw, manual.yaw);
     camera.advance(5.01, 0.5F, 1.0F);
     QVERIFY(camera.snapshot().yaw > manual.yaw);
+    const float firstResumeDelta = camera.snapshot().yaw - manual.yaw;
+    camera.advance(6.3, 0.5F, 1.0F);
+    const float fullSpeedDelta = camera.snapshot().yaw - manual.yaw - firstResumeDelta;
+    QVERIFY2(firstResumeDelta < fullSpeedDelta * 0.1F,
+             "Automatic orbit must ease back in after a manual operation");
     QVERIFY(camera.snapshot().punch < manual.punch);
 }
 

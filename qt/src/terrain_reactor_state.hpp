@@ -10,7 +10,7 @@
 
 namespace agplayer::terrain {
 
-inline constexpr float kTerrainStageExtent = 196.0F;
+inline constexpr float kTerrainStageExtent = 168.0F;
 
 enum class ColorZone : quint8 {
     Dark,
@@ -48,6 +48,8 @@ struct SceneLayout {
 
 SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
                             int meteorCount, int particleCount);
+int terrainGridSizeForDensity(int baseGridSize, int densityPercent,
+                              int gridCeiling) noexcept;
 
 struct MeteorPhase {
     float normalizedAge = 0.0F;
@@ -69,7 +71,7 @@ struct MeteorPhase {
 
 MeteorPhase meteorPhase(float random, float timeSeconds) noexcept;
 
-enum class RenderColorMode : quint8 { MultiRegion, Custom, RgbSweep };
+enum class RenderColorMode : quint8 { MultiRegion, Custom, RgbSweep, RainbowColumn = 3 };
 
 using TrackPalette = std::array<QVector4D, 5>;
 
@@ -95,6 +97,9 @@ struct RenderStyleSnapshot {
     int columnDensity = 125;
     float columnOpacity = 1.0F;
     float reactorBrightness = 1.0F;
+    float columnInnerLight = 1.0F;
+    float columnLightSpill = 0.2F;
+    float columnLightRadius = 1.0F;
     float materialSoftness = 0.45F;
     float jellyElasticity = 0.35F;
     float inkDensity = 0.60F;
@@ -199,8 +204,8 @@ enum class DegradationStage : quint8 {
 };
 
 struct QualityConfiguration {
-    int gridSize = 128;
-    int floatingCount = 52;
+    int gridSize = 160;
+    int floatingCount = 80;
     int particleCount = 1600;
     int meteorCount = 10;
     int rippleCount = 4;
@@ -297,8 +302,8 @@ private:
 
 struct CameraSnapshot {
     float yaw = 2.6075219F;
-    float pitch = 0.62F;
-    float distance = 164.0F;
+    float pitch = 0.80F;
+    float distance = 144.0F;
     float punch = 0.0F;
 };
 

@@ -25,6 +25,13 @@ Item {
                           0.95 + c.b * 0.03, 1) : c
     }
     readonly property var terrainItem: terrainLoader.item
+    readonly property bool localGlowLifecycleEligible:
+        renderingEnabled && active && hostExposed && !inkMode
+        && PlayerExperienceController.glowIntensity > 0
+        && PlayerExperienceController.columnLightSpill > 0
+    readonly property bool localGlowRequested:
+        localGlowLifecycleEligible && terrainItem
+        && terrainItem.renderStatus === TerrainReactorItem.Ready
     property string platformPlugin: String(Qt.platform.pluginName || "")
     readonly property bool waylandFallback:
         hostMode === PlayerExperienceController.Desktop
@@ -125,27 +132,22 @@ Item {
         onItemChanged: root.synchronizeAudioFeatures()
     }
 
-    Item {
-        id: reactorSoftBloom
+    Loader {
+        id: localGlowLoader
+        objectName: "immersiveColumnGlowLoader"
         anchors.fill: parent
-        visible: root.active && root.hostExposed && !root.inkMode
-        opacity: 0.14 + (root.terrainItem
-                         ? Math.min(1, root.terrainItem.featureEnergy) * 0.18 : 0)
+        active: root.localGlowRequested
+        sourceComponent: localGlowComponent
+    }
 
-        Repeater {
-            model: 4
-            Rectangle {
-                required property int index
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.verticalCenterOffset: parent.height * 0.08
-                width: parent.width * (0.58 - index * 0.065)
-                height: parent.height * (0.43 - index * 0.045)
-                radius: Math.min(width, height) / 2
-                color: index % 2 === 0 ? PlayerExperienceController.peakColor
-                                       : PlayerExperienceController.warmColor
-                opacity: 0.007
-            }
+    Component {
+        id: localGlowComponent
+        ImmersiveColumnGlow {
+            objectName: "immersiveColumnGlow"
+            sourceItem: root.terrainItem
+            intensity: PlayerExperienceController.glowIntensity / 100.0
+            spill: PlayerExperienceController.columnLightSpill / 100.0
+            radius: PlayerExperienceController.columnLightRadius / 100.0
         }
     }
 

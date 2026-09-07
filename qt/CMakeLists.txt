@@ -203,14 +203,25 @@ set_property(SOURCE src/qml_registration.cpp APPEND PROPERTY OBJECT_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/terrain_reactor_item.hpp;${CMAKE_CURRENT_SOURCE_DIR}/src/terrain_reactor_state.hpp"
 )
 set_property(SOURCE src/terrain_reactor_item.cpp APPEND PROPERTY OBJECT_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/terrain_reactor_item.hpp;${CMAKE_CURRENT_SOURCE_DIR}/src/terrain_reactor_state.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/terrain_reactor_item.hpp;${CMAKE_CURRENT_SOURCE_DIR}/src/terrain_reactor_state.hpp;${CMAKE_CURRENT_SOURCE_DIR}/src/terrain_reactor_gpu_data.hpp"
 )
+set_property(SOURCE src/terrain_reactor_item.cpp APPEND PROPERTY OBJECT_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/terrain_column_mesh.hpp;${CMAKE_CURRENT_SOURCE_DIR}/src/terrain_shadow_map.hpp")
 
 qt_add_shaders(agplayer_qt agplayer_terrain_reactor_shaders
     PREFIX "/terrain"
     FILES
         shaders/terrain_reactor.vert
         shaders/terrain_reactor.frag
+        shaders/terrain_shadow.frag
+        shaders/terrain_glow_extract.frag
+        shaders/terrain_glow_blur.frag
+)
+qt_add_shaders(agplayer_qt agplayer_terrain_shadow_vertex
+    PREFIX "/terrain-shadow"
+    DEFINES TERRAIN_SHADOW_PASS=1
+    FILES shaders/terrain_reactor.vert
+    OUTPUTS shaders/terrain_shadow.vert.qsb
 )
 
 if(WIN32)

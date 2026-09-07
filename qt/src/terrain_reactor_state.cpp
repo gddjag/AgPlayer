@@ -232,11 +232,7 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
                             int meteorCount, int particleCount)
 {
     SceneLayout result;
-    const int requestedGrid = std::max(1, gridSize);
-    // Center a real tile at the focal point so an even grid cannot reveal a
-    // dark crosshair through the reactor's middle.
-    const int boundedGrid = requestedGrid % 2 == 0
-        ? requestedGrid + 1 : requestedGrid;
+    const int boundedGrid = std::max(1, gridSize);
     const int boundedParticleCount = std::clamp(particleCount, 0, 1600);
     const int terrainCount = boundedGrid * boundedGrid;
     result.terrain.reserve(terrainCount);
@@ -249,7 +245,6 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
 
     DeterministicRandom random(seed);
     constexpr float extent = kTerrainStageExtent;
-    constexpr float stageRadius = extent * 0.5F;
     const float spacing = extent / static_cast<float>(boundedGrid);
     const float center = static_cast<float>(boundedGrid - 1) * 0.5F;
     for (int z = 0; z < boundedGrid; ++z) {
@@ -262,11 +257,9 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
             // second gap here made the center read as a black seam.
             instance.scale = QVector3D(spacing, 1.0F, spacing);
             instance.random = random.unit();
-            const float distance = std::hypot(worldX, worldZ);
-            // Retain the centered Cartesian cells and their random sequence,
-            // but submit only the circular stage. The shader softens its rim.
-            if (distance > stageRadius) continue;
-            const float radius = distance / stageRadius;
+            // Submit the complete Cartesian grid. The vertex shader owns the
+            // radial stage fade, so the CPU count remains exactly N * N.
+            const float radius = std::hypot(worldX, worldZ) / (extent * 0.5F);
             instance.zone = zoneFor(worldX, worldZ, radius, instance.random);
             result.terrain.append(instance);
         }
@@ -339,6 +332,16 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
         result.particles.append(particle);
     }
     return result;
+}
+
+int terrainGridSizeForDensity(int baseGridSize, int densityPercent,
+                              int gridCeiling) noexcept
+{
+    const int safeCeiling = std::max(32, gridCeiling);
+    const int safeBase = std::clamp(baseGridSize, 32, safeCeiling);
+    const float density = float(std::clamp(densityPercent, 50, 200)) / 125.0F;
+    return std::clamp(qRound(float(safeBase) * std::sqrt(density)),
+                      32, safeCeiling);
 }
 
 MeteorPhase meteorPhase(float random, float timeSeconds) noexcept
@@ -637,18 +640,22 @@ QualityConfiguration AutomaticQualityController::configuration(bool eco) const n
     case DegradationStage::Full:
         break;
     case DegradationStage::ReducedParticles:
+        result.floatingCount = 52;
         result.particleCount = 240;
         break;
     case DegradationStage::ReducedMeteors:
+        result.floatingCount = 52;
         result.particleCount = 240;
         result.meteorCount = 6;
         break;
     case DegradationStage::ReducedRipples:
+        result.floatingCount = 52;
         result.particleCount = 240;
         result.meteorCount = 6;
         result.rippleCount = 4;
         break;
     case DegradationStage::ReducedGrid:
+        result.floatingCount = 52;
         result.particleCount = 240;
         result.meteorCount = 6;
         result.rippleCount = 4;
@@ -657,6 +664,7 @@ QualityConfiguration AutomaticQualityController::configuration(bool eco) const n
         result.sampleCount = 1;
         break;
     case DegradationStage::ReducedResolution:
+        result.floatingCount = 52;
         result.particleCount = 120;
         result.meteorCount = 4;
         result.rippleCount = 3;
@@ -847,8 +855,12 @@ void CameraMotion::advance(double nowSeconds, float elapsedSeconds,
 {
     const float elapsed = std::max(0.0F, elapsedSeconds);
     if (nowSeconds >= manualUntilSeconds_) {
+        const float resume = manualUntilSeconds_ > 0.0
+            ? std::clamp(float((nowSeconds - manualUntilSeconds_) / 1.2), 0.0F, 1.0F)
+            : 1.0F;
+        const float ease = resume * resume * (3.0F - 2.0F * resume);
         snapshot_.yaw += elapsed * std::clamp(autoRotateSpeed, 0.0F, 2.0F)
-            * 0.098F;
+            * 0.098F * ease;
     }
     snapshot_.punch *= std::exp(-elapsed * 5.0F);
 }
@@ -991,7 +1003,9 @@ ImpactPulseSnapshot ImpactEventConsumer::snapshot(float nowSeconds) const noexce
     if (age >= 1.0F) return result;
     result.active = true;
     result.age = age;
-    result.strength = clampUnit(baseStrength_ * (1.0F - age * 0.55F));
+    // Reach zero before expiration instead of dropping the remaining 45%
+    // in one frame. Preserve the event's initial strength and lifetime.
+    result.strength = clampUnit(baseStrength_ * (1.0F - age));
     return result;
 }
 

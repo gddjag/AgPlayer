@@ -151,6 +151,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/PlayerPresentation.js
         qml/AgPlayer/components/FallbackCoverImage.qml
         qml/AgPlayer/components/ImmersiveSurface.qml
+        qml/AgPlayer/components/ImmersiveColumnGlow.qml
         qml/AgPlayer/components/ImmersiveControlPanel.qml
         qml/AgPlayer/components/ImmersiveQueueDrawer.qml
         qml/AgPlayer/components/LyricsPanel.qml

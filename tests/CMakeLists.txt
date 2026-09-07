@@ -905,6 +905,37 @@ add_test(NAME recovery_test
 )
 set_tests_properties(recovery_test PROPERTIES TIMEOUT 30)
 
+add_executable(terrain_column_material_test qt/terrain_column_material_test.cpp)
+add_executable(terrain_column_mesh_test qt/terrain_column_mesh_test.cpp)
+set_target_properties(terrain_column_mesh_test PROPERTIES AUTOMOC ON)
+target_include_directories(terrain_column_mesh_test PRIVATE "${CMAKE_SOURCE_DIR}/qt/src")
+target_link_libraries(terrain_column_mesh_test PRIVATE Qt6::Gui Qt6::Test)
+set_property(SOURCE qt/terrain_column_mesh_test.cpp APPEND PROPERTY OBJECT_DEPENDS
+    "${CMAKE_SOURCE_DIR}/qt/src/terrain_column_mesh.hpp;${CMAKE_SOURCE_DIR}/qt/src/terrain_reactor_gpu_data.hpp")
+add_test(NAME terrain_column_mesh_test COMMAND terrain_column_mesh_test)
+set_tests_properties(terrain_column_mesh_test PROPERTIES TIMEOUT 30
+    ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
+set_target_properties(terrain_column_material_test PROPERTIES AUTOMOC ON)
+set_property(SOURCE qt/terrain_column_material_test.cpp APPEND PROPERTY OBJECT_DEPENDS
+    "${CMAKE_SOURCE_DIR}/qt/src/terrain_reactor_gpu_data.hpp;${CMAKE_SOURCE_DIR}/qt/src/terrain_column_mesh.hpp;${CMAKE_SOURCE_DIR}/qt/src/terrain_shadow_map.hpp")
+target_include_directories(terrain_column_material_test PRIVATE "${CMAKE_SOURCE_DIR}/qt/src")
+target_link_libraries(terrain_column_material_test PRIVATE Qt6::Quick Qt6::GuiPrivate Qt6::Test)
+qt_add_shaders(terrain_column_material_test terrain_column_study_shaders
+    PREFIX "/terrain"
+    BASE "${CMAKE_SOURCE_DIR}/qt"
+    FILES "${CMAKE_SOURCE_DIR}/qt/shaders/terrain_reactor.vert"
+          "${CMAKE_SOURCE_DIR}/qt/shaders/terrain_reactor.frag"
+          "${CMAKE_SOURCE_DIR}/qt/shaders/terrain_shadow.frag")
+qt_add_shaders(terrain_column_material_test terrain_column_study_shadow_vertex
+    PREFIX "/terrain-shadow"
+    DEFINES TERRAIN_SHADOW_PASS=1
+    FILES "${CMAKE_SOURCE_DIR}/qt/shaders/terrain_reactor.vert"
+    OUTPUTS shaders/terrain_shadow.vert.qsb)
+agplayer_enable_warnings(terrain_column_material_test)
+add_test(NAME terrain_column_material_test COMMAND terrain_column_material_test)
+set_tests_properties(terrain_column_material_test PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
+    ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
+
 foreach(qt_test IN ITEMS
     filename_processing_test
     rename_transaction_test
@@ -980,7 +1011,7 @@ set_tests_properties(update_checker_test PROPERTIES TIMEOUT 20)
 # This GPU suite runs seven targeted cases, each with its own
 # discriminating QTRY deadline. Give only the outer CTest watchdog enough time
 # to let those condition-based failures report their real assertion.
-set_tests_properties(terrain_reactor_gpu_smoke_test PROPERTIES TIMEOUT 60)
+set_tests_properties(terrain_reactor_gpu_smoke_test PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE)
 
 # This suite includes real notice-expiry waits and can exceed the generic
 # ten-second Qt test budget on a busy Windows runner.
@@ -1564,6 +1595,19 @@ add_test(NAME qml_immersive_integration_test
 set_tests_properties(qml_immersive_integration_test PROPERTIES
     TIMEOUT 120
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;QT_QUICK_BACKEND=software"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
+# Native-only visual probe: the software integration suite above covers the
+# fallback, but cannot verify a QQuickRhiItem texture sampled by ShaderEffect.
+add_test(NAME qml_immersive_glow_gpu_test
+    COMMAND qml_mini_player_test
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_immersive_glow.qml)
+set_tests_properties(qml_immersive_glow_gpu_test PROPERTIES
+    TIMEOUT 60
+    RUN_SERIAL TRUE
+    ENVIRONMENT "QT_QUICK_CONTROLS_STYLE=Basic"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )

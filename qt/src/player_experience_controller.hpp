@@ -33,6 +33,9 @@ class PlayerExperienceController final : public QObject {
     Q_PROPERTY(int columnDensity READ columnDensity WRITE setColumnDensity NOTIFY columnDensityChanged)
     Q_PROPERTY(int columnOpacity READ columnOpacity WRITE setColumnOpacity NOTIFY columnOpacityChanged)
     Q_PROPERTY(int reactorBrightness READ reactorBrightness WRITE setReactorBrightness NOTIFY reactorBrightnessChanged)
+    Q_PROPERTY(int columnInnerLight READ columnInnerLight WRITE setColumnInnerLight NOTIFY columnInnerLightChanged)
+    Q_PROPERTY(int columnLightSpill READ columnLightSpill WRITE setColumnLightSpill NOTIFY columnLightSpillChanged)
+    Q_PROPERTY(int columnLightRadius READ columnLightRadius WRITE setColumnLightRadius NOTIFY columnLightRadiusChanged)
     Q_PROPERTY(int colorMode READ colorMode WRITE setColorMode NOTIFY colorModeChanged)
     Q_PROPERTY(QString coolColor READ coolColor WRITE setCoolColor
                    NOTIFY coolColorChanged)
@@ -117,7 +120,7 @@ public:
     Q_ENUM(HostMode)
     enum QualityPreset { Auto = 0, Eco = 1, Balanced = 2, High = 3, Ultra = 4 };
     Q_ENUM(QualityPreset)
-    enum ColorMode { MultiRegion = 0, Custom = 1, RgbSweep = 2 };
+    enum ColorMode { MultiRegion = 0, Custom = 1, RgbSweep = 2, RainbowColumn = 3 };
     Q_ENUM(ColorMode)
     enum VisualPreset {
         AudioRangeEcho = 0,
@@ -155,6 +158,9 @@ public:
     int columnDensity() const noexcept;
     int columnOpacity() const noexcept;
     int reactorBrightness() const noexcept;
+    int columnInnerLight() const noexcept;
+    int columnLightSpill() const noexcept;
+    int columnLightRadius() const noexcept;
     QString coolColor() const;
     QString warmColor() const;
     QString accentColor() const;
@@ -211,6 +217,9 @@ public:
     void setColumnDensity(int value);
     void setColumnOpacity(int value);
     void setReactorBrightness(int value);
+    void setColumnInnerLight(int value);
+    void setColumnLightSpill(int value);
+    void setColumnLightRadius(int value);
     void setCoolColor(const QString& value);
     void setWarmColor(const QString& value);
     void setAccentColor(const QString& value);
@@ -275,6 +284,9 @@ signals:
     void columnDensityChanged();
     void columnOpacityChanged();
     void reactorBrightnessChanged();
+    void columnInnerLightChanged();
+    void columnLightSpillChanged();
+    void columnLightRadiusChanged();
     void coolColorChanged();
     void warmColorChanged();
     void accentColorChanged();
@@ -342,11 +354,14 @@ private:
     int columnDensity_ = 125;
     int columnOpacity_ = 72;
     int reactorBrightness_ = 100;
-    QString coolColor_ = QStringLiteral("#8BDCFF");
-    QString warmColor_ = QStringLiteral("#EB7894");
-    QString accentColor_ = QStringLiteral("#FFD7DF");
-    QString peakColor_ = QStringLiteral("#FFF7FB");
-    QString baseColor_ = QStringLiteral("#050206");
+    int columnInnerLight_ = 100;
+    int columnLightSpill_ = 20;
+    int columnLightRadius_ = 100;
+    QString coolColor_ = QStringLiteral("#6553DD");
+    QString warmColor_ = QStringLiteral("#F467A9");
+    QString accentColor_ = QStringLiteral("#AD62ED");
+    QString peakColor_ = QStringLiteral("#FFE2EE");
+    QString baseColor_ = QStringLiteral("#030817");
     int terrainAmplitude_ = 42;
     int motionResponse_ = 34;
     int gradientLayers_ = 74;

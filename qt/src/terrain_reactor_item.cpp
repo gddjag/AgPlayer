@@ -1,4 +1,7 @@
 #include "terrain_reactor_item.hpp"
+#include "terrain_reactor_gpu_data.hpp"
+#include "terrain_column_mesh.hpp"
+#include "terrain_shadow_map.hpp"
 
 #include "audio_visual_feature_controller.hpp"
 #include "player_experience_controller.hpp"
@@ -28,83 +31,10 @@ using namespace agplayer::terrain;
 
 namespace {
 
-constexpr int cubeVertexCount = 24;
-constexpr int cubeIndexCount = 36;
-
-struct Vertex {
-    float position[3];
-    float normal[3];
-};
-
-struct GpuInstance {
-    float position[3];
-    float scale[3];
-    float data[4];
-};
-
-struct alignas(16) UniformBlock {
-    float mvp[16]{};
-    float bandsLow[4]{};
-    float bandsHigh[4]{};
-    float parameters[4]{}; // energy, flux, ripple, time
-    float effects[4]{}; // particles, meteors, punch, fog
-    float colors[5][4]{}; // base, cool, warm, accent, peak
-    float equalizerLow[4]{};
-    float equalizerHigh[4]{};
-    float styleParameters[4]{}; // amplitude, motion, glow, cinema
-    float styleDynamics[4]{}; // rotate, peak, color mode, gradient
-    float styleToggles[4]{}; // ripples, cubes, meteors, breathing
-    float styleExtra[4]{}; // theme cycle, burst, stream highlight, reserved
-    float styleAudio[4]{}; // compression, response, range, center highlight
-    float stylePresentation[4]{}; // rhythm, depth, clarity, rotation speed
-    float impact[4]{}; // strength, age, active, sensitivity
-    float waveSources[8][4]{}; // stage x/z, normalized phase, strength
-    float audioEnvelope[4]{}; // fast bass, slow bass, beat strength, beat age
-    float cameraPosition[4]{}; // world-space eye position
-    float materialParameters[4]{}; // mode, softness, elasticity, ink density
-    float sceneControls[4]{}; // column opacity, terrain exposure, reserved
-    float waveParameters[4]{}; // strength, width, lifetime factor, reserved
-};
-
-static_assert(alignof(UniformBlock) == 16);
-static_assert(sizeof(UniformBlock) % 16 == 0);
+using namespace agplayer::terrain::gpu;
 
 constexpr quint32 maximumInstances = 192U * 192U + 120U
     + 28U * (1U + 3U + 16U + 12U) + 1600U;
-
-constexpr std::array<Vertex, cubeVertexCount> cubeVertices{{
-    {{-0.5F, -0.5F,  0.5F}, { 0.0F,  0.0F,  1.0F}},
-    {{ 0.5F, -0.5F,  0.5F}, { 0.0F,  0.0F,  1.0F}},
-    {{ 0.5F,  0.5F,  0.5F}, { 0.0F,  0.0F,  1.0F}},
-    {{-0.5F,  0.5F,  0.5F}, { 0.0F,  0.0F,  1.0F}},
-    {{ 0.5F, -0.5F, -0.5F}, { 0.0F,  0.0F, -1.0F}},
-    {{-0.5F, -0.5F, -0.5F}, { 0.0F,  0.0F, -1.0F}},
-    {{-0.5F,  0.5F, -0.5F}, { 0.0F,  0.0F, -1.0F}},
-    {{ 0.5F,  0.5F, -0.5F}, { 0.0F,  0.0F, -1.0F}},
-    {{-0.5F, -0.5F, -0.5F}, {-1.0F,  0.0F,  0.0F}},
-    {{-0.5F, -0.5F,  0.5F}, {-1.0F,  0.0F,  0.0F}},
-    {{-0.5F,  0.5F,  0.5F}, {-1.0F,  0.0F,  0.0F}},
-    {{-0.5F,  0.5F, -0.5F}, {-1.0F,  0.0F,  0.0F}},
-    {{ 0.5F, -0.5F,  0.5F}, { 1.0F,  0.0F,  0.0F}},
-    {{ 0.5F, -0.5F, -0.5F}, { 1.0F,  0.0F,  0.0F}},
-    {{ 0.5F,  0.5F, -0.5F}, { 1.0F,  0.0F,  0.0F}},
-    {{ 0.5F,  0.5F,  0.5F}, { 1.0F,  0.0F,  0.0F}},
-    {{-0.5F,  0.5F,  0.5F}, { 0.0F,  1.0F,  0.0F}},
-    {{ 0.5F,  0.5F,  0.5F}, { 0.0F,  1.0F,  0.0F}},
-    {{ 0.5F,  0.5F, -0.5F}, { 0.0F,  1.0F,  0.0F}},
-    {{-0.5F,  0.5F, -0.5F}, { 0.0F,  1.0F,  0.0F}},
-    {{-0.5F, -0.5F, -0.5F}, { 0.0F, -1.0F,  0.0F}},
-    {{ 0.5F, -0.5F, -0.5F}, { 0.0F, -1.0F,  0.0F}},
-    {{ 0.5F, -0.5F,  0.5F}, { 0.0F, -1.0F,  0.0F}},
-    {{-0.5F, -0.5F,  0.5F}, { 0.0F, -1.0F,  0.0F}},
-}};
-
-constexpr std::array<quint16, cubeIndexCount> cubeIndices{{
-     0,  1,  2,  0,  2,  3,  4,  5,  6,  4,  6,  7,
-     8,  9, 10,  8, 10, 11, 12, 13, 14, 12, 14, 15,
-    16, 17, 18, 16, 18, 19, 20, 21, 22, 20, 22, 23,
-}};
-
 QShader loadShader(const QString& path)
 {
     QFile file(path);
@@ -261,7 +191,6 @@ protected:
         const bool seedChanged = next.seed != snapshot_.seed;
         const bool layoutChanged = seedChanged
             || next.style.materialMode != snapshot_.style.materialMode
-            || next.style.columnSize != snapshot_.style.columnSize
             || next.style.columnDensity != snapshot_.style.columnDensity
             || next.quality != snapshot_.quality
             || next.style.floatingCubesEnabled != snapshot_.style.floatingCubesEnabled
@@ -373,8 +302,12 @@ protected:
         visual.impactAge = impact.age;
         const RenderDynamics dynamics = mapRenderDynamics(snapshot_.style);
         camera_.advance(renderTimeSeconds, float(animationElapsedSeconds),
-                        dynamics.autoRotateSpeed * snapshot_.style.motionResponse);
+                        dynamics.autoRotateSpeed);
         UniformBlock uniforms = buildUniforms(visual, camera_.snapshot());
+        shadow_.configure(rhi(), uniforms,
+            snapshot_.quality != TerrainReactorItem::Quality::Eco
+            && quality_.stage() < DegradationStage::ReducedGrid
+            && snapshot_.style.materialMode != 2);
         QRhiResourceUpdateBatch* updates = rhi()->nextResourceUpdateBatch();
         updates->updateDynamicBuffer(uniformBuffer_.get(), 0,
                                      sizeof(UniformBlock), &uniforms);
@@ -390,23 +323,35 @@ protected:
                 std::exchange(pendingStaticUploads_, nullptr));
         }
 
+        commandBuffer->resourceUpdate(updates);
+        shadow_.render(rhi(), commandBuffer, uniforms, columnVertexBuffer_.get(),
+            columnIndexBuffer_.get(), instanceBuffer_.get(), quint32(columnIndices.size()),
+            quint32(currentTerrainCount_));
+
         // QQuickRhiItem textures use premultiplied alpha, including the clear
         // color; see Qt's BSD-3-Clause rhitextureitem example.
         commandBuffer->beginPass(renderTarget(), QColor(0, 0, 0, 0),
-                                 {1.0F, 0}, updates);
+                                 {1.0F, 0});
         commandBuffer->setGraphicsPipeline(pipeline_.get());
         commandBuffer->setShaderResources(bindings_.get());
         const QSize size = renderTarget()->pixelSize();
         commandBuffer->setViewport(QRhiViewport(0.0F, 0.0F,
                                                 float(size.width()),
                                                 float(size.height())));
-        const QRhiCommandBuffer::VertexInput bindings[] = {
-            {vertexBuffer_.get(), 0}, {instanceBuffer_.get(), 0}
+        const QRhiCommandBuffer::VertexInput columnBindings[] = {
+            {columnVertexBuffer_.get(), 0}, {instanceBuffer_.get(), 0}
         };
-        commandBuffer->setVertexInput(0, 2, bindings, indexBuffer_.get(), 0,
+        commandBuffer->setVertexInput(0, 2, columnBindings, columnIndexBuffer_.get(), 0,
+                                      QRhiCommandBuffer::IndexUInt16);
+        commandBuffer->drawIndexed(quint32(columnIndices.size()), quint32(currentTerrainCount_));
+        const QRhiCommandBuffer::VertexInput otherBindings[] = {
+            {vertexBuffer_.get(), 0},
+            {instanceBuffer_.get(), quint32(currentTerrainCount_ * sizeof(GpuInstance))}
+        };
+        commandBuffer->setVertexInput(0, 2, otherBindings, indexBuffer_.get(), 0,
                                       QRhiCommandBuffer::IndexUInt16);
         commandBuffer->drawIndexed(cubeIndexCount,
-                                   static_cast<quint32>(instances_.size()));
+            quint32(instances_.size() - currentTerrainCount_));
         commandBuffer->endPass();
         telemetry_->terrainCount.store(currentTerrainCount_, std::memory_order_release);
 
@@ -443,56 +388,64 @@ private:
             QRhiBuffer::VertexBuffer, sizeof(cubeVertices)));
         indexBuffer_.reset(rhi()->newBuffer(QRhiBuffer::Immutable,
             QRhiBuffer::IndexBuffer, sizeof(cubeIndices)));
+        columnVertexBuffer_.reset(rhi()->newBuffer(QRhiBuffer::Immutable,
+            QRhiBuffer::VertexBuffer, sizeof(columnVertices)));
+        columnIndexBuffer_.reset(rhi()->newBuffer(QRhiBuffer::Immutable,
+            QRhiBuffer::IndexBuffer, sizeof(columnIndices)));
         instanceBuffer_.reset(rhi()->newBuffer(QRhiBuffer::Dynamic,
             QRhiBuffer::VertexBuffer, maximumInstances * sizeof(GpuInstance)));
         uniformBuffer_.reset(rhi()->newBuffer(QRhiBuffer::Dynamic,
             QRhiBuffer::UniformBuffer, sizeof(UniformBlock)));
         if (!vertexBuffer_->create() || !indexBuffer_->create()
-            || !instanceBuffer_->create() || !uniformBuffer_->create()) {
+            || !instanceBuffer_->create() || !uniformBuffer_->create()
+            || !columnVertexBuffer_->create() || !columnIndexBuffer_->create()) {
             return false;
         }
 
-        bindings_.reset(rhi()->newShaderResourceBindings());
-        bindings_->setBindings({QRhiShaderResourceBinding::uniformBuffer(
-            0, QRhiShaderResourceBinding::VertexStage
-                | QRhiShaderResourceBinding::FragmentStage,
-            uniformBuffer_.get())});
-        if (!bindings_->create()) return false;
+        const auto layout = terrainVertexLayout();
+        if (!shadow_.create(rhi(),
+                loadShader(QStringLiteral(":/terrain-shadow/shaders/terrain_shadow.vert.qsb")),
+                loadShader(QStringLiteral(":/terrain/shaders/terrain_shadow.frag.qsb")), layout))
+            return false;
+        const auto createMaterial = [&]() {
+            bindings_.reset(rhi()->newShaderResourceBindings());
+            bindings_->setBindings({QRhiShaderResourceBinding::uniformBuffer(
+                0, QRhiShaderResourceBinding::VertexStage
+                    | QRhiShaderResourceBinding::FragmentStage,
+                uniformBuffer_.get()), QRhiShaderResourceBinding::sampledTexture(
+                    1, QRhiShaderResourceBinding::FragmentStage,
+                    shadow_.texture(), shadow_.sampler())});
+            if (!bindings_->create()) return false;
 
-        pipeline_.reset(rhi()->newGraphicsPipeline());
-        pipeline_->setShaderStages({
-            {QRhiShaderStage::Vertex, vertexShader},
-            {QRhiShaderStage::Fragment, fragmentShader},
-        });
-        QRhiVertexInputLayout layout;
-        layout.setBindings({
-            {sizeof(Vertex)},
-            {sizeof(GpuInstance), QRhiVertexInputBinding::PerInstance},
-        });
-        layout.setAttributes({
-            {0, 0, QRhiVertexInputAttribute::Float3, offsetof(Vertex, position)},
-            {0, 1, QRhiVertexInputAttribute::Float3, offsetof(Vertex, normal)},
-            {1, 2, QRhiVertexInputAttribute::Float3, offsetof(GpuInstance, position)},
-            {1, 3, QRhiVertexInputAttribute::Float3, offsetof(GpuInstance, scale)},
-            {1, 4, QRhiVertexInputAttribute::Float4, offsetof(GpuInstance, data)},
-        });
-        pipeline_->setVertexInputLayout(layout);
-        pipeline_->setShaderResourceBindings(bindings_.get());
-        pipeline_->setRenderPassDescriptor(renderTarget()->renderPassDescriptor());
-        pipeline_->setSampleCount(renderTarget()->sampleCount());
-        pipeline_->setCullMode(QRhiGraphicsPipeline::Back);
-        pipeline_->setDepthTest(true);
-        pipeline_->setDepthWrite(true);
-        QRhiGraphicsPipeline::TargetBlend blend;
-        blend.enable = true;
-        blend.srcColor = QRhiGraphicsPipeline::SrcAlpha;
-        blend.dstColor = QRhiGraphicsPipeline::OneMinusSrcAlpha;
-        pipeline_->setTargetBlends({blend});
-        if (!pipeline_->create()) return false;
+            pipeline_.reset(rhi()->newGraphicsPipeline());
+            pipeline_->setShaderStages({
+                {QRhiShaderStage::Vertex, vertexShader},
+                {QRhiShaderStage::Fragment, fragmentShader},
+            });
+            pipeline_->setVertexInputLayout(layout);
+            pipeline_->setShaderResourceBindings(bindings_.get());
+            pipeline_->setRenderPassDescriptor(renderTarget()->renderPassDescriptor());
+            pipeline_->setSampleCount(renderTarget()->sampleCount());
+            pipeline_->setCullMode(QRhiGraphicsPipeline::Back);
+            pipeline_->setDepthTest(true);
+            pipeline_->setDepthWrite(true);
+            QRhiGraphicsPipeline::TargetBlend blend;
+            blend.enable = true;
+            blend.srcColor = QRhiGraphicsPipeline::SrcAlpha;
+            blend.dstColor = QRhiGraphicsPipeline::OneMinusSrcAlpha;
+            pipeline_->setTargetBlends({blend});
+            return pipeline_->create();
+        };
+        if (!shadow_.createMaterialOrFallback(rhi(), createMaterial, [&]() {
+                pipeline_.reset();
+                bindings_.reset();
+            })) return false;
 
         QRhiResourceUpdateBatch* uploads = rhi()->nextResourceUpdateBatch();
         uploads->uploadStaticBuffer(vertexBuffer_.get(), cubeVertices.data());
         uploads->uploadStaticBuffer(indexBuffer_.get(), cubeIndices.data());
+        uploads->uploadStaticBuffer(columnVertexBuffer_.get(), columnVertices.data());
+        uploads->uploadStaticBuffer(columnIndexBuffer_.get(), columnIndices.data());
         // initialize() receives a command buffer, but the first render pass can
         // safely consume this batch together with the dynamic frame uploads.
         pendingStaticUploads_ = uploads;
@@ -515,12 +468,13 @@ private:
         case TerrainReactorItem::Quality::Balanced:
             config.rippleCount = std::min(config.rippleCount, 4);
             config.gridSize = std::min(config.gridSize, 128);
+            config.floatingCount = std::min(config.floatingCount, 52);
             if (quality_.stage() < DegradationStage::ReducedGrid) gridCeiling = 160;
             config.particleCount = std::min(config.particleCount, 960);
             break;
         case TerrainReactorItem::Quality::High:
             if (quality_.stage() < DegradationStage::ReducedGrid) {
-                config.gridSize = 144;
+                config.gridSize = 160;
                 gridCeiling = 192;
                 config.internalScale = 1.0F;
             }
@@ -532,12 +486,11 @@ private:
         if (!snapshot_.style.meteorsEnabled) config.meteorCount = 0;
         if (!snapshot_.style.ripplesEnabled) config.rippleCount = 0;
         if (snapshot_.style.materialMode == 2) config.particleCount = 0;
-        // Keep radius fixed and respect the selected quality's detail ceiling.
-        // Small cells cannot undo Eco or automatic grid degradation.
-        const float density = float(std::clamp(snapshot_.style.columnDensity, 50, 200)) / 100.0F;
-        config.gridSize = std::clamp(qRound(config.gridSize * std::sqrt(density)
-                                            / (0.5F + snapshot_.style.columnSize)),
-                                     32, gridCeiling);
+        // Density controls instance count; column size changes only each
+        // column's cross-section in the shader. At the reference 125% density,
+        // High remains the exact 160 x 160 source grid.
+        config.gridSize = terrainGridSizeForDensity(
+            config.gridSize, snapshot_.style.columnDensity, gridCeiling);
         const SceneLayout layout = makeSceneLayout(snapshot_.seed,
             config.gridSize, config.floatingCount, config.meteorCount,
             config.particleCount);
@@ -695,7 +648,11 @@ private:
         result.materialParameters[0] = float(snapshot_.style.materialMode);
         result.sceneControls[0] = snapshot_.style.columnOpacity;
         result.sceneControls[1] = snapshot_.style.reactorBrightness;
+        result.sceneLighting[0] = snapshot_.style.columnInnerLight;
+        result.sceneLighting[1] = snapshot_.style.columnLightSpill;
+        result.sceneLighting[2] = snapshot_.style.columnLightRadius;
         result.sceneControls[2] = kTerrainStageExtent * 0.5F;
+        result.sceneControls[3] = snapshot_.style.columnSize;
         result.materialParameters[1] = snapshot_.style.materialSoftness;
         result.materialParameters[2] = snapshot_.style.jellyElasticity;
         result.materialParameters[3] = snapshot_.style.inkDensity;
@@ -717,10 +674,13 @@ private:
         }
         pipeline_.reset();
         bindings_.reset();
+        shadow_.reset();
         uniformBuffer_.reset();
         instanceBuffer_.reset();
         indexBuffer_.reset();
         vertexBuffer_.reset();
+        columnIndexBuffer_.reset();
+        columnVertexBuffer_.reset();
         lastRenderTarget_ = nullptr;
         resourceState_->invalidateResources();
     }
@@ -826,6 +786,8 @@ private:
     QString diagnostic_;
     QRhiRenderTarget* lastRenderTarget_ = nullptr;
     std::unique_ptr<QRhiBuffer> vertexBuffer_;
+    std::unique_ptr<QRhiBuffer> columnVertexBuffer_, columnIndexBuffer_;
+    TerrainShadowMap shadow_;
     std::unique_ptr<QRhiBuffer> indexBuffer_;
     std::unique_ptr<QRhiBuffer> instanceBuffer_;
     std::unique_ptr<QRhiBuffer> uniformBuffer_;
@@ -892,6 +854,9 @@ void TerrainReactorItem::setStyleSource(QObject* source)
         styleConnections_.append(connect(styleSource_, &PlayerExperienceController::columnDensityChanged, this, capture));
         styleConnections_.append(connect(styleSource_, &PlayerExperienceController::columnOpacityChanged, this, capture));
         styleConnections_.append(connect(styleSource_, &PlayerExperienceController::reactorBrightnessChanged, this, capture));
+        styleConnections_.append(connect(styleSource_, &PlayerExperienceController::columnInnerLightChanged, this, capture));
+        styleConnections_.append(connect(styleSource_, &PlayerExperienceController::columnLightSpillChanged, this, capture));
+        styleConnections_.append(connect(styleSource_, &PlayerExperienceController::columnLightRadiusChanged, this, capture));
         styleConnections_.append(connect(styleSource_, &PlayerExperienceController::jellyElasticityChanged, this, capture));
         styleConnections_.append(connect(styleSource_, &PlayerExperienceController::inkDensityChanged, this, capture));
         styleConnections_.append(connect(styleSource_, &PlayerExperienceController::rippleStrengthChanged, this, capture));
@@ -1298,6 +1263,9 @@ void TerrainReactorItem::copyStyleSource()
     next.columnDensity = styleSource_->columnDensity();
     next.columnOpacity = float(styleSource_->columnOpacity()) / 100.0F;
     next.reactorBrightness = float(styleSource_->reactorBrightness()) / 100.0F;
+    next.columnInnerLight = float(styleSource_->columnInnerLight()) / 100.0F;
+    next.columnLightSpill = float(styleSource_->columnLightSpill()) / 100.0F;
+    next.columnLightRadius = float(styleSource_->columnLightRadius()) / 100.0F;
     next.jellyElasticity = float(styleSource_->jellyElasticity()) / 100.0F;
     next.inkDensity = float(styleSource_->inkDensity()) / 100.0F;
     next.rippleStrength = float(styleSource_->rippleStrength()) / 100.0F;

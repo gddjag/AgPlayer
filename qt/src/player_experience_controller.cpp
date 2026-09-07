@@ -128,7 +128,7 @@ struct StylePreset {
 const std::array<StylePreset, 9>& visualPresets()
 {
     static const std::array<StylePreset, 9> presets = {{
-        {0, "#8BDCFF", "#EB7894", "#FFD7DF", "#FFF7FB", "#050206",
+        {0, "#6553DD", "#F467A9", "#AD62ED", "#FFE2EE", "#030817",
          62, 56, 74, 38, 0.30, 54, 58, true, true, true, true, true, false, true,
          {90, 92, 50, 50, 50, 50, 50, 48}, 82, 136, 100, 64, 30, 86, 112, 42, 80},
         {2, "#7F5CFF", "#FF4FD8", "#22F0FF", "#F7F2FF", "#070310",
@@ -146,15 +146,15 @@ const std::array<StylePreset, 9>& visualPresets()
         {2, "#44D9FF", "#FF4FA7", "#FF8A45", "#FFF1D1", "#05030D",
          72, 68, 76, 52, 0.45, 58, 68, true, true, true, true, true, true, true,
          {96, 88, 66, 54, 58, 76, 94, 100}, 80, 140, 182, 64, 104, 96, 110, 46, 84},
-        {2, "#38D8FF", "#FF5A9D", "#8A7CFF", "#F8F4FF", "#03040B",
+        {3, "#38D8FF", "#FF5A9D", "#8A7CFF", "#F8F4FF", "#03040B",
          58, 62, 82, 46, 0.22, 46, 64, true, false, true, true, true, false, true,
-         {92, 86, 66, 58, 62, 76, 88, 94}, 82, 138, 168, 62, 74, 82, 118, 40, 82},
+         {92, 86, 66, 58, 62, 76, 88, 94}, 82, 138, 198, 62, 74, 82, 118, 40, 82},
         {1, "#174C78", "#2EC4B6", "#78DCE8", "#E9FDFF", "#02070C",
          44, 38, 58, 28, 0.10, 30, 42, true, false, false, false, true, false, true,
-         {78, 74, 68, 60, 52, 48, 44, 40}, 88, 118, 174, 52, 58, 108, 116, 24, 70},
+         {78, 74, 68, 60, 52, 48, 44, 40}, 88, 118, 195, 52, 58, 108, 116, 24, 70},
         {1, "#8A3D22", "#E6813B", "#FFC66D", "#FFF1C2", "#090502",
          56, 48, 66, 34, 0.18, 34, 52, true, false, true, true, true, false, true,
-         {88, 84, 72, 62, 54, 48, 44, 42}, 84, 126, 162, 60, 66, 94, 120, 28, 74},
+         {88, 84, 72, 62, 54, 48, 44, 42}, 84, 126, 188, 60, 66, 94, 120, 28, 74},
     }};
     return presets;
 }
@@ -189,6 +189,9 @@ int PlayerExperienceController::columnSize() const noexcept { return columnSize_
 int PlayerExperienceController::columnDensity() const noexcept { return columnDensity_; }
 int PlayerExperienceController::columnOpacity() const noexcept { return columnOpacity_; }
 int PlayerExperienceController::reactorBrightness() const noexcept { return reactorBrightness_; }
+int PlayerExperienceController::columnInnerLight() const noexcept { return columnInnerLight_; }
+int PlayerExperienceController::columnLightSpill() const noexcept { return columnLightSpill_; }
+int PlayerExperienceController::columnLightRadius() const noexcept { return columnLightRadius_; }
 QString PlayerExperienceController::coolColor() const { return coolColor_; }
 QString PlayerExperienceController::warmColor() const { return warmColor_; }
 QString PlayerExperienceController::accentColor() const { return accentColor_; }
@@ -346,6 +349,33 @@ void PlayerExperienceController::setReactorBrightness(int value)
     emit reactorBrightnessChanged();
 }
 
+void PlayerExperienceController::setColumnInnerLight(int value)
+{
+    value = clampRange(value, 0, 200);
+    if (columnInnerLight_ == value) return;
+    columnInnerLight_ = value;
+    persist(QStringLiteral("columnInnerLight"), value);
+    emit columnInnerLightChanged();
+}
+
+void PlayerExperienceController::setColumnLightSpill(int value)
+{
+    value = clampRange(value, 0, 200);
+    if (columnLightSpill_ == value) return;
+    columnLightSpill_ = value;
+    persist(QStringLiteral("columnLightSpill"), value);
+    emit columnLightSpillChanged();
+}
+
+void PlayerExperienceController::setColumnLightRadius(int value)
+{
+    value = clampRange(value, 20, 200);
+    if (columnLightRadius_ == value) return;
+    columnLightRadius_ = value;
+    persist(QStringLiteral("columnLightRadius"), value);
+    emit columnLightRadiusChanged();
+}
+
 void PlayerExperienceController::setImmersiveMode(int value)
 {
     value = value == TerrainReactor ? TerrainReactor : Off;
@@ -399,7 +429,7 @@ void PlayerExperienceController::setQualityPreset(int value)
 
 void PlayerExperienceController::setColorMode(int value)
 {
-    value = enumOrDefault(value, MultiRegion, RgbSweep, MultiRegion);
+    value = enumOrDefault(value, MultiRegion, RainbowColumn, MultiRegion);
     if (colorMode_ == value) return;
     colorMode_ = value;
     persist(QStringLiteral("colorMode"), value);
@@ -756,10 +786,14 @@ bool PlayerExperienceController::applyPreset(int preset)
     setRippleWidth(material[5]);
     setRippleDecay(material[6]);
     static constexpr std::array<int, 9> columnSizes =
-        {120, 110, 95, 125, 150, 110, 100, 130, 140};
+        {95, 90, 80, 100, 110, 90, 85, 105, 105};
     setColumnSize(columnSizes.at(static_cast<size_t>(preset)));
     setColumnOpacity(100);
-    setReactorBrightness(100);
+    // The pale stage and strong galactic pulse need less exposure than dark
+    // palettes; retain their motion rather than flattening beat strength.
+    static constexpr std::array<int, 9> brightness =
+        {100, 100, 100, 78, 100, 74, 100, 100, 100};
+    setReactorBrightness(brightness.at(static_cast<size_t>(preset)));
     const StylePreset& values = visualPresets().at(static_cast<size_t>(preset));
     // An explicit preset selection owns the palette until automatic track
     // colors are enabled again by the user.
@@ -859,22 +893,22 @@ void PlayerExperienceController::load()
     qualityPreset_ = enumOrDefault(integer(QStringLiteral("qualityPreset"), Auto),
                                    Auto, Ultra, Auto);
     colorMode_ = enumOrDefault(integer(QStringLiteral("colorMode"), MultiRegion),
-                               MultiRegion, RgbSweep, MultiRegion);
+                               MultiRegion, RainbowColumn, MultiRegion);
     coolColor_ = normalizedColor(storedColor(settings_.value(QStringLiteral("coolColor")),
-                                             QStringLiteral("#8BDCFF")),
-                                 QStringLiteral("#8BDCFF"));
+                                             QStringLiteral("#6553DD")),
+                                 QStringLiteral("#6553DD"));
     warmColor_ = normalizedColor(storedColor(settings_.value(QStringLiteral("warmColor")),
-                                             QStringLiteral("#EB7894")),
-                                 QStringLiteral("#EB7894"));
+                                             QStringLiteral("#F467A9")),
+                                 QStringLiteral("#F467A9"));
     accentColor_ = normalizedColor(storedColor(settings_.value(QStringLiteral("accentColor")),
-                                               QStringLiteral("#FFD7DF")),
-                                   QStringLiteral("#FFD7DF"));
+                                               QStringLiteral("#AD62ED")),
+                                   QStringLiteral("#AD62ED"));
     peakColor_ = normalizedColor(storedColor(settings_.value(QStringLiteral("peakColor")),
-                                             QStringLiteral("#FFF7FB")),
-                                 QStringLiteral("#FFF7FB"));
+                                             QStringLiteral("#FFE2EE")),
+                                 QStringLiteral("#FFE2EE"));
     baseColor_ = normalizedColor(storedColor(settings_.value(QStringLiteral("baseColor")),
-                                             QStringLiteral("#050206")),
-                                 QStringLiteral("#050206"));
+                                             QStringLiteral("#030817")),
+                                 QStringLiteral("#030817"));
     terrainAmplitude_ = clampPercent(integer(QStringLiteral("terrainAmplitude"), 42));
     materialMode_ = enumOrDefault(integer(QStringLiteral("materialMode"), 0), 0, 2, 0);
     materialSoftness_ = clampRange(integer(QStringLiteral("materialSoftness"), 45), 0, 100);
@@ -887,6 +921,9 @@ void PlayerExperienceController::load()
     columnDensity_ = clampRange(integer(QStringLiteral("columnDensity"), 125), 50, 200);
     columnOpacity_ = clampRange(integer(QStringLiteral("columnOpacity"), 72), 0, 100);
     reactorBrightness_ = clampRange(integer(QStringLiteral("reactorBrightness"), 100), 0, 200);
+    columnInnerLight_ = clampRange(integer(QStringLiteral("columnInnerLight"), 100), 0, 200);
+    columnLightSpill_ = clampRange(integer(QStringLiteral("columnLightSpill"), 20), 0, 200);
+    columnLightRadius_ = clampRange(integer(QStringLiteral("columnLightRadius"), 100), 20, 200);
     motionResponse_ = clampPercent(integer(QStringLiteral("motionResponse"), 34));
     gradientLayers_ = clampPercent(integer(QStringLiteral("gradientLayers"), 74));
     glowIntensity_ = clampPercent(integer(QStringLiteral("glowIntensity"), 38));
@@ -944,6 +981,9 @@ void PlayerExperienceController::load()
     settings_.setValue(QStringLiteral("columnDensity"), columnDensity_);
     settings_.setValue(QStringLiteral("columnOpacity"), columnOpacity_);
     settings_.setValue(QStringLiteral("reactorBrightness"), reactorBrightness_);
+    settings_.setValue(QStringLiteral("columnInnerLight"), columnInnerLight_);
+    settings_.setValue(QStringLiteral("columnLightSpill"), columnLightSpill_);
+    settings_.setValue(QStringLiteral("columnLightRadius"), columnLightRadius_);
     settings_.setValue(QStringLiteral("coolColor"), coolColor_);
     settings_.setValue(QStringLiteral("warmColor"), warmColor_);
     settings_.setValue(QStringLiteral("accentColor"), accentColor_);
