@@ -1,4 +1,7 @@
 #include "audio_tools_controller.hpp"
+#include "audio_editor/audio_editor_controller.hpp"
+#include "audio_preview_controller.hpp"
+#include "playback_controller.hpp"
 #include "audio_file_discovery.hpp"
 #include "filename_processor.hpp"
 #include "format_converter.hpp"
@@ -64,6 +67,7 @@ class AudioToolsEndToEndTest final : public QObject {
 private slots:
     void formatConverterExposesOnlyReleaseFormats();
     void audioToolsControllerKeepsLegacyIdsAndSupportsSeparation();
+    void allPlaybackLocationsPauseEachOther();
     void toolsExpandDroppedFoldersRecursively();
     void audioFileDiscoveryExpandsFoldersOffTheGuiThread();
     void formatConverterLoadsDroppedFilesAsynchronously();
@@ -1984,6 +1988,80 @@ void AudioToolsEndToEndTest::formatConverterConvertsAcrossDistinctChinesePaths()
     QVERIFY(completed.wait(30'000));
     QCOMPARE(converter.failedCount(), 0);
     verifyAudioFile(QDir(outputDirectory).filePath(QStringLiteral("伪装.wav")));
+}
+
+void AudioToolsEndToEndTest::allPlaybackLocationsPauseEachOther()
+{
+    const QString fixture = QCoreApplication::applicationDirPath() + "/fixtures/sine-440hz.wav";
+    QVERIFY(QFileInfo::exists(fixture));
+    ag_player* core = nullptr;
+    const ag_player_config config{AG_AUDIO_BACKEND_NULL, 0U};
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    const auto cleanup = qScopeGuard([&] { ag_player_destroy(core); });
+    LibraryModel library;
+    TrackRecord track;
+    track.trackId = "focus-track";
+    track.path = fixture;
+    track.available = true;
+    QVERIFY(library.append(track));
+    PlaybackController playback(core, &library);
+    AudioEditorController editor(AG_AUDIO_BACKEND_NULL);
+    editor.setPlaybackController(&playback);
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL, &playback);
+    AudioToolsController tools;
+    tools.bindPlaybackControllers(&playback, &editor, &preview);
+    QVERIFY(editor.openFile(QUrl::fromLocalFile(fixture)));
+    QTRY_VERIFY_WITH_TIMEOUT(editor.hasDocument() && !editor.loading(), 5000);
+    QVERIFY(playback.playTrackIds({track.trackId}, track.trackId));
+    playback.seek(500);
+    preview.play(QUrl::fromLocalFile(fixture));
+    QTRY_VERIFY(preview.playing());
+    QTRY_COMPARE(playback.state(), PlaybackController::Paused);
+    QVERIFY(playback.positionMs() >= 450);
+    preview.seek(600);
+    playback.play();
+    QTRY_COMPARE(playback.state(), PlaybackController::Playing);
+    QVERIFY(!preview.playing());
+    QVERIFY(preview.hasSource());
+    QVERIFY(preview.positionMs() >= 550);
+    preview.resume();
+    QTRY_VERIFY(preview.playing());
+    QTRY_COMPARE(playback.state(), PlaybackController::Paused);
+    QVERIFY(editor.playPause());
+    QTRY_VERIFY(editor.playing());
+    QVERIFY(!preview.playing());
+    editor.seekMs(700);
+    preview.toggle(QUrl::fromLocalFile(fixture));
+    QTRY_VERIFY(preview.playing());
+    QVERIFY(!editor.playing());
+    QVERIFY(editor.positionMs() >= 650);
+    QVERIFY(editor.playPause());
+    QVERIFY(!preview.playing());
+    playback.play();
+    QTRY_COMPARE(playback.state(), PlaybackController::Playing);
+    QVERIFY(!editor.playing());
+    QVERIFY(editor.positionMs() >= 650);
+    QVERIFY(editor.playPause());
+    QVERIFY(preview.playMix({{"one", fixture, 0.5}, {"two", fixture, 0.5}}, 500));
+    QVERIFY(!editor.playing());
+    QVERIFY(preview.playing());
+    playback.play();
+    QVERIFY(!preview.playing());
+    QVERIFY(preview.mixActive());
+    preview.resume();
+    QVERIFY(preview.playing());
+    QTRY_COMPARE(playback.state(), PlaybackController::Paused);
+    QVERIFY(editor.playPause());
+    QVERIFY(!preview.playing());
+    QVERIFY(playback.playTrackIds({track.trackId}, track.trackId));
+    QVERIFY(!editor.playing());
+    editor.deactivate();
+    QTRY_COMPARE(playback.state(), PlaybackController::Playing);
+    preview.play(QUrl::fromLocalFile(fixture));
+    preview.setDspParameters(1.2, 100, true, false, false, true);
+    QVERIFY(editor.playPause());
+    QTRY_VERIFY_WITH_TIMEOUT(!preview.processing(), 10000);
+    QVERIFY(!preview.playing());
 }
 
 void AudioToolsEndToEndTest::audioToolsControllerKeepsLegacyIdsAndSupportsSeparation()

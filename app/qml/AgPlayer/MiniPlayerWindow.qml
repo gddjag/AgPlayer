@@ -45,12 +45,12 @@ Window {
 
     Rectangle {
         id: surface
+        objectName: "miniWindowSurface"
         anchors.fill: parent
         anchors.margins: 2
         radius: Theme.windowRadius
         color: Theme.background
-        border.color: Theme.border
-        border.width: 1
+        border.width: 0
         clip: true
 
         ColumnLayout {

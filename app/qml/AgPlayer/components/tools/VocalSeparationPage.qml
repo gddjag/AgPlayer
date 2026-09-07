@@ -47,6 +47,7 @@ Rectangle {
     property real inputPreviewPositionMs: 0
     property real resultPreviewPositionMs: 0
     property string rememberedInputPath: ""
+    property bool environmentRefreshReady: false
     readonly property string inputPreviewPath:
         VocalSeparationController.inputInfo.path || ""
     readonly property bool inputPreviewCurrent:
@@ -57,15 +58,15 @@ Rectangle {
         !== VocalSeparationController.None
 
     onVisibleChanged: {
-        if (visible && !VocalSeparationController.downloadBusy) {
+        if (environmentRefreshReady && visible
+                && !VocalSeparationController.downloadBusy) {
             VocalSeparationController.probeDevices()
-            VocalSeparationController.verifyInstalledModels()
         }
     }
     Component.onCompleted: {
+        environmentRefreshReady = true
         if (visible && !VocalSeparationController.downloadBusy) {
             VocalSeparationController.probeDevices()
-            VocalSeparationController.verifyInstalledModels()
         }
     }
 
@@ -1202,21 +1203,20 @@ Rectangle {
                                           WorkbenchButton {
                                               objectName: "separationInstallRuntime-" + cardData.id
                                               visible: cardData.backend === "external-python"
-                                                       || (cardData.state === VocalSeparationController.Installed
-                                                        && !VocalSeparationController.runtimeReady)
-                                                       || (cardData.origin === "custom"
-                                                           && cardData.compatibility === "diagnostic"
-                                                           && cardData.backend === "onnxruntime-native")
+                                                       || cardData.backend === "onnxruntime-native"
                                               implicitHeight: 24
                                               leftPadding: 6
                                               rightPadding: 6
                                               topPadding: 3
                                               bottomPadding: 3
                                               text: cardData.compatibility === "diagnostic" ? qsTr("查看原因")
-                                                  : cardData.state === VocalSeparationController.Downloading ? qsTr("暂停")
-                                                  : cardData.state === VocalSeparationController.Paused ? qsTr("继续配置")
+                                                  : cardData.backend === "external-python"
+                                                    && cardData.state === VocalSeparationController.Downloading ? qsTr("暂停")
+                                                  : cardData.backend === "external-python"
+                                                    && cardData.state === VocalSeparationController.Paused ? qsTr("继续配置")
                                                   : qsTr("一键配置")
-                                              enabled: !page.contextLocked
+                                              enabled: (!page.contextLocked
+                                                        || cardData.state === VocalSeparationController.Verifying)
                                                        && (!VocalSeparationController.downloadBusy
                                                            || cardData.id === VocalSeparationController.downloadingModelId)
                                               Accessible.name: text
@@ -1225,9 +1225,11 @@ Rectangle {
                                                   if (cardData.compatibility === "diagnostic") {
                                                       configurationDiagnostic.text = cardData.failureReason || cardData.description
                                                       configurationDialog.open()
-                                                  } else if (cardData.state === VocalSeparationController.Downloading)
+                                                  } else if (cardData.backend === "external-python"
+                                                             && cardData.state === VocalSeparationController.Downloading)
                                                       VocalSeparationController.pauseDownload()
-                                                  else if (cardData.state === VocalSeparationController.Paused)
+                                                  else if (cardData.backend === "external-python"
+                                                          && cardData.state === VocalSeparationController.Paused)
                                                       VocalSeparationController.resumeDownload()
                                                   else if (!VocalSeparationController.configureRuntime(cardData.id)) {
                                                       configurationDiagnostic.text = VocalSeparationController.error

@@ -548,6 +548,7 @@ void SettingsControllerTest::waveformAppearanceSettingsClampPersistAndReset()
         QCOMPARE(settings.waveformDensity(), 2.0);
         QCOMPARE(settings.waveformThickness(), 1.0);
         QCOMPARE(settings.waveformMode(), 0);
+        QCOMPARE(settings.listWaveformThumbnailMode(), QStringLiteral("Spectral"));
         auto* frequency = settings.frequencyColorWaveform();
         QCOMPARE(frequency->lowColor(), QColor(QStringLiteral("#ff0000")));
         QCOMPARE(frequency->midColor(), QColor(QStringLiteral("#00ff00")));

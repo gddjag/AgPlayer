@@ -149,6 +149,32 @@ public:
             && !controller.downloadQueue_.isEmpty()
             && controller.downloadQueue_.constFirst().runtimeArchive;
     }
+
+    static quint64 verificationGeneration(
+        const VocalSeparationController& controller)
+    {
+        return controller.verificationGeneration_;
+    }
+
+    static bool verificationInFlight(
+        const VocalSeparationController& controller)
+    {
+        return controller.verificationWatcher_ != nullptr;
+    }
+
+    static bool directoryAndVerificationIdle(
+        const VocalSeparationController& controller)
+    {
+        return controller.modelDirectoryIndexWatcher_ == nullptr
+            && controller.verificationWatcher_ == nullptr;
+    }
+
+    static bool beginRefreshVerification(
+        VocalSeparationController& controller)
+    {
+        return controller.beginVerification(
+            VocalSeparationController::VerificationPurpose::Refresh);
+    }
 };
 
 class VocalSeparationControllerTest final : public QObject {
@@ -166,6 +192,12 @@ private slots:
     void runtimeCanBeConfiguredWithoutCatalogModelLookup();
     void configuredRuntimeDoesNotPretendUnknownModelsAreConfigured();
     void installedMappingUsesCheapDiscoveryThenExplicitAsyncHashing();
+    void unchangedVerifiedModelIsNotHashedAgainByDirectoryRefresh();
+    void changedVerifiedModelInvalidatesTheCachedResult();
+    void changedRuntimeInvalidatesTheCachedResultBeforeProbe();
+    void unexpectedRuntimeEntryInvalidatesTheCachedResultBeforeProbe();
+    void cancellingRevalidationDoesNotCacheARejectedModel();
+    void configurationCanTakeOverBackgroundRefreshVerification();
     void customModelDirectoryPersistsAndRecognizesTrustedNestedFiles();
     void customModelDirectoryListsNestedRawModelsWithBackendDiagnostics();
     void knownLocalMdxProfileIsDiscoveredButStillRequiresItsFingerprint();
@@ -702,7 +734,190 @@ installedMappingUsesCheapDiscoveryThenExplicitAsyncHashing()
     QVERIFY(controller.verifyInstalledModels());
     QTRY_COMPARE_WITH_TIMEOUT(
         modelStateFor(controller.models(), QStringLiteral("two-stem")),
-        int(VocalSeparationController::ModelState::NotInstalled), 5000);
+             int(VocalSeparationController::ModelState::NotInstalled), 5000);
+}
+
+void VocalSeparationControllerTest::
+unchangedVerifiedModelIsNotHashedAgainByDirectoryRefresh()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray modelBytes(8 * 1024 * 1024, 'v');
+    auto options = optionsFor(temporary, QStringLiteral("stale"), modelBytes);
+    installTestModel(options, QStringLiteral("two-stem"), modelBytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, QByteArrayLiteral("runtime")));
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+
+    QVERIFY(controller.verifyInstalledModels());
+    QTRY_COMPARE_WITH_TIMEOUT(
+        modelStateFor(controller.models(), QStringLiteral("two-stem")),
+        int(VocalSeparationController::ModelState::Installed), 5'000);
+    QTRY_VERIFY_WITH_TIMEOUT(
+        !VocalSeparationControllerTestDriver::verificationInFlight(controller),
+        5'000);
+    const quint64 verifiedGeneration =
+        VocalSeparationControllerTestDriver::verificationGeneration(controller);
+
+    QVERIFY(controller.verifyInstalledModels());
+    QTRY_VERIFY_WITH_TIMEOUT(
+        VocalSeparationControllerTestDriver::directoryAndVerificationIdle(
+            controller),
+        5'000);
+    QCOMPARE(
+        VocalSeparationControllerTestDriver::verificationGeneration(controller),
+        verifiedGeneration);
+    QCOMPARE(modelStateFor(controller.models(), QStringLiteral("two-stem")),
+             int(VocalSeparationController::ModelState::Installed));
+}
+
+void VocalSeparationControllerTest::
+changedVerifiedModelInvalidatesTheCachedResult()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray trustedBytes("trusted-test-model");
+    const QByteArray changedBytes("untrusted-model---");
+    QCOMPARE(changedBytes.size(), trustedBytes.size());
+    auto options = optionsFor(temporary, QStringLiteral("stale"), trustedBytes);
+    installTestModel(options, QStringLiteral("two-stem"), trustedBytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, QByteArrayLiteral("runtime")));
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+
+    QVERIFY(controller.verifyInstalledModels());
+    QTRY_COMPARE_WITH_TIMEOUT(
+        modelStateFor(controller.models(), QStringLiteral("two-stem")),
+        int(VocalSeparationController::ModelState::Installed), 5'000);
+    const quint64 verifiedGeneration =
+        VocalSeparationControllerTestDriver::verificationGeneration(controller);
+    QTest::qWait(5);
+    installTestModel(options, QStringLiteral("two-stem"), changedBytes);
+
+    QVERIFY(controller.verifyInstalledModels());
+    QTRY_COMPARE_WITH_TIMEOUT(
+        modelStateFor(controller.models(), QStringLiteral("two-stem")),
+        int(VocalSeparationController::ModelState::NotInstalled), 5'000);
+    QVERIFY(VocalSeparationControllerTestDriver::verificationGeneration(controller)
+            > verifiedGeneration);
+}
+
+void VocalSeparationControllerTest::
+changedRuntimeInvalidatesTheCachedResultBeforeProbe()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray modelBytes("trusted-test-model");
+    auto options = optionsFor(temporary, QStringLiteral("stale"), modelBytes);
+    installTestModel(options, QStringLiteral("two-stem"), modelBytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, QByteArrayLiteral("runtime-a")));
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+
+    QVERIFY(controller.verifyInstalledModels());
+    QTRY_COMPARE_WITH_TIMEOUT(
+        modelStateFor(controller.models(), QStringLiteral("two-stem")),
+        int(VocalSeparationController::ModelState::Installed), 5'000);
+    const quint64 verifiedGeneration =
+        VocalSeparationControllerTestDriver::verificationGeneration(controller);
+    QTest::qWait(5);
+    QVERIFY(writeBytes(options.runtimeLibraryPath,
+                       QByteArrayLiteral("runtime-b")));
+
+    QVERIFY(controller.probeDevices());
+    QVERIFY(VocalSeparationControllerTestDriver::verificationGeneration(controller)
+            > verifiedGeneration);
+    controller.cancel();
+}
+
+void VocalSeparationControllerTest::
+unexpectedRuntimeEntryInvalidatesTheCachedResultBeforeProbe()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray modelBytes("trusted-test-model");
+    auto options = optionsFor(temporary, QStringLiteral("stale"), modelBytes);
+    installTestModel(options, QStringLiteral("two-stem"), modelBytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, QByteArrayLiteral("runtime")));
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+
+    QVERIFY(controller.verifyInstalledModels());
+    QTRY_COMPARE_WITH_TIMEOUT(
+        modelStateFor(controller.models(), QStringLiteral("two-stem")),
+        int(VocalSeparationController::ModelState::Installed), 5'000);
+    const quint64 verifiedGeneration =
+        VocalSeparationControllerTestDriver::verificationGeneration(controller);
+    QVERIFY(QDir().mkpath(temporary.filePath(
+        QStringLiteral("unexpected-runtime-entry"))));
+
+    QVERIFY(controller.probeDevices());
+    QVERIFY(VocalSeparationControllerTestDriver::verificationGeneration(controller)
+            > verifiedGeneration);
+    controller.cancel();
+}
+
+void VocalSeparationControllerTest::
+cancellingRevalidationDoesNotCacheARejectedModel()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray modelBytes(32 * 1024 * 1024, 'r');
+    auto options = optionsFor(temporary, QStringLiteral("stale"), modelBytes);
+    installTestModel(options, QStringLiteral("two-stem"), modelBytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, QByteArrayLiteral("runtime")));
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+
+    QVERIFY(controller.verifyInstalledModels());
+    QTRY_COMPARE_WITH_TIMEOUT(
+        modelStateFor(controller.models(), QStringLiteral("two-stem")),
+        int(VocalSeparationController::ModelState::Installed), 5'000);
+    QTest::qWait(5);
+    installTestModel(options, QStringLiteral("two-stem"), modelBytes);
+
+    QVERIFY(controller.probeDevices());
+    QVERIFY(VocalSeparationControllerTestDriver::verificationInFlight(
+        controller));
+    controller.cancel();
+    QCOMPARE(modelStateFor(controller.models(), QStringLiteral("two-stem")),
+             int(VocalSeparationController::ModelState::PendingVerification));
+}
+
+void VocalSeparationControllerTest::
+configurationCanTakeOverBackgroundRefreshVerification()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray modelBytes(16 * 1024 * 1024, 'c');
+    auto options = optionsFor(temporary, QStringLiteral("stale"), modelBytes);
+    installTestModel(options, QStringLiteral("two-stem"), modelBytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, QByteArrayLiteral("runtime")));
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+
+    QVERIFY(VocalSeparationControllerTestDriver::beginRefreshVerification(
+        controller));
+    QVERIFY(VocalSeparationControllerTestDriver::verificationInFlight(
+        controller));
+    QVERIFY(controller.configureRuntime(QStringLiteral("two-stem")));
+    QTRY_COMPARE_WITH_TIMEOUT(
+        modelStateFor(controller.models(), QStringLiteral("two-stem")),
+        int(VocalSeparationController::ModelState::Installed), 5'000);
+    QVERIFY(VocalSeparationControllerTestDriver::directoryAndVerificationIdle(
+        controller));
 }
 
 void VocalSeparationControllerTest::

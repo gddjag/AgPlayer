@@ -110,7 +110,7 @@ Item {
         anchors.left: volumeSlider.right; anchors.leftMargin: width > 0 ? 6 : 0; anchors.verticalCenter: parent.verticalCenter
         width: root.showExpandedPercent ? 38 : 0
         opacity: width > 0 ? 1 : 0; visible: !root.emptyMode
-        horizontalAlignment: Text.AlignRight
+        horizontalAlignment: Text.AlignLeft
         text: Math.round((root.playback ? root.playback.volume : 0) * 100) + "%"
         color: Theme.primaryText
         font.family: Theme.fontPrimary

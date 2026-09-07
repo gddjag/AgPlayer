@@ -199,7 +199,7 @@ QtObject {
     // Shared by every player shell because TagManagementPanel is shared.
     readonly property int tagCapsuleHeight: 28
     readonly property int tagCapsuleRadius: 11
-    readonly property real tagCapsuleBorderWidth: 2.4
+    readonly property real tagCapsuleBorderWidth: 1.4
     readonly property color tagCapsuleLightText: "#FFFFFF"
     readonly property color tagCapsuleDarkText: "#000000"
     function tagCapsuleFilledText(fill) {
@@ -224,7 +224,7 @@ QtObject {
     readonly property int spacingXl: 24
     readonly property int spacing2Xl: 32
     readonly property int fontSizeCaption: 12
-    readonly property int fontSizeTagCapsule: 13
+    readonly property int fontSizeTagCapsule: 12
     readonly property int fontSizeMeta: 12
     readonly property int fontSizeBody: 14
     readonly property int fontSizeBodyStrong: 14

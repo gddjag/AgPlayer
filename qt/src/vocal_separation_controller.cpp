@@ -214,6 +214,75 @@ QStringList resolveModelFilePaths(const VocalModelCard& model,
     return modelFilesMatchSizes(model, discovered) ? discovered : nested;
 }
 
+void addFingerprintValue(QCryptographicHash& hash, const QByteArray& value)
+{
+    hash.addData(QByteArray::number(value.size()));
+    hash.addData(QByteArrayView(":", 1));
+    hash.addData(value);
+    hash.addData(QByteArrayView("\n", 1));
+}
+
+void addFileIdentity(QCryptographicHash& hash, const QFileInfo& info)
+{
+    addFingerprintValue(hash, QDir::cleanPath(info.absoluteFilePath()).toUtf8());
+    addFingerprintValue(hash, info.canonicalFilePath().toUtf8());
+    addFingerprintValue(hash, QByteArray::number(info.isFile()));
+    addFingerprintValue(hash, QByteArray::number(info.isDir()));
+    addFingerprintValue(hash, QByteArray::number(info.isSymLink()));
+    addFingerprintValue(hash, QByteArray::number(
+        int(safePathKind(info.absoluteFilePath()))));
+    addFingerprintValue(hash, QByteArray::number(info.size()));
+    addFingerprintValue(hash, QByteArray::number(
+        info.lastModified().toMSecsSinceEpoch()));
+    addFingerprintValue(hash, QByteArray::number(
+        info.metadataChangeTime().toMSecsSinceEpoch()));
+}
+
+QString modelVerificationFingerprint(const VocalModelCard& model,
+                                     const QString& storageDirectory,
+                                     const ModelFileIndex& files)
+{
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    addFingerprintValue(hash, model.id.toUtf8());
+    const QStringList paths = resolveModelFilePaths(
+        model, storageDirectory, files);
+    for (qsizetype index = 0; index < model.files.size(); ++index) {
+        const VocalDownloadFile& expected = model.files.at(index);
+        addFingerprintValue(hash, expected.fileName.toUtf8());
+        addFingerprintValue(hash, QByteArray::number(expected.bytes));
+        addFingerprintValue(hash, expected.sha256.toLower().toUtf8());
+        const QString path = index < paths.size()
+            ? paths.at(index) : QString();
+        addFileIdentity(hash, QFileInfo(path));
+        addFingerprintValue(hash, QByteArray::number(
+            !path.isEmpty()
+            && safeExistingFileWithin(path, storageDirectory)));
+    }
+    return QString::fromLatin1(hash.result().toHex());
+}
+
+QString runtimeVerificationFingerprint(const QString& runtimePath,
+                                        const QString& expectedArchiveSha256,
+                                        const bool verifyIntegrity)
+{
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    addFingerprintValue(hash, expectedArchiveSha256.toLower().toUtf8());
+    addFingerprintValue(hash, QByteArray::number(verifyIntegrity));
+    const QFileInfo library(runtimePath);
+    addFileIdentity(hash, library);
+    if (!library.isFile())
+        return QString::fromLatin1(hash.result().toHex());
+
+    const QDir directory(library.absolutePath());
+    const QFileInfoList entries = directory.entryInfoList(
+        QDir::AllEntries | QDir::Hidden | QDir::System
+            | QDir::NoDotAndDotDot,
+        QDir::Name | QDir::IgnoreCase);
+    for (const QFileInfo& entry : entries)
+        addFileIdentity(hash, entry);
+    return QString::fromLatin1(hash.result().toHex());
+}
+
 } // namespace
 
 VocalSeparationController::ModelDirectoryIndex
@@ -413,6 +482,12 @@ VocalSeparationController::VocalSeparationController(
                     return;
                 }
                 runtimeVerified_ = true;
+                runtimeVerificationKnown_ = true;
+                runtimeVerificationFingerprint_ =
+                    runtimeVerificationFingerprint(
+                        options_.runtimeLibraryPath,
+                        VocalSeparationCatalog::directMlRuntime().sha256,
+                        options_.verifyRuntimeIntegrity);
                 startNextDownload();
             });
             const QString archive = completed.destination;
@@ -653,8 +728,44 @@ bool VocalSeparationController::configureGpuRuntime(const QString& modelId)
 
 bool VocalSeparationController::configureRuntime(const QString& modelIdForUi)
 {
+    if (verificationWatcher_ != nullptr) {
+        if (verificationPurpose_ == VerificationPurpose::Download
+            && downloadingModelId_ == modelIdForUi) {
+            return true;
+        }
+        if (verificationPurpose_ == VerificationPurpose::Download) {
+            setError(tr("配置正在下载或校验，请等待当前进度完成"));
+            return false;
+        }
+        deferredRuntimeConfigurationModelId_ = modelIdForUi;
+        ++verificationGeneration_;
+        if (verificationCancellation_)
+            verificationCancellation_->store(true, std::memory_order_release);
+        verificationPurpose_ = VerificationPurpose::None;
+        verifyingModelId_.clear();
+        activeRequest_.reset();
+        failedRequest_.reset();
+        deviceProbePending_ = false;
+        if (jobState_ == JobState::Probing || jobState_ == JobState::Running)
+            setJobState(JobState::Idle, {});
+        setError({});
+        refreshModels();
+        if (modelIdForUi == QStringLiteral("python-vr-5hp")) {
+            deferredRuntimeConfigurationModelId_.reset();
+            downloadingModelId_ = modelIdForUi;
+            failedDownloadModelId_.clear();
+            if (!externalRuntime_->start()) {
+                downloadingModelId_.clear();
+                setError(tr("无法启动外置环境配置，请检查模型缓存目录是否可写"));
+                return false;
+            }
+            emit downloadStateChanged();
+        }
+        return true;
+    }
+    if (requestInFlight()) return false;
     if (modelIdForUi == QStringLiteral("python-vr-5hp")) {
-        if (requestInFlight() || downloadBusy()) return false;
+        if (downloadBusy()) return false;
         downloadingModelId_ = modelIdForUi;
         failedDownloadModelId_.clear();
         setError({});
@@ -666,7 +777,7 @@ bool VocalSeparationController::configureRuntime(const QString& modelIdForUi)
         emit downloadStateChanged();
         return true;
     }
-    if (!downloadQueue_.isEmpty() || verificationWatcher_ != nullptr
+    if (!downloadQueue_.isEmpty()
         || runtimeInstallerWatcher_ != nullptr
         || downloader_->state() == VocalDownloadState::Downloading
         || downloader_->state() == VocalDownloadState::Paused
@@ -687,6 +798,21 @@ bool VocalSeparationController::configureRuntime(const QString& modelIdForUi)
                          .arg(model.value(QStringLiteral("failureReason")).toString()));
             return false;
         }
+    }
+    if (const VocalModelCard* model = modelForId(modelIdForUi);
+        model != nullptr && !modelInstalled(*model)) {
+        const bool builtIn = std::any_of(
+            baseCatalog_.cbegin(), baseCatalog_.cend(),
+            [&modelIdForUi](const VocalModelCard& candidate) {
+                return candidate.id == modelIdForUi;
+            });
+        if (builtIn) return beginModelDownload(modelIdForUi, false);
+        if (modelFilesPresent(*model)) {
+            setError({});
+            return beginVerification(VerificationPurpose::Refresh, model);
+        }
+        setError(tr("模型已变更，请重新检测模型目录"));
+        return false;
     }
     if (runtimeReady()) {
         if (const VocalModelCard* model = modelForId(modelIdForUi)) {
@@ -763,6 +889,7 @@ bool VocalSeparationController::beginModelDownload(
 
 bool VocalSeparationController::verifyInstalledModels()
 {
+    verifyAllModelsOnNextScan_ = true;
     modelDirectoryScanTimer_.stop();
     scanModelDirectory();
     return modelDirectoryIndexWatcher_ != nullptr
@@ -881,6 +1008,7 @@ bool VocalSeparationController::deleteModel(const QString& modelId)
     if (failedDownloadModelId_ == modelId) failedDownloadModelId_.clear();
     verifiedModelIds_.remove(modelId);
     verifiedOrRejectedModelIds_.remove(modelId);
+    modelVerificationFingerprints_.remove(modelId);
     refreshModels();
     return true;
 }
@@ -971,7 +1099,8 @@ bool VocalSeparationController::probeDevices()
     activeRequest_ = ActiveRequestContext{RequestKind::Probe};
     setError({});
     setJobState(JobState::Probing, QStringLiteral("runtime_verification"));
-    if (beginVerification(VerificationPurpose::Probe)) return true;
+    if (beginVerification(VerificationPurpose::Probe, selectedModel()))
+        return true;
     activeRequest_.reset();
     setJobState(JobState::Idle, {});
     return false;
@@ -1099,7 +1228,8 @@ void VocalSeparationController::cancel()
             verificationCancellation_->store(true, std::memory_order_release);
         if (!verifyingModelId_.isEmpty()) {
             verifiedModelIds_.remove(verifyingModelId_);
-            verifiedOrRejectedModelIds_.insert(verifyingModelId_);
+            verifiedOrRejectedModelIds_.remove(verifyingModelId_);
+            modelVerificationFingerprints_.remove(verifyingModelId_);
         }
         ++verificationGeneration_;
         verificationPurpose_ = VerificationPurpose::None;
@@ -1373,6 +1503,7 @@ bool VocalSeparationController::selectModelDirectory(const QUrl& directory)
     modelDirectoryRescanPending_ = false;
     verifiedModelIds_.clear();
     verifiedOrRejectedModelIds_.clear();
+    modelVerificationFingerprints_.clear();
     setError({});
     rebuildModelDirectoryWatcher();
     refreshModels();
@@ -1453,6 +1584,45 @@ bool VocalSeparationController::beginVerification(
     const QString runtimePath = options_.runtimeLibraryPath;
     const bool verifyRuntime = options_.verifyRuntimeIntegrity;
     const QString runtimeHash = VocalSeparationCatalog::directMlRuntime().sha256;
+    const QHash<QString, QString> cachedModelFingerprints =
+        modelVerificationFingerprints_;
+    const QSet<QString> cachedVerifiedModels = verifiedModelIds_;
+    const QSet<QString> cachedCheckedModels = verifiedOrRejectedModelIds_;
+    const bool cachedRuntimeKnown = runtimeVerificationKnown_;
+    const bool cachedRuntimeVerified = runtimeVerified_;
+    const QString cachedRuntimeFingerprint = runtimeVerificationFingerprint_;
+    VerificationResult cachedResult;
+    bool fullyCached = !modelDirectoryRescanPending_;
+    for (const VocalModelCard& candidate : catalog) {
+        const QString fingerprint = modelVerificationFingerprint(
+            candidate, modelStorageDirectory_, indexedModelFiles_);
+        if (!cachedCheckedModels.contains(candidate.id)
+            || cachedModelFingerprints.value(candidate.id) != fingerprint) {
+            fullyCached = false;
+            break;
+        }
+        cachedResult.checkedModels.insert(candidate.id);
+        cachedResult.modelFingerprints.insert(candidate.id, fingerprint);
+        if (cachedVerifiedModels.contains(candidate.id))
+            cachedResult.verifiedModels.insert(candidate.id);
+    }
+    const QString currentRuntimeFingerprint = runtimeVerificationFingerprint(
+        runtimePath, runtimeHash, verifyRuntime);
+    if (!cachedRuntimeKnown
+        || cachedRuntimeFingerprint != currentRuntimeFingerprint) {
+        fullyCached = false;
+    } else {
+        cachedResult.runtimeChecked = true;
+        cachedResult.runtimeVerified = cachedRuntimeVerified;
+        cachedResult.runtimeFingerprint = currentRuntimeFingerprint;
+    }
+    if (fullyCached) {
+        verificationPurpose_ = purpose;
+        verifyingModelId_ = model == nullptr ? QString() : model->id;
+        finishVerification(verificationGeneration_, cachedResult);
+        return true;
+    }
+
     verificationPurpose_ = purpose;
     verifyingModelId_ = model == nullptr ? QString() : model->id;
     const quint64 generation = ++verificationGeneration_;
@@ -1471,6 +1641,15 @@ bool VocalSeparationController::beginVerification(
         }
         if (generation != verificationGeneration_) {
             refreshModels();
+            if (deferredRuntimeConfigurationModelId_.has_value()) {
+                const QString modelId =
+                    *std::exchange(deferredRuntimeConfigurationModelId_,
+                                   std::nullopt);
+                QTimer::singleShot(0, this, [this, modelId] {
+                    configureRuntime(modelId);
+                });
+                return;
+            }
             if (modelDirectoryRescanPending_) {
                 modelDirectoryRescanPending_ = false;
                 scheduleModelDirectoryScan();
@@ -1482,6 +1661,8 @@ bool VocalSeparationController::beginVerification(
     refreshModels();
     verificationWatcher_->setFuture(QtConcurrent::run(
         [catalog, modelStorageDirectory, runtimePath, verifyRuntime, runtimeHash,
+         cachedModelFingerprints, cachedVerifiedModels, cachedCheckedModels,
+         cachedRuntimeKnown, cachedRuntimeVerified, cachedRuntimeFingerprint,
          cancellation] {
             VerificationResult result;
             const ModelFileIndex fileIndex = buildModelDirectoryIndex(
@@ -1491,7 +1672,20 @@ bool VocalSeparationController::beginVerification(
             };
             for (const VocalModelCard& candidate : catalog) {
                 if (cancelled()) return result;
+                const QString fingerprint = modelVerificationFingerprint(
+                    candidate, modelStorageDirectory, fileIndex);
+                if (cachedCheckedModels.contains(candidate.id)
+                    && cachedModelFingerprints.value(candidate.id)
+                        == fingerprint) {
+                    result.checkedModels.insert(candidate.id);
+                    result.modelFingerprints.insert(candidate.id,
+                                                    fingerprint);
+                    if (cachedVerifiedModels.contains(candidate.id))
+                        result.verifiedModels.insert(candidate.id);
+                    continue;
+                }
                 bool verified = !candidate.files.isEmpty();
+                QSet<QString> verifiedFiles;
                 const QStringList paths = resolveModelFilePaths(
                     candidate, modelStorageDirectory, fileIndex);
                 if (paths.size() != candidate.files.size()) verified = false;
@@ -1503,20 +1697,44 @@ bool VocalSeparationController::beginVerification(
                     const QString& path = paths.at(index);
                     if (VocalSeparationInstaller::isVerifiedFile(
                             file, path, cancellation)) {
-                        result.verifiedFiles.insert(QFileInfo(path).absoluteFilePath());
+                        verifiedFiles.insert(QFileInfo(path).absoluteFilePath());
                     } else {
                         if (cancelled()) return result;
                         verified = false;
                     }
                 }
+                const QString verifiedFingerprint = modelVerificationFingerprint(
+                    candidate, modelStorageDirectory, fileIndex);
+                if (fingerprint != verifiedFingerprint) continue;
+                result.checkedModels.insert(candidate.id);
+                result.modelFingerprints.insert(candidate.id,
+                                                verifiedFingerprint);
+                result.verifiedFiles.unite(verifiedFiles);
                 if (verified) result.verifiedModels.insert(candidate.id);
             }
             if (cancelled()) return result;
-            result.runtimeVerified = QFileInfo(runtimePath).isFile()
-                && (!verifyRuntime
-                    || VocalSeparationInstaller::runtimeDirectoryIsVerified(
-                        QFileInfo(runtimePath).absolutePath(), runtimeHash,
-                        cancellation));
+            const QString runtimeFingerprint = runtimeVerificationFingerprint(
+                runtimePath, runtimeHash, verifyRuntime);
+            if (cachedRuntimeKnown
+                && cachedRuntimeFingerprint == runtimeFingerprint) {
+                result.runtimeChecked = true;
+                result.runtimeVerified = cachedRuntimeVerified;
+                result.runtimeFingerprint = runtimeFingerprint;
+            } else {
+                result.runtimeVerified = QFileInfo(runtimePath).isFile()
+                    && (!verifyRuntime
+                        || VocalSeparationInstaller::runtimeDirectoryIsVerified(
+                            QFileInfo(runtimePath).absolutePath(), runtimeHash,
+                            cancellation));
+                const QString verifiedRuntimeFingerprint =
+                    runtimeVerificationFingerprint(
+                        runtimePath, runtimeHash, verifyRuntime);
+                if (!cancelled()
+                    && runtimeFingerprint == verifiedRuntimeFingerprint) {
+                    result.runtimeChecked = true;
+                    result.runtimeFingerprint = verifiedRuntimeFingerprint;
+                }
+            }
             return result;
         }));
     return true;
@@ -1535,18 +1753,33 @@ void VocalSeparationController::finishVerification(
     const QString verifiedModelId = verifyingModelId_;
     verificationPurpose_ = VerificationPurpose::None;
     verifyingModelId_.clear();
-    runtimeVerified_ = result.runtimeVerified;
+    if (result.runtimeChecked) {
+        runtimeVerified_ = result.runtimeVerified;
+        runtimeVerificationKnown_ = true;
+        runtimeVerificationFingerprint_ = result.runtimeFingerprint;
+    } else {
+        runtimeVerified_ = false;
+        runtimeVerificationKnown_ = false;
+        runtimeVerificationFingerprint_.clear();
+    }
 
     if (verifiedModelId.isEmpty()) {
         verifiedModelIds_ = result.verifiedModels;
-        for (const VocalModelCard& model : options_.catalog)
-            verifiedOrRejectedModelIds_.insert(model.id);
-    } else if (result.verifiedModels.contains(verifiedModelId)) {
-        verifiedModelIds_.insert(verifiedModelId);
+        verifiedOrRejectedModelIds_ = result.checkedModels;
+        modelVerificationFingerprints_ = result.modelFingerprints;
+    } else if (result.checkedModels.contains(verifiedModelId)) {
+        if (result.verifiedModels.contains(verifiedModelId))
+            verifiedModelIds_.insert(verifiedModelId);
+        else
+            verifiedModelIds_.remove(verifiedModelId);
         verifiedOrRejectedModelIds_.insert(verifiedModelId);
+        modelVerificationFingerprints_.insert(
+            verifiedModelId,
+            result.modelFingerprints.value(verifiedModelId));
     } else {
         verifiedModelIds_.remove(verifiedModelId);
-        verifiedOrRejectedModelIds_.insert(verifiedModelId);
+        verifiedOrRejectedModelIds_.remove(verifiedModelId);
+        modelVerificationFingerprints_.remove(verifiedModelId);
     }
 
     if (purpose == VerificationPurpose::Refresh) {
@@ -1914,10 +2147,15 @@ void VocalSeparationController::finishExhaustedDownload(
 void VocalSeparationController::startNextDownload()
 {
     if (downloadQueue_.isEmpty()) {
-        if (!runtimeOnlyDownload_ && !downloadingModelId_.isEmpty())
+        if (!runtimeOnlyDownload_ && !downloadingModelId_.isEmpty()) {
             verifiedModelIds_.insert(downloadingModelId_);
-        if (!runtimeOnlyDownload_ && !downloadingModelId_.isEmpty())
             verifiedOrRejectedModelIds_.insert(downloadingModelId_);
+            if (const VocalModelCard* model = modelForId(downloadingModelId_)) {
+                modelVerificationFingerprints_.insert(
+                    downloadingModelId_, modelVerificationFingerprint(
+                        *model, modelStorageDirectory_, indexedModelFiles_));
+            }
+        }
         runtimeOnlyDownload_ = false;
         downloadingModelId_.clear();
         downloadProgress_ = 1.0;
@@ -2286,39 +2524,61 @@ void VocalSeparationController::scanModelDirectory()
         modelDirectoryRescanPending_ = true;
         return;
     }
+    const bool verifyAllModels = std::exchange(
+        verifyAllModelsOnNextScan_, false);
     const QString scannedRoot = modelStorageDirectory_;
     auto* const watcher = new QFutureWatcher<ModelDirectoryIndex>(this);
     modelDirectoryIndexWatcher_ = watcher;
     connect(watcher, &QFutureWatcher<ModelDirectoryIndex>::finished, this,
-            [this, watcher, scannedRoot] {
+            [this, watcher, scannedRoot, verifyAllModels] {
         const ModelDirectoryIndex result = watcher->result();
         watcher->deleteLater();
         if (modelDirectoryIndexWatcher_ != watcher) return;
         modelDirectoryIndexWatcher_ = nullptr;
         if (scannedRoot != modelStorageDirectory_) {
+            if (verifyAllModels) verifyAllModelsOnNextScan_ = true;
             scheduleModelDirectoryScan();
             return;
         }
         indexedModelFiles_ = result.filesByName;
-        validatedGpuProviders_.clear();
         const QStringList watched = modelDirectoryWatcher_.directories();
         if (!watched.isEmpty()) modelDirectoryWatcher_.removePaths(watched);
         if (!result.directories.isEmpty())
             modelDirectoryWatcher_.addPaths(result.directories);
         discoverCustomModels(result.manifests);
-        verifiedModelIds_.clear();
-        verifiedOrRejectedModelIds_.clear();
-        refreshModels();
-        bool completeKnownModel = false;
+        QSet<QString> catalogIds;
+        QSet<QString> changedModelIds;
         for (const VocalModelCard& model : std::as_const(options_.catalog)) {
-            if (modelFilesPresent(model)) {
-                completeKnownModel = true;
-                break;
+            catalogIds.insert(model.id);
+            const QString fingerprint = modelVerificationFingerprint(
+                model, modelStorageDirectory_, indexedModelFiles_);
+            if (modelVerificationFingerprints_.value(model.id)
+                == fingerprint
+                && verifiedOrRejectedModelIds_.contains(model.id)) {
+                continue;
+            }
+            modelVerificationFingerprints_.remove(model.id);
+            verifiedModelIds_.remove(model.id);
+            verifiedOrRejectedModelIds_.remove(model.id);
+            validatedGpuProviders_.remove(model.id);
+            if (modelFilesPresent(model))
+                changedModelIds.insert(model.id);
+        }
+        for (auto it = modelVerificationFingerprints_.begin();
+             it != modelVerificationFingerprints_.end();) {
+            if (!catalogIds.contains(it.key())) {
+                verifiedModelIds_.remove(it.key());
+                verifiedOrRejectedModelIds_.remove(it.key());
+                validatedGpuProviders_.remove(it.key());
+                it = modelVerificationFingerprints_.erase(it);
+            } else {
+                ++it;
             }
         }
+        refreshModels();
         const bool rescanRequested = std::exchange(
             modelDirectoryRescanPending_, false);
-        if (completeKnownModel)
+        if (verifyAllModels || !changedModelIds.isEmpty())
             beginVerification(VerificationPurpose::Refresh);
         else if (deviceProbePending_)
             QTimer::singleShot(0, this, [this] { probeDevices(); });

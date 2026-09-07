@@ -647,7 +647,10 @@ public:
         controller_->downloadProgress_ = 0.0;
         controller_->verifiedModelIds_.clear();
         controller_->verifiedOrRejectedModelIds_.clear();
+        controller_->modelVerificationFingerprints_.clear();
         controller_->runtimeVerified_ = false;
+        controller_->runtimeVerificationKnown_ = false;
+        controller_->runtimeVerificationFingerprint_.clear();
         controller_->options_.runtimeLibraryPath = runtimeLibraryPath_;
         controller_->inputInfo_.clear();
         controller_->error_.clear();
@@ -1147,6 +1150,7 @@ public slots:
         playlists_ = std::make_unique<PlaylistModel>();
         audioPreview_ = std::make_unique<AudioPreviewController>(
             audioBackend, playback_.get());
+        audioTools_->bindPlaybackControllers(playback_.get(), audioEditor_.get(), audioPreview_.get());
         VocalSeparationControllerOptions separationOptions;
         separationOptions.dataRoot = QDir(QStandardPaths::writableLocation(
             QStandardPaths::AppDataLocation)).filePath(QStringLiteral("separation"));

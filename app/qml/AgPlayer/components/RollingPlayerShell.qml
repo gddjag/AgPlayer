@@ -513,12 +513,14 @@ Item {
             Item {
                 id: headerInfo
                 objectName: "rollingHeaderInfo"
+                readonly property int lineHeight: root.height < 700 ? 20 : 24
+                readonly property int lineSpacing: root.height < 700 ? 4 : 3
                 anchors.left: coverFrame.right
                 anchors.leftMargin: 16
                 anchors.right: parent.right
                 anchors.verticalCenter: coverFrame.verticalCenter
                 height: titleRow.height + subtitleRow.height + badgeRow.height
-                        + overviewWaveformHost.height + 3 * Theme.spacingXs
+                        + overviewWaveformHost.height + 2 * lineSpacing + Theme.spacingXs
 
                 Row {
                     id: titleRow
@@ -527,7 +529,7 @@ Item {
                     anchors.right: meters.left
                     anchors.rightMargin: 12
                     anchors.top: parent.top
-                    height: root.height < 700 ? 24 : 28
+                    height: headerInfo.lineHeight
                     spacing: 8
                     clip: true
 
@@ -549,12 +551,13 @@ Item {
                         objectName: "rollingFavoriteButton"
                         width: 28
                         height: parent.height
+                        padding: 0
                         icon.source: root.currentTrack && root.currentTrack.favorite
                                      ? Theme.icon("heart-fill") : Theme.icon("heart-line")
                         icon.color: root.currentTrack && root.currentTrack.favorite
                                     ? Theme.favoriteRed : Theme.secondaryText
-                        icon.width: 18
-                        icon.height: 18
+                        icon.width: 20
+                        icon.height: 20
                         Accessible.name: qsTr("收藏歌曲")
                         onClicked: root.toggleFavorite()
                     }
@@ -565,10 +568,10 @@ Item {
                     objectName: "rollingSubtitleRow"
                     anchors.left: parent.left
                     anchors.top: titleRow.bottom
-                    anchors.topMargin: 4
+                    anchors.topMargin: headerInfo.lineSpacing
                     anchors.right: meters.left
                     anchors.rightMargin: 12
-                    height: root.height < 700 ? 18 : 20
+                    height: headerInfo.lineHeight
                     spacing: 6
 
                     TrackSubtitle {
@@ -593,8 +596,8 @@ Item {
                         Repeater {
                             model: 5
                             ThemedIcon {
-                                width: 12
-                                height: 12
+                                width: 14
+                                height: 14
                                 source: index < Number(root.currentTrack && root.currentTrack.rating || 0)
                                         ? Theme.icon("star-fill") : Theme.icon("star-line")
                                 tint: index < Number(root.currentTrack && root.currentTrack.rating || 0)
@@ -689,8 +692,8 @@ Item {
                 anchors.leftMargin: 16
                 anchors.top: headerInfo.top
                 anchors.topMargin: titleRow.height + subtitleRow.height
-                                   + 2 * Theme.spacingXs
-                height: root.height < 700 ? 18 : 22
+                                   + 2 * headerInfo.lineSpacing
+                height: headerInfo.lineHeight
                 spacing: 5
                 Repeater {
                     model: root.metadataBadges
@@ -897,10 +900,10 @@ Item {
                 id: mainWaveform
                 objectName: "rollingMainWaveform"
                 x: root.waveformContentX
-                y: 6
+                y: 4
                 width: Math.max(0, (parent.width - 2)
                                 * root.waveformContentWidthFraction)
-                height: Math.max(0, parent.height - 12)
+                height: Math.max(0, parent.height - 8)
                 layers: root.waveformSession
                         ? root.waveformSession.layers : ({})
                 duration: root.effectiveDurationMs
@@ -1430,8 +1433,13 @@ Item {
                             id: targetBpm
                             objectName: "rollingTargetBpm"
                             Layout.preferredWidth: 72
-                            Layout.preferredHeight: Theme.controlHeightCompact
+                            Layout.preferredHeight: 24
+                            Layout.maximumHeight: 24
+                            Layout.alignment: Qt.AlignVCenter
+                            Layout.topMargin: 2
+                            Layout.bottomMargin: 2
                             horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: TextInput.AlignVCenter
                             text: root.formatBpm(
                                       root.playback
                                       ? root.playback.targetBpm : 0)
@@ -1511,15 +1519,27 @@ Item {
                 id: calibrationPopup
                 objectName: "rollingGridCalibrationPopup"
                 parent: Overlay.overlay
-                x: {
-                    var point = calibrationButton.mapToItem(parent, 0, 0)
-                    return Math.max(8, Math.min(parent.width - width - 8,
-                                                point.x + calibrationButton.width
-                                                - width))
+                function setBoundedPosition(nextX, nextY) {
+                    x = Math.max(8, Math.min(parent.width - width - 8, nextX))
+                    y = Math.max(8, Math.min(parent.height - height - 8, nextY))
                 }
-                y: {
+                function positionAboveButton() {
                     var point = calibrationButton.mapToItem(parent, 0, 0)
-                    return Math.max(8, point.y - height - 4)
+                    setBoundedPosition(point.x + calibrationButton.width - width,
+                                       point.y - height - 4)
+                }
+                onAboutToShow: positionAboveButton()
+                onOpened: positionAboveButton()
+                Connections {
+                    target: calibrationPopup.parent
+                    function onWidthChanged() {
+                        if (calibrationPopup.visible)
+                            calibrationPopup.setBoundedPosition(calibrationPopup.x, calibrationPopup.y)
+                    }
+                    function onHeightChanged() {
+                        if (calibrationPopup.visible)
+                            calibrationPopup.setBoundedPosition(calibrationPopup.x, calibrationPopup.y)
+                    }
                 }
                 width: 228
                 padding: 10
@@ -1536,10 +1556,30 @@ Item {
                     Label {
                         objectName: "rollingGridStatusLabel"
                         Layout.fillWidth: true
+                        Layout.preferredHeight: 20
                         text: root.beatGridStatusText()
                         color: Theme.secondaryText
                         font.family: Theme.fontPrimary
                         font.pixelSize: Theme.fontSizeCaption
+                        MouseArea {
+                            objectName: "rollingGridCalibrationDragHandle"
+                            anchors.fill: parent
+                            cursorShape: Qt.SizeAllCursor
+                            property point pressPoint
+                            property real initialX: 0
+                            property real initialY: 0
+                            onPressed: function(mouse) {
+                                pressPoint = mapToItem(calibrationPopup.parent, mouse.x, mouse.y)
+                                initialX = calibrationPopup.x
+                                initialY = calibrationPopup.y
+                            }
+                            onPositionChanged: function(mouse) {
+                                if (!pressed) return
+                                var point = mapToItem(calibrationPopup.parent, mouse.x, mouse.y)
+                                calibrationPopup.setBoundedPosition(initialX + point.x - pressPoint.x,
+                                                                     initialY + point.y - pressPoint.y)
+                            }
+                        }
                     }
                     ThemedButton {
                         objectName: "rollingGridSetFirstBeat"

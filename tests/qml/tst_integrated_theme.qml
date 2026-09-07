@@ -1005,6 +1005,11 @@ TestCase {
         var button = findChild(controls, "themeModeButton")
         var menu = findChild(controls, "playerShellMenu")
         verify(controls && button && menu)
+        var classic = findChild(controls, "classicShellMenuItem")
+        compare(classic.labelPixelSize, 12)
+        compare(classic.implicitHeight, 28)
+        compare(menu.background.color, Theme.surfaceElevated)
+        compare(classic.contentItem.color, Theme.primaryText)
         compare(menu.parent, controls.Window.window.contentItem)
         for (var index = 0; index < 2; ++index) {
             var dpr = index === 0 ? 1.0 : 1.5

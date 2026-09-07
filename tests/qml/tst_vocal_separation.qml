@@ -76,7 +76,7 @@ TestCase {
             verify(play && play.enabled)
             mouseClick(play)
             tryCompare(AudioPreviewController, "playing", true, 5000)
-            tryCompare(PlaybackController, "state", PlaybackController.Stopped, 5000)
+            tryCompare(PlaybackController, "state", PlaybackController.Paused, 5000)
             compare(separationTestDriver.activeResultMixKinds(), [kinds[0], kinds[2], kinds[3], kinds[4]])
             tryVerify(function() { return page.resultPreviewPositionMs > 300 }, 5000)
             console.log("Real device four-source mix position", page.resultPreviewPositionMs)
@@ -901,6 +901,28 @@ TestCase {
         compare(VocalSeparationController.availableDevices[0].available, false)
         compare(VocalSeparationController.availableDevices[0].reason,
                 "CPU 和 GPU 均未通过设备探测")
+        separationTestDriver.reset()
+    }
+
+    function test_configurationStaysVisibleAndClickableDuringModelVerification() {
+        separationTestDriver.reset()
+        separationTestDriver.setRuntimeMissing()
+        separationTestDriver.markSelectedModelInstalled()
+        separationTestDriver.setDownloadState(
+                    VocalSeparationController.selectedModelId,
+                    VocalSeparationController.Verifying, 0, "")
+        separationTestDriver.setJobState(
+                    VocalSeparationController.Probing,
+                    "runtime_verification")
+        const configure = findChild(
+                    page, "separationInstallRuntime-"
+                          + VocalSeparationController.selectedModelId)
+        verify(configure)
+        verify(configure.visible,
+               "configuration must not disappear while model verification runs")
+        verify(configure.enabled,
+               "background verification must not block configuration")
+        compare(configure.text, "一键配置")
         separationTestDriver.reset()
     }
 

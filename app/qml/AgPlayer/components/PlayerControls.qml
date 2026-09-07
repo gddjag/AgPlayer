@@ -271,23 +271,38 @@ Rectangle {
         parent: root.Window.window ? root.Window.window.contentItem : root
         width: Math.max(120, implicitContentWidth + leftPadding + rightPadding)
 
-        MenuItem {
+        background: Rectangle {
+            color: Theme.surfaceElevated
+            border.color: Theme.opaqueBorder
+            radius: Theme.radiusSm
+        }
+
+        ThemedMenuItem {
             objectName: "classicShellMenuItem"
+            implicitWidth: contentItem.implicitWidth + leftPadding + rightPadding
+            implicitHeight: 28
+            labelPixelSize: 12
             text: qsTr("经典双窗口")
             checkable: true
             checked: SettingsController.playerShellMode === 0
             onTriggered: SettingsController.playerShellMode = 0
         }
-        MenuItem {
+        ThemedMenuItem {
             objectName: "integratedShellMenuItem"
+            implicitWidth: contentItem.implicitWidth + leftPadding + rightPadding
+            implicitHeight: 28
+            labelPixelSize: 12
             text: qsTr("集成单窗口")
             checkable: true
             checked: SettingsController.playerShellMode === 1
             onTriggered: SettingsController.playerShellMode = 1
         }
-        MenuItem {
+        ThemedMenuItem {
             objectName: "rollingShellMenuItem"
-            text: qsTr("滚动播放模式")
+            implicitWidth: contentItem.implicitWidth + leftPadding + rightPadding
+            implicitHeight: 28
+            labelPixelSize: 12
+            text: qsTr("专业模式")
             checkable: true
             checked: SettingsController.playerShellMode === 2
             onTriggered: SettingsController.playerShellMode = 2

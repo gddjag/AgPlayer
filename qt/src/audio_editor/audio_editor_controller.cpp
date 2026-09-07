@@ -1671,7 +1671,7 @@ void AudioEditorController::deactivate()
     if (viewport_waveform_cancel_token_) {
         viewport_waveform_cancel_token_->store(true, std::memory_order_release);
     }
-    if (playback_adapter_) {
+    if (playback_adapter_ && (playback_prepared_ || editor_playback_owns_player_)) {
         (void)playback_adapter_->stop();
         releaseEditorPlaybackOutput();
     }
@@ -2947,6 +2947,9 @@ bool AudioEditorController::playPause()
         emit playbackChanged();
         return true;
     }
+    bool accepted = true;
+    emit playbackRequested(&accepted);
+    if (!accepted) return false;
     const auto selection = document_.selection();
     if (selection && sample_rate_ > 0) {
         const qint64 start = selection->start * 1'000 / sample_rate_;
@@ -2971,6 +2974,24 @@ bool AudioEditorController::playPause()
     playback_timer_.start();
     setState(EditorSessionState::Playing);
     emit playbackChanged();
+    return true;
+}
+
+bool AudioEditorController::pauseForPlaybackHandoff()
+{
+    if (playing_) {
+        const qint64 frame = currentPlaybackTimelineFrame();
+        if (!playPause()) return false;
+        const qint64 position = sample_rate_ > 0 ? frame * 1000 / sample_rate_ : position_ms_;
+        const bool modifiedChanged = updatePersistedPlayhead(frame, position);
+        emit playbackChanged();
+        if (modifiedChanged) emit documentChanged();
+    }
+    if (playback_controller_ && playback_controller_->editorOutputOwned()) {
+        playback_controller_->releaseEditorOutput(false);
+        if (playback_controller_->editorOutputOwned()) return false;
+        releaseEditorPlaybackOutput();
+    }
     return true;
 }
 

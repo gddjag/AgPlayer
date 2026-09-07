@@ -3487,8 +3487,8 @@
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/components/IntegratedPlayerControls.qml" line="221" />
-            <source>滚动播放模式</source>
-            <translation>滚动播放模式</translation>
+            <source>专业模式</source>
+            <translation>专业模式</translation>
         </message>
     </context>
 <context>
@@ -5571,8 +5571,8 @@
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="469" />
-            <source>滚动播放模式</source>
-            <translation>滚动播放模式</translation>
+            <source>专业模式</source>
+            <translation>专业模式</translation>
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="76" />
@@ -6736,8 +6736,8 @@
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="1425" />
-            <source>滚动播放模式</source>
-            <translation>滚动播放模式</translation>
+            <source>专业模式</source>
+            <translation>专业模式</translation>
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="1505" />
@@ -6781,8 +6781,8 @@
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="2138" />
-            <source>滚动播放器键盘</source>
-            <translation>滚动播放器键盘</translation>
+            <source>专业模式快捷键</source>
+            <translation>专业模式快捷键</translation>
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="2142" />
@@ -6821,8 +6821,8 @@
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="2170" />
-            <source>恢复滚动播放器默认快捷键</source>
-            <translation>恢复滚动播放器默认快捷键</translation>
+            <source>恢复专业模式默认快捷键</source>
+            <translation>恢复专业模式默认快捷键</translation>
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="2176" />

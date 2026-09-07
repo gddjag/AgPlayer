@@ -271,8 +271,12 @@ private:
 
     struct VerificationResult {
         QSet<QString> verifiedModels;
+        QSet<QString> checkedModels;
         QSet<QString> verifiedFiles;
+        QHash<QString, QString> modelFingerprints;
         bool runtimeVerified = false;
+        bool runtimeChecked = false;
+        QString runtimeFingerprint;
     };
 
     struct ModelDirectoryIndex {
@@ -371,7 +375,11 @@ private:
     QString verifyingModelId_;
     QSet<QString> verifiedModelIds_;
     QSet<QString> verifiedOrRejectedModelIds_;
+    QHash<QString, QString> modelVerificationFingerprints_;
     bool runtimeVerified_ = false;
+    bool runtimeVerificationKnown_ = false;
+    QString runtimeVerificationFingerprint_;
+    std::optional<QString> deferredRuntimeConfigurationModelId_;
     bool runtimeOnlyDownload_ = false;
     QList<DownloadItem> downloadQueue_;
     QString downloadingModelId_;
@@ -396,6 +404,7 @@ private:
     QString modelStorageDirectory_;
     QHash<QString, QStringList> indexedModelFiles_;
     bool modelDirectoryRescanPending_ = false;
+    bool verifyAllModelsOnNextScan_ = false;
     bool deviceProbePending_ = false;
     bool deviceChosenByUser_ = false;
     DeviceMode deviceMode_ = DeviceMode::Auto;

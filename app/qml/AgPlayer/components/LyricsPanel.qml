@@ -55,7 +55,7 @@ Item {
             color: parent.down ? Theme.surfacePressed
                                : parent.hovered ? Theme.hoverSurface
                                                 : "transparent"
-            border.width: parent.activeFocus ? 2 : 0
+            border.width: parent.visualFocus ? 2 : 0
             border.color: Theme.focus
             radius: Theme.radiusSm
         }

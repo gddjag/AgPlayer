@@ -43,7 +43,8 @@ void AudioPreviewControllerTest::startingMainPlayerStopsActivePreview()
     mainPlayback.play();
     QTRY_COMPARE_WITH_TIMEOUT(mainPlayback.state(),
                               PlaybackController::Playing, 2'000);
-    QTRY_VERIFY_WITH_TIMEOUT(!preview.hasSource(), 2'000);
+    QTRY_VERIFY_WITH_TIMEOUT(!preview.playing(), 2'000);
+    QVERIFY(preview.hasSource());
     QVERIFY(!preview.playing());
     ag_player_destroy(mainPlayer);
 }
@@ -111,7 +112,7 @@ void AudioPreviewControllerTest::stopsMainPlayerBeforePreviewAndDoesNotResume()
     QTRY_VERIFY_WITH_TIMEOUT(preview.hasSource(), 2'000);
     QTRY_VERIFY_WITH_TIMEOUT(preview.playing(), 2'000);
     QTRY_COMPARE_WITH_TIMEOUT(
-        mainPlayback.state(), PlaybackController::Stopped, 2'000);
+        mainPlayback.state(), PlaybackController::Paused, 2'000);
     QVERIFY(preview.durationMs() > 0);
     QVERIFY(preview.isCurrentSource(QUrl::fromLocalFile(fixture)));
     QCOMPARE(QFileInfo(preview.sourcePath()).canonicalFilePath(),
@@ -127,7 +128,7 @@ void AudioPreviewControllerTest::stopsMainPlayerBeforePreviewAndDoesNotResume()
     preview.stop();
     QVERIFY(!preview.playing());
     QVERIFY(!preview.hasSource());
-    QCOMPARE(mainPlayback.state(), PlaybackController::Stopped);
+    QCOMPARE(mainPlayback.state(), PlaybackController::Paused);
     ag_player_destroy(mainPlayer);
 }
 

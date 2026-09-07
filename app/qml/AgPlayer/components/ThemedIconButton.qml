@@ -48,9 +48,8 @@ T.Button {
                                                                     : Theme.accent)
                : control.down ? Theme.surfacePressed
                : control.hovered ? Theme.surfaceHover : "transparent"
-        border.color: control.activeFocus ? Theme.focus
-                      : control.selected ? Theme.accentBorder : "transparent"
-        border.width: control.activeFocus ? 2 : control.selected ? 1 : 0
+        border.color: control.visualFocus ? Theme.focus : "transparent"
+        border.width: control.visualFocus ? 2 : 0
 
         Behavior on color {
             ColorAnimation { duration: 140 }

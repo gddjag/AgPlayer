@@ -2456,6 +2456,7 @@ TestCase {
         verify(mute)
         verify(slider)
         verify(percent)
+        compare(percent.horizontalAlignment, Text.AlignLeft)
         compare(mute.icon.color.toString(), Theme.iconPrimary.toString())
         compare(mute.icon.width, 20)
         verify(slider.handle.width <= 10)
@@ -3334,7 +3335,8 @@ TestCase {
         compare(firstPill.height, 28)
         compare(firstPill.radius, 11)
         compare(firstPill.color.a, 0)
-        verify(firstPill.border.width >= 2)
+        compare(firstPill.border.width, 1.4)
+        compare(findChild(firstPill, "tagCapsuleName-" + keys[0]).font.pixelSize, 12)
         compare(firstPill.border.color, firstPill.baseAccent)
         compare(panel.pillHorizontalPadding, 6)
         compare(panel.pillCountHorizontalPadding, 5)
@@ -3387,7 +3389,7 @@ TestCase {
         tryVerify(function() { return firstPill.selectedVisual }, 500)
         mouseMove(window.contentItem, window.width - 2, window.height - 2)
         tryCompare(firstPill, "color", Qt.rgba(0, 0, 0, 0), 1000)
-        verify(firstPill.border.width > 2.4,
+        verify(firstPill.border.width > 1.4,
                "selected tags stay hollow and use a stronger outline")
 
         var pointer = findChild(firstPill, "tagPillPointerArea-" + keys[0])

@@ -122,7 +122,9 @@ public:
     void setPlayer(ag_player* player);
     [[nodiscard]] ag_player* playerHandle() const noexcept { return player_; }
     [[nodiscard]] bool acquireEditorOutput() noexcept;
-    void releaseEditorOutput() noexcept;
+    void releaseEditorOutput(bool resumePrevious = true) noexcept;
+    bool editorOutputOwned() const noexcept { return editorOutputOwned_; }
+    bool pauseForPlaybackHandoff();
 
     Q_INVOKABLE void play();
     Q_INVOKABLE void pause();
@@ -182,6 +184,8 @@ public:
     Q_INVOKABLE void resetBeatGrid();
 
 signals:
+    // Synchronous, same-thread arbitration; a receiver may veto a failed handoff.
+    void playbackRequested(bool* accepted);
     void stateChanged();
     void positionMsChanged();
     void durationMsChanged();

@@ -365,7 +365,7 @@ bool PlaybackController::acquireEditorOutput() noexcept
     }
 }
 
-void PlaybackController::releaseEditorOutput() noexcept
+void PlaybackController::releaseEditorOutput(const bool resumePrevious) noexcept
 {
     if (!editorOutputOwned_) return;
     if (!editorSessionSnapshot_) {
@@ -373,6 +373,8 @@ void PlaybackController::releaseEditorOutput() noexcept
         setErrorMessage(QStringLiteral("Unable to restore the playback session"));
         return;
     }
+    if (!resumePrevious && editorSessionSnapshot_->state == Playing)
+        editorSessionSnapshot_->state = Paused;
     const bool hasMainSession =
         !editorSessionSnapshot_->queueTrackIds.isEmpty();
     const bool injectedStopFailure =
@@ -504,6 +506,9 @@ bool PlaybackController::shouldFailEditorOutputStep(
 
 void PlaybackController::play()
 {
+    bool accepted = true;
+    emit playbackRequested(&accepted);
+    if (!accepted) return;
     if (editorOutputOwned_) return;
     const ag_result result = player_ != nullptr
         ? ag_player_play(player_) : AG_INVALID_ARGUMENT;
@@ -520,6 +525,17 @@ void PlaybackController::pause()
 {
     if (editorOutputOwned_) return;
     runCommand(player_ != nullptr ? ag_player_pause(player_) : AG_INVALID_ARGUMENT);
+}
+
+bool PlaybackController::pauseForPlaybackHandoff()
+{
+    if (!player_ || editorOutputOwned_) return true;
+    ag_playback_snapshot snapshot{};
+    if (ag_player_snapshot(player_, &snapshot) != AG_OK) return false;
+    if (snapshot.state != AG_PLAYING) return true;
+    const ag_result result = ag_player_pause(player_);
+    runCommand(result);
+    return result == AG_OK;
 }
 
 void PlaybackController::stop()
@@ -624,6 +640,9 @@ void PlaybackController::clearSelection()
 
 void PlaybackController::cuePress()
 {
+    bool accepted = true;
+    emit playbackRequested(&accepted);
+    if (!accepted) return;
     if (cueHeld_ || player_ == nullptr || editorOutputOwned_
         || !hasPersistentCurrentTrack()) {
         return;
@@ -731,6 +750,9 @@ void PlaybackController::jumpToCue()
 
 void PlaybackController::activateHotCue(const int slot)
 {
+    bool accepted = true;
+    emit playbackRequested(&accepted);
+    if (!accepted) return;
     if (slot < 0 || slot >= 8 || player_ == nullptr || editorOutputOwned_
         || !hasPersistentCurrentTrack()) {
         return;
@@ -930,6 +952,9 @@ bool PlaybackController::setSelection(qint64 startMs,
 
 void PlaybackController::next()
 {
+    bool accepted = true;
+    emit playbackRequested(&accepted);
+    if (!accepted) return;
     if (editorOutputOwned_) return;
     const ag_result result = player_ != nullptr
         ? ag_player_next(player_) : AG_INVALID_ARGUMENT;
@@ -939,6 +964,9 @@ void PlaybackController::next()
 
 void PlaybackController::previous()
 {
+    bool accepted = true;
+    emit playbackRequested(&accepted);
+    if (!accepted) return;
     if (editorOutputOwned_) return;
     const ag_result result = player_ != nullptr
         ? ag_player_previous(player_) : AG_INVALID_ARGUMENT;
@@ -1090,6 +1118,9 @@ bool PlaybackController::playTrackIds(const QStringList& trackIds,
         paths.push_back(utf8Paths.back().constData());
     }
 
+    bool accepted = true;
+    emit playbackRequested(&accepted);
+    if (!accepted || editorOutputOwned_) return false;
     applyReplayGainForTrack(currentTrackId);
     const ag_result result = ag_player_set_scoped_queue(
         player_, paths.data(), paths.size(), 0U,
@@ -1159,6 +1190,9 @@ bool PlaybackController::prepareRow(int row)
         return false;
     }
 
+    bool accepted = true;
+    emit playbackRequested(&accepted);
+    if (!accepted) return false;
     if (editorOutputOwned_) {
         releaseEditorOutput();
         if (editorOutputOwned_) return false;

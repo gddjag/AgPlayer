@@ -129,6 +129,7 @@ public:
                                    QObject* parent = nullptr);
     ~AudioEditorController() override;
     void setPlaybackController(PlaybackController* controller);
+    bool pauseForPlaybackHandoff();
     [[nodiscard]] ag_player* playerHandleForTesting() const noexcept
     { return player_; }
 
@@ -354,6 +355,7 @@ public:
     Q_INVOKABLE bool reduceNoise();
 
 signals:
+    void playbackRequested(bool* accepted);
     void stateChanged();
     void documentChanged();
     void waveformChanged();

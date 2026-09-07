@@ -319,12 +319,13 @@ TestCase {
         }
     }
 
-    function test_rolling_bpm_input_matches_grouping_height() {
+    function test_rolling_bpm_input_is_compact_and_centered() {
         var rolling = rollingWithFakes()
         var target = findChild(rolling, "rollingTargetBpm")
         var grouping = findChild(rolling, "rollingBeatGridGrouping")
-        compare(target.height, grouping.height,
-                "BPM and grouping must use the same compact control height")
+        compare(target.height, 24)
+        verify(target.height < grouping.height)
+        compare(target.verticalAlignment, TextInput.AlignVCenter)
     }
 
     function test_rolling_wrapped_controls_center_without_overflow() {
@@ -519,7 +520,7 @@ TestCase {
         compare(menu.count, 3)
         compare(findChild(menu, "classicShellMenuItem").text, "经典双窗口")
         compare(findChild(menu, "integratedShellMenuItem").text, "集成单窗口")
-        compare(findChild(menu, "rollingShellMenuItem").text, "滚动播放模式")
+        compare(findChild(menu, "rollingShellMenuItem").text, "专业模式")
         menu.close()
     }
 
@@ -867,8 +868,8 @@ TestCase {
             var waveform = findChild(rolling, "rollingMainWaveform")
             verify(canvas && waveform)
             compare(canvas.height, rolling.height < 800 ? 124 : 136)
-            compare(waveform.y, 6)
-            compare(waveform.y + waveform.height, canvas.height - 6)
+            compare(waveform.y, 4)
+            compare(waveform.y + waveform.height, canvas.height - 4)
             compare(waveform.amplitudeScale, 1.5,
                     "rolling preserves the configured amplitude without a hidden cap")
             compare(waveform.preserveSourcePeakDensity, false)
@@ -915,7 +916,8 @@ TestCase {
             compare(minus.height, 28)
             compare(plus.height, 28)
             compare(zoomReset.height, 28)
-            compare(targetBpm.height, grouping.height)
+            compare(targetBpm.height, 24)
+            compare(targetBpm.verticalAlignment, TextInput.AlignVCenter)
             compare(tempoReset.height, 28)
             compare(calibration.height, 28)
             compare(zoomReset.icon.width, 18)
@@ -1121,6 +1123,48 @@ TestCase {
         }
     }
 
+    function test_calibration_popup_drag_and_reopen_position() {
+        var rolling = rollingWithFakes()
+        var button = findChild(rolling, "rollingGridCalibrationButton")
+        var popup = findChild(rolling, "rollingGridCalibrationPopup")
+        mouseClick(button)
+        tryCompare(popup, "opened", true)
+        var handle = findChild(popup, "rollingGridCalibrationDragHandle")
+        verify(handle, "calibration needs a title-only drag handle")
+        var initialX = popup.x
+        var initialY = popup.y
+        var buttonTop = button.mapToItem(popup.parent, 0, 0).y
+        verify(popup.y + popup.height <= buttonTop)
+        mousePress(handle, handle.width / 2, handle.height / 2)
+        mouseMove(handle, handle.width / 2 + 55, handle.height / 2 - 35, 30, Qt.LeftButton)
+        mouseRelease(handle, handle.width / 2, handle.height / 2, Qt.LeftButton)
+        verify(Math.abs(popup.x - initialX) > 10 || Math.abs(popup.y - initialY) > 10)
+        verify(popup.x >= 0 && popup.y >= 0)
+        verify(popup.x + popup.width <= popup.parent.width)
+        verify(popup.y + popup.height <= popup.parent.height)
+        mousePress(handle, handle.width / 2, handle.height / 2)
+        var corner = popup.parent.mapToItem(handle, 0, 0)
+        mouseMove(handle, corner.x, corner.y, 30, Qt.LeftButton)
+        corner = popup.parent.mapToItem(handle, 0, 0)
+        mouseRelease(handle, corner.x, corner.y, Qt.LeftButton)
+        compare(popup.x, 8)
+        compare(popup.y, 8)
+        var field = findChild(popup, "rollingGridBpmField")
+        var draggedX = popup.x
+        var draggedY = popup.y
+        mouseClick(field)
+        compare(popup.x, draggedX)
+        compare(popup.y, draggedY)
+        popup.close()
+        tryCompare(popup, "visible", false)
+        mouseClick(button)
+        tryCompare(popup, "opened", true)
+        compare(popup.x, initialX)
+        compare(popup.y, Math.max(8, button.mapToItem(popup.parent, 0, 0).y
+                                   - popup.height - 4))
+        popup.close()
+    }
+
     function test_cue_hold_release_cancel_and_grid_calibration_actions() {
         var rolling = rollingWithFakes()
         var cueButton = findChild(rolling, "rollingCueButton")
@@ -1214,7 +1258,9 @@ TestCase {
         for (var row = 1; row < rows.length; ++row) {
             var gap = rows[row].mapToItem(rolling, 0, 0).y
                     - rows[row - 1].mapToItem(rolling, 0, rows[row - 1].height).y
-            verify(Math.abs(gap - 4) < 1, "all four information rows use the same gap")
+            var expectedGap = row === 3 ? 4 : (rolling.height < 700 ? 4 : 3)
+            verify(Math.abs(gap - expectedGap) < 1,
+                   "text rows are uniform while the overview keeps its existing clearance")
         }
     }
 
@@ -1226,6 +1272,25 @@ TestCase {
         var subtitle = findChild(rolling, "rollingSubtitleRow")
         var badges = findChild(rolling, "rollingMetadataBadges")
         verify(cover && info && title && subtitle && badges)
+        compare(info.height, rolling.height < 700 ? 96 : 112,
+                "equalizing text rows must not move the overview or grow the header")
+        compare(title.height, subtitle.height)
+        compare(subtitle.height, badges.height)
+        var favorite = findChild(rolling, "rollingFavoriteButton")
+        var rating = findChild(rolling, "rollingTrackRating")
+        compare(favorite.icon.width, 20)
+        compare(favorite.icon.height, 20)
+        compare(favorite.padding, 0,
+                "compact rows must not shrink the enlarged icon through button padding")
+        var stars = 0
+        for (var child of rating.children) {
+            if (child.tint !== undefined) {
+                compare(child.width, 14)
+                compare(child.height, 14)
+                stars++
+            }
+        }
+        compare(stars, 5)
         var center = info.mapToItem(rolling, 0, info.height / 2).y
         verify(Math.abs(center - cover.mapToItem(rolling, 0, cover.height / 2).y) < 1)
         var firstGap = subtitle.mapToItem(rolling, 0, 0).y
@@ -1233,6 +1298,10 @@ TestCase {
         var secondGap = badges.mapToItem(rolling, 0, 0).y
                       - subtitle.mapToItem(rolling, 0, subtitle.height).y
         verify(firstGap >= 3 && Math.abs(firstGap - secondGap) < 1)
+        compare(title.mapToItem(rolling, 0, 0).x,
+                subtitle.mapToItem(rolling, 0, 0).x)
+        compare(subtitle.mapToItem(rolling, 0, 0).x,
+                badges.mapToItem(rolling, 0, 0).x)
         verify(findChild(rolling, "rollingOverviewWaveform")
                .mapToItem(rolling, 0, 0).y >= badges.mapToItem(rolling, 0, badges.height).y)
     }

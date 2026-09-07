@@ -1422,7 +1422,7 @@ Item {
                         valueModel: [
                             { text: qsTr("双窗口主题"), value: "dual-window" },
                             { text: qsTr("单窗口主题"), value: "single-window" },
-                            { text: qsTr("滚动播放模式"), value: "rolling-player" }
+                            { text: qsTr("专业模式"), value: "rolling-player" }
                         ]
                         currentIndex:
                             SettingsController.windowLayoutTheme === "rolling-player"
@@ -2135,7 +2135,7 @@ Item {
             }
 
             SettingCard {
-                title: qsTr("滚动播放器键盘")
+                title: qsTr("专业模式快捷键")
 
                 Text {
                     Layout.fillWidth: true
@@ -2167,7 +2167,7 @@ Item {
 
                 ThemedButton {
                     objectName: "rollingShortcutResetButton"
-                    text: qsTr("恢复滚动播放器默认快捷键")
+                    text: qsTr("恢复专业模式默认快捷键")
                     onClicked: SettingsController.resetRollingKeyboardShortcuts()
                 }
             }

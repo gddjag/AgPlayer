@@ -49,7 +49,7 @@ AudioPreviewController::AudioPreviewController(
             if (mainPlayback_ != nullptr
                 && mainPlayback_->state() == PlaybackController::Playing
                 && hasSource()) {
-                stopPlaybackAndClear();
+                pause();
             }
         });
     }
@@ -128,12 +128,8 @@ void AudioPreviewController::toggle(const QUrl& source)
     if (isCurrentSource(source)) {
         if (playing_) {
             pause();
-        } else if (player_ != nullptr && ag_player_play(player_) == AG_OK) {
-            pollTimer_.start();
-            pollSnapshot();
         } else {
-            stopPlaybackAndClear();
-            setError(tr("无法开始预览播放"));
+            resume();
         }
         return;
     }
@@ -154,11 +150,8 @@ void AudioPreviewController::play(const QUrl& source)
         return;
     }
 
+    if (!requestPlayback()) return;
     stopPlaybackAndClear();
-    if (mainPlayback_ != nullptr
-        && mainPlayback_->state() != PlaybackController::Stopped) {
-        mainPlayback_->stop();
-    }
     const QString absolutePath = QFileInfo(path).absoluteFilePath();
     if (!loadPlaybackPath(absolutePath, absolutePath, 0.0, true)) {
         return;
@@ -173,6 +166,7 @@ void AudioPreviewController::resume()
     if (!hasSource()) {
         return;
     }
+    if (!requestPlayback()) return;
     if (mixActive()) {
         if (stemMixer_ != nullptr && stemMixer_->play() == AG_OK) {
             pollTimer_.start();
@@ -293,11 +287,8 @@ bool AudioPreviewController::playMix(const QList<MixSource>& sources,
         sourceIds.push_back(source.id);
     }
 
+    if (!requestPlayback()) return false;
     stopPlaybackAndClear();
-    if (mainPlayback_ != nullptr
-        && mainPlayback_->state() != PlaybackController::Stopped) {
-        mainPlayback_->stop();
-    }
     if (stemMixer_->load(std::move(nativeSources), std::max<qint64>(0, positionMs))
             != AG_OK
         || stemMixer_->play() != AG_OK) {
@@ -614,9 +605,11 @@ void AudioPreviewController::scheduleDspPreview()
             != QFileInfo(logicalSource).canonicalFilePath()) {
             return;
         }
+        const bool stillPlaying = resumePlaying && playing_;
+        const qint64 currentPosition = playing_ ? resumePositionMs : positionMs_;
         if (loadPlaybackPath(logicalSource, outputPath, 0.0, false)) {
-            seek(std::min(resumePositionMs, durationMs_));
-            if (resumePlaying) resume();
+            seek(std::min(currentPosition, durationMs_));
+            if (stillPlaying) resume();
         }
     });
 
@@ -630,4 +623,12 @@ void AudioPreviewController::scheduleDspPreview()
                 effectivePitch, keepTempo, tempoRatio, "pcm_s16le",
                 &options, token, nullptr, nullptr));
         }));
+}
+
+bool AudioPreviewController::requestPlayback()
+{
+    bool accepted = true;
+    emit playbackRequested(&accepted);
+    if (!accepted) return false;
+    return !mainPlayback_ || mainPlayback_->pauseForPlaybackHandoff();
 }

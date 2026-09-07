@@ -1,6 +1,11 @@
 #pragma once
 
 #include <QObject>
+#include <QList>
+
+class PlaybackController;
+class AudioEditorController;
+class AudioPreviewController;
 
 class AudioToolsController final : public QObject {
     Q_OBJECT
@@ -9,6 +14,9 @@ class AudioToolsController final : public QObject {
 
 public:
     explicit AudioToolsController(QObject* parent = nullptr);
+    void bindPlaybackControllers(PlaybackController* playback,
+                                 AudioEditorController* editor,
+                                 AudioPreviewController* preview);
 
     int currentTool() const noexcept;
     bool visible() const noexcept;
@@ -29,6 +37,7 @@ signals:
     void losslessLocateRequested(const QString& path);
 
 private:
+    QList<QMetaObject::Connection> playbackConnections_;
     int currentTool_ = 0;  // Default: Light Editor
     bool visible_ = false;
 };

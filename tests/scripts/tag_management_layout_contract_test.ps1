@@ -96,8 +96,8 @@ Assert-Matches $theme 'readonly property int tagCapsuleHeight:\s*28\b' `
     'Shared tag capsules must remain 28 px high'
 Assert-Matches $theme 'readonly property int tagCapsuleRadius:\s*11\b' `
     'Shared tag capsules must use the approved 11 px radius'
-Assert-Matches $theme 'readonly property real tagCapsuleBorderWidth:\s*2\.4\b' `
-    'Shared tag capsules must use the compact 0.2em-equivalent outline'
+Assert-Matches $theme 'readonly property real tagCapsuleBorderWidth:\s*1\.4\b' `
+    'Shared tag capsules must reduce the previous outline by one DIP'
 Assert-Matches $theme 'function tagCapsuleFilledText\(fill\)' `
     'Theme must supply contrasting foreground for arbitrary filled tag colors'
 Assert-Matches $theme 'tagPillDropSurface' `

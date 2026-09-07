@@ -79,6 +79,7 @@ public:
     bool mixActive() const noexcept;
 
 signals:
+    void playbackRequested(bool* accepted);
     void sourceChanged();
     void stateChanged();
     void volumeChanged();
@@ -87,6 +88,7 @@ signals:
     void errorOccurred(const QString& message);
 
 private:
+    bool requestPlayback();
     friend class AudioPreviewControllerTest;
 
     ag_player* player_ = nullptr;

@@ -5090,8 +5090,8 @@ Clear: Remove all known aliases for this field.</translation>
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/components/PlayerControls.qml" line="469" />
-            <source>滚动播放模式</source>
-            <translation>Rolling playback mode</translation>
+            <source>专业模式</source>
+            <translation>Professional mode</translation>
         </message>
     </context>
 <context>
@@ -6123,8 +6123,8 @@ Clear: Remove all known aliases for this field.</translation>
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="1425" />
-            <source>滚动播放模式</source>
-            <translation>Rolling playback mode</translation>
+            <source>专业模式</source>
+            <translation>Professional mode</translation>
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="1505" />
@@ -6168,8 +6168,8 @@ Clear: Remove all known aliases for this field.</translation>
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="2138" />
-            <source>滚动播放器键盘</source>
-            <translation>Rolling Player Keyboard Shortcuts</translation>
+            <source>专业模式快捷键</source>
+            <translation>Professional mode keyboard shortcuts</translation>
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="2142" />
@@ -6208,8 +6208,8 @@ Clear: Remove all known aliases for this field.</translation>
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="2170" />
-            <source>恢复滚动播放器默认快捷键</source>
-            <translation>Restore Rolling Player Default Shortcuts</translation>
+            <source>恢复专业模式默认快捷键</source>
+            <translation>Restore Professional mode default shortcuts</translation>
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="2176" />
@@ -8454,8 +8454,8 @@ A pinned NVIDIA CUDA version is installed separately without changing the existi
             <translation>Integrated single-window mode</translation>
         </message>
         <message>
-            <source>滚动播放模式</source>
-            <translation>Rolling playback mode</translation>
+            <source>专业模式</source>
+            <translation>Professional mode</translation>
         </message>
 </context>
 <context>

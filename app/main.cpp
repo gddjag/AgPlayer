@@ -871,9 +871,8 @@ int main(int argc, char* argv[])
         if (!qaLanguage.isEmpty()) {
             settings.setLanguage(qaLanguage);
         }
-        if (qaTestMode) {
-            settings.setWaveformMode(1);
-        }
+        // QA defaults must match a fresh installation; an explicit waveform
+        // argument below is the only presentation override.
         if (qaWaveformMode >= 0) {
             settings.setWaveformMode(qaWaveformMode);
         }
@@ -980,6 +979,7 @@ int main(int argc, char* argv[])
                          &losslessAnalysis, &LosslessAnalysisController::refreshTranslations);
         AudioPreviewController audioPreview(
             AG_AUDIO_BACKEND_DEFAULT, &playback);
+        audioTools.bindPlaybackControllers(&playback, &audioEditor, &audioPreview);
         WaveformProvider separationWaveformProvider(&settings);
         VocalSeparationControllerOptions separationOptions;
         separationOptions.dataRoot = QFileInfo(libraryPath).dir().filePath(

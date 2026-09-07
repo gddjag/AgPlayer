@@ -307,6 +307,17 @@ TestCase {
         textField.error = false
     }
 
+    function test_icon_mouse_focus_has_no_border_but_keyboard_focus_remains() {
+        iconButton.forceActiveFocus(Qt.MouseFocusReason)
+        tryCompare(iconButton.background.border, "width", 0)
+        textField.forceActiveFocus(Qt.OtherFocusReason)
+        iconButton.forceActiveFocus(Qt.TabFocusReason)
+        tryCompare(iconButton.background.border, "width", 2)
+        textField.forceActiveFocus(Qt.OtherFocusReason)
+        iconButton.forceActiveFocus(Qt.MouseFocusReason)
+        tryCompare(iconButton.background.border, "width", 0)
+    }
+
     function test_shared_controls_enable_desktop_hover_and_keyboard_focus() {
         compare(textField.hoverEnabled, true)
         compare(checkBox.hoverEnabled, true)
