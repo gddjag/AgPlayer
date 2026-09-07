@@ -53,10 +53,10 @@ Assert-Matches $navigation 'anchors\.leftMargin:\s*6 \+ nodeRow\.depth \* 12' `
 
 Assert-Matches $tagPanel '(?s)id:\s*tagPill.*implicitHeight:\s*Theme\.tagCapsuleHeight.*height:\s*implicitHeight.*radius:\s*Theme\.tagCapsuleRadius' `
     'Tag capsules must use the shared compact height and rounded outline'
-Assert-Matches $theme 'readonly property int tagCapsuleHeight:\s*28\b' `
-    'Shared tag capsules must remain 28 px high'
-Assert-Matches $theme 'readonly property int tagCapsuleRadius:\s*11\b' `
-    'Shared tag capsules must use the approved 11 px radius'
+Assert-Matches $theme 'readonly property int tagCapsuleHeight:\s*24\b' `
+    'Shared tag capsules must use the compact 24 px height'
+Assert-Matches $theme 'readonly property int tagCapsuleRadius:\s*10\b' `
+    'Shared tag capsules must use the compact 10 px radius'
 Assert-Matches $tagPanel '(?s)TagFilterModel\s*\{.*sourceModel:\s*root\.tagModel.*query:\s*root\.searchText' `
     'Tag panel must retain the quantity-descending stable-name proxy sorting'
 

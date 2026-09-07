@@ -15,6 +15,7 @@ Item {
     property var libraryModel: LibraryModel
     property var playlistModel: PlaylistModel
     property var navigationModel: LibraryNavigationModel
+    property alias libraryNavigation: sideNavigation
     property var tagModel: TagModel
     property var playbackController: PlaybackController
     property var lyricsService: LyricsService
@@ -258,9 +259,13 @@ Item {
                                                        resourceFolder) {
                             if (!root.filterModel)
                                 return
+                            if (nodeType === "resourceRoot" || nodeType === "resourceFolder")
+                                root.filterModel.category = "all"
                             root.filterModel.resourceFolder = resourceFolder
-                            if (nodeType !== "tags")
+                            if (nodeType !== "tags") {
                                 root.filterModel.tagKey = ""
+                                TagModel.selectedKey = ""
+                            }
                         }
                     }
                 }

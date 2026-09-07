@@ -755,6 +755,8 @@ TestCase {
     }
 
     function test_twoStemTimelineKeepsUnsupportedStemsVisibleAndLocalized() {
+        separationTestDriver.reset()
+        wait(0)
         compare(VocalSeparationController.stems.length, 5)
         const drums = page.stemInfo(VocalSeparationController.Drums)
         verify(!drums.supported && !drums.selected && !drums.available)
@@ -901,6 +903,61 @@ TestCase {
         compare(VocalSeparationController.availableDevices[0].available, false)
         compare(VocalSeparationController.availableDevices[0].reason,
                 "CPU 和 GPU 均未通过设备探测")
+        separationTestDriver.reset()
+    }
+
+    function test_configurationCardsDisplayIndependentProgressAndCompletedState() {
+        separationTestDriver.reset()
+        separationTestDriver.setCardConfiguration("uvr-mdxnet-kara", {
+            configurationTaskId: "model:uvr-mdxnet-kara", configurationState: "downloading",
+            configurationProgress: 0.25, configurationDetail: "A", configurationError: "",
+            configurationCanPause: true, configurationCanResume: false,
+            configurationCanCancel: true, configurationEnabled: false
+        })
+        separationTestDriver.setCardConfiguration("uvr-mdx-net-inst-hq3", {
+            configurationTaskId: "model:uvr-mdx-net-inst-hq3", configurationState: "paused",
+            configurationProgress: 0.70, configurationDetail: "B", configurationError: "",
+            configurationCanPause: false, configurationCanResume: true,
+            configurationCanCancel: true, configurationEnabled: false
+        })
+        const first = findChild(page, "separationDownloadProgress-uvr-mdxnet-kara")
+        const second = findChild(page, "separationDownloadProgress-uvr-mdx-net-inst-hq3")
+        verify(first.visible && second.visible)
+        compare(first.value, 0.25)
+        compare(second.value, 0.70)
+        compare(findChild(page, "separationDownloadModel-uvr-mdxnet-kara").text, "暂停")
+        compare(findChild(page, "separationDownloadModel-uvr-mdx-net-inst-hq3").text, "继续")
+        wait(0)
+        for (const id of ["uvr-mdxnet-kara", "uvr-mdx-net-inst-hq3"]) {
+            const card = findChild(page, "separationModelCard-" + id)
+            const actions = findChild(card, "separationModelAction-" + id)
+            verify(actions.mapToItem(card, actions.width, actions.height).x <= card.width)
+            verify(actions.mapToItem(card, actions.width, actions.height).y <= card.height)
+        }
+        if (visualFixtureOutput) grabImage(page).save(visualFixtureOutput + "-parallel-models.png")
+        separationTestDriver.setCardConfiguration("uvr-mdxnet-kara", {
+            configurationState: "complete", configurationProgress: 1,
+            configurationCanPause: false, configurationCanResume: false,
+            configurationCanCancel: false, configurationEnabled: false
+        })
+        verify(!findChild(page, "separationInstallRuntime-uvr-mdxnet-kara").visible)
+        compare(second.value, 0.70)
+        separationTestDriver.reset()
+    }
+
+    function test_switchingModelKeepsPublishedWaveformsVisible() {
+        separationTestDriver.reset()
+        separationTestDriver.selectModel("htdemucs-ft-fp16")
+        separationTestDriver.setCompleted()
+        const drums = page.stemInfo(VocalSeparationController.Drums)
+        verify(drums.available && drums.waveform.length > 0)
+        const oldPath = drums.path
+        separationTestDriver.selectModel("uvr-mdxnet-kara")
+        compare(page.stemInfo(VocalSeparationController.Drums).path, oldPath)
+        const waveform = findChild(page, "separationStemWaveform-" + VocalSeparationController.Drums)
+        verify(waveform.visible, "published results must not be hidden by the next model's stem support")
+        verify(waveform.peaks.length > 0)
+        verify(findChild(page, "stemPreviewVolume-" + VocalSeparationController.Drums).enabled)
         separationTestDriver.reset()
     }
 

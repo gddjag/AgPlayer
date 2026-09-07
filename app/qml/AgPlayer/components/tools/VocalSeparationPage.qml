@@ -58,6 +58,20 @@ Rectangle {
     readonly property bool resultPreviewCurrent:
         VocalSeparationController.resultPreviewMode
         !== VocalSeparationController.None
+    readonly property var runtimeTasks: (VocalSeparationController.runtimeConfigurations || []).filter(
+        function(task) { return task.configurationState !== "idle" && task.configurationState !== "complete" })
+    readonly property bool hasConfigurationTasks: VocalSeparationController.models.some(
+        function(card) { return card.configurationState && card.configurationState !== "idle"
+                               && card.configurationState !== "complete" })
+
+    function configurationTaskId(card) {
+        return card.configurationTaskId || card.taskId || "model:" + card.id
+    }
+
+    function configurationActive(card) {
+        return !!card.configurationState && card.configurationState !== "idle"
+               && card.configurationState !== "complete"
+    }
 
     onVisibleChanged: {
         if (environmentRefreshReady && visible
@@ -429,7 +443,7 @@ Rectangle {
 
     function adjustStemVolume(kind, wheelDelta) {
         const stem = page.stemInfo(kind)
-        if (!stem.supported || wheelDelta === 0)
+        if ((!stem.supported && !stem.available) || wheelDelta === 0)
             return
         const current = Number(stem.previewVolume === undefined
                                ? 0.8 : stem.previewVolume)
@@ -501,6 +515,9 @@ Rectangle {
             return qsTr("已识别 · 尚未适配")
         if (card.origin === "custom" && card.compatibility === "rejected")
             return qsTr("配置无效")
+        if (card.configurationState === "waiting-runtime") return qsTr("等待共享环境")
+        if (card.configurationState === "failed") return qsTr("配置失败")
+        if (card.configurationState === "complete") return qsTr("已配置")
         switch (card.state) {
         case VocalSeparationController.NotInstalled: return qsTr("未下载")
         case VocalSeparationController.PendingVerification: return qsTr("待校验")
@@ -952,7 +969,7 @@ Rectangle {
                         id: modelDeck
                         objectName: "separationModelDeck"
                         Layout.fillWidth: true
-                        Layout.preferredHeight: VocalSeparationController.downloadBusy ? 234 : 194
+                        Layout.preferredHeight: page.hasConfigurationTasks ? 234 : 194
                         color: "transparent"
 
                         ListView {
@@ -1117,7 +1134,7 @@ Rectangle {
                                     }
                                      RowLayout {
                                          objectName: "separationDownloadProgressRow-" + cardData.id
-                                         visible: cardData.id === VocalSeparationController.downloadingModelId
+                                         visible: page.configurationActive(cardData)
                                          Layout.fillWidth: true
                                          Layout.preferredHeight: 12
                                          spacing: 6
@@ -1125,8 +1142,8 @@ Rectangle {
                                              objectName: "separationDownloadProgress-" + cardData.id
                                              from: 0
                                              to: 1
-                                             value: VocalSeparationController.downloadProgress
-                                             indeterminate: VocalSeparationController.downloadProgress < 0
+                                             value: Number(cardData.configurationProgress || 0)
+                                             indeterminate: cardData.configurationProgress < 0
                                              Layout.fillWidth: true
                                              Layout.preferredHeight: 4
                                              background: Rectangle {
@@ -1149,11 +1166,11 @@ Rectangle {
                                              objectName: "separationDownloadPercentage-" + cardData.id
                                              Layout.minimumWidth: 0
                                              Layout.maximumWidth: 116
-                                             text: (VocalSeparationController.downloadProgress < 0 ? qsTr("配置中") : Math.round(VocalSeparationController.downloadProgress * 100) + "%")
-                                                   + " · " + VocalSeparationController.downloadSource
+                                             text: (cardData.configurationProgress < 0 ? qsTr("配置中") : Math.round(Number(cardData.configurationProgress || 0) * 100) + "%")
+                                                   + " · " + (cardData.configurationError || cardData.configurationDetail || "")
                                              elide: Text.ElideRight
                                              ToolTip.visible: pythonProgressHover.hovered
-                                             ToolTip.text: VocalSeparationController.downloadSource
+                                             ToolTip.text: cardData.configurationError || cardData.configurationDetail || ""
                                              HoverHandler { id: pythonProgressHover }
                                              color: page.success
                                              font.pixelSize: Theme.fontSizeCaption
@@ -1170,7 +1187,7 @@ Rectangle {
                                          Item { Layout.fillWidth: true; Layout.minimumWidth: 0 }
                                         WorkbenchButton {
                                             objectName: "separationConfigureGpu-" + cardData.id
-                                            visible: !!cardData.gpuRuntimeConfigurable
+                                            visible: !!cardData.gpuRuntimeConfigurable && !cardData.gpuRuntimeReady
                                                      && cardData.state === VocalSeparationController.Installed
                                             implicitHeight: 24
                                             leftPadding: 6
@@ -1180,7 +1197,7 @@ Rectangle {
                                             ToolTip.visible: hovered
                                             ToolTip.text: (cardData.gpuReason || "")
                                                           + qsTr("\nNVIDIA CUDA 固定版本独立安装，不修改现有 Python/CPU 环境。约 1.51 GB 下载；失败自动尝试备用线路。安装完成不代表模型已通过 GPU 推理验证。")
-                                            enabled: !!cardData.configurationEnabled
+                                            enabled: !!cardData.gpuConfigurationEnabled
                                             onClicked: {
                                                 if (cardData.gpuRuntimeReady)
                                                     VocalSeparationController.probeDevices(true)
@@ -1204,35 +1221,25 @@ Rectangle {
                                           }
                                           WorkbenchButton {
                                               objectName: "separationInstallRuntime-" + cardData.id
-                                              visible: cardData.backend === "external-python"
-                                                       || cardData.backend === "onnxruntime-native"
+                                              visible: (cardData.backend === "external-python"
+                                                        || cardData.backend === "onnxruntime-native")
+                                                       && cardData.configurationState !== "complete"
+                                                       && (!page.configurationActive(cardData)
+                                                           || cardData.compatibility === "diagnostic")
                                               implicitHeight: 24
                                               leftPadding: 6
                                               rightPadding: 6
                                               topPadding: 3
                                               bottomPadding: 3
-                                              text: cardData.compatibility === "diagnostic" ? qsTr("查看原因")
-                                                  : cardData.backend === "external-python"
-                                                    && cardData.state === VocalSeparationController.Downloading ? qsTr("暂停")
-                                                  : cardData.backend === "external-python"
-                                                    && cardData.state === VocalSeparationController.Paused ? qsTr("继续配置")
-                                                  : qsTr("一键配置")
-                                              enabled: !!cardData.configurationEnabled
-                                                       || (cardData.id === VocalSeparationController.downloadingModelId
-                                                           && VocalSeparationController.downloadBusy)
+                                              text: cardData.compatibility === "diagnostic" ? qsTr("查看原因") : qsTr("一键配置")
+                                              enabled: !!cardData.configurationEnabled || cardData.compatibility === "diagnostic"
                                               Accessible.name: text
                                               Accessible.role: Accessible.Button
                                               onClicked: {
                                                   if (cardData.compatibility === "diagnostic") {
                                                       configurationDiagnostic.text = cardData.failureReason || cardData.description
                                                       configurationDialog.open()
-                                                  } else if (cardData.backend === "external-python"
-                                                             && cardData.state === VocalSeparationController.Downloading)
-                                                      VocalSeparationController.pauseDownload()
-                                                  else if (cardData.backend === "external-python"
-                                                          && cardData.state === VocalSeparationController.Paused)
-                                                      VocalSeparationController.resumeDownload()
-                                                  else if (!VocalSeparationController.configureRuntime(cardData.id)) {
+                                                  } else if (!VocalSeparationController.configureRuntime(cardData.id)) {
                                                       configurationDiagnostic.text = VocalSeparationController.error
                                                       configurationDialog.open()
                                                   }
@@ -1260,42 +1267,29 @@ Rectangle {
                                           }
                                           WorkbenchButton {
                                               objectName: "separationDownloadModel-" + cardData.id
-                                              visible: cardData.state !== VocalSeparationController.Installed
-                                                       && cardData.backend !== "external-python"
-                                                       && !(cardData.origin === "custom"
-                                                            && cardData.compatibility === "diagnostic")
+                                              // The configuration action also downloads missing model files.
+                                              // Keep one per-task pause/resume action instead of duplicate downloads.
+                                              visible: !!cardData.configurationCanPause || !!cardData.configurationCanResume
                                                implicitHeight: 24
                                                leftPadding: 6
                                                rightPadding: 6
                                              topPadding: 3
                                              bottomPadding: 3
-                                            text: cardData.state === VocalSeparationController.Verifying ? qsTr("校验中")
-                                                : cardData.state === VocalSeparationController.Downloading ? qsTr("暂停")
-                                                : cardData.state === VocalSeparationController.Paused ? qsTr("继续")
-                                                : cardData.state === VocalSeparationController.ModelFailed ? qsTr("重新下载")
-                                                : cardData.state === VocalSeparationController.PendingVerification ? qsTr("校验")
-                                                : qsTr("下载")
+                                            text: cardData.configurationCanPause ? qsTr("暂停")
+                                                : cardData.configurationState === "failed" ? qsTr("重试") : qsTr("继续")
                                             Accessible.name: text
                                             Accessible.role: Accessible.Button
-                                            enabled: cardData.state !== VocalSeparationController.Verifying
-                                                     && (!!cardData.configurationEnabled
-                                                         || (cardData.id === VocalSeparationController.downloadingModelId
-                                                             && VocalSeparationController.downloadBusy))
+                                            enabled: visible
                                             onClicked: {
-                                                if (cardData.state === VocalSeparationController.Downloading)
-                                                    VocalSeparationController.pauseDownload()
-                                                else if (cardData.state === VocalSeparationController.Paused)
-                                                    VocalSeparationController.resumeDownload()
-                                                else if (cardData.state === VocalSeparationController.PendingVerification)
-                                                    VocalSeparationController.verifyInstalledModels()
+                                                if (cardData.configurationCanPause)
+                                                    VocalSeparationController.pauseConfiguration(page.configurationTaskId(cardData))
                                                 else
-                                                    VocalSeparationController.downloadModel(cardData.id)
+                                                    VocalSeparationController.resumeConfiguration(page.configurationTaskId(cardData))
                                             }
                                          }
                                          WorkbenchButton {
                                              objectName: "separationCancelDownload-" + cardData.id
-                                             visible: cardData.id === VocalSeparationController.downloadingModelId
-                                                      && VocalSeparationController.downloadBusy
+                                             visible: !!cardData.configurationCanCancel
                                               implicitHeight: 24
                                               leftPadding: 6
                                               rightPadding: 6
@@ -1305,7 +1299,7 @@ Rectangle {
                                              enabled: visible
                                              Accessible.name: qsTr("取消下载")
                                              Accessible.role: Accessible.Button
-                                             onClicked: VocalSeparationController.cancelDownload()
+                                             onClicked: VocalSeparationController.cancelConfiguration(page.configurationTaskId(cardData))
                                          }
                                      }
                                  }
@@ -1676,13 +1670,13 @@ Rectangle {
                                             Layout.fillHeight: true
                                             radius: 3
                                             color: Qt.rgba(accent.r, accent.g, accent.b,
-                                                           modelData.supported ? 0.22 : 0.06)
+                                                           (modelData.supported || modelData.available) ? 0.22 : 0.06)
                                             RowLayout {
                                                 anchors.fill: parent
                                                 anchors.margins: 5
                                                 ThemedIcon {
                                                     source: Theme.icon(page.stemIcon(modelData.kind))
-                                                    tint: modelData.supported ? accent : page.muted
+                                                    tint: (modelData.supported || modelData.available) ? accent : page.muted
                                                     sourceSize.width: 14
                                                     sourceSize.height: 14
                                                     Layout.preferredWidth: 14
@@ -1691,7 +1685,7 @@ Rectangle {
                                                 Label {
                                                     Layout.fillWidth: true
                                                     text: page.stemLabel(modelData.kind)
-                                                    color: modelData.supported ? page.textPrimary : page.muted
+                                                    color: (modelData.supported || modelData.available) ? page.textPrimary : page.muted
                                                     font.pixelSize: Theme.fontSizeCaption
                                                 }
                                             }
@@ -1704,7 +1698,7 @@ Rectangle {
                                             from: 0; to: 1; stepSize: 0.05
                                             value: Number(modelData.previewVolume === undefined
                                                           ? 0.8 : modelData.previewVolume)
-                                            enabled: modelData.supported && !page.contextLocked
+                                            enabled: (modelData.supported || modelData.available) && !page.contextLocked
                                             focusPolicy: Qt.StrongFocus
                                             onMoved: VocalSeparationController.setStemPreviewVolume(
                                                          modelData.kind, value)
@@ -1745,7 +1739,7 @@ Rectangle {
                                         Item {
                                             id: waveformTrack
                                             Layout.fillWidth: true; Layout.fillHeight: true
-                                            visible: modelData.supported
+                                            visible: modelData.supported || modelData.available
                                             clip: true
                                             UnifiedWaveform {
                                                 id: stemWaveform
@@ -1779,7 +1773,7 @@ Rectangle {
                                                 opacity: 0.7
                                             }
                                         }
-                                        Label { visible: !modelData.supported; Layout.fillWidth: true; text: qsTr("当前模型不支持"); color: page.muted; font.pixelSize: Theme.fontSizeCaption }
+                                        Label { visible: !modelData.supported && !modelData.available; Layout.fillWidth: true; text: qsTr("当前模型不支持"); color: page.muted; font.pixelSize: Theme.fontSizeCaption }
                                     }
                                 }
                             }
@@ -1793,6 +1787,94 @@ Rectangle {
                     Layout.preferredWidth: page.compact ? workbench.width : page.sidePanelWidth
                     Layout.fillHeight: true
                     visible: page.desktop || page.compactTab !== 0
+
+                    Rectangle {
+                        objectName: "separationRuntimeTasks"
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Math.min(178, runtimeTaskColumn.implicitHeight + 12)
+                        visible: page.runtimeTasks.length > 0
+                        color: page.surface
+                        border.color: page.border
+                        radius: 6
+                        Flickable {
+                            anchors.fill: parent
+                            anchors.margins: 6
+                            contentWidth: width
+                            contentHeight: runtimeTaskColumn.implicitHeight
+                            clip: true
+                            boundsBehavior: Flickable.StopAtBounds
+                            ScrollBar.vertical: ThemedScrollBar { }
+                            ColumnLayout {
+                                id: runtimeTaskColumn
+                                width: parent.width
+                                spacing: 6
+                                Label {
+                                    text: qsTr("共享运行环境")
+                                    color: page.textPrimary
+                                    font.pixelSize: Theme.fontSizeCaption
+                                }
+                                Repeater {
+                                    model: page.runtimeTasks.length
+                                    ColumnLayout {
+                                        required property int index
+                                        readonly property var task: page.runtimeTasks[index] || ({})
+                                        objectName: "separationRuntimeTask-" + page.configurationTaskId(task)
+                                        Layout.fillWidth: true
+                                        spacing: 3
+                                        Label {
+                                            Layout.fillWidth: true
+                                            text: (task.name || "") + " · "
+                                                  + (task.configurationError || task.configurationDetail || task.configurationState || "")
+                                            color: task.configurationError ? Theme.error : page.muted
+                                            font.pixelSize: Theme.fontSizeCaption
+                                            elide: Text.ElideRight
+                                            HoverHandler { id: runtimeTaskHover }
+                                            ToolTip.visible: runtimeTaskHover.hovered
+                                            ToolTip.text: text
+                                        }
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 6
+                                            ProgressBar {
+                                                Layout.fillWidth: true
+                                                from: 0; to: 1
+                                                value: Number(task.configurationProgress || 0)
+                                                indeterminate: task.configurationProgress < 0
+                                                palette.highlight: page.success
+                                                palette.dark: page.divider
+                                            }
+                                            Label {
+                                                text: task.configurationProgress < 0 ? "…"
+                                                      : Math.round(Number(task.configurationProgress || 0) * 100) + "%"
+                                                color: page.muted
+                                                font.pixelSize: Theme.fontSizeCaption
+                                            }
+                                            WorkbenchButton {
+                                                implicitHeight: 24
+                                                leftPadding: 6; rightPadding: 6
+                                                visible: !!task.configurationCanPause || !!task.configurationCanResume
+                                                text: task.configurationCanPause ? qsTr("暂停")
+                                                      : task.configurationState === "failed" ? qsTr("重试") : qsTr("继续")
+                                                onClicked: {
+                                                    if (task.configurationCanPause)
+                                                        VocalSeparationController.pauseConfiguration(page.configurationTaskId(task))
+                                                    else
+                                                        VocalSeparationController.resumeConfiguration(page.configurationTaskId(task))
+                                                }
+                                            }
+                                            WorkbenchButton {
+                                                implicitHeight: 24
+                                                leftPadding: 6; rightPadding: 6
+                                                visible: !!task.configurationCanCancel
+                                                text: qsTr("取消")
+                                                onClicked: VocalSeparationController.cancelConfiguration(page.configurationTaskId(task))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     spacing: 8
                     Rectangle {
                         id: settingsPanel

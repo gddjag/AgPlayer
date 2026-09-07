@@ -169,6 +169,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/WindowResizeHandles.qml
         qml/AgPlayer/components/MiniPlayerControls.qml
         qml/AgPlayer/components/SideNavigation.qml
+        qml/AgPlayer/components/LibraryNavigationActions.qml
         qml/AgPlayer/components/SearchFilter.qml
         qml/AgPlayer/components/ColorField.qml
         qml/AgPlayer/components/ThemedIcon.qml

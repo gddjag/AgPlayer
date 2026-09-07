@@ -249,6 +249,9 @@ VocalInstallResult VocalSeparationInstaller::installDirectMlRuntime(
     const QString& nupkgPath, const QString& runtimeRoot,
     const std::shared_ptr<std::atomic_bool>& cancellation)
 {
+    QLockFile installationLock(runtimeRoot + QStringLiteral(".install.lock"));
+    if (!QDir().mkpath(QFileInfo(runtimeRoot).absolutePath()) || !installationLock.tryLock())
+        return fail(QStringLiteral("DirectML runtime installation target is locked"));
     const auto cancelledResult = [] {
         return fail(QStringLiteral("DirectML runtime installation was cancelled"));
     };
@@ -456,7 +459,14 @@ void VocalSeparationDownloader::start(const VocalDownloadFile& file,
         finishFailure(QStringLiteral("Invalid download request"));
         return;
     }
+    m_destinationLock = std::make_unique<QLockFile>(destination + QStringLiteral(".download.lock"));
+    if (!m_destinationLock->tryLock()) {
+        m_destinationLock.reset();
+        finishFailure(QStringLiteral("Download destination is locked"));
+        return;
+    }
     if (!m_state.start()) {
+        m_destinationLock.reset();
         m_error = QStringLiteral("Download is already active");
         return;
     }
@@ -467,7 +477,36 @@ void VocalSeparationDownloader::start(const VocalDownloadFile& file,
     m_attempt = 0;
     m_error.clear();
     setState(VocalDownloadState::Downloading);
-    issueRequest(m_operation);
+    if (QFileInfo::exists(m_destination)) verifyExistingDestination(m_operation);
+    else issueRequest(m_operation);
+}
+
+void VocalSeparationDownloader::verifyExistingDestination(quint64 operation)
+{
+    if (operation != m_operation || m_state.state() != VocalDownloadState::Downloading) return;
+    const auto file = m_file;
+    const auto destination = m_destination;
+    m_state.verify();
+    setState(VocalDownloadState::Verifying);
+    auto* watcher = new QFutureWatcher<bool>(this);
+    m_verificationWatcher = watcher;
+    connect(watcher, &QFutureWatcher<bool>::finished, this,
+        [this, watcher, operation] {
+            const bool verified = watcher->result();
+            watcher->deleteLater();
+            if (m_verificationWatcher == watcher) m_verificationWatcher = nullptr;
+            if (operation != m_operation || m_state.state() != VocalDownloadState::Verifying) return;
+            if (!verified) {
+                finishFailure(QStringLiteral("Existing download failed integrity verification; refusing to overwrite"));
+                return;
+            }
+            m_state.complete();
+            setState(VocalDownloadState::Complete);
+            emit finished(VocalInstallResult{true, {}});
+        });
+    watcher->setFuture(QtConcurrent::run([file, destination] {
+        return VocalSeparationInstaller::isVerifiedFile(file, destination);
+    }));
 }
 
 void VocalSeparationDownloader::pause()
@@ -491,7 +530,8 @@ void VocalSeparationDownloader::resume()
     }
     ++m_operation;
     setState(VocalDownloadState::Downloading);
-    issueRequest(m_operation);
+    if (QFileInfo::exists(m_destination)) verifyExistingDestination(m_operation);
+    else issueRequest(m_operation);
 }
 
 void VocalSeparationDownloader::cancel()
@@ -698,6 +738,8 @@ void VocalSeparationDownloader::verifyAndActivate(quint64 operation)
 
 void VocalSeparationDownloader::setState(VocalDownloadState state)
 {
+    if (state == VocalDownloadState::Complete || state == VocalDownloadState::Failed
+        || state == VocalDownloadState::Cancelled) m_destinationLock.reset();
     emit stateChanged(state);
 }
 

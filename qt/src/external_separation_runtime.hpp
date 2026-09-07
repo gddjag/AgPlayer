@@ -39,6 +39,7 @@ private:
     bool recoverIncompletePython();
     QString root_;
     VocalSeparationDownloader downloader_;
+    std::unique_ptr<QLockFile> installationLock_;
     QProcess process_;
     QProcess terminateTree_;
     QTimer inactivity_;
@@ -88,6 +89,7 @@ private:
     void fail(const QString& error);
     QString root_;
     QVariantMap hardware_;
+    std::unique_ptr<QLockFile> installationLock_;
     QList<VocalDownloadFile> archives_;
     QString activeDirectory_ = QStringLiteral("native");
     QList<VocalDownloadFile> dlls_;

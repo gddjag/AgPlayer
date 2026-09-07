@@ -332,12 +332,15 @@ VocalSeparationController::VocalSeparationController(
             [this](double value, const QString& detail) {
         downloadProgress_ = value;
         downloadSource_ = detail;
+        runtimeProgress_["python"] = value; runtimeDetails_["python"] = detail;
+        refreshModels();
         emit downloadProgressChanged();
         emit downloadStateChanged();
     });
     connect(cudaRuntime_.get(), &CudaSeparationRuntime::progress, this,
         [this](double value, const QString& detail) {
             downloadProgress_ = value; downloadSource_ = detail;
+            runtimeProgress_["cuda"] = value; runtimeDetails_["cuda"] = detail;
             emit downloadProgressChanged(); emit downloadStateChanged();
         });
     connect(cudaRuntime_.get(), &CudaSeparationRuntime::changed, this, [this] {
@@ -350,17 +353,17 @@ VocalSeparationController::VocalSeparationController(
     });
     connect(cudaRuntime_.get(), &CudaSeparationRuntime::finished, this,
         [this](bool success, const QString& error) {
-            if (!success) failedDownloadModelId_ = downloadingModelId_;
-            downloadingModelId_.clear(); setError(error); refreshModels(); emit downloadStateChanged();
+            runtimeErrors_["cuda"] = success ? QString() : error;
+            if (!success) setError(error);
+            configurationChanged();
             if (success) QTimer::singleShot(0, this, [this] { probeDevices(); });
         });
     connect(externalRuntime_.get(), &ExternalSeparationRuntime::changed,
             this, &VocalSeparationController::refreshModels);
     connect(externalRuntime_.get(), &ExternalSeparationRuntime::finished, this,
             [this](bool success, const QString& diagnostic) {
-        if (!success) failedDownloadModelId_ = downloadingModelId_;
-        downloadingModelId_.clear();
-        setError(diagnostic);
+        runtimeErrors_["python"] = success ? QString() : diagnostic;
+        if (!success) setError(diagnostic);
         emit downloadStateChanged();
         refreshModels();
     });
@@ -438,6 +441,7 @@ VocalSeparationController::VocalSeparationController(
     connect(downloader_.get(), &VocalSeparationDownloader::stateChanged,
             this, [this](VocalDownloadState) {
         refreshModels();
+        emit downloadStateChanged();
     });
     connect(downloader_.get(), &VocalSeparationDownloader::progressChanged,
             this, [this](qint64 received, qint64 total) {
@@ -449,7 +453,9 @@ VocalSeparationController::VocalSeparationController(
             ? static_cast<double>(completedDownloadBytes_ + current)
                   / static_cast<double>(totalDownloadBytes_)
             : 0.0;
+        if (runtimeOnlyDownload_) runtimeProgress_["directml"] = downloadProgress_;
         emit downloadProgressChanged();
+        emit downloadStateChanged();
     });
     connect(downloader_.get(), &VocalSeparationDownloader::finished,
             this, [this](const VocalInstallResult& result) {
@@ -474,7 +480,7 @@ VocalSeparationController::VocalSeparationController(
                 if (runtimeInstallCancellation_ == cancellation)
                     runtimeInstallCancellation_.reset();
                 if (cancellation->load(std::memory_order_acquire)) {
-                    refreshModels();
+                    configurationChanged();
                     if (modelDirectoryRescanPending_) {
                         modelDirectoryRescanPending_ = false;
                         scheduleModelDirectoryScan();
@@ -516,6 +522,16 @@ VocalSeparationController::VocalSeparationController(
 
 VocalSeparationController::~VocalSeparationController()
 {
+    for (const auto& task : modelConfigurations_) {
+        task->cancellation->store(true);
+        task->downloader->disconnect(this);
+        task->downloader->cancel();
+        if (task->verification) {
+            task->verification->disconnect(this);
+            task->verification->future().waitForFinished();
+        }
+    }
+    modelConfigurations_.clear();
     if (downloader_) downloader_->cancel();
     ++verificationGeneration_;
     if (verificationCancellation_)
@@ -553,11 +569,24 @@ QVariantList VocalSeparationController::availableDevices() const { return availa
 VocalSeparationController::JobState VocalSeparationController::jobState() const noexcept { return jobState_; }
 QString VocalSeparationController::stage() const { return stage_; }
 double VocalSeparationController::progress() const noexcept { return progress_; }
-double VocalSeparationController::downloadProgress() const noexcept { return downloadProgress_; }
-QString VocalSeparationController::downloadingModelId() const { return downloadingModelId_; }
+double VocalSeparationController::downloadProgress() const noexcept {
+    if (modelConfigurations_.isEmpty()) return downloadProgress_;
+    double total = 0;
+    for (const auto& task : modelConfigurations_) total += qMax(0.0, task->progress);
+    return total / double(modelConfigurations_.size());
+}
+QString VocalSeparationController::downloadingModelId() const {
+    if (!downloadingModelId_.isEmpty()) return downloadingModelId_;
+    for (const auto& task : modelConfigurations_)
+        if (modelConfigurationBusy(task->modelId)) return task->modelId;
+    return {};
+}
 bool VocalSeparationController::downloadBusy() const noexcept
 {
-    return !downloadingModelId_.isEmpty();
+    if (!downloadingModelId_.isEmpty() || externalRuntime_->busy() || cudaRuntime_->busy()) return true;
+    for (const auto& task : modelConfigurations_)
+        if (task->state != "idle" && modelConfigurationBusy(task->modelId)) return true;
+    return false;
 }
 QString VocalSeparationController::downloadSource() const
 {
@@ -718,14 +747,17 @@ bool VocalSeparationController::downloadModelFromMirror(const QString& modelId)
 bool VocalSeparationController::configureGpuRuntime(const QString& modelId)
 {
     const auto* model = modelForId(modelId);
-    if (!model || modelId == QStringLiteral("python-vr-5hp") || !canConfigureModel(modelId)) return false;
+    if (!model || modelId == QStringLiteral("python-vr-5hp")) return false;
+    if (cudaRuntime_->ready() || cudaRuntime_->busy()) return true;
+    if (activeRequest_ && activeRequest_->kind == RequestKind::Separation
+        && activeRequest_->modelId != QStringLiteral("python-vr-5hp")) return false;
     if (cudaRuntime_->checking()) { setError(tr("正在异步校验 CUDA 组件和 NVIDIA 驱动，请稍候")); return false; }
     if (!cudaRuntime_->nvidiaAvailable()) {
         setError(tr("未检测到可用 NVIDIA 驱动；CUDA 环境仅适用于 NVIDIA 显卡，不会补齐未知模型适配器")); return false;
     }
-    downloadingModelId_ = modelId; failedDownloadModelId_.clear(); setError({});
+    runtimeErrors_.remove("cuda"); setError({});
     if (!cudaRuntime_->start()) {
-        downloadingModelId_.clear(); setError(tr("CUDA 配置无法开始：请等待环境检查完成，并保留至少 5 GB 可用磁盘空间"));
+        setError(tr("CUDA 配置无法开始：请等待环境检查完成，并保留至少 5 GB 可用磁盘空间"));
         return false;
     }
     refreshModels(); emit downloadStateChanged(); return true;
@@ -733,6 +765,12 @@ bool VocalSeparationController::configureGpuRuntime(const QString& modelId)
 
 bool VocalSeparationController::configureRuntime(const QString& modelIdForUi)
 {
+    if (modelForId(modelIdForUi) != nullptr
+        && modelIdForUi != QStringLiteral("python-vr-5hp"))
+        return beginModelConfiguration(modelIdForUi, false);
+    if (modelIdForUi == QStringLiteral("python-vr-5hp")
+        && (externalRuntime_->ready() || externalRuntime_->busy()))
+        return true;
     if (verificationPurpose_ == VerificationPurpose::Download
         && downloadingModelId_ == modelIdForUi) return true;
     if (!canConfigureModel(modelIdForUi)) return false;
@@ -764,10 +802,8 @@ bool VocalSeparationController::configureRuntime(const QString& modelIdForUi)
         refreshModels();
         if (modelIdForUi == QStringLiteral("python-vr-5hp")) {
             deferredRuntimeConfigurationModelId_.reset();
-            downloadingModelId_ = modelIdForUi;
             failedDownloadModelId_.clear();
             if (!externalRuntime_->start()) {
-                downloadingModelId_.clear();
                 setError(tr("无法启动外置环境配置，请检查模型缓存目录是否可写"));
                 return false;
             }
@@ -776,12 +812,10 @@ bool VocalSeparationController::configureRuntime(const QString& modelIdForUi)
         return true;
     }
     if (modelIdForUi == QStringLiteral("python-vr-5hp")) {
-        if (downloadBusy()) return false;
-        downloadingModelId_ = modelIdForUi;
+        if (externalRuntime_->busy()) return true;
         failedDownloadModelId_.clear();
         setError({});
         if (!externalRuntime_->start()) {
-            downloadingModelId_.clear();
             setError(tr("无法启动外置环境配置，请检查模型缓存目录是否可写"));
             return false;
         }
@@ -864,38 +898,196 @@ bool VocalSeparationController::configureRuntime(const QString& modelIdForUi)
 bool VocalSeparationController::beginModelDownload(
     const QString& modelId, const bool preferDomesticMirror)
 {
-    const VocalModelCard* model = modelForId(modelId);
-    if (model == nullptr || !canConfigureModel(modelId) || !downloadQueue_.isEmpty()
-        || verificationWatcher_ != nullptr || runtimeInstallerWatcher_ != nullptr
-        || downloader_->state() == VocalDownloadState::Downloading
-        || downloader_->state() == VocalDownloadState::Paused
-        || downloader_->state() == VocalDownloadState::Verifying) {
-        return false;
-    }
-    if (preferDomesticMirror) {
-        bool mirrorAvailable = false;
-        for (const VocalDownloadFile& file : model->files) {
-            if (vocalDomesticMirrorUrl(file.url).isValid()) {
-                mirrorAvailable = true;
-                break;
-            }
+    if (modelId == QStringLiteral("python-vr-5hp")) return configureRuntime(modelId);
+    return beginModelConfiguration(modelId, preferDomesticMirror);
+}
+
+bool VocalSeparationController::modelConfigurationBusy(const QString& modelId) const
+{
+    const auto task = modelConfigurations_.value(modelId);
+    return task && (task->state == "checking" || task->state == "downloading"
+        || task->state == "paused" || task->state == "waiting-runtime"
+        || task->verification != nullptr);
+}
+
+void VocalSeparationController::configurationChanged()
+{
+    for (const auto& task : modelConfigurations_) {
+        if (task->state != "waiting-runtime") continue;
+        if (runtimeReady()) task->state = "complete";
+        else if (!runtimeErrors_.value("directml").isEmpty()) {
+            task->state = "failed"; task->error = runtimeErrors_.value("directml");
         }
-        if (!mirrorAvailable) {
-            setError(tr("当前模型没有可自动下载的国内镜像，请使用备用公益地址"));
-            return false;
-        }
     }
-    preferDomesticMirror_ = preferDomesticMirror;
-    downloadSource_ = preferDomesticMirror ? tr("国内镜像") : tr("官方线路");
-    downloadingModelId_ = modelId;
-    failedDownloadModelId_.clear();
-    downloadProgress_ = 0.0;
-    completedDownloadBytes_ = 0;
-    totalDownloadBytes_ = 0;
     emit downloadProgressChanged();
     emit downloadStateChanged();
-    setError({});
-    return beginVerification(VerificationPurpose::Download, model);
+    refreshModels();
+    if (!downloadBusy() && modelDirectoryRescanPending_) scheduleModelDirectoryScan();
+}
+
+bool VocalSeparationController::ensureSharedRuntime()
+{
+    if (runtimeReady()) return true;
+    if (runtimeOnlyDownload_ || runtimeInstallerWatcher_ != nullptr) return true;
+    if (!downloadQueue_.isEmpty()) return false;
+    if (activeRequest_ && activeRequest_->kind == RequestKind::Separation
+        && activeRequest_->modelId != QStringLiteral("python-vr-5hp")) return false;
+    const auto package = VocalSeparationCatalog::directMlRuntime();
+    downloadQueue_.push_back({{QStringLiteral("runtime.nupkg"), package.url,
+        package.bytes, package.sha256}, QDir(options_.dataRoot).filePath(
+            QStringLiteral("downloads/runtime.nupkg")), true, {}, false});
+    runtimeOnlyDownload_ = true;
+    downloadingModelId_ = QStringLiteral("runtime");
+    downloadSource_ = tr("官方线路");
+    runtimeErrors_.remove(QStringLiteral("directml"));
+    runtimeDetails_["directml"] = downloadSource_;
+    completedDownloadBytes_ = 0;
+    totalDownloadBytes_ = package.bytes;
+    downloadProgress_ = 0;
+    runtimeProgress_["directml"] = 0;
+    startNextDownload();
+    return true;
+}
+
+bool VocalSeparationController::beginModelConfiguration(const QString& modelId, bool mirror)
+{
+    const VocalModelCard* model = modelForId(modelId);
+    if (!model) return false;
+    const auto existing = modelConfigurations_.value(modelId);
+    if (existing && existing->state == "idle" && existing->verification != nullptr) return false;
+    if (existing && modelConfigurationBusy(modelId)) return true;
+    if (modelInstalled(*model) && runtimeReady()) return true;
+    if (!canConfigureModel(modelId)) return false;
+    if (mirror && std::none_of(model->files.cbegin(), model->files.cend(),
+        [](const VocalDownloadFile& file) { return vocalDomesticMirrorUrl(file.url).isValid(); }))
+        return false;
+    auto task = std::make_shared<ModelConfiguration>();
+    task->modelId = modelId;
+    task->mirror = mirror;
+    task->cancellation = std::make_shared<std::atomic_bool>(false);
+    task->downloader = std::make_unique<VocalSeparationDownloader>(&network_);
+    modelConfigurations_.insert(modelId, task);
+    const std::weak_ptr<ModelConfiguration> weak = task;
+    connect(task->downloader.get(), &VocalSeparationDownloader::progressChanged, this,
+        [this, weak](qint64 received, qint64) {
+            const auto current = weak.lock(); if (!current || current->queue.isEmpty()) return;
+            current->progress = current->totalBytes > 0
+                ? double(current->completedBytes + qBound<qint64>(0, received, current->queue.first().file.bytes)) / double(current->totalBytes) : 0;
+            configurationChanged();
+        });
+    connect(task->downloader.get(), &VocalSeparationDownloader::stateChanged, this,
+        [this, weak](VocalDownloadState state) {
+            const auto current = weak.lock(); if (!current) return;
+            if (state == VocalDownloadState::Downloading) current->state = "downloading";
+            else if (state == VocalDownloadState::Paused) current->state = "paused";
+            else if (state == VocalDownloadState::Verifying) current->state = "checking";
+            configurationChanged();
+        });
+    connect(task->downloader.get(), &VocalSeparationDownloader::finished, this,
+        [this, weak](const VocalInstallResult& result) {
+            const auto current = weak.lock();
+            if (!current || current->state == "idle" || current->queue.isEmpty()) return;
+            if (!result.ok) {
+                auto& file = current->queue.first();
+                if (!file.mirrorAttempted && file.mirrorUrl.isValid()) {
+                    file.file.url = file.mirrorUrl; file.mirrorAttempted = true;
+                    advanceModelConfiguration(current); return;
+                }
+                current->state = "failed"; current->error = result.error;
+                configurationChanged();
+                emit downloadSourcesExhausted({{"modelId", current->modelId},
+                    {"source", current->detail}, {"diagnostic", current->error}});
+                return;
+            }
+            current->completedBytes += current->queue.takeFirst().file.bytes;
+            advanceModelConfiguration(current);
+        });
+    const VocalModelCard snapshot = *model;
+    const QString root = modelStorageDirectory_;
+    const QString runtime = options_.runtimeLibraryPath;
+    const bool verifyRuntime = options_.verifyRuntimeIntegrity;
+    const auto cancellation = task->cancellation;
+    auto* watcher = new QFutureWatcher<VerificationResult>(this);
+    task->verification = watcher;
+    connect(watcher, &QFutureWatcher<VerificationResult>::finished, this,
+        [this, task, watcher, snapshot, root] {
+            const auto result = watcher->result(); watcher->deleteLater(); task->verification = nullptr;
+            if (task->cancellation->load() || task->state == "idle"
+                || root != modelStorageDirectory_ || modelConfigurations_.value(task->modelId) != task) {
+                configurationChanged(); return;
+            }
+            if (result.runtimeChecked && result.runtimeFingerprint == runtimeVerificationFingerprint(
+                    options_.runtimeLibraryPath, VocalSeparationCatalog::directMlRuntime().sha256,
+                    options_.verifyRuntimeIntegrity)) {
+                runtimeVerified_ = result.runtimeVerified; runtimeVerificationKnown_ = true;
+                runtimeVerificationFingerprint_ = result.runtimeFingerprint;
+            }
+            for (const auto& file : snapshot.files) {
+                const QString destination = QDir(modelDirectory(snapshot.id)).filePath(file.fileName);
+                if (result.verifiedModels.contains(snapshot.id)
+                    || result.verifiedFiles.contains(QFileInfo(destination).absoluteFilePath())) continue;
+                const QUrl backup = vocalDomesticMirrorUrl(file.url);
+                auto selected = file; if (task->mirror && backup.isValid()) selected.url = backup;
+                task->queue.push_back({selected, destination, false, backup, task->mirror});
+                task->totalBytes += file.bytes;
+            }
+            if (!ensureSharedRuntime()) {
+                task->state = "failed"; task->error = tr("运行时正在使用，无法配置");
+                configurationChanged(); return;
+            }
+            advanceModelConfiguration(task);
+        });
+    watcher->setFuture(QtConcurrent::run([snapshot, root, runtime, verifyRuntime, cancellation] {
+        VerificationResult result;
+        const auto index = buildModelDirectoryIndex(root).filesByName;
+        const QString before = modelVerificationFingerprint(snapshot, root, index);
+        const auto paths = resolveModelFilePaths(snapshot, root, index);
+        bool valid = paths.size() == snapshot.files.size() && !paths.isEmpty();
+        for (qsizetype i = 0; i < snapshot.files.size(); ++i) {
+            if (cancellation->load()) return result;
+            if (i < paths.size() && VocalSeparationInstaller::isVerifiedFile(snapshot.files[i], paths[i], cancellation))
+                result.verifiedFiles.insert(QFileInfo(paths[i]).absoluteFilePath());
+            else valid = false;
+        }
+        if (before != modelVerificationFingerprint(snapshot, root, index)) {
+            valid = false; result.verifiedFiles.clear();
+        }
+        if (valid) result.verifiedModels.insert(snapshot.id);
+        const auto hash = VocalSeparationCatalog::directMlRuntime().sha256;
+        const auto fingerprint = runtimeVerificationFingerprint(runtime, hash, verifyRuntime);
+        result.runtimeVerified = QFileInfo(runtime).isFile() && (!verifyRuntime
+            || VocalSeparationInstaller::runtimeDirectoryIsVerified(QFileInfo(runtime).absolutePath(), hash, cancellation));
+        result.runtimeChecked = !cancellation->load()
+            && fingerprint == runtimeVerificationFingerprint(runtime, hash, verifyRuntime);
+        result.runtimeFingerprint = fingerprint;
+        return result;
+    }));
+    configurationChanged();
+    return true;
+}
+
+void VocalSeparationController::advanceModelConfiguration(const std::shared_ptr<ModelConfiguration>& task)
+{
+    if (task->state == "idle" || task->cancellation->load()) return;
+    if (task->queue.isEmpty()) {
+        verifiedModelIds_.insert(task->modelId);
+        verifiedOrRejectedModelIds_.insert(task->modelId);
+        if (const auto* model = modelForId(task->modelId))
+            modelVerificationFingerprints_.insert(task->modelId, modelVerificationFingerprint(
+                *model, modelStorageDirectory_, buildModelDirectoryIndex(modelStorageDirectory_).filesByName));
+        task->progress = 1;
+        task->state = runtimeReady() ? "complete" : "waiting-runtime";
+        configurationChanged(); return;
+    }
+    const auto& item = task->queue.first();
+    task->detail = item.mirrorAttempted ? tr("国内镜像") : tr("官方线路");
+    if (!QDir().mkpath(QFileInfo(item.destination).absolutePath())) {
+        task->state = "failed"; task->error = tr("无法创建模型下载目录");
+        configurationChanged(); return;
+    }
+    task->state = "downloading";
+    task->downloader->start(item.file, item.destination);
+    configurationChanged();
 }
 
 bool VocalSeparationController::verifyInstalledModels()
@@ -908,14 +1100,26 @@ bool VocalSeparationController::verifyInstalledModels()
 }
 
 void VocalSeparationController::pauseDownload() {
+    if (downloadingModelId_.isEmpty()) {
+        const auto id = downloadingModelId();
+        if (!id.isEmpty()) { pauseConfiguration("model:" + id); return; }
+    }
     if (cudaRuntime_->busy()) cudaRuntime_->pause(); else if (externalRuntime_->busy()) externalRuntime_->pause(); else downloader_->pause();
 }
 void VocalSeparationController::resumeDownload() {
+    if (downloadingModelId_.isEmpty()) {
+        const auto id = downloadingModelId();
+        if (!id.isEmpty()) { resumeConfiguration("model:" + id); return; }
+    }
     if (cudaRuntime_->busy()) cudaRuntime_->resume(); else if (externalRuntime_->busy()) externalRuntime_->resume(); else downloader_->resume();
 }
 
 void VocalSeparationController::cancelDownload()
 {
+    if (downloadingModelId_.isEmpty()) {
+        const auto id = downloadingModelId();
+        if (!id.isEmpty()) { cancelConfiguration("model:" + id); return; }
+    }
     if (cudaRuntime_->busy()) {
         cudaRuntime_->cancel(); downloadingModelId_.clear(); emit downloadStateChanged(); refreshModels(); return;
     }
@@ -988,7 +1192,7 @@ bool VocalSeparationController::deleteModel(const QString& modelId)
         scheduleModelDirectoryScan();
         return true;
     }
-    if (requestInFlight() || downloadActive
+    if (requestInFlight() || downloadActive || modelConfigurationBusy(modelId)
         || runtimeInstallerWatcher_ != nullptr
         || modelDirectoryIndexWatcher_ != nullptr
         || verificationWatcher_ != nullptr)
@@ -1017,6 +1221,7 @@ bool VocalSeparationController::deleteModel(const QString& modelId)
         emit downloadStateChanged();
     }
     if (failedDownloadModelId_ == modelId) failedDownloadModelId_.clear();
+    modelConfigurations_.remove(modelId);
     verifiedModelIds_.remove(modelId);
     verifiedOrRejectedModelIds_.remove(modelId);
     modelVerificationFingerprints_.remove(modelId);
@@ -1029,13 +1234,6 @@ bool VocalSeparationController::selectModel(const QString& modelId)
     if (modelForId(modelId) == nullptr || jobState_ == JobState::Running
         || jobState_ == JobState::Cancelling) return false;
     if (selectedModelId_ == modelId) return true;
-    if (resultPreviewMode_ != ResultPreviewMode::None
-        || (preview_ != nullptr && preview_->mixActive())) {
-        if (preview_ != nullptr) preview_->stop();
-        resetResultPreviewState();
-    }
-    ++resultGeneration_;
-    clearPublishedResult();
     selectedModelId_ = modelId;
     invalidateRetry();
     emit selectedModelIdChanged();
@@ -1053,7 +1251,8 @@ bool VocalSeparationController::setStemSelected(StemKind kind, bool selected)
     for (QVariant& value : stems_) {
         QVariantMap stem = value.toMap();
         if (stem.value(QStringLiteral("kind")).toInt() != int(kind)) continue;
-        if (!stem.value(QStringLiteral("supported")).toBool()) return false;
+        if (!stem.value(QStringLiteral("supported")).toBool()
+            && !stem.value(QStringLiteral("available")).toBool()) return false;
         stem.insert(QStringLiteral("selected"), selected);
         value = stem;
         invalidateRetry();
@@ -1367,7 +1566,8 @@ bool VocalSeparationController::setStemPreviewVolume(StemKind kind,
     for (QVariant& value : stems_) {
         QVariantMap stem = value.toMap();
         if (stem.value(QStringLiteral("kind")).toInt() != int(kind)) continue;
-        if (!stem.value(QStringLiteral("supported")).toBool()) return false;
+        if (!stem.value(QStringLiteral("supported")).toBool()
+            && !stem.value(QStringLiteral("available")).toBool()) return false;
         stemPreviewVolumes_.insert(int(kind), bounded);
         stem.insert(QStringLiteral("previewVolume"), bounded);
         value = stem;
@@ -1404,7 +1604,13 @@ bool VocalSeparationController::exportStemToOutputDirectory(StemKind kind)
 
 bool VocalSeparationController::exportSelected(const QUrl& destinationDirectory)
 {
-    return exportKinds(selectedStemKinds(), destinationDirectory);
+    QList<StemKind> kinds;
+    for (const auto& value : stems_) {
+        const auto stem = value.toMap();
+        if (stem.value("available").toBool() && stem.value("selected").toBool())
+            kinds.push_back(static_cast<StemKind>(stem.value("kind").toInt()));
+    }
+    return exportKinds(kinds, destinationDirectory);
 }
 
 bool VocalSeparationController::exportAll(const QUrl& destinationDirectory)
@@ -1484,8 +1690,10 @@ bool VocalSeparationController::addStemToPlaylist(
 bool VocalSeparationController::addSelectedToPlaylist(const QString& playlistId)
 {
     QStringList paths;
-    for (const StemKind kind : selectedStemKinds()) {
-        const QString path = pathForStem(kind);
+    for (const auto& value : stems_) {
+        const auto stem = value.toMap();
+        if (!stem.value("selected").toBool() || !stem.value("available").toBool()) continue;
+        const QString path = stem.value("path").toString();
         if (!safeExistingFileWithin(path, publishedOutputRoot_)) {
             setError(tr("无法加入播放列表：至少一个已选音轨不存在或不安全"));
             return false;
@@ -1530,7 +1738,7 @@ bool VocalSeparationController::selectModelDirectory(const QUrl& directory)
     const bool downloadActive = downloadState == VocalDownloadState::Downloading
         || downloadState == VocalDownloadState::Paused
         || downloadState == VocalDownloadState::Verifying;
-    if (requestInFlight() || verificationWatcher_ != nullptr
+    if (requestInFlight() || downloadBusy() || verificationWatcher_ != nullptr
         || modelDirectoryIndexWatcher_ != nullptr
         || runtimeInstallerWatcher_ != nullptr || downloadActive
         || !downloadQueue_.isEmpty()) {
@@ -1624,8 +1832,127 @@ bool VocalSeparationController::deviceAvailable(DeviceMode mode) const
     return false;
 }
 
+QVariantMap VocalSeparationController::configurationFields(const QString& modelId) const
+{
+    const auto task = modelConfigurations_.value(modelId);
+    const auto* model = modelForId(modelId);
+    const bool ready = model && modelInstalled(*model)
+        && (modelId == "python-vr-5hp" ? externalRuntime_->ready() : runtimeReady());
+    QString state = task ? task->state : ready ? QStringLiteral("complete") : QStringLiteral("idle");
+    QString taskId = "model:" + modelId;
+    if (!task && modelId == downloadingModelId_) {
+        if (downloader_->state() == VocalDownloadState::Downloading) state = "downloading";
+        if (downloader_->state() == VocalDownloadState::Paused) state = "paused";
+        if (downloader_->state() == VocalDownloadState::Verifying) state = "checking";
+    }
+    if (modelId == "python-vr-5hp") {
+        taskId = "runtime:python";
+        if (externalRuntime_->busy()) state = externalRuntime_->paused() ? "paused" : "downloading";
+        else if (!runtimeErrors_.value("python").isEmpty()) state = "failed";
+    }
+    const auto taskError = task ? task->error : modelId == "python-vr-5hp" ? runtimeErrors_.value("python") : QString();
+    return {{"configurationTaskId", taskId}, {"configurationState", state},
+        {"configurationProgress", modelId == "python-vr-5hp"
+            ? (ready && !externalRuntime_->busy() ? 1.0 : runtimeProgress_.value("python", 0))
+            : task ? task->progress : modelId == downloadingModelId_ ? downloadProgress_ : ready ? 1.0 : 0.0},
+        {"configurationDetail", modelId == "python-vr-5hp" ? runtimeDetails_.value("python")
+            : task ? task->detail : QString()},
+        {"configurationError", taskError},
+        {"configurationCanPause", state == "downloading"},
+        {"configurationCanResume", state == "paused" || state == "failed"},
+        {"configurationCanCancel", (task && modelConfigurationBusy(modelId))
+            || state == "downloading" || state == "paused" || state == "checking"}};
+}
+
+QVariantList VocalSeparationController::runtimeConfigurations() const
+{
+    QVariantList rows;
+    for (const QString& id : {QStringLiteral("directml"), QStringLiteral("python"), QStringLiteral("cuda")}) {
+        const bool python = id == "python", cuda = id == "cuda";
+        const bool busy = python ? externalRuntime_->busy() : cuda ? cudaRuntime_->busy()
+            : runtimeOnlyDownload_ || runtimeInstallerWatcher_ != nullptr;
+        const bool ready = python ? externalRuntime_->ready() : cuda ? cudaRuntime_->ready() : runtimeReady();
+        const bool paused = python ? externalRuntime_->paused() : cuda ? cudaRuntime_->paused()
+            : downloader_->state() == VocalDownloadState::Paused;
+        const auto error = runtimeErrors_.value(id);
+        const QString state = busy ? paused ? "paused" : "downloading"
+            : ready ? "complete" : !error.isEmpty() ? "failed" : "idle";
+        const QString taskId = "runtime:" + id;
+        rows.push_back(QVariantMap{{"id", id}, {"taskId", taskId}, {"configurationTaskId", taskId},
+            {"name", python ? "Python / PyTorch" : cuda ? "CUDA / cuDNN" : "ONNX Runtime / DirectML"},
+            {"configurationState", state}, {"configurationProgress", ready && !busy ? 1.0 : runtimeProgress_.value(id, 0)},
+            {"configurationDetail", runtimeDetails_.value(id)},
+            {"configurationError", error}, {"configurationCanPause", busy && !paused
+                && (id != "directml" || downloader_->state() == VocalDownloadState::Downloading)},
+            {"configurationCanResume", paused || state == "failed"},
+            {"configurationCanCancel", busy}});
+    }
+    return rows;
+}
+
+void VocalSeparationController::pauseConfiguration(const QString& taskId)
+{
+    if (taskId == "runtime:python") externalRuntime_->pause();
+    else if (taskId == "runtime:cuda") cudaRuntime_->pause();
+    else if (taskId == "runtime:directml") downloader_->pause();
+    else if (taskId.startsWith("model:")) {
+        const auto task = modelConfigurations_.value(taskId.mid(6));
+        if (task) task->downloader->pause();
+        else if (taskId.mid(6) == downloadingModelId_) downloader_->pause();
+    }
+    configurationChanged();
+}
+
+void VocalSeparationController::resumeConfiguration(const QString& taskId)
+{
+    if (taskId == "runtime:python") {
+        if (activeRequest_ && activeRequest_->kind == RequestKind::Separation
+            && activeRequest_->modelId == "python-vr-5hp") return;
+        if (externalRuntime_->busy()) externalRuntime_->resume();
+        else { runtimeErrors_.remove("python"); if (!externalRuntime_->start()) runtimeErrors_["python"] = tr("无法启动配置"); }
+    } else if (taskId == "runtime:cuda") {
+        if (activeRequest_ && activeRequest_->kind == RequestKind::Separation
+            && activeRequest_->modelId != "python-vr-5hp") return;
+        if (cudaRuntime_->busy()) cudaRuntime_->resume();
+        else { runtimeErrors_.remove("cuda"); if (!cudaRuntime_->start()) runtimeErrors_["cuda"] = tr("无法启动配置"); }
+    } else if (taskId == "runtime:directml") {
+        if (downloader_->state() == VocalDownloadState::Paused) downloader_->resume();
+        else if (!ensureSharedRuntime()) runtimeErrors_["directml"] = tr("无法启动配置");
+    } else if (taskId.startsWith("model:")) {
+        const auto task = modelConfigurations_.value(taskId.mid(6));
+        if (task && task->state == "paused") task->downloader->resume();
+        else if (task && task->state == "failed") (void)beginModelConfiguration(task->modelId, task->mirror);
+        else if (!task && taskId.mid(6) == downloadingModelId_) downloader_->resume();
+    }
+    configurationChanged();
+}
+
+void VocalSeparationController::cancelConfiguration(const QString& taskId)
+{
+    if (taskId == "runtime:python") externalRuntime_->cancel();
+    else if (taskId == "runtime:cuda") cudaRuntime_->cancel();
+    else if (taskId == "runtime:directml") {
+        downloader_->cancel();
+        if (runtimeInstallCancellation_) runtimeInstallCancellation_->store(true);
+        downloadQueue_.clear(); runtimeOnlyDownload_ = false;
+        if (downloadingModelId_ == "runtime") downloadingModelId_.clear();
+        runtimeErrors_["directml"] = tr("配置已取消");
+    } else if (taskId.startsWith("model:")) {
+        const auto task = modelConfigurations_.value(taskId.mid(6));
+        if (task) {
+            task->cancellation->store(true); ++task->generation;
+            task->state = "idle"; task->downloader->cancel(); task->queue.clear();
+        } else if (taskId.mid(6) == downloadingModelId_) {
+            downloader_->cancel(); downloadQueue_.clear(); downloadingModelId_.clear();
+            downloadProgress_ = 0;
+        }
+    }
+    configurationChanged();
+}
+
 bool VocalSeparationController::downloadConflictsWithModel(const QString& modelId) const
 {
+    if (modelConfigurationBusy(modelId)) return true;
     // Separate models can be downloaded while a worker reads an installed model.
     // Never write the selected model or its shared native runtime underneath it.
     return downloadBusy() && (downloadingModelId_ == modelId
@@ -1637,8 +1964,11 @@ bool VocalSeparationController::downloadConflictsWithModel(const QString& modelI
 
 bool VocalSeparationController::canConfigureModel(const QString& modelId) const
 {
-    if (downloadBusy() || runtimeInstallerWatcher_ != nullptr
-        || !downloadQueue_.isEmpty()) return false;
+    if (!modelId.isEmpty() && modelId == downloadingModelId_) return false;
+    if (modelConfigurationBusy(modelId)) return false;
+    if (modelId == "python-vr-5hp" && (externalRuntime_->busy() || externalRuntime_->ready())) return false;
+    if (const auto* model = modelForId(modelId);
+        model && modelInstalled(*model) && runtimeReady()) return false;
     if (jobState_ == JobState::Cancelling) return false;
     if (jobState_ != JobState::Running) return true;
     if (!activeRequest_ || activeRequest_->kind != RequestKind::Separation
@@ -1858,33 +2188,37 @@ void VocalSeparationController::finishVerification(
     const QString verifiedModelId = verifyingModelId_;
     verificationPurpose_ = VerificationPurpose::None;
     verifyingModelId_.clear();
-    if (result.runtimeChecked) {
+    const QString currentRuntimeFingerprint = runtimeVerificationFingerprint(
+        options_.runtimeLibraryPath, VocalSeparationCatalog::directMlRuntime().sha256,
+        options_.verifyRuntimeIntegrity);
+    if (result.runtimeChecked && result.runtimeFingerprint == currentRuntimeFingerprint) {
         runtimeVerified_ = result.runtimeVerified;
         runtimeVerificationKnown_ = true;
         runtimeVerificationFingerprint_ = result.runtimeFingerprint;
-    } else {
+    } else if (runtimeVerificationFingerprint_ != currentRuntimeFingerprint) {
         runtimeVerified_ = false;
         runtimeVerificationKnown_ = false;
         runtimeVerificationFingerprint_.clear();
+        modelDirectoryRescanPending_ = true;
     }
 
-    if (verifiedModelId.isEmpty()) {
-        verifiedModelIds_ = result.verifiedModels;
-        verifiedOrRejectedModelIds_ = result.checkedModels;
-        modelVerificationFingerprints_ = result.modelFingerprints;
-    } else if (result.checkedModels.contains(verifiedModelId)) {
-        if (result.verifiedModels.contains(verifiedModelId))
-            verifiedModelIds_.insert(verifiedModelId);
-        else
-            verifiedModelIds_.remove(verifiedModelId);
-        verifiedOrRejectedModelIds_.insert(verifiedModelId);
-        modelVerificationFingerprints_.insert(
-            verifiedModelId,
-            result.modelFingerprints.value(verifiedModelId));
-    } else {
-        verifiedModelIds_.remove(verifiedModelId);
-        verifiedOrRejectedModelIds_.remove(verifiedModelId);
-        modelVerificationFingerprints_.remove(verifiedModelId);
+    // An independent download may finish while this snapshot is hashing.
+    // Only publish matching snapshots; retain newer matching cache entries.
+    for (const auto& model : options_.catalog) {
+        if (!verifiedModelId.isEmpty() && model.id != verifiedModelId) continue;
+        const QString fingerprint = modelVerificationFingerprint(model, modelStorageDirectory_, indexedModelFiles_);
+        if (result.checkedModels.contains(model.id)
+            && result.modelFingerprints.value(model.id) == fingerprint) {
+            if (result.verifiedModels.contains(model.id)) verifiedModelIds_.insert(model.id);
+            else verifiedModelIds_.remove(model.id);
+            verifiedOrRejectedModelIds_.insert(model.id);
+            modelVerificationFingerprints_.insert(model.id, fingerprint);
+        } else if (modelVerificationFingerprints_.value(model.id) != fingerprint) {
+            verifiedModelIds_.remove(model.id);
+            verifiedOrRejectedModelIds_.remove(model.id);
+            modelVerificationFingerprints_.remove(model.id);
+            modelDirectoryRescanPending_ = true;
+        }
     }
 
     if (purpose == VerificationPurpose::Refresh) {
@@ -1920,7 +2254,7 @@ void VocalSeparationController::finishVerification(
                                           mirror, preferDomesticMirror_});
             }
         }
-        if (!result.runtimeVerified) {
+        if (!runtimeReady()) {
             const VocalRuntimePackage package =
                 VocalSeparationCatalog::directMlRuntime();
             const VocalDownloadFile archive{
@@ -1940,14 +2274,14 @@ void VocalSeparationController::finishVerification(
         return;
     }
     if (purpose == VerificationPurpose::Probe) {
-        if (!result.runtimeVerified) {
+        if (!runtimeReady()) {
             activeRequest_.reset();
             failedRequest_.reset();
             setError(tr("ONNX Runtime 尚未配置，请点击模型卡片的一键配置"));
             setJobState(JobState::Idle, QStringLiteral("runtime_missing"));
             return;
         }
-        if (!result.runtimeVerified || !launchProbe()) {
+        if (!runtimeReady() || !launchProbe()) {
             const ActiveRequestContext context = activeRequest_.value_or(
                 ActiveRequestContext{RequestKind::Probe});
             failRequest(context, tr("ONNX Runtime 尚未安装或校验失败"),
@@ -1956,9 +2290,10 @@ void VocalSeparationController::finishVerification(
         return;
     }
     if (purpose == VerificationPurpose::Start) {
+        const auto* requestedModel = activeRequest_ ? modelForId(activeRequest_->modelId) : nullptr;
         if (!activeRequest_.has_value()
-            || !result.verifiedModels.contains(activeRequest_->modelId)
-            || !result.runtimeVerified
+            || requestedModel == nullptr || !modelInstalled(*requestedModel)
+            || !runtimeReady()
             || !launchSeparation(*activeRequest_)) {
             const ActiveRequestContext context = activeRequest_.value_or(
                 ActiveRequestContext{RequestKind::Separation});
@@ -2069,6 +2404,13 @@ void VocalSeparationController::refreshModels()
         }
         if (model.id == failedDownloadModelId_)
             state = ModelState::ModelFailed;
+        const auto configuration = modelConfigurations_.value(model.id);
+        if (configuration) {
+            if (configuration->state == "checking") state = ModelState::Verifying;
+            else if (configuration->state == "downloading") state = ModelState::Downloading;
+            else if (configuration->state == "paused") state = ModelState::Paused;
+            else if (configuration->state == "failed") state = ModelState::ModelFailed;
+        }
         if (model.id == QStringLiteral("python-vr-5hp")) {
             state = modelInstalled(model) ? ModelState::Installed : ModelState::ModelFailed;
             if (externalRuntime_->busy()) state = externalRuntime_->paused() ? ModelState::Paused : ModelState::Downloading;
@@ -2096,6 +2438,11 @@ void VocalSeparationController::refreshModels()
             {QStringLiteral("gpuHardwareName"), cudaRuntime_->hardwareName()},
             {QStringLiteral("gpuDriverVersion"), cudaRuntime_->driverVersion()},
             {QStringLiteral("gpuRuntimeConfigurable"), cudaRuntime_->nvidiaAvailable() && model.id != QStringLiteral("python-vr-5hp")},
+            {QStringLiteral("gpuConfigurationEnabled"), cudaRuntime_->nvidiaAvailable()
+                && !cudaRuntime_->ready() && !cudaRuntime_->busy()
+                && model.id != QStringLiteral("python-vr-5hp")
+                && (!activeRequest_ || activeRequest_->kind != RequestKind::Separation
+                    || activeRequest_->modelId == QStringLiteral("python-vr-5hp"))},
             {QStringLiteral("gpuProvider"), validatedGpuProviders_.value(model.id,
                 cudaRuntime_->ready() ? QStringLiteral("cuda") : model.family == VocalModelFamily::Mdx ? QStringLiteral("directml") : QString())},
             {QStringLiteral("gpuCompatibility"), model.id == QStringLiteral("python-vr-5hp") ? QStringLiteral("unsupported")
@@ -2160,12 +2507,19 @@ void VocalSeparationController::refreshModels()
             canConfigureModel(diagnostic.value(QStringLiteral("id")).toString()));
         models_.push_back(diagnostic);
     }
+    for (QVariant& value : models_) {
+        auto card = value.toMap();
+        const auto fields = configurationFields(card.value("id").toString());
+        for (auto it = fields.cbegin(); it != fields.cend(); ++it) card.insert(it.key(), it.value());
+        value = card;
+    }
     emit modelsChanged();
     emit startEligibilityChanged();
 }
 
 void VocalSeparationController::rebuildStems()
 {
+    const QVariantList previous = stems_;
     stems_.clear();
     const VocalModelCard* model = selectedModel();
     const QList<StemKind> fixedKinds{
@@ -2189,6 +2543,15 @@ void VocalSeparationController::rebuildStems()
             {QStringLiteral("previewVolume"),
              stemPreviewVolumes_.value(int(kind), 0.8)},
         });
+        for (const QVariant& oldValue : previous) {
+            const QVariantMap old = oldValue.toMap();
+            if (old.value(QStringLiteral("kind")).toInt() != int(kind)
+                || !old.value(QStringLiteral("available")).toBool()) continue;
+            QVariantMap current = stems_.last().toMap();
+            for (const auto* key : {"available", "path", "waveform", "selected", "previewVolume", "derived"})
+                current.insert(QString::fromLatin1(key), old.value(QString::fromLatin1(key)));
+            stems_.last() = current;
+        }
     }
     emit stemsChanged();
     emit startEligibilityChanged();
@@ -2229,6 +2592,7 @@ void VocalSeparationController::handleDownloadFailure(
         retry.file.url = retry.mirrorUrl;
         retry.mirrorAttempted = true;
         downloadSource_ = tr("国内镜像");
+        if (runtimeOnlyDownload_) runtimeDetails_["directml"] = downloadSource_;
         emit downloadStateChanged();
         setError(tr("官方线路失败，已自动切换国内镜像"));
         if (startRetry) startNextDownload();
@@ -2240,6 +2604,7 @@ void VocalSeparationController::handleDownloadFailure(
 void VocalSeparationController::finishExhaustedDownload(
     const QString& source, const QString& diagnostic)
 {
+    if (runtimeOnlyDownload_ || source == "runtime") runtimeErrors_["directml"] = diagnostic;
     const QString modelId = downloadingModelId_;
     downloadQueue_.clear();
     runtimeOnlyDownload_ = false;
@@ -2251,7 +2616,7 @@ void VocalSeparationController::finishExhaustedDownload(
     emit downloadProgressChanged();
     emit downloadStateChanged();
     setError(diagnostic);
-    refreshModels();
+    configurationChanged();
     emit downloadSourcesExhausted(QVariantMap{
         {QStringLiteral("modelId"), modelId},
         {QStringLiteral("source"), source},
@@ -2274,11 +2639,12 @@ void VocalSeparationController::startNextDownload()
         runtimeOnlyDownload_ = false;
         downloadingModelId_.clear();
         downloadProgress_ = 1.0;
+        runtimeProgress_["directml"] = 1.0;
         completedDownloadBytes_ = totalDownloadBytes_;
         emit downloadProgressChanged();
         emit downloadStateChanged();
         rebuildModelDirectoryWatcher();
-        refreshModels();
+        configurationChanged();
         if (modelDirectoryRescanPending_) {
             modelDirectoryRescanPending_ = false;
             scheduleModelDirectoryScan();
@@ -2288,6 +2654,7 @@ void VocalSeparationController::startNextDownload()
     const DownloadItem& item = downloadQueue_.first();
     const QString route = item.mirrorAttempted ? tr("国内镜像")
                                                 : tr("官方线路");
+    if (runtimeOnlyDownload_) runtimeDetails_["directml"] = route;
     if (downloadSource_ != route) {
         downloadSource_ = route;
         emit downloadStateChanged();
@@ -2629,7 +2996,7 @@ void VocalSeparationController::scanModelDirectory()
 {
     const VocalDownloadState downloadState = downloader_
         ? downloader_->state() : VocalDownloadState::Idle;
-    const bool busy = requestInFlight() || verificationWatcher_ != nullptr
+    const bool busy = requestInFlight() || downloadBusy() || verificationWatcher_ != nullptr
         || modelDirectoryIndexWatcher_ != nullptr
         || runtimeInstallerWatcher_ != nullptr || !downloadQueue_.isEmpty()
         || downloadState == VocalDownloadState::Downloading

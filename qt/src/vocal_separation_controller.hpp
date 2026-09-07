@@ -56,6 +56,7 @@ class VocalSeparationController final : public QObject {
     Q_PROPERTY(double downloadProgress READ downloadProgress NOTIFY downloadProgressChanged)
     Q_PROPERTY(QString downloadingModelId READ downloadingModelId NOTIFY downloadStateChanged)
     Q_PROPERTY(bool downloadBusy READ downloadBusy NOTIFY downloadStateChanged)
+    Q_PROPERTY(QVariantList runtimeConfigurations READ runtimeConfigurations NOTIFY downloadStateChanged)
     Q_PROPERTY(QString downloadSource READ downloadSource NOTIFY downloadStateChanged)
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
     Q_PROPERTY(QString outputFormat READ outputFormat NOTIFY outputFormatChanged)
@@ -146,6 +147,7 @@ public:
     double downloadProgress() const noexcept;
     QString downloadingModelId() const;
     bool downloadBusy() const noexcept;
+    QVariantList runtimeConfigurations() const;
     QString downloadSource() const;
     QString error() const;
     QString outputFormat() const;
@@ -170,6 +172,9 @@ public:
     Q_INVOKABLE void pauseDownload();
     Q_INVOKABLE void resumeDownload();
     Q_INVOKABLE void cancelDownload();
+    Q_INVOKABLE void pauseConfiguration(const QString& taskId);
+    Q_INVOKABLE void resumeConfiguration(const QString& taskId);
+    Q_INVOKABLE void cancelConfiguration(const QString& taskId);
     Q_INVOKABLE bool deleteModel(const QString& modelId);
     Q_INVOKABLE bool selectModel(const QString& modelId);
     Q_INVOKABLE bool setStemSelected(StemKind kind, bool selected);
@@ -285,6 +290,28 @@ private:
         QStringList manifests;
     };
 
+    struct ModelConfiguration {
+        QString modelId;
+        QString state = QStringLiteral("checking");
+        QString error;
+        QString detail;
+        double progress = -1;
+        qint64 completedBytes = 0;
+        qint64 totalBytes = 0;
+        bool mirror = false;
+        quint64 generation = 0;
+        QList<DownloadItem> queue;
+        std::unique_ptr<VocalSeparationDownloader> downloader;
+        QPointer<QFutureWatcher<VerificationResult>> verification;
+        std::shared_ptr<std::atomic_bool> cancellation;
+    };
+    bool beginModelConfiguration(const QString& modelId, bool mirror);
+    void advanceModelConfiguration(const std::shared_ptr<ModelConfiguration>& task);
+    bool ensureSharedRuntime();
+    bool modelConfigurationBusy(const QString& modelId) const;
+    QVariantMap configurationFields(const QString& modelId) const;
+    void configurationChanged();
+
     const VocalModelCard* selectedModel() const;
     const VocalModelCard* modelForId(const QString& modelId) const;
     QString modelDirectory(const QString& modelId) const;
@@ -363,6 +390,9 @@ private:
     std::unique_ptr<VocalSeparationDownloader> downloader_;
     std::unique_ptr<ExternalSeparationRuntime> externalRuntime_;
     std::unique_ptr<CudaSeparationRuntime> cudaRuntime_;
+    QHash<QString, std::shared_ptr<ModelConfiguration>> modelConfigurations_;
+    QHash<QString, double> runtimeProgress_;
+    QHash<QString, QString> runtimeDetails_, runtimeErrors_;
     QString actualProvider_, actualDevice_, fallbackReason_;
     double outputGain_ = 1.0;
     QHash<QString, QString> validatedGpuProviders_;

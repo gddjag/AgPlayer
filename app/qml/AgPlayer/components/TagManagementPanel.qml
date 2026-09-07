@@ -510,7 +510,9 @@ Item {
                                 color: "transparent"
                                 border.color: tagPill.contentColor
                                 border.width: 1
-                                visible: tagPill.focusedVisual && !tagPill.selectedVisual
+                                visible: tagPill.focusedVisual
+                                         && !tagPointer.pointerFocusSuppressed
+                                         && !tagPill.selectedVisual
                             }
                             HoverHandler { id: tagHover }
                             MouseArea {
@@ -520,6 +522,12 @@ Item {
                                 z: 2
                                 activeFocusOnTab: true
                                 acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                property bool pointerFocusSuppressed: false
+                                onActiveFocusChanged: {
+                                    if (!activeFocus)
+                                        pointerFocusSuppressed = false
+                                }
+                                onPressed: pointerFocusSuppressed = true
                                 Keys.onReturnPressed: root.selectTag(tagCell.key)
                                 onClicked: function(mouse) {
                                     forceActiveFocus()

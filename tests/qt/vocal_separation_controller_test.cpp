@@ -15,6 +15,7 @@
 #include <QMetaEnum>
 #include <QProcess>
 #include <QNetworkReply>
+#include <QNetworkProxy>
 #include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -52,6 +53,43 @@ public:
 
 class VocalSeparationControllerTestDriver {
 public:
+    static void publishPythonConfigurationProgress(VocalSeparationController& controller) {
+        emit controller.externalRuntime_->progress(0.42, QStringLiteral("python-only-phase"));
+        emit controller.cudaRuntime_->progress(0.81, QStringLiteral("cuda-only-phase"));
+    }
+    static bool lateRuntimeVerificationPreservesInstalledState(VocalSeparationController& controller, bool checked) {
+        controller.runtimeVerified_ = true;
+        controller.runtimeVerificationKnown_ = true;
+        const QString fingerprint = controller.runtimeVerificationFingerprint_;
+        VocalSeparationController::VerificationResult stale;
+        stale.runtimeChecked = checked;
+        stale.runtimeVerified = false;
+        stale.runtimeFingerprint = QStringLiteral("old-runtime-before-install");
+        stale.verifiedModels = controller.verifiedModelIds_;
+        stale.checkedModels = controller.verifiedOrRejectedModelIds_;
+        stale.modelFingerprints = controller.modelVerificationFingerprints_;
+        controller.verificationPurpose_ = VocalSeparationController::VerificationPurpose::Refresh;
+        controller.finishVerification(controller.verificationGeneration_, stale);
+        return controller.runtimeVerified_ && controller.runtimeVerificationKnown_
+            && controller.runtimeVerificationFingerprint_ == fingerprint;
+    }
+    static bool lateModelVerificationPreservesInstalledState(VocalSeparationController& controller) {
+        const auto verified = controller.verifiedModelIds_;
+        VocalSeparationController::VerificationResult stale;
+        stale.runtimeChecked = true;
+        stale.runtimeVerified = controller.runtimeVerified_;
+        stale.runtimeFingerprint = controller.runtimeVerificationFingerprint_;
+        controller.verificationPurpose_ = VocalSeparationController::VerificationPurpose::Refresh;
+        controller.finishVerification(controller.verificationGeneration_, stale);
+        return !verified.isEmpty() && controller.verifiedModelIds_ == verified;
+    }
+    static void useLocalProxy(VocalSeparationController& controller, quint16 port) {
+        controller.network_.setProxy(QNetworkProxy(QNetworkProxy::HttpProxy, "127.0.0.1", port));
+    }
+    static int sharedRuntimeDownloads(const VocalSeparationController& controller) {
+        return int(std::count_if(controller.downloadQueue_.cbegin(), controller.downloadQueue_.cend(),
+            [](const auto& item) { return item.runtimeArchive; }));
+    }
     static void publishGpuCandidate(VocalSeparationController& controller)
     {
         controller.handleProbe({{"cpu", true}, {"gpu", true}});
@@ -139,6 +177,8 @@ public:
     static bool downloadPipelineIdle(
         const VocalSeparationController& controller)
     {
+        for (const auto& task : controller.modelConfigurations_)
+            if (task->verification != nullptr) return false;
         return controller.verificationWatcher_ == nullptr
             && controller.runtimeInstallerWatcher_ == nullptr;
     }
@@ -204,6 +244,10 @@ class VocalSeparationControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void lateRuntimeVerificationCannotOverwriteInstalledState();
+    void sharedRuntimeIsDeduplicatedAndIndependentOfModelCancellation();
+    void configurationDownloadsRunIndependently();
+    void switchingModelPreservesPublishedResult();
     void doesNotLaunchWorkerDuringConstruction();
     void exposesOutputChoicesAndPublishesTheSelectedInputWaveform();
     void clearsTheSelectedInputWithoutLeavingStaleWaveformData();
@@ -744,6 +788,124 @@ downloadProgressNeverMutatesAnActiveSeparationJob()
                               5000);
 }
 
+void VocalSeparationControllerTest::lateRuntimeVerificationCannotOverwriteInstalledState()
+{
+    QTemporaryDir temporary;
+    auto options = optionsFor(temporary, "success", "model");
+    installTestModel(options, QStringLiteral("two-stem"), "model");
+    QVERIFY(writeBytes(options.runtimeLibraryPath, "installed runtime"));
+    VocalSeparationController controller(nullptr, nullptr, nullptr, nullptr, nullptr, options);
+    QTRY_COMPARE_WITH_TIMEOUT(modelStateFor(controller.models(), QStringLiteral("two-stem")),
+        int(VocalSeparationController::ModelState::Installed), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(VocalSeparationControllerTestDriver::directoryAndVerificationIdle(controller), 5000);
+    QVERIFY(VocalSeparationControllerTestDriver::lateRuntimeVerificationPreservesInstalledState(controller, false));
+    QVERIFY(VocalSeparationControllerTestDriver::lateRuntimeVerificationPreservesInstalledState(controller, true));
+    QVERIFY(VocalSeparationControllerTestDriver::lateModelVerificationPreservesInstalledState(controller));
+}
+
+void VocalSeparationControllerTest::sharedRuntimeIsDeduplicatedAndIndependentOfModelCancellation()
+{
+    QTemporaryDir temporary;
+    const QByteArray bytes("verified-model");
+    auto options = optionsFor(temporary, "success", bytes);
+    installTestModel(options, "two-stem", bytes);
+    installTestModel(options, "five-stem", bytes);
+    QTcpServer proxy;
+    QVERIFY(proxy.listen(QHostAddress::LocalHost));
+    VocalSeparationController controller(nullptr, nullptr, nullptr, nullptr, nullptr, options);
+    VocalSeparationControllerTestDriver::useLocalProxy(controller, proxy.serverPort());
+    QVERIFY(controller.configureRuntime("two-stem"));
+    QVERIFY(controller.configureRuntime("five-stem"));
+    const auto state = [&controller](const QString& id) {
+        for (const auto& value : controller.models()) {
+            const auto card = value.toMap();
+            if (card.value("id").toString() == id) return card.value("configurationState").toString();
+        }
+        return QString();
+    };
+    QTRY_COMPARE_WITH_TIMEOUT(state("two-stem"), QStringLiteral("waiting-runtime"), 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(state("five-stem"), QStringLiteral("waiting-runtime"), 5000);
+    QCOMPARE(VocalSeparationControllerTestDriver::sharedRuntimeDownloads(controller), 1);
+    QTRY_VERIFY_WITH_TIMEOUT(proxy.hasPendingConnections(), 3000);
+    QScopedPointer<QTcpSocket> request(proxy.nextPendingConnection());
+    QVERIFY(QMetaObject::invokeMethod(&controller, "cancelConfiguration", Q_ARG(QString, "model:two-stem")));
+    QCOMPARE(state("five-stem"), QStringLiteral("waiting-runtime"));
+    QCOMPARE(VocalSeparationControllerTestDriver::sharedRuntimeDownloads(controller), 1);
+    QVERIFY(!proxy.hasPendingConnections());
+    QVERIFY(QMetaObject::invokeMethod(&controller, "pauseConfiguration", Q_ARG(QString, "runtime:directml")));
+    QCOMPARE(controller.runtimeConfigurations().first().toMap().value("configurationState").toString(), QStringLiteral("paused"));
+    QVERIFY(QMetaObject::invokeMethod(&controller, "cancelConfiguration", Q_ARG(QString, "runtime:directml")));
+    QCOMPARE(VocalSeparationControllerTestDriver::sharedRuntimeDownloads(controller), 0);
+    QVERIFY(!controller.runtimeReady());
+    QVERIFY(!controller.downloadBusy());
+}
+
+void VocalSeparationControllerTest::configurationDownloadsRunIndependently()
+{
+    QTemporaryDir temporary;
+    const QByteArray bytes(65536, 'p');
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    auto options = optionsFor(temporary, QStringLiteral("success"), bytes);
+    options.catalog = {options.catalog.first(), options.catalog.first()};
+    for (int i = 0; i < 2; ++i) {
+        options.catalog[i].id = QStringLiteral("parallel-%1").arg(i);
+        options.catalog[i].files = {{QStringLiteral("test.onnx"),
+            QUrl(QStringLiteral("http://127.0.0.1:%1/%2").arg(server.serverPort()).arg(i)),
+            bytes.size(), sha256(bytes)}};
+    }
+    QVERIFY(writeBytes(options.runtimeLibraryPath, "runtime"));
+    VocalSeparationController controller(nullptr, nullptr, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.configureRuntime("parallel-0"));
+    QVERIFY2(controller.configureRuntime("parallel-1"), "Another model must start without waiting for the first download");
+    QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 5000);
+    QScopedPointer<QTcpSocket> first(server.nextPendingConnection());
+    QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 5000);
+    QScopedPointer<QTcpSocket> second(server.nextPendingConnection());
+    QTRY_VERIFY_WITH_TIMEOUT(first->bytesAvailable() > 0 && second->bytesAvailable() > 0, 5000);
+    const bool firstIsA = first->readAll().contains("GET /0 ");
+    second->readAll();
+    auto* a = firstIsA ? first.data() : second.data();
+    auto* b = firstIsA ? second.data() : first.data();
+    const QByteArray header = "HTTP/1.1 200 OK\r\nContent-Length: " + QByteArray::number(bytes.size()) + "\r\nConnection: close\r\n\r\n";
+    a->write(header + bytes.left(4096)); a->flush();
+    b->write(header + bytes.left(4096)); b->flush();
+    QVERIFY(QMetaObject::invokeMethod(&controller, "pauseConfiguration", Q_ARG(QString, "model:parallel-0")));
+    b->write(bytes.mid(4096)); b->disconnectFromHost();
+    QTRY_COMPARE_WITH_TIMEOUT(modelStateFor(controller.models(), "parallel-1"), int(VocalSeparationController::ModelState::Installed), 5000);
+    QCOMPARE(modelStateFor(controller.models(), "parallel-0"), int(VocalSeparationController::ModelState::Paused));
+    QVERIFY(controller.configureRuntime("parallel-1"));
+    QVERIFY(!server.hasPendingConnections());
+    QVERIFY(QMetaObject::invokeMethod(&controller, "cancelConfiguration", Q_ARG(QString, "model:parallel-0")));
+    QVERIFY(!controller.downloadBusy());
+}
+
+void VocalSeparationControllerTest::switchingModelPreservesPublishedResult()
+{
+    QTemporaryDir temporary;
+    const QByteArray bytes("trusted-model");
+    auto options = optionsFor(temporary, QStringLiteral("success"), bytes);
+    auto other = options.catalog.first(); other.id = "other-model";
+    other.stems = {QStringLiteral("vocals")}; options.catalog.push_back(other);
+    installTestModel(options, "two-stem", bytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, "runtime"));
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(&preview, &waveforms, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
+    QVERIFY(controller.start());
+    QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(), VocalSeparationController::JobState::Completed, 5000);
+    const auto before = stemFor(controller.stems(), VocalSeparationController::StemKind::Accompaniment);
+    QVERIFY(before.value("available").toBool());
+    QVERIFY(controller.selectModel("other-model"));
+    const auto after = stemFor(controller.stems(), VocalSeparationController::StemKind::Accompaniment);
+    QCOMPARE(after.value("path"), before.value("path"));
+    QVERIFY(after.value("available").toBool());
+    QVERIFY(controller.previewStem(VocalSeparationController::StemKind::Accompaniment));
+    QVERIFY(QDir().mkpath(temporary.filePath("preserved-export")));
+    QVERIFY(controller.exportAll(QUrl::fromLocalFile(temporary.filePath("preserved-export"))));
+}
+
 void VocalSeparationControllerTest::downloadingAnotherModelDoesNotBlockSeparation()
 {
     QTemporaryDir temporary;
@@ -841,6 +1003,9 @@ void VocalSeparationControllerTest::cancellingQueuedStartPreservesBackgroundDown
     VocalSeparationController controller(nullptr, nullptr, nullptr, nullptr, nullptr, options);
     QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
     QVERIFY(controller.downloadModel(QStringLiteral("five-stem")));
+    // Model preflight now has its own task; a separate Refresh occupies the
+    // shared worker-verification slot so Start still exercises its queued path.
+    QVERIFY(VocalSeparationControllerTestDriver::beginRefreshVerification(controller));
     QVERIFY(VocalSeparationControllerTestDriver::verificationInFlight(controller));
     const auto generation = VocalSeparationControllerTestDriver::verificationGeneration(controller);
     QVERIFY(controller.start());
@@ -854,8 +1019,8 @@ void VocalSeparationControllerTest::cancellingQueuedStartPreservesBackgroundDown
     QCOMPARE(VocalSeparationControllerTestDriver::verificationGeneration(controller), generation);
     QVERIFY(VocalSeparationControllerTestDriver::verificationInFlight(controller));
     QTRY_VERIFY_WITH_TIMEOUT(!controller.downloadBusy(), 5000);
-    QCOMPARE(modelStateFor(controller.models(), QStringLiteral("five-stem")),
-             int(VocalSeparationController::ModelState::Installed));
+    QTRY_COMPARE_WITH_TIMEOUT(modelStateFor(controller.models(), QStringLiteral("five-stem")),
+             int(VocalSeparationController::ModelState::Installed), 5000);
     QCOMPARE(controller.jobState(), VocalSeparationController::JobState::Cancelled);
     QVERIFY(controller.history().isEmpty());
 }
@@ -2006,6 +2171,7 @@ void VocalSeparationControllerTest::externalRuntimeAlreadyVerifiedDoesNotInvalid
     QSignalSpy finished(&runtime, &ExternalSeparationRuntime::finished);
     QVERIFY(runtime.start());
     QVERIFY2(runtime.ready(), "Repeated configure must not invalidate an already verified environment");
+    QVERIFY2(!runtime.busy(), "An already verified environment must not queue a marker-writing install stage");
     QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
     QVERIFY(finished.first().first().toBool());
     QVERIFY(!runtime.busy());
@@ -2172,6 +2338,14 @@ void VocalSeparationControllerTest::knownVrModelOffersExternalConfigurationWithP
     QCOMPARE(controller.deviceMode(), VocalSeparationController::DeviceMode::Auto);
     QVERIFY(controller.configureRuntime(QStringLiteral("python-vr-5hp")));
     QVERIFY(controller.downloadBusy());
+    QVERIFY(controller.downloadModel(QStringLiteral("python-vr-5hp")));
+    QCOMPARE(VocalSeparationControllerTestDriver::sharedRuntimeDownloads(controller), 0);
+    VocalSeparationControllerTestDriver::publishPythonConfigurationProgress(controller);
+    QVariantMap pythonCard;
+    for (const auto& value : controller.models())
+        if (value.toMap().value("id") == "python-vr-5hp") pythonCard = value.toMap();
+    QCOMPARE(pythonCard.value("configurationProgress").toDouble(), 0.42);
+    QCOMPARE(pythonCard.value("configurationDetail").toString(), QStringLiteral("python-only-phase"));
     controller.pauseDownload();
     QCOMPARE(modelStateFor(controller.models(), QStringLiteral("python-vr-5hp")), int(VocalSeparationController::ModelState::Paused));
     controller.cancelDownload();
@@ -2409,6 +2583,9 @@ void VocalSeparationControllerTest::failedDownloadCanBeDeletedAndReset()
     QVERIFY(temporary.isValid());
     const QByteArray modelBytes("trusted-test-model");
     auto options = optionsFor(temporary, QStringLiteral("stale"), modelBytes);
+    // Isolate the model failure: runtime configuration is now independent and
+    // deliberately continues even if an unrelated model download fails.
+    QVERIFY(writeBytes(options.runtimeLibraryPath, "runtime"));
     AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
     WaveformProvider waveforms;
     VocalSeparationController controller(

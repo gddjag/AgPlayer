@@ -4,6 +4,7 @@
 
 #include <QObject>
 #include <QFutureWatcher>
+#include <QLockFile>
 #include <QTimer>
 
 #include <atomic>
@@ -85,6 +86,7 @@ signals:
 
 private:
     void verifyAndActivate(quint64 operation);
+    void verifyExistingDestination(quint64 operation);
     void issueRequest(quint64 operation);
     void setState(VocalDownloadState state);
     void finishFailure(const QString& error);
@@ -101,4 +103,5 @@ private:
     QFutureWatcher<bool>* m_verificationWatcher = nullptr;
     QTimer m_retryTimer;
     VocalDownloadStateMachine m_state;
+    std::unique_ptr<QLockFile> m_destinationLock;
 };

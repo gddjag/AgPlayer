@@ -23,6 +23,7 @@ Item {
     }
 
     property var hostWindow: null
+    property alias libraryNavigation: rollingNavigation
     property var playback: PlaybackController
     RollingKeyboardHandler {
         objectName: "rollingKeyboardHandler"
@@ -1719,9 +1720,13 @@ Item {
                                                        resourceFolder) {
                             if (!root.filterModel)
                                 return
+                            if (nodeType === "resourceRoot" || nodeType === "resourceFolder")
+                                root.filterModel.category = "all"
                             root.filterModel.resourceFolder = resourceFolder || ""
-                            if (nodeType !== "tags")
+                            if (nodeType !== "tags") {
                                 root.filterModel.tagKey = ""
+                                TagModel.selectedKey = ""
+                            }
                         }
                     }
 

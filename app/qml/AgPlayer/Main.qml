@@ -314,6 +314,14 @@ ApplicationWindow {
         }
     }
 
+    LibraryNavigationActions {
+        objectName: "embeddedLibraryActions"
+        hostWindow: mainWindow
+        filterModel: sharedFilterModel
+        navigation: (mainWindow.integratedShell || mainWindow.rollingShell)
+                    && shellLoader.item ? (shellLoader.item.libraryNavigation || null) : null
+    }
+
     Loader {
         id: shellLoader
         objectName: "playerShellLoader"

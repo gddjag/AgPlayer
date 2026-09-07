@@ -641,6 +641,9 @@ public:
         controller_->failedRequest_.reset();
         controller_->setJobState(VocalSeparationController::JobState::Idle);
         controller_->clearInput();
+        // Some UI-only result fixtures publish stems without an input file.
+        // Clearing the source alone intentionally does nothing in that case.
+        controller_->clearPublishedResult();
         controller_->downloadQueue_.clear();
         controller_->downloadingModelId_.clear();
         controller_->failedDownloadModelId_.clear();
@@ -845,6 +848,9 @@ public:
         if (modelState == VocalSeparationController::ModelState::ModelFailed) {
             controller_->failedDownloadModelId_ = modelId;
             controller_->downloadingModelId_.clear();
+        } else if (modelState == VocalSeparationController::ModelState::Verifying) {
+            // Background model verification is not a configuration/download task.
+            controller_->downloadingModelId_.clear();
         } else {
             controller_->downloadingModelId_ = modelId;
         }
@@ -853,6 +859,19 @@ public:
             QVariantMap model = controller_->models_.at(index).toMap();
             if (model.value(QStringLiteral("id")).toString() == modelId) {
                 model.insert(QStringLiteral("state"), state);
+                const QString taskState = modelState == VocalSeparationController::ModelState::Downloading
+                    ? QStringLiteral("downloading")
+                    : modelState == VocalSeparationController::ModelState::Paused ? QStringLiteral("paused")
+                    : modelState == VocalSeparationController::ModelState::ModelFailed ? QStringLiteral("failed")
+                    : QStringLiteral("idle");
+                model.insert(QStringLiteral("configurationTaskId"), "model:" + modelId);
+                model.insert(QStringLiteral("configurationState"), taskState);
+                model.insert(QStringLiteral("configurationProgress"), progress);
+                model.insert(QStringLiteral("configurationDetail"), QStringLiteral("官方线路"));
+                model.insert(QStringLiteral("configurationError"), error);
+                model.insert(QStringLiteral("configurationCanPause"), taskState == "downloading");
+                model.insert(QStringLiteral("configurationCanResume"), taskState == "paused" || taskState == "failed");
+                model.insert(QStringLiteral("configurationCanCancel"), taskState == "downloading" || taskState == "paused");
                 controller_->models_[index] = model;
                 break;
             }
@@ -861,6 +880,22 @@ public:
         emit controller_->modelsChanged();
         emit controller_->downloadProgressChanged();
         emit controller_->downloadStateChanged();
+    }
+
+    // Inject completed backend snapshots to test QML's per-card binding only.
+    // Network concurrency/pause semantics are exercised by the controller HTTP tests.
+    Q_INVOKABLE void setCardConfiguration(const QString& modelId, const QVariantMap& fields)
+    {
+        if (controller_ == nullptr) return;
+        for (int index = 0; index < controller_->models_.size(); ++index) {
+            QVariantMap model = controller_->models_.at(index).toMap();
+            if (model.value(QStringLiteral("id")).toString() != modelId) continue;
+            for (auto it = fields.cbegin(); it != fields.cend(); ++it)
+                model.insert(it.key(), it.value());
+            controller_->models_[index] = model;
+            emit controller_->modelsChanged();
+            return;
+        }
     }
 
     Q_INVOKABLE void setJobState(int state, const QString& stage)

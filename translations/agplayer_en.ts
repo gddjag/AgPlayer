@@ -6757,6 +6757,9 @@ Clear: Remove all known aliases for this field.</translation>
     </context>
 <context>
         <name>VocalSeparationController</name>
+        <message><source>运行时正在使用，无法配置</source><translation>The runtime is in use and cannot be configured.</translation></message>
+        <message><source>无法启动配置</source><translation>Unable to start configuration.</translation></message>
+        <message><source>配置已取消</source><translation>Configuration cancelled.</translation></message>
         <message>
             <source>自动选择已验证的可用设备</source>
             <translation>Automatically select a verified, available device</translation>
@@ -7578,6 +7581,10 @@ Clear: Remove all known aliases for this field.</translation>
     </context>
 <context>
         <name>VocalSeparationPage</name>
+        <message><source>等待共享环境</source><translation>Waiting for shared runtime</translation></message>
+        <message><source>配置失败</source><translation>Configuration failed</translation></message>
+        <message><source>已配置</source><translation>Configured</translation></message>
+        <message><source>共享运行环境</source><translation>Shared runtimes</translation></message>
         <message>
             <source>正在探测设备，请稍候</source>
             <translation>Checking devices. Please wait.</translation>

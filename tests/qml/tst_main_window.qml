@@ -1731,6 +1731,192 @@ TestCase {
         SettingsController.listWaveformThumbnailEnabled = previousEnabled
     }
 
+    function test_embedded_library_actions_data() {
+        return [{ tag: "single-window", theme: "single-window", navigation: "integratedLibraryNavigation" },
+                { tag: "professional", theme: "rolling-player", navigation: "rollingLibraryNavigation" }]
+    }
+
+    function test_embedded_library_actions(data) {
+        for (var warning = 0; !nativeDropHelper.supportsWindowsDropFiles() && warning < 4; ++warning)
+            ignoreWarning(/This plugin does not support propagateSizeHints\(\)/)
+        var previousTheme = SettingsController.windowLayoutTheme
+        var previousShell = SettingsController.playerShellMode
+        var previousExpanded = LibraryNavigationModel.data(
+                    LibraryNavigationModel.index(0, 0), LibraryNavigationModel.ExpandedRole)
+        var filter = findChild(mainWindow, "filterModel")
+        var createdId = ""
+        SettingsController.playerShellMode = 1
+        SettingsController.windowLayoutTheme = data.theme
+        try {
+            var navigation = null
+            tryVerify(function() {
+                navigation = findChild(mainWindow, data.navigation)
+                return navigation && navigation.visible
+            }, 1500)
+            LibraryNavigationModel.setExpanded("library:all", false)
+            wait(0)
+            function action(nodeName, actionName) {
+                var node = findChild(navigation, nodeName)
+                verify(node && node.visible)
+                mouseClick(node, node.width * 0.75, node.height / 2, Qt.RightButton)
+                var menu = findChild(navigation, "playlistContextMenu")
+                tryCompare(menu, "opened", true)
+                var item = findChild(menu, actionName)
+                verify(item && item.enabled)
+                mouseClick(item, item.width / 2, item.height / 2)
+            }
+            function clickDialogButton(dialog, standardButton) {
+                tryCompare(dialog, "opened", true)
+                verify(waitForPolish(mainWindow))
+                var button = dialog.standardButton(standardButton)
+                verify(button)
+                mouseClick(button, button.width / 2, button.height / 2)
+            }
+            action("navigationNode-library:all", "playlistMenuCreate")
+            var create = findChild(mainWindow, "createPlaylistDialog")
+            verify(create, "the active embedded host must own a create dialog")
+            tryCompare(create, "visible", true)
+            compare(create.parent, mainWindow.contentItem,
+                    "playlist popups must be anchored to the visible main window")
+            var name = "Embedded " + data.tag + " " + Date.now()
+            findChild(create, "createPlaylistField").text = name
+            clickDialogButton(create, Dialog.Ok)
+            createdId = PlaylistModel.idAt(PlaylistModel.count - 1)
+            compare(PlaylistModel.nameForId(createdId), name)
+            compare(filter.category, createdId)
+            wait(0)
+            var nodeName = "playlistCategory-" + createdId
+            tryVerify(function() { var node = findChild(navigation, nodeName); return node && node.visible })
+            action(nodeName, "playlistMenuRename")
+            var rename = findChild(mainWindow, "renamePlaylistDialog")
+            tryCompare(rename, "visible", true)
+            findChild(rename, "renamePlaylistField").text = name + " renamed"
+            clickDialogButton(rename, Dialog.Ok)
+            compare(PlaylistModel.nameForId(createdId), name + " renamed")
+            action(nodeName, "playlistMenuExport")
+            var exportOptions = findChild(mainWindow, "exportOptionsDialog")
+            tryCompare(exportOptions, "visible", true)
+            compare(findChild(mainWindow, "embeddedLibraryActions").exportPlaylistId, createdId)
+            var exportAccepted = signalSpyComponent.createObject(testCase, {
+                "target": exportOptions, "signalName": "accepted"
+            })
+            clickDialogButton(exportOptions, Dialog.Cancel)
+            compare(exportAccepted.count, 0, "cancel must not launch the OS export picker")
+            exportAccepted.destroy()
+            action(nodeName, "playlistMenuDelete")
+            var remove = findChild(mainWindow, "removePlaylistDialog")
+            tryCompare(remove, "visible", true)
+            clickDialogButton(remove, Dialog.Yes)
+            compare(PlaylistModel.nameForId(createdId), "")
+            compare(filter.category, "all")
+            createdId = ""
+        } finally {
+            if (createdId) PlaylistModel.removePlaylist(createdId)
+            LibraryNavigationModel.setExpanded("library:all", previousExpanded)
+            filter.category = "all"
+            SettingsController.windowLayoutTheme = previousTheme
+            SettingsController.playerShellMode = previousShell
+        }
+    }
+
+    function test_embedded_resource_navigation_clears_previous_category_data() {
+        return test_embedded_library_actions_data()
+    }
+
+    function test_embedded_resource_navigation_clears_previous_category(data) {
+        for (var warning = 0; !nativeDropHelper.supportsWindowsDropFiles() && warning < 4; ++warning)
+            ignoreWarning(/This plugin does not support propagateSizeHints\(\)/)
+        var previousTheme = SettingsController.windowLayoutTheme
+        var previousExpanded = LibraryNavigationModel.data(
+                    LibraryNavigationModel.index(0, 0), LibraryNavigationModel.ExpandedRole)
+        var filter = findChild(mainWindow, "filterModel")
+        var folderUrl = nativeDropHelper.createDropDirectory()
+        var folderPath = ResourceFolderController.classifyDropUrl(folderUrl).path
+        verify(ResourceFolderController.addMonitoredFolder(folderPath))
+        var playlistId = PlaylistModel.createPlaylist("Resource route " + Date.now())
+        try {
+            SettingsController.windowLayoutTheme = data.theme
+            var navigation = null
+            tryVerify(function() {
+                navigation = findChild(mainWindow, data.navigation)
+                return navigation && navigation.visible
+            }, 1500)
+            LibraryNavigationModel.setExpanded("library:all", false)
+            wait(0)
+            var nodeId = ""
+            for (var row = 0; row < LibraryNavigationModel.rowCount(); ++row) {
+                var index = LibraryNavigationModel.index(row, 0)
+                if (String(LibraryNavigationModel.data(index, LibraryNavigationModel.ResourceFolderRole)) === folderPath) {
+                    nodeId = LibraryNavigationModel.data(index, LibraryNavigationModel.NodeIdRole)
+                    break
+                }
+            }
+            verify(nodeId)
+            navigation.revealNode(nodeId)
+            wait(0)
+            var categories = [playlistId, "favorites"]
+            for (var i = 0; i < categories.length; ++i) {
+                filter.category = categories[i]
+                filter.resourceFolder = ""
+                var node = findChild(navigation, "navigationNode-" + nodeId)
+                verify(node && node.visible)
+                mouseClick(node, node.width * 0.75, node.height / 2)
+                tryCompare(filter, "resourceFolder", folderPath)
+                compare(filter.category, "all", "resource clicks must replace, not intersect the preceding playlist/category")
+                compare(filter.tagKey, "")
+            }
+        } finally {
+            filter.category = "all"
+            filter.resourceFolder = ""
+            PlaylistModel.removePlaylist(playlistId)
+            ResourceFolderController.removeMonitoredFolder(folderPath)
+            LibraryNavigationModel.setExpanded("library:all", previousExpanded)
+            SettingsController.windowLayoutTheme = previousTheme
+        }
+    }
+
+    function test_embedded_import_survives_shell_change() {
+        for (var warning = 0; !nativeDropHelper.supportsWindowsDropFiles() && warning < 4; ++warning)
+            ignoreWarning(/This plugin does not support propagateSizeHints\(\)/)
+        var previousTheme = SettingsController.windowLayoutTheme
+        var filter = findChild(mainWindow, "filterModel")
+        var id = PlaylistModel.createPlaylist("Embedded import " + Date.now())
+        var importedId = ""
+        try {
+            SettingsController.windowLayoutTheme = "single-window"
+            var navigation = null
+            tryVerify(function() {
+                navigation = findChild(mainWindow, "integratedLibraryNavigation")
+                return navigation && navigation.visible
+            })
+            var actions = findChild(mainWindow, "embeddedLibraryActions")
+            verify(actions)
+            // Exercise the real asynchronous importer and shell lifetime,
+            // without programmatically cancelling an OS-modal file picker.
+            // The native picker itself is outside this integration fixture.
+            actions.importTargetPlaylistId = id
+            var audio = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+            verify(audio)
+            verify(actions.importUrls([audio]))
+            verify(ImportController.busy)
+            SettingsController.windowLayoutTheme = "rolling-player"
+            filter.category = "favorites"
+            compare(findChild(mainWindow, "embeddedLibraryActions"), actions,
+                    "replacing a shell must retain the import owner")
+            tryCompare(actions, "importBatchActive", false, 5000)
+            verify(ImportController.importedTrackIds.length > 0)
+            importedId = ImportController.importedTrackIds[0]
+            verify(PlaylistModel.containsTrack(id, importedId),
+                   "shell replacement must not destroy the pending import's playlist target")
+            compare(filter.category, "favorites", "completion must not override later navigation")
+        } finally {
+            PlaylistModel.removePlaylist(id)
+            if (importedId) LibraryModel.removeTrack(importedId)
+            filter.category = "all"
+            SettingsController.windowLayoutTheme = previousTheme
+        }
+    }
+
     function test_playlist_context_actions_use_real_mouse_and_keep_playlist_id() {
         var filterModel = findChild(mainWindow, "filterModel")
         var window = listWindowComponent.createObject(null, {
@@ -3575,8 +3761,8 @@ TestCase {
         verify(firstPill && secondPill && longPill)
         mouseMove(window.contentItem, window.width - 2, window.height - 2)
         tryCompare(firstPill, "color", Qt.rgba(0, 0, 0, 0), 1000)
-        compare(firstPill.height, 28)
-        compare(firstPill.radius, 11)
+        compare(firstPill.height, 24)
+        compare(firstPill.radius, 10)
         compare(firstPill.color.a, 0)
         compare(firstPill.border.width, 1.4)
         compare(findChild(firstPill, "tagCapsuleName-" + keys[0]).font.pixelSize, 12)
@@ -5145,7 +5331,7 @@ TestCase {
                 tagPill = findChild(tagPanel, "tagPill-" + tagKey)
                 return tagPill !== null
             }, 1000)
-            compare(tagPill.height, 28)
+            compare(tagPill.height, 24)
 
             emptyNavigation = emptyLibraryNavigationComponent.createObject(
                         mainWindow.contentItem)

@@ -197,8 +197,8 @@ QtObject {
     readonly property color tagPillSecondaryText: isLight ? "#526B7C" : "#B9CCDA"
     readonly property color tagPillShadow: isLight ? "#241A2E3D" : "#4D000000"
     // Shared by every player shell because TagManagementPanel is shared.
-    readonly property int tagCapsuleHeight: 28
-    readonly property int tagCapsuleRadius: 11
+    readonly property int tagCapsuleHeight: 24
+    readonly property int tagCapsuleRadius: 10
     readonly property real tagCapsuleBorderWidth: 1.4
     readonly property color tagCapsuleLightText: "#FFFFFF"
     readonly property color tagCapsuleDarkText: "#000000"

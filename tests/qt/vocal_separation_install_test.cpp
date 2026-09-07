@@ -23,6 +23,8 @@ class VocalSeparationInstallTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void verifiedDestinationIsReusedWithoutNetwork();
+    void independentDownloadersCannotWriteTheSameDestination();
     void exposesPinnedApprovedCatalog();
     void domesticMirrorOnlyRewritesSupportedHuggingFaceDownloads();
     void exposesDownloadStateTransitions();
@@ -287,6 +289,49 @@ void VocalSeparationInstallTest::resumesAndActivatesOnlyVerifiedFiles()
     QFile installed(destination);
     QVERIFY(installed.open(QIODevice::ReadOnly));
     QCOMPARE(installed.readAll(), payload);
+}
+
+void VocalSeparationInstallTest::verifiedDestinationIsReusedWithoutNetwork()
+{
+    QTemporaryDir temporary;
+    const QByteArray payload("verified-cached-runtime");
+    const QString destination = temporary.filePath("runtime.nupkg");
+    QVERIFY(writeFile(destination, payload));
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    QNetworkAccessManager network;
+    network.setProxy(QNetworkProxy(QNetworkProxy::NoProxy));
+    VocalSeparationDownloader downloader(&network);
+    QSignalSpy finished(&downloader, &VocalSeparationDownloader::finished);
+    downloader.start(downloadFileFor(payload, QUrl(QStringLiteral("http://127.0.0.1:%1/archive").arg(server.serverPort()))), destination);
+    QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty() || server.hasPendingConnections(), 3000);
+    QVERIFY2(!server.hasPendingConnections(), "A verified archive must be reused after an interrupted installation");
+    QCOMPARE(finished.count(), 1);
+    QVERIFY(finished.first().first().value<VocalInstallResult>().ok);
+    QFile file(destination); QVERIFY(file.open(QIODevice::ReadOnly)); QCOMPARE(file.readAll(), payload);
+}
+
+void VocalSeparationInstallTest::independentDownloadersCannotWriteTheSameDestination()
+{
+    QTemporaryDir temporary;
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    QNetworkAccessManager network;
+    network.setProxy(QNetworkProxy(QNetworkProxy::NoProxy));
+    const QString destination = temporary.filePath("model.onnx");
+    const auto file = downloadFileFor("same-model", QUrl(QStringLiteral("http://127.0.0.1:%1/model").arg(server.serverPort())));
+    VocalSeparationDownloader first(&network), second(&network);
+    QSignalSpy failed(&second, &VocalSeparationDownloader::finished);
+    first.start(file, destination);
+    QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 3000);
+    QScopedPointer<QTcpSocket> socket(server.nextPendingConnection());
+    second.start(file, destination);
+    QCOMPARE(failed.count(), 1);
+    QVERIFY(!failed.first().first().value<VocalInstallResult>().ok);
+    QVERIFY(second.error().contains("locked"));
+    QCOMPARE(first.state(), VocalDownloadState::Downloading);
+    QVERIFY(!server.hasPendingConnections());
+    first.cancel();
 }
 
 void VocalSeparationInstallTest::downloaderSignalsInitialState()

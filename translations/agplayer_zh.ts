@@ -7574,6 +7574,9 @@
     </context>
 <context>
         <name>VocalSeparationController</name>
+        <message><source>运行时正在使用，无法配置</source><translation>运行时正在使用，无法配置</translation></message>
+        <message><source>无法启动配置</source><translation>无法启动配置</translation></message>
+        <message><source>配置已取消</source><translation>配置已取消</translation></message>
         <message>
             <source>已发现 DirectML 硬件候选；开始分离时将用所选模型验证</source>
             <translation>已发现 DirectML 硬件候选；开始分离时将用所选模型验证</translation>
@@ -8118,6 +8121,10 @@
     </context>
 <context>
         <name>VocalSeparationPage</name>
+        <message><source>等待共享环境</source><translation>等待共享环境</translation></message>
+        <message><source>配置失败</source><translation>配置失败</translation></message>
+        <message><source>已配置</source><translation>已配置</translation></message>
+        <message><source>共享运行环境</source><translation>共享运行环境</translation></message>
         <message>
             <location filename="../app/qml/AgPlayer/components/tools/VocalSeparationPage.qml" line="40" />
             <source>正在探测设备，请稍候</source>

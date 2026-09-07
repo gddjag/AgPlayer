@@ -53,7 +53,7 @@ Assert-Matches $tagPanel '(?s)Flow\s*\{.*id:\s*tagFlow' `
 Assert-Matches $tagPanel 'contentHeight:\s*tagFlow\.height' `
     'Tag Flickable content height must follow the natural Flow height'
 Assert-Matches $tagPanel '(?s)id:\s*tagPill.*countSectionWidth:.*tagCount\.implicitWidth.*nameSectionWidth:.*tagNameMeasure\.implicitWidth.*implicitWidth:\s*Math\.min\(tagFlow\.width,.*implicitHeight:\s*Theme\.tagCapsuleHeight.*height:\s*implicitHeight.*radius:\s*Theme\.tagCapsuleRadius' `
-    'Tag capsules must preserve compact natural width in 28 px reference capsules'
+    'Tag capsules must preserve compact natural width in 24 px capsules'
 Assert-Matches $tagPanel 'selectedVisual|hoveredVisual|pressedVisual|tagDropTarget\.containsDrag' `
     'Tag capsules must expose selected, hover and drop visual states'
 Assert-Matches $tagPanel '(?s)id:\s*tagName.*objectName:\s*"tagCapsuleName-".*text:\s*tagCell\.displayName' `
@@ -92,10 +92,10 @@ if ($tagPanel -match '\bGridView\s*\{') {
     throw 'Tag capsules must not use a fixed GridView'
 }
 
-Assert-Matches $theme 'readonly property int tagCapsuleHeight:\s*28\b' `
-    'Shared tag capsules must remain 28 px high'
-Assert-Matches $theme 'readonly property int tagCapsuleRadius:\s*11\b' `
-    'Shared tag capsules must use the approved 11 px radius'
+Assert-Matches $theme 'readonly property int tagCapsuleHeight:\s*24\b' `
+    'Shared tag capsules must use the compact 24 px height'
+Assert-Matches $theme 'readonly property int tagCapsuleRadius:\s*10\b' `
+    'Shared tag capsules must use the compact 10 px radius'
 Assert-Matches $theme 'readonly property real tagCapsuleBorderWidth:\s*1\.4\b' `
     'Shared tag capsules must reduce the previous outline by one DIP'
 Assert-Matches $theme 'function tagCapsuleFilledText\(fill\)' `

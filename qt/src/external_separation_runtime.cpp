@@ -64,7 +64,7 @@ ExternalSeparationRuntime::ExternalSeparationRuntime(QString root,
         if (!paused_) advance();
     });
     connect(&cacheVerification_, &QFutureWatcher<bool>::finished, this, [this] {
-        if (!busy_) return;
+        if (!busy_) { installationLock_.reset(); return; }
         if (cacheVerification_.result()) {
             step_ = 1;
             if (!paused_) advance();
@@ -225,13 +225,16 @@ bool ExternalSeparationRuntime::start()
     if (ready()) {
         // A repeated configure action must never reinstall into a working VR
         // environment. The bundled bridge has already been checked by ready().
-        busy_ = true; paused_ = false; step_ = 5; ++generation_;
-        emit changed();
-        queueAdvance();
+        emit finished(true, {});
         return true;
     }
     if (!QDir().mkpath(root_)) return false;
     if (!vocal_separation_paths::safeExistingDirectory(root_)) return false;
+    installationLock_ = std::make_unique<QLockFile>(root_ + QStringLiteral(".install.lock"));
+    if (!installationLock_->tryLock()) { installationLock_.reset(); return false; }
+    const auto unlockFailedStart = qScopeGuard([this] {
+        if (!busy_) installationLock_.reset();
+    });
     const QString marker = QDir(root_).filePath("verified-vr-1");
     if (QFileInfo::exists(marker) && !QFile::remove(marker)) return false;
     if (!synchronizeWorker()) return false;
@@ -317,6 +320,7 @@ void ExternalSeparationRuntime::advance()
         }
         busy_ = false;
         appendLog(QStringLiteral("verified Python environment ready"));
+        installationLock_.reset();
         emit progress(1, tr("Python VR 环境已就绪"));
         emit changed();
         emit finished(true, {});
@@ -360,10 +364,12 @@ void ExternalSeparationRuntime::cancel()
     appendLog(QStringLiteral("cancelled; retaining cache"));
     downloader_.cancel();
     stopInstaller();
+    if (!stopping_ && !cacheVerification_.isRunning()) installationLock_.reset();
     emit changed();
 }
 void ExternalSeparationRuntime::fail(const QString& error)
 {
+    if (process_.state() == QProcess::NotRunning && !cacheVerification_.isRunning()) installationLock_.reset();
     inactivity_.stop(); ioPoll_.stop();
     appendLog(QStringLiteral("failure: %1").arg(error));
     busy_ = false;
@@ -394,7 +400,7 @@ void ExternalSeparationRuntime::finishStoppedInstaller()
         || terminateTree_.state() != QProcess::NotRunning) return;
     stopDeadline_.stop();
     stopping_ = false;
-    if (!busy_) return;
+    if (!busy_) { if (!cacheVerification_.isRunning()) installationLock_.reset(); return; }
     if (paused_) {
         if (resumeRequested_) { resumeRequested_ = false; resume(); }
         return;
@@ -550,6 +556,7 @@ CudaSeparationRuntime::CudaSeparationRuntime(QString root, QNetworkAccessManager
     });
     connect(&work_, &QFutureWatcher<VocalInstallResult>::finished, this, [this] {
         const auto result = work_.result();
+        if (!busy_) installationLock_.reset();
         if (phase_ == -1) {
             ready_ = result.ok;
             hardware_ = QJsonDocument::fromJson(result.error.toUtf8()).object().toVariantMap();
@@ -564,7 +571,7 @@ CudaSeparationRuntime::CudaSeparationRuntime(QString root, QNetworkAccessManager
         if (phase_ == 1) {
             if (!result.ok) { fail(result.error); return; }
             activeDirectory_ = result.error;
-            ready_ = true; busy_ = false; emit changed(); emit finished(true, {}); return;
+            ready_ = true; busy_ = false; installationLock_.reset(); emit changed(); emit finished(true, {}); return;
         }
         if (result.ok) { ++index_; mirror_ = false; advance(); return; }
         auto archive = archives_.at(index_);
@@ -601,10 +608,13 @@ QString CudaSeparationRuntime::hardwareSummary() const
 QString CudaSeparationRuntime::libraryPath() const { return QDir(root_).filePath(activeDirectory_ + "/onnxruntime.dll"); }
 bool CudaSeparationRuntime::start()
 {
+    if (ready_) return true;
     if (busy_ || work_.isRunning() || archives_.isEmpty() || dlls_.isEmpty()) return false;
     if (!QDir().mkpath(QDir(root_).filePath("cache"))
         || !vocal_separation_paths::safeExistingDirectory(root_)) return false;
     if (!VocalSeparationInstaller::hasDiskSpace(root_, 5LL * 1024 * 1024 * 1024)) return false;
+    installationLock_ = std::make_unique<QLockFile>(root_ + QStringLiteral(".install.lock"));
+    if (!installationLock_->tryLock()) { installationLock_.reset(); return false; }
     cancellation_ = std::make_shared<std::atomic_bool>(false);
     busy_ = true; paused_ = false; resumeRequested_ = false; index_ = 0; mirror_ = false;
     emit changed(); advance(); return true;
@@ -684,5 +694,6 @@ void CudaSeparationRuntime::resume() {
 }
 void CudaSeparationRuntime::cancel() {
     busy_ = false; paused_ = false; resumeRequested_ = false; cancellation_->store(true); downloader_.cancel(); emit changed();
+    if (!work_.isRunning()) installationLock_.reset();
 }
-void CudaSeparationRuntime::fail(const QString& error) { busy_ = false; emit changed(); emit finished(false, error); }
+void CudaSeparationRuntime::fail(const QString& error) { busy_ = false; installationLock_.reset(); emit changed(); emit finished(false, error); }
