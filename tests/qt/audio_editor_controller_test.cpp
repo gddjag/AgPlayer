@@ -304,6 +304,47 @@ private slots:
         ag_player_destroy(sharedPlayer);
     }
 
+    void detachedSharedPlayerCanBeDestroyedBeforeEditor()
+    {
+        ag_player_config config{};
+        config.backend = AG_AUDIO_BACKEND_NULL;
+        ag_player* sharedPlayer = nullptr;
+        QCOMPARE(ag_player_create_with_config(&config, &sharedPlayer), AG_OK);
+        const auto destroyPlayer = qScopeGuard([&] {
+            if (sharedPlayer) ag_player_destroy(sharedPlayer);
+        });
+        PlaybackController playback(sharedPlayer);
+        auto editor = std::make_unique<AudioEditorController>();
+        editor->setPlaybackController(&playback);
+        QVERIFY(editor->playbackSupported());
+
+        // Production shutdown must revoke the borrowed handle before its
+        // owner destroys the core, while the editor itself remains alive.
+        editor->setPlaybackController(nullptr);
+        QVERIFY(!editor->playbackSupported());
+        QCOMPARE(editor->playerHandleForTesting(), nullptr);
+        QVERIFY(!editor->editorPlaybackOwnsPlayer());
+        playback.setPlayer(nullptr);
+        ag_player_destroy(sharedPlayer);
+        sharedPlayer = nullptr;
+
+        editor->setPlaybackController(nullptr);
+        editor->deactivate();
+        editor.reset(); // Must not stop or release the destroyed shared core.
+    }
+
+    void nullPlaybackControllerPreservesStandalonePlayer()
+    {
+        AudioEditorController editor(AG_AUDIO_BACKEND_NULL);
+        ag_player* const standalone = editor.playerHandleForTesting();
+        QVERIFY(standalone != nullptr);
+        editor.setPlaybackController(nullptr);
+        QCOMPARE(editor.playerHandleForTesting(), standalone);
+        QVERIFY(editor.playbackSupported());
+        QVERIFY(editor.createUntitledDocument(48'000, 2, 1'000));
+        editor.deactivate();
+    }
+
     void activationRestoresMainPlaybackSession_data()
     {
         QTest::addColumn<bool>("pauseBeforeActivation");

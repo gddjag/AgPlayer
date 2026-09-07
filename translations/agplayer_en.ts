@@ -2734,6 +2734,15 @@ Actual encoding parameters may vary with system performance.</translation>
     </context>
 <context>
         <name>ImmersiveControlPanel</name>
+        <message><source>仅调视觉响应，不改变音效；频带估计不等于人声分离或乐器识别</source><translation>Visual response only; audio is unchanged. Frequency estimates are not vocal separation or instrument recognition.</translation></message>
+        <message><source>低频 · 整体起伏</source><translation>Low frequencies · Overall motion</translation></message>
+        <message><source>低频 · 鼓点区域</source><translation>Low frequencies · Beat region</translation></message>
+        <message><source>中低频</source><translation>Low-mid frequencies</translation></message>
+        <message><source>中频 · 人声频段</source><translation>Mid frequencies · Vocal range</translation></message>
+        <message><source>中高频 · 细节</source><translation>High-mid frequencies · Detail</translation></message>
+        <message><source>高频 · 顶面</source><translation>High frequencies · Top faces</translation></message>
+        <message><source>高频 · 亮片</source><translation>High frequencies · Glints</translation></message>
+        <message><source>极高频 · 空气感</source><translation>Highest frequencies · Air</translation></message>
         <message><source>彩虹内光 · 多点涟漪</source><translation>Rainbow inner light · Multi-point ripples</translation></message>
         <message><source>柱内光芯</source><translation>Inner light</translation></message>
         <message><source>照亮周围</source><translation>Light spill</translation></message>

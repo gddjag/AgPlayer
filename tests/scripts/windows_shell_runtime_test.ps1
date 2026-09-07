@@ -109,6 +109,7 @@ try {
     $deadline = [DateTime]::UtcNow.AddSeconds(10)
     $mainWindow = [IntPtr]::Zero
     $identityVerified = $false
+    $teardownVerified = $false
     do {
         Start-Sleep -Milliseconds 50
         $visible = [AgPlayerShellProbe]::VisibleWindowsForProcess(
@@ -122,18 +123,19 @@ try {
             $mainWindow = $appWindows[0]
         }
         if (Test-Path -LiteralPath $stderrPath) {
-            $identityVerified = (Get-Content -Raw -LiteralPath $stderrPath) `
-                -match 'AgPlayer native taskbar identity verified'
+            $probeOutput = Get-Content -Raw -LiteralPath $stderrPath
+            $identityVerified = $probeOutput -match 'AgPlayer native taskbar identity verified'
+            $teardownVerified = $probeOutput -match 'AgPlayer shell teardown probe: passed created=1 destroyed=1 stayedDestroyed=1'
         }
-    } while (($mainWindow -eq [IntPtr]::Zero -or -not $identityVerified) -and
+    } while (($mainWindow -eq [IntPtr]::Zero -or -not $identityVerified -or -not $teardownVerified) -and
              [DateTime]::UtcNow -lt $deadline -and
              -not $process.HasExited)
 
-    if ($mainWindow -eq [IntPtr]::Zero -or -not $identityVerified) {
+    if ($mainWindow -eq [IntPtr]::Zero -or -not $identityVerified -or -not $teardownVerified) {
         $stderr = if (Test-Path -LiteralPath $stderrPath) {
             Get-Content -Raw -LiteralPath $stderrPath
         } else { '' }
-        throw "AgPlayer did not publish one taskbar window with complete shell identity:`n$stderr"
+        throw "AgPlayer shell identity/live-window/teardown contract failed:`n$stderr"
     }
     $mainStyle = [AgPlayerShellProbe]::GetWindowLongPtr(
         $mainWindow, [AgPlayerShellProbe]::GWL_STYLE).ToInt64()

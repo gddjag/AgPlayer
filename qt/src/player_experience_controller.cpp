@@ -909,7 +909,7 @@ void PlayerExperienceController::load()
     baseColor_ = normalizedColor(storedColor(settings_.value(QStringLiteral("baseColor")),
                                              QStringLiteral("#030817")),
                                  QStringLiteral("#030817"));
-    terrainAmplitude_ = clampPercent(integer(QStringLiteral("terrainAmplitude"), 42));
+    terrainAmplitude_ = clampPercent(integer(QStringLiteral("terrainAmplitude"), 62));
     materialMode_ = enumOrDefault(integer(QStringLiteral("materialMode"), 0), 0, 2, 0);
     materialSoftness_ = clampRange(integer(QStringLiteral("materialSoftness"), 45), 0, 100);
     jellyElasticity_ = clampRange(integer(QStringLiteral("jellyElasticity"), 35), 0, 100);
@@ -917,17 +917,17 @@ void PlayerExperienceController::load()
     rippleStrength_ = clampRange(integer(QStringLiteral("rippleStrength"), 100), 0, 200);
     rippleWidth_ = clampRange(integer(QStringLiteral("rippleWidth"), 100), 20, 200);
     rippleDecay_ = clampRange(integer(QStringLiteral("rippleDecay"), 100), 20, 200);
-    columnSize_ = clampRange(integer(QStringLiteral("columnSize"), 50), 50, 200);
-    columnDensity_ = clampRange(integer(QStringLiteral("columnDensity"), 125), 50, 200);
-    columnOpacity_ = clampRange(integer(QStringLiteral("columnOpacity"), 72), 0, 100);
+    columnSize_ = clampRange(integer(QStringLiteral("columnSize"), 95), 50, 200);
+    columnDensity_ = clampRange(integer(QStringLiteral("columnDensity"), 130), 50, 200);
+    columnOpacity_ = clampRange(integer(QStringLiteral("columnOpacity"), 100), 0, 100);
     reactorBrightness_ = clampRange(integer(QStringLiteral("reactorBrightness"), 100), 0, 200);
     columnInnerLight_ = clampRange(integer(QStringLiteral("columnInnerLight"), 100), 0, 200);
     columnLightSpill_ = clampRange(integer(QStringLiteral("columnLightSpill"), 20), 0, 200);
     columnLightRadius_ = clampRange(integer(QStringLiteral("columnLightRadius"), 100), 20, 200);
-    motionResponse_ = clampPercent(integer(QStringLiteral("motionResponse"), 34));
+    motionResponse_ = clampPercent(integer(QStringLiteral("motionResponse"), 56));
     gradientLayers_ = clampPercent(integer(QStringLiteral("gradientLayers"), 74));
     glowIntensity_ = clampPercent(integer(QStringLiteral("glowIntensity"), 38));
-    cinemaShake_ = std::clamp(decimal(QStringLiteral("cinemaShake"), 0.40), 0.0, 1.8);
+    cinemaShake_ = std::clamp(decimal(QStringLiteral("cinemaShake"), 0.30), 0.0, 1.8);
     autoRotate_ = clampPercent(integer(QStringLiteral("autoRotate"), 54));
     peakBoost_ = clampPercent(integer(QStringLiteral("peakBoost"), 58));
     ripplesEnabled_ = boolean(QStringLiteral("ripplesEnabled"), true);
@@ -939,7 +939,7 @@ void PlayerExperienceController::load()
     streamHighlightEnabled_ = boolean(
         QStringLiteral("streamHighlightEnabled"), true);
     songAdaptiveColorEnabled_ = boolean(
-        QStringLiteral("songAdaptiveColorEnabled"), true);
+        QStringLiteral("songAdaptiveColorEnabled"), false);
     const QVariant persistedGains = settings_.value(QStringLiteral("visualEqGains"));
     const int persistedGainsType = persistedGains.metaType().id();
     visualEqGains_ = (persistedGainsType == QMetaType::QVariantList
@@ -954,14 +954,14 @@ void PlayerExperienceController::load()
     lyricPositionX_ = clampPercent(integer(QStringLiteral("lyricPositionX"), 50));
     lyricPositionY_ = clampPercent(integer(QStringLiteral("lyricPositionY"), 42));
     inputCompression_ = clampRange(integer(QStringLiteral("inputCompression"), 82), 20, 150);
-    audioResponse_ = clampRange(integer(QStringLiteral("audioResponse"), 128), 20, 200);
+    audioResponse_ = clampRange(integer(QStringLiteral("audioResponse"), 136), 20, 200);
     responseRange_ = clampRange(integer(QStringLiteral("responseRange"), 100), 50, 220);
-    centerHighlight_ = clampPercent(integer(QStringLiteral("centerHighlight"), 58));
+    centerHighlight_ = clampPercent(integer(QStringLiteral("centerHighlight"), 64));
     rhythmStrength_ = clampRange(integer(QStringLiteral("rhythmStrength"), 30), 0, 140);
     depthOfField_ = clampRange(integer(QStringLiteral("depthOfField"), 86), 0, 150);
-    subjectClarity_ = clampRange(integer(QStringLiteral("subjectClarity"), 110), 20, 140);
+    subjectClarity_ = clampRange(integer(QStringLiteral("subjectClarity"), 112), 20, 140);
     autoRotateSpeed_ = clampPercent(integer(QStringLiteral("autoRotateSpeed"), 42));
-    rhythmSensitivity_ = clampPercent(integer(QStringLiteral("rhythmSensitivity"), 78));
+    rhythmSensitivity_ = clampPercent(integer(QStringLiteral("rhythmSensitivity"), 80));
 
     settings_.setValue(QStringLiteral("mode"), immersiveMode_);
     settings_.setValue(QStringLiteral("hostMode"), hostMode_);

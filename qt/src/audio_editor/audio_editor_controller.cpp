@@ -896,7 +896,21 @@ void AudioEditorController::setPlaybackController(
         releaseEditorPlaybackOutput();
     }
     playback_controller_ = controller;
-    if (controller == nullptr || controller->playerHandle() == player_) {
+    if (controller == nullptr) {
+        // A borrowed core belongs to the application. Revoke both copies of
+        // its handle before the owner destroys it; standalone cores stay owned.
+        if (!owns_player_) player_ = nullptr;
+        playback_adapter_ = std::make_unique<EditorPlaybackAdapter>(player_);
+        playback_timer_.stop();
+        playing_ = false;
+        if (has_document_ && state_ == EditorSessionState::Playing) {
+            setState(EditorSessionState::Ready);
+        }
+        emit playbackChanged();
+        emit documentChanged();
+        return;
+    }
+    if (controller->playerHandle() == player_) {
         playback_adapter_ = std::make_unique<EditorPlaybackAdapter>(
             player_, controller);
         return;

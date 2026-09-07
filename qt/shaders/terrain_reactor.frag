@@ -175,28 +175,65 @@ void columnMedium(vec3 normal, vec3 view, float ior, float roughness,
                   out vec3 transmittedLight, out vec3 emittedLight)
 {
     vec3 extent = max(columnExtent, vec3(0.001));
-    // The reference is a planar box, not a cylinder with a radial light core.
-    // A homogeneous slab preserves the full square cap and straight sides;
-    // only vertical attenuation varies across a face. No radial ray marching.
-    float height = clamp(surfacePosition.y + 0.5, 0.0, 1.0);
+    // Analytic optical path inside the actual box. No ray marching, flow
+    // texture, scene-color copy or per-column transparency sorting required.
+    // This transmits the inner emitter, not geometry behind another column.
+    vec3 ray = refract(-view, normal, 1.0 / ior);
+    vec3 position = clamp(surfacePosition, vec3(-0.4999), vec3(0.4999)) * extent;
+    vec3 exitPlane = mix(-extent * 0.5, extent * 0.5, greaterThanEqual(ray, vec3(0.0)));
+    vec3 rayDistance = abs(exitPlane - position) / max(abs(ray), vec3(0.00001));
+    float travel = min(rayDistance.x, min(rayDistance.y, rayDistance.z));
+    travel = min(travel, length(extent));
+    // A separate inset rectangular emitter, seen through a clear shell.
+    // The ray's entry/exit changes with view, giving real interior parallax
+    // without pretending to refract the scene behind the column.
+    vec3 inverseRay = mix(vec3(-1.0), vec3(1.0), greaterThanEqual(ray, vec3(0.0)))
+                    / max(abs(ray), vec3(0.00001));
+    // A thin optical shell, not a percentage-height opaque lid. Tall columns
+    // must keep their emitter close to the cap as their height changes.
+    vec3 shellThickness = min(extent * 0.006, vec3(0.008));
+    vec3 innerHalf = extent * 0.5 - shellThickness;
+    vec3 firstHit = (-innerHalf - position) * inverseRay;
+    vec3 lastHit = (innerHalf - position) * inverseRay;
+    vec3 entry = min(firstHit, lastHit);
+    vec3 leave = max(firstHit, lastHit);
+    float innerStart = max(0.0, max(entry.x, max(entry.y, entry.z)));
+    float innerEnd = min(travel, min(leave.x, min(leave.y, leave.z)));
+    float innerLength = max(0.0, innerEnd - innerStart);
+    float height = clamp((position.y + ray.y * (innerStart + innerLength * 0.5))
+                         / extent.y + 0.5, 0.0, 1.0);
     vec3 tint = mediumTint(height);
-    float cap = step(0.5, normal.y);
-    float travel = mix(min(extent.x, extent.z),
-                       min(extent.y, min(extent.x, extent.z) * 1.5), cap);
-    vec3 absorption = -log(max(tint, vec3(0.015))) * 0.18 + vec3(0.035);
+    vec3 absorption = -log(max(tint, vec3(0.015))) * 0.06 + vec3(0.015);
     vec3 transmission = exp(-absorption * travel);
     vec4 lowMidBands = clamp(ubuf.bandsLow * ubuf.equalizerLow, vec4(0.0), vec4(1.0));
     float lowMidEnergy = dot(lowMidBands, vec4(0.35, 0.30, 0.20, 0.15));
+    vec4 upperBands = clamp(ubuf.bandsHigh * ubuf.equalizerHigh, vec4(0.0), vec4(1.0));
+    float upperEnergy = dot(upperBands, vec4(0.38, 0.28, 0.20, 0.14));
     // No constant core lamp: sustained low/mid energy feeds the volume,
     // while the existing spatial beat and impact envelopes excite it further.
     float pulse = lowMidEnergy * 1.4 * clamp(ubuf.styleAudio.w, 0.0, 1.5)
+                + upperEnergy * 0.18 * clamp(ubuf.styleAudio.w, 0.0, 1.5)
                 + clamp(musicLight, 0.0, 1.0) * 0.85
                 + clamp(impactLight, 0.0, 1.0) * 1.20;
     float sourcePower = clamp(ubuf.sceneLighting.x, 0.0, 2.0)
                       * (0.38 + clamp(glow, 0.0, 2.0) * 0.16) * pulse * 1.4;
-    float faceWeight = mix(0.24 + max(normal.z, 0.0) * 0.08, 0.70, cap);
-    emittedLight = ((vec3(1.0) - transmission) / absorption) * tint
-                 * sourcePower * (0.10 + 0.90 * height * height) * faceWeight;
+    // Emission belongs to the raised musical relief. Leave the flat apron
+    // quiet so troughs and travelling wave crests retain visual separation.
+    sourcePower *= mix(0.28, 1.0, smoothstep(0.12, 2.2, extent.y));
+    // A distributed source fills the same medium up to its boundary.
+    // A grazing ray missing the inset core must not paint an opaque black rim.
+    // This remains audio-powered; it does not add a constant ambient lamp.
+    // Diffuse light transport within the gel fills thin/grazing paths. Keep
+    // optical-depth variation, but do not turn the perimeter into a dark cage.
+    float crossSection = min(extent.x, extent.z);
+    float opticalLength = max(crossSection * 0.80,
+                              innerLength * 0.35 + crossSection * 0.65);
+    // Near-surface scattering lets the flat cap receive the upper emitter's
+    // light rather than the darker midpoint of a long downward viewing ray.
+    float luminousHeight = mix(height, clamp(surfacePosition.y + 0.5, 0.0, 1.0), 0.75);
+    emittedLight = exp(-absorption * innerStart)
+                 * ((vec3(1.0) - exp(-absorption * opticalLength)) / absorption)
+                 * tint * sourcePower * (0.45 + 0.55 * luminousHeight) * 2.3;
     // The distant environment is a dim background behind the emitting core,
     // not another white studio panel painted across the entire front face.
     transmittedLight = transmission * studioEnvironment(-view, roughness * 0.7) * 0.08;
@@ -286,27 +323,48 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
     float eventSource = clamp(musicLight, 0.0, 1.0) * 0.80
                       + clamp(impactLight, 0.0, 1.0) * 1.20;
     emission += mediumTint(bodyHeight) * sourceHeight * (steadySource + highSource + eventSource)
-              * clamp(ubuf.sceneLighting.x, 0.0, 2.0);
-
-    float coordinate = surfacePosition.x * 0.82 + surfacePosition.z * 0.57;
-    float patchWidth = max(fwidth(coordinate), 0.015);
-    float capPatch = 1.0 - smoothstep(0.035, 0.035 + patchWidth, abs(coordinate - 0.08));
-    // Derivative AA widens a subpixel strip. Conserve its projected energy so
-    // distant caps cannot become full tiles of high-frequency illumination.
-    capPatch *= 0.07 / (0.07 + patchWidth);
+              * clamp(ubuf.sceneLighting.x, 0.0, 2.0)
+              * (1.0 - smoothstep(0.10, 1.20, columnExtent.y));
     float cap = smoothstep(0.70, 0.98, normal.y);
+    // Upward light escape distinguishes the flat cap from the clear walls
+    // without an opaque border or an added external lamp.
+    emission *= 1.0 + cap * 0.65;
     float flash = clamp(streamSheen, 0.0, 4.0);
-    flash *= smoothstep(0.08, 0.32, flash);
+    flash *= smoothstep(0.015, 0.15, flash);
     float flashEnergy = dot(highBands, vec4(0.0, 0.42, 0.36, 0.22)) * 2.0
                       + clamp(musicLight, 0.0, 1.0) + clamp(impactLight, 0.0, 1.0);
     // Timing alone cannot illuminate a silent reactor; this local glint is
     // powered by the same inner-light control as the volume and thin shell.
     flash *= clamp(flashEnergy, 0.0, 1.0) * clamp(ubuf.sceneLighting.x, 0.0, 2.0);
-    // A bounded audio cue stays local to the physical cap. It does not alter
-    // the wall normal, medium samples, or the whole cap's base exposure.
-    emission += mix(albedo, srgbToLinear(vec3(0.85, 0.94, 1.0)), 0.12)
-              * capPatch * cap * (flash / (1.0 + flash)) * 1.5;
-    vec3 radiance = externalLight + emission * (vec3(1.0) - fresnel);
+    // Microfacets cover the cap, not its rim. Stable local cells receive
+    // different phases; never regenerate random noise each frame. Fade into
+    // their average once subpixel to avoid distant shimmering / aliasing.
+    vec2 facetUv = (surfacePosition.xz + vec2(0.5)) * 22.0;
+    vec2 facetCell = floor(facetUv);
+    float facetSeed = fract(sin(dot(facetCell, vec2(127.1, 311.7))) * 43758.5453);
+    float facetPhase = ubuf.parameters.w * (2.4 + facetSeed * 2.0)
+                     + facetSeed * 6.2831853;
+    float facetPulse = pow(0.5 + 0.5 * sin(facetPhase), 10.0);
+    float facetFootprint = max(fwidth(facetUv.x), fwidth(facetUv.y));
+    float facetResolved = 1.0 - smoothstep(0.65, 1.5, facetFootprint);
+    // A second, fixed 3x3 cluster scale preserves sparse glints when the fine
+    // facets are subpixel. Never enlarge noise continuously with camera zoom:
+    // cross-fade fixed scales and filter even the clusters at extreme distance.
+    vec2 clusterUv = (surfacePosition.xz + vec2(0.5)) * 3.0;
+    vec3 columnCenter = worldPosition - surfacePosition * columnExtent;
+    float clusterSeed = fract(sin(dot(floor(clusterUv), vec2(39.73, 81.19))
+                         + dot(columnCenter.xz, vec2(0.73, 1.31))) * 15731.743);
+    float clusterPulse = pow(0.5 + 0.5 * sin(ubuf.parameters.w
+                         * (2.4 + clusterSeed * 2.0) + clusterSeed * 6.2831853), 10.0);
+    float clusterFootprint = max(fwidth(clusterUv.x), fwidth(clusterUv.y));
+    float clusterResolved = 1.0 - smoothstep(0.8, 1.8, clusterFootprint);
+    float distantLight = mix(0.08, 0.025 + clusterPulse * 4.5, clusterResolved);
+    float facetLight = mix(distantLight, 0.02 + facetPulse * 5.0, facetResolved);
+    emission += mix(albedo, srgbToLinear(vec3(0.85, 0.94, 1.0)), 0.40)
+              * cap * (flash / (1.0 + flash)) * facetLight;
+    // Distributed subsurface light remains visible at grazing angles; keep
+    // reflection contrast without letting a dark environment blacken the rim.
+    vec3 radiance = externalLight + emission * (vec3(1.0) - min(fresnel, vec3(0.10)));
     radiance *= pow(clamp(fog, 0.0, 1.0), 1.35) * (0.80 + clamp(focus, 0.0, 1.0) * 0.20);
     radiance *= clamp(material.z, 0.0, 2.0);
     // Hue-preserving bounded shoulder, followed by exactly one display

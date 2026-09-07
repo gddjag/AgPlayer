@@ -225,7 +225,7 @@ void main()
                        * (0.012 + ubuf.parameters.x * 0.035
                           + slowBass * 0.045 + beatPulse * 0.12)
                        * ubuf.styleAudio.w;
-        float coreLift = (slowBass * 0.15 + beatPulse * 1.25) * dome * 4.25;
+        float coreLift = (slowBass * 0.15 + beatPulse * 2.25) * dome * 4.25;
         float centerShoulders = ubuf.parameters.x * ubuf.styleAudio.w
                               * terrainField
                               * (0.035 + core * 0.14 + wideRidge * 0.26);
@@ -263,8 +263,9 @@ void main()
         if (material.x > 0.5 && material.x < 1.5) {
             // Bounded vertical beat response: no cross-section deformation,
             // audio buffer, or free-running wobble during silence.
-            float rebound = sin(ubuf.audioEnvelope.w * 12.56637)
-                          * beatPulse * material.z;
+            // The detected envelope already has attack/release. A sine that
+            // starts at zero erased the attack and delayed the visible beat.
+            float rebound = beatPulse * material.z;
             scale.y *= 1.0 + rebound * 0.18;
         }
         position.y += scale.y * 0.5;
@@ -315,6 +316,9 @@ void main()
         position.y += sin(t * 0.74 * motion + randomValue * 18.0) * 1.95
                     + bandsLow.x * 2.2;
         scale *= 1.0 + ubuf.parameters.z * 0.28;
+        scale *= mix(0.62, 1.58, randomValue * randomValue)
+               * mix(0.90, 1.15, material.y);
+        scale.y *= mix(0.78, 1.45, randomValue);
     } else if (type < 2.5) {
         float group = floor(instanceData.w + 0.001);
         float cycle = 4.5 + randomValue * 2.0;
@@ -412,6 +416,10 @@ void main()
         color = mix(cool, warm, smoothstep(0.42, 0.68, colorBand));
         color = mix(color, accent,
                     smoothstep(0.66, 0.92, accentField) * 0.70);
+        // A readable focal hierarchy inside each preset's own palette:
+        // warmer central relief, cooler middle distance, quiet outer apron.
+        float focalColor = exp(-distanceFromCore * distanceFromCore / 780.0);
+        color = mix(color, mix(warm, accent, 0.22), focalColor * 0.78);
         float edge = smoothstep(0.34, 0.94,
                                 clamp(distanceFromCore / 118.0, 0.0, 1.0));
         color = mix(color, base, edge * 0.52);
@@ -462,6 +470,13 @@ void main()
         color = mix(color, vec3(1.0), 0.62);
     }
     if (type > 4.5 && type < 5.5) color = mix(cool, accent, randomValue);
+    if (type > 0.5 && type < 1.5) {
+        // Stable per-crystal variety inside the active preset, not one
+        // washed-out peak color shared by every floating instance.
+        color = mix(cool, warm, smoothstep(0.0, 0.55, randomValue));
+        color = mix(color, accent, smoothstep(0.55, 0.90, randomValue));
+        color = mix(color, peak, smoothstep(0.90, 1.0, randomValue) * 0.15);
+    }
 
     if (type < 0.5) scale = max(scale, vec3(0.001));
     vec3 localVertex = vertexPosition * scale;

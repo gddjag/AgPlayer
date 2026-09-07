@@ -128,6 +128,8 @@ public:
     explicit AudioEditorController(ag_audio_backend backend,
                                    QObject* parent = nullptr);
     ~AudioEditorController() override;
+    // Passing nullptr detaches a borrowed player while it is still alive.
+    // A standalone player owned by this editor is unaffected.
     void setPlaybackController(PlaybackController* controller);
     bool pauseForPlaybackHandoff();
     [[nodiscard]] ag_player* playerHandleForTesting() const noexcept
