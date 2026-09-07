@@ -113,3 +113,7 @@ body[data-page="download"] .footer-inner{gap:20px}
  body[data-page="download"] .download-faq .section-heading{margin-bottom:12px}
  body[data-page="download"] .site-footer{padding:11px 0}
 }
+
+
+/* Expanded desktop feature highlights. */
+.feature-poster .feature-list li{padding-block:24px;align-items:flex-start}.feature-poster .feature-list h3{font-size:20px;line-height:1.5}.feature-poster .feature-list p{font-size:15px;line-height:1.85;text-wrap:pretty}.feature-poster .feature-list li:first-child{padding-top:24px}.feature-updates{margin:38px 0 0;padding-top:22px;border-top:1px solid var(--line);color:var(--muted);font-size:14px;letter-spacing:.02em}.feature-updates::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:10px;vertical-align:middle}@media(max-width:600px){.feature-poster .feature-list h3{font-size:18px}.feature-poster .feature-list p{font-size:14px}.feature-updates{font-size:13px;margin-top:25px}}

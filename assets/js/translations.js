@@ -122,31 +122,44 @@ window.AG_COPY = {
     },
     "features": {
       "title": "简单外表，专业内核",
-      "description": "让音乐管理、播放与处理，都保持简单。",
+      "description": "从听歌、选段到音频处理，常用能力，一站备齐。",
       "formats": {
-        "title": "全格式品质播放",
-        "description": "MP3、WAV、FLAC、AAC、M4A、OGG、Opus、WMA。"
+        "title": "全格式 · 无间隙播放",
+        "description": "支持 MP3、WAV、FLAC、AAC 等常用格式，专辑曲目自然衔接，聆听不间断。"
       },
-      "gapless": {
-        "title": "无间隙播放",
-        "description": "专辑曲目自然衔接，现场感不间断。"
+      "selection": {
+        "title": "框选波形 · 拖出片段",
+        "description": "一键框选波形，将选中片段直接拖到桌面或剪辑软件时间线，选段剪辑更高效。"
       },
-      "snap": {
-        "title": "双窗口磁吸",
-        "description": "播放器与列表自由拆分、吸附组合。"
+      "tempo": {
+        "title": "加速播放 · 节拍网格",
+        "description": "自由调整播放速度与 BPM，配合大幅滚动波形和节拍网格，看清细节，找准节奏。"
       },
-      "search": {
-        "title": "极速搜索与筛选",
-        "description": "按歌曲、艺人、标签、评分和 BPM 快速查找。"
+      "layouts": {
+        "title": "三种主题 · 迷你播放",
+        "description": "经典双窗口、单窗口与专业模式随心切换，支持磁吸组合，迷你窗口置顶不打扰。"
       },
-      "favorites": {
-        "title": "收藏与评分",
-        "description": "用收藏与星标整理你的私人音乐库。"
+      "library": {
+        "title": "标签管理 · 精准筛选",
+        "description": "用标签、收藏与评分管理歌曲，按歌曲、艺人、评分和 BPM 范围快速定位。"
       },
-      "response": {
-        "title": "迅捷响应",
-        "description": "原生体验，让每次操作直接顺畅。"
-      }
+      "editing": {
+        "title": "音频编辑 · 升降调",
+        "description": "选段、分割、裁剪与淡入淡出，支持升降调和 BPM 调速，试听满意再导出。"
+      },
+      "separation": {
+        "title": "伴奏分离 · 格式转换",
+        "description": "分离人声与伴奏，批量转换常用音频格式；工具处理时，音乐仍可正常播放。"
+      },
+      "metadata": {
+        "title": "元数据 · 文件名整理",
+        "description": "批量编辑标题、艺人、专辑与封面，预览并统一整理文件名，让音乐信息更完整。"
+      },
+      "quality": {
+        "title": "无损鉴别 · 本地处理",
+        "description": "结合频谱与音频特征，辅助判断音源品质；播放、分析与处理均在本地完成。"
+      },
+      "updates": "持续更新与优化，让每一次聆听与创作更顺手。"
     },
     "tools": {
       "title": "轻便工具，留给音乐更多可能",
@@ -446,31 +459,44 @@ window.AG_COPY = {
     },
     "features": {
       "title": "Simple on the surface. Built for detail.",
-      "description": "Keep music organization, playback, and processing simple.",
+      "description": "From listening and selecting clips to processing audio, your everyday tools in one place.",
       "formats": {
-        "title": "Quality playback across formats",
-        "description": "MP3, WAV, FLAC, AAC, M4A, OGG, Opus, WMA."
+        "title": "Rich format support",
+        "description": "Play MP3, WAV, FLAC, AAC and more, with gapless transitions that keep albums flowing."
       },
-      "gapless": {
-        "title": "Gapless playback",
-        "description": "Let album tracks flow naturally, keeping live recordings uninterrupted."
+      "selection": {
+        "title": "Select, drag, create",
+        "description": "Select a waveform region and drag the clip straight to your desktop or an editing timeline."
       },
-      "snap": {
-        "title": "Snap-together windows",
-        "description": "Separate the player and playlist, or snap them together."
+      "tempo": {
+        "title": "Playback speed & beat grid",
+        "description": "Adjust speed and BPM. Use the scrolling waveform and beat grid to follow every detail and beat."
       },
-      "search": {
-        "title": "Fast search and filtering",
-        "description": "Quickly find tracks by title, artist, tags, rating, and BPM."
+      "layouts": {
+        "title": "Three themes, plus Mini",
+        "description": "Switch between dual-window, single-window and Pro layouts, with magnetic snapping and an always-on-top Mini player."
       },
-      "favorites": {
-        "title": "Favorites and ratings",
-        "description": "Organize your personal library with favorites and star ratings."
+      "library": {
+        "title": "Tag management & filtering",
+        "description": "Organize with tags, favorites and ratings. Filter by song, artist, rating or BPM range."
       },
-      "response": {
-        "title": "Responsive controls",
-        "description": "A native experience keeps every action direct and smooth."
-      }
+      "editing": {
+        "title": "Edit, pitch & tempo",
+        "description": "Select, split, trim and fade audio. Adjust pitch or BPM, preview the result, then export."
+      },
+      "separation": {
+        "title": "Separate & convert",
+        "description": "Separate vocals and instrumentals or batch-convert audio formats, while your music keeps playing."
+      },
+      "metadata": {
+        "title": "Metadata & file names",
+        "description": "Batch-edit titles, artists, albums and artwork. Preview file-name changes before applying them."
+      },
+      "quality": {
+        "title": "Quality checks, locally",
+        "description": "Use spectrum and audio analysis to assess source quality. Playback and processing stay on your device."
+      },
+      "updates": "Continuously refined for a smoother listening and creative experience."
     },
     "tools": {
       "title": "Small tools. More ways to work with music.",
@@ -648,3 +674,4 @@ window.AG_COPY = {
     }
   }
 };
+
