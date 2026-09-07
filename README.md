@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/agplayer-logo.png" alt="AgPlayer Logo" width="220">
+</p>
+
 # AgPlayer
 
 **听见音乐，看见声音。**
