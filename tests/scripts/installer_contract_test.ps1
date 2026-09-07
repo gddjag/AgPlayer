@@ -3,6 +3,12 @@ $installer = Get-Content -Raw -Encoding UTF8 -LiteralPath $env:AGPLAYER_INSTALLE
 $repo = Split-Path -Parent (Split-Path -Parent $env:AGPLAYER_INSTALLER_SCRIPT)
 $packageScriptPath = Join-Path $repo 'scripts\package-windows.ps1'
 $packageScript = Get-Content -Raw -Encoding UTF8 -LiteralPath $packageScriptPath
+foreach ($notice in @('lossless-mp3-window-NOTICE.md', 'FFmpeg-LGPL-2.1-or-later.txt')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $repo ('LICENSES/' + $notice))) -or
+        -not $packageScript.Contains('licenses/' + $notice)) {
+        throw "The MP3 analysis-window attribution and license must be shipped: $notice"
+    }
+}
 
 if ($installer -match '#define AppVersion\s+"[0-9]+\.[0-9]+\.[0-9]+"' -or
     $installer -notmatch '#ifndef AppVersion' -or

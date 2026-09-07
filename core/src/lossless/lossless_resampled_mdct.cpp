@@ -2,6 +2,7 @@
 extern "C" {
 #include <libavutil/channel_layout.h>
 #include <libavutil/mathematics.h>
+#include <libavutil/opt.h>
 #include <libswresample/swresample.h>
 }
 #include <algorithm>
@@ -34,7 +35,12 @@ struct ResampledMdctProbe::Impl final {
         const int allocated = swr_alloc_set_opts2(&swr, &layout, AV_SAMPLE_FMT_DBL, target,
                                                   &layout, AV_SAMPLE_FMT_DBL, rate, 0, nullptr);
         av_channel_layout_uninit(&layout);
-        if (allocated < 0 || !swr || swr_init(swr) < 0) {
+        // Preserve transform evidence near the candidate Nyquist boundary.
+        // These fixed analysis-only settings do not affect playback resampling.
+        if (allocated < 0 || !swr
+            || av_opt_set_int(swr, "filter_size", 128, 0) < 0
+            || av_opt_set_double(swr, "cutoff", 1.0, 0) < 0
+            || swr_init(swr) < 0) {
             swr_free(&swr);
             throw std::runtime_error("Cannot initialize inverse-rate MDCT analysis");
         }

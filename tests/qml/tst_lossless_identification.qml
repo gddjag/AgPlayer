@@ -287,7 +287,7 @@ TestCase {
             return mockController.selectedResult.taskId === "fixture-1"
         })
         compare(findChild(page, "losslessVerdictText").text, "疑似升频")
-        compare(findChild(page, "losslessConfidenceValue").text, "87%")
+        compare(findChild(page, "losslessConfidenceValue").text, "87分")
         verify(findChild(page, "losslessEvidenceList").count > 0)
         verify(findChild(page, "losslessSpectrumChart").spectrum.length > 0)
         const disclaimer = findChild(page, "losslessDisclaimer")

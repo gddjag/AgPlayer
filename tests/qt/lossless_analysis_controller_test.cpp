@@ -129,6 +129,16 @@ public:
             && QString::fromUtf8(sourceText) == QString::fromUtf8("CELT帧结构")) {
             return QStringLiteral("CELT frame structure");
         }
+        if (QString::fromLatin1(context) == QStringLiteral("LosslessEvidence")
+            && QString::fromUtf8(sourceText) == QString::fromUtf8("%1 Hz PCM（推测）")) {
+            return QStringLiteral("%1 Hz PCM (inferred)");
+        }
+        if (QString::fromLatin1(context) == QStringLiteral("LosslessEvidence")) {
+            if (QString::fromUtf8(sourceText) == QString::fromUtf8("重采样或周期调制"))
+                return QStringLiteral("Resampling or periodic modulation");
+            if (QString::fromUtf8(sourceText) == QString::fromUtf8("检测到稳定周期结构；重采样与周期调制均可形成，不能单独确定升频历史。"))
+                return QStringLiteral("Periodic structure does not establish upsampling history.");
+        }
         return {};
     }
 };
@@ -269,6 +279,8 @@ private slots:
     void spectrogramRendererPeakReducesIntoFullBudget();
     void sourceChangesDuringAnalysisFailWithoutCaching();
     void terminalStatusSummarizesAllOutcomes();
+    void resamplingGridRequiresQualifiedEvidence_data();
+    void resamplingGridRequiresQualifiedEvidence();
     void dsdSelectedResultUsesRawRateAndHidesPcmDiagnostics();
     void candidateFormatsTranslateInitiallyAndOnLanguageRefresh();
     void rejectsUnboundedDiscoveryAndConcurrentReports();
@@ -651,11 +663,13 @@ void LosslessAnalysisControllerTest::realWavPublishesSpectrumAndCacheKeepsIt()
     LosslessAnalysisController controller;
     controller.loadFiles(urls({path}));
     QTRY_COMPARE_WITH_TIMEOUT(controller.totalCount(), 1, 3000);
-    // This integration check exercises unoptimized DSP in Debug, not a latency SLA.
+    // Full framing refinement is deliberately exercised twice (spectrum then spectrogram).
+    // Measured dense-probe work exceeded the former 10s/30s waits; this is a
+    // functional completion budget, not the separate cancellation latency target.
 #ifdef NDEBUG
-    constexpr int analysisTimeoutMs = 10000;
+    constexpr int analysisTimeoutMs = 20000;
 #else
-    constexpr int analysisTimeoutMs = 30000;
+    constexpr int analysisTimeoutMs = 60000;
 #endif
     controller.start();
     QTRY_VERIFY_WITH_TIMEOUT(!controller.running(), analysisTimeoutMs);
@@ -925,6 +939,72 @@ void LosslessAnalysisControllerTest::terminalStatusSummarizesAllOutcomes()
              QString::fromUtf8("已处理 3/3（成功 1，失败 1，取消 1）"));
 }
 
+void LosslessAnalysisControllerTest::resamplingGridRequiresQualifiedEvidence_data()
+{
+    QTest::addColumn<double>("sourceRate");
+    QTest::addColumn<int>("targetRate");
+    QTest::addColumn<bool>("qualified");
+    QTest::addColumn<int>("sourceKind");
+    QTest::addColumn<QString>("expected");
+    using agplayer::lossless::SourceKind;
+    const int pcm = static_cast<int>(SourceKind::PcmInteger);
+    QTest::newRow("qualified-grid") << 44100.0 << 96000 << true << pcm
+        << QString::fromUtf8("44.1 kHz → 96 kHz");
+    QTest::newRow("candidate-only") << 44100.0 << 96000 << false << pcm << QString{};
+    QTest::newRow("zero-source") << 0.0 << 96000 << true << pcm << QString{};
+    QTest::newRow("nan-source") << std::numeric_limits<double>::quiet_NaN()
+        << 96000 << true << pcm << QString{};
+    QTest::newRow("overflow-source") << std::numeric_limits<double>::max()
+        << 96000 << true << pcm << QString{};
+    QTest::newRow("invalid-target") << 44100.0 << 0 << true << pcm << QString{};
+    QTest::newRow("not-upsampled") << 96000.0 << 44100 << true << pcm << QString{};
+    QTest::newRow("dsd-hidden") << 44100.0 << 96000 << true
+        << static_cast<int>(SourceKind::Dsd) << QString{};
+    QTest::newRow("dst-hidden") << 44100.0 << 96000 << true
+        << static_cast<int>(SourceKind::Dst) << QString{};
+}
+
+void LosslessAnalysisControllerTest::resamplingGridRequiresQualifiedEvidence()
+{
+    QFETCH(double, sourceRate);
+    QFETCH(int, targetRate);
+    QFETCH(bool, qualified);
+    QFETCH(int, sourceKind);
+    QFETCH(QString, expected);
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = writeFile(directory, QStringLiteral("grid.wav"));
+    LosslessAnalysisController controller(
+        [=](const std::string& utf8Path,
+            const agplayer::lossless::AnalysisOptions&,
+            const std::atomic_bool&,
+            agplayer::lossless::ProgressCallback) {
+            using namespace agplayer::lossless;
+            auto result = completedResult(QString::fromUtf8(utf8Path),
+                                           Verdict::SuspectedUpsample);
+            result.source.kind = static_cast<SourceKind>(sourceKind);
+            result.source.sampleRate = targetRate;
+            result.measurements.resamplingMirrorScore = 0.0;
+            result.measurements.resamplingPhaseSourceRate = sourceRate;
+            if (qualified) {
+                result.evidence.push_back({"resampling_polyphase_grid",
+                    EvidenceFamily::Resampling, EvidenceDirection::SupportsUpsampling,
+                    sourceRate, "Hz", "qualified grid", 2, 0.0, 1.234,
+                    "qualified resampling evidence"});
+            }
+            return result;
+        }, nullptr);
+    controller.loadFiles(urls({path}));
+    QTRY_COMPARE_WITH_TIMEOUT(controller.totalCount(), 1, 3000);
+    controller.start();
+    QTRY_VERIFY_WITH_TIMEOUT(!controller.running(), 3000);
+    QCOMPARE(controller.selectedResult().value(QStringLiteral("resamplingText")).toString(),
+             expected);
+    controller.refreshTranslations();
+    QCOMPARE(controller.selectedResult().value(QStringLiteral("resamplingText")).toString(),
+             expected);
+}
+
 void LosslessAnalysisControllerTest::dsdSelectedResultUsesRawRateAndHidesPcmDiagnostics()
 {
     QTemporaryDir directory;
@@ -984,6 +1064,15 @@ void LosslessAnalysisControllerTest::candidateFormatsTranslateInitiallyAndOnLang
             result.candidates.clear();
             result.candidates.push_back(
                 {"CELT帧结构", 87, "仅为信号特征推断"});
+            result.candidates.push_back({"重采样或周期调制", 33, ""});
+            result.measurements.resamplingMirrorScore = 0.0;
+            result.measurements.resamplingPhaseSourceRate = 44100;
+            result.evidence.push_back({"resampling_polyphase_grid",
+                agplayer::lossless::EvidenceFamily::Resampling,
+                agplayer::lossless::EvidenceDirection::Neutral,
+                44100, "Hz", "", 1, 0.0, 1.234,
+                "检测到稳定周期结构；重采样与周期调制均可形成，不能单独确定升频历史。"});
+            result.chain.push_back("44100 Hz PCM（推测）");
             return result;
         }, nullptr);
 
@@ -1001,6 +1090,20 @@ void LosslessAnalysisControllerTest::candidateFormatsTranslateInitiallyAndOnLang
             .value(QStringLiteral("candidates")).toList().first().toMap();
         QCOMPARE(candidate.value(QStringLiteral("format")).toString(),
                  QStringLiteral("CELT frame structure"));
+        QVERIFY(controller.selectedResult().value(QStringLiteral("resamplingText")).toString().isEmpty());
+        QCOMPARE(controller.selectedResult().value(QStringLiteral("candidates")).toList().last()
+                     .toMap().value(QStringLiteral("format")).toString(),
+                 QStringLiteral("Resampling or periodic modulation"));
+        QCOMPARE(controller.selectedResult().value(QStringLiteral("evidence")).toList().last()
+                     .toMap().value(QStringLiteral("text")).toString(),
+                 QStringLiteral("Periodic structure does not establish upsampling history."));
+        controller.refreshTranslations();
+        QVERIFY(controller.selectedResult().value(QStringLiteral("resamplingText")).toString().isEmpty());
+        QCOMPARE(controller.selectedResult().value(QStringLiteral("evidence")).toList().last()
+                     .toMap().value(QStringLiteral("text")).toString(),
+                 QStringLiteral("Periodic structure does not establish upsampling history."));
+        QCOMPARE(controller.selectedResult().value(QStringLiteral("chain")).toList().last().toString(),
+                 QStringLiteral("44100 Hz PCM (inferred)"));
 
         QSignalSpy exported(&controller,
                             &LosslessAnalysisController::reportExported);
@@ -1024,6 +1127,10 @@ void LosslessAnalysisControllerTest::candidateFormatsTranslateInitiallyAndOnLang
         .value(QStringLiteral("candidates")).toList().first().toMap();
     QCOMPARE(refreshedCandidate.value(QStringLiteral("format")).toString(),
              QString::fromUtf8("CELT帧结构"));
+    QVERIFY(controller.selectedResult().value(QStringLiteral("resamplingText")).toString().isEmpty());
+    QCOMPARE(controller.selectedResult().value(QStringLiteral("candidates")).toList().last()
+                 .toMap().value(QStringLiteral("format")).toString(),
+             QString::fromUtf8("重采样或周期调制"));
 }
 
 void LosslessAnalysisControllerTest::rejectsUnboundedDiscoveryAndConcurrentReports()
@@ -1120,6 +1227,7 @@ void LosslessAnalysisControllerTest::exportsVersionedJsonAndCsvWithoutTouchingSo
                 ? "AAC-LC 1024" : "must-not-be-serialized";
             result.measurements.celtFrameBlocks = extendedMeasured ? 48 : 0;
             result.measurements.celtFrameSamples = 240;
+            result.measurements.celtFramesPerAnchor = 48;
             result.measurements.mdctAnalysisSampleRate = 44100;
             result.measurements.celtFrameMinimumBandZ = extendedFinite
                 ? 11.75 : measuredValue;
@@ -1165,6 +1273,14 @@ void LosslessAnalysisControllerTest::exportsVersionedJsonAndCsvWithoutTouchingSo
                  .toString(), Qt::ISODateWithMs).toMSecsSinceEpoch(),
              qint64(1'780'000'000'000LL));
     QVERIFY(!document.object().value(QStringLiteral("appVersion")).toString().isEmpty());
+    const QJsonObject scoredResult = document.object()
+        .value(QStringLiteral("results")).toArray().first().toObject();
+    QCOMPARE(scoredResult.value(QStringLiteral("confidenceKind")).toString(),
+             QStringLiteral("ordinal_evidence_score"));
+    QCOMPARE(scoredResult.value(QStringLiteral("calibrationStatus")).toString(),
+             QStringLiteral("uncalibrated"));
+    QVERIFY(scoredResult.contains(QStringLiteral("calibratedProbability")));
+    QVERIFY(scoredResult.value(QStringLiteral("calibratedProbability")).isNull());
     const QJsonObject measurements = document.object()
         .value(QStringLiteral("results")).toArray().first().toObject()
         .value(QStringLiteral("measurements")).toObject();
@@ -1199,15 +1315,19 @@ void LosslessAnalysisControllerTest::exportsVersionedJsonAndCsvWithoutTouchingSo
     QCOMPARE(measurements.value(QStringLiteral("celtFrameBlocks")).toInt(),
              extendedMeasured ? 48 : 0);
     QVERIFY(measurements.contains(QStringLiteral("celtFrameSamples")));
+    QVERIFY(measurements.contains(QStringLiteral("celtFramesPerAnchor")));
     QVERIFY(measurements.contains(QStringLiteral("mdctAnalysisSampleRate")));
     if (extendedMeasured)
         QCOMPARE(measurements.value(QStringLiteral("mdctAnalysisSampleRate")).toInt(), 44100);
     else
         QVERIFY(measurements.value(QStringLiteral("mdctAnalysisSampleRate")).isNull());
-    if (extendedMeasured)
+    if (extendedMeasured) {
         QCOMPARE(measurements.value(QStringLiteral("celtFrameSamples")).toInt(), 240);
-    else
+        QCOMPARE(measurements.value(QStringLiteral("celtFramesPerAnchor")).toInt(), 48);
+    } else {
         QVERIFY(measurements.value(QStringLiteral("celtFrameSamples")).isNull());
+        QVERIFY(measurements.value(QStringLiteral("celtFramesPerAnchor")).isNull());
+    }
     const QVariantMap nullableMeasurements{
         {QStringLiteral("lowLevelSpectralEdgeHz"), 21500.25},
         {QStringLiteral("lowLevelSpectralEdgeDepthDb"), 42.5},
@@ -1264,6 +1384,8 @@ void LosslessAnalysisControllerTest::exportsVersionedJsonAndCsvWithoutTouchingSo
     QVERIFY(csvFile.open(QIODevice::ReadOnly));
     const QByteArray csv = csvFile.readAll();
     QVERIFY(csv.startsWith("schemaVersion,algorithmVersion"));
+    QVERIFY(csv.contains("confidence,confidenceKind,calibrationStatus,calibratedProbability"));
+    QVERIFY(csv.contains("\"ordinal_evidence_score\",\"uncalibrated\",\"\""));
     QVERIFY(csv.contains("appVersion,generatedAt,parameterVersion,analysisStartedAt"));
     QVERIFY(csv.contains("sourceDetails,measurements"));
     QVERIFY(csv.contains("\"\"rawDsdSampleRate\"\":0"));

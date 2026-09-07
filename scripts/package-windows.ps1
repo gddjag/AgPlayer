@@ -95,6 +95,7 @@ $stage = Join-Path $repo "build/package/AgPlayer"
 $installerOutput = Join-Path $repo "build/installer"
 $thirdPartyNotices = Join-Path $repo "THIRD-PARTY-NOTICES.md"
 $licenseSource = Join-Path $repo "assets/licenses"
+$losslessLicenseSource = Join-Path $repo "LICENSES"
 $cmakeCache = Join-Path $build "CMakeCache.txt"
 $versionTool = Join-Path $repo 'scripts/release-version.ps1'
 $versionOutput = (& $versionTool -SourceRoot $repo | Out-String).Trim()
@@ -134,7 +135,9 @@ if (-not $iscc) { throw "Inno Setup compiler was not found" }
 
 foreach ($required in @(
     $build, $windeployqt, $vcvars, $configuredCompiler, $iscc,
-    $thirdPartyNotices, $licenseSource
+    $thirdPartyNotices, $licenseSource,
+    (Join-Path $losslessLicenseSource 'lossless-mp3-window-NOTICE.md'),
+    (Join-Path $losslessLicenseSource 'FFmpeg-LGPL-2.1-or-later.txt')
 )) {
     if (-not (Test-Path -LiteralPath $required)) {
         throw "Required path not found: $required"
@@ -204,6 +207,9 @@ Copy-Item -LiteralPath $exe -Destination $stage
 Copy-Item -LiteralPath $worker -Destination $stage
 Copy-Item -LiteralPath $thirdPartyNotices -Destination $stage
 Copy-Item -LiteralPath $licenseSource -Destination $stage -Recurse
+foreach ($license in @('lossless-mp3-window-NOTICE.md', 'FFmpeg-LGPL-2.1-or-later.txt')) {
+    Copy-Item -LiteralPath (Join-Path $losslessLicenseSource $license) -Destination (Join-Path $stage 'licenses')
+}
 # CMake's post-build deployment directory may contain transitive Windows
 # system DLLs. Copy only the audio libraries that are linked by AgPlayer;
 # windeployqt below supplies the Qt runtime itself.
@@ -287,6 +293,8 @@ $requiredRuntime = @(
     "licenses/AgPlayer-Icons-License.txt",
     "licenses/Lucide-Icons-License.txt",
     "licenses/RemixIcon-Apache-2.0.txt",
+    "licenses/lossless-mp3-window-NOTICE.md",
+    "licenses/FFmpeg-LGPL-2.1-or-later.txt",
     "Qt6Core.dll",
     "Qt6Gui.dll",
     "Qt6Qml.dll",

@@ -20,7 +20,7 @@ $scratch = Join-Path ([IO.Path]::GetTempPath()) `
     ('agplayer-package-version-' + [guid]::NewGuid().ToString('N'))
 try {
     foreach ($directory in @(
-        'app', 'assets\licenses', 'cmake', 'installer', 'qt\src', 'scripts',
+        'app', 'assets\licenses', 'LICENSES', 'cmake', 'installer', 'qt\src', 'scripts',
         'build\stale\app', 'deployment\updates'
     )) {
         New-Item -ItemType Directory -Path (Join-Path $scratch $directory) `
@@ -29,6 +29,8 @@ try {
     foreach ($relativePath in @(
         'CMakeLists.txt',
         'THIRD-PARTY-NOTICES.md',
+        'LICENSES\lossless-mp3-window-NOTICE.md',
+        'LICENSES\FFmpeg-LGPL-2.1-or-later.txt',
         'app\CMakeLists.txt',
         'app\agplayer.manifest.in',
         'app\agplayer.rc.in',

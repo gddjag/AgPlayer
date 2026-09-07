@@ -74,7 +74,7 @@ QVariant LosslessTaskModel::headerData(
         return {};
     }
     static const std::array<const char*, 7> headers{
-        "", "文件名", "容器", "音频格式", "判定", "置信度", "状态"};
+        "", "文件名", "容器", "音频格式", "判定", "评分", "状态"};
     return QString::fromUtf8(headers.at(static_cast<std::size_t>(section)));
 }
 

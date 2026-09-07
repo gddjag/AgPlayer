@@ -42,6 +42,9 @@ QByteArray jsonReport(const QVariantList& results)
 {
     QJsonObject root{
         {QStringLiteral("schemaVersion"), QStringLiteral("1")},
+        // Applies also to historical cached results and source candidates.
+        {QStringLiteral("confidenceKind"), QStringLiteral("ordinal_evidence_score")},
+        {QStringLiteral("calibrationStatus"), QStringLiteral("uncalibrated")},
         {QStringLiteral("appVersion"),
          QString::fromLatin1(agplayer::version::kVersion)},
         {QStringLiteral("algorithmVersion"),
@@ -86,6 +89,9 @@ QByteArray csvReport(const QVariantList& results)
         QStringLiteral("verdictCode"),
         QStringLiteral("verdictText"),
         QStringLiteral("confidence"),
+        QStringLiteral("confidenceKind"),
+        QStringLiteral("calibrationStatus"),
+        QStringLiteral("calibratedProbability"),
         QStringLiteral("coverage"),
         QStringLiteral("spectralEdgeFrequencyHz"),
         QStringLiteral("spectralEdgeDepthDb"),
@@ -134,6 +140,9 @@ QByteArray csvReport(const QVariantList& results)
             result.value(QStringLiteral("verdictCode")),
             result.value(QStringLiteral("verdictText")),
             result.value(QStringLiteral("confidence")),
+            result.value(QStringLiteral("confidenceKind"), QStringLiteral("ordinal_evidence_score")),
+            result.value(QStringLiteral("calibrationStatus"), QStringLiteral("uncalibrated")),
+            result.value(QStringLiteral("calibratedProbability")),
             coverage.value(QStringLiteral("decodedRatio")),
             measurements.value(QStringLiteral("spectralEdgeFrequencyHz")),
             measurements.value(QStringLiteral("spectralEdgeDepthDb")),

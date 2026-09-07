@@ -162,6 +162,15 @@ try {
         'Undeclared source coverage cannot pass candidate gate'
     Assert-Equal $report.professionalAcceptance.status 'ineligible' `
         'Engineering candidate metrics never imply professional acceptance'
+    Assert-Equal $report.professionalAcceptance.projectPolicy.priority 'low_false_positive' `
+        'User delegated a low-error project policy'
+    Assert-Equal $report.professionalAcceptance.projectPolicy.falsePositiveRateTarget 0.01 `
+        'Project false-positive target remains explicit'
+    Assert-Equal $report.professionalAcceptance.projectPolicy.highConfidenceWrongMaximum 0 `
+        'High-confidence errors are not permitted'
+    if (@($report.professionalAcceptance.reasons) -contains 'no_approved_professional_numeric_standard') {
+        throw 'Do not ask the user again for a delegated project standard'
+    }
     Assert-Equal $report.sourceEqualWeightDiagnostics.status `
         'reported_descriptive_only' `
         'Predeclared source-equal diagnostics are reported without a gate'

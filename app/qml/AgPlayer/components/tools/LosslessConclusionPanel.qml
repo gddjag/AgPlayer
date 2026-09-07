@@ -208,7 +208,7 @@ Rectangle {
                     Text {
                         height: parent.height
                         verticalAlignment: Text.AlignVCenter
-                        text: qsTr("综合置信度")
+                        text: qsTr("证据评分")
                         color: Theme.textSecondary
                         font.family: Theme.fontPrimary
                         font.pixelSize: Theme.losslessFontSizeBody
@@ -266,7 +266,7 @@ Rectangle {
                                         id: candidateConfidence
                                         width: 46
                                         horizontalAlignment: Text.AlignRight
-                                        text: Number(modelData.confidence || 0) + "%"
+                                        text: qsTr("%1分").arg(Number(modelData.confidence || 0))
                                         color: Theme.accent
                                         font.family: Theme.fontPrimary
                                         font.pixelSize: Theme.losslessFontSizeMeta
@@ -555,7 +555,7 @@ Rectangle {
                 anchors.leftMargin: Theme.spacingMd
                 anchors.rightMargin: Theme.spacingMd
                 verticalAlignment: Text.AlignVCenter
-                text: qsTr("ⓘ 结果为信号特征推断，不代表可恢复原始文件。")
+                text: qsTr("ⓘ 评分尚未校准，不代表正确率。结果为信号特征推断，不代表可恢复原始文件。")
                 wrapMode: Text.Wrap
                 color: Theme.textTertiary
                 font.family: Theme.fontPrimary

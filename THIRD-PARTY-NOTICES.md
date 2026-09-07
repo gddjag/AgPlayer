@@ -1,5 +1,12 @@
 # Third-party notices
 
+## MPEG analysis-window coefficients
+
+The experimental lossless-identification MP3 probe includes analysis-window
+coefficients derived from FFmpeg n7.0. The source attribution and accompanying
+license are shipped in `licenses/lossless-mp3-window-NOTICE.md` and
+`licenses/FFmpeg-LGPL-2.1-or-later.txt`.
+
 ## Signalsmith Stretch 1.3.2
 
 Source: `Signalsmith-Audio/signalsmith-stretch`, commit

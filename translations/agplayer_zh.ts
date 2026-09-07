@@ -3834,6 +3834,18 @@
 <context>
         <name>LosslessConclusionPanel</name>
         <message>
+            <source>证据评分</source>
+            <translation>证据评分</translation>
+        </message>
+        <message>
+            <source>%1分</source>
+            <translation>%1分</translation>
+        </message>
+        <message>
+            <source>ⓘ 评分尚未校准，不代表正确率。结果为信号特征推断，不代表可恢复原始文件。</source>
+            <translation>ⓘ 评分尚未校准，不代表正确率。结果为信号特征推断，不代表可恢复原始文件。</translation>
+        </message>
+        <message>
             <source> 声道</source>
             <translation> 声道</translation>
         </message>
@@ -4133,6 +4145,18 @@
     </context>
 <context>
         <name>LosslessTaskPanel</name>
+        <message>
+            <source>评分</source>
+            <translation>评分</translation>
+        </message>
+        <message>
+            <source>按证据评分排序</source>
+            <translation>按证据评分排序</translation>
+        </message>
+        <message>
+            <source>%1分</source>
+            <translation>%1分</translation>
+        </message>
         <message>
             <source>采样率 / 位深</source>
             <translation>采样率 / 位深</translation>
@@ -9030,9 +9054,53 @@ NVIDIA CUDA 固定版本独立安装，不修改现有 Python/CPU 环境。约 1
     </context>
 <context>
         <name>LosslessConfidenceRing</name>
+        <message>
+            <source>%1分</source>
+            <translation>%1分</translation>
+        </message>
     </context>
 <context>
         <name>LosslessEvidence</name>
+        <message>
+            <source>MP3长块编码（推测）</source>
+            <translation>MP3长块编码（推测）</translation>
+        </message>
+        <message>
+            <source>MP3混合变换结构</source>
+            <translation>MP3混合变换结构</translation>
+        </message>
+        <message>
+            <source>检测到与MP3长块混合滤波器一致的帧结构；尚未验证短块、混合块及完整编码历史。</source>
+            <translation>检测到与MP3长块混合滤波器一致的帧结构；尚未验证短块、混合块及完整编码历史。</translation>
+        </message>
+        <message>
+            <source>%1 Hz PCM（推测）</source>
+            <translation>%1 Hz PCM（推测）</translation>
+        </message>
+        <message>
+            <source>变换帧与多相残差共同支持有损后升频；候选采样率一致仍不能恢复完整制作历史。</source>
+            <translation>变换帧与多相残差共同支持有损后升频；候选采样率一致仍不能恢复完整制作历史。</translation>
+        </message>
+        <message>
+            <source>检测到稳定周期结构；重采样与周期调制均可形成，不能单独确定升频历史。</source>
+            <translation>检测到稳定周期结构；重采样与周期调制均可形成，不能单独确定升频历史。</translation>
+        </message>
+        <message>
+            <source>重采样或周期调制</source>
+            <translation>重采样或周期调制</translation>
+        </message>
+        <message>
+            <source>周期、镜像和带外抑制仍可由同一种调制处理形成，候选不构成来源判定。</source>
+            <translation>周期、镜像和带外抑制仍可由同一种调制处理形成，候选不构成来源判定。</translation>
+        </message>
+        <message>
+            <source>镜像相关不能区分重采样与周期调制</source>
+            <translation>镜像相关不能区分重采样与周期调制</translation>
+        </message>
+        <message>
+            <source>频移副本也可能来自周期调制，不能单独确定升频历史。</source>
+            <translation>频移副本也可能来自周期调制，不能单独确定升频历史。</translation>
+        </message>
         <message>
             <source>&gt; 0.72且需稳定截止共同支持</source>
             <translation>&gt; 0.72且需稳定截止共同支持</translation>

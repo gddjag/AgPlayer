@@ -299,14 +299,14 @@ Rectangle {
                     height: parent.height
                     verticalAlignment: Text.AlignVCenter
                     horizontalAlignment: Text.AlignRight
-                    text: qsTr("置信度") + (root.sortColumn === 5
+                    text: qsTr("评分") + (root.sortColumn === 5
                           ? (root.sortAscending ? " ↑" : " ↓") : "")
                     elide: Text.ElideRight
                     clip: true
                     color: Theme.textSecondary
                     font.family: Theme.fontPrimary
                     font.pixelSize: Theme.losslessFontSizeMeta
-                    Accessible.name: qsTr("按置信度排序")
+                    Accessible.name: qsTr("按证据评分排序")
                     Accessible.role: Accessible.Button
                     TapHandler { onTapped: root.sortTasks(5) }
                 }
@@ -469,7 +469,7 @@ Rectangle {
                             verticalAlignment: Text.AlignVCenter
                             horizontalAlignment: Text.AlignRight
                             text: taskRow.verdictText
-                                  ? taskRow.confidence + "%"
+                                  ? qsTr("%1分").arg(taskRow.confidence)
                                   : Math.round(taskRow.progress * 100) + "%"
                             color: taskRow.verdictText
                                    ? root.verdictColor(taskRow.verdictCode)

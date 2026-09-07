@@ -3445,6 +3445,18 @@ Actual encoding parameters may vary with system performance.</translation>
 <context>
         <name>LosslessConclusionPanel</name>
         <message>
+            <source>证据评分</source>
+            <translation>Evidence score</translation>
+        </message>
+        <message>
+            <source>%1分</source>
+            <translation>%1 pts</translation>
+        </message>
+        <message>
+            <source>ⓘ 评分尚未校准，不代表正确率。结果为信号特征推断，不代表可恢复原始文件。</source>
+            <translation>ⓘ Scores are uncalibrated, not accuracy estimates. Signal-based inference cannot recover the original file.</translation>
+        </message>
+        <message>
             <source> 声道</source>
             <translation> channels</translation>
         </message>
@@ -3744,6 +3756,18 @@ Actual encoding parameters may vary with system performance.</translation>
     </context>
 <context>
         <name>LosslessTaskPanel</name>
+        <message>
+            <source>评分</source>
+            <translation>Score</translation>
+        </message>
+        <message>
+            <source>按证据评分排序</source>
+            <translation>Sort by evidence score</translation>
+        </message>
+        <message>
+            <source>%1分</source>
+            <translation>%1 pts</translation>
+        </message>
         <message>
             <source>删除选中</source>
             <translation>Remove selected</translation>
@@ -7196,6 +7220,46 @@ Clear: Remove all known aliases for this field.</translation>
 <context>
         <name>LosslessEvidence</name>
         <message>
+            <source>MP3长块编码（推测）</source>
+            <translation>MP3 long-block encoding (inferred)</translation>
+        </message>
+        <message>
+            <source>MP3混合变换结构</source>
+            <translation>MP3 hybrid transform structure</translation>
+        </message>
+        <message>
+            <source>检测到与MP3长块混合滤波器一致的帧结构；尚未验证短块、混合块及完整编码历史。</source>
+            <translation>Framing is consistent with the MP3 long-block hybrid filter bank; short blocks, mixed blocks and the complete encoding history have not been validated.</translation>
+        </message>
+        <message>
+            <source>%1 Hz PCM（推测）</source>
+            <translation>%1 Hz PCM (inferred)</translation>
+        </message>
+        <message>
+            <source>变换帧与多相残差共同支持有损后升频；候选采样率一致仍不能恢复完整制作历史。</source>
+            <translation>Transform framing and polyphase residuals jointly support lossy transcoding followed by upsampling; matching candidate rates cannot recover the complete production history.</translation>
+        </message>
+        <message>
+            <source>检测到稳定周期结构；重采样与周期调制均可形成，不能单独确定升频历史。</source>
+            <translation>Stable periodic structure detected; resampling and periodic modulation can both produce it, so it alone cannot establish upsampling history.</translation>
+        </message>
+        <message>
+            <source>重采样或周期调制</source>
+            <translation>Resampling or periodic modulation</translation>
+        </message>
+        <message>
+            <source>周期、镜像和带外抑制仍可由同一种调制处理形成，候选不构成来源判定。</source>
+            <translation>Periodicity, spectral images and out-of-band suppression can arise from the same modulation process; this candidate does not establish provenance.</translation>
+        </message>
+        <message>
+            <source>镜像相关不能区分重采样与周期调制</source>
+            <translation>Image correlation cannot distinguish resampling from periodic modulation</translation>
+        </message>
+        <message>
+            <source>频移副本也可能来自周期调制，不能单独确定升频历史。</source>
+            <translation>Frequency-shifted copies can also arise from periodic modulation and alone cannot establish upsampling history.</translation>
+        </message>
+        <message>
             <source>&gt; 0.72且需稳定截止共同支持</source>
             <translation>&gt; 0.72 with supporting stable cutoff evidence</translation>
         </message>
@@ -8712,4 +8776,11 @@ A pinned NVIDIA CUDA version is installed separately without changing the existi
             <translation>Drag out clip</translation>
         </message>
 </context>
+    <context>
+        <name>LosslessConfidenceRing</name>
+        <message>
+            <source>%1分</source>
+            <translation>%1 pts</translation>
+        </message>
+    </context>
 </TS>

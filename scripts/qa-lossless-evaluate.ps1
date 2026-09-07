@@ -521,13 +521,22 @@ $scanVersion = [ordered]@{
 }
 $professionalAcceptance = [ordered]@{
     status='ineligible'
+    projectPolicy=[ordered]@{
+        version='low-error-2026-09-06'
+        authority='User delegated project criteria with low error as priority; not an industry standard'
+        priority='low_false_positive'
+        falsePositiveRateTarget=0.01
+        highConfidenceWrongMaximum=0
+        confidenceIsCalibratedProbability=$false
+        abstention='Allowed when evidence is insufficient; report recall and abstention separately'
+        populationClaim='Requires representative independent validation and an uncertainty interval; synthetic variants do not establish a real-recording population rate'
+    }
     reasons=@(
-        'no_approved_professional_numeric_standard',
         'large_scale_independent_source_validation_missing',
         'native_dsd_and_pcm_to_dsd_validation_missing',
         'confidence_calibration_missing'
     )
-    note='The proposed engineering candidate gate cannot establish professional accuracy.'
+    note='Project criteria are delegated and defined; remaining validation is owned by development, not a request for user samples. Candidate metrics alone cannot establish professional accuracy.'
 }
 $sourceEqualPolicy = $truth.protocol.sourceEqualWeightDiagnostics
 $sourceEqualStatus = 'not_predeclared'
@@ -648,7 +657,7 @@ $confusion = @(
 $hidden = @($rowArray | Where-Object hidden)
 $report = [ordered]@{
     schemaVersion='2';scope=[string]$truth.description
-    limitations='Evaluation reports observed classification behavior only. Confidence is uncalibrated evidence strength; no numeric professional acceptance threshold is asserted.'
+    limitations='Evaluation reports observed classification behavior only. Confidence is uncalibrated evidence strength. The low-error project target is not an industry standard or a measured population guarantee.'
     protocolCompliant=$protocolCompliant
     protocolWarnings=@($protocolWarnings | Sort-Object -Unique)
     scanVersion=$scanVersion
