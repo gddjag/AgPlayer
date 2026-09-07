@@ -24,6 +24,9 @@ private slots:
     void materialControlsNormalizeNotifyAndPersist();
     void materialPresetsRestoreAfterInk();
     void defaultPresetDoesNotOverrideSongPaletteWithTimeCycling();
+    void freshInstallUsesAudioRangeEchoDefaults();
+    void invalidStoredVisualValuesUseAudioRangeEchoDefaults();
+    void storedColumnDensityOverridesTheFreshInstallDefault();
     void initTestCase();
     void defaultsAreIndependent();
     void persistsAndNormalizesValues();
@@ -117,8 +120,8 @@ void PlayerExperienceControllerTest::columnControlsNormalizeNotifyAndPersist()
 {
     struct Control { const char* name; int minimum; int maximum; int fallback; };
     const Control controls[] = {
-        {"columnDensity", 50, 200, 125},
-        {"columnSize", 50, 200, 50}, {"columnOpacity", 0, 100, 72},
+        {"columnDensity", 50, 200, 130},
+        {"columnSize", 50, 200, 95}, {"columnOpacity", 0, 100, 100},
         {"reactorBrightness", 0, 200, 100},
     };
     QSettings().clear();
@@ -139,8 +142,8 @@ void PlayerExperienceControllerTest::columnControlsNormalizeNotifyAndPersist()
         QVERIFY(property.write(&experience, 999));
         QCOMPARE(property.read(&experience).toInt(), control.maximum);
         QCOMPARE(changed.count(), lowChangeCount + 1);
-        QCOMPARE(experience.terrainAmplitude(), 42);
-        QCOMPARE(experience.subjectClarity(), 110);
+        QCOMPARE(experience.terrainAmplitude(), 62);
+        QCOMPARE(experience.subjectClarity(), 112);
         QCOMPARE(experience.rhythmStrength(), 30);
         PlayerExperienceController reloaded;
         QCOMPARE(reloaded.property(control.name).toInt(), control.maximum);
@@ -283,6 +286,93 @@ void PlayerExperienceControllerTest::defaultPresetDoesNotOverrideSongPaletteWith
     QCOMPARE(experience.colorMode(), 0);
 }
 
+void PlayerExperienceControllerTest::freshInstallUsesAudioRangeEchoDefaults()
+{
+    QSettings().clear();
+    PlayerExperienceController experience;
+
+    QCOMPARE(experience.columnDensity(), 130);
+    QCOMPARE(experience.columnSize(), 95);
+    QCOMPARE(experience.columnOpacity(), 100);
+    QCOMPARE(experience.reactorBrightness(), 100);
+    QCOMPARE(experience.materialMode(), 0);
+    QCOMPARE(experience.materialSoftness(), 45);
+    QCOMPARE(experience.jellyElasticity(), 35);
+    QCOMPARE(experience.inkDensity(), 60);
+    QCOMPARE(experience.rippleStrength(), 100);
+    QCOMPARE(experience.rippleWidth(), 100);
+    QCOMPARE(experience.rippleDecay(), 100);
+    QCOMPARE(experience.terrainAmplitude(), 62);
+    QCOMPARE(experience.motionResponse(), 56);
+    QCOMPARE(experience.gradientLayers(), 74);
+    QCOMPARE(experience.glowIntensity(), 38);
+    QCOMPARE(experience.cinemaShake(), 0.30);
+    QCOMPARE(experience.autoRotate(), 54);
+    QCOMPARE(experience.peakBoost(), 58);
+    QCOMPARE(experience.visualEqGains(),
+             QVariantList({90, 92, 50, 50, 50, 50, 50, 48}));
+    QCOMPARE(experience.inputCompression(), 82);
+    QCOMPARE(experience.audioResponse(), 136);
+    QCOMPARE(experience.responseRange(), 100);
+    QCOMPARE(experience.centerHighlight(), 64);
+    QCOMPARE(experience.rhythmStrength(), 30);
+    QCOMPARE(experience.depthOfField(), 86);
+    QCOMPARE(experience.subjectClarity(), 112);
+    QCOMPARE(experience.autoRotateSpeed(), 42);
+    QCOMPARE(experience.rhythmSensitivity(), 80);
+    QCOMPARE(experience.colorMode(), PlayerExperienceController::MultiRegion);
+    QCOMPARE(experience.coolColor(), QStringLiteral("#6553DD"));
+    QCOMPARE(experience.warmColor(), QStringLiteral("#F467A9"));
+    QCOMPARE(experience.accentColor(), QStringLiteral("#AD62ED"));
+    QCOMPARE(experience.peakColor(), QStringLiteral("#FFE2EE"));
+    QCOMPARE(experience.baseColor(), QStringLiteral("#030817"));
+    QVERIFY(experience.floatingCubesEnabled());
+    QVERIFY(experience.meteorsEnabled());
+    QVERIFY(experience.ripplesEnabled());
+    QVERIFY(experience.burstEnabled());
+    QVERIFY(experience.idleBreathingEnabled());
+    QVERIFY(experience.streamHighlightEnabled());
+    QVERIFY(!experience.themeCycleEnabled());
+    QVERIFY(!experience.songAdaptiveColorEnabled());
+}
+
+void PlayerExperienceControllerTest::invalidStoredVisualValuesUseAudioRangeEchoDefaults()
+{
+    QSettings settings;
+    settings.clear();
+    const QString group = QStringLiteral("immersiveVisual/");
+    const QString invalid = QStringLiteral("invalid");
+    for (const char* key : {"columnSize", "columnDensity", "columnOpacity",
+                            "terrainAmplitude", "motionResponse", "cinemaShake",
+                            "audioResponse", "centerHighlight", "subjectClarity",
+                            "rhythmSensitivity", "songAdaptiveColorEnabled"}) {
+        settings.setValue(group + QLatin1String(key), invalid);
+    }
+
+    PlayerExperienceController experience;
+    QCOMPARE(experience.columnSize(), 95);
+    QCOMPARE(experience.columnDensity(), 130);
+    QCOMPARE(experience.columnOpacity(), 100);
+    QCOMPARE(experience.terrainAmplitude(), 62);
+    QCOMPARE(experience.motionResponse(), 56);
+    QCOMPARE(experience.cinemaShake(), 0.30);
+    QCOMPARE(experience.audioResponse(), 136);
+    QCOMPARE(experience.centerHighlight(), 64);
+    QCOMPARE(experience.subjectClarity(), 112);
+    QCOMPARE(experience.rhythmSensitivity(), 80);
+    QVERIFY(!experience.songAdaptiveColorEnabled());
+}
+
+void PlayerExperienceControllerTest::storedColumnDensityOverridesTheFreshInstallDefault()
+{
+    QSettings settings;
+    settings.clear();
+    settings.setValue(QStringLiteral("immersiveVisual/columnDensity"), 87);
+
+    PlayerExperienceController experience;
+    QCOMPARE(experience.columnDensity(), 87);
+}
+
 void PlayerExperienceControllerTest::defaultsAreIndependent()
 {
     QSettings().clear();
@@ -293,7 +383,7 @@ void PlayerExperienceControllerTest::defaultsAreIndependent()
     QVERIFY(!experience.lyricsVisible());
     QVERIFY(experience.panelVisible());
     QVERIFY(!experience.desktopMousePassthrough());
-    QVERIFY(experience.songAdaptiveColorEnabled());
+    QVERIFY(!experience.songAdaptiveColorEnabled());
     QCOMPARE(experience.qualityPreset(), 0);
     QCOMPARE(experience.coolColor(), QStringLiteral("#6553DD"));
     QCOMPARE(experience.warmColor(), QStringLiteral("#F467A9"));
@@ -367,14 +457,14 @@ void PlayerExperienceControllerTest::defaultsExposeV46ExperienceControls()
     QCOMPARE(experience.lyricPositionX(), 50);
     QCOMPARE(experience.lyricPositionY(), 42);
     QCOMPARE(experience.inputCompression(), 82);
-    QCOMPARE(experience.audioResponse(), 128);
+    QCOMPARE(experience.audioResponse(), 136);
     QCOMPARE(experience.responseRange(), 100);
-    QCOMPARE(experience.centerHighlight(), 58);
+    QCOMPARE(experience.centerHighlight(), 64);
     QCOMPARE(experience.rhythmStrength(), 30);
     QCOMPARE(experience.depthOfField(), 86);
-    QCOMPARE(experience.subjectClarity(), 110);
+    QCOMPARE(experience.subjectClarity(), 112);
     QCOMPARE(experience.autoRotateSpeed(), 42);
-    QCOMPARE(experience.rhythmSensitivity(), 78);
+    QCOMPARE(experience.rhythmSensitivity(), 80);
     QCOMPARE(experience.coolColor(), QStringLiteral("#6553DD"));
     QCOMPARE(experience.warmColor(), QStringLiteral("#F467A9"));
     QCOMPARE(experience.accentColor(), QStringLiteral("#AD62ED"));
@@ -672,16 +762,16 @@ void PlayerExperienceControllerTest::strictlyParsesPersistedScalarTypes()
     settings.setValue(QStringLiteral("immersiveVisual/panelVisible"), 0);
 
     PlayerExperienceController malformed;
-    QCOMPARE(malformed.terrainAmplitude(), 42);
+    QCOMPARE(malformed.terrainAmplitude(), 62);
     QCOMPARE(malformed.qualityPreset(), 0);
-    QCOMPARE(malformed.cinemaShake(), 0.40);
+    QCOMPARE(malformed.cinemaShake(), 0.30);
     QVERIFY(malformed.panelVisible());
     QCOMPARE(settings.value(QStringLiteral("immersiveVisual/terrainAmplitude")),
-             QVariant(42));
+             QVariant(62));
     QCOMPARE(settings.value(QStringLiteral("immersiveVisual/qualityPreset")),
              QVariant(0));
-    QCOMPARE(settings.value(QStringLiteral("immersiveVisual/cinemaShake")),
-             QVariant(0.40));
+    QCOMPARE(settings.value(QStringLiteral("immersiveVisual/cinemaShake")).toDouble(),
+             0.30);
     QCOMPARE(settings.value(QStringLiteral("immersiveVisual/panelVisible")),
              QVariant(true));
 

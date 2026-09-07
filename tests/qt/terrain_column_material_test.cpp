@@ -25,6 +25,7 @@ struct StudyParameters {
     bool stream = false;
     float beat = 0;
     float audioLevel = 1;
+    float lowAudioLevel = 1;
     float exposure = 1;
     float opacity = 1;
     float softness = 0.45F;
@@ -166,8 +167,8 @@ void ColumnRenderer::render(QRhiCommandBuffer* cb)
         u.equalizerLow[i] = u.equalizerHigh[i] = 1;
         u.bandsHigh[i] = 0.9F * parameters_.audioLevel;
     }
-    u.bandsLow[0] = 0.40F * parameters_.audioLevel;
-    u.bandsLow[1] = 0.30F * parameters_.audioLevel;
+    u.bandsLow[0] = 0.40F * parameters_.audioLevel * parameters_.lowAudioLevel;
+    u.bandsLow[1] = 0.30F * parameters_.audioLevel * parameters_.lowAudioLevel;
     u.parameters[3] = parameters_.time;
     for (int i = 0; i < 5; ++i) {
         u.colors[i][0] = float(parameters_.tint.redF());
@@ -403,6 +404,8 @@ private slots:
     void sharedShadowChangesLightingWithoutMovingArraySilhouette();
     void globalOpacityDoesNotSwitchShadowAtFiftyFivePercent();
     void audioDrivesInnerLightWithoutWashingOutShell();
+    void innerLightHasOpticalDepthAcrossSmoothFace();
+    void jellyReboundStartsAtBeatOnset();
     void neutralGrayWithoutInnerLightRemainsNeutral();
     void roughnessAndViewChangeReflectionResponse();
     void everyColumnHasLocalCapFlash_data() {
@@ -416,6 +419,7 @@ private slots:
         QTest::newRow("inner-source") << 0;
         QTest::newRow("light-spill") << 1;
         QTest::newRow("light-radius") << 2;
+        QTest::newRow("high-only-inner-source") << 3;
     }
     void lightControlsReachNativeMaterial();
     void smoothInteriorRemainsStable_data() {
@@ -427,6 +431,58 @@ private slots:
     }
     void smoothInteriorRemainsStable();
 };
+
+void TerrainColumnMaterialTest::jellyReboundStartsAtBeatOnset()
+{
+    auto counters = std::make_shared<StudyCounters>();
+    QQuickWindow window;
+    window.resize(640, 640); window.setColor(QColor(160, 0, 160));
+    ColumnItem item(window.contentItem(), counters);
+    item.parameters.material = 0;
+    item.parameters.beat = 1;
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(counters->frames > 0 || counters->failed, 5000);
+    QVERIFY(!counters->failed);
+    const auto rigid = studyFrame(window);
+    const int before = counters->frames;
+    item.parameters.material = 1;
+    item.update();
+    QTRY_VERIFY_WITH_TIMEOUT(counters->frames > before, 3000);
+    const auto elastic = studyFrame(window);
+    const auto frames = compareFrames(rigid, elastic);
+    QVERIFY2(frames.secondBounds.top() < frames.firstBounds.top() - 4,
+             "Elastic columns must rise on beat onset, not wait for a sine phase");
+}
+
+void TerrainColumnMaterialTest::innerLightHasOpticalDepthAcrossSmoothFace()
+{
+    auto counters = std::make_shared<StudyCounters>();
+    QQuickWindow window;
+    window.resize(640, 640); window.setColor(QColor(3, 5, 9));
+    ColumnItem item(window.contentItem(), counters);
+    item.parameters.lighting = {1, 0, 1};
+    item.parameters.stream = false;
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(counters->frames > 0 || counters->failed, 5000);
+    QVERIFY(!counters->failed);
+    const auto frame = studyFrame(window);
+    const FrontFace face = locateFrontFace(frame);
+    QVERIFY(face.capContrast >= 3 && face.foot > face.cap + 100);
+    const int y = (face.cap + face.foot) / 2;
+    const double left = patchLight(meanPatch(frame, 235, 240, y - 3, y + 3));
+    const double center = patchLight(meanPatch(frame, 277, 282, y - 3, y + 3));
+    const double right = patchLight(meanPatch(frame, 319, 324, y - 3, y + 3));
+    const double opticalRelief = std::abs(center - (left + right) * 0.5);
+    qInfo() << "Optical face relief / samples:" << opticalRelief << left << center << right;
+    // Remove the linear projected height ramp: uniform face paint cannot
+    // create the nonlinear depth transition at a refracted box exit.
+    QVERIFY2(opticalRelief > 1.0,
+             "Smooth emitting shell must reveal optical thickness beyond a height ramp");
+    QVERIFY2(face.coreLight > 55.0,
+             "The powered interior must be legibly luminous, not only a dark tinted surface");
+}
 
 void TerrainColumnMaterialTest::unsupportedDepthMaterialFallsBack()
 {
@@ -782,14 +838,22 @@ void TerrainColumnMaterialTest::roughnessAndViewChangeReflectionResponse()
 void TerrainColumnMaterialTest::lightControlsReachNativeMaterial()
 {
     QFETCH(int, lane);
+    const bool highOnly = lane == 3;
+    if (highOnly) lane = 0;
     auto counters = std::make_shared<StudyCounters>();
     QQuickWindow window;
-    window.resize(640, 640); window.setColor(QColor(3, 5, 9));
+    window.resize(640, 640);
+    window.setColor(lane == 1 ? QColor(160, 0, 160) : QColor(3, 5, 9));
     ColumnItem item(window.contentItem(), counters);
+    if (lane == 1) {
+        item.parameters.array = true;
+        item.parameters.camera = {34, 30, 48};
+    }
     item.parameters.lighting[lane] = lane == 2 ? 0.2F : 0;
     // Spill is powered by music, not an always-on point light. Compare both
     // control endpoints at the same fixed beat, with identical geometry.
-    item.parameters.beat = 0.5F;
+    item.parameters.beat = highOnly ? 0.0F : 0.5F;
+    item.parameters.lowAudioLevel = highOnly ? 0.0F : 1.0F;
     window.show();
     QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
     QTRY_VERIFY_WITH_TIMEOUT(counters->frames > 0 || counters->failed, 5000);
@@ -802,6 +866,33 @@ void TerrainColumnMaterialTest::lightControlsReachNativeMaterial()
     QTRY_VERIFY_WITH_TIMEOUT(counters->frames > before, 3000);
     const QImage high = studyFrame(window);
     QVERIFY(!low.isNull() && low.size() == high.size());
+    if (lane == 1) {
+        const FrameComparison receivers = compareFrames(low, high);
+        qInfo() << "Spill receiver visible/common/mismatch/changed/RGB/light delta:"
+                << receivers.firstVisible << receivers.commonVisible
+                << receivers.silhouetteMismatch << receivers.changedCommon
+                << receivers.totalRgbDifference << receivers.firstMinusSecondLight;
+        QVERIFY2(receivers.commonVisible > 80000,
+                 "Spill must be tested on a real neighbouring receiver array, not one source column");
+        QVERIFY2(nearlySameBounds(receivers.firstBounds, receivers.secondBounds),
+                 "Spill may light receiver surfaces without moving their silhouette");
+        QVERIFY2(receivers.silhouetteMismatch < receivers.commonVisible / 100,
+                 "Spill must not appear by changing receiver geometry coverage");
+        QVERIFY2(receivers.changedCommon > receivers.commonVisible / 100,
+                 "Neighbouring receiver pixels must visibly respond to column spill");
+        QVERIFY2(receivers.changedCommon < receivers.commonVisible * 3 / 4,
+                 "Column spill must remain local instead of washing the whole receiver array");
+        QVERIFY2(receivers.totalRgbDifference > quint64(receivers.commonVisible),
+                 "The local spill response must exceed native readback quantization noise");
+        QVERIFY2(receivers.firstMinusSecondLight < 0,
+                 "Increasing spill must brighten, never darken, neighbouring receivers overall");
+        const QString directory = qEnvironmentVariable("AGPLAYER_COLUMN_STUDY_DIR");
+        if (!directory.isEmpty()) {
+            QVERIFY(QDir().mkpath(directory));
+            QVERIFY(low.save(QDir(directory).filePath("column-array-light-spill-off.png")));
+            QVERIFY(high.save(QDir(directory).filePath("column-array-light-spill-on.png")));
+        }
+    }
     quint64 difference = 0;
     for (int y = 200; y < 500; ++y)
         for (int x = 230; x < 395; ++x)
@@ -878,9 +969,16 @@ void TerrainColumnMaterialTest::smoothInteriorRemainsStable()
                     }
                     QVERIFY2(patchLight(face.upper) > patchLight(face.lower) + 4,
                              "The light core must remain brighter above its absorbing foot");
-                    if (materialMode == 1)
-                        QVERIFY2(face.horizontalContrast < 12,
-                                 "A flat box face must not read as a cylindrical radial light core");
+                    if (materialMode == 1) {
+                        const int y = (face.cap + face.foot) / 2;
+                        double previous = -1;
+                        for (int x = 235; x <= 315; x += 10) {
+                            const double current = patchLight(meanPatch(frame, x, x + 5, y - 3, y + 3));
+                            QVERIFY2(current + 2 >= previous,
+                                     "Flat box optical depth must not create a central radial peak");
+                            previous = current;
+                        }
+                    }
                 }
                 // Remove the temporal DC component: uniform brightening is
                 // not evidence that a texture moved inside the column.
@@ -1007,22 +1105,20 @@ void TerrainColumnMaterialTest::everyColumnHasLocalCapFlash()
                     + std::abs(c.blue() - background.blue()) > 10) { first = y; break; }
         }
         if (first < 0) continue;
-        int boundary = first;
-        double bestDrop = -1e9;
-        for (int y = first + 8; y < first + (face.foot - first) / 5; ++y) {
-            const double drop = patchLight(meanPatch(reference, x - 1, x + 2, y - 5, y - 2))
-                              - patchLight(meanPatch(reference, x - 1, x + 2, y + 2, y + 5));
-            if (drop > bestDrop) { bestDrop = drop; boundary = y; }
-        }
-        if (bestDrop < 3 || boundary - first < 12 || boundary - first > 70) continue;
-        for (int y = first + 5; y < boundary - 5; ++y)
+        // With a clear shell, brightness gradients locate the internal source,
+        // not a geometric top/side boundary. This inspected 4-unit box at the
+        // fixed study camera has >20px cap depth throughout this x interval.
+        // Sample a strip across its width, inset from the silhouette edges.
+        for (int y = first + 8; y < first + 18; ++y)
             capPixels.append(QPoint(x, y));
     }
     QVERIFY2(capPixels.size() > 400, "The cap mask must contain a real interior patch, not background");
     const int sideHeight = face.foot - face.cap;
     const QRect side(265, face.cap + sideHeight / 4, 40, sideHeight * 2 / 5);
     double topRms[2]{}, sideRms[2]{};
-    double bestLocalCoverage = 1;
+      double bestLocalCoverage = 0;
+      QVector<bool> flashed(capPixels.size(), false);
+    double topMeanChange = 0;
     const QString directory = qEnvironmentVariable("AGPLAYER_COLUMN_STUDY_DIR");
     if (!directory.isEmpty()) QVERIFY(QDir().mkpath(directory));
     for (int stream = 0; stream < 2; ++stream) {
@@ -1038,18 +1134,24 @@ void TerrainColumnMaterialTest::everyColumnHasLocalCapFlash()
             if (first.isNull()) first = frame;
             double sum = 0, squares = 0;
             int changed = 0, nearWhite = 0, colored = 0;
-            for (const QPoint p : capPixels) {
+              int pixelIndex = 0;
+              for (const QPoint p : capPixels) {
                 const QColor c = frame.pixelColor(p);
                 const double delta = qGray(c.rgb()) - qGray(first.pixel(p));
                 sum += delta; squares += delta * delta;
-                if (std::abs(delta) > 3) ++changed;
+                  if (std::abs(delta) > 3) ++changed;
+                  if (stream == 1 && std::abs(delta) > 3) flashed[pixelIndex] = true;
+                  ++pixelIndex;
                 if (c.red() >= 235 && c.green() >= 235 && c.blue() >= 235) ++nearWhite;
                 if (std::max({c.red(), c.green(), c.blue()}) - std::min({c.red(), c.green(), c.blue()}) > 12) ++colored;
             }
             const double count = capPixels.size();
             const double residual = std::sqrt(std::max(0.0, squares / count - std::pow(sum / count, 2)));
             topRms[stream] = std::max(topRms[stream], residual);
-            if (residual > 1) bestLocalCoverage = std::min(bestLocalCoverage, changed / count);
+            if (stream == 1) {
+                bestLocalCoverage = std::max(bestLocalCoverage, changed / count);
+                topMeanChange = std::max(topMeanChange, std::abs(sum / count));
+            }
             QVERIFY2(nearWhite / count < 0.03, "A top flash must not whiten the cap");
             QVERIFY2(colored / count > 0.75, "Most of the cap must preserve its material color");
             sum = 0; squares = 0;
@@ -1069,10 +1171,16 @@ void TerrainColumnMaterialTest::everyColumnHasLocalCapFlash()
     qInfo() << "Random/cap pixels/top RMS off-on/side RMS off-on/local coverage:"
             << randomValue << capPixels.size() << topRms[0] << topRms[1]
             << sideRms[0] << sideRms[1] << bestLocalCoverage;
-    QVERIFY2(topRms[0] < 0.25, "The cap must be stable with stream disabled");
-    QVERIFY2(topRms[1] > 1, "Every column, including low-random cells, needs a local top flash");
-    QVERIFY2(bestLocalCoverage > 0.01 && bestLocalCoverage < 0.80,
-             "The flash must occupy a local cap region, not wash the entire top");
+      QVERIFY2(topRms[0] < 0.25, "The cap must be stable with stream disabled");
+      QVERIFY2(topRms[1] > 5.0,
+               "The cap needs independently twinkling microfacets, not a uniform sheet flash");
+    QVERIFY2(topMeanChange > 3, "Every column needs a visible face-wide top flash");
+      const double temporalCoverage = double(std::count(flashed.begin(), flashed.end(), true))
+                                    / flashed.size();
+      QVERIFY2(temporalCoverage > 0.80,
+               "Twinkles must visit the whole cap over time, not a narrow glowing line");
+      QVERIFY2(bestLocalCoverage < 0.95,
+               "Microfacets must not flash as one uniformly illuminated sheet");
     QVERIFY2(sideRms[0] < 0.25 && sideRms[1] < 0.25,
              "Top flashes must not create texture inside the smooth column");
 }

@@ -981,8 +981,8 @@ TestCase {
 
     function test_readable_preset_page_keeps_quality_control_visible() {
         var panel = windowedPresetPanel()
-        compare(panel.expandedHeight, 700,
-               "preset expandedHeight=" + panel.expandedHeight)
+        verify(panel.expandedHeight < 550,
+               "preset page must fit its content: " + panel.expandedHeight)
         var panelScroll = findChild(panel, "immersivePanelScroll")
         var qualityCombo = findChild(panel, "immersiveQualityCombo")
         verify(panelScroll && qualityCombo)
@@ -993,6 +993,8 @@ TestCase {
                "quality bounds=" + qualityBounds.top + ".."
                + qualityBounds.bottom
                + " viewportHeight=" + panelScroll.height)
+        verify(panelScroll.height - qualityBounds.bottom <= Theme.spacingLg,
+               "preset page must not retain a large empty lower half")
     }
 
     function test_compact_preset_card_click_applies_selected_preset() {
@@ -1004,6 +1006,49 @@ TestCase {
         mouseClick(amberCinema, amberCinema.width / 2,
                    amberCinema.height / 2, Qt.LeftButton)
         tryCompare(PlayerExperienceController, "terrainAmplitude", 56)
+        compare(amberCinema.checkable, false)
+        var host = amberCinema.Window.window
+        verify(host)
+        compare(host.objectName, "immersiveVisualWindow")
+        host.requestActivate()
+        tryCompare(host, "active", true)
+        // The click above already focused the command with MouseFocusReason.
+        // An actual focus transition is required to exercise keyboard styling.
+        var precedingCard = findChild(panel, "immersivePresetCard7")
+        verify(precedingCard)
+        precedingCard.forceActiveFocus(Qt.TabFocusReason)
+        tryCompare(precedingCard, "activeFocus", true)
+        tryCompare(amberCinema, "activeFocus", false)
+        amberCinema.forceActiveFocus(Qt.TabFocusReason)
+        function focusDiagnostic() {
+            return "host.active=" + host.active
+                    + " activeFocus=" + amberCinema.activeFocus
+                    + " focusReason=" + amberCinema.focusReason
+                    + " activeFocusItem="
+                    + (host.activeFocusItem ? host.activeFocusItem.objectName : "null")
+        }
+        tryVerify(function() { return amberCinema.activeFocus }, 1000,
+                  focusDiagnostic())
+        compare(amberCinema.focusReason, Qt.TabFocusReason, focusDiagnostic())
+        tryCompare(amberCinema, "visualFocus", true)
+        compare(amberCinema.background.border.width, 2)
+    }
+
+    function test_compact_panel_keeps_dynamic_eq_reachable_by_scrolling() {
+        var panel = windowedPresetPanel()
+        panel.currentTab = 2
+        compare(panel.expandedHeight, 760)
+        var scroll = findChild(panel, "immersivePanelScroll")
+        var lastEq = findChild(panel, "visualEqSlider_7")
+        verify(scroll && lastEq)
+        tryVerify(function() { return scroll.contentHeight > scroll.height }, 1000)
+        var targetY = lastEq.mapToItem(scroll.contentItem, 0, 0).y
+        scroll.contentItem.contentY = Math.min(targetY,
+                                              scroll.contentHeight - scroll.height)
+        wait(0)
+        var bounds = mappedBounds(lastEq, scroll)
+        verify(bounds.top >= -0.5 && bounds.bottom <= scroll.height + 0.5,
+               "last visual EQ band remains reachable in the dynamic tab")
     }
 
     function test_v46_panel_exposes_nine_presets_lyrics_and_real_dynamics() {
@@ -1018,7 +1063,11 @@ TestCase {
                 : null
         verify(panel)
         compare(panel.currentTab, 0)
-        verify(panel.height > 590)
+        tryVerify(function() {
+            return panel.expandedHeight < 550
+                    && Math.abs(panel.height - Math.min(panel.expandedHeight,
+                                                       panel.parent.height - 108)) < 0.5
+        }, 1000)
         verify(panel.height <= panel.parent.height - 108)
         var presetCards = []
         for (var preset = 0; preset < 9; ++preset) {
@@ -1543,7 +1592,7 @@ TestCase {
                 wait(0)
                 var tab = findChild(panel, "immersivePresetTab")
                 verify(tab && tab.checked)
-                compare(tab.contentItem.color.toString(), Theme.accentText.toString())
+                compare(tab.contentItem.color.toString(), Theme.textPrimary.toString())
                 compare(tab.font.family, Theme.fontPrimary)
                 var title = findChild(panel, "immersivePresetTitle0")
                 compare(title.font.family, Theme.fontPrimary)
@@ -1553,6 +1602,32 @@ TestCase {
             }
         } finally {
             SettingsController.themeMode = previousTheme
+        }
+    }
+
+    function test_visual_eq_sliders_change_only_the_selected_frequency_band() {
+        var saved = PlayerExperienceController.visualEqGains.slice()
+        var panel = createTemporaryObject(immersiveControlPanelComponent,
+                                          mainWindow.contentItem, { currentTab: 2 })
+        verify(panel)
+        try {
+            for (var band = 0; band < 8; ++band) {
+                var gains = [40, 41, 42, 43, 44, 45, 46, 47]
+                PlayerExperienceController.visualEqGains = gains
+                var slider = findChild(panel, "visualEqSlider_" + band)
+                verify(slider, "Missing visual EQ control for band " + band)
+                compare(slider.from, 0)
+                compare(slider.to, 100)
+                compare(slider.value, gains[band])
+                slider.value = 73
+                slider.moved()
+                for (var i = 0; i < 8; ++i)
+                    compare(PlayerExperienceController.visualEqGains[i],
+                            i === band ? 73 : gains[i])
+                compare(findChild(panel, "visualEqValue_" + band).text, "73%")
+            }
+        } finally {
+            PlayerExperienceController.visualEqGains = saved
         }
     }
 
@@ -1626,12 +1701,10 @@ TestCase {
     }
 
     function test_dynamics_controls_are_grouped_by_meaning_and_remain_wired() {
-        var panel = immersiveControlPanelComponent.createObject(
-                    mainWindow.contentItem)
+        var panel = windowedPresetPanel()
         verify(panel)
         compare(panel.width, 320)
-        compare(panel.expandedHeight, panel.currentTab === 0 ? 700
-                                                           : panel.currentTab === 1 ? 700 : 760)
+        tryVerify(function() { return panel.expandedHeight < 550 }, 1000)
         var terrainGroup = findChild(panel, "dynamicsTerrainGroup")
         var lightGroup = findChild(panel, "dynamicsLightGroup")
         var motionGroup = findChild(panel, "dynamicsMotionGroup")
@@ -1750,7 +1823,6 @@ TestCase {
         impactToggle.checked = impactToggleValue
         impactToggle.toggled()
         compare(PlayerExperienceController.burstEnabled, impactToggleValue)
-        panel.destroy()
     }
 
     function test_lyrics_switch_drives_service_and_below_list_panel() {

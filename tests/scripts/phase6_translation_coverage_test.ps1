@@ -156,7 +156,7 @@ $lupdateProject = if ($env:AGPLAYER_LUPDATE_PROJECT) {
 if (-not $lupdateProject) {
     $probe = [IO.Path]::GetFullPath((Get-Location).Path)
     while ($probe) {
-        $candidate = Join-Path $probe '.lupdate\AgPlayer_lupdate_project.json'
+        $candidate = Join-Path $probe '.lupdate\AgPlayer_lupdate_project.cmake'
         if (Test-Path -LiteralPath $candidate) {
             $lupdateProject = $candidate
             break
@@ -167,7 +167,7 @@ if (-not $lupdateProject) {
     }
 }
 if (-not $lupdateProject) {
-    $candidate = Join-Path $SourceRoot 'build\release\.lupdate\AgPlayer_lupdate_project.json'
+    $candidate = Join-Path $SourceRoot 'build\release\.lupdate\AgPlayer_lupdate_project.cmake'
     if (Test-Path -LiteralPath $candidate) { $lupdateProject = $candidate }
 }
 if (-not $lupdateProject -or -not (Test-Path -LiteralPath $lupdateProject)) {
@@ -188,6 +188,17 @@ $extractionDirectory = Join-Path ([IO.Path]::GetTempPath()) (
 $sourceCatalogPath = Join-Path $extractionDirectory 'current-source.ts'
 New-Item -ItemType Directory -Path $extractionDirectory -Force | Out-Null
 try {
+    if ([IO.Path]::GetExtension($lupdateProject) -eq '.cmake') {
+        # The normal build generates the CMake input, not the JSON. Generate
+        # only the disposable project here; never run the catalog-update target.
+        $temporaryProject = Join-Path $extractionDirectory 'project.json'
+        $generator = Join-Path $qtRoot 'lib\cmake\Qt6LinguistTools\GenerateLUpdateProject.cmake'
+        & cmake "-DIN_FILE=$lupdateProject" "-DOUT_FILE=$temporaryProject" -P $generator
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $temporaryProject)) {
+            throw 'Unable to generate the temporary AgPlayer lupdate project.'
+        }
+        $lupdateProject = $temporaryProject
+    }
     & $lupdate -project $lupdateProject -no-obsolete -locations none -silent `
         -ts $sourceCatalogPath
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $sourceCatalogPath)) {

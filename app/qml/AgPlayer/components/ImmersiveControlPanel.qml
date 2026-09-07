@@ -13,9 +13,9 @@ Rectangle {
     property real featureSpectralFlux: 0
     property bool featureKick: false
     property real featureKickEnvelope: 0
-    // Keep the panel narrow, but give every tab enough vertical room that its
-    // lower controls are not hidden behind a short initial viewport.
-    readonly property real expandedHeight: currentTab === 0 ? 700
+    // Presets fit their content; the longer tabs retain a bounded scroll area.
+    readonly property real expandedHeight: currentTab === 0
+                                                ? tabs.y + tabs.height + presetPage.implicitHeight + Theme.spacingMd
                                                 : currentTab === 1 ? 700 : 760
     signal pointerActivity()
 
@@ -24,7 +24,8 @@ Rectangle {
                                       parent ? parent.height - 108
                                              : expandedHeight)
     radius: Theme.radiusLg
-    color: Theme.glassSurfaceElevated
+    color: Qt.rgba(Theme.contentSurface.r, Theme.contentSurface.g,
+                   Theme.contentSurface.b, Theme.isLight ? 0.97 : 0.90)
     border.width: 1
     border.color: Theme.glassBorder
     clip: true
@@ -121,7 +122,9 @@ Rectangle {
 
     function setEqGain(index, value) {
         var gains = PlayerExperienceController.visualEqGains.slice()
-        gains[index] = Math.round(value)
+        // The persisted gain normalizer accepts integers/canonical integer
+        // strings, not the Double QVariant produced by JavaScript Math.round.
+        gains[index] = String(Math.round(value))
         PlayerExperienceController.visualEqGains = gains
     }
 
@@ -250,10 +253,10 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: divider.bottom
-        anchors.leftMargin: 10
-        anchors.rightMargin: 10
+        anchors.leftMargin: Theme.spacingMd
+        anchors.rightMargin: Theme.spacingMd
         height: 48
-        spacing: 4
+        spacing: Theme.spacingXs
         Repeater {
             model: [qsTr("预设"), qsTr("歌词"), qsTr("动态")]
             Button {
@@ -271,12 +274,24 @@ Rectangle {
                 onClicked: root.currentTab = index
                 background: Rectangle {
                     radius: Theme.radiusSm
-                    color: parent.checked ? Theme.selectionGlassFill
-                                          : "transparent"
+                    color: parent.down ? Theme.accentSoft
+                         : parent.checked ? Theme.subtleGlassActive
+                         : parent.hovered ? Theme.subtleGlassHover : "transparent"
+                    border.width: parent.visualFocus ? 2 : 0
+                    border.color: Theme.focus
+                    Rectangle {
+                        anchors.bottom: parent.bottom
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: parent.width - Theme.spacingMd * 2
+                        height: 2
+                        radius: 1
+                        visible: parent.parent.checked
+                        color: Theme.accent
+                    }
                 }
                 contentItem: Text {
                     text: parent.text
-                    color: parent.checked ? Theme.accentText
+                    color: parent.checked ? Theme.textPrimary
                                           : Theme.textSecondary
                     font: parent.font
                     horizontalAlignment: Text.AlignHCenter
@@ -294,9 +309,9 @@ Rectangle {
         anchors.right: parent.right
         anchors.top: tabs.bottom
         anchors.bottom: parent.bottom
-        anchors.leftMargin: 14
-        anchors.rightMargin: 14
-        anchors.bottomMargin: 12
+        anchors.leftMargin: Theme.spacingMd
+        anchors.rightMargin: Theme.spacingMd
+        anchors.bottomMargin: Theme.spacingMd
         clip: true
         contentWidth: availableWidth
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
@@ -342,13 +357,15 @@ Rectangle {
                             Layout.preferredHeight: contentItem.implicitHeight + topPadding + bottomPadding
                             padding: Theme.spacingSm
                             flat: true
-                            ToolTip.visible: hovered
+                            ToolTip.visible: hovered || visualFocus
                             ToolTip.text: modelData.title + " · " + modelData.sub
                             onClicked: PlayerExperienceController.applyPreset(index)
                             background: Rectangle {
                                 radius: Theme.radiusSm
-                                border.width: 1
-                                border.color: parent.hovered ? Theme.borderStrong
+                                border.width: parent.down || parent.visualFocus ? 2 : 1
+                                border.color: parent.visualFocus ? Theme.focus
+                                             : parent.down ? Theme.onBrandGradientText
+                                             : parent.hovered ? Theme.borderStrong
                                                              : Theme.glassBorder
                                 gradient: Gradient {
                                     orientation: Gradient.Horizontal
@@ -620,6 +637,50 @@ Rectangle {
                     }
                 }
                 Text { text: qsTr("视觉 EQ · 8 音域"); color: Theme.textSecondary; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption }
+                Text {
+                    Layout.fillWidth: true
+                    text: qsTr("仅调视觉响应，不改变音效；频带估计不等于人声分离或乐器识别")
+                    wrapMode: Text.WordWrap
+                    color: Theme.textTertiary
+                    font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption
+                }
+                Repeater {
+                    model: [qsTr("低频 · 整体起伏"), qsTr("低频 · 鼓点区域"),
+                            qsTr("中低频"), qsTr("中频 · 人声频段"),
+                            qsTr("中高频 · 细节"), qsTr("高频 · 顶面"),
+                            qsTr("高频 · 亮片"), qsTr("极高频 · 空气感")]
+                    ColumnLayout {
+                        required property int index
+                        required property string modelData
+                        property int bandIndex: index
+                        Layout.fillWidth: true
+                        spacing: Theme.spacingXs
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Text {
+                                Layout.fillWidth: true
+                                text: modelData
+                                color: Theme.textSecondary
+                                font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption
+                            }
+                            Text {
+                                objectName: "visualEqValue_" + bandIndex
+                                text: Math.round(Number(PlayerExperienceController.visualEqGains[bandIndex])) + "%"
+                                color: Theme.textPrimary
+                                font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption
+                            }
+                        }
+                        ThemedSlider {
+                            objectName: "visualEqSlider_" + bandIndex
+                            Layout.fillWidth: true
+                            implicitHeight: 20
+                            from: 0; to: 100; stepSize: 1
+                            value: Number(PlayerExperienceController.visualEqGains[bandIndex])
+                            Accessible.name: modelData
+                            onMoved: root.setEqGain(bandIndex, value)
+                        }
+                    }
+                }
                 RowLayout {
                     Layout.fillWidth: true
                     Text {

@@ -406,6 +406,17 @@ final result: passed
 
 ---
 
+# Design QA — 沉浸视觉内光与细闪片 — 2026-09-08
+
+- 使用 ui-ux-pro-max 的桌面层级、对比和焦点原则；预设面板按内容收紧，复用 Theme，未新增重模糊或新UI依赖。
+- 实际渲染：`build/qa/ux-final-visual.png`；参考视频抽帧：`build/qa/ux-reference-video-contact.png`。薄壳改善厚暗顶盖；近景细闪片有独立时序，侧面保持光滑。
+- 尚有差距：整场柱体仍偏实体，参考的内透光与波纹层次未完全达到；不能用材质测试通过替代审美验收。
+- 30分钟合成场景稳定运行、正常退出。Release整轮171/176通过、5超时，超时目标随后独立通过；不是无超时全量通过。完整日志与跨平台未验证边界见 `docs/development/2026-09-07-reactor-pbr-plan.md`。
+
+final result: needs work — 非发布验收通过
+
+---
+
 # Design QA — 原生标签胶囊 — 2026-09-03
 
 ## 对照来源

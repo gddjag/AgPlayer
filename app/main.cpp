@@ -26,6 +26,9 @@
 #include <QSystemTrayIcon>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QElapsedTimer>
+#include <QPointer>
+#include <QSet>
 #include <QWindow>
 #include <QtPlugin>
 
@@ -48,6 +51,7 @@
 #include "audio_tools_controller.hpp"
 #include "audio_file_discovery.hpp"
 #include "audio_visual_feature_controller.hpp"
+#include "terrain_reactor_item.hpp"
 #include "audio_editor/audio_editor_controller.hpp"
 #include "audio_editor/playback_clip_drag_adapter.hpp"
 #include "audio_preview_controller.hpp"
@@ -159,7 +163,14 @@ QString windowStringProperty(IPropertyStore* properties,
 void applyWindowsShellIdentity(QWindow* window, const QIcon& icon,
                                const NativeWindowIcons& nativeIcons)
 {
-    if (window == nullptr) {
+    // WinIdChange also arrives when a native window is destroyed. winId()
+    // would create a new platform window in that state, including during
+    // QQuickWindow teardown; shell metadata must only decorate a live HWND.
+    if (window == nullptr || window->handle() == nullptr) {
+        return;
+    }
+    const auto* quickWindow = qobject_cast<QQuickWindow*>(window);
+    if (quickWindow && !quickWindow->contentItem()) {
         return;
     }
     window->setIcon(icon);
@@ -309,6 +320,37 @@ int main(int argc, char* argv[])
     WindowsShellIdentityFilter shellIdentityFilter(
         applicationIcon, loadNativeWindowIcons(), &app);
     app.installEventFilter(&shellIdentityFilter);
+    if (qEnvironmentVariableIntValue("AGPLAYER_QA_SHELL_PROBE") == 1) {
+        // Exercise the production filter with a real, already-destroyed HWND.
+        // Deliver the late notification explicitly so this regression does not
+        // depend on monitor layout or platform teardown notification timing.
+        QWindow probeWindow;
+        probeWindow.create();
+        const HWND originalHwnd = probeWindow.handle()
+            ? reinterpret_cast<HWND>(probeWindow.winId()) : nullptr;
+        const bool nativeCreated = originalHwnd && IsWindow(originalHwnd);
+        app.removeEventFilter(&shellIdentityFilter);
+        probeWindow.destroy();
+        const bool nativeDestroyed = !probeWindow.handle()
+            && originalHwnd && !IsWindow(originalHwnd);
+        app.installEventFilter(&shellIdentityFilter);
+        QEvent lateWinIdChange(QEvent::WinIdChange);
+        QCoreApplication::sendEvent(&probeWindow, &lateWinIdChange);
+        const bool stayedDestroyed = !probeWindow.handle();
+        // Clean up even on RED without allowing another shell notification to
+        // interfere with the assertion or the test's own object destruction.
+        app.removeEventFilter(&shellIdentityFilter);
+        probeWindow.destroy();
+        app.installEventFilter(&shellIdentityFilter);
+        const bool passed = nativeCreated && nativeDestroyed && stayedDestroyed;
+        std::fprintf(stderr,
+            "AgPlayer shell teardown probe: %s created=%d destroyed=%d stayedDestroyed=%d\n",
+            passed ? "passed" : "failed", int(nativeCreated),
+            int(nativeDestroyed), int(stayedDestroyed));
+        std::fflush(stderr);
+        if (!passed)
+            return 7;
+    }
 #endif
 
     // Development-only QA arguments. Parsed before ag_player_create so the
@@ -327,6 +369,7 @@ int main(int argc, char* argv[])
     //   --qa-tag <name>              seed a tag in --qa-test-mode only
     //   --qa-selected-tag <name>     select a seeded tag in --qa-test-mode only
     //   --qa-immersive-preset <0..8> select a preset in QA mode
+    //   --qa-immersive-stability    log renderer counters (requires QA test mode)
     //   --qa-lyric-placement <0..2>  enable and position QA lyrics
     //   --qa-capture-delay-ms <ms>  QA capture delay, 2500..60000
     bool qaTestMode = false;
@@ -343,6 +386,7 @@ int main(int argc, char* argv[])
     int qaLyricPlacement = -1;
     int qaCaptureDelayMs = 2500;
     bool qaIntegratedShellLifecycleProbe = false;
+    bool qaImmersiveStability = false;
     QString qaScreenshotMini;
     QString qaScreenshotTools;
     int qaTool = 0;
@@ -422,6 +466,8 @@ int main(int argc, char* argv[])
                 if (ok) qaCaptureDelayMs = std::clamp(value, 2500, 60000);
             } else if (arg == QStringLiteral("--qa-integrated-shell-lifecycle-probe")) {
                 qaIntegratedShellLifecycleProbe = true;
+            } else if (arg == QStringLiteral("--qa-immersive-stability")) {
+                qaImmersiveStability = true;
             } else if (arg == QStringLiteral("--qa-screenshot-mini")
                        && i + 1 < cliArgs.size()) {
                 qaScreenshotMini = cliArgs.at(++i);
@@ -1223,7 +1269,8 @@ int main(int argc, char* argv[])
                 settings.clearTempFiles();
             }
         };
-        shutdownActions.releaseCore = [&playback, &core]() {
+        shutdownActions.releaseCore = [&audioEditor, &playback, &core]() {
+            audioEditor.setPlaybackController(nullptr);
             playback.setPlayer(nullptr);
             if (core != nullptr) {
                 ag_player_destroy(core);
@@ -1283,6 +1330,49 @@ int main(int argc, char* argv[])
                              &VideoPlaybackController::visibleChanged,
                              &app, enterQaVideoFullscreen);
             QTimer::singleShot(0, &app, enterQaVideoFullscreen);
+
+            if (qaTestMode && qaImmersiveStability) {
+                const QPointer<QObject> qaRoot(mainWindow);
+                auto elapsed = std::make_shared<QElapsedTimer>();
+                elapsed->start();
+                const auto sampleRenderer = [qaRoot, elapsed](const QString& phase) {
+                    QSet<TerrainReactorItem*> items;
+                    const auto collectItems = [&items](QObject* root) {
+                        if (!root) return;
+                        for (auto* item : root->findChildren<TerrainReactorItem*>())
+                            items.insert(item);
+                    };
+                    collectItems(qaRoot.data());
+                    for (QWindow* window : QGuiApplication::allWindows()) collectItems(window);
+                    TerrainReactorItem* terrain = nullptr;
+                    for (auto* item : items) {
+                        if (!terrain || item->active()) terrain = item;
+                    }
+                    const auto counter = [terrain](const char* name) -> qulonglong {
+                        return terrain ? terrain->property(name).toULongLong() : 0;
+                    };
+                    // Only numeric health counters: no track names, paths or audio data.
+                    qInfo().noquote() << QStringLiteral(
+                        "QA immersive stability: phase=%1 elapsedMs=%2 present=%3 active=%4 exposed=%5 frames=%6 itemLive=%7 resources=%8 items=%9")
+                        .arg(phase).arg(elapsed->elapsed()).arg(terrain ? 1 : 0)
+                        .arg(counter("active")).arg(counter("hostExposed"))
+                        .arg(counter("frameCount")).arg(counter("liveRendererCount"))
+                        .arg(counter("resourceGeneration")).arg(items.size());
+                };
+                auto* sampler = new QTimer(&app);
+                sampler->setTimerType(Qt::PreciseTimer);
+                QObject::connect(sampler, &QTimer::timeout, &app, [sampler, sampleRenderer] {
+                    sampleRenderer(QStringLiteral("sample"));
+                    sampler->setInterval(60000);
+                });
+                QObject::connect(&app, &QCoreApplication::aboutToQuit, &app, [sampler, sampleRenderer] {
+                    sampler->stop();
+                    // aboutToQuit precedes scene-graph teardown: this is not
+                    // evidence that GPU resources have already been released.
+                    sampleRenderer(QStringLiteral("pre-exit"));
+                });
+                sampler->start(3000);
+            }
 
             if (qaExitAfterMs > 0) {
                 QTimer::singleShot(

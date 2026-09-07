@@ -4,6 +4,7 @@
 #include "format_converter.hpp"
 #include "import_controller.hpp"
 #include "library_model.hpp"
+#include "lyrics_service.hpp"
 #include "resource_folder_controller.hpp"
 #include "library_navigation_model.hpp"
 #include "metadata_editor.hpp"
@@ -38,7 +39,9 @@
 #include <QQmlEngine>
 #include <QStandardPaths>
 #include <QSettings>
+#include <QSet>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <QUrl>
 #include <QUuid>
 #include <QtPlugin>
@@ -59,6 +62,24 @@
 #endif
 
 Q_IMPORT_PLUGIN(AgPlayerPlugin)
+
+// UI contracts exercise the real service without depending on public servers.
+class NoMatchLyricsProvider final : public LyricsProvider {
+public:
+    void requestExact(quint64 id, const Track&) override { enqueue(id); }
+    void requestSearch(quint64 id, const Track&) override { enqueue(id); }
+    void cancel(quint64 id) override { pending_.remove(id); }
+
+private:
+    void enqueue(quint64 id)
+    {
+        pending_.insert(id);
+        QTimer::singleShot(0, this, [this, id] {
+            if (pending_.remove(id)) complete(id, Result::notFound());
+        });
+    }
+    QSet<quint64> pending_;
+};
 
 class NativeDropHelper final : public QObject {
     Q_OBJECT
@@ -482,6 +503,9 @@ public slots:
         filenameProcessor_->setLibraryModel(library_.get());
         formatConverter_ = std::make_unique<FormatConverter>();
         settings_ = std::make_unique<SettingsController>();
+        lyricsProvider_ = std::make_unique<NoMatchLyricsProvider>();
+        lyrics_ = std::make_unique<LyricsService>(
+            library_.get(), playback_.get(), settings_.get(), lyricsProvider_.get());
         waveformProvider_ = std::make_unique<WaveformProvider>(settings_.get());
         thumbnailProvider_ = std::make_unique<TrackWaveformThumbnailProvider>(
             settings_->cacheDirectory());
@@ -512,7 +536,8 @@ public slots:
                                         resourceFolders_.get(),
                                         thumbnailProvider_.get(),
                                         nullptr,
-                                        videoPlayback_.get()});
+                                        videoPlayback_.get()},
+                                    nullptr, nullptr, lyrics_.get());
     }
 
     void qmlEngineAvailable(QQmlEngine* engine)
@@ -592,6 +617,8 @@ private:
     std::unique_ptr<FilenameProcessor> filenameProcessor_;
     std::unique_ptr<FormatConverter> formatConverter_;
     std::unique_ptr<SettingsController> settings_;
+    std::unique_ptr<NoMatchLyricsProvider> lyricsProvider_;
+    std::unique_ptr<LyricsService> lyrics_;
     std::unique_ptr<WaveformProvider> waveformProvider_;
     std::unique_ptr<TrackWaveformThumbnailProvider> thumbnailProvider_;
     std::unique_ptr<ResourceFolderController> resourceFolders_;

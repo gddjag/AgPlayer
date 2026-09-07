@@ -2976,6 +2976,15 @@
     </context>
 <context>
         <name>ImmersiveControlPanel</name>
+        <message><source>仅调视觉响应，不改变音效；频带估计不等于人声分离或乐器识别</source><translation>仅调视觉响应，不改变音效；频带估计不等于人声分离或乐器识别</translation></message>
+        <message><source>低频 · 整体起伏</source><translation>低频 · 整体起伏</translation></message>
+        <message><source>低频 · 鼓点区域</source><translation>低频 · 鼓点区域</translation></message>
+        <message><source>中低频</source><translation>中低频</translation></message>
+        <message><source>中频 · 人声频段</source><translation>中频 · 人声频段</translation></message>
+        <message><source>中高频 · 细节</source><translation>中高频 · 细节</translation></message>
+        <message><source>高频 · 顶面</source><translation>高频 · 顶面</translation></message>
+        <message><source>高频 · 亮片</source><translation>高频 · 亮片</translation></message>
+        <message><source>极高频 · 空气感</source><translation>极高频 · 空气感</translation></message>
         <message><source>彩虹内光 · 多点涟漪</source><translation>彩虹内光 · 多点涟漪</translation></message>
         <message><source>柱内光芯</source><translation>柱内光芯</translation></message>
         <message><source>照亮周围</source><translation>照亮周围</translation></message>
