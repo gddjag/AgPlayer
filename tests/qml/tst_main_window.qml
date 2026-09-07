@@ -2079,6 +2079,246 @@ TestCase {
         mainWindow.requestActivate()
     }
 
+    function test_new_playlist_expands_collapsed_library_navigation() {
+        var filterModel = findChild(mainWindow, "filterModel")
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1400,
+            "height": 620
+        })
+        verify(window && filterModel)
+        var navigation = findChild(window, "referenceSideNavigation")
+        verify(navigation)
+        var createdId = ""
+        try {
+            verify(LibraryNavigationModel.setExpanded("library:all", false))
+            var libraryIndex = -1
+            for (var row = 0; row < LibraryNavigationModel.rowCount(); ++row) {
+                var index = LibraryNavigationModel.index(row, 0)
+                if (LibraryNavigationModel.data(
+                            index, LibraryNavigationModel.NodeIdRole)
+                        === "library:all") {
+                    libraryIndex = row
+                    break
+                }
+            }
+            verify(libraryIndex >= 0)
+            compare(LibraryNavigationModel.data(
+                        LibraryNavigationModel.index(libraryIndex, 0),
+                        LibraryNavigationModel.ExpandedRole), false)
+
+            var dialog = findChild(window, "createPlaylistDialog")
+            var field = findChild(dialog, "createPlaylistField")
+            verify(dialog && field)
+            dialog.open()
+            field.text = "Visible after create " + Date.now()
+            dialog.accept()
+            createdId = filterModel.category
+            verify(createdId && createdId !== "all")
+
+            tryVerify(function() {
+                return findChild(navigation,
+                                 "playlistCategory-" + createdId) !== null
+            }, 500, "creating a playlist must reveal its selected navigation row")
+            libraryIndex = -1
+            for (row = 0; row < LibraryNavigationModel.rowCount(); ++row) {
+                index = LibraryNavigationModel.index(row, 0)
+                if (LibraryNavigationModel.data(
+                            index, LibraryNavigationModel.NodeIdRole)
+                        === "library:all") {
+                    libraryIndex = row
+                    break
+                }
+            }
+            verify(libraryIndex >= 0)
+            compare(LibraryNavigationModel.data(
+                        LibraryNavigationModel.index(libraryIndex, 0),
+                        LibraryNavigationModel.ExpandedRole), true)
+        } finally {
+            if (createdId)
+                PlaylistModel.removePlaylist(createdId)
+            LibraryNavigationModel.setExpanded("library:all", true)
+            filterModel.category = "all"
+            window.destroy()
+            wait(0)
+            mainWindow.requestActivate()
+        }
+    }
+
+    function test_resource_row_click_survives_navigation_model_reset() {
+        var filterModel = findChild(mainWindow, "filterModel")
+        var folderUrl = nativeDropHelper.createDropDirectory()
+        var folderPath = ResourceFolderController.classifyDropUrl(folderUrl).path
+        verify(folderPath)
+        verify(ResourceFolderController.addMonitoredFolder(folderPath))
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1400,
+            "height": 620
+        })
+        verify(window && filterModel)
+        window.requestActivate()
+        tryVerify(function() { return window.active }, 1000)
+        var navigation = findChild(window, "referenceSideNavigation")
+        verify(navigation)
+        var secondFolderPath = ""
+        var firstFolderRegistered = true
+        try {
+            LibraryNavigationModel.setExpanded("library:all", false)
+            filterModel.category = "all"
+            filterModel.resourceFolder = ""
+
+            var resourceNode = null
+            for (var row = 0; row < LibraryNavigationModel.rowCount(); ++row) {
+                var index = LibraryNavigationModel.index(row, 0)
+                var candidatePath = String(LibraryNavigationModel.data(
+                    index, LibraryNavigationModel.ResourceFolderRole))
+                if (candidatePath.replace(/\\/g, "/").toLowerCase()
+                        === folderPath.replace(/\\/g, "/").toLowerCase()) {
+                    resourceNode = findChild(navigation, "navigationNode-"
+                        + LibraryNavigationModel.data(
+                            index, LibraryNavigationModel.NodeIdRole))
+                    break
+                }
+            }
+            verify(resourceNode)
+            var point = resourceNode.mapToItem(
+                        navigation, resourceNode.width * 0.75,
+                        resourceNode.height / 2)
+            mousePress(navigation, point.x, point.y, Qt.LeftButton)
+
+            // Adding a later root rebuilds the navigation model while keeping
+            // this first resource row at the same visual position.  A row
+            // handler owned by the recycled delegate loses this click.
+            var secondFolderUrl = nativeDropHelper.createDropDirectory()
+            secondFolderPath = ResourceFolderController.classifyDropUrl(
+                        secondFolderUrl).path
+            verify(secondFolderPath)
+            verify(ResourceFolderController.addMonitoredFolder(secondFolderPath))
+            wait(0)
+            mouseRelease(navigation, point.x, point.y, Qt.LeftButton)
+
+            tryCompare(filterModel, "resourceFolder", folderPath, 500,
+                       "a model refresh between press/release must not swallow the resource click")
+            compare(navigation.activeNodeType, "resourceRoot")
+
+            filterModel.resourceFolder = ""
+            resourceNode = null
+            for (row = 0; row < LibraryNavigationModel.rowCount(); ++row) {
+                index = LibraryNavigationModel.index(row, 0)
+                candidatePath = String(LibraryNavigationModel.data(
+                    index, LibraryNavigationModel.ResourceFolderRole))
+                if (candidatePath.replace(/\\/g, "/").toLowerCase()
+                        === folderPath.replace(/\\/g, "/").toLowerCase()) {
+                    resourceNode = findChild(navigation, "navigationNode-"
+                        + LibraryNavigationModel.data(
+                            index, LibraryNavigationModel.NodeIdRole))
+                    break
+                }
+            }
+            verify(resourceNode)
+            point = resourceNode.mapToItem(
+                        navigation, resourceNode.width * 0.75,
+                        resourceNode.height / 2)
+            mousePress(navigation, point.x, point.y, Qt.LeftButton)
+            verify(ResourceFolderController.removeMonitoredFolder(folderPath))
+            firstFolderRegistered = false
+            wait(0)
+            mouseRelease(navigation, point.x, point.y, Qt.LeftButton)
+            compare(filterModel.resourceFolder, "",
+                    "removing the pressed row must not select a different row that moves under the release point")
+        } finally {
+            if (secondFolderPath)
+                ResourceFolderController.removeMonitoredFolder(secondFolderPath)
+            if (firstFolderRegistered)
+                ResourceFolderController.removeMonitoredFolder(folderPath)
+            LibraryNavigationModel.setExpanded("library:all", true)
+            filterModel.category = "all"
+            filterModel.resourceFolder = ""
+            window.destroy()
+            wait(0)
+            mainWindow.requestActivate()
+        }
+    }
+
+    function test_resource_expand_arrow_does_not_change_filter_selection() {
+        var filterModel = findChild(mainWindow, "filterModel")
+        var rootUrl = nativeDropHelper.createNestedDropDirectory()
+        var rootPath = ResourceFolderController.classifyDropUrl(rootUrl).path
+        verify(rootPath)
+        verify(ResourceFolderController.addMonitoredFolder(rootPath))
+        ResourceFolderController.rescan()
+        var childPath = rootPath + "/child"
+        tryVerify(function() {
+            return !ResourceFolderController.scanning
+                    && ResourceFolderController.resourceDirectories.some(
+                        function(path) {
+                            return path.replace(/\\/g, "/").toLowerCase()
+                                    === childPath.toLowerCase()
+                        })
+        }, 3000)
+
+        var window = listWindowComponent.createObject(null, {
+            "filterModel": filterModel,
+            "width": 1400,
+            "height": 620
+        })
+        verify(window && filterModel)
+        var navigation = findChild(window, "referenceSideNavigation")
+        verify(navigation)
+        try {
+            LibraryNavigationModel.setExpanded("library:all", false)
+            wait(0)
+            window.enterCategory("favorites", "favorites")
+            compare(filterModel.category, "favorites")
+            compare(filterModel.resourceFolder, "")
+
+            var resourceNode = null
+            var resourceIndex = -1
+            for (var row = 0; row < LibraryNavigationModel.rowCount(); ++row) {
+                var index = LibraryNavigationModel.index(row, 0)
+                var candidatePath = String(LibraryNavigationModel.data(
+                    index, LibraryNavigationModel.ResourceFolderRole))
+                if (candidatePath.replace(/\\/g, "/").toLowerCase()
+                        === rootPath.replace(/\\/g, "/").toLowerCase()) {
+                    resourceIndex = row
+                    resourceNode = findChild(navigation, "navigationNode-"
+                        + LibraryNavigationModel.data(
+                            index, LibraryNavigationModel.NodeIdRole))
+                    break
+                }
+            }
+            verify(resourceIndex >= 0 && resourceNode)
+            var modelIndex = LibraryNavigationModel.index(resourceIndex, 0)
+            compare(LibraryNavigationModel.data(
+                        modelIndex, LibraryNavigationModel.HasChildrenRole), true)
+            compare(LibraryNavigationModel.data(
+                        modelIndex, LibraryNavigationModel.ExpandedRole), false)
+            var expandButton = findChild(resourceNode, "navigationExpandButton")
+            verify(expandButton && expandButton.visible)
+
+            mouseClick(expandButton, expandButton.width / 2,
+                       expandButton.height / 2, Qt.LeftButton)
+            tryVerify(function() {
+                var current = LibraryNavigationModel.index(resourceIndex, 0)
+                return LibraryNavigationModel.data(
+                            current, LibraryNavigationModel.ExpandedRole) === true
+            }, 500)
+            compare(filterModel.category, "favorites")
+            compare(filterModel.resourceFolder, "",
+                    "the tree arrow must not also select the resource root")
+            compare(navigation.activeNodeType, "favorites")
+        } finally {
+            window.destroy()
+            ResourceFolderController.removeMonitoredFolder(rootPath)
+            LibraryNavigationModel.setExpanded("library:all", true)
+            filterModel.category = "all"
+            filterModel.resourceFolder = ""
+            wait(0)
+            mainWindow.requestActivate()
+        }
+    }
+
     function test_z_delete_key_uses_current_view_semantics() {
         var previousEnabled = SettingsController.listWaveformThumbnailEnabled
         SettingsController.listWaveformThumbnailEnabled = false
@@ -2457,6 +2697,9 @@ TestCase {
         verify(slider)
         verify(percent)
         compare(percent.horizontalAlignment, Text.AlignLeft)
+        compare(slider.rightPadding, 0)
+        compare(slider.leftPadding, 0)
+        compare(percent.anchors.leftMargin, percent.width > 0 ? 4 : 0)
         compare(mute.icon.color.toString(), Theme.iconPrimary.toString())
         compare(mute.icon.width, 20)
         verify(slider.handle.width <= 10)
@@ -3388,9 +3631,8 @@ TestCase {
         panel.selectTag(keys[0])
         tryVerify(function() { return firstPill.selectedVisual }, 500)
         mouseMove(window.contentItem, window.width - 2, window.height - 2)
-        tryCompare(firstPill, "color", Qt.rgba(0, 0, 0, 0), 1000)
-        verify(firstPill.border.width > 1.4,
-               "selected tags stay hollow and use a stronger outline")
+        tryCompare(firstPill, "color", firstPill.baseAccent, 1000)
+        compare(firstPill.border.color, firstPill.baseAccent)
 
         var pointer = findChild(firstPill, "tagPillPointerArea-" + keys[0])
         verify(pointer)
@@ -3470,6 +3712,10 @@ TestCase {
                    focusPointer.height / 2)
         tryVerify(function() { return focusPointer.activeFocus }, 500,
                   "clicking a tag pill must give it focus")
+        verify(focusPill.selectedVisual)
+        compare(focusPill.color, focusPill.baseAccent)
+        verify(!findChild(focusPill, "tagCapsuleFocus-" + keys[1]).visible,
+               "selected tags must not show a white inner focus outline")
         var selectedAfterClick = TagModel.selectedKey
         keyClick(Qt.Key_Space)
         compare(TagModel.selectedKey, selectedAfterClick,

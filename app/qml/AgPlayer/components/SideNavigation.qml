@@ -83,6 +83,47 @@ Item {
         return listBottom
     }
 
+    function revealNode(nodeId) {
+        for (var row = 0; row < navigationList.count; ++row) {
+            var modelIndex = navigationModel.index(row, 0)
+            if (navigationModel.data(
+                        modelIndex, LibraryNavigationModel.NodeIdRole)
+                    === nodeId) {
+                navigationList.positionViewAtIndex(row, ListView.Contain)
+                return true
+            }
+        }
+        return false
+    }
+
+    function resourceNodeAt(x, y) {
+        var contentPoint = navigationList.contentItem.mapFromItem(
+                    navigationList, x, y)
+        var row = navigationList.indexAt(contentPoint.x, contentPoint.y)
+        if (row < 0)
+            return null
+        var modelIndex = navigationModel.index(row, 0)
+        var nodeType = navigationModel.data(
+                    modelIndex, LibraryNavigationModel.NodeTypeRole)
+        if (nodeType !== "resourceRoot" && nodeType !== "resourceFolder")
+            return null
+        var depth = navigationModel.data(
+                    modelIndex, LibraryNavigationModel.DepthRole)
+        var hasChildren = navigationModel.data(
+                    modelIndex, LibraryNavigationModel.HasChildrenRole)
+        var expandLeft = 6 + depth * 12
+        if (hasChildren && contentPoint.x >= expandLeft
+                && contentPoint.x < expandLeft + navigationActionExtent)
+            return null
+        return {
+            "nodeType": nodeType,
+            "nodeId": navigationModel.data(
+                modelIndex, LibraryNavigationModel.NodeIdRole),
+            "resourceFolder": navigationModel.data(
+                modelIndex, LibraryNavigationModel.ResourceFolderRole)
+        }
+    }
+
     function confirmResourceFolderRemoval(folder) {
         if (!folder || folder.length === 0)
             return
@@ -303,6 +344,31 @@ Item {
         model: root.navigationModel
         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
+        // Resource topology updates reset the model.  Keep resource selection
+        // on the stable view so a reset between press and release cannot
+        // destroy the handler that owns the gesture.
+        TapHandler {
+            property var pressedResourceNode: null
+            acceptedButtons: Qt.LeftButton
+            onPressedChanged: {
+                if (pressed)
+                    pressedResourceNode = root.resourceNodeAt(
+                                point.position.x, point.position.y)
+            }
+            onTapped: function(eventPoint) {
+                var releasedNode = root.resourceNodeAt(
+                            eventPoint.position.x, eventPoint.position.y)
+                var pressedNode = pressedResourceNode
+                pressedResourceNode = null
+                if (!pressedNode || !releasedNode
+                        || pressedNode.nodeId !== releasedNode.nodeId)
+                    return
+                root.activateNode(pressedNode.nodeType, pressedNode.nodeId,
+                                  pressedNode.resourceFolder)
+            }
+            onCanceled: pressedResourceNode = null
+        }
+
         delegate: Rectangle {
             id: nodeRow
             required property int index
@@ -493,6 +559,8 @@ Item {
             TapHandler {
                 acceptedButtons: Qt.LeftButton
                 enabled: nodeRow.nodeType !== "resourceSection"
+                         && nodeRow.nodeType !== "resourceRoot"
+                         && nodeRow.nodeType !== "resourceFolder"
                 onTapped: root.activateNode(nodeRow.nodeType, nodeRow.nodeId,
                                             nodeRow.resourceFolder)
             }

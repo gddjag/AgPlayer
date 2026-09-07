@@ -60,8 +60,8 @@ Assert-Matches $theme 'readonly property int tagCapsuleRadius:\s*11\b' `
 Assert-Matches $tagPanel '(?s)TagFilterModel\s*\{.*sourceModel:\s*root\.tagModel.*query:\s*root\.searchText' `
     'Tag panel must retain the quantity-descending stable-name proxy sorting'
 
-Assert-Matches $mini '(?s)objectName:\s*"miniMetadataRow".*Layout\.preferredHeight:\s*26.*objectName:\s*"miniArtist".*wrapMode:\s*Text\.NoWrap.*objectName:\s*"miniAlbum".*wrapMode:\s*Text\.NoWrap.*objectName:\s*"miniTagSeparator".*visible:\s*miniTags\.visible.*objectName:\s*"miniRating".*objectName:\s*"miniFavoriteButton".*Layout\.preferredWidth:\s*16.*Layout\.preferredHeight:\s*16' `
-    'Mini metadata must be one non-wrapping artist/album/tag/rating/favorite row'
+Assert-Matches $mini '(?s)objectName:\s*"miniTrackTitle".*objectName:\s*"miniFavoriteButton".*width:\s*16.*height:\s*16.*anchors\.left:\s*miniTrackTitle\.right.*objectName:\s*"miniMetadataRow".*Layout\.preferredHeight:\s*26.*objectName:\s*"miniArtist".*wrapMode:\s*Text\.NoWrap.*objectName:\s*"miniAlbum".*wrapMode:\s*Text\.NoWrap.*objectName:\s*"miniTagSeparator".*visible:\s*miniTags\.visible.*objectName:\s*"miniRating"' `
+    'Mini favorite follows the title; metadata remains one non-wrapping artist/album/tag/rating row'
 
 Assert-Matches $libraryIcon 'viewBox="-125 -125 250 250"' `
     'The library entry must use the supplied blob icon geometry'

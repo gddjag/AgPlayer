@@ -176,7 +176,7 @@ public:
     Q_INVOKABLE bool selectDevice(DeviceMode mode);
     Q_INVOKABLE bool selectOutputFormat(const QString& format);
     Q_INVOKABLE bool selectOutputDirectory(const QUrl& directory);
-    Q_INVOKABLE bool probeDevices();
+    Q_INVOKABLE bool probeDevices(bool force = false);
     Q_INVOKABLE bool start();
     Q_INVOKABLE void reportStartDisabledReason();
     Q_INVOKABLE void cancel();
@@ -294,6 +294,9 @@ private:
     bool modelInstalled(const VocalModelCard& model) const;
     bool modelFilesPresent(const VocalModelCard& model) const;
     bool deviceAvailable(DeviceMode mode) const;
+    bool canConfigureModel(const QString& modelId) const;
+    bool downloadConflictsWithModel(const QString& modelId) const;
+    QString probeFingerprint(const QString& modelId) const;
     bool beginVerification(VerificationPurpose purpose,
                            const VocalModelCard* model = nullptr);
     void finishVerification(quint64 generation,
@@ -363,6 +366,9 @@ private:
     QString actualProvider_, actualDevice_, fallbackReason_;
     double outputGain_ = 1.0;
     QHash<QString, QString> validatedGpuProviders_;
+    QHash<QString, QJsonObject> deviceProbeCache_;
+    QHash<QString, QString> deviceProbeFingerprints_;
+    QString activeProbeFingerprint_;
     QFileSystemWatcher modelDirectoryWatcher_;
     QTimer modelDirectoryScanTimer_;
     QFutureWatcher<VerificationResult>* verificationWatcher_ = nullptr;
@@ -406,6 +412,7 @@ private:
     bool modelDirectoryRescanPending_ = false;
     bool verifyAllModelsOnNextScan_ = false;
     bool deviceProbePending_ = false;
+    bool pendingStartVerification_ = false;
     bool deviceChosenByUser_ = false;
     DeviceMode deviceMode_ = DeviceMode::Auto;
     JobState jobState_ = JobState::Idle;

@@ -418,6 +418,11 @@ VocalSeparationController::VocalSeparationController(
             this, &VocalSeparationController::handleResult);
     connect(&process_, &SeparationProcessClient::requestAvailabilityChanged,
             this, &VocalSeparationController::startEligibilityChanged);
+    connect(&process_, &SeparationProcessClient::requestAvailabilityChanged,
+            this, [this] {
+        if (deviceProbePending_ && !requestInFlight() && process_.canAcceptRequest())
+            QTimer::singleShot(0, this, [this] { if (deviceProbePending_) probeDevices(); });
+    });
     connect(&process_, &SeparationProcessClient::failed, this,
             [this](const QString& message, bool) {
         if (activeRequest_.has_value()) failedRequest_ = activeRequest_;
@@ -577,7 +582,7 @@ bool VocalSeparationController::canStart() const
 
 QString VocalSeparationController::startDisabledReason() const
 {
-    if (downloadBusy()) return tr("请先完成或取消当前模型/运行时配置");
+    if (downloadConflictsWithModel(selectedModelId_)) return tr("请先完成或取消当前模型/运行时配置");
     if (requestInFlight()) return tr("当前任务尚未结束");
     if (!process_.canAcceptRequest()) return tr("当前任务尚未结束");
     if (!safeExistingFile(inputInfo_.value(QStringLiteral("path")).toString()))
@@ -713,7 +718,7 @@ bool VocalSeparationController::downloadModelFromMirror(const QString& modelId)
 bool VocalSeparationController::configureGpuRuntime(const QString& modelId)
 {
     const auto* model = modelForId(modelId);
-    if (!model || modelId == QStringLiteral("python-vr-5hp") || requestInFlight() || downloadBusy()) return false;
+    if (!model || modelId == QStringLiteral("python-vr-5hp") || !canConfigureModel(modelId)) return false;
     if (cudaRuntime_->checking()) { setError(tr("正在异步校验 CUDA 组件和 NVIDIA 驱动，请稍候")); return false; }
     if (!cudaRuntime_->nvidiaAvailable()) {
         setError(tr("未检测到可用 NVIDIA 驱动；CUDA 环境仅适用于 NVIDIA 显卡，不会补齐未知模型适配器")); return false;
@@ -728,6 +733,9 @@ bool VocalSeparationController::configureGpuRuntime(const QString& modelId)
 
 bool VocalSeparationController::configureRuntime(const QString& modelIdForUi)
 {
+    if (verificationPurpose_ == VerificationPurpose::Download
+        && downloadingModelId_ == modelIdForUi) return true;
+    if (!canConfigureModel(modelIdForUi)) return false;
     if (verificationWatcher_ != nullptr) {
         if (verificationPurpose_ == VerificationPurpose::Download
             && downloadingModelId_ == modelIdForUi) {
@@ -743,11 +751,15 @@ bool VocalSeparationController::configureRuntime(const QString& modelIdForUi)
             verificationCancellation_->store(true, std::memory_order_release);
         verificationPurpose_ = VerificationPurpose::None;
         verifyingModelId_.clear();
-        activeRequest_.reset();
-        failedRequest_.reset();
-        deviceProbePending_ = false;
-        if (jobState_ == JobState::Probing || jobState_ == JobState::Running)
-            setJobState(JobState::Idle, {});
+        // A background hash check may overlap a separation worker. Taking
+        // over that check must not discard the worker's immutable context.
+        if (!activeRequest_ || activeRequest_->kind == RequestKind::Probe) {
+            activeRequest_.reset();
+            failedRequest_.reset();
+            deviceProbePending_ = false;
+            if (jobState_ == JobState::Probing)
+                setJobState(JobState::Idle, {});
+        }
         setError({});
         refreshModels();
         if (modelIdForUi == QStringLiteral("python-vr-5hp")) {
@@ -763,7 +775,6 @@ bool VocalSeparationController::configureRuntime(const QString& modelIdForUi)
         }
         return true;
     }
-    if (requestInFlight()) return false;
     if (modelIdForUi == QStringLiteral("python-vr-5hp")) {
         if (downloadBusy()) return false;
         downloadingModelId_ = modelIdForUi;
@@ -854,7 +865,7 @@ bool VocalSeparationController::beginModelDownload(
     const QString& modelId, const bool preferDomesticMirror)
 {
     const VocalModelCard* model = modelForId(modelId);
-    if (model == nullptr || !downloadQueue_.isEmpty()
+    if (model == nullptr || !canConfigureModel(modelId) || !downloadQueue_.isEmpty()
         || verificationWatcher_ != nullptr || runtimeInstallerWatcher_ != nullptr
         || downloader_->state() == VocalDownloadState::Downloading
         || downloader_->state() == VocalDownloadState::Paused
@@ -1015,7 +1026,8 @@ bool VocalSeparationController::deleteModel(const QString& modelId)
 
 bool VocalSeparationController::selectModel(const QString& modelId)
 {
-    if (modelForId(modelId) == nullptr || requestInFlight()) return false;
+    if (modelForId(modelId) == nullptr || jobState_ == JobState::Running
+        || jobState_ == JobState::Cancelling) return false;
     if (selectedModelId_ == modelId) return true;
     if (resultPreviewMode_ != ResultPreviewMode::None
         || (preview_ != nullptr && preview_->mixActive())) {
@@ -1028,7 +1040,10 @@ bool VocalSeparationController::selectModel(const QString& modelId)
     invalidateRetry();
     emit selectedModelIdChanged();
     rebuildStems();
-    QTimer::singleShot(0, this, [this] { if (!requestInFlight() && runtimeReady()) probeDevices(); });
+    deviceProbePending_ = true;
+    QTimer::singleShot(0, this, [this, modelId] {
+        if (deviceProbePending_ && selectedModelId_ == modelId && runtimeReady()) probeDevices();
+    });
     return true;
 }
 
@@ -1086,8 +1101,16 @@ bool VocalSeparationController::selectOutputDirectory(const QUrl& directory)
     return true;
 }
 
-bool VocalSeparationController::probeDevices()
+bool VocalSeparationController::probeDevices(bool force)
 {
+    // A queued page/hardware callback must not enqueue a probe behind an
+    // active separation, including its verification phase.
+    if (jobState_ == JobState::Running || jobState_ == JobState::Cancelling)
+        return false;
+    if (force) {
+        deviceProbeCache_.remove(selectedModelId_);
+        deviceProbeFingerprints_.remove(selectedModelId_);
+    }
     if (!cudaRuntime_->nvidiaAvailable() && !cudaRuntime_->ready()) cudaRuntime_->refreshHardware();
     if (verificationWatcher_ != nullptr || modelDirectoryIndexWatcher_ != nullptr) {
         deviceProbePending_ = true;
@@ -1097,6 +1120,14 @@ bool VocalSeparationController::probeDevices()
         || verificationWatcher_ != nullptr) return false;
     deviceProbePending_ = false;
     activeRequest_ = ActiveRequestContext{RequestKind::Probe};
+    activeRequest_->modelId = selectedModelId_;
+    const QString fingerprint = probeFingerprint(selectedModelId_);
+    if (deviceProbeCache_.contains(selectedModelId_)
+        && deviceProbeFingerprints_.value(selectedModelId_) == fingerprint) {
+        activeProbeFingerprint_ = fingerprint;
+        handleProbe(deviceProbeCache_.value(selectedModelId_));
+        return true;
+    }
     setError({});
     setJobState(JobState::Probing, QStringLiteral("runtime_verification"));
     if (beginVerification(VerificationPurpose::Probe, selectedModel()))
@@ -1108,7 +1139,14 @@ bool VocalSeparationController::probeDevices()
 
 bool VocalSeparationController::start()
 {
+    if (downloadConflictsWithModel(selectedModelId_)) {
+        reportStartDisabledReason();
+        return false;
+    }
     if (requestInFlight() || !process_.canAcceptRequest()) return false;
+    // Starting the selected model supersedes its queued background probe.
+    // Do not let that probe replace the completed separation's UI state.
+    deviceProbePending_ = false;
     const VocalModelCard* model = selectedModel();
     const QString inputPath = inputInfo_.value(QStringLiteral("path")).toString();
     const QStringList stemNames = selectedStemNames();
@@ -1192,6 +1230,12 @@ bool VocalSeparationController::beginSeparationRequest(
         failRequest(context, tr("Python VR 环境缺失，请使用模型卡片的一键配置"), "runtime_verification");
         return false;
     }
+    if (verificationWatcher_ != nullptr) {
+        // Hashing is bounded and shared; keep the start request alive while
+        // an unrelated background check finishes, without stopping downloads.
+        pendingStartVerification_ = true;
+        return true;
+    }
     if (beginVerification(VerificationPurpose::Start,
                           modelForId(context.modelId))) return true;
     failRequest(context, tr("无法开始模型校验"),
@@ -1221,6 +1265,13 @@ void VocalSeparationController::invalidateRetry()
 void VocalSeparationController::cancel()
 {
     if (jobState_ != JobState::Running && jobState_ != JobState::Probing) return;
+    if (pendingStartVerification_) {
+        pendingStartVerification_ = false;
+        activeRequest_.reset();
+        failedRequest_.reset();
+        setJobState(JobState::Cancelled, QStringLiteral("cancelled"));
+        return;
+    }
     if (verificationWatcher_ != nullptr
         && (verificationPurpose_ == VerificationPurpose::Start
             || verificationPurpose_ == VerificationPurpose::Probe)) {
@@ -1573,6 +1624,46 @@ bool VocalSeparationController::deviceAvailable(DeviceMode mode) const
     return false;
 }
 
+bool VocalSeparationController::downloadConflictsWithModel(const QString& modelId) const
+{
+    // Separate models can be downloaded while a worker reads an installed model.
+    // Never write the selected model or its shared native runtime underneath it.
+    return downloadBusy() && (downloadingModelId_ == modelId
+        || (modelId != QStringLiteral("python-vr-5hp")
+            && (runtimeOnlyDownload_ || runtimeInstallerWatcher_ != nullptr
+                || std::any_of(downloadQueue_.cbegin(), downloadQueue_.cend(),
+                    [](const DownloadItem& item) { return item.runtimeArchive; }))));
+}
+
+bool VocalSeparationController::canConfigureModel(const QString& modelId) const
+{
+    if (downloadBusy() || runtimeInstallerWatcher_ != nullptr
+        || !downloadQueue_.isEmpty()) return false;
+    if (jobState_ == JobState::Cancelling) return false;
+    if (jobState_ != JobState::Running) return true;
+    if (!activeRequest_ || activeRequest_->kind != RequestKind::Separation
+        || activeRequest_->modelId == modelId
+        || pendingStartVerification_
+        || verificationPurpose_ == VerificationPurpose::Start) return false;
+    return modelId == QStringLiteral("python-vr-5hp")
+        || activeRequest_->modelId == QStringLiteral("python-vr-5hp")
+        || runtimeReady();
+}
+
+QString VocalSeparationController::probeFingerprint(const QString& modelId) const
+{
+    const auto* model = modelForId(modelId);
+    const QString runtimePath = cudaRuntime_->ready()
+        ? cudaRuntime_->libraryPath() : options_.runtimeLibraryPath;
+    return runtimeVerificationFingerprint(runtimePath,
+        VocalSeparationCatalog::directMlRuntime().sha256,
+        options_.verifyRuntimeIntegrity)
+        + QLatin1Char('|') + cudaRuntime_->hardwareName()
+        + QLatin1Char('|') + cudaRuntime_->driverVersion()
+        + QLatin1Char('|') + (model ? modelVerificationFingerprint(
+            *model, modelStorageDirectory_, indexedModelFiles_) : QString());
+}
+
 bool VocalSeparationController::beginVerification(
     VerificationPurpose purpose, const VocalModelCard* model)
 {
@@ -1744,6 +1835,20 @@ void VocalSeparationController::finishVerification(
     quint64 generation, const VerificationResult& result)
 {
     if (generation != verificationGeneration_) return;
+    const auto pendingStart = qScopeGuard([this] {
+        if (!pendingStartVerification_) return;
+        QTimer::singleShot(0, this, [this] {
+            if (!pendingStartVerification_ || verificationWatcher_ != nullptr) return;
+            pendingStartVerification_ = false;
+            if (activeRequest_ && activeRequest_->kind == RequestKind::Separation
+                && jobState_ == JobState::Running) {
+                const ActiveRequestContext context = *activeRequest_;
+                if (!beginVerification(VerificationPurpose::Start,
+                                       modelForId(context.modelId)))
+                    failRequest(context, tr("无法开始模型校验"), QStringLiteral("model_verification"));
+            }
+        });
+    });
     const auto pendingRescan = qScopeGuard([this] {
         if (!modelDirectoryRescanPending_) return;
         modelDirectoryRescanPending_ = false;
@@ -1867,7 +1972,9 @@ void VocalSeparationController::finishVerification(
 bool VocalSeparationController::launchProbe()
 {
     if (!process_.setWorker(options_.workerProgram, options_.workerArguments)) return false;
-    const auto* model = selectedModel();
+    const auto* model = modelForId(activeRequest_.has_value()
+        ? activeRequest_->modelId : selectedModelId_);
+    activeProbeFingerprint_ = probeFingerprint(model ? model->id : QString());
     QJsonObject payload{{QStringLiteral("runtimePath"), cudaRuntime_->ready() ? cudaRuntime_->libraryPath() : options_.runtimeLibraryPath}};
     if (model) {
         payload.insert("modelId", model->id);
@@ -2002,6 +2109,7 @@ void VocalSeparationController::refreshModels()
                         : tr("；标准五轨缺少应用专用 CUDA 组件（不是缺显卡驱动）。一键配置约 1.51 GB 下载、5 GB 可用磁盘，安装后验证当前模型"))
                 : validatedGpuProviders_.contains(model.id) ? tr("当前模型已通过真实 GPU 推理验证") : tr("CUDA 组件已校验，等待当前模型 GPU 推理验证")},
             {QStringLiteral("id"), model.id},
+            {QStringLiteral("configurationEnabled"), canConfigureModel(model.id)},
             {QStringLiteral("family"), model.family == VocalModelFamily::Mdx
                  ? QStringLiteral("mdx") : QStringLiteral("demucs")},
             {QStringLiteral("stems"), kinds},
@@ -2046,8 +2154,12 @@ void VocalSeparationController::refreshModels()
             {QStringLiteral("rejectionReason"), QString()},
         });
     }
-    for (const QVariant& rejected : std::as_const(rejectedCustomModels_))
-        models_.push_back(rejected);
+    for (const QVariant& rejected : std::as_const(rejectedCustomModels_)) {
+        QVariantMap diagnostic = rejected.toMap();
+        diagnostic.insert(QStringLiteral("configurationEnabled"),
+            canConfigureModel(diagnostic.value(QStringLiteral("id")).toString()));
+        models_.push_back(diagnostic);
+    }
     emit modelsChanged();
     emit startEligibilityChanged();
 }
@@ -2087,7 +2199,10 @@ void VocalSeparationController::setJobState(JobState state, const QString& stage
     const bool changed = jobState_ != state || stage_ != stage;
     jobState_ = state;
     stage_ = stage;
-    if (changed) emit jobStateChanged();
+    if (changed) {
+        emit jobStateChanged();
+        refreshModels();
+    }
     emit startEligibilityChanged();
     if (deviceProbePending_ && state != JobState::Running
         && state != JobState::Probing && state != JobState::Cancelling) {
@@ -2590,11 +2705,29 @@ void VocalSeparationController::scanModelDirectory()
 
 void VocalSeparationController::handleProbe(const QJsonObject& payload)
 {
+    const QString probedModelId = activeRequest_ && activeRequest_->kind == RequestKind::Probe
+        ? activeRequest_->modelId : selectedModelId_;
+    if (!activeProbeFingerprint_.isEmpty()
+        && activeProbeFingerprint_ == probeFingerprint(probedModelId)
+        && (payload.value(QStringLiteral("cpu")).toBool()
+            || payload.value(QStringLiteral("gpu")).toBool())) {
+        deviceProbeCache_.insert(probedModelId, payload);
+        deviceProbeFingerprints_.insert(probedModelId, activeProbeFingerprint_);
+    }
     const QString provider = payload.value(QStringLiteral("provider")).toString();
-    validatedGpuProviders_.remove(selectedModelId_);
+    validatedGpuProviders_.remove(probedModelId);
     if (payload.value(QStringLiteral("modelValidated")).toBool()
         && payload.value(QStringLiteral("gpu")).toBool())
-        validatedGpuProviders_.insert(selectedModelId_, provider);
+        validatedGpuProviders_.insert(probedModelId, provider);
+    if (probedModelId != selectedModelId_) {
+        activeRequest_.reset();
+        failedRequest_.reset();
+        deviceProbePending_ = true;
+        setJobState(JobState::Idle, {});
+        refreshModels();
+        QTimer::singleShot(0, this, [this] { if (deviceProbePending_) probeDevices(); });
+        return;
+    }
     const QString workerReason =
         payload.value(QStringLiteral("gpuReason")).toString();
     const bool cpuAvailable = payload.value(QStringLiteral("cpu")).toBool();

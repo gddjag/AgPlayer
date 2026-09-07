@@ -933,6 +933,64 @@ TestCase {
         verify(instructions.text.indexOf(".agmodel.json") >= 0)
     }
 
+    function test_runningModelLocksOnlyItsConfigurationAndSharedConflicts() {
+        verify(separationTestDriver.setReady(testAudioUrl))
+        verify(separationTestDriver.setRunningModel("uvr-mdxnet-kara"))
+        compare(VocalSeparationController.selectedModelId, "uvr-mdxnet-kara")
+        compare(VocalSeparationController.jobState, VocalSeparationController.Running)
+        const ownConfiguration = findChild(page, "separationInstallRuntime-uvr-mdxnet-kara")
+        const otherConfiguration = findChild(page, "separationInstallRuntime-uvr-mdx-net-inst-hq3")
+        verify(ownConfiguration && otherConfiguration)
+        verify(!ownConfiguration.enabled)
+        verify(otherConfiguration.enabled,
+               "another model must remain configurable when the shared runtime is already ready")
+        verify(!controlWithText(page, "选择文件").enabled)
+        separationTestDriver.setJobState(VocalSeparationController.Cancelling, "cancelling")
+        verify(!otherConfiguration.enabled)
+        separationTestDriver.reset()
+    }
+
+    function test_modelCardCanBeSelectedDuringProbeWithoutUnlockingOtherSettings() {
+        separationTestDriver.reset()
+        separationTestDriver.selectModel("uvr-mdxnet-kara")
+        separationTestDriver.setJobState(VocalSeparationController.Probing, "probe")
+        const otherCard = findChild(page, "separationModelCard-uvr-mdx-net-inst-hq3")
+        verify(otherCard)
+        verify(!controlWithText(page, "选择文件").enabled)
+        mouseClick(otherCard, otherCard.width / 2, 18)
+        compare(VocalSeparationController.selectedModelId, "uvr-mdx-net-inst-hq3")
+        separationTestDriver.reset()
+    }
+
+    function test_modelSelectionKeepsOtherModelDownloadAlive() {
+        separationTestDriver.reset()
+        separationTestDriver.selectModel("uvr-mdxnet-kara")
+        separationTestDriver.setDownloadState("uvr-mdxnet-kara",
+                                              VocalSeparationController.Downloading, 0.42, "")
+        const otherCard = findChild(page, "separationModelCard-uvr-mdx-net-inst-hq3")
+        mouseClick(otherCard, otherCard.width / 2, 18)
+        compare(VocalSeparationController.selectedModelId, "uvr-mdx-net-inst-hq3")
+        compare(VocalSeparationController.downloadingModelId, "uvr-mdxnet-kara")
+        verify(VocalSeparationController.downloadBusy)
+        compare(VocalSeparationController.downloadProgress, 0.42)
+        separationTestDriver.setJobState(VocalSeparationController.Running, "separating")
+        const cancelDownload = findChild(page, "separationCancelDownload-uvr-mdxnet-kara")
+        verify(cancelDownload.visible && cancelDownload.enabled,
+               "a different running separation must not lock the active download controls")
+        const pauseDownload = findChild(page, "separationDownloadModel-uvr-mdxnet-kara")
+        verify(pauseDownload.enabled)
+        compare(pauseDownload.text, "暂停")
+        verify(!findChild(page, "separationDomesticMirror-uvr-mdxnet-kara").enabled)
+        const firstCard = findChild(page, "separationModelCard-uvr-mdxnet-kara")
+        mouseClick(firstCard, firstCard.width / 2, 18)
+        compare(VocalSeparationController.selectedModelId, "uvr-mdx-net-inst-hq3")
+        separationTestDriver.setJobState(VocalSeparationController.Cancelling, "cancelling")
+        mouseClick(firstCard, firstCard.width / 2, 18)
+        compare(VocalSeparationController.selectedModelId, "uvr-mdx-net-inst-hq3")
+        verify(cancelDownload.enabled)
+        separationTestDriver.reset()
+    }
+
     function test_probeRunningCancellingAndCompletedLockTheRealControls() {
         separationTestDriver.reset()
         const chooseFile = controlWithText(page, "选择文件")

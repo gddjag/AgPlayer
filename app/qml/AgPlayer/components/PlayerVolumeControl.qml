@@ -19,10 +19,10 @@ Item {
     readonly property real buttonExtent: compact ? 32 : 44
     readonly property real expandedSliderWidth: !emptyMode && expanded
         ? Math.max(0, Math.min(108, maximumExpandedWidth - buttonExtent
-                              - (showExpandedPercent ? 44 : 0))) : 0
+                              - (showExpandedPercent ? 42 : 0))) : 0
     width: emptyMode ? buttonExtent
                      : buttonExtent + volumeSlider.width + volumePercent.width
-                       + (volumePercent.width > 0 ? 6 : 0)
+                       + (volumePercent.width > 0 ? 4 : 0)
     height: buttonExtent
     z: 10
     clip: false
@@ -69,6 +69,8 @@ Item {
         objectName: "volumeSlider"
         anchors.left: muteButton.right; anchors.verticalCenter: parent.verticalCenter
         width: root.expandedSliderWidth
+        leftPadding: 0
+        rightPadding: 0
         opacity: width > 0 ? 1 : 0; visible: !root.emptyMode
         from: 0; to: 1
         Accessible.name: qsTr("音量")
@@ -107,7 +109,7 @@ Item {
     Label {
         id: volumePercent
         objectName: "volumePercentLabel"
-        anchors.left: volumeSlider.right; anchors.leftMargin: width > 0 ? 6 : 0; anchors.verticalCenter: parent.verticalCenter
+        anchors.left: volumeSlider.right; anchors.leftMargin: width > 0 ? 4 : 0; anchors.verticalCenter: parent.verticalCenter
         width: root.showExpandedPercent ? 38 : 0
         opacity: width > 0 ? 1 : 0; visible: !root.emptyMode
         horizontalAlignment: Text.AlignLeft

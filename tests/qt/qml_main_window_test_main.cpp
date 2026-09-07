@@ -367,6 +367,15 @@ public:
         return QDir().mkpath(path) ? QUrl::fromLocalFile(path) : QUrl{};
     }
 
+    Q_INVOKABLE QUrl createNestedDropDirectory()
+    {
+        const QUrl root = createDropDirectory();
+        if (!root.isLocalFile()) return {};
+        return QDir().mkpath(QDir(root.toLocalFile()).filePath(
+                   QStringLiteral("child")))
+            ? root : QUrl{};
+    }
+
     Q_INVOKABLE QUrl createAudioDropDirectory(const QUrl& source,
                                               int fileCount)
     {

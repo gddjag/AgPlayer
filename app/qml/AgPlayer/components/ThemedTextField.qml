@@ -39,7 +39,9 @@ T.TextField {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            height: Theme.controlHeight
+            height: Math.max(0, control.height
+                            - (control.showError ? Theme.spacingXs
+                               + errorLabel.implicitHeight : 0))
             radius: Theme.radiusSm
             color: !control.enabled ? Theme.disabled
                    : control.hovered ? Theme.surfaceHover

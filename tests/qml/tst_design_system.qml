@@ -138,6 +138,34 @@ TestCase {
                 Theme.minimumInteractionExtent)
     }
 
+    function test_text_field_frame_follows_compact_height_and_preserves_error_footer() {
+        var component = Qt.createComponent(Qt.resolvedUrl(
+                    "../../app/qml/AgPlayer/components/ThemedTextField.qml"))
+        compare(component.status, Component.Ready, component.errorString())
+        var field = component.createObject(testCase, {"width": 160, "placeholderText": "输入"})
+        verify(field)
+        try {
+            var frame = findChild(field, "themedTextFieldFrame")
+            var footer = findChild(field, "themedTextFieldErrorLabel")
+            compare(frame.height, Theme.controlHeight)
+            field.height = 24
+            compare(frame.height, 24)
+            field.error = true
+            field.errorMessage = "无效内容，请重新输入"
+            wait(0)
+            field.height = 24 + Theme.spacingXs + footer.implicitHeight
+            compare(frame.height, 24)
+            verify(footer.visible)
+            compare(footer.y, frame.height + Theme.spacingXs)
+            verify(footer.y + footer.height <= field.height)
+            field.height = field.implicitHeight
+            compare(frame.height, Theme.controlHeight)
+            verify(footer.y + footer.height <= field.height)
+        } finally {
+            field.destroy()
+        }
+    }
+
     function test_text_field_placeholder_tracks_empty_and_input_states() {
         var component = Qt.createComponent(Qt.resolvedUrl(
                     "../../app/qml/AgPlayer/components/ThemedTextField.qml"))

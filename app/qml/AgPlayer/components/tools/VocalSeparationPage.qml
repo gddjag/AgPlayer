@@ -36,6 +36,8 @@ Rectangle {
     readonly property bool contextLocked: VocalSeparationController.jobState === VocalSeparationController.Probing
                                         || VocalSeparationController.jobState === VocalSeparationController.Running
                                         || VocalSeparationController.jobState === VocalSeparationController.Cancelling
+    readonly property bool modelSelectionLocked: VocalSeparationController.jobState === VocalSeparationController.Running
+                                               || VocalSeparationController.jobState === VocalSeparationController.Cancelling
     readonly property string contextLockReason: VocalSeparationController.jobState === VocalSeparationController.Probing
                                              ? qsTr("正在探测设备，请稍候")
                                              : qsTr("分离任务进行中，暂不能更改输入或设置")
@@ -1001,7 +1003,7 @@ Rectangle {
 
                                 MouseArea {
                                     anchors.fill: parent
-                                    enabled: !page.contextLocked
+                                    enabled: customEntry ? !page.contextLocked : !page.modelSelectionLocked
                                     onClicked: customEntry
                                                ? VocalSeparationController.openModelDirectory()
                                                : VocalSeparationController.selectModel(cardData.id)
@@ -1178,10 +1180,10 @@ Rectangle {
                                             ToolTip.visible: hovered
                                             ToolTip.text: (cardData.gpuReason || "")
                                                           + qsTr("\nNVIDIA CUDA 固定版本独立安装，不修改现有 Python/CPU 环境。约 1.51 GB 下载；失败自动尝试备用线路。安装完成不代表模型已通过 GPU 推理验证。")
-                                            enabled: !page.contextLocked && !VocalSeparationController.downloadBusy
+                                            enabled: !!cardData.configurationEnabled
                                             onClicked: {
                                                 if (cardData.gpuRuntimeReady)
-                                                    VocalSeparationController.probeDevices()
+                                                    VocalSeparationController.probeDevices(true)
                                                 else if (!VocalSeparationController.configureGpuRuntime(cardData.id)) {
                                                     configurationDiagnostic.text = VocalSeparationController.error
                                                     configurationDialog.open()
@@ -1215,10 +1217,9 @@ Rectangle {
                                                   : cardData.backend === "external-python"
                                                     && cardData.state === VocalSeparationController.Paused ? qsTr("继续配置")
                                                   : qsTr("一键配置")
-                                              enabled: (!page.contextLocked
-                                                        || cardData.state === VocalSeparationController.Verifying)
-                                                       && (!VocalSeparationController.downloadBusy
-                                                           || cardData.id === VocalSeparationController.downloadingModelId)
+                                              enabled: !!cardData.configurationEnabled
+                                                       || (cardData.id === VocalSeparationController.downloadingModelId
+                                                           && VocalSeparationController.downloadBusy)
                                               Accessible.name: text
                                               Accessible.role: Accessible.Button
                                               onClicked: {
@@ -1249,8 +1250,7 @@ Rectangle {
                                               topPadding: 3
                                               bottomPadding: 3
                                               text: qsTr("国内镜像")
-                                              enabled: !page.contextLocked
-                                                       && !VocalSeparationController.downloadBusy
+                                              enabled: !!cardData.configurationEnabled
                                               Accessible.name: text
                                               Accessible.role: Accessible.Button
                                               onClicked: {
@@ -1259,6 +1259,7 @@ Rectangle {
                                               }
                                           }
                                           WorkbenchButton {
+                                              objectName: "separationDownloadModel-" + cardData.id
                                               visible: cardData.state !== VocalSeparationController.Installed
                                                        && cardData.backend !== "external-python"
                                                        && !(cardData.origin === "custom"
@@ -1277,9 +1278,9 @@ Rectangle {
                                             Accessible.name: text
                                             Accessible.role: Accessible.Button
                                             enabled: cardData.state !== VocalSeparationController.Verifying
-                                                     && !page.contextLocked
-                                                     && (!VocalSeparationController.downloadBusy
-                                                         || cardData.id === VocalSeparationController.downloadingModelId)
+                                                     && (!!cardData.configurationEnabled
+                                                         || (cardData.id === VocalSeparationController.downloadingModelId
+                                                             && VocalSeparationController.downloadBusy))
                                             onClicked: {
                                                 if (cardData.state === VocalSeparationController.Downloading)
                                                     VocalSeparationController.pauseDownload()
@@ -1301,7 +1302,7 @@ Rectangle {
                                              topPadding: 3
                                              bottomPadding: 3
                                              text: qsTr("取消")
-                                             enabled: visible && !page.contextLocked
+                                             enabled: visible
                                              Accessible.name: qsTr("取消下载")
                                              Accessible.role: Accessible.Button
                                              onClicked: VocalSeparationController.cancelDownload()
@@ -1897,7 +1898,7 @@ Rectangle {
                                     Accessible.name: qsTr("探测处理设备"); Accessible.role: Accessible.Button
                                     ToolTip.visible: hovered && !enabled
                                     ToolTip.text: page.contextLocked ? page.contextLockReason : qsTr("设备探测正在进行")
-                                    onClicked: VocalSeparationController.probeDevices()
+                                    onClicked: VocalSeparationController.probeDevices(true)
                                 }
                             }
                             RowLayout {

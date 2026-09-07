@@ -848,6 +848,7 @@ public:
         } else {
             controller_->downloadingModelId_ = modelId;
         }
+        controller_->refreshModels();
         for (int index = 0; index < controller_->models_.size(); ++index) {
             QVariantMap model = controller_->models_.at(index).toMap();
             if (model.value(QStringLiteral("id")).toString() == modelId) {
@@ -865,8 +866,37 @@ public:
     Q_INVOKABLE void setJobState(int state, const QString& stage)
     {
         if (controller_ == nullptr) return;
+        if (state == int(VocalSeparationController::JobState::Running)) {
+            controller_->activeRequest_ = VocalSeparationController::ActiveRequestContext{
+                VocalSeparationController::RequestKind::Separation};
+            controller_->activeRequest_->modelId = controller_->selectedModelId_;
+        }
+        const QString downloadingId = controller_->downloadingModelId_;
+        int downloadState = -1;
+        for (const QVariant& entry : controller_->models_) {
+            const QVariantMap model = entry.toMap();
+            if (model.value(QStringLiteral("id")).toString() == downloadingId)
+                downloadState = model.value(QStringLiteral("state")).toInt();
+        }
         controller_->setJobState(
             static_cast<VocalSeparationController::JobState>(state), stage);
+        if (!downloadingId.isEmpty() && downloadState >= 0)
+            setDownloadState(downloadingId, downloadState,
+                             controller_->downloadProgress_, controller_->error());
+    }
+
+    Q_INVOKABLE bool setRunningModel(const QString& modelId)
+    {
+        if (controller_ == nullptr
+            || !QFileInfo(controller_->options_.runtimeLibraryPath).isFile()
+            || !controller_->selectModel(modelId)) return false;
+        // A running native separation has already passed runtime verification.
+        // This UI fixture represents that completed preflight, not its hashing.
+        controller_->runtimeVerified_ = true;
+        controller_->runtimeVerificationKnown_ = true;
+        setJobState(int(VocalSeparationController::JobState::Running),
+                    QStringLiteral("separating"));
+        return true;
     }
 
     Q_INVOKABLE void setCompleted()

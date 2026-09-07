@@ -134,13 +134,34 @@ Rectangle {
 
         ColumnLayout {
             Layout.fillWidth: true; Layout.fillHeight: true; spacing: 2
-            Text {
-                objectName: "miniTrackTitle"
-                text: root.currentTrackValue(LibraryModel.TitleRole) || qsTr("未加载歌曲")
-                color: Theme.primaryText; font.family: Theme.fontPrimary
-                font.pixelSize: Theme.fontSizeSection; font.weight: Font.DemiBold
-                elide: Text.ElideRight; Layout.fillWidth: true
+            Item {
+                Layout.fillWidth: true
                 Layout.preferredHeight: 20
+                Text {
+                    id: miniTrackTitle
+                    objectName: "miniTrackTitle"
+                    text: root.currentTrackValue(LibraryModel.TitleRole) || qsTr("未加载歌曲")
+                    color: Theme.primaryText; font.family: Theme.fontPrimary
+                    font.pixelSize: Theme.fontSizeSection; font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                    width: Math.min(implicitWidth, Math.max(0, parent.width - favoriteButton.width - 6))
+                    height: parent.height
+                    verticalAlignment: Text.AlignVCenter
+                }
+                ToolButton {
+                    id: favoriteButton
+                    objectName: "miniFavoriteButton"
+                    width: 16
+                    height: 16
+                    anchors.left: miniTrackTitle.right
+                    anchors.leftMargin: 6
+                    anchors.verticalCenter: parent.verticalCenter
+                    padding: 0
+                    icon.source: root.currentTrackFavorite() ? Theme.icon("heart-fill") : Theme.icon("heart-line")
+                    icon.color: root.currentTrackFavorite() ? Theme.favoriteRed : Theme.secondaryText
+                    icon.width: 16; icon.height: 16; enabled: root.currentRow() >= 0
+                    onClicked: if (playback) playback.toggleFavorite(); background: null
+                }
             }
             RowLayout {
                 objectName: "miniMetadataRow"
@@ -212,18 +233,6 @@ Rectangle {
                             Layout.alignment: Qt.AlignVCenter
                         }
                     }
-                }
-                ToolButton {
-                    id: favoriteButton
-                    objectName: "miniFavoriteButton"
-                    Layout.preferredWidth: 16
-                    Layout.preferredHeight: 16
-                    Layout.alignment: Qt.AlignVCenter
-                    padding: 0
-                    icon.source: root.currentTrackFavorite() ? Theme.icon("heart-fill") : Theme.icon("heart-line")
-                    icon.color: root.currentTrackFavorite() ? Theme.favoriteRed : Theme.secondaryText
-                    icon.width: 16; icon.height: 16; enabled: root.currentRow() >= 0
-                    onClicked: if (playback) playback.toggleFavorite(); background: null
                 }
                 Item { Layout.fillWidth: true }
             }

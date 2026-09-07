@@ -1853,6 +1853,13 @@ set_tests_properties(qml_rolling_theme_test PROPERTIES
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
+if(WIN32)
+    # The offscreen plugin does not discover Windows fonts by itself. Use real
+    # font metrics for compact text-fit assertions instead of placeholder boxes.
+    set_property(TEST qml_rolling_theme_test APPEND PROPERTY ENVIRONMENT
+        "QT_QPA_FONTDIR=$ENV{SystemRoot}/Fonts")
+endif()
+
 add_test(NAME qml_player_controls_layout_test
     COMMAND qml_main_window_test
         -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_player_controls.qml)

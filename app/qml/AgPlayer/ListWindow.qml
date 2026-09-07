@@ -370,7 +370,13 @@ Window {
         }
         onAccepted: {
             var id = playlistModel.createPlaylist(createPlaylistField.text)
-            if (id) listWindow.enterCategory(id, "playlist")
+            if (id) {
+                sideNavigation.navigationModel.setExpanded("library:all", true)
+                listWindow.enterCategory(id, "playlist")
+                Qt.callLater(function() {
+                    sideNavigation.revealNode("playlist:" + id)
+                })
+            }
         }
         contentItem: TextField {
             id: createPlaylistField

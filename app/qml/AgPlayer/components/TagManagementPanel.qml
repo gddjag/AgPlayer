@@ -438,7 +438,7 @@ Item {
                                                        ? Qt.rgba(tagCell.color.r, tagCell.color.g,
                                                                  tagCell.color.b, 1)
                                                        : Theme.accent
-                            readonly property bool filledVisual: hoveredVisual || pressedVisual
+                            readonly property bool filledVisual: selectedVisual || hoveredVisual || pressedVisual
                             readonly property color contentColor: filledVisual
                                                                   ? Theme.tagCapsuleFilledText(baseAccent)
                                                                   : Theme.primaryText
@@ -510,7 +510,7 @@ Item {
                                 color: "transparent"
                                 border.color: tagPill.contentColor
                                 border.width: 1
-                                visible: tagPill.focusedVisual
+                                visible: tagPill.focusedVisual && !tagPill.selectedVisual
                             }
                             HoverHandler { id: tagHover }
                             MouseArea {

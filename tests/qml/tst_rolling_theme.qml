@@ -323,8 +323,14 @@ TestCase {
         var rolling = rollingWithFakes()
         var target = findChild(rolling, "rollingTargetBpm")
         var grouping = findChild(rolling, "rollingBeatGridGrouping")
+        compare(target.height, grouping.height)
         compare(target.height, 24)
-        verify(target.height < grouping.height)
+        compare(target.width, 62)
+        compare(grouping.width, 62)
+        compare(findChild(target, "themedTextFieldFrame").height, target.height)
+        target.text = "128.16"
+        verify(target.contentWidth <= target.width - target.leftPadding - target.rightPadding,
+               "128.16 must fit without horizontal scrolling or clipping")
         compare(target.verticalAlignment, TextInput.AlignVCenter)
     }
 
@@ -911,12 +917,13 @@ TestCase {
             compare(minus.enabled, true)
             compare(plus.enabled, true)
             compare(gridSwitch.height, 28)
-            compare(grouping.height, 28)
-            compare(viewport.height, 28)
+            compare(grouping.height, 24)
+            compare(viewport.height, 24)
+            compare(viewport.width, 62)
             compare(minus.height, 28)
             compare(plus.height, 28)
             compare(zoomReset.height, 28)
-            compare(targetBpm.height, 24)
+            compare(targetBpm.height, grouping.height)
             compare(targetBpm.verticalAlignment, TextInput.AlignVCenter)
             compare(tempoReset.height, 28)
             compare(calibration.height, 28)
@@ -1266,6 +1273,7 @@ TestCase {
 
     function test_header_three_rows_are_evenly_spaced_and_cover_centered() {
         var rolling = rollingWithFakes()
+        compare(findChild(rolling, "rollingTrackSubtitle").verticalAlignment, Text.AlignVCenter)
         var cover = findChild(rolling, "rollingTrackCover")
         var info = findChild(rolling, "rollingHeaderInfo")
         var title = findChild(rolling, "rollingTitleRow")
@@ -1285,8 +1293,8 @@ TestCase {
         var stars = 0
         for (var child of rating.children) {
             if (child.tint !== undefined) {
-                compare(child.width, 14)
-                compare(child.height, 14)
+                compare(child.width, 16)
+                compare(child.height, 16)
                 stars++
             }
         }

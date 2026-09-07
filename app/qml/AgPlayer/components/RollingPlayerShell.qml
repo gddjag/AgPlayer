@@ -576,6 +576,7 @@ Item {
 
                     TrackSubtitle {
                         objectName: "rollingTrackSubtitle"
+                        verticalAlignment: Text.AlignVCenter
                         width: Math.min(implicitWidth,
                                         Math.max(0, parent.width - headerRating.width - 6))
                         height: parent.height
@@ -596,8 +597,8 @@ Item {
                         Repeater {
                             model: 5
                             ThemedIcon {
-                                width: 14
-                                height: 14
+                                width: 16
+                                height: 16
                                 source: index < Number(root.currentTrack && root.currentTrack.rating || 0)
                                         ? Theme.icon("star-fill") : Theme.icon("star-line")
                                 tint: index < Number(root.currentTrack && root.currentTrack.rating || 0)
@@ -1297,8 +1298,11 @@ Item {
                         ThemedComboBox {
                             id: beatGridGrouping
                             objectName: "rollingBeatGridGrouping"
-                            Layout.preferredWidth: 56
-                            Layout.preferredHeight: Theme.controlHeightCompact
+                            Layout.preferredWidth: 62
+                            Layout.preferredHeight: 24
+                            Layout.maximumHeight: 24
+                            Layout.topMargin: 2
+                            Layout.bottomMargin: 2
                             model: ["4", "8"]
                             currentIndex:
                                 SettingsController.rollingBeatGridGrouping === 8
@@ -1337,7 +1341,9 @@ Item {
                                 id: viewportBeats
                                 objectName: "rollingViewportBeats"
                                 Layout.preferredWidth: 62
-                                Layout.preferredHeight: Theme.controlHeightCompact
+                                Layout.preferredHeight: 24
+                                Layout.maximumHeight: 24
+                                Layout.alignment: Qt.AlignVCenter
                                 leftPadding: 0
                                 rightPadding: 20
                                 textLeftPadding: 6
@@ -1432,12 +1438,14 @@ Item {
                         ThemedTextField {
                             id: targetBpm
                             objectName: "rollingTargetBpm"
-                            Layout.preferredWidth: 72
+                            leftPadding: 4
+                            rightPadding: 4
+                            Layout.preferredWidth: 62
                             Layout.preferredHeight: 24
                             Layout.maximumHeight: 24
-                            Layout.alignment: Qt.AlignVCenter
                             Layout.topMargin: 2
                             Layout.bottomMargin: 2
+                            Layout.alignment: Qt.AlignVCenter
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: TextInput.AlignVCenter
                             text: root.formatBpm(

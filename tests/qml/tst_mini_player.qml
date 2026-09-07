@@ -321,8 +321,10 @@ TestCase {
                "artist and album must share one baseline")
         verify(rating.x >= artist.x + artist.width,
                "rating must follow the single metadata text run")
-        verify(favorite.x >= rating.x + rating.width,
-               "favorite must immediately follow rating in the metadata row")
+        compare(favorite.parent, title.parent)
+        verify(Math.abs(favorite.x - (title.x + title.width) - 6) <= 1,
+               "favorite must immediately follow the content-sized title")
+        verify(title.width <= title.implicitWidth + 1)
         verify(!tags.visible,
                "empty tags must be omitted instead of showing placeholder text")
         compare(rating.spacing, 1)
@@ -330,11 +332,11 @@ TestCase {
         compare(firstStar.height, firstStar.sourceSize.height)
         compare(favorite.width, 16)
         compare(favorite.height, 16)
-        compare(Math.round(firstStar.mapToItem(metadataRow, 0,
-                                               firstStar.height / 2).y),
+        compare(Math.round(title.mapToItem(metadataRow, 0,
+                                          title.height / 2).y),
                 Math.round(favorite.mapToItem(metadataRow, 0,
                                               favorite.height / 2).y),
-                "stars and favorite must share one visual centerline")
+                "title and favorite must share one visual centerline")
         compare(favorite.icon.width, 16)
         compare(favorite.icon.height, 16)
         compare(findChild(miniPlayer, "miniElapsedTime").font.pixelSize,

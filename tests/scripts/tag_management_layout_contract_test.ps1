@@ -60,8 +60,8 @@ Assert-Matches $tagPanel '(?s)id:\s*tagName.*objectName:\s*"tagCapsuleName-".*te
     'Tag capsules must display the tag name'
 Assert-Matches $tagPanel '(?s)id:\s*tagCount.*objectName:\s*"tagCapsuleCount-".*text:\s*tagCell\.trackCount' `
     'Tag capsules must display the live track count'
-Assert-Matches $tagPanel 'filledVisual:\s*hoveredVisual\s*\|\|\s*pressedVisual\s*[\r\n]' `
-    'Only hover or press may fill a tag; selected tags must remain hollow when the pointer leaves'
+Assert-Matches $tagPanel 'filledVisual:\s*selectedVisual\s*\|\|\s*hoveredVisual\s*\|\|\s*pressedVisual\s*[\r\n]' `
+    'Selected tags retain their solid color after the pointer leaves'
 Assert-Matches $tagPanel 'color:\s*filledVisual\s*\?\s*baseAccent\s*:\s*"transparent"' `
     'Tag capsules must switch between a transparent interior and their own solid color'
 Assert-Matches $tagPanel '(?s)border\.color:\s*baseAccent.*border\.width:\s*Theme\.tagCapsuleBorderWidth\s*\+\s*\(selectedVisual\s*\?\s*0\.8\s*:\s*0\)' `

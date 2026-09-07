@@ -18,6 +18,8 @@
 #include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QTest>
 #include <QTranslator>
 #include <QTimer>
@@ -161,6 +163,15 @@ public:
     {
         return controller.verificationWatcher_ != nullptr;
     }
+    static bool workerAvailable(const VocalSeparationController& controller)
+    {
+        return controller.process_.canAcceptRequest();
+    }
+
+    static bool hardwareDiscoveryInFlight(const VocalSeparationController& controller)
+    {
+        return controller.cudaRuntime_->checking();
+    }
 
     static bool directoryAndVerificationIdle(
         const VocalSeparationController& controller)
@@ -175,6 +186,18 @@ public:
         return controller.beginVerification(
             VocalSeparationController::VerificationPurpose::Refresh);
     }
+
+    static bool startVerificationPending(const VocalSeparationController& controller)
+    {
+        return controller.pendingStartVerification_;
+    }
+
+    static QString activeSeparationModel(const VocalSeparationController& controller)
+    {
+        return controller.activeRequest_
+                && controller.activeRequest_->kind == VocalSeparationController::RequestKind::Separation
+            ? controller.activeRequest_->modelId : QString{};
+    }
 };
 
 class VocalSeparationControllerTest final : public QObject {
@@ -187,6 +210,12 @@ private slots:
     void historyActionsPreserveReservedUnicodePaths();
     void downloadsMultipleArtifactsSequentiallyThroughTheController();
     void downloadProgressNeverMutatesAnActiveSeparationJob();
+    void downloadingAnotherModelDoesNotBlockSeparation();
+    void modelSelectionRespondsDuringDeviceProbe();
+    void unchangedModelReusesDeviceProbe();
+    void startWaitsForBackgroundVerificationWithoutFailing();
+    void cancellingQueuedStartPreservesBackgroundDownloadVerification();
+    void configurationDuringRefreshPreservesRunningSeparationContext();
     void downloadFailureRetriesMirrorBeforeReportingExhaustion();
     void queuedDownloadRouteAndCancellationUseProductionControllerState();
     void runtimeCanBeConfiguredWithoutCatalogModelLookup();
@@ -713,6 +742,166 @@ downloadProgressNeverMutatesAnActiveSeparationJob()
     QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(),
                               VocalSeparationController::JobState::Completed,
                               5000);
+}
+
+void VocalSeparationControllerTest::downloadingAnotherModelDoesNotBlockSeparation()
+{
+    QTemporaryDir temporary;
+    const QByteArray installedBytes("installed-model");
+    const QByteArray downloadBytes(1024 * 1024, 'd');
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    auto options = optionsFor(temporary, QStringLiteral("success"), installedBytes);
+    auto downloading = options.catalog.first();
+    downloading.id = QStringLiteral("background-model");
+    downloading.files = {{QStringLiteral("test.onnx"),
+        QUrl(QStringLiteral("http://127.0.0.1:%1/model").arg(server.serverPort())),
+        downloadBytes.size(), sha256(downloadBytes)}};
+    options.catalog.push_back(downloading);
+    installTestModel(options, QStringLiteral("two-stem"), installedBytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, "runtime"));
+    VocalSeparationController controller(nullptr, nullptr, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
+    QVERIFY(controller.downloadModel(downloading.id));
+    QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 5000);
+    QScopedPointer<QTcpSocket> socket(server.nextPendingConnection());
+    QTRY_VERIFY_WITH_TIMEOUT(socket->bytesAvailable() > 0, 5000);
+    socket->readAll();
+    socket->write("HTTP/1.1 200 OK\r\nContent-Length: "
+        + QByteArray::number(downloadBytes.size()) + "\r\nConnection: close\r\n\r\n");
+    socket->write(downloadBytes.left(4096));
+    socket->flush();
+    QVERIFY2(controller.canStart(), qPrintable(controller.startDisabledReason()));
+    QVERIFY(controller.start());
+    QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(),
+        VocalSeparationController::JobState::Completed, 5000);
+    QVERIFY(controller.downloadBusy());
+    QCOMPARE(controller.downloadingModelId(), downloading.id);
+    socket->write(downloadBytes.mid(4096));
+    socket->disconnectFromHost();
+    QTRY_VERIFY_WITH_TIMEOUT(!controller.downloadBusy(), 5000);
+    QCOMPARE(modelStateFor(controller.models(), downloading.id),
+        int(VocalSeparationController::ModelState::Installed));
+    QCOMPARE(controller.history().size(), 1);
+}
+
+void VocalSeparationControllerTest::modelSelectionRespondsDuringDeviceProbe()
+{
+    QTemporaryDir temporary;
+    const QByteArray bytes("installed-model");
+    auto options = optionsFor(temporary, QStringLiteral("delayed-hello"), bytes);
+    installTestModel(options, QStringLiteral("two-stem"), bytes);
+    installTestModel(options, QStringLiteral("five-stem"), bytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, "runtime"));
+    VocalSeparationController controller(nullptr, nullptr, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.probeDevices());
+    QCOMPARE(controller.jobState(), VocalSeparationController::JobState::Probing);
+    QVERIFY(controller.selectModel(QStringLiteral("five-stem")));
+    QCOMPARE(controller.selectedModelId(), QStringLiteral("five-stem"));
+    QVERIFY(controller.selectModel(QStringLiteral("two-stem")));
+    QCOMPARE(controller.selectedModelId(), QStringLiteral("two-stem"));
+    QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(),
+        VocalSeparationController::JobState::Idle, 10000);
+    QCOMPARE(controller.selectedModelId(), QStringLiteral("two-stem"));
+    QTRY_VERIFY_WITH_TIMEOUT(VocalSeparationControllerTestDriver::workerAvailable(controller), 5000);
+}
+
+void VocalSeparationControllerTest::startWaitsForBackgroundVerificationWithoutFailing()
+{
+    QTemporaryDir temporary;
+    const QByteArray bytes("installed-model");
+    auto options = optionsFor(temporary, QStringLiteral("success"), bytes);
+    installTestModel(options, QStringLiteral("two-stem"), bytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, "runtime"));
+    VocalSeparationController controller(nullptr, nullptr, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
+    QVERIFY(VocalSeparationControllerTestDriver::beginRefreshVerification(controller));
+    QVERIFY(VocalSeparationControllerTestDriver::verificationInFlight(controller));
+    QVERIFY(controller.start());
+    QVERIFY(VocalSeparationControllerTestDriver::startVerificationPending(controller));
+    QVERIFY(!controller.probeDevices());
+    QVERIFY(!controller.configureRuntime(QStringLiteral("python-vr-5hp")));
+    QVERIFY(!controller.configureRuntime(QStringLiteral("five-stem")));
+    QVERIFY(VocalSeparationControllerTestDriver::startVerificationPending(controller));
+    QCOMPARE(VocalSeparationControllerTestDriver::activeSeparationModel(controller),
+             QStringLiteral("two-stem"));
+    QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(),
+        VocalSeparationController::JobState::Completed, 5000);
+    QCOMPARE(controller.history().size(), 1);
+}
+
+void VocalSeparationControllerTest::cancellingQueuedStartPreservesBackgroundDownloadVerification()
+{
+    QTemporaryDir temporary;
+    const QByteArray bytes(4 * 1024 * 1024, 'q');
+    auto options = optionsFor(temporary, QStringLiteral("success"), bytes);
+    installTestModel(options, QStringLiteral("two-stem"), bytes);
+    installTestModel(options, QStringLiteral("five-stem"), bytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, "runtime"));
+    VocalSeparationController controller(nullptr, nullptr, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
+    QVERIFY(controller.downloadModel(QStringLiteral("five-stem")));
+    QVERIFY(VocalSeparationControllerTestDriver::verificationInFlight(controller));
+    const auto generation = VocalSeparationControllerTestDriver::verificationGeneration(controller);
+    QVERIFY(controller.start());
+    QVERIFY(VocalSeparationControllerTestDriver::startVerificationPending(controller));
+    controller.cancel();
+    QCOMPARE(controller.jobState(), VocalSeparationController::JobState::Cancelled);
+    QVERIFY(!VocalSeparationControllerTestDriver::startVerificationPending(controller));
+    QVERIFY(VocalSeparationControllerTestDriver::activeSeparationModel(controller).isEmpty());
+    QVERIFY(controller.downloadBusy());
+    QCOMPARE(controller.downloadingModelId(), QStringLiteral("five-stem"));
+    QCOMPARE(VocalSeparationControllerTestDriver::verificationGeneration(controller), generation);
+    QVERIFY(VocalSeparationControllerTestDriver::verificationInFlight(controller));
+    QTRY_VERIFY_WITH_TIMEOUT(!controller.downloadBusy(), 5000);
+    QCOMPARE(modelStateFor(controller.models(), QStringLiteral("five-stem")),
+             int(VocalSeparationController::ModelState::Installed));
+    QCOMPARE(controller.jobState(), VocalSeparationController::JobState::Cancelled);
+    QVERIFY(controller.history().isEmpty());
+}
+
+void VocalSeparationControllerTest::configurationDuringRefreshPreservesRunningSeparationContext()
+{
+    QTemporaryDir temporary;
+    const QByteArray bytes(4 * 1024 * 1024, 'r');
+    auto options = optionsFor(temporary, QStringLiteral("long-delayed-result"), bytes);
+    installTestModel(options, QStringLiteral("two-stem"), bytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, "runtime"));
+    VocalSeparationController controller(nullptr, nullptr, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
+    QVERIFY(controller.start());
+    QTRY_COMPARE_WITH_TIMEOUT(controller.stage(), QStringLiteral("inference"), 5000);
+    installTestModel(options, QStringLiteral("five-stem"), bytes);
+    QVERIFY(VocalSeparationControllerTestDriver::beginRefreshVerification(controller));
+    QVERIFY(VocalSeparationControllerTestDriver::verificationInFlight(controller));
+    QVERIFY(controller.configureRuntime(QStringLiteral("five-stem")));
+    QCOMPARE(controller.jobState(), VocalSeparationController::JobState::Running);
+    QCOMPARE(VocalSeparationControllerTestDriver::activeSeparationModel(controller),
+             QStringLiteral("two-stem"));
+    QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(), VocalSeparationController::JobState::Completed, 5000);
+    QCOMPARE(controller.history().size(), 1);
+}
+
+void VocalSeparationControllerTest::unchangedModelReusesDeviceProbe()
+{
+    QTemporaryDir temporary;
+    const QByteArray bytes("installed-model");
+    auto options = optionsFor(temporary, QStringLiteral("success"), bytes);
+    installTestModel(options, QStringLiteral("two-stem"), bytes);
+    QVERIFY(writeBytes(options.runtimeLibraryPath, "runtime"));
+    VocalSeparationController controller(nullptr, nullptr, nullptr, nullptr, nullptr, options);
+    // Hardware discovery changes the probe fingerprint. Establish the stable
+    // environment before testing reuse, including its queued completion signal.
+    QTRY_VERIFY_WITH_TIMEOUT(!VocalSeparationControllerTestDriver::hardwareDiscoveryInFlight(controller), 10000);
+    QCoreApplication::processEvents();
+    QVERIFY(controller.probeDevices());
+    QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(),
+        VocalSeparationController::JobState::Idle, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(VocalSeparationControllerTestDriver::workerAvailable(controller), 5000);
+    const auto generation = VocalSeparationControllerTestDriver::verificationGeneration(controller);
+    QVERIFY(controller.probeDevices());
+    QCOMPARE(controller.jobState(), VocalSeparationController::JobState::Idle);
+    QCOMPARE(VocalSeparationControllerTestDriver::verificationGeneration(controller), generation);
 }
 
 void VocalSeparationControllerTest::
