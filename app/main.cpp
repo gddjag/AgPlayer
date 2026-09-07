@@ -320,7 +320,8 @@ int main(int argc, char* argv[])
     WindowsShellIdentityFilter shellIdentityFilter(
         applicationIcon, loadNativeWindowIcons(), &app);
     app.installEventFilter(&shellIdentityFilter);
-    if (qEnvironmentVariableIntValue("AGPLAYER_QA_SHELL_PROBE") == 1) {
+    if (qEnvironmentVariableIntValue("AGPLAYER_QA_SHELL_PROBE") == 1
+        && QCoreApplication::arguments().contains(QStringLiteral("--qa-test-mode"))) {
         // Exercise the production filter with a real, already-destroyed HWND.
         // Deliver the late notification explicitly so this regression does not
         // depend on monitor layout or platform teardown notification timing.

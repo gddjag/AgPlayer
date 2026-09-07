@@ -78,6 +78,7 @@ $savedPath = $env:PATH
 $savedPlatform = $env:QT_QPA_PLATFORM
 $savedBackend = $env:QT_QUICK_BACKEND
 $savedRhi = $env:QSG_RHI_BACKEND
+$process = $null
 try {
     $env:PATH = ($runtimePaths -join ';') + ';' + $savedPath
     $env:QT_QPA_PLATFORM = 'windows'; $env:QT_QUICK_BACKEND = ''; $env:QSG_RHI_BACKEND = 'd3d11'
@@ -93,7 +94,7 @@ try {
                 CpuSeconds = $process.TotalProcessorTime.TotalSeconds }
         }
         if (((Get-Date) - $started).TotalSeconds -gt $DurationSeconds + 90) {
-            throw "Normal timed exit failed; process $($process.Id) was not killed. Inspect it explicitly."
+            throw "Normal timed exit failed; the owned process $($process.Id) will be cleaned up. Logs remain at $outputRoot."
         }
     }
     $processRecords | Export-Csv -LiteralPath (Join-Path $outputRoot 'process.csv') -NoTypeInformation
@@ -110,4 +111,20 @@ try {
 finally {
     $env:PATH = $savedPath; $env:QT_QPA_PLATFORM = $savedPlatform
     $env:QT_QUICK_BACKEND = $savedBackend; $env:QSG_RHI_BACKEND = $savedRhi
+    if ($null -ne $process) {
+        try {
+            # Use only the Process returned by this invocation's Start-Process;
+            # never enumerate AgPlayer instances or terminate a process tree.
+            if (!$process.HasExited) {
+                $process.Kill()
+                if (!$process.WaitForExit(5000)) {
+                    Write-Warning "Owned QA process $($process.Id) did not exit after cleanup."
+                }
+            }
+        }
+        catch {
+            Write-Warning "Could not clean up owned QA process: $($_.Exception.Message)"
+        }
+        finally { $process.Dispose() }
+    }
 }
