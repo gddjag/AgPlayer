@@ -159,11 +159,11 @@ void AudioVisualFeatureController::processPlaybackPosition(qint64 positionMs)
 
     const bool majorImpact = group > 0 && group > lastImpactGroup_;
     if (beat > lastBeatIndex_) {
-        triggerBeat(std::clamp(0.42 + energy_ * 0.34, 0.0, 0.76),
+        triggerBeat(audibleSpectrum_ ? std::clamp(0.42 + energy_ * 0.34, 0.0, 0.76) : 0.0,
                     !majorImpact);
     }
     if (majorImpact) {
-        triggerImpact(std::clamp(0.68 + energy_ * 0.32, 0.0, 1.0));
+        triggerImpact(audibleSpectrum_ ? std::clamp(0.68 + energy_ * 0.32, 0.0, 1.0) : 0.0);
     }
     lastPositionMs_ = positionMs;
     lastBeatIndex_ = beat;
@@ -178,18 +178,26 @@ void AudioVisualFeatureController::processSpectrum(const QVariantList& spectrum)
                                            36, 56, 84, 128};
     constexpr std::array<double, 8> energyWeights{
         0.24, 0.19, 0.15, 0.13, 0.11, 0.08, 0.06, 0.04};
+    // Match the kick flux to the same two bass bands used by its energy gate.
+    // Including midrange bins both diluted narrow kicks and let mid notes
+    // retrigger the kick while bass was merely sustaining.
+    constexpr int kickBinCount = bandEdges[2];
     std::array<double, 128> current{};
     double flux = 0.0;
     double lowFlux = 0.0;
     double highFlux = 0.0;
+    audibleSpectrum_ = false;
     for (int index = 0; index < 128; ++index) {
         const double value = normalizedValue(spectrum.at(index));
+        // Gate only the visual strength, not the BPM grid or eight-beat count.
+        // Do not mistake the smoothed envelope's release tail for current audio.
+        audibleSpectrum_ = audibleSpectrum_ || (std::isfinite(value) && value > 1e-4);
         current[std::size_t(index)] = value;
         const double previous = previousSpectrum_.size() == 128
             ? normalizedValue(previousSpectrum_.at(index)) : 0.0;
         const double delta = std::max(0.0, value - previous);
         flux += delta;
-        if (index < 22) lowFlux += delta;
+        if (index < kickBinCount) lowFlux += delta;
         if (index >= 36 && index < 96) highFlux += delta;
     }
 
@@ -223,7 +231,7 @@ void AudioVisualFeatureController::processSpectrum(const QVariantList& spectrum)
     bands_ = std::move(nextBands);
     energy_ = std::clamp(weightedEnergy, 0.0, 1.0);
     spectralFlux_ = flux / 128.0;
-    const double normalizedLowFlux = lowFlux / 22.0;
+    const double normalizedLowFlux = lowFlux / double(kickBinCount);
     const double normalizedHighFlux = highFlux / 60.0;
     const double kickThreshold = adaptiveThreshold(
         lowFluxHistory_, transientSampleCount_, 0.05);
@@ -385,6 +393,7 @@ void AudioVisualFeatureController::resetOutputLevels()
 
 void AudioVisualFeatureController::resetBeatPosition() noexcept
 {
+    audibleSpectrum_ = false;
     lastPositionMs_ = -1;
     lastBeatIndex_ = -1;
     lastImpactGroup_ = -1;

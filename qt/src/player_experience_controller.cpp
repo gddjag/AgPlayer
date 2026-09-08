@@ -128,35 +128,76 @@ struct StylePreset {
 const std::array<StylePreset, 9>& visualPresets()
 {
     static const std::array<StylePreset, 9> presets = {{
-        {0, "#6553DD", "#F467A9", "#AD62ED", "#FFE2EE", "#030817",
+        {0, "#5276E8", "#F58DAD", "#A880ED", "#F5DBEC", "#040A1C",
          62, 56, 74, 38, 0.30, 54, 58, true, true, true, true, true, false, true,
          {90, 92, 50, 50, 50, 50, 50, 48}, 82, 136, 100, 64, 30, 86, 112, 42, 80},
-        {2, "#7F5CFF", "#FF4FD8", "#22F0FF", "#F7F2FF", "#070310",
+        {2, "#5554D8", "#EF5AAE", "#36D9DF", "#DFEBFA", "#070B1B",
          70, 80, 84, 58, 0.48, 64, 72, true, true, true, true, false, true, true,
          {92, 84, 58, 48, 54, 72, 96, 100}, 84, 144, 178, 68, 106, 94, 108, 48, 84},
-        {1, "#19282B", "#343B3B", "#B4CDCA", "#7F8D89", "#F4F1E8",
+        {1, "#203C3D", "#58655E", "#93B6A7", "#C4D6C8", "#F4F1E8",
          48, 36, 42, 22, 0.12, 30, 36, true, true, false, false, true, false, true,
          {62, 58, 54, 50, 48, 44, 42, 40}, 88, 122, 160, 48, 82, 116, 120, 30, 72},
-        {1, "#8EDFFF", "#D9B9FF", "#9EF2D1", "#F7FFFF", "#0B1117",
+        {1, "#76BFD7", "#E7B8A6", "#9ED5C0", "#ECF6EF", "#08141C",
          52, 48, 36, 24, 0.18, 34, 42, true, true, false, false, false, false, true,
          {70, 68, 62, 58, 58, 62, 68, 72}, 80, 134, 166, 56, 92, 70, 126, 34, 80},
-        {0, "#5264D9", "#B89CFF", "#46C7BC", "#DAF3EE", "#0A1018",
+        {0, "#637EA3", "#BAA5CA", "#76B7B1", "#D6E9E4", "#09151D",
          28, 22, 30, 16, 0.08, 26, 24, true, true, false, false, true, false, true,
          {48, 46, 44, 42, 42, 40, 38, 36}, 92, 108, 154, 46, 64, 112, 106, 26, 66},
-        {2, "#44D9FF", "#FF4FA7", "#FF8A45", "#FFF1D1", "#05030D",
+        {2, "#4B70D2", "#C567B5", "#E8AD75", "#DCE5FA", "#050918",
          72, 68, 76, 52, 0.45, 58, 68, true, true, true, true, true, true, true,
          {96, 88, 66, 54, 58, 76, 94, 100}, 80, 140, 182, 64, 104, 96, 110, 46, 84},
-        {3, "#38D8FF", "#FF5A9D", "#8A7CFF", "#F8F4FF", "#03040B",
+        {3, "#39CFE0", "#EF70A5", "#9778E8", "#F3DEEB", "#050718",
          58, 62, 82, 46, 0.22, 46, 64, true, false, true, true, true, false, true,
          {92, 86, 66, 58, 62, 76, 88, 94}, 82, 138, 198, 62, 74, 82, 118, 40, 82},
-        {1, "#174C78", "#2EC4B6", "#78DCE8", "#E9FDFF", "#02070C",
+        {1, "#245785", "#3DB4B1", "#7979B8", "#CAE5E8", "#030C17",
          44, 38, 58, 28, 0.10, 30, 42, true, false, false, false, true, false, true,
          {78, 74, 68, 60, 52, 48, 44, 40}, 88, 118, 195, 52, 58, 108, 116, 24, 70},
-        {1, "#8A3D22", "#E6813B", "#FFC66D", "#FFF1C2", "#090502",
+        {1, "#285A62", "#DC984E", "#EFBA72", "#F5DFC0", "#0C1014",
          56, 48, 66, 34, 0.18, 34, 52, true, false, true, true, true, false, true,
          {88, 84, 72, 62, 54, 48, 44, 42}, 84, 126, 188, 60, 66, 94, 120, 28, 74},
     }};
     return presets;
+}
+
+// User-authored preset values from the nine 2026-09-08 screenshots.
+// cinemaShake is stored here in hundredths; unpictured settings keep their preset values.
+struct ScreenshotPreset {
+    int rippleStrength;
+    int rippleWidth;
+    int rippleDecay;
+    int columnDensity;
+    int terrainAmplitude;
+    int subjectClarity;
+    int inputCompression;
+    int audioResponse;
+    int peakBoost;
+    int responseRange;
+    int reactorBrightness;
+    int columnInnerLight;
+    int columnLightSpill;
+    int columnLightRadius;
+    int centerHighlight;
+    int glowIntensity;
+    int depthOfField;
+    int autoRotateSpeed;
+    int cinemaShake;
+    int songAdaptiveColorEnabled;
+    int rhythmSensitivity;
+};
+const std::array<ScreenshotPreset, 9>& screenshotPresets()
+{
+    static const std::array<ScreenshotPreset, 9> values = {{
+        {39, 82, 81, 50, 34, 114, 99, 121, 55, 129, 100, 155, 176, 86, 40, 100, 83, 78, 81, 1, 80},
+        {41, 57, 81, 50, 40, 65, 108, 127, 62, 122, 99, 152, 94, 121, 31, 46, 69, 72, 43, 1, 84},
+        {85, 107, 73, 50, 46, 120, 76, 127, 56, 160, 92, 52, 86, 88, 39, 77, 98, 61, 80, 0, 72},
+        {139, 163, 99, 50, 26, 110, 107, 135, 64, 169, 131, 171, 125, 122, 55, 73, 70, 100, 119, 1, 80},
+        {26, 142, 125, 200, 57, 104, 130, 73, 55, 93, 187, 134, 125, 166, 74, 80, 135, 100, 8, 0, 66},
+        {155, 103, 119, 170, 29, 110, 80, 140, 68, 164, 110, 174, 125, 130, 64, 52, 116, 93, 116, 0, 95},
+        {91, 128, 115, 200, 67, 75, 92, 110, 49, 104, 71, 108, 60, 81, 62, 46, 56, 100, 95, 0, 82},
+        {65, 165, 147, 200, 28, 110, 135, 118, 70, 140, 153, 136, 79, 113, 66, 28, 108, 100, 99, 0, 70},
+        {78, 125, 90, 200, 52, 89, 84, 142, 94, 220, 71, 176, 131, 167, 80, 76, 129, 100, 111, 0, 74},
+    }};
+    return values;
 }
 
 } // namespace
@@ -764,53 +805,48 @@ void PlayerExperienceController::setRhythmSensitivity(int value)
 bool PlayerExperienceController::applyPreset(int preset)
 {
     if (preset < AudioRangeEcho || preset > AmberCinema) return false;
-    // Mode, softness, elasticity, ink density, ripple strength, width, decay.
-    // Higher decay fades a ring sooner; low values give slow waves a longer tail.
-    static constexpr std::array<std::array<int, 7>, 9> materials = {{
-        {0, 45, 35, 60, 100, 100, 100}, // balanced crystal
-        {1, 60, 82, 45, 125, 65, 175},  // short, fast neon jelly
-        {2, 88, 12, 78, 72, 155, 75},   // spreading ink
-        {1, 72, 58, 35, 82, 115, 110},  // soft, moist stage
-        {0, 22, 10, 50, 35, 130, 125},  // quiet crystal
-        {0, 34, 28, 52, 155, 145, 120}, // broad, strong galactic rings
-        {1, 52, 72, 42, 145, 45, 145},  // narrow overlapping neon
-        {1, 85, 42, 68, 65, 180, 55},   // broad, lingering sea waves
-        {0, 58, 20, 65, 78, 125, 90},   // softened amber crystal
+    const auto& screenshot = screenshotPresets().at(static_cast<size_t>(preset));
+    // Unpictured material mode, softness, elasticity and ink density stay unchanged.
+    static constexpr std::array<std::array<int, 4>, 9> materials = {{
+        {0, 45, 35, 60},
+        {1, 60, 82, 45},
+        {2, 88, 12, 78},
+        {1, 72, 58, 35},
+        {0, 22, 10, 50},
+        {0, 34, 28, 52},
+        {1, 52, 72, 42},
+        {1, 85, 42, 68},
+        {0, 58, 20, 65},
     }};
     const auto& material = materials.at(static_cast<size_t>(preset));
     setMaterialMode(material[0]);
     setMaterialSoftness(material[1]);
     setJellyElasticity(material[2]);
     setInkDensity(material[3]);
-    setRippleStrength(material[4]);
-    setRippleWidth(material[5]);
-    setRippleDecay(material[6]);
+    setRippleStrength(screenshot.rippleStrength);
+    setRippleWidth(screenshot.rippleWidth);
+    setRippleDecay(screenshot.rippleDecay);
     static constexpr std::array<int, 9> columnSizes =
         {95, 90, 80, 100, 110, 90, 85, 105, 105};
     setColumnSize(columnSizes.at(static_cast<size_t>(preset)));
     setColumnOpacity(100);
-    // The pale stage and strong galactic pulse need less exposure than dark
-    // palettes; retain their motion rather than flattening beat strength.
-    static constexpr std::array<int, 9> brightness =
-        {100, 100, 100, 78, 100, 74, 100, 100, 100};
-    setReactorBrightness(brightness.at(static_cast<size_t>(preset)));
+    setReactorBrightness(screenshot.reactorBrightness);
     const StylePreset& values = visualPresets().at(static_cast<size_t>(preset));
-    // An explicit preset selection owns the palette until automatic track
-    // colors are enabled again by the user.
-    setSongAdaptiveColorEnabled(false);
+    // Preserve the screenshot choice for per-song adaptive colors.
+    setSongAdaptiveColorEnabled(screenshot.songAdaptiveColorEnabled);
     setColorMode(values.colorMode);
     setCoolColor(QLatin1String(values.coolColor));
     setWarmColor(QLatin1String(values.warmColor));
     setAccentColor(QLatin1String(values.accentColor));
     setPeakColor(QLatin1String(values.peakColor));
     setBaseColor(QLatin1String(values.baseColor));
-    setTerrainAmplitude(values.terrainAmplitude);
+    setTerrainAmplitude(screenshot.terrainAmplitude);
     setMotionResponse(values.motionResponse);
     setGradientLayers(values.gradientLayers);
-    setGlowIntensity(values.glowIntensity);
-    setCinemaShake(values.cinemaShake);
+    setGlowIntensity(screenshot.glowIntensity);
+    setCinemaShake(screenshot.cinemaShake / 100.0);
     setAutoRotate(values.autoRotate);
-    setPeakBoost(values.peakBoost);
+    setPeakBoost(screenshot.peakBoost);
     setRipplesEnabled(values.ripplesEnabled);
     setBurstEnabled(values.burstEnabled);
     setFloatingCubesEnabled(values.floatingCubesEnabled);
@@ -819,15 +855,20 @@ bool PlayerExperienceController::applyPreset(int preset)
     setThemeCycleEnabled(values.themeCycleEnabled);
     setStreamHighlightEnabled(values.streamHighlightEnabled);
     setVisualEqGains(values.visualEqGains);
-    setInputCompression(values.inputCompression);
-    setAudioResponse(values.audioResponse);
-    setResponseRange(values.responseRange);
-    setCenterHighlight(values.centerHighlight);
+    setInputCompression(screenshot.inputCompression);
+    setAudioResponse(screenshot.audioResponse);
+    setResponseRange(screenshot.responseRange);
+    setCenterHighlight(screenshot.centerHighlight);
     setRhythmStrength(values.rhythmStrength);
-    setDepthOfField(values.depthOfField);
-    setSubjectClarity(values.subjectClarity);
-    setAutoRotateSpeed(values.autoRotateSpeed);
-    setRhythmSensitivity(values.rhythmSensitivity);
+    setDepthOfField(screenshot.depthOfField);
+    setSubjectClarity(screenshot.subjectClarity);
+    setAutoRotateSpeed(screenshot.autoRotateSpeed);
+    setRhythmSensitivity(screenshot.rhythmSensitivity);
+    // Density and column lighting now belong to each screenshot preset.
+    setColumnDensity(screenshot.columnDensity);
+    setColumnInnerLight(screenshot.columnInnerLight);
+    setColumnLightSpill(screenshot.columnLightSpill);
+    setColumnLightRadius(screenshot.columnLightRadius);
     return true;
 }
 
@@ -895,41 +936,41 @@ void PlayerExperienceController::load()
     colorMode_ = enumOrDefault(integer(QStringLiteral("colorMode"), MultiRegion),
                                MultiRegion, RainbowColumn, MultiRegion);
     coolColor_ = normalizedColor(storedColor(settings_.value(QStringLiteral("coolColor")),
-                                             QStringLiteral("#6553DD")),
-                                 QStringLiteral("#6553DD"));
+                                             QStringLiteral("#5276E8")),
+                                 QStringLiteral("#5276E8"));
     warmColor_ = normalizedColor(storedColor(settings_.value(QStringLiteral("warmColor")),
-                                             QStringLiteral("#F467A9")),
-                                 QStringLiteral("#F467A9"));
+                                             QStringLiteral("#F58DAD")),
+                                 QStringLiteral("#F58DAD"));
     accentColor_ = normalizedColor(storedColor(settings_.value(QStringLiteral("accentColor")),
-                                               QStringLiteral("#AD62ED")),
-                                   QStringLiteral("#AD62ED"));
+                                               QStringLiteral("#A880ED")),
+                                   QStringLiteral("#A880ED"));
     peakColor_ = normalizedColor(storedColor(settings_.value(QStringLiteral("peakColor")),
-                                             QStringLiteral("#FFE2EE")),
-                                 QStringLiteral("#FFE2EE"));
+                                             QStringLiteral("#F5DBEC")),
+                                 QStringLiteral("#F5DBEC"));
     baseColor_ = normalizedColor(storedColor(settings_.value(QStringLiteral("baseColor")),
-                                             QStringLiteral("#030817")),
-                                 QStringLiteral("#030817"));
-    terrainAmplitude_ = clampPercent(integer(QStringLiteral("terrainAmplitude"), 62));
+                                             QStringLiteral("#040A1C")),
+                                 QStringLiteral("#040A1C"));
+    terrainAmplitude_ = clampPercent(integer(QStringLiteral("terrainAmplitude"), 34));
     materialMode_ = enumOrDefault(integer(QStringLiteral("materialMode"), 0), 0, 2, 0);
     materialSoftness_ = clampRange(integer(QStringLiteral("materialSoftness"), 45), 0, 100);
     jellyElasticity_ = clampRange(integer(QStringLiteral("jellyElasticity"), 35), 0, 100);
     inkDensity_ = clampRange(integer(QStringLiteral("inkDensity"), 60), 0, 100);
-    rippleStrength_ = clampRange(integer(QStringLiteral("rippleStrength"), 100), 0, 200);
-    rippleWidth_ = clampRange(integer(QStringLiteral("rippleWidth"), 100), 20, 200);
-    rippleDecay_ = clampRange(integer(QStringLiteral("rippleDecay"), 100), 20, 200);
+    rippleStrength_ = clampRange(integer(QStringLiteral("rippleStrength"), 39), 0, 200);
+    rippleWidth_ = clampRange(integer(QStringLiteral("rippleWidth"), 82), 20, 200);
+    rippleDecay_ = clampRange(integer(QStringLiteral("rippleDecay"), 81), 20, 200);
     columnSize_ = clampRange(integer(QStringLiteral("columnSize"), 95), 50, 200);
-    columnDensity_ = clampRange(integer(QStringLiteral("columnDensity"), 130), 50, 200);
+    columnDensity_ = clampRange(integer(QStringLiteral("columnDensity"), 50), 50, 200);
     columnOpacity_ = clampRange(integer(QStringLiteral("columnOpacity"), 100), 0, 100);
     reactorBrightness_ = clampRange(integer(QStringLiteral("reactorBrightness"), 100), 0, 200);
-    columnInnerLight_ = clampRange(integer(QStringLiteral("columnInnerLight"), 100), 0, 200);
-    columnLightSpill_ = clampRange(integer(QStringLiteral("columnLightSpill"), 20), 0, 200);
-    columnLightRadius_ = clampRange(integer(QStringLiteral("columnLightRadius"), 100), 20, 200);
+    columnInnerLight_ = clampRange(integer(QStringLiteral("columnInnerLight"), 155), 0, 200);
+    columnLightSpill_ = clampRange(integer(QStringLiteral("columnLightSpill"), 176), 0, 200);
+    columnLightRadius_ = clampRange(integer(QStringLiteral("columnLightRadius"), 86), 20, 200);
     motionResponse_ = clampPercent(integer(QStringLiteral("motionResponse"), 56));
     gradientLayers_ = clampPercent(integer(QStringLiteral("gradientLayers"), 74));
-    glowIntensity_ = clampPercent(integer(QStringLiteral("glowIntensity"), 38));
-    cinemaShake_ = std::clamp(decimal(QStringLiteral("cinemaShake"), 0.30), 0.0, 1.8);
+    glowIntensity_ = clampPercent(integer(QStringLiteral("glowIntensity"), 100));
+    cinemaShake_ = std::clamp(decimal(QStringLiteral("cinemaShake"), 0.81), 0.0, 1.8);
     autoRotate_ = clampPercent(integer(QStringLiteral("autoRotate"), 54));
-    peakBoost_ = clampPercent(integer(QStringLiteral("peakBoost"), 58));
+    peakBoost_ = clampPercent(integer(QStringLiteral("peakBoost"), 55));
     ripplesEnabled_ = boolean(QStringLiteral("ripplesEnabled"), true);
     burstEnabled_ = boolean(QStringLiteral("burstEnabled"), true);
     floatingCubesEnabled_ = boolean(QStringLiteral("floatingCubesEnabled"), true);
@@ -939,7 +980,7 @@ void PlayerExperienceController::load()
     streamHighlightEnabled_ = boolean(
         QStringLiteral("streamHighlightEnabled"), true);
     songAdaptiveColorEnabled_ = boolean(
-        QStringLiteral("songAdaptiveColorEnabled"), false);
+        QStringLiteral("songAdaptiveColorEnabled"), true);
     const QVariant persistedGains = settings_.value(QStringLiteral("visualEqGains"));
     const int persistedGainsType = persistedGains.metaType().id();
     visualEqGains_ = (persistedGainsType == QMetaType::QVariantList
@@ -953,14 +994,14 @@ void PlayerExperienceController::load()
                                    Left, Right, Center);
     lyricPositionX_ = clampPercent(integer(QStringLiteral("lyricPositionX"), 50));
     lyricPositionY_ = clampPercent(integer(QStringLiteral("lyricPositionY"), 42));
-    inputCompression_ = clampRange(integer(QStringLiteral("inputCompression"), 82), 20, 150);
-    audioResponse_ = clampRange(integer(QStringLiteral("audioResponse"), 136), 20, 200);
-    responseRange_ = clampRange(integer(QStringLiteral("responseRange"), 100), 50, 220);
-    centerHighlight_ = clampPercent(integer(QStringLiteral("centerHighlight"), 64));
+    inputCompression_ = clampRange(integer(QStringLiteral("inputCompression"), 99), 20, 150);
+    audioResponse_ = clampRange(integer(QStringLiteral("audioResponse"), 121), 20, 200);
+    responseRange_ = clampRange(integer(QStringLiteral("responseRange"), 129), 50, 220);
+    centerHighlight_ = clampPercent(integer(QStringLiteral("centerHighlight"), 40));
     rhythmStrength_ = clampRange(integer(QStringLiteral("rhythmStrength"), 30), 0, 140);
-    depthOfField_ = clampRange(integer(QStringLiteral("depthOfField"), 86), 0, 150);
-    subjectClarity_ = clampRange(integer(QStringLiteral("subjectClarity"), 112), 20, 140);
-    autoRotateSpeed_ = clampPercent(integer(QStringLiteral("autoRotateSpeed"), 42));
+    depthOfField_ = clampRange(integer(QStringLiteral("depthOfField"), 83), 0, 150);
+    subjectClarity_ = clampRange(integer(QStringLiteral("subjectClarity"), 114), 20, 140);
+    autoRotateSpeed_ = clampPercent(integer(QStringLiteral("autoRotateSpeed"), 78));
     rhythmSensitivity_ = clampPercent(integer(QStringLiteral("rhythmSensitivity"), 80));
 
     settings_.setValue(QStringLiteral("mode"), immersiveMode_);

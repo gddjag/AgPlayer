@@ -6,6 +6,23 @@
 #include <cmath>
 
 namespace agplayer::terrain {
+float smoothReactorFeature(float current, float target, float elapsedSeconds) noexcept
+{
+    const float safeCurrent = std::isfinite(current) ? std::clamp(current, 0.0F, 1.0F) : 0.0F;
+    const float safeTarget = std::isfinite(target) ? std::clamp(target, 0.0F, 1.0F) : 0.0F;
+    const float elapsed = std::isfinite(elapsedSeconds) ? std::clamp(elapsedSeconds, 0.0F, 0.25F) : 0.0F;
+    const float timeConstant = safeTarget > safeCurrent ? 0.045F : 0.22F;
+    return safeCurrent + (safeTarget - safeCurrent) * (1.0F - std::exp(-elapsed / timeConstant));
+}
+
+bool TravelingWaveGate::consume(float nowSeconds, float strength) noexcept
+{
+    if (!std::isfinite(nowSeconds) || nowSeconds < nextSeconds_) return false;
+    const float energy = std::isfinite(strength) ? std::clamp(strength, 0.0F, 1.0F) : 0.0F;
+    nextSeconds_ = nowSeconds + 6.0F - energy * 3.0F;
+    return true;
+}
+
 namespace {
 
 float finiteOr(float value, float fallback) noexcept

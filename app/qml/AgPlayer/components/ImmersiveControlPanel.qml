@@ -493,23 +493,29 @@ Rectangle {
                     spacing: Theme.spacingSm
                     Repeater {
                         model: [qsTr("左"), qsTr("中"), qsTr("右")]
-                        Button {
+                        ThemedButton {
+                            id: positionButton
                             required property int index
                             required property string modelData
                             objectName: "lyricPositionButton" + index
                             Layout.fillWidth: true
                             implicitHeight: 30
+                            labelPixelSize: Theme.fontSizeCaption
                             text: modelData
                             checkable: true
+                            autoExclusive: true
                             checked: PlayerExperienceController.lyricPosition === index
                             onClicked: PlayerExperienceController.lyricPosition = index
                             background: Rectangle {
-                                radius: 8
-                                color: parent.checked ? Theme.highlightSoft
-                                                      : Theme.subtleGlassFill
-                                border.width: 1
-                                border.color: parent.checked ? Theme.highlightBorder
-                                                             : Theme.subtleGlassBorder
+                                radius: Theme.radiusSm
+                                color: positionButton.down ? Theme.surfacePressed
+                                       : positionButton.checked ? Theme.highlightSoft
+                                       : positionButton.hovered ? Theme.surfaceHover
+                                                                : Theme.subtleGlassFill
+                                border.width: positionButton.activeFocus ? 2 : 1
+                                border.color: positionButton.activeFocus ? Theme.focus
+                                              : positionButton.checked ? Theme.highlightBorder
+                                                                       : Theme.subtleGlassBorder
                             }
                         }
                     }

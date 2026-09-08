@@ -13,6 +13,8 @@ class TerrainReactorStateTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void travelingWaveGateSpacesMusicalEvents();
+    void rendererEnvelopeKeepsShortNotesVisible();
     void ecoOverloadReducesActualBudgetAtEveryStage();
     void defaultAudioMappingPreservesMediumAndLoudDynamics();
     void weakMusicRetainsVisualTravelWithoutLiftingSilence();
@@ -64,6 +66,29 @@ private slots:
     void ecoFramePacerLimitsWorkToThirtyFrames();
     void balancedFramePacerDoesNotCollapseToThirtyOnSixtyHertz();
 };
+
+void TerrainReactorStateTest::travelingWaveGateSpacesMusicalEvents()
+{
+    TravelingWaveGate gate;
+    QVERIFY(gate.consume(0.0F, 1.0F));
+    QVERIFY(!gate.consume(0.5F, 1.0F));
+    QVERIFY(!gate.consume(2.99F, 1.0F));
+    QVERIFY(gate.consume(3.0F, 0.25F));
+    QVERIFY(!gate.consume(6.0F, 1.0F));
+    QVERIFY(gate.consume(8.25F, 0.0F));
+    QVERIFY(!gate.consume(14.24F, 1.0F));
+    QVERIFY(gate.consume(14.25F, 1.0F));
+    QVERIFY(!gate.consume(std::numeric_limits<float>::quiet_NaN(), 1.0F));
+}
+
+void TerrainReactorStateTest::rendererEnvelopeKeepsShortNotesVisible()
+{
+    const float attacked = smoothReactorFeature(0.0F, 1.0F, 0.05F);
+    QVERIFY(attacked > 0.60F && attacked < 1.0F);
+    const float released = smoothReactorFeature(attacked, 0.0F, 0.2F);
+    QVERIFY(released > 0.0F && released < attacked * 0.45F);
+    QCOMPARE(smoothReactorFeature(0.0F, 0.0F, 0.2F), 0.0F);
+}
 
 void TerrainReactorStateTest::weakMusicRetainsVisualTravelWithoutLiftingSilence()
 {
@@ -741,8 +766,8 @@ void TerrainReactorStateTest::defaultCameraStartsAtHighObliqueView()
              "The initial immersive camera must retain an oblique overview");
     QVERIFY2(camera.pitch <= 0.88F,
              "The initial view must retain enough side elevation to read column height");
-    QVERIFY2(camera.distance >= 135.0F && camera.distance <= 150.0F,
-             "The initial overview must bring the wide stage into the foreground");
+    QVERIFY2(camera.distance >= 170.0F && camera.distance <= 190.0F,
+             "The floating stage overview must leave room for its dissolving boundary");
 }
 
 void TerrainReactorStateTest::terrainAmplitudeProducesClearlyVisibleColumnTravel()
@@ -1557,7 +1582,7 @@ void TerrainReactorStateTest::manualCameraControlRecoversAfterFourSeconds()
     CameraMotion camera;
     const CameraSnapshot initial = camera.snapshot();
     // A broad ground view, while retaining readable vertical side faces.
-    QVERIFY(initial.distance >= 135.0F && initial.distance <= 150.0F);
+    QVERIFY(initial.distance >= 170.0F && initial.distance <= 190.0F);
     QVERIFY(initial.pitch >= 0.75F && initial.pitch <= 0.88F);
     CameraMotion zoomedOut;
     zoomedOut.zoomBy(10000.0F, 1.0);
