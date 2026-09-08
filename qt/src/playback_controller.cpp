@@ -174,7 +174,8 @@ bool PlaybackController::scratchBuffering() const noexcept
 
 qint64 PlaybackController::cuePositionMs() const noexcept
 {
-    return currentDeckState().cuePositionMs;
+    const qint64 manualCue = currentDeckState().cuePositionMs;
+    return manualCue >= 0 ? manualCue : automaticCuePositionMs_;
 }
 
 bool PlaybackController::cueAuditioning() const noexcept
@@ -674,13 +675,13 @@ void PlaybackController::cuePress()
     }
 
     cueHeld_ = true;
-    const DeckState deck = currentDeckState();
+    const qint64 activeCue = cuePositionMs();
     const State activeState = toState(snapshot.state);
     if (activeState == Playing) {
         const ag_result pauseResult = ag_player_pause(player_);
         runCommand(pauseResult);
         if (pauseResult == AG_OK) {
-            seek(deck.cuePositionMs >= 0 ? deck.cuePositionMs : 0);
+            seek(activeCue >= 0 ? activeCue : 0);
         }
         return;
     }
@@ -690,12 +691,12 @@ void PlaybackController::cuePress()
     }
 
     constexpr qint64 cuePositionToleranceMs = 2;
-    if (deck.cuePositionMs >= 0
-        && qAbs(snapshot.position_ms - deck.cuePositionMs)
+    if (activeCue >= 0
+        && qAbs(snapshot.position_ms - activeCue)
             <= cuePositionToleranceMs) {
         cueAuditioning_ = true;
         cueAuditionTrackId_ = currentTrackId_;
-        cueAuditionReturnMs_ = deck.cuePositionMs;
+        cueAuditionReturnMs_ = activeCue;
         emit cueChanged();
         const ag_result playResult = ag_player_play(player_);
         runCommand(playResult);
@@ -706,6 +707,8 @@ void PlaybackController::cuePress()
     }
 
     DeckState& current = deckStates_[currentTrackId_];
+    automaticCuePositionMs_ = -1;
+    automaticCueSuppressed_ = true;
     current.cuePositionMs = std::max(qint64{0}, snapshot.position_ms);
     if (!saveDeckStateStore()) {
         setErrorMessage(QStringLiteral("Unable to save deck state"));
@@ -727,14 +730,19 @@ void PlaybackController::clearCue()
 {
     finishCueAudition(true);
     if (!hasPersistentCurrentTrack()) return;
-    DeckState& current = deckStates_[currentTrackId_];
-    if (current.cuePositionMs < 0) return;
-    current.cuePositionMs = -1;
-    if (deckStateIsEmpty(current)) deckStates_.remove(currentTrackId_);
-    if (!saveDeckStateStore()) {
-        setErrorMessage(QStringLiteral("Unable to save deck state"));
+    cancelBeatGridAutoPosition();
+    const bool hadCue = cuePositionMs() >= 0;
+    automaticCuePositionMs_ = -1;
+    automaticCueSuppressed_ = true;
+    auto current = deckStates_.find(currentTrackId_);
+    if (current != deckStates_.end() && current->cuePositionMs >= 0) {
+        current->cuePositionMs = -1;
+        if (deckStateIsEmpty(*current)) deckStates_.erase(current);
+        if (!saveDeckStateStore()) {
+            setErrorMessage(QStringLiteral("Unable to save deck state"));
+        }
     }
-    emit cueChanged();
+    if (hadCue) emit cueChanged();
 }
 
 void PlaybackController::jumpToCue()
@@ -756,7 +764,7 @@ void PlaybackController::jumpToCue()
         return;
     }
     finishCueAudition(false);
-    const qint64 target = std::max(qint64{0}, currentDeckState().cuePositionMs);
+    const qint64 target = std::max(qint64{0}, cuePositionMs());
     const ag_result pauseResult = ag_player_pause(player_);
     runCommand(pauseResult);
     if (pauseResult == AG_OK) seek(target);
@@ -825,6 +833,7 @@ void PlaybackController::setBeatGridFirstBeat()
     preserveAutomaticBeatGrid(current);
     current.beatGridOffsetMs = std::max(qint64{0}, qint64(snapshot.position_ms));
     current.beatGridCalibrated = true;
+    syncAutomaticCueToBeatGrid(true);
     if (!saveDeckStateStore()) {
         setErrorMessage(QStringLiteral("Unable to save deck state"));
     }
@@ -849,6 +858,7 @@ void PlaybackController::nudgeBeatGrid(const qint64 deltaMs)
         current.beatGridOffsetMs += deltaMs;
     }
     current.beatGridCalibrated = true;
+    syncAutomaticCueToBeatGrid(true);
     if (!saveDeckStateStore()) {
         setErrorMessage(QStringLiteral("Unable to save deck state"));
     }
@@ -867,6 +877,7 @@ void PlaybackController::setBeatGridBpm(const double bpm)
     preserveAutomaticBeatGrid(current);
     current.beatGridBpmOverride = bpm;
     current.beatGridCalibrated = true;
+    syncAutomaticCueToBeatGrid(true);
     if (!saveDeckStateStore()) {
         setErrorMessage(QStringLiteral("Unable to save deck state"));
     }
@@ -881,6 +892,23 @@ void PlaybackController::preserveAutomaticBeatGrid(DeckState& deck)
     // updates/reopening cannot silently move a grid the user already aligned.
     if (!validBeatGridBpm(deck.beatGridBpmOverride))
         deck.beatGridBpmOverride = beatGridBpm();
+}
+
+void PlaybackController::syncAutomaticCueToBeatGrid(const bool reliable)
+{
+    if (automaticCuePositionMs_ < 0
+        || currentDeckState().cuePositionMs >= 0) return;
+    qint64 nextCue = -1;
+    if (reliable) {
+        const qint64 target = beatGridOffsetMs();
+        const qint64 duration = std::max(durationMs_, beatGridWaveformDurationMs_);
+        if (target >= 0 && (duration <= 0 || target < duration)) {
+            nextCue = target;
+        }
+    }
+    if (automaticCuePositionMs_ == nextCue) return;
+    automaticCuePositionMs_ = nextCue;
+    emit cueChanged();
 }
 
 void PlaybackController::applyBeatGridWaveform(const QString& trackId,
@@ -914,14 +942,19 @@ void PlaybackController::setBeatGridAutoPositionEnabled(const bool enabled)
 
 void PlaybackController::cancelBeatGridAutoPosition()
 {
+    const bool suppressAutomaticCue = beatGridAutoPositionPending_;
     beatGridAutoPositionPending_ = false;
     // A user can seek between core queue selection and the next UI poll.
     // Remember the actual target so that poll cannot re-arm it afterward.
     ag_playback_snapshot snapshot{};
     if (player_ && ag_player_snapshot(player_, &snapshot) == AG_OK
         && snapshot.track_index < static_cast<size_t>(queueTrackIds_.size())) {
-        beatGridAutoPositionCancelledTrackId_ =
+        const QString targetTrackId =
             queueTrackIds_.at(static_cast<qsizetype>(snapshot.track_index));
+        beatGridAutoPositionCancelledTrackId_ = targetTrackId;
+        if (suppressAutomaticCue && targetTrackId == currentTrackId_) {
+            automaticCueSuppressed_ = true;
+        }
     }
 }
 
@@ -942,6 +975,10 @@ void PlaybackController::tryAlignBeatGridStart()
     const qint64 duration = std::max(durationMs_, qint64(snapshot.duration_ms));
     // Malformed/out-of-range saved anchors must not seek to the end of a song.
     if (target < 0 || target >= duration) return;
+    if (deck.cuePositionMs < 0 && !automaticCueSuppressed_) {
+        automaticCuePositionMs_ = target;
+        emit cueChanged();
+    }
     // seek preserves the core's stopped/paused/playing state and publishes the
     // committed source position used by the centered rolling playhead.
     seek(target);
@@ -966,9 +1003,11 @@ void PlaybackController::resetBeatGrid()
     current.beatGridBpmOverride = 0.0;
     current.beatGridOffsetMs = 0;
     current.beatGridCalibrated = false;
+    const bool restoreAutomaticCue = automaticBeatGrid_.reliable;
     if (deckStateIsEmpty(current)) {
         deckStates_.remove(currentTrackId_);
     }
+    syncAutomaticCueToBeatGrid(restoreAutomaticCue);
     if (!saveDeckStateStore()) {
         setErrorMessage(QStringLiteral("Unable to save deck state"));
     }
@@ -1331,6 +1370,9 @@ bool PlaybackController::prepareRow(int row)
     invalidateCueHoldForTrackChange();
     queueTrackIds_ = std::move(trackIds);
     beatGridAutoPositionCancelledTrackId_.clear();
+    if (library_->tracks().at(row).trackId == currentTrackId_) {
+        automaticCueSuppressed_ = false;
+    }
     beatGridAutoPositionPending_ = beatGridAutoPositionEnabled_;
     activeScopeSize_ = queueTrackIds_.size();
     activeScopeAllowsFallback_ = false;
@@ -1966,8 +2008,11 @@ void PlaybackController::pollSnapshot()
         beatGridWaveformDurationMs_ = 0;
         beatGridWaveformBpm_ = 0;
         automaticBeatGrid_ = {};
+        automaticCuePositionMs_ = -1;
+        automaticCueSuppressed_ =
+            beatGridAutoPositionCancelledTrackId_ == currentTrackId_;
         beatGridAutoPositionPending_ = beatGridAutoPositionEnabled_
-            && beatGridAutoPositionCancelledTrackId_ != currentTrackId_;
+            && !automaticCueSuppressed_;
         // This marker only bridges a core track switch and its next UI poll;
         // it must not suppress a later visit to the same song.
         beatGridAutoPositionCancelledTrackId_.clear();

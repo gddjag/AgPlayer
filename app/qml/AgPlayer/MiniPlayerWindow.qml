@@ -166,6 +166,8 @@ Window {
                 playback: miniWindow.playback
                 windows: miniWindow.windows
                 waveformSession: miniWindow.waveformSession
+                waveformActive: miniWindow.visible
+                                && miniWindow.visibility !== Window.Minimized
             }
         }
     }

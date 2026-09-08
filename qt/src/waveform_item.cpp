@@ -692,6 +692,11 @@ QVariantMap WaveformItem::layers() const
 
 void WaveformItem::setLayers(const QVariantMap& layers)
 {
+    // The shared session publishes duration and layers separately. QML can
+    // therefore deliver the same implicitly shared payload more than once.
+    // Keep the render snapshot and its summaries instead of reallocating them.
+    if (peaks_.isEmpty() && layers_ == layers) return;
+
     auto snapshot = std::make_shared<PeakSnapshot>();
     snapshot->revision = nextRevision_++;
 

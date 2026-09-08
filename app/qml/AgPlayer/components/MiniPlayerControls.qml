@@ -12,6 +12,7 @@ Rectangle {
     property var playback: PlaybackController
     property var windows: WindowController
     property var waveformSession: null
+    property bool waveformActive: true
     readonly property var frequencyWaveformSettings:
         SettingsController.frequencyColorWaveform
     property var rawWaveformLayers: ({})
@@ -84,6 +85,11 @@ Rectangle {
         return result
     }
     function applyWaveformMode() {
+        if (!waveformActive) {
+            fullTrackWaveform.layers = ({})
+            fullTrackWaveform.peaks = []
+            return
+        }
         if (SettingsController.waveformMode === 2) {
             fullTrackWaveform.peaks = root.shapeSpectrum(
                         playback ? playback.spectrum : [])
@@ -92,7 +98,7 @@ Rectangle {
         }
     }
     function loadWaveform() {
-        rawWaveformLayers = waveformSession ? waveformSession.layers : ({})
+        rawWaveformLayers = waveformActive && waveformSession ? waveformSession.layers : ({})
         waveformDurationMs = waveformSession
                 ? Number(waveformSession.durationMs || 0) : 0
         applyWaveformMode()
@@ -451,7 +457,10 @@ Rectangle {
         target: playback; ignoreUnknownSignals: true
         function onTrackIndexChanged() { root.loadWaveform() }
         function onCurrentTrackIdChanged() { root.loadWaveform() }
-        function onSpectrumChanged() { if (SettingsController.waveformMode === 2) root.applyWaveformMode() }
+        function onSpectrumChanged() {
+            if (root.waveformActive && SettingsController.waveformMode === 2)
+                root.applyWaveformMode()
+        }
     }
     Connections {
         target: root.waveformSession
@@ -464,5 +473,6 @@ Rectangle {
         function onWaveformModeChanged() { root.applyWaveformMode() }
     }
     onWaveformSessionChanged: root.loadWaveform()
+    onWaveformActiveChanged: root.loadWaveform()
     Component.onCompleted: root.loadWaveform()
 }

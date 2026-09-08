@@ -51,6 +51,16 @@ PlaybackStateStore::State PlaybackStateStore::load() const
 
 bool PlaybackStateStore::save(const State& state) const
 {
+    // A paused/idle player publishes the same checkpoint every second.
+    // Only cache successful commits; failed writes must remain retryable.
+    if (lastSavedState_) {
+        const auto& saved = *lastSavedState_;
+        if (saved.positionMs == state.positionMs && saved.mode == state.mode
+            && saved.cleanExit == state.cleanExit
+            && saved.currentTrackId == state.currentTrackId
+            && saved.queueTrackIds == state.queueTrackIds
+            && QFile::exists(filePath_)) return true;
+    }
     QJsonObject object{
         {QStringLiteral("version"), StateVersion},
         {QStringLiteral("queueTrackIds"), QJsonArray::fromStringList(state.queueTrackIds)},
@@ -65,7 +75,9 @@ bool PlaybackStateStore::save(const State& state) const
         file.cancelWriting();
         return false;
     }
-    return file.commit();
+    if (!file.commit()) return false;
+    lastSavedState_ = state;
+    return true;
 }
 
 bool PlaybackStateStore::markRunStarted() const

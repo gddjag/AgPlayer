@@ -727,9 +727,9 @@ int main(int argc, char* argv[])
                 store.requestSave(library.tracks());
                 store.flush();
             });
-        const QList<TrackRecord> loaded = store.load();
+        QList<TrackRecord> loaded = store.load();
         if (!loaded.isEmpty()) {
-            library.replaceAll(loaded);
+            library.replaceAll(std::move(loaded));
         }
         const QDir libraryDataDirectory = QFileInfo(libraryPath).dir();
         QString tagStoragePath =

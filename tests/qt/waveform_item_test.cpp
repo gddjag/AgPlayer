@@ -58,6 +58,7 @@ private slots:
     void reusesGeometryWhenPositionChangesWithinBucket();
     void subPixelWidthDoesNotCrash();
     void setLayersPopulatesLayerProperties();
+    void unchangedLayersDoNotInvalidateRenderData();
     void nonFrequencyModesIgnoreFrequencyLayers();
     void densityAndLineWidthAffectRenderedGeometry();
     void waveformStrokesStayInsideContainerEdges();
@@ -1052,6 +1053,27 @@ void WaveformItemTest::subPixelWidthDoesNotCrash()
     const auto* geometryNode = static_cast<const QSGGeometryNode*>(node);
     QCOMPARE(geometryNode->geometry()->vertexCount(), 4);
     delete node;
+}
+
+void WaveformItemTest::unchangedLayersDoNotInvalidateRenderData()
+{
+    WaveformItem item;
+    const auto layers = makeLayers(peaks({0.2, 0.8, 0.4}), peaks({0.1, 0.5, 0.2}));
+    item.setLayers(layers);
+    QSignalSpy changed(&item, &WaveformItem::layersChanged);
+    // Session duration and layers notifications can deliver the same payload twice.
+    item.setLayers(layers);
+    QCOMPARE(changed.count(), 0);
+    auto updated = layers;
+    updated[QStringLiteral("mix")] = peaks({0.3, 0.9, 0.5});
+    item.setLayers(updated);
+    QCOMPARE(changed.count(), 1);
+    QCOMPARE(item.layers(), updated);
+    // Returning from spectrum data must restore layers even when empty.
+    item.setLayers({});
+    item.setPeaks(peaks({0.5}));
+    item.setLayers({});
+    QVERIFY(item.peaks().isEmpty());
 }
 
 void WaveformItemTest::setLayersPopulatesLayerProperties()

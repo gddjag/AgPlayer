@@ -118,6 +118,34 @@ TestCase {
                 "mini must not instantiate a hidden UI registry")
     }
 
+    function test_waveform_data_visibility() {
+        var controls = findChild(miniPlayer, "miniPlayerControls")
+        var waveform = findChild(miniPlayer, "miniWaveform")
+        var session = controls.waveformSession
+        var savedLayers = session.layers
+        var savedMode = SettingsController.waveformMode
+        try {
+            SettingsController.waveformMode = 0
+            session.layers = {mix: [0.2, 0.8, 0.4]}
+            tryCompare(waveform, "layers", session.layers)
+            miniPlayer.visible = false
+            tryVerify(function() { return !waveform.layers.mix })
+            session.layers = {mix: [0.9, 0.3]}
+            verify(!waveform.layers.mix)
+            miniPlayer.visible = true
+            tryCompare(waveform, "layers", session.layers)
+            miniPlayer.showMinimized()
+            tryVerify(function() { return !waveform.layers.mix })
+            miniPlayer.showNormal()
+            tryCompare(waveform, "layers", session.layers)
+        } finally {
+            miniPlayer.showNormal()
+            miniPlayer.visible = true
+            session.layers = savedLayers
+            SettingsController.waveformMode = savedMode
+        }
+    }
+
     function test_mini_waveform_is_clipped_to_its_container() {
         var controls = findChild(miniPlayer, "miniPlayerControls")
         var container = findChild(controls, "miniWaveformContainer")

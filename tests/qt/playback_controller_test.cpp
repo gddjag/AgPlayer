@@ -59,6 +59,9 @@ private slots:
     void beatGridStateUsesSourceFallbackAndPersistsPerTrack();
     void firstBeatAutoPositionHonorsTransport_data();
     void firstBeatAutoPositionHonorsTransport();
+    void clearedAutomaticFirstBeatCueIsNotRecreated();
+    void sameTrackReloadRestoresAutomaticFirstBeatCue();
+    void manualBeatGridCalibrationUpdatesAutomaticCue();
     void deckStateStoreRejectsInvalidIntegerFields();
     void beatGridEditsDoNotChangeTempoMetadataOrCue();
     void cuePressReleaseAndPlayLatchFollowDeckContract();
@@ -1023,6 +1026,7 @@ void PlaybackControllerTest::firstBeatAutoPositionHonorsTransport_data()
     QTest::newRow("leave-and-reenter-professional") << 8;
     QTest::newRow("cancelled-old-track-can-align-on-next-visit") << 9;
     QTest::newRow("seek-before-track-poll-cancels-new-track") << 10;
+    QTest::newRow("saved-manual-cue-is-not-overwritten") << 11;
 }
 
 void PlaybackControllerTest::firstBeatAutoPositionHonorsTransport()
@@ -1078,6 +1082,9 @@ void PlaybackControllerTest::firstBeatAutoPositionHonorsTransport()
         controller.deckStates_[track.trackId].beatGridCalibrated = true;
         controller.deckStates_[track.trackId].beatGridOffsetMs = 400;
     }
+    if (action == 11) {
+        controller.deckStates_[track.trackId].cuePositionMs = 420;
+    }
     if (action == 8) {
         QVERIFY(QMetaObject::invokeMethod(&controller, "setBeatGridAutoPositionEnabled",
             Q_ARG(bool, false)));
@@ -1107,22 +1114,146 @@ void PlaybackControllerTest::firstBeatAutoPositionHonorsTransport()
     ag_playback_snapshot before{};
     QCOMPARE(ag_player_snapshot(core, &before), AG_OK);
     QSignalSpy seeks(&controller, &PlaybackController::seekCommitted);
+    if (action == 10) {
+        // An analysis completion for the previous track cannot initialize the
+        // new track's CUE while the controller is between asynchronous polls.
+        controller.applyBeatGridWaveform(track.trackId, 120.0, 16000, peaks);
+        QCOMPARE(controller.cuePositionMs(), qint64{-1});
+    }
     controller.applyBeatGridWaveform(controller.currentTrackId(), 120.0, 16000, peaks);
     ag_playback_snapshot after{};
     QCOMPARE(ag_player_snapshot(core, &after), AG_OK);
     QCOMPARE(after.state, before.state);
-    const bool shouldAlign = action == 0 || action == 1 || action == 7 || action == 9;
+    const bool shouldAlign = action == 0 || action == 1 || action == 7
+        || action == 9 || action == 11;
     QCOMPARE(seeks.size(), shouldAlign ? 1 : 0);
     if (shouldAlign) {
         const qint64 target = action == 7 ? 400 : 250;
         QCOMPARE(seeks.front().front().toLongLong(), target);
         QVERIFY(qAbs(after.position_ms - target) < 30);
     }
+    const qint64 expectedCue = action == 4 ? 0
+        : action == 11 ? 420
+        : action == 7 ? 400
+        : action == 0 || action == 1 || action == 9 ? 250 : -1;
+    QCOMPARE(controller.cuePositionMs(), expectedCue);
     // Reanalysis/metadata changes cannot re-arm an already consumed request.
     seeks.clear();
     peaks[0] = 0.4;
     controller.applyBeatGridWaveform(controller.currentTrackId(), 120.0, 16000, peaks);
     QCOMPARE(seeks.size(), 0);
+    QCOMPARE(controller.cuePositionMs(), expectedCue);
+}
+
+void PlaybackControllerTest::clearedAutomaticFirstBeatCueIsNotRecreated()
+{
+    const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(!fixture.isEmpty());
+    LibraryModel model;
+    TrackRecord track;
+    track.trackId = QStringLiteral("cleared-auto-cue");
+    track.path = fixture;
+    track.available = true;
+    track.bpm = 120.0;
+    QVERIFY(model.append(track));
+
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2'048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    const auto destroyCore = qScopeGuard([&] { ag_player_destroy(core); });
+    PlaybackController controller(core, &model);
+    controller.setBeatGridAutoPositionEnabled(true);
+    controller.loadRow(0);
+    QTRY_COMPARE(controller.currentTrackId(), track.trackId);
+
+    QVariantList peaks;
+    peaks.fill(0.0, 8'000);
+    for (int beat = 0; beat < 30; ++beat) peaks[125 + beat * 250] = 0.8;
+    controller.applyBeatGridWaveform(track.trackId, 120.0, 16'000, peaks);
+    QCOMPARE(controller.cuePositionMs(), qint64{250});
+    QVERIFY(!controller.deckStates_.contains(track.trackId));
+
+    controller.clearCue();
+    QCOMPARE(controller.cuePositionMs(), qint64{-1});
+    QVERIFY(!controller.deckStates_.contains(track.trackId));
+    peaks[0] = 0.4;
+    controller.applyBeatGridWaveform(track.trackId, 120.0, 16'000, peaks);
+    QCOMPARE(controller.cuePositionMs(), qint64{-1});
+    controller.nudgeBeatGrid(10);
+    QCOMPARE(controller.cuePositionMs(), qint64{-1});
+}
+
+void PlaybackControllerTest::sameTrackReloadRestoresAutomaticFirstBeatCue()
+{
+    const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(!fixture.isEmpty());
+    LibraryModel model;
+    TrackRecord track;
+    track.trackId = QStringLiteral("same-track-auto-cue");
+    track.path = fixture;
+    track.available = true;
+    track.bpm = 120.0;
+    QVERIFY(model.append(track));
+
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2'048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    const auto destroyCore = qScopeGuard([&] { ag_player_destroy(core); });
+    PlaybackController controller(core, &model);
+    controller.setBeatGridAutoPositionEnabled(true);
+    controller.loadRow(0);
+    QTRY_COMPARE(controller.currentTrackId(), track.trackId);
+
+    QVariantList peaks;
+    peaks.fill(0.0, 8'000);
+    for (int beat = 0; beat < 30; ++beat) peaks[125 + beat * 250] = 0.8;
+    controller.applyBeatGridWaveform(track.trackId, 120.0, 16'000, peaks);
+    QCOMPARE(controller.cuePositionMs(), qint64{250});
+    controller.clearCue();
+    QCOMPARE(controller.cuePositionMs(), qint64{-1});
+
+    controller.loadRow(0);
+    QCOMPARE(controller.currentTrackId(), track.trackId);
+    QCOMPARE(controller.cuePositionMs(), qint64{250});
+}
+
+void PlaybackControllerTest::manualBeatGridCalibrationUpdatesAutomaticCue()
+{
+    const QString fixture = QString::fromUtf8(qgetenv("AGPLAYER_TEST_WAV"));
+    QVERIFY(!fixture.isEmpty());
+    LibraryModel model;
+    TrackRecord track;
+    track.trackId = QStringLiteral("calibrated-auto-cue");
+    track.path = fixture;
+    track.available = true;
+    track.bpm = 120.0;
+    QVERIFY(model.append(track));
+
+    ag_player_config config{AG_AUDIO_BACKEND_NULL, 2'048};
+    ag_player* core = nullptr;
+    QCOMPARE(ag_player_create_with_config(&config, &core), AG_OK);
+    const auto destroyCore = qScopeGuard([&] { ag_player_destroy(core); });
+    PlaybackController controller(core, &model);
+    controller.setBeatGridAutoPositionEnabled(true);
+    controller.loadRow(0);
+    QTRY_COMPARE(controller.currentTrackId(), track.trackId);
+
+    QVariantList peaks;
+    peaks.fill(0.0, 8'000);
+    for (int beat = 0; beat < 30; ++beat) peaks[125 + beat * 250] = 0.8;
+    controller.applyBeatGridWaveform(track.trackId, 120.0, 16'000, peaks);
+    QCOMPARE(controller.cuePositionMs(), qint64{250});
+
+    controller.seek(600);
+    controller.setBeatGridFirstBeat();
+    QCOMPARE(controller.beatGridOffsetMs(), qint64{600});
+    QCOMPARE(controller.cuePositionMs(), qint64{600});
+    controller.nudgeBeatGrid(-25);
+    QCOMPARE(controller.beatGridOffsetMs(), qint64{575});
+    QCOMPARE(controller.cuePositionMs(), qint64{575});
+    controller.resetBeatGrid();
+    QCOMPARE(controller.beatGridOffsetMs(), qint64{250});
+    QCOMPARE(controller.cuePositionMs(), qint64{250});
 }
 
 void PlaybackControllerTest::deckStateStoreRejectsInvalidIntegerFields()

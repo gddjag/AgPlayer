@@ -2,6 +2,7 @@
 
 #include <QString>
 #include <QStringList>
+#include <optional>
 
 class PlaybackStateStore final {
 public:
@@ -22,4 +23,5 @@ public:
 
 private:
     QString filePath_;
+    mutable std::optional<State> lastSavedState_;
 };

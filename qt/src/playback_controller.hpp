@@ -265,6 +265,7 @@ private:
     void refreshSourceBpm();
     void refreshAutomaticBeatGrid();
     void preserveAutomaticBeatGrid(DeckState& deck);
+    void syncAutomaticCueToBeatGrid(bool reliable);
     void cancelBeatGridAutoPosition();
     void tryAlignBeatGridStart();
     void loadDeckStateStore();
@@ -323,6 +324,8 @@ private:
     qint64 beatGridWaveformDurationMs_ = 0;
     double beatGridWaveformBpm_ = 0;
     BeatGridEstimate automaticBeatGrid_;
+    qint64 automaticCuePositionMs_ = -1;
+    bool automaticCueSuppressed_ = false;
     bool beatGridAutoPositionEnabled_ = false;
     bool beatGridAutoPositionPending_ = false;
     QString beatGridAutoPositionCancelledTrackId_;
