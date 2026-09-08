@@ -201,6 +201,27 @@ TrackPalette blendTrackPalettes(const TrackPalette& from,
     return result;
 }
 
+bool MeteorFlight::launch(float now, int count, float strength) noexcept
+{
+    if (!std::isfinite(now) || count <= 0 || !std::isfinite(strength)
+        || strength <= 0.0F || pending_ || now - start_ < 3.0F)
+        return false;
+    group_ = int(sequence_++ % unsigned(count));
+    start_ = now;
+    strength_ = clampUnit(strength) * (0.66F + 0.34F
+        * std::fmod(float(sequence_) * 0.61803399F, 1.0F));
+    pending_ = true;
+    return true;
+}
+
+bool MeteorFlight::landed(float now) noexcept
+{
+    if (!pending_ || !std::isfinite(now) || now - start_ < 0.56F)
+        return false;
+    pending_ = false;
+    return true;
+}
+
 MultiWaveSources multiWaveSources(quint32 seed) noexcept
 {
     DeterministicRandom random(seed == 0U ? 1U : seed);

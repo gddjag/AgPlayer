@@ -905,7 +905,8 @@ add_test(NAME recovery_test
 )
 set_tests_properties(recovery_test PROPERTIES TIMEOUT 30)
 
-add_executable(terrain_column_material_test qt/terrain_column_material_test.cpp)
+add_executable(terrain_column_material_test qt/terrain_column_material_test.cpp
+    "${CMAKE_SOURCE_DIR}/qt/src/terrain_reactor_state.cpp")
 add_executable(terrain_column_mesh_test qt/terrain_column_mesh_test.cpp)
 set_target_properties(terrain_column_mesh_test PROPERTIES AUTOMOC ON)
 target_include_directories(terrain_column_mesh_test PRIVATE "${CMAKE_SOURCE_DIR}/qt/src")

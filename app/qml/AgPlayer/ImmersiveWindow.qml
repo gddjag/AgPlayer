@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Templates as T
 import AgPlayer
 
 Window {
@@ -11,6 +12,25 @@ Window {
     property int qaViewportWidth: 0
     property int qaViewportHeight: 0
     property alias surfaceItem: surface
+
+    readonly property bool transportShortcutsEnabled:
+        visible && active && visibility !== Window.Minimized
+        // Transient windows may remain "active" with focus in their owner.
+        && activeFocusItem !== null && activeFocusItem.activeFocus
+        && !editingControl()
+
+    function editingControl() {
+        var item = activeFocusItem
+        while (item) {
+            // Preserve arrows/Space for sliders, text editors, buttons and
+            // other focused controls, including their internal focus items.
+            if (item instanceof T.Control || item instanceof TextInput
+                    || item instanceof TextEdit)
+                return true
+            item = item.parent
+        }
+        return false
+    }
 
     function returnToWindowTheme() {
         if (PlayerExperienceController.hostMode
@@ -91,6 +111,52 @@ Window {
                  === PlayerExperienceController.Fullscreen
         onActivated: PlayerExperienceController.hostMode =
                      PlayerExperienceController.Windowed
+    }
+
+    Shortcut {
+        objectName: "immersivePreviousShortcut"
+        sequence: "Left"
+        context: Qt.WindowShortcut
+        autoRepeat: false
+        enabled: root.transportShortcutsEnabled
+        onActivated: PlaybackController.previous()
+    }
+
+    Shortcut {
+        objectName: "immersiveNextShortcut"
+        sequence: "Right"
+        context: Qt.WindowShortcut
+        autoRepeat: false
+        enabled: root.transportShortcutsEnabled
+        onActivated: PlaybackController.next()
+    }
+
+    Shortcut {
+        objectName: "immersivePlaybackShortcut"
+        sequence: "Space"
+        context: Qt.WindowShortcut
+        autoRepeat: false
+        enabled: root.transportShortcutsEnabled
+        onActivated: PlaybackController.togglePlayback()
+    }
+
+    Shortcut {
+        objectName: "immersiveShuffleShortcut"
+        sequence: "Down"
+        context: Qt.WindowShortcut
+        autoRepeat: false
+        enabled: root.transportShortcutsEnabled
+        onActivated: PlaybackController.setMode(PlaybackController.Shuffle)
+    }
+
+    Shortcut {
+        objectName: "immersiveLyricsShortcut"
+        sequence: "Up"
+        context: Qt.WindowShortcut
+        autoRepeat: false
+        enabled: root.transportShortcutsEnabled
+        onActivated: PlayerExperienceController.lyricsVisible =
+                     !PlayerExperienceController.lyricsVisible
     }
 
     ImmersiveSurface {

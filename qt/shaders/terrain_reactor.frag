@@ -231,9 +231,18 @@ void columnMedium(vec3 normal, vec3 view, float ior, float roughness,
     // Near-surface scattering lets the flat cap receive the upper emitter's
     // light rather than the darker midpoint of a long downward viewing ray.
     float luminousHeight = mix(height, clamp(surfacePosition.y + 0.5, 0.0, 1.0), 0.75);
+    // A smooth volume pulse rises from the foot after each detected bass beat.
+    // It changes emitted light only: the shell and the ground never move.
+    float riseAge = clamp(ubuf.audioEnvelope.w, 0.0, 1.0);
+    float riseHeight = mix(0.16, 1.20, smoothstep(0.0, 0.80, riseAge));
+    float riseProfile = exp(-pow((luminousHeight - riseHeight) / 0.26, 2.0));
+    float risingSource = clamp(musicLight, 0.0, 1.0) * riseProfile
+                       * (1.0 - smoothstep(0.72, 1.0, riseAge))
+                       * clamp(ubuf.sceneLighting.x, 0.0, 2.0) * 0.24;
     emittedLight = exp(-absorption * innerStart)
                  * ((vec3(1.0) - exp(-absorption * opticalLength)) / absorption)
-                 * tint * sourcePower * (0.12 + 0.88 * luminousHeight * luminousHeight) * 2.3;
+                 * tint * (sourcePower * (0.12 + 0.88 * luminousHeight * luminousHeight)
+                           + risingSource) * 2.3;
     // The distant environment is a dim background behind the emitting core,
     // not another white studio panel painted across the entire front face.
     transmittedLight = transmission * studioEnvironment(-view, roughness * 0.7) * 0.08;
@@ -330,7 +339,7 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
     float cap = smoothstep(0.70, 0.98, normal.y);
     // Upward light escape distinguishes the flat cap from the clear walls
     // without an opaque border or an added external lamp.
-    emission *= 1.0 + cap * 0.85;
+    emission *= 1.0 + cap * 0.30;
     float flash = clamp(streamSheen, 0.0, 4.0);
     flash *= smoothstep(0.015, 0.15, flash);
     float flashEnergy = dot(highBands, vec4(0.0, 0.42, 0.36, 0.22)) * 2.0
@@ -360,8 +369,10 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
                          * (2.4 + clusterSeed * 2.0) + clusterSeed * 6.2831853), 10.0);
     float clusterFootprint = max(fwidth(clusterUv.x), fwidth(clusterUv.y));
     float clusterResolved = 1.0 - smoothstep(0.8, 1.8, clusterFootprint);
-    float distantLight = mix(0.08, 0.025 + clusterPulse * 4.5, clusterResolved);
-    float facetLight = mix(distantLight, 0.02 + facetPulse * 5.0, facetResolved);
+    // One coherent flash lights the entire selected plane. Fine facets are
+    // restrained highlights on that sheet, not isolated patches replacing it.
+    float distantLight = mix(1.05, 1.05 + clusterPulse * 0.35, clusterResolved);
+    float facetLight = mix(distantLight, 1.05 + facetPulse * 0.45, facetResolved);
     emission += mix(albedo, srgbToLinear(vec3(0.85, 0.94, 1.0)), 0.40)
               * cap * (flash / (1.0 + flash)) * facetLight;
     // Distributed subsurface light remains visible at grazing angles; keep
@@ -389,12 +400,8 @@ void main()
     }
     float isTerrain = 1.0 - step(0.5, objectKind);
     float columnHeight = columnExtent.y;
-    // A small top-facet glint, never a texture on the smooth column wall.
-    float glintCoordinate = surfacePosition.x * 0.82 + surfacePosition.z * 0.57;
-    float glintWidth = max(fwidth(glintCoordinate), 0.015);
-    float glintPatch = 1.0 - smoothstep(0.035, 0.035 + glintWidth,
-                                        abs(glintCoordinate - 0.08));
-    float crownSheen = streamSheen * glintPatch;
+    // The ink preset also flashes the complete flat cap, not a narrow stripe.
+    float crownSheen = streamSheen;
     float jelly = step(0.5, material.x) * (1.0 - step(1.5, material.x));
     if (material.x > 1.5 && isTerrain > 0.5) {
         // Ink is deposited on a light ground, not luminous dark-mode tiles

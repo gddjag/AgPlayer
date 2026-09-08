@@ -180,6 +180,22 @@ private:
     float nextSeconds_ = 0.0F;
 };
 
+class MeteorFlight final {
+public:
+    bool launch(float now, int count, float strength) noexcept;
+    bool landed(float now) noexcept;
+    int group() const noexcept { return group_; }
+    float age(float now) const noexcept { return now - start_; }
+    float strength() const noexcept { return strength_; }
+    void cancel() noexcept { group_ = -1; pending_ = false; }
+private:
+    int group_ = -1;
+    unsigned sequence_ = 0;
+    float start_ = -100.0F;
+    float strength_ = 0.0F;
+    bool pending_ = false;
+};
+
 // x/y are stage coordinates, z is the normalized cycle phase and w is strength.
 MultiWaveSources multiWaveSources(quint32 seed) noexcept;
 
