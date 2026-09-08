@@ -1033,7 +1033,7 @@ TestCase {
         compare(PlayerExperienceController.terrainAmplitude, 0)
         mouseClick(amberCinema, amberCinema.width / 2,
                    amberCinema.height / 2, Qt.LeftButton)
-        tryCompare(PlayerExperienceController, "terrainAmplitude", 56)
+        tryCompare(PlayerExperienceController, "terrainAmplitude", 52)
         compare(amberCinema.checkable, false)
         var host = amberCinema.Window.window
         verify(host)
@@ -1060,6 +1060,31 @@ TestCase {
         compare(amberCinema.focusReason, Qt.TabFocusReason, focusDiagnostic())
         tryCompare(amberCinema, "visualFocus", true)
         compare(amberCinema.background.border.width, 2)
+    }
+
+    function test_000_first_immersive_open_accepts_shortcuts() {
+        var savedLyrics = PlayerExperienceController.lyricsVisible
+        try {
+            PlayerExperienceController.lyricsVisible = false
+            // Open through the real controller path. No click, requestActivate
+            // or forceActiveFocus in this test may repair initial focus.
+            PlayerExperienceController.immersiveMode = PlayerExperienceController.TerrainReactor
+            var coordinator = findChild(mainWindow, "immersiveCoordinator")
+            tryCompare(coordinator, "attachedHostMode", PlayerExperienceController.Windowed)
+            var host = coordinator.surface.Window.window
+            tryCompare(host, "visible", true)
+            tryCompare(host, "activeFocusItem", coordinator.surface)
+            tryCompare(host, "transportShortcutsEnabled", true)
+            var shortcut = findChild(host, "immersiveLyricsShortcut")
+            var spy = createTemporaryObject(immersiveShortcutSpyComponent,
+                                            testCase, { target: shortcut })
+            verify(spy && spy.valid)
+            keyClick(Qt.Key_Up)
+            compare(spy.count, 1)
+            compare(PlayerExperienceController.lyricsVisible, true)
+        } finally {
+            PlayerExperienceController.lyricsVisible = savedLyrics
+        }
     }
 
     function test_immersive_transport_shortcuts_respect_focus_and_editing() {

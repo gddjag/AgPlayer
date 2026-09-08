@@ -161,6 +161,9 @@ Window {
 
     ImmersiveSurface {
         id: surface
+        // Give the first presentation an explicit keyboard focus target.
+        // Declarative initial focus still yields to editors and sliders.
+        focus: true
         anchors.fill: parent
         hostMode: PlayerExperienceController.hostMode
         attached: PlayerExperienceController.immersiveMode
