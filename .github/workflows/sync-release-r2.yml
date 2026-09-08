@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: r2-release-${{ github.event.release.tag_name || inputs.tag }}
+  group: r2-release-latest
   cancel-in-progress: false
 
 jobs:
@@ -36,7 +36,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: node scripts/sync-release-r2.mjs download
-      - name: Upload EXE assets and publish checksums last
+      - name: Upload EXE assets, checksums, and latest metadata
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}

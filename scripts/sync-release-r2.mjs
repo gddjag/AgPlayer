@@ -10,6 +10,8 @@ import { pipeline } from 'node:stream/promises';
 const api = 'https://api.github.com/repos/gddjag/AgPlayer';
 const endpoint = 'https://50fb972f4425789ab744ba4c6614221e.r2.cloudflarestorage.com';
 const bucket = 'agplayer-releases';
+const publicBase = 'https://download.agplayer.com';
+const githubBase = 'https://github.com/gddjag/AgPlayer';
 const allowedHosts = new Set(['api.github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com']);
 
 export function validateTag(tag) {
@@ -17,6 +19,45 @@ export function validateTag(tag) {
     throw new Error('A stable release tag vX.Y.Z is required');
   }
   return tag;
+}
+
+export function compareVersions(left, right) {
+  const parse = value => {
+    if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(value ?? '')) throw new Error('A stable version X.Y.Z is required');
+    return value.split('.').map(BigInt);
+  };
+  const a = parse(left);
+  const b = parse(right);
+  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i] ? 1 : -1;
+  return 0;
+}
+
+export function buildLatest(manifest) {
+  const tag = validateTag(manifest?.tag);
+  const version = tag.slice(1);
+  if (typeof manifest.publishedAt !== 'string' || !Number.isFinite(Date.parse(manifest.publishedAt))) throw new Error('A valid publishedAt timestamp is required');
+  if (manifest.releaseNotesUrl !== `${githubBase}/releases/tag/${tag}`) throw new Error('Unexpected release notes URL');
+  if (!Array.isArray(manifest.files) || !manifest.files.length) throw new Error('At least one release file is required');
+  return {
+    schemaVersion: 1,
+    version,
+    tag,
+    publishedAt: manifest.publishedAt,
+    releaseNotesUrl: manifest.releaseNotesUrl,
+    files: manifest.files.map(file => {
+      if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*\.exe$/i.test(file.name) || !Number.isSafeInteger(file.size) || file.size <= 0 || !/^[a-f0-9]{64}$/.test(file.sha256)) {
+        throw new Error('Invalid latest release file');
+      }
+      const name = encodeURIComponent(file.name);
+      return {
+        name: file.name,
+        size: file.size,
+        sha256: file.sha256,
+        githubUrl: `${githubBase}/releases/download/${tag}/${name}`,
+        r2Url: `${publicBase}/releases/${tag}/${name}`
+      };
+    })
+  };
 }
 
 export function selectAssets(release, assets, tag) {
@@ -74,7 +115,11 @@ async function snapshot(tag) {
     assets.push(...batch);
     if (batch.length < 100) break;
   }
-  return selectAssets(release, assets, tag).map(({ id, name, size, digest, updated_at }) => ({ id, name, size, digest, updated_at }));
+  return {
+    publishedAt: release.published_at,
+    releaseNotesUrl: release.html_url,
+    assets: selectAssets(release, assets, tag).map(({ id, name, size, digest, updated_at }) => ({ id, name, size, digest, updated_at }))
+  };
 }
 
 async function sha256(path) {
@@ -84,10 +129,10 @@ async function sha256(path) {
 }
 
 export async function download(tag, directory) {
-  const assets = await snapshot(tag);
+  const release = await snapshot(tag);
   await mkdir(directory, { recursive: true });
   const files = [];
-  for (const asset of assets) {
+  for (const asset of release.assets) {
     const path = join(directory, asset.name);
     const response = await githubRequest(`${api}/releases/assets/${asset.id}`, true);
     await pipeline(Readable.fromWeb(response.body), createWriteStream(path));
@@ -96,8 +141,8 @@ export async function download(tag, directory) {
     if (asset.digest && asset.digest !== `sha256:${hash}`) throw new Error(`GitHub digest mismatch: ${asset.name}`);
     files.push({ name: asset.name, size: asset.size, sha256: hash });
   }
-  if (JSON.stringify(assets) !== JSON.stringify(await snapshot(tag))) throw new Error('Release assets changed during download; rerun after all uploads finish');
-  await writeFile(join(directory, 'manifest.json'), JSON.stringify({ tag, files }));
+  if (JSON.stringify(release) !== JSON.stringify(await snapshot(tag))) throw new Error('Release assets changed during download; rerun after all uploads finish');
+  await writeFile(join(directory, 'manifest.json'), JSON.stringify({ tag, publishedAt: release.publishedAt, releaseNotesUrl: release.releaseNotesUrl, files }));
   await writeFile(join(directory, 'SHA256SUMS'), files.map(file => `${file.sha256}  ${file.name}\n`).join(''));
   console.log(`Verified ${files.length} EXE asset(s) for ${tag}`);
 }
@@ -106,6 +151,7 @@ export async function upload(tag, directory, run = execFileSync) {
   if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) throw new Error('R2 access key secrets are required');
   const manifest = JSON.parse(await readFile(join(directory, 'manifest.json'), 'utf8'));
   if (manifest.tag !== tag || !Array.isArray(manifest.files) || !manifest.files.length) throw new Error('Invalid download manifest');
+  const latest = buildLatest(manifest);
   // Validate everything before any remote write, including the final checksum file.
   selectAssets({ tag_name: tag, published_at: true }, manifest.files.map((file, i) => ({ ...file, id: i + 1, state: 'uploaded' })), tag);
   for (const file of manifest.files) {
@@ -120,9 +166,26 @@ export async function upload(tag, directory, run = execFileSync) {
     const head = JSON.parse(aws(['s3api', 'head-object', '--bucket', bucket, '--key', key]));
     if (head.ContentLength !== file.size || head.Metadata?.sha256 !== file.sha256) throw new Error(`R2 object verification failed: ${file.name}`);
   }
-  // No latest pointer, recursive sync, or deletion; publish the manifest last.
+  // Publish checksums only after every EXE has been uploaded and verified.
   aws(['s3', 'cp', join(directory, 'SHA256SUMS'), `s3://${bucket}/releases/${tag}/SHA256SUMS`, '--only-show-errors', '--content-type', 'text/plain; charset=utf-8', '--cache-control', 'no-cache']);
-  console.log(`Synced ${manifest.files.length} EXE asset(s) and SHA256SUMS to releases/${tag}/`);
+  const currentPath = join(directory, 'current-latest.json');
+  let current;
+  try {
+    aws(['s3api', 'get-object', '--bucket', bucket, '--key', 'updates/latest.json', currentPath]);
+    current = JSON.parse(await readFile(currentPath, 'utf8'));
+    if (current.schemaVersion !== 1 || typeof current.version !== 'string') throw new Error('Invalid current latest metadata');
+  } catch (error) {
+    const details = `${error.stderr ?? ''} ${error.message ?? ''}`;
+    if (!/NoSuchKey|Not Found|404/i.test(details)) throw error;
+  }
+  if (current && compareVersions(latest.version, current.version) < 0) {
+    console.log(`Synced ${manifest.files.length} EXE asset(s) for ${tag}; kept newer latest ${current.version}`);
+    return;
+  }
+  const latestPath = join(directory, 'latest.json');
+  await writeFile(latestPath, `${JSON.stringify(latest, null, 2)}\n`);
+  aws(['s3', 'cp', latestPath, `s3://${bucket}/updates/latest.json`, '--only-show-errors', '--content-type', 'application/json; charset=utf-8', '--cache-control', 'no-cache']);
+  console.log(`Synced ${manifest.files.length} EXE asset(s) and latest metadata for ${tag}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
