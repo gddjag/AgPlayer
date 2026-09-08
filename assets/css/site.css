@@ -55,7 +55,9 @@
 .support-content>h2{font-size:clamp(32px,3.2vw,48px);margin-bottom:30px}.support-description{max-width:770px;margin:0 auto 16px;font-size:18px;line-height:1.95}.support-use{max-width:770px;margin:0 auto;font-size:16px;line-height:1.9}
 .support-codes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:32px;max-width:680px;margin:52px auto 34px}
 .support-code{margin:0;padding:28px 24px 24px;border:1px solid var(--line);border-radius:16px;background:#17101d}.support-code h3{font-size:20px;margin-bottom:24px;letter-spacing:0}.support-code.wechat h3{color:#9e71d9}.support-code.alipay h3{color:#c295ee}
-.qr-crop{display:block;position:relative;width:100%;max-width:240px;aspect-ratio:1;overflow:hidden;background:white;margin:0 auto;border-radius:8px}
+.qr-crop{display:block;position:relative;width:100%;max-width:240px;overflow:hidden;background:white;margin:0 auto;border-radius:8px}
+/* Intrinsic square fallback also supports Safari versions without aspect-ratio. */
+.qr-crop::before{content:"";display:block;padding-top:100%}
 .qr-crop img{position:absolute;max-width:none;height:auto;filter:none}
 .wechat .qr-crop img{width:232.833333%;left:-66.666667%;top:-75%}
 .alipay .qr-crop img{width:194.615385%;left:-47.115385%;top:-108.653846%}

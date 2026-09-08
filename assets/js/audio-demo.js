@@ -101,7 +101,13 @@
     if (!data) return;
     if (!audio.paused) { audio.pause(); return; }
     const task = generation;
-    try { await context.resume(); if (task !== generation) return; if (audio.ended) audio.currentTime = 0; await audio.play(); }
+    try {
+      // Safari requires play() during the original user gesture, before any await.
+      if (audio.ended) audio.currentTime = 0;
+      const resume = context.resume();
+      const playback = audio.play();
+      await Promise.all([resume, playback]);
+    }
     catch (_) { if (task === generation) status.textContent = AG.t('audioDemo.error.playback'); }
   });
   audio.addEventListener('play', () => { setState('playing'); sync(); });
