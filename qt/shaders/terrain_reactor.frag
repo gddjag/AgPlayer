@@ -203,7 +203,8 @@ void columnMedium(vec3 normal, vec3 view, float ior, float roughness,
     float height = clamp((position.y + ray.y * (innerStart + innerLength * 0.5))
                          / extent.y + 0.5, 0.0, 1.0);
     vec3 tint = mediumTint(height);
-    vec3 absorption = -log(max(tint, vec3(0.015))) * 0.06 + vec3(0.015);
+    // Retain the palette through the shorter reference-driven column volume.
+    vec3 absorption = -log(max(tint, vec3(0.015))) * 0.08 + vec3(0.015);
     vec3 transmission = exp(-absorption * travel);
     vec4 lowMidBands = clamp(ubuf.bandsLow * ubuf.equalizerLow, vec4(0.0), vec4(1.0));
     float lowMidEnergy = dot(lowMidBands, vec4(0.35, 0.30, 0.20, 0.15));
@@ -212,8 +213,15 @@ void columnMedium(vec3 normal, vec3 view, float ior, float roughness,
     // No constant core lamp: sustained low/mid energy feeds the volume,
     // while the existing spatial beat and impact envelopes excite it further.
     float coreRadius = max(16.0, ubuf.styleAudio.z * 0.65);
-    float steadyField = 0.35 + 0.65 * exp(-dot(worldPosition.xz, worldPosition.xz)
-                                         / (coreRadius * coreRadius));
+    float coreField = exp(-dot(worldPosition.xz, worldPosition.xz)
+                         / (coreRadius * coreRadius));
+    float steadyField = 0.35 + 0.65 * coreField;
+    // Elasticity drives a bounded inner-light response, not another height
+    // scale. Read the original uniform; material.z carries display opacity.
+    float elasticLight = step(0.5, material.x)
+                       * clamp(ubuf.materialParameters.z, 0.0, 1.0)
+                       * clamp(ubuf.audioEnvelope.z, 0.0, 1.0)
+                       * coreField * clamp(ubuf.styleAudio.w, 0.0, 1.5);
     float pulse = lowMidEnergy * 1.05 * steadyField * clamp(ubuf.styleAudio.w, 0.0, 1.5)
                 + upperEnergy * 0.18 * clamp(ubuf.styleAudio.w, 0.0, 1.5)
                 + clamp(musicLight, 0.0, 1.0) * 0.85
@@ -239,7 +247,8 @@ void columnMedium(vec3 normal, vec3 view, float ior, float roughness,
     float riseAge = clamp(ubuf.audioEnvelope.w, 0.0, 1.0);
     float riseHeight = mix(0.16, 1.20, smoothstep(0.0, 0.80, riseAge));
     float riseProfile = exp(-pow((luminousHeight - riseHeight) / 0.26, 2.0));
-    float risingSource = clamp(musicLight, 0.0, 1.0) * riseProfile
+    // Elasticity follows the traveling band rather than washing the whole face.
+    float risingSource = (clamp(musicLight, 0.0, 1.0) + elasticLight) * riseProfile
                        * (1.0 - smoothstep(0.72, 1.0, riseAge))
                        * clamp(ubuf.sceneLighting.x, 0.0, 2.0) * 0.24;
     emittedLight = exp(-absorption * innerStart)

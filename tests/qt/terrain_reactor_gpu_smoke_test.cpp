@@ -397,7 +397,9 @@ void TerrainReactorGpuSmokeTest::beatMaterialControlsChangeRenderedSurface_data(
     QTest::addColumn<int>("low");
     QTest::addColumn<int>("high");
     QTest::addColumn<int>("delay");
-    QTest::newRow("elasticity") << QByteArray("jellyElasticity") << 0 << 100 << 80;
+    // Elasticity's moving light is checked with fixed beat uniforms in
+    // terrain_column_material_test; asynchronous event captures are not a
+    // stable pixel comparison for a short traveling band.
     QTest::newRow("wave-strength") << QByteArray("rippleStrength") << 0 << 200 << 200;
     QTest::newRow("wave-width") << QByteArray("rippleWidth") << 20 << 200 << 200;
     QTest::newRow("wave-decay") << QByteArray("rippleDecay") << 20 << 200 << 1000;

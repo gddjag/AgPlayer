@@ -934,7 +934,8 @@ qt_add_shaders(terrain_column_material_test terrain_column_study_shadow_vertex
     OUTPUTS shaders/terrain_shadow.vert.qsb)
 agplayer_enable_warnings(terrain_column_material_test)
 add_test(NAME terrain_column_material_test COMMAND terrain_column_material_test)
-set_tests_properties(terrain_column_material_test PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE
+# Includes three fixed-phase native elasticity comparisons and repeat controls.
+set_tests_properties(terrain_column_material_test PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE
     ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
 
 foreach(qt_test IN ITEMS

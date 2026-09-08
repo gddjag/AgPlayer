@@ -29,6 +29,7 @@ struct StudyParameters {
     float beat = 0;
     float beatAge = 0;
     float audioLevel = 1;
+    float heightControl = 0.60F;
     float lowAudioLevel = 1;
     float midAudioLevel = 0;
     int waveSlot = -1;
@@ -36,13 +37,24 @@ struct StudyParameters {
     float exposure = 1;
     float opacity = 1;
     float softness = 0.45F;
+    float elasticity = 1.0F;
     float randomValue = 0.9F;
     bool array = false;
     bool shadows = false;
     QVector3D lighting{1, 0.6F, 1};
     QColor tint = QColor::fromRgbF(0.08F, 0.55F, 0.72F);
     QVector3D camera{15, 16, 24};
+    QVector3D cameraTarget{0, 6, 0};
 };
+
+void frameColumnOptics(StudyParameters& parameters)
+{
+    // Inspect the shorter reference-driven column at material-study scale.
+    // Keep the original viewing direction; change only the test camera, never
+    // the production mesh, audio gain, or height. Geometry cases retain defaults.
+    parameters.cameraTarget = {0, 3, 0};
+    parameters.camera = {9.75F, 9.5F, 15.6F};
+}
 struct StudyCounters {
     // Test-only rejection at the native material creation boundary.
     int rejectDepthStage = 0;
@@ -167,7 +179,7 @@ void ColumnRenderer::render(QRhiCommandBuffer* cb)
     QMatrix4x4 projection;
     projection.perspective(32, 1, 0.1F, 200);
     QMatrix4x4 view;
-    view.lookAt(parameters_.camera, QVector3D(0, 6, 0), QVector3D(0, 1, 0));
+    view.lookAt(parameters_.camera, parameters_.cameraTarget, QVector3D(0, 1, 0));
     const QMatrix4x4 mvp = rhi()->clipSpaceCorrMatrix() * projection * view;
     std::memcpy(u.mvp, mvp.constData(), sizeof(u.mvp));
     for (int i = 0; i < 4; ++i) {
@@ -183,7 +195,7 @@ void ColumnRenderer::render(QRhiCommandBuffer* cb)
         u.colors[i][1] = float(parameters_.tint.greenF());
         u.colors[i][2] = float(parameters_.tint.blueF()); u.colors[i][3] = 1;
     }
-    u.styleParameters[0] = 0.60F;
+    u.styleParameters[0] = parameters_.heightControl;
     // Material-only cases freeze affine motion by default; the fixed-audio
     // geometry regression explicitly supplies a supported nonzero motion.
     u.styleParameters[1] = parameters_.motionControl;
@@ -203,7 +215,7 @@ void ColumnRenderer::render(QRhiCommandBuffer* cb)
     u.cameraPosition[2] = parameters_.camera.z();
     u.materialParameters[0] = float(parameters_.material);
     u.materialParameters[1] = parameters_.softness;
-    u.materialParameters[2] = 1.0F;
+    u.materialParameters[2] = parameters_.elasticity;
     u.materialParameters[3] = 0.6F;
     u.sceneControls[0] = parameters_.opacity; u.sceneControls[1] = parameters_.exposure;
     u.sceneControls[2] = 112;
@@ -423,7 +435,12 @@ private slots:
     }
     void fixedAudioDoesNotAnimateColumnRelief();
     void consecutiveWavesUseDifferentPaletteAnchors();
-    void sustainedReliefLeavesRoomForBeatLift();
+    void steadyBandsDoNotReceiveAdditionalBeatDome_data() {
+        QTest::addColumn<int>("materialMode");
+        QTest::newRow("crystal") << 0;
+        QTest::newRow("jelly") << 1;
+    }
+    void steadyBandsDoNotReceiveAdditionalBeatDome();
     void unsupportedDepthMaterialFallsBack_data() {
         QTest::addColumn<int>("stage");
         QTest::newRow("bindings") << 1;
@@ -436,7 +453,8 @@ private slots:
     void beatLightTravelsUpInsideFixedColumn();
     void decayingBeatRetainsVisibleUpwardLightTravel();
     void innerLightHasOpticalDepthAcrossSmoothFace();
-    void jellyReboundStartsAtBeatOnset();
+    void jellyHeightFollowsContinuousBands();
+    void elasticityChangesTravelingLightAtFixedBeat();
     void neutralGrayWithoutInnerLightRemainsNeutral();
     void roughnessAndViewChangeReflectionResponse();
     void everyColumnHasLocalCapFlash_data() {
@@ -464,6 +482,69 @@ private slots:
     }
     void smoothInteriorRemainsStable();
 };
+
+void TerrainColumnMaterialTest::elasticityChangesTravelingLightAtFixedBeat()
+{
+    int peakChanged = 0;
+    for (float age : {0.0F, 0.25F, 0.50F}) {
+    auto counters = std::make_shared<StudyCounters>();
+    QQuickWindow window;
+    window.resize(640, 640);
+    window.setColor(QColor(3, 5, 9));
+    ColumnItem item(window.contentItem(), counters);
+    frameColumnOptics(item.parameters);
+    item.parameters.material = 1;
+    item.parameters.beat = 0.0F;
+    item.parameters.beatAge = age;
+    item.parameters.elasticity = 0;
+    item.parameters.lighting = {1, 0, 1};
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(counters->frames > 0 || counters->failed, 5000);
+    QVERIFY(!counters->failed);
+    // Locate geometry before lighting the moving band: a bright upper band
+    // can otherwise be mistaken for the cap by the optical face locator.
+    const FrontFace face = locateFrontFace(studyFrame(window));
+    QVERIFY(face.cap > 0 && face.foot > face.cap + 150);
+    item.parameters.beat = 1.0F;
+    std::array<QImage, 3> frames;
+    for (int pass = 0; pass < 3; ++pass) {
+        item.parameters.elasticity = pass == 0 ? 0 : 1;
+        const int before = counters->frames;
+        item.update();
+        QTRY_VERIFY_WITH_TIMEOUT(counters->frames > before, 3000);
+        frames[pass] = studyFrame(window);
+        QVERIFY(!frames[pass].isNull());
+    }
+    // Keep RGB delta >24 and >150 affected pixels. Inspect the full height
+    // of a narrower wall strip so the rising band cannot leave the ROI.
+    // Unlike separate real-time beat events, all inputs except elasticity are
+    // identical. Real event delivery remains covered by the reactor GPU tests.
+    const int wallHeight = face.foot - face.cap;
+    const QRect roi(265, face.cap + qRound(wallHeight * 0.05),
+                    40, qRound(wallHeight * 0.90));
+    int changed = 0;
+    for (int y = roi.top(); y <= roi.bottom(); ++y)
+        for (int x = roi.left(); x <= roi.right(); ++x) {
+            const QColor a = frames[0].pixelColor(x, y);
+            const QColor b = frames[1].pixelColor(x, y);
+            if (std::abs(a.red() - b.red()) + std::abs(a.green() - b.green())
+                + std::abs(a.blue() - b.blue()) > 24)
+                ++changed;
+        }
+    QCOMPARE(frames[1], frames[2]);
+    const auto geometry = compareFrames(frames[0], frames[1]);
+    QCOMPARE(geometry.firstBounds, geometry.secondBounds);
+    QVERIFY2(geometry.silhouetteMismatch < 10,
+             "Elasticity must not turn inner-light response into geometry motion");
+    qInfo() << "Fixed-beat elasticity age / changed pixels / ROI:" << age << changed << roi;
+    peakChanged = std::max(peakChanged, changed);
+    }
+    // A short pulse must be visible during its lifetime, not stay at peak
+    // contrast through the fading tail. Every phase above still must repeat
+    // exactly and retain identical geometry.
+    QVERIFY2(peakChanged > 150, "Elasticity must visibly change the traveling inner light");
+}
 
 void TerrainColumnMaterialTest::fixedAudioDoesNotAnimateColumnRelief()
 {
@@ -544,55 +625,79 @@ void TerrainColumnMaterialTest::consecutiveWavesUseDifferentPaletteAnchors()
     }
 }
 
-void TerrainColumnMaterialTest::sustainedReliefLeavesRoomForBeatLift()
+void TerrainColumnMaterialTest::steadyBandsDoNotReceiveAdditionalBeatDome()
 {
+    QFETCH(int, materialMode);
     QQuickWindow window;
     window.resize(640, 640);
-    window.setColor(Qt::black);
+    // Beat illumination is allowed to change. A chromatic backdrop keeps the
+    // coverage measurement independent of how brightly the shell is lit.
+    window.setColor(QColor(160, 0, 160));
     auto counters = std::make_shared<StudyCounters>();
     ColumnItem item(window.contentItem(), counters);
-    item.parameters.material = 0;
+    item.parameters.material = materialMode;
     item.parameters.camera = {0, 6, 50};
     item.parameters.midAudioLevel = 1;
+    item.parameters.stream = false;
+    item.parameters.beat = 0;
+    item.parameters.waveSlot = -1;
     window.show();
     QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
     item.update();
-    QTRY_VERIFY_WITH_TIMEOUT(counters->frames > 0, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(counters->frames > 0 || counters->failed, 5000);
+    QVERIFY(!counters->failed);
     const QImage steady = studyFrame(window);
+    QVERIFY(!steady.isNull());
     const int previous = counters->frames;
-    item.parameters.beat = 0.7F;
+    item.parameters.beat = 1;
     item.update();
-    QTRY_VERIFY_WITH_TIMEOUT(counters->frames > previous, 5000);
-    const FrameComparison change = compareFrames(steady, studyFrame(window));
-    qInfo() << "Sustained/beat column image heights:" << change.firstBounds.height()
-            << change.secondBounds.height();
+    QTRY_VERIFY_WITH_TIMEOUT(counters->frames > previous || counters->failed, 5000);
+    QVERIFY(!counters->failed);
+    const QImage beat = studyFrame(window);
+    QCOMPARE(beat.size(), steady.size());
+    const FrameComparison change = compareFrames(steady, beat);
+    qInfo() << "Fixed-band beat0/1 center bounds / coverage mismatch:"
+            << change.firstBounds << change.secondBounds << change.silhouetteMismatch;
+    QVERIFY2(change.commonVisible > 1000,
+             "The center column must be visibly driven by the nonzero bands");
     QVERIFY2(change.firstBounds.height() < 230,
              "Sustained audio makes a tall tower instead of a low floating terrain");
-    QVERIFY2(change.secondBounds.height() > change.firstBounds.height() * 1.15,
-             "Sustained relief masks the short beat lift");
+    QVERIFY2(nearlySameBounds(change.firstBounds, change.secondBounds),
+             "A beat must not add a separate center-height dome on top of fixed bands");
+    QVERIFY2(change.silhouetteMismatch <= change.commonVisible / 1000,
+             "Fixed frequency inputs must retain center geometry when only beat light changes");
 }
 
-void TerrainColumnMaterialTest::jellyReboundStartsAtBeatOnset()
+void TerrainColumnMaterialTest::jellyHeightFollowsContinuousBands()
 {
     auto counters = std::make_shared<StudyCounters>();
     QQuickWindow window;
     window.resize(640, 640); window.setColor(QColor(160, 0, 160));
     ColumnItem item(window.contentItem(), counters);
-    item.parameters.material = 0;
-    item.parameters.beat = 1;
+    item.parameters.material = 1;
+    item.parameters.beat = 0;
+    item.parameters.audioLevel = 0.35F;
+    item.parameters.midAudioLevel = 0.35F;
+    item.parameters.camera = {0, 6, 50};
     window.show();
     QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
     QTRY_VERIFY_WITH_TIMEOUT(counters->frames > 0 || counters->failed, 5000);
     QVERIFY(!counters->failed);
-    const auto rigid = studyFrame(window);
+    const auto quietBands = studyFrame(window);
+    QVERIFY(!quietBands.isNull());
     const int before = counters->frames;
-    item.parameters.material = 1;
+    item.parameters.audioLevel = 1;
+    item.parameters.midAudioLevel = 1;
     item.update();
-    QTRY_VERIFY_WITH_TIMEOUT(counters->frames > before, 3000);
-    const auto elastic = studyFrame(window);
-    const auto frames = compareFrames(rigid, elastic);
-    QVERIFY2(frames.secondBounds.top() < frames.firstBounds.top() - 4,
-             "Elastic columns must rise on beat onset, not wait for a sine phase");
+    QTRY_VERIFY_WITH_TIMEOUT(counters->frames > before || counters->failed, 3000);
+    QVERIFY(!counters->failed);
+    const auto strongBands = studyFrame(window);
+    QCOMPARE(strongBands.size(), quietBands.size());
+    const auto frames = compareFrames(quietBands, strongBands);
+    qInfo() << "Jelly continuous-band center bounds:" << frames.firstBounds << frames.secondBounds;
+    QVERIFY(frames.commonVisible > 1000);
+    QVERIFY2(frames.secondBounds.height() > frames.firstBounds.height() + 4,
+             "Stronger continuous audio must still raise jelly columns without a beat event");
 }
 
 void TerrainColumnMaterialTest::innerLightHasOpticalDepthAcrossSmoothFace()
@@ -601,6 +706,7 @@ void TerrainColumnMaterialTest::innerLightHasOpticalDepthAcrossSmoothFace()
     QQuickWindow window;
     window.resize(640, 640); window.setColor(QColor(3, 5, 9));
     ColumnItem item(window.contentItem(), counters);
+    frameColumnOptics(item.parameters);
     item.parameters.lighting = {1, 0, 1};
     item.parameters.stream = false;
     window.show();
@@ -609,11 +715,46 @@ void TerrainColumnMaterialTest::innerLightHasOpticalDepthAcrossSmoothFace()
     QVERIFY(!counters->failed);
     const auto frame = studyFrame(window);
     const FrontFace face = locateFrontFace(frame);
+    qInfo() << "Optical depth sampled face cap/foot:" << face.cap << face.foot;
+    const QString directory = qEnvironmentVariable("AGPLAYER_COLUMN_STUDY_DIR");
+    if (!directory.isEmpty()) {
+        QVERIFY(QDir().mkpath(directory));
+        QVERIFY(frame.save(QDir(directory).filePath("column-optical-depth-samples.png")));
+    }
     QVERIFY(face.capContrast >= 3 && face.foot > face.cap + 100);
     const int y = (face.cap + face.foot) / 2;
-    const double left = patchLight(meanPatch(frame, 235, 240, y - 3, y + 3));
-    const double center = patchLight(meanPatch(frame, 277, 282, y - 3, y + 3));
-    const double right = patchLight(meanPatch(frame, 319, 324, y - 3, y + 3));
+    const QColor background = frame.pixelColor(20, 20);
+    const auto covered = [&](int x, int row) {
+        const QColor pixel = frame.pixelColor(x, row);
+        return std::abs(pixel.red() - background.red())
+             + std::abs(pixel.green() - background.green())
+             + std::abs(pixel.blue() - background.blue()) > 10;
+    };
+    // The lowest silhouette point is the near vertical corner separating the
+    // inspected left wall from the right. Use coverage, not a highlight edge.
+    int cornerX = -1, wallLeft = -1;
+    for (int row = frame.height() - 2; row > y && cornerX < 0; --row) {
+        int first = -1, last = -1;
+        for (int x = 1; x < frame.width() - 1; ++x) {
+            if (!covered(x, row)) continue;
+            if (first < 0) first = x;
+            last = x;
+        }
+        if (first >= 0) cornerX = (first + last) / 2;
+    }
+    for (int x = 1; x < cornerX; ++x) {
+        if (covered(x, y)) { wallLeft = x; break; }
+    }
+    QVERIFY(wallLeft > 0 && cornerX - wallLeft > 80);
+    const int wallWidth = cornerX - wallLeft;
+    const int leftX = wallLeft + qRound(wallWidth * 0.125);
+    const int centerX = wallLeft + qRound(wallWidth * 0.5);
+    const int rightX = wallLeft + qRound(wallWidth * 0.875);
+    const double left = patchLight(meanPatch(frame, leftX - 2, leftX + 3, y - 3, y + 3));
+    const double center = patchLight(meanPatch(frame, centerX - 2, centerX + 3, y - 3, y + 3));
+    const double right = patchLight(meanPatch(frame, rightX - 2, rightX + 3, y - 3, y + 3));
+    qInfo() << "Optical depth wall span / sample centers / row:"
+            << wallLeft << cornerX << leftX << centerX << rightX << y;
     const double opticalRelief = std::abs(center - (left + right) * 0.5);
     qInfo() << "Optical face relief / samples:" << opticalRelief << left << center << right;
     // Remove the linear projected height ramp: uniform face paint cannot
@@ -665,6 +806,9 @@ void TerrainColumnMaterialTest::sharedShadowChangesLightingWithoutMovingArraySil
     window.resize(640, 640); window.setColor(QColor(160, 0, 160));
     ColumnItem item(window.contentItem(), counters);
     item.parameters.array = true;
+    // Exercise actual tall-column occlusion via the supported height control;
+    // the default reference centre is deliberately a much shallower relief.
+    item.parameters.heightControl = 1.0F;
     item.parameters.shadows = false;
     item.parameters.time = 0.15F;
     item.parameters.stream = false;
@@ -693,6 +837,11 @@ void TerrainColumnMaterialTest::sharedShadowChangesLightingWithoutMovingArraySil
     QVERIFY(!shadowOff.isNull() && shadowOff.size() == shadowOn.size());
 
     const FrameComparison comparison = compareFrames(shadowOff, shadowOn);
+    const QString shadowStudyDirectory = qEnvironmentVariable("AGPLAYER_COLUMN_STUDY_DIR");
+    if (!shadowStudyDirectory.isEmpty()) {
+        QVERIFY(QDir().mkpath(shadowStudyDirectory));
+        QVERIFY(shadowOn.save(QDir(shadowStudyDirectory).filePath("receiver-shadow-inspection.png")));
+    }
     qInfo() << "Array shadow off/on visible, mismatch, changed, RGB delta, light delta:"
             << comparison.firstVisible << comparison.secondVisible
             << comparison.silhouetteMismatch << comparison.changedCommon
@@ -709,13 +858,13 @@ void TerrainColumnMaterialTest::sharedShadowChangesLightingWithoutMovingArraySil
     QVERIFY2(comparison.firstMinusSecondLight > 0,
              "Enabling the shadow must reduce incident light on real receiver pixels");
 
-    // Manually located on the frontmost column's broad planar wall in the
-    // fixed 640px reference: no bevel, silhouette, cap or neighbour boundary.
+    // Located on the front-left column wall in receiver-shadow-inspection.png
+    // at the reference height: exclude caps, background and neighbour edges.
     // Archived acne frame: horizontal second-difference RMS 5.69; fixed: 0.
     double planeSecondDifference = 0;
     int planeSamples = 0;
-    for (int y = 440; y < 535; ++y) {
-        for (int x = 337; x < 365; ++x) {
+    for (int y = 505; y < 518; ++y) {
+        for (int x = 255; x < 270; ++x) {
             const double second = qGray(shadowOn.pixel(x - 1, y))
                                 - 2 * qGray(shadowOn.pixel(x, y))
                                 + qGray(shadowOn.pixel(x + 1, y));
@@ -791,22 +940,40 @@ void TerrainColumnMaterialTest::beatLightTravelsUpInsideFixedColumn()
     QQuickWindow window;
     window.resize(640, 640); window.setColor(QColor(3, 5, 9));
     ColumnItem item(window.contentItem(), counters);
-    item.parameters.beat = 1;
+    frameColumnOptics(item.parameters);
+    item.parameters.beat = 0;
+    item.parameters.beatAge = 1;
     item.parameters.stream = false;
     item.parameters.lighting = {1, 0, 1};
     window.show();
     QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
     QTRY_VERIFY_WITH_TIMEOUT(counters->frames > 0 || counters->failed, 5000);
     QVERIFY(!counters->failed);
-    const QImage early = studyFrame(window);
-    const FrontFace face = locateFrontFace(early);
+    // Locate the cap with the beat light off: even at age 1 the nonzero beat
+    // still lights the wall. Geometry is independent of this light envelope.
+    // The two compared frames below remain strength 1, age 0 and 0.55.
+    const QImage baseline = studyFrame(window);
+    const FrontFace face = locateFrontFace(baseline);
     QVERIFY(face.cap > 0 && face.foot > face.cap + 100);
+    item.parameters.beat = 1;
+    item.parameters.beatAge = 0;
+    const int baselineFrames = counters->frames;
+    item.update();
+    QTRY_VERIFY_WITH_TIMEOUT(counters->frames > baselineFrames, 3000);
+    const QImage early = studyFrame(window);
     item.parameters.beatAge = 0.55F;
     const int before = counters->frames;
     item.update();
     QTRY_VERIFY_WITH_TIMEOUT(counters->frames > before, 3000);
     const QImage late = studyFrame(window);
     QCOMPARE(early.size(), late.size());
+    qInfo() << "Fixed-strength rise sampled face cap/foot:" << face.cap << face.foot;
+    const QString directory = qEnvironmentVariable("AGPLAYER_COLUMN_STUDY_DIR");
+    if (!directory.isEmpty()) {
+        QVERIFY(QDir().mkpath(directory));
+        QVERIFY(early.save(QDir(directory).filePath("column-fixed-rise-early.png")));
+        QVERIFY(late.save(QDir(directory).filePath("column-fixed-rise-late.png")));
+    }
     const auto band = [&](const QImage& frame, float fraction) {
         double sum = 0;
         const int centerY = face.cap + qRound((face.foot - face.cap) * fraction);
@@ -816,6 +983,11 @@ void TerrainColumnMaterialTest::beatLightTravelsUpInsideFixedColumn()
     };
     const double upperGain = band(late, 0.25F) - band(early, 0.25F);
     const double lowerRelease = band(early, 0.75F) - band(late, 0.75F);
+    for (int i = 2; i <= 18; ++i) {
+        const float fraction = float(i) / 20.0F;
+        qInfo() << "Fixed-strength rise fraction / late-minus-early:"
+                << fraction << band(late, fraction) - band(early, fraction);
+    }
     qInfo() << "Upward inner light upper gain/lower release:" << upperGain << lowerRelease;
     QVERIFY2(upperGain > 3, "The inner pulse must reach the upper wall later in the beat");
     QVERIFY2(lowerRelease > 3, "The lower wall must release after the pulse rises");
@@ -836,6 +1008,7 @@ void TerrainColumnMaterialTest::decayingBeatRetainsVisibleUpwardLightTravel()
     QQuickWindow window;
     window.resize(640, 640); window.setColor(QColor(3, 5, 9));
     ColumnItem item(window.contentItem(), counters);
+    frameColumnOptics(item.parameters);
     item.parameters.stream = false;
     item.parameters.lighting = {1, 0, 1};
     window.show();
@@ -1091,8 +1264,10 @@ void TerrainColumnMaterialTest::lightControlsReachNativeMaterial()
     window.resize(640, 640);
     window.setColor(lane == 1 ? QColor(160, 0, 160) : QColor(3, 5, 9));
     ColumnItem item(window.contentItem(), counters);
+    if (lane == 2) frameColumnOptics(item.parameters);
     if (lane == 1) {
         item.parameters.array = true;
+        item.parameters.heightControl = 1.0F;
         item.parameters.camera = {34, 30, 48};
     }
     item.parameters.lighting[lane] = lane == 2 ? 0.2F : 0;
@@ -1139,12 +1314,25 @@ void TerrainColumnMaterialTest::lightControlsReachNativeMaterial()
             QVERIFY(high.save(QDir(directory).filePath("column-array-light-spill-on.png")));
         }
     }
+    QRect sample(230, 200, 165, 300);
+    if (lane == 2) {
+        // Measure the actual wall, not a fixed rectangle diluted by background
+        // after the center-height contract changes. Keep the >1 code-value
+        // mean response requirement identical for every lighting control.
+        const FrontFace face = locateFrontFace(high);
+        QVERIFY(face.cap > 0 && face.foot > face.cap + 100);
+        const int height = face.foot - face.cap;
+        sample = QRect(265, face.cap + qRound(height * 0.20),
+                       40, qRound(height * 0.65));
+    }
     quint64 difference = 0;
-    for (int y = 200; y < 500; ++y)
-        for (int x = 230; x < 395; ++x)
+    for (int y = sample.top(); y <= sample.bottom(); ++y)
+        for (int x = sample.left(); x <= sample.right(); ++x)
             difference += std::abs(qGray(low.pixel(x, y)) - qGray(high.pixel(x, y)));
-    qInfo() << "Native light control lane / mean difference:" << lane << double(difference) / (300 * 165);
-    QVERIFY2(difference > 300 * 165,
+    const int samples = sample.width() * sample.height();
+    qInfo() << "Native light control lane / ROI / mean difference:"
+            << lane << sample << double(difference) / samples;
+    QVERIFY2(difference > quint64(samples),
              "A lighting slider must visibly affect the rendered surface at fixed geometry/time");
     QCOMPARE(counters->generations.load(), generation);
 }
@@ -1329,6 +1517,7 @@ void TerrainColumnMaterialTest::everyColumnHasLocalCapFlash()
     QQuickWindow window;
     window.resize(640, 640); window.setColor(QColor(3, 5, 9));
     ColumnItem item(window.contentItem(), counters);
+    frameColumnOptics(item.parameters);
     item.parameters.randomValue = randomValue;
     window.show();
     QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);

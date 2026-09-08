@@ -108,7 +108,7 @@ void main()
         // Existing short beat/onset envelope drives illumination separately
         // from sustained band energy. No oscillator masquerades as a beat.
         musicLight = clamp(beatPulse * (0.18 + pow(core, 1.15) * 0.82)
-                            * ubuf.styleAudio.w * 1.15, 0.0, 1.0);
+                            * ubuf.styleAudio.w * 0.70, 0.0, 1.0);
         float terrainField = 1.0 - smoothstep(responseRadius * 0.45,
                                               responseRadius * 1.15,
                                               distanceFromCore);
@@ -234,7 +234,6 @@ void main()
                        * (0.012 + ubuf.parameters.x * 0.035
                           + slowBass * 0.045 + beatPulse * 0.12)
                        * ubuf.styleAudio.w;
-        float coreLift = (slowBass * 0.15 + beatPulse * 2.60) * dome * 4.25;
         float centerShoulders = ubuf.parameters.x * ubuf.styleAudio.w
                               * terrainField
                               * (0.035 + core * 0.14 + wideRidge * 0.26);
@@ -263,10 +262,26 @@ void main()
                     + frequencyTowers * (0.35 + crest * 0.65)) * amplitude;
         float restrainedRelief = min(sustainedRelief, 6.0)
                                + max(0.0, sustainedRelief - 6.0) * 0.20;
+        // Reference centre: overlapping continuous sub/bass regions (25/35),
+        // with 5/4 units of lift, rather than a second event-driven piston.
+        // Keep the surrounding terrain, ripples and the stationary base intact.
+        float referenceScale = mix(0.70, 1.38,
+            clamp((responseRadius / 56.0 - 0.5) / 1.7, 0.0, 1.0));
+        float referenceDistance = distanceFromCore / referenceScale;
+        float subRegion = 1.0 - smoothstep(0.0, 25.0, referenceDistance);
+        float bassRegion = 1.0 - smoothstep(5.0, 35.0, referenceDistance);
+        float referenceDrive = mix(0.28, 1.83, ubuf.styleParameters.x);
+        float referenceRelief = max(0.0,
+              bandsLow.x * subRegion * 5.0
+            + bandsLow.y * bassRegion * smoothstep(0.0, 1.0, randomValue + 0.25) * 4.0
+            + bandsLow.z * coherentDetail * 2.5
+            + bandsLow.w * ridgeA * 3.0 - 0.2) * referenceDrive;
+        float centerBlend = 1.0 - smoothstep(25.0, 35.0, referenceDistance);
+        float bandRelief = mix(restrainedRelief, referenceRelief, centerBlend);
         float rawHeight = max(0.0,
-            idle + restrainedRelief
+            idle + bandRelief
             + ripple * amplitude * 0.55
-            + coreLift * amplitude * (0.30 + crest * 0.70) + centerShoulders
+            + centerShoulders
             + coreGlow * 1.55);
         float softCap = mix(42.0, 48.0, step(0.001, impactStrength));
         float height = max(0.035,
@@ -274,14 +289,7 @@ void main()
         scale.y = height;
         // Straight boxes occupy 98.5% of the layout spacing, leaving a hairline.
         scale.xz *= 0.985 * clamp(ubuf.sceneControls.w, 0.5, 2.0);
-        if (material.x > 0.5 && material.x < 1.5) {
-            // Bounded vertical beat response: no cross-section deformation,
-            // audio buffer, or free-running wobble during silence.
-            // The detected envelope already has attack/release. A sine that
-            // starts at zero erased the attack and delayed the visible beat.
-            float rebound = beatPulse * material.z;
-            scale.y *= 1.0 + rebound * 0.28;
-        }
+        // Jelly is an optical material, not an extra whole-column beat scale.
         position.y += scale.y * 0.5;
         float stageHalfExtent = max(1.0, ubuf.sceneControls.z);
         float stageDistance = distanceFromCore;
@@ -533,8 +541,8 @@ void main()
         float baseLuminance = dot(base, vec3(0.2126, 0.7152, 0.0722));
         color = baseLuminance < 0.5 ? vec3(0.95) + base * 0.03 : base;
     }
-    // Elasticity is consumed in the vertex stage only. Reuse that varying
-    // component for exposure instead of increasing the interpolator budget.
+    // Fragment elasticity reads its original uniform directly. Reuse this
+    // varying for exposure instead of increasing the interpolator budget.
     material.z = ubuf.sceneControls.y;
     // Ink density is unused by non-ink material. Reuse its varying lane as a
     // signed rainbow-emission flag instead of adding an interpolator/uniform.
