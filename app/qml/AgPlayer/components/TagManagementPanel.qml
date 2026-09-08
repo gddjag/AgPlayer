@@ -109,7 +109,9 @@ Item {
     ThemedDialog {
         id: addTagDialog
         objectName: "addTagDialog"
-        width: 320
+        margins: Theme.spacingLg
+        parent: root.Overlay.overlay
+        width: Math.min(296, parent && parent.width > 32 ? parent.width - 32 : 296)
         title: qsTr("添加标签")
         modal: true
         anchors.centerIn: parent
@@ -174,8 +176,10 @@ Item {
 
     ThemedDialog {
         id: renameTagDialog
-        width: 320
+        parent: root.Overlay.overlay
+        width: Math.min(296, parent && parent.width > 32 ? parent.width - 32 : 296)
         objectName: "renameTagDialog"
+        margins: Theme.spacingLg
         title: qsTr("重命名标签")
         modal: true
         anchors.centerIn: parent
@@ -234,9 +238,12 @@ Item {
     ThemedDialog {
         id: removeTagDialog
         objectName: "removeTagDialog"
+        margins: Theme.spacingLg
         title: qsTr("删除标签")
         modal: true
-        width: 320
+        parent: root.Overlay.overlay
+        width: Math.min(296, parent && parent.width > 32 ? parent.width - 32 : 296)
+        contentWidth: width - leftPadding - rightPadding
         anchors.centerIn: parent
         standardButtons: Dialog.Ok | Dialog.Cancel
         onAccepted: {
@@ -250,11 +257,16 @@ Item {
                 root.removeTagRequested(removedKey)
             }
         }
-        contentItem: Label {
-            objectName: "removeTagWarning"
-            text: qsTr("确定删除这个标签？此操作只解除标签关系，不删除歌曲或磁盘文件。")
-            color: Theme.primaryText
-            wrapMode: Text.Wrap
+        contentItem: Item {
+            implicitHeight: removeTagWarning.implicitHeight
+            Label {
+                id: removeTagWarning
+                objectName: "removeTagWarning"
+                width: removeTagDialog.contentWidth
+                text: qsTr("确定删除这个标签？此操作只解除标签关系，不删除歌曲或磁盘文件。")
+                color: Theme.primaryText
+                wrapMode: Text.Wrap
+            }
         }
         background: Rectangle {
             color: Theme.elevated

@@ -94,6 +94,20 @@ private slots:
         checker.check(); network.replies.last()->respond(R"({"schemaVersion":1,"version":"1.1.1"})");
         QCOMPARE(checker.state(), "current");
     }
+    void missingManifestIsUnavailableRatherThanNetworkTimeout() {
+        ManifestNetwork network;
+        UpdateChecker checker(QUrl("https://download.agplayer.com/updates/latest.json"), "1.0.0", nullptr, &network);
+        checker.check();
+        network.replies.last()->respond("<html>Object not found</html>", 404);
+        QCOMPARE(checker.state(), "unavailable");
+        QVERIFY(!checker.busy());
+        QVERIFY(!checker.updateAvailable());
+        QVERIFY(checker.latestVersion().isEmpty());
+        QVERIFY(!checker.statusText().contains(QStringLiteral("超时")));
+        checker.check();
+        network.replies.last()->respond(R"({"schemaVersion":1,"version":"1.0.1"})");
+        QCOMPARE(checker.state(), "available");
+    }
     void excessiveResponseIsAborted() {
         ManifestNetwork network;
         UpdateChecker checker(QUrl("https://www.agplayer.com/latest.json"), "1.1.1", nullptr, &network);

@@ -211,7 +211,10 @@ void columnMedium(vec3 normal, vec3 view, float ior, float roughness,
     float upperEnergy = dot(upperBands, vec4(0.38, 0.28, 0.20, 0.14));
     // No constant core lamp: sustained low/mid energy feeds the volume,
     // while the existing spatial beat and impact envelopes excite it further.
-    float pulse = lowMidEnergy * 1.4 * clamp(ubuf.styleAudio.w, 0.0, 1.5)
+    float coreRadius = max(16.0, ubuf.styleAudio.z * 0.65);
+    float steadyField = 0.35 + 0.65 * exp(-dot(worldPosition.xz, worldPosition.xz)
+                                         / (coreRadius * coreRadius));
+    float pulse = lowMidEnergy * 1.05 * steadyField * clamp(ubuf.styleAudio.w, 0.0, 1.5)
                 + upperEnergy * 0.18 * clamp(ubuf.styleAudio.w, 0.0, 1.5)
                 + clamp(musicLight, 0.0, 1.0) * 0.85
                 + clamp(impactLight, 0.0, 1.0) * 1.20;
@@ -282,8 +285,8 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
     float softness = clamp(material.y, 0.0, 1.0);
     float jelly = step(0.5, material.x);
     float clarity = clamp(light, 0.0, 1.5);
-    float roughness = clamp(mix(0.10, 0.46, softness) + jelly * 0.045
-                             - clarity * 0.025, 0.08, 0.60);
+    float roughness = clamp(mix(0.10, 0.38, softness) + jelly * 0.035
+                             - clarity * 0.035, 0.08, 0.60);
     float ior = mix(1.46, 1.38, jelly);
     float f0Value = (ior - 1.0) / (ior + 1.0);
     vec3 f0 = vec3(f0Value * f0Value);
@@ -321,7 +324,7 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
     float centerRadius = max(16.0, ubuf.styleAudio.z * 0.38);
     float centerField = exp(-dot(worldPosition.xz, worldPosition.xz)
                            / (centerRadius * centerRadius));
-    float steadySource = lowMidEnergy * centerField * 0.50
+    float steadySource = lowMidEnergy * centerField * 0.30
                        * clamp(ubuf.styleAudio.w, 0.0, 1.5);
     vec4 highBands = clamp(ubuf.bandsHigh * ubuf.equalizerHigh, vec4(0.0), vec4(1.0));
     float highEnergy = dot(highBands, vec4(0.38, 0.28, 0.20, 0.14));
@@ -347,34 +350,43 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
     // Timing alone cannot illuminate a silent reactor; this local glint is
     // powered by the same inner-light control as the volume and thin shell.
     flash *= clamp(flashEnergy, 0.0, 1.0) * clamp(ubuf.sceneLighting.x, 0.0, 2.0);
+    // Derivatives must be evaluated outside non-uniform cap/flash branches.
+    vec2 surfaceFootprint = fwidth(surfacePosition.xz);
+    // Walls and unselected columns cannot show cap glints. Avoid their
+    // per-fragment hash/trigonometry work entirely.
+    if (cap > 0.0 && flash > 0.0001) {
     // Microfacets cover the cap, not its rim. Stable local cells receive
     // different phases; never regenerate random noise each frame. Fade into
     // their average once subpixel to avoid distant shimmering / aliasing.
-    vec2 facetUv = (surfacePosition.xz + vec2(0.5)) * 22.0;
+    vec2 facetUv = (surfacePosition.xz + vec2(0.5)) * 24.0;
     vec2 facetCell = floor(facetUv);
     float facetSeed = fract(sin(dot(facetCell, vec2(127.1, 311.7))) * 43758.5453);
     float facetPhase = ubuf.parameters.w * (2.4 + facetSeed * 2.0)
                      + facetSeed * 6.2831853;
     float facetPulse = pow(0.5 + 0.5 * sin(facetPhase), 10.0);
-    float facetFootprint = max(fwidth(facetUv.x), fwidth(facetUv.y));
+    float facetFootprint = max(surfaceFootprint.x, surfaceFootprint.y) * 24.0;
     float facetResolved = 1.0 - smoothstep(0.65, 1.5, facetFootprint);
-    // A second, fixed 3x3 cluster scale preserves sparse glints when the fine
+    // A second, fixed 4x4 cluster scale preserves sparse glints when the fine
     // facets are subpixel. Never enlarge noise continuously with camera zoom:
     // cross-fade fixed scales and filter even the clusters at extreme distance.
-    vec2 clusterUv = (surfacePosition.xz + vec2(0.5)) * 3.0;
+    vec2 clusterUv = (surfacePosition.xz + vec2(0.5)) * 4.0;
     vec3 columnCenter = worldPosition - surfacePosition * columnExtent;
     float clusterSeed = fract(sin(dot(floor(clusterUv), vec2(39.73, 81.19))
                          + dot(columnCenter.xz, vec2(0.73, 1.31))) * 15731.743);
     float clusterPulse = pow(0.5 + 0.5 * sin(ubuf.parameters.w
                          * (2.4 + clusterSeed * 2.0) + clusterSeed * 6.2831853), 10.0);
-    float clusterFootprint = max(fwidth(clusterUv.x), fwidth(clusterUv.y));
+    float clusterFootprint = max(surfaceFootprint.x, surfaceFootprint.y) * 4.0;
     float clusterResolved = 1.0 - smoothstep(0.8, 1.8, clusterFootprint);
     // One coherent flash lights the entire selected plane. Fine facets are
     // restrained highlights on that sheet, not isolated patches replacing it.
-    float distantLight = mix(1.05, 1.05 + clusterPulse * 0.35, clusterResolved);
-    float facetLight = mix(distantLight, 1.05 + facetPulse * 0.45, facetResolved);
-    emission += mix(albedo, srgbToLinear(vec3(0.85, 0.94, 1.0)), 0.40)
-              * cap * (flash / (1.0 + flash)) * facetLight;
+    float distantGrain = mix(0.12, clusterPulse * 1.4, clusterResolved);
+    float grain = mix(distantGrain, facetPulse * 1.8, facetResolved);
+    // A subdued colored sheet preserves the plane; silver points carry the
+    // sparkle, instead of making the entire face a white light source.
+    vec3 sheet = mix(albedo, srgbToLinear(vec3(0.85, 0.94, 1.0)), 0.25) * 0.65;
+    vec3 silver = mix(albedo, srgbToLinear(vec3(0.94, 0.97, 1.0)), 0.90);
+    emission += (sheet + silver * grain) * cap * (flash / (1.0 + flash));
+    }
     // Distributed subsurface light remains visible at grazing angles; keep
     // reflection contrast without letting a dark environment blacken the rim.
     vec3 radiance = externalLight + emission * (vec3(1.0) - min(fresnel, vec3(0.10)));

@@ -36,6 +36,7 @@ Dialog {
     onStandardButtonsChanged: Qt.callLater(updateStandardButtonLabels)
 
     footer: DialogButtonBox {
+        alignment: Qt.AlignRight
         visible: count > 0
         standardButtons: control.standardButtons
         spacing: Theme.spacingSm

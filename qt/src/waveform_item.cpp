@@ -163,6 +163,14 @@ VertexColor mixColor(double normalizedX,
     return {gradientColor(normalizedX), 255U};
 }
 
+bool playbackProgressAffectsColor(int visualMode,
+                                  qreal frequencyUnplayedOpacity) noexcept
+{
+    return visualMode == 0 || visualMode == 1
+           || (visualMode == 3
+               && !qFuzzyCompare(frequencyUnplayedOpacity + 1.0, 2.0));
+}
+
 std::size_t computePlayedCount(std::size_t peakCount,
                                qint64 position,
                                qint64 duration,
@@ -784,7 +792,10 @@ void WaveformItem::setPosition(qreal position)
     position_ = clamped;
     emit positionChanged();
     emit waveformCursorXChanged();
-    update();
+    if (playbackProgressAffectsColor(visualMode_,
+                                     frequencyUnplayedOpacity_)) {
+        update();
+    }
 }
 
 qreal WaveformItem::duration() const
@@ -1555,10 +1566,17 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         return node;
     }
 
-    const std::size_t newPlayedCount = sourceAnchoredSampling_
-        ? sourceAnchoredPlayedCount(anchoredWindow, position_, duration_)
-        : computePlayedCount(peakCount, position_ - visibleStartMs_,
-                             visibleEndMs_ - visibleStartMs_, 0);
+    // Spectrum and a fully opaque frequency waveform do not encode playback
+    // progress in their colours. Keep the cached bucket so a position-only
+    // update cannot rewrite and re-upload an identical vertex buffer.
+    const bool progressAffectsColor = playbackProgressAffectsColor(
+        visualMode_, frequencyUnplayedOpacity_);
+    const std::size_t newPlayedCount = !progressAffectsColor
+        ? node->playedCount_
+        : sourceAnchoredSampling_
+          ? sourceAnchoredPlayedCount(anchoredWindow, position_, duration_)
+          : computePlayedCount(peakCount, position_ - visibleStartMs_,
+                               visibleEndMs_ - visibleStartMs_, 0);
     const bool colorChanged = node->waveformColor_ != waveformColor_
                               || node->playedCount_ != newPlayedCount
                               || node->lowColor_ != lowColor_

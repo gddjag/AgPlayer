@@ -45,6 +45,7 @@ private slots:
     void threeBandMixerKeepsModerateDominanceVivid_data();
     void threeBandMixerKeepsModerateDominanceVivid();
     void frequencyModeUsesAmplitudeGeometryAndBrightnessOnlyProgress();
+    void opaqueFrequencyModeDoesNotRewriteColorsForPosition();
     void frequencyColorChangeDoesNotReplaceGeometryNode();
     void reusesNodeAndUpdatesGeometryAfterResize();
     void clearsOldNodeForEmptyOrZeroSizedContent();
@@ -82,6 +83,7 @@ private slots:
     void explicitViewportSurvivesDurationCorrection();
     void subBucketPanMovesWaveformContinuously();
     void sourceAnchoredPanKeepsOverlappingSamplesStable();
+    void bufferedRangeKeepsSourcePixelDensity();
     void frequencyIgnoresOptionalPeakRmsGeometry();
     void frequencyOverviewIntegratesEnergyInsteadOfIndependentMaxima();
     void frequencyZoomKeepsBucketColorOnPlainMixContour();
@@ -481,6 +483,37 @@ void WaveformItemTest::frequencyModeUsesAmplitudeGeometryAndBrightnessOnlyProgre
     QCOMPARE(playedVertices[1].b, beforeCenter.b);
     delete plainNode;
     delete frequencyNode;
+}
+
+void WaveformItemTest::opaqueFrequencyModeDoesNotRewriteColorsForPosition()
+{
+    TestableWaveformItem item;
+    item.setWidth(100);
+    item.setHeight(40);
+    item.setDuration(100);
+    item.setPosition(0);
+    item.setDensity(2.0);
+    item.setLineWidth(1.0);
+    item.setVisualMode(3);
+    item.setFrequencyUnplayedOpacity(1.0);
+    item.setLayers(makeLayers(
+        peaks({0.25, 0.5, 0.75, 1.0}),
+        peaks({1.0, 0.0, 1.0, 1.0}),
+        peaks({0.0, 1.0, 1.0, 1.0}),
+        peaks({0.0, 0.0, 0.0, 1.0})));
+
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node != nullptr);
+    auto* before = static_cast<QSGGeometryNode*>(node)
+                       ->geometry()->vertexDataAsColoredPoint2D();
+    before[0].set(before[0].x, before[0].y, 7, 11, 13, 17);
+
+    item.setPosition(100);
+    QCOMPARE(item.updatePaintNode(node, nullptr), node);
+    const auto* after = vertices(node);
+    compareColor(after[0], 7, 11, 13, 17);
+
+    delete node;
 }
 
 void WaveformItemTest::frequencyColorChangeDoesNotReplaceGeometryNode()
@@ -1354,6 +1387,61 @@ void WaveformItemTest::sourceAnchoredPanKeepsOverlappingSamplesStable()
         QCOMPARE(after.a, before[static_cast<std::size_t>(index)].a);
         QVERIFY(after.x < before[static_cast<std::size_t>(index)].x);
     }
+
+    // A buffered rolling waveform eventually rebases by many lattice points,
+    // not only by the sub-bucket pan above. The overlapping source points must
+    // retain both their amplitude and frequency colour across that rebase.
+    item.setVisibleRange(3000, 7000);
+    node = item.updatePaintNode(node, nullptr);
+    QVERIFY(node);
+    QCOMPARE(renderedPeakCount(node, item), beforeCount);
+    for (int index = 0; index < 2; ++index) {
+        const auto& after = vertices(node)[index * 2];
+        const auto& overlappingBefore = before[static_cast<std::size_t>(index + 2)];
+        QCOMPARE(after.y, overlappingBefore.y);
+        QCOMPARE(after.r, overlappingBefore.r);
+        QCOMPARE(after.g, overlappingBefore.g);
+        QCOMPARE(after.b, overlappingBefore.b);
+        QCOMPARE(after.a, overlappingBefore.a);
+        QVERIFY(after.x < overlappingBefore.x);
+    }
+    delete node;
+}
+
+void WaveformItemTest::bufferedRangeKeepsSourcePixelDensity()
+{
+    TestableWaveformItem item;
+    item.setHeight(100);
+    item.setDensity(1);
+    item.setLineWidth(1);
+    item.setDuration(120000);
+    item.setVisualMode(3);
+    item.setFrequencyUnplayedOpacity(1);
+    item.setSourceAnchoredSampling(true);
+
+    QVariantList values;
+    values.reserve(4096);
+    for (int index = 0; index < 4096; ++index) {
+        values.append(0.1 + 0.8 * std::abs(std::sin(index * 0.13)));
+    }
+    item.setLayers(makeLayers(values, values, values, values));
+
+    item.setWidth(640);
+    item.setVisibleRange(52500, 67500);
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node);
+    const int oneViewportPeaks = renderedPeakCount(node, item);
+    QCOMPARE(oneViewportPeaks, 320);
+
+    item.setWidth(1280);
+    item.setVisibleRange(45000, 75000);
+    node = item.updatePaintNode(node, nullptr);
+    QVERIFY(node);
+    const int bufferedPeaks = renderedPeakCount(node, item);
+    QCOMPARE(bufferedPeaks, oneViewportPeaks * 2);
+    QCOMPARE(static_cast<double>(bufferedPeaks) / 30000.0,
+             static_cast<double>(oneViewportPeaks) / 15000.0);
+
     delete node;
 }
 

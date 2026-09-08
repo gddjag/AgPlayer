@@ -522,6 +522,39 @@ TestCase {
         }, 1000)
     }
 
+    function test_search_input_debounces_and_cancels_stale_queries() {
+        var component = Qt.createComponent(Qt.resolvedUrl(
+                    "../../app/qml/AgPlayer/components/SearchFilter.qml"))
+        compare(component.status, Component.Ready, component.errorString())
+        var filter = component.createObject(testCase, { width: 640, height: 32 })
+        verify(filter)
+        try {
+            var field = findChild(filter, "librarySearchField")
+            verify(field)
+            field.text = "a"
+            field.text = "artist"
+            compare(filter.searchText, "")
+            compare(field.text, "artist")
+            tryCompare(filter, "searchText", "artist", 1000)
+            field.text = "pending"
+            filter.clearFilters()
+            wait(220)
+            compare(filter.searchText, "")
+            compare(field.text, "")
+            field.text = "stale"
+            filter.searchText = "external"
+            wait(220)
+            compare(filter.searchText, "external")
+            compare(field.text, "external")
+            field.text = "enter"
+            field.forceActiveFocus()
+            keyClick(Qt.Key_Return)
+            compare(filter.searchText, "enter")
+        } finally {
+            filter.destroy()
+        }
+    }
+
     function test_search_filter_compacts_without_hiding_controls() {
         var previousAutoRating = SettingsController.autoReadRating
         SettingsController.autoReadRating = true

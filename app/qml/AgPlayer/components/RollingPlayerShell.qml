@@ -57,7 +57,9 @@ Item {
     property var visualFeatures: AudioVisualFeatureController
     property var currentTrack: null
     // Rolling viewport state. Waveform samples/layers remain owned and
-    // rendered by WaveformItem; only the visible time interval changes.
+    // rendered by WaveformItem. A bounded two-viewport render window keeps
+    // the same pixels-per-millisecond density while ordinary playback only
+    // translates already-built scene-graph geometry.
     property var viewportBeatOptions: [2, 4, 8, 16, 32, 64]
     // Viewport zoom is deliberately local to a shell instance: re-entering
     // rolling mode starts wide, while track changes keep the user's choice.
@@ -66,10 +68,8 @@ Item {
     property real scratchVisualPositionMs: 0
     property real scratchAnchorPositionMs: 0
     property int libraryTrackRevision: 0
-    // Derived from WaveformItem's own coordinate mapper after each viewport
-    // update. This keeps the source position on the fixed needle even when
-    // the item has a clipped lead-in/out segment at a track boundary.
-    property real waveformContentX: 1
+    property real waveformRenderStartMs: -1
+    property real waveformRenderEndMs: -1
     property alias tagSearchText: rollingSidePanel.tagSearchText
     property int sidePanelPage: 0
     property bool sidePanelExpanded: true
@@ -127,17 +127,24 @@ Item {
         effectiveDurationMs <= 0 ? 0 : viewportStartMs + viewportSpanMs
     readonly property real viewStartTimeSec: viewportStartMs / 1000.0
     readonly property real viewEndTimeSec: viewportEndMs / 1000.0
-    readonly property real waveformVisibleStartMs:
-        Math.round(clamp(viewportStartMs, 0, effectiveDurationMs))
-    readonly property real waveformVisibleEndMs:
-        Math.round(clamp(viewportEndMs, 0, effectiveDurationMs))
-    readonly property real waveformContentStartFraction:
-        viewportSpanMs > 0
-        ? (waveformVisibleStartMs - viewportStartMs) / viewportSpanMs : 0
+    readonly property real waveformRenderSpanMs:
+        Math.max(0, waveformRenderEndMs - waveformRenderStartMs)
     readonly property real waveformContentWidthFraction:
         viewportSpanMs > 0
-        ? (waveformVisibleEndMs - waveformVisibleStartMs) / viewportSpanMs
+        ? waveformRenderSpanMs / viewportSpanMs
         : 1
+    // This is the same mapping used by WaveformItem::pixelForTime: the item's
+    // width is renderSpan / viewportSpan canvases, so renderSpan cancels out.
+    // Keeping it declarative avoids a transient old-width/new-range frame.
+    readonly property real waveformContentX: {
+        if (waveformRenderSpanMs <= 0 || viewportSpanMs <= 0)
+            return 1
+        var sourceTime = Math.round(clamp(viewportCenterMs, 0,
+                                          effectiveDurationMs))
+        return mainWaveformCanvas.width / 2
+                - (sourceTime - waveformRenderStartMs) / viewportSpanMs
+                  * Math.max(0, mainWaveformCanvas.width - 2)
+    }
     readonly property bool rollingLightTheme:
         SettingsController.themeMode === 1
         || (SettingsController.themeMode === 2 && Theme.isLight)
@@ -223,28 +230,54 @@ Item {
         return (Number(timeSec) - viewStartTimeSec) * pxPerSec
     }
 
-    function alignWaveformToPlayhead() {
-        if (!mainWaveform)
-            return
-        var sourceTime = Math.round(clamp(viewportCenterMs, 0,
-                                          effectiveDurationMs))
-        waveformContentX = mainWaveformCanvas.width / 2
-                - mainWaveform.pixelForTime(sourceTime)
+    function waveformRenderWindowNeedsRebase() {
+        var duration = Math.max(0, Math.round(effectiveDurationMs))
+        if (duration <= 0 || viewportSpanMs <= 0)
+            return waveformRenderStartMs !== 0 || waveformRenderEndMs !== 0
+        var targetSpan = Math.min(duration,
+                                  Math.max(1, Math.round(viewportSpanMs * 2)))
+        if (waveformRenderStartMs < 0 || waveformRenderEndMs < 0
+                || Math.abs(waveformRenderSpanMs - targetSpan) > 1)
+            return true
+
+        var sourceTime = Math.round(clamp(viewportCenterMs, 0, duration))
+        var guardMs = viewportSpanMs / 2
+        return (waveformRenderStartMs > 0
+                && sourceTime < waveformRenderStartMs + guardMs)
+                || (waveformRenderEndMs < duration
+                    && sourceTime > waveformRenderEndMs - guardMs)
     }
 
-    function syncWaveformViewport() {
+    function rebaseWaveformRenderWindow() {
+        if (!mainWaveform)
+            return
+        var duration = Math.max(0, Math.round(effectiveDurationMs))
+        if (duration <= 0 || viewportSpanMs <= 0) {
+            waveformRenderStartMs = 0
+            waveformRenderEndMs = 0
+            mainWaveform.setVisibleRange(0, 0)
+            return
+        }
+        var targetSpan = Math.min(duration,
+                                  Math.max(1, Math.round(viewportSpanMs * 2)))
+        var sourceTime = Math.round(clamp(viewportCenterMs, 0, duration))
+        var startMs = Math.round(clamp(sourceTime - targetSpan / 2,
+                                       0, duration - targetSpan))
+        var endMs = startMs + targetSpan
+        waveformRenderStartMs = startMs
+        waveformRenderEndMs = endMs
+        mainWaveform.setVisibleRange(startMs, endMs)
+    }
+
+    function syncWaveformViewport(forceRebase) {
         if (!mainWaveform)
             return
         // `playback` is injected as a var in tests and in the shell loader.
         // Write the derived centre explicitly so a late controller swap can
         // never leave WaveformItem on its construction-time position.
         mainWaveform.position = Math.round(viewportCenterMs)
-        mainWaveform.setVisibleRange(Math.round(waveformVisibleStartMs),
-                                     Math.round(waveformVisibleEndMs))
-        alignWaveformToPlayhead()
-        // setVisibleRange changes the clipped waveform width through QML
-        // bindings. Re-align once after those bindings settle.
-        Qt.callLater(alignWaveformToPlayhead)
+        if (forceRebase || waveformRenderWindowNeedsRebase())
+            rebaseWaveformRenderWindow()
     }
 
     function adjustSpeed(delta) {
@@ -350,7 +383,7 @@ Item {
         }
         scratchSurface.scratchStarted = false
         scratchGestureActive = false
-        syncWaveformViewport()
+        syncWaveformViewport(false)
     }
 
     function cancelScratchGesture() {
@@ -393,19 +426,24 @@ Item {
             visibleBeats = normalizedBeats
             return
         }
-        syncWaveformViewport()
+        syncWaveformViewport(true)
     }
-    onEffectiveBpmChanged: syncWaveformViewport()
-    onViewportCenterMsChanged: syncWaveformViewport()
-    onViewportSpanMsChanged: Qt.callLater(syncWaveformViewport)
-    onEffectiveDurationMsChanged: syncWaveformViewport()
-    onWaveformSessionChanged: refreshCurrentTrack()
+    onViewportCenterMsChanged: syncWaveformViewport(false)
+    onViewportSpanMsChanged: syncWaveformViewport(true)
+    onEffectiveDurationMsChanged: syncWaveformViewport(true)
+    onWaveformSessionChanged: {
+        refreshCurrentTrack()
+        syncWaveformViewport(true)
+    }
     onLibraryModelChanged: refreshCurrentTrack()
-    onPlaybackChanged: refreshCurrentTrack()
+    onPlaybackChanged: {
+        refreshCurrentTrack()
+        syncWaveformViewport(true)
+    }
 
     Component.onCompleted: {
         refreshCurrentTrack()
-        Qt.callLater(syncWaveformViewport)
+        Qt.callLater(function() { syncWaveformViewport(true) })
     }
 
     Connections {
@@ -1156,7 +1194,7 @@ Item {
                     scratchIdleTimer.restart()
                     lastX = mouse.x
                     lastTimestamp = now
-                    root.syncWaveformViewport()
+                    root.syncWaveformViewport(false)
                 }
 
                 onReleased: root.finishScratchGesture(false)

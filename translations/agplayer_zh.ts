@@ -7581,6 +7581,10 @@
 <context>
         <name>UpdateChecker</name>
         <message>
+            <source>官网尚未提供可用的更新信息，请前往官网下载页查看。</source>
+            <translation>官网尚未提供可用的更新信息，请前往官网下载页查看。</translation>
+        </message>
+        <message>
             <location filename="../qt/src/update_checker.cpp" line="40" />
             <source>更新服务尚未配置，可前往官网查看版本。</source>
             <translation>更新服务尚未配置，可前往官网查看版本。</translation>

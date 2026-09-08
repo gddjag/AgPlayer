@@ -1088,6 +1088,111 @@ TestCase {
         }
     }
 
+    function test_immersive_arrows_switch_real_queue_after_button_focus() {
+        var savedMode = PlaybackController.mode
+        var savedLyrics = PlayerExperienceController.lyricsVisible
+        try {
+            PlaybackController.setMode(PlaybackController.Sequential)
+            tryCompare(PlaybackController, "mode", PlaybackController.Sequential)
+            var ids = transportTestSetup.prepareTransportQueue()
+            compare(ids.length, 3, "Real PCM queue must load successfully")
+            tryCompare(PlaybackController, "currentTrackId", ids[1])
+            var panel = windowedPresetPanel()
+            var host = panel.Window.window
+            host.requestActivate()
+            tryCompare(host, "active", true)
+            host.surfaceItem.forceActiveFocus(Qt.OtherFocusReason)
+            keyClick(Qt.Key_Right)
+            tryCompare(PlaybackController, "currentTrackId", ids[2])
+            keyClick(Qt.Key_Left)
+            tryCompare(PlaybackController, "currentTrackId", ids[1])
+
+            var button = findChild(panel, "immersivePanelCollapseButton")
+            verify(button)
+            button.forceActiveFocus(Qt.TabFocusReason)
+            tryCompare(button, "activeFocus", true)
+            keyClick(Qt.Key_Left)
+            tryCompare(PlaybackController, "currentTrackId", ids[0])
+            keyClick(Qt.Key_Right)
+            tryCompare(PlaybackController, "currentTrackId", ids[1])
+            // Space still activates the focused button, not playback.
+            var collapsed = panel.collapsed
+            keyClick(Qt.Key_Space)
+            compare(panel.collapsed, !collapsed)
+            keyClick(Qt.Key_Right)
+            tryCompare(PlaybackController, "currentTrackId", ids[2])
+
+            PlayerExperienceController.lyricsVisible = false
+            keyClick(Qt.Key_Up)
+            compare(PlayerExperienceController.lyricsVisible, true)
+            keyClick(Qt.Key_Up)
+            compare(PlayerExperienceController.lyricsVisible, false)
+            keyClick(Qt.Key_Down)
+            tryCompare(PlaybackController, "mode", PlaybackController.Shuffle)
+            keyClick(Qt.Key_Down)
+            tryCompare(PlaybackController, "mode", PlaybackController.Shuffle)
+            PlaybackController.setMode(PlaybackController.Sequential)
+            tryCompare(PlaybackController, "mode", PlaybackController.Sequential)
+
+            var editing = createTemporaryObject(immersiveShortcutEditingComponent,
+                                                host.contentItem)
+            verify(editing)
+            var slider = findChild(editing, "shortcutEditingSlider")
+            slider.forceActiveFocus(Qt.TabFocusReason)
+            tryCompare(slider, "activeFocus", true)
+            keyClick(Qt.Key_Left)
+            compare(slider.value, 4)
+            keyClick(Qt.Key_Up)
+            keyClick(Qt.Key_Down)
+            compare(PlayerExperienceController.lyricsVisible, false)
+            compare(PlaybackController.mode, PlaybackController.Sequential)
+            wait(150)
+            compare(PlaybackController.currentTrackId, ids[2])
+            var text = findChild(editing, "shortcutEditingText")
+            text.forceActiveFocus(Qt.TabFocusReason)
+            tryCompare(text, "activeFocus", true)
+            text.cursorPosition = 2
+            keyClick(Qt.Key_Left)
+            compare(text.cursorPosition, 1)
+            keyClick(Qt.Key_Up)
+            keyClick(Qt.Key_Down)
+            compare(PlayerExperienceController.lyricsVisible, false)
+            compare(PlaybackController.mode, PlaybackController.Sequential)
+            wait(150)
+            compare(PlaybackController.currentTrackId, ids[2])
+
+            // Real transport/settings must also remain unchanged when the
+            // owner has focus, even if Qt reports its transient as active.
+            mainWindow.visible = true
+            mainWindow.requestActivate()
+            tryCompare(host, "activeFocusItem", null)
+            keyClick(Qt.Key_Left)
+            keyClick(Qt.Key_Up)
+            keyClick(Qt.Key_Down)
+            wait(150)
+            compare(PlaybackController.currentTrackId, ids[2])
+            compare(PlayerExperienceController.lyricsVisible, false)
+            compare(PlaybackController.mode, PlaybackController.Sequential)
+
+            PlayerExperienceController.immersiveMode = PlayerExperienceController.Off
+            tryCompare(WindowController, "immersivePresentationActive", false)
+            mainWindow.requestActivate()
+            tryCompare(mainWindow, "active", true)
+            keyClick(Qt.Key_Left)
+            keyClick(Qt.Key_Up)
+            keyClick(Qt.Key_Down)
+            wait(150)
+            compare(PlaybackController.currentTrackId, ids[2])
+            compare(PlayerExperienceController.lyricsVisible, false)
+            compare(PlaybackController.mode, PlaybackController.Sequential)
+        } finally {
+            PlaybackController.stop()
+            PlaybackController.setMode(savedMode)
+            tryCompare(PlaybackController, "mode", savedMode)
+            PlayerExperienceController.lyricsVisible = savedLyrics
+        }
+    }
+
     function test_immersive_transport_shortcuts_respect_focus_and_editing() {
         var savedMode = PlaybackController.mode
         var savedLyrics = PlayerExperienceController.lyricsVisible

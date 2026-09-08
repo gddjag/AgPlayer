@@ -21,6 +21,8 @@ using namespace agplayer::terrain::gpu;
 namespace {
 struct StudyParameters {
     float time = 0;
+    float motionControl = -0.125F;
+    bool idleRelief = false;
     int material = 1;
     bool rainbow = false;
     bool stream = false;
@@ -182,14 +184,15 @@ void ColumnRenderer::render(QRhiCommandBuffer* cb)
         u.colors[i][2] = float(parameters_.tint.blueF()); u.colors[i][3] = 1;
     }
     u.styleParameters[0] = 0.60F;
-    // Test-only fixture freezes the existing affine motion input. This does
-    // not change material time, geometry algorithms, or the production UBO.
-    u.styleParameters[1] = -0.125F;
+    // Material-only cases freeze affine motion by default; the fixed-audio
+    // geometry regression explicitly supplies a supported nonzero motion.
+    u.styleParameters[1] = parameters_.motionControl;
     u.styleParameters[2] = 0.5F;
     u.styleDynamics[1] = 0.5F;
     u.styleDynamics[2] = parameters_.rainbow ? 3.0F : 1.0F;
     u.styleDynamics[3] = 0.5F;
     u.styleExtra[2] = parameters_.stream ? 1.0F : 0.0F;
+    u.styleToggles[3] = parameters_.idleRelief ? 1.0F : 0.0F;
     u.styleAudio[0] = u.styleAudio[1] = u.styleAudio[3] = 1;
     u.styleAudio[2] = 56;
     u.stylePresentation[0] = u.stylePresentation[2] = 1;
@@ -412,6 +415,13 @@ FrontFace locateFrontFace(const QImage& frame)
 class TerrainColumnMaterialTest : public QObject {
     Q_OBJECT
 private slots:
+    void fixedAudioDoesNotAnimateColumnRelief_data() {
+        QTest::addColumn<float>("audioLevel");
+        QTest::addColumn<float>("midAudioLevel");
+        QTest::newRow("silence-with-idle-enabled") << 0.0F << 0.0F;
+        QTest::newRow("steady-audio-with-motion-enabled") << 0.65F << 0.35F;
+    }
+    void fixedAudioDoesNotAnimateColumnRelief();
     void consecutiveWavesUseDifferentPaletteAnchors();
     void sustainedReliefLeavesRoomForBeatLift();
     void unsupportedDepthMaterialFallsBack_data() {
@@ -432,8 +442,8 @@ private slots:
     void everyColumnHasLocalCapFlash_data() {
         QTest::addColumn<float>("randomValue");
         QTest::newRow("low-random") << 0.10F;
-        QTest::newRow("last-selected") << 0.49F;
-        QTest::newRow("first-unselected") << 0.51F;
+        QTest::newRow("last-selected") << 0.24F;
+        QTest::newRow("first-unselected") << 0.26F;
         QTest::newRow("unselected-forty-percent") << 0.90F;
     }
     void everyColumnHasLocalCapFlash();
@@ -454,6 +464,55 @@ private slots:
     }
     void smoothInteriorRemainsStable();
 };
+
+void TerrainColumnMaterialTest::fixedAudioDoesNotAnimateColumnRelief()
+{
+    QFETCH(float, audioLevel);
+    QFETCH(float, midAudioLevel);
+    auto counters = std::make_shared<StudyCounters>();
+    QQuickWindow window;
+    // Distinguish even a dark silent column from the background. Assertions
+    // measure occupied pixels, not material brightness or shader height math.
+    window.resize(640, 640);
+    window.setColor(QColor(160, 0, 160));
+    ColumnItem item(window.contentItem(), counters);
+    item.parameters.array = true;
+    item.parameters.material = 0;
+    item.parameters.motionControl = 0.5F; // Real supported motion, not the frozen fixture default.
+    item.parameters.idleRelief = true;
+    item.parameters.audioLevel = audioLevel;
+    item.parameters.midAudioLevel = midAudioLevel;
+    item.parameters.stream = false;
+    item.parameters.beat = 0;
+    item.parameters.waveSlot = -1;
+    item.parameters.lighting = {0, 0, 1};
+    item.parameters.tint = QColor::fromRgbF(0.42F, 0.42F, 0.42F);
+    item.parameters.camera = {34, 30, 48};
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(counters->frames > 0 || counters->failed, 5000);
+    QVERIFY(!counters->failed);
+    const QImage baseline = studyFrame(window);
+    QVERIFY(!baseline.isNull());
+    for (const float time : {2.0F, 5.0F, 11.0F}) {
+        const int before = counters->frames;
+        item.parameters.time = time;
+        item.update();
+        QTRY_VERIFY_WITH_TIMEOUT(counters->frames > before || counters->failed, 3000);
+        QVERIFY(!counters->failed);
+        const QImage current = studyFrame(window);
+        QCOMPARE(current.size(), baseline.size());
+        const auto frames = compareFrames(baseline, current);
+        qInfo() << "Fixed-audio relief time / coverage / mismatch / bounds:"
+                << time << frames.commonVisible << frames.silhouetteMismatch
+                << frames.firstBounds << frames.secondBounds;
+        QVERIFY2(frames.commonVisible > 5000, "The stationary column array must remain visible");
+        QVERIFY2(nearlySameBounds(frames.firstBounds, frames.secondBounds),
+                 "Elapsed time alone must not raise or lower the terrain silhouette");
+        QVERIFY2(frames.silhouetteMismatch <= frames.commonVisible / 1000,
+                 "Fixed audio without beat/ripple events must not animate individual columns");
+    }
+}
 
 void TerrainColumnMaterialTest::consecutiveWavesUseDifferentPaletteAnchors()
 {
@@ -1358,13 +1417,14 @@ void TerrainColumnMaterialTest::everyColumnHasLocalCapFlash()
     qInfo() << "Random/cap pixels/top RMS off-on/side RMS off-on/local coverage:"
             << randomValue << capPixels.size() << topRms[0] << topRms[1]
             << sideRms[0] << sideRms[1] << bestLocalCoverage;
-    if (randomValue >= 0.50F) {
-        QVERIFY2(topRms[1] < 0.25, "The unselected half must retain a steady cap without twinkles");
+    if (randomValue >= 0.25F) {
+        QVERIFY2(topRms[1] < 0.25, "The unselected three quarters must retain a steady cap");
         QVERIFY(sideRms[0] < 0.25 && sideRms[1] < 0.25);
         return;
     }
       QVERIFY2(topRms[0] < 0.25, "The cap must be stable with stream disabled");
     QVERIFY2(topMeanChange > 3, "Every column needs a visible face-wide top flash");
+    QVERIFY2(topRms[1] > 4, "Fine glints must have visible contrast on the flashing plane");
       const double temporalCoverage = double(std::count(flashed.begin(), flashed.end(), true))
                                     / flashed.size();
       QVERIFY2(temporalCoverage > 0.80,

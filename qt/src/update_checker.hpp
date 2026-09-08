@@ -31,7 +31,7 @@ public:
 signals:
     void changed();
 private:
-    void fail();
+    void fail(const QString& state = QStringLiteral("error"));
     const QUrl endpoint_;
     const QString currentVersion_;
     QNetworkAccessManager* network_;

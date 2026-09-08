@@ -422,7 +422,9 @@ ListView {
     ThemedDialog {
         id: tagDialog
         objectName: "trackTagDialog"
-        width: 320
+        margins: Theme.spacingLg
+        parent: root.popupOverlay
+        width: Math.min(296, parent && parent.width > 32 ? parent.width - 32 : 296)
         title: qsTr("自定义标签")
         modal: true
         anchors.centerIn: parent

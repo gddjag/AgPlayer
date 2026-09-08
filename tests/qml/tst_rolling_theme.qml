@@ -13,6 +13,7 @@ TestCase {
     property int savedWaveformMode: 0
 
     Component { id: trackListFixture; TrackList { width: 900; height: 300 } }
+    Component { id: signalSpyFixture; SignalSpy {} }
 
     QtObject {
         id: fakePlayback
@@ -595,7 +596,8 @@ TestCase {
         tryCompare(waveform, "position", fakePlayback.positionMs)
         rolling.syncWaveformViewport()
         var firstStart = waveform.visibleStartMs
-        var referenceX = waveform.pixelForTime(60000)
+        var referenceX = waveform.mapToItem(
+                    canvas, waveform.pixelForTime(60000), 0).x
         compare(Math.round(playhead.mapToItem(canvas,
                                              playhead.width / 2, 0).x),
                 Math.round(canvas.width / 2))
@@ -603,12 +605,97 @@ TestCase {
         fakePlayback.positionMs = 61000
         rolling.syncWaveformViewport()
         compare(waveform.position, 61000)
-        verify(waveform.visibleStartMs > firstStart)
-        verify(waveform.pixelForTime(60000) < referenceX,
+        compare(waveform.visibleStartMs, firstStart)
+        verify(waveform.mapToItem(
+                   canvas, waveform.pixelForTime(60000), 0).x < referenceX,
                "a fixed source point must move left during playback")
         compare(Math.round(playhead.mapToItem(canvas,
                                              playhead.width / 2, 0).x),
                 Math.round(canvas.width / 2))
+    }
+
+    function test_main_waveform_uses_bounded_render_window_while_scrolling() {
+        var rolling = rollingWithFakes()
+        var canvas = findChild(rolling, "rollingMainWaveformCanvas")
+        var waveform = findChild(rolling, "rollingMainWaveform")
+        verify(canvas && waveform)
+        rolling.syncWaveformViewport()
+        wait(0)
+
+        var startSpy = createTemporaryObject(signalSpyFixture, rolling, {
+            "target": waveform,
+            "signalName": "visibleStartMsChanged"
+        })
+        var endSpy = createTemporaryObject(signalSpyFixture, rolling, {
+            "target": waveform,
+            "signalName": "visibleEndMsChanged"
+        })
+        verify(startSpy && endSpy)
+        startSpy.clear()
+        endSpy.clear()
+
+        var initialRangeMs = waveform.visibleEndMs - waveform.visibleStartMs
+        var expectedBufferedRangeMs = Math.min(fakePlayback.durationMs,
+                                               rolling.viewportSpanMs * 2)
+        var previousX = waveform.x
+        var translatedTicks = 0
+        var startedAtMs = Date.now()
+        for (var tick = 0; tick < 240; ++tick) {
+            fakePlayback.positionMs += 16
+            rolling.syncWaveformViewport()
+            if (waveform.x < previousX)
+                ++translatedTicks
+            previousX = waveform.x
+            var sourceX = waveform.mapToItem(
+                        canvas,
+                        waveform.pixelForTime(fakePlayback.positionMs), 0).x
+            verify(Math.abs(sourceX - canvas.width / 2) <= 1,
+                   "the current source time must stay under the fixed needle")
+        }
+        var elapsedMs = Date.now() - startedAtMs
+        console.info("rolling-waveform-240-ticks-ms=" + elapsedMs
+                     + " visible-range-updates="
+                     + (startSpy.count + endSpy.count)
+                     + " translated-ticks=" + translatedTicks)
+
+        compare(translatedTicks, 240,
+                "ordinary playback ticks must translate the cached waveform left")
+        verify(Math.abs(initialRangeMs - expectedBufferedRangeMs) <= 1,
+               "the cached render window must cover two viewports without changing px/ms")
+        verify(startSpy.count + endSpy.count <= 2,
+               "240 ordinary ticks must not rebuild the four-layer geometry every frame")
+
+        var pointsPerMs = waveform.width
+                / (waveform.visibleEndMs - waveform.visibleStartMs)
+        verify(Math.abs(pointsPerMs
+                        - (canvas.width - 2) / rolling.viewportSpanMs) < 0.0001,
+               "the two-viewport buffer must retain the original pixel density")
+
+        var lowColor = waveform.lowColor.toString()
+        var midColor = waveform.midColor.toString()
+        var highColor = waveform.highColor.toString()
+        var rebaseBoundary = waveform.visibleEndMs
+                - rolling.viewportSpanMs / 2
+        fakePlayback.positionMs = Math.floor(rebaseBoundary)
+        rolling.syncWaveformViewport()
+        var sampleTime = fakePlayback.positionMs
+        var beforeRebaseX = waveform.mapToItem(
+                    canvas, waveform.pixelForTime(sampleTime), 0).x
+        var updatesBeforeRebase = startSpy.count + endSpy.count
+        var stepMs = 16
+        fakePlayback.positionMs += stepMs
+        rolling.syncWaveformViewport()
+        var afterRebaseX = waveform.mapToItem(
+                    canvas, waveform.pixelForTime(sampleTime), 0).x
+        var expectedShift = -stepMs * rolling.pxPerSec / 1000
+
+        compare(startSpy.count + endSpy.count - updatesBeforeRebase, 2,
+                "crossing the guard boundary must perform exactly one atomic range rebase")
+        verify(Math.abs((afterRebaseX - beforeRebaseX) - expectedShift) <= 1,
+               "a render-window rebase must not jump a source point on screen")
+        compare(waveform.lowColor.toString(), lowColor)
+        compare(waveform.midColor.toString(), midColor)
+        compare(waveform.highColor.toString(), highColor)
     }
 
     function test_scratch_mapping_threshold_direction_end_cancel_and_buffering() {

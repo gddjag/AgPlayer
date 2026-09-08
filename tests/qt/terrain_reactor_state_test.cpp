@@ -13,6 +13,8 @@ class TerrainReactorStateTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void automaticCameraUsesBoundedViewpointsAndDwells();
+    void automaticCameraRestartsWithoutJumping();
     void meteorFlightIsSingleSpacedAndLandsOnce();
     void travelingWaveGateSpacesMusicalEvents();
     void rendererEnvelopeKeepsShortNotesVisible();
@@ -67,6 +69,45 @@ private slots:
     void ecoFramePacerLimitsWorkToThirtyFrames();
     void balancedFramePacerDoesNotCollapseToThirtyOnSixtyHertz();
 };
+
+void TerrainReactorStateTest::automaticCameraUsesBoundedViewpointsAndDwells()
+{
+    CameraMotion camera;
+    const auto initial = camera.snapshot();
+    float maximumYaw = initial.yaw, minimumYaw = initial.yaw;
+    int stillFrames = 0;
+    int changedPitchFrames = 0;
+    auto previous = initial;
+    for (int frame = 1; frame <= 2400; ++frame) {
+        camera.advance(frame * 0.05, 0.05F, 1.0F);
+        const auto current = camera.snapshot();
+        maximumYaw = std::max(maximumYaw, current.yaw);
+        minimumYaw = std::min(minimumYaw, current.yaw);
+        if (std::abs(current.yaw - previous.yaw) < 0.000001F
+            && std::abs(current.pitch - previous.pitch) < 0.000001F) ++stillFrames;
+        if (std::abs(current.pitch - initial.pitch) > 0.02F) ++changedPitchFrames;
+        QVERIFY(current.pitch >= 0.70F && current.pitch <= 1.10F);
+        QCOMPARE(current.distance, initial.distance);
+        previous = current;
+    }
+    QVERIFY2(maximumYaw - minimumYaw < 1.20F, "Automatic camera keeps orbiting full circles");
+    QVERIFY2(maximumYaw - minimumYaw > 0.50F, "Camera must visit distinct viewpoints");
+    QVERIFY2(stillFrames > 300, "Viewpoints need real stationary dwell periods");
+    QVERIFY(changedPitchFrames > 300);
+}
+
+void TerrainReactorStateTest::automaticCameraRestartsWithoutJumping()
+{
+    CameraMotion camera;
+    for (int frame = 1; frame < 180; ++frame) camera.advance(frame * 0.05, 0.05F, 1);
+    const auto paused = camera.snapshot();
+    camera.advance(20, 1, 0);
+    QCOMPARE(camera.snapshot().yaw, paused.yaw);
+    QCOMPARE(camera.snapshot().pitch, paused.pitch);
+    camera.advance(21, 0.016F, 1);
+    QVERIFY(std::abs(camera.snapshot().yaw - paused.yaw) < 0.001F);
+    QVERIFY(std::abs(camera.snapshot().pitch - paused.pitch) < 0.001F);
+}
 
 void TerrainReactorStateTest::meteorFlightIsSingleSpacedAndLandsOnce()
 {
@@ -1195,15 +1236,20 @@ void TerrainReactorStateTest::automaticQualityUsesHysteresisCooldownAndEffectFir
     observe(40.0, 5.0);
     observe(40.0, 2.0);
     QCOMPARE(quality.stage(), DegradationStage::ReducedRipples);
+    const int reducedWaves = quality.configuration().rippleCount;
+    QVERIFY2(reducedWaves < meteorsReduced.rippleCount,
+             "The ripple stage must reduce Balanced's existing four-wave budget");
     observe(40.0, 5.0);
     observe(40.0, 2.0);
     QCOMPARE(quality.stage(), DegradationStage::ReducedGrid);
     QCOMPARE(quality.configuration().particleCount, 240);
+    QVERIFY(quality.configuration().rippleCount <= reducedWaves);
     QCOMPARE(quality.configuration().sampleCount, 1);
     observe(40.0, 5.0);
     observe(40.0, 2.0);
     QCOMPARE(quality.stage(), DegradationStage::ReducedResolution);
     QCOMPARE(quality.configuration().particleCount, 120);
+    QVERIFY(quality.configuration().rippleCount <= reducedWaves);
     QCOMPARE(quality.configuration().sampleCount, 1);
 
     observe(10.0, 7.99);

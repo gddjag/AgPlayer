@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Window
 import QtTest
 import AgPlayer
 
@@ -19,6 +20,68 @@ TestCase {
 
     SignalSpy { id: acceptedSpy; signalName: "accepted" }
     SignalSpy { id: rejectedSpy; signalName: "rejected" }
+    Component {
+        id: offsetWindowComponent
+        ApplicationWindow { width: 860; height: 540; visible: true; color: Theme.contentSurface }
+    }
+    function test_tag_dialogs_center_on_owner_window_data() {
+        return [{tag: "dark-dual", mode: 0, hostWidth: 860, hostHeight: 540},
+                {tag: "light-dual", mode: 1, hostWidth: 860, hostHeight: 540},
+                {tag: "dark-wide", mode: 0, hostWidth: 1280, hostHeight: 800},
+                {tag: "light-small", mode: 1, hostWidth: 320, hostHeight: 260},
+                {tag: "narrow-wrap", mode: 0, hostWidth: 248, hostHeight: 230}]
+    }
+    function test_tag_dialogs_center_on_owner_window(data) {
+        failOnWarning(/Binding loop detected/)
+        var previousMode = SettingsController.themeMode
+        var host = createTemporaryObject(offsetWindowComponent, testCase)
+        verify(host)
+        host.width = data.hostWidth
+        host.height = data.hostHeight
+        host.requestActivate()
+        tryCompare(host, "active", true)
+        SettingsController.themeMode = data.mode
+        var files = ["TagManagementPanel.qml", "TrackList.qml"]
+        var names = [["addTagDialog", "renameTagDialog", "removeTagDialog"], ["trackTagDialog"]]
+        try {
+            for (var f = 0; f < files.length; ++f) {
+                var component = Qt.createComponent(Qt.resolvedUrl(
+                            "../../app/qml/AgPlayer/components/" + files[f]))
+                compare(component.status, Component.Ready, component.errorString())
+                var owner = component.createObject(host.contentItem,
+                            {"x": host.width - 240, "y": 40,
+                             "width": 240, "height": host.height - 80})
+                verify(owner)
+                try {
+                    for (var n = 0; n < names[f].length; ++n) {
+                        var dialog = findChild(owner, names[f][n])
+                        verify(dialog)
+                        dialog.open()
+                        tryCompare(dialog, "opened", true)
+                        waitForRendering(dialog.contentItem)
+                        var frame = dialog.background.parent
+                        var point = frame.mapToItem(host.contentItem, 0, 0)
+                        verify(Math.abs(point.x + dialog.width / 2 - host.width / 2) <= 1,
+                               names[f][n] + " must center in owner window; actual left=" + point.x
+                               + " width=" + dialog.width + " overlayWidth=" + dialog.parent.width + " hostWidth=" + host.width)
+                        verify(Math.abs(point.y + dialog.height / 2 - host.height / 2) <= 1,
+                               names[f][n] + " must center vertically in owner window")
+                        verify(point.x >= 0 && point.x + dialog.width <= host.width)
+                        verify(point.y >= 0 && point.y + dialog.height <= host.height)
+                        verify(dialog.height <= 220)
+                        var cancel = dialog.standardButton(Dialog.Cancel)
+                        verify(cancel.width <= 96, names[f][n] + " actions must retain compact width; actual=" + cancel.width)
+                        if (typeof visualFixtureOutput !== "undefined" && visualFixtureOutput.length > 0) {
+                            waitForRendering(dialog.contentItem)
+                            grabImage(host.contentItem).save(visualFixtureOutput + "-" + data.tag + "-" + names[f][n] + ".png")
+                        }
+                        dialog.reject()
+                        tryCompare(dialog, "visible", false)
+                    }
+                } finally { owner.destroy() }
+            }
+        } finally { SettingsController.themeMode = previousMode }
+    }
     function test_cache_confirmation_uses_themed_buttons_without_clearing_cache() {
         var component = Qt.createComponent(Qt.resolvedUrl(
                     "../../app/qml/AgPlayer/SettingsPage.qml"))
@@ -50,6 +113,8 @@ TestCase {
         }
     }
     function test_all_tag_dialogs_share_compact_localized_controls() {
+        testCase.Window.window.requestActivate()
+        tryCompare(testCase.Window.window, "active", true)
         var files = ["TagManagementPanel.qml", "TrackList.qml"]
         var names = [["addTagDialog", "renameTagDialog", "removeTagDialog"],
                      ["trackTagDialog"]]
@@ -65,7 +130,7 @@ TestCase {
                     verify(dialog, names[f][n])
                     dialog.open()
                     tryCompare(dialog, "opened", true)
-                    compare(dialog.width, 320)
+                    verify(dialog.width >= 280 && dialog.width <= 300)
                     verify(dialog.height <= 220, "compact tag dialog")
                     compare(dialog.standardButton(Dialog.Cancel).text, "取消")
                     compare(dialog.standardButton(Dialog.Ok).text, "确定")
@@ -78,7 +143,9 @@ TestCase {
                         }))
                         tryVerify(function() { return saved })
                     }
-                    dialog.reject()
+                    dialog.contentItem.forceActiveFocus()
+                    keyClick(Qt.Key_Escape)
+                    tryCompare(dialog, "visible", false)
                 }
             } finally { owner.destroy() }
         }
@@ -119,6 +186,8 @@ TestCase {
             compare(cancel.text, "取消")
             verify(ok.height <= Theme.controlHeight)
             verify(cancel.height <= Theme.controlHeight)
+            verify(ok.width <= 96)
+            verify(cancel.width <= 96)
             if (typeof testTranslationsEnabled !== "undefined" && testTranslationsEnabled) {
                 SettingsController.language = "en"
                 tryCompare(ok, "text", "OK")

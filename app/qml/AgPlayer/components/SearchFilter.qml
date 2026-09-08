@@ -25,6 +25,23 @@ Rectangle {
                                                    : Theme.controlSubtleBorder
 
     Timer {
+        id: searchDebounce
+        interval: 150
+        onTriggered: root.commitSearch()
+    }
+
+    function commitSearch() {
+        searchDebounce.stop()
+        searchText = searchField.text
+    }
+
+    onSearchTextChanged: {
+        searchDebounce.stop()
+        if (searchField.text !== searchText)
+            searchField.text = searchText
+    }
+
+    Timer {
         id: bpmDebounce
         interval: 200
         onTriggered: {
@@ -39,6 +56,7 @@ Rectangle {
     }
 
     function clearFilters() {
+        searchDebounce.stop()
         bpmDebounce.stop()
         searchField.clear()
         searchText = ""
@@ -96,7 +114,8 @@ Rectangle {
                 leftPadding: 34
                 font.family: Theme.fontPrimary
                 font.pixelSize: Theme.fontSizeCaption
-                onTextChanged: root.searchText = text
+                onTextChanged: if (text !== root.searchText) searchDebounce.restart()
+                onAccepted: root.commitSearch()
                 background: null
             }
         }

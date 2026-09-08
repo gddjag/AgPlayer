@@ -38,6 +38,7 @@ UpdateChecker::UpdateChecker(QUrl endpoint, QString currentVersion,
 QString UpdateChecker::statusText() const
 {
     if (state_ == "unconfigured") return tr("更新服务尚未配置，可前往官网查看版本。");
+    if (state_ == "unavailable") return tr("官网尚未提供可用的更新信息，请前往官网下载页查看。");
     if (state_ == "checking") return tr("正在检查更新…");
     if (state_ == "available") return tr("发现新版本 %1，请前往官网下载。").arg(latestVersion_);
     if (state_ == "current") return tr("当前已是最新版本。");
@@ -54,9 +55,9 @@ UpdateChecker::~UpdateChecker()
     }
 }
 
-void UpdateChecker::fail()
+void UpdateChecker::fail(const QString& state)
 {
-    state_ = QStringLiteral("error");
+    state_ = state;
     latestVersion_.clear();
     auto reply = reply_;
     reply_.clear(); // Abort may synchronously emit finished; invalidate first.
@@ -102,6 +103,10 @@ void UpdateChecker::check()
     connect(reply, &QNetworkReply::finished, this, [this, reply] {
         if (reply_ != reply) return;
         payload_.append(reply->read(kMaxManifestBytes + 1 - payload_.size()));
+        if (reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 404) {
+            fail(QStringLiteral("unavailable"));
+            return;
+        }
         if (reply->error() != QNetworkReply::NoError
             || reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() != 200
             || payload_.size() > kMaxManifestBytes) { fail(); return; }

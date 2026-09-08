@@ -690,13 +690,13 @@ QualityConfiguration AutomaticQualityController::configuration(bool eco) const n
         result.floatingCount = 52;
         result.particleCount = 240;
         result.meteorCount = 6;
-        result.rippleCount = 4;
+        result.rippleCount = 2;
         break;
     case DegradationStage::ReducedGrid:
         result.floatingCount = 52;
         result.particleCount = 240;
         result.meteorCount = 6;
-        result.rippleCount = 4;
+        result.rippleCount = 2;
         result.gridSize = 96;
         result.internalScale = 0.82F;
         result.sampleCount = 1;
@@ -705,7 +705,7 @@ QualityConfiguration AutomaticQualityController::configuration(bool eco) const n
         result.floatingCount = 52;
         result.particleCount = 120;
         result.meteorCount = 4;
-        result.rippleCount = 3;
+        result.rippleCount = 2;
         result.gridSize = 96;
         result.internalScale = 0.70F;
         result.sampleCount = 1;
@@ -891,14 +891,44 @@ void CameraMotion::clearBeatPunch() noexcept
 void CameraMotion::advance(double nowSeconds, float elapsedSeconds,
                            float autoRotateSpeed) noexcept
 {
-    const float elapsed = std::max(0.0F, elapsedSeconds);
-    if (nowSeconds >= manualUntilSeconds_) {
-        const float resume = manualUntilSeconds_ > 0.0
-            ? std::clamp(float((nowSeconds - manualUntilSeconds_) / 1.2), 0.0F, 1.0F)
-            : 1.0F;
-        const float ease = resume * resume * (3.0F - 2.0F * resume);
-        snapshot_.yaw += elapsed * std::clamp(autoRotateSpeed, 0.0F, 2.0F)
-            * 0.098F * ease;
+    const float elapsed = std::isfinite(elapsedSeconds)
+        ? std::clamp(elapsedSeconds, 0.0F, 1.0F) : 0.0F;
+    const float speed = std::isfinite(autoRotateSpeed)
+        ? std::clamp(autoRotateSpeed, 0.0F, 2.0F) : 0.0F;
+    if (speed <= 0.0F || !std::isfinite(nowSeconds)
+        || nowSeconds < manualUntilSeconds_) {
+        automaticInitialized_ = false;
+    } else {
+        // Bounded camera compositions, not an accumulating 360-degree orbit.
+        // A paused/manual camera becomes the new anchor without a position jump.
+        if (!automaticInitialized_) {
+            automaticAnchor_ = snapshot_;
+            automaticFrom_ = snapshot_;
+            automaticPhase_ = 0.0F;
+            automaticView_ = 0;
+            automaticInitialized_ = true;
+        }
+        constexpr std::array<float, 4> yawOffsets{0.46F, -0.34F, 0.18F, 0.0F};
+        constexpr std::array<float, 4> pitches{0.90F, 1.00F, 0.78F, 0.86F};
+        constexpr float moveSeconds = 8.0F;
+        constexpr float viewSeconds = 11.0F;
+        const float activeElapsed = manualUntilSeconds_ > 0.0
+            ? std::min(elapsed, float(std::max(0.0, nowSeconds - manualUntilSeconds_)))
+            : elapsed;
+        automaticPhase_ += activeElapsed * speed;
+        if (automaticPhase_ >= viewSeconds) {
+            automaticFrom_.yaw = automaticAnchor_.yaw + yawOffsets[automaticView_];
+            automaticFrom_.pitch = pitches[automaticView_];
+            automaticPhase_ -= viewSeconds;
+            automaticView_ = (automaticView_ + 1) % int(yawOffsets.size());
+        }
+        const float progress = std::min(automaticPhase_ / moveSeconds, 1.0F);
+        const float ease = progress * progress * (3.0F - 2.0F * progress);
+        snapshot_.yaw = automaticFrom_.yaw
+            + (automaticAnchor_.yaw + yawOffsets[automaticView_] - automaticFrom_.yaw) * ease;
+        snapshot_.pitch = automaticFrom_.pitch
+            + (pitches[automaticView_] - automaticFrom_.pitch) * ease;
+        // Distance belongs to the user's wheel/zoom, not the automatic tour.
     }
     snapshot_.punch *= std::exp(-elapsed * 5.0F);
 }
@@ -912,6 +942,7 @@ void CameraMotion::synchronize(CameraSnapshot snapshot,
 {
     const CameraSnapshot fallback = sanitizedCameraSnapshot(snapshot_);
     snapshot_ = sanitizedCameraSnapshot(snapshot, fallback);
+    automaticInitialized_ = false;
     const double safeManualUntil = std::isfinite(manualUntilSeconds_)
         ? manualUntilSeconds_ : 0.0;
     manualUntilSeconds_ = std::max(
@@ -944,6 +975,7 @@ void CameraMotion::markManual(double nowSeconds) noexcept
 {
     if (!std::isfinite(nowSeconds)) return;
     manualUntilSeconds_ = std::max(0.0, nowSeconds) + 4.0;
+    automaticInitialized_ = false;
 }
 
 PunchEventConsumer::PunchEventConsumer(

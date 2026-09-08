@@ -3,6 +3,7 @@
 #include "playlist_model.hpp"
 
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -22,6 +23,9 @@ private slots:
     void writesRatingThroughProxyRows();
     void filtersPlaylistMembershipAndTracksLiveChanges();
     void preservesCustomPlaylistOrder();
+    void filtersAndSortsLargePlaylistWithinBudget();
+    void preservesDuplicateSourceTrackOrderInPlaylist();
+    void foldsLargeSearchQueryWithinBudget();
     void intersectsTagFolderAndExistingFiltersWithoutSourceReset();
 };
 
@@ -285,6 +289,9 @@ void LibraryFilterModelTest::preservesCustomPlaylistOrder()
     QVERIFY(playlists.addTracks(playlistId,
                                {QStringLiteral("gamma"), QStringLiteral("alpha"),
                                 QStringLiteral("beta")}));
+    const QString otherPlaylistId = playlists.createPlaylist(QStringLiteral("Other"));
+    QVERIFY(playlists.addTracks(otherPlaylistId,
+                               {QStringLiteral("alpha"), QStringLiteral("delta")}));
 
     LibraryModel source;
     source.replaceAll(sampleTracks());
@@ -300,6 +307,135 @@ void LibraryFilterModelTest::preservesCustomPlaylistOrder()
     QVERIFY(playlists.moveTrack(playlistId, 2, 0));
     QCOMPARE(filter.data(filter.index(0, 0), LibraryModel::TrackIdRole).toString(),
              QStringLiteral("beta"));
+    filter.setCategory(otherPlaylistId);
+    QCOMPARE(filter.count(), 2);
+    QCOMPARE(filter.data(filter.index(0, 0), LibraryModel::TrackIdRole).toString(),
+             QStringLiteral("alpha"));
+    QVERIFY(playlists.moveTrack(playlistId, 2, 1));
+    filter.setCategory(playlistId);
+    QCOMPARE(filter.count(), 3);
+    QCOMPARE(filter.data(filter.index(0, 0), LibraryModel::TrackIdRole).toString(),
+             QStringLiteral("beta"));
+    QCOMPARE(filter.data(filter.index(1, 0), LibraryModel::TrackIdRole).toString(),
+             QStringLiteral("alpha"));
+}
+
+void LibraryFilterModelTest::filtersAndSortsLargePlaylistWithinBudget()
+{
+    constexpr int librarySize = 10000;
+    constexpr int playlistSize = 5000;
+    QList<TrackRecord> tracks;
+    QStringList playlistTrackIds;
+    tracks.reserve(librarySize);
+    playlistTrackIds.reserve(playlistSize);
+    for (int index = 0; index < librarySize; ++index) {
+        const QString id = QStringLiteral("track-%1").arg(index, 5, 10, QLatin1Char('0'));
+        tracks.append(makeTrack(id, QStringLiteral("Track %1").arg(index),
+                                QStringLiteral("Artist"), QStringLiteral("Album"),
+                                0, 0.0));
+    }
+    for (int index = playlistSize - 1; index >= 0; --index)
+        playlistTrackIds.append(tracks.at(index * 2).trackId);
+
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    PlaylistModel playlists(dir.filePath(QStringLiteral("playlists.json")));
+    const QString playlistId = playlists.createPlaylist(QStringLiteral("Large"));
+    QCOMPARE(playlists.addTracks(playlistId, playlistTrackIds), playlistSize);
+    LibraryModel source;
+    source.replaceAll(std::move(tracks));
+    LibraryFilterModel filter;
+    filter.setSourceModel(&source);
+    filter.setPlaylistModel(&playlists);
+
+    filter.setCategory(QStringLiteral("favorites"));
+    QCOMPARE(filter.count(), 0);
+    QElapsedTimer baselineElapsed;
+    baselineElapsed.start();
+    filter.setCategory(QStringLiteral("all"));
+    QCOMPARE(filter.count(), librarySize);
+    const qint64 allTracksMs = baselineElapsed.elapsed();
+    QElapsedTimer playlistElapsed;
+    playlistElapsed.start();
+    filter.setCategory(playlistId);
+    QCOMPARE(filter.count(), playlistSize);
+    QCOMPARE(filter.data(filter.index(0, 0), LibraryModel::TrackIdRole).toString(),
+             playlistTrackIds.front());
+    QCOMPARE(filter.data(filter.index(playlistSize - 1, 0),
+                         LibraryModel::TrackIdRole).toString(),
+             playlistTrackIds.back());
+    const qint64 playlistMs = playlistElapsed.elapsed();
+    qInfo("PERF library_filter library=10000 playlist=5000 all_ms=%lld playlist_ms=%lld",
+          allTracksMs, playlistMs);
+    const qint64 playlistBudgetMs = qMax<qint64>(1500, allTracksMs * 20);
+    QVERIFY2(playlistMs < playlistBudgetMs,
+             qPrintable(QStringLiteral("10K library / 5K playlist filter+sort took %1 ms "
+                                       "(all-tracks baseline %2 ms, budget %3 ms)")
+                            .arg(playlistMs).arg(allTracksMs).arg(playlistBudgetMs)));
+}
+
+void LibraryFilterModelTest::preservesDuplicateSourceTrackOrderInPlaylist()
+{
+    TrackRecord first = makeTrack(QStringLiteral("duplicate"), QStringLiteral("First"),
+                                  QStringLiteral("Artist"), QStringLiteral("Album"), 0, 0.0);
+    TrackRecord second = makeTrack(QStringLiteral("duplicate"), QStringLiteral("Second"),
+                                   QStringLiteral("Artist"), QStringLiteral("Album"), 0, 0.0);
+    second.path = QStringLiteral("C:/music/duplicate-second.wav");
+    LibraryModel source;
+    source.replaceAll({first, second});
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    PlaylistModel playlists(dir.filePath(QStringLiteral("playlists.json")));
+    const QString playlistId = playlists.createPlaylist(QStringLiteral("Duplicates"));
+    QVERIFY(playlists.addTrack(playlistId, QStringLiteral("duplicate")));
+    LibraryFilterModel filter;
+    filter.setSourceModel(&source);
+    filter.setPlaylistModel(&playlists);
+
+    filter.setCategory(playlistId);
+
+    QCOMPARE(filter.count(), 2);
+    QCOMPARE(filter.data(filter.index(0, 0), LibraryModel::TitleRole).toString(),
+             QStringLiteral("First"));
+    QCOMPARE(filter.data(filter.index(1, 0), LibraryModel::TitleRole).toString(),
+             QStringLiteral("Second"));
+}
+
+void LibraryFilterModelTest::foldsLargeSearchQueryWithinBudget()
+{
+    constexpr int librarySize = 10000;
+    QList<TrackRecord> tracks;
+    tracks.reserve(librarySize);
+    for (int index = 0; index < librarySize; ++index) {
+        const QString id = QStringLiteral("track-%1").arg(index, 5, 10, QLatin1Char('0'));
+        tracks.append(makeTrack(id, QStringLiteral("Ordinary title"),
+                                QStringLiteral("Artist"), QStringLiteral("Album"),
+                                0, 0.0));
+    }
+    LibraryModel source;
+    source.replaceAll(std::move(tracks));
+    LibraryFilterModel filter;
+    filter.setSourceModel(&source);
+    QElapsedTimer shortQueryElapsed;
+    shortQueryElapsed.start();
+    filter.setSearchText(QStringLiteral("missing"));
+    QCOMPARE(filter.count(), 0);
+    const qint64 shortQueryMs = shortQueryElapsed.elapsed();
+    filter.setSearchText(QString{});
+    QCOMPARE(filter.count(), librarySize);
+    const QString query = QString(32768, QChar(0x0130));
+    QElapsedTimer stressQueryElapsed;
+    stressQueryElapsed.start();
+    filter.setSearchText(query);
+    QCOMPARE(filter.count(), 0);
+    const qint64 stressQueryMs = stressQueryElapsed.elapsed();
+    qInfo("PERF library_search tracks=10000 short_ms=%lld stress_code_units=32768 stress_ms=%lld",
+          shortQueryMs, stressQueryMs);
+    const qint64 stressBudgetMs = shortQueryMs * 4 + 300;
+    QVERIFY2(stressQueryMs < stressBudgetMs,
+             qPrintable(QStringLiteral("10K-track stress-query search took %1 ms "
+                                       "(short-query baseline %2 ms, budget %3 ms)")
+                            .arg(stressQueryMs).arg(shortQueryMs).arg(stressBudgetMs)));
 }
 
 void LibraryFilterModelTest::intersectsTagFolderAndExistingFiltersWithoutSourceReset()

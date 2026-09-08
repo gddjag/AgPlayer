@@ -37,6 +37,7 @@ void LibraryFilterModel::setSearchText(const QString& text)
         return;
     }
     searchText_ = text;
+    foldedSearchText_ = text.toCaseFolded();
     emit searchTextChanged();
     invalidateFilter();
 }
@@ -98,6 +99,7 @@ void LibraryFilterModel::setCategory(const QString& category)
         return;
     }
     category_ = category;
+    rebuildPlaylistRanks();
     emit categoryChanged();
     invalidateFilter();
     if (category_ == QStringLiteral("history")) {
@@ -203,15 +205,23 @@ void LibraryFilterModel::setPlaylistModel(PlaylistModel* playlistModel)
     playlistModel_ = playlistModel;
     if (playlistModel_ != nullptr) {
         connect(playlistModel_, &PlaylistModel::membershipChanged, this,
-                [this] {
-                    invalidateFilter();
+                [this](const QString& playlistId) {
+                    if (playlistId != category_) return;
+                    rebuildPlaylistRanks();
                     invalidate();
                 });
         connect(playlistModel_, &QAbstractItemModel::rowsRemoved, this,
-                [this] { invalidateFilter(); });
+                [this] {
+                    rebuildPlaylistRanks();
+                    invalidate();
+                });
         connect(playlistModel_, &QAbstractItemModel::modelReset, this,
-                [this] { invalidateFilter(); });
+                [this] {
+                    rebuildPlaylistRanks();
+                    invalidate();
+                });
     }
+    rebuildPlaylistRanks();
     emit playlistModelChanged();
     invalidateFilter();
 }
@@ -284,8 +294,8 @@ bool LibraryFilterModel::rowMatchesCategory(int sourceRow) const
     }
     QAbstractItemModel* model = sourceModel();
     const QModelIndex idx = model->index(sourceRow, 0);
-    return playlistModel_->containsTrack(
-        category_, model->data(idx, LibraryModel::TrackIdRole).toString());
+    return playlistRanks_.contains(
+        model->data(idx, LibraryModel::TrackIdRole).toString());
 }
 
 bool LibraryFilterModel::lessThan(const QModelIndex& sourceLeft,
@@ -313,8 +323,10 @@ bool LibraryFilterModel::lessThan(const QModelIndex& sourceLeft,
         const QString rightId = sourceModel()
                                     ->data(sourceRight, LibraryModel::TrackIdRole)
                                     .toString();
-        const QStringList ids = playlistModel_->trackIdsForPlaylist(category_);
-        return ids.indexOf(leftId) < ids.indexOf(rightId);
+        const int leftRank = playlistRanks_.value(leftId, -1);
+        const int rightRank = playlistRanks_.value(rightId, -1);
+        return leftRank == rightRank ? sourceLeft.row() < sourceRight.row()
+                                     : leftRank < rightRank;
     }
     return sourceLeft.row() < sourceRight.row();
 }
@@ -326,21 +338,38 @@ bool LibraryFilterModel::rowMatchesSearch(int sourceRow) const
     }
     QAbstractItemModel* model = sourceModel();
     const QModelIndex idx = model->index(sourceRow, 0);
-    const QString text = searchText_.toCaseFolded();
     constexpr LibraryModel::Role searchableRoles[]{
         LibraryModel::TitleRole, LibraryModel::ArtistRole,
         LibraryModel::AlbumRole, LibraryModel::AlbumArtistRole,
         LibraryModel::GenreRole, LibraryModel::YearRole,
         LibraryModel::DateRole, LibraryModel::ComposerRole};
     for (const LibraryModel::Role role : searchableRoles) {
-        if (model->data(idx, role).toString().toCaseFolded().contains(text)) {
+        if (model->data(idx, role).toString().toCaseFolded().contains(foldedSearchText_)) {
             return true;
         }
     }
     const QStringList tags = model->data(idx, LibraryModel::TagsRole).toStringList();
-    return std::any_of(tags.cbegin(), tags.cend(), [&text](const QString& tag) {
-        return tag.toCaseFolded().contains(text);
+    return std::any_of(tags.cbegin(), tags.cend(), [this](const QString& tag) {
+        return tag.toCaseFolded().contains(foldedSearchText_);
     });
+}
+
+void LibraryFilterModel::rebuildPlaylistRanks()
+{
+    playlistRanks_.clear();
+    if (playlistModel_ == nullptr || category_ == QStringLiteral("all")
+        || category_ == QStringLiteral("favorites")
+        || category_ == QStringLiteral("history")
+        || category_ == QStringLiteral("recentAdded")
+        || category_ == QStringLiteral("neverPlayed")) {
+        return;
+    }
+    const QStringList trackIds = playlistModel_->trackIdsForPlaylist(category_);
+    playlistRanks_.reserve(trackIds.size());
+    for (int rank = 0; rank < trackIds.size(); ++rank) {
+        if (!playlistRanks_.contains(trackIds.at(rank)))
+            playlistRanks_.insert(trackIds.at(rank), rank);
+    }
 }
 
 bool LibraryFilterModel::rowMatchesRating(int sourceRow) const

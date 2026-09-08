@@ -3,6 +3,7 @@
 #include "library_model.hpp"
 #include "playlist_model.hpp"
 
+#include <QHash>
 #include <QPointer>
 #include <QSortFilterProxyModel>
 #include <QString>
@@ -82,8 +83,10 @@ private:
     bool rowMatchesTag(int sourceRow) const;
     bool rowMatchesResourceFolder(int sourceRow) const;
     QModelIndex sourceIndexForRow(int sourceRow) const;
+    void rebuildPlaylistRanks();
 
     QString searchText_;
+    QString foldedSearchText_;
     int exactRating_ = 0;
     double minBpm_ = 60.0;
     double maxBpm_ = 160.0;
@@ -91,4 +94,5 @@ private:
     QString tagKey_;
     QString resourceFolder_;
     QPointer<PlaylistModel> playlistModel_;
+    QHash<QString, int> playlistRanks_;
 };

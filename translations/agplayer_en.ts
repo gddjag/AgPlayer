@@ -6750,6 +6750,10 @@ Clear: Remove all known aliases for this field.</translation>
 <context>
         <name>UpdateChecker</name>
         <message>
+            <source>官网尚未提供可用的更新信息，请前往官网下载页查看。</source>
+            <translation>Update information is not yet available from the official website. Please visit its download page.</translation>
+        </message>
+        <message>
             <location filename="../qt/src/update_checker.cpp" line="40" />
             <source>更新服务尚未配置，可前往官网查看版本。</source>
             <translation>Update service is not configured. Visit the official website to check for releases.</translation>
