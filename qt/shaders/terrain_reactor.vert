@@ -278,8 +278,14 @@ void main()
             + bandsLow.w * ridgeA * 3.0 - 0.2) * referenceDrive;
         float centerBlend = 1.0 - smoothstep(25.0, 35.0, referenceDistance);
         float bandRelief = mix(restrainedRelief, referenceRelief, centerBlend);
+        // A stable irregular minority of central columns responds to the real
+        // beat envelope. Add bounded local height, never scale the whole bed.
+        float localBeatMask = 1.0 - step(0.30, randomValue);
+        float localBeatLift = localBeatMask * centerBlend * subRegion
+            * clamp(ubuf.audioEnvelope.z, 0.0, 1.0)
+            * (0.65 + randomValue * 2.0) * referenceDrive * 2.4;
         float rawHeight = max(0.0,
-            idle + bandRelief
+            idle + bandRelief + localBeatLift
             + ripple * amplitude * 0.55
             + centerShoulders
             + coreGlow * 1.55);

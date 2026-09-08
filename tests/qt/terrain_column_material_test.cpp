@@ -4,6 +4,13 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
+#include <QCryptographicHash>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QMatrix4x4>
 #include <QQuickRhiItem>
 #include <QQuickWindow>
@@ -15,10 +22,153 @@
 #include <cmath>
 #include <cstring>
 #include <memory>
+#include <stdexcept>
 
 using namespace agplayer::terrain::gpu;
 
 namespace {
+struct NativeReplay {
+    UniformBlock uniform{};
+    QMatrix4x4 projection, view;
+    std::vector<GpuInstance> instances;
+    QJsonObject manifest;
+};
+std::shared_ptr<const NativeReplay> loadNativeReplay(const QString& path)
+{
+    const auto require = [](bool ok, const char* message) {
+        if (!ok) throw std::runtime_error(message);
+    };
+    QFile file(path);
+    require(file.open(QIODevice::ReadOnly), "Cannot open reference JSON");
+    require(file.size() < 32 * 1024 * 1024, "Reference exceeds bounded input size");
+    const QByteArray bytes = file.readAll();
+    QJsonParseError error;
+    const auto document = QJsonDocument::fromJson(bytes, &error);
+    require(error.error == QJsonParseError::NoError && document.isObject(), "Invalid reference JSON");
+    const auto root = document.object();
+    require(root.value("schema").toInt() == 1
+        && root.value("input").toString() == "reference-engine-silence", "Only schema 1 silence replay supported");
+    const auto numbers = [&](QJsonValue value, int count) {
+        require(value.isArray(), "Expected numeric array");
+        auto array = value.toArray();
+        require(array.size() == count, "Numeric array length mismatch");
+        for (const auto number : array)
+            require(number.isDouble() && std::isfinite(number.toDouble())
+                && std::abs(number.toDouble()) < 1e8, "Nonfinite or out-of-range numeric input");
+        return array;
+    };
+    auto result = std::make_shared<NativeReplay>();
+    const auto matrices = root.value("matrices").toObject();
+    for (const auto name : {"model", "world", "modelView", "view", "cameraWorld", "projection"}) {
+        const auto a = numbers(matrices.value(name), 16);
+        if (QString(name) == "model" || QString(name) == "world") {
+            for (int i = 0; i < 16; ++i)
+                require(std::abs(a[i].toDouble() - (i % 5 == 0 ? 1.0 : 0.0)) < 1e-7,
+                        "Nonidentity object transform unsupported (must not ignore rotation/scale)");
+        }
+        if (QString(name) == "view" || QString(name) == "projection") {
+            auto& matrix = QString(name) == "view" ? result->view : result->projection;
+            for (int i = 0; i < 16; ++i) matrix.data()[i] = float(a[i].toDouble());
+        }
+    }
+    numbers(matrices.value("normal"), 9);
+    const auto eye = numbers(root.value("camera").toObject().value("position"), 3);
+    auto& u = result->uniform;
+    for (int i = 0; i < 3; ++i) u.cameraPosition[i] = float(eye[i].toDouble());
+    const auto uniforms = root.value("uniforms").toObject();
+    const QStringList zeroFields = {"uSubBass", "uBass", "uLowMid", "uMid", "uHighMid", "uPresence",
+        "uBrilliance", "uAir", "uWarmth", "uBrightness", "uSharpness", "uSmoothness", "uDensity",
+        "uSpectralCentroid", "uEnergy"};
+    for (const auto& key : zeroFields)
+        require(uniforms.value(key).isDouble() && uniforms.value(key).toDouble() == 0,
+                "Nonzero or absent audio descriptor unsupported");
+    const QStringList colorFields = {"uBaseColor1", "uBaseColor2", "uFogColor", "uCoolCore", "uCoolEdge",
+        "uWarmCore", "uWarmEdge", "uRippleColor"};
+    for (auto it = uniforms.begin(); it != uniforms.end(); ++it) {
+        require(zeroFields.contains(it.key()) || colorFields.contains(it.key())
+            || QStringList{"uTime", "uAmplitude", "uGlowIntensity", "uRipples"}.contains(it.key()),
+            "Unknown uniform: no silent generic conversion");
+    }
+    for (const auto& key : colorFields) numbers(uniforms.value(key).toObject().value("rgb"), 3);
+    for (const auto key : {"uTime", "uAmplitude", "uGlowIntensity"})
+        require(uniforms.value(key).isDouble() && std::isfinite(uniforms.value(key).toDouble()), "Missing numeric uniform");
+    require(uniforms.value("uRipples").isArray(), "Missing ripple state");
+    for (const auto ripple : uniforms.value("uRipples").toArray()) {
+        const auto r = ripple.toObject();
+        require(r.value("isActive").isDouble() && r.value("isActive").toDouble() == 0
+            && r.value("strength").isDouble() && r.value("strength").toDouble() == 0, "Active ripple unsupported");
+        numbers(r.value("pos"), 2);
+    }
+    u.parameters[3] = float(uniforms.value("uTime").toDouble());
+    const QStringList anchors = {"uBaseColor1", "uCoolCore", "uWarmCore", "uCoolEdge", "uWarmEdge"};
+    for (int c = 0; c < 5; ++c) {
+        const auto rgb = uniforms.value(anchors[c]).toObject().value("rgb").toArray();
+        for (int i = 0; i < 3; ++i) u.colors[c][i] = float(rgb[i].toDouble());
+        u.colors[c][3] = 1;
+    }
+    // Explicit adapter defaults, not equivalence to foreign material uniforms.
+    for (int i = 0; i < 4; ++i) u.equalizerLow[i] = u.equalizerHigh[i] = 1;
+    u.styleParameters[0] = 0.6F; u.styleParameters[1] = -0.125F; u.styleParameters[2] = 0.5F;
+    u.styleDynamics[1] = 0.5F; u.styleDynamics[2] = 1; u.styleDynamics[3] = 0.5F;
+    u.styleAudio[0] = u.styleAudio[1] = u.styleAudio[3] = 1; u.styleAudio[2] = 56;
+    u.stylePresentation[0] = u.stylePresentation[2] = 1;
+    u.materialParameters[0] = 1; u.materialParameters[1] = 0.45F;
+    u.materialParameters[2] = 1; u.materialParameters[3] = 0.6F;
+    u.sceneControls[0] = u.sceneControls[1] = u.sceneControls[3] = 1; u.sceneControls[2] = 112;
+    u.sceneLighting[0] = u.sceneLighting[2] = 1; u.sceneLighting[1] = 0.6F;
+    const auto geometry = root.value("geometry").toObject();
+    require(geometry.value("type").toString() == "BoxGeometry", "Only box geometry supported");
+    const auto dimensions = geometry.value("parameters").toObject();
+    for (const auto key : {"width", "height", "depth"})
+        require(dimensions.value(key).isDouble() && dimensions.value(key).toDouble() > 0
+            && dimensions.value(key).toDouble() < 1000, "Invalid box dimensions");
+    const auto instanceObject = root.value("instances").toObject();
+    const int count = instanceObject.value("count").toInt();
+    require(count == 24025 && count <= 65536, "Baseline must contain exactly 24025 instances");
+    const auto data = numbers(instanceObject.value("matrices"), count * 16);
+    for (int n = 0; n < count; ++n)
+        for (int i = 0; i < 16; ++i)
+            if (i < 12 || i == 15)
+                require(std::abs(data[n * 16 + i].toDouble() - (i % 5 == 0 ? 1.0 : 0.0)) < 1e-6,
+                        "Instance rotation/scale unsupported");
+    result->instances.reserve(count);
+    for (int n = 0; n < count; ++n) result->instances.push_back({
+        {float(data[n*16+12].toDouble()), float(data[n*16+13].toDouble() - dimensions.value("height").toDouble() * 0.5), float(data[n*16+14].toDouble())},
+        {float(dimensions.value("width").toDouble()), float(dimensions.value("height").toDouble()),
+         float(dimensions.value("depth").toDouble())}, {0, 0, 0.5F, 0}});
+    const auto instanceFields = [](const GpuInstance& instance) {
+        QJsonArray values;
+        for (const auto value : instance.position) values.append(double(value));
+        for (const auto value : instance.scale) values.append(double(value));
+        for (const auto value : instance.data) values.append(double(value));
+        return values;
+    };
+    const auto first = instanceFields(result->instances.front());
+    QJsonArray minima = first, maxima = first;
+    for (const auto& instance : result->instances) {
+        const auto values = instanceFields(instance);
+        for (int i = 0; i < values.size(); ++i) {
+            minima[i] = std::min(minima[i].toDouble(), values[i].toDouble());
+            maxima[i] = std::max(maxima[i].toDouble(), values[i].toDouble());
+        }
+    }
+    const auto matrixSequence = QJsonDocument(data).toJson(QJsonDocument::Compact);
+    result->manifest = {{"input", "reference-engine-silence"}, {"referenceSha256", QString(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex())},
+        {"referenceAbsolutePath", QFileInfo(path).absoluteFilePath()},
+        {"instanceAnchorConversion", "native baseY = reference matrix centerY - geometry.height/2; original centerY sequence at matrices[16*n+13], SHA256 below; fixed baseline centerY=.5,height=1 -> baseY=0"},
+        {"referenceCameraPosition", eye}, {"referenceGeometryParameters", dimensions},
+        {"referenceInstanceMatricesSha256", QString(QCryptographicHash::hash(matrixSequence, QCryptographicHash::Sha256).toHex())},
+        {"referenceInstanceMatricesSerialization", "Qt 6.7 QJsonDocument(QJsonArray).toJson(Compact), UTF-8, parsed double values in original array order, no newline"},
+        {"nativeInstanceSummary", QJsonObject{{"fieldOrder", "position.xyz,scale.xyz,data.type,zone,random,aux"},
+            {"first", first}, {"last", instanceFields(result->instances.back())}, {"min", minima}, {"max", maxima}}},
+        {"instanceCount", count}, {"referenceUniforms", uniforms}, {"referenceMatrices", matrices},
+        {"nativeColorAnchors", QJsonArray::fromStringList(anchors)},
+        {"knownGaps", QJsonArray{"Not equal-U or shader parity; native defaults explicitly retained", "Native height deformation and analytic surface coordinates differ from reference BoxGeometry UVs",
+            "uAmplitude/uGlowIntensity and base2/fog/ripple colors have no exact native mapping", "Native random=0.5 and zone=0: reference does not export native attributes",
+            "terrain_reactor.vert terrain branch multiplies imported scale.xz by 0.985*clamp(sceneControls.w,0.5,2); sceneControls.w=1, so rendered width/depth are 98.5% of imported values. Native idle relief/height deformation remains different; native base-to-center height/2 step is now paired with imported center-to-base conversion",
+            "Native material/style/lighting defaults; no analyzer, style controller or smoothing", "Native shadow pass disabled; native tone mapping and alpha blending differ"}}};
+    return result;
+}
 struct StudyParameters {
     float time = 0;
     float motionControl = -0.125F;
@@ -56,6 +206,9 @@ void frameColumnOptics(StudyParameters& parameters)
     parameters.camera = {9.75F, 9.5F, 15.6F};
 }
 struct StudyCounters {
+    QMutex replayMutex;
+    QList<QByteArray> replayFrames;
+    QJsonObject replayManifest;
     // Test-only rejection at the native material creation boundary.
     int rejectDepthStage = 0;
     std::atomic<int> materialAttempts{0};
@@ -68,7 +221,7 @@ struct StudyCounters {
 class ColumnItem;
 class ColumnRenderer final : public QQuickRhiItemRenderer {
 public:
-    explicit ColumnRenderer(std::shared_ptr<StudyCounters> counters) : counters_(std::move(counters))
+    explicit ColumnRenderer(std::shared_ptr<StudyCounters> counters, std::shared_ptr<const NativeReplay> replay = {}) : counters_(std::move(counters)), replay_(std::move(replay))
     { ++counters_->live; }
     ~ColumnRenderer() override { release(); --counters_->live; }
     void initialize(QRhiCommandBuffer*) override;
@@ -82,6 +235,8 @@ private:
     }
     StudyParameters parameters_;
     std::shared_ptr<StudyCounters> counters_;
+    std::shared_ptr<const NativeReplay> replay_;
+    QRhiReadbackResult replayReadback_;
     std::unique_ptr<QRhiBuffer> vertices_, indices_, instances_, uniform_;
     std::unique_ptr<QRhiShaderResourceBindings> bindings_;
     std::unique_ptr<QRhiGraphicsPipeline> pipeline_;
@@ -99,18 +254,25 @@ public:
         setAlphaBlending(true);
     }
     StudyParameters parameters;
+    std::shared_ptr<const NativeReplay> replay;
     std::shared_ptr<StudyCounters> counters;
 protected:
-    QQuickRhiItemRenderer* createRenderer() override { return new ColumnRenderer(counters); }
+    QQuickRhiItemRenderer* createRenderer() override { return new ColumnRenderer(counters, replay); }
 };
 
 void ColumnRenderer::initialize(QRhiCommandBuffer*)
 {
     if (pipeline_ && lastTarget_ == renderTarget()) return;
     release();
-    const auto shader = [](const QString& path) {
+    const auto shader = [this](const QString& path) {
         QFile file(path);
-        return file.open(QIODevice::ReadOnly) ? QShader::fromSerialized(file.readAll()) : QShader{};
+        if (!file.open(QIODevice::ReadOnly)) return QShader{};
+        const auto bytes = file.readAll();
+        if (replay_) {
+            QMutexLocker lock(&counters_->replayMutex);
+            counters_->replayManifest[path] = QString(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
+        }
+        return QShader::fromSerialized(bytes);
     };
     const QShader vertexShader = shader(QStringLiteral(":/terrain/shaders/terrain_reactor.vert.qsb"));
     const QShader fragmentShader = shader(QStringLiteral(":/terrain/shaders/terrain_reactor.frag.qsb"));
@@ -125,7 +287,7 @@ void ColumnRenderer::initialize(QRhiCommandBuffer*)
     indices_.reset(rhi()->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::IndexBuffer,
                                     sizeof(columnIndices)));
     instances_.reset(rhi()->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer,
-                                      25 * sizeof(GpuInstance)));
+                                      (replay_ ? int(replay_->instances.size()) : 25) * sizeof(GpuInstance)));
     uniform_.reset(rhi()->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(UniformBlock)));
     if (!vertices_->create() || !indices_->create() || !instances_->create() || !uniform_->create()) {
         counters_->failed = true; return;
@@ -251,10 +413,16 @@ void ColumnRenderer::render(QRhiCommandBuffer* cb)
     } else {
         columns[0] = {{0, 0, 0}, {4, 12, 4}, {0, 0, parameters_.randomValue, 0}};
     }
+    if (replay_) {
+        u = replay_->uniform;
+        const auto corrected = rhi()->clipSpaceCorrMatrix() * replay_->projection * replay_->view;
+        std::memcpy(u.mvp, corrected.constData(), sizeof(u.mvp));
+        instanceCount = quint32(replay_->instances.size());
+    }
     auto* updates = rhi()->nextResourceUpdateBatch();
     updates->updateDynamicBuffer(uniform_.get(), 0, sizeof(u), &u);
     updates->updateDynamicBuffer(instances_.get(), 0,
-                                 instanceCount * sizeof(GpuInstance), columns.data());
+                                 instanceCount * sizeof(GpuInstance), replay_ ? replay_->instances.data() : columns.data());
     if (upload_) {
         updates->uploadStaticBuffer(vertices_.get(), columnVertices.data());
         updates->uploadStaticBuffer(indices_.get(), columnIndices.data());
@@ -290,6 +458,27 @@ void ColumnRenderer::render(QRhiCommandBuffer* cb)
     cb->setVertexInput(0, 2, inputs, indices_.get(), 0, QRhiCommandBuffer::IndexUInt16);
     cb->drawIndexed(quint32(columnIndices.size()), instanceCount);
     cb->endPass();
+    if (replay_) {
+        auto* texture = resolveTexture() ? resolveTexture() : colorTexture();
+        replayReadback_.completed = [this] {
+            QMutexLocker lock(&counters_->replayMutex);
+            if (counters_->replayFrames.size() < 2) counters_->replayFrames.append(replayReadback_.data);
+            counters_->replayManifest["width"] = replayReadback_.pixelSize.width();
+            counters_->replayManifest["height"] = replayReadback_.pixelSize.height();
+            counters_->replayManifest["format"] = int(replayReadback_.format);
+        };
+        auto* readback = rhi()->nextResourceUpdateBatch();
+        readback->readBackTexture(QRhiReadbackDescription(texture), &replayReadback_);
+        cb->resourceUpdate(readback);
+        rhi()->finish();
+        QMutexLocker lock(&counters_->replayMutex);
+        counters_->replayManifest["backend"] = int(rhi()->backend());
+        counters_->replayManifest["sampleCount"] = renderTarget()->sampleCount();
+        counters_->replayManifest["framebufferYUp"] = rhi()->isYUpInFramebuffer();
+        counters_->replayManifest["actualUniformBytesHex"] = QString(QByteArray(reinterpret_cast<const char*>(&u), sizeof(u)).toHex());
+        counters_->replayManifest["actualInstanceSha256"] = QString(QCryptographicHash::hash(
+            QByteArray(reinterpret_cast<const char*>(replay_->instances.data()), instanceCount * sizeof(GpuInstance)), QCryptographicHash::Sha256).toHex());
+    }
     ++counters_->frames;
 }
 struct FrontFace {
@@ -427,6 +616,53 @@ FrontFace locateFrontFace(const QImage& frame)
 class TerrainColumnMaterialTest : public QObject {
     Q_OBJECT
 private slots:
+    void nativeZeroInputReplay()
+    {
+        const auto path = qEnvironmentVariable("AGPLAYER_PARITY_REFERENCE");
+        if (path.isEmpty()) QSKIP("Opt-in reference-engine-silence diagnostic");
+        std::shared_ptr<const NativeReplay> replay;
+        try { replay = loadNativeReplay(path); }
+        catch (const std::exception& error) { QFAIL(error.what()); }
+        // The fixed reference uses centerY=.5 and box height=1. Its base is zero.
+        // Assert actual loader output before creating any rendering resources.
+        QCOMPARE(replay->manifest.value("referenceGeometryParameters").toObject().value("height").toDouble(), 1.0);
+        for (const auto& instance : replay->instances)
+            QCOMPARE(instance.position[1], 0.0F);
+        auto counters = std::make_shared<StudyCounters>();
+        QQuickWindow window;
+        window.resize(960, 540);
+        auto* item = new ColumnItem(window.contentItem(), counters);
+        item->replay = replay;
+        item->setSize(QSizeF(960, 540));
+        item->setFixedColorBufferWidth(1920); item->setFixedColorBufferHeight(1080);
+        item->setSampleCount(1);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        const auto captured = [&] { QMutexLocker lock(&counters->replayMutex); return counters->replayFrames.size(); };
+        QTRY_VERIFY_WITH_TIMEOUT(captured() >= 1 || counters->failed.load(), 30000);
+        QVERIFY(!counters->failed);
+        item->update();
+        QTRY_VERIFY_WITH_TIMEOUT(captured() >= 2, 30000);
+        QMutexLocker lock(&counters->replayMutex);
+        QCOMPARE(counters->replayFrames[0], counters->replayFrames[1]);
+        QCOMPARE(counters->replayManifest.value("width").toInt(), 1920);
+        QCOMPARE(counters->replayManifest.value("height").toInt(), 1080);
+        QCOMPARE(counters->replayManifest.value("format").toInt(), int(QRhiTexture::RGBA8));
+        QCOMPARE(counters->replayFrames[0].size(), 1920 * 1080 * 4);
+        const auto output = qEnvironmentVariable("AGPLAYER_PARITY_OUTPUT");
+        QVERIFY2(!output.isEmpty(), "Set AGPLAYER_PARITY_OUTPUT");
+        QVERIFY(QDir().mkpath(output));
+        auto manifest = replay->manifest;
+        for (auto it = counters->replayManifest.begin(); it != counters->replayManifest.end(); ++it) manifest[it.key()] = it.value();
+        manifest["nativeRepeatabilityOnly"] = true;
+        manifest["rawSha256"] = QString(QCryptographicHash::hash(counters->replayFrames[0], QCryptographicHash::Sha256).toHex());
+        QImage image(reinterpret_cast<const uchar*>(counters->replayFrames[0].constData()), 1920, 1080, QImage::Format_RGBA8888);
+        if (manifest.value("framebufferYUp").toBool()) image = image.mirrored();
+        QVERIFY(image.save(output + "/native-u.png"));
+        QFile report(output + "/native-u-manifest.json");
+        QVERIFY(report.open(QIODevice::WriteOnly));
+        QVERIFY(report.write(QJsonDocument(manifest).toJson()) > 0);
+    }
     void fixedAudioDoesNotAnimateColumnRelief_data() {
         QTest::addColumn<float>("audioLevel");
         QTest::addColumn<float>("midAudioLevel");
@@ -435,12 +671,16 @@ private slots:
     }
     void fixedAudioDoesNotAnimateColumnRelief();
     void consecutiveWavesUseDifferentPaletteAnchors();
-    void steadyBandsDoNotReceiveAdditionalBeatDome_data() {
+    void centerBeatLiftRemainsSparseAndBounded_data() {
         QTest::addColumn<int>("materialMode");
-        QTest::newRow("crystal") << 0;
-        QTest::newRow("jelly") << 1;
+        QTest::addColumn<float>("randomValue");
+        QTest::addColumn<bool>("selected");
+        QTest::newRow("crystal-unselected") << 0 << 0.90F << false;
+        QTest::newRow("jelly-unselected") << 1 << 0.90F << false;
+        QTest::newRow("crystal-selected") << 0 << 0.10F << true;
+        QTest::newRow("jelly-selected") << 1 << 0.10F << true;
     }
-    void steadyBandsDoNotReceiveAdditionalBeatDome();
+    void centerBeatLiftRemainsSparseAndBounded();
     void unsupportedDepthMaterialFallsBack_data() {
         QTest::addColumn<int>("stage");
         QTest::newRow("bindings") << 1;
@@ -625,9 +865,11 @@ void TerrainColumnMaterialTest::consecutiveWavesUseDifferentPaletteAnchors()
     }
 }
 
-void TerrainColumnMaterialTest::steadyBandsDoNotReceiveAdditionalBeatDome()
+void TerrainColumnMaterialTest::centerBeatLiftRemainsSparseAndBounded()
 {
     QFETCH(int, materialMode);
+    QFETCH(float, randomValue);
+    QFETCH(bool, selected);
     QQuickWindow window;
     window.resize(640, 640);
     // Beat illumination is allowed to change. A chromatic backdrop keeps the
@@ -636,6 +878,7 @@ void TerrainColumnMaterialTest::steadyBandsDoNotReceiveAdditionalBeatDome()
     auto counters = std::make_shared<StudyCounters>();
     ColumnItem item(window.contentItem(), counters);
     item.parameters.material = materialMode;
+    item.parameters.randomValue = randomValue;
     item.parameters.camera = {0, 6, 50};
     item.parameters.midAudioLevel = 1;
     item.parameters.stream = false;
@@ -662,10 +905,22 @@ void TerrainColumnMaterialTest::steadyBandsDoNotReceiveAdditionalBeatDome()
              "The center column must be visibly driven by the nonzero bands");
     QVERIFY2(change.firstBounds.height() < 230,
              "Sustained audio makes a tall tower instead of a low floating terrain");
-    QVERIFY2(nearlySameBounds(change.firstBounds, change.secondBounds),
-             "A beat must not add a separate center-height dome on top of fixed bands");
-    QVERIFY2(change.silhouetteMismatch <= change.commonVisible / 1000,
-             "Fixed frequency inputs must retain center geometry when only beat light changes");
+    QVERIFY2(std::abs(change.secondBounds.left() - change.firstBounds.left()) <= 1
+             && std::abs(change.secondBounds.right() - change.firstBounds.right()) <= 1,
+             "A center transient may lift columns, not expand their width");
+    QVERIFY2(std::abs(change.secondBounds.bottom() - change.firstBounds.bottom()) <= 1,
+             "The column foot must remain anchored to the fixed ground");
+    if (selected) {
+        QVERIFY2(change.secondBounds.height() > change.firstBounds.height() + 4,
+                 "A selected center column must visibly rise on a real beat");
+        QVERIFY2(change.secondBounds.height() <= change.firstBounds.height() * 1.5,
+                 "A sparse center lift must stay bounded, not double the column height");
+    } else {
+        QVERIFY2(nearlySameBounds(change.firstBounds, change.secondBounds),
+                 "Unselected columns must not receive a whole-center beat dome");
+        QVERIFY2(change.silhouetteMismatch <= change.commonVisible / 1000,
+                 "Only selected columns may change geometry on a beat");
+    }
 }
 
 void TerrainColumnMaterialTest::jellyHeightFollowsContinuousBands()
