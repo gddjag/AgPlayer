@@ -21,6 +21,7 @@ class TerrainReactorGpuSmokeTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void cameraPunchDoesNotMoveTheGroundProjection();
     void denseMaterialFrameBudgetProbe();
     void columnLayeringReferenceFixture_data();
     void columnLayeringReferenceFixture();
@@ -284,6 +285,68 @@ private:
     quint64 beatRevision_ = 0;
     double beatStrength_ = 0.0;
 };
+
+void TerrainReactorGpuSmokeTest::cameraPunchDoesNotMoveTheGroundProjection()
+{
+    QQuickWindow window;
+    window.setScreen(QGuiApplication::primaryScreen());
+    window.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    window.setGeometry(QRect(window.screen()->availableGeometry().center()
+                             - QPoint(320, 240), QSize(640, 480)));
+    PlayerExperienceController style;
+    style.applyPreset(0);
+    style.setAutoRotate(0);
+    style.setAutoRotateSpeed(0);
+    style.setCinemaShake(1.8);
+    style.setIdleBreathingEnabled(false);
+    style.setRipplesEnabled(false);
+    style.setFloatingCubesEnabled(false);
+    style.setMeteorsEnabled(false);
+    style.setBurstEnabled(false);
+    style.setStreamHighlightEnabled(false);
+    style.setThemeCycleEnabled(false);
+    TerrainReactorItem item(window.contentItem());
+    item.setSize(QSizeF(640, 480));
+    item.setStyleSource(&style);
+    item.setUseSyntheticFeatures(true);
+    item.setSyntheticFeatures({.55,.45,.35,.25,0,0,0,0}, .3, 0, false, false);
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    if (window.rendererInterface()->graphicsApi() == QSGRendererInterface::Software)
+        QSKIP("No accelerated backend");
+    item.setActive(true);
+    QTRY_COMPARE_WITH_TIMEOUT(item.renderStatus(), TerrainReactorItem::RenderStatus::Ready, 5000);
+    QTest::qWait(1200);
+    const auto capture = [&]() { return window.grabWindow().convertToFormat(QImage::Format_RGB32); };
+    const QImage first = capture();
+    QTest::qWait(100);
+    const QImage quiet = capture();
+    // Inject only the revisioned camera impulse. No beat/flux/material change
+    // can disguise a moving projection as legitimate column deformation.
+    item.triggerCameraPunch(1);
+    const quint64 frame = item.frameCount();
+    QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() >= frame + 2, 3000);
+    const QImage punched = capture();
+    QCOMPARE(first.size(), quiet.size());
+    QCOMPARE(quiet.size(), punched.size());
+    QVERIFY(!punched.isNull());
+    int quietChanges = 0, impulseChanges = 0, visible = 0;
+    for (int y = quiet.height() * 4 / 10; y < quiet.height() * 85 / 100; ++y)
+        for (int x = quiet.width() * 3 / 10; x < quiet.width() * 7 / 10; ++x) {
+            const QColor a = first.pixelColor(x,y), b = quiet.pixelColor(x,y), c = punched.pixelColor(x,y);
+            const auto delta = [](QColor u, QColor v) {
+                return std::abs(u.red()-v.red()) + std::abs(u.green()-v.green()) + std::abs(u.blue()-v.blue());
+            };
+            if (b.red()+b.green()+b.blue() > 30) ++visible;
+            if (delta(a,b) > 24) ++quietChanges;
+            if (delta(b,c) > 24) ++impulseChanges;
+        }
+    QVERIFY(visible > 1000);
+    qInfo() << "Ground projection quiet/punch changed pixels:" << quietChanges << impulseChanges;
+    QVERIFY2(impulseChanges <= quietChanges + 80,
+             "An audio camera impulse changes the supposedly fixed ground projection");
+    item.setActive(false);
+}
 
 void TerrainReactorGpuSmokeTest::materialControlsChangeRenderedSurface_data()
 {

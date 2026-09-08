@@ -556,8 +556,8 @@ private:
     UniformBlock buildUniforms(const VisualParameters& visual,
                                const CameraSnapshot& camera)
     {
-        // Manual camera deltas come from the GUI snapshot. The punch envelope
-        // is a revisioned event owned and advanced by the render thread.
+        // Camera composition belongs exclusively to manual/automatic motion.
+        // Audio impulses animate columns and light, never the ground projection.
         QMatrix4x4 projection;
         const QSize size = renderTarget()->pixelSize();
         const float aspect = size.height() > 0
@@ -569,19 +569,13 @@ private:
         const float distance = std::clamp(
             finiteOr(camera.distance, defaults.distance), 42.0F, 220.0F);
         const float punch = finiteUnit(camera.punch * snapshot_.style.cinemaShake);
-        projection.perspective(46.0F - punch * 2.15F,
-                               aspect, 0.1F, 800.0F);
-        const float radius = distance - punch * 0.6F;
+        projection.perspective(46.0F, aspect, 0.1F, 800.0F);
+        const float radius = distance;
         const RenderDynamics dynamics = mapRenderDynamics(snapshot_.style);
         const float lowAngleLift = 0.96F;
         QVector3D eye(radius * std::cos(pitch) * std::sin(yaw),
                       9.0F + radius * std::sin(pitch) * lowAngleLift,
                       radius * std::cos(pitch) * std::cos(yaw));
-        const float shake = snapshot_.style.cinemaShake
-            * (visual.spectralFlux * 0.22F + punch * 0.12F);
-        eye += QVector3D(std::sin(visual.timeSeconds * 21.0F) * shake,
-                        std::cos(visual.timeSeconds * 17.0F) * shake * 0.55F,
-                        std::sin(visual.timeSeconds * 13.0F) * shake * 0.7F);
         QMatrix4x4 view;
         view.lookAt(eye, QVector3D(0.0F, 2.0F, 0.0F),
                     QVector3D(0.0F, 1.0F, 0.0F));

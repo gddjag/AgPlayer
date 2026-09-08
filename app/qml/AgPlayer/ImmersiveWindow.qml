@@ -13,16 +13,38 @@ Window {
     property int qaViewportHeight: 0
     property alias surfaceItem: surface
 
-    readonly property bool transportShortcutsEnabled:
+    readonly property bool hasKeyboardFocus:
         visible && active && visibility !== Window.Minimized
         // Transient windows may remain "active" with focus in their owner.
         && activeFocusItem !== null && activeFocusItem.activeFocus
-        && !editingControl()
+    readonly property bool transportShortcutsEnabled:
+        hasKeyboardFocus && !editingControl()
+    readonly property bool arrowShortcutsEnabled:
+        hasKeyboardFocus && !editingArrowControl()
+
+    function editingArrowControl() {
+        var item = activeFocusItem
+        // A hidden/disabled former editor must not suppress the window keys.
+        if (item && (!item.visible || !item.enabled))
+            return false
+        while (item) {
+            // Ordinary buttons and passive Control containers do not edit
+            // with arrows. Preserve actual value/text/navigation editors.
+            if (item instanceof TextInput || item instanceof TextEdit
+                    || item instanceof T.Slider || item instanceof T.RangeSlider
+                    || item instanceof T.Dial || item instanceof T.SpinBox
+                    || item instanceof T.ComboBox || item instanceof T.Tumbler
+                    || item instanceof T.ScrollBar || item instanceof ListView)
+                return true
+            item = item.parent
+        }
+        return false
+    }
 
     function editingControl() {
         var item = activeFocusItem
         while (item) {
-            // Preserve arrows/Space for sliders, text editors, buttons and
+            // Preserve Space for sliders, text editors, buttons and
             // other focused controls, including their internal focus items.
             if (item instanceof T.Control || item instanceof TextInput
                     || item instanceof TextEdit)
@@ -118,7 +140,7 @@ Window {
         sequence: "Left"
         context: Qt.WindowShortcut
         autoRepeat: false
-        enabled: root.transportShortcutsEnabled
+        enabled: root.arrowShortcutsEnabled
         onActivated: PlaybackController.previous()
     }
 
@@ -127,7 +149,7 @@ Window {
         sequence: "Right"
         context: Qt.WindowShortcut
         autoRepeat: false
-        enabled: root.transportShortcutsEnabled
+        enabled: root.arrowShortcutsEnabled
         onActivated: PlaybackController.next()
     }
 
@@ -145,7 +167,7 @@ Window {
         sequence: "Down"
         context: Qt.WindowShortcut
         autoRepeat: false
-        enabled: root.transportShortcutsEnabled
+        enabled: root.arrowShortcutsEnabled
         onActivated: PlaybackController.setMode(PlaybackController.Shuffle)
     }
 
@@ -154,7 +176,7 @@ Window {
         sequence: "Up"
         context: Qt.WindowShortcut
         autoRepeat: false
-        enabled: root.transportShortcutsEnabled
+        enabled: root.arrowShortcutsEnabled
         onActivated: PlayerExperienceController.lyricsVisible =
                      !PlayerExperienceController.lyricsVisible
     }

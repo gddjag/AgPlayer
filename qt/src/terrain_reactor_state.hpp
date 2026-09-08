@@ -355,6 +355,11 @@ private:
 
     CameraSnapshot snapshot_;
     double manualUntilSeconds_ = 0.0;
+    CameraSnapshot automaticAnchor_;
+    CameraSnapshot automaticFrom_;
+    float automaticPhase_ = 0.0F;
+    int automaticView_ = 0;
+    bool automaticInitialized_ = false;
 };
 
 struct PunchEvent {

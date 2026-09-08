@@ -16,6 +16,8 @@
 #include <agplayer/c_api.h>
 
 #include <QCoreApplication>
+#include <QDataStream>
+#include <QFile>
 #include <QEvent>
 #include <QEventLoop>
 #include <QQmlComponent>
@@ -23,6 +25,7 @@
 #include <QQmlEngine>
 #include <QPointer>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QUuid>
 #include <QtPlugin>
 #include <QtQuickTest/quicktest.h>
@@ -40,6 +43,43 @@ class QmlMiniPlayerSetup final : public QObject {
     Q_OBJECT
 
 public:
+    Q_INVOKABLE QStringList prepareTransportQueue()
+    {
+        if (!transportDirectory_.isValid() || !playback_ || !library_) return {};
+        QStringList ids;
+        for (int index = 0; index < 3; ++index) {
+            const QString id = QStringLiteral("shortcut-track-%1").arg(index);
+            const QString path = transportDirectory_.filePath(id + QStringLiteral(".wav"));
+            if (library_->indexForTrackId(id) < 0) {
+                QFile file(path);
+                if (!file.open(QIODevice::WriteOnly)) return {};
+                // One second of real PCM silence; only the output device is
+                // null. Decoder, queue, transport and snapshots remain real.
+                QDataStream wav(&file);
+                wav.setByteOrder(QDataStream::LittleEndian);
+                wav.writeRawData("RIFF", 4);
+                wav << quint32(36 + 192000);
+                wav.writeRawData("WAVEfmt ", 8);
+                wav << quint32(16) << quint16(1) << quint16(2) << quint32(48000)
+                    << quint32(192000) << quint16(4) << quint16(16);
+                wav.writeRawData("data", 4);
+                wav << quint32(192000);
+                const QByteArray pcm(192000, '\0');
+                wav.writeRawData(pcm.constData(), pcm.size());
+                if (wav.status() != QDataStream::Ok) return {};
+                file.close();
+                TrackRecord track;
+                track.trackId = id;
+                track.path = path;
+                track.title = id;
+                track.available = true;
+                if (!library_->append(track)) return {};
+            }
+            ids.append(id);
+        }
+        return playback_->restoreQueue(ids, ids.at(1)) ? ids : QStringList{};
+    }
+
     ~QmlMiniPlayerSetup() override
     {
         // Quick Test may destroy the engine (and its QML objects) before this
@@ -99,7 +139,8 @@ public slots:
         QCoreApplication::setOrganizationName("AgPlayer");
         QCoreApplication::setApplicationName("AgPlayer-test");
 
-        if (ag_player_create(&core_) != AG_OK) {
+        const ag_player_config config{AG_AUDIO_BACKEND_NULL, 2048};
+        if (ag_player_create_with_config(&config, &core_) != AG_OK) {
             return;
         }
         library_ = std::make_unique<LibraryModel>();
@@ -144,6 +185,7 @@ public slots:
         engine->addImportPath("qrc:/");
         engine->rootContext()->setContextProperty("miniMetadataTrackId",
                                                   miniMetadataTrackId_);
+        engine->rootContext()->setContextProperty("transportTestSetup", this);
 
         // Main window — same as qml_main_window_test harness.
         mainComponent_ = std::make_unique<QQmlComponent>(engine);
@@ -175,6 +217,7 @@ public slots:
     }
 
 private:
+    QTemporaryDir transportDirectory_;
     ag_player* core_ = nullptr;
     std::unique_ptr<LibraryModel> library_;
     std::unique_ptr<PlaybackController> playback_;

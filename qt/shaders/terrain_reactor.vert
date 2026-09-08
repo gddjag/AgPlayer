@@ -108,11 +108,13 @@ void main()
         // Existing short beat/onset envelope drives illumination separately
         // from sustained band energy. No oscillator masquerades as a beat.
         musicLight = clamp(beatPulse * (0.18 + pow(core, 1.15) * 0.82)
-                            * ubuf.styleAudio.w, 0.0, 1.0);
+                            * ubuf.styleAudio.w * 0.70, 0.0, 1.0);
         float terrainField = 1.0 - smoothstep(responseRadius * 0.45,
                                               responseRadius * 1.15,
                                               distanceFromCore);
-        float flowTime = t * motion;
+        // Spatial relief is stationary. Only real bands, beat envelopes and
+        // emitted wave ages may move columns; wall-clock time is not music.
+        float flowTime = 0.0;
         float bassField = 0.78 + 0.22
             * sin(position.x * 0.038 - position.z * 0.029 + flowTime * 0.20);
         float ridgeA = 0.5 + 0.5
@@ -195,10 +197,14 @@ void main()
                 float ridgeDistance = sourceDistance - waveRadius;
                 float waveWidth = max(0.2, ubuf.waveParameters.y);
                 float waveLife = 2.8 / max(0.2, ubuf.waveParameters.z);
-                float ridge = exp(-(ridgeDistance * ridgeDistance) / (9.0 * waveWidth * waveWidth));
+                // A distinct leading edge followed by a softer trailing ridge.
+                // Keep at least one cell of front width to avoid a broken ring.
+                float ridgeWidth = ridgeDistance > 0.0
+                    ? max(1.2, 1.6 * waveWidth) : 3.0 * waveWidth;
+                float ridge = exp(-(ridgeDistance * ridgeDistance) / (ridgeWidth * ridgeWidth));
                 float tail = exp(-max(0.0, waveRadius - sourceDistance) / (14.0 * waveWidth))
                            * step(sourceDistance, waveRadius);
-                float weight = (ridge + tail * 0.14)
+                float weight = (ridge + tail * 0.08)
                              * max(0.0, 1.0 - age / waveLife) * source.w;
                 waveField += weight;
                 // The pool advances once per emitted wave: each event retains
@@ -228,7 +234,6 @@ void main()
                        * (0.012 + ubuf.parameters.x * 0.035
                           + slowBass * 0.045 + beatPulse * 0.12)
                        * ubuf.styleAudio.w;
-        float coreLift = (slowBass * 0.15 + beatPulse * 2.25) * dome * 4.25;
         float centerShoulders = ubuf.parameters.x * ubuf.styleAudio.w
                               * terrainField
                               * (0.035 + core * 0.14 + wideRidge * 0.26);
@@ -257,10 +262,32 @@ void main()
                     + frequencyTowers * (0.35 + crest * 0.65)) * amplitude;
         float restrainedRelief = min(sustainedRelief, 6.0)
                                + max(0.0, sustainedRelief - 6.0) * 0.20;
+        // Reference centre: overlapping continuous sub/bass regions (25/35),
+        // with 5/4 units of lift, rather than a second event-driven piston.
+        // Keep the surrounding terrain, ripples and the stationary base intact.
+        float referenceScale = mix(0.70, 1.38,
+            clamp((responseRadius / 56.0 - 0.5) / 1.7, 0.0, 1.0));
+        float referenceDistance = distanceFromCore / referenceScale;
+        float subRegion = 1.0 - smoothstep(0.0, 25.0, referenceDistance);
+        float bassRegion = 1.0 - smoothstep(5.0, 35.0, referenceDistance);
+        float referenceDrive = mix(0.28, 1.83, ubuf.styleParameters.x);
+        float referenceRelief = max(0.0,
+              bandsLow.x * subRegion * 5.0
+            + bandsLow.y * bassRegion * smoothstep(0.0, 1.0, randomValue + 0.25) * 4.0
+            + bandsLow.z * coherentDetail * 2.5
+            + bandsLow.w * ridgeA * 3.0 - 0.2) * referenceDrive;
+        float centerBlend = 1.0 - smoothstep(25.0, 35.0, referenceDistance);
+        float bandRelief = mix(restrainedRelief, referenceRelief, centerBlend);
+        // A stable irregular minority of central columns responds to the real
+        // beat envelope. Add bounded local height, never scale the whole bed.
+        float localBeatMask = 1.0 - step(0.30, randomValue);
+        float localBeatLift = localBeatMask * centerBlend * subRegion
+            * clamp(ubuf.audioEnvelope.z, 0.0, 1.0)
+            * (0.65 + randomValue * 2.0) * referenceDrive * 2.4;
         float rawHeight = max(0.0,
-            idle + restrainedRelief
+            idle + bandRelief + localBeatLift
             + ripple * amplitude * 0.55
-            + coreLift * amplitude * (0.30 + crest * 0.70) + centerShoulders
+            + centerShoulders
             + coreGlow * 1.55);
         float softCap = mix(42.0, 48.0, step(0.001, impactStrength));
         float height = max(0.035,
@@ -268,14 +295,7 @@ void main()
         scale.y = height;
         // Straight boxes occupy 98.5% of the layout spacing, leaving a hairline.
         scale.xz *= 0.985 * clamp(ubuf.sceneControls.w, 0.5, 2.0);
-        if (material.x > 0.5 && material.x < 1.5) {
-            // Bounded vertical beat response: no cross-section deformation,
-            // audio buffer, or free-running wobble during silence.
-            // The detected envelope already has attack/release. A sine that
-            // starts at zero erased the attack and delayed the visible beat.
-            float rebound = beatPulse * material.z;
-            scale.y *= 1.0 + rebound * 0.28;
-        }
+        // Jelly is an optical material, not an extra whole-column beat scale.
         position.y += scale.y * 0.5;
         float stageHalfExtent = max(1.0, ubuf.sceneControls.z);
         float stageDistance = distanceFromCore;
@@ -313,15 +333,15 @@ void main()
         float presence = clamp(bandsHigh.y * 0.42 + bandsHigh.z * 0.36
                                + bandsHigh.w * 0.22, 0.0, 1.0);
         // Selected columns catch glints with different timing and strength.
-        // The fragment shader confines it to a small crown facet, so this
-        // weight is not a constant light floor across the full top surface.
+        // The fragment shader confines the flash to the top plane, with
+        // local silver grains; this is not a constant whole-scene light.
         float sheenMask = mix(0.60, 1.0, randomValue);
         streamSheen = ubuf.styleExtra.z
                     * (0.075 + presence * 0.72 + beatPulse * 0.22)
                     * (flowingBand * 1.18 + sparkle * 1.36)
                     * sheenMask * (0.25 + ubuf.styleParameters.z * 1.9);
-        // Stable irregular half of the columns; no frame-to-frame reshuffle.
-        streamSheen *= 1.0 - step(0.50, randomValue);
+        // Stable sparse quarter of columns; no frame-to-frame reshuffle.
+        streamSheen *= 1.0 - step(0.25, randomValue);
     } else if (type < 1.5) {
         position.y += sin(t * 0.74 * motion + randomValue * 18.0) * 1.95
                     + bandsLow.x * 2.2;
