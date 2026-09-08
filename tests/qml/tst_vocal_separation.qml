@@ -934,15 +934,57 @@ TestCase {
             verify(actions.mapToItem(card, actions.width, actions.height).x <= card.width)
             verify(actions.mapToItem(card, actions.width, actions.height).y <= card.height)
         }
-        if (visualFixtureOutput) grabImage(page).save(visualFixtureOutput + "-parallel-models.png")
         separationTestDriver.setCardConfiguration("uvr-mdxnet-kara", {
             configurationState: "complete", configurationProgress: 1,
             configurationCanPause: false, configurationCanResume: false,
             configurationCanCancel: false, configurationEnabled: false
         })
         verify(!findChild(page, "separationInstallRuntime-uvr-mdxnet-kara").visible)
-        compare(second.value, 0.70)
+        // Publishing the model list can recreate repeater delegates. Inspect
+        // the current card rather than a deleted delegate retained before it.
+        const updatedSecond = findChild(page, "separationDownloadProgress-uvr-mdx-net-inst-hq3")
+        verify(updatedSecond && updatedSecond.visible)
+        compare(updatedSecond.value, 0.70)
+        // Capture only after verifying injected snapshots: grabbing renders
+        // processes queued real-runtime discovery, which can replace fixtures.
+        if (visualFixtureOutput) grabImage(page).save(visualFixtureOutput + "-parallel-models.png")
         separationTestDriver.reset()
+    }
+
+    function test_sharedRuntimeProgressDoesNotCoverActions() {
+        const originalTheme = SettingsController.themeMode
+        separationTestDriver.reset()
+        separationTestDriver.setSharedRuntimeProgress(true)
+        try {
+            const panel = findChild(page, "separationRuntimeTasks")
+            const scroll = findChild(page, "separationRuntimeScrollbar")
+            const bar = findChild(page, "separationRuntimeProgress-runtime:directml")
+            tryVerify(function() { return panel.visible && bar && bar.width > 0 })
+            wait(50)
+            verify(!scroll.visible, "one task must not display a scrollbar over cancel")
+            verify(scroll.width <= 4)
+            compare(bar.value, 0.23)
+            const cancel = controlWithText(panel, "取消")
+            verify(cancel && cancel.visible)
+            verify(cancel.mapToItem(panel, cancel.width, cancel.height).x <= panel.width - 6)
+            for (const theme of [0, 1]) {
+                SettingsController.themeMode = theme
+                wait(20)
+                compare(bar.contentItem.children[0].color, Theme.highlight)
+                if (visualFixtureOutput) {
+                    let captured = false
+                    verify(panel.grabToImage(function(result) {
+                        result.saveToFile(visualFixtureOutput + "-shared-runtime-" + theme + ".png")
+                        captured = true
+                    }))
+                    tryVerify(function() { return captured })
+                }
+            }
+        } finally {
+            SettingsController.themeMode = originalTheme
+            separationTestDriver.setSharedRuntimeProgress(false)
+            separationTestDriver.reset()
+        }
     }
 
     function test_switchingModelKeepsPublishedWaveformsVisible() {

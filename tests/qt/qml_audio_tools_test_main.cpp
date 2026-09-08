@@ -632,11 +632,26 @@ public:
         playback_ = playback;
         if (controller_ != nullptr)
             runtimeLibraryPath_ = controller_->options_.runtimeLibraryPath;
+        if (controller_ != nullptr) {
+            // UI snapshots must survive unrelated asynchronous GPU discovery.
+            // This connection is installed before QML observes modelsChanged.
+            connect(controller_, &VocalSeparationController::modelsChanged, this, [this] {
+                for (int index = 0; index < controller_->models_.size(); ++index) {
+                    auto model = controller_->models_[index].toMap();
+                    const auto fields = cardSnapshots_.value(model.value("id").toString());
+                    if (fields.isEmpty()) continue;
+                    for (auto it = fields.cbegin(); it != fields.cend(); ++it)
+                        model.insert(it.key(), it.value());
+                    controller_->models_[index] = model;
+                }
+            });
+        }
     }
 
     Q_INVOKABLE void reset()
     {
         if (controller_ == nullptr) return;
+        cardSnapshots_.clear();
         controller_->activeRequest_.reset();
         controller_->failedRequest_.reset();
         controller_->setJobState(VocalSeparationController::JobState::Idle);
@@ -887,6 +902,8 @@ public:
     Q_INVOKABLE void setCardConfiguration(const QString& modelId, const QVariantMap& fields)
     {
         if (controller_ == nullptr) return;
+        for (auto it = fields.cbegin(); it != fields.cend(); ++it)
+            cardSnapshots_[modelId].insert(it.key(), it.value());
         for (int index = 0; index < controller_->models_.size(); ++index) {
             QVariantMap model = controller_->models_.at(index).toMap();
             if (model.value(QStringLiteral("id")).toString() != modelId) continue;
@@ -896,6 +913,16 @@ public:
             emit controller_->modelsChanged();
             return;
         }
+    }
+
+    // Drive the real shared-runtime view without downloading a large runtime.
+    Q_INVOKABLE void setSharedRuntimeProgress(bool downloading)
+    {
+        if (controller_ == nullptr) return;
+        controller_->runtimeOnlyDownload_ = downloading;
+        controller_->runtimeProgress_[QStringLiteral("directml")] = 0.23;
+        controller_->runtimeDetails_[QStringLiteral("directml")] = QStringLiteral("下载组件 3 / 5");
+        emit controller_->downloadStateChanged();
     }
 
     Q_INVOKABLE void setJobState(int state, const QString& stage)
@@ -1151,6 +1178,7 @@ private:
 
     VocalSeparationController* controller_ = nullptr;
     QString runtimeLibraryPath_;
+    QHash<QString, QVariantMap> cardSnapshots_;
     QTemporaryDir audioResults_;
     quint64 audioResultGeneration_ = 0;
 };

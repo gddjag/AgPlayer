@@ -27,6 +27,7 @@ private slots:
     void freshInstallUsesAudioRangeEchoDefaults();
     void invalidStoredVisualValuesUseAudioRangeEchoDefaults();
     void storedColumnDensityOverridesTheFreshInstallDefault();
+    void screenshotPresetValues();
     void initTestCase();
     void defaultsAreIndependent();
     void persistsAndNormalizesValues();
@@ -46,9 +47,9 @@ private slots:
 void PlayerExperienceControllerTest::columnLightingPersistsClampsAndSurvivesPresets()
 {
     struct Setting { const char* name; int minimum; int fallback; };
-    const Setting settings[] = {{"columnInnerLight", 0, 100},
-                                {"columnLightSpill", 0, 20},
-                                {"columnLightRadius", 20, 100}};
+    const Setting settings[] = {{"columnInnerLight", 0, 155},
+                                {"columnLightSpill", 0, 176},
+                                {"columnLightRadius", 20, 86}};
     QSettings().clear();
     for (const auto& setting : settings) {
         PlayerExperienceController experience;
@@ -67,10 +68,6 @@ void PlayerExperienceControllerTest::columnLightingPersistsClampsAndSurvivesPres
         QCOMPARE(property.read(&experience).toInt(), 200);
         QCOMPARE(changed.count(), 2);
         QVERIFY(property.write(&experience, 137));
-        for (int preset = 0; preset < 9; ++preset) {
-            QVERIFY(experience.applyPreset(preset));
-            QCOMPARE(property.read(&experience).toInt(), 137);
-        }
         PlayerExperienceController restored;
         QCOMPARE(restored.property(setting.name).toInt(), 137);
         QSettings storage;
@@ -120,7 +117,7 @@ void PlayerExperienceControllerTest::columnControlsNormalizeNotifyAndPersist()
 {
     struct Control { const char* name; int minimum; int maximum; int fallback; };
     const Control controls[] = {
-        {"columnDensity", 50, 200, 130},
+        {"columnDensity", 50, 200, 50},
         {"columnSize", 50, 200, 95}, {"columnOpacity", 0, 100, 100},
         {"reactorBrightness", 0, 200, 100},
     };
@@ -142,8 +139,8 @@ void PlayerExperienceControllerTest::columnControlsNormalizeNotifyAndPersist()
         QVERIFY(property.write(&experience, 999));
         QCOMPARE(property.read(&experience).toInt(), control.maximum);
         QCOMPARE(changed.count(), lowChangeCount + 1);
-        QCOMPARE(experience.terrainAmplitude(), 62);
-        QCOMPARE(experience.subjectClarity(), 112);
+        QCOMPARE(experience.terrainAmplitude(), 34);
+        QCOMPARE(experience.subjectClarity(), 114);
         QCOMPARE(experience.rhythmStrength(), 30);
         PlayerExperienceController reloaded;
         QCOMPARE(reloaded.property(control.name).toInt(), control.maximum);
@@ -169,12 +166,13 @@ void PlayerExperienceControllerTest::columnPresetsRestoreIndependentControls()
     for (const char* key : keys)
         QVERIFY2(experience.metaObject()->indexOfProperty(key) >= 0, key);
     const int sizes[] = {95, 90, 80, 100, 110, 90, 85, 105, 105};
-    const int brightness[] = {100, 100, 100, 78, 100, 74, 100, 100, 100};
+    const int brightness[] = {100, 99, 92, 131, 187, 110, 71, 153, 71};
+    const int density[] = {50, 50, 50, 50, 200, 170, 200, 200, 200};
     for (int preset = 0; preset < 9; ++preset) {
         experience.setProperty("columnDensity", 175);
         for (const char* key : keys) QVERIFY(experience.setProperty(key, 51));
         QVERIFY(experience.applyPreset(preset));
-        QCOMPARE(experience.property("columnDensity").toInt(), 175);
+        QCOMPARE(experience.property("columnDensity").toInt(), density[preset]);
         QCOMPARE(experience.property("columnSize").toInt(), sizes[preset]);
         QCOMPARE(experience.property("columnOpacity").toInt(), 100);
         QCOMPARE(experience.property("reactorBrightness").toInt(), brightness[preset]);
@@ -190,8 +188,8 @@ void PlayerExperienceControllerTest::materialControlsNormalizeNotifyAndPersist()
     const Control controls[] = {
         {"materialMode", 0, 2, 0}, {"materialSoftness", 0, 100, 45},
         {"jellyElasticity", 0, 100, 35}, {"inkDensity", 0, 100, 60},
-        {"rippleStrength", 0, 200, 100}, {"rippleWidth", 20, 200, 100},
-        {"rippleDecay", 20, 200, 100},
+        {"rippleStrength", 0, 200, 39}, {"rippleWidth", 20, 200, 82},
+        {"rippleDecay", 20, 200, 81},
     };
     QSettings().clear();
     for (const auto& control : controls) {
@@ -265,6 +263,36 @@ void PlayerExperienceControllerTest::materialPresetsRestoreAfterInk()
     QCOMPARE(configurations.size(), 9);
 }
 
+
+void PlayerExperienceControllerTest::screenshotPresetValues()
+{
+    QSettings().clear();
+    const char* keys[] = {"rippleStrength", "rippleWidth", "rippleDecay", "columnDensity", "terrainAmplitude", "subjectClarity", "inputCompression", "audioResponse", "peakBoost", "responseRange", "reactorBrightness", "columnInnerLight", "columnLightSpill", "columnLightRadius", "centerHighlight", "glowIntensity", "depthOfField", "autoRotateSpeed", "cinemaShake", "songAdaptiveColorEnabled", "rhythmSensitivity"};
+    const int expected[9][21] = {
+        {39, 82, 81, 50, 34, 114, 99, 121, 55, 129, 100, 155, 176, 86, 40, 100, 83, 78, 81, 1, 80},
+        {41, 57, 81, 50, 40, 65, 108, 127, 62, 122, 99, 152, 94, 121, 31, 46, 69, 72, 43, 1, 84},
+        {85, 107, 73, 50, 46, 120, 76, 127, 56, 160, 92, 52, 86, 88, 39, 77, 98, 61, 80, 0, 72},
+        {139, 163, 99, 50, 26, 110, 107, 135, 64, 169, 131, 171, 125, 122, 55, 73, 70, 100, 119, 1, 80},
+        {26, 142, 125, 200, 57, 104, 130, 73, 55, 93, 187, 134, 125, 166, 74, 80, 135, 100, 8, 0, 66},
+        {155, 103, 119, 170, 29, 110, 80, 140, 68, 164, 110, 174, 125, 130, 64, 52, 116, 93, 116, 0, 95},
+        {91, 128, 115, 200, 67, 75, 92, 110, 49, 104, 71, 108, 60, 81, 62, 46, 56, 100, 95, 0, 82},
+        {65, 165, 147, 200, 28, 110, 135, 118, 70, 140, 153, 136, 79, 113, 66, 28, 108, 100, 99, 0, 70},
+        {78, 125, 90, 200, 52, 89, 84, 142, 94, 220, 71, 176, 131, 167, 80, 76, 129, 100, 111, 0, 74},
+    };
+    PlayerExperienceController experience;
+    for (int preset = 0; preset < 9; ++preset) {
+        QVERIFY(experience.applyPreset(preset));
+        for (int field = 0; field < 21; ++field) {
+            const double value = experience.property(keys[field]).toDouble();
+            const double expectedValue = field == 18 ? expected[preset][field] / 100.0 : expected[preset][field];
+            QVERIFY2(qAbs(value - expectedValue) < 0.00001,
+                     qPrintable(QString("preset %1 %2: got %3 expected %4").arg(preset).arg(keys[field]).arg(value).arg(expectedValue)));
+        }
+        PlayerExperienceController restored;
+        for (const char* key : keys) QCOMPARE(restored.property(key), experience.property(key));
+    }
+}
+
 void PlayerExperienceControllerTest::initTestCase()
 {
     QStandardPaths::setTestModeEnabled(true);
@@ -291,7 +319,7 @@ void PlayerExperienceControllerTest::freshInstallUsesAudioRangeEchoDefaults()
     QSettings().clear();
     PlayerExperienceController experience;
 
-    QCOMPARE(experience.columnDensity(), 130);
+    QCOMPARE(experience.columnDensity(), 50);
     QCOMPARE(experience.columnSize(), 95);
     QCOMPARE(experience.columnOpacity(), 100);
     QCOMPARE(experience.reactorBrightness(), 100);
@@ -299,33 +327,33 @@ void PlayerExperienceControllerTest::freshInstallUsesAudioRangeEchoDefaults()
     QCOMPARE(experience.materialSoftness(), 45);
     QCOMPARE(experience.jellyElasticity(), 35);
     QCOMPARE(experience.inkDensity(), 60);
-    QCOMPARE(experience.rippleStrength(), 100);
-    QCOMPARE(experience.rippleWidth(), 100);
-    QCOMPARE(experience.rippleDecay(), 100);
-    QCOMPARE(experience.terrainAmplitude(), 62);
+    QCOMPARE(experience.rippleStrength(), 39);
+    QCOMPARE(experience.rippleWidth(), 82);
+    QCOMPARE(experience.rippleDecay(), 81);
+    QCOMPARE(experience.terrainAmplitude(), 34);
     QCOMPARE(experience.motionResponse(), 56);
     QCOMPARE(experience.gradientLayers(), 74);
-    QCOMPARE(experience.glowIntensity(), 38);
-    QCOMPARE(experience.cinemaShake(), 0.30);
+    QCOMPARE(experience.glowIntensity(), 100);
+    QCOMPARE(experience.cinemaShake(), 0.81);
     QCOMPARE(experience.autoRotate(), 54);
-    QCOMPARE(experience.peakBoost(), 58);
+    QCOMPARE(experience.peakBoost(), 55);
     QCOMPARE(experience.visualEqGains(),
              QVariantList({90, 92, 50, 50, 50, 50, 50, 48}));
-    QCOMPARE(experience.inputCompression(), 82);
-    QCOMPARE(experience.audioResponse(), 136);
-    QCOMPARE(experience.responseRange(), 100);
-    QCOMPARE(experience.centerHighlight(), 64);
+    QCOMPARE(experience.inputCompression(), 99);
+    QCOMPARE(experience.audioResponse(), 121);
+    QCOMPARE(experience.responseRange(), 129);
+    QCOMPARE(experience.centerHighlight(), 40);
     QCOMPARE(experience.rhythmStrength(), 30);
-    QCOMPARE(experience.depthOfField(), 86);
-    QCOMPARE(experience.subjectClarity(), 112);
-    QCOMPARE(experience.autoRotateSpeed(), 42);
+    QCOMPARE(experience.depthOfField(), 83);
+    QCOMPARE(experience.subjectClarity(), 114);
+    QCOMPARE(experience.autoRotateSpeed(), 78);
     QCOMPARE(experience.rhythmSensitivity(), 80);
     QCOMPARE(experience.colorMode(), PlayerExperienceController::MultiRegion);
-    QCOMPARE(experience.coolColor(), QStringLiteral("#6553DD"));
-    QCOMPARE(experience.warmColor(), QStringLiteral("#F467A9"));
-    QCOMPARE(experience.accentColor(), QStringLiteral("#AD62ED"));
-    QCOMPARE(experience.peakColor(), QStringLiteral("#FFE2EE"));
-    QCOMPARE(experience.baseColor(), QStringLiteral("#030817"));
+    QCOMPARE(experience.coolColor(), QStringLiteral("#5276E8"));
+    QCOMPARE(experience.warmColor(), QStringLiteral("#F58DAD"));
+    QCOMPARE(experience.accentColor(), QStringLiteral("#A880ED"));
+    QCOMPARE(experience.peakColor(), QStringLiteral("#F5DBEC"));
+    QCOMPARE(experience.baseColor(), QStringLiteral("#040A1C"));
     QVERIFY(experience.floatingCubesEnabled());
     QVERIFY(experience.meteorsEnabled());
     QVERIFY(experience.ripplesEnabled());
@@ -333,7 +361,7 @@ void PlayerExperienceControllerTest::freshInstallUsesAudioRangeEchoDefaults()
     QVERIFY(experience.idleBreathingEnabled());
     QVERIFY(experience.streamHighlightEnabled());
     QVERIFY(!experience.themeCycleEnabled());
-    QVERIFY(!experience.songAdaptiveColorEnabled());
+    QVERIFY(experience.songAdaptiveColorEnabled());
 }
 
 void PlayerExperienceControllerTest::invalidStoredVisualValuesUseAudioRangeEchoDefaults()
@@ -351,16 +379,16 @@ void PlayerExperienceControllerTest::invalidStoredVisualValuesUseAudioRangeEchoD
 
     PlayerExperienceController experience;
     QCOMPARE(experience.columnSize(), 95);
-    QCOMPARE(experience.columnDensity(), 130);
+    QCOMPARE(experience.columnDensity(), 50);
     QCOMPARE(experience.columnOpacity(), 100);
-    QCOMPARE(experience.terrainAmplitude(), 62);
+    QCOMPARE(experience.terrainAmplitude(), 34);
     QCOMPARE(experience.motionResponse(), 56);
-    QCOMPARE(experience.cinemaShake(), 0.30);
-    QCOMPARE(experience.audioResponse(), 136);
-    QCOMPARE(experience.centerHighlight(), 64);
-    QCOMPARE(experience.subjectClarity(), 112);
+    QCOMPARE(experience.cinemaShake(), 0.81);
+    QCOMPARE(experience.audioResponse(), 121);
+    QCOMPARE(experience.centerHighlight(), 40);
+    QCOMPARE(experience.subjectClarity(), 114);
     QCOMPARE(experience.rhythmSensitivity(), 80);
-    QVERIFY(!experience.songAdaptiveColorEnabled());
+    QVERIFY(experience.songAdaptiveColorEnabled());
 }
 
 void PlayerExperienceControllerTest::storedColumnDensityOverridesTheFreshInstallDefault()
@@ -383,10 +411,10 @@ void PlayerExperienceControllerTest::defaultsAreIndependent()
     QVERIFY(!experience.lyricsVisible());
     QVERIFY(experience.panelVisible());
     QVERIFY(!experience.desktopMousePassthrough());
-    QVERIFY(!experience.songAdaptiveColorEnabled());
+    QVERIFY(experience.songAdaptiveColorEnabled());
     QCOMPARE(experience.qualityPreset(), 0);
-    QCOMPARE(experience.coolColor(), QStringLiteral("#6553DD"));
-    QCOMPARE(experience.warmColor(), QStringLiteral("#F467A9"));
+    QCOMPARE(experience.coolColor(), QStringLiteral("#5276E8"));
+    QCOMPARE(experience.warmColor(), QStringLiteral("#F58DAD"));
     QCOMPARE(experience.visualEqGains(),
              QVariantList({90, 92, 50, 50, 50, 50, 50, 48}));
 
@@ -438,7 +466,7 @@ void PlayerExperienceControllerTest::persistsAndNormalizesValues()
     QCOMPARE(malformed.immersiveMode(), 0);
     QCOMPARE(malformed.hostMode(), 0);
     QCOMPARE(malformed.qualityPreset(), 0);
-    QCOMPARE(malformed.coolColor(), QStringLiteral("#6553DD"));
+    QCOMPARE(malformed.coolColor(), QStringLiteral("#5276E8"));
     QCOMPARE(malformed.terrainAmplitude(), 100);
     QCOMPARE(malformed.visualEqGains(),
              QVariantList({90, 92, 50, 50, 50, 50, 50, 48}));
@@ -456,19 +484,19 @@ void PlayerExperienceControllerTest::defaultsExposeV46ExperienceControls()
     QCOMPARE(experience.lyricPosition(), PlayerExperienceController::Center);
     QCOMPARE(experience.lyricPositionX(), 50);
     QCOMPARE(experience.lyricPositionY(), 42);
-    QCOMPARE(experience.inputCompression(), 82);
-    QCOMPARE(experience.audioResponse(), 136);
-    QCOMPARE(experience.responseRange(), 100);
-    QCOMPARE(experience.centerHighlight(), 64);
+    QCOMPARE(experience.inputCompression(), 99);
+    QCOMPARE(experience.audioResponse(), 121);
+    QCOMPARE(experience.responseRange(), 129);
+    QCOMPARE(experience.centerHighlight(), 40);
     QCOMPARE(experience.rhythmStrength(), 30);
-    QCOMPARE(experience.depthOfField(), 86);
-    QCOMPARE(experience.subjectClarity(), 112);
-    QCOMPARE(experience.autoRotateSpeed(), 42);
+    QCOMPARE(experience.depthOfField(), 83);
+    QCOMPARE(experience.subjectClarity(), 114);
+    QCOMPARE(experience.autoRotateSpeed(), 78);
     QCOMPARE(experience.rhythmSensitivity(), 80);
-    QCOMPARE(experience.coolColor(), QStringLiteral("#6553DD"));
-    QCOMPARE(experience.warmColor(), QStringLiteral("#F467A9"));
-    QCOMPARE(experience.accentColor(), QStringLiteral("#AD62ED"));
-    QCOMPARE(experience.peakColor(), QStringLiteral("#FFE2EE"));
+    QCOMPARE(experience.coolColor(), QStringLiteral("#5276E8"));
+    QCOMPARE(experience.warmColor(), QStringLiteral("#F58DAD"));
+    QCOMPARE(experience.accentColor(), QStringLiteral("#A880ED"));
+    QCOMPARE(experience.peakColor(), QStringLiteral("#F5DBEC"));
     QVERIFY(experience.burstEnabled());
     QVERIFY(experience.streamHighlightEnabled());
 }
@@ -636,8 +664,7 @@ void PlayerExperienceControllerTest::appliesDistinctCompleteVisualPresetSnapshot
     for (const int preset : presets) {
         experience.setSongAdaptiveColorEnabled(true);
         QVERIFY(experience.applyPreset(preset));
-        QVERIFY2(!experience.songAdaptiveColorEnabled(),
-                 "Selecting a preset must display its own palette, not the track-derived palette");
+        QCOMPARE(experience.songAdaptiveColorEnabled(), preset == 0 || preset == 1 || preset == 3);
         snapshots.append({
             experience.colorMode(), experience.coolColor(), experience.warmColor(),
             experience.accentColor(), experience.peakColor(), experience.baseColor(),
@@ -660,43 +687,34 @@ void PlayerExperienceControllerTest::appliesDistinctCompleteVisualPresetSnapshot
                      "every visual preset must apply a different complete state snapshot");
         }
     }
-    const QList<QVariantList> expected = {
-        {0, "#6553DD", "#F467A9", "#AD62ED", "#FFE2EE", "#030817", 62, 56, 74,
-         38, 0.30, 54, 58, true, true, true, true, false,
-         QVariantList({90, 92, 50, 50, 50, 50, 50, 48}), 82, 136, 100, 64, 30, 86,
-         112, 42, 80},
-        {2, "#7F5CFF", "#FF4FD8", "#22F0FF", "#F7F2FF", "#070310", 70, 80, 84,
-         58, 0.48, 64, 72, true, true, true, false, true,
-         QVariantList({92, 84, 58, 48, 54, 72, 96, 100}), 84, 144, 178, 68, 106, 94,
-         108, 48, 84},
-        {1, "#19282B", "#343B3B", "#B4CDCA", "#7F8D89", "#F4F1E8", 48, 36, 42,
-         22, 0.12, 30, 36, true, false, false, true, false,
-         QVariantList({62, 58, 54, 50, 48, 44, 42, 40}), 88, 122, 160, 48, 82, 116,
-         120, 30, 72},
-        {1, "#8EDFFF", "#D9B9FF", "#9EF2D1", "#F7FFFF", "#0B1117", 52, 48, 36,
-         24, 0.18, 34, 42, true, false, false, false, false,
-         QVariantList({70, 68, 62, 58, 58, 62, 68, 72}), 80, 134, 166, 56, 92, 70,
-         126, 34, 80},
-        {0, "#5264D9", "#B89CFF", "#46C7BC", "#DAF3EE", "#0A1018", 28, 22, 30,
-         16, 0.08, 26, 24, true, false, false, true, false,
-         QVariantList({48, 46, 44, 42, 42, 40, 38, 36}), 92, 108, 154, 46, 64, 112,
-         106, 26, 66},
-        {2, "#44D9FF", "#FF4FA7", "#FF8A45", "#FFF1D1", "#05030D", 72, 68, 76,
-         52, 0.45, 58, 68, true, true, true, true, true,
-         QVariantList({96, 88, 66, 54, 58, 76, 94, 100}), 80, 140, 182, 64, 104, 96,
-         110, 46, 84},
-        {3, "#38D8FF", "#FF5A9D", "#8A7CFF", "#F8F4FF", "#03040B", 58, 62, 82,
-         46, 0.22, 46, 64, true, true, true, true, false,
-         QVariantList({92, 86, 66, 58, 62, 76, 88, 94}), 82, 138, 198, 62, 74, 82,
-         118, 40, 82},
-        {1, "#174C78", "#2EC4B6", "#78DCE8", "#E9FDFF", "#02070C", 44, 38, 58,
-         28, 0.10, 30, 42, true, false, false, true, false,
-         QVariantList({78, 74, 68, 60, 52, 48, 44, 40}), 88, 118, 195, 52, 58, 108,
-         116, 24, 70},
-        {1, "#8A3D22", "#E6813B", "#FFC66D", "#FFF1C2", "#090502", 56, 48, 66,
-         34, 0.18, 34, 52, true, true, true, true, false,
-         QVariantList({88, 84, 72, 62, 54, 48, 44, 42}), 84, 126, 188, 60, 66, 94,
-         120, 28, 74},
+    QList<QVariantList> expected = {
+        {0, "#5276E8", "#F58DAD", "#A880ED", "#F5DBEC", "#040A1C", 34, 56, 74,
+         100, 0.81, 54, 55, true, true, true, true, false, QVariantList({90, 92, 50, 50, 50, 50, 50, 48}),
+         99, 121, 129, 40, 30, 83, 114, 78, 80},
+        {2, "#5554D8", "#EF5AAE", "#36D9DF", "#DFEBFA", "#070B1B", 40, 80, 84,
+         46, 0.43, 64, 62, true, true, true, false, true, QVariantList({92, 84, 58, 48, 54, 72, 96, 100}),
+         108, 127, 122, 31, 106, 69, 65, 72, 84},
+        {1, "#203C3D", "#58655E", "#93B6A7", "#C4D6C8", "#F4F1E8", 46, 36, 42,
+         77, 0.80, 30, 56, true, false, false, true, false, QVariantList({62, 58, 54, 50, 48, 44, 42, 40}),
+         76, 127, 160, 39, 82, 98, 120, 61, 72},
+        {1, "#76BFD7", "#E7B8A6", "#9ED5C0", "#ECF6EF", "#08141C", 26, 48, 36,
+         73, 1.19, 34, 64, true, false, false, false, false, QVariantList({70, 68, 62, 58, 58, 62, 68, 72}),
+         107, 135, 169, 55, 92, 70, 110, 100, 80},
+        {0, "#637EA3", "#BAA5CA", "#76B7B1", "#D6E9E4", "#09151D", 57, 22, 30,
+         80, 0.08, 26, 55, true, false, false, true, false, QVariantList({48, 46, 44, 42, 42, 40, 38, 36}),
+         130, 73, 93, 74, 64, 135, 104, 100, 66},
+        {2, "#4B70D2", "#C567B5", "#E8AD75", "#DCE5FA", "#050918", 29, 68, 76,
+         52, 1.16, 58, 68, true, true, true, true, true, QVariantList({96, 88, 66, 54, 58, 76, 94, 100}),
+         80, 140, 164, 64, 104, 116, 110, 93, 95},
+        {3, "#39CFE0", "#EF70A5", "#9778E8", "#F3DEEB", "#050718", 67, 62, 82,
+         46, 0.95, 46, 49, true, true, true, true, false, QVariantList({92, 86, 66, 58, 62, 76, 88, 94}),
+         92, 110, 104, 62, 74, 56, 75, 100, 82},
+        {1, "#245785", "#3DB4B1", "#7979B8", "#CAE5E8", "#030C17", 28, 38, 58,
+         28, 0.99, 30, 70, true, false, false, true, false, QVariantList({78, 74, 68, 60, 52, 48, 44, 40}),
+         135, 118, 140, 66, 58, 108, 110, 100, 70},
+        {1, "#285A62", "#DC984E", "#EFBA72", "#F5DFC0", "#0C1014", 52, 48, 66,
+         76, 1.11, 34, 94, true, true, true, true, false, QVariantList({88, 84, 72, 62, 54, 48, 44, 42}),
+         84, 142, 220, 80, 66, 129, 89, 100, 74},
     };
     QCOMPARE(snapshots, expected);
     QVERIFY(!experience.applyPreset(-1));
@@ -719,17 +737,17 @@ void PlayerExperienceControllerTest::presetsMatchFinalHtmlContract()
         int autoRotateSpeed;
         int rhythmSensitivity;
     };
-    // The first six rows are the user's HTML contract, not expanded scene defaults.
+    // Latest screenshot values override pictured HTML parameters; rhythmStrength was not pictured.
     const std::array expected{
-        Expected{0, 82, 136, 100, 64, 30, 86, 112, 42, 80},
-        Expected{1, 84, 144, 178, 68, 106, 94, 108, 48, 84},
-        Expected{2, 88, 122, 160, 48, 82, 116, 120, 30, 72},
-        Expected{3, 80, 134, 166, 56, 92, 70, 126, 34, 80},
-        Expected{4, 92, 108, 154, 46, 64, 112, 106, 26, 66},
-        Expected{5, 80, 140, 182, 64, 104, 96, 110, 46, 84},
-        Expected{6, 82, 138, 198, 62, 74, 82, 118, 40, 82},
-        Expected{7, 88, 118, 195, 52, 58, 108, 116, 24, 70},
-        Expected{8, 84, 126, 188, 60, 66, 94, 120, 28, 74},
+        Expected{0, 99, 121, 129, 40, 30, 83, 114, 78, 80},
+        Expected{1, 108, 127, 122, 31, 106, 69, 65, 72, 84},
+        Expected{2, 76, 127, 160, 39, 82, 98, 120, 61, 72},
+        Expected{3, 107, 135, 169, 55, 92, 70, 110, 100, 80},
+        Expected{4, 130, 73, 93, 74, 64, 135, 104, 100, 66},
+        Expected{5, 80, 140, 164, 64, 104, 116, 110, 93, 95},
+        Expected{6, 92, 110, 104, 62, 74, 56, 75, 100, 82},
+        Expected{7, 135, 118, 140, 66, 58, 108, 110, 100, 70},
+        Expected{8, 84, 142, 220, 80, 66, 129, 89, 100, 74},
     };
 
     for (const Expected& values : expected) {
@@ -762,16 +780,16 @@ void PlayerExperienceControllerTest::strictlyParsesPersistedScalarTypes()
     settings.setValue(QStringLiteral("immersiveVisual/panelVisible"), 0);
 
     PlayerExperienceController malformed;
-    QCOMPARE(malformed.terrainAmplitude(), 62);
+    QCOMPARE(malformed.terrainAmplitude(), 34);
     QCOMPARE(malformed.qualityPreset(), 0);
-    QCOMPARE(malformed.cinemaShake(), 0.30);
+    QCOMPARE(malformed.cinemaShake(), 0.81);
     QVERIFY(malformed.panelVisible());
     QCOMPARE(settings.value(QStringLiteral("immersiveVisual/terrainAmplitude")),
-             QVariant(62));
+             QVariant(34));
     QCOMPARE(settings.value(QStringLiteral("immersiveVisual/qualityPreset")),
              QVariant(0));
     QCOMPARE(settings.value(QStringLiteral("immersiveVisual/cinemaShake")).toDouble(),
-             0.30);
+             0.81);
     QCOMPARE(settings.value(QStringLiteral("immersiveVisual/panelVisible")),
              QVariant(true));
 

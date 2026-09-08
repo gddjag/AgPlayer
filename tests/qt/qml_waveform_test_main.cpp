@@ -7,6 +7,7 @@
 
 #include <QCoreApplication>
 #include <QQmlEngine>
+#include <QQmlContext>
 #include <QStandardPaths>
 #include <QtQml/qqml.h>
 #include <QtQuickTest/quicktest.h>
@@ -17,6 +18,12 @@ class QmlWaveformSetup final : public QObject {
     Q_OBJECT
 
 public slots:
+    void feedSpectrum(const QVariantList& spectrum) {
+        features_->processSpectrum(spectrum);
+    }
+    void qmlEngineAvailable(QQmlEngine* engine) {
+        engine->rootContext()->setContextProperty(QStringLiteral("spectrumTestDriver"), this);
+    }
     void applicationAvailable() {
         QStandardPaths::setTestModeEnabled(true);
         QCoreApplication::setOrganizationName(QStringLiteral("AgPlayer"));

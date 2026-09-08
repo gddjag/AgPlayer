@@ -13,6 +13,7 @@
 #include "playlist_model.hpp"
 #include "qml_registration.hpp"
 #include "settings_controller.hpp"
+#include "translation_manager.hpp"
 #include "tag_model.hpp"
 #include "track_waveform_thumbnail_provider.hpp"
 #include "video_playback_controller.hpp"
@@ -512,6 +513,11 @@ public slots:
         filenameProcessor_->setLibraryModel(library_.get());
         formatConverter_ = std::make_unique<FormatConverter>();
         settings_ = std::make_unique<SettingsController>();
+        windows_->setMainWindowShellMode(settings_->playerShellMode());
+        connect(settings_.get(), &SettingsController::playerShellModeChanged,
+                windows_.get(), [this] {
+                    windows_->setMainWindowShellMode(settings_->playerShellMode());
+                });
         lyricsProvider_ = std::make_unique<NoMatchLyricsProvider>();
         lyrics_ = std::make_unique<LyricsService>(
             library_.get(), playback_.get(), settings_.get(), lyricsProvider_.get());
@@ -552,6 +558,22 @@ public slots:
     void qmlEngineAvailable(QQmlEngine* engine)
     {
         engine->addImportPath("qrc:/");
+        engine->rootContext()->setContextProperty(
+            "visualFixtureOutput",
+            QString::fromLocal8Bit(qgetenv("AGPLAYER_VISUAL_FIXTURE_OUTPUT")));
+        const bool testTranslations = qEnvironmentVariableIsSet("AGPLAYER_TEST_TRANSLATIONS");
+        engine->rootContext()->setContextProperty("testTranslationsEnabled", testTranslations);
+        if (testTranslations) {
+            translations_ = std::make_unique<TranslationManager>();
+            if (!translations_->setLanguage(settings_->language()))
+                qFatal("Unable to load test translation catalog");
+            connect(settings_.get(), &SettingsController::languageChanged, engine, [this] {
+                if (!translations_->setLanguage(settings_->language()))
+                    qFatal("Unable to switch test translation catalog");
+            });
+            connect(translations_.get(), &TranslationManager::languageChanged,
+                    engine, &QQmlEngine::retranslate);
+        }
         const QString fixture =
             QString::fromLocal8Bit(qgetenv("AGPLAYER_TEST_AUDIO"));
         engine->rootContext()->setContextProperty(
@@ -626,6 +648,7 @@ private:
     std::unique_ptr<FilenameProcessor> filenameProcessor_;
     std::unique_ptr<FormatConverter> formatConverter_;
     std::unique_ptr<SettingsController> settings_;
+    std::unique_ptr<TranslationManager> translations_;
     std::unique_ptr<NoMatchLyricsProvider> lyricsProvider_;
     std::unique_ptr<LyricsService> lyrics_;
     std::unique_ptr<WaveformProvider> waveformProvider_;

@@ -22,10 +22,14 @@ private slots:
     void outputLevelsPollCoreAtPlaybackCadence();
     void adaptiveTransientFloorRejectsRepeatedBackgroundPulses();
     void perceptualBandsKeepNarrowBassEnergyLocalized();
+    void narrowBassTransientsTriggerKickWithoutMidrangeLeakage();
     void perceptualBandsUseFastAttackAndProgressiveRelease();
     void perceptualBandsPreserveSparseMidAndHighTones();
     void perceptualBandsReleaseWithinEightFrames();
     void silentWaveformDoesNotEnableSyntheticBeatGrid();
+    void reliableBeatGridKeepsCountingWithoutLightingSilentPassages();
+    void fadeOutPublicationResidueDoesNotLightBeatGrid_data();
+    void fadeOutPublicationResidueDoesNotLightBeatGrid();
 };
 
 namespace {
@@ -49,6 +53,8 @@ void AudioVisualFeatureControllerTest::reliableBpmEmitsOnceEveryEightBeats()
     features.setWaveformTiming(QStringLiteral("track-a"), 120.0, 120000,
                                QVariantList{0.2, 0.6, 0.4});
     QVERIFY(features.beatReliable());
+    features.processSpectrum(spectrum(0.3));
+    impactSpy.clear();
 
     features.processPlaybackPosition(0);
     features.processPlaybackPosition(3999);
@@ -70,6 +76,7 @@ void AudioVisualFeatureControllerTest::reliableBpmEmitsRegularBeatPulseAndEightB
     features.setActive(true);
     features.setWaveformTiming(QStringLiteral("track-beat"), 120.0, 120000,
                                QVariantList{0.2, 0.6, 0.4});
+    features.processSpectrum(spectrum(0.3));
 
     features.processPlaybackPosition(0);
     features.processPlaybackPosition(499);
@@ -290,6 +297,28 @@ void AudioVisualFeatureControllerTest::perceptualBandsKeepNarrowBassEnergyLocali
     QVERIFY(features.energy() > 0.12);
 }
 
+void AudioVisualFeatureControllerTest::narrowBassTransientsTriggerKickWithoutMidrangeLeakage()
+{
+    AudioVisualFeatureController features;
+    features.setActive(true);
+    features.processSpectrum(spectrum(0.0));
+
+    QVariantList bass(128, 0.0);
+    for (int index = 0; index < 3; ++index) bass[index] = 0.30;
+    features.processSpectrum(bass);
+    QVERIFY2(features.kickPulse(),
+             "A localized audible bass onset must not be diluted by silent midrange bins");
+    QCOMPARE(features.beatRevision(), 1);
+    QCOMPARE(features.impactRevision(), 0);
+
+    // A sustained bass bed plus a new midrange note is not another kick.
+    QVariantList bassAndMid = bass;
+    for (int index = 13; index < 22; ++index) bassAndMid[index] = 0.8;
+    features.processSpectrum(bassAndMid);
+    QVERIFY2(!features.kickPulse(),
+             "Midrange flux must not trigger a kick over sustained bass");
+}
+
 void AudioVisualFeatureControllerTest::perceptualBandsUseFastAttackAndProgressiveRelease()
 {
     AudioVisualFeatureController features;
@@ -359,6 +388,78 @@ void AudioVisualFeatureControllerTest::silentWaveformDoesNotEnableSyntheticBeatG
     features.processPlaybackPosition(4000);
     QCOMPARE(features.beatRevision(), 0);
     QCOMPARE(features.impactRevision(), 0);
+}
+
+void AudioVisualFeatureControllerTest::reliableBeatGridKeepsCountingWithoutLightingSilentPassages()
+{
+    AudioVisualFeatureController features;
+    features.setActive(true);
+    features.setWaveformTiming(QStringLiteral("track-with-silence"), 120.0, 120000,
+                               QVariantList{0.2, 0.6, 0.4});
+    features.processSpectrum(spectrum(0.3));
+    features.processPlaybackPosition(0);
+    features.processPlaybackPosition(500);
+    QVERIFY(features.beatStrength() > 0.0);
+
+    // The envelope still has a release tail, but the current audio is silent.
+    features.processSpectrum(spectrum(0.0));
+    QVERIFY(features.energy() > 0.0);
+    for (qint64 position = 1000; position <= 4000; position += 500)
+        features.processPlaybackPosition(position);
+    QCOMPARE(features.beatRevision(), 8);
+    QCOMPARE(features.impactRevision(), 1);
+    QCOMPARE(features.beatStrength(), 0.0);
+    QCOMPARE(features.impactStrength(), 0.0);
+
+    features.processSpectrum(spectrum(0.3));
+    for (qint64 position = 4500; position <= 8000; position += 500)
+        features.processPlaybackPosition(position);
+    QCOMPARE(features.beatRevision(), 16);
+    QCOMPARE(features.impactRevision(), 2);
+    QVERIFY(features.beatStrength() > 0.0);
+    QVERIFY(features.impactStrength() > 0.0);
+}
+
+void AudioVisualFeatureControllerTest::fadeOutPublicationResidueDoesNotLightBeatGrid_data()
+{
+    QTest::addColumn<double>("residue");
+    QTest::newRow("below-publication-threshold") << double(0.0015F);
+    QTest::newRow("at-publication-threshold") << double(0.002F);
+}
+
+void AudioVisualFeatureControllerTest::fadeOutPublicationResidueDoesNotLightBeatGrid()
+{
+    QFETCH(double, residue);
+    AudioVisualFeatureController features;
+    features.setActive(true);
+    features.setWaveformTiming(QStringLiteral("fading-track"), 120.0, 120000,
+                               QVariantList{0.2, 0.6, 0.4});
+    features.processSpectrum(spectrum(0.3));
+    features.processPlaybackPosition(0);
+    features.processPlaybackPosition(500);
+    QVERIFY(features.beatStrength() > 0.0);
+
+    // This is the last published fade-out sample. pollSpectrum does not
+    // publish the subsequent zero bins because their delta is <= 0.002F.
+    features.processSpectrum(spectrum(residue));
+    QVERIFY(features.energy() > residue);
+    for (qint64 position = 1000; position <= 8000; position += 500) {
+        features.processPlaybackPosition(position);
+        QCOMPARE(features.beatStrength(), 0.0);
+        QCOMPARE(features.impactStrength(), 0.0);
+    }
+    QCOMPARE(features.beatRevision(), 16);
+    QCOMPARE(features.impactRevision(), 2);
+
+    // A returning signal whose delta clears the publication threshold restores
+    // visual pulses without resetting the eight-beat count.
+    features.processSpectrum(spectrum(0.0041F));
+    for (qint64 position = 8500; position <= 12000; position += 500)
+        features.processPlaybackPosition(position);
+    QCOMPARE(features.beatRevision(), 24);
+    QCOMPARE(features.impactRevision(), 3);
+    QVERIFY(features.beatStrength() > 0.0);
+    QVERIFY(features.impactStrength() > 0.0);
 }
 
 QTEST_GUILESS_MAIN(AudioVisualFeatureControllerTest)

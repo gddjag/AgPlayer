@@ -98,7 +98,7 @@ set_tests_properties(qml_lossless_identification_test PROPERTIES
     ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<IF:$<CONFIG:Debug>,debug/bin,bin>")
 
 qt_add_translations(
-    TARGETS AgPlayer translation_manager_test
+    TARGETS AgPlayer translation_manager_test qml_main_window_test
     SOURCE_TARGETS agplayer_app_qml agplayer_qt AgPlayer
     TS_FILES
         ${CMAKE_SOURCE_DIR}/translations/agplayer_zh.ts

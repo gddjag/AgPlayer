@@ -167,6 +167,15 @@ TestCase {
         verify(caseBox.width >= 112)
         verify(conflictBox.width >= 180)
 
+        if (visualFixtureOutput) {
+            let captured = false
+            verify(rulesPanel.grabToImage(function(result) {
+                result.saveToFile(visualFixtureOutput + "-filename-rules.png")
+                captured = true
+            }))
+            tryVerify(function() { return captured })
+        }
+
         compare(prefixAdd.checked, true)
         let payload = page.rules()
         compare(payload.prefix, "")

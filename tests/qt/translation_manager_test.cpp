@@ -9,6 +9,7 @@ private slots:
     void exposesOnlyRequestedLanguages();
     void normalizesUnsupportedLanguageToChinese();
     void switchesInstalledQtTranslation();
+    void switchesDialogButtonsAndFilenamePlaceholders();
 };
 
 void TranslationManagerTest::exposesOnlyRequestedLanguages()
@@ -94,6 +95,25 @@ void TranslationManagerTest::switchesInstalledQtTranslation()
     QCOMPARE(libraryResourceFoldersLabel(), QStringLiteral("资源文件夹"));
     QCOMPARE(sideResourceFoldersLabel(), QStringLiteral("资源文件夹"));
     QCOMPARE(searchPlaceholder(), QStringLiteral("歌曲 · 艺术家 · 专辑 · 标签"));
+}
+
+void TranslationManagerTest::switchesDialogButtonsAndFilenamePlaceholders()
+{
+    TranslationManager translations;
+    const char* labels[] = {"确定", "取消", "是", "否", "关闭"};
+    const char* english[] = {"OK", "Cancel", "Yes", "No", "Close"};
+    QVERIFY(translations.setLanguage(QStringLiteral("en")));
+    for (int i = 0; i < 5; ++i)
+        QCOMPARE(QCoreApplication::translate("ThemedDialog", labels[i]),
+                 QString::fromUtf8(english[i]));
+    QCOMPARE(QCoreApplication::translate("FilenameProcessPage", "输入要添加的前缀"),
+             QStringLiteral("Enter a prefix to add"));
+    QCOMPARE(QCoreApplication::translate("FilenameProcessPage", "输入要添加的后缀"),
+             QStringLiteral("Enter a suffix to add"));
+    QVERIFY(translations.setLanguage(QStringLiteral("zh")));
+    for (const auto* label : labels)
+        QCOMPARE(QCoreApplication::translate("ThemedDialog", label),
+                 QString::fromUtf8(label));
 }
 
 QTEST_MAIN(TranslationManagerTest)

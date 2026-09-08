@@ -184,15 +184,22 @@ bool PlaybackController::cueAuditioning() const noexcept
 
 double PlaybackController::beatGridBpm() const noexcept
 {
-    const double overrideBpm = currentDeckState().beatGridBpmOverride;
+    const auto deck = currentDeckState();
+    const double overrideBpm = deck.beatGridBpmOverride;
     if (validBeatGridBpm(overrideBpm)) return overrideBpm;
+    if (!deck.beatGridCalibrated && automaticBeatGrid_.reliable)
+        return automaticBeatGrid_.bpm;
     if (validBeatGridBpm(sourceBpm_)) return sourceBpm_;
+    if (validBeatGridBpm(beatGridWaveformBpm_)) return beatGridWaveformBpm_;
     return 120.0;
 }
 
 qint64 PlaybackController::beatGridOffsetMs() const noexcept
 {
-    return currentDeckState().beatGridOffsetMs;
+    const auto deck = currentDeckState();
+    return deck.beatGridCalibrated ? deck.beatGridOffsetMs
+        : automaticBeatGrid_.reliable ? automaticBeatGrid_.offsetMs
+                                     : deck.beatGridOffsetMs;
 }
 
 bool PlaybackController::beatGridCalibrated() const noexcept
@@ -203,7 +210,8 @@ bool PlaybackController::beatGridCalibrated() const noexcept
 bool PlaybackController::beatGridEstimatedBpm() const noexcept
 {
     return !validBeatGridBpm(currentDeckState().beatGridBpmOverride)
-        && !validBeatGridBpm(sourceBpm_);
+        && !validBeatGridBpm(sourceBpm_) && !automaticBeatGrid_.reliable
+        && !validBeatGridBpm(beatGridWaveformBpm_);
 }
 
 QVariantList PlaybackController::hotCuePositions() const
@@ -506,6 +514,7 @@ bool PlaybackController::shouldFailEditorOutputStep(
 
 void PlaybackController::play()
 {
+    cancelBeatGridAutoPosition();
     bool accepted = true;
     emit playbackRequested(&accepted);
     if (!accepted) return;
@@ -523,6 +532,7 @@ void PlaybackController::play()
 
 void PlaybackController::pause()
 {
+    cancelBeatGridAutoPosition();
     if (editorOutputOwned_) return;
     runCommand(player_ != nullptr ? ag_player_pause(player_) : AG_INVALID_ARGUMENT);
 }
@@ -540,6 +550,7 @@ bool PlaybackController::pauseForPlaybackHandoff()
 
 void PlaybackController::stop()
 {
+    cancelBeatGridAutoPosition();
     if (editorOutputOwned_) return;
     runCommand(player_ != nullptr ? ag_player_stop(player_) : AG_INVALID_ARGUMENT);
 }
@@ -559,6 +570,7 @@ void PlaybackController::togglePlayback()
 
 void PlaybackController::seek(qint64 positionMs)
 {
+    cancelBeatGridAutoPosition();
     if (editorOutputOwned_) return;
     if (player_ == nullptr) {
         runCommand(AG_INVALID_ARGUMENT);
@@ -640,6 +652,7 @@ void PlaybackController::clearSelection()
 
 void PlaybackController::cuePress()
 {
+    cancelBeatGridAutoPosition();
     bool accepted = true;
     emit playbackRequested(&accepted);
     if (!accepted) return;
@@ -726,6 +739,7 @@ void PlaybackController::clearCue()
 
 void PlaybackController::jumpToCue()
 {
+    cancelBeatGridAutoPosition();
     if (player_ == nullptr || editorOutputOwned_
         || !hasPersistentCurrentTrack()) {
         return;
@@ -750,6 +764,7 @@ void PlaybackController::jumpToCue()
 
 void PlaybackController::activateHotCue(const int slot)
 {
+    cancelBeatGridAutoPosition();
     bool accepted = true;
     emit playbackRequested(&accepted);
     if (!accepted) return;
@@ -799,6 +814,7 @@ void PlaybackController::clearHotCue(const int slot)
 
 void PlaybackController::setBeatGridFirstBeat()
 {
+    cancelBeatGridAutoPosition();
     if (!hasPersistentCurrentTrack()) return;
     ag_playback_snapshot snapshot{};
     if (ag_player_snapshot(player_, &snapshot) != AG_OK
@@ -806,6 +822,7 @@ void PlaybackController::setBeatGridFirstBeat()
         || queueTrackIds_.at(static_cast<qsizetype>(snapshot.track_index))
                != currentTrackId_) return;
     DeckState& current = deckStates_[currentTrackId_];
+    preserveAutomaticBeatGrid(current);
     current.beatGridOffsetMs = std::max(qint64{0}, qint64(snapshot.position_ms));
     current.beatGridCalibrated = true;
     if (!saveDeckStateStore()) {
@@ -816,8 +833,10 @@ void PlaybackController::setBeatGridFirstBeat()
 
 void PlaybackController::nudgeBeatGrid(const qint64 deltaMs)
 {
+    cancelBeatGridAutoPosition();
     if (!hasPersistentCurrentTrack() || deltaMs == 0) return;
     DeckState& current = deckStates_[currentTrackId_];
+    preserveAutomaticBeatGrid(current);
     if (deltaMs > 0
         && current.beatGridOffsetMs
             > std::numeric_limits<qint64>::max() - deltaMs) {
@@ -838,12 +857,14 @@ void PlaybackController::nudgeBeatGrid(const qint64 deltaMs)
 
 void PlaybackController::setBeatGridBpm(const double bpm)
 {
+    cancelBeatGridAutoPosition();
     if (!hasPersistentCurrentTrack() || !validBeatGridBpm(bpm)) return;
     DeckState& current = deckStates_[currentTrackId_];
     if (qFuzzyCompare(current.beatGridBpmOverride + 1.0, bpm + 1.0)
         && current.beatGridCalibrated) {
         return;
     }
+    preserveAutomaticBeatGrid(current);
     current.beatGridBpmOverride = bpm;
     current.beatGridCalibrated = true;
     if (!saveDeckStateStore()) {
@@ -852,8 +873,90 @@ void PlaybackController::setBeatGridBpm(const double bpm)
     emit beatGridChanged();
 }
 
+void PlaybackController::preserveAutomaticBeatGrid(DeckState& deck)
+{
+    if (deck.beatGridCalibrated) return;
+    deck.beatGridOffsetMs = beatGridOffsetMs();
+    // Freeze the displayed tempo with the manual anchor, so later metadata
+    // updates/reopening cannot silently move a grid the user already aligned.
+    if (!validBeatGridBpm(deck.beatGridBpmOverride))
+        deck.beatGridBpmOverride = beatGridBpm();
+}
+
+void PlaybackController::applyBeatGridWaveform(const QString& trackId,
+                                              const double bpm,
+                                              const qint64 durationMs,
+                                              const QVariantList& peaks)
+{
+    if (trackId.isEmpty() || trackId != currentTrackId_
+        || durationMs <= 0 || peaks.isEmpty()) return;
+    const double waveformBpm = validBeatGridBpm(bpm) ? bpm : 0.0;
+    if (beatGridWaveformDurationMs_ == durationMs
+        && beatGridWaveformBpm_ == waveformBpm && beatGridPeaks_ == peaks) {
+        tryAlignBeatGridStart();
+        return;
+    }
+    beatGridPeaks_ = peaks;
+    beatGridWaveformDurationMs_ = durationMs;
+    beatGridWaveformBpm_ = waveformBpm;
+    refreshAutomaticBeatGrid();
+    emit beatGridChanged();
+    tryAlignBeatGridStart();
+}
+
+void PlaybackController::setBeatGridAutoPositionEnabled(const bool enabled)
+{
+    if (beatGridAutoPositionEnabled_ == enabled) return;
+    beatGridAutoPositionEnabled_ = enabled;
+    // Entering professional mode does not re-arm an already loaded song.
+    if (!enabled) cancelBeatGridAutoPosition();
+}
+
+void PlaybackController::cancelBeatGridAutoPosition()
+{
+    beatGridAutoPositionPending_ = false;
+    // A user can seek between core queue selection and the next UI poll.
+    // Remember the actual target so that poll cannot re-arm it afterward.
+    ag_playback_snapshot snapshot{};
+    if (player_ && ag_player_snapshot(player_, &snapshot) == AG_OK
+        && snapshot.track_index < static_cast<size_t>(queueTrackIds_.size())) {
+        beatGridAutoPositionCancelledTrackId_ =
+            queueTrackIds_.at(static_cast<qsizetype>(snapshot.track_index));
+    }
+}
+
+void PlaybackController::tryAlignBeatGridStart()
+{
+    if (!beatGridAutoPositionEnabled_ || !beatGridAutoPositionPending_
+        || !hasPersistentCurrentTrack() || editorOutputOwned_
+        || cueHeld_ || cueAuditioning_ || scratchActive_) return;
+    const auto deck = currentDeckState();
+    if (!deck.beatGridCalibrated && !automaticBeatGrid_.reliable) return;
+    ag_playback_snapshot snapshot{};
+    if (ag_player_snapshot(player_, &snapshot) != AG_OK
+        || snapshot.track_index >= static_cast<size_t>(queueTrackIds_.size())
+        || queueTrackIds_.at(static_cast<qsizetype>(snapshot.track_index))
+            != currentTrackId_) return;
+    beatGridAutoPositionPending_ = false;
+    const qint64 target = beatGridOffsetMs();
+    const qint64 duration = std::max(durationMs_, qint64(snapshot.duration_ms));
+    // Malformed/out-of-range saved anchors must not seek to the end of a song.
+    if (target < 0 || target >= duration) return;
+    // seek preserves the core's stopped/paused/playing state and publishes the
+    // committed source position used by the centered rolling playhead.
+    seek(target);
+}
+
+void PlaybackController::refreshAutomaticBeatGrid()
+{
+    automaticBeatGrid_ = estimateBeatGrid(beatGridPeaks_,
+        beatGridWaveformDurationMs_, validBeatGridBpm(sourceBpm_)
+            ? sourceBpm_ : beatGridWaveformBpm_);
+}
+
 void PlaybackController::resetBeatGrid()
 {
+    cancelBeatGridAutoPosition();
     if (!hasPersistentCurrentTrack()) return;
     DeckState& current = deckStates_[currentTrackId_];
     if (!validBeatGridBpm(current.beatGridBpmOverride)
@@ -1227,9 +1330,12 @@ bool PlaybackController::prepareRow(int row)
     }
     invalidateCueHoldForTrackChange();
     queueTrackIds_ = std::move(trackIds);
+    beatGridAutoPositionCancelledTrackId_.clear();
+    beatGridAutoPositionPending_ = beatGridAutoPositionEnabled_;
     activeScopeSize_ = queueTrackIds_.size();
     activeScopeAllowsFallback_ = false;
     emit queueTrackIdsChanged();
+    tryAlignBeatGridStart();
     return true;
 }
 
@@ -1276,6 +1382,7 @@ void PlaybackController::setKeepPitch(const bool keepPitch)
 
 bool PlaybackController::beginScratch()
 {
+    cancelBeatGridAutoPosition();
     if (player_ == nullptr || editorOutputOwned_) {
         runCommand(AG_INVALID_ARGUMENT);
         return false;
@@ -1366,6 +1473,7 @@ void PlaybackController::syncTimePitchFromCore()
 void PlaybackController::refreshSourceBpm()
 {
     const double oldGridBpm = beatGridBpm();
+    const qint64 oldGridOffset = beatGridOffsetMs();
     const bool oldEstimated = beatGridEstimatedBpm();
     double nextBpm = 0.0;
     if (library_ != nullptr && !currentTrackId_.isEmpty()) {
@@ -1377,11 +1485,14 @@ void PlaybackController::refreshSourceBpm()
     }
     if (qFuzzyCompare(sourceBpm_ + 1.0, nextBpm + 1.0)) return;
     sourceBpm_ = nextBpm;
+    refreshAutomaticBeatGrid();
     emit tempoChanged();
     if (!qFuzzyCompare(oldGridBpm + 1.0, beatGridBpm() + 1.0)
+        || oldGridOffset != beatGridOffsetMs()
         || oldEstimated != beatGridEstimatedBpm()) {
         emit beatGridChanged();
     }
+    tryAlignBeatGridStart();
 }
 
 bool PlaybackController::validBeatGridBpm(const double bpm) noexcept
@@ -1851,6 +1962,15 @@ void PlaybackController::pollSnapshot()
     }
     if (currentTrackId_ != nextTrackId) {
         currentTrackId_ = std::move(nextTrackId);
+        beatGridPeaks_.clear();
+        beatGridWaveformDurationMs_ = 0;
+        beatGridWaveformBpm_ = 0;
+        automaticBeatGrid_ = {};
+        beatGridAutoPositionPending_ = beatGridAutoPositionEnabled_
+            && beatGridAutoPositionCancelledTrackId_ != currentTrackId_;
+        // This marker only bridges a core track switch and its next UI poll;
+        // it must not suppress a later visit to the same song.
+        beatGridAutoPositionCancelledTrackId_.clear();
         applyReplayGainForTrack(currentTrackId_);
         refreshSourceBpm();
         emit currentTrackIdChanged();

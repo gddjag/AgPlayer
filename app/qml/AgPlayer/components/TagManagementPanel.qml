@@ -106,8 +106,10 @@ Item {
         query: root.searchText
     }
 
-    Dialog {
+    ThemedDialog {
         id: addTagDialog
+        objectName: "addTagDialog"
+        width: 320
         title: qsTr("添加标签")
         modal: true
         anchors.centerIn: parent
@@ -117,7 +119,7 @@ Item {
             newTagField.forceActiveFocus()
         }
         onAccepted: root.addTag(newTagField.text)
-        contentItem: TextField {
+        contentItem: ThemedTextField {
             id: newTagField
             objectName: "newTagField"
             placeholderText: qsTr("标签名称")
@@ -170,8 +172,9 @@ Item {
         }
     }
 
-    Dialog {
+    ThemedDialog {
         id: renameTagDialog
+        width: 320
         objectName: "renameTagDialog"
         title: qsTr("重命名标签")
         modal: true
@@ -200,7 +203,7 @@ Item {
                 root.filterModel.tagKey = nextKey
             root.renameTagRequested(previousKey, nextName)
         }
-        contentItem: TextField {
+        contentItem: ThemedTextField {
             id: renameTagField
             objectName: "renameTagField"
             maximumLength: 96
@@ -228,14 +231,14 @@ Item {
         }
     }
 
-    Dialog {
+    ThemedDialog {
         id: removeTagDialog
         objectName: "removeTagDialog"
         title: qsTr("删除标签")
         modal: true
-        width: 430
+        width: 320
         anchors.centerIn: parent
-        standardButtons: Dialog.Yes | Dialog.No
+        standardButtons: Dialog.Ok | Dialog.Cancel
         onAccepted: {
             var removedKey = root.contextTagKey
             var existed = root.hasTagKey(removedKey)
@@ -249,7 +252,6 @@ Item {
         }
         contentItem: Label {
             objectName: "removeTagWarning"
-            width: 390
             text: qsTr("确定删除这个标签？此操作只解除标签关系，不删除歌曲或磁盘文件。")
             color: Theme.primaryText
             wrapMode: Text.Wrap

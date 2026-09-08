@@ -3306,7 +3306,7 @@ TestCase {
         verify(currentRow)
         compare(currentRow.color.toString(), Theme.currentTrackSelection.toString())
         compare(indicator.barCount, 3)
-        compare(indicator.barColor.toString(), Theme.waveformMagenta.toString())
+        compare(indicator.barColor.toString(), Theme.accent.toString())
         verify(findChild(indicator, "playingBar0"))
         verify(findChild(indicator, "playingBar1"))
         verify(findChild(indicator, "playingBar2"))

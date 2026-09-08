@@ -41,6 +41,11 @@ QtObject {
         // them would reset spectrum/transient history on every preview update.
         if (layers._complete === false)
             return
+        Runtime.PlaybackController.applyBeatGridWaveform(
+                    trackId,
+                    Number(layers._bpm) || 0,
+                    Math.max(0, Number(layers._durationMs) || durationMs || 0),
+                    layers.mix || [])
         Runtime.AudioVisualFeatureController.setWaveformTiming(
                     trackId,
                     Number(layers._bpm) || 0,
@@ -83,7 +88,11 @@ QtObject {
         Runtime.WaveformProvider.prefetchTracks(neighbors)
     }
 
-    Component.onCompleted: loadWaveform()
+    Component.onCompleted: {
+        Runtime.PlaybackController.setBeatGridAutoPositionEnabled(
+                    Runtime.SettingsController.playerShellMode === 2)
+        loadWaveform()
+    }
 
     property Connections playbackConnection: Connections {
         target: Runtime.PlaybackController
@@ -121,6 +130,10 @@ QtObject {
 
     property Connections settingsConnection: Connections {
         target: Runtime.SettingsController
+        function onPlayerShellModeChanged() {
+            Runtime.PlaybackController.setBeatGridAutoPositionEnabled(
+                        Runtime.SettingsController.playerShellMode === 2)
+        }
         function onWaveformPeakAlgorithmChanged() { root.loadWaveform() }
     }
 

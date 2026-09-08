@@ -57,17 +57,6 @@ float finiteUnit(float value, float fallback = 0.0F) noexcept
     return std::clamp(finiteOr(value, fallback), 0.0F, 1.0F);
 }
 
-float smoothReactorFeature(float current, float target,
-                           float elapsedSeconds) noexcept
-{
-    const float boundedCurrent = finiteUnit(current);
-    const float boundedTarget = finiteUnit(target);
-    const float elapsed = std::clamp(elapsedSeconds, 0.0F, 0.25F);
-    const float timeConstant = boundedTarget > boundedCurrent ? 0.18F : 0.52F;
-    const float amount = 1.0F - std::exp(-elapsed / timeConstant);
-    return boundedCurrent + (boundedTarget - boundedCurrent) * amount;
-}
-
 AudioFeatures smoothReactorFeatures(const AudioFeatures& current,
                                     const AudioFeatures& target,
                                     float elapsedSeconds) noexcept
@@ -280,17 +269,20 @@ protected:
         punchEvents_.consume(snapshot_.punchEvent, camera_);
         const bool newBeat = beatEvents_.consume(snapshot_.beatEvent,
                                                 renderTimeSeconds);
+        const bool newImpact = impactEvents_.consume(snapshot_.impactEvent, renderTimeSeconds);
+        const float waveStrength = newImpact ? snapshot_.impactEvent.strength
+                                            : snapshot_.beatEvent.strength;
         if (!snapshot_.style.ripplesEnabled) {
             travelingWaves_.fill(QVector4D());
-        } else if (newBeat) {
+        } else if ((newImpact || newBeat) && waveStrength > 0.0F
+                   && waveGate_.consume(renderTimeSeconds, waveStrength)) {
             const int slot = nextWave_ % std::max(1, currentRippleCount_);
             nextWave_ = (slot + 1) % std::max(1, currentRippleCount_);
             const QVector4D& origin = waveSources_[std::size_t(slot)];
             travelingWaves_[std::size_t(slot)] = QVector4D(
                 origin.x(), origin.y(), renderTimeSeconds,
-                finiteUnit(snapshot_.beatEvent.strength));
+                finiteUnit(waveStrength));
         }
-        impactEvents_.consume(snapshot_.impactEvent, renderTimeSeconds);
         const BeatPulseSnapshot beat = beatEvents_.snapshot(
             renderTimeSeconds);
         const ImpactPulseSnapshot impact = impactEvents_.snapshot(
@@ -573,7 +565,7 @@ private:
                         std::cos(visual.timeSeconds * 17.0F) * shake * 0.55F,
                         std::sin(visual.timeSeconds * 13.0F) * shake * 0.7F);
         QMatrix4x4 view;
-        view.lookAt(eye, QVector3D(0.0F, 8.0F, 0.0F),
+        view.lookAt(eye, QVector3D(0.0F, 2.0F, 0.0F),
                     QVector3D(0.0F, 1.0F, 0.0F));
         const QMatrix4x4 mvp = rhi()->clipSpaceCorrMatrix() * projection * view;
 
@@ -754,6 +746,7 @@ private:
     BassEnvelopeFollower bassEnvelope_;
     MultiWaveSources waveSources_{};
     MultiWaveSources travelingWaves_{};
+    TravelingWaveGate waveGate_;
     int nextWave_ = 0;
     int currentSampleCount_ = 4;
     bool waveSourcesInitialized_ = false;

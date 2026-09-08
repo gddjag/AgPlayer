@@ -12,10 +12,10 @@ ApplicationWindow {
     visible: true
     width: 863
     height: 266
-    minimumWidth: SettingsController.playerShellMode === 1
-                  || SettingsController.playerShellMode === 2 ? 1180 : 612
-    minimumHeight: SettingsController.playerShellMode === 1 ? 720
-                   : SettingsController.playerShellMode === 2 ? 720 : 232
+    minimumWidth: WindowController.mainWindowShellMode === 1
+                  || WindowController.mainWindowShellMode === 2 ? 1180 : 612
+    minimumHeight: WindowController.mainWindowShellMode === 1 ? 720
+                   : WindowController.mainWindowShellMode === 2 ? 720 : 232
     onClosing: function(close) {
         close.accepted = false
         WindowController.requestClose()

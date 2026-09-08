@@ -301,12 +301,12 @@ Item {
         onAccepted: root.navigationModel.addResourceFolder(selectedFolder)
     }
 
-    Dialog {
+    ThemedDialog {
         id: removeResourceFolderDialog
         objectName: "removeResourceFolderDialog"
         title: qsTr("移除资源文件夹")
         modal: true
-        width: 450
+        width: 360
         anchors.centerIn: parent
         standardButtons: Dialog.Yes | Dialog.No
         onAccepted: {
@@ -319,7 +319,6 @@ Item {
         onRejected: root.pendingResourceFolderRemoval = ""
         contentItem: Label {
             objectName: "removeResourceFolderWarning"
-            width: 410
             text: qsTr("只从 AgPlayer 移除此目录引用和监控，不删除电脑磁盘中的实际文件夹和音乐文件。")
             color: Theme.primaryText
             wrapMode: Text.Wrap

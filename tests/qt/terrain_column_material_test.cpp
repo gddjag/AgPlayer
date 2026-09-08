@@ -26,6 +26,8 @@ struct StudyParameters {
     float beat = 0;
     float audioLevel = 1;
     float lowAudioLevel = 1;
+    float midAudioLevel = 0;
+    int waveSlot = -1;
     float exposure = 1;
     float opacity = 1;
     float softness = 0.45F;
@@ -169,6 +171,7 @@ void ColumnRenderer::render(QRhiCommandBuffer* cb)
     }
     u.bandsLow[0] = 0.40F * parameters_.audioLevel * parameters_.lowAudioLevel;
     u.bandsLow[1] = 0.30F * parameters_.audioLevel * parameters_.lowAudioLevel;
+    u.bandsLow[2] = u.bandsLow[3] = 0.70F * parameters_.midAudioLevel;
     u.parameters[3] = parameters_.time;
     for (int i = 0; i < 5; ++i) {
         u.colors[i][0] = float(parameters_.tint.redF());
@@ -199,6 +202,15 @@ void ColumnRenderer::render(QRhiCommandBuffer* cb)
     u.sceneControls[2] = 112;
     u.sceneControls[3] = 1.0F;
     u.waveParameters[0] = u.waveParameters[1] = u.waveParameters[2] = 1;
+    if (parameters_.waveSlot >= 0) {
+        const QVector3D anchors[] = {{0.1F,0.8F,1}, {1,0.2F,0.4F}, {1,0.7F,0.1F}};
+        for (int i = 0; i < 3; ++i)
+            for (int channel = 0; channel < 3; ++channel)
+                u.colors[i + 1][channel] = anchors[i][channel];
+        u.styleToggles[0] = 1;
+        u.effects[3] = 8;
+        u.waveSources[parameters_.waveSlot][3] = 0.8F;
+    }
     u.sceneLighting[0] = parameters_.lighting.x();
     u.sceneLighting[1] = parameters_.lighting.y();
     u.sceneLighting[2] = parameters_.lighting.z();
@@ -395,6 +407,8 @@ FrontFace locateFrontFace(const QImage& frame)
 class TerrainColumnMaterialTest : public QObject {
     Q_OBJECT
 private slots:
+    void consecutiveWavesUseDifferentPaletteAnchors();
+    void sustainedReliefLeavesRoomForBeatLift();
     void unsupportedDepthMaterialFallsBack_data() {
         QTest::addColumn<int>("stage");
         QTest::newRow("bindings") << 1;
@@ -411,7 +425,8 @@ private slots:
     void everyColumnHasLocalCapFlash_data() {
         QTest::addColumn<float>("randomValue");
         QTest::newRow("low-random") << 0.10F;
-        QTest::newRow("high-random") << 0.90F;
+        QTest::newRow("last-selected") << 0.59F;
+        QTest::newRow("unselected-forty-percent") << 0.90F;
     }
     void everyColumnHasLocalCapFlash();
     void lightControlsReachNativeMaterial_data() {
@@ -431,6 +446,61 @@ private slots:
     }
     void smoothInteriorRemainsStable();
 };
+
+void TerrainColumnMaterialTest::consecutiveWavesUseDifferentPaletteAnchors()
+{
+    QQuickWindow window;
+    window.resize(640, 640);
+    window.setColor(Qt::black);
+    auto counters = std::make_shared<StudyCounters>();
+    ColumnItem item(window.contentItem(), counters);
+    item.parameters.camera = {0, 6, 50};
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    QImage previous;
+    for (int slot = 0; slot < 3; ++slot) {
+        item.parameters.waveSlot = slot;
+        const int frames = counters->frames;
+        item.update();
+        QTRY_VERIFY_WITH_TIMEOUT(counters->frames > frames, 5000);
+        const QImage frame = studyFrame(window);
+        if (!previous.isNull()) {
+            const auto difference = compareFrames(previous, frame);
+            QVERIFY(difference.commonVisible > 1000);
+            QVERIFY2(difference.changedCommon > difference.commonVisible / 3,
+                     "Consecutive wave events reuse the same color");
+        }
+        previous = frame;
+    }
+}
+
+void TerrainColumnMaterialTest::sustainedReliefLeavesRoomForBeatLift()
+{
+    QQuickWindow window;
+    window.resize(640, 640);
+    window.setColor(Qt::black);
+    auto counters = std::make_shared<StudyCounters>();
+    ColumnItem item(window.contentItem(), counters);
+    item.parameters.material = 0;
+    item.parameters.camera = {0, 6, 50};
+    item.parameters.midAudioLevel = 1;
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    item.update();
+    QTRY_VERIFY_WITH_TIMEOUT(counters->frames > 0, 5000);
+    const QImage steady = studyFrame(window);
+    const int previous = counters->frames;
+    item.parameters.beat = 0.7F;
+    item.update();
+    QTRY_VERIFY_WITH_TIMEOUT(counters->frames > previous, 5000);
+    const FrameComparison change = compareFrames(steady, studyFrame(window));
+    qInfo() << "Sustained/beat column image heights:" << change.firstBounds.height()
+            << change.secondBounds.height();
+    QVERIFY2(change.firstBounds.height() < 230,
+             "Sustained audio makes a tall tower instead of a low floating terrain");
+    QVERIFY2(change.secondBounds.height() > change.firstBounds.height() * 1.15,
+             "Sustained relief masks the short beat lift");
+}
 
 void TerrainColumnMaterialTest::jellyReboundStartsAtBeatOnset()
 {
@@ -1171,6 +1241,11 @@ void TerrainColumnMaterialTest::everyColumnHasLocalCapFlash()
     qInfo() << "Random/cap pixels/top RMS off-on/side RMS off-on/local coverage:"
             << randomValue << capPixels.size() << topRms[0] << topRms[1]
             << sideRms[0] << sideRms[1] << bestLocalCoverage;
+    if (randomValue >= 0.60F) {
+        QVERIFY2(topRms[1] < 0.25, "The unselected 40% must retain a steady cap without twinkles");
+        QVERIFY(sideRms[0] < 0.25 && sideRms[1] < 0.25);
+        return;
+    }
       QVERIFY2(topRms[0] < 0.25, "The cap must be stable with stream disabled");
       QVERIFY2(topRms[1] > 5.0,
                "The cap needs independently twinkling microfacets, not a uniform sheet flash");

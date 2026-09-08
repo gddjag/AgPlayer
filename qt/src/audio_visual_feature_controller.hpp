@@ -102,6 +102,7 @@ private:
     QVariantList previousSpectrum_;
     double energy_ = 0.0;
     double spectralFlux_ = 0.0;
+    bool audibleSpectrum_ = false;
     bool kickPulse_ = false;
     bool snarePulse_ = false;
     std::array<double, 8> smoothedBands_{};

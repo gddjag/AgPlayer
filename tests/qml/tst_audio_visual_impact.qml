@@ -57,6 +57,12 @@ TestCase {
                     "track-a", 120, 120000, [0.2, 0.6, 0.4])
         compare(AudioVisualFeatureController.beatReliable, true)
 
+        // A BPM grid supplies timing, not audible energy. Feed spectrum just as
+        // the live playback controller does before expecting a visible impact.
+        var spectrum = []
+        for (var bin = 0; bin < 128; ++bin) spectrum.push(0.4)
+        spectrumTestDriver.feedSpectrum(spectrum)
+
         AudioVisualFeatureController.processPlaybackPosition(0)
         AudioVisualFeatureController.processPlaybackPosition(3999)
         compare(AudioVisualFeatureController.impactRevision, startRevision)
@@ -68,6 +74,12 @@ TestCase {
         AudioVisualFeatureController.processPlaybackPosition(8000)
         compare(AudioVisualFeatureController.impactRevision, startRevision + 2)
         verify(AudioVisualFeatureController.impactStrength > 0)
+        for (var silentBin = 0; silentBin < 128; ++silentBin) spectrum[silentBin] = 0
+        spectrumTestDriver.feedSpectrum(spectrum)
+        AudioVisualFeatureController.processPlaybackPosition(11999)
+        AudioVisualFeatureController.processPlaybackPosition(12000)
+        compare(AudioVisualFeatureController.impactRevision, startRevision + 3)
+        compare(AudioVisualFeatureController.impactStrength, 0)
     }
 
     function test_seek_and_track_change_do_not_emit_duplicate_impacts() {

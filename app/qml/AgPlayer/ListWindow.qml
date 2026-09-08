@@ -320,7 +320,7 @@ Window {
         }
     }
 
-    Dialog {
+    ThemedDialog {
         id: exportOptionsDialog
         title: qsTr("导出歌单")
         modal: true
@@ -357,7 +357,7 @@ Window {
                         copyPlaylistFiles.checked)
     }
 
-    Dialog {
+    ThemedDialog {
         id: createPlaylistDialog
         objectName: "createPlaylistDialog"
         title: qsTr("新建歌单")
@@ -389,7 +389,7 @@ Window {
             radius: Theme.radiusMd
         }
     }
-    Dialog {
+    ThemedDialog {
         id: renamePlaylistDialog
         objectName: "renamePlaylistDialog"
         property string playlistId
@@ -409,13 +409,13 @@ Window {
             radius: Theme.radiusMd
         }
     }
-    Dialog {
+    ThemedDialog {
         id: removePlaylistDialog
         objectName: "removePlaylistDialog"
         property string playlistId
         title: qsTr("删除歌单")
         modal: true
-        width: 420
+        width: 360
         anchors.centerIn: parent
         standardButtons: Dialog.Yes | Dialog.No
         onAccepted: {
@@ -424,7 +424,6 @@ Window {
                 listWindow.enterCategory("all", "library")
         }
         contentItem: Label {
-            width: 380
             text: qsTr("确定删除这个歌单？音乐文件不会被删除。")
             color: Theme.primaryText
             wrapMode: Text.Wrap

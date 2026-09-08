@@ -400,6 +400,7 @@ void TerrainReactorGpuSmokeTest::beatMaterialControlsChangeRenderedSurface_data(
     QTest::newRow("wave-strength") << QByteArray("rippleStrength") << 0 << 200 << 200;
     QTest::newRow("wave-width") << QByteArray("rippleWidth") << 20 << 200 << 200;
     QTest::newRow("wave-decay") << QByteArray("rippleDecay") << 20 << 200 << 1000;
+    QTest::newRow("impact-decay") << QByteArray("rippleDecay") << 20 << 200 << 500;
 }
 
 void TerrainReactorGpuSmokeTest::beatMaterialControlsChangeRenderedSurface()
@@ -436,7 +437,10 @@ void TerrainReactorGpuSmokeTest::beatMaterialControlsChangeRenderedSurface()
         item.setActive(true);
         QTRY_COMPARE_WITH_TIMEOUT(item.renderStatus(),TerrainReactorItem::RenderStatus::Ready,5000);
         QTest::qWait(200);
-        source.publishBeat(.9);
+        if (QByteArray(QTest::currentDataTag()) == "impact-decay")
+            source.publishImpact(.9);
+        else
+            source.publishBeat(.9);
         QTest::qWait(delay);
         frames[pass] = window.grabWindow();
         QVERIFY(!frames[pass].isNull());

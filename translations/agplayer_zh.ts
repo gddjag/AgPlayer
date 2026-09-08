@@ -1788,6 +1788,14 @@
 <context>
         <name>FilenameProcessPage</name>
         <message>
+            <source>输入要添加的前缀</source>
+            <translation>输入要添加的前缀</translation>
+        </message>
+        <message>
+            <source>输入要添加的后缀</source>
+            <translation>输入要添加的后缀</translation>
+        </message>
+        <message>
             <location filename="../app/qml/AgPlayer/components/tools/FilenameProcessPage.qml" line="182" />
             <source>音频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</source>
             <translation>音频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.wma)</translation>
@@ -9436,5 +9444,13 @@ NVIDIA CUDA 固定版本独立安装，不修改现有 Python/CPU 环境。约 1
     </context>
 <context>
         <name>LosslessProgressBar</name>
+    </context>
+    <context>
+        <name>ThemedDialog</name>
+        <message><source>确定</source><translation>确定</translation></message>
+        <message><source>取消</source><translation>取消</translation></message>
+        <message><source>是</source><translation>是</translation></message>
+        <message><source>否</source><translation>否</translation></message>
+        <message><source>关闭</source><translation>关闭</translation></message>
     </context>
 </TS>

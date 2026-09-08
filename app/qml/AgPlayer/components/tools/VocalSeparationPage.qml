@@ -1797,16 +1797,23 @@ Rectangle {
                         border.color: page.border
                         radius: 6
                         Flickable {
+                            id: runtimeTaskViewport
+                            objectName: "separationRuntimeViewport"
                             anchors.fill: parent
                             anchors.margins: 6
                             contentWidth: width
                             contentHeight: runtimeTaskColumn.implicitHeight
                             clip: true
                             boundsBehavior: Flickable.StopAtBounds
-                            ScrollBar.vertical: ThemedScrollBar { }
+                            ScrollBar.vertical: ThemedScrollBar {
+                                id: runtimeTaskScrollbar
+                                objectName: "separationRuntimeScrollbar"
+                                implicitWidth: 4
+                                visible: runtimeTaskViewport.contentHeight > runtimeTaskViewport.height
+                            }
                             ColumnLayout {
                                 id: runtimeTaskColumn
-                                width: parent.width
+                                width: parent.width - (runtimeTaskScrollbar.visible ? 8 : 0)
                                 spacing: 6
                                 Label {
                                     text: qsTr("共享运行环境")
@@ -1836,12 +1843,28 @@ Rectangle {
                                             Layout.fillWidth: true
                                             spacing: 6
                                             ProgressBar {
+                                                id: runtimeProgress
+                                                objectName: "separationRuntimeProgress-" + page.configurationTaskId(task)
                                                 Layout.fillWidth: true
+                                                Layout.preferredHeight: 6
                                                 from: 0; to: 1
                                                 value: Number(task.configurationProgress || 0)
                                                 indeterminate: task.configurationProgress < 0
-                                                palette.highlight: page.success
-                                                palette.dark: page.divider
+                                                background: Rectangle {
+                                                    implicitHeight: 6
+                                                    radius: 3
+                                                    color: Theme.navigatorGlassTrack
+                                                }
+                                                contentItem: Item {
+                                                    implicitHeight: 6
+                                                    Rectangle {
+                                                        width: parent.width * (runtimeProgress.indeterminate ? 1 : runtimeProgress.visualPosition)
+                                                        height: parent.height
+                                                        radius: 3
+                                                        color: page.primary
+                                                        opacity: runtimeProgress.indeterminate ? 0.35 : 1
+                                                    }
+                                                }
                                             }
                                             Label {
                                                 text: task.configurationProgress < 0 ? "…"

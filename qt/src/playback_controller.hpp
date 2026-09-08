@@ -8,6 +8,7 @@
 #include <QStringList>
 #include <QTimer>
 #include <QVariantList>
+#include "editor_timeline_math.hpp"
 
 #include <array>
 #include <optional>
@@ -182,6 +183,9 @@ public:
     Q_INVOKABLE void nudgeBeatGrid(qint64 deltaMs);
     Q_INVOKABLE void setBeatGridBpm(double bpm);
     Q_INVOKABLE void resetBeatGrid();
+    Q_INVOKABLE void applyBeatGridWaveform(const QString& trackId, double bpm,
+                                         qint64 durationMs, const QVariantList& peaks);
+    Q_INVOKABLE void setBeatGridAutoPositionEnabled(bool enabled);
 
 signals:
     // Synchronous, same-thread arbitration; a receiver may veto a failed handoff.
@@ -259,6 +263,10 @@ private:
     bool shouldFailEditorOutputStep(EditorOutputStep step) noexcept;
     void syncTimePitchFromCore();
     void refreshSourceBpm();
+    void refreshAutomaticBeatGrid();
+    void preserveAutomaticBeatGrid(DeckState& deck);
+    void cancelBeatGridAutoPosition();
+    void tryAlignBeatGridStart();
     void loadDeckStateStore();
     bool saveDeckStateStore();
     QString deckStateFilePath() const;
@@ -309,6 +317,15 @@ private:
     bool scratchReady_ = false;
     bool scratchBuffering_ = false;
     QHash<QString, DeckState> deckStates_;
+    // Only the active track retains its shared waveform envelope. Manual
+    // calibration remains in the existing per-track persistent deck store.
+    QVariantList beatGridPeaks_;
+    qint64 beatGridWaveformDurationMs_ = 0;
+    double beatGridWaveformBpm_ = 0;
+    BeatGridEstimate automaticBeatGrid_;
+    bool beatGridAutoPositionEnabled_ = false;
+    bool beatGridAutoPositionPending_ = false;
+    QString beatGridAutoPositionCancelledTrackId_;
     bool cueHeld_ = false;
     bool cueAuditioning_ = false;
     QString cueAuditionTrackId_;

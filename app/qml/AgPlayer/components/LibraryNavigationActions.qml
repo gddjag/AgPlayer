@@ -121,12 +121,6 @@ Item {
                                 implicitHeaderWidth, implicitFooterWidth)
         width: Math.min(implicitWidth, parent.width - 24)
         standardButtons: Dialog.Ok | Dialog.Cancel
-        onAboutToShow: {
-            var confirmButton = standardButton(Dialog.Ok) || standardButton(Dialog.Yes)
-            var cancelButton = standardButton(Dialog.Cancel) || standardButton(Dialog.No)
-            if (confirmButton) confirmButton.text = qsTranslate("ColorField", "确定")
-            if (cancelButton) cancelButton.text = qsTranslate("ColorField", "取消")
-        }
     }
 
     PlaylistDialog {

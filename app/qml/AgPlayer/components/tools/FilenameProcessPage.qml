@@ -650,7 +650,7 @@ Control {
                                     Layout.rightMargin: 9
                                     Layout.preferredHeight: Theme.controlHeight
                                     enabled: prefixAddRadio.checked
-                                    placeholderText: qsTr("留空则清理已有前缀")
+                                    placeholderText: qsTr("输入要添加的前缀")
                                     ToolTip.visible: hovered
                                     ToolTip.text: qsTr("填写时添加；留空时删除可识别的原前缀和序号")
                                     onTextChanged: page.refreshPreview()
@@ -701,7 +701,7 @@ Control {
                                     Layout.rightMargin: 9
                                     Layout.preferredHeight: Theme.controlHeight
                                     enabled: suffixAddRadio.checked
-                                    placeholderText: qsTr("留空则清理已有后缀")
+                                    placeholderText: qsTr("输入要添加的后缀")
                                     ToolTip.visible: hovered
                                     ToolTip.text: qsTr("填写时添加；留空时删除可识别的原后缀")
                                     onTextChanged: page.refreshPreview()

@@ -1600,6 +1600,14 @@
 <context>
         <name>FilenameProcessPage</name>
         <message>
+            <source>输入要添加的前缀</source>
+            <translation>Enter a prefix to add</translation>
+        </message>
+        <message>
+            <source>输入要添加的后缀</source>
+            <translation>Enter a suffix to add</translation>
+        </message>
+        <message>
             <source>添加前缀</source>
             <translation>Add prefix</translation>
         </message>
@@ -8802,5 +8810,13 @@ A pinned NVIDIA CUDA version is installed separately without changing the existi
             <source>%1分</source>
             <translation>%1 pts</translation>
         </message>
+    </context>
+    <context>
+        <name>ThemedDialog</name>
+        <message><source>确定</source><translation>OK</translation></message>
+        <message><source>取消</source><translation>Cancel</translation></message>
+        <message><source>是</source><translation>Yes</translation></message>
+        <message><source>否</source><translation>No</translation></message>
+        <message><source>关闭</source><translation>Close</translation></message>
     </context>
 </TS>

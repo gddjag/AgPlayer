@@ -230,18 +230,27 @@ void WindowController::setMainWindowShellMode(int mode)
     }
     persistGeometry(mainWindow_, mainWindowGeometryKey());
     persistListWindowState();
+    const QPoint previousPosition = mainWindow_ != nullptr ? mainWindow_->position() : QPoint();
+    const QRect previousAvailable = availableGeometryForWindow(mainWindow_);
     mainWindowShellMode_ = mode;
+    // QML's minimum size follows this signal, after the outgoing size is saved.
+    emit mainWindowShellModeChanged();
     if (mainWindowShellMode_ == 0) {
         loadPersistedListWindowState();
     }
     if (mainWindow_ != nullptr) {
-        restoreMainWindowGeometry(mainWindow_, true);
-        if (mainWindowShellMode_ == 0) {
-            const QSize referenceSize(863, 266);
-            const QRect available = availableGeometryForWindow(mainWindow_);
+        // Switching shells is not a startup restore: keep the live monitor and
+        // anchor, while recalling only the destination shell's logical size.
+        {
+            const QRect saved = settings_.value(mainWindowGeometryKey()).toRect();
+            const QSize referenceSize = saved.isValid() ? saved.size()
+                : mainWindowShellMode_ == 1 ? QSize(1386, 832)
+                : mainWindowShellMode_ == 2 ? QSize(1386, 972) : QSize(863, 266);
+            const QRect available = previousAvailable;
+            const QSize preferredSize = referenceSize.expandedTo(mainWindow_->minimumSize());
             const QSize targetSize = available.isValid()
-                ? referenceSize.boundedTo(available.size()) : referenceSize;
-            QRect geometry(mainWindow_->position(), targetSize);
+                ? preferredSize.boundedTo(available.size()) : preferredSize;
+            QRect geometry(previousPosition, targetSize);
             if (available.isValid()) {
                 if (geometry.right() > available.right()) {
                     geometry.moveRight(available.right());
@@ -1208,11 +1217,18 @@ bool WindowController::nativeEventFilter(const QByteArray& eventType, void* mess
                         currentGeometry, audioToolsTrackedDpr_, suggestedGeometry,
                         newDpr, targetAvailableGeometry);
                 } else {
-                    adjusted = geometryForDpiChange(
-                        currentGeometry, suggestedGeometry);
                     const QSize preservedSize = mainChanged ? mainNativePixelSize_
                         : listChanged ? listNativePixelSize_ : settingsNativePixelSize_;
-                    if (preservedSize.isValid()) adjusted.setSize(preservedSize);
+                    if (mainChanged || listChanged) {
+                        const qreal oldDpr = mainChanged ? mainTrackedDpr_ : listTrackedDpr_;
+                        adjusted = geometryForDpiChange(
+                            QRect(currentGeometry.topLeft(), preservedSize.isValid()
+                                ? preservedSize : currentGeometry.size()),
+                            oldDpr, suggestedGeometry, newDpr, QRect());
+                    } else {
+                        adjusted = geometryForDpiChange(currentGeometry, suggestedGeometry);
+                        if (preservedSize.isValid()) adjusted.setSize(preservedSize);
+                    }
                 }
                 const HWND changedWindow = msg->hwnd;
                 const quintptr capturedHandle = reinterpret_cast<quintptr>(changedWindow);
@@ -1259,6 +1275,10 @@ bool WindowController::nativeEventFilter(const QByteArray& eventType, void* mess
                                  adjusted.width(), adjusted.height(),
                                  SWP_NOZORDER | SWP_NOACTIVATE);
                     updatingWindowGeometry_ = false;
+                    if (mainChanged || listChanged) {
+                        rememberNativePixelSize(changedQtWindow);
+                        repositionDockedListWindow();
+                    }
                 });
             }
         }

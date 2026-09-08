@@ -69,7 +69,7 @@ private slots:
     void dockedGroupDoesNotClampMainMoveAtScreenEdge();
     void dockedListOwnsAlignedWidthAndKeepsWindowsAdjacent();
 #ifdef Q_OS_WIN
-    void dockedWindowsKeepNativeSizeAcrossScreens();
+    void dockedWindowsKeepLogicalSizeAcrossScreens();
     void nativeTaskbarGroupUsesMainAsOnlyAppWindow();
     void recreatedMainTaskbarSurfaceRefreshesStylesAndCommands();
     void taskbarCommandsToggleDockedGroupWithoutResizing();
@@ -83,7 +83,9 @@ private slots:
     void geometryDockAndPinStatePersist();
     void legacyMiniGeometryMigratesToReferenceDefault();
     void persistedClassicGeometrySurvivesReferenceDefaultChange();
-    void switchingBackToClassicRestoresReferenceSize();
+    void switchingBackToClassicRestoresUserSize();
+    void shellSwitchKeepsSecondaryScreenAndUserSizes();
+    void shellMinimumChangesDoNotOverwriteOutgoingUserSize();
     void classicListVisibilitySurvivesAVisitToRollingShell();
     void switchingBackWithoutClassicGeometryUsesCompactDefault();
     void persistedDockEdgeSurvivesInitialPreferenceWiring();
@@ -304,19 +306,19 @@ void WindowControllerTest::immersivePresentationHonorsDeferredShellRequestWithou
     WindowController windows;
     windows.setWindows(&mainWindow, nullptr);
     windows.setMainWindowShellMode(1);
-    QCOMPARE(mainWindow.geometry(), integratedGeometry);
+    QCOMPARE(mainWindow.geometry(), QRect(classicGeometry.topLeft(), integratedGeometry.size()));
 
     windows.enterImmersivePresentation();
     mainWindow.setGeometry(temporaryGeometry);
     windows.setMainWindowShellMode(0);
 
     windows.leaveImmersivePresentation();
-    QCOMPARE(mainWindow.size(), QSize(863, 266).boundedTo(
+    QCOMPARE(mainWindow.size(), classicGeometry.size().boundedTo(
                  mainWindow.screen()->availableGeometry().size()));
     QCOMPARE(settings.value(QStringLiteral("windows/mainGeometry")).toRect(),
              mainWindow.geometry());
     QCOMPARE(settings.value(QStringLiteral("windows/integratedMainGeometry")).toRect(),
-             integratedGeometry);
+             QRect(classicGeometry.topLeft(), integratedGeometry.size()));
 }
 
 void WindowControllerTest::immersivePresentationDeferredRollingShellKeepsIndependentListHidden()
@@ -358,7 +360,12 @@ void WindowControllerTest::immersivePresentationDeferredRollingShellKeepsIndepen
     windows.setMainWindowShellMode(2);
     windows.leaveImmersivePresentation();
 
-    QCOMPARE(mainWindow.geometry(), rollingMainGeometry);
+    const QRect available = mainWindow.screen()->availableGeometry();
+    const QSize targetSize = rollingMainGeometry.size().boundedTo(available.size());
+    const QPoint targetPosition(
+        qBound(available.left(), classicMainGeometry.x(), available.right() - targetSize.width() + 1),
+        qBound(available.top(), classicMainGeometry.y(), available.bottom() - targetSize.height() + 1));
+    QCOMPARE(mainWindow.geometry(), QRect(targetPosition, targetSize));
     QCOMPARE(listWindow.geometry(), classicListGeometry);
     QVERIFY(!windows.listWindowVisible());
     QVERIFY(!listWindow.isVisible());
@@ -508,13 +515,14 @@ void WindowControllerTest::immersivePresentationDefersClassicShellRequestWithout
         WindowController windows;
         windows.setWindows(&mainWindow, nullptr);
         windows.setMainWindowShellMode(1);
-        QCOMPARE(mainWindow.geometry(), integratedGeometry);
+        const QRect activeIntegratedGeometry(classicGeometry.topLeft(), integratedGeometry.size());
+        QCOMPARE(mainWindow.geometry(), activeIntegratedGeometry);
 
         windows.enterImmersivePresentation();
         windows.setMainWindowShellMode(0);
         windows.leaveImmersivePresentation();
 
-        QCOMPARE(mainWindow.size(), QSize(863, 266).boundedTo(
+        QCOMPARE(mainWindow.size(), classicGeometry.size().boundedTo(
                      mainWindow.screen()->availableGeometry().size()));
         QTest::qWait(300);
         settings.sync();
@@ -522,7 +530,7 @@ void WindowControllerTest::immersivePresentationDefersClassicShellRequestWithout
                  mainWindow.geometry());
         QCOMPARE(settings.value(
                      QStringLiteral("windows/integratedMainGeometry")).toRect(),
-                 integratedGeometry);
+                 activeIntegratedGeometry);
 
         mainWindow.setGeometry(userClassicGeometry);
         QTest::qWait(300);
@@ -531,7 +539,7 @@ void WindowControllerTest::immersivePresentationDefersClassicShellRequestWithout
                  userClassicGeometry);
         QCOMPARE(settings.value(
                      QStringLiteral("windows/integratedMainGeometry")).toRect(),
-                 integratedGeometry);
+                 activeIntegratedGeometry);
     }
     QSettings persistedSettings;
     persistedSettings.sync();
@@ -539,10 +547,10 @@ void WindowControllerTest::immersivePresentationDefersClassicShellRequestWithout
              userClassicGeometry);
     QCOMPARE(persistedSettings.value(
                  QStringLiteral("windows/integratedMainGeometry")).toRect(),
-             integratedGeometry);
+             QRect(classicGeometry.topLeft(), integratedGeometry.size()));
 }
 
-void WindowControllerTest::switchingBackToClassicRestoresReferenceSize()
+void WindowControllerTest::switchingBackToClassicRestoresUserSize()
 {
     QWindow mainWindow;
     mainWindow.setGeometry(40, 50, 960, 298);
@@ -557,7 +565,7 @@ void WindowControllerTest::switchingBackToClassicRestoresReferenceSize()
     mainWindow.setGeometry(20, 40, 760, 700);
 
     windows.setMainWindowShellMode(0);
-    QCOMPARE(mainWindow.size(), QSize(863, 266).boundedTo(
+    QCOMPARE(mainWindow.size(), QSize(700, 320).boundedTo(
                  mainWindow.screen()->availableGeometry().size()));
 
     windows.setMainWindowShellMode(1);
@@ -569,7 +577,7 @@ void WindowControllerTest::switchingBackToClassicRestoresReferenceSize()
     mainWindow.setGeometry(30, 50, 760, 460);
 
     windows.setMainWindowShellMode(0);
-    QCOMPARE(mainWindow.size(), QSize(863, 266).boundedTo(
+    QCOMPARE(mainWindow.size(), QSize(700, 320).boundedTo(
                  mainWindow.screen()->availableGeometry().size()));
     const QRect referenceClassicGeometry = mainWindow.geometry();
     windows.setMainWindowShellMode(2);
@@ -582,6 +590,61 @@ void WindowControllerTest::switchingBackToClassicRestoresReferenceSize()
     QCOMPARE(QSettings().value(
                  QStringLiteral("windows/rollingMainGeometry")).toRect(),
              QRect(30, 50, 760, 460));
+}
+
+void WindowControllerTest::shellSwitchKeepsSecondaryScreenAndUserSizes()
+{
+    QScreen* secondary = nullptr;
+    for (QScreen* screen : QGuiApplication::screens()) {
+        if (screen != QGuiApplication::primaryScreen()) {
+            secondary = screen;
+            if (screen->geometry().x() < 0 || screen->geometry().y() < 0) break;
+        }
+    }
+    if (secondary == nullptr) QSKIP("requires a secondary screen");
+    const QRect area = secondary->availableGeometry();
+    const QPoint anchor = area.topLeft() + QPoint(20, 20);
+    const QSize classicSize = QSize(700, 320).boundedTo(area.size() - QSize(40, 40));
+    const QSize integratedSize = QSize(800, 600).boundedTo(area.size() - QSize(40, 40));
+    QSettings settings;
+    settings.setValue(QStringLiteral("windows/mainGeometry"), QRect(anchor, classicSize));
+    settings.setValue(QStringLiteral("windows/integratedMainGeometry"),
+                      QRect(QGuiApplication::primaryScreen()->availableGeometry().topLeft(),
+                            integratedSize));
+    QWindow mainWindow;
+    mainWindow.setFlags(Qt::FramelessWindowHint);
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    QTRY_COMPARE(mainWindow.screen(), secondary);
+    windows.setMainWindowShellMode(1);
+    QTRY_COMPARE(mainWindow.geometry(), QRect(anchor, integratedSize));
+    QTRY_COMPARE(mainWindow.screen(), secondary);
+    windows.setMainWindowShellMode(0);
+    QTRY_COMPARE(mainWindow.geometry(), QRect(anchor, classicSize));
+    // An unvisited shell uses its own default on this same monitor.
+    windows.setMainWindowShellMode(2);
+    QTRY_COMPARE(mainWindow.screen(), secondary);
+    QVERIFY(area.contains(mainWindow.geometry()));
+}
+
+void WindowControllerTest::shellMinimumChangesDoNotOverwriteOutgoingUserSize()
+{
+    QWindow mainWindow;
+    mainWindow.setGeometry(20, 30, 700, 320);
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    const QSize classicSize = mainWindow.size();
+    // Mirrors Main.qml's synchronous minimum-size binding during a switch.
+    connect(&windows, &WindowController::mainWindowShellModeChanged, &mainWindow, [&] {
+        const QSize minimum = windows.mainWindowShellMode() == 0
+            ? QSize(612, 232) : QSize(1180, 720);
+        mainWindow.setMinimumSize(minimum);
+        mainWindow.resize(mainWindow.size().expandedTo(minimum));
+    });
+    windows.setMainWindowShellMode(1);
+    QCOMPARE(QSettings().value(QStringLiteral("windows/mainGeometry")).toRect().size(), classicSize);
+    windows.setMainWindowShellMode(0);
+    QCOMPARE(mainWindow.size(), classicSize);
 }
 
 void WindowControllerTest::classicListVisibilitySurvivesAVisitToRollingShell()
@@ -1404,7 +1467,7 @@ void WindowControllerTest::dockedListOwnsAlignedWidthAndKeepsWindowsAdjacent()
 }
 
 #ifdef Q_OS_WIN
-void WindowControllerTest::dockedWindowsKeepNativeSizeAcrossScreens()
+void WindowControllerTest::dockedWindowsKeepLogicalSizeAcrossScreens()
 {
     const QList<QScreen*> screens = QGuiApplication::screens();
     if (screens.size() < 2) {
@@ -1433,35 +1496,34 @@ void WindowControllerTest::dockedWindowsKeepNativeSizeAcrossScreens()
     RECT initialList{};
     QVERIFY(GetWindowRect(reinterpret_cast<HWND>(mainWindow.winId()), &initialMain));
     QVERIFY(GetWindowRect(reinterpret_cast<HWND>(listWindow.winId()), &initialList));
-    const QSize mainNativeSize(initialMain.right - initialMain.left,
-                               initialMain.bottom - initialMain.top);
-    const QSize listNativeSize(initialList.right - initialList.left,
-                               initialList.bottom - initialList.top);
-    QCOMPARE(listNativeSize.width(), mainNativeSize.width());
+    const QSize mainLogicalSize = mainWindow.size();
+    const int listLogicalHeight = listWindow.height();
+    const auto nativeWindowsAreAdjacent = [&] {
+        RECT mainRect{};
+        RECT listRect{};
+        return GetWindowRect(reinterpret_cast<HWND>(mainWindow.winId()), &mainRect)
+            && GetWindowRect(reinterpret_cast<HWND>(listWindow.winId()), &listRect)
+            && mainRect.left == listRect.left && mainRect.bottom - 2 == listRect.top;
+    };
 
     mainWindow.setPosition(screens.at(1)->availableGeometry().topLeft()
                            + QPoint(80, 80));
     QTRY_VERIFY(mainWindow.screen() == screens.at(1));
     QTRY_COMPARE(listWindow.x(), mainWindow.x());
-    QTRY_COMPARE(listWindow.y(), mainWindow.geometry().bottom() - 1);
+    QTRY_VERIFY(nativeWindowsAreAdjacent());
 
-    const auto nativeSize = [](QWindow& window) {
-        RECT rect{};
-        if (!GetWindowRect(reinterpret_cast<HWND>(window.winId()), &rect)) {
-            return QSize();
-        }
-        return QSize(rect.right - rect.left, rect.bottom - rect.top);
-    };
-    QTRY_COMPARE(nativeSize(mainWindow), mainNativeSize);
-    QTRY_COMPARE(nativeSize(listWindow), listNativeSize);
+    QTRY_COMPARE(mainWindow.size(), mainLogicalSize);
+    QTRY_COMPARE(listWindow.height(), listLogicalHeight);
+    QTRY_COMPARE(listWindow.width(), mainWindow.width());
 
     mainWindow.setPosition(screens.at(0)->availableGeometry().topLeft()
                            + QPoint(120, 120));
     QTRY_VERIFY(mainWindow.screen() == screens.at(0));
     QTRY_COMPARE(listWindow.x(), mainWindow.x());
-    QTRY_COMPARE(listWindow.y(), mainWindow.geometry().bottom() - 1);
-    QTRY_COMPARE(nativeSize(mainWindow), mainNativeSize);
-    QTRY_COMPARE(nativeSize(listWindow), listNativeSize);
+    QTRY_VERIFY(nativeWindowsAreAdjacent());
+    QTRY_COMPARE(mainWindow.size(), mainLogicalSize);
+    QTRY_COMPARE(listWindow.height(), listLogicalHeight);
+    QTRY_COMPARE(listWindow.width(), mainWindow.width());
 }
 
 void WindowControllerTest::nativeTaskbarGroupUsesMainAsOnlyAppWindow()

@@ -92,6 +92,8 @@ void main()
     float coreGlow = 0.0;
     float steadyCoreGlow = 0.0;
     float rippleWave = 0.0;
+    vec3 travelingWaveTint = vec3(0.0);
+    float travelingWaveWeight = 0.0;
     float terrainSpike = 0.0;
     float towerGlow = 0.0;
     opacity = 1.0;
@@ -196,21 +198,22 @@ void main()
                 float ridge = exp(-(ridgeDistance * ridgeDistance) / (9.0 * waveWidth * waveWidth));
                 float tail = exp(-max(0.0, waveRadius - sourceDistance) / (14.0 * waveWidth))
                            * step(sourceDistance, waveRadius);
-                waveField += (ridge + tail * 0.14)
-                           * max(0.0, 1.0 - age / waveLife) * source.w;
+                float weight = (ridge + tail * 0.14)
+                             * max(0.0, 1.0 - age / waveLife) * source.w;
+                waveField += weight;
+                // The pool advances once per emitted wave: each event retains
+                // its own palette anchor, rather than changing hue mid-flight.
+                int tintIndex = 1 + (waveIndex % 3);
+                travelingWaveTint += ubuf.colors[tintIndex].rgb * weight;
+                travelingWaveWeight += weight;
             }
         }
         float ripple = waveField * waveEnergy * ubuf.styleToggles.x
                      * 13.0 * cellModulation * ubuf.waveParameters.x;
         rippleWave = ripple;
-        float travelingRadius = impactAge * responseRadius * 0.92;
-        float impactWidth = max(0.2, ubuf.waveParameters.y);
-        float firstRing = exp(-pow((distanceFromCore - travelingRadius) / impactWidth, 2.0) / 12.0);
-        float secondRing = exp(-pow((distanceFromCore - max(0.0, travelingRadius - 9.0)) / impactWidth, 2.0) / 18.0);
-        float thirdRing = exp(-pow((distanceFromCore - max(0.0, travelingRadius - 18.0)) / impactWidth, 2.0) / 25.0);
-        impactWave = impactStrength * ubuf.styleToggles.x
-                   * (firstRing + secondRing * 0.72 + thirdRing * 0.48)
-                   * (4.0 + ubuf.stylePresentation.x * 5.5) * ubuf.waveParameters.x;
+        // All large rings now share the beat-driven, 3--6 second wave gate.
+        // An eighth-beat impact still lights the core and releases meteors,
+        // but must not add three unthrottled rings over the travelling wave.
         float domeRadius = max(12.0, responseRadius * 0.36);
         float dome = exp(-(distanceFromCore * distanceFromCore)
                        / (domeRadius * domeRadius));
@@ -247,13 +250,18 @@ void main()
                           * (bandsLow.z + bandsLow.w) * center * 1.8;
         frequencyTowers *= 0.58 + coherentDetail * 0.42;
         idle *= ubuf.styleToggles.w;
+        // Keep sustained mids/bass as low connected shelves. A separate short
+        // beat lift then reads as a pulse instead of vanishing in tall towers.
+        float sustainedRelief = (((bass + mids) * localContour + highDetail)
+                    * terrainField + swells + printRelief + midSpire
+                    + frequencyTowers * (0.35 + crest * 0.65)) * amplitude;
+        float restrainedRelief = min(sustainedRelief, 6.0)
+                               + max(0.0, sustainedRelief - 6.0) * 0.20;
         float rawHeight = max(0.0,
-            idle + (((bass + mids) * localContour + highDetail)
-                    * terrainField + ripple + swells + printRelief) * amplitude
-            + midSpire * amplitude
-            + frequencyTowers * amplitude * (0.35 + crest * 0.65)
+            idle + restrainedRelief
+            + ripple * amplitude * 0.55
             + coreLift * amplitude * (0.30 + crest * 0.70) + centerShoulders
-            + impactWave + coreGlow * 1.55);
+            + coreGlow * 1.55);
         float softCap = mix(42.0, 48.0, step(0.001, impactStrength));
         float height = max(0.035,
             softCap * (1.0 - exp(-rawHeight / softCap)));
@@ -266,7 +274,7 @@ void main()
             // The detected envelope already has attack/release. A sine that
             // starts at zero erased the attack and delayed the visible beat.
             float rebound = beatPulse * material.z;
-            scale.y *= 1.0 + rebound * 0.18;
+            scale.y *= 1.0 + rebound * 0.28;
         }
         position.y += scale.y * 0.5;
         float stageHalfExtent = max(1.0, ubuf.sceneControls.z);
@@ -304,7 +312,7 @@ void main()
                                            + randomValue * 47.0), 18.0);
         float presence = clamp(bandsHigh.y * 0.42 + bandsHigh.z * 0.36
                                + bandsHigh.w * 0.22, 0.0, 1.0);
-        // Every column can catch a glint, with different timing and strength.
+        // Selected columns catch glints with different timing and strength.
         // The fragment shader confines it to a small crown facet, so this
         // weight is not a constant light floor across the full top surface.
         float sheenMask = mix(0.60, 1.0, randomValue);
@@ -312,6 +320,7 @@ void main()
                     * (0.075 + presence * 0.72 + beatPulse * 0.22)
                     * (flowingBand * 1.18 + sparkle * 1.36)
                     * sheenMask * (0.25 + ubuf.styleParameters.z * 1.9);
+        streamSheen *= 1.0 - step(0.60, randomValue);
     } else if (type < 1.5) {
         position.y += sin(t * 0.74 * motion + randomValue * 18.0) * 1.95
                     + bandsLow.x * 2.2;
@@ -321,11 +330,9 @@ void main()
         scale.y *= mix(0.78, 1.45, randomValue);
     } else if (type < 2.5) {
         float group = floor(instanceData.w + 0.001);
-        float cycle = 4.5 + randomValue * 2.0;
-        float age = mod(t * motion + randomValue * cycle, cycle) / cycle;
-        if (group < 0.5 && ubuf.impact.z > 0.5) {
-            age = clamp(impactAge / 0.78, 0.0, 1.0);
-        }
+        float age = ubuf.impact.z > 0.5
+            ? clamp(impactAge / 0.78 + randomValue * 0.08 * step(0.5, group), 0.0, 1.0)
+            : 1.0;
         float fall = clamp(age / 0.72, 0.0, 1.0);
         float visibleFactor = group < 0.5
             ? 1.0 - step(0.72, age)
@@ -359,11 +366,9 @@ void main()
     } else {
         float group = floor(instanceData.w + 0.001);
         float localValue = fract(instanceData.w);
-        float cycle = 4.5 + randomValue * 2.0;
-        float age = mod(t * motion + randomValue * cycle, cycle) / cycle;
-        if (group < 0.5 && ubuf.impact.z > 0.5) {
-            age = clamp(impactAge / 0.78, 0.0, 1.0);
-        }
+        float age = ubuf.impact.z > 0.5
+            ? clamp(impactAge / 0.78 + randomValue * 0.08 * step(0.5, group), 0.0, 1.0)
+            : 1.0;
         float collision = step(0.72, age);
         float collisionProgress = clamp((age - 0.72) / 0.28, 0.0, 1.0);
         float angle = localValue * 6.2831853;
@@ -420,10 +425,11 @@ void main()
         // warmer central relief, cooler middle distance, quiet outer apron.
         float focalColor = exp(-distanceFromCore * distanceFromCore / 780.0);
         color = mix(color, mix(warm, accent, 0.22), focalColor * 0.78);
+        float colorRadius = min(ubuf.sceneControls.z, responseRadius * 1.4);
         float edge = smoothstep(0.34, 0.94,
-                                clamp(distanceFromCore / 118.0, 0.0, 1.0));
+                                clamp(distanceFromCore / colorRadius, 0.0, 1.0));
         color = mix(color, base, edge * 0.52);
-        float corePresence = pow(clamp(1.0 - distanceFromCore / 84.0,
+        float corePresence = pow(clamp(1.0 - distanceFromCore / colorRadius,
                                        0.0, 1.0), 0.58);
         color *= mix(0.10, 0.90, corePresence);
     } else if (type < 1.5) color = mix(warm, peak, 0.76);
@@ -440,8 +446,9 @@ void main()
         // Sweep through the preset's palette rather than replacing every
         // preset with the same absolute rainbow.
         float sweep = 0.5 + 0.5 * sin(t * 0.22 + distanceFromCore * 0.025);
-        color = mix(mix(cool, warm, smoothstep(0.0, 0.55, sweep)),
-                    accent, smoothstep(0.55, 1.0, sweep));
+        vec3 cyclingColor = mix(mix(cool, warm, smoothstep(0.0, 0.55, sweep)),
+                               accent, smoothstep(0.55, 1.0, sweep));
+        color = mix(color, cyclingColor, 0.45);
     } else if (ubuf.styleDynamics.z > 0.5) {
         color = mix(color, mix(cool, accent,
                     clamp(distanceFromCore / 110.0, 0.0, 1.0)), 0.25);
@@ -451,9 +458,7 @@ void main()
                     clamp(0.08 * (1.0 - distanceFromCore / 24.0), 0.0, 0.08));
     }
     if (type < 0.5 && rippleWave > 0.001) {
-        vec3 ringTint = mix(cool, warm,
-                            0.5 + 0.5 * sin(t * 0.9 + distanceFromCore * 0.16));
-        ringTint = mix(ringTint, accent, 0.24);
+        vec3 ringTint = travelingWaveTint / max(0.001, travelingWaveWeight);
         color = mix(color, ringTint, clamp(rippleWave * 0.78, 0.0, 0.96));
     }
     if (type < 0.5 && steadyCoreGlow > 0.001) {

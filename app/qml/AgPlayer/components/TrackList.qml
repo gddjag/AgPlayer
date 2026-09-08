@@ -409,7 +409,7 @@ ListView {
         nameFilters: [ResourceFolderController.audioFileNameFilter]
         onAccepted: fileOps.relocateTrackToUrl(trackMenu.targetTrackId, selectedFile)
     }
-    Dialog {
+    ThemedDialog {
         id: renameDialog
         title: qsTr("重命名")
         modal: true
@@ -419,8 +419,10 @@ ListView {
         contentItem: TextField { id: renameField; placeholderText: qsTr("新文件名") }
         background: Rectangle { color: Theme.elevated; border.color: Theme.border; radius: Theme.radiusMd }
     }
-    Dialog {
+    ThemedDialog {
         id: tagDialog
+        objectName: "trackTagDialog"
+        width: 320
         title: qsTr("自定义标签")
         modal: true
         anchors.centerIn: parent
@@ -433,17 +435,17 @@ ListView {
             var values = tagField.text.split(/[,，]/).map(function(value) { return value.trim() })
             root.applyTagsToTracks(trackMenu.targetTrackIds, values)
         }
-        contentItem: TextField { id: tagField; placeholderText: qsTr("用逗号分隔多个标签") }
+        contentItem: ThemedTextField { id: tagField; placeholderText: qsTr("用逗号分隔多个标签") }
         background: Rectangle { color: Theme.elevated; border.color: Theme.border; radius: Theme.radiusMd }
     }
-    Dialog {
+    ThemedDialog {
         id: trashConfirm
-        width: 460
+        width: 360
         title: qsTr("彻底删除至回收站")
         modal: true
         anchors.centerIn: parent
         standardButtons: Dialog.Yes | Dialog.No
-        contentItem: Label { text: qsTr("确定把选中的音乐文件移到系统回收站？"); color: Theme.primaryText }
+        contentItem: Label { text: qsTr("确定把选中的音乐文件移到系统回收站？"); color: Theme.primaryText; wrapMode: Text.WordWrap }
         onAccepted: {
             root.lastTrashResult = fileOps.trashTracks(trackMenu.targetTrackIds)
             root.selectedTrackIds = []
@@ -452,7 +454,7 @@ ListView {
         }
         background: Rectangle { color: Theme.elevated; border.color: Theme.border; radius: Theme.radiusMd }
     }
-    Dialog {
+    ThemedDialog {
         id: trashResultDialog
         width: 520
         title: qsTr("部分文件未删除")
@@ -661,7 +663,7 @@ ListView {
                     id: playingBars
                     objectName: "playingBarsIndicator"
                     readonly property int barCount: 3
-                    readonly property color barColor: Theme.waveformMagenta
+                    readonly property color barColor: Theme.accent
                     readonly property real barGap: 2
                     readonly property bool animated:
                         visible && PlaybackController.state === PlaybackController.Playing

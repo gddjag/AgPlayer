@@ -1005,7 +1005,8 @@ TestCase {
         compare(PlayerExperienceController.terrainAmplitude, 0)
         mouseClick(amberCinema, amberCinema.width / 2,
                    amberCinema.height / 2, Qt.LeftButton)
-        tryCompare(PlayerExperienceController, "terrainAmplitude", 56)
+        // User-approved 2026-09-08 amber-cinema screenshot: column height 52.
+        tryCompare(PlayerExperienceController, "terrainAmplitude", 52)
         compare(amberCinema.checkable, false)
         var host = amberCinema.Window.window
         verify(host)
@@ -1602,6 +1603,85 @@ TestCase {
             }
         } finally {
             SettingsController.themeMode = previousTheme
+        }
+    }
+
+    function test_lyric_position_labels_remain_readable_when_unselected() {
+        var savedTheme = SettingsController.themeMode
+        var savedPosition = PlayerExperienceController.lyricPosition
+        // Use the exposed host: a temporary z=0 panel under Main's shell is
+        // sufficient for property checks, but can be covered during input.
+        var panel = windowedPresetPanel()
+        panel.currentTab = 1
+        wait(220)
+        verify(panel)
+        function textItem(item, text) {
+            if (item.text === text && item.color !== undefined)
+                return item
+            for (var child = 0; child < item.children.length; ++child) {
+                var found = textItem(item.children[child], text)
+                if (found)
+                    return found
+            }
+            return null
+        }
+        function luminance(color) {
+            function linear(value) {
+                return value <= 0.04045 ? value / 12.92
+                                       : Math.pow((value + 0.055) / 1.055, 2.4)
+            }
+            return 0.2126 * linear(color.r) + 0.7152 * linear(color.g)
+                    + 0.0722 * linear(color.b)
+        }
+        try {
+            for (var mode = 0; mode <= 1; ++mode) {
+                SettingsController.themeMode = mode
+                for (var selected = 0; selected < 3; ++selected) {
+                    PlayerExperienceController.lyricPosition = selected
+                    wait(0)
+                    for (var index = 0; index < 3; ++index) {
+                        var button = findChild(panel, "lyricPositionButton" + index)
+                        verify(button && button.visible && button.enabled)
+                        compare(button.checked, selected === index)
+                        var label = textItem(button.contentItem, button.text)
+                        verify(label && label.visible && label.opacity > 0)
+                        verify(label.width > 0 && label.height > 0)
+                        var background = button.background.color
+                        var composed = Qt.rgba(
+                                background.r * background.a + panel.color.r * (1 - background.a),
+                                background.g * background.a + panel.color.g * (1 - background.a),
+                                background.b * background.a + panel.color.b * (1 - background.a), 1)
+                        var foregroundLuma = luminance(label.color)
+                        var backgroundLuma = luminance(composed)
+                        var contrast = (Math.max(foregroundLuma, backgroundLuma) + 0.05)
+                                / (Math.min(foregroundLuma, backgroundLuma) + 0.05)
+                        verify(contrast >= 4.5, "theme=" + mode + " position=" + index
+                               + " selected=" + selected + " contrast=" + contrast)
+                    }
+                }
+            }
+            for (var target = 0; target < 3; ++target) {
+                var targetButton = findChild(panel, "lyricPositionButton" + target)
+                var viewport = findChild(panel, "immersivePanelScroll")
+                var bounds = mappedBounds(targetButton, viewport)
+                verify(bounds.left >= 0 && bounds.right <= viewport.width
+                       && bounds.top >= 0 && bounds.bottom <= viewport.height,
+                       "Position button must be inside the exposed scroll viewport")
+                mouseClick(targetButton, targetButton.width / 2,
+                           targetButton.height / 2, Qt.LeftButton)
+                compare(PlayerExperienceController.lyricPosition, target)
+                compare(targetButton.checked, true)
+                targetButton.Window.window.requestActivate()
+                targetButton.forceActiveFocus(Qt.TabFocusReason)
+                verify(targetButton.activeFocus)
+                compare(targetButton.background.border.color.toString(), Theme.focus.toString())
+                keyClick(Qt.Key_Space)
+                compare(PlayerExperienceController.lyricPosition, target)
+                compare(targetButton.checked, true)
+            }
+        } finally {
+            SettingsController.themeMode = savedTheme
+            PlayerExperienceController.lyricPosition = savedPosition
         }
     }
 

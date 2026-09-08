@@ -170,6 +170,16 @@ private:
 
 using MultiWaveSources = std::array<QVector4D, 8>;
 
+float smoothReactorFeature(float current, float target, float elapsedSeconds) noexcept;
+
+// Beat-driven accents, not a free-running timer. Silence never emits a wave.
+class TravelingWaveGate final {
+public:
+    bool consume(float nowSeconds, float strength) noexcept;
+private:
+    float nextSeconds_ = 0.0F;
+};
+
 // x/y are stage coordinates, z is the normalized cycle phase and w is strength.
 MultiWaveSources multiWaveSources(quint32 seed) noexcept;
 
@@ -303,7 +313,7 @@ private:
 struct CameraSnapshot {
     float yaw = 2.6075219F;
     float pitch = 0.80F;
-    float distance = 144.0F;
+    float distance = 180.0F;
     float punch = 0.0F;
 };
 
