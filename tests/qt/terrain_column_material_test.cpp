@@ -1,4 +1,5 @@
 #include "terrain_column_mesh.hpp"
+#include "terrain_reactor_state.hpp"
 #include "terrain_shadow_map.hpp"
 
 #include <QDir>
@@ -24,10 +25,12 @@ struct StudyParameters {
     bool rainbow = false;
     bool stream = false;
     float beat = 0;
+    float beatAge = 0;
     float audioLevel = 1;
     float lowAudioLevel = 1;
     float midAudioLevel = 0;
     int waveSlot = -1;
+    int waveTint = 0;
     float exposure = 1;
     float opacity = 1;
     float softness = 0.45F;
@@ -191,6 +194,7 @@ void ColumnRenderer::render(QRhiCommandBuffer* cb)
     u.styleAudio[2] = 56;
     u.stylePresentation[0] = u.stylePresentation[2] = 1;
     u.audioEnvelope[2] = parameters_.beat;
+    u.audioEnvelope[3] = parameters_.beatAge;
     u.cameraPosition[0] = parameters_.camera.x();
     u.cameraPosition[1] = parameters_.camera.y();
     u.cameraPosition[2] = parameters_.camera.z();
@@ -210,6 +214,7 @@ void ColumnRenderer::render(QRhiCommandBuffer* cb)
         u.styleToggles[0] = 1;
         u.effects[3] = 8;
         u.waveSources[parameters_.waveSlot][3] = 0.8F;
+        u.waveSources[parameters_.waveSlot][2] = 32.0F * parameters_.waveTint;
     }
     u.sceneLighting[0] = parameters_.lighting.x();
     u.sceneLighting[1] = parameters_.lighting.y();
@@ -418,6 +423,8 @@ private slots:
     void sharedShadowChangesLightingWithoutMovingArraySilhouette();
     void globalOpacityDoesNotSwitchShadowAtFiftyFivePercent();
     void audioDrivesInnerLightWithoutWashingOutShell();
+    void beatLightTravelsUpInsideFixedColumn();
+    void decayingBeatRetainsVisibleUpwardLightTravel();
     void innerLightHasOpticalDepthAcrossSmoothFace();
     void jellyReboundStartsAtBeatOnset();
     void neutralGrayWithoutInnerLightRemainsNeutral();
@@ -425,7 +432,8 @@ private slots:
     void everyColumnHasLocalCapFlash_data() {
         QTest::addColumn<float>("randomValue");
         QTest::newRow("low-random") << 0.10F;
-        QTest::newRow("last-selected") << 0.59F;
+        QTest::newRow("last-selected") << 0.49F;
+        QTest::newRow("first-unselected") << 0.51F;
         QTest::newRow("unselected-forty-percent") << 0.90F;
     }
     void everyColumnHasLocalCapFlash();
@@ -458,8 +466,11 @@ void TerrainColumnMaterialTest::consecutiveWavesUseDifferentPaletteAnchors()
     window.show();
     QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
     QImage previous;
-    for (int slot = 0; slot < 3; ++slot) {
-        item.parameters.waveSlot = slot;
+    for (int tint = 0; tint < 4; ++tint) {
+        // Reusing one slot models the smallest quality pool: event color must
+        // change independently of which storage slot is available.
+        item.parameters.waveSlot = 0;
+        item.parameters.waveTint = tint;
         const int frames = counters->frames;
         item.update();
         QTRY_VERIFY_WITH_TIMEOUT(counters->frames > frames, 5000);
@@ -713,6 +724,112 @@ void TerrainColumnMaterialTest::globalOpacityDoesNotSwitchShadowAtFiftyFivePerce
     QVERIFY2(crossingStep > 0.1, "The actual opacity input must change the rendered wall");
     QVERIFY2(crossingStep <= 2 * std::max(lowerStep, upperStep) + 0.75,
              "Crossing 55% opacity must not abruptly enable the whole solid shadow map");
+}
+
+void TerrainColumnMaterialTest::beatLightTravelsUpInsideFixedColumn()
+{
+    auto counters = std::make_shared<StudyCounters>();
+    QQuickWindow window;
+    window.resize(640, 640); window.setColor(QColor(3, 5, 9));
+    ColumnItem item(window.contentItem(), counters);
+    item.parameters.beat = 1;
+    item.parameters.stream = false;
+    item.parameters.lighting = {1, 0, 1};
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(counters->frames > 0 || counters->failed, 5000);
+    QVERIFY(!counters->failed);
+    const QImage early = studyFrame(window);
+    const FrontFace face = locateFrontFace(early);
+    QVERIFY(face.cap > 0 && face.foot > face.cap + 100);
+    item.parameters.beatAge = 0.55F;
+    const int before = counters->frames;
+    item.update();
+    QTRY_VERIFY_WITH_TIMEOUT(counters->frames > before, 3000);
+    const QImage late = studyFrame(window);
+    QCOMPARE(early.size(), late.size());
+    const auto band = [&](const QImage& frame, float fraction) {
+        double sum = 0;
+        const int centerY = face.cap + qRound((face.foot - face.cap) * fraction);
+        for (int y = centerY - 4; y <= centerY + 4; ++y)
+            for (int x = 270; x < 300; ++x) sum += qGray(frame.pixel(x, y));
+        return sum / 270.0;
+    };
+    const double upperGain = band(late, 0.25F) - band(early, 0.25F);
+    const double lowerRelease = band(early, 0.75F) - band(late, 0.75F);
+    qInfo() << "Upward inner light upper gain/lower release:" << upperGain << lowerRelease;
+    QVERIFY2(upperGain > 3, "The inner pulse must reach the upper wall later in the beat");
+    QVERIFY2(lowerRelease > 3, "The lower wall must release after the pulse rises");
+}
+
+void TerrainColumnMaterialTest::decayingBeatRetainsVisibleUpwardLightTravel()
+{
+    agplayer::terrain::RendererResourceState lifecycle;
+    agplayer::terrain::BeatEventConsumer consumer(lifecycle);
+    QVERIFY(consumer.consume({1.0F, 1}, 0.0F));
+    const std::array<agplayer::terrain::BeatPulseSnapshot, 2> pulses{
+        consumer.snapshot(0.0F), consumer.snapshot(0.18F)};
+    QVERIFY(pulses[0].active && pulses[1].active);
+    QVERIFY(pulses[1].strength < pulses[0].strength * 0.3F);
+    QVERIFY(pulses[1].age > pulses[0].age);
+
+    auto counters = std::make_shared<StudyCounters>();
+    QQuickWindow window;
+    window.resize(640, 640); window.setColor(QColor(3, 5, 9));
+    ColumnItem item(window.contentItem(), counters);
+    item.parameters.stream = false;
+    item.parameters.lighting = {1, 0, 1};
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(counters->frames > 0 || counters->failed, 5000);
+    QVERIFY(!counters->failed);
+
+    std::array<double, 2> centers{}, peakGains{};
+    for (std::size_t phase = 0; phase < pulses.size(); ++phase) {
+        item.parameters.beat = pulses[phase].strength;
+        std::array<QImage, 2> frames;
+        for (int sample = 0; sample < 2; ++sample) {
+            // Hold the real, decayed strength and resulting geometry fixed
+            // within this pair. Age=1 is the finished upward-light state;
+            // subtraction isolates the traveling light from steady emission.
+            item.parameters.beatAge = sample == 0 ? pulses[phase].age : 1.0F;
+            const int before = counters->frames;
+            item.update();
+            QTRY_VERIFY_WITH_TIMEOUT(counters->frames > before, 3000);
+            frames[std::size_t(sample)] = studyFrame(window);
+            QVERIFY(!frames[std::size_t(sample)].isNull());
+        }
+        QCOMPARE(frames[0].size(), frames[1].size());
+        const FrontFace face = locateFrontFace(frames[1]);
+        QVERIFY(face.cap > 0 && face.foot > face.cap + 100);
+        double weight = 0, weightedPosition = 0;
+        for (int band = 2; band <= 18; ++band) {
+            const double fraction = band / 20.0;
+            const int yCenter = face.cap + qRound((face.foot - face.cap) * fraction);
+            double gain = 0;
+            for (int y = yCenter - 3; y <= yCenter + 3; ++y)
+                for (int x = 270; x < 300; ++x)
+                    gain += qGray(frames[0].pixel(x, y)) - qGray(frames[1].pixel(x, y));
+            gain /= 210.0;
+            peakGains[phase] = std::max(peakGains[phase], gain);
+            // Ignore one-code-value quantization when locating the visible
+            // light band, without assuming any shader shape or trajectory.
+            const double visibleGain = std::max(0.0, gain - 1.0);
+            weight += visibleGain;
+            weightedPosition += visibleGain * fraction;
+        }
+        qInfo() << "Real beat phase/strength/peak light gain:"
+                << pulses[phase].age << pulses[phase].strength << peakGains[phase];
+        QVERIFY2(peakGains[phase] > 3.0,
+                 "Both real beat snapshots need a visibly distinct inner light band");
+        QVERIFY(weight > 0);
+        centers[phase] = weightedPosition / weight;
+    }
+    qInfo() << "Real decaying beat light centroid, footward fraction:" << centers[0] << centers[1];
+    QVERIFY2(centers[0] > 0.55, "The detected beat must first illuminate the lower wall");
+    QVERIFY2(centers[1] < 0.50, "The decaying beat must carry light into the upper wall");
+    QVERIFY2(centers[0] - centers[1] > 0.25,
+             "Visible light must travel upward, not merely dim on the same part of the wall");
 }
 
 void TerrainColumnMaterialTest::audioDrivesInnerLightWithoutWashingOutShell()
@@ -1241,21 +1358,19 @@ void TerrainColumnMaterialTest::everyColumnHasLocalCapFlash()
     qInfo() << "Random/cap pixels/top RMS off-on/side RMS off-on/local coverage:"
             << randomValue << capPixels.size() << topRms[0] << topRms[1]
             << sideRms[0] << sideRms[1] << bestLocalCoverage;
-    if (randomValue >= 0.60F) {
-        QVERIFY2(topRms[1] < 0.25, "The unselected 40% must retain a steady cap without twinkles");
+    if (randomValue >= 0.50F) {
+        QVERIFY2(topRms[1] < 0.25, "The unselected half must retain a steady cap without twinkles");
         QVERIFY(sideRms[0] < 0.25 && sideRms[1] < 0.25);
         return;
     }
       QVERIFY2(topRms[0] < 0.25, "The cap must be stable with stream disabled");
-      QVERIFY2(topRms[1] > 5.0,
-               "The cap needs independently twinkling microfacets, not a uniform sheet flash");
     QVERIFY2(topMeanChange > 3, "Every column needs a visible face-wide top flash");
       const double temporalCoverage = double(std::count(flashed.begin(), flashed.end(), true))
                                     / flashed.size();
       QVERIFY2(temporalCoverage > 0.80,
                "Twinkles must visit the whole cap over time, not a narrow glowing line");
-      QVERIFY2(bestLocalCoverage < 0.95,
-               "Microfacets must not flash as one uniformly illuminated sheet");
+      QVERIFY2(bestLocalCoverage > 0.90,
+               "A selected column must flash across its whole cap in the same frame");
     QVERIFY2(sideRms[0] < 0.25 && sideRms[1] < 0.25,
              "Top flashes must not create texture inside the smooth column");
 }

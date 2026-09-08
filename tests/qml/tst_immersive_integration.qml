@@ -151,6 +151,34 @@ TestCase {
     }
 
     Component {
+        id: immersiveShortcutSpyComponent
+        SignalSpy { signalName: "activated" }
+    }
+
+    Component {
+        id: immersiveShortcutEditingComponent
+        Item {
+            width: 240
+            height: 100
+            z: 100
+            TextField {
+                objectName: "shortcutEditingText"
+                width: 220
+                text: "ab"
+            }
+            ThemedSlider {
+                objectName: "shortcutEditingSlider"
+                y: 50
+                width: 220
+                from: 0
+                to: 10
+                stepSize: 1
+                value: 5
+            }
+        }
+    }
+
+    Component {
         id: sharedWaveformComponent
         SharedWaveformView {
             width: 800
@@ -1035,6 +1063,131 @@ TestCase {
         compare(amberCinema.background.border.width, 2)
     }
 
+    function test_000_first_immersive_open_accepts_shortcuts() {
+        var savedLyrics = PlayerExperienceController.lyricsVisible
+        try {
+            PlayerExperienceController.lyricsVisible = false
+            // Open through the real controller path. No click, requestActivate
+            // or forceActiveFocus in this test may repair initial focus.
+            PlayerExperienceController.immersiveMode = PlayerExperienceController.TerrainReactor
+            var coordinator = findChild(mainWindow, "immersiveCoordinator")
+            tryCompare(coordinator, "attachedHostMode", PlayerExperienceController.Windowed)
+            var host = coordinator.surface.Window.window
+            tryCompare(host, "visible", true)
+            tryCompare(host, "activeFocusItem", coordinator.surface)
+            tryCompare(host, "transportShortcutsEnabled", true)
+            var shortcut = findChild(host, "immersiveLyricsShortcut")
+            var spy = createTemporaryObject(immersiveShortcutSpyComponent,
+                                            testCase, { target: shortcut })
+            verify(spy && spy.valid)
+            keyClick(Qt.Key_Up)
+            compare(spy.count, 1)
+            compare(PlayerExperienceController.lyricsVisible, true)
+        } finally {
+            PlayerExperienceController.lyricsVisible = savedLyrics
+        }
+    }
+
+    function test_immersive_transport_shortcuts_respect_focus_and_editing() {
+        var savedMode = PlaybackController.mode
+        var savedLyrics = PlayerExperienceController.lyricsVisible
+        try {
+            PlaybackController.setMode(PlaybackController.Sequential)
+            tryCompare(PlaybackController, "mode", PlaybackController.Sequential)
+            PlayerExperienceController.lyricsVisible = false
+            var panel = windowedPresetPanel()
+            var host = panel.Window.window
+            host.requestActivate()
+            tryCompare(host, "active", true)
+            host.surfaceItem.forceActiveFocus(Qt.OtherFocusReason)
+            var names = ["immersivePreviousShortcut", "immersiveNextShortcut",
+                         "immersivePlaybackShortcut", "immersiveShuffleShortcut",
+                         "immersiveLyricsShortcut"]
+            var keys = [Qt.Key_Left, Qt.Key_Right, Qt.Key_Space,
+                        Qt.Key_Down, Qt.Key_Up]
+            var shortcuts = []
+            var spies = []
+            for (var index = 0; index < names.length; ++index) {
+                var shortcut = findChild(host, names[index])
+                verify(shortcut, "Missing transport shortcut: " + names[index])
+                compare(shortcut.context, Qt.WindowShortcut)
+                compare(shortcut.autoRepeat, false)
+                tryCompare(shortcut, "enabled", true)
+                shortcuts.push(shortcut)
+                var spy = createTemporaryObject(immersiveShortcutSpyComponent,
+                                                testCase, { target: shortcut })
+                verify(spy && spy.valid)
+                spies.push(spy)
+            }
+            for (var key = 0; key < keys.length; ++key) {
+                keyClick(keys[key])
+                compare(spies[key].count, 1)
+            }
+            tryCompare(PlaybackController, "mode", PlaybackController.Shuffle)
+            compare(PlayerExperienceController.lyricsVisible, true)
+            keyClick(Qt.Key_Down)
+            tryCompare(PlaybackController, "mode", PlaybackController.Shuffle)
+            keyClick(Qt.Key_Up)
+            compare(PlayerExperienceController.lyricsVisible, false)
+            var baselineCounts = spies.map(function(spy) { return spy.count })
+
+            var editing = createTemporaryObject(immersiveShortcutEditingComponent,
+                                                host.contentItem)
+            verify(editing)
+            var text = findChild(editing, "shortcutEditingText")
+            text.forceActiveFocus(Qt.TabFocusReason)
+            tryCompare(text, "activeFocus", true)
+            text.cursorPosition = 1
+            for (var disabled = 0; disabled < shortcuts.length; ++disabled)
+                tryCompare(shortcuts[disabled], "enabled", false)
+            keyClick(Qt.Key_Space)
+            compare(text.text, "a b")
+            keyClick(Qt.Key_Left)
+            compare(text.cursorPosition, 1)
+            keyClick(Qt.Key_Right)
+            compare(text.cursorPosition, 2)
+            keyClick(Qt.Key_Down)
+            keyClick(Qt.Key_Up)
+
+            var slider = findChild(editing, "shortcutEditingSlider")
+            slider.forceActiveFocus(Qt.TabFocusReason)
+            tryCompare(slider, "activeFocus", true)
+            for (var blocked = 0; blocked < shortcuts.length; ++blocked)
+                tryCompare(shortcuts[blocked], "enabled", false)
+            keyClick(Qt.Key_Right)
+            compare(slider.value, 6)
+            keyClick(Qt.Key_Left)
+            compare(slider.value, 5)
+            keyClick(Qt.Key_Space)
+            keyClick(Qt.Key_Down)
+            keyClick(Qt.Key_Up)
+            compare(slider.value, 5)
+            for (var unchanged = 0; unchanged < spies.length; ++unchanged)
+                compare(spies[unchanged].count, baselineCounts[unchanged])
+
+            host.surfaceItem.forceActiveFocus(Qt.OtherFocusReason)
+            tryCompare(shortcuts[0], "enabled", true)
+            // Immersive presentation hides Main; a hidden window cannot take
+            // focus merely through requestActivate(). Expose it first.
+            mainWindow.visible = true
+            mainWindow.requestActivate()
+            // Qt keeps transient siblings/owners "active" together. The
+            // actual Quick focus item distinguishes which window has input.
+            tryCompare(host, "activeFocusItem", null)
+            for (var inactive = 0; inactive < shortcuts.length; ++inactive)
+                tryCompare(shortcuts[inactive], "enabled", false)
+            keyClick(Qt.Key_Right)
+            compare(spies[1].count, 1)
+            host.visible = false
+            for (var hidden = 0; hidden < shortcuts.length; ++hidden)
+                compare(shortcuts[hidden].enabled, false)
+        } finally {
+            PlaybackController.setMode(savedMode)
+            tryCompare(PlaybackController, "mode", savedMode)
+            PlayerExperienceController.lyricsVisible = savedLyrics
+        }
+    }
+
     function test_compact_panel_keeps_dynamic_eq_reachable_by_scrolling() {
         var panel = windowedPresetPanel()
         panel.currentTab = 2
@@ -1367,45 +1520,65 @@ TestCase {
         verify(panel)
         panel.spatialMode = true
         panel.depth = 100
-        var perspective = findChild(panel, "cinematicLyricsPerspective")
         var previousLine = findChild(panel, "previousLyricLine")
         var currentLine = findChild(panel, "currentLyricLine")
         var nextLine = findChild(panel, "nextLyricLine")
-        verify(perspective && previousLine && currentLine && nextLine)
+        verify(previousLine && currentLine && nextLine)
+
+        function edgeHeight(line, right) {
+            var x = right ? line.width : 0
+            var top = line.mapToItem(panel, x, 0)
+            var bottom = line.mapToItem(panel, x, line.height)
+            return Math.hypot(bottom.x - top.x, bottom.y - top.y)
+        }
 
         panel.depth = 0
-        panel.placement = PlayerExperienceController.Center
-        compare(perspective.angle, 0)
+        panel.placement = PlayerExperienceController.Left
+        wait(0)
+        var previousFlatHeight = edgeHeight(previousLine, false)
+        var nextFlatHeight = edgeHeight(nextLine, false)
+        var currentFlatHeight = edgeHeight(currentLine, false)
+        verify(Math.abs(edgeHeight(currentLine, true) - currentFlatHeight) < 0.01)
         compare(findChild(panel, "previousLyricDepthTransform").y, 0)
         compare(findChild(panel, "nextLyricDepthTransform").y, 0)
         panel.depth = 100
 
         panel.placement = PlayerExperienceController.Left
-        var leftAngle = perspective.angle
         compare(currentLine.horizontalAlignment, Text.AlignLeft)
-        verify(leftAngle < 0)
-        verify(Math.abs(leftAngle) >= 18)
-        verify(Math.abs(leftAngle) <= 28)
+        var leftNear = edgeHeight(currentLine, false)
+        var leftFar = edgeHeight(currentLine, true)
+        verify(leftNear / leftFar > 1.3,
+               "The side lyric plane must visibly recede, not merely scale: "
+               + leftNear / leftFar)
+        verify(leftNear / leftFar < 2, "Keep the far end readable")
+        verify(leftNear >= currentFlatHeight * 0.95,
+               "The current line must remain clear at the reading edge")
+        verify(edgeHeight(previousLine, false) < previousFlatHeight * 0.92,
+               "The previous line must retreat behind the current plane")
+        verify(edgeHeight(nextLine, false) < nextFlatHeight * 0.88,
+               "The upcoming line must occupy the deeper plane")
 
         panel.placement = PlayerExperienceController.Right
-        var rightAngle = perspective.angle
         compare(currentLine.horizontalAlignment, Text.AlignRight)
-        verify(rightAngle > 0)
-        verify(Math.abs(rightAngle) >= 18)
-        verify(Math.abs(rightAngle) <= 28)
-        verify(Math.abs(leftAngle + rightAngle) < 0.001)
+        verify(Math.abs(edgeHeight(currentLine, true) - leftNear) < 0.01)
+        verify(Math.abs(edgeHeight(currentLine, false) - leftFar) < 0.01)
 
         panel.placement = PlayerExperienceController.Center
         compare(currentLine.horizontalAlignment, Text.AlignHCenter)
-        verify(perspective.axis.x > 0.99)
-        verify(Math.abs(perspective.axis.y) < 0.01)
-        verify(perspective.angle < 0)
-        verify(Math.abs(perspective.angle) >= 8)
-        verify(Math.abs(perspective.angle) <= 10)
+        verify(Math.abs(edgeHeight(currentLine, true)
+                        - edgeHeight(currentLine, false)) < 0.01)
 
         panel.spatialMode = false
         panel.placement = PlayerExperienceController.Left
-        compare(perspective.angle, 0)
+        // Probe the plane with exact integer distances; do not compare mapped
+        // text bounds with a fractional implicit text height (e.g. 22.4px).
+        var normalOrigin = currentLine.mapToItem(panel, 0, 0)
+        var normalVertical = currentLine.mapToItem(panel, 0, 16)
+        var normalHorizontal = currentLine.mapToItem(panel, 16, 0)
+        verify(Math.abs(normalVertical.y - normalOrigin.y - 16) < 0.01)
+        verify(Math.abs(normalVertical.x - normalOrigin.x) < 0.01)
+        verify(Math.abs(normalHorizontal.x - normalOrigin.x - 16) < 0.01)
+        verify(Math.abs(normalHorizontal.y - normalOrigin.y) < 0.01)
         compare(currentLine.wrapMode, Text.Wrap)
         compare(currentLine.maximumLineCount, 3)
         compare(currentLine.scale, 1)
@@ -1415,7 +1588,6 @@ TestCase {
         compare(previousLine.opacity, 1)
         compare(currentLine.opacity, 1)
         compare(nextLine.opacity, 1)
-        compare(perspective.angle, 0)
         verify(Math.abs(previousLine.scale - 0.92) < 0.001)
         verify(Math.abs(nextLine.scale - 0.86) < 0.001)
         panel.destroy()

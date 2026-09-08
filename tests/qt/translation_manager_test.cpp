@@ -10,6 +10,7 @@ private slots:
     void normalizesUnsupportedLanguageToChinese();
     void switchesInstalledQtTranslation();
     void switchesDialogButtonsAndFilenamePlaceholders();
+    void switchesMetadataNotices();
 };
 
 void TranslationManagerTest::exposesOnlyRequestedLanguages()
@@ -114,6 +115,27 @@ void TranslationManagerTest::switchesDialogButtonsAndFilenamePlaceholders()
     for (const auto* label : labels)
         QCOMPARE(QCoreApplication::translate("ThemedDialog", label),
                  QString::fromUtf8(label));
+}
+
+void TranslationManagerTest::switchesMetadataNotices()
+{
+    TranslationManager translations;
+    const char* noFiles = "No new supported audio files were found.";
+    const char* coverError = "Could not open the cover image: %1";
+    QVERIFY(translations.setLanguage(QStringLiteral("zh")));
+    QCOMPARE(QCoreApplication::translate("MetadataEditor", noFiles),
+             QStringLiteral("未找到可新增的受支持音频文件。"));
+    QCOMPARE(QCoreApplication::translate("MetadataEditor", coverError).arg("cover.png"),
+             QStringLiteral("无法打开封面图片：cover.png"));
+    QCOMPARE(QCoreApplication::translate("MetadataEditPage", "元数据处理提示"),
+             QStringLiteral("元数据处理提示"));
+    QVERIFY(translations.setLanguage(QStringLiteral("en")));
+    QCOMPARE(QCoreApplication::translate("MetadataEditor", noFiles),
+             QString::fromUtf8(noFiles));
+    QCOMPARE(QCoreApplication::translate("MetadataEditor", coverError).arg("cover.png"),
+             QStringLiteral("Could not open the cover image: cover.png"));
+    QCOMPARE(QCoreApplication::translate("MetadataEditPage", "元数据处理提示"),
+             QStringLiteral("Metadata notice"));
 }
 
 QTEST_MAIN(TranslationManagerTest)

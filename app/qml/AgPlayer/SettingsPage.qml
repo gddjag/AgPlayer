@@ -203,11 +203,18 @@ Item {
         }
     }
 
-    MessageDialog {
+    ThemedDialog {
         id: clearCacheConfirmDialog
+        objectName: "clearCacheConfirmDialog"
+        anchors.centerIn: Overlay.overlay
+        width: 360
         title: qsTr("确认清空缓存")
-        text: qsTr("确定要一键清空全部缓存吗？此操作不可撤销。")
-        buttons: MessageDialog.Yes | MessageDialog.No
+        standardButtons: Dialog.Yes | Dialog.No
+        contentItem: Label {
+            text: qsTr("确定要一键清空全部缓存吗？此操作不可撤销。")
+            color: Theme.textPrimary
+            wrapMode: Text.Wrap
+        }
         onAccepted: SettingsController.clearAllCache()
     }
 
@@ -504,8 +511,13 @@ Item {
                         + Theme.spacingXl
         Layout.preferredHeight: implicitHeight
 
-        ColumnLayout {
-            anchors.fill: parent
+        Column {
+            // The card height follows this layout's content. Do not also force
+            // its height from the card: wrapped text otherwise feeds a polish
+            // loop back through contentContainer.implicitHeight.
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
             anchors.margins: Theme.spacingSm
             spacing: Theme.spacingSm
 
@@ -515,12 +527,12 @@ Item {
                 font.family: Theme.fontPrimary
                 font.pixelSize: Theme.fontSizeBodyStrong
                 font.weight: Font.Bold
-                Layout.fillWidth: true
+                width: parent.width
             }
 
             ColumnLayout {
                 id: contentContainer
-                Layout.fillWidth: true
+                width: parent.width
                 spacing: Theme.spacingSm
             }
 
@@ -2541,12 +2553,20 @@ Item {
                 }
                 ThemedButton {
                     objectName: "aboutDownloadUpdate"
-                    visible: aboutSection.updateService.updateAvailable
                     prominent: true
                     text: qsTr("前往官网下载")
                     onClicked: SettingsController.openOfficialWebsite()
                 }
                 Item { Layout.fillWidth: true }
+            }
+            Text {
+                objectName: "aboutUpdateDownloadHelp"
+                Layout.fillWidth: true
+                text: qsTr("下载由浏览器完成。若下载卡顿、超时或失败，请返回官网切换 GitHub / R2 线路。")
+                textFormat: Text.PlainText
+                wrapMode: Text.WordWrap
+                color: Theme.secondaryText
+                font.pixelSize: Theme.fontSizeBody
             }
         }
         Item { Layout.fillHeight: true }

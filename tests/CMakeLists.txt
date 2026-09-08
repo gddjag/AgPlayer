@@ -905,7 +905,8 @@ add_test(NAME recovery_test
 )
 set_tests_properties(recovery_test PROPERTIES TIMEOUT 30)
 
-add_executable(terrain_column_material_test qt/terrain_column_material_test.cpp)
+add_executable(terrain_column_material_test qt/terrain_column_material_test.cpp
+    "${CMAKE_SOURCE_DIR}/qt/src/terrain_reactor_state.cpp")
 add_executable(terrain_column_mesh_test qt/terrain_column_mesh_test.cpp)
 set_target_properties(terrain_column_mesh_test PROPERTIES AUTOMOC ON)
 target_include_directories(terrain_column_mesh_test PRIVATE "${CMAKE_SOURCE_DIR}/qt/src")
@@ -1821,8 +1822,10 @@ set_tests_properties(import_controller_test PROPERTIES
     ENVIRONMENT "AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
 )
 set_tests_properties(playback_controller_test PROPERTIES
-    TIMEOUT 30
-    ENVIRONMENT "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE}"
+    # This executable contains 52 integration cases whose combined wall time varies under load.
+    # Keep a 30 s QtTest watchdog per case while allowing the complete suite 90 s.
+    TIMEOUT 90
+    ENVIRONMENT "AGPLAYER_TEST_WAV=${SINE_WAV_FIXTURE};QTEST_FUNCTION_TIMEOUT=30000"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<IF:$<CONFIG:Debug>,debug/bin,bin>"
 )

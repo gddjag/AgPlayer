@@ -41,7 +41,7 @@ QString UpdateChecker::statusText() const
     if (state_ == "checking") return tr("正在检查更新…");
     if (state_ == "available") return tr("发现新版本 %1，请前往官网下载。").arg(latestVersion_);
     if (state_ == "current") return tr("当前已是最新版本。");
-    if (state_ == "error") return tr("暂时无法检查更新，请稍后重试或访问官网。");
+    if (state_ == "error") return tr("更新检查超时或失败，请前往官网选择其他下载线路（GitHub / R2）。");
     return tr("检查官网发布的最新版本。");
 }
 

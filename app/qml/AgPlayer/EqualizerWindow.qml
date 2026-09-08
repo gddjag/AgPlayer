@@ -785,7 +785,7 @@ Window {
         }
     }
 
-    Dialog {
+    ThemedDialog {
         id: saveDialog
         objectName: "equalizerSaveDialog"
         modal: true
@@ -807,7 +807,7 @@ Window {
                 font.pixelSize: Theme.fontSizePageTitle
                 font.weight: Font.Medium
             }
-            TextField {
+            ThemedTextField {
                 id: saveName
                 objectName: "equalizerSaveNameField"
                 Layout.fillWidth: true

@@ -210,10 +210,13 @@ Copy-Item -LiteralPath $licenseSource -Destination $stage -Recurse
 foreach ($license in @('lossless-mp3-window-NOTICE.md', 'FFmpeg-LGPL-2.1-or-later.txt')) {
     Copy-Item -LiteralPath (Join-Path $losslessLicenseSource $license) -Destination (Join-Path $stage 'licenses')
 }
+Copy-Item -LiteralPath (Join-Path $losslessLicenseSource 'runtime') `
+    -Destination (Join-Path $stage 'licenses/runtime') -Recurse
 # CMake's post-build deployment directory may contain transitive Windows
 # system DLLs. Copy only the audio libraries that are linked by AgPlayer;
 # windeployqt below supplies the Qt runtime itself.
 $nativeRuntimeDependencies = @(
+    "SoundTouch.dll",
     "avcodec-62.dll",
     "avformat-62.dll",
     "avutil-60.dll",
@@ -287,6 +290,7 @@ Get-ChildItem -LiteralPath $crtDirectory -File -Filter "*.dll" |
     Copy-Item -Destination $stage -Force
 
 $requiredRuntime = @(
+    "SoundTouch.dll",
     "AgPlayer.exe",
     "AgSeparationWorker.exe",
     "THIRD-PARTY-NOTICES.md",
@@ -295,6 +299,18 @@ $requiredRuntime = @(
     "licenses/RemixIcon-Apache-2.0.txt",
     "licenses/lossless-mp3-window-NOTICE.md",
     "licenses/FFmpeg-LGPL-2.1-or-later.txt",
+    "licenses/runtime/README.md",
+    "licenses/runtime/Qt-LGPL-3.0-only.txt",
+    "licenses/runtime/Qt-GPL-3.0-only.txt",
+    "licenses/runtime/Qt-6.7-DEPLOYED-ATTRIBUTIONS.md",
+    "licenses/runtime/SoundTouch-LGPL-2.1-only.txt",
+    "licenses/runtime/FFmpeg-LGPL-2.1-or-later.txt",
+    "licenses/runtime/LAME-LGPL-2.0-only.txt",
+    "licenses/runtime/Opus-BSD-3-Clause.txt",
+    "licenses/runtime/libogg-BSD-3-Clause.txt",
+    "licenses/runtime/libvorbis-BSD-3-Clause.txt",
+    "licenses/runtime/miniaudio-Unlicense-or-MIT-0.txt",
+    "licenses/runtime/ONNX-Runtime-MIT.txt",
     "Qt6Core.dll",
     "Qt6Gui.dll",
     "Qt6Qml.dll",

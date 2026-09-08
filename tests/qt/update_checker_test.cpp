@@ -90,6 +90,7 @@ private slots:
         QVERIFY(checker.updateAvailable());
         checker.check(); network.replies.last()->respond("{}", 302);
         QCOMPARE(checker.state(), "error"); QVERIFY(!checker.updateAvailable()); QVERIFY(checker.latestVersion().isEmpty());
+        QVERIFY(checker.statusText().contains(QStringLiteral("其他下载线路")));
         checker.check(); network.replies.last()->respond(R"({"schemaVersion":1,"version":"1.1.1"})");
         QCOMPARE(checker.state(), "current");
     }

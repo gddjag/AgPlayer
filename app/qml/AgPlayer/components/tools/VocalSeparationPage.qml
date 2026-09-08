@@ -114,8 +114,10 @@ Rectangle {
         }
         contentItem: Text {
             text: control.text
-            color: control.emphasizeSelection && control.checked ? "white"
-                   : control.enabled ? page.textPrimary : page.muted
+            color: !control.enabled ? page.muted
+                   : control.primaryAction || (control.emphasizeSelection && control.checked)
+                     ? Theme.accentText : page.textPrimary
+            font: control.font
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
@@ -603,7 +605,7 @@ Rectangle {
         }
     }
 
-    Dialog {
+    ThemedDialog {
         id: backupModelDialog
         objectName: "separationBackupModelDialog"
         modal: true

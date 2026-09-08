@@ -49,6 +49,26 @@ public:
         runtime.step_ = 2;
         runtime.advance();
     }
+    static int stage(const ExternalSeparationRuntime& runtime)
+    {
+        return runtime.step_;
+    }
+    static bool failedExistingVerificationStartsTrustedRepair(ExternalSeparationRuntime& runtime)
+    {
+        runtime.busy_ = true;
+        runtime.step_ = 4;
+        runtime.verifyingExistingEnvironment_ = true;
+        runtime.stageFailed(QStringLiteral("controlled import failure"));
+        return runtime.cacheVerification_.isRunning();
+    }
+    static QStringList repairExistingEnvironmentArguments(ExternalSeparationRuntime& runtime)
+    {
+        runtime.busy_ = true;
+        runtime.step_ = 2;
+        runtime.repairAttempted_ = true;
+        runtime.advance();
+        return runtime.process_.arguments();
+    }
 };
 
 class VocalSeparationControllerTestDriver {
@@ -261,6 +281,7 @@ private slots:
     void cancellingQueuedStartPreservesBackgroundDownloadVerification();
     void configurationDuringRefreshPreservesRunningSeparationContext();
     void downloadFailureRetriesMirrorBeforeReportingExhaustion();
+    void downloadSafetyDiagnosticsAreLocalized();
     void queuedDownloadRouteAndCancellationUseProductionControllerState();
     void runtimeCanBeConfiguredWithoutCatalogModelLookup();
     void configuredRuntimeDoesNotPretendUnknownModelsAreConfigured();
@@ -309,6 +330,10 @@ private slots:
     void externalRuntimeQuarantinesIncompletePythonWithoutDeletingIt();
     void externalRuntimePauseThenImmediateResumeIsNonBlocking();
     void externalRuntimeAlreadyVerifiedDoesNotInvalidateOrReinstall();
+    void externalRuntimeRejectsLegacyReadyMarker();
+    void externalRuntimeReadyStartQueuesAsynchronousVerification();
+    void externalRuntimeFailedExistingVerificationKeepsEnvironmentAndUsesTrustedRepair();
+    void externalRuntimeRepairReinstallsDependencies();
     void gpuCardDistinguishesDetectedDriverFromMissingCuda();
     void explicitDemucsGpuRequiresCudaBeforeStartingWorker();
     void existingPythonEnvironmentUpgradesTheBundledWorkerWithoutDownloading();
@@ -2164,18 +2189,91 @@ void VocalSeparationControllerTest::externalRuntimeAlreadyVerifiedDoesNotInvalid
 {
     QTemporaryDir root;
     QVERIFY(writeBytes(root.filePath("env/Scripts/python.exe"), "verified interpreter - must not execute"));
-    QVERIFY(writeBytes(root.filePath("verified-vr-1"), "audio-separator=0.30.2"));
+    QVERIFY(writeBytes(root.filePath("verified-vr-1"),
+                       "audio-separator=0.30.2\nverification=external-separation-worker-v1\n"));
     UnavailableDownloadNetwork network;
     ExternalSeparationRuntime runtime(root.path(), &network);
     QVERIFY(runtime.ready());
     QSignalSpy finished(&runtime, &ExternalSeparationRuntime::finished);
     QVERIFY(runtime.start());
-    QVERIFY2(runtime.ready(), "Repeated configure must not invalidate an already verified environment");
-    QVERIFY2(!runtime.busy(), "An already verified environment must not queue a marker-writing install stage");
-    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
-    QVERIFY(finished.first().first().toBool());
+    QVERIFY2(runtime.ready(), "Existing marker remains valid until asynchronous verification completes");
+    QVERIFY2(runtime.busy(), "Repeated configure must verify an existing environment without reinstalling it");
+    QCOMPARE(ExternalSeparationRuntimeTestDriver::stage(runtime), 4);
+    QCOMPARE(finished.count(), 0);
+    runtime.cancel();
+    QVERIFY(runtime.ready());
+    QVERIFY(network.hosts.isEmpty());
+}
+
+void VocalSeparationControllerTest::externalRuntimeRejectsLegacyReadyMarker()
+{
+    QTemporaryDir root;
+    QVERIFY(writeBytes(root.filePath("env/Scripts/python.exe"), "interpreter"));
+    QVERIFY(writeBytes(root.filePath("verified-vr-1"), "audio-separator=0.30.2"));
+    UnavailableDownloadNetwork network;
+    ExternalSeparationRuntime runtime(root.path(), &network);
+    QVERIFY(!runtime.ready());
+    QVERIFY(runtime.start());
+    QVERIFY(runtime.busy());
+    QCOMPARE(ExternalSeparationRuntimeTestDriver::stage(runtime), 4);
+    QVERIFY(QFileInfo::exists(root.filePath("env/Scripts/python.exe")));
+    QVERIFY(network.hosts.isEmpty());
+    runtime.cancel();
+}
+
+void VocalSeparationControllerTest::externalRuntimeReadyStartQueuesAsynchronousVerification()
+{
+    QTemporaryDir root;
+    QVERIFY(writeBytes(root.filePath("env/Scripts/python.exe"), "interpreter"));
+    QVERIFY(writeBytes(root.filePath("verified-vr-1"),
+                       "audio-separator=0.30.2\nverification=external-separation-worker-v1\n"));
+    UnavailableDownloadNetwork network;
+    ExternalSeparationRuntime runtime(root.path(), &network);
+    QVERIFY(runtime.ready());
+    QSignalSpy finished(&runtime, &ExternalSeparationRuntime::finished);
+    QVERIFY(runtime.start());
+    QVERIFY(runtime.busy());
+    QCOMPARE(ExternalSeparationRuntimeTestDriver::stage(runtime), 4);
+    QCOMPARE(finished.count(), 0);
+    runtime.cancel();
     QVERIFY(!runtime.busy());
     QVERIFY(network.hosts.isEmpty());
+}
+
+void VocalSeparationControllerTest::externalRuntimeFailedExistingVerificationKeepsEnvironmentAndUsesTrustedRepair()
+{
+    QTemporaryDir root;
+    const QString interpreter = root.filePath("env/Scripts/python.exe");
+    QVERIFY(writeBytes(interpreter, "broken interpreter fixture"));
+    QVERIFY(writeBytes(root.filePath("verified-vr-1"),
+                       "audio-separator=0.30.2\nverification=external-separation-worker-v1\n"));
+    UnavailableDownloadNetwork network;
+    ExternalSeparationRuntime runtime(root.path(), &network);
+    QVERIFY(runtime.ready());
+
+    QVERIFY(ExternalSeparationRuntimeTestDriver::failedExistingVerificationStartsTrustedRepair(runtime));
+    QCOMPARE(ExternalSeparationRuntimeTestDriver::stage(runtime), -1);
+    QVERIFY(QFileInfo::exists(interpreter));
+    QVERIFY(!QFileInfo::exists(root.filePath("verified-vr-1")));
+    runtime.cancel();
+    QVERIFY(QFileInfo::exists(interpreter));
+    QVERIFY(network.hosts.isEmpty());
+}
+
+void VocalSeparationControllerTest::externalRuntimeRepairReinstallsDependencies()
+{
+    QTemporaryDir root;
+    const QString interpreter = root.filePath("env/Scripts/python.exe");
+    QVERIFY(writeBytes(interpreter, "existing interpreter fixture"));
+    UnavailableDownloadNetwork network;
+    ExternalSeparationRuntime runtime(root.path(), &network);
+    const auto arguments = ExternalSeparationRuntimeTestDriver::repairExistingEnvironmentArguments(runtime);
+    QCOMPARE(arguments.value(0), QStringLiteral("pip"));
+    QCOMPARE(arguments.value(1), QStringLiteral("install"));
+    QVERIFY(arguments.contains(QStringLiteral("--reinstall")));
+    QVERIFY(!arguments.contains(QStringLiteral("venv")));
+    QVERIFY(QFileInfo::exists(interpreter));
+    runtime.cancel();
 }
 
 void VocalSeparationControllerTest::gpuCardDistinguishesDetectedDriverFromMissingCuda()
@@ -2253,7 +2351,8 @@ void VocalSeparationControllerTest::existingPythonEnvironmentUpgradesTheBundledW
     const QString marker = QDir(root).filePath("verified-vr-1");
     const QString worker = QDir(root).filePath("external_separation_worker.py");
     QVERIFY(writeBytes(python, "existing interpreter - never executed by this test"));
-    QVERIFY(writeBytes(marker, "audio-separator=0.30.2"));
+    QVERIFY(writeBytes(marker,
+                       "audio-separator=0.30.2\nverification=external-separation-worker-v1\n"));
     QVERIFY(writeBytes(worker, "# worker from the previous application version\n"));
     UnavailableDownloadNetwork network;
     ExternalSeparationRuntime runtime(root, &network);
@@ -2881,6 +2980,35 @@ downloadFailureRetriesMirrorBeforeReportingExhaustion()
     VocalSeparationControllerTestDriver::cancelDownloader(controller);
     QVERIFY2(exhausted.count() == 0,
              "cancelling a download must not open backup-source UI");
+}
+
+void VocalSeparationControllerTest::downloadSafetyDiagnosticsAreLocalized()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const auto options = optionsFor(temporary, QStringLiteral("stale"),
+                                    QByteArray("trusted-test-model"));
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(
+        &preview, &waveforms, nullptr, nullptr, nullptr, options);
+    QSignalSpy exhausted(
+        &controller, &VocalSeparationController::downloadSourcesExhausted);
+
+    const auto verify = [&](const QString& diagnostic,
+                            const QString& expected) {
+        VocalSeparationControllerTestDriver::seedDownloadFailure(controller, true);
+        VocalSeparationControllerTestDriver::failDownload(controller, diagnostic);
+        QCOMPARE(controller.error(), expected);
+        QCOMPARE(exhausted.count(), 1);
+        const QVariantMap outcome = exhausted.takeFirst().at(0).toMap();
+        QCOMPARE(outcome.value(QStringLiteral("diagnostic")).toString(), expected);
+    };
+
+    verify(QStringLiteral("Unsafe partial download path"),
+           QStringLiteral("临时下载路径不安全，已停止下载。请更换模型目录后重试"));
+    verify(QStringLiteral("Download exceeded expected size"),
+           QStringLiteral("下载内容超过清单声明大小，已停止下载"));
 }
 
 void VocalSeparationControllerTest::

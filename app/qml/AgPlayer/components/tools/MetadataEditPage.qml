@@ -537,9 +537,9 @@ Rectangle {
         id: metadataErrorDialog
         objectName: "metadataErrorDialog"
         modal: true
-        title: qsTr("元数据修改失败")
+        title: qsTr("元数据处理提示")
         anchors.centerIn: parent
-        width: Math.min(480, page.width - 2 * Theme.spacing2Xl)
+        width: Math.min(360, page.width - 2 * Theme.spacing2Xl)
         contentWidth: Math.max(0, width - leftPadding - rightPadding)
         contentHeight: metadataErrorContent.implicitHeight
         standardButtons: Dialog.Ok

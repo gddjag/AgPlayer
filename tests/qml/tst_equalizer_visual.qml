@@ -130,6 +130,25 @@ TestCase {
         EqualizerController.autoClipProtection = true
     }
 
+    function test_save_dialog_palette_follows_theme_data() {
+        return [{tag: "dark", mode: 0}, {tag: "light", mode: 1}]
+    }
+
+    function test_save_dialog_palette_follows_theme(data) {
+        SettingsController.themeMode = data.mode
+        var dialog = findChild(equalizer, "equalizerSaveDialog")
+        var field = findChild(equalizer, "equalizerSaveNameField")
+        verify(dialog && field)
+        dialog.open()
+        tryCompare(dialog, "opened", true)
+        compare(dialog.palette.text.toString(), Theme.textPrimary.toString())
+        compare(field.color.toString(), Theme.textPrimary.toString())
+        compare(field.selectionColor.toString(), Theme.accent.toString())
+        compare(field.selectedTextColor.toString(), Theme.accentText.toString())
+        verify(findChild(field, "themedTextFieldFrame"))
+        dialog.close()
+    }
+
     function cleanup() {
         if (temporaryPresetId.length > 0)
             EqualizerController.deleteCustomPreset(temporaryPresetId)

@@ -10,6 +10,7 @@
 #include <QElapsedTimer>
 #include <QNetworkAccessManager>
 #include <QNetworkProxy>
+#include <QProcess>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTcpServer>
@@ -18,6 +19,12 @@
 #include <QTest>
 #include <QThread>
 #include <QtConcurrent/QtConcurrentRun>
+
+#ifdef Q_OS_WIN
+#include <qt_windows.h>
+#endif
+
+#include <filesystem>
 
 class VocalSeparationInstallTest final : public QObject {
     Q_OBJECT
@@ -40,6 +47,9 @@ private slots:
     void runtimeVerificationRejectsChangedNativeFile();
     void cancelledRuntimeExtractionStopsAndCleansKnownStaging();
     void runtimeExtractionRefusesUnsafePreexistingStaging();
+    void downloaderRefusesUnsafePartialFile();
+    void downloaderRejectsResponseLargerThanManifest();
+    void downloaderCompletesLargeBoundedResponses();
     void httpResumeValidatesRangeAndFallback();
     void pauseAndCancelPreventBackoffReconnect();
 };
@@ -311,6 +321,54 @@ void VocalSeparationInstallTest::verifiedDestinationIsReusedWithoutNetwork()
     QFile file(destination); QVERIFY(file.open(QIODevice::ReadOnly)); QCOMPARE(file.readAll(), payload);
 }
 
+std::filesystem::path nativePath(const QString& path)
+{
+#ifdef Q_OS_WIN
+    return std::filesystem::path(path.toStdWString());
+#else
+    return std::filesystem::u8path(path.toUtf8().constData());
+#endif
+}
+
+bool createDirectoryLink(const QString& linkPath, const QString& targetPath)
+{
+    std::error_code error;
+    std::filesystem::create_directory_symlink(
+        nativePath(targetPath), nativePath(linkPath), error);
+#ifdef Q_OS_WIN
+    if (error) {
+        QProcess process;
+        process.setProgram(QStringLiteral("cmd.exe"));
+        process.setArguments(
+            {QStringLiteral("/d"), QStringLiteral("/c"), QStringLiteral("mklink"),
+             QStringLiteral("/J"), QDir::toNativeSeparators(linkPath),
+             QDir::toNativeSeparators(targetPath)});
+        process.start();
+        if (process.waitForFinished(5'000) && process.exitCode() == 0) {
+            error.clear();
+        }
+    }
+#endif
+    return !error;
+}
+
+class DirectoryLinkGuard final {
+public:
+    explicit DirectoryLinkGuard(QString path) : m_path(std::move(path)) {}
+    ~DirectoryLinkGuard()
+    {
+#ifdef Q_OS_WIN
+        const QString native = QDir::toNativeSeparators(m_path);
+        RemoveDirectoryW(reinterpret_cast<LPCWSTR>(native.utf16()));
+#else
+        QFile::remove(m_path);
+#endif
+    }
+
+private:
+    QString m_path;
+};
+
 void VocalSeparationInstallTest::independentDownloadersCannotWriteTheSameDestination()
 {
     QTemporaryDir temporary;
@@ -578,6 +636,106 @@ void VocalSeparationInstallTest::runtimeExtractionRefusesUnsafePreexistingStagin
             packagePath, temporary.path());
     QVERIFY(!installed.ok);
     QVERIFY(QFileInfo::exists(sentinel));
+}
+
+void VocalSeparationInstallTest::downloaderRefusesUnsafePartialFile()
+{
+    const QByteArray payload("verified-model-payload");
+    QTemporaryDir holder;
+    QTemporaryDir external;
+    QVERIFY(holder.isValid());
+    QVERIFY(external.isValid());
+    const QString outside = external.filePath(QStringLiteral("outside.bin"));
+    const QByteArray sentinel("outside");
+    QVERIFY(writeFile(outside, sentinel));
+    const QString destination = holder.filePath(QStringLiteral("model.onnx"));
+    const QString partial = VocalSeparationInstaller::partPath(destination);
+    if (!createDirectoryLink(partial, external.path())) {
+        QSKIP("directory symlink or junction creation is unavailable");
+    }
+    DirectoryLinkGuard linkGuard(partial);
+
+    LocalHttpServer server(payload, LocalHttpServer::Mode::Full200);
+    QVERIFY(server.start());
+    disableProxyForLocalTests();
+    QNetworkAccessManager network;
+    network.setProxy(QNetworkProxy(QNetworkProxy::NoProxy));
+    VocalSeparationDownloader downloader(&network);
+    QSignalSpy finished(&downloader, &VocalSeparationDownloader::finished);
+    downloader.start(downloadFileFor(payload, server.url()), destination);
+
+    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 3'000);
+    const VocalInstallResult result =
+        finished.first().first().value<VocalInstallResult>();
+    QVERIFY(!result.ok);
+    QVERIFY2(result.error.contains(QStringLiteral("Unsafe partial download path")),
+             qPrintable(result.error));
+    QCOMPARE(server.connections(), 0);
+    QFile outsideFile(outside);
+    QVERIFY(outsideFile.open(QIODevice::ReadOnly));
+    QCOMPARE(outsideFile.readAll(), sentinel);
+}
+
+void VocalSeparationInstallTest::downloaderRejectsResponseLargerThanManifest()
+{
+    const QByteArray expected("expected-model");
+    const QByteArray oversized = expected + QByteArray("-unexpected-excess");
+    LocalHttpServer server(oversized, LocalHttpServer::Mode::Full200);
+    QVERIFY(server.start());
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+
+    disableProxyForLocalTests();
+    QNetworkAccessManager network;
+    network.setProxy(QNetworkProxy(QNetworkProxy::NoProxy));
+    VocalSeparationDownloader downloader(&network);
+    QSignalSpy finished(&downloader, &VocalSeparationDownloader::finished);
+    const QString destination = temporary.filePath(QStringLiteral("model.onnx"));
+    downloader.start(downloadFileFor(expected, server.url()), destination);
+
+    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 3'000);
+    const VocalInstallResult result =
+        finished.first().first().value<VocalInstallResult>();
+    QVERIFY(!result.ok);
+    QVERIFY2(result.error.contains(QStringLiteral("exceeded expected size")),
+             qPrintable(result.error));
+    const QString partial = VocalSeparationInstaller::partPath(destination);
+    QVERIFY(!QFileInfo::exists(partial)
+            || QFileInfo(partial).size() <= expected.size());
+}
+
+void VocalSeparationInstallTest::downloaderCompletesLargeBoundedResponses()
+{
+    QByteArray payload(256 * 1024, 'a');
+    for (qsizetype index = 0; index < payload.size(); index += 4096) {
+        payload[index] = char('a' + (index / 4096) % 26);
+    }
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString source = temporary.filePath(QStringLiteral("source.onnx"));
+    QVERIFY(writeFile(source, payload));
+
+    const auto verifyDownload = [&](const QUrl& url, const QString& name) {
+        disableProxyForLocalTests();
+        QNetworkAccessManager network;
+        network.setProxy(QNetworkProxy(QNetworkProxy::NoProxy));
+        VocalSeparationDownloader downloader(&network);
+        QSignalSpy finished(&downloader, &VocalSeparationDownloader::finished);
+        const QString destination = temporary.filePath(name);
+        downloader.start(downloadFileFor(payload, url, name), destination);
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5'000);
+        const VocalInstallResult result =
+            finished.first().first().value<VocalInstallResult>();
+        QVERIFY2(result.ok, qPrintable(result.error));
+        QFile downloaded(destination);
+        QVERIFY(downloaded.open(QIODevice::ReadOnly));
+        QCOMPARE(downloaded.readAll(), payload);
+    };
+
+    verifyDownload(QUrl::fromLocalFile(source), QStringLiteral("local.onnx"));
+    LocalHttpServer server(payload, LocalHttpServer::Mode::Full200);
+    QVERIFY(server.start());
+    verifyDownload(server.url(), QStringLiteral("http.onnx"));
 }
 
 void VocalSeparationInstallTest::httpResumeValidatesRangeAndFallback()

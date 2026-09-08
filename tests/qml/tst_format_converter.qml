@@ -26,6 +26,24 @@ TestCase {
         }
     }
 
+    function test_start_button_disabled_text_follows_theme() {
+        var previousTheme = SettingsController.themeMode
+        var button = findChild(page, "convertAllButton")
+        var label = findChild(page, "convertAllButtonLabel")
+        var icon = findChild(page, "convertAllButtonIcon")
+        verify(button && label && icon)
+        try {
+            for (var mode = 0; mode <= 1; ++mode) {
+                SettingsController.themeMode = mode
+                var expected = button.enabled ? Theme.accentText : Theme.textDisabled
+                compare(label.color.toString(), expected.toString())
+                compare(icon.tint.toString(), expected.toString())
+            }
+        } finally {
+            SettingsController.themeMode = previousTheme
+        }
+    }
+
     Component {
         id: dialogBehaviorWindowComponent
 

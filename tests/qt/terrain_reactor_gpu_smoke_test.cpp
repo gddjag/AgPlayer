@@ -5,6 +5,7 @@
 #include <QFile>
 #include <QDir>
 #include <QQuickWindow>
+#include <QScreen>
 #include <QSGRendererInterface>
 #include <QScopeGuard>
 #include <QTest>
@@ -410,6 +411,25 @@ void TerrainReactorGpuSmokeTest::beatMaterialControlsChangeRenderedSurface()
     QFETCH(int, high);
     QFETCH(int, delay);
     QImage frames[2];
+    // Keep the native surface and its DPI unchanged across both parameter
+    // samples. Recreating two independently placed Windows windows can put
+    // them on different monitors or capture during WM_DPICHANGED resizing.
+    QQuickWindow window;
+    QScreen* const screen = QGuiApplication::primaryScreen();
+    QVERIFY(screen);
+    window.setScreen(screen);
+    window.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    const QSize logicalSize(480, 270);
+    window.setMinimumSize(logicalSize);
+    window.setMaximumSize(logicalSize);
+    window.setGeometry(QRect(screen->availableGeometry().center()
+                             - QPoint(240, 135), logicalSize));
+    window.show();
+    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    QTRY_COMPARE_WITH_TIMEOUT(window.screen(), screen, 3000);
+    QTRY_COMPARE_WITH_TIMEOUT(window.size(), logicalSize, 3000);
+    const QSize physicalSize(qRound(480 * window.devicePixelRatio()),
+                             qRound(270 * window.devicePixelRatio()));
     for (int pass = 0; pass < 2; ++pass) {
         PlayerExperienceController style;
         style.applyPreset(0);
@@ -423,19 +443,22 @@ void TerrainReactorGpuSmokeTest::beatMaterialControlsChangeRenderedSurface()
         style.setBurstEnabled(false);
         style.setStreamHighlightEnabled(false);
         QVERIFY(style.setProperty(control.constData(), pass ? high : low));
-        QQuickWindow window;
-        window.resize(480,270);
         StableImpactSource source;
         TerrainReactorItem item(window.contentItem());
         item.setSize(QSizeF(480,270));
         item.setStyleSource(&style);
         item.setFeatureSource(&source);
-        window.show();
-        QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(),3000);
         if (window.rendererInterface()->graphicsApi() == QSGRendererInterface::Software)
             QSKIP("No accelerated backend");
         item.setActive(true);
         QTRY_COMPARE_WITH_TIMEOUT(item.renderStatus(),TerrainReactorItem::RenderStatus::Ready,5000);
+        QImage settled;
+        QTRY_VERIFY_WITH_TIMEOUT((settled = window.grabWindow()).size()
+                                == physicalSize, 3000);
+        const quint64 readyFrame = item.frameCount();
+        QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() >= readyFrame + 3, 3000);
+        QCOMPARE(window.screen(), screen);
+        QCOMPARE(window.size(), logicalSize);
         QTest::qWait(200);
         if (QByteArray(QTest::currentDataTag()) == "impact-decay")
             source.publishImpact(.9);
@@ -444,6 +467,7 @@ void TerrainReactorGpuSmokeTest::beatMaterialControlsChangeRenderedSurface()
         QTest::qWait(delay);
         frames[pass] = window.grabWindow();
         QVERIFY(!frames[pass].isNull());
+        QCOMPARE(frames[pass].size(), physicalSize);
         item.setActive(false);
     }
     QCOMPARE(frames[0].size(),frames[1].size());

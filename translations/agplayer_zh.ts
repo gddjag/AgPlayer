@@ -1543,6 +1543,22 @@
 <context>
         <name>ExternalSeparationRuntime</name>
         <message>
+            <source>无法安全保存环境校验状态</source>
+            <translation>无法安全保存环境校验状态</translation>
+        </message>
+        <message>
+            <source>无法安全清除失效的环境校验状态</source>
+            <translation>无法安全清除失效的环境校验状态</translation>
+        </message>
+        <message>
+            <source>验证已有 Python / PyTorch / FFmpeg 环境</source>
+            <translation>验证已有 Python / PyTorch / FFmpeg 环境</translation>
+        </message>
+        <message>
+            <source>已有环境验证失败，使用已校验配置器修复（保留环境和缓存）</source>
+            <translation>已有环境验证失败，使用已校验配置器修复（保留环境和缓存）</translation>
+        </message>
+        <message>
             <location filename="../qt/src/external_separation_runtime.cpp" line="46" />
             <source>下载配置器 %1 / %2 MB</source>
             <translation>下载配置器 %1 / %2 MB</translation>
@@ -1700,37 +1716,37 @@
         <message>
             <location filename="../qt/src/file_association_controller.cpp" line="301" />
             <source>Failed to register OpenWith ProgID for .%1</source>
-            <translation>Failed to register OpenWith ProgID for .%1</translation>
+            <translation>无法为 .%1 注册“打开方式”程序标识</translation>
         </message>
         <message>
             <location filename="../qt/src/file_association_controller.cpp" line="317" />
             <source>Failed to remove stale ProgID for .%1</source>
-            <translation>Failed to remove stale ProgID for .%1</translation>
+            <translation>无法移除 .%1 的旧程序标识</translation>
         </message>
         <message>
             <location filename="../qt/src/file_association_controller.cpp" line="376" />
             <source>Failed to remove RegisteredApplications entry and default-app capabilities</source>
-            <translation>Failed to remove RegisteredApplications entry and default-app capabilities</translation>
+            <translation>无法移除已注册应用条目和默认应用功能</translation>
         </message>
         <message>
             <location filename="../qt/src/file_association_controller.cpp" line="378" />
             <source>Failed to remove RegisteredApplications entry</source>
-            <translation>Failed to remove RegisteredApplications entry</translation>
+            <translation>无法移除已注册应用条目</translation>
         </message>
         <message>
             <location filename="../qt/src/file_association_controller.cpp" line="380" />
             <source>Failed to remove default-app capabilities</source>
-            <translation>Failed to remove default-app capabilities</translation>
+            <translation>无法移除默认应用功能</translation>
         </message>
         <message>
             <location filename="../qt/src/file_association_controller.cpp" line="397" />
             <source>Failed to read default-app file associations</source>
-            <translation>Failed to read default-app file associations</translation>
+            <translation>无法读取默认应用的文件关联</translation>
         </message>
         <message>
             <location filename="../qt/src/file_association_controller.cpp" line="414" />
             <source>Failed to enumerate default-app file associations</source>
-            <translation>Failed to enumerate default-app file associations</translation>
+            <translation>无法枚举默认应用的文件关联</translation>
         </message>
     </context>
 <context>
@@ -3523,6 +3539,50 @@
 <context>
         <name>LibraryFileOperations</name>
         <message>
+            <source>曲库更新失败，且文件名自动回滚未完成</source>
+            <translation>曲库更新失败，且文件名自动回滚未完成</translation>
+        </message>
+        <message>
+            <source>文件移动暂存失败，且覆盖目标自动恢复未完成</source>
+            <translation>文件移动暂存失败，且覆盖目标自动恢复未完成</translation>
+        </message>
+        <message>
+            <source>文件移动提交失败，且自动回滚未完整完成</source>
+            <translation>文件移动提交失败，且自动回滚未完整完成</translation>
+        </message>
+        <message>
+            <source>曲库更新失败，且文件移动自动回滚未完成</source>
+            <translation>曲库更新失败，且文件移动自动回滚未完成</translation>
+        </message>
+        <message>
+            <source>曲库更新失败，且覆盖目标自动恢复未完成</source>
+            <translation>曲库更新失败，且覆盖目标自动恢复未完成</translation>
+        </message>
+        <message>
+            <source>文件已移动，但覆盖备份清理失败</source>
+            <translation>文件已移动，但覆盖备份清理失败</translation>
+        </message>
+        <message>
+            <source>文件复制暂存失败，且覆盖目标自动恢复未完成</source>
+            <translation>文件复制暂存失败，且覆盖目标自动恢复未完成</translation>
+        </message>
+        <message>
+            <source>文件复制提交失败，且覆盖目标自动恢复未完成</source>
+            <translation>文件复制提交失败，且覆盖目标自动恢复未完成</translation>
+        </message>
+        <message>
+            <source>文件已复制，但覆盖备份清理失败</source>
+            <translation>文件已复制，但覆盖备份清理失败</translation>
+        </message>
+        <message>
+            <source>%1；原目标保留在 %2</source>
+            <translation>%1；原目标保留在 %2</translation>
+        </message>
+        <message>
+            <source>%1；源文件保留在 %2</source>
+            <translation>%1；源文件保留在 %2</translation>
+        </message>
+        <message>
             <location filename="../qt/src/library_file_operations.cpp" line="134" />
             <source>文件不存在或路径无效</source>
             <translation>文件不存在或路径无效</translation>
@@ -4458,16 +4518,20 @@
         <message>
             <location filename="../app/main.cpp" line="1218" />
             <source>Failed to save tag data during shutdown</source>
-            <translation>Failed to save tag data during shutdown</translation>
+            <translation>退出时无法保存标签数据</translation>
         </message>
         <message>
             <location filename="../app/main.cpp" line="2191" />
             <source>Failed to save tag data after event loop exit</source>
-            <translation>Failed to save tag data after event loop exit</translation>
+            <translation>事件循环退出后无法保存标签数据</translation>
         </message>
     </context>
 <context>
         <name>MetadataEditPage</name>
+        <message>
+            <source>元数据处理提示</source>
+            <translation>元数据处理提示</translation>
+        </message>
         <message>
             <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="37" />
             <location filename="../app/qml/AgPlayer/components/tools/MetadataEditPage.qml" line="710" />
@@ -5300,52 +5364,52 @@
         <message>
             <location filename="../qt/src/metadata_editor.cpp" line="277" />
             <source>Could not open the cover image: %1</source>
-            <translation>Could not open the cover image: %1</translation>
+            <translation>无法打开封面图片：%1</translation>
         </message>
         <message>
             <location filename="../qt/src/metadata_editor.cpp" line="282" />
             <source>The cover image is empty: %1</source>
-            <translation>The cover image is empty: %1</translation>
+            <translation>封面图片为空：%1</translation>
         </message>
         <message>
             <location filename="../qt/src/metadata_editor.cpp" line="287" />
             <source>The cover image cannot exceed 20 MB: %1</source>
-            <translation>The cover image cannot exceed 20 MB: %1</translation>
+            <translation>封面图片不能超过 20 MB：%1</translation>
         </message>
         <message>
             <location filename="../qt/src/metadata_editor.cpp" line="293" />
             <source>The selected file is not a readable image: %1</source>
-            <translation>The selected file is not a readable image: %1</translation>
+            <translation>所选文件不是可读取的图片：%1</translation>
         </message>
         <message>
             <location filename="../qt/src/metadata_editor.cpp" line="299" />
             <source>Cover images must contain PNG, JPEG, or BMP data: %1</source>
-            <translation>Cover images must contain PNG, JPEG, or BMP data: %1</translation>
+            <translation>封面图片必须为 PNG、JPEG 或 BMP 格式：%1</translation>
         </message>
         <message>
             <location filename="../qt/src/metadata_editor.cpp" line="305" />
             <source>The cover image could not be decoded completely: %1</source>
-            <translation>The cover image could not be decoded completely: %1</translation>
+            <translation>无法完整解码封面图片：%1</translation>
         </message>
         <message>
             <location filename="../qt/src/metadata_editor.cpp" line="310" />
             <source>The cover dimensions must not exceed 4096 x 4096: %1</source>
-            <translation>The cover dimensions must not exceed 4096 x 4096: %1</translation>
+            <translation>封面尺寸不能超过 4096 × 4096：%1</translation>
         </message>
         <message>
             <location filename="../qt/src/metadata_editor.cpp" line="369" />
             <source>Could not scan the selected audio files.</source>
-            <translation>Could not scan the selected audio files.</translation>
+            <translation>无法扫描所选音频文件。</translation>
         </message>
         <message>
             <location filename="../qt/src/metadata_editor.cpp" line="391" />
             <source>No new supported audio files were found.</source>
-            <translation>No new supported audio files were found.</translation>
+            <translation>未找到可新增的受支持音频文件。</translation>
         </message>
         <message>
             <location filename="../qt/src/metadata_editor.cpp" line="417" />
             <source>Could not read metadata from the selected files.</source>
-            <translation>Could not read metadata from the selected files.</translation>
+            <translation>无法读取所选文件的元数据。</translation>
         </message>
         <message>
             <location filename="../qt/src/metadata_editor.cpp" line="500" />
@@ -5387,37 +5451,37 @@
         <message>
             <location filename="../qt/src/metadata_editor.cpp" line="1026" />
             <source>Metadata preflight failed unexpectedly.</source>
-            <translation>Metadata preflight failed unexpectedly.</translation>
+            <translation>元数据预检发生意外错误。</translation>
         </message>
         <message>
             <location filename="../qt/src/metadata_editor.cpp" line="1088" />
             <source>Metadata preflight setup failed: %1</source>
-            <translation>Metadata preflight setup failed: %1</translation>
+            <translation>无法准备元数据预检：%1</translation>
         </message>
         <message>
             <location filename="../qt/src/metadata_editor.cpp" line="1095" />
             <source>Metadata preflight setup failed.</source>
-            <translation>Metadata preflight setup failed.</translation>
+            <translation>无法准备元数据预检。</translation>
         </message>
         <message>
             <location filename="../qt/src/metadata_editor.cpp" line="1149" />
             <source>Target directory is not writable.</source>
-            <translation>Target directory is not writable.</translation>
+            <translation>目标目录不可写入。</translation>
         </message>
         <message>
             <location filename="../qt/src/metadata_editor.cpp" line="1155" />
             <source>Supported; waiting to process without audio re-encoding.</source>
-            <translation>Supported; waiting to process without audio re-encoding.</translation>
+            <translation>支持处理；等待修改，无需重新编码音频。</translation>
         </message>
         <message>
             <location filename="../qt/src/metadata_editor.cpp" line="1166" />
             <source>Metadata preflight failed: %1</source>
-            <translation>Metadata preflight failed: %1</translation>
+            <translation>元数据预检失败：%1</translation>
         </message>
         <message>
             <location filename="../qt/src/metadata_editor.cpp" line="1169" />
             <source>Metadata preflight failed.</source>
-            <translation>Metadata preflight failed.</translation>
+            <translation>元数据预检失败。</translation>
         </message>
         <message>
             <location filename="../qt/src/metadata_editor.cpp" line="881" />
@@ -5443,7 +5507,7 @@
             <location filename="../qt/src/metadata_editor.cpp" line="1225" />
             <location filename="../qt/src/metadata_editor.cpp" line="1227" />
             <source>Metadata target is no longer available.</source>
-            <translation>Metadata target is no longer available.</translation>
+            <translation>元数据处理目标已不可用。</translation>
         </message>
     </context>
 <context>
@@ -5670,7 +5734,7 @@
         <message>
             <location filename="../app/qml/AgPlayer/components/PlayerPane.qml" line="355" />
             <source>Unknown album</source>
-            <translation>Unknown album</translation>
+            <translation>未知专辑</translation>
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/components/PlayerPane.qml" line="312" />
@@ -5765,7 +5829,7 @@
         <message>
             <location filename="../qt/src/resource_folder_controller.cpp" line="155" />
             <source>Audio files (%1)</source>
-            <translation>Audio files (%1)</translation>
+            <translation>音频文件 (%1)</translation>
         </message>
         <message>
             <location filename="../qt/src/resource_folder_controller.cpp" line="408" />
@@ -5970,6 +6034,10 @@
     </context>
 <context>
         <name>SettingsPage</name>
+        <message>
+            <source>下载由浏览器完成。若下载卡顿、超时或失败，请返回官网切换 GitHub / R2 线路。</source>
+            <translation>下载由浏览器完成。若下载卡顿、超时或失败，请返回官网切换 GitHub / R2 线路。</translation>
+        </message>
         <message>
             <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="1443" />
             <source>单曲循环</source>
@@ -7534,8 +7602,8 @@
         </message>
         <message>
             <location filename="../qt/src/update_checker.cpp" line="44" />
-            <source>暂时无法检查更新，请稍后重试或访问官网。</source>
-            <translation>暂时无法检查更新，请稍后重试或访问官网。</translation>
+            <source>更新检查超时或失败，请前往官网选择其他下载线路（GitHub / R2）。</source>
+            <translation>更新检查超时或失败，请前往官网选择其他下载线路（GitHub / R2）。</translation>
         </message>
         <message>
             <location filename="../qt/src/update_checker.cpp" line="45" />
@@ -7591,6 +7659,14 @@
     </context>
 <context>
         <name>VocalSeparationController</name>
+        <message>
+            <source>临时下载路径不安全，已停止下载。请更换模型目录后重试</source>
+            <translation>临时下载路径不安全，已停止下载。请更换模型目录后重试</translation>
+        </message>
+        <message>
+            <source>下载内容超过清单声明大小，已停止下载</source>
+            <translation>下载内容超过清单声明大小，已停止下载</translation>
+        </message>
         <message><source>运行时正在使用，无法配置</source><translation>运行时正在使用，无法配置</translation></message>
         <message><source>无法启动配置</source><translation>无法启动配置</translation></message>
         <message><source>配置已取消</source><translation>配置已取消</translation></message>

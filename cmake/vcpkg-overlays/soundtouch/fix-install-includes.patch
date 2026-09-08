@@ -2,15 +2,6 @@ diff --git a/CMakeLists.txt b/CMakeLists.txt
 index 1234567..abcdefg 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -21,7 +21,7 @@ endif()
- #####################
- # SoundTouch library
- 
--add_library(SoundTouch
-+add_library(SoundTouch STATIC
-   source/SoundTouch/AAFilter.cpp
-   source/SoundTouch/BPMDetect.cpp
-   source/SoundTouch/cpu_detect_x86.cpp
 @@ -100,10 +100,10 @@ install(FILES
  
  install(TARGETS SoundTouch

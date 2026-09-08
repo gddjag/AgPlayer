@@ -26,8 +26,11 @@ signals:
     void finished(bool success, const QString& error);
 private:
     friend class ExternalSeparationRuntimeTestDriver;
+    bool markerMatchesVerificationContract() const;
     bool workerMatchesBundle() const;
     bool synchronizeWorker();
+    bool clearVerificationMarker();
+    void verifyCachedConfigurator();
     void advance();
     void launch(const QString& program, const QStringList& arguments);
     void fail(const QString& error);
@@ -53,6 +56,8 @@ private:
     bool paused_ = false;
     bool mirror_ = false;
     bool archiveMirror_ = false;
+    bool verifyingExistingEnvironment_ = false;
+    bool repairAttempted_ = false;
     bool stopping_ = false;
     bool resumeRequested_ = false;
     QString stopError_;

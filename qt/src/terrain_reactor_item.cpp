@@ -174,6 +174,7 @@ protected:
             punchEvents_.discard(next.punchEvent, camera_);
             beatEvents_.discard(next.beatEvent);
             impactEvents_.discard(next.impactEvent);
+            meteorFlight_.cancel();
             smoothedFeatures_ = AudioFeatures{};
         }
         if (next.running || failed_) publishStatus();
@@ -272,16 +273,30 @@ protected:
         const bool newImpact = impactEvents_.consume(snapshot_.impactEvent, renderTimeSeconds);
         const float waveStrength = newImpact ? snapshot_.impactEvent.strength
                                             : snapshot_.beatEvent.strength;
+        if (!snapshot_.style.meteorsEnabled) meteorFlight_.cancel();
+        if (newImpact && snapshot_.style.meteorsEnabled && !meteorOrigins_.isEmpty()
+            && waveStrength > 0.0F && waveGate_.consume(renderTimeSeconds, waveStrength)) {
+            // The reserved wave gate belongs to this flight until touchdown.
+            // No beat emits a competing ring while meteors are enabled.
+            meteorFlight_.launch(renderTimeSeconds, int(meteorOrigins_.size()), waveStrength);
+        }
+        const bool meteorLanded = meteorFlight_.landed(renderTimeSeconds);
         if (!snapshot_.style.ripplesEnabled) {
             travelingWaves_.fill(QVector4D());
-        } else if ((newImpact || newBeat) && waveStrength > 0.0F
-                   && waveGate_.consume(renderTimeSeconds, waveStrength)) {
+        } else if (meteorLanded || (!snapshot_.style.meteorsEnabled
+                   && (newImpact || newBeat) && waveStrength > 0.0F
+                   && waveGate_.consume(renderTimeSeconds, waveStrength))) {
             const int slot = nextWave_ % std::max(1, currentRippleCount_);
             nextWave_ = (slot + 1) % std::max(1, currentRippleCount_);
-            const QVector4D& origin = waveSources_[std::size_t(slot)];
+            waveTints_[std::size_t(slot)] = waveSequence_++ % 4U;
+            const QVector4D origin = meteorLanded && meteorFlight_.group() >= 0
+                && meteorFlight_.group() < meteorOrigins_.size()
+                ? QVector4D(meteorOrigins_[meteorFlight_.group()].x(),
+                            meteorOrigins_[meteorFlight_.group()].z(), 0, 0)
+                : waveSources_[std::size_t(slot)];
             travelingWaves_[std::size_t(slot)] = QVector4D(
                 origin.x(), origin.y(), renderTimeSeconds,
-                finiteUnit(waveStrength));
+                meteorLanded ? meteorFlight_.strength() : finiteUnit(waveStrength));
         }
         const BeatPulseSnapshot beat = beatEvents_.snapshot(
             renderTimeSeconds);
@@ -486,6 +501,9 @@ private:
         const SceneLayout layout = makeSceneLayout(snapshot_.seed,
             config.gridSize, config.floatingCount, config.meteorCount,
             config.particleCount);
+        meteorOrigins_.clear();
+        meteorFlight_.cancel();
+        for (const auto& meteor : layout.meteors) meteorOrigins_.append(meteor.position);
         instances_.clear();
         currentTerrainCount_ = int(layout.terrain.size());
         instances_.reserve(layout.terrain.size() + layout.floating.size()
@@ -607,6 +625,7 @@ private:
         result.styleExtra[0] = snapshot_.style.themeCycleEnabled ? 1.0F : 0.0F;
         result.styleExtra[1] = snapshot_.style.burstEnabled ? 1.0F : 0.0F;
         result.styleExtra[2] = snapshot_.style.streamHighlightEnabled ? 1.0F : 0.0F;
+        result.styleExtra[3] = meteorFlight_.age(visual.timeSeconds);
         result.styleAudio[0] = dynamics.inputCompression;
         result.styleAudio[1] = dynamics.audioResponse;
         result.styleAudio[2] = dynamics.responseRadius;
@@ -617,14 +636,15 @@ private:
         result.stylePresentation[3] = dynamics.autoRotateSpeed;
         result.impact[0] = visual.impactStrength;
         result.impact[1] = visual.impactAge;
-        result.impact[2] = visual.impactStrength > 0.001F ? 1.0F : 0.0F;
+        result.impact[2] = float(meteorFlight_.group() + 1);
         result.impact[3] = dynamics.rhythmSensitivity;
         for (std::size_t index = 0; index < waveSources_.size(); ++index) {
             const QVector4D& source = travelingWaves_[index];
             result.waveSources[index][0] = source.x();
             result.waveSources[index][1] = source.y();
             const float age = std::max(0.0F, visual.timeSeconds - source.z());
-            result.waveSources[index][2] = age;
+            result.waveSources[index][2] = std::min(age, 31.0F)
+                + float(waveTints_[index]) * 32.0F;
             result.waveSources[index][3] = age < 2.8F / snapshot_.style.rippleDecay
                 ? source.w() * dynamics.rhythmStrength : 0.0F;
         }
@@ -746,6 +766,10 @@ private:
     BassEnvelopeFollower bassEnvelope_;
     MultiWaveSources waveSources_{};
     MultiWaveSources travelingWaves_{};
+    std::array<unsigned, 8> waveTints_{};
+    unsigned waveSequence_ = 0;
+    MeteorFlight meteorFlight_;
+    QVector<QVector3D> meteorOrigins_;
     TravelingWaveGate waveGate_;
     int nextWave_ = 0;
     int currentSampleCount_ = 4;

@@ -126,6 +126,36 @@ Item {
         currentLineSettle.start()
     }
 
+    function lyricPlaneProjection(line, recession) {
+        if (!spatialMode || depthScale <= 0)
+            return Qt.matrix4x4(1, 0, 0, 0, 0, 1, 0, 0,
+                               0, 0, 1, 0, 0, 0, 0, 1)
+        var amount = Math.min(1, depthScale)
+        var yaw = sidePlacement
+                ? (placement === PlayerExperienceController.Left ? 1 : -1)
+                  * 28 * amount * Math.PI / 180 : 0
+        var pitch = (sidePlacement ? -4 : -10) * amount * Math.PI / 180
+        var cy = Math.cos(yaw), sy = Math.sin(yaw)
+        var cp = Math.cos(pitch), sp = Math.sin(pitch)
+        var cameraDistance = Math.max(320, line.width * 0.9)
+        var ox = placement === PlayerExperienceController.Left ? 0
+               : placement === PlayerExperienceController.Right ? line.width
+                                                               : line.width / 2
+        var oy = currentLine.y + currentLine.height / 2 - line.y
+        // Project each plane from the same reading-edge camera. The inward
+        // edge recedes; previous/next lines sit behind the sharp current line.
+        // A homogeneous divide gives real convergence, not an affine skew.
+        var a = cp * sy / cameraDistance
+        var b = -sp / cameraDistance
+        var c = 1 + recession * amount - a * ox - b * oy
+        return Qt.matrix4x4(
+                    cy + ox * a, ox * b, 0, ox * c - cy * ox,
+                    sp * sy + oy * a, cp + oy * b, 0,
+                    oy * c - sp * sy * ox - cp * oy,
+                    0, 0, 1, 0,
+                    a, b, 0, c)
+    }
+
     function importSelectedFile(url) {
         return service ? service.importLrc(url) : false
     }
@@ -207,23 +237,6 @@ Item {
         width: parent.width - (root.spatialMode ? 0 : 36)
         spacing: Math.max(3, 6 * root.sizeScale)
         visible: !root.spatialUntimedFallback && !root.hasTimelineModel
-        transform: Rotation {
-            objectName: "cinematicLyricsPerspective"
-            origin.x: root.placement === PlayerExperienceController.Right
-                      ? lyricStack.width : root.placement === PlayerExperienceController.Left
-                                           ? 0 : lyricStack.width / 2
-            origin.y: lyricStack.height / 2
-            axis {
-                x: root.sidePlacement ? 0 : 1
-                y: root.sidePlacement ? 1 : 0
-                z: 0
-            }
-            angle: !root.spatialMode || root.depthScale <= 0 ? 0
-                   : root.sidePlacement
-                     ? (root.placement === PlayerExperienceController.Left ? -1 : 1)
-                       * root.depthScale * 24
-                     : -root.depthScale * 10
-        }
 
         Text {
             id: previousLine
@@ -250,7 +263,7 @@ Item {
                      ? 0.32 + root.clarityScale * 0.18 : 1
             visible: !root.spatialMode || text.length > 0
             scale: root.spatialMode
-                   ? 0.88 - root.depthScale * 0.05
+                   ? 0.94 - root.depthScale * 0.02
                    : 1.0 - root.depthScale * 0.08
             transformOrigin: root.placement === PlayerExperienceController.Right
                              ? Item.Right : root.placement === PlayerExperienceController.Left
@@ -260,11 +273,8 @@ Item {
                     objectName: "previousLyricDepthTransform"
                     y: root.spatialMode ? -root.depthScale * 6 : 0
                 },
-                Rotation {
-                    origin.x: previousLine.width / 2
-                    origin.y: previousLine.height
-                    axis { x: 1; y: 0; z: 0 }
-                    angle: root.spatialMode ? root.depthScale * 6 : 0
+                Matrix4x4 {
+                    matrix: root.lyricPlaneProjection(previousLine, 0.12)
                 }
             ]
         }
@@ -303,10 +313,16 @@ Item {
             transformOrigin: root.placement === PlayerExperienceController.Right
                              ? Item.Right : root.placement === PlayerExperienceController.Left
                                             ? Item.Left : Item.Center
-            transform: Translate {
-                objectName: "currentLyricEntranceTransform"
-                y: currentLine.settleOffsetY
-            }
+            transform: [
+                Translate {
+                    objectName: "currentLyricEntranceTransform"
+                    y: currentLine.settleOffsetY
+                },
+                Matrix4x4 {
+                    objectName: "cinematicLyricsPerspective"
+                    matrix: root.lyricPlaneProjection(currentLine, 0)
+                }
+            ]
         }
 
         Text {
@@ -334,7 +350,7 @@ Item {
                      ? 0.26 + root.clarityScale * 0.15 : 1
             visible: !root.spatialMode || text.length > 0
             scale: root.spatialMode
-                   ? 0.82 - root.depthScale * 0.05
+                   ? 0.90 - root.depthScale * 0.02
                    : 1.0 - root.depthScale * 0.14
             transformOrigin: root.placement === PlayerExperienceController.Right
                              ? Item.Right : root.placement === PlayerExperienceController.Left
@@ -344,11 +360,8 @@ Item {
                     objectName: "nextLyricDepthTransform"
                     y: root.spatialMode ? root.depthScale * 6 : 0
                 },
-                Rotation {
-                    origin.x: nextLine.width / 2
-                    origin.y: 0
-                    axis { x: 1; y: 0; z: 0 }
-                    angle: root.spatialMode ? -root.depthScale * 6 : 0
+                Matrix4x4 {
+                    matrix: root.lyricPlaneProjection(nextLine, 0.22)
                 }
             ]
         }

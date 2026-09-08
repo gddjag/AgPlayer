@@ -142,6 +142,23 @@ inline bool safeExistingDirectory(const QString& path)
     return !QDir(path).canonicalPath().isEmpty();
 }
 
+inline bool openFileHandleIsRegular(QFile* file)
+{
+    if (file == nullptr || !file->isOpen()) return false;
+#ifdef Q_OS_WIN
+    BY_HANDLE_FILE_INFORMATION information{};
+    const intptr_t operatingSystemHandle = _get_osfhandle(file->handle());
+    if (operatingSystemHandle == -1) return false;
+    const HANDLE handle = reinterpret_cast<HANDLE>(operatingSystemHandle);
+    return handle != INVALID_HANDLE_VALUE
+        && GetFileInformationByHandle(handle, &information)
+        && (information.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY
+                                             | FILE_ATTRIBUTE_REPARSE_POINT)) == 0;
+#else
+    return true;
+#endif
+}
+
 inline bool openRegularFileForRead(QFile* file)
 {
     if (file == nullptr || !safeExistingFile(file->fileName())) return false;
@@ -153,22 +170,36 @@ inline bool openRegularFileForRead(QFile* file)
         file->close();
         return false;
     }
-#ifdef Q_OS_WIN
-    BY_HANDLE_FILE_INFORMATION information{};
-    const intptr_t operatingSystemHandle = _get_osfhandle(file->handle());
-    if (operatingSystemHandle == -1) {
+    if (!openFileHandleIsRegular(file)) {
         file->close();
         return false;
     }
-    const HANDLE handle = reinterpret_cast<HANDLE>(operatingSystemHandle);
-    if (handle == INVALID_HANDLE_VALUE
-        || !GetFileInformationByHandle(handle, &information)
-        || (information.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY
-                                             | FILE_ATTRIBUTE_REPARSE_POINT)) != 0) {
+    return true;
+}
+
+inline bool openRegularFileForAppend(QFile* file)
+{
+    if (file == nullptr) return false;
+    const SafePathKind kind = safePathKind(file->fileName());
+    QString before;
+    QIODevice::OpenMode mode = QIODevice::WriteOnly | QIODevice::Append;
+    if (kind == SafePathKind::RegularFile) {
+        if (!safeExistingFile(file->fileName())) return false;
+        before = QFileInfo(file->fileName()).canonicalFilePath();
+        mode |= QIODevice::ExistingOnly;
+    } else if (kind == SafePathKind::Missing) {
+        mode |= QIODevice::NewOnly;
+    } else {
+        return false;
+    }
+    if (!file->open(mode)) return false;
+    const QString after = QFileInfo(file->fileName()).canonicalFilePath();
+    if (!safeExistingFile(file->fileName()) || after.isEmpty()
+        || (!before.isEmpty() && !samePath(before, after))
+        || !openFileHandleIsRegular(file)) {
         file->close();
         return false;
     }
-#endif
     return true;
 }
 

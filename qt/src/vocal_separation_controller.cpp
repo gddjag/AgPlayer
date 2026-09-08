@@ -2604,7 +2604,14 @@ void VocalSeparationController::handleDownloadFailure(
 void VocalSeparationController::finishExhaustedDownload(
     const QString& source, const QString& diagnostic)
 {
-    if (runtimeOnlyDownload_ || source == "runtime") runtimeErrors_["directml"] = diagnostic;
+    QString visibleDiagnostic = diagnostic;
+    if (diagnostic == QStringLiteral("Unsafe partial download path")) {
+        visibleDiagnostic = tr("临时下载路径不安全，已停止下载。请更换模型目录后重试");
+    } else if (diagnostic == QStringLiteral("Download exceeded expected size")) {
+        visibleDiagnostic = tr("下载内容超过清单声明大小，已停止下载");
+    }
+    if (runtimeOnlyDownload_ || source == "runtime")
+        runtimeErrors_["directml"] = visibleDiagnostic;
     const QString modelId = downloadingModelId_;
     downloadQueue_.clear();
     runtimeOnlyDownload_ = false;
@@ -2615,12 +2622,12 @@ void VocalSeparationController::finishExhaustedDownload(
     totalDownloadBytes_ = 0;
     emit downloadProgressChanged();
     emit downloadStateChanged();
-    setError(diagnostic);
+    setError(visibleDiagnostic);
     configurationChanged();
     emit downloadSourcesExhausted(QVariantMap{
         {QStringLiteral("modelId"), modelId},
         {QStringLiteral("source"), source},
-        {QStringLiteral("diagnostic"), diagnostic},
+        {QStringLiteral("diagnostic"), visibleDiagnostic},
     });
 }
 

@@ -4036,6 +4036,10 @@ Actual encoding parameters may vary with system performance.</translation>
 <context>
         <name>MetadataEditPage</name>
         <message>
+            <source>元数据处理提示</source>
+            <translation>Metadata notice</translation>
+        </message>
+        <message>
             <source>自定义标签</source>
             <translation>Custom tags</translation>
         </message>
@@ -5357,6 +5361,10 @@ Clear: Remove all known aliases for this field.</translation>
     </context>
 <context>
         <name>SettingsPage</name>
+        <message>
+            <source>下载由浏览器完成。若下载卡顿、超时或失败，请返回官网切换 GitHub / R2 线路。</source>
+            <translation>Your browser handles downloads. If a download stalls, times out or fails, return to the official website and switch between GitHub and R2.</translation>
+        </message>
         <message>
             <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="1443" />
             <source>单曲循环</source>
@@ -6763,8 +6771,8 @@ Clear: Remove all known aliases for this field.</translation>
         </message>
         <message>
             <location filename="../qt/src/update_checker.cpp" line="44" />
-            <source>暂时无法检查更新，请稍后重试或访问官网。</source>
-            <translation>Unable to check for updates. Try again later or visit the official website.</translation>
+            <source>更新检查超时或失败，请前往官网选择其他下载线路（GitHub / R2）。</source>
+            <translation>The update check timed out or failed. Visit the official website to choose another download source (GitHub / R2).</translation>
         </message>
         <message>
             <location filename="../qt/src/update_checker.cpp" line="45" />
@@ -6774,6 +6782,14 @@ Clear: Remove all known aliases for this field.</translation>
     </context>
 <context>
         <name>VocalSeparationController</name>
+        <message>
+            <source>临时下载路径不安全，已停止下载。请更换模型目录后重试</source>
+            <translation>The temporary download path is unsafe. Download stopped. Choose another model directory and retry.</translation>
+        </message>
+        <message>
+            <source>下载内容超过清单声明大小，已停止下载</source>
+            <translation>The download exceeded its declared size and has been stopped.</translation>
+        </message>
         <message><source>运行时正在使用，无法配置</source><translation>The runtime is in use and cannot be configured.</translation></message>
         <message><source>无法启动配置</source><translation>Unable to start configuration.</translation></message>
         <message><source>配置已取消</source><translation>Configuration cancelled.</translation></message>
@@ -8355,6 +8371,22 @@ A pinned NVIDIA CUDA version is installed separately without changing the existi
 <context>
         <name>ExternalSeparationRuntime</name>
         <message>
+            <source>无法安全保存环境校验状态</source>
+            <translation>Unable to safely save the environment verification state</translation>
+        </message>
+        <message>
+            <source>无法安全清除失效的环境校验状态</source>
+            <translation>Unable to safely clear the invalid environment verification state</translation>
+        </message>
+        <message>
+            <source>验证已有 Python / PyTorch / FFmpeg 环境</source>
+            <translation>Verifying the existing Python / PyTorch / FFmpeg environment</translation>
+        </message>
+        <message>
+            <source>已有环境验证失败，使用已校验配置器修复（保留环境和缓存）</source>
+            <translation>Existing environment verification failed. Repairing with the verified installer while preserving the environment and cache.</translation>
+        </message>
+        <message>
             <source>下载配置器 %1 / %2 MB</source>
             <translation>Downloading setup package %1 / %2 MB</translation>
         </message>
@@ -8678,6 +8710,50 @@ A pinned NVIDIA CUDA version is installed separately without changing the existi
 </context>
 <context>
         <name>LibraryFileOperations</name>
+        <message>
+            <source>曲库更新失败，且文件名自动回滚未完成</source>
+            <translation>Library update failed; filename rollback could not be completed</translation>
+        </message>
+        <message>
+            <source>文件移动暂存失败，且覆盖目标自动恢复未完成</source>
+            <translation>Move staging failed; the original destination could not be restored</translation>
+        </message>
+        <message>
+            <source>文件移动提交失败，且自动回滚未完整完成</source>
+            <translation>Move commit failed; automatic rollback could not be completed</translation>
+        </message>
+        <message>
+            <source>曲库更新失败，且文件移动自动回滚未完成</source>
+            <translation>Library update failed; file move rollback could not be completed</translation>
+        </message>
+        <message>
+            <source>曲库更新失败，且覆盖目标自动恢复未完成</source>
+            <translation>Library update failed; the original destination could not be restored</translation>
+        </message>
+        <message>
+            <source>文件已移动，但覆盖备份清理失败</source>
+            <translation>File moved, but the overwritten destination backup could not be removed</translation>
+        </message>
+        <message>
+            <source>文件复制暂存失败，且覆盖目标自动恢复未完成</source>
+            <translation>Copy staging failed; the original destination could not be restored</translation>
+        </message>
+        <message>
+            <source>文件复制提交失败，且覆盖目标自动恢复未完成</source>
+            <translation>Copy commit failed; the original destination could not be restored</translation>
+        </message>
+        <message>
+            <source>文件已复制，但覆盖备份清理失败</source>
+            <translation>File copied, but the overwritten destination backup could not be removed</translation>
+        </message>
+        <message>
+            <source>%1；原目标保留在 %2</source>
+            <translation>%1; the original destination is preserved at %2</translation>
+        </message>
+        <message>
+            <source>%1；源文件保留在 %2</source>
+            <translation>%1; the source file is preserved at %2</translation>
+        </message>
         <message>
             <source>文件不存在或路径无效</source>
             <translation>The file does not exist or its path is invalid</translation>

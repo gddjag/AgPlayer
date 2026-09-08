@@ -1,6 +1,7 @@
 #include "library_file_operations.hpp"
 
 #include <QClipboard>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDir>
@@ -9,7 +10,111 @@
 #include <QGuiApplication>
 #include <QProcess>
 #include <QUrl>
+#include <QUuid>
 
+#include <utility>
+
+namespace {
+
+bool samePath(const QString& left, const QString& right)
+{
+    const QString normalizedLeft = QDir::cleanPath(
+        QFileInfo(left).absoluteFilePath());
+    const QString normalizedRight = QDir::cleanPath(
+        QFileInfo(right).absoluteFilePath());
+#ifdef Q_OS_WIN
+    return normalizedLeft.compare(normalizedRight, Qt::CaseInsensitive) == 0;
+#else
+    return normalizedLeft == normalizedRight;
+#endif
+}
+
+class ExistingTargetBackup final {
+public:
+    explicit ExistingTargetBackup(QString target)
+        : target_(std::move(target))
+    {}
+
+    bool preserve(bool overwrite)
+    {
+        if (!QFileInfo::exists(target_)) return true;
+        if (!overwrite) return false;
+        const QFileInfo targetInfo(target_);
+        backup_ = targetInfo.dir().filePath(
+            QStringLiteral(".agplayer-file-operation-%1.bak")
+                .arg(QUuid::createUuid().toString(QUuid::Id128)));
+        if (QFileInfo::exists(backup_) || !QFile::rename(target_, backup_)) {
+            backup_.clear();
+            return false;
+        }
+        return true;
+    }
+
+    bool restore()
+    {
+        if (backup_.isEmpty()) return true;
+        // A target appearing after preserve() belongs to another actor. Never
+        // delete an unknown file merely to put our backup back in place.
+        if (QFileInfo::exists(target_)) return false;
+        if (!QFile::rename(backup_, target_)) return false;
+        backup_.clear();
+        return true;
+    }
+
+    bool discard()
+    {
+        if (backup_.isEmpty()) return true;
+        if (QFileInfo::exists(backup_) && !QFile::remove(backup_)) return false;
+        backup_.clear();
+        return true;
+    }
+
+    const QString& recoveryPath() const noexcept { return backup_; }
+
+private:
+    QString target_;
+    QString backup_;
+};
+
+QString stagePath(const QString& path, const QString& operation)
+{
+    const QFileInfo info(path);
+    return info.dir().filePath(QStringLiteral(".agplayer-%1-%2.tmp")
+        .arg(operation, QUuid::createUuid().toString(QUuid::Id128)));
+}
+
+bool moveFile(const QString& source, const QString& target)
+{
+    if (QFile::rename(source, target)) return true;
+    if (!QFile::copy(source, target)) return false;
+    if (QFile::remove(source)) return true;
+    QFile::remove(target);
+    return false;
+}
+
+QString withRecoveryPath(const QString& message, const QString& path)
+{
+    return path.isEmpty()
+        ? message
+        : QCoreApplication::translate(
+              "LibraryFileOperations", "%1；原目标保留在 %2")
+              .arg(message, QDir::toNativeSeparators(path));
+}
+
+QString withSourceRecoveryPath(const QString& message, const QString& path)
+{
+    return QCoreApplication::translate(
+        "LibraryFileOperations", "%1；源文件保留在 %2")
+        .arg(message, QDir::toNativeSeparators(path));
+}
+
+QString recoveryMessage(const QString& message,
+                        const ExistingTargetBackup& backup)
+{
+    return withRecoveryPath(message, backup.recoveryPath());
+}
+
+} // namespace
 
 LibraryFileOperations::LibraryFileOperations(QObject* parent)
     : QObject(parent)
@@ -64,7 +169,12 @@ bool LibraryFileOperations::renameTrack(const QString& trackId, const QString& n
     const QString target = source.dir().filePath(
         safeName + (source.suffix().isEmpty() ? QString() : QStringLiteral(".") + source.suffix()));
     if (QFileInfo::exists(target) || !QFile::rename(sourcePath, target)) return false;
-    return library_->updateTrackPath(trackId, target);
+    if (library_->updateTrackPath(trackId, target)) return true;
+    if (!QFile::rename(target, sourcePath)) {
+        emit operationFailed(withSourceRecoveryPath(
+            tr("曲库更新失败，且文件名自动回滚未完成"), target));
+    }
+    return false;
 }
 
 int LibraryFileOperations::moveTracks(const QStringList& trackIds,
@@ -76,11 +186,48 @@ int LibraryFileOperations::moveTracks(const QStringList& trackIds,
     for (const QString& trackId : trackIds) {
         const QString source = library_->trackForId(trackId).value(QStringLiteral("path")).toString();
         const QString target = resolvedDestination(source, destinationFolder, conflictMode);
-        if (target.isEmpty()) continue;
-        if (conflictMode == Overwrite && QFileInfo::exists(target) && !QFile::remove(target)) continue;
-        bool success = QFile::rename(source, target);
-        if (!success && QFile::copy(source, target)) success = QFile::remove(source);
-        if (success && library_->updateTrackPath(trackId, target)) ++moved;
+        if (target.isEmpty() || samePath(source, target)) continue;
+        ExistingTargetBackup backup(target);
+        if (!backup.preserve(conflictMode == Overwrite)) continue;
+        const QString stage = stagePath(source, QStringLiteral("move-stage"));
+        if (QFileInfo::exists(stage) || !QFile::rename(source, stage)) {
+            if (!backup.restore()) {
+                emit operationFailed(recoveryMessage(
+                    tr("文件移动暂存失败，且覆盖目标自动恢复未完成"), backup));
+            }
+            continue;
+        }
+        if (!moveFile(stage, target)) {
+            const bool sourceRestored = !QFileInfo::exists(source)
+                && QFile::rename(stage, source);
+            const bool targetRestored = backup.restore();
+            if (!sourceRestored || !targetRestored) {
+                QString message = tr("文件移动提交失败，且自动回滚未完整完成");
+                if (!sourceRestored) {
+                    message = withSourceRecoveryPath(message, stage);
+                }
+                emit operationFailed(recoveryMessage(message, backup));
+            }
+            continue;
+        }
+        if (!library_->updateTrackPath(trackId, target)) {
+            if (!moveFile(target, source)) {
+                emit operationFailed(recoveryMessage(withSourceRecoveryPath(
+                    tr("曲库更新失败，且文件移动自动回滚未完成"),
+                    target), backup));
+                continue;
+            }
+            if (!backup.restore()) {
+                emit operationFailed(recoveryMessage(
+                    tr("曲库更新失败，且覆盖目标自动恢复未完成"), backup));
+            }
+            continue;
+        }
+        if (!backup.discard()) {
+            emit operationFailed(recoveryMessage(
+                tr("文件已移动，但覆盖备份清理失败"), backup));
+        }
+        ++moved;
     }
     return moved;
 }
@@ -94,9 +241,35 @@ int LibraryFileOperations::copyTracks(const QStringList& trackIds,
     for (const QString& trackId : trackIds) {
         const QString source = library_->trackForId(trackId).value(QStringLiteral("path")).toString();
         const QString target = resolvedDestination(source, destinationFolder, conflictMode);
-        if (target.isEmpty()) continue;
-        if (conflictMode == Overwrite && QFileInfo::exists(target) && !QFile::remove(target)) continue;
-        if (QFile::copy(source, target)) ++copied;
+        if (target.isEmpty() || samePath(source, target)) continue;
+        ExistingTargetBackup backup(target);
+        if (!backup.preserve(conflictMode == Overwrite)) continue;
+        const QString stage = stagePath(target, QStringLiteral("copy-stage"));
+        if (QFileInfo::exists(stage) || !QFile::copy(source, stage)) {
+            if (!backup.restore()) {
+                emit const_cast<LibraryFileOperations*>(this)->operationFailed(
+                    recoveryMessage(
+                        tr("文件复制暂存失败，且覆盖目标自动恢复未完成"),
+                        backup));
+            }
+            continue;
+        }
+        if (!QFile::rename(stage, target)) {
+            QFile::remove(stage);
+            if (!backup.restore()) {
+                emit const_cast<LibraryFileOperations*>(this)->operationFailed(
+                    recoveryMessage(
+                        tr("文件复制提交失败，且覆盖目标自动恢复未完成"),
+                        backup));
+            }
+            continue;
+        }
+        if (!backup.discard()) {
+            emit const_cast<LibraryFileOperations*>(this)->operationFailed(
+                recoveryMessage(tr("文件已复制，但覆盖备份清理失败"),
+                                backup));
+        }
+        ++copied;
     }
     return copied;
 }

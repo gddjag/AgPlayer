@@ -31,11 +31,11 @@ struct alignas(16) UniformBlock {
     float styleParameters[4]{}; // amplitude, motion, glow, cinema
     float styleDynamics[4]{}; // rotate, peak, color mode, gradient
     float styleToggles[4]{}; // ripples, cubes, meteors, breathing
-    float styleExtra[4]{}; // theme cycle, burst, stream highlight, reserved
+    float styleExtra[4]{}; // theme cycle, burst, stream highlight, meteor flight age
     float styleAudio[4]{}; // compression, response, range, center highlight
     float stylePresentation[4]{}; // rhythm, depth, clarity, rotation speed
-    float impact[4]{}; // strength, age, active, sensitivity
-    float waveSources[8][4]{}; // stage x/z, normalized phase, strength
+    float impact[4]{}; // core pulse strength/age, selected group + 1 (0=none), sensitivity
+    float waveSources[8][4]{}; // stage x/z, age + 32 * palette index (0..3), strength
     float audioEnvelope[4]{}; // fast bass, slow bass, beat strength, beat age
     float cameraPosition[4]{}; // world-space eye position
     float materialParameters[4]{}; // mode, softness, elasticity, ink density

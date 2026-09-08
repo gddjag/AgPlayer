@@ -5983,12 +5983,12 @@ TestCase {
         var downloadUpdate = findChild(page, "aboutDownloadUpdate")
         verify(updateStatus && checkUpdates && downloadUpdate)
         compare(updateStatus.text, SettingsController.updateChecker.statusText)
-        compare(downloadUpdate.visible, SettingsController.updateChecker.updateAvailable)
+        verify(downloadUpdate.visible, "Official download fallback must remain available")
         if (SettingsController.updateChecker.state === "unconfigured") {
             verify(checkUpdates.enabled)
             checkUpdates.clicked()
             compare(SettingsController.updateChecker.state, "unconfigured")
-            verify(!downloadUpdate.visible)
+            verify(downloadUpdate.visible)
         }
         page.close()
     }

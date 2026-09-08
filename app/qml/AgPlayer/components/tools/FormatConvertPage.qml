@@ -373,8 +373,8 @@ Rectangle {
                     onClicked: page.requestPlan()
                     contentItem: RowLayout {
                         spacing: 10
-                        ThemedIcon { source: parent.parent.icon.source; tint: Theme.accentText; sourceSize.width: Theme.iconSizeMd; sourceSize.height: Theme.iconSizeMd }
-                        Text { text: parent.parent.text; color: Theme.accentText; font.pixelSize: Theme.fontSizeBody }
+                        ThemedIcon { objectName: "convertAllButtonIcon"; source: convertAllButton.icon.source; tint: convertAllButton.enabled ? Theme.accentText : Theme.textDisabled; sourceSize.width: Theme.iconSizeMd; sourceSize.height: Theme.iconSizeMd }
+                        Text { objectName: "convertAllButtonLabel"; text: convertAllButton.text; color: convertAllButton.enabled ? Theme.accentText : Theme.textDisabled; font.pixelSize: Theme.fontSizeBody }
                     }
                 }
 

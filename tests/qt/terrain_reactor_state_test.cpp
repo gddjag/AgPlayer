@@ -13,6 +13,7 @@ class TerrainReactorStateTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void meteorFlightIsSingleSpacedAndLandsOnce();
     void travelingWaveGateSpacesMusicalEvents();
     void rendererEnvelopeKeepsShortNotesVisible();
     void ecoOverloadReducesActualBudgetAtEveryStage();
@@ -66,6 +67,26 @@ private slots:
     void ecoFramePacerLimitsWorkToThirtyFrames();
     void balancedFramePacerDoesNotCollapseToThirtyOnSixtyHertz();
 };
+
+void TerrainReactorStateTest::meteorFlightIsSingleSpacedAndLandsOnce()
+{
+    MeteorFlight flight;
+    QVERIFY(!flight.launch(0.0F, 8, 0.0F));
+    QVERIFY(flight.launch(0.0F, 8, 0.9F));
+    QCOMPARE(flight.group(), 0);
+    const float firstStrength = flight.strength();
+    QVERIFY(!flight.landed(0.55F));
+    QVERIFY(!flight.launch(0.2F, 8, 1.0F));
+    QVERIFY(flight.landed(0.57F));
+    QVERIFY(!flight.landed(0.8F));
+    QVERIFY(!flight.launch(2.9F, 8, 1.0F));
+    QVERIFY(flight.launch(4.0F, 8, 0.9F));
+    QCOMPARE(flight.group(), 1);
+    QVERIFY(flight.strength() != firstStrength);
+    flight.cancel();
+    QVERIFY(!flight.landed(5.0F));
+    QCOMPARE(flight.group(), -1);
+}
 
 void TerrainReactorStateTest::travelingWaveGateSpacesMusicalEvents()
 {

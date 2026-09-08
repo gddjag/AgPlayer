@@ -7,6 +7,13 @@ $ErrorActionPreference = 'Stop'
 function ConvertFrom-Utf8Base64([string]$Value) {
     [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Value))
 }
+function Test-IsProjectPath([string]$Path, [string]$Root) {
+    $normalizedRoot = [IO.Path]::GetFullPath($Root).TrimEnd([char[]]@(92, 47)) +
+        [IO.Path]::DirectorySeparatorChar
+    $normalizedPath = [IO.Path]::GetFullPath($Path)
+    return $normalizedPath.StartsWith($normalizedRoot,
+        [StringComparison]::OrdinalIgnoreCase)
+}
 $phase6Qml = @(
     'app/qml/AgPlayer/AudioToolsWindow.qml',
     'app/qml/AgPlayer/components/tools/AudioEditorPage.qml',
@@ -197,6 +204,35 @@ try {
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $temporaryProject)) {
             throw 'Unable to generate the temporary AgPlayer lupdate project.'
         }
+        $generatedProject = Get-Content -Raw -Encoding UTF8 -LiteralPath $temporaryProject |
+            ConvertFrom-Json
+        # CMake propagates Qt SDK paths/metatypes and build-generated files
+        # into this project. They are not AgPlayer translation sources, and
+        # letting lupdate traverse them makes this coverage check timing-dependent.
+        foreach ($subproject in @($generatedProject.subProjects)) {
+            $subproject.includePaths = @($subproject.includePaths | Where-Object {
+                (Test-IsProjectPath $_ $SourceRoot) -and
+                    -not (Test-IsProjectPath $_ $buildRoot)
+            })
+            $subproject.sources = @($subproject.sources | Where-Object {
+                (Test-IsProjectPath $_ $SourceRoot) -and
+                    -not (Test-IsProjectPath $_ $buildRoot)
+            })
+        }
+        $externalPaths = @(
+            foreach ($subproject in @($generatedProject.subProjects)) {
+                foreach ($path in @($subproject.includePaths) + @($subproject.sources)) {
+                    if (-not (Test-IsProjectPath $path $SourceRoot) -or
+                        (Test-IsProjectPath $path $buildRoot)) { $path }
+                }
+            }
+        )
+        if ($externalPaths.Count -gt 0) {
+            throw "Temporary lupdate project must exclude non-source paths: $($externalPaths[0])"
+        }
+        [IO.File]::WriteAllText($temporaryProject,
+            ($generatedProject | ConvertTo-Json -Depth 8),
+            [Text.UTF8Encoding]::new($false))
         $lupdateProject = $temporaryProject
     }
     & $lupdate -project $lupdateProject -no-obsolete -locations none -silent `
@@ -232,13 +268,26 @@ if (@(Compare-Object $expectedCatalogNames $actualCatalogNames).Count -ne 0) {
 foreach ($locale in @('zh', 'en')) {
     $catalogPath = Join-Path $SourceRoot "translations/agplayer_$locale.ts"
     [xml]$catalog = Get-Content -Raw -Encoding UTF8 -LiteralPath $catalogPath
+    # Index once instead of rescanning every message for every source. Keep
+    # the previous last-message-wins rule for duplicate catalog entries.
+    $messagesByContext = [Collections.Generic.Dictionary[string,object]]::new(
+        [StringComparer]::Ordinal)
+    foreach ($contextNode in @($catalog.TS.context)) {
+        $contextName = [string]$contextNode.name
+        if (-not $messagesByContext.ContainsKey($contextName)) {
+            $messagesByContext[$contextName] =
+                [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::Ordinal)
+        }
+        foreach ($catalogMessage in @($contextNode.message)) {
+            $messagesByContext[$contextName][[string]$catalogMessage.source] = $catalogMessage
+        }
+    }
     foreach ($context in $expected.Keys) {
-        $catalogMessages = @($catalog.TS.context |
-            Where-Object { [string]$_.name -eq $context } |
-            ForEach-Object { @($_.message) })
         foreach ($source in $expected[$context]) {
-            $message = @($catalogMessages |
-                Where-Object { [string]$_.source -eq $source }) | Select-Object -Last 1
+            $message = $null
+            if ($messagesByContext.ContainsKey($context)) {
+                [void]$messagesByContext[$context].TryGetValue($source, [ref]$message)
+            }
             if ($null -eq $message) {
                 throw "$locale catalog misses [$context] $source"
             }
@@ -251,6 +300,15 @@ foreach ($locale in @('zh', 'en')) {
             if ($locale -ne 'zh' -and $source -match '[\p{IsCJKUnifiedIdeographs}]' -and
                 $translation -match '[\p{IsCJKUnifiedIdeographs}]') {
                 throw "$locale catalog falls back to Chinese for [$context] $source"
+            }
+            # A non-empty translation can still be untranslated English. These
+            # contexts contain user-facing messages, not model or codec names.
+            if ($locale -eq 'zh' -and $context -in @(
+                'MetadataEditor', 'FileAssociationController', 'Main',
+                'PlayerPane', 'ResourceFolderController'
+            ) -and $source -match '[A-Za-z]{3}' -and
+                $translation -notmatch '[\p{IsCJKUnifiedIdeographs}]') {
+                throw "$locale catalog falls back to English for [$context] $source"
             }
             $sourcePlaceholders = @([regex]::Matches($source, '%(?:[1-9][0-9]?|n)') |
                 ForEach-Object { $_.Value } | Sort-Object)

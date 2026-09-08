@@ -11,9 +11,39 @@ class LibraryFileOperationsTest final : public QObject {
     Q_OBJECT
 private slots:
     void renamesCopiesMovesAndRelocatesWithoutSilentOverwrite();
+    void renameRollsBackWhenLibraryRejectsTargetPath();
+    void overwriteMoveRollsBackSourceAndExistingTargetWhenLibraryRejectsPath();
+    void overwriteCopyToSameFolderPreservesSource();
     void trashTracksReportsPartialFailureWithoutDroppingLibraryRows();
     void trackDetailsIsPureRead();
 };
+
+namespace {
+
+void writeFile(const QString& path, const QByteArray& contents)
+{
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    QCOMPARE(file.write(contents), qint64(contents.size()));
+}
+
+QByteArray readFile(const QString& path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) return {};
+    return file.readAll();
+}
+
+TrackRecord availableTrack(const QString& trackId, const QString& path)
+{
+    TrackRecord record;
+    record.trackId = trackId;
+    record.path = path;
+    record.available = true;
+    return record;
+}
+
+} // namespace
 
 void LibraryFileOperationsTest::trackDetailsIsPureRead()
 {
@@ -88,6 +118,81 @@ void LibraryFileOperationsTest::renamesCopiesMovesAndRelocatesWithoutSilentOverw
     QCOMPARE(library.trackForId(QStringLiteral("track"))
                  .value(QStringLiteral("path")).toString(),
              QDir::fromNativeSeparators(QFileInfo(relocated).absoluteFilePath()));
+}
+
+void LibraryFileOperationsTest::renameRollsBackWhenLibraryRejectsTargetPath()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString source = dir.filePath(QStringLiteral("source.mp3"));
+    const QString target = dir.filePath(QStringLiteral("renamed.mp3"));
+    writeFile(source, "source-audio");
+
+    LibraryModel library;
+    library.replaceAll({availableTrack(QStringLiteral("source"), source),
+                        availableTrack(QStringLiteral("reserved"), target)});
+    LibraryFileOperations operations;
+    operations.setLibraryModel(&library);
+
+    QVERIFY(!operations.renameTrack(QStringLiteral("source"),
+                                    QStringLiteral("renamed")));
+    QCOMPARE(readFile(source), QByteArray("source-audio"));
+    QVERIFY(!QFileInfo::exists(target));
+    QCOMPARE(library.trackForId(QStringLiteral("source"))
+                 .value(QStringLiteral("path")).toString(),
+             QDir::fromNativeSeparators(QFileInfo(source).absoluteFilePath()));
+    QVERIFY(QDir(dir.path()).entryList(
+        {QStringLiteral(".agplayer-*")}, QDir::Files).isEmpty());
+}
+
+void LibraryFileOperationsTest::overwriteMoveRollsBackSourceAndExistingTargetWhenLibraryRejectsPath()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString source = dir.filePath(QStringLiteral("song.mp3"));
+    const QString destination = dir.filePath(QStringLiteral("destination"));
+    QVERIFY(QDir().mkpath(destination));
+    const QString target = QDir(destination).filePath(QStringLiteral("song.mp3"));
+    writeFile(source, "source-audio");
+    writeFile(target, "existing-target-audio");
+
+    LibraryModel library;
+    library.replaceAll({availableTrack(QStringLiteral("source"), source),
+                        availableTrack(QStringLiteral("reserved"), target)});
+    LibraryFileOperations operations;
+    operations.setLibraryModel(&library);
+
+    QCOMPARE(operations.moveTracks({QStringLiteral("source")}, destination,
+                                   LibraryFileOperations::Overwrite), 0);
+    QCOMPARE(readFile(source), QByteArray("source-audio"));
+    QCOMPARE(readFile(target), QByteArray("existing-target-audio"));
+    QCOMPARE(library.trackForId(QStringLiteral("source"))
+                 .value(QStringLiteral("path")).toString(),
+             QDir::fromNativeSeparators(QFileInfo(source).absoluteFilePath()));
+    QVERIFY(QDir(dir.path()).entryList(
+        {QStringLiteral(".agplayer-*")}, QDir::Files).isEmpty());
+    QVERIFY(QDir(destination).entryList(
+        {QStringLiteral(".agplayer-*")}, QDir::Files).isEmpty());
+}
+
+void LibraryFileOperationsTest::overwriteCopyToSameFolderPreservesSource()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString source = dir.filePath(QStringLiteral("song.mp3"));
+    writeFile(source, "source-audio");
+
+    LibraryModel library;
+    library.replaceAll({availableTrack(QStringLiteral("source"), source)});
+    LibraryFileOperations operations;
+    operations.setLibraryModel(&library);
+
+    QCOMPARE(operations.copyTracks({QStringLiteral("source")}, dir.path(),
+                                   LibraryFileOperations::Overwrite), 0);
+    QCOMPARE(readFile(source), QByteArray("source-audio"));
+    QCOMPARE(library.trackForId(QStringLiteral("source"))
+                 .value(QStringLiteral("path")).toString(),
+             QDir::fromNativeSeparators(QFileInfo(source).absoluteFilePath()));
 }
 
 void LibraryFileOperationsTest::trashTracksReportsPartialFailureWithoutDroppingLibraryRows()

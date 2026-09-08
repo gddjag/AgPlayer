@@ -16,6 +16,20 @@ TestCase {
         anchors.fill: parent
     }
 
+    function test_generic_metadata_notice_is_compact_and_not_a_write_failure() {
+        var dialog = findChild(page, "metadataErrorDialog")
+        verify(dialog)
+        page.errorMessage = "未发现新的受支持音频文件。"
+        dialog.open()
+        try {
+            tryCompare(dialog, "opened", true)
+            compare(dialog.title, "元数据处理提示")
+            verify(dialog.width <= 360)
+            verify(dialog.height < 240)
+            compare(dialog.contentItem.color.toString(), Theme.primaryText.toString())
+        } finally { dialog.close(); page.errorMessage = "" }
+    }
+
     Component {
         id: navigationWindowComponent
         Window {

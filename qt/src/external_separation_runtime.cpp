@@ -26,6 +26,13 @@ static VocalDownloadFile uvArchive(bool mirror = false) {
             20716936, "5049375aa2a5162f132b2c1cb992e25d42d47d934cab8c174dbe6f60973dcc12"};
 }
 
+static const QByteArray& verifiedVrMarker()
+{
+    static const QByteArray marker = QByteArrayLiteral(
+        "audio-separator=0.30.2\nverification=external-separation-worker-v1\n");
+    return marker;
+}
+
 ExternalSeparationRuntime::ExternalSeparationRuntime(QString root,
     QNetworkAccessManager* network, QObject* parent)
     : QObject(parent), root_(std::move(root)), downloader_(network),
@@ -36,9 +43,7 @@ ExternalSeparationRuntime::ExternalSeparationRuntime(QString root,
     if (bundled.open(QIODevice::ReadOnly)) bundledWorker_ = bundled.readAll();
     // Updating the application updates its bridge, not the optional Python
     // installation. Reuse a verified environment without any network/process.
-    if (vocal_separation_paths::safeExistingFileWithin(python(), root_)
-        && vocal_separation_paths::safeExistingFileWithin(
-            QDir(root_).filePath("verified-vr-1"), root_))
+    if (vocal_separation_paths::safeExistingFileWithin(python(), root_))
         synchronizeWorker();
     connect(&downloader_, &VocalSeparationDownloader::progressChanged, this,
             [this](qint64 received, qint64 total) {
@@ -149,7 +154,9 @@ ExternalSeparationRuntime::ExternalSeparationRuntime(QString root,
         QTimer::singleShot(0, this, [this, generation, diagnostic] {
             if (generation != generation_) return;
             if (stopping_) finishStoppedInstaller();
-            else if (busy_ && !paused_) fail(tr("无法启动配置程序：%1").arg(diagnostic));
+            else if (busy_ && !paused_) {
+                stageFailed(tr("无法启动配置程序：%1").arg(diagnostic));
+            }
         });
     });
     connect(&process_, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
@@ -187,9 +194,16 @@ bool ExternalSeparationRuntime::ready() const
 {
     return vocal_separation_paths::safeExistingDirectory(root_)
         && vocal_separation_paths::safeExistingFileWithin(python(), root_)
-        && vocal_separation_paths::safeExistingFileWithin(
-            QDir(root_).filePath("verified-vr-1"), root_)
+        && markerMatchesVerificationContract()
         && workerMatchesBundle();
+}
+
+bool ExternalSeparationRuntime::markerMatchesVerificationContract() const
+{
+    const auto& expected = verifiedVrMarker();
+    QFile marker(QDir(root_).filePath("verified-vr-1"));
+    return vocal_separation_paths::openRegularFileForReadWithin(&marker, root_)
+        && marker.read(expected.size() + 1) == expected;
 }
 
 bool ExternalSeparationRuntime::workerMatchesBundle() const
@@ -219,15 +233,27 @@ bool ExternalSeparationRuntime::synchronizeWorker()
     return workerMatchesBundle();
 }
 
+bool ExternalSeparationRuntime::clearVerificationMarker()
+{
+    using namespace vocal_separation_paths;
+    const QString marker = QDir(root_).filePath("verified-vr-1");
+    const auto kind = safePathKind(marker);
+    return kind == SafePathKind::Missing
+        || (safeExistingFileWithin(marker, root_) && QFile::remove(marker));
+}
+
+void ExternalSeparationRuntime::verifyCachedConfigurator()
+{
+    const QString archive = QDir(root_).filePath("uv.zip");
+    step_ = -1;
+    cacheVerification_.setFuture(QtConcurrent::run([archive] {
+        return VocalSeparationInstaller::isVerifiedFile(uvArchive(), archive);
+    }));
+}
+
 bool ExternalSeparationRuntime::start()
 {
     if (busy_ || stopping_ || process_.state() != QProcess::NotRunning || cacheVerification_.isRunning()) return false;
-    if (ready()) {
-        // A repeated configure action must never reinstall into a working VR
-        // environment. The bundled bridge has already been checked by ready().
-        emit finished(true, {});
-        return true;
-    }
     if (!QDir().mkpath(root_)) return false;
     if (!vocal_separation_paths::safeExistingDirectory(root_)) return false;
     installationLock_ = std::make_unique<QLockFile>(root_ + QStringLiteral(".install.lock"));
@@ -235,24 +261,28 @@ bool ExternalSeparationRuntime::start()
     const auto unlockFailedStart = qScopeGuard([this] {
         if (!busy_) installationLock_.reset();
     });
-    const QString marker = QDir(root_).filePath("verified-vr-1");
-    if (QFileInfo::exists(marker) && !QFile::remove(marker)) return false;
     if (!synchronizeWorker()) return false;
+    const bool verifyExistingEnvironment = vocal_separation_paths::safeExistingFileWithin(python(), root_);
+    if (!verifyExistingEnvironment && !clearVerificationMarker()) return false;
     busy_ = true;
     paused_ = false;
     step_ = 0;
     mirror_ = false;
     archiveMirror_ = false;
+    verifyingExistingEnvironment_ = verifyExistingEnvironment;
+    repairAttempted_ = false;
     resumeRequested_ = false;
     stopError_.clear();
     appendLog(QStringLiteral("begin optional Python configuration"));
     emit changed();
+    if (verifyingExistingEnvironment_) {
+        step_ = 4;
+        emit progress(-1, tr("验证已有 Python / PyTorch / FFmpeg 环境"));
+        queueAdvance();
+        return true;
+    }
     emit progress(0, tr("外置 Python / PyTorch，约 450 MB 下载，约 1.5 GB 磁盘；不修改系统环境"));
-    const QString archive = QDir(root_).filePath("uv.zip");
-    step_ = -1;
-    cacheVerification_.setFuture(QtConcurrent::run([archive] {
-        return VocalSeparationInstaller::isVerifiedFile(uvArchive(), archive);
-    }));
+    verifyCachedConfigurator();
     return true;
 }
 
@@ -306,19 +336,28 @@ void ExternalSeparationRuntime::advance()
         launch(uv, {"venv", "--python", "3.11.13", "--managed-python", QDir(root_).filePath("env")});
     } else if (step_ == 3) {
         emit progress(-1, tr("下载 / 安装 PyTorch、VR 适配器和 FFmpeg（保留缓存，可暂停续装）"));
-        launch(uv, {"pip", "install", "--index-url", mirror_ ? "https://pypi.tuna.tsinghua.edu.cn/simple" : "https://pypi.org/simple",
-                    "--python", python(), "audio-separator[cpu]==0.30.2",
-                    "torch==2.5.1", "torchaudio==2.5.1", "torchvision==0.20.1", "numpy==1.26.4", "imageio-ffmpeg==0.6.0",
-                    "onnxruntime==1.20.1", "onnx==1.17.0", "numba==0.60.0", "scipy==1.14.1", "librosa==0.10.2.post1"});
+        QStringList arguments{"pip", "install"};
+        if (repairAttempted_) arguments.append("--reinstall");
+        arguments.append({"--index-url", mirror_ ? "https://pypi.tuna.tsinghua.edu.cn/simple" : "https://pypi.org/simple",
+                          "--python", python(), "audio-separator[cpu]==0.30.2",
+                          "torch==2.5.1", "torchaudio==2.5.1", "torchvision==0.20.1", "numpy==1.26.4", "imageio-ffmpeg==0.6.0",
+                          "onnxruntime==1.20.1", "onnx==1.17.0", "numba==0.60.0", "scipy==1.14.1", "librosa==0.10.2.post1"});
+        launch(uv, arguments);
     } else if (step_ == 4) {
         emit progress(-1, tr("验证实际 Python / PyTorch / FFmpeg 导入"));
         launch(python(), {workerScript(), "--verify"});
     } else {
+        if (!clearVerificationMarker()) {
+            fail(tr("无法安全保存环境校验状态")); return;
+        }
         QSaveFile marker(QDir(root_).filePath("verified-vr-1"));
-        if (!marker.open(QIODevice::WriteOnly) || marker.write("audio-separator=0.30.2") < 0 || !marker.commit()) {
+        const auto& expected = verifiedVrMarker();
+        if (!marker.open(QIODevice::WriteOnly) || marker.write(expected) != expected.size() || !marker.commit()) {
             fail(tr("无法保存环境校验状态")); return;
         }
         busy_ = false;
+        verifyingExistingEnvironment_ = false;
+        repairAttempted_ = false;
         appendLog(QStringLiteral("verified Python environment ready"));
         installationLock_.reset();
         emit progress(1, tr("Python VR 环境已就绪"));
@@ -414,6 +453,16 @@ void ExternalSeparationRuntime::finishStoppedInstaller()
 void ExternalSeparationRuntime::stageFailed(const QString& error)
 {
     appendLog(QStringLiteral("stage failure: %1").arg(error));
+    if (step_ == 4 && verifyingExistingEnvironment_ && !repairAttempted_) {
+        verifyingExistingEnvironment_ = false;
+        repairAttempted_ = true;
+        if (!clearVerificationMarker()) {
+            fail(tr("无法安全清除失效的环境校验状态")); return;
+        }
+        emit progress(-1, tr("已有环境验证失败，使用已校验配置器修复（保留环境和缓存）"));
+        verifyCachedConfigurator();
+        return;
+    }
     if ((step_ == 2 || step_ == 3) && !mirror_) {
         mirror_ = true;
         emit progress(-1, step_ == 2

@@ -19,6 +19,36 @@ TestCase {
 
     SignalSpy { id: acceptedSpy; signalName: "accepted" }
     SignalSpy { id: rejectedSpy; signalName: "rejected" }
+    function test_cache_confirmation_uses_themed_buttons_without_clearing_cache() {
+        var component = Qt.createComponent(Qt.resolvedUrl(
+                    "../../app/qml/AgPlayer/SettingsPage.qml"))
+        compare(component.status, Component.Ready, component.errorString())
+        var owner = component.createObject(testCase, {"width": 640, "height": 480})
+        verify(owner)
+        var previousTheme = SettingsController.themeMode
+        var previousLanguage = SettingsController.language
+        try {
+            SettingsController.language = "zh"
+            var dialog = findChild(owner, "clearCacheConfirmDialog")
+            verify(dialog)
+            for (var mode = 0; mode <= 1; ++mode) {
+                SettingsController.themeMode = mode
+                dialog.open()
+                tryCompare(dialog, "opened", true)
+                compare(dialog.width, 360)
+                compare(dialog.contentItem.color.toString(), Theme.textPrimary.toString())
+                compare(dialog.standardButton(Dialog.Yes).text, "是")
+                var no = dialog.standardButton(Dialog.No)
+                compare(no.text, "否")
+                mouseClick(no, no.width / 2, no.height / 2)
+                tryCompare(dialog, "visible", false)
+            }
+        } finally {
+            SettingsController.themeMode = previousTheme
+            SettingsController.language = previousLanguage
+            owner.destroy()
+        }
+    }
     function test_all_tag_dialogs_share_compact_localized_controls() {
         var files = ["TagManagementPanel.qml", "TrackList.qml"]
         var names = [["addTagDialog", "renameTagDialog", "removeTagDialog"],

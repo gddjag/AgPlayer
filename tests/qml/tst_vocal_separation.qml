@@ -21,6 +21,38 @@ TestCase {
         VocalSeparationPage { }
     }
 
+    function test_primary_action_text_remains_readable_in_both_themes() {
+        separationTestDriver.reset()
+        const originalTheme = SettingsController.themeMode
+        const button = findChild(page, "separationDetectModels")
+        verify(button)
+        try {
+            for (const theme of [0, 1]) {
+                SettingsController.themeMode = theme
+                tryCompare(button, "enabled", true)
+                compare(button.contentItem.color.toString(), "#ffffff")
+                compare(button.contentItem.font.pixelSize, button.font.pixelSize)
+                if (visualFixtureOutput)
+                    grabImage(page).save(visualFixtureOutput + "-palette-" + theme + ".png")
+            }
+        } finally { SettingsController.themeMode = originalTheme }
+    }
+
+    function test_model_help_header_follows_theme() {
+        const originalTheme = SettingsController.themeMode
+        const dialog = findChild(page, "separationBackupModelDialog")
+        verify(dialog)
+        try {
+            for (const theme of [0, 1]) {
+                SettingsController.themeMode = theme
+                dialog.open()
+                tryCompare(dialog, "opened", true)
+                compare(dialog.header.color.toString(), Theme.textPrimary.toString())
+                dialog.close()
+            }
+        } finally { dialog.close(); SettingsController.themeMode = originalTheme }
+    }
+
     function test_retainedCudaManifestRejectsCrossStemHash() {
         if (!realSeparationDirectory || realSeparationSourceUrl.toString().length === 0)
             skip("Opt-in retained CUDA files were not supplied")

@@ -48,6 +48,8 @@ try {
         Copy-Item -LiteralPath (Join-Path $SourceRoot $relativePath) `
             -Destination (Join-Path $scratch $relativePath)
     }
+    Copy-Item -LiteralPath (Join-Path $SourceRoot 'LICENSES/runtime') `
+        -Destination (Join-Path $scratch 'LICENSES/runtime') -Recurse
     $sourceBuild = Join-Path $SourceRoot $BuildDirectory
     Copy-Item -LiteralPath (Join-Path $sourceBuild 'CMakeCache.txt') `
         -Destination (Join-Path $scratch 'build\stale\CMakeCache.txt')

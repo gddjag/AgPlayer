@@ -19,6 +19,15 @@
 namespace {
 
 constexpr int kMaxAttempts = 3;
+constexpr qint64 kDownloadReadBufferSize = 64 * 1024;
+
+bool isSafePartialDownloadPath(const QString& path)
+{
+    const auto kind = vocal_separation_paths::safePathKind(path);
+    return kind == vocal_separation_paths::SafePathKind::Missing
+        || (kind == vocal_separation_paths::SafePathKind::RegularFile
+            && vocal_separation_paths::safeExistingFile(path));
+}
 
 bool isCancelled(const std::shared_ptr<std::atomic_bool>& cancellation)
 {
@@ -166,8 +175,11 @@ QString VocalSeparationInstaller::partPath(const QString& destination)
 
 qint64 VocalSeparationInstaller::resumeOffset(const QString& destination)
 {
-    const QFileInfo part(partPath(destination));
-    return part.isFile() ? part.size() : 0;
+    const QString path = partPath(destination);
+    return vocal_separation_paths::safePathKind(path)
+            == vocal_separation_paths::SafePathKind::RegularFile
+            && vocal_separation_paths::safeExistingFile(path)
+        ? QFileInfo(path).size() : 0;
 }
 
 bool VocalSeparationInstaller::hasDiskSpace(const QString& destination,
@@ -553,9 +565,14 @@ void VocalSeparationDownloader::issueRequest(quint64 operation)
         || m_reply != nullptr) {
         return;
     }
+    const QString partialPath = VocalSeparationInstaller::partPath(m_destination);
+    if (!isSafePartialDownloadPath(partialPath)) {
+        finishFailure(QStringLiteral("Unsafe partial download path"));
+        return;
+    }
     m_resumeOffset = VocalSeparationInstaller::resumeOffset(m_destination);
     if (m_resumeOffset > m_file.bytes) {
-        QFile::remove(VocalSeparationInstaller::partPath(m_destination));
+        QFile::remove(partialPath);
         m_resumeOffset = 0;
     }
     if (m_resumeOffset == m_file.bytes) {
@@ -573,6 +590,7 @@ void VocalSeparationDownloader::issueRequest(quint64 operation)
         request.setRawHeader("Range", "bytes=" + QByteArray::number(m_resumeOffset) + "-");
     }
     QNetworkReply* const reply = m_network->get(request);
+    reply->setReadBufferSize(kDownloadReadBufferSize);
     m_reply = reply;
     m_acceptResponseBody = !m_file.url.scheme().startsWith(QStringLiteral("http"),
                                                             Qt::CaseInsensitive);
@@ -590,12 +608,12 @@ void VocalSeparationDownloader::issueRequest(quint64 operation)
             }
             m_acceptResponseBody = true;
         } else if (m_resumeOffset > 0 && status == 200) {
-            QFile part(VocalSeparationInstaller::partPath(m_destination));
-            if (!part.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-                finishFailure(QStringLiteral("Cannot restart partial download"));
+            const QString partialPath = VocalSeparationInstaller::partPath(m_destination);
+            if (!isSafePartialDownloadPath(partialPath)
+                || !QFile::remove(partialPath)) {
+                finishFailure(QStringLiteral("Unsafe partial download path"));
                 return;
             }
-            part.close();
             m_resumeOffset = 0;
             m_acceptResponseBody = true;
         } else if (m_resumeOffset == 0 && status == 200) {
@@ -611,18 +629,39 @@ void VocalSeparationDownloader::issueRequest(quint64 operation)
             reply->readAll();
             return;
         }
-        QFile part(VocalSeparationInstaller::partPath(m_destination));
-        if (!part.open(QIODevice::WriteOnly | QIODevice::Append)) {
+        const QString partialPath = VocalSeparationInstaller::partPath(m_destination);
+        if (!isSafePartialDownloadPath(partialPath)) {
+            finishFailure(QStringLiteral("Unsafe partial download path"));
+            return;
+        }
+        QFile part(partialPath);
+        if (!vocal_separation_paths::openRegularFileForAppend(&part)) {
             finishFailure(QStringLiteral("Cannot write partial download"));
             return;
         }
-        const QByteArray bytes = reply->readAll();
-        if (bytes.isEmpty()) {
-            return;
-        }
-        if (part.write(bytes) != bytes.size()) {
-            part.close();
-            finishFailure(QStringLiteral("Cannot write complete partial download"));
+        qint64 currentSize = part.size();
+        while (reply->bytesAvailable() > 0) {
+            if (currentSize < 0 || currentSize > m_file.bytes) {
+                part.close();
+                finishFailure(QStringLiteral("Download exceeded expected size"));
+                return;
+            }
+            const qint64 remaining = m_file.bytes - currentSize;
+            const qint64 readLimit = remaining >= kDownloadReadBufferSize
+                ? kDownloadReadBufferSize : remaining + 1;
+            const QByteArray bytes = reply->read(readLimit);
+            if (bytes.isEmpty()) break;
+            if (bytes.size() > remaining) {
+                part.close();
+                finishFailure(QStringLiteral("Download exceeded expected size"));
+                return;
+            }
+            if (part.write(bytes) != bytes.size()) {
+                part.close();
+                finishFailure(QStringLiteral("Cannot write complete partial download"));
+                return;
+            }
+            currentSize += bytes.size();
         }
     });
     connect(reply, &QNetworkReply::downloadProgress, this,

@@ -81,7 +81,7 @@ void main()
     float motion = mix(0.2, 1.8, ubuf.styleParameters.y);
     float responseRadius = max(28.0, ubuf.styleAudio.z);
     float impactStrength = ubuf.impact.x;
-    float impactAge = ubuf.impact.y;
+    float flightAge = ubuf.styleExtra.w;
     float fastBass = ubuf.audioEnvelope.x;
     float slowBass = ubuf.audioEnvelope.y;
     float beatPulse = clamp(ubuf.audioEnvelope.z * 1.8
@@ -189,7 +189,7 @@ void main()
                 if (waveIndex >= waveCount) break;
                 vec4 source = ubuf.waveSources[waveIndex];
                 if (source.w <= 0.001) continue;
-                float age = source.z;
+                float age = mod(source.z, 32.0);
                 float waveRadius = age * 31.0;
                 float sourceDistance = length(position.xz - source.xy);
                 float ridgeDistance = sourceDistance - waveRadius;
@@ -203,7 +203,7 @@ void main()
                 waveField += weight;
                 // The pool advances once per emitted wave: each event retains
                 // its own palette anchor, rather than changing hue mid-flight.
-                int tintIndex = 1 + (waveIndex % 3);
+                int tintIndex = 1 + int(floor(source.z / 32.0));
                 travelingWaveTint += ubuf.colors[tintIndex].rgb * weight;
                 travelingWaveWeight += weight;
             }
@@ -320,7 +320,8 @@ void main()
                     * (0.075 + presence * 0.72 + beatPulse * 0.22)
                     * (flowingBand * 1.18 + sparkle * 1.36)
                     * sheenMask * (0.25 + ubuf.styleParameters.z * 1.9);
-        streamSheen *= 1.0 - step(0.60, randomValue);
+        // Stable irregular half of the columns; no frame-to-frame reshuffle.
+        streamSheen *= 1.0 - step(0.50, randomValue);
     } else if (type < 1.5) {
         position.y += sin(t * 0.74 * motion + randomValue * 18.0) * 1.95
                     + bandsLow.x * 2.2;
@@ -330,16 +331,12 @@ void main()
         scale.y *= mix(0.78, 1.45, randomValue);
     } else if (type < 2.5) {
         float group = floor(instanceData.w + 0.001);
-        float age = ubuf.impact.z > 0.5
-            ? clamp(impactAge / 0.78 + randomValue * 0.08 * step(0.5, group), 0.0, 1.0)
-            : 1.0;
-        float fall = clamp(age / 0.72, 0.0, 1.0);
-        float visibleFactor = group < 0.5
-            ? 1.0 - step(0.72, age)
-            : 1.0 - step(0.18, age);
-        position.y *= 1.0 - fall;
-        position.xz = mix(position.xz, vec2(0.0), fall * (group < 0.5 ? 0.86 : 0.0));
-        position.x += fall * 6.0 * step(0.5, group);
+        float fall = clamp(flightAge / 0.56, 0.0, 1.0);
+        float visibleFactor = (1.0 - step(0.5, abs(group + 1.0 - ubuf.impact.z)))
+            * (1.0 - step(0.56, flightAge));
+        vec2 offset = vec2(18.0 + randomValue * 14.0, -16.0);
+        position.xz += offset * (1.0 - fall);
+        position.y = mix(instancePosition.y, 0.15, fall);
         scale.y *= (1.0 + ubuf.effects.y * 1.7 + impactStrength * 3.0)
                  * visibleFactor;
         scale.xz *= visibleFactor;
@@ -366,39 +363,32 @@ void main()
     } else {
         float group = floor(instanceData.w + 0.001);
         float localValue = fract(instanceData.w);
-        float age = ubuf.impact.z > 0.5
-            ? clamp(impactAge / 0.78 + randomValue * 0.08 * step(0.5, group), 0.0, 1.0)
-            : 1.0;
+        float age = clamp(flightAge / 0.78, 0.0, 1.0);
+        float selected = 1.0 - step(0.5, abs(group + 1.0 - ubuf.impact.z));
         float collision = step(0.72, age);
         float collisionProgress = clamp((age - 0.72) / 0.28, 0.0, 1.0);
         float angle = localValue * 6.2831853;
         if (type < 4.5) {
             float delayedFall = clamp(age / 0.72 - localValue * 0.12,
                                       0.0, 1.0);
-            float visibleFactor = group < 0.5
-                ? 1.0 - step(0.72, age)
-                : 1.0 - step(0.18, age);
-            position.y *= 1.0 - delayedFall;
-            position.xz = mix(position.xz, vec2(0.0), delayedFall
-                            * (group < 0.5 ? 0.86 : 0.0));
-            position.x += delayedFall * 6.0 * step(0.5, group);
-            scale.y *= visibleFactor * (1.0 - localValue * 0.42);
+            float visibleFactor = selected * (1.0 - step(0.56, flightAge));
+            position.y = mix(instancePosition.y, 0.15, delayedFall);
+            position.xz += vec2(18.0 + randomValue * 14.0, -16.0) * (1.0 - delayedFall);
+            scale.y *= 4.0 * visibleFactor * (1.0 - localValue * 0.42);
             scale.xz *= visibleFactor;
             opacity = visibleFactor * (1.0 - localValue * 0.62);
         } else if (type < 5.5) {
             vec2 direction = vec2(cos(angle), sin(angle));
-            position.xz = group < 0.5 ? vec2(0.0) : position.xz + vec2(6.0, 0.0);
             position.xz += direction * collisionProgress * 12.0;
             scale.x *= 1.0 + collisionProgress * 2.0;
-            scale *= collision * sin(collisionProgress * 3.1415926);
-            opacity = collision * (1.0 - collisionProgress);
+            scale *= selected * collision * sin(collisionProgress * 3.1415926);
+            opacity = selected * collision * (1.0 - collisionProgress);
         } else {
             vec2 direction = vec2(cos(angle), sin(angle));
-            position.xz = group < 0.5 ? vec2(0.0) : position.xz + vec2(6.0, 0.0);
             position.xz += direction * collisionProgress * 8.0;
             position.y += sin(collisionProgress * 3.1415926) * 7.0;
-            scale *= collision * (1.0 - collisionProgress);
-            opacity = collision * (1.0 - collisionProgress);
+            scale *= selected * collision * (1.0 - collisionProgress);
+            opacity = selected * collision * (1.0 - collisionProgress);
         }
     }
 
@@ -500,11 +490,8 @@ void main()
     if ((type > 1.5 && type < 2.5) || (type > 3.5 && type < 4.5)) {
         // Orient both the mesh and normal along its actual trajectory; a
         // sheared vertical bar gave the old streak an unrelated direction.
-        float primary = 1.0 - step(0.5, floor(instanceData.w + 0.001));
-        vec3 direction = normalize(vec3(-instancePosition.x * 0.86 * primary
-                                         + 6.0 * (1.0 - primary),
-                                        -max(1.0, instancePosition.y),
-                                        -instancePosition.z * 0.86 * primary));
+        vec3 direction = normalize(vec3(-(18.0 + randomValue * 14.0),
+                                        -max(1.0, instancePosition.y), 16.0));
         vec3 across = normalize(cross(direction, vec3(0.0, 0.0, 1.0)));
         vec3 third = normalize(cross(across, direction));
         mat3 flightFrame = mat3(across, direction, third);
