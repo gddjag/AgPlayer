@@ -10,10 +10,6 @@ AgPlayer 是一款以轻量、简洁为设计方向的本地音频播放器，�
 
 [访问官网](https://agplayer.com) · [版本发布](https://github.com/gddjag/AgPlayer/releases)
 
-官网已上线，`agplayer.com` 与 `www.agplayer.com` 均已绑定 Cloudflare Pages 并启用 HTTPS。
-
-首个正式版本 **v1.0.0** 正在准备中，Windows 安装包尚未开放下载。后续正式安装包将按版本号发布到 GitHub Releases，并提供 R2 下载地址。
-
 ## 主要特点
 
 - **四种波形显示模式**：纯色波形、频彩波形、RGB 渐变与动态频谱，从振幅和频段等不同角度观察音乐。
