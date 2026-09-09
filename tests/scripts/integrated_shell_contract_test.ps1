@@ -67,7 +67,7 @@ Assert-Match $controls 'objectName:\s*"playerSecondaryActions"[\s\S]*ExperienceA
 if ($controls -match 'objectName:\s*"playerShellModeButton"') {
     throw 'Playback controls must not expose the removed shell-mode button.'
 }
-Assert-Match $experience 'Theme\.icon\("immersive-visual-mode"\)' 'Immersive mode must use the supplied icon asset.'
+Assert-Match $experience 'AnimatedImmersiveIcon\s*\{' 'Immersive mode must use the shared animated vector icon.'
 Assert-Match $experience 'Theme\.icon\("lyrics"\)' 'Lyrics must use the supplied icon asset.'
 
 Write-Host 'Integrated shell source contract passed.'

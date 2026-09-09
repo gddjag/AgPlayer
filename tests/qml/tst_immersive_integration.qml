@@ -470,6 +470,36 @@ TestCase {
         miniWindow = null
     }
 
+    function test_immersive_icon_animates_and_follows_theme_visibility() {
+        var action = findChild(mainWindow, "immersiveActionButton")
+        verify(action)
+        var icon = findChild(action, "animatedImmersiveIcon")
+        verify(icon, "The shared immersive action must use the animated icon")
+        var previousTheme = SettingsController.themeMode
+        try {
+            for (var mode = 0; mode < 2; ++mode) {
+                SettingsController.themeMode = mode
+                tryCompare(Theme, "isLight", mode === 1)
+                compare(icon.color.toString(), action.checked
+                        ? Theme.iconAccent.toString() : Theme.iconPrimary.toString())
+            }
+            tryCompare(icon, "animating", true)
+            var before = icon.phase
+            wait(100)
+            verify(icon.phase !== before)
+            action.visible = false
+            tryCompare(icon, "animating", false)
+            var stopped = icon.phase
+            wait(100)
+            compare(icon.phase, stopped)
+            action.visible = true
+            tryCompare(icon, "animating", true)
+        } finally {
+            action.visible = true
+            SettingsController.themeMode = previousTheme
+        }
+    }
+
     function test_shared_actions_reuse_one_state_source() {
         var mainActions = findChild(mainWindow, "experienceActions")
         var miniControls = findChild(miniWindow, "miniPlayerControls")

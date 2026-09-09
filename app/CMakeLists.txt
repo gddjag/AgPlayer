@@ -45,7 +45,6 @@ set(ICON_FILES
     ${CMAKE_SOURCE_DIR}/assets/icons/heart-fill.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/heart-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/information-line.svg
-    ${CMAKE_SOURCE_DIR}/assets/icons/immersive-visual-mode.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/keyboard-box-line.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/list-unordered.svg
     ${CMAKE_SOURCE_DIR}/assets/icons/lyrics.svg
@@ -148,6 +147,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/VideoTransportBar.qml
         qml/AgPlayer/components/IntegratedPlayerControls.qml
         qml/AgPlayer/components/ExperienceActions.qml
+        qml/AgPlayer/components/AnimatedImmersiveIcon.qml
         qml/AgPlayer/components/PlayerPresentation.js
         qml/AgPlayer/components/FallbackCoverImage.qml
         qml/AgPlayer/components/ImmersiveSurface.qml

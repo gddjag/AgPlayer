@@ -51,6 +51,7 @@ RowLayout {
     }
 
     ToolButton {
+        id: immersiveButton
         objectName: root.showImmersive ? "immersiveActionButton" : ""
         visible: root.showImmersive
         Layout.preferredWidth: root.buttonSize()
@@ -59,10 +60,14 @@ RowLayout {
         checkable: true
         checked: PlayerExperienceController.immersiveMode
                  !== PlayerExperienceController.Off
-        icon.source: Theme.icon("immersive-visual-mode")
-        icon.color: checked ? Theme.iconAccent : Theme.iconPrimary
-        icon.width: 22
-        icon.height: 22
+        contentItem: Item {
+            AnimatedImmersiveIcon {
+                anchors.centerIn: parent
+                width: 22
+                height: 22
+                color: immersiveButton.checked ? Theme.iconAccent : Theme.iconPrimary
+            }
+        }
         Accessible.name: checked ? qsTr("关闭沉浸视觉") : qsTr("开启沉浸视觉")
         onClicked: PlayerExperienceController.toggleImmersiveMode()
         ToolTip.text: Accessible.name

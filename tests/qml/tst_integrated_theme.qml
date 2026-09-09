@@ -376,10 +376,10 @@ TestCase {
         verify(findChild(shell, "miniPlayerButton"))
         compare(audioTools.parent,
                 findChild(shell, "integratedCenterControls"))
-        verify(immersive.icon.source.toString().endsWith(
-                   "/immersive-visual-mode.svg"))
-        compare(immersive.icon.width, 22)
-        compare(immersive.icon.height, 22)
+        var immersiveIcon = findChild(immersive, "animatedImmersiveIcon")
+        verify(immersiveIcon)
+        compare(immersiveIcon.width, 22)
+        compare(immersiveIcon.height, 22)
         var theme = findChild(shell, "themeModeButton")
         verify(theme)
         verify(theme.icon.source.toString().endsWith("/theme-skin.svg"))

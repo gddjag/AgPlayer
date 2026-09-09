@@ -2963,7 +2963,8 @@ TestCase {
             "themeModeButton", "immersiveActionButton", "miniPlayerButton"
         ])
         compare(findChild(rightActions, "themeModeButton").icon.width, 22)
-        compare(findChild(rightActions, "immersiveActionButton").icon.width, 22)
+        compare(findChild(rightActions, "animatedImmersiveIcon").width, 22)
+        compare(findChild(rightActions, "animatedImmersiveIcon").height, 22)
         compare(findChild(rightActions, "miniPlayerButton").icon.width, 22)
         verify(findChild(rightActions, "themeModeButton").width >= 32)
         verify(findChild(rightActions, "immersiveActionButton").width >= 32)
