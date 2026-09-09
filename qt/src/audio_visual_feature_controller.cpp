@@ -36,6 +36,87 @@ AudioVisualFeatureController::AudioVisualFeatureController(
 }
 
 bool AudioVisualFeatureController::active() const noexcept { return active_; }
+AudioVisualFeatureController::~AudioVisualFeatureController()
+{
+    setVisualPcmEnabled(false);
+}
+
+void AudioVisualFeatureController::setVisualPcmEnabled(bool enabled)
+{
+    if (playback_ && playback_->playerHandle())
+        ag_player_set_visual_pcm_enabled(playback_->playerHandle(), enabled ? 1 : 0);
+}
+
+void AudioVisualFeatureController::resetVisualPcm()
+{
+    const bool hadPcm = visualPcmSize_ != 0;
+    visualAnalyzer_.reset();
+    visualFeatureAnalyzer_.reset();
+    visualKickResponse_.reset();
+    visualFeatures_ = {};
+    visualKick_ = {};
+    visualSamplesSinceUpdate_ = 0;
+    visualPcm_.fill(0.0f);
+    visualSpectrum_.fill(0);
+    visualPcmSize_ = 0;
+    visualSampleRate_ = 0;
+    visualGeneration_ = 0;
+    visualNextIndex_ = 0;
+    // Separate from a completed FFT: consumers clear cached output without
+    // treating activation or repeated empty resets as new audio frames.
+    if (hadPcm) emit visualStateReset();
+}
+
+void AudioVisualFeatureController::setVisualKickSensitivity(int sensitivity)
+{
+    sensitivity = std::clamp(sensitivity, 0, 100);
+    if (visualKickSensitivity_ == sensitivity) return;
+    visualKickSensitivity_ = sensitivity;
+    emit visualKickSensitivityChanged();
+}
+
+void AudioVisualFeatureController::ingestVisualPcm(const ag_visual_pcm_snapshot& pcm)
+{
+    if (!active_) return;
+    // Empty reads carry the epoch but no sample rate or sample index.
+    if (pcm.sample_count == 0) {
+        if (pcm.generation != visualGeneration_) {
+            resetVisualPcm();
+            visualGeneration_ = pcm.generation;
+        }
+        return;
+    }
+    if (pcm.sample_count > visualPcm_.size() || pcm.sample_rate <= 0) {
+        resetVisualPcm();
+        return;
+    }
+    if (pcm.generation != visualGeneration_ || pcm.sample_rate != visualSampleRate_
+        || pcm.first_sample_index != visualNextIndex_) {
+        resetVisualPcm();
+    }
+    visualGeneration_ = pcm.generation;
+    visualSampleRate_ = pcm.sample_rate;
+    visualNextIndex_ = pcm.first_sample_index + pcm.sample_count;
+    const auto retained = std::min(visualPcmSize_, visualPcm_.size() - pcm.sample_count);
+    // Move the retained tail forward without allocating a second PCM buffer.
+    for (std::size_t i = 0; i < retained; ++i)
+        visualPcm_[i] = visualPcm_[visualPcmSize_ - retained + i];
+    std::copy_n(pcm.samples, pcm.sample_count, visualPcm_.begin() + retained);
+    visualPcmSize_ = retained + pcm.sample_count;
+    visualSamplesSinceUpdate_ += pcm.sample_count;
+    if (visualPcmSize_ == visualPcm_.size()) {
+        visualSpectrum_ = visualAnalyzer_.process(visualPcm_);
+        // First complete window uses all samples accumulated since reset;
+        // subsequent updates use only newly received contiguous samples.
+        // Empty reads never advance descriptor history or detector time.
+        const double dt = double(visualSamplesSinceUpdate_) / double(visualSampleRate_);
+        visualFeatures_ = visualFeatureAnalyzer_.update(visualSpectrum_, true, false);
+        visualKick_ = visualKickResponse_.process(visualSpectrum_, dt, visualKickSensitivity_);
+        visualSamplesSinceUpdate_ = 0;
+        ++visualSpectrumUpdateCount_;
+        emit visualSpectrumReady();
+    }
+}
 QVariantList AudioVisualFeatureController::bands() const { return bands_; }
 double AudioVisualFeatureController::energy() const noexcept { return energy_; }
 double AudioVisualFeatureController::spectralFlux() const noexcept { return spectralFlux_; }
@@ -73,11 +154,14 @@ double AudioVisualFeatureController::rightRms() const noexcept { return rightRms
 void AudioVisualFeatureController::setPlaybackController(PlaybackController* playback)
 {
     if (playback_ == playback) return;
+    setVisualPcmEnabled(false);
+    resetVisualPcm();
     disconnectPlaybackSignals();
     resetOutputLevels();
     playback_ = playback;
     resetBeatPosition();
     if (active_) connectPlaybackSignals();
+    setVisualPcmEnabled(active_);
     updateOutputLevelPolling();
 }
 
@@ -85,6 +169,8 @@ void AudioVisualFeatureController::setActive(bool active)
 {
     if (active_ == active) return;
     active_ = active;
+    setVisualPcmEnabled(active_);
+    resetVisualPcm();
     if (active_) {
         previousSpectrum_.clear();
         resetTransientHistory();
@@ -277,12 +363,14 @@ void AudioVisualFeatureController::connectPlaybackSignals()
     if (playback_ == nullptr) return;
     if (!playbackDestroyedConnection_) {
         playbackDestroyedConnection_ = connect(
-            playback_, &QObject::destroyed, this, [this] {
+            playback_, &PlaybackController::aboutToBeDestroyed, this, [this] {
+                setVisualPcmEnabled(false);
                 spectrumConnection_ = {};
                 positionConnection_ = {};
                 trackConnection_ = {};
                 playbackDestroyedConnection_ = {};
                 playback_ = nullptr;
+                resetVisualPcm();
                 updateOutputLevelPolling();
             });
     }
@@ -348,6 +436,11 @@ void AudioVisualFeatureController::updateOutputLevelPolling()
 
 void AudioVisualFeatureController::pollOutputLevels()
 {
+    if (active_ && playback_ && playback_->playerHandle()) {
+        ag_visual_pcm_snapshot pcm{};
+        if (ag_player_read_visual_pcm(playback_->playerHandle(), &pcm) == AG_OK)
+            ingestVisualPcm(pcm);
+    }
     ag_output_levels levels{};
     if (active_ && playback_ != nullptr
         && playback_->playerHandle() != nullptr

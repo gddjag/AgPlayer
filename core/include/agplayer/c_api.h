@@ -8,6 +8,21 @@ extern "C" {
 #endif
 
 typedef struct ag_player ag_player;
+/* Optional mono PCM tap after EQ/transition fade, before user volume, mute and
+ * ReplayGain (also after EQ for scratch playback). Disabled by default. Enable and read
+ * from one GUI thread only; do not race these calls with player destruction.
+ * Reads consume this independent tap, never the legacy spectrum queue.
+ * Returns newest <=1024 available samples, or sample_count=0 when none are fresh.
+ * Continuity requires equal generation AND first_sample_index equal to the
+ * previous first_sample_index + sample_count. Reset/seek/disable/overflow
+ * invalidate generation. Samples use the actual processing sample rate. */
+typedef struct ag_visual_pcm_snapshot {
+    float samples[1024];
+    size_t sample_count;
+    int sample_rate;
+    uint64_t generation;
+    uint64_t first_sample_index;
+} ag_visual_pcm_snapshot;
 typedef struct ag_metadata ag_metadata;
 typedef struct ag_waveform ag_waveform;
 typedef struct ag_cancel_token ag_cancel_token;
@@ -181,6 +196,8 @@ ag_result ag_player_equalizer_status(const ag_player* player,
 ag_result ag_player_set_muted(ag_player* player, int muted);
 ag_result ag_player_snapshot(const ag_player* player,
                              ag_playback_snapshot* snapshot);
+ag_result ag_player_set_visual_pcm_enabled(ag_player* player, int enabled);
+ag_result ag_player_read_visual_pcm(ag_player* player, ag_visual_pcm_snapshot* snapshot);
 /* Copies a real-time FFT snapshot from the audible PCM stream.
  * bin_count must be between 1 and 256. Bins are normalized to 0..1. */
 ag_result ag_player_spectrum(ag_player* player,

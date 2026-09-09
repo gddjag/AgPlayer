@@ -5,6 +5,8 @@
 
 #include "audio_visual_feature_controller.hpp"
 #include "player_experience_controller.hpp"
+#include "immersive_theme_catalog.hpp"
+#include "visual_terrain_response.hpp"
 
 #include <QColor>
 #include <QEvent>
@@ -176,12 +178,26 @@ protected:
             impactEvents_.discard(next.impactEvent);
             meteorFlight_.cancel();
             smoothedFeatures_ = AudioFeatures{};
+            referenceResponse_.reset();
+        }
+        const bool visualReset = next.referenceAudio != snapshot_.referenceAudio
+            || next.visualResetRevision != snapshot_.visualResetRevision;
+        if (visualReset) {
+            referenceResponse_.reset();
+            smoothedFeatures_ = {};
+            bassEnvelope_ = {};
+            beatEvents_.discard(next.beatEvent);
+            impactEvents_.discard(next.impactEvent);
+            punchEvents_.discard(next.punchEvent, camera_);
+            travelingWaves_.fill(QVector4D());
+            meteorFlight_.cancel();
         }
         if (next.running || failed_) publishStatus();
         const bool seedChanged = next.seed != snapshot_.seed;
         const bool layoutChanged = seedChanged
             || next.style.materialMode != snapshot_.style.materialMode
             || next.style.columnDensity != snapshot_.style.columnDensity
+            || next.style.topographyDensity != snapshot_.style.topographyDensity
             || next.quality != snapshot_.quality
             || next.style.floatingCubesEnabled != snapshot_.style.floatingCubesEnabled
             || next.style.meteorsEnabled != snapshot_.style.meteorsEnabled
@@ -264,6 +280,18 @@ protected:
                                                    float(animationElapsedSeconds));
         VisualParameters visual = mapVisualParameters(smoothedFeatures_,
             renderTimeSeconds, snapshot_.style);
+        if (snapshot_.referenceAudio) {
+            agplayer::VisualTerrainResponse::EqBands eq;
+            for (std::size_t i = 0; i < eq.size(); ++i) eq[i] = snapshot_.style.visualEqGains[i];
+            const auto& response = referenceResponse_.update(snapshot_.descriptors,
+                snapshot_.kickEnvelope, eq, {true,true,true,true,true,true,true,true},
+                animationElapsedSeconds, snapshot_.style.motionResponse * 100.0);
+            for (std::size_t i = 0; i < visual.bands.size(); ++i)
+                visual.bands[i] = float(response.bands[i]);
+            visual.energy = float(response.energy);
+            visual.spectralFlux = snapshot_.features.spectralFlux;
+            referenceDescriptors_ = response;
+        }
         bassEnvelope_.advance(visual.bands[0] * 0.72F
                                   + visual.bands[1] * 0.28F,
                               float(animationElapsedSeconds));
@@ -434,6 +462,8 @@ private:
             pipeline_->setRenderPassDescriptor(renderTarget()->renderPassDescriptor());
             pipeline_->setSampleCount(renderTarget()->sampleCount());
             pipeline_->setCullMode(QRhiGraphicsPipeline::Back);
+            // Clip-Y inversion below reverses winding as well as sample coverage.
+            pipeline_->setFrontFace(QRhiGraphicsPipeline::CW);
             pipeline_->setDepthTest(true);
             pipeline_->setDepthWrite(true);
             QRhiGraphicsPipeline::TargetBlend blend;
@@ -482,7 +512,7 @@ private:
         case TerrainReactorItem::Quality::High:
             if (quality_.stage() < DegradationStage::ReducedGrid) {
                 config.gridSize = 160;
-                gridCeiling = 192;
+                gridCeiling = snapshot_.style.topographyDensity >= 0 ? 224 : 192;
                 config.internalScale = 1.0F;
             }
             if (quality_.stage() < DegradationStage::ReducedRipples)
@@ -496,8 +526,9 @@ private:
         // Density controls instance count; column size changes only each
         // column's cross-section in the shader. At the reference 125% density,
         // High remains the exact 160 x 160 source grid.
-        config.gridSize = terrainGridSizeForDensity(
-            config.gridSize, snapshot_.style.columnDensity, gridCeiling);
+        config.gridSize = snapshot_.style.topographyDensity >= 0
+            ? std::min(referenceTerrainGridSize(snapshot_.style.topographyDensity), gridCeiling)
+            : terrainGridSizeForDensity(config.gridSize, snapshot_.style.columnDensity, gridCeiling);
         const SceneLayout layout = makeSceneLayout(snapshot_.seed,
             config.gridSize, config.floatingCount, config.meteorCount,
             config.particleCount);
@@ -569,17 +600,19 @@ private:
         const float distance = std::clamp(
             finiteOr(camera.distance, defaults.distance), 42.0F, 220.0F);
         const float punch = finiteUnit(camera.punch * snapshot_.style.cinemaShake);
-        projection.perspective(46.0F, aspect, 0.1F, 800.0F);
+        projection.perspective(45.0F, aspect, 0.1F, 1000.0F);
         const float radius = distance;
         const RenderDynamics dynamics = mapRenderDynamics(snapshot_.style);
-        const float lowAngleLift = 0.96F;
         QVector3D eye(radius * std::cos(pitch) * std::sin(yaw),
-                      9.0F + radius * std::sin(pitch) * lowAngleLift,
+                      radius * std::sin(pitch),
                       radius * std::cos(pitch) * std::cos(yaw));
         QMatrix4x4 view;
-        view.lookAt(eye, QVector3D(0.0F, 2.0F, 0.0F),
+        view.lookAt(eye, QVector3D(0.0F, 0.0F, 0.0F),
                     QVector3D(0.0F, 1.0F, 0.0F));
-        const QMatrix4x4 mvp = rhi()->clipSpaceCorrMatrix() * projection * view;
+        QMatrix4x4 mvp = rhi()->clipSpaceCorrMatrix() * projection * view;
+        // Preserve the reference's vertical multisample coverage orientation.
+        // QQuickRhiItem mirrors the texture back for normal scene presentation.
+        for (int column = 0; column < 4; ++column) mvp(1, column) *= -1;
 
         UniformBlock result;
         std::memcpy(result.mvp, mvp.constData(), sizeof(result.mvp));
@@ -592,10 +625,27 @@ private:
             result.colors[index][2] = color.z();
             result.colors[index][3] = color.w();
         }
+        // Independent theme roles stay precise through the snapshot.
+        for (int channel = 0; channel < 3; ++channel) {
+            result.bodyColor[channel] = snapshot_.style.bodyColor.w() > 0.5F
+                ? snapshot_.style.bodyColor[channel]
+                : result.colors[0][channel] * 0.92F + result.colors[1][channel] * 0.08F;
+            result.atmosphereColor[channel] = snapshot_.style.atmosphereColor.w() > 0.5F
+                ? snapshot_.style.atmosphereColor[channel] : result.colors[0][channel];
+        }
+        result.bodyColor[3] = 1.0F;
+        result.atmosphereColor[3] = 1.0F;
+        for (int channel = 0; channel < 4; ++channel)
+            result.rippleColor[channel] = snapshot_.style.rippleColor[channel];
         std::copy_n(snapshot_.style.visualEqGains.begin(), 4,
                     result.equalizerLow);
         std::copy_n(snapshot_.style.visualEqGains.begin() + 4, 4,
                     result.equalizerHigh);
+        if (snapshot_.referenceAudio) {
+            // EQ and smoothing have already been applied by the reference response.
+            std::fill_n(result.equalizerLow, 4, 1.0F);
+            std::fill_n(result.equalizerHigh, 4, 1.0F);
+        }
         result.parameters[0] = visual.energy;
         result.parameters[1] = visual.spectralFlux;
         result.parameters[2] = visual.rippleStrength;
@@ -637,10 +687,18 @@ private:
             result.waveSources[index][0] = source.x();
             result.waveSources[index][1] = source.y();
             const float age = std::max(0.0F, visual.timeSeconds - source.z());
-            result.waveSources[index][2] = std::min(age, 31.0F)
-                + float(waveTints_[index]) * 32.0F;
-            result.waveSources[index][3] = age < 2.8F / snapshot_.style.rippleDecay
-                ? source.w() * dynamics.rhythmStrength : 0.0F;
+            if (snapshot_.style.rippleColor.w() > 0.5F) {
+                // Reference events carry plain elapsed seconds and signed
+                // strength. Existing production events are normal (positive);
+                // white/snare event generation belongs to the later S layer.
+                result.waveSources[index][2] = age;
+                result.waveSources[index][3] = source.w();
+            } else {
+                result.waveSources[index][2] = std::min(age, 31.0F)
+                    + float(waveTints_[index]) * 32.0F;
+                result.waveSources[index][3] = age < 2.8F / snapshot_.style.rippleDecay
+                    ? source.w() * dynamics.rhythmStrength : 0.0F;
+            }
         }
         const BassEnvelopeSnapshot envelope = bassEnvelope_.snapshot();
         result.audioEnvelope[0] = envelope.fast;
@@ -665,6 +723,17 @@ private:
         result.waveParameters[0] = snapshot_.style.rippleStrength;
         result.waveParameters[1] = snapshot_.style.rippleWidth;
         result.waveParameters[2] = snapshot_.style.rippleDecay;
+        if (snapshot_.referenceAudio) {
+            result.waveParameters[3] = float(referenceDescriptors_.smoothness);
+            result.sceneLighting[3] = float(referenceDescriptors_.density);
+            result.timbre[0] = float(referenceDescriptors_.warmth);
+            result.timbre[1] = float(referenceDescriptors_.brightness);
+            result.timbre[2] = float(referenceDescriptors_.sharpness);
+        }
+        // Explicitly distinguish the interactive AgPlayer material from the
+        // zero-flag fixed reference fixtures. Runtime keeps the reference U/S
+        // inputs, then applies user-controlled clarity and gel light response.
+        result.timbre[3] = 1.0F;
         return result;
     }
 
@@ -753,6 +822,8 @@ private:
     DegradationStage lastStage_ = DegradationStage::Full;
     TerrainReactorItem::RenderSnapshot snapshot_;
     AudioFeatures smoothedFeatures_;
+    agplayer::VisualTerrainResponse referenceResponse_;
+    agplayer::VisualSpectrumFeatures::Features referenceDescriptors_;
     CameraMotion camera_;
     PunchEventConsumer punchEvents_;
     BeatEventConsumer beatEvents_;
@@ -815,6 +886,7 @@ TerrainReactorItem::TerrainReactorItem(QQuickItem* parent)
 {
     setSampleCount(1);
     setAlphaBlending(true);
+    setMirrorVertically(true);
     clock_.start();
     // A bounded GUI-thread heartbeat avoids a renderer self-update busy loop
     // when the native backend does not block on presentation. The existing
@@ -859,10 +931,12 @@ void TerrainReactorItem::setStyleSource(QObject* source)
     styleSource_ = typed;
     if (styleSource_ != nullptr) {
         const auto capture = [this] { copyStyleSource(); };
+        styleConnections_.append(connect(styleSource_, &PlayerExperienceController::themeChanged, this, capture));
         styleConnections_.append(connect(styleSource_, &PlayerExperienceController::materialModeChanged, this, capture));
         styleConnections_.append(connect(styleSource_, &PlayerExperienceController::materialSoftnessChanged, this, capture));
         styleConnections_.append(connect(styleSource_, &PlayerExperienceController::columnSizeChanged, this, capture));
         styleConnections_.append(connect(styleSource_, &PlayerExperienceController::columnDensityChanged, this, capture));
+        styleConnections_.append(connect(styleSource_, &PlayerExperienceController::topographyDensityChanged, this, capture));
         styleConnections_.append(connect(styleSource_, &PlayerExperienceController::columnOpacityChanged, this, capture));
         styleConnections_.append(connect(styleSource_, &PlayerExperienceController::reactorBrightnessChanged, this, capture));
         styleConnections_.append(connect(styleSource_, &PlayerExperienceController::columnInnerLightChanged, this, capture));
@@ -989,14 +1063,33 @@ void TerrainReactorItem::setFeatureSource(QObject* source)
     }
     if (featureSource_ == accepted) return;
     if (featureConnection_) disconnect(featureConnection_);
+    if (visualConnection_) disconnect(visualConnection_);
+    if (visualResetConnection_) disconnect(visualResetConnection_);
     if (impactConnection_) disconnect(impactConnection_);
     if (sourceDestroyedConnection_) disconnect(sourceDestroyedConnection_);
     featureSource_ = accepted;
+    ++visualResetRevision_;
+    lastVisualUpdate_ = 0;
+    visualBeatCount_ = 0;
+    liveDescriptors_ = {};
+    liveKickEnvelope_ = 0;
     featureSourceProvidesBeat_ = featureSource_ != nullptr
         && featureSource_->metaObject()->indexOfProperty("beatRevision") >= 0;
     featureSourceProvidesImpact_ = featureSource_ != nullptr
         && featureSource_->metaObject()->indexOfProperty("impactRevision") >= 0;
     if (featureSource_ != nullptr) {
+        if (auto* visual = qobject_cast<AudioVisualFeatureController*>(featureSource_)) {
+            if (styleSource_)
+                visual->setVisualKickSensitivity(styleSource_->rhythmSensitivity());
+            visualConnection_ = connect(visual, &AudioVisualFeatureController::visualSpectrumReady,
+                                       this, &TerrainReactorItem::copyVisualSource);
+            visualResetConnection_ = connect(visual, &AudioVisualFeatureController::visualStateReset,
+                this, [this] {
+                    ++visualResetRevision_;
+                    visualBeatCount_ = 0;
+                    copyVisualSource();
+                });
+        }
         const QMetaObject* sourceMeta = featureSource_->metaObject();
         const int signalIndex = sourceMeta->indexOfSignal("featuresChanged()");
         const int slotIndex = metaObject()->indexOfSlot("copyFeatureSource()");
@@ -1012,9 +1105,17 @@ void TerrainReactorItem::setFeatureSource(QObject* source)
         sourceDestroyedConnection_ = connect(featureSource_, &QObject::destroyed,
             this, [this] {
                 featureSource_.clear();
+                ++visualResetRevision_;
+                liveDescriptors_ = {};
+                liveKickEnvelope_ = 0;
+                liveFeatures_ = {};
+                applyCurrentFeatures(liveFeatures_);
                 emit featureSourceChanged();
             });
         copyFeatureSource();
+    } else {
+        liveFeatures_ = {};
+        applyCurrentFeatures(liveFeatures_);
     }
     emit featureSourceChanged();
 }
@@ -1026,7 +1127,15 @@ void TerrainReactorItem::setUseSyntheticFeatures(bool enabled)
 {
     if (useSyntheticFeatures_ == enabled) return;
     useSyntheticFeatures_ = enabled;
-    applyCurrentFeatures(enabled ? syntheticFeatures_ : liveFeatures_);
+    if (enabled || styleSource_.isNull() || styleSource_->themeId().isEmpty()
+        || qobject_cast<AudioVisualFeatureController*>(featureSource_) == nullptr)
+        applyCurrentFeatures(enabled ? syntheticFeatures_ : liveFeatures_);
+    else {
+        ++visualResetRevision_;
+        ++featureRevision_;
+        emit featureRevisionChanged();
+        scheduleIfRunnable();
+    }
     emit useSyntheticFeaturesChanged();
 }
 quint32 TerrainReactorItem::deterministicSeed() const noexcept
@@ -1239,6 +1348,12 @@ TerrainReactorItem::RenderSnapshot TerrainReactorItem::snapshotForRenderer() con
 {
     RenderSnapshot result;
     result.features = useSyntheticFeatures_ ? syntheticFeatures_ : liveFeatures_;
+    result.referenceAudio = !useSyntheticFeatures_ && !styleSource_.isNull()
+        && !styleSource_->themeId().isEmpty()
+        && qobject_cast<AudioVisualFeatureController*>(featureSource_) != nullptr;
+    result.descriptors = liveDescriptors_;
+    result.kickEnvelope = liveKickEnvelope_;
+    result.visualResetRevision = visualResetRevision_;
     result.style = renderStyle_;
     result.camera = camera_.snapshot();
     result.punchEvent = pendingPunch_;
@@ -1318,7 +1433,31 @@ void TerrainReactorItem::copyStyleSource()
     next.idleBreathingEnabled = styleSource_->idleBreathingEnabled();
     next.themeCycleEnabled = styleSource_->themeCycleEnabled();
     next.streamHighlightEnabled = styleSource_->streamHighlightEnabled();
+    using namespace agplayer::immersive;
+    const QByteArray themeId = styleSource_->themeId().toUtf8();
+    if (const auto* theme = findBuiltInTheme(std::string_view(themeId.constData(),
+                                                            std::size_t(themeId.size())))) {
+        const auto encodedRole = [theme](ThemeColorRole role) {
+            const auto value = workingLinearToSrgb(toWorkingLinear(theme->colors[themeColorIndex(role)]));
+            return QVector4D(value.red, value.green, value.blue, 1.0F);
+        };
+        next.colors = {encodedRole(ThemeColorRole::BasePrimary),
+                       encodedRole(ThemeColorRole::CoolCore),
+                       encodedRole(ThemeColorRole::WarmCore),
+                       encodedRole(ThemeColorRole::CoolEdge),
+                       encodedRole(ThemeColorRole::WarmEdge)};
+        next.bodyColor = encodedRole(ThemeColorRole::BaseSecondary);
+        next.rippleColor = encodedRole(ThemeColorRole::Ripple);
+        next.topographyDensity = styleSource_->topographyDensity();
+        next.atmosphereColor = encodedRole(ThemeColorRole::Fog);
+        next.glowIntensity = float(styleSource_->themeGlow());
+        next.colorMode = RenderColorMode::MultiRegion;
+        next.themeCycleEnabled = false;
+    }
     renderStyle_ = next;
+    if (auto* visual = qobject_cast<AudioVisualFeatureController*>(featureSource_))
+        visual->setVisualKickSensitivity(styleSource_->rhythmSensitivity());
+    copyFeatureSource();
     ++styleRevision_;
     emit styleRevisionChanged();
     scheduleIfRunnable();
@@ -1327,6 +1466,11 @@ void TerrainReactorItem::copyStyleSource()
 void TerrainReactorItem::copyFeatureSource()
 {
     if (featureSource_ == nullptr) return;
+    if (styleSource_ && !styleSource_->themeId().isEmpty()
+        && qobject_cast<AudioVisualFeatureController*>(featureSource_)) {
+        copyVisualSource();
+        return;
+    }
     AudioFeatures next;
     const QVariantList bands = featureSource_->property("bands").toList();
     for (int index = 0; index < 8; ++index) {
@@ -1360,6 +1504,39 @@ void TerrainReactorItem::copyFeatureSource()
     }
     liveFeatures_ = next;
     if (!useSyntheticFeatures_) applyCurrentFeatures(liveFeatures_);
+}
+
+void TerrainReactorItem::copyVisualSource()
+{
+    const auto* source = qobject_cast<AudioVisualFeatureController*>(featureSource_);
+    if (!source || !styleSource_ || styleSource_->themeId().isEmpty()) return;
+    liveDescriptors_ = source->visualFeatures();
+    liveKickEnvelope_ = source->visualKick().envelope;
+    AudioFeatures next;
+    for (std::size_t i = 0; i < next.bands.size(); ++i)
+        next.bands[i] = float(liveDescriptors_.bands[i]);
+    next.energy = float(liveDescriptors_.energy);
+    next.spectralFlux = float(source->visualKick().flux);
+    next.kick = float(source->visualKick().onset);
+    const auto revision = source->visualSpectrumUpdateCount();
+    if (revision != lastVisualUpdate_ && next.kick > 0) {
+        pendingBeat_.strength = float(source->visualKick().confidence);
+        ++pendingBeat_.revision;
+        emit beatChanged();
+        if (++visualBeatCount_ % 8 == 0) {
+            pendingImpact_.strength = pendingBeat_.strength;
+            ++pendingImpact_.revision;
+            emit impactChanged();
+        }
+    }
+    lastVisualUpdate_ = revision;
+    liveFeatures_ = next;
+    if (!useSyntheticFeatures_) {
+        // Reference onsets only move the terrain: never raise camera punch events.
+        ++featureRevision_;
+        emit featureRevisionChanged();
+        scheduleIfRunnable();
+    }
 }
 
 void TerrainReactorItem::applyCurrentFeatures(const AudioFeatures& features)

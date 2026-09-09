@@ -1,5 +1,7 @@
 #include "audio_visual_feature_controller.hpp"
 #include "playback_controller.hpp"
+#include "visual_spectrum_features.hpp"
+#include "visual_kick_response.hpp"
 
 #include <agplayer/c_api.h>
 
@@ -10,10 +12,18 @@
 #include <limits>
 #include <memory>
 
+
 class AudioVisualFeatureControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void visualResetNotifiesOnceAfterClearing();
+    void visualKickSensitivityControlsDetector();
+    void visualPcmUpdatesDescriptorsBeforeReadyAndSkipsEmptyReads();
+    void visualPcmDescriptorHistoryResets_data();
+    void visualPcmDescriptorHistoryResets();
+    void visualPcmAssemblesAndResets();
+    void visualPcmLifecycle();
     void reliableBpmEmitsOnceEveryEightBeats();
     void reliableBpmEmitsRegularBeatPulseAndEightBeatImpact();
     void seeksAndTrackChangesDoNotEmitDuplicateImpacts();
@@ -31,6 +41,282 @@ private slots:
     void fadeOutPublicationResidueDoesNotLightBeatGrid_data();
     void fadeOutPublicationResidueDoesNotLightBeatGrid();
 };
+
+void AudioVisualFeatureControllerTest::visualResetNotifiesOnceAfterClearing()
+{
+    AudioVisualFeatureController controller;
+    QSignalSpy reset(&controller, SIGNAL(visualStateReset()));
+    QVERIFY(reset.isValid());
+    controller.setActive(true);
+    QCOMPARE(reset.count(), 0);
+    ag_visual_pcm_snapshot pcm{};
+    pcm.generation = 1;
+    pcm.sample_rate = 48000;
+    pcm.sample_count = 1024;
+    std::fill(std::begin(pcm.samples), std::end(pcm.samples), .1f);
+    controller.ingestVisualPcm(pcm);
+    QCOMPARE(reset.count(), 0);
+    QVERIFY(controller.visualFeatures().energy > 0);
+    controller.setActive(false);
+    QCOMPARE(reset.count(), 1);
+    QCOMPARE(controller.visualFeatures().energy, 0.0);
+    QCOMPARE(controller.visualKick().envelope, 0.0);
+    controller.resetVisualPcm();
+    QCOMPARE(reset.count(), 1);
+    controller.setActive(true);
+    controller.ingestVisualPcm(pcm);
+    ag_visual_pcm_snapshot empty{};
+    empty.generation = 2;
+    controller.ingestVisualPcm(empty);
+    QCOMPARE(reset.count(), 2);
+    QCOMPARE(controller.visualFeatures().energy, 0.0);
+    controller.ingestVisualPcm(empty);
+    QCOMPARE(reset.count(), 2);
+}
+
+void AudioVisualFeatureControllerTest::visualKickSensitivityControlsDetector()
+{
+    AudioVisualFeatureController controller;
+    QCOMPARE(controller.property("visualKickSensitivity").toInt(), 100);
+    QVERIFY(controller.setProperty("visualKickSensitivity", -20));
+    QCOMPARE(controller.property("visualKickSensitivity").toInt(), 0);
+    controller.setActive(true);
+    ag_visual_pcm_snapshot pcm{};
+    pcm.generation = 1;
+    pcm.sample_rate = 48000;
+    pcm.sample_count = 1024;
+    controller.ingestVisualPcm(pcm);
+    QCOMPARE(controller.visualKick().threshold, .05);
+    QVERIFY(controller.setProperty("visualKickSensitivity", 120));
+    QCOMPARE(controller.property("visualKickSensitivity").toInt(), 100);
+    pcm.first_sample_index = 1024;
+    controller.ingestVisualPcm(pcm);
+    QCOMPARE(controller.visualKick().threshold, .016);
+}
+
+void AudioVisualFeatureControllerTest::visualPcmUpdatesDescriptorsBeforeReadyAndSkipsEmptyReads()
+{
+    AudioVisualFeatureController controller;
+    controller.setActive(true);
+    ag_visual_pcm_snapshot pcm{};
+    pcm.sample_rate = 48000;
+    pcm.generation = 1;
+    pcm.sample_count = 512;
+    std::fill(std::begin(pcm.samples), std::end(pcm.samples), .1f);
+    int readyCount = 0;
+    connect(&controller, &AudioVisualFeatureController::visualSpectrumReady, this, [&] {
+        ++readyCount;
+        QVERIFY(controller.visualFeatures().energy > 0);
+        QVERIFY(controller.visualKick().level > 0);
+    });
+    controller.ingestVisualPcm(pcm);
+    QCOMPARE(readyCount, 0);
+    QCOMPARE(controller.visualFeatures().energy, 0.0);
+    pcm.first_sample_index = 512;
+    controller.ingestVisualPcm(pcm);
+    QCOMPARE(readyCount, 1);
+    const auto first = controller.visualFeatures();
+    const auto kick = controller.visualKick();
+    QVERIFY(first.energy > 0);
+    // The independently tested detector is an oracle for the controller's dt wiring.
+    agplayer::visual::KickResponse detector;
+    const auto firstExpected = detector.process(controller.visualSpectrum(), 1024.0 / 48000.0);
+    QCOMPARE(kick.level, firstExpected.level);
+    QCOMPARE(kick.envelope, firstExpected.envelope);
+    ag_visual_pcm_snapshot empty{};
+    empty.generation = 1;
+    for (int i = 0; i < 10; ++i) controller.ingestVisualPcm(empty);
+    QCOMPARE(readyCount, 1);
+    QCOMPARE(controller.visualFeatures().energy, first.energy);
+    QCOMPARE(controller.visualFeatures().smoothness, first.smoothness);
+    QCOMPARE(controller.visualKick().envelope, kick.envelope);
+    QCOMPARE(controller.visualKick().flux, kick.flux);
+    pcm.first_sample_index = 1024;
+    pcm.sample_count = 128;
+    controller.ingestVisualPcm(pcm);
+    QCOMPARE(readyCount, 2);
+    const auto nextExpected = detector.process(controller.visualSpectrum(), 128.0 / 48000.0);
+    QCOMPARE(controller.visualKick().level, nextExpected.level);
+    QCOMPARE(controller.visualKick().envelope, nextExpected.envelope);
+    QVERIFY(controller.visualFeatures().energy > first.energy);
+    QCOMPARE(controller.energy(), 0.0);
+    QCOMPARE(controller.beatRevision(), 0);
+    QCOMPARE(controller.derivedUpdateCount(), 0);
+}
+
+void AudioVisualFeatureControllerTest::visualPcmDescriptorHistoryResets_data()
+{
+    QTest::addColumn<int>("interruption");
+    QTest::newRow("generation") << 0;
+    QTest::newRow("sample-rate") << 1;
+    QTest::newRow("sample-index") << 2;
+    QTest::newRow("empty-generation") << 3;
+    QTest::newRow("inactive") << 4;
+}
+
+void AudioVisualFeatureControllerTest::visualPcmDescriptorHistoryResets()
+{
+    QFETCH(int, interruption);
+    AudioVisualFeatureController controller;
+    controller.setActive(true);
+    ag_visual_pcm_snapshot pcm{};
+    pcm.generation = 1;
+    pcm.sample_rate = 48000;
+    pcm.sample_count = 1024;
+    std::fill(std::begin(pcm.samples), std::end(pcm.samples), .2f);
+    controller.ingestVisualPcm(pcm);
+    pcm.first_sample_index = 1024;
+    controller.ingestVisualPcm(pcm);
+    QVERIFY(controller.visualFeatures().energy > 0);
+    QVERIFY(controller.visualKick().envelope > 0);
+    pcm.first_sample_index = 2048;
+    pcm.sample_count = 256;
+    if (interruption == 0) ++pcm.generation;
+    if (interruption == 1) pcm.sample_rate = 44100;
+    if (interruption == 2) ++pcm.first_sample_index;
+    if (interruption == 3) { ++pcm.generation; pcm.sample_count = 0; }
+    if (interruption == 4) controller.setActive(false);
+    controller.ingestVisualPcm(pcm);
+    const auto reset = controller.visualFeatures();
+    QCOMPARE(reset.energy, 0.0);
+    QCOMPARE(reset.warmth, 0.0);
+    QCOMPARE(reset.brightness, 0.0);
+    QCOMPARE(reset.sharpness, 0.0);
+    QCOMPARE(reset.smoothness, 0.0);
+    QCOMPARE(reset.density, 0.0);
+    QCOMPARE(reset.spectralCentroid, 0.0);
+    for (double band : reset.bands) QCOMPARE(band, 0.0);
+    const auto kick = controller.visualKick();
+    QCOMPARE(kick.level, 0.0);
+    QCOMPARE(kick.flux, 0.0);
+    QCOMPARE(kick.threshold, 0.0);
+    QCOMPARE(kick.onset, 0.0);
+    QCOMPARE(kick.envelope, 0.0);
+    QCOMPARE(kick.confidence, 0.0);
+    QCOMPARE(kick.windowIndex, std::size_t(0));
+    // Same post-interruption samples must behave exactly like a fresh stream.
+    controller.setActive(true);
+    if (pcm.sample_count) pcm.first_sample_index += pcm.sample_count;
+    pcm.sample_count = (interruption < 3) ? 768 : 1024;
+    controller.ingestVisualPcm(pcm);
+    AudioVisualFeatureController fresh;
+    fresh.setActive(true);
+    pcm.sample_count = 1024;
+    fresh.ingestVisualPcm(pcm);
+    QCOMPARE(controller.visualFeatures().energy, fresh.visualFeatures().energy);
+    QCOMPARE(controller.visualFeatures().smoothness, fresh.visualFeatures().smoothness);
+    QCOMPARE(controller.visualKick().level, fresh.visualKick().level);
+    QCOMPARE(controller.visualKick().flux, fresh.visualKick().flux);
+    QCOMPARE(controller.visualKick().envelope, fresh.visualKick().envelope);
+}
+
+void AudioVisualFeatureControllerTest::visualPcmLifecycle()
+{
+    ag_player* player = nullptr;
+    const ag_player_config config{AG_AUDIO_BACKEND_NULL, 4096U};
+    QCOMPARE(ag_player_create_with_config(&config, &player), AG_OK);
+    const auto fixture = qgetenv("AGPLAYER_TEST_AUDIO");
+    QCOMPARE(ag_player_load(player, fixture.constData()), AG_OK);
+    QCOMPARE(ag_player_play(player), AG_OK);
+    auto playback = std::make_unique<PlaybackController>(player);
+    ag_visual_pcm_snapshot pcm{};
+    auto expectDisabled = [&] {
+        QTest::qWait(40);
+        QCOMPARE(ag_player_read_visual_pcm(player, &pcm), AG_OK);
+        QCOMPARE(pcm.sample_count, std::size_t(0));
+    };
+    {
+        AudioVisualFeatureController features(playback.get());
+        expectDisabled();
+        features.setActive(true);
+        QTRY_VERIFY_WITH_TIMEOUT(features.visualSpectrumUpdateCount() > 0, 1000);
+        features.setPlaybackController(nullptr);
+        expectDisabled();
+        features.setPlaybackController(playback.get());
+        const auto count = features.visualSpectrumUpdateCount();
+        QTRY_VERIFY_WITH_TIMEOUT(features.visualSpectrumUpdateCount() > count, 1000);
+    }
+    expectDisabled();
+    {
+        AudioVisualFeatureController features(playback.get());
+        features.setActive(true);
+        playback.reset();
+        QVERIFY(features.playback_.isNull());
+        QVERIFY(!features.outputLevelTimer_.isActive());
+        QCOMPARE(features.visualPcmSize_, std::size_t(0));
+        features.pollOutputLevels();
+        expectDisabled();
+    }
+    ag_player_destroy(player);
+}
+
+void AudioVisualFeatureControllerTest::visualPcmAssemblesAndResets()
+{
+    AudioVisualFeatureController features;
+    features.setActive(true);
+    QSignalSpy ready(&features, &AudioVisualFeatureController::visualSpectrumReady);
+    ag_visual_pcm_snapshot pcm{};
+    pcm.sample_rate = 48000;
+    pcm.generation = 1;
+    pcm.sample_count = 512;
+    std::fill(std::begin(pcm.samples), std::end(pcm.samples), 0.1f);
+    features.ingestVisualPcm(pcm);
+    QCOMPARE(features.visualSpectrumUpdateCount(), 0);
+    ag_visual_pcm_snapshot empty{};
+    empty.generation = pcm.generation;
+    features.ingestVisualPcm(empty);
+    QCOMPARE(features.visualPcmSize_, std::size_t(512));
+    pcm.first_sample_index = 512;
+    features.ingestVisualPcm(pcm);
+    QCOMPARE(features.visualSpectrumUpdateCount(), 1);
+    QCOMPARE(features.visualPcmSize_, std::size_t(1024));
+    QCOMPARE(ready.count(), 1);
+    agplayer::VisualSpectrumAnalyzer reference;
+    agplayer::VisualSpectrumAnalyzer::Window window;
+    window.fill(0.1f);
+    QVERIFY(features.visualSpectrum() == reference.process(window));
+    features.ingestVisualPcm(empty);
+    QCOMPARE(features.visualPcmSize_, std::size_t(1024));
+    pcm.first_sample_index = 1024;
+    pcm.sample_count = 256;
+    std::fill(std::begin(pcm.samples), std::end(pcm.samples), 0.2f);
+    features.ingestVisualPcm(pcm);
+    QCOMPARE(features.visualSpectrumUpdateCount(), 2);
+    std::fill(window.end() - 256, window.end(), 0.2f);
+    QVERIFY(features.visualSpectrum() == reference.process(window));
+    pcm.sample_count = 0;
+    features.ingestVisualPcm(pcm);
+    QCOMPARE(features.visualSpectrumUpdateCount(), 2);
+    QCOMPARE(ready.count(), 2);
+    pcm.sample_count = 1024;
+    pcm.first_sample_index = 4000;
+    std::fill(std::begin(pcm.samples), std::end(pcm.samples), 0.0f);
+    features.ingestVisualPcm(pcm);
+    QCOMPARE(features.visualPcmSize_, std::size_t(1024));
+    QVERIFY(std::all_of(features.visualSpectrum().begin(), features.visualSpectrum().end(),
+                        [](auto v) { return v == 0; }));
+    pcm.sample_count = 200;
+    pcm.first_sample_index = 5024;
+    features.ingestVisualPcm(pcm);
+    ++pcm.generation;
+    pcm.first_sample_index = 0;
+    features.ingestVisualPcm(pcm);
+    QCOMPARE(features.visualPcmSize_, std::size_t(200));
+    pcm.sample_rate = 44100;
+    pcm.first_sample_index = 200;
+    features.ingestVisualPcm(pcm);
+    QCOMPARE(features.visualPcmSize_, std::size_t(200));
+    empty.generation = pcm.generation + 1;
+    features.ingestVisualPcm(empty);
+    QCOMPARE(features.visualPcmSize_, std::size_t(0));
+    QVERIFY(std::all_of(features.visualSpectrum().begin(), features.visualSpectrum().end(),
+                        [](auto v) { return v == 0; }));
+    features.setActive(false);
+    QCOMPARE(features.visualPcmSize_, std::size_t(0));
+    const auto count = features.visualSpectrumUpdateCount();
+    features.ingestVisualPcm(pcm);
+    QCOMPARE(features.visualSpectrumUpdateCount(), count);
+}
 
 namespace {
 QVariantList spectrum(double value, bool lowOnly = false)
@@ -244,6 +530,9 @@ void AudioVisualFeatureControllerTest::outputLevelsPollCoreAtPlaybackCadence()
         QCOMPARE(ag_player_play(player), AG_OK);
         QTRY_VERIFY_WITH_TIMEOUT(features.leftPeak() > 0.0, 3'000);
         QTRY_VERIFY_WITH_TIMEOUT(features.rightRms() > 0.0, 3'000);
+        QTRY_VERIFY_WITH_TIMEOUT(features.visualSpectrumUpdateCount() > 0, 3'000);
+        QVERIFY(std::any_of(features.visualSpectrum().begin(), features.visualSpectrum().end(),
+                            [](auto v) { return v > 0; }));
 
         QCOMPARE(ag_player_set_muted(player, 1), AG_OK);
         const double beforeDecay = features.leftPeak();

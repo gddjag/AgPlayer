@@ -107,6 +107,11 @@ PlaybackController::PlaybackController(ag_player* player,
     pollTimer_.start();
 }
 
+PlaybackController::~PlaybackController()
+{
+    emit aboutToBeDestroyed();
+}
+
 PlaybackController::State PlaybackController::state() const noexcept { return state_; }
 qint64 PlaybackController::positionMs() const noexcept { return positionMs_; }
 qint64 PlaybackController::durationMs() const noexcept { return durationMs_; }

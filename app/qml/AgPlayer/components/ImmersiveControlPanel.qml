@@ -30,26 +30,7 @@ Rectangle {
     border.color: Theme.glassBorder
     clip: true
 
-    readonly property var presetCards: [
-        { "title": qsTr("音域回响"), "sub": qsTr("中央脉冲 · 多彩地形"),
-          "from": "#4a2935", "to": "#82724c" }, // theme-color-allow: fixed immersive media preset thumbnail palette
-        { "title": qsTr("霓虹雨夜"), "sub": qsTr("青蓝粉紫 · 高动态"),
-          "from": "#252044", "to": "#7d2c88" }, // theme-color-allow: fixed immersive media preset thumbnail palette
-        { "title": qsTr("水墨"), "sub": qsTr("低饱和 · 轻呼吸"),
-          "from": "#2c353a", "to": "#8b7378" }, // theme-color-allow: fixed immersive media preset thumbnail palette
-        { "title": qsTr("纯净舞台"), "sub": qsTr("中心聚焦 · 清晰结构"),
-          "from": "#173a3b", "to": "#40777c" }, // theme-color-allow: fixed immersive media preset thumbnail palette
-        { "title": qsTr("安静"), "sub": qsTr("低响应 · 柔和环境"),
-          "from": "#17303c", "to": "#176a7b" }, // theme-color-allow: fixed immersive media preset thumbnail palette
-        { "title": qsTr("星河"), "sub": qsTr("深空主题 · 流星冲击"),
-          "from": "#442037", "to": "#91356d" }, // theme-color-allow: fixed immersive media preset thumbnail palette
-        { "title": qsTr("多源霓虹"), "sub": qsTr("彩虹内光 · 多点涟漪"),
-          "from": "#123a58", "to": "#7c316d" }, // theme-color-allow: fixed immersive media preset thumbnail palette
-        { "title": qsTr("深海柔波"), "sub": qsTr("低负载 · 深蓝呼吸"),
-          "from": "#082238", "to": "#176b72" }, // theme-color-allow: fixed immersive media preset thumbnail palette
-        { "title": qsTr("琥珀电影"), "sub": qsTr("暖金顶光 · 克制旋转"),
-          "from": "#351a10", "to": "#9b5c28" } // theme-color-allow: fixed immersive media preset thumbnail palette
-    ]
+    readonly property var presetCards: PlayerExperienceController.builtInThemeChoices
     readonly property var paletteDefaults: ({
         "coolColor": "#8BDCFF", "warmColor": "#EB7894", // theme-color-allow: default immersive media palette, not UI chrome
         "accentColor": "#FFD7DF", "peakColor": "#FFF7FB", // theme-color-allow: default immersive media palette, not UI chrome
@@ -68,7 +49,9 @@ Rectangle {
         {
             "key": "Terrain", "title": qsTr("柱体与地形"),
             "sliders": [
-                { "label": qsTr("柱体数量"), "key": "columnDensity", "from": 50, "to": 200, "step": 5, "suffix": "%" },
+                PlayerExperienceController.themeId.length > 0
+                  ? { "label": qsTr("地形密度"), "key": "topographyDensity", "from": 0, "to": 100, "step": 1 }
+                  : { "label": qsTr("柱体数量"), "key": "columnDensity", "from": 50, "to": 200, "step": 5, "suffix": "%" },
                 { "label": qsTr("柱体高度"), "key": "terrainAmplitude", "from": 0, "to": 100 },
                 { "label": qsTr("柱体清晰度"), "key": "subjectClarity", "from": 20, "to": 140 },
                 { "label": qsTr("弱音细节"), "key": "inputCompression", "from": 20, "to": 150 },
@@ -342,7 +325,7 @@ Rectangle {
                     rowSpacing: Theme.spacingSm
                     columnSpacing: Theme.spacingSm
                     Repeater {
-                        model: root.presetCards
+                        model: PlayerExperienceController.builtInThemeChoices
                         Button {
                             id: presetCard
                             required property int index
@@ -358,13 +341,14 @@ Rectangle {
                             padding: Theme.spacingSm
                             flat: true
                             ToolTip.visible: hovered || visualFocus
-                            ToolTip.text: modelData.title + " · " + modelData.sub
-                            onClicked: PlayerExperienceController.applyPreset(index)
+                            ToolTip.text: modelData.title
+                            onClicked: PlayerExperienceController.applyTheme(modelData.id)
                             background: Rectangle {
                                 radius: Theme.radiusSm
-                                border.width: parent.down || parent.visualFocus ? 2 : 1
+                                border.width: parent.down || parent.visualFocus
+                                              || PlayerExperienceController.themeId === modelData.id ? 2 : 1
                                 border.color: parent.visualFocus ? Theme.focus
-                                             : parent.down ? Theme.onBrandGradientText
+                                             : parent.down || PlayerExperienceController.themeId === modelData.id ? Theme.onBrandGradientText
                                              : parent.hovered ? Theme.borderStrong
                                                              : Theme.glassBorder
                                 gradient: Gradient {
@@ -383,6 +367,7 @@ Rectangle {
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
                                 wrapMode: Text.NoWrap
+                                elide: Text.ElideRight
                             }
                         }
                     }

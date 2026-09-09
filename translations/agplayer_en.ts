@@ -2755,6 +2755,7 @@ Actual encoding parameters may vary with system performance.</translation>
         <message><source>柱内光芯</source><translation>Inner light</translation></message>
         <message><source>照亮周围</source><translation>Light spill</translation></message>
         <message><source>照明范围</source><translation>Light range</translation></message>
+        <message><source>地形密度</source><translation>Terrain density</translation></message>
         <message><source>柱体数量</source><translation>Column quantity</translation></message>
         <message><source>减少柱体数量</source><translation>Decrease column quantity</translation></message>
         <message><source>增加柱体数量</source><translation>Increase column quantity</translation></message>

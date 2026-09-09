@@ -3013,6 +3013,7 @@
         <message><source>柱内光芯</source><translation>柱内光芯</translation></message>
         <message><source>照亮周围</source><translation>照亮周围</translation></message>
         <message><source>照明范围</source><translation>照明范围</translation></message>
+        <message><source>地形密度</source><translation>地形密度</translation></message>
         <message><source>柱体数量</source><translation>柱体数量</translation></message>
         <message><source>减少柱体数量</source><translation>减少柱体数量</translation></message>
         <message><source>增加柱体数量</source><translation>增加柱体数量</translation></message>

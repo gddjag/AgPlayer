@@ -1,3 +1,24 @@
+add_executable(visual_kick_response_test qt/visual_kick_response_test.cpp)
+add_executable(visual_terrain_response_test qt/visual_terrain_response_test.cpp)
+target_include_directories(visual_terrain_response_test PRIVATE "${CMAKE_SOURCE_DIR}/qt/src")
+agplayer_enable_warnings(visual_terrain_response_test)
+add_test(NAME visual_terrain_response_test COMMAND visual_terrain_response_test)
+target_include_directories(visual_kick_response_test PRIVATE "${CMAKE_SOURCE_DIR}/qt/src")
+agplayer_enable_warnings(visual_kick_response_test)
+add_test(NAME visual_kick_response_test COMMAND visual_kick_response_test)
+
+add_executable(visual_spectrum_features_test qt/visual_spectrum_features_test.cpp)
+target_include_directories(visual_spectrum_features_test PRIVATE "${CMAKE_SOURCE_DIR}/qt/src")
+target_link_libraries(visual_spectrum_features_test PRIVATE Qt6::Core)
+agplayer_enable_warnings(visual_spectrum_features_test)
+add_test(NAME visual_spectrum_features_test COMMAND visual_spectrum_features_test)
+set_tests_properties(visual_spectrum_features_test PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
+
+add_executable(visual_spectrum_analyzer_test qt/visual_spectrum_analyzer_test.cpp)
+target_include_directories(visual_spectrum_analyzer_test PRIVATE "${CMAKE_SOURCE_DIR}/qt/src")
+agplayer_enable_warnings(visual_spectrum_analyzer_test)
+add_test(NAME visual_spectrum_analyzer_test COMMAND visual_spectrum_analyzer_test)
+
 add_executable(dependency_smoke_test
     core/dependency_smoke_test.cpp
 )
@@ -84,6 +105,12 @@ target_link_libraries(pcm_ring_buffer_test PRIVATE agplayer_core)
 agplayer_enable_warnings(pcm_ring_buffer_test)
 
 add_test(NAME pcm_ring_buffer_test COMMAND pcm_ring_buffer_test)
+
+add_executable(visual_pcm_tap_test core/visual_pcm_tap_test.cpp)
+target_include_directories(visual_pcm_tap_test PRIVATE "${CMAKE_SOURCE_DIR}/core/src")
+target_link_libraries(visual_pcm_tap_test PRIVATE agplayer_core)
+agplayer_enable_warnings(visual_pcm_tap_test)
+add_test(NAME visual_pcm_tap_test COMMAND visual_pcm_tap_test)
 
 add_executable(scratch_pcm_window_test
     core/scratch_pcm_window_test.cpp
@@ -907,6 +934,14 @@ set_tests_properties(recovery_test PROPERTIES TIMEOUT 30)
 
 add_executable(terrain_column_material_test qt/terrain_column_material_test.cpp
     "${CMAKE_SOURCE_DIR}/qt/src/terrain_reactor_state.cpp")
+add_executable(immersive_theme_catalog_test qt/immersive_theme_catalog_test.cpp)
+set_target_properties(immersive_theme_catalog_test PROPERTIES AUTOMOC ON)
+target_include_directories(immersive_theme_catalog_test PRIVATE "${CMAKE_SOURCE_DIR}/qt/src")
+target_link_libraries(immersive_theme_catalog_test PRIVATE Qt6::Test)
+agplayer_enable_warnings(immersive_theme_catalog_test)
+add_test(NAME immersive_theme_catalog_test COMMAND immersive_theme_catalog_test)
+set_tests_properties(immersive_theme_catalog_test PROPERTIES TIMEOUT 30
+    ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
 add_executable(terrain_column_mesh_test qt/terrain_column_mesh_test.cpp)
 set_target_properties(terrain_column_mesh_test PROPERTIES AUTOMOC ON)
 target_include_directories(terrain_column_mesh_test PRIVATE "${CMAKE_SOURCE_DIR}/qt/src")
@@ -934,8 +969,10 @@ qt_add_shaders(terrain_column_material_test terrain_column_study_shadow_vertex
     OUTPUTS shaders/terrain_shadow.vert.qsb)
 agplayer_enable_warnings(terrain_column_material_test)
 add_test(NAME terrain_column_material_test COMMAND terrain_column_material_test)
-# Includes three fixed-phase native elasticity comparisons and repeat controls.
-set_tests_properties(terrain_column_material_test PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE
+# Expanded native material suite includes 140 real render-frame comparisons
+# and takes about seven minutes on the Windows integration GPU. This is only
+# the outer watchdog; every per-frame assertion and QTRY deadline is unchanged.
+set_tests_properties(terrain_column_material_test PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE
     ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
 
 foreach(qt_test IN ITEMS
@@ -1013,10 +1050,9 @@ set_tests_properties(update_checker_test PROPERTIES TIMEOUT 20)
 # This GPU suite runs targeted cases and data rows, each with its own
 # discriminating QTRY deadline. Give only the outer CTest watchdog enough time
 # to let those condition-based failures report their real assertion.
-# The expanded material/lifecycle suite completes naturally in ~93s on the
-# integration host. Keep per-case QTRY/frame assertions unchanged; this is only
-# the outer watchdog for the complete suite, not a renderer performance budget.
-set_tests_properties(terrain_reactor_gpu_smoke_test PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE)
+# Keep per-case QTRY/frame assertions unchanged; this is only the outer
+# watchdog for the expanded renderer suite, not a performance budget.
+set_tests_properties(terrain_reactor_gpu_smoke_test PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
 
 # This suite includes real notice-expiry waits and can exceed the generic
 # ten-second Qt test budget on a busy Windows runner.
@@ -1861,6 +1897,8 @@ set_tests_properties(settings_controller_test PROPERTIES
 set_tests_properties(terrain_reactor_item_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
 )
+add_dependencies(terrain_reactor_item_test decoder_fixture)
+target_compile_definitions(terrain_reactor_item_test PRIVATE AGPLAYER_TEST_WAV="${SINE_WAV_FIXTURE}")
 set_tests_properties(track_waveform_thumbnail_item_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )

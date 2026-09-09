@@ -284,16 +284,16 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
     DeterministicRandom random(seed);
     constexpr float extent = kTerrainStageExtent;
     const float spacing = extent / static_cast<float>(boundedGrid);
-    const float center = static_cast<float>(boundedGrid - 1) * 0.5F;
     for (int z = 0; z < boundedGrid; ++z) {
         for (int x = 0; x < boundedGrid; ++x) {
             SceneInstance instance;
-            const float worldX = (static_cast<float>(x) - center) * spacing;
-            const float worldZ = (static_cast<float>(z) - center) * spacing;
+            const float worldX = -extent * 0.5F + static_cast<float>(x) * spacing;
+            const float worldZ = -extent * 0.5F + static_cast<float>(z) * spacing;
             instance.position = QVector3D(worldX, 0.0F, worldZ);
-            // The vertex shader owns the single, hairline gutter. Applying a
-            // second gap here made the center read as a black seam.
-            instance.scale = QVector3D(spacing, 1.0F, spacing);
+            // Instances carry physical box dimensions. The shader must not
+            // apply another hidden gutter to this reference width ratio.
+            const float columnWidth = spacing * (0.9F / 1.05F);
+            instance.scale = QVector3D(columnWidth, 1.0F, columnWidth);
             instance.random = random.unit();
             // Submit the complete Cartesian grid. The vertex shader owns the
             // radial stage fade, so the CPU count remains exactly N * N.
@@ -370,6 +370,11 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
         result.particles.append(particle);
     }
     return result;
+}
+
+int referenceTerrainGridSize(int density) noexcept
+{
+    return int(std::lround(96.0 + 128.0 * std::clamp(density, 0, 100) / 100.0));
 }
 
 int terrainGridSizeForDensity(int baseGridSize, int densityPercent,
@@ -540,17 +545,15 @@ float terrainHeight(const SceneInstance& unsafeInstance,
     const float idlePhase = std::sin(instance.position.x() * 0.032F
                                      + instance.position.z() * 0.041F) * 0.72F;
     const float reliefA = 0.5F + 0.5F * std::sin(
-        instance.position.x() * 0.055F + instance.position.z() * 0.032F
-        + timeSeconds * 0.18F);
+        instance.position.x() * 0.055F + instance.position.z() * 0.032F);
     const float reliefB = 0.5F + 0.5F * std::cos(
-        instance.position.z() * 0.070F - instance.position.x() * 0.018F
-        - timeSeconds * 0.14F);
+        instance.position.z() * 0.070F - instance.position.x() * 0.018F);
     const float baseRelief = (0.24F + 0.48F
         * (reliefA * 0.55F + reliefB * 0.45F)) * terrainField
         + core * 1.08F;
     const float idle = style.idleBreathingEnabled
         ? baseRelief + 0.06F + 0.10F * std::sin(
-              distance * 0.067F - timeSeconds * 0.36F + idlePhase)
+              distance * 0.067F + idlePhase)
         : 0.0F;
     const float rippleRadius = std::fmod(std::max(0.0F, timeSeconds) * 13.5F,
                                         96.0F);
@@ -909,7 +912,10 @@ void CameraMotion::advance(double nowSeconds, float elapsedSeconds,
             automaticInitialized_ = true;
         }
         constexpr std::array<float, 4> yawOffsets{0.46F, -0.34F, 0.18F, 0.0F};
-        constexpr std::array<float, 4> pitches{0.90F, 1.00F, 0.78F, 0.86F};
+        constexpr std::array<float, 4> pitchOffsets{0.04F, 0.07F, -0.02F, 0.0F};
+        const auto targetPitch = [&](int index) {
+            return std::clamp(automaticAnchor_.pitch + pitchOffsets[index], 0.12F, 1.15F);
+        };
         constexpr float moveSeconds = 8.0F;
         constexpr float viewSeconds = 11.0F;
         const float activeElapsed = manualUntilSeconds_ > 0.0
@@ -918,7 +924,7 @@ void CameraMotion::advance(double nowSeconds, float elapsedSeconds,
         automaticPhase_ += activeElapsed * speed;
         if (automaticPhase_ >= viewSeconds) {
             automaticFrom_.yaw = automaticAnchor_.yaw + yawOffsets[automaticView_];
-            automaticFrom_.pitch = pitches[automaticView_];
+            automaticFrom_.pitch = targetPitch(automaticView_);
             automaticPhase_ -= viewSeconds;
             automaticView_ = (automaticView_ + 1) % int(yawOffsets.size());
         }
@@ -927,7 +933,7 @@ void CameraMotion::advance(double nowSeconds, float elapsedSeconds,
         snapshot_.yaw = automaticFrom_.yaw
             + (automaticAnchor_.yaw + yawOffsets[automaticView_] - automaticFrom_.yaw) * ease;
         snapshot_.pitch = automaticFrom_.pitch
-            + (pitches[automaticView_] - automaticFrom_.pitch) * ease;
+            + (targetPitch(automaticView_) - automaticFrom_.pitch) * ease;
         // Distance belongs to the user's wheel/zoom, not the automatic tour.
     }
     snapshot_.punch *= std::exp(-elapsed * 5.0F);

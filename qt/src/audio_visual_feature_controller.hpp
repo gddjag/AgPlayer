@@ -9,6 +9,11 @@
 #include <QVariantList>
 
 #include <array>
+#include "visual_spectrum_analyzer.hpp"
+#include "visual_spectrum_features.hpp"
+#include "visual_kick_response.hpp"
+
+struct ag_visual_pcm_snapshot;
 
 class PlaybackController;
 class AudioVisualFeatureControllerTest;
@@ -17,6 +22,8 @@ class AudioVisualFeatureController final : public QObject {
     Q_OBJECT
 
     Q_PROPERTY(bool active READ active NOTIFY activeChanged)
+    Q_PROPERTY(int visualKickSensitivity READ visualKickSensitivity WRITE setVisualKickSensitivity NOTIFY visualKickSensitivityChanged)
+    Q_PROPERTY(quint64 visualSpectrumUpdateCount READ visualSpectrumUpdateCount NOTIFY visualSpectrumReady)
     Q_PROPERTY(QVariantList bands READ bands NOTIFY featuresChanged)
     Q_PROPERTY(double energy READ energy NOTIFY featuresChanged)
     Q_PROPERTY(double spectralFlux READ spectralFlux NOTIFY featuresChanged)
@@ -37,6 +44,13 @@ class AudioVisualFeatureController final : public QObject {
 public:
     explicit AudioVisualFeatureController(PlaybackController* playback = nullptr,
                                           QObject* parent = nullptr);
+    ~AudioVisualFeatureController() override;
+    const agplayer::VisualSpectrumAnalyzer::Spectrum& visualSpectrum() const noexcept { return visualSpectrum_; }
+    quint64 visualSpectrumUpdateCount() const noexcept { return visualSpectrumUpdateCount_; }
+    const agplayer::VisualSpectrumFeatures::Features& visualFeatures() const noexcept { return visualFeatures_; }
+    const agplayer::visual::KickResponse::Output& visualKick() const noexcept { return visualKick_; }
+    int visualKickSensitivity() const noexcept { return visualKickSensitivity_; }
+    void setVisualKickSensitivity(int sensitivity);
 
     bool active() const noexcept;
     QVariantList bands() const;
@@ -64,6 +78,9 @@ public:
     void processSpectrum(const QVariantList& spectrum);
 
 signals:
+    void visualSpectrumReady();
+    void visualStateReset();
+    void visualKickSensitivityChanged();
     void activeChanged();
     void featuresChanged();
     void beatReliableChanged();
@@ -72,6 +89,23 @@ signals:
 
 private:
     friend class AudioVisualFeatureControllerTest;
+    void setVisualPcmEnabled(bool enabled);
+    void resetVisualPcm();
+    void ingestVisualPcm(const ag_visual_pcm_snapshot& snapshot);
+    agplayer::VisualSpectrumAnalyzer visualAnalyzer_;
+    agplayer::VisualSpectrumFeatures visualFeatureAnalyzer_;
+    agplayer::visual::KickResponse visualKickResponse_;
+    agplayer::VisualSpectrumFeatures::Features visualFeatures_{};
+    agplayer::visual::KickResponse::Output visualKick_{};
+    int visualKickSensitivity_ = 100;
+    std::size_t visualSamplesSinceUpdate_ = 0;
+    agplayer::VisualSpectrumAnalyzer::Window visualPcm_{};
+    agplayer::VisualSpectrumAnalyzer::Spectrum visualSpectrum_{};
+    std::size_t visualPcmSize_ = 0;
+    quint64 visualGeneration_ = 0;
+    quint64 visualNextIndex_ = 0;
+    int visualSampleRate_ = 0;
+    quint64 visualSpectrumUpdateCount_ = 0;
     void connectPlaybackSignals();
     void disconnectPlaybackSignals();
     void updateOutputLevelPolling();

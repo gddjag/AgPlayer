@@ -1,6 +1,7 @@
 #pragma once
 
 #include "terrain_reactor_state.hpp"
+#include "visual_spectrum_features.hpp"
 
 #include <QElapsedTimer>
 #include <QMetaObject>
@@ -183,6 +184,7 @@ protected:
 
 private slots:
     void copyFeatureSource();
+    void copyVisualSource();
 
 private:
     struct Telemetry {
@@ -198,6 +200,10 @@ private:
 
     struct RenderSnapshot {
         agplayer::terrain::AudioFeatures features;
+        agplayer::VisualSpectrumFeatures::Features descriptors;
+        double kickEnvelope = 0;
+        bool referenceAudio = false;
+        quint64 visualResetRevision = 0;
         agplayer::terrain::RenderStyleSnapshot style;
         agplayer::terrain::CameraSnapshot camera;
         agplayer::terrain::PunchEvent punchEvent;
@@ -241,12 +247,19 @@ private:
     QPointer<QObject> featureSource_;
     QPointer<PlayerExperienceController> styleSource_;
     QMetaObject::Connection featureConnection_;
+    QMetaObject::Connection visualConnection_;
+    QMetaObject::Connection visualResetConnection_;
     QMetaObject::Connection impactConnection_;
     QMetaObject::Connection sourceDestroyedConnection_;
     QVector<QMetaObject::Connection> styleConnections_;
     QMetaObject::Connection windowVisibilityConnection_;
     QPointer<QQuickWindow> trackedWindow_;
     agplayer::terrain::AudioFeatures liveFeatures_;
+    agplayer::VisualSpectrumFeatures::Features liveDescriptors_;
+    double liveKickEnvelope_ = 0;
+    quint64 visualResetRevision_ = 0;
+    quint64 lastVisualUpdate_ = 0;
+    quint64 visualBeatCount_ = 0;
     agplayer::terrain::AudioFeatures syntheticFeatures_;
     quint64 featureRevision_ = 0;
     quint64 styleRevision_ = 0;

@@ -48,6 +48,7 @@ struct SceneLayout {
 
 SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
                             int meteorCount, int particleCount);
+int referenceTerrainGridSize(int density) noexcept;
 int terrainGridSizeForDensity(int baseGridSize, int densityPercent,
                               int gridCeiling) noexcept;
 
@@ -82,6 +83,12 @@ TrackPalette blendTrackPalettes(const TrackPalette& from,
                                 float progress) noexcept;
 
 struct RenderStyleSnapshot {
+    // Encoded sRGB, like colors; alpha zero selects the legacy fallback.
+    QVector4D bodyColor{};
+    QVector4D atmosphereColor{};
+    // Encoded theme ripple color; alpha one selects reference event semantics.
+    // Zero preserves the existing custom palette/event encoding.
+    QVector4D rippleColor{};
     TrackPalette colors{
         QVector4D(0.031F, 0.024F, 0.086F, 1.0F),
         QVector4D(0.31F, 0.435F, 1.0F, 1.0F),
@@ -95,6 +102,7 @@ struct RenderStyleSnapshot {
     int materialMode = 0;
     float columnSize = 1.0F;
     int columnDensity = 125;
+    int topographyDensity = -1; // Negative selects legacy percentage density.
     float columnOpacity = 1.0F;
     float reactorBrightness = 1.0F;
     float columnInnerLight = 1.0F;
@@ -327,9 +335,9 @@ private:
 };
 
 struct CameraSnapshot {
-    float yaw = 2.6075219F;
-    float pitch = 0.80F;
-    float distance = 180.0F;
+    float yaw = -0.386852433896339F;
+    float pitch = 0.25265687598048F;
+    float distance = 102.885F;
     float punch = 0.0F;
 };
 

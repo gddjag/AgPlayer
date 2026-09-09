@@ -183,6 +183,16 @@ EngineSnapshot CoreContext::snapshot() const noexcept
     return audio_engine_.snapshot();
 }
 
+void CoreContext::set_visual_pcm_enabled(bool enabled) noexcept
+{
+    audio_engine_.set_visual_pcm_enabled(enabled);
+}
+
+void CoreContext::read_visual_pcm(ag_visual_pcm_snapshot& snapshot) noexcept
+{
+    audio_engine_.read_visual_pcm(snapshot);
+}
+
 ag_result CoreContext::spectrum(float* bins,
                                 const std::size_t bin_count) noexcept
 {

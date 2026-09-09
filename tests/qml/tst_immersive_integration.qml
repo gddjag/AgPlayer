@@ -18,6 +18,7 @@ TestCase {
     property bool originalImmersiveRenderingEnabled: false
     property var originalLyricSettings: ({})
     property var originalDynamicsSettings: ({})
+    property string originalThemeId: ""
     property var transientLyricsPanel: null
     property var transientWaveformView: null
 
@@ -285,6 +286,7 @@ TestCase {
     }
 
     function initTestCase() {
+        originalThemeId = PlayerExperienceController.themeId
         verify(typeof testMainWindow !== "undefined")
         verify(typeof testMiniWindow !== "undefined")
         mainWindow = testMainWindow
@@ -400,6 +402,8 @@ TestCase {
         PlayerExperienceController.panelVisible = true
         for (var lyricKey in originalLyricSettings)
             PlayerExperienceController[lyricKey] = originalLyricSettings[lyricKey]
+        if (originalThemeId.length > 0)
+            PlayerExperienceController.applyTheme(originalThemeId)
         for (var dynamicKey in originalDynamicsSettings)
             PlayerExperienceController[dynamicKey]
                     = originalDynamicsSettings[dynamicKey]
@@ -989,10 +993,11 @@ TestCase {
         drawer.destroy()
     }
 
-    function test_preset_cards_fit_readable_text_in_a_three_by_three_grid() {
+    function test_theme_cards_fit_readable_text_in_five_compact_rows() {
         var panel = windowedPresetPanel()
         var cards = []
-        for (var preset = 0; preset < 9; ++preset) {
+        compare(PlayerExperienceController.builtInThemeChoices.length, 13)
+        for (var preset = 0; preset < 13; ++preset) {
             var card = findChild(panel, "immersivePresetCard" + preset)
             verify(card)
             cards.push(card)
@@ -1006,7 +1011,7 @@ TestCase {
             compare(title.lineCount, 1)
             verify(title.contentWidth <= title.width + 0.5)
             compare(card.ToolTip.text,
-                    panel.presetCards[preset].title + " · " + panel.presetCards[preset].sub)
+                    PlayerExperienceController.builtInThemeChoices[preset].title)
             var titleBounds = mappedBounds(title, card)
             verify(titleBounds.left >= -0.5
                    && titleBounds.right <= card.width + 0.5)
@@ -1032,9 +1037,14 @@ TestCase {
         verify(cards[2].x > cards[1].x && cards[1].x > cards[0].x)
         verify(cards[5].x > cards[4].x && cards[4].x > cards[3].x)
         verify(cards[8].x > cards[7].x && cards[7].x > cards[6].x)
-        verify(cards[8].y + cards[8].height - cards[0].y <= 150,
+        compare(findChild(panel, "immersivePresetCard13"), null)
+        compare(cards[9].y, cards[10].y)
+        compare(cards[10].y, cards[11].y)
+        verify(cards[9].y > cards[6].y && cards[12].y > cards[9].y)
+        compare(cards[12].x, cards[0].x)
+        verify(cards[12].y + cards[12].height - cards[0].y <= 250,
                "preset grid height="
-               + (cards[8].y + cards[8].height - cards[0].y))
+               + (cards[12].y + cards[12].height - cards[0].y))
     }
 
     function test_readable_preset_page_keeps_quality_control_visible() {
@@ -1055,16 +1065,19 @@ TestCase {
                "preset page must not retain a large empty lower half")
     }
 
-    function test_compact_preset_card_click_applies_selected_preset() {
+    function test_last_theme_card_applies_id_without_overwriting_dynamics() {
         var panel = windowedPresetPanel()
-        var amberCinema = findChild(panel, "immersivePresetCard8")
+        var amberCinema = findChild(panel, "immersivePresetCard12")
         verify(amberCinema)
-        PlayerExperienceController.terrainAmplitude = 0
-        compare(PlayerExperienceController.terrainAmplitude, 0)
+        PlayerExperienceController.terrainAmplitude = 37
+        PlayerExperienceController.audioResponse = 123
+        PlayerExperienceController.responseRange = 117
         mouseClick(amberCinema, amberCinema.width / 2,
                    amberCinema.height / 2, Qt.LeftButton)
-        // User-approved 2026-09-08 amber-cinema screenshot: column height 52.
-        tryCompare(PlayerExperienceController, "terrainAmplitude", 52)
+        tryCompare(PlayerExperienceController, "themeId", PlayerExperienceController.builtInThemeChoices[12].id)
+        compare(PlayerExperienceController.terrainAmplitude, 37)
+        compare(PlayerExperienceController.audioResponse, 123)
+        compare(PlayerExperienceController.responseRange, 117)
         compare(amberCinema.checkable, false)
         var host = amberCinema.Window.window
         verify(host)
@@ -1073,7 +1086,7 @@ TestCase {
         tryCompare(host, "active", true)
         // The click above already focused the command with MouseFocusReason.
         // An actual focus transition is required to exercise keyboard styling.
-        var precedingCard = findChild(panel, "immersivePresetCard7")
+        var precedingCard = findChild(panel, "immersivePresetCard11")
         verify(precedingCard)
         precedingCard.forceActiveFocus(Qt.TabFocusReason)
         tryCompare(precedingCard, "activeFocus", true)
@@ -1340,7 +1353,7 @@ TestCase {
                "last visual EQ band remains reachable in the dynamic tab")
     }
 
-    function test_v46_panel_exposes_nine_presets_lyrics_and_real_dynamics() {
+    function test_panel_exposes_thirteen_themes_lyrics_and_real_dynamics() {
         PlayerExperienceController.immersiveMode =
                 PlayerExperienceController.TerrainReactor
         PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
@@ -1351,6 +1364,10 @@ TestCase {
                 ? findChild(coordinator.surface, "immersiveControlPanelHost")
                 : null
         verify(panel)
+        // The shared window intentionally preserves the user's last tab.
+        // This test validates the preset page itself, so select it explicitly
+        // instead of depending on the alphabetical order of earlier cases.
+        panel.currentTab = 0
         compare(panel.currentTab, 0)
         tryVerify(function() {
             return panel.expandedHeight < 550
@@ -1359,7 +1376,7 @@ TestCase {
         }, 1000)
         verify(panel.height <= panel.parent.height - 108)
         var presetCards = []
-        for (var preset = 0; preset < 9; ++preset) {
+        for (var preset = 0; preset < 13; ++preset) {
             var presetCard = findChild(panel, "immersivePresetCard" + preset)
             verify(presetCard)
             presetCards.push(presetCard)
@@ -1423,7 +1440,8 @@ TestCase {
         }, 1000)
         mainWindow.immersiveRenderingEnabled = originalImmersiveRenderingEnabled
         verify(findChild(panel, "dynamicSlider_terrainAmplitude"))
-        compare(PlayerExperienceController.responseRange, 100)
+        // 音域回响 follows the approved preset capture: response range 1.29.
+        compare(PlayerExperienceController.responseRange, 129)
         compare(PlayerExperienceController.rhythmStrength, 30)
 
         var fallbackMessage = findChild(coordinator.surface,
@@ -1493,6 +1511,37 @@ TestCase {
         }
     }
 
+    function test_reference_theme_density_and_light_background_follow_selection() {
+        PlayerExperienceController.immersiveMode = PlayerExperienceController.TerrainReactor
+        PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
+        var coordinator = findChild(mainWindow, "immersiveCoordinator")
+        verify(coordinator)
+        tryCompare(coordinator, "attachedHostMode", PlayerExperienceController.Windowed, 2000)
+        var surface = coordinator.surface
+        var panel = windowedPresetPanel()
+        verify(panel)
+        try {
+            verify(PlayerExperienceController.applyTheme("ink-wash"))
+            compare(surface.inkMode, false)
+            compare(surface.lightEnvironment, true)
+            panel.currentTab = 2
+            var density = findChild(panel, "dynamicSlider_topographyDensity")
+            verify(density)
+            compare(density.from, 0)
+            compare(density.to, 100)
+            density.value = 61
+            density.moved()
+            compare(PlayerExperienceController.topographyDensity, 61)
+            verify(PlayerExperienceController.applyTheme("nocturnal"))
+            compare(surface.lightEnvironment, false)
+            compare(PlayerExperienceController.topographyDensity, 61)
+        } finally {
+            PlayerExperienceController.topographyDensity = 46
+            PlayerExperienceController.applyTheme("ink-wash")
+            panel.currentTab = 0
+        }
+    }
+
     function test_environment_palette_exposes_valid_live_color_channels() {
         PlayerExperienceController.immersiveMode = PlayerExperienceController.TerrainReactor
         PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
@@ -1516,7 +1565,7 @@ TestCase {
         }
     }
 
-    function test_ink_contrast_tracks_preset_without_replacing_frequency_waveform() {
+    function test_theme_contrast_does_not_replace_frequency_waveform() {
         PlayerExperienceController.immersiveMode =
                 PlayerExperienceController.TerrainReactor
         PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
@@ -1532,23 +1581,17 @@ TestCase {
         verify(surface && waveform && lyrics && session)
         var frequencyWaveform = findChild(waveform, "immersiveWaveform")
         verify(frequencyWaveform)
-        for (var preset = 0; preset < 9; ++preset) {
-            if (preset === 2)
-                continue
-            verify(PlayerExperienceController.applyPreset(2))
-            compare(surface.inkMode, true)
-            compare(waveform.lightBackground, true)
-            compare(lyrics.lightBackground, true)
-            compare(frequencyWaveform.visualMode, 3)
-            compare(waveform.waveformSession, session)
-            verify(PlayerExperienceController.applyPreset(preset))
-            compare(surface.inkMode, false)
-            compare(waveform.lightBackground, false)
-            compare(lyrics.lightBackground, false)
-            compare(frequencyWaveform.visualMode, 3)
-            compare(waveform.waveformSession, session)
-        }
-        verify(PlayerExperienceController.applyPreset(0))
+        verify(PlayerExperienceController.applyTheme("ink-wash"))
+        compare(waveform.lightBackground, true)
+        compare(lyrics.lightBackground, true)
+        compare(frequencyWaveform.visualMode, 3)
+        compare(waveform.waveformSession, session)
+        verify(PlayerExperienceController.applyTheme("nocturnal"))
+        compare(surface.inkMode, false)
+        compare(waveform.lightBackground, false)
+        compare(lyrics.lightBackground, false)
+        compare(frequencyWaveform.visualMode, 3)
+        compare(waveform.waveformSession, session)
         PlayerExperienceController.materialMode = 2
         compare(surface.inkMode, true)
         compare(waveform.lightBackground, true)
@@ -2083,8 +2126,6 @@ TestCase {
         verify(!material)
         verify(!findChild(panel, "immersiveMaterialCombo"))
         verify(ripple)
-        verify(PlayerExperienceController.applyPreset(PlayerExperienceController.InkWash))
-        compare(PlayerExperienceController.materialMode, 2)
     }
 
     function test_dynamics_controls_are_grouped_by_meaning_and_remain_wired() {
@@ -2101,12 +2142,12 @@ TestCase {
         panel.currentTab = 0
         wait(0)
         var presetScroll = findChild(panel, "immersivePanelScroll")
-        var lastPreset = findChild(panel, "immersivePresetCard8")
+        var lastPreset = findChild(panel, "immersivePresetCard12")
         verify(presetScroll && lastPreset)
         var presetRight = lastPreset.mapToItem(presetScroll, lastPreset.width, 0).x
         verify(presetRight <= presetScroll.width + 0.5,
                "preset and color controls must stay inside the narrow panel")
-        for (var cardIndex = 0; cardIndex < 9; ++cardIndex) {
+        for (var cardIndex = 0; cardIndex < 13; ++cardIndex) {
             var card = findChild(panel, "immersivePresetCard" + cardIndex)
             var title = findChild(card, "immersivePresetTitle" + cardIndex)
             verify(title, "each preset must expose a visible name")

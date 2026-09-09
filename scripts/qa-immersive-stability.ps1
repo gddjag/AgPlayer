@@ -3,6 +3,7 @@ param(
     [string]$BuildDirectory = 'build/release',
     [ValidateRange(75, 86400)][int]$DurationSeconds = 1800,
     [string]$AudioPath,
+    [ValidateNotNullOrEmpty()][string]$ThemeId = 'ink-wash',
     [string]$OutputDirectory,
     [string]$ValidateLog
 )
@@ -70,10 +71,16 @@ if ($vcpkgLine) {
     $runtimePaths += Join-Path $dependencyRoot 'x64-windows/bin'
 }
 $arguments = @('--qa-test-mode', '--qa-instance-key', ('stability-' + [guid]::NewGuid().ToString('N')),
-    '--qa-log', ('"' + $logPath + '"'), '--qa-immersive', '--qa-immersive-preset', '0',
+    '--qa-log', ('"' + $logPath + '"'), '--qa-immersive',
     '--qa-immersive-stability', '--qa-exit-after-ms', ($DurationSeconds * 1000).ToString())
+if ($ThemeId -notmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$') { throw 'ThemeId must be a built-in theme id.' }
+$arguments += @('--qa-immersive-theme', $ThemeId)
 if ($AudioPath) { $arguments += @('--qa-play', ('"' + $AudioPath + '"')) }
 else { $arguments += '--qa-immersive-synthetic' }
+[pscustomobject]@{ ThemeId = $ThemeId
+    AudioMode = $(if ($AudioPath) { 'file' } else { 'synthetic' })
+    AudioPath = $AudioPath; DurationSeconds = $DurationSeconds
+} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $outputRoot 'run.json') -Encoding utf8
 $savedPath = $env:PATH
 $savedPlatform = $env:QT_QPA_PLATFORM
 $savedBackend = $env:QT_QUICK_BACKEND
@@ -105,6 +112,7 @@ try {
     # does not separately certify GPU resource release or global renderer count.
     [pscustomobject]@{ ExitCode = $process.ExitCode; Samples = $samples.Count
         DurationSeconds = $samples[-1].ElapsedMs / 1000; Evidence = $outputRoot
+        ThemeId = $ThemeId
         Scope = 'Running-item counters and process exit only; GPU teardown not measured'
         AudioMode = $(if ($AudioPath) { 'file - verify duration and playback separately' } else { 'synthetic' }) }
 }

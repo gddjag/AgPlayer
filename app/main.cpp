@@ -69,6 +69,7 @@
 #include "native_drop_router.hpp"
 #include "playback_controller.hpp"
 #include "player_experience_controller.hpp"
+#include "immersive_theme_catalog.hpp"
 #include "playback_state_store.hpp"
 #include "playlist_model.hpp"
 #include "qml_registration.hpp"
@@ -369,7 +370,7 @@ int main(int argc, char* argv[])
     //   --qa-equalizer-size <w> <h> resize the EQ visual target
     //   --qa-tag <name>              seed a tag in --qa-test-mode only
     //   --qa-selected-tag <name>     select a seeded tag in --qa-test-mode only
-    //   --qa-immersive-preset <0..8> select a preset in QA mode
+    //   --qa-immersive-theme <id>  select an original theme in QA mode
     //   --qa-immersive-stability    log renderer counters (requires QA test mode)
     //   --qa-lyric-placement <0..2>  enable and position QA lyrics
     //   --qa-capture-delay-ms <ms>  QA capture delay, 2500..60000
@@ -383,7 +384,8 @@ int main(int argc, char* argv[])
     int qaWaveformMode = -1;
     int qaMainWidth = 0;
     int qaMainHeight = 0;
-    int qaImmersivePreset = -1;
+    QString qaImmersiveTheme;
+    bool qaImmersiveThemeRequested = false;
     int qaLyricPlacement = -1;
     int qaCaptureDelayMs = 2500;
     bool qaIntegratedShellLifecycleProbe = false;
@@ -450,11 +452,11 @@ int main(int argc, char* argv[])
                 bool ok = false;
                 const int value = cliArgs.at(++i).toInt(&ok);
                 if (ok && value > 0) qaMainHeight = value;
-            } else if (arg == QStringLiteral("--qa-immersive-preset")
-                       && i + 1 < cliArgs.size()) {
-                bool ok = false;
-                const int value = cliArgs.at(++i).toInt(&ok);
-                if (ok && value >= 0 && value <= 8) qaImmersivePreset = value;
+            } else if (arg == QStringLiteral("--qa-immersive-theme")) {
+                qaImmersiveThemeRequested = true;
+                qaImmersiveTheme.clear();
+                if (i + 1 < cliArgs.size() && !cliArgs.at(i + 1).startsWith('-'))
+                    qaImmersiveTheme = cliArgs.at(++i);
             } else if (arg == QStringLiteral("--qa-lyric-placement")
                        && i + 1 < cliArgs.size()) {
                 bool ok = false;
@@ -568,6 +570,15 @@ int main(int argc, char* argv[])
                 initialFilePath = arg;
             }
         }
+    }
+
+    if (qaImmersiveThemeRequested
+        && (!qaTestMode || qaImmersiveTheme.isEmpty()
+            || !agplayer::immersive::findBuiltInTheme(qaImmersiveTheme.toStdString()))) {
+        RuntimeLog::install(qaLogPath);
+        qCritical().noquote() << "Invalid --qa-immersive-theme:" << qaImmersiveTheme
+                             << "(requires --qa-test-mode and a built-in theme id)";
+        return 2;
     }
 
     if (qaTestMode) {
@@ -796,7 +807,10 @@ int main(int argc, char* argv[])
         AudioVisualFeatureController audioVisualFeatures(&playback);
         LyricsService lyricsService(&library, &playback, &settings);
         if (qaTestMode) {
-            if (qaImmersivePreset >= 0) playerExperience.applyPreset(qaImmersivePreset);
+            if (qaImmersiveThemeRequested) {
+                playerExperience.applyTheme(qaImmersiveTheme);
+                qInfo().noquote() << "QA immersive theme:" << playerExperience.themeId();
+            }
             if (qaLyricPlacement >= 0) {
                 playerExperience.setLyricPosition(qaLyricPlacement);
                 playerExperience.setLyricsVisible(true);
