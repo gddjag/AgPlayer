@@ -787,6 +787,20 @@ ag_result ag_player_snapshot(const ag_player* player,
     });
 }
 
+ag_result ag_player_set_visual_pcm_enabled(ag_player* player, int enabled)
+{
+    if (!player || (enabled != 0 && enabled != 1)) return AG_INVALID_ARGUMENT;
+    player->context.set_visual_pcm_enabled(enabled != 0);
+    return AG_OK;
+}
+
+ag_result ag_player_read_visual_pcm(ag_player* player, ag_visual_pcm_snapshot* snapshot)
+{
+    if (!player || !snapshot) return AG_INVALID_ARGUMENT;
+    player->context.read_visual_pcm(*snapshot);
+    return AG_OK;
+}
+
 ag_result ag_player_spectrum(ag_player* player,
                              float* bins,
                              const size_t bin_count)

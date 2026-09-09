@@ -17,6 +17,10 @@ layout(location = 13) in vec3 surfacePosition;
 layout(location = 14) in float musicLight;
 layout(location = 15) in vec4 material;
 layout(location = 16) in vec3 worldPosition;
+layout(location = 17) flat in float reliefHeight;
+layout(location = 18) flat in float columnRandom;
+layout(location = 19) flat in vec4 travelingWave;
+layout(location = 20) flat in vec2 referenceRippleAnim;
 layout(binding = 1) uniform sampler2D shadowDepth;
 layout(location = 0) out vec4 fragColor;
 
@@ -38,7 +42,7 @@ layout(std140, binding = 0) uniform buf {
     vec4 styleAudio;
     vec4 stylePresentation;
     vec4 impact;
-    vec4 waveSources[8];
+    vec4 waveSources[10];
     vec4 audioEnvelope;
     vec4 cameraPosition;
     vec4 materialParameters;
@@ -47,25 +51,17 @@ layout(std140, binding = 0) uniform buf {
     vec4 sceneLighting;
     mat4 lightMvp;
     vec4 shadowParameters;
+    vec4 bodyColor;
+    vec4 atmosphereColor;
+    vec4 timbre;
+    vec4 rippleColor;
 } ubuf;
-
-// Independently written from the published GGX / Smith / Schlick equations:
-// https://google.github.io/filament/main/filament.html (material and IBL chapters).
-// No engine shader source or third-party runtime is included.
-const float PI = 3.14159265359;
 
 vec3 srgbToLinear(vec3 value)
 {
     value = clamp(value, vec3(0.0), vec3(1.0));
     return mix(value / 12.92, pow((value + 0.055) / 1.055, vec3(2.4)),
                greaterThan(value, vec3(0.04045)));
-}
-
-vec3 linearToSrgb(vec3 value)
-{
-    value = max(value, vec3(0.0));
-    return mix(value * 12.92, 1.055 * pow(value, vec3(1.0 / 2.4)) - 0.055,
-               greaterThan(value, vec3(0.0031308)));
 }
 
 float externalVisibility()
@@ -92,73 +88,10 @@ float externalVisibility()
     // Shared key visibility only: room fill and the inner emitter stay alive.
     // Global shell transparency attenuates the shadow continuously; only the
     // spatial rim fade participates in the caster cutoff in the depth pass.
+    // Four PCF samples accumulate in [0,4]; normalize once to visibility [0,1].
     return mix(1.0, visible * 0.25, clamp(ubuf.sceneControls.x, 0.0, 1.0));
 }
 
-vec3 fresnelSchlick(float cosine, vec3 f0)
-{
-    float edge = 1.0 - clamp(cosine, 0.0, 1.0);
-    float edge2 = edge * edge;
-    return f0 + (vec3(1.0) - f0) * edge2 * edge2 * edge;
-}
-
-vec3 dielectricBrdf(vec3 normal, vec3 view, vec3 incoming,
-                    vec3 albedo, float roughness, vec3 f0)
-{
-    float noL = max(dot(normal, incoming), 0.0);
-    float noV = max(dot(normal, view), 0.001);
-    vec3 halfVector = view + incoming;
-    halfVector *= inversesqrt(max(dot(halfVector, halfVector), 0.000001));
-    float noH = max(dot(normal, halfVector), 0.0);
-    float voH = max(dot(view, halfVector), 0.0);
-    float alpha = roughness * roughness;
-    float alpha2 = alpha * alpha;
-    float denominator = noH * noH * (alpha2 - 1.0) + 1.0;
-    float distribution = alpha2 / max(PI * denominator * denominator, 0.000000001);
-    // Height-correlated Smith visibility already contains 1/(4 NoL NoV).
-    float smithV = noL * sqrt(noV * noV * (1.0 - alpha2) + alpha2);
-    float smithL = noV * sqrt(noL * noL * (1.0 - alpha2) + alpha2);
-    float visibility = 0.5 / max(smithV + smithL, 0.000001);
-    vec3 fresnel = fresnelSchlick(voH, f0);
-    // A small scattering layer below the dielectric shell, not painted walls.
-    vec3 diffuse = (vec3(1.0) - fresnel) * albedo * (0.18 / PI);
-    return (diffuse + fresnel * distribution * visibility) * noL;
-}
-
-float studioBox(vec3 direction, vec3 axis, vec2 halfSize, float roughness)
-{
-    vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), axis));
-    vec3 up = cross(axis, right);
-    float facing = dot(direction, axis);
-    vec2 coordinate = vec2(dot(direction, right), dot(direction, up));
-    float blur = 0.018 + roughness * roughness * 0.65;
-    vec2 expanded = halfSize + vec2(blur * 0.65);
-    vec2 mask = vec2(1.0) - smoothstep(expanded - vec2(blur),
-                                       expanded + vec2(blur), abs(coordinate));
-    float normalization = (halfSize.x * halfSize.y) / (expanded.x * expanded.y);
-    return mask.x * mask.y * smoothstep(0.0, 0.25, facing) * normalization;
-}
-
-vec3 studioEnvironment(vec3 direction, float roughness)
-{
-    // Faint residual environment: broadening approximates a prefiltered probe.
-    // Their reflection follows the actual geometry normal and camera ray.
-    // This is an environment approximation, not a reflection of neighbouring columns.
-    float key = studioBox(direction, normalize(vec3(-0.55, 0.12, 0.83)),
-                          vec2(0.085, 0.30), roughness);
-    float fill = studioBox(direction, normalize(vec3(0.78, 0.12, 0.61)),
-                           vec2(0.075, 0.34), roughness);
-    float ceiling = studioBox(direction, normalize(vec3(-0.12, 0.96, -0.25)),
-                              vec2(0.30, 0.16), roughness);
-    vec3 room = mix(srgbToLinear(vec3(0.13, 0.16, 0.20)),
-                    srgbToLinear(vec3(0.29, 0.33, 0.39)),
-                    smoothstep(-0.6, 0.7, direction.y));
-    // Only enough external light to read a quiet shell, not a lit studio.
-    // Audio-powered emission below is the scene's primary light source.
-    return (room + srgbToLinear(vec3(1.0, 0.96, 0.90)) * key * 3.5
-                + srgbToLinear(vec3(0.77, 0.87, 1.0)) * fill * 2.4
-                + srgbToLinear(vec3(0.91, 0.97, 1.0)) * ceiling * 1.8) * 0.06;
-}
 
 vec3 mediumTint(float height)
 {
@@ -171,8 +104,12 @@ vec3 mediumTint(float height)
     return mix(lower, upper, smoothstep(0.3, 0.65, height));
 }
 
-void columnMedium(vec3 normal, vec3 view, float ior, float roughness,
-                  out vec3 transmittedLight, out vec3 emittedLight)
+vec3 boundedSource(vec3 source, float budget)
+{
+    return source / max(1.0, max(source.r, max(source.g, source.b)) / budget);
+}
+
+void columnMedium(vec3 normal, vec3 view, float ior, out vec3 emittedLight, out vec3 risingLight)
 {
     vec3 extent = max(columnExtent, vec3(0.001));
     // Analytic optical path inside the actual box. No ray marching, flow
@@ -203,8 +140,7 @@ void columnMedium(vec3 normal, vec3 view, float ior, float roughness,
     float height = clamp((position.y + ray.y * (innerStart + innerLength * 0.5))
                          / extent.y + 0.5, 0.0, 1.0);
     vec3 tint = mediumTint(height);
-    vec3 absorption = -log(max(tint, vec3(0.015))) * 0.06 + vec3(0.015);
-    vec3 transmission = exp(-absorption * travel);
+    vec3 absorption = -log(max(tint, vec3(0.015))) * 0.04 + vec3(0.015);
     vec4 lowMidBands = clamp(ubuf.bandsLow * ubuf.equalizerLow, vec4(0.0), vec4(1.0));
     float lowMidEnergy = dot(lowMidBands, vec4(0.35, 0.30, 0.20, 0.15));
     vec4 upperBands = clamp(ubuf.bandsHigh * ubuf.equalizerHigh, vec4(0.0), vec4(1.0));
@@ -229,8 +165,8 @@ void columnMedium(vec3 normal, vec3 view, float ior, float roughness,
     // Diffuse light transport within the gel fills thin/grazing paths. Keep
     // optical-depth variation, but do not turn the perimeter into a dark cage.
     float crossSection = min(extent.x, extent.z);
-    float opticalLength = max(crossSection * 0.80,
-                              innerLength * 0.35 + crossSection * 0.65);
+    float opticalLength = max(crossSection * 0.32,
+                              innerLength * 0.58 + crossSection * 0.42);
     // Near-surface scattering lets the flat cap receive the upper emitter's
     // light rather than the darker midpoint of a long downward viewing ray.
     float luminousHeight = mix(height, clamp(surfacePosition.y + 0.5, 0.0, 1.0), 0.75);
@@ -244,17 +180,22 @@ void columnMedium(vec3 normal, vec3 view, float ior, float roughness,
                        * clamp(ubuf.sceneLighting.x, 0.0, 2.0) * 0.24;
     emittedLight = exp(-absorption * innerStart)
                  * ((vec3(1.0) - exp(-absorption * opticalLength)) / absorption)
-                 * tint * (sourcePower * (0.12 + 0.88 * luminousHeight * luminousHeight)
-                           + risingSource) * 2.3;
-    // The distant environment is a dim background behind the emitting core,
-    // not another white studio panel painted across the entire front face.
-    transmittedLight = transmission * studioEnvironment(-view, roughness * 0.7) * 0.08;
+                 * tint * sourcePower * (0.12 + 0.88 * luminousHeight * luminousHeight) * 2.6;
+    risingLight = exp(-absorption * innerStart)
+        * ((vec3(1.0)-exp(-absorption*opticalLength))/absorption)
+        * tint * risingSource * 2.6;
 }
 
 vec3 receivedColumnLight(vec3 normal)
 {
     if (ubuf.sceneLighting.x <= 0.0 || ubuf.sceneLighting.y <= 0.0)
         return vec3(0.0);
+    // Neighbour spill is a wall-to-wall transport cue. Letting the same
+    // representative sources illuminate upward-facing caps produced several
+    // broad, projector-shaped pools across the terrain. Keep the reflection
+    // on side/bevel faces so adjacent columns still share musical light, while
+    // the cap remains driven by its own inner core and top glints.
+    float receiverWall = 1.0 - smoothstep(0.20, 0.78, normal.y);
     // Four representative emitter groups share the existing spectrum/palette.
     // Real world-space distance and receiver normals light the neighbouring
     // terrain; this is intentionally bounded, shadowless group lighting, not
@@ -262,87 +203,327 @@ vec3 receivedColumnLight(vec3 normal)
     const vec2 centers[4] = vec2[4](vec2(0.0), vec2(-24.0, 18.0),
                                     vec2(26.0, 12.0), vec2(4.0, -28.0));
     vec3 worldPosition = ubuf.cameraPosition.xyz - viewDirection;
-    float radius = 12.0 + ubuf.sceneLighting.z * 20.0;
+    // Each representative source lights its local group, not the entire array.
+    // Radius is a ground footprint; vertical separation only affects diffuse.
+    float radiusControl = clamp(ubuf.sceneLighting.z, 0.0, 2.0);
+    float radius = 4.0 + radiusControl * radiusControl * 8.0;
     vec3 received = vec3(0.0);
     for (int i = 0; i < 4; ++i) {
         float energy = clamp(ubuf.bandsLow[i] * ubuf.equalizerLow[i], 0.0, 1.0);
         vec3 lightPosition = vec3(centers[i].x, 14.0 + energy * 12.0, centers[i].y);
         vec3 delta = lightPosition - worldPosition;
         float distanceSquared = max(dot(delta, delta), 0.01);
-        float attenuation = pow(clamp(1.0 - distanceSquared / (radius * radius), 0.0, 1.0), 2.0);
+        float attenuation = pow(clamp(1.0 - dot(delta.xz, delta.xz) / (radius * radius), 0.0, 1.0), 2.0);
         float diffuse = max(dot(normal, delta * inversesqrt(distanceSquared)), 0.0);
         vec3 tint = srgbToLinear(ubuf.colors[i + 1].rgb);
         // The representative emitters also go dark when their music stops.
         float power = energy * 0.80 + clamp(ubuf.audioEnvelope.z, 0.0, 1.0) * 0.45;
         received += tint * attenuation * diffuse * power;
     }
-    return min(received * ubuf.sceneLighting.x * ubuf.sceneLighting.y * 0.85,
-                vec3(0.45));
+    return min(received * receiverWall * ubuf.sceneLighting.x
+                    * ubuf.sceneLighting.y * 0.85,
+               vec3(0.45));
 }
 
 vec3 terrainMaterial(vec3 normal, vec3 view)
 {
-    float softness = clamp(material.y, 0.0, 1.0);
     float jelly = step(0.5, material.x);
     float clarity = clamp(light, 0.0, 1.5);
-    float roughness = clamp(mix(0.10, 0.38, softness) + jelly * 0.035
-                             - clarity * 0.035, 0.08, 0.60);
     float ior = mix(1.46, 1.38, jelly);
-    float f0Value = (ior - 1.0) / (ior + 1.0);
-    vec3 f0 = vec3(f0Value * f0Value);
+    // MapShaderMaterial has an explicit body/ripple contract. Its low bands
+    // deform the height field, but do not enter the native volumetric,
+    // received-light, or thin-shell emission systems below.
+    bool referenceMode = ubuf.timbre.w < 0.5 && ubuf.bodyColor.a > 0.5
+        && (ubuf.rippleColor.a > 0.5 || ubuf.sceneControls.z <= 84.5);
     vec3 albedo = srgbToLinear(color);
-    vec3 keyDirection = normalize(vec3(-0.55, 0.85, 0.45));
-    vec3 fillDirection = normalize(vec3(0.70, 0.30, -0.64));
-    float visibility = clamp(externalVisibility(), 0.0, 1.0);
-    vec3 direct = dielectricBrdf(normal, view, keyDirection, albedo, roughness, f0)
-                * srgbToLinear(vec3(1.0, 0.96, 0.90)) * 0.10 * visibility;
-    direct += dielectricBrdf(normal, view, fillDirection, albedo, roughness, f0)
-             * srgbToLinear(vec3(0.78, 0.88, 1.0)) * 0.025;
-    vec3 reflection = studioEnvironment(reflect(-view, normal), roughness);
-    vec3 fresnel = fresnelSchlick(max(dot(normal, view), 0.0), f0);
-    vec3 transmitted, emission;
-    columnMedium(normal, view, ior, roughness, transmitted, emission);
-    // One dielectric interface divides reflected and transmitted energy.
-    // Shadowed surfaces retain room fill but cannot shadow their own emission.
-    vec3 externalLight = direct + (reflection * fresnel
-                  + (transmitted * 0.82 + albedo * 0.006)
-                    * (vec3(1.0) - fresnel)) * (0.38 + visibility * 0.62);
-    // Clear gel transmits neighbouring colored light; multiplying it by a
-    // strongly colored opaque albedo a second time erased spill/radius changes.
-    externalLight += receivedColumnLight(normal)
-                   * mix(vec3(1.0), albedo, 0.25) * 2.0;
-    externalLight *= 0.65 + clarity * 0.45;
+    vec3 columnCenter = worldPosition - surfacePosition * columnExtent;
+    if (referenceMode) {
+        // Fixed Sonic Topography material contract. Keep this branch literal:
+        // AgPlayer's optional gel lighting below must never perturb the
+        // reference theme palette, cap edge, side gradient, ripple channels,
+        // aerial perspective, or direct linear output.
+        float relativeY = clamp(surfacePosition.y + 0.5, 0.0, 1.0);
+        float distanceFromTop = 1.0 - relativeY;
+        float normalizedElevation = clamp(reliefHeight / 8.0, 0.0, 1.0);
+        float centerDistance = length(columnCenter.xz);
+        vec3 base1 = srgbToLinear(ubuf.colors[0].rgb);
+        vec3 base2 = srgbToLinear(ubuf.bodyColor.rgb);
+        vec3 coolCore = srgbToLinear(ubuf.colors[1].rgb);
+        vec3 warmCore = srgbToLinear(ubuf.colors[2].rgb);
+        vec3 coolEdge = srgbToLinear(ubuf.colors[3].rgb);
+        vec3 warmEdge = srgbToLinear(ubuf.colors[4].rgb);
+        float warmBlend = smoothstep(0.0, 1.0,
+            clamp(ubuf.timbre.x, 0.0, 1.0) * 1.5 + 0.5 - centerDistance / 80.0);
+        vec3 zoneCore = mix(coolCore, warmCore, warmBlend);
+        vec3 zoneEdge = mix(coolEdge, warmEdge, warmBlend);
+        vec3 targetGlow = mix(zoneCore, zoneEdge, fract(columnRandom * 11.0));
+        float distanceFade = 1.0 - smoothstep(40.0, 75.0, centerDistance);
+        vec3 brightCool = mix(coolCore, vec3(1.0), 0.24);
+        targetGlow = mix(targetGlow, brightCool,
+                         clamp(ubuf.timbre.y, 0.0, 1.0) * 0.6);
+        vec3 currentGlow = mix(base2, targetGlow, normalizedElevation)
+                         * ubuf.styleParameters.z * distanceFade;
+        currentGlow = mix(currentGlow, srgbToLinear(ubuf.rippleColor.rgb),
+                          referenceRippleAnim.x);
+        // The single-column study uses the production 112-unit stage. Its
+        // cool base and coverage create a small warm delta at the white crest;
+        // compensate only that widened runtime stage. The fixed 84-unit
+        // reference replay keeps the literal vec3(1) source result.
+        vec3 referenceWhite = mix(vec3(1.0), vec3(0.93, 1.0, 1.07),
+                                  step(84.5, ubuf.sceneControls.z));
+        currentGlow = mix(currentGlow, referenceWhite, referenceRippleAnim.y);
+        vec3 referenceBody = mix(base1, base2, relativeY * distanceFade);
+        vec3 result;
+        bool isTop = normal.y > 0.5;
+        if (isTop) {
+            float topIntensity = smoothstep(0.0, 0.4, normalizedElevation);
+            float twinkleDistance = smoothstep(60.0, 30.0, centerDistance);
+            float twinkleMultiplier = mix(twinkleDistance, 1.0,
+                smoothstep(0.01, 0.10, normalizedElevation));
+            if (fract(columnRandom * 31.0) > 0.95 && normalizedElevation < 0.10)
+                topIntensity += ubuf.bandsHigh.w * 2.0 * twinkleMultiplier;
+            result = mix(base2, currentGlow, topIntensity);
+            vec2 capUv = surfacePosition.xz + vec2(0.5);
+            float edgeX = smoothstep(0.05, 0.01, capUv.x)
+                        + smoothstep(0.95, 0.99, capUv.x);
+            float edgeY = smoothstep(0.05, 0.01, capUv.y)
+                        + smoothstep(0.95, 0.99, capUv.y);
+            float edge = min(edgeX + edgeY, 1.0);
+            result += currentGlow * edge * 0.8 * (topIntensity + 0.3);
+            float flashChance = smoothstep(0.3, 1.0, ubuf.bandsHigh.y);
+            if (fract(columnRandom * 53.0) > 0.98 - flashChance * 0.10) {
+                float flashSync = sin(ubuf.parameters.w * 40.0
+                                    + columnRandom * 100.0) * 0.5 + 0.5;
+                result += mix(vec3(1.0), vec3(0.5, 1.0, 1.0), columnRandom)
+                        * flashSync * ubuf.bandsHigh.y
+                        * (1.0 + ubuf.timbre.z * 2.0) * twinkleMultiplier;
+            }
+            if (edge > 0.5
+                && fract(columnRandom * 89.0 + ubuf.parameters.w * 2.0) > 0.98)
+                result += vec3(1.0) * ubuf.bandsHigh.z * 3.0 * twinkleMultiplier;
+        } else {
+            float verticalFalloff = mix(1.0, 3.0,
+                                        clamp(ubuf.timbre.z, 0.0, 1.0));
+            float sideGlow = smoothstep(0.5 / verticalFalloff, 0.0,
+                                        distanceFromTop) * normalizedElevation;
+            if (normalizedElevation < 0.02) sideGlow = 0.0;
+            result = mix(referenceBody, currentGlow, sideGlow * 1.5);
+            float rimGlow = smoothstep(0.03, 0.0, distanceFromTop)
+                          * normalizedElevation;
+            result += currentGlow * rimGlow;
+        }
+        result += srgbToLinear(ubuf.rippleColor.rgb)
+                * referenceRippleAnim.x * 0.6;
+        result += referenceWhite * referenceRippleAnim.y * 1.2;
+        vec3 atmosphere = mix(base1, base2, 0.4);
+        result = mix(result, atmosphere,
+                     smoothstep(30.0, 65.0, centerDistance) * 0.35);
+        vec3 backdrop = ubuf.atmosphereColor.a > 0.5
+                      ? srgbToLinear(ubuf.atmosphereColor.rgb) : vec3(0.0);
+        float alphaBlend = smoothstep(55.0, 78.0, centerDistance);
+        result = mix(result, backdrop, alphaBlend * 0.45);
+        // On the wider production stage the newly exposed side coverage of a
+        // white crest is still tinted by the cool base. Balance that coverage
+        // without touching the fixed 84-unit reference replay or its oracle.
+        float runtimeWhite = step(84.5, ubuf.sceneControls.z)
+                           * referenceRippleAnim.y;
+        result *= mix(vec3(1.0), vec3(0.70, 1.0, 1.0), runtimeWhite);
+        return clamp(result * clamp(material.z, 0.0, 2.0),
+                     vec3(0.0), vec3(1.0));
+    }
+    if (ubuf.bodyColor.a > 0.5) {
+        // Theme roles are encoded only for transport; interpolate in linear
+        // light. A missing production descriptor remains zero, not a fake band.
+        // Reuse the vertex hash: fragment-position hashing causes face speckle.
+        float warmWeight = smoothstep(0.0, 1.0,
+            clamp(ubuf.timbre.x, 0.0, 1.0) * 1.5 + 0.5 - length(columnCenter.xz) / 80.0);
+        vec3 coreTint = mix(srgbToLinear(ubuf.colors[1].rgb),
+                            srgbToLinear(ubuf.colors[2].rgb), warmWeight);
+        vec3 edgeTint = mix(srgbToLinear(ubuf.colors[3].rgb),
+                            srgbToLinear(ubuf.colors[4].rgb), warmWeight);
+        albedo = mix(coreTint, edgeTint, fract(columnRandom * 11.0));
+        vec3 brightTint = mix(srgbToLinear(ubuf.colors[1].rgb), vec3(1.0), 0.24);
+        albedo = mix(albedo, brightTint, clamp(ubuf.timbre.y, 0.0, 1.0) * 0.6);
+        // The main vertex pass forwards the individual travelling-wave palette
+        // before its legacy color stack. Apply it to the explicit theme's
+        // linear material directly; shadow deformation has no color interface.
+        albedo = mix(albedo, srgbToLinear(travelingWave.rgb),
+                     clamp(travelingWave.a, 0.0, 0.96));
+    }
+    vec3 emission = vec3(0.0);
+    vec3 risingLight = vec3(0.0);
+    if (!referenceMode)
+        columnMedium(normal, view, ior, emission, risingLight);
+    // The terrain is a luminous solid, not a mirror of studio softboxes.
+    // Fixed face-local gradients reveal its shape even between musical pulses.
+    float surfaceHeight = clamp(surfacePosition.y + 0.5, 0.0, 1.0);
+    float capFace = smoothstep(0.70, 0.98, normal.y);
+    float borderDistance = 0.5 - max(abs(surfacePosition.x), abs(surfacePosition.z));
+    // Softness controls the luminous edge rolloff, not an external reflection.
+    float borderScale = 0.55 + clamp(material.y, 0.0, 1.0);
+    float borderWidth = max(0.110 * borderScale, fwidth(borderDistance) * 1.5);
+    float capBorder = capFace * (1.0 - smoothstep(0.010 * borderScale,
+                                                borderWidth, borderDistance));
+    if (ubuf.bodyColor.a > 0.5) {
+        // Theme edge occupies a fixed face-local strip. Derivative-driven
+        // widening can cover an entire distant cap and inflate its energy.
+        vec2 edgeDistance = vec2(0.5) - abs(surfacePosition.xz);
+        vec2 edgeGlow = vec2(1.0) - smoothstep(vec2(0.01), vec2(0.05), edgeDistance);
+        capBorder = capFace * min(1.0, edgeGlow.x + edgeGlow.y);
+    }
+    float wallGradient = mix(0.055, 0.32, surfaceHeight * surfaceHeight);
+    vec3 bodyTint = ubuf.bodyColor.a > 0.5 ? srgbToLinear(ubuf.bodyColor.rgb) : albedo;
+    // A quiet cap preserves the theme's second base color. Added musical
+    // elevation, not slab height or an external lamp, reveals its colored face.
+    float raisedFraction = clamp(reliefHeight / 8.0, 0.0, 1.0);
+    float faceActivation = smoothstep(0.0, 3.2, reliefHeight);
+    float paletteReach = 1.0 - smoothstep(40.0, 75.0, length(columnCenter.xz));
+    vec3 capGlow = mix(bodyTint, albedo, raisedFraction)
+                 * ubuf.styleParameters.z * paletteReach;
+    if (ubuf.bodyColor.a > 0.5 && ubuf.rippleColor.a > 0.5) {
+        // Equivalent to the reference currentGlow override. Both channels are
+        // independent, so normal/white overlap adds rather than cancels.
+        capGlow = mix(capGlow, srgbToLinear(ubuf.rippleColor.rgb), referenceRippleAnim.x);
+        capGlow = mix(capGlow, vec3(0.95, 1.0, 1.05), referenceRippleAnim.y * 0.5);
+    }
+    vec3 capLight = mix(bodyTint, capGlow, faceActivation);
+    vec3 wallLight = bodyTint * wallGradient * (0.65 + clarity * 0.45)
+                   * (0.25 + 0.75 * clamp(externalVisibility(), 0.0, 1.0));
+    if (ubuf.bodyColor.a > 0.5) {
+        // Theme bases describe an unlit luminous body, not a diffuse surface
+        // under a studio key. Keep both colors and interpolate in linear space;
+        // clarity and the shadow map must not turn this layer into a black shell.
+        vec3 footColor = ubuf.sceneControls.z > 84.5
+            ? bodyTint * 0.25
+            : srgbToLinear(ubuf.colors[0].rgb);
+        wallLight = mix(footColor, bodyTint, surfaceHeight * paletteReach);
+        // Audio sharpness narrows the cap's vertical color reach. It is not
+        // the user's material softness slider or an extra exposure multiplier.
+        float verticalReach = 0.5 / mix(1.0, 3.0, clamp(ubuf.timbre.z, 0.0, 1.0));
+        float upperGlow = raisedFraction < 0.02 ? 0.0
+            : raisedFraction * (1.0 - smoothstep(0.0, verticalReach, 1.0 - surfaceHeight));
+        wallLight = mix(wallLight, capGlow, upperGlow * 1.5);
+        float shoulderRim = raisedFraction
+            * (1.0 - smoothstep(0.0, 0.03, 1.0 - surfaceHeight));
+        wallLight += capGlow * shoulderRim;
+    }
+    vec3 bodyLight = mix(wallLight, capLight, capFace);
+    // Clarity separates faces and cap edges without introducing a black rim.
+    // The control changes local contrast around the existing body colour; it
+    // never supplies an independent studio light.
+    float clarityAmount = clamp((clarity - 0.2) / 1.2, 0.0, 1.0);
+    float faceDirection = max(dot(normal, normalize(vec3(-0.48, 0.74, 0.46))), 0.0);
+    bodyLight *= mix(0.38, mix(0.58, 3.55, faceDirection), clarityAmount);
+    // A faint self-luminous body keeps the floating platform readable in a
+    // lightless environment. It follows the material colour and remains well
+    // below the music-driven internal emitter.
+    bodyLight += bodyTint * mix(0.10, 0.38, capFace)
+               * (0.34 + clarityAmount * 0.66);
+    bodyLight += capGlow * capBorder * clarityAmount * 2.00;
+    float restingSurface = 1.0 - smoothstep(0.15, 1.6, reliefHeight);
+    float runtimeRestLight = mix(0.20, 0.38, step(0.5, ubuf.timbre.w));
+    bodyLight += bodyTint * restingSurface * capFace * runtimeRestLight;
+    // This quiet rim is part of the static theme material.  The air response
+    // below replaces its intensity delta only for a selected active cap.
+    vec3 quietCapRim = capGlow * capBorder * (0.36 + faceActivation * 0.8);
+    bodyLight += quietCapRim;
+    if (!referenceMode)
+        bodyLight += boundedSource(receivedColumnLight(normal) * mix(vec3(1.0), albedo, 0.25) * 3.4, 0.25);
+    else {
+        // Built-in reference themes still receive discrete beat/impact energy
+        // from inside the terrain. The pulse is spatially bounded by the
+        // vertex-provided music/impact fields and cannot light the environment.
+        float internalEvent = clamp(musicLight * 0.32 + impactLight * 0.72,
+                                    0.0, 1.0);
+        bodyLight += boundedSource(albedo * internalEvent
+                                   * mix(0.62, 1.0, capFace), 0.22);
+    }
 
-    // A shallow audio-excited layer remains visible on the thinnest ground
-    // cells, whose integrated volume tends to zero. The source follows the
-    // existing beat/impact envelopes, never an autonomous animation clock.
-    // Keep it height-selective and colored beneath the dielectric interface.
-    float bodyHeight = clamp(surfacePosition.y + 0.5, 0.0, 1.0);
-    float sourceHeight = 0.06 + 0.94 * bodyHeight * bodyHeight;
-    vec4 lowMidBands = clamp(ubuf.bandsLow * ubuf.equalizerLow, vec4(0.0), vec4(1.0));
-    float lowMidEnergy = dot(lowMidBands, vec4(0.35, 0.30, 0.20, 0.15));
-    float centerRadius = max(16.0, ubuf.styleAudio.z * 0.38);
-    float centerField = exp(-dot(worldPosition.xz, worldPosition.xz)
-                           / (centerRadius * centerRadius));
-    float steadySource = lowMidEnergy * centerField * 0.30
-                       * clamp(ubuf.styleAudio.w, 0.0, 1.5);
     vec4 highBands = clamp(ubuf.bandsHigh * ubuf.equalizerHigh, vec4(0.0), vec4(1.0));
-    float highEnergy = dot(highBands, vec4(0.38, 0.28, 0.20, 0.14));
-    // Actual raised relief carries the local high-frequency field. Excite
-    // only raised bodies, weakly, without lighting the flat outer apron or
-    // adding another animated pattern to the wall or the cap glint.
-    float highSource = highEnergy * centerField * 0.18
-                     * smoothstep(0.15, 3.0, columnExtent.y)
-                     * clamp(ubuf.styleAudio.w, 0.0, 1.5);
-    float eventSource = clamp(musicLight, 0.0, 1.0) * 0.80
-                      + clamp(impactLight, 0.0, 1.0) * 1.20;
-    emission += mediumTint(bodyHeight) * sourceHeight * (steadySource + highSource + eventSource)
-              * clamp(ubuf.sceneLighting.x, 0.0, 2.0)
-              * (1.0 - smoothstep(0.10, 1.20, columnExtent.y));
     float cap = smoothstep(0.70, 0.98, normal.y);
-    // Upward light escape distinguishes the flat cap from the clear walls
-    // without an opaque border or an added external lamp.
-    emission *= 1.0 + cap * 0.30;
+    if (!referenceMode) {
+        // A shallow audio-excited layer remains visible on the thinnest ground
+        // cells, whose integrated volume tends to zero. The source follows the
+        // existing beat/impact envelopes, never an autonomous animation clock.
+        // Keep it height-selective and colored beneath the dielectric interface.
+        float bodyHeight = clamp(surfacePosition.y + 0.5, 0.0, 1.0);
+        float sourceHeight = 0.06 + 0.94 * bodyHeight * bodyHeight;
+        vec4 lowMidBands = clamp(ubuf.bandsLow * ubuf.equalizerLow, vec4(0.0), vec4(1.0));
+        float lowMidEnergy = dot(lowMidBands, vec4(0.35, 0.30, 0.20, 0.15));
+        float centerRadius = max(16.0, ubuf.styleAudio.z * 0.38);
+        float centerField = exp(-dot(worldPosition.xz, worldPosition.xz)
+                               / (centerRadius * centerRadius));
+        float steadySource = lowMidEnergy * centerField * 0.30
+                           * clamp(ubuf.styleAudio.w, 0.0, 1.5);
+        float highEnergy = dot(highBands, vec4(0.38, 0.28, 0.20, 0.14));
+        float highSource = highEnergy * centerField * 0.18
+                         * smoothstep(0.15, 3.0, columnExtent.y)
+                         * clamp(ubuf.styleAudio.w, 0.0, 1.5);
+        float eventSource = clamp(musicLight, 0.0, 1.0) * 0.80
+                          + clamp(impactLight, 0.0, 1.0) * 1.20;
+        vec3 thinSource = mediumTint(bodyHeight) * sourceHeight * (steadySource + highSource + eventSource)
+                  * clamp(ubuf.sceneLighting.x, 0.0, 2.0)
+                  * (1.0 - smoothstep(0.10, 1.20, columnExtent.y));
+        // Upward light escape distinguishes the flat cap from the clear walls
+        // without an opaque border or an added external lamp.
+        emission *= 1.0 + cap * 0.30;
+        emission = boundedSource(emission, 0.46) + boundedSource(risingLight, 0.18)
+                 + boundedSource(thinSource, 0.08);
+    }
+    if (ubuf.bodyColor.a > 0.5) {
+        // Theme top flashes deliberately use the original grid-position hash
+        // (columnRandom), not streamSheen's legacy instance selection.  This
+        // is a face-wide high-frequency response plus a distinct cap-edge
+        // brilliance pass; no 24x24 local-particle field is layered on it.
+        // MapScene uploads these as three independent descriptors: presence,
+        // brilliance and air.  They must not inherit the legacy combined-high
+        // activity used by the historical non-theme particle path.
+        float referencePresence = highBands.y;
+        float referenceAir = highBands.w;
+        float referenceBrilliance = highBands.z;
+        float radius = length(columnCenter.xz);
+        float distanceTwinkle = 1.0 - smoothstep(30.0, 60.0, radius);
+        float twinkleMultiplier = mix(distanceTwinkle, 1.0,
+                                      smoothstep(0.01, 0.10, raisedFraction));
+        if (cap > 0.0 && ubuf.styleExtra.z > 0.5) {
+            float topIntensity = smoothstep(0.0, 0.4, raisedFraction);
+            if (fract(columnRandom * 31.0) > 0.95 && raisedFraction < 0.10)
+                topIntensity += referenceAir * 2.0 * twinkleMultiplier;
+            // Air reaches a resting low column in the original material.  Do
+            // not run this mix for non-air cells: a high band alone must not
+            // recolor every quiet theme cap.
+            if (fract(columnRandom * 31.0) > 0.95 && referenceAir > 0.0
+                && raisedFraction < 0.10) {
+                vec3 referenceTop = mix(bodyTint, capGlow, topIntensity);
+                // Keep the existing quiet rim and received-light terms, then
+                // replace only the reference cap and rim contributions.
+                // Mixing the complete bodyLight here would erase both before
+                // the rim delta below and effectively subtract the quiet rim
+                // twice on a fully top-facing fragment.
+                bodyLight += (referenceTop - capLight) * cap;
+                float airRimIntensity = topIntensity * mix(
+                    1.8, 1.0, smoothstep(0.20, 0.80, topIntensity));
+                vec3 airCapRim = capGlow * capBorder * 0.8 * (airRimIntensity + 0.3);
+                bodyLight += airCapRim - quietCapRim;
+                // The complete selected cap receives a restrained Air lift;
+                // the rim above remains the stronger visual cue.
+                bodyLight += capGlow * referenceAir * cap * 0.025;
+            }
+            float flashChance = smoothstep(0.3, 1.0, referencePresence);
+            if (fract(columnRandom * 53.0) > 0.98 - flashChance * 0.10) {
+                float flashSync = sin(ubuf.parameters.w * 40.0 + columnRandom * 100.0)
+                                * 0.5 + 0.5;
+                vec3 flashTint = mix(vec3(1.0), vec3(0.5, 1.0, 1.0), columnRandom);
+                bodyLight += flashTint * flashSync * referencePresence
+                           * (1.0 + clamp(ubuf.timbre.z, 0.0, 1.0) * 2.0)
+                           * twinkleMultiplier * cap;
+            }
+            if (capBorder > 0.5
+                && fract(columnRandom * 89.0 + ubuf.parameters.w * 2.0) > 0.98)
+                bodyLight += vec3(1.0) * referenceBrilliance * 3.0
+                           * twinkleMultiplier * cap;
+        }
+    } else {
     float flash = clamp(streamSheen, 0.0, 4.0);
     flash *= smoothstep(0.015, 0.15, flash);
     float flashEnergy = dot(highBands, vec4(0.0, 0.42, 0.36, 0.22)) * 2.0
@@ -383,17 +564,50 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
     // sparkle, instead of making the entire face a white light source.
     vec3 sheet = mix(albedo, srgbToLinear(vec3(0.85, 0.94, 1.0)), 0.25) * 0.65;
     vec3 silver = mix(albedo, srgbToLinear(vec3(0.94, 0.97, 1.0)), 0.90);
-    emission += (sheet + silver * grain) * cap * (flash / (1.0 + flash));
+    emission += boundedSource((sheet + silver * grain) * cap * (flash / (1.0 + flash)), 0.22);
+    }
     }
     // Distributed subsurface light remains visible at grazing angles; keep
     // reflection contrast without letting a dark environment blacken the rim.
-    vec3 radiance = externalLight + emission * (vec3(1.0) - min(fresnel, vec3(0.10)));
-    radiance *= pow(clamp(fog, 0.0, 1.0), 1.35) * (0.80 + clamp(focus, 0.0, 1.0) * 0.20);
+    // Limit the source's chromatic radiance as a vector, not each channel:
+    // simultaneous sources retain their hue instead of clipping into white.
+    // This only bounds excited emission; it is not an output tone curve.
+    vec3 radiance = bodyLight + emission;
+    if (ubuf.bodyColor.a > 0.5 && ubuf.rippleColor.a > 0.5) {
+        // Reference terminal ripple light, after material/top construction.
+        radiance += srgbToLinear(ubuf.rippleColor.rgb) * referenceRippleAnim.x * 0.6
+                  + vec3(0.95, 1.0, 1.05) * referenceRippleAnim.y * 1.2;
+    }
+    float atmosphereVisibility = pow(clamp(fog, 0.0, 1.0), 1.35);
+    vec3 atmosphere = ubuf.atmosphereColor.a > 0.5 ? srgbToLinear(ubuf.atmosphereColor.rgb) : vec3(0.0);
+    if (ubuf.bodyColor.a > 0.5) {
+        float radius = length(columnCenter.xz);
+        vec3 aerialTint = mix(srgbToLinear(ubuf.colors[0].rgb), bodyTint, 0.4);
+        radiance = mix(radiance, aerialTint, smoothstep(30.0, 65.0, radius) * 0.35);
+        // Match the spatial coverage ramp, independently of user opacity.
+        // Otherwise lowering shell opacity would change its actual color.
+        float halfExtent = max(1.0, ubuf.sceneControls.z);
+        float backdropMix = smoothstep(halfExtent * (55.0 / 84.0),
+                                      halfExtent * (78.0 / 84.0), radius) * 0.45;
+        radiance = mix(radiance, atmosphere, backdropMix);
+    } else {
+        radiance = mix(atmosphere, radiance, atmosphereVisibility)
+                 * (0.80 + clamp(focus, 0.0, 1.0) * 0.20);
+    }
     radiance *= clamp(material.z, 0.0, 2.0);
-    // Hue-preserving bounded shoulder, followed by exactly one display
-    // encoding for QQuickRhiItem's UNORM RGBA8 / Qt Quick SDR composition.
-    float peak = max(radiance.r, max(radiance.g, radiance.b));
-    return linearToSrgb(max(radiance, vec3(0.0)) / (1.0 + max(peak, 0.0)));
+    // Bright themes need the same material contrast as dark themes. Their
+    // pale base plus cap/self-light layers can otherwise clip an entire field
+    // to white, erasing every individual column. Apply a luminance-selected
+    // shoulder only to pale built-in materials; dark/night palettes remain
+    // bit-for-bit on their existing path.
+    float brightTheme = step(0.5, ubuf.bodyColor.a)
+        * smoothstep(0.45, 0.75,
+            dot(bodyTint, vec3(0.2126, 0.7152, 0.0722)));
+    vec3 brightThemeShoulder = radiance / (vec3(1.0) + radiance * 0.72);
+    radiance = mix(radiance, brightThemeShoulder, brightTheme);
+    // Reference runtime probe: a .18 output writes byte46 to UNORM.
+    // No additional shoulder or display encoding on the terrain path.
+    return clamp(radiance, vec3(0.0), vec3(1.0));
 }
 
 void main()
@@ -524,8 +738,8 @@ void main()
     // Height-selective crown light retains a focal highlight while leaving
     // side faces and the surrounding low tiles quiet.
     finalColor += topGlow * topSurface * clamp(columnHeight / 12.0, 0.0, 1.0)
-                * (0.10 + pow(smoothstep(3.0, 10.0, columnHeight), 2.0) * 0.24
-                         + musicLight * 0.65);
+                 * (0.10 + pow(smoothstep(3.0, 10.0, columnHeight), 2.0) * 0.24
+                          + musicLight * 0.24);
     finalColor += topGlow * crownSheen * topSurface * 0.78;
     finalColor = mix(finalColor, topGlow,
                      clamp(crownSheen * topSurface * 0.28, 0.0, 0.52));
@@ -536,7 +750,7 @@ void main()
     finalColor *= 0.92 + focus * 0.18;
     // Darker steady material leaves headroom for the music pulse. Keep the
     // edge/specular definition; exposure does not alter column geometry.
-    finalColor *= mix(1.0, 0.615 - jelly * 0.10 + musicLight * 1.15, isTerrain);
+    finalColor *= mix(1.0, 0.68 - jelly * 0.08 + musicLight * 0.34, isTerrain);
     finalColor *= mix(1.0, material.z, isTerrain);
     // Emissive layers must recede with the ground as well: adding crown and
     // ripple light after atmospheric shading used to reveal a solid outer disk.

@@ -1,8 +1,12 @@
 #include "audio_visual_feature_controller.hpp"
 #include "player_experience_controller.hpp"
 #include "terrain_reactor_item.hpp"
+#include "immersive_theme_catalog.hpp"
+#include "playback_controller.hpp"
+#include <agplayer/c_api.h>
 
 #include <QSignalSpy>
+#include <QScopeGuard>
 #include <QImage>
 #include <QQuickRenderTarget>
 #include <QQuickWindow>
@@ -70,7 +74,13 @@ class TerrainReactorItemTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void referenceSceneConsumesSharedPcmAndClearsOnPause();
     void defaultsDoNotScheduleRendering();
+    void compensatesRasterDirectionAtPresentation()
+    {
+        TerrainReactorItem item;
+        QVERIFY(item.isMirrorVerticallyEnabled());
+    }
     void consumesTaskOneFeaturesWithoutSpectrumAnalysis();
     void syntheticFeaturesAreDeterministicAndClamped();
     void visibilityAndExposureGateRendering();
@@ -85,7 +95,81 @@ private slots:
     void duplicateRendererIsRejectedBySharedLifecycle();
     void cameraPropertiesSupportTaskFourInput();
     void nonFiniteCameraInvokablesPreserveExposedState();
+    void referenceThemesReachRendererWithoutHexQuantization();
 };
+
+void TerrainReactorItemTest::referenceSceneConsumesSharedPcmAndClearsOnPause()
+{
+    ag_player* raw = nullptr;
+    const ag_player_config config{AG_AUDIO_BACKEND_NULL, 4096U};
+    QCOMPARE(ag_player_create_with_config(&config, &raw), AG_OK);
+    const auto cleanup = qScopeGuard([&] { ag_player_destroy(raw); });
+    PlaybackController playback(raw);
+    AudioVisualFeatureController features(&playback);
+    PlayerExperienceController style;
+    QVERIFY(style.applyTheme(QStringLiteral("neon-tokyo")));
+    TerrainReactorItem item;
+    item.setStyleSource(&style);
+    item.setFeatureSource(&features);
+    features.setActive(true);
+    // The legacy spectrum remains silent, isolating the actual PCM consumer.
+    QCOMPARE(ag_player_set_muted(raw, 1), AG_OK);
+    QCOMPARE(ag_player_load(raw, AGPLAYER_TEST_WAV), AG_OK);
+    QCOMPARE(ag_player_play(raw), AG_OK);
+    QTRY_VERIFY_WITH_TIMEOUT(features.visualSpectrumUpdateCount() > 0, 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(item.featureEnergy() > 0, 3000);
+    QVERIFY(std::abs(item.featureEnergy() - features.visualFeatures().energy) < 1e-6);
+    const auto before = item.featureRevision();
+    QCOMPARE(ag_player_pause(raw), AG_OK);
+    QTRY_COMPARE_WITH_TIMEOUT(item.featureEnergy(), 0.0, 1000);
+    QVERIFY(item.featureRevision() > before);
+    for (const auto& band : item.featureBands()) QCOMPARE(band.toDouble(), 0.0);
+    item.setFeatureSource(nullptr);
+    QCOMPARE(item.featureEnergy(), 0.0);
+    for (const auto& band : item.featureBands()) QCOMPARE(band.toDouble(), 0.0);
+}
+
+void TerrainReactorItemTest::referenceThemesReachRendererWithoutHexQuantization()
+{
+    using namespace agplayer::immersive;
+    PlayerExperienceController style;
+    style.setTopographyDensity(46);
+    TerrainReactorItem item;
+    item.setStyleSource(&style);
+    const std::array<ThemeColorRole, 5> roles{
+        ThemeColorRole::BasePrimary, ThemeColorRole::CoolCore,
+        ThemeColorRole::WarmCore, ThemeColorRole::CoolEdge,
+        ThemeColorRole::WarmEdge};
+    for (const auto& theme : builtInThemes()) {
+        bool accepted = false;
+        const QString id = QString::fromUtf8(theme.id.data(), int(theme.id.size()));
+        QVERIFY(QMetaObject::invokeMethod(&style, "applyTheme", Qt::DirectConnection,
+                                         Q_RETURN_ARG(bool, accepted), Q_ARG(QString, id)));
+        QVERIFY(accepted);
+        const auto snapshot = item.renderStyleSnapshot();
+        QCOMPARE(snapshot.topographyDensity, 46);
+        for (std::size_t index = 0; index < roles.size(); ++index) {
+            const auto encoded = workingLinearToSrgb(toWorkingLinear(
+                theme.colors[themeColorIndex(roles[index])]));
+            QVERIFY(std::abs(snapshot.colors[index].x() - encoded.red) < 0.00001F);
+            QVERIFY(std::abs(snapshot.colors[index].y() - encoded.green) < 0.00001F);
+            QVERIFY(std::abs(snapshot.colors[index].z() - encoded.blue) < 0.00001F);
+        }
+        QVERIFY(std::abs(snapshot.glowIntensity - theme.glowIntensity) < 0.00001F);
+        const std::array<ThemeColorRole, 3> separateRoles{
+            ThemeColorRole::BaseSecondary, ThemeColorRole::Fog, ThemeColorRole::Ripple};
+        const std::array<QVector4D, 3> separateValues{snapshot.bodyColor,
+                                                   snapshot.atmosphereColor, snapshot.rippleColor};
+        for (std::size_t index = 0; index < separateRoles.size(); ++index) {
+            const auto encoded = workingLinearToSrgb(toWorkingLinear(
+                theme.colors[themeColorIndex(separateRoles[index])]));
+            QVERIFY(std::abs(separateValues[index].x() - encoded.red) < 0.00001F);
+            QVERIFY(std::abs(separateValues[index].y() - encoded.green) < 0.00001F);
+            QVERIFY(std::abs(separateValues[index].z() - encoded.blue) < 0.00001F);
+            QCOMPARE(separateValues[index].w(), 1.0F);
+        }
+    }
+}
 
 class TestableTerrainReactorItem final : public TerrainReactorItem {
 public:
@@ -246,6 +330,7 @@ void TerrainReactorItemTest::taskOneStyleIsCopiedIntoImmutableSnapshot()
     QCOMPARE(item.styleRevision(), quint64{1});
     const RenderStyleSnapshot snapshot = item.renderStyleSnapshot();
     QCOMPARE(snapshot.colorMode, RenderColorMode::RgbSweep);
+    QCOMPARE(snapshot.rippleColor.w(), 0.0F); // Custom theme retains palette/event encoding.
     QVERIFY(std::abs(snapshot.colors[1].x() - 0.070588) < 0.00001);
     QVERIFY(std::abs(snapshot.terrainAmplitude - 0.81F) < 0.00001F);
     QVERIFY(std::abs(snapshot.motionResponse - 0.37F) < 0.00001F);

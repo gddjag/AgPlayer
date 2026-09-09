@@ -35,19 +35,30 @@ struct alignas(16) UniformBlock {
     float styleAudio[4]{}; // compression, response, range, center highlight
     float stylePresentation[4]{}; // rhythm, depth, clarity, rotation speed
     float impact[4]{}; // core pulse strength/age, selected group + 1 (0=none), sensitivity
-    float waveSources[8][4]{}; // stage x/z, age + 32 * palette index (0..3), strength
+    // Native mode uses the first eight entries with age + 32 * palette index.
+    // Reference-ripple mode consumes all ten as x/z, age seconds, signed strength.
+    float waveSources[10][4]{};
     float audioEnvelope[4]{}; // fast bass, slow bass, beat strength, beat age
     float cameraPosition[4]{}; // world-space eye position
     float materialParameters[4]{}; // mode, softness, elasticity, ink density
-    float sceneControls[4]{}; // column opacity, terrain exposure, reserved
-    float waveParameters[4]{}; // strength, width, lifetime factor, reserved
-    float sceneLighting[4]{}; // inner light, light spill, light radius, reserved
+    float sceneControls[4]{}; // column opacity, exposure, stage half extent, column size
+    float waveParameters[4]{}; // strength, width, decay speed, terrain smoothness descriptor
+    float sceneLighting[4]{}; // inner light, light spill, light radius, terrain density descriptor
     float lightMvp[16]{};
     float shadowParameters[4]{}; // enabled, texel size, depth zero-to-one, texture Y flip
+    // Display-encoded colors, like colors above. A=0 selects the palette
+    // fallback; A=1 supplies an explicit material/atmosphere color.
+    float bodyColor[4]{};
+    float atmosphereColor[4]{};
+    float timbre[4]{}; // warmth, brightness, sharpness, reserved; normalized descriptors
+    // Display-encoded reference ripple tint. A > .5 selects reference ripple
+    // semantics; A == 0 preserves the native travelling-wave interpretation.
+    float rippleColor[4]{};
 };
 
 static_assert(alignof(UniformBlock) == 16);
 static_assert(sizeof(UniformBlock) % 16 == 0);
+static_assert(sizeof(UniformBlock) == 752, "Terrain UBO layout must match the 10-slot GLSL contract");
 
 constexpr std::array<Vertex, cubeVertexCount> cubeVertices{{
     {{-0.5F, -0.5F,  0.5F}, { 0.0F,  0.0F,  1.0F}},

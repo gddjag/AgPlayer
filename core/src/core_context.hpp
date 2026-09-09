@@ -51,6 +51,8 @@ public:
     void set_muted(bool muted) noexcept;
     [[nodiscard]] EngineSnapshot snapshot() const noexcept;
     ag_result spectrum(float* bins, std::size_t bin_count) noexcept;
+    void set_visual_pcm_enabled(bool enabled) noexcept;
+    void read_visual_pcm(ag_visual_pcm_snapshot& snapshot) noexcept;
     [[nodiscard]] bool device_lost() const noexcept;
     ag_result retry_device() noexcept;
     void simulate_device_loss() noexcept;

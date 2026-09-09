@@ -11,7 +11,9 @@
 #include <QSet>
 #include <QSignalSpy>
 #include <QStandardPaths>
+#include <QStringList>
 #include <QTest>
+#include <QVariantMap>
 
 class PlayerExperienceControllerTest final : public QObject {
     Q_OBJECT
@@ -24,9 +26,10 @@ private slots:
     void materialControlsNormalizeNotifyAndPersist();
     void materialPresetsRestoreAfterInk();
     void defaultPresetDoesNotOverrideSongPaletteWithTimeCycling();
-    void freshInstallUsesAudioRangeEchoDefaults();
+    void freshInstallUsesMinimalMonochromeTheme();
     void invalidStoredVisualValuesUseAudioRangeEchoDefaults();
     void storedColumnDensityOverridesTheFreshInstallDefault();
+    void topographyDensityIsIndependentPersistentAndThemeStable();
     void screenshotPresetValues();
     void initTestCase();
     void defaultsAreIndependent();
@@ -42,6 +45,10 @@ private slots:
     void derivesBandsAndEvents();
     void followsPlaybackSpectrumOnlyWhileActive();
     void eventThresholdsIncludeBoundaries();
+    void builtInThemesApplyWithoutDynamicPresetChanges();
+    void invalidThemeDoesNotChangeState();
+    void themePersistsAndLegacyColorsRemainManual();
+    void presetAndManualColorClearTheme();
 };
 
 void PlayerExperienceControllerTest::columnLightingPersistsClampsAndSurvivesPresets()
@@ -314,7 +321,7 @@ void PlayerExperienceControllerTest::defaultPresetDoesNotOverrideSongPaletteWith
     QCOMPARE(experience.colorMode(), 0);
 }
 
-void PlayerExperienceControllerTest::freshInstallUsesAudioRangeEchoDefaults()
+void PlayerExperienceControllerTest::freshInstallUsesMinimalMonochromeTheme()
 {
     QSettings().clear();
     PlayerExperienceController experience;
@@ -349,11 +356,12 @@ void PlayerExperienceControllerTest::freshInstallUsesAudioRangeEchoDefaults()
     QCOMPARE(experience.autoRotateSpeed(), 78);
     QCOMPARE(experience.rhythmSensitivity(), 80);
     QCOMPARE(experience.colorMode(), PlayerExperienceController::MultiRegion);
-    QCOMPARE(experience.coolColor(), QStringLiteral("#5276E8"));
-    QCOMPARE(experience.warmColor(), QStringLiteral("#F58DAD"));
-    QCOMPARE(experience.accentColor(), QStringLiteral("#A880ED"));
-    QCOMPARE(experience.peakColor(), QStringLiteral("#F5DBEC"));
-    QCOMPARE(experience.baseColor(), QStringLiteral("#040A1C"));
+    QCOMPARE(experience.themeId(), QStringLiteral("minimal-monochrome"));
+    QCOMPARE(experience.coolColor(), QStringLiteral("#F3F3F3"));
+    QCOMPARE(experience.warmColor(), QStringLiteral("#FFFFFF"));
+    QCOMPARE(experience.accentColor(), QStringLiteral("#FFFFFF"));
+    QCOMPARE(experience.peakColor(), QStringLiteral("#DADADA"));
+    QCOMPARE(experience.baseColor(), QStringLiteral("#272727"));
     QVERIFY(experience.floatingCubesEnabled());
     QVERIFY(experience.meteorsEnabled());
     QVERIFY(experience.ripplesEnabled());
@@ -361,7 +369,7 @@ void PlayerExperienceControllerTest::freshInstallUsesAudioRangeEchoDefaults()
     QVERIFY(experience.idleBreathingEnabled());
     QVERIFY(experience.streamHighlightEnabled());
     QVERIFY(!experience.themeCycleEnabled());
-    QVERIFY(experience.songAdaptiveColorEnabled());
+    QVERIFY(!experience.songAdaptiveColorEnabled());
 }
 
 void PlayerExperienceControllerTest::invalidStoredVisualValuesUseAudioRangeEchoDefaults()
@@ -401,6 +409,33 @@ void PlayerExperienceControllerTest::storedColumnDensityOverridesTheFreshInstall
     QCOMPARE(experience.columnDensity(), 87);
 }
 
+void PlayerExperienceControllerTest::topographyDensityIsIndependentPersistentAndThemeStable()
+{
+    QSettings settings;
+    settings.clear();
+    PlayerExperienceController experience;
+    QCOMPARE(experience.topographyDensity(), 46);
+    QSignalSpy changed(&experience, &PlayerExperienceController::topographyDensityChanged);
+
+    experience.setTopographyDensity(-1);
+    QCOMPARE(experience.topographyDensity(), 0);
+    experience.setTopographyDensity(101);
+    QCOMPARE(experience.topographyDensity(), 100);
+    QCOMPARE(changed.count(), 2);
+
+    experience.setTopographyDensity(63);
+    QCOMPARE(settings.value(QStringLiteral("immersiveVisual/topographyDensity")).toInt(), 63);
+    QCOMPARE(experience.columnDensity(), 50);
+    QVERIFY(experience.applyTheme(QStringLiteral("neon-tokyo")));
+    QCOMPARE(experience.topographyDensity(), 63);
+
+    PlayerExperienceController restored;
+    QCOMPARE(restored.topographyDensity(), 63);
+    settings.setValue(QStringLiteral("immersiveVisual/topographyDensity"), 101);
+    PlayerExperienceController high;
+    QCOMPARE(high.topographyDensity(), 100);
+}
+
 void PlayerExperienceControllerTest::defaultsAreIndependent()
 {
     QSettings().clear();
@@ -411,10 +446,10 @@ void PlayerExperienceControllerTest::defaultsAreIndependent()
     QVERIFY(!experience.lyricsVisible());
     QVERIFY(experience.panelVisible());
     QVERIFY(!experience.desktopMousePassthrough());
-    QVERIFY(experience.songAdaptiveColorEnabled());
+    QVERIFY(!experience.songAdaptiveColorEnabled());
     QCOMPARE(experience.qualityPreset(), 0);
-    QCOMPARE(experience.coolColor(), QStringLiteral("#5276E8"));
-    QCOMPARE(experience.warmColor(), QStringLiteral("#F58DAD"));
+    QCOMPARE(experience.coolColor(), QStringLiteral("#F3F3F3"));
+    QCOMPARE(experience.warmColor(), QStringLiteral("#FFFFFF"));
     QCOMPARE(experience.visualEqGains(),
              QVariantList({90, 92, 50, 50, 50, 50, 50, 48}));
 
@@ -493,10 +528,10 @@ void PlayerExperienceControllerTest::defaultsExposeV46ExperienceControls()
     QCOMPARE(experience.subjectClarity(), 114);
     QCOMPARE(experience.autoRotateSpeed(), 78);
     QCOMPARE(experience.rhythmSensitivity(), 80);
-    QCOMPARE(experience.coolColor(), QStringLiteral("#5276E8"));
-    QCOMPARE(experience.warmColor(), QStringLiteral("#F58DAD"));
-    QCOMPARE(experience.accentColor(), QStringLiteral("#A880ED"));
-    QCOMPARE(experience.peakColor(), QStringLiteral("#F5DBEC"));
+    QCOMPARE(experience.coolColor(), QStringLiteral("#F3F3F3"));
+    QCOMPARE(experience.warmColor(), QStringLiteral("#FFFFFF"));
+    QCOMPARE(experience.accentColor(), QStringLiteral("#FFFFFF"));
+    QCOMPARE(experience.peakColor(), QStringLiteral("#DADADA"));
     QVERIFY(experience.burstEnabled());
     QVERIFY(experience.streamHighlightEnabled());
 }
@@ -952,6 +987,103 @@ void PlayerExperienceControllerTest::eventThresholdsIncludeBoundaries()
     QVERIFY(!hasSnare(0.161)); // Positive delta is just below 0.04.
     QVERIFY(hasSnare(0.160));  // Positive delta is exactly 0.04.
     QVERIFY(hasSnare(0.159));  // Positive delta is just above 0.04.
+}
+
+void PlayerExperienceControllerTest::builtInThemesApplyWithoutDynamicPresetChanges()
+{
+    QSettings().clear();
+    PlayerExperienceController experience;
+    experience.setTerrainAmplitude(73);
+    experience.setRippleStrength(147);
+    experience.setMaterialSoftness(19);
+
+    const QVariantList choices = experience.builtInThemeChoices();
+    const QStringList expectedTitles = {
+        QStringLiteral("水墨"), QStringLiteral("夜色"), QStringLiteral("东京霓虹"),
+        QStringLiteral("赛博森林"), QStringLiteral("极简黑白"), QStringLiteral("冰川白昼"),
+        QStringLiteral("锦鲤池"), QStringLiteral("珊瑚礁"), QStringLiteral("苔藓玻璃"),
+        QStringLiteral("蓝调时刻"), QStringLiteral("青瓷"), QStringLiteral("绯红信号"),
+        QStringLiteral("黎明青柠"),
+    };
+    QCOMPARE(choices.size(), 13);
+    for (qsizetype index = 0; index < choices.size(); ++index) {
+        const QVariant& item = choices.at(index);
+        const QVariantMap choice = item.toMap();
+        const QString id = choice.value(QStringLiteral("id")).toString();
+        QVERIFY(!id.isEmpty());
+        QCOMPARE(choice.value(QStringLiteral("title")).toString(), expectedTitles.at(index));
+        QVERIFY(choice.value(QStringLiteral("from")).toString().startsWith('#'));
+        QVERIFY(choice.value(QStringLiteral("to")).toString().startsWith('#'));
+        QVERIFY(choice.value(QStringLiteral("background")).toString().startsWith('#'));
+        QVERIFY(experience.applyTheme(id));
+        QCOMPARE(experience.themeId(), id);
+        QCOMPARE(experience.themeBackground().name(QColor::HexRgb).toUpper(),
+                 choice.value(QStringLiteral("background")).toString());
+        QCOMPARE(experience.colorMode(), PlayerExperienceController::MultiRegion);
+        QCOMPARE(experience.materialMode(), 0);
+        QVERIFY(!experience.songAdaptiveColorEnabled());
+        QCOMPARE(experience.terrainAmplitude(), 73);
+        QCOMPARE(experience.rippleStrength(), 147);
+        QCOMPARE(experience.materialSoftness(), 19);
+    }
+}
+
+void PlayerExperienceControllerTest::invalidThemeDoesNotChangeState()
+{
+    QSettings().clear();
+    PlayerExperienceController experience;
+    QVERIFY(experience.applyTheme(QStringLiteral("wine-signal")));
+    const QString id = experience.themeId();
+    const QString cool = experience.coolColor();
+    const QColor background = experience.themeBackground();
+    const float glow = experience.themeGlow();
+    QSignalSpy changed(&experience, &PlayerExperienceController::themeChanged);
+
+    QVERIFY(!experience.applyTheme(QStringLiteral("not-a-theme")));
+    QCOMPARE(experience.themeId(), id);
+    QCOMPARE(experience.coolColor(), cool);
+    QCOMPARE(experience.themeBackground(), background);
+    QCOMPARE(experience.themeGlow(), glow);
+    QCOMPARE(changed.count(), 0);
+    QCOMPARE(QSettings().value(QStringLiteral("immersiveVisual/themeId")).toString(), id);
+}
+
+void PlayerExperienceControllerTest::themePersistsAndLegacyColorsRemainManual()
+{
+    QSettings settings;
+    settings.clear();
+    {
+        PlayerExperienceController experience;
+        QVERIFY(experience.applyTheme(QStringLiteral("glacier-day")));
+    }
+    PlayerExperienceController restored;
+    QCOMPARE(restored.themeId(), QStringLiteral("glacier-day"));
+    QCOMPARE(restored.themeBackground().name(QColor::HexRgb).toUpper(),
+             QStringLiteral("#D8E6EA"));
+
+    settings.clear();
+    settings.setValue(QStringLiteral("immersiveVisual/coolColor"), QStringLiteral("#123456"));
+    settings.setValue(QStringLiteral("immersiveVisual/warmColor"), QStringLiteral("#ABCDEF"));
+    PlayerExperienceController legacy;
+    QVERIFY(legacy.themeId().isEmpty());
+    QCOMPARE(legacy.coolColor(), QStringLiteral("#123456"));
+    QCOMPARE(legacy.warmColor(), QStringLiteral("#ABCDEF"));
+    QVERIFY(!settings.contains(QStringLiteral("immersiveVisual/themeId")));
+}
+
+void PlayerExperienceControllerTest::presetAndManualColorClearTheme()
+{
+    QSettings().clear();
+    PlayerExperienceController experience;
+    QVERIFY(experience.applyTheme(QStringLiteral("ink-wash")));
+    QVERIFY(experience.applyPreset(PlayerExperienceController::InkWash));
+    QVERIFY(experience.themeId().isEmpty());
+
+    QVERIFY(experience.applyTheme(QStringLiteral("neon-tokyo")));
+    experience.setAccentColor(QStringLiteral("#123456"));
+    QVERIFY(experience.themeId().isEmpty());
+    experience.setColorMode(PlayerExperienceController::RgbSweep);
+    QCOMPARE(experience.colorMode(), PlayerExperienceController::RgbSweep);
 }
 
 QTEST_MAIN(PlayerExperienceControllerTest)

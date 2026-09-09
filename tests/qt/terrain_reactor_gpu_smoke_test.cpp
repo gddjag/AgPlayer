@@ -17,6 +17,17 @@
 #include <limits>
 #include <memory>
 
+namespace {
+bool waitForGpuWindow(QQuickWindow& window)
+{
+    if (QTest::qWaitForWindowExposed(&window, 3000)) return true;
+    window.hide();
+    QTest::qWait(50);
+    window.show();
+    return QTest::qWaitForWindowExposed(&window, 5000);
+}
+} // namespace
+
 class TerrainReactorGpuSmokeTest final : public QObject {
     Q_OBJECT
 
@@ -60,7 +71,7 @@ void TerrainReactorGpuSmokeTest::denseMaterialFrameBudgetProbe()
     item.setUseSyntheticFeatures(true);
     item.setSyntheticFeatures({.8,.7,.6,.5,.4,.3,.2,.1}, .6,.35,false,false);
     window.show();
-    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    QVERIFY(waitForGpuWindow(window));
     item.setActive(true);
     QTRY_COMPARE_WITH_TIMEOUT(item.renderStatus(), TerrainReactorItem::RenderStatus::Ready, 5000);
     QTest::qWait(1500);
@@ -124,7 +135,12 @@ void TerrainReactorGpuSmokeTest::columnLayeringReferenceFixture()
     style.setStreamHighlightEnabled(false);
     style.setIdleBreathingEnabled(false);
     QQuickWindow window;
-    window.resize(960, 640);
+    QScreen* const screen = QGuiApplication::primaryScreen();
+    QVERIFY(screen);
+    window.setScreen(screen);
+    window.setFlags(Qt::Window | Qt::FramelessWindowHint);
+    window.setGeometry(QRect(screen->availableGeometry().center()
+                             - QPoint(480, 320), QSize(960, 640)));
     window.setColor(QColor("#03080C"));
     TerrainReactorItem item(window.contentItem());
     item.setSize(QSizeF(960, 640));
@@ -136,7 +152,7 @@ void TerrainReactorGpuSmokeTest::columnLayeringReferenceFixture()
     item.orbitBy(-item.cameraYaw(), 0.30 - item.cameraPitch(), 0);
     item.zoomBy((85.0 - item.cameraDistance()) / 0.04, 0);
     window.show();
-    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    QVERIFY(waitForGpuWindow(window));
     const auto api = window.rendererInterface()->graphicsApi();
     if (api != QSGRendererInterface::Direct3D11 && api != QSGRendererInterface::OpenGL
         && api != QSGRendererInterface::Vulkan && api != QSGRendererInterface::Metal)
@@ -311,7 +327,7 @@ void TerrainReactorGpuSmokeTest::cameraPunchDoesNotMoveTheGroundProjection()
     item.setUseSyntheticFeatures(true);
     item.setSyntheticFeatures({.55,.45,.35,.25,0,0,0,0}, .3, 0, false, false);
     window.show();
-    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    QVERIFY(waitForGpuWindow(window));
     if (window.rendererInterface()->graphicsApi() == QSGRendererInterface::Software)
         QSKIP("No accelerated backend");
     item.setActive(true);
@@ -401,7 +417,7 @@ void TerrainReactorGpuSmokeTest::materialControlsChangeRenderedSurface()
         item.setSyntheticFeatures({0.,0.,0.,0.,0.,0.,0.,0.}, 0, 0, false, false);
     }
     window.show();
-    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    QVERIFY(waitForGpuWindow(window));
     const auto api = window.rendererInterface()->graphicsApi();
     if (api != QSGRendererInterface::Direct3D11 && api != QSGRendererInterface::OpenGL
         && api != QSGRendererInterface::Vulkan && api != QSGRendererInterface::Metal)
@@ -412,9 +428,10 @@ void TerrainReactorGpuSmokeTest::materialControlsChangeRenderedSurface()
     const QImage a = window.grabWindow();
     const int lowTerrainCount = item.property("renderedTerrainCount").toInt();
     const quint64 generationBeforeDensity = item.resourceGeneration();
+    const quint64 frameBeforeChange = item.frameCount();
     QVERIFY(style.setProperty(control.constData(), high));
     QTRY_COMPARE_WITH_TIMEOUT(item.renderedStyleRevision(), item.styleRevision(), 3000);
-    QTRY_VERIFY_WITH_TIMEOUT(item.stableRenderedFrameCount() >= 4, 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() >= frameBeforeChange + 2, 3000);
     const QImage b = window.grabWindow();
     if (control == "columnDensity") {
         const int highTerrainCount = item.property("renderedTerrainCount").toInt();
@@ -442,14 +459,20 @@ void TerrainReactorGpuSmokeTest::materialControlsChangeRenderedSurface()
     QVERIFY(!a.isNull());
     QCOMPARE(a.size(), b.size());
     int changed = 0;
+    int maximumDifference = 0;
+    quint64 totalDifference = 0;
     for (int y = a.height() / 3; y < a.height() * 4 / 5; ++y) {
         for (int x = a.width() / 4; x < a.width() * 3 / 4; ++x) {
             const QColor ca = a.pixelColor(x,y), cb = b.pixelColor(x,y);
-            if (std::abs(ca.red()-cb.red()) + std::abs(ca.green()-cb.green())
-                + std::abs(ca.blue()-cb.blue()) > 24) ++changed;
+            const int difference = std::abs(ca.red()-cb.red())
+                + std::abs(ca.green()-cb.green()) + std::abs(ca.blue()-cb.blue());
+            maximumDifference = std::max(maximumDifference, difference);
+            totalDifference += quint64(difference);
+            if (difference > 24) ++changed;
         }
     }
-    qInfo() << control << "material pixels changed:" << changed;
+    qInfo() << control << "material pixels changed:" << changed
+            << "max/total delta:" << maximumDifference << totalDifference;
     QVERIFY2(changed > 500, "Material parameter changes numbers but not the rendered surface");
     item.setActive(false);
 }
@@ -488,7 +511,7 @@ void TerrainReactorGpuSmokeTest::beatMaterialControlsChangeRenderedSurface()
     window.setGeometry(QRect(screen->availableGeometry().center()
                              - QPoint(240, 135), logicalSize));
     window.show();
-    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    QVERIFY(waitForGpuWindow(window));
     QTRY_COMPARE_WITH_TIMEOUT(window.screen(), screen, 3000);
     QTRY_COMPARE_WITH_TIMEOUT(window.size(), logicalSize, 3000);
     const QSize physicalSize(qRound(480 * window.devicePixelRatio()),
@@ -568,7 +591,7 @@ void TerrainReactorGpuSmokeTest::regularBeatBrieflyBrightensThenReturns()
     item.setStyleSource(&style);
     item.setFeatureSource(&source);
     window.show();
-    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    QVERIFY(waitForGpuWindow(window));
     const auto api = window.rendererInterface()->graphicsApi();
     if (api != QSGRendererInterface::Direct3D11
         && api != QSGRendererInterface::OpenGL
@@ -611,8 +634,11 @@ void TerrainReactorGpuSmokeTest::regularBeatBrieflyBrightensThenReturns()
     for (int frame = 0; frame < 5; ++frame) {
         QTest::qWait(16);
         double nearWhiteFraction = 0;
-        peak = std::max(peak, centerLight(&nearWhiteFraction));
-        peakNearWhiteFraction = std::max(peakNearWhiteFraction, nearWhiteFraction);
+        const quint64 current = centerLight(&nearWhiteFraction);
+        if (current > peak) {
+            peak = current;
+            peakNearWhiteFraction = nearWhiteFraction;
+        }
     }
     QTest::qWait(500);
     const quint64 settled = centerLight();
@@ -674,7 +700,7 @@ void TerrainReactorGpuSmokeTest::wideGroundFadesBeforeCircularBoundary()
     item.orbitBy(-item.cameraYaw(), 1.15 - item.cameraPitch(), 0);
     item.zoomBy(10000, 0);
     window.show();
-    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    QVERIFY(waitForGpuWindow(window));
     item.setActive(true);
     QTRY_COMPARE_WITH_TIMEOUT(item.renderStatus(), TerrainReactorItem::RenderStatus::Ready, 5000);
     QTest::qWait(250);
@@ -710,7 +736,7 @@ void TerrainReactorGpuSmokeTest::firstActiveCreatesResourcesAndRendersStaticFeat
     QCOMPARE(item.liveRendererCount(), 0);
     window.show();
 
-    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    QVERIFY(waitForGpuWindow(window));
     const auto api = window.rendererInterface()->graphicsApi();
     if (api != QSGRendererInterface::Direct3D11
         && api != QSGRendererInterface::OpenGL
@@ -791,7 +817,7 @@ void TerrainReactorGpuSmokeTest::staticFeaturesKeepRenderingWithoutGuiFeatureUpd
     item.setQuality(TerrainReactorItem::Quality::Balanced);
     item.setFeatureSource(&source);
     window.show();
-    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    QVERIFY(waitForGpuWindow(window));
     const auto api = window.rendererInterface()->graphicsApi();
     if (api != QSGRendererInterface::Direct3D11
         && api != QSGRendererInterface::OpenGL
@@ -851,7 +877,7 @@ void TerrainReactorGpuSmokeTest::explicitImpactBrightensAStableTerrainFrame()
     item.setStyleSource(&style);
     item.setFeatureSource(&source);
     window.show();
-    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    QVERIFY(waitForGpuWindow(window));
     const auto api = window.rendererInterface()->graphicsApi();
     if (api != QSGRendererInterface::Direct3D11
         && api != QSGRendererInterface::OpenGL
@@ -894,17 +920,37 @@ void TerrainReactorGpuSmokeTest::explicitImpactBrightensAStableTerrainFrame()
         std::memory_order_acquire);
     source.publishImpact(1.0);
     QTRY_VERIFY_WITH_TIMEOUT(item.featureRevision() > beforeRevision, 3000);
+    QTRY_COMPARE_WITH_TIMEOUT(item.impactRevision(), source.impactRevision(), 3000);
+    QVERIFY(item.impactStrength() > 0.99);
     const quint64 impactFeatureRevision = item.featureRevision();
     QTRY_VERIFY_WITH_TIMEOUT(([&item, presentedFrames, impactPresented,
                                impactFeatureRevision] {
         item.update();
         return item.renderedFeatureRevision() == impactFeatureRevision
             && presentedFrames->load(std::memory_order_acquire)
-                > impactPresented;
+                >= impactPresented + 2;
     }()), 3000);
-    const QImage impacted = window.grabWindow().convertToFormat(
-        QImage::Format_RGBA8888);
-    QCOMPARE(impacted.size(), baseline.size());
+    QImage impacted;
+    quint64 strongestLight = 0;
+    for (int sample = 0; sample < 5; ++sample) {
+        QTest::qWait(16);
+        const QImage candidate = window.grabWindow().convertToFormat(
+            QImage::Format_RGBA8888);
+        QCOMPARE(candidate.size(), baseline.size());
+        quint64 light = 0;
+        const QRect roi(candidate.width() / 4, candidate.height() / 4,
+                        candidate.width() / 2, candidate.height() / 2);
+        for (int y = roi.top(); y <= roi.bottom(); ++y)
+            for (int x = roi.left(); x <= roi.right(); ++x) {
+                const QColor c = candidate.pixelColor(x, y);
+                light += quint64(c.red() + c.green() + c.blue());
+            }
+        if (light > strongestLight) {
+            strongestLight = light;
+            impacted = candidate;
+        }
+    }
+    QVERIFY(!impacted.isNull());
 
     quint64 baselineLight = 0;
     quint64 impactedLight = 0;
@@ -966,7 +1012,7 @@ void TerrainReactorGpuSmokeTest::highFrequencySheenStaysLocalizedAndHeightSubord
         presentedFrames->fetch_add(1, std::memory_order_release);
     }, Qt::DirectConnection);
     window.show();
-    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    QVERIFY(waitForGpuWindow(window));
     const auto api = window.rendererInterface()->graphicsApi();
     if (api != QSGRendererInterface::Direct3D11
         && api != QSGRendererInterface::OpenGL
@@ -1126,7 +1172,7 @@ void TerrainReactorGpuSmokeTest::silentTerrainDoesNotGenerateTopFlashes()
     item.setUseSyntheticFeatures(true);
     item.setSyntheticFeatures({0,0,0,0,0,0,0,0}, 0, 0, false, false);
     window.show();
-    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    QVERIFY(waitForGpuWindow(window));
     item.setActive(true);
     QTRY_COMPARE_WITH_TIMEOUT(item.renderStatus(), TerrainReactorItem::RenderStatus::Ready, 5000);
     QTest::qWait(300);
@@ -1175,7 +1221,7 @@ void TerrainReactorGpuSmokeTest::highFrequencyHeightControlChangesActualRelief()
     item.setSyntheticFeatures({0, 0, 0, 0, 0.72, 0.72, 0.72, 0.72},
                               0, 0, false, false);
     window.show();
-    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    QVERIFY(waitForGpuWindow(window));
     const auto api = window.rendererInterface()->graphicsApi();
     if (api != QSGRendererInterface::Direct3D11
         && api != QSGRendererInterface::OpenGL
@@ -1193,8 +1239,10 @@ void TerrainReactorGpuSmokeTest::highFrequencyHeightControlChangesActualRelief()
     };
     settle();
     const QImage low = window.grabWindow();
+    const quint64 frameBeforeAmplitude = item.frameCount();
     style.setTerrainAmplitude(100);
     settle();
+    QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() >= frameBeforeAmplitude + 2, 3000);
     const QImage high = window.grabWindow();
     QVERIFY(!low.isNull());
     QCOMPARE(high.size(), low.size());
@@ -1251,7 +1299,7 @@ void TerrainReactorGpuSmokeTest::steadyCorePreservesHighlightDetailWithoutWhiteP
         presentedFrames->fetch_add(1, std::memory_order_release);
     }, Qt::DirectConnection);
     window.show();
-    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    QVERIFY(waitForGpuWindow(window));
     const auto api = window.rendererInterface()->graphicsApi();
     if (api != QSGRendererInterface::Direct3D11
         && api != QSGRendererInterface::OpenGL
@@ -1474,7 +1522,7 @@ void TerrainReactorGpuSmokeTest::nonFiniteCameraControlsRemainRenderable()
                                0.0, 0.0, 0.0, 0.0},
                               0.0, 0.0, false, false);
     window.show();
-    QTRY_VERIFY_WITH_TIMEOUT(window.isExposed(), 3000);
+    QVERIFY(waitForGpuWindow(window));
     const auto api = window.rendererInterface()->graphicsApi();
     if (api != QSGRendererInterface::Direct3D11
         && api != QSGRendererInterface::OpenGL

@@ -1,9 +1,11 @@
 #include "player_experience_controller.hpp"
 
+#include "immersive_theme_catalog.hpp"
 #include "settings_controller.hpp"
 
 #include <QColor>
 #include <QMetaType>
+#include <QVariantMap>
 
 #include <algorithm>
 #include <array>
@@ -228,6 +230,7 @@ int PlayerExperienceController::rippleWidth() const noexcept { return rippleWidt
 int PlayerExperienceController::rippleDecay() const noexcept { return rippleDecay_; }
 int PlayerExperienceController::columnSize() const noexcept { return columnSize_; }
 int PlayerExperienceController::columnDensity() const noexcept { return columnDensity_; }
+int PlayerExperienceController::topographyDensity() const noexcept { return topographyDensity_; }
 int PlayerExperienceController::columnOpacity() const noexcept { return columnOpacity_; }
 int PlayerExperienceController::reactorBrightness() const noexcept { return reactorBrightness_; }
 int PlayerExperienceController::columnInnerLight() const noexcept { return columnInnerLight_; }
@@ -238,6 +241,38 @@ QString PlayerExperienceController::warmColor() const { return warmColor_; }
 QString PlayerExperienceController::accentColor() const { return accentColor_; }
 QString PlayerExperienceController::peakColor() const { return peakColor_; }
 QString PlayerExperienceController::baseColor() const { return baseColor_; }
+QString PlayerExperienceController::themeId() const { return themeId_; }
+QVariantList PlayerExperienceController::builtInThemeChoices() const
+{
+    static const std::array<QString, 13> titles = {
+        QStringLiteral("水墨"), QStringLiteral("夜色"), QStringLiteral("东京霓虹"),
+        QStringLiteral("赛博森林"), QStringLiteral("极简黑白"), QStringLiteral("冰川白昼"),
+        QStringLiteral("锦鲤池"), QStringLiteral("珊瑚礁"), QStringLiteral("苔藓玻璃"),
+        QStringLiteral("蓝调时刻"), QStringLiteral("青瓷"), QStringLiteral("绯红信号"),
+        QStringLiteral("黎明青柠"),
+    };
+    QVariantList choices;
+    choices.reserve(static_cast<qsizetype>(agplayer::immersive::builtInThemes().size()));
+    for (std::size_t index = 0; index < agplayer::immersive::builtInThemes().size(); ++index) {
+        const auto& theme = agplayer::immersive::builtInThemes().at(index);
+        const auto color = [&theme](const agplayer::immersive::ThemeColorRole role) {
+            const auto rgb = agplayer::immersive::workingLinearToSrgb(
+                agplayer::immersive::toWorkingLinear(
+                    theme.colors.at(agplayer::immersive::themeColorIndex(role))));
+            return QColor::fromRgbF(rgb.red, rgb.green, rgb.blue).name(QColor::HexRgb)
+                .toUpper();
+        };
+        choices.append(QVariantMap{{QStringLiteral("id"), QString::fromUtf8(theme.id.data(),
+                                                               static_cast<qsizetype>(theme.id.size()))},
+                                   {QStringLiteral("title"), titles.at(index)},
+                                   {QStringLiteral("from"), color(agplayer::immersive::ThemeColorRole::CoolCore)},
+                                   {QStringLiteral("to"), color(agplayer::immersive::ThemeColorRole::WarmCore)},
+                                   {QStringLiteral("background"), color(agplayer::immersive::ThemeColorRole::BasePrimary)}});
+    }
+    return choices;
+}
+float PlayerExperienceController::themeGlow() const noexcept { return themeGlow_; }
+QColor PlayerExperienceController::themeBackground() const { return themeBackground_; }
 int PlayerExperienceController::terrainAmplitude() const noexcept { return terrainAmplitude_; }
 int PlayerExperienceController::motionResponse() const noexcept { return motionResponse_; }
 int PlayerExperienceController::gradientLayers() const noexcept { return gradientLayers_; }
@@ -294,6 +329,7 @@ int PlayerExperienceController::rhythmSensitivity() const noexcept
 void PlayerExperienceController::setMaterialMode(int value)
 {
     value = enumOrDefault(value, 0, 2, 0);
+    if (!themeId_.isEmpty() && !applyingTheme_ && value != 0) setThemeId({});
     if (materialMode_ == value) return;
     materialMode_ = value;
     persist(QStringLiteral("materialMode"), value);
@@ -361,6 +397,15 @@ void PlayerExperienceController::setColumnDensity(int value)
     columnDensity_ = value;
     persist(QStringLiteral("columnDensity"), value);
     emit columnDensityChanged();
+}
+
+void PlayerExperienceController::setTopographyDensity(int value)
+{
+    value = clampPercent(value);
+    if (topographyDensity_ == value) return;
+    topographyDensity_ = value;
+    persist(QStringLiteral("topographyDensity"), value);
+    emit topographyDensityChanged();
 }
 
 void PlayerExperienceController::setColumnSize(int value)
@@ -471,6 +516,7 @@ void PlayerExperienceController::setQualityPreset(int value)
 void PlayerExperienceController::setColorMode(int value)
 {
     value = enumOrDefault(value, MultiRegion, RainbowColumn, MultiRegion);
+    if (!themeId_.isEmpty() && !applyingTheme_ && value != MultiRegion) setThemeId({});
     if (colorMode_ == value) return;
     colorMode_ = value;
     persist(QStringLiteral("colorMode"), value);
@@ -479,6 +525,7 @@ void PlayerExperienceController::setColorMode(int value)
 
 void PlayerExperienceController::setCoolColor(const QString& value)
 {
+    clearThemeForManualColor();
     const QString normalized = normalizedColor(value, QStringLiteral("#4F6FFF"));
     if (coolColor_ == normalized) return;
     coolColor_ = normalized;
@@ -488,6 +535,7 @@ void PlayerExperienceController::setCoolColor(const QString& value)
 
 void PlayerExperienceController::setWarmColor(const QString& value)
 {
+    clearThemeForManualColor();
     const QString normalized = normalizedColor(value, QStringLiteral("#FF4778"));
     if (warmColor_ == normalized) return;
     warmColor_ = normalized;
@@ -497,6 +545,7 @@ void PlayerExperienceController::setWarmColor(const QString& value)
 
 void PlayerExperienceController::setAccentColor(const QString& value)
 {
+    clearThemeForManualColor();
     const QString normalized = normalizedColor(value, QStringLiteral("#77EAFF"));
     if (accentColor_ == normalized) return;
     accentColor_ = normalized;
@@ -506,6 +555,7 @@ void PlayerExperienceController::setAccentColor(const QString& value)
 
 void PlayerExperienceController::setPeakColor(const QString& value)
 {
+    clearThemeForManualColor();
     const QString normalized = normalizedColor(value, QStringLiteral("#D7FF58"));
     if (peakColor_ == normalized) return;
     peakColor_ = normalized;
@@ -515,6 +565,7 @@ void PlayerExperienceController::setPeakColor(const QString& value)
 
 void PlayerExperienceController::setBaseColor(const QString& value)
 {
+    clearThemeForManualColor();
     const QString normalized = normalizedColor(value, QStringLiteral("#080616"));
     if (baseColor_ == normalized) return;
     baseColor_ = normalized;
@@ -643,6 +694,7 @@ void PlayerExperienceController::setStreamHighlightEnabled(bool value)
 
 void PlayerExperienceController::setSongAdaptiveColorEnabled(bool value)
 {
+    if (!themeId_.isEmpty() && !applyingTheme_) value = false;
     if (songAdaptiveColorEnabled_ == value) return;
     songAdaptiveColorEnabled_ = value;
     persist(QStringLiteral("songAdaptiveColorEnabled"), value);
@@ -805,6 +857,7 @@ void PlayerExperienceController::setRhythmSensitivity(int value)
 bool PlayerExperienceController::applyPreset(int preset)
 {
     if (preset < AudioRangeEcho || preset > AmberCinema) return false;
+    setThemeId({});
     const auto& screenshot = screenshotPresets().at(static_cast<size_t>(preset));
     // Unpictured material mode, softness, elasticity and ink density stay unchanged.
     static constexpr std::array<std::array<int, 4>, 9> materials = {{
@@ -872,6 +925,39 @@ bool PlayerExperienceController::applyPreset(int preset)
     return true;
 }
 
+bool PlayerExperienceController::applyTheme(const QString& id)
+{
+    const auto* theme = agplayer::immersive::findBuiltInTheme(id.toStdString());
+    if (theme == nullptr) return false;
+
+    const auto encodedColor = [theme](const agplayer::immersive::ThemeColorRole role) {
+        const auto rgb = agplayer::immersive::workingLinearToSrgb(
+            agplayer::immersive::toWorkingLinear(
+                theme->colors.at(agplayer::immersive::themeColorIndex(role))));
+        return QColor::fromRgbF(rgb.red, rgb.green, rgb.blue);
+    };
+
+    applyingTheme_ = true;
+    setMaterialMode(0);
+    setColorMode(MultiRegion);
+    setSongAdaptiveColorEnabled(false);
+    setCoolColor(encodedColor(agplayer::immersive::ThemeColorRole::CoolCore)
+                     .name(QColor::HexRgb));
+    setWarmColor(encodedColor(agplayer::immersive::ThemeColorRole::WarmCore)
+                     .name(QColor::HexRgb));
+    setAccentColor(encodedColor(agplayer::immersive::ThemeColorRole::Ripple)
+                       .name(QColor::HexRgb));
+    setPeakColor(encodedColor(agplayer::immersive::ThemeColorRole::WarmEdge)
+                     .name(QColor::HexRgb));
+    setBaseColor(encodedColor(agplayer::immersive::ThemeColorRole::BasePrimary)
+                     .name(QColor::HexRgb));
+    themeGlow_ = theme->glowIntensity;
+    themeBackground_ = encodedColor(agplayer::immersive::ThemeColorRole::BasePrimary);
+    applyingTheme_ = false;
+    setThemeId(id);
+    return true;
+}
+
 void PlayerExperienceController::toggleImmersiveMode()
 {
     setImmersiveMode(immersiveMode_ == Off ? TerrainReactor : Off);
@@ -913,6 +999,10 @@ void PlayerExperienceController::cycleExperienceTheme()
 void PlayerExperienceController::load()
 {
     settings_.beginGroup(QLatin1String(kSettingsGroup));
+    const bool isNewInstall = settings_.allKeys().isEmpty();
+    const QVariant persistedTheme = settings_.value(QStringLiteral("themeId"));
+    const QString storedThemeId = persistedTheme.metaType().id() == QMetaType::QString
+        ? persistedTheme.toString() : QString{};
     const auto integer = [this](const QString& key, const int fallback) {
         return storedInteger(settings_.value(key)).value_or(fallback);
     };
@@ -950,6 +1040,7 @@ void PlayerExperienceController::load()
     baseColor_ = normalizedColor(storedColor(settings_.value(QStringLiteral("baseColor")),
                                              QStringLiteral("#040A1C")),
                                  QStringLiteral("#040A1C"));
+    themeBackground_ = QColor(baseColor_);
     terrainAmplitude_ = clampPercent(integer(QStringLiteral("terrainAmplitude"), 34));
     materialMode_ = enumOrDefault(integer(QStringLiteral("materialMode"), 0), 0, 2, 0);
     materialSoftness_ = clampRange(integer(QStringLiteral("materialSoftness"), 45), 0, 100);
@@ -960,6 +1051,7 @@ void PlayerExperienceController::load()
     rippleDecay_ = clampRange(integer(QStringLiteral("rippleDecay"), 81), 20, 200);
     columnSize_ = clampRange(integer(QStringLiteral("columnSize"), 95), 50, 200);
     columnDensity_ = clampRange(integer(QStringLiteral("columnDensity"), 50), 50, 200);
+    topographyDensity_ = clampPercent(integer(QStringLiteral("topographyDensity"), 46));
     columnOpacity_ = clampRange(integer(QStringLiteral("columnOpacity"), 100), 0, 100);
     reactorBrightness_ = clampRange(integer(QStringLiteral("reactorBrightness"), 100), 0, 200);
     columnInnerLight_ = clampRange(integer(QStringLiteral("columnInnerLight"), 155), 0, 200);
@@ -1020,6 +1112,7 @@ void PlayerExperienceController::load()
     settings_.setValue(QStringLiteral("rippleDecay"), rippleDecay_);
     settings_.setValue(QStringLiteral("columnSize"), columnSize_);
     settings_.setValue(QStringLiteral("columnDensity"), columnDensity_);
+    settings_.setValue(QStringLiteral("topographyDensity"), topographyDensity_);
     settings_.setValue(QStringLiteral("columnOpacity"), columnOpacity_);
     settings_.setValue(QStringLiteral("reactorBrightness"), reactorBrightness_);
     settings_.setValue(QStringLiteral("columnInnerLight"), columnInnerLight_);
@@ -1065,11 +1158,32 @@ void PlayerExperienceController::load()
     settings_.setValue(QStringLiteral("autoRotateSpeed"), autoRotateSpeed_);
     settings_.setValue(QStringLiteral("rhythmSensitivity"), rhythmSensitivity_);
     settings_.endGroup();
+
+    if (agplayer::immersive::findBuiltInTheme(storedThemeId.toStdString()) != nullptr) {
+        applyTheme(storedThemeId);
+    } else if (isNewInstall) {
+        applyTheme(QString::fromUtf8(
+            agplayer::immersive::defaultBuiltInTheme().id.data(),
+            static_cast<qsizetype>(agplayer::immersive::defaultBuiltInTheme().id.size())));
+    }
 }
 
 void PlayerExperienceController::persist(const QString& key, const QVariant& value)
 {
     settings_.setValue(QLatin1String(kSettingsGroup) + QLatin1Char('/') + key, value);
+}
+
+void PlayerExperienceController::setThemeId(const QString& id)
+{
+    if (themeId_ == id) return;
+    themeId_ = id;
+    persist(QStringLiteral("themeId"), themeId_);
+    emit themeChanged();
+}
+
+void PlayerExperienceController::clearThemeForManualColor()
+{
+    if (!applyingTheme_) setThemeId({});
 }
 
 int PlayerExperienceController::clampPercent(int value) noexcept

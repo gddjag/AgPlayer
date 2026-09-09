@@ -13,6 +13,42 @@ class TerrainReactorStateTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void reference155GridUsesCornerAnchoredCoordinates()
+    {
+        QCOMPARE(referenceTerrainGridSize(-5),96);
+        QCOMPARE(referenceTerrainGridSize(0),96);
+        QCOMPARE(referenceTerrainGridSize(46),155);
+        QCOMPARE(referenceTerrainGridSize(100),224);
+        QCOMPARE(referenceTerrainGridSize(105),224);
+        const auto layout=makeSceneLayout(46,155,0,0,0);
+        QCOMPARE(layout.terrain.size(),std::size_t(24025));
+        const auto& first=layout.terrain.front();
+        const auto& next=layout.terrain[1];
+        const auto& last=layout.terrain.back();
+        QVERIFY(std::abs(first.position.x()+84)<0.00001F);
+        QVERIFY(std::abs(first.position.z()+84)<0.00001F);
+        QVERIFY(std::abs(next.position.x()-(-82.916129032258))<0.00001F);
+        QVERIFY(std::abs(last.position.x()-82.916129032258)<0.00001F);
+        QVERIFY(std::abs(last.position.z()-82.916129032258)<0.00001F);
+        QCOMPARE(first.position.y(),0.0F);
+        QCOMPARE(first.scale.y(),1.0F);
+        QVERIFY(std::abs(first.scale.x()-0.9290322580645162)<0.000001F);
+    }
+    void referenceDefaultCameraHasStablePhysicalEye()
+    {
+        CameraMotion motion;
+        const auto initial=motion.snapshot();
+        const auto eye=[](CameraSnapshot c){return std::array<float,3>{
+            c.distance*std::cos(c.pitch)*std::sin(c.yaw),c.distance*std::sin(c.pitch),
+            c.distance*std::cos(c.pitch)*std::cos(c.yaw)};};
+        const auto actual=eye(initial);
+        QVERIFY(std::abs(actual[0]-(-37.5836298835141))<0.0001);
+        QVERIFY(std::abs(actual[1]-25.718921008284557)<0.0001);
+        QVERIFY(std::abs(actual[2]-92.25687558089541)<0.0001);
+        motion.applyBeatPunch(1);
+        motion.advance(1,.1F,0);
+        QCOMPARE(eye(motion.snapshot()), actual);
+    }
     void automaticCameraUsesBoundedViewpointsAndDwells();
     void automaticCameraRestartsWithoutJumping();
     void meteorFlightIsSingleSpacedAndLandsOnce();
@@ -86,7 +122,7 @@ void TerrainReactorStateTest::automaticCameraUsesBoundedViewpointsAndDwells()
         if (std::abs(current.yaw - previous.yaw) < 0.000001F
             && std::abs(current.pitch - previous.pitch) < 0.000001F) ++stillFrames;
         if (std::abs(current.pitch - initial.pitch) > 0.02F) ++changedPitchFrames;
-        QVERIFY(current.pitch >= 0.70F && current.pitch <= 1.10F);
+        QVERIFY(current.pitch >= initial.pitch-0.021F && current.pitch <= initial.pitch+0.071F);
         QCOMPARE(current.distance, initial.distance);
         previous = current;
     }
@@ -168,15 +204,16 @@ void TerrainReactorStateTest::weakMusicRetainsVisualTravelWithoutLiftingSilence(
 
 void TerrainReactorStateTest::fixedSeedProducesStableLayoutAndColorZones()
 {
-    const SceneLayout first = makeSceneLayout(0x5eedU, 9, 12, 4, 16);
-    const SceneLayout repeated = makeSceneLayout(0x5eedU, 9, 12, 4, 16);
-    const SceneLayout different = makeSceneLayout(0x5eeeU, 9, 12, 4, 16);
+    // An even corner-anchored grid includes the origin for the peak-zone check.
+    const SceneLayout first = makeSceneLayout(0x5eedU, 10, 12, 4, 16);
+    const SceneLayout repeated = makeSceneLayout(0x5eedU, 10, 12, 4, 16);
+    const SceneLayout different = makeSceneLayout(0x5eeeU, 10, 12, 4, 16);
 
     QCOMPARE(first.terrain, repeated.terrain);
     QCOMPARE(first.floating, repeated.floating);
     QCOMPARE(first.meteors, repeated.meteors);
     QCOMPARE(first.particles, repeated.particles);
-    QCOMPARE(first.terrain.size(), 81);
+    QCOMPARE(first.terrain.size(), 100);
     QCOMPARE(first.floating.size(), 12);
     QCOMPARE(first.meteors.size(), 4);
     QCOMPARE(first.particles.size(), 16);
@@ -192,11 +229,10 @@ void TerrainReactorStateTest::fixedSeedProducesStableLayoutAndColorZones()
     QVERIFY(hasZone(ColorZone::Warm));
     QVERIFY(hasZone(ColorZone::Accent));
     QVERIFY(hasZone(ColorZone::Peak));
-    const auto center = std::find_if(first.terrain.cbegin(), first.terrain.cend(),
-                                     [](const SceneInstance& instance) {
-        return qFuzzyIsNull(instance.position.x())
-            && qFuzzyIsNull(instance.position.z());
-    });
+    const auto center = std::min_element(first.terrain.cbegin(), first.terrain.cend(),
+        [](const SceneInstance& a, const SceneInstance& b) {
+            return a.position.lengthSquared() < b.position.lengthSquared();
+        });
     QVERIFY(center != first.terrain.cend());
     QCOMPARE(center->zone, ColorZone::Peak);
 }
@@ -209,10 +245,8 @@ void TerrainReactorStateTest::terrainCellsExposeSideFacesAtDefaultDensity()
     QVERIFY(!layout.terrain.isEmpty());
     for (const SceneInstance& cell : layout.terrain) {
         const float footprint = cell.scale.x() / spacing;
-        QVERIFY2(footprint >= 0.99F,
-                 "The renderer must own the single, narrow terrain gutter");
-        QVERIFY2(footprint <= 1.01F,
-                 "Terrain cell scale must not compound a second black gap");
+        QVERIFY2(std::abs(footprint - 0.857142857F) < 0.00001F,
+                 "The instance must carry physical box width, not cell spacing");
         QCOMPARE(cell.scale.x(), cell.scale.z());
     }
 }
@@ -229,16 +263,16 @@ void TerrainReactorStateTest::terrainLayoutKeepsTheRequestedCompleteCartesianGri
         return qFuzzyIsNull(instance.position.x())
             && qFuzzyIsNull(instance.position.z());
     });
-    QVERIFY2(center == layout.terrain.cend(),
-             "an even reference grid must not be silently converted to an odd grid");
-    const float halfCell = layout.terrain.front().scale.x() * 0.5F;
+    QVERIFY2(center != layout.terrain.cend(),
+             "corner-anchored even grid must contain the origin without changing its count");
+    const float cell = kTerrainStageExtent / 32.0F;
     const SceneInstance& firstCorner = layout.terrain.front();
     const SceneInstance& lastCorner = layout.terrain.back();
     QVERIFY(std::hypot(firstCorner.position.x(), firstCorner.position.z())
             > kTerrainStageExtent * 0.5F);
-    QVERIFY(std::abs(firstCorner.position.x() - halfCell
+    QVERIFY(std::abs(firstCorner.position.x()
                      + kTerrainStageExtent * 0.5F) < 0.0001F);
-    QVERIFY(std::abs(lastCorner.position.x() + halfCell
+    QVERIFY(std::abs(lastCorner.position.x() + cell
                      - kTerrainStageExtent * 0.5F) < 0.0001F);
     for (const SceneInstance& star : layout.particles) {
         QVERIFY2(star.position.length() >= 240.0F,
@@ -255,7 +289,7 @@ void TerrainReactorStateTest::referenceGridContains25600CellsAcross168WorldUnits
     QCOMPARE(layout.terrain.size(), 25600);
     QCOMPARE(layout.floating.size(), 80);
     const float expectedSpacing = 168.0F / 160.0F;
-    QVERIFY(std::abs(layout.terrain.front().scale.x() - expectedSpacing) < 0.0001F);
+    QVERIFY(std::abs(layout.terrain.front().scale.x() - 0.9F) < 0.0001F);
     const float coveredWidth = layout.terrain.back().position.x()
         - layout.terrain.front().position.x() + expectedSpacing;
     QVERIFY(std::abs(coveredWidth - 168.0F) < 0.0001F);
@@ -824,11 +858,11 @@ void TerrainReactorStateTest::defaultAudioMappingPreservesMediumAndLoudDynamics(
 void TerrainReactorStateTest::defaultCameraStartsAtHighObliqueView()
 {
     const CameraSnapshot camera;
-    QVERIFY2(camera.pitch >= 0.75F,
+    QVERIFY2(camera.pitch >= 0.25F,
              "The initial immersive camera must retain an oblique overview");
-    QVERIFY2(camera.pitch <= 0.88F,
+    QVERIFY2(camera.pitch <= 0.26F,
              "The initial view must retain enough side elevation to read column height");
-    QVERIFY2(camera.distance >= 170.0F && camera.distance <= 190.0F,
+    QVERIFY2(camera.distance >= 102.8F && camera.distance <= 103.0F,
              "The floating stage overview must leave room for its dissolving boundary");
 }
 
@@ -1649,8 +1683,8 @@ void TerrainReactorStateTest::manualCameraControlRecoversAfterFourSeconds()
     CameraMotion camera;
     const CameraSnapshot initial = camera.snapshot();
     // A broad ground view, while retaining readable vertical side faces.
-    QVERIFY(initial.distance >= 170.0F && initial.distance <= 190.0F);
-    QVERIFY(initial.pitch >= 0.75F && initial.pitch <= 0.88F);
+    QVERIFY(initial.distance >= 102.8F && initial.distance <= 103.0F);
+    QVERIFY(initial.pitch >= 0.25F && initial.pitch <= 0.26F);
     CameraMotion zoomedOut;
     zoomedOut.zoomBy(10000.0F, 1.0);
     QCOMPARE(zoomedOut.snapshot().distance, 220.0F);

@@ -22,7 +22,7 @@ layout(std140, binding = 0) uniform buf {
     vec4 styleAudio;
     vec4 stylePresentation;
     vec4 impact;
-    vec4 waveSources[8];
+    vec4 waveSources[10];
     vec4 audioEnvelope;
     vec4 cameraPosition;
     vec4 materialParameters;
@@ -31,6 +31,10 @@ layout(std140, binding = 0) uniform buf {
     vec4 sceneLighting;
     mat4 lightMvp;
     vec4 shadowParameters;
+    vec4 bodyColor;
+    vec4 atmosphereColor;
+    vec4 timbre;
+    vec4 rippleColor;
 } ubuf;
 
 #ifdef TERRAIN_SHADOW_PASS
@@ -45,6 +49,8 @@ vec3 columnExtent, surfacePosition;
 float musicLight;
 vec4 material;
 vec3 worldPosition;
+float reliefHeight;
+float columnRandom;
 #else
 layout(location = 0) out vec3 color;
 layout(location = 1) out float light;
@@ -63,7 +69,46 @@ layout(location = 13) out vec3 surfacePosition;
 layout(location = 14) out float musicLight;
 layout(location = 15) out vec4 material;
 layout(location = 16) out vec3 worldPosition;
+layout(location = 17) flat out float reliefHeight;
+layout(location = 18) flat out float columnRandom;
+// Main-pass only: explicit theme material cannot recover a travelling-wave
+// palette from the final legacy vertex color without also inheriting its other
+// color effects.  Keep the shadow signature unchanged.
+layout(location = 19) flat out vec4 travelingWave;
+// Reference ripple normal/white channels; main pass only, constant across a
+// column. Shadow receives the same height deformation but no color interface.
+layout(location = 20) flat out vec2 referenceRippleAnim;
 #endif
+
+// 2D simplex kernel adapted directly from Ashima Arts' MIT-licensed
+// webgl-noise, commit705a24f80b8e59a905ac5a31de2ea7aa6dce16f0.
+// Copyright (C)2011 Ashima Arts. See THIRD-PARTY-NOTICES.md.
+vec3 noiseWrap(vec3 v) { return v - floor(v * (1.0 / 289.0)) * 289.0; }
+vec2 noiseWrap(vec2 v) { return v - floor(v * (1.0 / 289.0)) * 289.0; }
+vec3 noisePermutation(vec3 v) { return noiseWrap((v * 34.0 + 1.0) * v); }
+float terrainNoise(vec2 point)
+{
+    const vec4 c = vec4(0.211324865405187, 0.366025403784439,
+                       -0.577350269189626, 0.024390243902439);
+    vec2 cell = floor(point + dot(point, c.yy));
+    vec2 a = point - cell + dot(cell, c.xx);
+    vec2 corner = a.x > a.y ? vec2(1, 0) : vec2(0, 1);
+    vec4 b = a.xyxy + c.xxzz;
+    b.xy -= corner;
+    cell = noiseWrap(cell);
+    vec3 permutation = noisePermutation(noisePermutation(cell.y + vec3(0, corner.y, 1))
+                                     + cell.x + vec3(0, corner.x, 1));
+    vec3 weight = max(0.5 - vec3(dot(a,a), dot(b.xy,b.xy), dot(b.zw,b.zw)), 0.0);
+    weight *= weight;
+    weight *= weight;
+    vec3 gradientX = 2.0 * fract(permutation * c.w) - 1.0;
+    vec3 gradientY = abs(gradientX) - 0.5;
+    gradientX -= floor(gradientX + 0.5);
+    weight *= 1.79284291400159 - 0.85373472095314
+            * (gradientX * gradientX + gradientY * gradientY);
+    return 130.0 * dot(weight, vec3(gradientX.x * a.x + gradientY.x * a.y,
+        gradientX.y * b.x + gradientY.y * b.y, gradientX.z * b.z + gradientY.z * b.w));
+}
 
 void main()
 {
@@ -101,6 +146,11 @@ void main()
     topSurface = 0.0;
     streamSheen = 0.0;
     musicLight = 0.0;
+    columnRandom = 0.0;
+#ifndef TERRAIN_SHADOW_PASS
+    travelingWave = vec4(0.0);
+    referenceRippleAnim = vec2(0.0);
+#endif
 
     if (type < 0.5) {
         float center = clamp(1.0 - distanceFromCore / responseRadius, 0.0, 1.0);
@@ -109,84 +159,85 @@ void main()
         // from sustained band energy. No oscillator masquerades as a beat.
         musicLight = clamp(beatPulse * (0.18 + pow(core, 1.15) * 0.82)
                             * ubuf.styleAudio.w * 0.70, 0.0, 1.0);
-        float terrainField = 1.0 - smoothstep(responseRadius * 0.45,
-                                              responseRadius * 1.15,
-                                              distanceFromCore);
-        // Spatial relief is stationary. Only real bands, beat envelopes and
-        // emitted wave ages may move columns; wall-clock time is not music.
-        float flowTime = 0.0;
-        float bassField = 0.78 + 0.22
-            * sin(position.x * 0.038 - position.z * 0.029 + flowTime * 0.20);
-        float ridgeA = 0.5 + 0.5
-            * sin(position.z * 0.052 + position.x * 0.027 + flowTime * 0.28);
-        float ridgeB = 0.5 + 0.5
-            * cos(position.x * 0.041 - position.z * 0.036 - flowTime * 0.22);
-        float wideRidge = ridgeA * 0.56 + ridgeB * 0.44;
-        float bass = bandsLow.x * (1.25 + core * 2.15)
-                   + bandsLow.y * (1.10 + bassField * 1.45) * center
-                   + fastBass * core * 1.55 + slowBass * terrainField * 0.78;
-        // The bass bed and regional mids form connected relief. Bounded local
-        // variation keeps its columns legible without isolated skyscrapers.
-        bass *= 1.90;
-        float ridgeCoordinateA = position.x * 0.052
-                               + position.z * 0.024;
-        float ridgeCoordinateB = position.z * 0.061
-                               - position.x * 0.019;
-        float ridgeMaskA = pow(0.5 + 0.5 * sin(ridgeCoordinateA
-                                             + flowTime * 0.24), 2.4);
-        float ridgeMaskB = pow(0.5 + 0.5 * cos(ridgeCoordinateB
-                                             - flowTime * 0.19), 2.7);
-        float midRegionalField = clamp(0.36 + (1.0 - center) * 0.38
-                                     + ridgeMaskA * 0.45
-                                     + ridgeMaskB * 0.12, 0.0, 1.35);
-        float mids = (bandsLow.z * (0.58 + wideRidge * 2.30)
-                   + bandsLow.w * (0.62 + (1.0 - wideRidge) * 2.05))
-                   * midRegionalField;
-        mids *= 2.40;
-        float midSpire = (bandsLow.z * pow(ridgeMaskA, 5.0)
-                        + bandsLow.w * pow(ridgeMaskB, 5.0))
-                       * center * 3.8;
-        float detailA = 0.5 + 0.5
-            * sin(position.x * 0.18 + position.z * 0.11);
-        float detailB = 0.5 + 0.5
-            * cos(position.z * 0.16 - position.x * 0.09);
-        float coherentDetail = detailA * 0.58 + detailB * 0.42;
-        // Continuous neighbouring relief avoids isolated black skyscrapers.
-        float towerCluster = detailA * 0.56 + detailB * 0.44;
-        float towerGate = 0.18 + towerCluster * 0.46 + randomValue * 0.36;
-        float lowMidTowerEnergy = clamp(bandsLow.x * 0.34
-                                      + bandsLow.y * 0.28
-                                      + bandsLow.z * 0.22
-                                      + bandsLow.w * 0.16, 0.0, 1.0);
-        float frequencyTowers = lowMidTowerEnergy * pow(towerGate, 1.35)
-                              * (0.35 + center * 0.65)
-                              * (1.2 + ridgeMaskA * 3.8);
-        towerGlow = lowMidTowerEnergy * towerGate * 0.30;
-        float highEnergy = clamp(bandsHigh.x * 0.38
-                               + bandsHigh.y * 0.28
-                               + bandsHigh.z * 0.20
-                               + bandsHigh.w * 0.14, 0.0, 1.0);
-        float peakControl = mix(0.42, 1.0,
-                                clamp(ubuf.styleDynamics.y, 0.0, 1.0));
-        float localizedHigh = 0.25 + 0.75 * pow(coherentDetail, 3.0);
-        float highDetail = highEnergy * (0.65 + coherentDetail * 4.2)
-                         * center * peakControl * localizedHigh;
-        terrainSpike = clamp(highDetail * 0.70, 0.0, 1.0);
-        float idlePhase = sin(position.x * 0.032 + position.z * 0.041) * 0.72;
-        float reliefA = 0.5 + 0.5 * sin(position.x * 0.055
-            + position.z * 0.032 + flowTime * 0.18);
-        float reliefB = 0.5 + 0.5 * cos(position.z * 0.070
-            - position.x * 0.018 - flowTime * 0.14);
-        float baseRelief = (0.24 + 0.48
-            * (reliefA * 0.55 + reliefB * 0.45)) * terrainField
-            + core * 1.08;
-        float idle = baseRelief + 0.06 + 0.10
-            * sin(distanceFromCore * 0.067 - flowTime * 0.36 + idlePhase);
+        // The field is assembled from independent frequency regions, not a
+        // concentric terrace multiplier. Time is an explicit renderer input;
+        // only column height changes, never the instance's base anchor.
+        float reliefDisk = 1.0 - smoothstep(30.0, 60.0, distanceFromCore);
+        float smoothness = clamp(ubuf.waveParameters.w, 0.0, 1.0);
+        float density = clamp(ubuf.sceneLighting.w, 0.0, 1.0);
+        bool referenceGeometry = ubuf.timbre.w < 0.5
+                              && ubuf.sceneControls.z <= 84.5;
+        vec2 p = position.xz;
+        float terrainRandom = fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453123);
+        columnRandom = terrainRandom;
+        float broadNoise = terrainNoise(p * 0.05 + vec2(t * 0.1, t * 0.05));
+        float diagonal = sin(dot(p, vec2(0.15, 0.1)) - t * 0.6);
+        float idle = mix(0.5 + broadNoise * 0.5, 0.5 + diagonal * 0.5,
+                         0.2 + smoothness * 0.5) * 0.8 * reliefDisk
+                     * ubuf.styleToggles.w;
+        float subRegion = 1.0 - smoothstep(0.0, 25.0, distanceFromCore);
+        float bassOffset = terrainNoise(p * 0.1 - vec2(0.0, t * 0.2));
+        float bassRegion = 1.0 - smoothstep(5.0, 35.0, distanceFromCore + bassOffset * 5.0);
+        float lowMidShape = 0.5 + 0.5 * terrainNoise(p * 0.05 + vec2(t * 0.1, 0.0));
+        float midShape = max(0.0, sin(dot(p, vec2(0.2))
+                               + terrainNoise(p * 0.1) * 2.0 - t * 2.0));
+        float highMidShape = fract(terrainRandom * 13.3) > 0.8
+            ? smoothstep(10.0, 45.0, distanceFromCore) * fract(terrainRandom * 7.7) : 0.0;
+        vec4 regionWeights = vec4(subRegion * 5.0,
+            bassRegion * smoothstep(0.0, 1.0, terrainRandom + density * 0.5) * 4.0,
+            lowMidShape * 2.5, midShape * 3.0);
+        float bandRelief = dot(bandsLow, regionWeights)
+            + bandsHigh.x * highMidShape * 2.5;
+        if (!referenceGeometry) {
+            float highTexture = smoothstep(0.48, 0.96,
+                                           fract(terrainRandom * 17.31));
+            bandRelief += dot(bandsHigh, vec4(0.38, 0.28, 0.20, 0.14))
+                        * (0.35 + highTexture * 1.15) * reliefDisk;
+        }
+        if (terrainRandom > 0.99) bandRelief += ubuf.parameters.x * 5.0;
+        // Gate before amplitude, so low-level energy cannot raise the apron.
+        // The fixed 168-unit reference stage stores amplitude on a half-scale
+        // adapter: 50% -> .5 here -> original uAmplitude 1.0. Standalone
+        // native material fixtures retain the stronger UI response curve.
+        float rawAmplitude = max(0.0, ubuf.styleParameters.x);
+        float amplitudeControl = referenceGeometry
+            ? rawAmplitude * 2.0
+            : rawAmplitude * (0.35 + rawAmplitude * 3.65);
+        bandRelief = max(0.0, bandRelief * reliefDisk - 0.2) * amplitudeControl;
+        float highEnergy = clamp(dot(bandsHigh, vec4(0.38, 0.28, 0.20, 0.14)), 0.0, 1.0);
+        float coherentDetail = lowMidShape;
+        terrainSpike = clamp(bandsHigh.x * highMidShape, 0.0, 1.0);
+        towerGlow = clamp(bandRelief * 0.04, 0.0, 0.3);
         float cellModulation = 0.86 + coherentDetail * 0.14;
         float waveField = 0.0;
+        float referenceRippleElevation = 0.0;
+        vec2 referenceRipple = vec2(0.0);
+        bool referenceRippleMode = ubuf.rippleColor.a > 0.5;
         float waveEnergy = 0.65 + fastBass * 0.35;
         int waveCount = int(clamp(ubuf.effects.w, 0.0, 8.0));
-        if (ubuf.styleToggles.x > 0.5 && waveCount > 0) {
+        if (referenceRippleMode && ubuf.styleToggles.x > 0.5) {
+            // Reference contract: all ten slots hold center, elapsed age and
+            // signed strength. Normal and white rings use separate physical
+            // speed/width/fade/elevation constants and never touch the native
+            // 42-unit overlap limiter or palette packing.
+            for (int waveIndex = 0; waveIndex < 10; ++waveIndex) {
+                vec4 source = ubuf.waveSources[waveIndex];
+                float strength = abs(source.w) * max(0.0, ubuf.waveParameters.x);
+                if (strength == 0.0) continue;
+                bool white = source.w < 0.0;
+                float speed = white ? 20.0 : 15.0;
+                float width = (white ? 1.0 : 3.0) * max(0.2, ubuf.waveParameters.y);
+                float fadeDistance = (white ? 8.0 : 15.0) / max(0.2, ubuf.waveParameters.z);
+                float elevationScale = white ? 1.0 : 4.0;
+                float radius = max(0.0, source.z) * speed;
+                float distanceToRing = length(position.xz - source.xy) - radius;
+                float ring = exp(-(distanceToRing * distanceToRing) / width);
+                float pulse = ring * exp(-radius / fadeDistance) * strength;
+                referenceRippleElevation += pulse * elevationScale;
+                if (white) referenceRipple.y += pulse;
+                else referenceRipple.x += pulse;
+            }
+        } else if (ubuf.styleToggles.x > 0.5 && waveCount > 0) {
             for (int waveIndex = 0; waveIndex < 8; ++waveIndex) {
                 if (waveIndex >= waveCount) break;
                 vec4 source = ubuf.waveSources[waveIndex];
@@ -199,13 +250,23 @@ void main()
                 float waveLife = 2.8 / max(0.2, ubuf.waveParameters.z);
                 // A distinct leading edge followed by a softer trailing ridge.
                 // Keep at least one cell of front width to avoid a broken ring.
+                float decaySpread = mix(4.60, 0.48,
+                    smoothstep(0.2, 2.0, ubuf.waveParameters.z));
                 float ridgeWidth = ridgeDistance > 0.0
-                    ? max(1.2, 1.6 * waveWidth) : 3.0 * waveWidth;
+                    ? max(1.2, 3.4 * waveWidth * decaySpread)
+                    : 6.0 * waveWidth * decaySpread;
                 float ridge = exp(-(ridgeDistance * ridgeDistance) / (ridgeWidth * ridgeWidth));
-                float tail = exp(-max(0.0, waveRadius - sourceDistance) / (14.0 * waveWidth))
+                float tail = exp(-max(0.0, waveRadius - sourceDistance)
+                                 / (22.0 * waveWidth * decaySpread))
                            * step(sourceDistance, waveRadius);
-                float weight = (ridge + tail * 0.08)
-                             * max(0.0, 1.0 - age / waveLife) * source.w;
+                float widthEnergy = mix(0.58, 1.30,
+                    smoothstep(0.2, 2.0, waveWidth));
+                float decayEnvelope = exp(-age * max(0.2, ubuf.waveParameters.z) * 5.5);
+                float decayEnergy = mix(1.85, 0.70,
+                    smoothstep(0.2, 2.0, ubuf.waveParameters.z));
+                float weight = (ridge + tail * 0.18)
+                             * max(0.0, 1.0 - age / waveLife)
+                             * decayEnvelope * decayEnergy * widthEnergy * source.w;
                 waveField += weight;
                 // The pool advances once per emitted wave: each event retains
                 // its own palette anchor, rather than changing hue mid-flight.
@@ -234,92 +295,42 @@ void main()
                        * (0.012 + ubuf.parameters.x * 0.035
                           + slowBass * 0.045 + beatPulse * 0.12)
                        * ubuf.styleAudio.w;
-        float centerShoulders = ubuf.parameters.x * ubuf.styleAudio.w
-                              * terrainField
-                              * (0.035 + core * 0.14 + wideRidge * 0.26);
-        // Connected ridge shelves and quiet valleys make side faces visible.
-        // Per-cell noise is restricted to small detail, not the main height.
-        float ridgeUnion = max(ridgeMaskA, ridgeMaskB * 0.78);
-        // Separated shelves and troughs expose side faces instead of joining
-        // every frequency region into one smooth dome.
-        // Warped concentric shelves leave readable troughs between waves.
-        // The broad bass bed must not bridge them into one continuous dome.
-        float swellPhase = distanceFromCore * 0.34 - flowTime * 1.05
-                         + (ridgeA - ridgeB) * 1.4;
-        float crest = pow(0.5 + 0.5 * sin(swellPhase), 3.0);
-        float localContour = (0.10 + pow(ridgeUnion, 3.2) * 1.15)
-                           * (0.22 + crest * 0.78);
-        float swells = crest * (bandsLow.x + bandsLow.y)
-                     * terrainField * 3.2;
-        float printRelief = (0.25 + 0.75 * smoothstep(0.3, 0.8, randomValue))
-                          * (bandsLow.z + bandsLow.w) * center * 1.8;
-        frequencyTowers *= 0.58 + coherentDetail * 0.42;
-        idle *= ubuf.styleToggles.w;
-        // Keep sustained mids/bass as low connected shelves. A separate short
-        // beat lift then reads as a pulse instead of vanishing in tall towers.
-        float sustainedRelief = (((bass + mids) * localContour + highDetail)
-                    * terrainField + swells + printRelief + midSpire
-                    + frequencyTowers * (0.35 + crest * 0.65)) * amplitude;
-        float restrainedRelief = min(sustainedRelief, 6.0)
-                               + max(0.0, sustainedRelief - 6.0) * 0.20;
-        // Reference centre: overlapping continuous sub/bass regions (25/35),
-        // with 5/4 units of lift, rather than a second event-driven piston.
-        // Keep the surrounding terrain, ripples and the stationary base intact.
-        float referenceScale = mix(0.70, 1.38,
-            clamp((responseRadius / 56.0 - 0.5) / 1.7, 0.0, 1.0));
-        float referenceDistance = distanceFromCore / referenceScale;
-        float subRegion = 1.0 - smoothstep(0.0, 25.0, referenceDistance);
-        float bassRegion = 1.0 - smoothstep(5.0, 35.0, referenceDistance);
-        float referenceDrive = mix(0.28, 1.83, ubuf.styleParameters.x);
-        float referenceRelief = max(0.0,
-              bandsLow.x * subRegion * 5.0
-            + bandsLow.y * bassRegion * smoothstep(0.0, 1.0, randomValue + 0.25) * 4.0
-            + bandsLow.z * coherentDetail * 2.5
-            + bandsLow.w * ridgeA * 3.0 - 0.2) * referenceDrive;
-        float centerBlend = 1.0 - smoothstep(25.0, 35.0, referenceDistance);
-        float bandRelief = mix(restrainedRelief, referenceRelief, centerBlend);
-        // A stable irregular minority of central columns responds to the real
-        // beat envelope. Add bounded local height, never scale the whole bed.
-        float localBeatMask = 1.0 - step(0.30, randomValue);
-        float localBeatLift = localBeatMask * centerBlend * subRegion
+        // Retain the existing optional sparse beat accent independently of
+        // the continuous frequency field; it is absent from direct U replay.
+        float centerBlend = 1.0 - smoothstep(25.0, 35.0, distanceFromCore);
+        float jellyElasticity = step(0.5, material.x)
+            * (1.0 - step(1.5, material.x)) * clamp(material.z, 0.0, 1.0);
+        float beatSelection = mix(0.30, 0.68, jellyElasticity);
+        float localBeatLift = (1.0 - step(beatSelection, randomValue)) * centerBlend * subRegion
             * clamp(ubuf.audioEnvelope.z, 0.0, 1.0)
-            * (0.65 + randomValue * 2.0) * referenceDrive * 2.4;
-        float rawHeight = max(0.0,
-            idle + bandRelief + localBeatLift
-            + ripple * amplitude * 0.55
-            + centerShoulders
-            + coreGlow * 1.55);
-        float softCap = mix(42.0, 48.0, step(0.001, impactStrength));
-        float height = max(0.035,
-            softCap * (1.0 - exp(-rawHeight / softCap)));
+            * (0.65 + randomValue * 2.0) * max(0.0, ubuf.styleParameters.x * 2.0)
+            * 2.4 * (1.0 + jellyElasticity * 2.4);
+        localBeatLift = min(localBeatLift, 0.35 * max(1.0, instanceScale.y + idle + bandRelief));
+        // No extra whole-field gain, shoulders or soft-cap compression.
+        // Emitted ripples remain separate from the finite musical relief disk.
+        // Keep the legacy42-unit safety budget on native wave overlap only;
+        // it must not compress the reference frequency field or its rest slab.
+        float nativeWaveLift = referenceRippleMode ? 0.0
+            : 42.0 * (1.0 - exp(-max(0.0, ripple * amplitude * 0.55) / 42.0));
+        float height = max(0.0, instanceScale.y)
+            + max(0.0, idle + bandRelief + localBeatLift + nativeWaveLift
+                      + referenceRippleElevation);
         scale.y = height;
-        // Straight boxes occupy 98.5% of the layout spacing, leaving a hairline.
-        scale.xz *= 0.985 * clamp(ubuf.sceneControls.w, 0.5, 2.0);
+        // Instance width is physical geometry, not layout spacing.
+        float readabilityScale = referenceGeometry ? 1.0 : 1.28;
+        scale.xz *= clamp(ubuf.sceneControls.w, 0.5, 2.0) * readabilityScale;
+#ifndef TERRAIN_SHADOW_PASS
+        referenceRippleAnim = clamp(referenceRipple, vec2(0.0), vec2(1.0));
+#endif
         // Jelly is an optical material, not an extra whole-column beat scale.
         position.y += scale.y * 0.5;
         float stageHalfExtent = max(1.0, ubuf.sceneControls.z);
         float stageDistance = distanceFromCore;
-        // A maximum response radius can outgrow the stage. Do not feed
-        // reversed edges to smoothstep: that is undefined and hid the wider
-        // field instead of letting it cover the expanded ground.
-        float outerField = 0.0;
-        if (responseRadius * 1.15 < stageHalfExtent) {
-            float outerFieldStart = max(responseRadius * 1.15,
-                                        stageHalfExtent * 0.72);
-            outerField = smoothstep(outerFieldStart, stageHalfExtent,
-                                    stageDistance);
-        }
-        float coherentNoise = 0.5 + 0.5 * sin(instancePosition.x * 0.11
-                                             + instancePosition.z * 0.075);
-        float cellNoise = clamp(coherentNoise * 0.68
-                                + randomValue * 0.32, 0.0, 1.0);
-        float sparseCell = smoothstep(0.54 + outerField * 0.20,
-                                      0.92, cellNoise);
-        opacity *= mix(1.0, 0.18 + sparseCell * 0.58, outerField);
-        // The terrain remains a large disk, but its outer apron dissolves
-        // gradually even when the musical response radius covers the stage.
-        opacity *= 1.0 - smoothstep(stageHalfExtent * 0.74,
-                                    stageHalfExtent, stageDistance);
+        float edgeCoverage = 1.0 - smoothstep(stageHalfExtent * (55.0 / 84.0),
+                                              stageHalfExtent * (78.0 / 84.0), stageDistance);
+        opacity *= referenceGeometry
+            ? max(0.0, edgeCoverage)
+            : sqrt(sqrt(max(0.0, edgeCoverage)));
 #ifndef TERRAIN_SHADOW_PASS
         opacity *= ubuf.sceneControls.x;
 #endif
@@ -470,6 +481,9 @@ void main()
     if (type < 0.5 && rippleWave > 0.001) {
         vec3 ringTint = travelingWaveTint / max(0.001, travelingWaveWeight);
         color = mix(color, ringTint, clamp(rippleWave * 0.78, 0.0, 0.96));
+#ifndef TERRAIN_SHADOW_PASS
+        travelingWave = vec4(ringTint, clamp(rippleWave * 0.78, 0.0, 0.96));
+#endif
     }
     if (type < 0.5 && steadyCoreGlow > 0.001) {
         color = mix(color, peak, clamp(steadyCoreGlow * 0.10, 0.0, 0.16));
@@ -526,6 +540,8 @@ void main()
     viewDirection = ubuf.cameraPosition.xyz - worldPosition;
     objectKind = type;
     columnExtent = scale;
+    // Material activation follows added relief, not the physical rest slab.
+    reliefHeight = type < 0.5 ? max(0.0, scale.y - instanceScale.y) : 0.0;
     surfacePosition = type < 0.5 ? localVertex / scale : vertexPosition;
     light = ubuf.stylePresentation.z; // face/edge clarity, not exposure
     fog = 1.0 - smoothstep(42.0, 100.0, distanceFromCore) * 0.88;

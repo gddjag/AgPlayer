@@ -1,0 +1,741 @@
+{
+  "source": "Sonic Topography ec8ecbaec0c9c5094b6b1480df0d6b2d32d6349b, unmodified vertex GPU probe",
+  "probe": "build/qa/immersive-parity/reference-study/height-samples.html",
+  "encoding": {
+    "format": "RGBA8_UNORM_RGB24",
+    "range": [
+      0,
+      8
+    ],
+    "precision": 4.768371866248361e-7
+  },
+  "inputs": {
+    "smoothness": 0,
+    "density": 0,
+    "energy": 0,
+    "amplitude": 1,
+    "ripplesActive": 0
+  },
+  "samples": [
+    {
+      "position": [
+        0,
+        0
+      ],
+      "time": 0,
+      "uniform": null,
+      "value": 0,
+      "elevation": 0.4000001206172588
+    },
+    {
+      "position": [
+        10,
+        5
+      ],
+      "time": 0,
+      "uniform": null,
+      "value": 0,
+      "elevation": 0.40286984643915236
+    },
+    {
+      "position": [
+        25,
+        -8
+      ],
+      "time": 0,
+      "uniform": null,
+      "value": 0,
+      "elevation": 0.5035997316265991
+    },
+    {
+      "position": [
+        40,
+        10
+      ],
+      "time": 0,
+      "uniform": null,
+      "value": 0,
+      "elevation": 0.2937638163300691
+    },
+    {
+      "position": [
+        55,
+        0
+      ],
+      "time": 0,
+      "uniform": null,
+      "value": 0,
+      "elevation": 0.026588386065691177
+    },
+    {
+      "position": [
+        60,
+        0
+      ],
+      "time": 0,
+      "uniform": null,
+      "value": 0,
+      "elevation": 0
+    },
+    {
+      "position": [
+        0,
+        0
+      ],
+      "time": 0,
+      "uniform": "uSubBass",
+      "value": 0.6,
+      "elevation": 3.2
+    },
+    {
+      "position": [
+        10,
+        5
+      ],
+      "time": 0,
+      "uniform": "uSubBass",
+      "value": 0.6,
+      "elevation": 1.9395264867961797
+    },
+    {
+      "position": [
+        25,
+        -8
+      ],
+      "time": 0,
+      "uniform": "uSubBass",
+      "value": 0.6,
+      "elevation": 0.5035997316265991
+    },
+    {
+      "position": [
+        40,
+        10
+      ],
+      "time": 0,
+      "uniform": "uSubBass",
+      "value": 0.6,
+      "elevation": 0.2937638163300691
+    },
+    {
+      "position": [
+        55,
+        0
+      ],
+      "time": 0,
+      "uniform": "uSubBass",
+      "value": 0.6,
+      "elevation": 0.026588386065691177
+    },
+    {
+      "position": [
+        60,
+        0
+      ],
+      "time": 0,
+      "uniform": "uSubBass",
+      "value": 0.6,
+      "elevation": 0
+    },
+    {
+      "position": [
+        0,
+        0
+      ],
+      "time": 0,
+      "uniform": "uBass",
+      "value": 0.6,
+      "elevation": 0.4000001206172588
+    },
+    {
+      "position": [
+        10,
+        5
+      ],
+      "time": 0,
+      "uniform": "uBass",
+      "value": 0.6,
+      "elevation": 0.40286984643915236
+    },
+    {
+      "position": [
+        25,
+        -8
+      ],
+      "time": 0,
+      "uniform": "uBass",
+      "value": 0.6,
+      "elevation": 0.5035997316265991
+    },
+    {
+      "position": [
+        40,
+        10
+      ],
+      "time": 0,
+      "uniform": "uBass",
+      "value": 0.6,
+      "elevation": 0.2937638163300691
+    },
+    {
+      "position": [
+        55,
+        0
+      ],
+      "time": 0,
+      "uniform": "uBass",
+      "value": 0.6,
+      "elevation": 0.026588386065691177
+    },
+    {
+      "position": [
+        60,
+        0
+      ],
+      "time": 0,
+      "uniform": "uBass",
+      "value": 0.6,
+      "elevation": 0
+    },
+    {
+      "position": [
+        0,
+        0
+      ],
+      "time": 0,
+      "uniform": "uLowMid",
+      "value": 0.6,
+      "elevation": 0.9499998643055838
+    },
+    {
+      "position": [
+        10,
+        5
+      ],
+      "time": 0,
+      "uniform": "uLowMid",
+      "value": 0.6,
+      "elevation": 0.789103195603501
+    },
+    {
+      "position": [
+        25,
+        -8
+      ],
+      "time": 0,
+      "uniform": "uLowMid",
+      "value": 0.6,
+      "elevation": 1.2607079931549707
+    },
+    {
+      "position": [
+        40,
+        10
+      ],
+      "time": 0,
+      "uniform": "uLowMid",
+      "value": 0.6,
+      "elevation": 0.5696145223179622
+    },
+    {
+      "position": [
+        55,
+        0
+      ],
+      "time": 0,
+      "uniform": "uLowMid",
+      "value": 0.6,
+      "elevation": 0.026588386065691177
+    },
+    {
+      "position": [
+        60,
+        0
+      ],
+      "time": 0,
+      "uniform": "uLowMid",
+      "value": 0.6,
+      "elevation": 0
+    },
+    {
+      "position": [
+        0,
+        0
+      ],
+      "time": 0,
+      "uniform": "uMid",
+      "value": 0.6,
+      "elevation": 0.4000001206172588
+    },
+    {
+      "position": [
+        10,
+        5
+      ],
+      "time": 0,
+      "uniform": "uMid",
+      "value": 0.6,
+      "elevation": 0.40286984643915236
+    },
+    {
+      "position": [
+        25,
+        -8
+      ],
+      "time": 0,
+      "uniform": "uMid",
+      "value": 0.6,
+      "elevation": 0.5035997316265991
+    },
+    {
+      "position": [
+        40,
+        10
+      ],
+      "time": 0,
+      "uniform": "uMid",
+      "value": 0.6,
+      "elevation": 0.2937638163300691
+    },
+    {
+      "position": [
+        55,
+        0
+      ],
+      "time": 0,
+      "uniform": "uMid",
+      "value": 0.6,
+      "elevation": 0.026588386065691177
+    },
+    {
+      "position": [
+        60,
+        0
+      ],
+      "time": 0,
+      "uniform": "uMid",
+      "value": 0.6,
+      "elevation": 0
+    },
+    {
+      "position": [
+        0,
+        0
+      ],
+      "time": 0,
+      "uniform": "uHighMid",
+      "value": 0.6,
+      "elevation": 0.4000001206172588
+    },
+    {
+      "position": [
+        10,
+        5
+      ],
+      "time": 0,
+      "uniform": "uHighMid",
+      "value": 0.6,
+      "elevation": 0.40286984643915236
+    },
+    {
+      "position": [
+        25,
+        -8
+      ],
+      "time": 0,
+      "uniform": "uHighMid",
+      "value": 0.6,
+      "elevation": 0.7722616489886996
+    },
+    {
+      "position": [
+        40,
+        10
+      ],
+      "time": 0,
+      "uniform": "uHighMid",
+      "value": 0.6,
+      "elevation": 0.2937638163300691
+    },
+    {
+      "position": [
+        55,
+        0
+      ],
+      "time": 0,
+      "uniform": "uHighMid",
+      "value": 0.6,
+      "elevation": 0.026588386065691177
+    },
+    {
+      "position": [
+        60,
+        0
+      ],
+      "time": 0,
+      "uniform": "uHighMid",
+      "value": 0.6,
+      "elevation": 0
+    },
+    {
+      "position": [
+        0,
+        0
+      ],
+      "time": 1,
+      "uniform": null,
+      "value": 0,
+      "elevation": 0.4476024455149226
+    },
+    {
+      "position": [
+        10,
+        5
+      ],
+      "time": 1,
+      "uniform": null,
+      "value": 0,
+      "elevation": 0.45069844931436626
+    },
+    {
+      "position": [
+        25,
+        -8
+      ],
+      "time": 1,
+      "uniform": null,
+      "value": 0,
+      "elevation": 0.566033637138054
+    },
+    {
+      "position": [
+        40,
+        10
+      ],
+      "time": 1,
+      "uniform": null,
+      "value": 0,
+      "elevation": 0.2681037006882723
+    },
+    {
+      "position": [
+        55,
+        0
+      ],
+      "time": 1,
+      "uniform": null,
+      "value": 0,
+      "elevation": 0.02146311750382583
+    },
+    {
+      "position": [
+        60,
+        0
+      ],
+      "time": 1,
+      "uniform": null,
+      "value": 0,
+      "elevation": 0
+    },
+    {
+      "position": [
+        0,
+        0
+      ],
+      "time": 1,
+      "uniform": "uSubBass",
+      "value": 0.6,
+      "elevation": 3.247602807366699
+    },
+    {
+      "position": [
+        10,
+        5
+      ],
+      "time": 1,
+      "uniform": "uSubBass",
+      "value": 0.6,
+      "elevation": 1.9873550896713934
+    },
+    {
+      "position": [
+        25,
+        -8
+      ],
+      "time": 1,
+      "uniform": "uSubBass",
+      "value": 0.6,
+      "elevation": 0.566033637138054
+    },
+    {
+      "position": [
+        40,
+        10
+      ],
+      "time": 1,
+      "uniform": "uSubBass",
+      "value": 0.6,
+      "elevation": 0.2681037006882723
+    },
+    {
+      "position": [
+        55,
+        0
+      ],
+      "time": 1,
+      "uniform": "uSubBass",
+      "value": 0.6,
+      "elevation": 0.02146311750382583
+    },
+    {
+      "position": [
+        60,
+        0
+      ],
+      "time": 1,
+      "uniform": "uSubBass",
+      "value": 0.6,
+      "elevation": 0
+    },
+    {
+      "position": [
+        0,
+        0
+      ],
+      "time": 1,
+      "uniform": "uBass",
+      "value": 0.6,
+      "elevation": 0.4476024455149226
+    },
+    {
+      "position": [
+        10,
+        5
+      ],
+      "time": 1,
+      "uniform": "uBass",
+      "value": 0.6,
+      "elevation": 0.45069844931436626
+    },
+    {
+      "position": [
+        25,
+        -8
+      ],
+      "time": 1,
+      "uniform": "uBass",
+      "value": 0.6,
+      "elevation": 0.572012393423344
+    },
+    {
+      "position": [
+        40,
+        10
+      ],
+      "time": 1,
+      "uniform": "uBass",
+      "value": 0.6,
+      "elevation": 0.2681037006882723
+    },
+    {
+      "position": [
+        55,
+        0
+      ],
+      "time": 1,
+      "uniform": "uBass",
+      "value": 0.6,
+      "elevation": 0.02146311750382583
+    },
+    {
+      "position": [
+        60,
+        0
+      ],
+      "time": 1,
+      "uniform": "uBass",
+      "value": 0.6,
+      "elevation": 0
+    },
+    {
+      "position": [
+        0,
+        0
+      ],
+      "time": 1,
+      "uniform": "uLowMid",
+      "value": 0.6,
+      "elevation": 0.9976026716722829
+    },
+    {
+      "position": [
+        10,
+        5
+      ],
+      "time": 1,
+      "uniform": "uLowMid",
+      "value": 0.6,
+      "elevation": 0.9971534930004297
+    },
+    {
+      "position": [
+        25,
+        -8
+      ],
+      "time": 1,
+      "uniform": "uLowMid",
+      "value": 0.6,
+      "elevation": 1.4678353272873932
+    },
+    {
+      "position": [
+        40,
+        10
+      ],
+      "time": 1,
+      "uniform": "uLowMid",
+      "value": 0.6,
+      "elevation": 0.6718921681706131
+    },
+    {
+      "position": [
+        55,
+        0
+      ],
+      "time": 1,
+      "uniform": "uLowMid",
+      "value": 0.6,
+      "elevation": 0.02146311750382583
+    },
+    {
+      "position": [
+        60,
+        0
+      ],
+      "time": 1,
+      "uniform": "uLowMid",
+      "value": 0.6,
+      "elevation": 0
+    },
+    {
+      "position": [
+        0,
+        0
+      ],
+      "time": 1,
+      "uniform": "uMid",
+      "value": 0.6,
+      "elevation": 0.4476024455149226
+    },
+    {
+      "position": [
+        10,
+        5
+      ],
+      "time": 1,
+      "uniform": "uMid",
+      "value": 0.6,
+      "elevation": 1.464652961530633
+    },
+    {
+      "position": [
+        25,
+        -8
+      ],
+      "time": 1,
+      "uniform": "uMid",
+      "value": 0.6,
+      "elevation": 1.0575166414124282
+    },
+    {
+      "position": [
+        40,
+        10
+      ],
+      "time": 1,
+      "uniform": "uMid",
+      "value": 0.6,
+      "elevation": 0.4048088894919752
+    },
+    {
+      "position": [
+        55,
+        0
+      ],
+      "time": 1,
+      "uniform": "uMid",
+      "value": 0.6,
+      "elevation": 0.02146311750382583
+    },
+    {
+      "position": [
+        60,
+        0
+      ],
+      "time": 1,
+      "uniform": "uMid",
+      "value": 0.6,
+      "elevation": 0
+    },
+    {
+      "position": [
+        0,
+        0
+      ],
+      "time": 1,
+      "uniform": "uHighMid",
+      "value": 0.6,
+      "elevation": 0.4476024455149226
+    },
+    {
+      "position": [
+        10,
+        5
+      ],
+      "time": 1,
+      "uniform": "uHighMid",
+      "value": 0.6,
+      "elevation": 0.45069844931436626
+    },
+    {
+      "position": [
+        25,
+        -8
+      ],
+      "time": 1,
+      "uniform": "uHighMid",
+      "value": 0.6,
+      "elevation": 0.8346955545001545
+    },
+    {
+      "position": [
+        40,
+        10
+      ],
+      "time": 1,
+      "uniform": "uHighMid",
+      "value": 0.6,
+      "elevation": 0.2681037006882723
+    },
+    {
+      "position": [
+        55,
+        0
+      ],
+      "time": 1,
+      "uniform": "uHighMid",
+      "value": 0.6,
+      "elevation": 0.02146311750382583
+    },
+    {
+      "position": [
+        60,
+        0
+      ],
+      "time": 1,
+      "uniform": "uHighMid",
+      "value": 0.6,
+      "elevation": 0
+    }
+  ]
+}

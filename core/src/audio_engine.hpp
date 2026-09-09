@@ -136,6 +136,8 @@ public:
     [[nodiscard]] EngineSnapshot snapshot() const noexcept;
     void render(float* output, std::size_t requested_frames) noexcept;
     ag_result spectrum(float* bins, std::size_t bin_count) noexcept;
+    void set_visual_pcm_enabled(bool enabled) noexcept;
+    void read_visual_pcm(ag_visual_pcm_snapshot& snapshot) noexcept;
     [[nodiscard]] std::size_t buffered_frames() const noexcept;
     [[nodiscard]] bool end_of_stream() const noexcept;
     [[nodiscard]] bool device_lost() const noexcept;

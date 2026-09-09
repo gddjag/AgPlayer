@@ -3,6 +3,7 @@
 #include "audio_stream_source.hpp"
 #include "decoder.hpp"
 #include "pcm_ring_buffer.hpp"
+#include "visual_pcm_tap.hpp"
 #include "playback_time_pitch_stage.hpp"
 #include "scratch_backfill_worker.hpp"
 #include "scratch_command_mailbox.hpp"
@@ -1029,6 +1030,7 @@ public:
                                            EngineState::Paused,
                                            std::memory_order_acq_rel,
                                            std::memory_order_acquire)) {
+            visual_pcm_tap_.invalidate();
             return AG_OK;
         }
         return expected == EngineState::Error ? current_error()
@@ -1923,6 +1925,8 @@ public:
         if (scratch) {
             render_scratch(output, requested_frames);
             equalizer_.process(output, requested_frames, channels);
+            if (visual_pcm_enabled_.load(std::memory_order_relaxed))
+                tap_spectrum(output, requested_frames, channels, true);
             const float gain = muted_.load(std::memory_order_relaxed)
                 ? 0.0F
                 : volume_.load(std::memory_order_relaxed)
@@ -1990,6 +1994,9 @@ public:
         const std::int64_t fade_boundary =
             fade_boundary_frame_.load(std::memory_order_acquire);
         float block_peak = 0.0F;
+        const bool visual_enabled = visual_pcm_enabled_.load(std::memory_order_relaxed);
+        std::array<float, spectrum_fft_size> visual_mono;
+        std::size_t visual_count = 0U;
         for (std::size_t frame = 0U; frame < frames; ++frame) {
             float transition_gain = 1.0F;
             if (fade_frames > 0 && fade_boundary >= 0) {
@@ -2008,10 +2015,19 @@ public:
                                       / static_cast<float>(fade_frames);
                 }
             }
+            float visual_sum = 0.0F;
             for (std::size_t channel = 0U; channel < channels; ++channel) {
                 float& sample = output[frame * channels + channel];
+                if (visual_enabled) visual_sum += sample * transition_gain;
                 sample *= gain * transition_gain;
                 block_peak = (std::max)(block_peak, std::abs(sample));
+            }
+            if (visual_enabled) {
+                visual_mono[visual_count++] = visual_sum / static_cast<float>(channels);
+                if (visual_count == visual_mono.size() || frame + 1U == frames) {
+                    visual_pcm_tap_.write(visual_mono.data(), visual_count, sample_rate);
+                    visual_count = 0U;
+                }
             }
         }
         if (frames == 0U || gain <= 0.0F) {
@@ -2046,6 +2062,7 @@ public:
             }
         }
         tap_spectrum(output, frames, channels);
+        if (frames < requested_frames) visual_pcm_tap_.invalidate();
         std::fill(output + frames * channels,
                   output + requested_frames * channels,
                   0.0F);
@@ -2256,6 +2273,17 @@ public:
         } catch (...) {
             return {};
         }
+    }
+
+    void set_visual_pcm_enabled(bool enabled) noexcept
+    {
+        visual_pcm_tap_.set_enabled(enabled);
+        visual_pcm_enabled_.store(enabled, std::memory_order_relaxed);
+    }
+
+    void read_visual_pcm(ag_visual_pcm_snapshot& snapshot) noexcept
+    {
+        visual_pcm_tap_.read(snapshot);
     }
 
     ag_result spectrum(float* bins, const std::size_t bin_count) noexcept
@@ -3380,6 +3408,7 @@ private:
             return;
         }
 
+        visual_pcm_tap_.invalidate();
         const ag_result transition_error =
             pending_transition_error_.load(std::memory_order_relaxed);
         if (transition_error != AG_OK) {
@@ -3531,6 +3560,7 @@ private:
 
     void reset_timeline_locked(const std::int64_t position_frames) noexcept
     {
+        visual_pcm_tap_.invalidate();
         invalidate_output_meter();
         decode_mapper_generation_ = next_mapper_generation();
         published_mapper_generation_.store(decode_mapper_generation_,
@@ -3940,7 +3970,8 @@ private:
 
     void tap_spectrum(const float* output,
                       const std::size_t frames,
-                      const std::size_t channels) noexcept
+                      const std::size_t channels,
+                      const bool visual_only = false) noexcept
     {
         if (output == nullptr || frames == 0U || channels == 0U) {
             return;
@@ -3958,7 +3989,12 @@ private:
                 }
                 mono[frame] = sum / static_cast<float>(channels);
             }
-            (void)spectrum_tap_.write(mono.data(), count);
+            if (visual_only) {
+                visual_pcm_tap_.write(mono.data(), count,
+                                      sample_rate_.load(std::memory_order_acquire));
+            } else {
+                (void)spectrum_tap_.write(mono.data(), count);
+            }
             offset += count;
         }
     }
@@ -4061,6 +4097,7 @@ private:
 
     void invalidate_output_meter() noexcept
     {
+        visual_pcm_tap_.invalidate();
         output_meter_generation_.fetch_add(1U, std::memory_order_acq_rel);
     }
 
@@ -4160,6 +4197,8 @@ private:
     std::atomic<float> output_left_rms_{0.0F};
     std::atomic<float> output_right_rms_{0.0F};
     PcmRingBuffer spectrum_tap_{spectrum_tap_capacity, 1U};
+    VisualPcmTap visual_pcm_tap_;
+    std::atomic<bool> visual_pcm_enabled_{false};
     std::array<float, spectrum_fft_size> spectrum_history_{};
     std::array<float, spectrum_max_bins> spectrum_smoothed_{};
     std::size_t spectrum_history_write_ = 0U;
@@ -4539,6 +4578,16 @@ void AudioEngine::publish_output_levels_for_testing(
     const std::size_t channels) noexcept
 {
     impl_->publish_output_levels_for_testing(output, frames, channels);
+}
+
+void AudioEngine::set_visual_pcm_enabled(bool enabled) noexcept
+{
+    impl_->set_visual_pcm_enabled(enabled);
+}
+
+void AudioEngine::read_visual_pcm(ag_visual_pcm_snapshot& snapshot) noexcept
+{
+    impl_->read_visual_pcm(snapshot);
 }
 
 ag_result AudioEngine::spectrum(float* bins,

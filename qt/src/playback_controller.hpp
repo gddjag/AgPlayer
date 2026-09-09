@@ -81,6 +81,7 @@ public:
     explicit PlaybackController(ag_player* player = nullptr,
                                 LibraryModel* library = nullptr,
                                 QObject* parent = nullptr);
+    ~PlaybackController() override;
 
     State state() const noexcept;
     qint64 positionMs() const noexcept;
@@ -182,6 +183,8 @@ public:
     Q_INVOKABLE void resetBeatGrid();
 
 signals:
+    // The externally owned core handle must outlive this controller.
+    void aboutToBeDestroyed();
     void stateChanged();
     void positionMsChanged();
     void durationMsChanged();

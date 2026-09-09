@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QColor>
 #include <QPointer>
 #include <QSettings>
 #include <QVariantList>
@@ -31,6 +32,8 @@ class PlayerExperienceController final : public QObject {
     Q_PROPERTY(int rippleDecay READ rippleDecay WRITE setRippleDecay NOTIFY rippleDecayChanged)
     Q_PROPERTY(int columnSize READ columnSize WRITE setColumnSize NOTIFY columnSizeChanged)
     Q_PROPERTY(int columnDensity READ columnDensity WRITE setColumnDensity NOTIFY columnDensityChanged)
+    Q_PROPERTY(int topographyDensity READ topographyDensity WRITE setTopographyDensity
+                   NOTIFY topographyDensityChanged)
     Q_PROPERTY(int columnOpacity READ columnOpacity WRITE setColumnOpacity NOTIFY columnOpacityChanged)
     Q_PROPERTY(int reactorBrightness READ reactorBrightness WRITE setReactorBrightness NOTIFY reactorBrightnessChanged)
     Q_PROPERTY(int columnInnerLight READ columnInnerLight WRITE setColumnInnerLight NOTIFY columnInnerLightChanged)
@@ -47,6 +50,10 @@ class PlayerExperienceController final : public QObject {
                    NOTIFY peakColorChanged)
     Q_PROPERTY(QString baseColor READ baseColor WRITE setBaseColor
                    NOTIFY baseColorChanged)
+    Q_PROPERTY(QString themeId READ themeId NOTIFY themeChanged)
+    Q_PROPERTY(QVariantList builtInThemeChoices READ builtInThemeChoices CONSTANT)
+    Q_PROPERTY(float themeGlow READ themeGlow NOTIFY themeChanged)
+    Q_PROPERTY(QColor themeBackground READ themeBackground NOTIFY themeChanged)
     Q_PROPERTY(int terrainAmplitude READ terrainAmplitude WRITE setTerrainAmplitude
                    NOTIFY terrainAmplitudeChanged)
     Q_PROPERTY(int motionResponse READ motionResponse WRITE setMotionResponse
@@ -156,6 +163,7 @@ public:
     int rippleDecay() const noexcept;
     int columnSize() const noexcept;
     int columnDensity() const noexcept;
+    int topographyDensity() const noexcept;
     int columnOpacity() const noexcept;
     int reactorBrightness() const noexcept;
     int columnInnerLight() const noexcept;
@@ -166,6 +174,10 @@ public:
     QString accentColor() const;
     QString peakColor() const;
     QString baseColor() const;
+    QString themeId() const;
+    QVariantList builtInThemeChoices() const;
+    float themeGlow() const noexcept;
+    QColor themeBackground() const;
     int terrainAmplitude() const noexcept;
     int motionResponse() const noexcept;
     int gradientLayers() const noexcept;
@@ -215,6 +227,7 @@ public:
     void setRippleDecay(int value);
     void setColumnSize(int value);
     void setColumnDensity(int value);
+    void setTopographyDensity(int value);
     void setColumnOpacity(int value);
     void setReactorBrightness(int value);
     void setColumnInnerLight(int value);
@@ -259,6 +272,7 @@ public:
     void setRhythmSensitivity(int value);
 
     Q_INVOKABLE bool applyPreset(int preset);
+    Q_INVOKABLE bool applyTheme(const QString& id);
     Q_INVOKABLE void toggleImmersiveMode();
     Q_INVOKABLE void toggleLyricsVisible();
     Q_INVOKABLE void togglePanelVisible();
@@ -282,6 +296,7 @@ signals:
     void rippleDecayChanged();
     void columnSizeChanged();
     void columnDensityChanged();
+    void topographyDensityChanged();
     void columnOpacityChanged();
     void reactorBrightnessChanged();
     void columnInnerLightChanged();
@@ -324,6 +339,7 @@ signals:
     void subjectClarityChanged();
     void autoRotateSpeedChanged();
     void rhythmSensitivityChanged();
+    void themeChanged();
 
 private:
     void load();
@@ -333,6 +349,8 @@ private:
     static QString normalizedColor(const QString& value, const QString& fallback);
     static QVariantList defaultVisualEqGains();
     static QVariantList normalizedVisualEqGains(const QVariantList& values);
+    void setThemeId(const QString& id);
+    void clearThemeForManualColor();
 
     QSettings settings_;
     QPointer<SettingsController> settingsController_;
@@ -352,6 +370,7 @@ private:
     int rippleDecay_ = 100;
     int columnSize_ = 95;
     int columnDensity_ = 130;
+    int topographyDensity_ = 46;
     int columnOpacity_ = 100;
     int reactorBrightness_ = 100;
     int columnInnerLight_ = 100;
@@ -362,6 +381,10 @@ private:
     QString accentColor_ = QStringLiteral("#AD62ED");
     QString peakColor_ = QStringLiteral("#FFE2EE");
     QString baseColor_ = QStringLiteral("#030817");
+    QString themeId_;
+    float themeGlow_ = 1.0F;
+    QColor themeBackground_ = QColor(QStringLiteral("#030817"));
+    bool applyingTheme_ = false;
     int terrainAmplitude_ = 62;
     int motionResponse_ = 56;
     int gradientLayers_ = 74;

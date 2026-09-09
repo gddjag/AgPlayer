@@ -47,6 +47,15 @@ int main(const int argc, char** argv)
     assert(ag_player_output_levels(player, &levels) == AG_OK);
     assert(isZero(levels));
 
+    ag_visual_pcm_snapshot pcm{};
+    assert(ag_player_set_visual_pcm_enabled(nullptr, 1) == AG_INVALID_ARGUMENT);
+    assert(ag_player_read_visual_pcm(nullptr, &pcm) == AG_INVALID_ARGUMENT);
+    assert(ag_player_read_visual_pcm(player, nullptr) == AG_INVALID_ARGUMENT);
+    assert(ag_player_set_visual_pcm_enabled(player, 2) == AG_INVALID_ARGUMENT);
+    assert(ag_player_read_visual_pcm(player, &pcm) == AG_OK);
+    assert(pcm.sample_count == 0);
+    assert(ag_player_set_visual_pcm_enabled(player, 1) == AG_OK);
+
     assert(ag_player_load(player, media.string().c_str()) == AG_OK);
     assert(ag_player_play(player) == AG_OK);
     const auto deadline = std::chrono::steady_clock::now()
@@ -61,6 +70,54 @@ int main(const int argc, char** argv)
     assert(levels.right_peak > 0.0F);
     assert(levels.left_rms > 0.0F);
     assert(levels.right_rms > 0.0F);
+
+    bool receivedPcm = false;
+    const auto pcmDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    do {
+        assert(ag_player_read_visual_pcm(player, &pcm) == AG_OK);
+        if (pcm.sample_count != 0) {
+            assert(pcm.sample_count <= 1024 && pcm.sample_rate > 0);
+            for (size_t i = 0; i < pcm.sample_count; ++i)
+                if (std::isfinite(pcm.samples[i]) && std::abs(pcm.samples[i]) > 0.0001F)
+                    receivedPcm = true;
+        }
+        if (!receivedPcm) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    } while (!receivedPcm && std::chrono::steady_clock::now() < pcmDeadline);
+    assert(receivedPcm);
+    // Muting the speakers must not silence the independent visual analysis.
+    assert(ag_player_set_muted(player, 1) == AG_OK);
+    assert(ag_player_output_levels(player, &levels) == AG_OK);
+    assert(isZero(levels));
+    assert(ag_player_set_visual_pcm_enabled(player, 0) == AG_OK);
+    assert(ag_player_read_visual_pcm(player, &pcm) == AG_OK);
+    assert(pcm.sample_count == 0);
+    const auto disabledGeneration = pcm.generation;
+    assert(ag_player_set_visual_pcm_enabled(player, 1) == AG_OK);
+    receivedPcm = false;
+    const auto mutedDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    do {
+        assert(ag_player_read_visual_pcm(player, &pcm) == AG_OK);
+        assert(pcm.generation != disabledGeneration);
+        for (size_t i = 0; i < pcm.sample_count; ++i)
+            if (std::isfinite(pcm.samples[i]) && std::abs(pcm.samples[i]) > 0.0001F)
+                receivedPcm = true;
+        if (!receivedPcm) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    } while (!receivedPcm && std::chrono::steady_clock::now() < mutedDeadline);
+    assert(receivedPcm && "muted output must retain visual PCM");
+    assert(ag_player_output_levels(player, &levels) == AG_OK);
+    assert(isZero(levels));
+    assert(ag_player_set_muted(player, 0) == AG_OK);
+    const auto generation = pcm.generation;
+    assert(ag_player_pause(player) == AG_OK);
+    assert(ag_player_read_visual_pcm(player, &pcm) == AG_OK);
+    assert(pcm.sample_count == 0 && pcm.generation != generation);
+    assert(ag_player_play(player) == AG_OK);
+    assert(ag_player_seek(player, 0) == AG_OK);
+    assert(ag_player_read_visual_pcm(player, &pcm) == AG_OK);
+    assert(pcm.generation != generation);
+    assert(ag_player_set_visual_pcm_enabled(player, 0) == AG_OK);
+    assert(ag_player_read_visual_pcm(player, &pcm) == AG_OK);
+    assert(pcm.sample_count == 0);
 
     assert(ag_player_set_muted(player, 1) == AG_OK);
     assert(ag_player_output_levels(player, &levels) == AG_OK);

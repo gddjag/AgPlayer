@@ -14,7 +14,13 @@ Item {
     property bool panelAutoHidden: false
     property bool manualCameraActive: false
     property bool qaSyntheticFeatures: false
+    readonly property bool referenceThemeActive: PlayerExperienceController.themeId.length > 0
     readonly property bool inkMode: PlayerExperienceController.materialMode === 2
+    readonly property bool lightEnvironment: {
+        if (!referenceThemeActive) return inkMode
+        var c = PlayerExperienceController.themeBackground
+        return c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722 > 0.65
+    }
     readonly property color materialBaseColor: PlayerExperienceController.baseColor
     readonly property color environmentCoolColor: PlayerExperienceController.coolColor
     readonly property color environmentWarmColor: PlayerExperienceController.warmColor
@@ -83,7 +89,8 @@ Item {
         gradient: Gradient {
             GradientStop {
                 position: 0.0
-                color: root.inkMode ? root.inkPaper : Qt.tint(PlayerExperienceController.baseColor,
+                color: root.referenceThemeActive ? PlayerExperienceController.themeBackground
+                     : root.inkMode ? root.inkPaper : Qt.tint(PlayerExperienceController.baseColor,
                                Qt.rgba( // theme-color-allow: immersive media visual contract
                                    root.environmentCoolColor.r,
                                    root.environmentCoolColor.g,
@@ -91,19 +98,20 @@ Item {
             }
             GradientStop {
                 position: 0.58
-                color: root.inkMode ? root.inkPaper : Qt.tint(Qt.darker(PlayerExperienceController.baseColor, 1.7),
+                color: root.referenceThemeActive ? PlayerExperienceController.themeBackground
+                     : root.inkMode ? root.inkPaper : Qt.tint(Qt.darker(PlayerExperienceController.baseColor, 1.7),
                                Qt.rgba( // theme-color-allow: immersive media visual contract
                                    root.environmentWarmColor.r,
                                    root.environmentWarmColor.g,
                                    root.environmentWarmColor.b, 0.025))
             }
-            GradientStop { position: 1.0; color: root.inkMode ? root.inkPaper : "#020305" } // theme-color-allow: immersive media visual contract
+            GradientStop { position: 1.0; color: root.referenceThemeActive ? PlayerExperienceController.themeBackground : root.inkMode ? root.inkPaper : "#020305" } // theme-color-allow: immersive media visual contract
         }
     }
 
     Item {
         id: ambientColorField
-        visible: !root.inkMode
+        visible: !root.inkMode && !root.referenceThemeActive
         anchors.fill: parent
         opacity: 0.72
 
@@ -396,7 +404,7 @@ Item {
         anchors.bottom: waveform.top
         anchors.bottomMargin: 2
         text: root.currentTitle()
-        color: root.inkMode ? "#293D40" : Qt.rgba(0.88, 0.92, 0.97, root.panelIdle ? 0.42 : 0.72) // theme-color-allow: immersive media visual contract
+        color: root.lightEnvironment ? "#293D40" : Qt.rgba(0.88, 0.92, 0.97, root.panelIdle ? 0.42 : 0.72) // theme-color-allow: immersive media visual contract
         font.pixelSize: Theme.fontSizeCaption
         elide: Text.ElideRight
         width: Math.min(parent.width * 0.68, implicitWidth)
@@ -415,7 +423,7 @@ Item {
         anchors.bottomMargin: 10
         height: 52
         waveformSession: root.waveformSession
-        lightBackground: root.inkMode
+        lightBackground: root.lightEnvironment
         opacityScale: root.panelIdle ? 0.55 : 1.0
         z: 9
     }
@@ -424,7 +432,7 @@ Item {
         id: lyricsPanel
         objectName: "immersiveLyricsPanel"
         spatialMode: true
-        lightBackground: root.inkMode
+        lightBackground: root.lightEnvironment
         fullscreen: root.hostMode === PlayerExperienceController.Fullscreen
         placement: PlayerExperienceController.lyricPosition
         width: Math.min(placement === PlayerExperienceController.Center ? 700 : 560,
