@@ -370,7 +370,6 @@ int main(int argc, char* argv[])
     //   --qa-equalizer-size <w> <h> resize the EQ visual target
     //   --qa-tag <name>              seed a tag in --qa-test-mode only
     //   --qa-selected-tag <name>     select a seeded tag in --qa-test-mode only
-    //   --qa-immersive-preset <0..8> select a preset in QA mode
     //   --qa-immersive-theme <id>  select an original theme in QA mode
     //   --qa-immersive-stability    log renderer counters (requires QA test mode)
     //   --qa-lyric-placement <0..2>  enable and position QA lyrics
@@ -385,7 +384,6 @@ int main(int argc, char* argv[])
     int qaWaveformMode = -1;
     int qaMainWidth = 0;
     int qaMainHeight = 0;
-    int qaImmersivePreset = -1;
     QString qaImmersiveTheme;
     bool qaImmersiveThemeRequested = false;
     int qaLyricPlacement = -1;
@@ -454,11 +452,6 @@ int main(int argc, char* argv[])
                 bool ok = false;
                 const int value = cliArgs.at(++i).toInt(&ok);
                 if (ok && value > 0) qaMainHeight = value;
-            } else if (arg == QStringLiteral("--qa-immersive-preset")
-                       && i + 1 < cliArgs.size()) {
-                bool ok = false;
-                const int value = cliArgs.at(++i).toInt(&ok);
-                if (ok && value >= 0 && value <= 8) qaImmersivePreset = value;
             } else if (arg == QStringLiteral("--qa-immersive-theme")) {
                 qaImmersiveThemeRequested = true;
                 qaImmersiveTheme.clear();
@@ -817,8 +810,6 @@ int main(int argc, char* argv[])
             if (qaImmersiveThemeRequested) {
                 playerExperience.applyTheme(qaImmersiveTheme);
                 qInfo().noquote() << "QA immersive theme:" << playerExperience.themeId();
-            } else if (qaImmersivePreset >= 0) {
-                playerExperience.applyPreset(qaImmersivePreset);
             }
             if (qaLyricPlacement >= 0) {
                 playerExperience.setLyricPosition(qaLyricPlacement);

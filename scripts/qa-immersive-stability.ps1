@@ -3,7 +3,7 @@ param(
     [string]$BuildDirectory = 'build/release',
     [ValidateRange(75, 86400)][int]$DurationSeconds = 1800,
     [string]$AudioPath,
-    [ValidateNotNullOrEmpty()][string]$ThemeId,
+    [ValidateNotNullOrEmpty()][string]$ThemeId = 'ink-wash',
     [string]$OutputDirectory,
     [string]$ValidateLog
 )
@@ -73,14 +73,11 @@ if ($vcpkgLine) {
 $arguments = @('--qa-test-mode', '--qa-instance-key', ('stability-' + [guid]::NewGuid().ToString('N')),
     '--qa-log', ('"' + $logPath + '"'), '--qa-immersive',
     '--qa-immersive-stability', '--qa-exit-after-ms', ($DurationSeconds * 1000).ToString())
-if ($ThemeId) {
-    if ($ThemeId -notmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$') { throw 'ThemeId must be a built-in theme id.' }
-    $arguments += @('--qa-immersive-theme', $ThemeId)
-}
-else { $arguments += @('--qa-immersive-preset', '0') }
+if ($ThemeId -notmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$') { throw 'ThemeId must be a built-in theme id.' }
+$arguments += @('--qa-immersive-theme', $ThemeId)
 if ($AudioPath) { $arguments += @('--qa-play', ('"' + $AudioPath + '"')) }
 else { $arguments += '--qa-immersive-synthetic' }
-[pscustomobject]@{ ThemeId = $ThemeId; LegacyPreset = $(if (!$ThemeId) { 0 } else { $null })
+[pscustomobject]@{ ThemeId = $ThemeId
     AudioMode = $(if ($AudioPath) { 'file' } else { 'synthetic' })
     AudioPath = $AudioPath; DurationSeconds = $DurationSeconds
 } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $outputRoot 'run.json') -Encoding utf8

@@ -1507,7 +1507,7 @@ TestCase {
             compare(PlayerExperienceController.topographyDensity, 61)
         } finally {
             PlayerExperienceController.topographyDensity = 46
-            PlayerExperienceController.applyPreset(0)
+            PlayerExperienceController.applyTheme("ink-wash")
             panel.currentTab = 0
         }
     }
@@ -1535,7 +1535,7 @@ TestCase {
         }
     }
 
-    function test_ink_contrast_tracks_preset_without_replacing_frequency_waveform() {
+    function test_theme_contrast_does_not_replace_frequency_waveform() {
         PlayerExperienceController.immersiveMode =
                 PlayerExperienceController.TerrainReactor
         PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
@@ -1551,23 +1551,17 @@ TestCase {
         verify(surface && waveform && lyrics && session)
         var frequencyWaveform = findChild(waveform, "immersiveWaveform")
         verify(frequencyWaveform)
-        for (var preset = 0; preset < 9; ++preset) {
-            if (preset === 2)
-                continue
-            verify(PlayerExperienceController.applyPreset(2))
-            compare(surface.inkMode, true)
-            compare(waveform.lightBackground, true)
-            compare(lyrics.lightBackground, true)
-            compare(frequencyWaveform.visualMode, 3)
-            compare(waveform.waveformSession, session)
-            verify(PlayerExperienceController.applyPreset(preset))
-            compare(surface.inkMode, false)
-            compare(waveform.lightBackground, false)
-            compare(lyrics.lightBackground, false)
-            compare(frequencyWaveform.visualMode, 3)
-            compare(waveform.waveformSession, session)
-        }
-        verify(PlayerExperienceController.applyPreset(0))
+        verify(PlayerExperienceController.applyTheme("ink-wash"))
+        compare(waveform.lightBackground, true)
+        compare(lyrics.lightBackground, true)
+        compare(frequencyWaveform.visualMode, 3)
+        compare(waveform.waveformSession, session)
+        verify(PlayerExperienceController.applyTheme("nocturnal"))
+        compare(surface.inkMode, false)
+        compare(waveform.lightBackground, false)
+        compare(lyrics.lightBackground, false)
+        compare(frequencyWaveform.visualMode, 3)
+        compare(waveform.waveformSession, session)
         PlayerExperienceController.materialMode = 2
         compare(surface.inkMode, true)
         compare(waveform.lightBackground, true)
@@ -2102,8 +2096,6 @@ TestCase {
         verify(!material)
         verify(!findChild(panel, "immersiveMaterialCombo"))
         verify(ripple)
-        verify(PlayerExperienceController.applyPreset(PlayerExperienceController.InkWash))
-        compare(PlayerExperienceController.materialMode, 2)
     }
 
     function test_dynamics_controls_are_grouped_by_meaning_and_remain_wired() {
@@ -2120,12 +2112,12 @@ TestCase {
         panel.currentTab = 0
         wait(0)
         var presetScroll = findChild(panel, "immersivePanelScroll")
-        var lastPreset = findChild(panel, "immersivePresetCard8")
+        var lastPreset = findChild(panel, "immersivePresetCard12")
         verify(presetScroll && lastPreset)
         var presetRight = lastPreset.mapToItem(presetScroll, lastPreset.width, 0).x
         verify(presetRight <= presetScroll.width + 0.5,
                "preset and color controls must stay inside the narrow panel")
-        for (var cardIndex = 0; cardIndex < 9; ++cardIndex) {
+        for (var cardIndex = 0; cardIndex < 13; ++cardIndex) {
             var card = findChild(panel, "immersivePresetCard" + cardIndex)
             var title = findChild(card, "immersivePresetTitle" + cardIndex)
             verify(title, "each preset must expose a visible name")

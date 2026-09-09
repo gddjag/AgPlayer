@@ -129,18 +129,6 @@ public:
     Q_ENUM(QualityPreset)
     enum ColorMode { MultiRegion = 0, Custom = 1, RgbSweep = 2, RainbowColumn = 3 };
     Q_ENUM(ColorMode)
-    enum VisualPreset {
-        AudioRangeEcho = 0,
-        NeonRainNight = 1,
-        InkWash = 2,
-        PureStage = 3,
-        Quiet = 4,
-        Galaxy = 5,
-        MultiSourceNeon = 6,
-        DeepSeaSoftWave = 7,
-        AmberCinema = 8,
-    };
-    Q_ENUM(VisualPreset)
     enum LyricPosition { Left = 0, Center = 1, Right = 2 };
     Q_ENUM(LyricPosition)
 
@@ -271,7 +259,6 @@ public:
     void setAutoRotateSpeed(int value);
     void setRhythmSensitivity(int value);
 
-    Q_INVOKABLE bool applyPreset(int preset);
     Q_INVOKABLE bool applyTheme(const QString& id);
     Q_INVOKABLE void toggleImmersiveMode();
     Q_INVOKABLE void toggleLyricsVisible();
