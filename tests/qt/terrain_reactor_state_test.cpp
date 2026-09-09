@@ -99,6 +99,7 @@ private slots:
     void continuousAndEventControlsStayDistinctBoundedAndLive();
     void nonFiniteInputsUseFiniteBoundedFallbacks();
     void idleTerrainKeepsFineVisibleReliefWithoutMusic();
+    void silentTerrainReliefDoesNotDriftWithAnimationClock();
     void idleTerrainFadesOutsideResponseField();
     void trackIdentityProducesStableBoundedDistinctPalette();
     void trackPaletteKeepsCoordinatedSemanticColorRoles();
@@ -1185,6 +1186,19 @@ void TerrainReactorStateTest::idleTerrainKeepsFineVisibleReliefWithoutMusic()
              "Idle terrain must remain visibly textured instead of collapsing flat");
     QVERIFY(first < 3.0F && second < 3.0F);
     QVERIFY(std::abs(first - second) < 0.35F);
+}
+
+void TerrainReactorStateTest::silentTerrainReliefDoesNotDriftWithAnimationClock()
+{
+    const VisualParameters silent;
+    const RenderStyleSnapshot style;
+    const SceneLayout layout = makeSceneLayout(0x91acU, 25, 0, 0, 0);
+
+    for (const SceneInstance& column : layout.terrain) {
+        const float initial = terrainHeight(column, silent, 0.0F, style);
+        const float later = terrainHeight(column, silent, 37.25F, style);
+        QCOMPARE(later, initial);
+    }
 }
 
 void TerrainReactorStateTest::idleTerrainFadesOutsideResponseField()

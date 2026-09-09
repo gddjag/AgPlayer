@@ -49,6 +49,7 @@ private slots:
     void highFrequencySheenStaysLocalizedAndHeightSubordinate();
     void highFrequencyHeightControlChangesActualRelief();
     void silentTerrainDoesNotGenerateTopFlashes();
+    void silentTerrainGeometryStaysFixedWithIdleReliefEnabled();
     void steadyCorePreservesHighlightDetailWithoutWhitePlateau();
     void nonFiniteFeatureInputsAreSanitizedBeforeExposure();
     void nonFiniteCameraControlsRemainRenderable();
@@ -1161,15 +1162,80 @@ void TerrainReactorGpuSmokeTest::silentTerrainDoesNotGenerateTopFlashes()
         const QImage on = window.grabWindow();
         QCOMPARE(on.size(), off.size());
         int changed = 0;
-        for (int y = on.height() / 3; y < on.height() * 4 / 5; ++y)
-            for (int x = on.width() / 4; x < on.width() * 3 / 4; ++x)
+        // Restrict the comparison to the dense central terrain. The wider
+        // rectangle included independent starfield twinkles and made this
+        // cap-light assertion depend on which stars crossed it that frame.
+        for (int y = on.height() / 2; y < on.height() * 4 / 5; ++y)
+            for (int x = on.width() / 3; x < on.width() * 2 / 3; ++x)
                 if (qGray(on.pixel(x,y)) > qGray(off.pixel(x,y)) + 3) ++changed;
         brightestChanges = std::max(brightestChanges, changed);
     }
     qInfo() << "Silent top-flash added pixels:" << brightestChanges;
     // A few edge pixels can move as the fixed scene accumulates subpixel AA;
-    // reject an actual flash region, not rasterization noise below 0.04% ROI.
-    QVERIFY2(brightestChanges < 40, "The top-flash clock is producing light without audio excitation");
+    // reject an actual flash region, not rasterization noise below 0.1% ROI.
+    QVERIFY2(brightestChanges < 24, "The top-flash clock is producing light without audio excitation");
+    item.setActive(false);
+}
+
+void TerrainReactorGpuSmokeTest::silentTerrainGeometryStaysFixedWithIdleReliefEnabled()
+{
+    PlayerExperienceController style;
+    style.applyTheme(QStringLiteral("ink-wash"));
+    style.setAutoRotate(0);
+    style.setAutoRotateSpeed(0);
+    style.setMotionResponse(0);
+    style.setCinemaShake(0);
+    style.setIdleBreathingEnabled(true);
+    style.setRipplesEnabled(false);
+    style.setFloatingCubesEnabled(false);
+    style.setMeteorsEnabled(false);
+    style.setBurstEnabled(false);
+    style.setStreamHighlightEnabled(false);
+    QQuickWindow window;
+    window.resize(640, 360);
+    TerrainReactorItem item(window.contentItem());
+    item.setSize(QSizeF(640, 360));
+    item.setStyleSource(&style);
+    item.setQuality(TerrainReactorItem::Quality::High);
+    item.setUseSyntheticFeatures(true);
+    item.setSyntheticFeatures({0,0,0,0,0,0,0,0}, 0, 0, false, false);
+    window.show();
+    QVERIFY(waitForGpuWindow(window));
+    item.setActive(true);
+    QTRY_COMPARE_WITH_TIMEOUT(item.renderStatus(),
+                              TerrainReactorItem::RenderStatus::Ready, 5000);
+    QTest::qWait(250);
+    const QImage first = window.grabWindow();
+    QVERIFY(!first.isNull());
+    QTest::qWait(650);
+    const QImage later = window.grabWindow();
+    QCOMPARE(later.size(), first.size());
+    int changed = 0;
+    int silhouetteChanged = 0;
+    int largestDelta = 0;
+    for (int y = later.height() / 4; y < later.height() * 9 / 10; ++y) {
+        for (int x = later.width() / 10; x < later.width() * 9 / 10; ++x) {
+            const QColor a = first.pixelColor(x, y);
+            const QColor b = later.pixelColor(x, y);
+            const int delta = std::abs(a.red() - b.red())
+                + std::abs(a.green() - b.green())
+                + std::abs(a.blue() - b.blue());
+            largestDelta = std::max(largestDelta, delta);
+            if (delta > 5) {
+                ++changed;
+            }
+            if ((qGray(a.rgb()) > 12) != (qGray(b.rgb()) > 12))
+                ++silhouetteChanged;
+        }
+    }
+    qInfo() << "Silent idle-relief changed/silhouette/max-delta pixels:"
+            << changed << silhouetteChanged << largestDelta;
+    QVERIFY2(silhouetteChanged < 16,
+             "The platform silhouette drifted without audio or an explicit event");
+    // Sparse star twinkles remain part of the environment, but a moving
+    // terrain field would change thousands of pixels and its silhouette.
+    QVERIFY2(changed < 300,
+             "Silent terrain produced a broad time-driven visual change");
     item.setActive(false);
 }
 

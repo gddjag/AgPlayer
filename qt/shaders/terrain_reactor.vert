@@ -170,8 +170,13 @@ void main()
         vec2 p = position.xz;
         float terrainRandom = fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453123);
         columnRandom = terrainRandom;
-        float broadNoise = terrainNoise(p * 0.05 + vec2(t * 0.1, t * 0.05));
-        float diagonal = sin(dot(p, vec2(0.15, 0.1)) - t * 0.6);
+        // Preserve literal reference-oracle replay while keeping the actual
+        // AgPlayer platform spatial and fixed. In production only real band
+        // energy and explicit beat/impact events can move column height.
+        float idleClock = ubuf.timbre.w < 0.5 ? t : 0.0;
+        float broadNoise = terrainNoise(p * 0.05
+                                      + vec2(idleClock * 0.1, idleClock * 0.05));
+        float diagonal = sin(dot(p, vec2(0.15, 0.1)) - idleClock * 0.6);
         float idle = mix(0.5 + broadNoise * 0.5, 0.5 + diagonal * 0.5,
                          0.2 + smoothness * 0.5) * 0.8 * reliefDisk
                      * ubuf.styleToggles.w;

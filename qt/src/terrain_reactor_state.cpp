@@ -545,17 +545,15 @@ float terrainHeight(const SceneInstance& unsafeInstance,
     const float idlePhase = std::sin(instance.position.x() * 0.032F
                                      + instance.position.z() * 0.041F) * 0.72F;
     const float reliefA = 0.5F + 0.5F * std::sin(
-        instance.position.x() * 0.055F + instance.position.z() * 0.032F
-        + timeSeconds * 0.18F);
+        instance.position.x() * 0.055F + instance.position.z() * 0.032F);
     const float reliefB = 0.5F + 0.5F * std::cos(
-        instance.position.z() * 0.070F - instance.position.x() * 0.018F
-        - timeSeconds * 0.14F);
+        instance.position.z() * 0.070F - instance.position.x() * 0.018F);
     const float baseRelief = (0.24F + 0.48F
         * (reliefA * 0.55F + reliefB * 0.45F)) * terrainField
         + core * 1.08F;
     const float idle = style.idleBreathingEnabled
         ? baseRelief + 0.06F + 0.10F * std::sin(
-              distance * 0.067F - timeSeconds * 0.36F + idlePhase)
+              distance * 0.067F + idlePhase)
         : 0.0F;
     const float rippleRadius = std::fmod(std::max(0.0F, timeSeconds) * 13.5F,
                                         96.0F);
