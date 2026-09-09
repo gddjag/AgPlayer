@@ -808,10 +808,12 @@ private slots:
         QTest::addColumn<float>("clarity");
         QTest::addColumn<bool>("raised");
         QTest::addColumn<float>("capWidth");
-        QTest::newRow("one-unit-rest-low-clarity") << 1.0F << 0.0F << false << 6.0F;
-        QTest::newRow("three-unit-rest-high-clarity") << 3.0F << 1.4F << false << 6.0F;
-        QTest::newRow("raised-cap-follows-glow-palette") << 1.0F << 1.4F << true << 6.0F;
-        QTest::newRow("two-pixel-cap-keeps-base-interior") << 1.0F << 1.0F << false << .03125F;
+        QTest::addColumn<float>("runtime");
+        QTest::newRow("one-unit-rest-low-clarity") << 1.0F << 0.0F << false << 6.0F << 0.0F;
+        QTest::newRow("three-unit-rest-high-clarity") << 3.0F << 1.4F << false << 6.0F << 0.0F;
+        QTest::newRow("raised-cap-follows-glow-palette") << 1.0F << 1.4F << true << 6.0F << 0.0F;
+        QTest::newRow("two-pixel-cap-keeps-base-interior") << 1.0F << 1.0F << false << .03125F << 0.0F;
+        QTest::newRow("runtime-cap-keeps-reference-base") << 1.0F << 1.14F << false << 6.0F << 1.0F;
     }
     void silentCapPreservesIndependentThemeBase()
     {
@@ -819,8 +821,10 @@ private slots:
         QFETCH(float, clarity);
         QFETCH(bool, raised);
         QFETCH(float, capWidth);
+        QFETCH(float, runtime);
         auto replay = std::make_shared<NativeReplay>();
         auto& u = replay->uniform;
+        u.timbre[3] = runtime;
         u.sceneControls[0]=u.sceneControls[1]=u.sceneControls[3]=1;
         u.sceneControls[2]=84; u.styleAudio[2]=56;
         u.materialParameters[0]=1; u.materialParameters[1]=.45F;
@@ -1032,18 +1036,27 @@ private slots:
     void referenceHeightSamples_data()
     {
         QTest::addColumn<QJsonObject>("sample");
+        QTest::addColumn<bool>("runtime");
         QFile file(QFINDTESTDATA("../fixtures/terrain_reference_heights.json"));
         QVERIFY(file.open(QIODevice::ReadOnly));
         const auto samples = QJsonDocument::fromJson(file.readAll()).object().value("samples").toArray();
         QCOMPARE(samples.size(), 72);
-        for (int i = 0; i < samples.size(); ++i)
-            QTest::newRow(qPrintable(QString::number(i))) << samples[i].toObject();
+        for (int i = 0; i < samples.size(); ++i) {
+            const auto sample = samples[i].toObject();
+            QTest::newRow(qPrintable(QString::number(i))) << sample << false;
+            // At t=0 frozen idle and original idle coincide. Replay real
+            // runtime flags against the independently captured GPU oracle.
+            if (sample.value("time").toDouble() == 0.0)
+                QTest::newRow(qPrintable(QString("runtime-%1").arg(i))) << sample << true;
+        }
     }
     void referenceHeightSamples()
     {
         QFETCH(QJsonObject, sample);
+        QFETCH(bool, runtime);
         auto replay = std::make_shared<NativeReplay>();
         auto& u = replay->uniform;
+        u.timbre[3] = runtime ? 1.0F : 0.0F;
         const auto position = sample.value("position").toArray();
         const float x = float(position[0].toDouble()), z = float(position[1].toDouble());
         u.parameters[3] = float(sample.value("time").toDouble());
@@ -1085,6 +1098,9 @@ private slots:
         QVERIFY2(std::abs(bounds.height()-expectedPixels)<=1.0,
                  "Column height must agree with the reference GPU within one raster pixel");
         QCOMPARE(bounds.bottom(),511); // baseY remains zero for every band/time.
+        if (runtime)
+            QVERIFY2(std::abs(bounds.width() - 256) <= 1,
+                     "Runtime must preserve the original four-unit column width");
     }
     void referenceRippleLiteralSamples_data()
     {

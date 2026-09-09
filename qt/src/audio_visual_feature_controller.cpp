@@ -437,9 +437,19 @@ void AudioVisualFeatureController::updateOutputLevelPolling()
 void AudioVisualFeatureController::pollOutputLevels()
 {
     if (active_ && playback_ && playback_->playerHandle()) {
-        ag_visual_pcm_snapshot pcm{};
-        if (ag_player_read_visual_pcm(playback_->playerHandle(), &pcm) == AG_OK)
+        // Drain the finite tap backlog after GUI scheduling delays. Each
+        // contiguous chunk keeps its real sample duration; never stitch over
+        // a seek/overflow epoch or manufacture missing audio. The cap covers
+        // the tap's 32 x 512 samples without an unbounded producer catch-up.
+        constexpr int MaxVisualReadsPerPoll = 16;
+        for (int read = 0; read < MaxVisualReadsPerPoll; ++read) {
+            if (!active_ || !playback_ || !playback_->playerHandle()) break;
+            ag_visual_pcm_snapshot pcm{};
+            if (ag_player_read_visual_pcm(playback_->playerHandle(), &pcm) != AG_OK)
+                break;
             ingestVisualPcm(pcm);
+            if (pcm.sample_count == 0) break;
+        }
     }
     ag_output_levels levels{};
     if (active_ && playback_ != nullptr

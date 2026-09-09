@@ -359,7 +359,6 @@ void PlayerExperienceController::setImmersiveMode(int value)
     value = value == TerrainReactor ? TerrainReactor : Off;
     if (immersiveMode_ == value) return;
     immersiveMode_ = value;
-    persist(QStringLiteral("mode"), value);
     emit immersiveModeChanged();
 }
 
@@ -834,8 +833,9 @@ void PlayerExperienceController::load()
         return storedDouble(settings_.value(key)).value_or(fallback);
     };
 
-    immersiveMode_ = enumOrDefault(integer(QStringLiteral("mode"), Off),
-                                   Off, TerrainReactor, Off);
+    // Presentation is session state. Never reopen a GPU-heavy immersive
+    // window on launch, including after an abnormal process termination.
+    immersiveMode_ = Off;
     hostMode_ = enumOrDefault(integer(QStringLiteral("hostMode"), Windowed),
                               Windowed, Desktop, Windowed);
     lyricsVisible_ = boolean(QStringLiteral("lyricsVisible"), false);
@@ -862,7 +862,7 @@ void PlayerExperienceController::load()
                                              QStringLiteral("#040A1C")),
                                  QStringLiteral("#040A1C"));
     themeBackground_ = QColor(baseColor_);
-    terrainAmplitude_ = clampPercent(integer(QStringLiteral("terrainAmplitude"), 34));
+    terrainAmplitude_ = clampPercent(integer(QStringLiteral("terrainAmplitude"), 50));
     materialMode_ = enumOrDefault(integer(QStringLiteral("materialMode"), 0), 0, 2, 0);
     materialSoftness_ = clampRange(integer(QStringLiteral("materialSoftness"), 45), 0, 100);
     jellyElasticity_ = clampRange(integer(QStringLiteral("jellyElasticity"), 35), 0, 100);
@@ -870,7 +870,7 @@ void PlayerExperienceController::load()
     rippleStrength_ = clampRange(integer(QStringLiteral("rippleStrength"), 39), 0, 200);
     rippleWidth_ = clampRange(integer(QStringLiteral("rippleWidth"), 82), 20, 200);
     rippleDecay_ = clampRange(integer(QStringLiteral("rippleDecay"), 81), 20, 200);
-    columnSize_ = clampRange(integer(QStringLiteral("columnSize"), 95), 50, 200);
+    columnSize_ = clampRange(integer(QStringLiteral("columnSize"), 100), 50, 200);
     columnDensity_ = clampRange(integer(QStringLiteral("columnDensity"), 50), 50, 200);
     topographyDensity_ = clampPercent(integer(QStringLiteral("topographyDensity"), 46));
     columnOpacity_ = clampRange(integer(QStringLiteral("columnOpacity"), 100), 0, 100);
@@ -878,7 +878,7 @@ void PlayerExperienceController::load()
     columnInnerLight_ = clampRange(integer(QStringLiteral("columnInnerLight"), 155), 0, 200);
     columnLightSpill_ = clampRange(integer(QStringLiteral("columnLightSpill"), 176), 0, 200);
     columnLightRadius_ = clampRange(integer(QStringLiteral("columnLightRadius"), 86), 20, 200);
-    motionResponse_ = clampPercent(integer(QStringLiteral("motionResponse"), 56));
+    motionResponse_ = clampPercent(integer(QStringLiteral("motionResponse"), 50));
     gradientLayers_ = clampPercent(integer(QStringLiteral("gradientLayers"), 74));
     glowIntensity_ = clampPercent(integer(QStringLiteral("glowIntensity"), 100));
     cinemaShake_ = std::clamp(decimal(QStringLiteral("cinemaShake"), 0.81), 0.0, 1.8);
@@ -893,7 +893,7 @@ void PlayerExperienceController::load()
     streamHighlightEnabled_ = boolean(
         QStringLiteral("streamHighlightEnabled"), true);
     songAdaptiveColorEnabled_ = boolean(
-        QStringLiteral("songAdaptiveColorEnabled"), true);
+        QStringLiteral("songAdaptiveColorEnabled"), false);
     const QVariant persistedGains = settings_.value(QStringLiteral("visualEqGains"));
     const int persistedGainsType = persistedGains.metaType().id();
     visualEqGains_ = (persistedGainsType == QMetaType::QVariantList
@@ -917,7 +917,7 @@ void PlayerExperienceController::load()
     autoRotateSpeed_ = clampPercent(integer(QStringLiteral("autoRotateSpeed"), 78));
     rhythmSensitivity_ = clampPercent(integer(QStringLiteral("rhythmSensitivity"), 80));
 
-    settings_.setValue(QStringLiteral("mode"), immersiveMode_);
+    settings_.remove(QStringLiteral("mode"));
     settings_.setValue(QStringLiteral("hostMode"), hostMode_);
     settings_.setValue(QStringLiteral("lyricsVisible"), lyricsVisible_);
     settings_.setValue(QStringLiteral("panelVisible"), panelVisible_);

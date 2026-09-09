@@ -165,8 +165,9 @@ void main()
         float reliefDisk = 1.0 - smoothstep(30.0, 60.0, distanceFromCore);
         float smoothness = clamp(ubuf.waveParameters.w, 0.0, 1.0);
         float density = clamp(ubuf.sceneLighting.w, 0.0, 1.0);
-        bool referenceGeometry = ubuf.timbre.w < 0.5
-                              && ubuf.sceneControls.z <= 84.5;
+        // The canonical stage uses the original geometry in the player too.
+        // Runtime differs only in freezing the unexcited idle relief below.
+        bool referenceGeometry = ubuf.timbre.w < 1.5 && ubuf.sceneControls.z <= 84.5;
         vec2 p = position.xz;
         float terrainRandom = fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453123);
         columnRandom = terrainRandom;
@@ -311,6 +312,7 @@ void main()
             * (0.65 + randomValue * 2.0) * max(0.0, ubuf.styleParameters.x * 2.0)
             * 2.4 * (1.0 + jellyElasticity * 2.4);
         localBeatLift = min(localBeatLift, 0.35 * max(1.0, instanceScale.y + idle + bandRelief));
+        if (referenceGeometry) localBeatLift = 0.0;
         // No extra whole-field gain, shoulders or soft-cap compression.
         // Emitted ripples remain separate from the finite musical relief disk.
         // Keep the legacy42-unit safety budget on native wave overlap only;

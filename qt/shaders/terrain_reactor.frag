@@ -241,7 +241,10 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
     // MapShaderMaterial has an explicit body/ripple contract. Its low bands
     // deform the height field, but do not enter the native volumetric,
     // received-light, or thin-shell emission systems below.
-    bool referenceMode = ubuf.timbre.w < 0.5 && ubuf.bodyColor.a > 0.5
+    // A canonical palette selects the original material in the actual player
+    // as well as in replay fixtures. Runtime flag 2 identifies a manual
+    // material without a canonical palette; its lighting controls stay live.
+    bool referenceMode = ubuf.timbre.w < 1.5 && ubuf.bodyColor.a > 0.5
         && (ubuf.rippleColor.a > 0.5 || ubuf.sceneControls.z <= 84.5);
     vec3 albedo = srgbToLinear(color);
     vec3 columnCenter = worldPosition - surfacePosition * columnExtent;
@@ -319,6 +322,19 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
             float rimGlow = smoothstep(0.03, 0.0, distanceFromTop)
                           * normalizedElevation;
             result += currentGlow * rimGlow;
+        }
+        if (ubuf.timbre.w > 0.5) {
+            // Optional player controls augment the original material, without
+            // recoloring the unexcited reference base or moving the platform.
+            float eventLight = clamp(musicLight * 0.32 + impactLight * 0.72, 0.0, 1.0)
+                             * max(0.0, ubuf.sceneLighting.x);
+            result += boundedSource(targetGlow * eventLight
+                * mix(0.35, 1.0, relativeY) * distanceFade, 0.22);
+            float clarityDelta = ubuf.stylePresentation.z > 0.0
+                ? clamp(ubuf.stylePresentation.z, 0.2, 1.4) - 1.14 : 0.0;
+            // Contrast remains adjustable on a silent platform too. Neutral
+            // clarity preserves the original linear palette exactly.
+            result *= max(0.25, 1.0 + clarityDelta * 1.5);
         }
         result += srgbToLinear(ubuf.rippleColor.rgb)
                 * referenceRippleAnim.x * 0.6;

@@ -5,6 +5,9 @@
 
 namespace agplayer::terrain::gpu {
 
+constexpr quint32 maximumInstances = 224U * 224U + 120U
+    + 28U * (1U + 3U + 16U + 12U) + 1600U;
+
 constexpr int cubeVertexCount = 24;
 constexpr int cubeIndexCount = 36;
 

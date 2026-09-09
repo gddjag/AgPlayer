@@ -49,6 +49,8 @@ Item {
     signal minimizeRequested()
 
     function notePointerActivity() {
+        if (!active || !hostExposed)
+            return
         panelAutoHidden = false
         if (PlayerExperienceController.panelVisible)
             panelAutoHideTimer.restart()
@@ -62,6 +64,8 @@ Item {
     }
 
     function noteManualCameraActivity() {
+        if (!active || !hostExposed)
+            return
         manualCameraActive = true
         cameraResumeTimer.restart()
         notePointerActivity()
@@ -135,6 +139,7 @@ Item {
     Loader {
         id: terrainLoader
         anchors.fill: parent
+        active: root.active
         sourceComponent: root.renderingEnabled
                          ? nativeTerrainComponent : inertTerrainComponent
         onItemChanged: root.synchronizeAudioFeatures()
@@ -250,6 +255,7 @@ Item {
         id: orbitArea
         objectName: "immersiveOrbitArea"
         anchors.fill: parent
+        enabled: root.active && root.terrainItem !== null
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton
         property real lastX: 0
@@ -257,7 +263,7 @@ Item {
         onEntered: root.notePointerActivity()
         onPositionChanged: function(mouse) {
             root.notePointerActivity()
-            if (!pressed)
+            if (!pressed || !root.terrainItem)
                 return
             root.terrainItem.orbitBy(-(mouse.x - lastX) * 0.004,
                                      (mouse.y - lastY) * 0.003,
@@ -274,6 +280,8 @@ Item {
         onReleased: root.notePointerActivity()
         onDoubleClicked: PlayerExperienceController.togglePanelVisible()
         onWheel: function(wheel) {
+            if (!root.terrainItem)
+                return
             root.terrainItem.zoomBy(wheel.angleDelta.y, Date.now() / 1000.0)
             root.noteManualCameraActivity()
             wheel.accepted = true
@@ -503,6 +511,18 @@ Item {
 
     onHostModeChanged: notePointerActivity()
     onAttachedChanged: if (attached) notePointerActivity()
+    function synchronizePresentationTimers() {
+        if (active && hostExposed) {
+            notePointerActivity()
+            return
+        }
+        panelIdleTimer.stop()
+        panelAutoHideTimer.stop()
+        cameraResumeTimer.stop()
+        manualCameraActive = false
+    }
+    onActiveChanged: synchronizePresentationTimers()
+    onHostExposedChanged: synchronizePresentationTimers()
     Component.onCompleted: synchronizeAudioFeatures()
     Component.onDestruction: AudioVisualFeatureController.setActive(false)
 }

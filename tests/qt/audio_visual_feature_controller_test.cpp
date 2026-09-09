@@ -24,6 +24,7 @@ private slots:
     void visualPcmDescriptorHistoryResets();
     void visualPcmAssemblesAndResets();
     void visualPcmLifecycle();
+    void visualPcmDelayedPollDrainsContiguousAudioWithoutReset();
     void reliableBpmEmitsOnceEveryEightBeats();
     void reliableBpmEmitsRegularBeatPulseAndEightBeatImpact();
     void seeksAndTrackChangesDoNotEmitDuplicateImpacts();
@@ -41,6 +42,37 @@ private slots:
     void fadeOutPublicationResidueDoesNotLightBeatGrid_data();
     void fadeOutPublicationResidueDoesNotLightBeatGrid();
 };
+
+void AudioVisualFeatureControllerTest::visualPcmDelayedPollDrainsContiguousAudioWithoutReset()
+{
+    const auto fixture = qgetenv("AGPLAYER_TEST_AUDIO");
+    QVERIFY(!fixture.isEmpty());
+    ag_player* player = nullptr;
+    const ag_player_config config{AG_AUDIO_BACKEND_NULL, 4096U};
+    QCOMPARE(ag_player_create_with_config(&config, &player), AG_OK);
+    {
+        PlaybackController playback(player);
+        AudioVisualFeatureController features(&playback);
+        features.setActive(true);
+        QCOMPARE(ag_player_load(player, fixture.constData()), AG_OK);
+        QCOMPARE(ag_player_play(player), AG_OK);
+        QTRY_VERIFY_WITH_TIMEOUT(features.visualSpectrumUpdateCount() > 0, 1000);
+        QSignalSpy resets(&features, &AudioVisualFeatureController::visualStateReset);
+        const auto before = features.visualSpectrumUpdateCount();
+        // A GUI scheduling delay is not an audio discontinuity. The NULL
+        // output continues producing real PCM while no GUI timer can consume it.
+        QTest::qSleep(60);
+        features.pollOutputLevels();
+        QCOMPARE(resets.count(), 0);
+        QVERIFY2(features.visualSpectrumUpdateCount() > before + 1,
+                 "One GUI poll must catch up multiple queued PCM windows");
+        QCOMPARE(ag_player_pause(player), AG_OK);
+        features.pollOutputLevels();
+        QCOMPARE(resets.count(), 1);
+        QCOMPARE(features.visualFeatures().energy, 0.0);
+    }
+    ag_player_destroy(player);
+}
 
 void AudioVisualFeatureControllerTest::visualResetNotifiesOnceAfterClearing()
 {

@@ -330,6 +330,12 @@ Rectangle {
                             id: presetCard
                             required property int index
                             required property var modelData
+                            readonly property color gradientFrom: modelData.from
+                            readonly property color gradientTo: modelData.to
+                            readonly property color labelColor: Theme.tagCapsuleFilledText(
+                                Qt.rgba((gradientFrom.r + gradientTo.r) / 2,
+                                        (gradientFrom.g + gradientTo.g) / 2,
+                                        (gradientFrom.b + gradientTo.b) / 2, 1))
                             objectName: "immersivePresetCard" + index
                             Layout.row: Math.floor(index / 3)
                             Layout.column: index % 3
@@ -360,7 +366,7 @@ Rectangle {
                             contentItem: Text {
                                 objectName: "immersivePresetTitle" + presetCard.index
                                 text: presetCard.modelData.title
-                                color: Theme.onBrandGradientText
+                                color: presetCard.labelColor
                                 font.family: Theme.fontPrimary
                                 font.pixelSize: Theme.fontSizeCaption
                                 font.weight: Font.DemiBold
@@ -440,9 +446,9 @@ Rectangle {
                     objectName: "immersiveQualityCombo"
                     Layout.fillWidth: true
                     implicitHeight: 30
-                    model: ["Auto · 自适应", "Eco · 96² / 30 FPS",
-                            "Balanced · 128² / 45 FPS", "High · 160² / 60 FPS",
-                            "Ultra · 160² / 60 FPS"]
+                    model: ["Auto · 自适应", "Eco · 30 FPS",
+                            "Balanced · 45 FPS", "High · 60 FPS",
+                            "Ultra · 60 FPS"]
                     currentIndex: PlayerExperienceController.qualityPreset
                     onActivated: PlayerExperienceController.qualityPreset = currentIndex
                 }

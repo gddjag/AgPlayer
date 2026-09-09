@@ -15,6 +15,7 @@
 #include <QMetaMethod>
 #include <QMetaObject>
 #include <QQuickWindow>
+#include <QStringList>
 #include <QSGRendererInterface>
 #include <QVector3D>
 #include <QWindow>
@@ -35,8 +36,6 @@ namespace {
 
 using namespace agplayer::terrain::gpu;
 
-constexpr quint32 maximumInstances = 192U * 192U + 120U
-    + 28U * (1U + 3U + 16U + 12U) + 1600U;
 QShader loadShader(const QString& path)
 {
     QFile file(path);
@@ -121,6 +120,9 @@ public:
         if (claimed_) {
             releaseResources();
             resourceState_->releaseRenderer(rendererId_);
+            if (performanceProbe_)
+                qInfo("Reactor released: renderer=%llu",
+                    static_cast<unsigned long long>(rendererId_));
         }
     }
 
@@ -141,7 +143,8 @@ protected:
             return;
         }
 
-        const bool targetChanged = renderTarget() != lastRenderTarget_;
+        const bool targetChanged = renderTarget() != lastRenderTarget_
+            || (pipeline_ && pipeline_->sampleCount() != renderTarget()->sampleCount());
         if (targetChanged && pipeline_) {
             pipeline_.reset();
             lastRenderTarget_ = nullptr;
@@ -166,6 +169,8 @@ protected:
         const bool resuming = next.running && (!snapshot_.running
             || next.activityRevision != snapshot_.activityRevision);
         if (resuming) {
+            if (performanceProbe_) qInfo("Reactor resume: activity=%llu",
+                static_cast<unsigned long long>(next.activityRevision));
             frameTimer_.restart();
             renderTimeEpochSeconds_ = next.timeSeconds;
             renderTimeTimer_.restart();
@@ -183,6 +188,8 @@ protected:
         const bool visualReset = next.referenceAudio != snapshot_.referenceAudio
             || next.visualResetRevision != snapshot_.visualResetRevision;
         if (visualReset) {
+            if (performanceProbe_) qInfo("Reactor audio reset: revision=%llu",
+                static_cast<unsigned long long>(next.visualResetRevision));
             referenceResponse_.reset();
             smoothedFeatures_ = {};
             bassEnvelope_ = {};
@@ -253,9 +260,6 @@ protected:
                 static_cast<double>(renderTimeTimer_.nsecsElapsed())
                     / 1'000'000'000.0)
             : snapshot_.timeSeconds;
-        if (!framePacer_.shouldRender(renderTimeSeconds, targetFps)) {
-            return;
-        }
 
         const qint64 elapsedNanoseconds = frameTimer_.nsecsElapsed();
         frameTimer_.restart();
@@ -392,6 +396,28 @@ protected:
 
         const double workMilliseconds = static_cast<double>(workTimer.nsecsElapsed())
             / 1'000'000.0;
+        if (performanceProbe_) {
+            frameIntervals_[probeFrames_++] = wallElapsedSeconds * 1000.0;
+            probeWorkMs_ += workMilliseconds;
+            if (probeFrames_ == frameIntervals_.size()) {
+                auto sorted = frameIntervals_;
+                std::sort(sorted.begin(), sorted.end());
+                const double gpuSeconds = commandBuffer->lastCompletedGpuTime();
+                qInfo("Reactor performance: frames=%u medianMs=%.3f p95Ms=%.3f maxMs=%.3f cpuMs=%.3f gpuMs=%.3f width=%d height=%d columns=%d resources=%llu",
+                    unsigned(probeFrames_), sorted[probeFrames_ / 2],
+                    sorted[(probeFrames_ * 95) / 100], sorted.back(),
+                    probeWorkMs_ / probeFrames_, gpuSeconds > 0 ? gpuSeconds * 1000.0 : -1.0,
+                    size.width(), size.height(), currentTerrainCount_,
+                    static_cast<unsigned long long>(resourceState_->generation()));
+                QStringList intervals;
+                intervals.reserve(int(probeFrames_));
+                for (double interval : frameIntervals_)
+                    intervals.append(QString::number(interval, 'f', 3));
+                qInfo().noquote() << "Reactor frame intervalsMs:" << intervals.join(',');
+                probeFrames_ = 0;
+                probeWorkMs_ = 0;
+            }
+        }
         const double targetFrameMilliseconds = 1000.0 / targetFps;
         quality_.observeFrameSample(workMilliseconds,
                                     wallElapsedSeconds * 1000.0,
@@ -488,6 +514,8 @@ private:
         pendingStaticUploads_ = uploads;
         lastRenderTarget_ = renderTarget();
         instancesDirty_ = true;
+        layoutBuildTimer_.invalidate();
+        instancesDirtyUpload_ = true;
         failed_ = false;
         return true;
     }
@@ -495,6 +523,10 @@ private:
     void buildInstancesIfNeeded()
     {
         if (!instancesDirty_) return;
+        // Keep drawing the previous complete layout while slider changes merge.
+        if (!instances_.isEmpty() && layoutBuildTimer_.isValid()
+            && layoutBuildTimer_.elapsed() < 100) return;
+        layoutBuildTimer_.restart();
         QualityConfiguration config = quality_.configuration(
             snapshot_.quality == TerrainReactorItem::Quality::Eco);
         int gridCeiling = config.gridSize;
@@ -567,6 +599,7 @@ private:
             qWarning("TerrainReactorItem instance capacity exceeded");
             instances_.resize(qsizetype(maximumInstances));
         }
+        currentTerrainCount_ = std::min(currentTerrainCount_, int(instances_.size()));
         instancesDirty_ = false;
         instancesDirtyUpload_ = true;
         currentRippleCount_ = config.rippleCount;
@@ -730,10 +763,9 @@ private:
             result.timbre[1] = float(referenceDescriptors_.brightness);
             result.timbre[2] = float(referenceDescriptors_.sharpness);
         }
-        // Explicitly distinguish the interactive AgPlayer material from the
-        // zero-flag fixed reference fixtures. Runtime keeps the reference U/S
-        // inputs, then applies user-controlled clarity and gel light response.
-        result.timbre[3] = 1.0F;
+        // 0: reference replay clock; 1: canonical theme with fixed idle terrain;
+        // 2: user-custom material. Both runtime modes keep idle terrain fixed.
+        result.timbre[3] = snapshot_.style.bodyColor.w() > 0.5F ? 1.0F : 2.0F;
         return result;
     }
 
@@ -792,6 +824,10 @@ private:
 
     void publishRenderedRevisions()
     {
+        if (instancesDirty_) {
+            telemetry_->stableRenderedFrames.store(0, std::memory_order_release);
+            return;
+        }
         const quint64 featureRevision = snapshot_.featureRevision;
         const quint64 styleRevision = snapshot_.styleRevision;
         const bool samePair = telemetry_->renderedFeatureRevision.load(
@@ -853,7 +889,11 @@ private:
     double renderTimeEpochSeconds_ = 0.0;
     bool renderTimeAnchored_ = false;
     QElapsedTimer counterTimer_;
-    FramePacer framePacer_;
+    QElapsedTimer layoutBuildTimer_;
+    const bool performanceProbe_ = qEnvironmentVariableIsSet("AGPLAYER_REACTOR_PERF");
+    std::array<double, 120> frameIntervals_{};
+    std::size_t probeFrames_ = 0;
+    double probeWorkMs_ = 0;
     QVector<GpuInstance> instances_;
     bool instancesDirty_ = true;
     bool instancesDirtyUpload_ = false;
@@ -888,9 +928,8 @@ TerrainReactorItem::TerrainReactorItem(QQuickItem* parent)
     setAlphaBlending(true);
     setMirrorVertically(true);
     clock_.start();
-    // A bounded GUI-thread heartbeat avoids a renderer self-update busy loop
-    // when the native backend does not block on presentation. The existing
-    // FramePacer still chooses 60 / 45 / 30 FPS from these opportunities.
+    // One GUI-thread scheduler owns the cadence. Never drop a requested RHI
+    // render: its target may have just been recreated or resolved by Qt.
     renderTick_.setTimerType(Qt::PreciseTimer);
     renderTick_.setInterval(16);
     connect(&renderTick_, &QTimer::timeout, this, [this] {
@@ -1568,13 +1607,14 @@ void TerrainReactorItem::applyCurrentFeatures(const AudioFeatures& features)
 void TerrainReactorItem::scheduleIfRunnable()
 {
     const bool running = renderingRequested();
+    const int interval = quality_ == Quality::Eco ? 33
+        : quality_ == Quality::Balanced ? 22 : 16;
+    if (renderTick_.interval() != interval) renderTick_.setInterval(interval);
     if (running && !renderTick_.isActive()) renderTick_.start();
     else if (!running) renderTick_.stop();
     if (running != lastScheduledRunning_) {
         lastScheduledRunning_ = running;
         ++activityRevision_;
-        update();
-    } else if (running) {
         update();
     }
 }
@@ -1613,6 +1653,12 @@ void TerrainReactorItem::updateWindowState(QQuickWindow* window)
     if (window == nullptr) {
         windowExposed_ = true;
     } else {
+        // Only the dedicated immersive host opts out of hidden-window GPU
+        // caching. Never change the normal player's scene-graph policy.
+        if (window->objectName() == QStringLiteral("immersiveVisualWindow")) {
+            window->setPersistentSceneGraph(false);
+            window->setPersistentGraphics(false);
+        }
         window->installEventFilter(this);
         const auto refresh = [this] { refreshWindowExposure(); };
         windowVisibilityConnection_ = connect(window, &QWindow::visibilityChanged,

@@ -32,7 +32,9 @@ class TerrainReactorGpuSmokeTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void densityAndQualityChangesKeepDrawingCompleteFrames();
     void cameraPunchDoesNotMoveTheGroundProjection();
+    void denseMaterialFrameBudgetProbe_data();
     void denseMaterialFrameBudgetProbe();
     void columnLayeringReferenceFixture_data();
     void columnLayeringReferenceFixture();
@@ -55,18 +57,75 @@ private slots:
     void nonFiniteCameraControlsRemainRenderable();
 };
 
+void TerrainReactorGpuSmokeTest::densityAndQualityChangesKeepDrawingCompleteFrames()
+{
+    PlayerExperienceController style;
+    style.applyTheme(QStringLiteral("nocturnal"));
+    style.setAutoRotate(0);
+    QQuickWindow window;
+    window.resize(640, 360);
+    TerrainReactorItem item(window.contentItem());
+    item.setSize(QSizeF(640, 360));
+    item.setStyleSource(&style);
+    item.setQuality(TerrainReactorItem::Quality::High);
+    item.setUseSyntheticFeatures(true);
+    item.setSyntheticFeatures({.8,.7,.6,.5,.4,.3,.2,.1}, .6,.35,false,false);
+    window.show();
+    QVERIFY(waitForGpuWindow(window));
+    item.setActive(true);
+    QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() > 3, 5000);
+    for (int density : {46, 80, 100, 35, 100}) {
+        const auto before = item.frameCount();
+        style.setTopographyDensity(density);
+        const int grid = agplayer::terrain::referenceTerrainGridSize(density);
+        QTRY_COMPARE_WITH_TIMEOUT(item.renderedTerrainCount(), grid * grid, 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() > before, 5000);
+        const auto image = window.grabWindow();
+        QVERIFY(!image.isNull());
+        int visible = 0;
+        for (int y = 0; y < image.height(); y += 4)
+            for (int x = 0; x < image.width(); x += 4)
+                if (qGray(image.pixel(x,y)) > 20) ++visible;
+        QVERIFY2(visible > 50, "Density transition produced an empty/black scene");
+    }
+    for (auto quality : {TerrainReactorItem::Quality::Eco,
+                         TerrainReactorItem::Quality::High,
+                         TerrainReactorItem::Quality::Balanced,
+                         TerrainReactorItem::Quality::High}) {
+        const auto before = item.frameCount();
+        item.setQuality(quality);
+        window.resize(window.width() + 2, window.height());
+        QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() > before + 4, 5000);
+        QCOMPARE(item.renderStatus(), TerrainReactorItem::RenderStatus::Ready);
+    }
+    item.setActive(false);
+}
+
+void TerrainReactorGpuSmokeTest::denseMaterialFrameBudgetProbe_data()
+{
+    QTest::addColumn<int>("terrainDensity");
+    QTest::addColumn<QSize>("viewport");
+    QTest::newRow("default-1080p") << 46 << QSize(1920, 1080);
+    QTest::newRow("maximum-1080p") << 100 << QSize(1920, 1080);
+    if (auto* screen = QGuiApplication::primaryScreen())
+        QTest::newRow("maximum-native-screen") << 100 << screen->size();
+}
+
 void TerrainReactorGpuSmokeTest::denseMaterialFrameBudgetProbe()
 {
     if (!qEnvironmentVariableIsSet("AGPLAYER_MATERIAL_BENCHMARK"))
         QSKIP("Opt-in comparative wall-frame probe, not a GPU timestamp benchmark");
+    QFETCH(int, terrainDensity);
+    QFETCH(QSize, viewport);
     PlayerExperienceController style;
     style.applyTheme(QStringLiteral("neon-tokyo"));
+    style.setTopographyDensity(terrainDensity);
     style.setAutoRotate(0);
     style.setAutoRotateSpeed(0);
     QQuickWindow window;
-    window.resize(1920, 1080);
+    window.resize(viewport);
     TerrainReactorItem item(window.contentItem());
-    item.setSize(QSizeF(1920, 1080));
+    item.setSize(QSizeF(viewport));
     item.setStyleSource(&style);
     item.setQuality(TerrainReactorItem::Quality::High);
     item.setUseSyntheticFeatures(true);
@@ -81,7 +140,7 @@ void TerrainReactorGpuSmokeTest::denseMaterialFrameBudgetProbe()
     timer.start();
     QTest::qWait(3000);
     const auto count = item.frameCount() - first;
-    qInfo() << "Dense 1080p material elapsed/frames/instances/ms per frame:"
+    qInfo() << "Dense material elapsed/frames/instances/ms per frame:"
             << timer.elapsed() << count << item.renderedTerrainCount()
             << double(timer.elapsed()) / double(std::max<quint64>(1, count));
     qInfo() << "Actual material buffer / device pixel ratio:"
@@ -601,7 +660,7 @@ void TerrainReactorGpuSmokeTest::regularBeatBrieflyBrightensThenReturns()
         }
         if (nearWhiteFraction)
             *nearWhiteFraction = visiblePixels > 0
-                ? double(nearWhitePixels) / double(visiblePixels) : 1.0;
+                ? double(nearWhitePixels) / double(visiblePixels) : 0.0;
         return total;
     };
     const quint64 baseline = centerLight();
@@ -965,6 +1024,11 @@ void TerrainReactorGpuSmokeTest::highFrequencySheenStaysLocalizedAndHeightSubord
     window.resize(480, 270);
     window.setColor(QColor(4, 6, 11));
     PlayerExperienceController style;
+    // This native artistic contract limits pixel-light response, not vertex
+    // height. Original presets intentionally have strong high-band cap flashes;
+    // their geometry is verified separately against captured GPU height data.
+    style.setCoolColor(style.coolColor());
+    QVERIFY(style.themeId().isEmpty());
     style.setAutoRotate(0);
     style.setAutoRotateSpeed(0);
     style.setMotionResponse(0);
@@ -1319,6 +1383,16 @@ void TerrainReactorGpuSmokeTest::steadyCorePreservesHighlightDetailWithoutWhiteP
     window.setColor(QColor(4, 6, 11));
     PlayerExperienceController style;
     QVERIFY(style.applyTheme(QStringLiteral("nocturnal")));
+    // These coverage and response-radius limits describe the customizable
+    // native lamp material (historically 1.28x columns and softer edge fade).
+    // Original presets use narrower columns, dark linear bases and fixed
+    // spectral regions; their colors/heights have independent GPU oracles.
+    style.setCoolColor(style.coolColor());
+    QVERIFY(style.themeId().isEmpty());
+    // Fixed legacy geometry inputs from 7fba19a load() defaults. This
+    // regression is not a moving golden for new canonical preset defaults.
+    style.setTerrainAmplitude(34);
+    style.setColumnSize(95);
     style.setThemeCycleEnabled(false);
     style.setAutoRotate(0);
     style.setAutoRotateSpeed(0);

@@ -474,11 +474,11 @@ TestCase {
         miniWindow = null
     }
 
-    function test_immersive_icon_animates_and_follows_theme_visibility() {
+    function test_immersive_icon_is_static_and_follows_theme_visibility() {
         var action = findChild(mainWindow, "immersiveActionButton")
         verify(action)
         var icon = findChild(action, "animatedImmersiveIcon")
-        verify(icon, "The shared immersive action must use the animated icon")
+        verify(icon, "The shared immersive action must use the eye icon")
         var previousTheme = SettingsController.themeMode
         try {
             for (var mode = 0; mode < 2; ++mode) {
@@ -487,17 +487,17 @@ TestCase {
                 compare(icon.color.toString(), action.checked
                         ? Theme.iconAccent.toString() : Theme.iconPrimary.toString())
             }
-            tryCompare(icon, "animating", true)
+            compare(icon.animating, false)
             var before = icon.phase
             wait(100)
-            verify(icon.phase !== before)
+            compare(icon.phase, before)
             action.visible = false
             tryCompare(icon, "animating", false)
             var stopped = icon.phase
             wait(100)
             compare(icon.phase, stopped)
             action.visible = true
-            tryCompare(icon, "animating", true)
+            compare(icon.animating, false)
         } finally {
             action.visible = true
             SettingsController.themeMode = previousTheme
@@ -743,10 +743,9 @@ TestCase {
         tryCompare(coordinator, "attachedHostMode", PlayerExperienceController.Windowed)
         var window = coordinator.fullscreenWindow
         var terrain = coordinator.surface.terrainItem
-        // Model Qt retaining the renderer while its window is hidden.
-        terrain.liveRendererCount = 1
         try {
             PlayerExperienceController.immersiveMode = PlayerExperienceController.Off
+            tryCompare(coordinator.surface, "terrainItem", null)
             // Resume near the real release deadline without a wall-clock race.
             coordinator.releasePolls = coordinator.releasePollLimit - 1
             PlayerExperienceController.immersiveMode = PlayerExperienceController.TerrainReactor
@@ -755,9 +754,81 @@ TestCase {
             compare(PlayerExperienceController.immersiveMode,
                     PlayerExperienceController.TerrainReactor)
             compare(window.visible, true)
-            compare(coordinator.surface.terrainItem, terrain)
+            verify(coordinator.surface.terrainItem)
+            verify(coordinator.surface.terrainItem !== terrain)
         } finally {
-            terrain.liveRendererCount = 0
+            PlayerExperienceController.immersiveMode = PlayerExperienceController.Off
+        }
+    }
+
+    function test_gpu_exit_releases_terrain_and_reopen_keeps_playback() {
+        var savedRendering = mainWindow.immersiveRenderingEnabled
+        var savedMode = PlaybackController.mode
+        var coordinator = findChild(mainWindow, "immersiveCoordinator")
+        try {
+            // Keep end-of-track queue transitions outside this lifecycle test.
+            var ids = transportTestSetup.prepareTransportQueue(30)
+            compare(ids.length, 3)
+            tryCompare(PlaybackController, "currentTrackId", ids[1])
+            PlaybackController.setMode(PlaybackController.RepeatOne)
+            tryCompare(PlaybackController, "mode", PlaybackController.RepeatOne)
+            PlaybackController.play()
+            tryCompare(PlaybackController, "state", PlaybackController.Playing)
+            var trackId = PlaybackController.currentTrackId
+            mainWindow.immersiveRenderingEnabled = true
+            PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
+            for (var cycle = 0; cycle < 3; ++cycle) {
+                PlayerExperienceController.immersiveMode = PlayerExperienceController.TerrainReactor
+                tryVerify(function() { return coordinator.surface
+                        && coordinator.surface.terrainItem }, 3000)
+                var surface = coordinator.surface
+                var terrain = surface.terrainItem
+                tryVerify(function() {
+                    return terrain.renderStatus === TerrainReactorItem.Ready
+                            || terrain.renderStatus === TerrainReactorItem.SoftwareBackend
+                }, 10000)
+                if (terrain.renderStatus === TerrainReactorItem.SoftwareBackend) {
+                    skip("Requires a native GPU backend; ordinary window tests remain enabled")
+                    return
+                }
+                tryCompare(terrain, "liveRendererCount", 1, 3000)
+                var firstFrame = terrain.frameCount
+                tryVerify(function() { return terrain.frameCount > firstFrame }, 3000)
+                var window = coordinator.fullscreenWindow
+                var invalidated = createTemporaryObject(immersiveShortcutSpyComponent,
+                    testCase, { target: window, signalName: "sceneGraphInvalidated" })
+                verify(invalidated && invalidated.valid)
+                window.showMinimized()
+                tryCompare(surface, "hostExposed", false, 1500)
+                tryCompare(terrain, "renderingRequested", false, 1500)
+                // Permit one already submitted frame to finish before checking quiescence.
+                wait(100)
+                var stoppedFrame = terrain.frameCount
+                wait(200)
+                compare(terrain.frameCount, stoppedFrame)
+                compare(surface.terrainItem, terrain)
+                window.showNormal()
+                tryCompare(surface, "hostExposed", true, 1500)
+                tryVerify(function() { return terrain.frameCount > stoppedFrame }, 3000)
+                invalidated.clear()
+                PlayerExperienceController.immersiveMode = PlayerExperienceController.Off
+                tryCompare(surface, "terrainItem", null, 3000)
+                tryVerify(function() { return invalidated.count > 0 }, 3000,
+                          "Exiting must invalidate the dedicated immersive scene graph")
+                tryCompare(AudioVisualFeatureController, "active", false, 1500)
+                tryCompare(coordinator, "handoffPhase", 0, 3000)
+                tryCompare(PlaybackController, "state", PlaybackController.Playing)
+                compare(PlaybackController.currentTrackId, trackId)
+                var exitPosition = PlaybackController.positionMs
+                tryVerify(function() {
+                    return PlaybackController.positionMs !== exitPosition
+                }, 1500, "Shared playback must keep advancing after immersive exit")
+            }
+        } finally {
+            PlayerExperienceController.immersiveMode = PlayerExperienceController.Off
+            mainWindow.immersiveRenderingEnabled = savedRendering
+            PlaybackController.stop()
+            PlaybackController.setMode(savedMode)
         }
     }
 
@@ -794,6 +865,8 @@ TestCase {
     }
 
     function test_fullscreen_idle_and_manual_camera_timers_match_contract() {
+        var playerGeometry = Qt.rect(mainWindow.x, mainWindow.y,
+                                     mainWindow.width, mainWindow.height)
         PlayerExperienceController.immersiveMode =
                 PlayerExperienceController.TerrainReactor
         PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
@@ -805,8 +878,11 @@ TestCase {
         var controlPanel = findChild(surface, "immersiveControlPanelHost")
         var queueTrigger = findChild(surface, "queueTriggerZone")
         verify(controlPanel && queueTrigger)
-        verify(controlPanel.x < surface.width / 2)
-        verify(queueTrigger.x >= surface.width - queueTrigger.width)
+        tryVerify(function() { return surface.width > 0
+                && controlPanel.x < surface.width / 2 }, 1500)
+        tryVerify(function() {
+            return queueTrigger.x >= surface.width - queueTrigger.width
+        }, 1500)
         compare(findChild(surface, "immersiveBrandTitle"), null)
         compare(findChild(surface, "immersivePanelToggleButton"), null)
         var fullscreenButton = findChild(surface, "immersiveFullscreenButton")
@@ -831,22 +907,65 @@ TestCase {
 
         var immersiveWindow = findChild(mainWindow, "immersiveVisualWindow")
         verify(immersiveWindow)
+        compare(WindowController.mainVisible, false)
+        compare(immersiveWindow.transientParent, null)
+        var restoredSurface = coordinator.surface
+        var restoredTerrain = surface.terrainItem
+        var restoredGeometry = Qt.rect(immersiveWindow.x, immersiveWindow.y,
+                                       immersiveWindow.width, immersiveWindow.height)
         minimizeButton.clicked()
         tryCompare(immersiveWindow, "visibility", Window.Minimized, 1500)
         tryCompare(AudioVisualFeatureController, "active", false, 1500)
+        compare(WindowController.mainVisible, false)
+        compare(PlayerExperienceController.immersiveMode,
+                PlayerExperienceController.TerrainReactor)
         immersiveWindow.showNormal()
+        immersiveWindow.requestActivate()
         tryCompare(immersiveWindow, "visibility", Window.Windowed, 1500)
+        tryCompare(immersiveWindow, "active", true, 1500)
+        compare(coordinator.surface, restoredSurface)
+        compare(surface.terrainItem, restoredTerrain)
+        compare(immersiveWindow.width, restoredGeometry.width)
+        compare(immersiveWindow.height, restoredGeometry.height)
+        compare(WindowController.mainVisible, false)
         tryCompare(AudioVisualFeatureController, "active",
                    surface.terrainItem.renderingRequested, 1500)
 
+        var normalGeometry = Qt.rect(immersiveWindow.x, immersiveWindow.y,
+                                     immersiveWindow.width, immersiveWindow.height)
         fullscreenButton.clicked()
         tryCompare(PlayerExperienceController, "hostMode",
                    PlayerExperienceController.Fullscreen, 1000)
         var escapeShortcut = findChild(mainWindow, "immersiveEscapeShortcut")
         verify(escapeShortcut)
-        escapeShortcut.activated()
-        compare(PlayerExperienceController.hostMode,
-                PlayerExperienceController.Windowed)
+        immersiveWindow.requestActivate()
+        fullscreenButton.forceActiveFocus()
+        keyClick(Qt.Key_Escape)
+        tryCompare(PlayerExperienceController, "hostMode",
+                   PlayerExperienceController.Windowed)
+        // A transient window owned by the hidden player has no independent
+        // taskbar restore target on Windows.
+        compare(immersiveWindow.transientParent, null)
+        tryCompare(immersiveWindow, "visibility", Window.Windowed)
+        compare(immersiveWindow.width, normalGeometry.width)
+        compare(immersiveWindow.height, normalGeometry.height)
+        compare(immersiveWindow.x, normalGeometry.x)
+        compare(immersiveWindow.y, normalGeometry.y)
+        surface.noteManualCameraActivity()
+        verify(findChild(surface, "immersiveCameraResumeTimer").running)
+        returnButton.clicked()
+        tryCompare(WindowController, "mainVisible", true, 1500)
+        tryCompare(AudioVisualFeatureController, "active", false, 1500)
+        tryCompare(surface, "terrainItem", null, 1500)
+        compare(findChild(surface, "immersiveOrbitArea").enabled, false)
+        compare(findChild(surface, "immersivePanelIdleTimer").running, false)
+        compare(findChild(surface, "immersivePanelAutoHideTimer").running, false)
+        compare(findChild(surface, "immersiveCameraResumeTimer").running, false)
+        compare(findChild(surface, "immersiveColumnGlowLoader").item, null)
+        compare(mainWindow.width, playerGeometry.width)
+        compare(mainWindow.height, playerGeometry.height)
+        compare(mainWindow.x, playerGeometry.x)
+        compare(mainWindow.y, playerGeometry.y)
     }
 
     function test_local_glow_lifecycle_stays_unloaded_on_software_backend() {

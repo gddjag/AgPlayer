@@ -7,6 +7,27 @@
 
 int main()
 {
+    // A delayed GUI poll must consume the oldest contiguous data first,
+    // retaining the remainder for the next bounded read rather than dropping it.
+    {
+        agplayer::VisualPcmTap delayed;
+        delayed.set_enabled(true);
+        std::array<float, 512> block{};
+        for (int index = 0; index < 6; ++index) {
+            block.fill(float(index));
+            delayed.write(block.data(), block.size(), 96000);
+        }
+        ag_visual_pcm_snapshot part{};
+        for (int index = 0; index < 3; ++index) {
+            delayed.read(part);
+            assert(part.first_sample_index == std::uint64_t(index * 1024));
+            assert(part.sample_count == 1024 && part.sample_rate == 96000);
+            assert(part.samples[0] == float(index * 2));
+            assert(part.samples[1023] == float(index * 2 + 1));
+        }
+        delayed.read(part);
+        assert(part.sample_count == 0);
+    }
     agplayer::VisualPcmTap tap;
     std::array<float, 512> mono{};
     mono.fill(0.25F);

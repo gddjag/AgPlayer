@@ -1,4 +1,5 @@
 #include "terrain_reactor_state.hpp"
+#include "terrain_reactor_gpu_data.hpp"
 
 #include <QTest>
 
@@ -13,6 +14,16 @@ class TerrainReactorStateTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void maximumDensityFitsGpuInstanceAllocation()
+    {
+        const auto layout = makeSceneLayout(46, referenceTerrainGridSize(100), 120, 28, 1600);
+        const auto count = layout.terrain.size() + layout.floating.size()
+            + layout.meteors.size() + layout.meteorTrails.size()
+            + layout.collisionRipples.size() + layout.collisionParticles.size()
+            + layout.particles.size();
+        QVERIFY2(count <= gpu::maximumInstances,
+                 "Maximum density and effects exceed the actual GPU buffer allocation");
+    }
     void reference155GridUsesCornerAnchoredCoordinates()
     {
         QCOMPARE(referenceTerrainGridSize(-5),96);
