@@ -158,6 +158,7 @@ private slots:
     void sameTitleAndArtistWithMateriallyWrongDurationIsRejected();
     void notFoundFollowedByTechnicalFailureRemainsRetryable();
     void disabledServiceDoesNotPublishPositionDrivenLineChanges();
+    void enabledServiceDoesNotRepublishAnUnchangedLineOnEveryPositionTick();
     void disablingLyricsHostPreservesResolvedPresentationState();
     void emptyEmbeddedLyricsFallsThroughToProvider();
     void embeddedLyricsRetainLocalSourceWithoutProviderRequest();
@@ -539,6 +540,20 @@ void LyricsServiceTest::disabledServiceDoesNotPublishPositionDrivenLineChanges()
     LyricsService service(nullptr, &playback, nullptr);
     QSignalSpy changed(&service, &LyricsService::currentLineChanged);
     emit playback.positionMsChanged();
+    QCOMPARE(changed.count(), 0);
+}
+
+void LyricsServiceTest::enabledServiceDoesNotRepublishAnUnchangedLineOnEveryPositionTick()
+{
+    PlaybackController playback;
+    LyricsService service(nullptr, &playback, nullptr);
+    service.setEnabled(true);
+    QSignalSpy changed(&service, &LyricsService::currentLineChanged);
+
+    emit playback.positionMsChanged();
+    emit playback.positionMsChanged();
+    emit playback.positionMsChanged();
+
     QCOMPARE(changed.count(), 0);
 }
 

@@ -379,6 +379,9 @@ Item {
             required property bool expanded
             required property string resourceFolder
             required property bool hasChildren
+            readonly property int nodeIconVisualSize:
+                nodeType === "library" ? root.navigationIconVisualSize + 2
+                                         : root.navigationIconVisualSize
 
             readonly property bool selected: root.nodeIsSelected(
                                                  nodeType, nodeId,
@@ -515,12 +518,12 @@ Item {
                     source: visible
                             ? Theme.icon(root.suppliedIconForNode(nodeRow.nodeType))
                             : ""
-                    sourceSize.width: root.navigationIconVisualSize
-                    sourceSize.height: root.navigationIconVisualSize
+                    sourceSize.width: nodeRow.nodeIconVisualSize
+                    sourceSize.height: nodeRow.nodeIconVisualSize
                     fillMode: Image.PreserveAspectFit
                     Layout.preferredWidth: visible
-                                           ? root.navigationIconVisualSize : 0
-                    Layout.preferredHeight: root.navigationIconVisualSize
+                                           ? nodeRow.nodeIconVisualSize : 0
+                    Layout.preferredHeight: nodeRow.nodeIconVisualSize
                 }
                 ThemedIcon {
                     visible: root.suppliedIconForNode(nodeRow.nodeType) === ""

@@ -63,8 +63,8 @@ RowLayout {
         contentItem: Item {
             AnimatedImmersiveIcon {
                 anchors.centerIn: parent
-                width: 22
-                height: 22
+                width: 20
+                height: 20
                 color: immersiveButton.checked ? Theme.iconAccent : Theme.iconPrimary
             }
         }

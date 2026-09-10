@@ -11,7 +11,7 @@ Item {
     property bool renderingEnabled: true
     property var waveformSession: null
     property bool panelIdle: false
-    property bool panelAutoHidden: false
+    property bool panelAutoHidden: true
     property bool manualCameraActive: false
     property bool qaSyntheticFeatures: false
     readonly property bool referenceThemeActive: PlayerExperienceController.themeId.length > 0
@@ -51,8 +51,7 @@ Item {
     function notePointerActivity() {
         if (!active || !hostExposed)
             return
-        panelAutoHidden = false
-        if (PlayerExperienceController.panelVisible)
+        if (PlayerExperienceController.panelVisible && !panelAutoHidden)
             panelAutoHideTimer.restart()
         if (hostMode !== PlayerExperienceController.Fullscreen) {
             panelIdle = false
@@ -61,6 +60,16 @@ Item {
         }
         panelIdle = false
         panelIdleTimer.restart()
+    }
+
+    function revealPanelFromHotCorner() {
+        if (!active || !hostExposed)
+            return
+        PlayerExperienceController.panelVisible = true
+        panelAutoHidden = false
+        panelIdle = false
+        panelIdleTimer.stop()
+        panelAutoHideTimer.restart()
     }
 
     function noteManualCameraActivity() {
@@ -278,13 +287,25 @@ Item {
             root.noteManualCameraActivity()
         }
         onReleased: root.notePointerActivity()
-        onDoubleClicked: PlayerExperienceController.togglePanelVisible()
         onWheel: function(wheel) {
             if (!root.terrainItem)
                 return
             root.terrainItem.zoomBy(wheel.angleDelta.y, Date.now() / 1000.0)
             root.noteManualCameraActivity()
             wheel.accepted = true
+        }
+    }
+
+    Item {
+        objectName: "immersivePanelRevealZone"
+        anchors.left: parent.left
+        anchors.top: parent.top
+        width: 64
+        height: 56
+        z: 30
+        HoverHandler {
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+            onHoveredChanged: if (hovered) root.revealPanelFromHotCorner()
         }
     }
 
@@ -388,7 +409,7 @@ Item {
         anchors.topMargin: 58
         visible: opacity > 0
         enabled: opacity > 0.05
-        opacity: PlayerExperienceController.panelVisible && !root.panelIdle
+        opacity: PlayerExperienceController.panelVisible
                  && !root.panelAutoHidden ? 1 : 0
         z: 10
         featureBands: root.terrainItem ? root.terrainItem.featureBands : []
@@ -509,11 +530,14 @@ Item {
         onTriggered: root.manualCameraActive = false
     }
 
-    onHostModeChanged: notePointerActivity()
-    onAttachedChanged: if (attached) notePointerActivity()
+    onHostModeChanged: synchronizePresentationTimers()
+    onAttachedChanged: synchronizePresentationTimers()
     function synchronizePresentationTimers() {
         if (active && hostExposed) {
-            notePointerActivity()
+            panelAutoHidden = true
+            panelIdle = false
+            panelIdleTimer.stop()
+            panelAutoHideTimer.stop()
             return
         }
         panelIdleTimer.stop()

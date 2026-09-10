@@ -435,7 +435,7 @@ void PlayerExperienceControllerTest::persistsAndNormalizesValues()
     PlayerExperienceController reloaded;
     QCOMPARE(reloaded.immersiveMode(), PlayerExperienceController::Off);
     QCOMPARE(reloaded.hostMode(), 2);
-    QVERIFY(reloaded.lyricsVisible());
+    QVERIFY(!reloaded.lyricsVisible());
     QVERIFY(!reloaded.panelVisible());
     QVERIFY(reloaded.desktopMousePassthrough());
     QVERIFY(!reloaded.songAdaptiveColorEnabled());

@@ -10,8 +10,8 @@ Item {
     property color color: Theme.iconPrimary
     readonly property real phase: 0
     readonly property bool animating: false
-    implicitWidth: 22
-    implicitHeight: 22
+    implicitWidth: 20
+    implicitHeight: 20
 
     Item {
         width: 1024

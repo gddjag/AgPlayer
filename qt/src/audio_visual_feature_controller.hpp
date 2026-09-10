@@ -103,7 +103,7 @@ private:
     agplayer::visual::KickResponse visualKickResponse_;
     agplayer::VisualSpectrumFeatures::Features visualFeatures_{};
     agplayer::visual::KickResponse::Output visualKick_{};
-    int visualKickSensitivity_ = 100;
+    int visualKickSensitivity_ = 50;
     std::size_t visualSamplesSinceUpdate_ = 0;
     QElapsedTimer visualAnalysisTimer_;
     unsigned int renderFrameConsumers_ = 0;
@@ -161,6 +161,8 @@ private:
     qint64 lastPositionMs_ = -1;
     qint64 lastBeatIndex_ = -1;
     qint64 lastBeatEventPositionMs_ = -1;
+    double beatPhaseOffsetMs_ = 0.0;
+    bool beatPhaseLocked_ = false;
     qint64 lastImpactGroup_ = -1;
     std::array<double, 24> lowFluxHistory_{};
     std::array<double, 24> highFluxHistory_{};

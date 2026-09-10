@@ -370,7 +370,9 @@ Item {
         anchors.bottomMargin: 42
         clip: true
         model: root.service ? root.service.lines : null
-        currentIndex: root.service ? root.service.currentLineIndex : -1
+        currentIndex: root.service
+                      && typeof root.service.currentLineIndex === "number"
+                      ? root.service.currentLineIndex : -1
         preferredHighlightBegin: height / 2 - 22
         preferredHighlightEnd: height / 2 + 22
         highlightRangeMode: ListView.StrictlyEnforceRange
@@ -534,22 +536,6 @@ Item {
                                      Math.round(Theme.fontSizeSection * root.sizeScale))
             horizontalAlignment: Text.AlignHCenter
         }
-    }
-
-    Text {
-        objectName: "lyricsTimingNotice"
-        visible: (root.spatialMode || root.chromeVisible)
-                 && untimedFlickable.visible
-        anchors.left: parent.left
-        anchors.bottom: parent.bottom
-        anchors.leftMargin: 10
-        anchors.bottomMargin: root.spatialMode
-                              ? 10 : Theme.controlHeightCompact + 10
-        z: 2
-        color: Theme.textSecondary
-        font.family: Theme.fontPrimary
-        font.pixelSize: Theme.fontSizeCaption
-        text: qsTr("纯文本歌词，无时间轴")
     }
 
     Rectangle {

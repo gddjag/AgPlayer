@@ -284,9 +284,9 @@ void AudioVisualFeatureController::processPlaybackPosition(qint64 positionMs)
     }
 
     const double beatMs = 60000.0 / bpm_;
-    const double groupMs = beatMs * 8.0;
-    const qint64 beat = static_cast<qint64>(std::floor(positionMs / beatMs));
-    const qint64 group = static_cast<qint64>(std::floor(positionMs / groupMs));
+    const qint64 beat = static_cast<qint64>(std::floor(
+        (double(positionMs) - beatPhaseOffsetMs_) / beatMs));
+    const qint64 group = static_cast<qint64>(std::floor(double(beat) / 8.0));
     if (lastPositionMs_ < 0) {
         lastPositionMs_ = positionMs;
         lastBeatIndex_ = beat;
@@ -389,15 +389,21 @@ void AudioVisualFeatureController::processSpectrum(const QVariantList& spectrum)
     spectralFlux_ = flux / 128.0;
     const double normalizedLowFlux = lowFlux / double(kickBinCount);
     const double normalizedHighFlux = highFlux / 60.0;
+    // The user-facing rhythm sensitivity must affect the spectrum path too,
+    // not only the PCM analyzer. A higher setting lowers both onset and energy
+    // gates while the adaptive history continues to reject a steady bass bed.
+    const double sensitivity = double(visualKickSensitivity_) / 100.0;
+    const double sensitivityScale = 1.5 - sensitivity;
     const double kickThreshold = adaptiveThreshold(
-        lowFluxHistory_, transientSampleCount_, 0.05);
+        lowFluxHistory_, transientSampleCount_, 0.05 * sensitivityScale);
     const double snareThreshold = adaptiveThreshold(
-        highFluxHistory_, transientSampleCount_, 0.04);
+        highFluxHistory_, transientSampleCount_, 0.04 * sensitivityScale);
     kickPulse_ = normalizedLowFlux >= kickThreshold
-        && bands_.at(0).toDouble() + bands_.at(1).toDouble() >= 0.20;
+        && bands_.at(0).toDouble() + bands_.at(1).toDouble()
+               >= 0.20 * sensitivityScale;
     snarePulse_ = normalizedHighFlux >= snareThreshold
         && bands_.at(5).toDouble() + bands_.at(6).toDouble()
-               + bands_.at(7).toDouble() >= 0.20;
+               + bands_.at(7).toDouble() >= 0.20 * sensitivityScale;
     appendTransientSample(lowFluxHistory_, transientSampleCount_,
                           transientWriteIndex_, normalizedLowFlux);
     const int highWriteIndex = (transientWriteIndex_ + 23) % 24;
@@ -421,6 +427,15 @@ void AudioVisualFeatureController::processSpectrum(const QVariantList& spectrum)
         triggerBeat(strength, false);
         if (reliableTransient) {
             lastBeatEventPositionMs_ = lastPositionMs_;
+            if (!beatPhaseLocked_) {
+                const double beatMs = 60000.0 / bpm_;
+                beatPhaseOffsetMs_ = std::fmod(double(lastPositionMs_), beatMs);
+                lastBeatIndex_ = static_cast<qint64>(std::floor(
+                    (double(lastPositionMs_) - beatPhaseOffsetMs_) / beatMs));
+                lastImpactGroup_ = static_cast<qint64>(
+                    std::floor(double(lastBeatIndex_) / 8.0));
+                beatPhaseLocked_ = true;
+            }
         } else {
             ++fallbackBeatCount_;
             if (fallbackBeatCount_ % 8 == 0) {
@@ -585,6 +600,8 @@ void AudioVisualFeatureController::resetBeatPosition() noexcept
     lastPositionMs_ = -1;
     lastBeatIndex_ = -1;
     lastBeatEventPositionMs_ = -1;
+    beatPhaseOffsetMs_ = 0.0;
+    beatPhaseLocked_ = false;
     lastImpactGroup_ = -1;
     fallbackBeatCount_ = 0;
 }

@@ -136,6 +136,7 @@ private:
     Status status_ = Idle;
     qint64 userOffsetMs_ = 0;
     qint64 documentOffsetMs_ = 0;
+    int lastPublishedLineIndex_ = -1;
     qint64 followPausedUntilMs_ = 0;
     int lastHttpStatus_ = 0;
     bool instrumental_ = false;

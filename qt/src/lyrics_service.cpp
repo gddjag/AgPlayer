@@ -374,6 +374,7 @@ void LyricsService::applyDocument(const TrackRecord& track, LyricsCache::Entry e
     untimedLyrics_ = entry.instrumental ? QString() : entry.document.untimedText;
     routeAttempts_.clear();
     lineModel_.setLines(entry.document.lines);
+    lastPublishedLineIndex_ = currentLineIndex();
     setStatus(Ready);
     emit instrumentalChanged();
     emit sourceChanged();
@@ -384,7 +385,11 @@ void LyricsService::applyDocument(const TrackRecord& track, LyricsCache::Entry e
 
 void LyricsService::updateCurrentLine()
 {
-    if (enabled_) emit currentLineChanged();
+    if (!enabled_) return;
+    const int index = currentLineIndex();
+    if (lastPublishedLineIndex_ == index) return;
+    lastPublishedLineIndex_ = index;
+    emit currentLineChanged();
 }
 
 void LyricsService::setStatus(const Status status)
@@ -405,6 +410,7 @@ void LyricsService::cancelPending()
 
 void LyricsService::resetPresentationState()
 {
+    lastPublishedLineIndex_ = -1;
     sourceInfo_ = {};
     synchronizedLyrics_ = false;
     untimedLyrics_.clear();

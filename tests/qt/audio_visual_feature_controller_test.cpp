@@ -88,6 +88,8 @@ private slots:
     void reliableBpmEmitsOnceEveryEightBeats();
     void reliableBpmEmitsRegularBeatPulseAndEightBeatImpact();
     void reliableBpmUsesTransientPhaseAndDeduplicatesGridBeat();
+    void reliableBpmLocksFutureGridToTheObservedTransientPhase();
+    void rhythmSensitivityRecoversModerateRepeatedDrumOnsets();
     void seeksAndTrackChangesDoNotEmitDuplicateImpacts();
     void unreliableTimingUsesDebouncedTransientFallbackOnly();
     void outputLevelsHaveFastAttackAndVisibleDecay();
@@ -551,7 +553,7 @@ void AudioVisualFeatureControllerTest::visualResetNotifiesOnceAfterClearing()
 void AudioVisualFeatureControllerTest::visualKickSensitivityControlsDetector()
 {
     AudioVisualFeatureController controller;
-    QCOMPARE(controller.property("visualKickSensitivity").toInt(), 100);
+    QCOMPARE(controller.property("visualKickSensitivity").toInt(), 50);
     QVERIFY(controller.setProperty("visualKickSensitivity", -20));
     QCOMPARE(controller.property("visualKickSensitivity").toInt(), 0);
     controller.setActive(true);
@@ -933,6 +935,43 @@ void AudioVisualFeatureControllerTest::reliableBpmUsesTransientPhaseAndDeduplica
     features.processSpectrum(spectrum(0.0));
     features.processPlaybackPosition(1500);
     QCOMPARE(features.beatRevision(), 3);
+}
+
+void AudioVisualFeatureControllerTest::reliableBpmLocksFutureGridToTheObservedTransientPhase()
+{
+    AudioVisualFeatureController features;
+    features.setActive(true);
+    features.setWaveformTiming(QStringLiteral("track-phase-lock"), 120.0,
+                               120000, QVariantList{0.2, 0.6, 0.4});
+    features.processPlaybackPosition(0);
+    features.processSpectrum(spectrum(0.0));
+
+    features.processPlaybackPosition(300);
+    features.processSpectrum(spectrum(0.30, true));
+    QCOMPARE(features.beatRevision(), 1);
+
+    features.processPlaybackPosition(500);
+    features.processPlaybackPosition(799);
+    QCOMPARE(features.beatRevision(), 1);
+    features.processPlaybackPosition(800);
+    QCOMPARE(features.beatRevision(), 2);
+}
+
+void AudioVisualFeatureControllerTest::rhythmSensitivityRecoversModerateRepeatedDrumOnsets()
+{
+    AudioVisualFeatureController conservative;
+    conservative.setVisualKickSensitivity(0);
+    conservative.setActive(true);
+    conservative.processSpectrum(spectrum(0.0));
+    conservative.processSpectrum(spectrum(0.08, true));
+    QVERIFY(!conservative.kickPulse());
+
+    AudioVisualFeatureController sensitive;
+    sensitive.setVisualKickSensitivity(100);
+    sensitive.setActive(true);
+    sensitive.processSpectrum(spectrum(0.0));
+    sensitive.processSpectrum(spectrum(0.08, true));
+    QVERIFY(sensitive.kickPulse());
 }
 
 void AudioVisualFeatureControllerTest::seeksAndTrackChangesDoNotEmitDuplicateImpacts()

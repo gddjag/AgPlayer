@@ -372,7 +372,7 @@ TestCase {
                 : null
         verify(panel)
         PlayerExperienceController.panelVisible = true
-        coordinator.surface.notePointerActivity()
+        coordinator.surface.revealPanelFromHotCorner()
         panel.collapsed = false
         panel.currentTab = 0
         tryCompare(panel, "currentTab", 0)
@@ -480,6 +480,8 @@ TestCase {
         verify(action)
         var icon = findChild(action, "animatedImmersiveIcon")
         verify(icon, "The three player themes must reuse the uploaded immersive icon")
+        compare(icon.width, 20)
+        compare(icon.height, 20)
         var uploadedPaths = [
             findChild(icon, "uploadedImmersivePath1"),
             findChild(icon, "uploadedImmersivePath2"),
@@ -563,7 +565,7 @@ TestCase {
         var source = findChild(panel, "lyricsSourceText")
         var flickable = findChild(panel, "untimedLyricsFlickable")
         verify(plainText)
-        verify(timingNotice)
+        compare(timingNotice, null)
         verify(source)
         verify(flickable)
         verify(plainText.text.indexOf("long complete plain lyric line 23") >= 0)
@@ -575,9 +577,6 @@ TestCase {
         var originalContentY = flickable.contentY
         flickable.flick(0, -1200)
         tryVerify(function() { return flickable.contentY > originalContentY }, 1500)
-        verify(timingNotice.visible,
-               "plain timing notice must remain visible after scroll; panel="
-               + panel.visible + ", flickable=" + flickable.visible)
         verify(source.text.indexOf("lyrics.ovh") >= 0)
         lyricsFake.synchronizedLyrics = true
         lyricsFake.untimedLyrics = ""
@@ -925,8 +924,18 @@ TestCase {
         compare(findChild(surface, "immersivePanelIdleTimer").interval, 3000)
         compare(findChild(surface, "immersivePanelAutoHideTimer").interval, 5000)
         compare(findChild(surface, "immersiveCameraResumeTimer").interval, 4000)
+        surface.panelAutoHidden = true
         surface.notePointerActivity()
+        compare(surface.panelAutoHidden, true)
+        var revealZone = findChild(surface, "immersivePanelRevealZone")
+        verify(revealZone)
+        surface.revealPanelFromHotCorner()
+        compare(surface.panelAutoHidden, false)
+        verify(findChild(surface, "immersivePanelAutoHideTimer").running)
         compare(surface.panelIdle, false)
+        surface.panelIdle = true
+        tryCompare(controlPanel, "opacity", 1)
+        surface.panelIdle = false
         surface.noteManualCameraActivity()
         compare(surface.manualCameraActive, true)
 

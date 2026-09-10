@@ -962,7 +962,9 @@ void PlayerExperienceController::load()
     immersiveMode_ = Off;
     hostMode_ = enumOrDefault(integer(QStringLiteral("hostMode"), Windowed),
                               Windowed, Desktop, Windowed);
-    lyricsVisible_ = boolean(QStringLiteral("lyricsVisible"), false);
+    // Lyrics are presentation state: every application launch starts clean and
+    // lets the listener opt in explicitly instead of reopening the last panel.
+    lyricsVisible_ = false;
     panelVisible_ = boolean(QStringLiteral("panelVisible"), true);
     desktopMousePassthrough_ = boolean(
         QStringLiteral("desktopMousePassthrough"), false);

@@ -2966,8 +2966,8 @@ TestCase {
             "themeModeButton", "immersiveActionButton", "miniPlayerButton"
         ])
         compare(findChild(rightActions, "themeModeButton").icon.width, 22)
-        compare(findChild(rightActions, "animatedImmersiveIcon").width, 22)
-        compare(findChild(rightActions, "animatedImmersiveIcon").height, 22)
+        compare(findChild(rightActions, "animatedImmersiveIcon").width, 20)
+        compare(findChild(rightActions, "animatedImmersiveIcon").height, 20)
         compare(findChild(rightActions, "miniPlayerButton").icon.width, 22)
         verify(findChild(rightActions, "themeModeButton").width >= 32)
         verify(findChild(rightActions, "immersiveActionButton").width >= 32)
@@ -3494,6 +3494,12 @@ TestCase {
                 Theme.navigationIconVisualSize)
         compare(side.navigationActionExtent,
                 Theme.navigationActionExtent)
+        var libraryIcon = findChild(side, "suppliedNodeIcon-library")
+        verify(libraryIcon)
+        compare(libraryIcon.sourceSize.width,
+                Theme.navigationIconVisualSize + 2)
+        compare(libraryIcon.sourceSize.height,
+                Theme.navigationIconVisualSize + 2)
         var nodeNames = ["navigationNode-library:all",
                          "navigationNode-favorites:favorites",
                          "navigationNode-tags:manage"]
