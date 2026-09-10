@@ -47,13 +47,21 @@ async function runDownloadScript(response, timers = {}) {
   const primary = fakeElement();
   const github = fakeElement();
   const status = fakeElement();
+  const checksum = fakeElement();
+  const checksumValue = fakeElement();
+  const checksumCopy = fakeElement();
+  checksum.setAttribute('hidden', '');
   const documentListeners = new Map();
   const calls = [];
   const navigations = [];
+  const clipboardWrites = [];
   const elements = new Map([
     ['.download-primary', primary],
     ['.download-github', github],
-    ['#windows-download-status', status]
+    ['#windows-download-status', status],
+    ['#windows-checksum', checksum],
+    ['#windows-sha256', checksumValue],
+    ['#windows-sha256-copy', checksumCopy]
   ]);
   const context = {
     document: {
@@ -66,6 +74,7 @@ async function runDownloadScript(response, timers = {}) {
       return typeof response === 'function' ? response(url, options) : response;
     },
     location: { assign: url => navigations.push(url) },
+    navigator: { clipboard: { writeText: async text => clipboardWrites.push(text) } },
     AG: { t: (key, values) => `${key}:${values.version}` },
     AbortController,
     TextDecoder,
@@ -76,7 +85,7 @@ async function runDownloadScript(response, timers = {}) {
   };
   runInNewContext(await readFile(scriptPath, 'utf8'), context, { filename: scriptPath });
   await new Promise(resolve => setTimeout(resolve, 0));
-  return { primary, github, status, calls, navigations, documentListeners };
+  return { primary, github, status, checksum, checksumValue, checksumCopy, calls, navigations, clipboardWrites, documentListeners };
 }
 
 function manifest(overrides = {}) {
@@ -120,6 +129,22 @@ test('valid official manifest enables both trusted Windows download routes', asy
   assert.equal(result.status.textContent, 'downloadPage.windows.available:1.0.0');
 });
 
+test('published Windows release exposes the real uppercase SHA-256 and copies it', async () => {
+  const expected = 'B379A969A3F61C31C6C0864F7D7EB9A2435BC268F47FDD5A52D5C70B0EE63F78';
+  const payload = manifest({ files: [{
+    ...manifest().files[0],
+    sha256: expected.toLowerCase()
+  }] });
+  const result = await runDownloadScript(streamedResponse(JSON.stringify(payload)));
+
+  assert.equal(result.checksum.hasAttribute('hidden'), false);
+  assert.equal(result.checksumValue.textContent, expected);
+  assert.equal(result.checksumCopy.disabled, false);
+  result.checksumCopy.click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(result.clipboardWrites, [expected]);
+});
+
 test('missing, oversized, or untrusted manifests keep downloads disabled', async () => {
   const cases = [
     { ok: false },
@@ -131,6 +156,8 @@ test('missing, oversized, or untrusted manifests keep downloads disabled', async
     const result = await runDownloadScript(response);
     assert.equal(result.primary.disabled, true);
     assert.equal(result.github.disabled, true);
+    assert.equal(result.checksum.hasAttribute('hidden'), true);
+    assert.equal(result.checksumValue.textContent, '');
     assert.deepEqual(result.navigations, []);
   }
 });
