@@ -3405,6 +3405,11 @@
             <translation>声音响应</translation>
         </message>
         <message>
+            <location filename="../app/qml/AgPlayer/components/ImmersiveControlPanel.qml" line="621" />
+            <source>还原默认</source>
+            <translation>还原默认</translation>
+        </message>
+        <message>
             <location filename="../app/qml/AgPlayer/components/ImmersiveControlPanel.qml" line="603" />
             <source>视觉 EQ · 8 音域</source>
             <translation>视觉 EQ · 8 音域</translation>

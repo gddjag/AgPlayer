@@ -23,17 +23,17 @@ int main(int argc, char** argv) {
         agplayer::VisualSpectrumFeatures analyzer;
         agplayer::VisualSpectrumFeatures::Spectrum bytes{};
         auto f = analyzer.update(bytes, true, false);
-        require(f.energy == 0 && std::abs(f.smoothness - .08) < 1e-12);
+        require(f.energy == 0 && std::abs(f.smoothness - .10) < 1e-12);
         analyzer.reset(); bytes.fill(255);
         f = analyzer.update(bytes, true, false);
         require(std::abs(f.energy - .15) < 1e-12 && f.smoothness == 0);
         require(std::abs(f.spectralCentroid - 255.5 * .15) < 1e-12);
         require(f.density == 0);
         f = analyzer.update(bytes, false, true);
-        require(std::abs(f.energy - .15 * .965) < 1e-12 && std::abs(f.smoothness - .035) < 1e-12);
+        require(std::abs(f.energy - .15 * .86) < 1e-12 && std::abs(f.smoothness - .14) < 1e-12);
         analyzer.reset();
         f = analyzer.update(bytes, false, false);
-        require(f.energy == 0 && std::abs(f.smoothness - .08) < 1e-12);
+        require(f.energy == 0 && std::abs(f.smoothness - .10) < 1e-12);
         // Single-bin boundary probes cover every raw band plus the unused tail;
         // legacy bass/mid overlap is intentionally tested separately.
         constexpr std::array<std::size_t, 9> edges{0,2,4,8,19,47,94,187,373};

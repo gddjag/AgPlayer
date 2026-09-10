@@ -204,9 +204,11 @@ void main()
         vec4 regionWeights = vec4(subRegion * 5.0,
             bassRegion * smoothstep(0.0, 1.0, terrainRandom + density * 0.5) * 4.0,
             lowMidShape * 2.5, midShape * 3.0);
-        vec4 responsiveLow = vec4(bandsLow.x, bandsLow.y,
-            pow(max(0.0, bandsLow.z), 0.82),
-            pow(max(0.0, bandsLow.w), 0.78));
+        vec4 responsiveLow = runtimeTheme
+            ? vec4(bandsLow.x, bandsLow.y,
+                pow(max(0.0, bandsLow.z), 0.82),
+                pow(max(0.0, bandsLow.w), 0.78))
+            : bandsLow;
         float bandRelief = dot(responsiveLow, regionWeights)
             + bandsHigh.x * highMidShape * 2.5;
         if (!referenceGeometry) {
@@ -264,8 +266,12 @@ void main()
                     ? mix(0.45, 2.40, smoothstep(0.2, 2.0, ubuf.waveParameters.z))
                     : max(0.2, ubuf.waveParameters.z);
                 float width = (white ? 1.0 : 3.0) * widthControl;
-                float fadeDistance = (white ? 13.0 : 25.0) / decayControl;
-                float elevationScale = white ? 1.8 : 5.6;
+                float fadeDistance = (white
+                    ? (runtimeTheme ? 13.0 : 8.0)
+                    : (runtimeTheme ? 25.0 : 15.0)) / decayControl;
+                float elevationScale = white
+                    ? (runtimeTheme ? 1.8 : 1.0)
+                    : (runtimeTheme ? 5.6 : 4.0);
                 float radius = max(0.0, source.z) * speed;
                 float distanceToRing = length(position.xz - source.xy) - radius;
                 float ring = exp(-(distanceToRing * distanceToRing) / width);

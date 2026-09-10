@@ -3147,6 +3147,11 @@ Actual encoding parameters may vary with system performance.</translation>
             <translation>Audio response</translation>
         </message>
         <message>
+            <location filename="../app/qml/AgPlayer/components/ImmersiveControlPanel.qml" line="621" />
+            <source>还原默认</source>
+            <translation>Restore defaults</translation>
+        </message>
+        <message>
             <location filename="../app/qml/AgPlayer/components/ImmersiveControlPanel.qml" line="603" />
             <source>视觉 EQ · 8 音域</source>
             <translation>Visual EQ · 8 bands</translation>
