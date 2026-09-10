@@ -160,12 +160,21 @@ void columnMedium(vec3 normal, vec3 view, float ior, out vec3 emittedLight, out 
                        * clamp(ubuf.materialParameters.z, 0.0, 1.0)
                        * clamp(ubuf.audioEnvelope.z, 0.0, 1.0)
                        * coreField * clamp(ubuf.styleAudio.w, 0.0, 1.5);
-    float pulse = lowMidEnergy * 1.05 * steadyField * clamp(ubuf.styleAudio.w, 0.0, 1.5)
-                + upperEnergy * 0.18 * clamp(ubuf.styleAudio.w, 0.0, 1.5)
-                + clamp(musicLight, 0.0, 1.0) * 0.85
-                + clamp(impactLight, 0.0, 1.0) * 1.20;
+    // Preserve headroom in sustained runtime passages, then let the actual
+    // beat drive the inner core. Reference replay retains its captured light.
+    bool runtimeTheme = ubuf.timbre.w >= 0.5;
+    float pulse = runtimeTheme
+        ? lowMidEnergy * 0.78 * steadyField * clamp(ubuf.styleAudio.w, 0.0, 1.5)
+          + upperEnergy * 0.12 * clamp(ubuf.styleAudio.w, 0.0, 1.5)
+          + clamp(musicLight, 0.0, 1.0) * 1.25
+          + clamp(impactLight, 0.0, 1.0) * 1.00
+        : lowMidEnergy * 1.05 * steadyField * clamp(ubuf.styleAudio.w, 0.0, 1.5)
+          + upperEnergy * 0.18 * clamp(ubuf.styleAudio.w, 0.0, 1.5)
+          + clamp(musicLight, 0.0, 1.0) * 0.85
+          + clamp(impactLight, 0.0, 1.0) * 1.20;
     float sourcePower = clamp(ubuf.sceneLighting.x, 0.0, 2.0)
-                      * (0.38 + clamp(glow, 0.0, 2.0) * 0.16) * pulse * 1.4;
+                      * (0.38 + clamp(glow, 0.0, 2.0) * 0.16) * pulse
+                      * (runtimeTheme ? 1.18 : 1.4);
     // Emission belongs to the raised musical relief. Leave the flat apron
     // quiet so troughs and travelling wave crests retain visual separation.
     sourcePower *= mix(0.28, 1.0, smoothstep(0.12, 2.2, extent.y));
@@ -351,6 +360,20 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
             float clarityScale = 1.0 + clarityDelta * 1.1
                 * mix(-0.18, 0.82, clarityStructure);
             result *= max(0.65, clarityScale);
+            // Canonical runtime themes still use the reference palette branch,
+            // so apply gel softness here instead of relying on the optional
+            // material path below. Broader softness rolls the luminous cap edge
+            // farther inward; captured reference replay (timbre.w == 0) remains
+            // bit-exact and crystal/ink materials are unchanged.
+            float runtimeGel = step(0.5, material.x)
+                             * (1.0 - step(1.5, material.x));
+            vec2 gelEdgeDistance = vec2(0.5) - abs(surfacePosition.xz);
+            float gelEdge = 1.0 - smoothstep(0.012,
+                mix(0.035, 0.145, clamp(material.y, 0.0, 1.0)),
+                min(gelEdgeDistance.x, gelEdgeDistance.y));
+            if (isTop)
+                result *= 1.0 + gelEdge * runtimeGel
+                        * clamp(material.y, 0.0, 1.0) * 0.65;
         }
         result += srgbToLinear(ubuf.rippleColor.rgb)
                 * referenceRippleAnim.x * 0.6;
@@ -407,8 +430,13 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
     if (ubuf.bodyColor.a > 0.5) {
         // Theme edge occupies a fixed face-local strip. Derivative-driven
         // widening can cover an entire distant cap and inflate its energy.
+        // Material softness may widen that bounded strip, but never delegates
+        // the width to screen-space derivatives.
         vec2 edgeDistance = vec2(0.5) - abs(surfacePosition.xz);
-        vec2 edgeGlow = vec2(1.0) - smoothstep(vec2(0.01), vec2(0.05), edgeDistance);
+        float themeEdgeWidth = mix(0.035, 0.145,
+                                   clamp(material.y, 0.0, 1.0));
+        vec2 edgeGlow = vec2(1.0) - smoothstep(vec2(0.01),
+                                               vec2(themeEdgeWidth), edgeDistance);
         capBorder = capFace * min(1.0, edgeGlow.x + edgeGlow.y);
     }
     float wallGradient = mix(0.055, 0.32, surfaceHeight * surfaceHeight);

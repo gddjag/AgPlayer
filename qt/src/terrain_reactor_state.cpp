@@ -95,7 +95,10 @@ void TravelingWaveGate::anchor(float nowSeconds, float strength) noexcept
 {
     if (!std::isfinite(nowSeconds)) return;
     const float energy = std::isfinite(strength) ? std::clamp(strength, 0.0F, 1.0F) : 0.0F;
-    nextSeconds_ = nowSeconds + 6.0F - energy * 3.0F;
+    // Keep the user's deliberately sparse 3--6 second cadence, but avoid the
+    // long six-second dead zone that made ordinary musical waves appear lost.
+    // Strong beats arrive after 3 s; quieter accepted events after at most 5 s.
+    nextSeconds_ = nowSeconds + 5.0F - energy * 2.0F;
 }
 
 namespace {

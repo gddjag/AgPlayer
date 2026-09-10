@@ -185,11 +185,16 @@ void main()
                          0.2 + smoothness * 0.5) * 0.8 * reliefDisk
                      * ubuf.styleToggles.w;
         float subRegion = 1.0 - smoothstep(0.0, 25.0, distanceFromCore);
-        float bassOffset = terrainNoise(p * 0.1 - vec2(0.0, t * 0.2));
+        // Direct reference replay keeps its captured scene clock. Runtime
+        // terrain has no autonomous wave clock: only changing audio and
+        // explicit beat/ripple events are allowed to change column height.
+        bool runtimeTheme = ubuf.timbre.w >= 0.5;
+        float fieldClock = runtimeTheme ? 0.0 : t;
+        float bassOffset = terrainNoise(p * 0.1 - vec2(0.0, fieldClock * 0.2));
         float bassRegion = 1.0 - smoothstep(5.0, 35.0, distanceFromCore + bassOffset * 5.0);
-        float lowMidShape = 0.5 + 0.5 * terrainNoise(p * 0.05 + vec2(t * 0.1, 0.0));
+        float lowMidShape = 0.5 + 0.5 * terrainNoise(p * 0.05 + vec2(fieldClock * 0.1, 0.0));
         float midShape = max(0.0, sin(dot(p, vec2(0.2))
-                               + terrainNoise(p * 0.1) * 2.0 - t * 2.0));
+                               + terrainNoise(p * 0.1) * 2.0 - fieldClock * 2.0));
         float highMidShape = fract(terrainRandom * 13.3) > 0.8
             ? smoothstep(10.0, 45.0, distanceFromCore) * fract(terrainRandom * 7.7) : 0.0;
         vec4 regionWeights = vec4(subRegion * 5.0,
@@ -212,7 +217,11 @@ void main()
         float amplitudeControl = referenceGeometry
             ? rawAmplitude * 2.0
             : rawAmplitude * (0.35 + rawAmplitude * 3.65);
-        bandRelief = max(0.0, bandRelief * reliefDisk - 0.2) * amplitudeControl;
+        float motionGain = runtimeTheme
+            ? mix(1.0, 1.65, clamp(ubuf.styleParameters.y, 0.0, 1.0))
+            : 1.0;
+        bandRelief = max(0.0, bandRelief * reliefDisk - 0.2)
+                   * amplitudeControl * motionGain;
         float highEnergy = clamp(dot(bandsHigh, vec4(0.38, 0.28, 0.20, 0.14)), 0.0, 1.0);
         float coherentDetail = lowMidShape;
         terrainSpike = clamp(bandsHigh.x * highMidShape, 0.0, 1.0);
@@ -231,12 +240,24 @@ void main()
             // 42-unit overlap limiter or palette packing.
             for (int waveIndex = 0; waveIndex < 10; ++waveIndex) {
                 vec4 source = ubuf.waveSources[waveIndex];
-                float strength = abs(source.w) * max(0.0, ubuf.waveParameters.x);
-                if (strength == 0.0) continue;
                 bool white = source.w < 0.0;
+                float strengthControl = runtimeTheme
+                    ? clamp(ubuf.waveParameters.x, 0.0, 2.0)
+                    : max(0.0, ubuf.waveParameters.x);
+                float strengthGain = runtimeTheme && !white
+                    ? 0.85 + 0.65 * sqrt(strengthControl * 0.5)
+                    : 1.0;
+                float strength = abs(source.w) * strengthControl * strengthGain;
+                if (strength == 0.0) continue;
                 float speed = white ? 20.0 : 15.0;
-                float width = (white ? 1.0 : 3.0) * max(0.2, ubuf.waveParameters.y);
-                float fadeDistance = (white ? 8.0 : 15.0) / max(0.2, ubuf.waveParameters.z);
+                float widthControl = runtimeTheme
+                    ? mix(0.25, 2.80, smoothstep(0.2, 2.0, ubuf.waveParameters.y))
+                    : max(0.2, ubuf.waveParameters.y);
+                float decayControl = runtimeTheme
+                    ? mix(0.45, 2.40, smoothstep(0.2, 2.0, ubuf.waveParameters.z))
+                    : max(0.2, ubuf.waveParameters.z);
+                float width = (white ? 1.0 : 3.0) * widthControl;
+                float fadeDistance = (white ? 8.0 : 15.0) / decayControl;
                 float elevationScale = white ? 1.0 : 4.0;
                 float radius = max(0.0, source.z) * speed;
                 float distanceToRing = length(position.xz - source.xy) - radius;
@@ -309,13 +330,19 @@ void main()
         float centerBlend = 1.0 - smoothstep(25.0, 35.0, distanceFromCore);
         float jellyElasticity = step(0.5, material.x)
             * (1.0 - step(1.5, material.x)) * clamp(material.z, 0.0, 1.0);
-        float beatSelection = mix(0.30, 0.68, jellyElasticity);
+        float beatSelection = mix(0.45, 0.72, jellyElasticity);
+        float beatDrive = sqrt(clamp(beatPulse, 0.0, 1.0));
         float localBeatLift = (1.0 - step(beatSelection, randomValue)) * centerBlend * subRegion
-            * clamp(ubuf.audioEnvelope.z, 0.0, 1.0)
+            * beatDrive
             * (0.65 + randomValue * 2.0) * max(0.0, ubuf.styleParameters.x * 2.0)
-            * 2.4 * (1.0 + jellyElasticity * 2.4);
-        localBeatLift = min(localBeatLift, 0.35 * max(1.0, instanceScale.y + idle + bandRelief));
-        if (referenceGeometry) localBeatLift = 0.0;
+            * 4.8 * (0.65 + motion * 0.55)
+            * (0.65 + ubuf.styleAudio.w * 0.65)
+            * (1.0 + jellyElasticity * 1.15);
+        localBeatLift = min(localBeatLift, 0.48 * max(1.0, instanceScale.y + idle + bandRelief));
+        // Captured reference-U replay has no native beat event. Canonical
+        // runtime themes (timbre.w == 1) do, even though they share the same
+        // 84-unit reference geometry and palette.
+        if (!runtimeTheme) localBeatLift = 0.0;
         // No extra whole-field gain, shoulders or soft-cap compression.
         // Emitted ripples remain separate from the finite musical relief disk.
         // Keep the legacy42-unit safety budget on native wave overlap only;

@@ -279,10 +279,10 @@ void TerrainReactorStateTest::travelingWaveGateSpacesMusicalEvents()
     QVERIFY(!gate.consume(0.5F, 1.0F));
     QVERIFY(!gate.consume(2.99F, 1.0F));
     QVERIFY(gate.consume(3.0F, 0.25F));
-    QVERIFY(!gate.consume(6.0F, 1.0F));
-    QVERIFY(gate.consume(8.25F, 0.0F));
-    QVERIFY(!gate.consume(14.24F, 1.0F));
-    QVERIFY(gate.consume(14.25F, 1.0F));
+    QVERIFY(!gate.consume(7.49F, 1.0F));
+    QVERIFY(gate.consume(7.5F, 0.0F));
+    QVERIFY(!gate.consume(12.49F, 1.0F));
+    QVERIFY(gate.consume(12.5F, 1.0F));
     QVERIFY(!gate.consume(std::numeric_limits<float>::quiet_NaN(), 1.0F));
 }
 

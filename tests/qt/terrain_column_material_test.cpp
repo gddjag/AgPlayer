@@ -299,6 +299,8 @@ struct StudyParameters {
     bool explicitHighBands = false;
     bool array = false;
     bool shadows = false;
+    float runtimeMode = 0.0F;
+    float stageHalfExtent = 112.0F;
     QVector3D lighting{1, 0.6F, 1};
     QColor tint = QColor::fromRgbF(0.08F, 0.55F, 0.72F);
     QColor bodyTint; // Optional explicit base2; invalid retains the legacy fallback.
@@ -524,9 +526,10 @@ void ColumnRenderer::render(QRhiCommandBuffer* cb)
     u.materialParameters[2] = 1.0F;
     u.materialParameters[3] = 0.6F;
     u.sceneControls[0] = parameters_.opacity; u.sceneControls[1] = parameters_.exposure;
-    u.sceneControls[2] = 112;
+    u.sceneControls[2] = parameters_.stageHalfExtent;
     u.sceneControls[3] = 1.0F;
     u.waveParameters[0] = u.waveParameters[1] = u.waveParameters[2] = 1;
+    u.timbre[3] = parameters_.runtimeMode;
     if (parameters_.waveSlot >= 0) {
         const QVector3D anchors[] = {{0.1F,0.8F,1}, {1,0.2F,0.4F}, {1,0.7F,0.1F}};
         for (int i = 0; i < 3; ++i)
@@ -1759,6 +1762,8 @@ private slots:
         QTest::newRow("steady-audio-with-motion-enabled") << 0.65F << 0.35F;
     }
     void sceneTimeChangesColumnsWithoutMovingBase();
+    void runtimeSteadyAudioDoesNotFreeRun();
+    void runtimeMotionControlChangesMusicalRelief();
     void consecutiveWavesUseDifferentPaletteAnchors();
     void explicitThemeTravellingWaveTintRequiresActiveWave();
     void referenceRippleSeparatesNormalAndWhiteContracts();
@@ -1874,6 +1879,77 @@ void TerrainColumnMaterialTest::sceneTimeChangesColumnsWithoutMovingBase()
     QVERIFY(nearlySameBounds(repeated.firstBounds, repeated.secondBounds));
     QVERIFY2(repeated.silhouetteMismatch <= repeated.commonVisible / 1000,
              "Replaying identical time/audio input must reproduce the same geometry");
+}
+
+void TerrainColumnMaterialTest::runtimeSteadyAudioDoesNotFreeRun()
+{
+    auto counters = std::make_shared<StudyCounters>();
+    QQuickWindow window;
+    window.resize(640, 640);
+    window.setColor(QColor(160, 0, 160));
+    ColumnItem item(window.contentItem(), counters);
+    item.parameters.array = true;
+    item.parameters.runtimeMode = 1.0F;
+    item.parameters.stageHalfExtent = 84.0F;
+    item.parameters.idleRelief = true;
+    item.parameters.audioLevel = 0.65F;
+    item.parameters.midAudioLevel = 0.35F;
+    item.parameters.beat = 0.0F;
+    item.parameters.waveSlot = -1;
+    item.parameters.camera = {34, 30, 48};
+    window.show();
+    QVERIFY(waitForStudyWindow(window));
+    QTRY_VERIFY_WITH_TIMEOUT(counters->frames > 0 || counters->failed, 5000);
+    QVERIFY(!counters->failed);
+    const QImage baseline = studyFrame(window);
+    QVERIFY(!baseline.isNull());
+
+    const int before = counters->frames;
+    item.parameters.time = 5.0F;
+    item.update();
+    QTRY_VERIFY_WITH_TIMEOUT(counters->frames > before || counters->failed, 3000);
+    QVERIFY(!counters->failed);
+    const auto change = compareFrames(baseline, studyFrame(window));
+    QVERIFY2(nearlySameBounds(change.firstBounds, change.secondBounds),
+             "Runtime terrain must keep its fixed ground and steady-audio silhouette");
+    QVERIFY2(change.silhouetteMismatch <= change.commonVisible / 1000,
+             "Steady audio must not animate columns from a free-running clock");
+}
+
+void TerrainColumnMaterialTest::runtimeMotionControlChangesMusicalRelief()
+{
+    auto counters = std::make_shared<StudyCounters>();
+    QQuickWindow window;
+    window.resize(640, 640);
+    window.setColor(QColor(160, 0, 160));
+    ColumnItem item(window.contentItem(), counters);
+    item.parameters.array = true;
+    item.parameters.runtimeMode = 1.0F;
+    item.parameters.stageHalfExtent = 84.0F;
+    item.parameters.idleRelief = false;
+    item.parameters.audioLevel = 0.72F;
+    item.parameters.midAudioLevel = 0.48F;
+    item.parameters.motionControl = 0.0F;
+    item.parameters.beat = 0.0F;
+    item.parameters.waveSlot = -1;
+    item.parameters.camera = {34, 30, 48};
+    window.show();
+    QVERIFY(waitForStudyWindow(window));
+    QTRY_VERIFY_WITH_TIMEOUT(counters->frames > 0 || counters->failed, 5000);
+    QVERIFY(!counters->failed);
+    const QImage restrained = studyFrame(window);
+    QVERIFY(!restrained.isNull());
+
+    const int before = counters->frames;
+    item.parameters.motionControl = 1.0F;
+    item.update();
+    QTRY_VERIFY_WITH_TIMEOUT(counters->frames > before || counters->failed, 3000);
+    QVERIFY(!counters->failed);
+    const auto change = compareFrames(restrained, studyFrame(window));
+    QVERIFY2(change.secondBounds.height() > change.firstBounds.height() + 8,
+             "Motion response slider must visibly change runtime musical column travel");
+    QVERIFY2(std::abs(change.secondBounds.bottom() - change.firstBounds.bottom()) <= 1,
+             "Motion response may change column height, not move the ground anchor");
 }
 
 void TerrainColumnMaterialTest::consecutiveWavesUseDifferentPaletteAnchors()
@@ -2124,6 +2200,8 @@ void TerrainColumnMaterialTest::centerBeatLiftRemainsSparseAndBounded()
     ColumnItem item(window.contentItem(), counters);
     item.parameters.material = materialMode;
     item.parameters.randomValue = randomValue;
+    item.parameters.runtimeMode = 1.0F;
+    item.parameters.stageHalfExtent = 84.0F;
     item.parameters.camera = {0, 6, 50};
     item.parameters.midAudioLevel = 1;
     item.parameters.stream = false;
@@ -2156,8 +2234,8 @@ void TerrainColumnMaterialTest::centerBeatLiftRemainsSparseAndBounded()
     QVERIFY2(std::abs(change.secondBounds.bottom() - change.firstBounds.bottom()) <= 1,
              "The column foot must remain anchored to the fixed ground");
     if (selected) {
-        QVERIFY2(change.secondBounds.height() > change.firstBounds.height() + 4,
-                 "A selected center column must visibly rise on a real beat");
+        QVERIFY2(change.secondBounds.height() > change.firstBounds.height() + 8,
+                 "A selected center column must clearly rise on a real beat in the production scene");
         QVERIFY2(change.secondBounds.height() <= change.firstBounds.height() * 1.5,
                  "A sparse center lift must stay bounded, not double the column height");
     } else {
