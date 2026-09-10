@@ -284,6 +284,7 @@ public:
     void setRhythmSensitivity(int value);
 
     Q_INVOKABLE bool applyTheme(const QString& id);
+    Q_INVOKABLE void restoreDynamicDefaults();
     Q_INVOKABLE void toggleImmersiveMode();
     Q_INVOKABLE void toggleLyricsVisible();
     Q_INVOKABLE void togglePanelVisible();

@@ -375,6 +375,11 @@ void AudioVisualFeatureControllerTest::pausedRenderFrameUsesOriginalVisualReleas
     QVERIFY(released.descriptors.energy > 0.0);
     QVERIFY(released.descriptors.energy < playingEnergy);
     QCOMPARE(released.kick.onset, 0.0);
+    double releaseEnergy = released.descriptors.energy;
+    for (int frame = 0; frame < 11; ++frame)
+        releaseEnergy = analyzer.process(pcm, 1.0 / 60.0).descriptors.energy;
+    QVERIFY2(releaseEnergy < playingEnergy * 0.20,
+             "Paused terrain must return near rest before the next DJ beat");
 
     pcm.paused = false;
     pcm.releasing = false;
@@ -755,6 +760,19 @@ void AudioVisualFeatureControllerTest::visualPcmPauseRetainsWindowForRelease()
     QCOMPARE(paused.epoch, playing.epoch);
     QVERIFY(std::equal(paused.pcm.cbegin(), paused.pcm.cend(),
                        playing.pcm.cbegin()));
+    QTest::qWait(550);
+    QVERIFY(!features.visualPcmSnapshot().releasing);
+
+    QCOMPARE(ag_player_play(player), AG_OK);
+    QCOMPARE(ag_player_set_muted(player, 1), AG_OK);
+    features.pollOutputLevels();
+    QVERIFY(features.visualPcmSnapshot().paused);
+    QCOMPARE(ag_player_set_muted(player, 0), AG_OK);
+    features.pollOutputLevels();
+    QVERIFY(!features.visualPcmSnapshot().paused);
+    QCOMPARE(ag_player_stop(player), AG_OK);
+    features.pollOutputLevels();
+    QVERIFY(features.visualPcmSnapshot().paused);
 }
 
 void AudioVisualFeatureControllerTest::visualPcmAssemblesAndResets()

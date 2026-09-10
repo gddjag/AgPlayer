@@ -664,7 +664,8 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
         radiance = mix(atmosphere, radiance, atmosphereVisibility)
                  * (0.80 + clamp(focus, 0.0, 1.0) * 0.20);
     }
-    radiance *= clamp(material.z, 0.0, 2.0);
+    // Keep headroom for beat-driven inner light and silver cap flashes.
+    radiance *= clamp(material.z, 0.0, 2.0) * 0.88;
     // Bright themes need the same material contrast as dark themes. Their
     // pale base plus cap/self-light layers can otherwise clip an entire field
     // to white, erasing every individual column. Apply a luminance-selected

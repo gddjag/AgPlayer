@@ -605,7 +605,23 @@ Rectangle {
                 visible: root.currentTab === 2
                 Layout.fillWidth: true
                 spacing: Theme.spacingSm
-                Text { text: qsTr("声音响应"); color: Theme.textSecondary; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("声音响应")
+                        color: Theme.textSecondary
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: Theme.fontSizeCaption
+                    }
+                    ThemedButton {
+                        objectName: "restoreImmersiveDynamicsDefaults"
+                        implicitHeight: 32
+                        text: qsTr("还原默认")
+                        Accessible.name: text
+                        onClicked: PlayerExperienceController.restoreDynamicDefaults()
+                    }
+                }
                 Repeater {
                     model: root.dynamicsGroups
                     ColumnLayout {

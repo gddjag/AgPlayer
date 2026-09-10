@@ -80,7 +80,7 @@ float smoothReactorFeature(float current, float target, float elapsedSeconds) no
     const float safeCurrent = std::isfinite(current) ? std::clamp(current, 0.0F, 1.0F) : 0.0F;
     const float safeTarget = std::isfinite(target) ? std::clamp(target, 0.0F, 1.0F) : 0.0F;
     const float elapsed = std::isfinite(elapsedSeconds) ? std::clamp(elapsedSeconds, 0.0F, 0.25F) : 0.0F;
-    const float timeConstant = safeTarget > safeCurrent ? 0.045F : 0.22F;
+    const float timeConstant = safeTarget > safeCurrent ? 0.045F : 0.105F;
     return safeCurrent + (safeTarget - safeCurrent) * (1.0F - std::exp(-elapsed / timeConstant));
 }
 
@@ -370,8 +370,8 @@ BassEnvelopeSnapshot BassEnvelopeFollower::advance(
             ? 1.0F : 1.0F - std::exp(-elapsed / timeConstant);
         return clampUnit(current + (target - current) * amount);
     };
-    snapshot_.fast = follow(snapshot_.fast, input, 0.030F, 0.180F);
-    snapshot_.slow = follow(snapshot_.slow, input, 0.075F, 0.400F);
+    snapshot_.fast = follow(snapshot_.fast, input, 0.030F, 0.100F);
+    snapshot_.slow = follow(snapshot_.slow, input, 0.075F, 0.220F);
     return snapshot_;
 }
 

@@ -57,7 +57,9 @@ public:
             previous_ = {};
         }
         previousBrightness_ = target.brightness;
-        const double coefficient = target.energy > 0 ? .15 : (releasing ? .035 : .08);
+        // Pausing/stopping is a short visual release, not a held last frame.
+        // DJ transients need the terrain near rest before the next hit.
+        const double coefficient = target.energy > 0 ? .15 : (releasing ? .14 : .10);
         const auto smooth = [coefficient](double& value, double goal) { value += (goal - value) * coefficient; };
         for (std::size_t i = 0; i < 8; ++i) smooth(state_.bands[i], target.bands[i]);
         smooth(state_.energy, target.energy); smooth(state_.warmth, target.warmth);

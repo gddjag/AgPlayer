@@ -1650,7 +1650,10 @@ void TerrainReactorItem::copyStyleSource()
         next.rippleColor = encodedRole(ThemeColorRole::Ripple);
         next.topographyDensity = styleSource_->topographyDensity();
         next.atmosphereColor = encodedRole(ThemeColorRole::Fog);
-        next.glowIntensity = float(styleSource_->themeGlow());
+        // Keep the theme's authored glow as the baseline while preserving the
+        // user-facing surface-sheen slider as a live multiplier.
+        next.glowIntensity = float(styleSource_->themeGlow())
+            * float(styleSource_->glowIntensity()) / 100.0F;
         next.colorMode = RenderColorMode::MultiRegion;
         next.themeCycleEnabled = false;
     }

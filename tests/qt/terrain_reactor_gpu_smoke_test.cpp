@@ -522,6 +522,7 @@ void TerrainReactorGpuSmokeTest::materialControlsChangeRenderedSurface_data()
     QTest::newRow("column-density") << QByteArray("columnDensity") << 0 << 50 << 200;
     QTest::newRow("column-opacity") << QByteArray("columnOpacity") << 0 << 0 << 100;
     QTest::newRow("reactor-brightness") << QByteArray("reactorBrightness") << 0 << 20 << 180;
+    QTest::newRow("theme-surface-sheen") << QByteArray("glowIntensity") << 0 << 0 << 100;
     QTest::newRow("column-clarity") << QByteArray("subjectClarity") << 0 << 20 << 140;
     QTest::newRow("ink-clarity") << QByteArray("subjectClarity") << 2 << 20 << 140;
 }
@@ -544,7 +545,7 @@ void TerrainReactorGpuSmokeTest::materialControlsChangeRenderedSurface()
     style.setRipplesEnabled(false);
     style.setFloatingCubesEnabled(false);
     style.setMeteorsEnabled(false);
-    style.setStreamHighlightEnabled(false);
+    style.setStreamHighlightEnabled(control == "glowIntensity");
     QQuickWindow window;
     window.resize(480, 270);
     window.setColor(mode == 2 ? QColor("#f6f5ef") : QColor("#04060b"));

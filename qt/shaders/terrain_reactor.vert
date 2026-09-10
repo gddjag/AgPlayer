@@ -189,6 +189,10 @@ void main()
         // terrain has no autonomous wave clock: only changing audio and
         // explicit beat/ripple events are allowed to change column height.
         bool runtimeTheme = ubuf.timbre.w >= 0.5;
+        if (runtimeTheme) {
+            float audibleIdle = smoothstep(0.006, 0.075, ubuf.parameters.x);
+            idle *= audibleIdle;
+        }
         float fieldClock = runtimeTheme ? 0.0 : t;
         float bassOffset = terrainNoise(p * 0.1 - vec2(0.0, fieldClock * 0.2));
         float bassRegion = 1.0 - smoothstep(5.0, 35.0, distanceFromCore + bassOffset * 5.0);
@@ -200,7 +204,10 @@ void main()
         vec4 regionWeights = vec4(subRegion * 5.0,
             bassRegion * smoothstep(0.0, 1.0, terrainRandom + density * 0.5) * 4.0,
             lowMidShape * 2.5, midShape * 3.0);
-        float bandRelief = dot(bandsLow, regionWeights)
+        vec4 responsiveLow = vec4(bandsLow.x, bandsLow.y,
+            pow(max(0.0, bandsLow.z), 0.82),
+            pow(max(0.0, bandsLow.w), 0.78));
+        float bandRelief = dot(responsiveLow, regionWeights)
             + bandsHigh.x * highMidShape * 2.5;
         if (!referenceGeometry) {
             float highTexture = smoothstep(0.48, 0.96,
@@ -257,8 +264,8 @@ void main()
                     ? mix(0.45, 2.40, smoothstep(0.2, 2.0, ubuf.waveParameters.z))
                     : max(0.2, ubuf.waveParameters.z);
                 float width = (white ? 1.0 : 3.0) * widthControl;
-                float fadeDistance = (white ? 8.0 : 15.0) / decayControl;
-                float elevationScale = white ? 1.0 : 4.0;
+                float fadeDistance = (white ? 13.0 : 25.0) / decayControl;
+                float elevationScale = white ? 1.8 : 5.6;
                 float radius = max(0.0, source.z) * speed;
                 float distanceToRing = length(position.xz - source.xy) - radius;
                 float ring = exp(-(distanceToRing * distanceToRing) / width);
@@ -277,7 +284,7 @@ void main()
                 float sourceDistance = length(position.xz - source.xy);
                 float ridgeDistance = sourceDistance - waveRadius;
                 float waveWidth = max(0.2, ubuf.waveParameters.y);
-                float waveLife = 2.8 / max(0.2, ubuf.waveParameters.z);
+                float waveLife = 3.6 / max(0.2, ubuf.waveParameters.z);
                 // A distinct leading edge followed by a softer trailing ridge.
                 // Keep at least one cell of front width to avoid a broken ring.
                 float decaySpread = mix(4.60, 0.48,
@@ -291,7 +298,7 @@ void main()
                            * step(sourceDistance, waveRadius);
                 float widthEnergy = mix(0.58, 1.30,
                     smoothstep(0.2, 2.0, waveWidth));
-                float decayEnvelope = exp(-age * max(0.2, ubuf.waveParameters.z) * 5.5);
+                float decayEnvelope = exp(-age * max(0.2, ubuf.waveParameters.z) * 3.0);
                 float decayEnergy = mix(1.85, 0.70,
                     smoothstep(0.2, 2.0, ubuf.waveParameters.z));
                 float weight = (ridge + tail * 0.18)

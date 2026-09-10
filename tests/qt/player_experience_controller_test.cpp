@@ -59,6 +59,7 @@ private slots:
     void followsPlaybackSpectrumOnlyWhileActive();
     void eventThresholdsIncludeBoundaries();
     void builtInThemesApplyWithoutDynamicPresetChanges();
+    void restoresDynamicDefaultsWithoutChangingTheme();
     void invalidThemeDoesNotChangeState();
     void themePersistsAndLegacyColorsRemainManual();
     void legacyNinePresetApiIsRemoved();
@@ -867,6 +868,40 @@ void PlayerExperienceControllerTest::invalidThemeDoesNotChangeState()
     QCOMPARE(experience.themeGlow(), glow);
     QCOMPARE(changed.count(), 0);
     QCOMPARE(QSettings().value(QStringLiteral("immersiveVisual/themeId")).toString(), id);
+}
+
+void PlayerExperienceControllerTest::restoresDynamicDefaultsWithoutChangingTheme()
+{
+    QSettings().clear();
+    PlayerExperienceController experience;
+    QVERIFY(experience.applyTheme(QStringLiteral("wine-signal")));
+    const QString themeId = experience.themeId();
+    const QString coolColor = experience.coolColor();
+
+    experience.setRippleStrength(190);
+    experience.setRippleWidth(190);
+    experience.setRippleDecay(190);
+    experience.setTerrainAmplitude(8);
+    experience.setGlowIntensity(4);
+    experience.setRhythmSensitivity(5);
+    experience.setRipplesEnabled(false);
+    experience.setStreamHighlightEnabled(false);
+    experience.setVisualEqGains(QVariantList({1,2,3,4,5,6,7,8}));
+
+    experience.restoreDynamicDefaults();
+
+    QCOMPARE(experience.themeId(), themeId);
+    QCOMPARE(experience.coolColor(), coolColor);
+    QCOMPARE(experience.rippleStrength(), 39);
+    QCOMPARE(experience.rippleWidth(), 82);
+    QCOMPARE(experience.rippleDecay(), 81);
+    QCOMPARE(experience.terrainAmplitude(), 50);
+    QCOMPARE(experience.glowIntensity(), 100);
+    QCOMPARE(experience.rhythmSensitivity(), 80);
+    QVERIFY(experience.ripplesEnabled());
+    QVERIFY(experience.streamHighlightEnabled());
+    QCOMPARE(experience.visualEqGains(),
+             QVariantList({90, 92, 50, 50, 50, 50, 50, 48}));
 }
 
 void PlayerExperienceControllerTest::themePersistsAndLegacyColorsRemainManual()

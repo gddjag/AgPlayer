@@ -482,6 +482,7 @@ TestCase {
         verify(findChild(icon, "uploadedImmersivePath1"))
         verify(findChild(icon, "uploadedImmersivePath2"))
         verify(findChild(icon, "uploadedImmersivePath3"))
+        verify(findChild(icon, "uploadedImmersivePath4"))
         var previousTheme = SettingsController.themeMode
         try {
             for (var mode = 0; mode < 2; ++mode) {
@@ -1331,10 +1332,17 @@ TestCase {
             tryCompare(PlaybackController, "currentTrackId", ids[0])
             keyClick(Qt.Key_Right)
             tryCompare(PlaybackController, "currentTrackId", ids[1])
-            // Space still activates the focused button, not playback.
+            // Playback remains a window command even after a panel button
+            // receives focus; otherwise the first click disables Space.
             var collapsed = panel.collapsed
+            var playbackShortcut = findChild(host, "immersivePlaybackShortcut")
+            var playbackSpy = createTemporaryObject(immersiveShortcutSpyComponent,
+                                                     testCase,
+                                                     { target: playbackShortcut })
+            verify(playbackSpy && playbackSpy.valid)
             keyClick(Qt.Key_Space)
-            compare(panel.collapsed, !collapsed)
+            compare(playbackSpy.count, 1)
+            compare(panel.collapsed, collapsed)
             keyClick(Qt.Key_Right)
             tryCompare(PlaybackController, "currentTrackId", ids[2])
 
@@ -1473,7 +1481,8 @@ TestCase {
             var slider = findChild(editing, "shortcutEditingSlider")
             slider.forceActiveFocus(Qt.TabFocusReason)
             tryCompare(slider, "activeFocus", true)
-            for (var blocked = 0; blocked < shortcuts.length; ++blocked)
+            tryCompare(shortcuts[2], "enabled", true)
+            for (var blocked of [0, 1, 3, 4])
                 tryCompare(shortcuts[blocked], "enabled", false)
             keyClick(Qt.Key_Right)
             compare(slider.value, 6)
@@ -1484,7 +1493,8 @@ TestCase {
             keyClick(Qt.Key_Up)
             compare(slider.value, 5)
             for (var unchanged = 0; unchanged < spies.length; ++unchanged)
-                compare(spies[unchanged].count, baselineCounts[unchanged])
+                compare(spies[unchanged].count,
+                        baselineCounts[unchanged] + (unchanged === 2 ? 1 : 0))
 
             host.surfaceItem.forceActiveFocus(Qt.OtherFocusReason)
             tryCompare(shortcuts[0], "enabled", true)
@@ -2482,6 +2492,20 @@ TestCase {
         impactToggle.checked = impactToggleValue
         impactToggle.toggled()
         compare(PlayerExperienceController.burstEnabled, impactToggleValue)
+
+        var restoreDefaults = findChild(panel,
+                                        "restoreImmersiveDynamicsDefaults")
+        verify(restoreDefaults)
+        verify(restoreDefaults.text.length > 0)
+        restoreDefaults.clicked()
+        compare(PlayerExperienceController.inputCompression, 99)
+        compare(PlayerExperienceController.terrainAmplitude, 50)
+        compare(PlayerExperienceController.centerHighlight, 40)
+        compare(PlayerExperienceController.autoRotateSpeed, 78)
+        compare(PlayerExperienceController.rhythmStrength, 30)
+        compare(PlayerExperienceController.streamHighlightEnabled, true)
+        compare(PlayerExperienceController.idleBreathingEnabled, true)
+        compare(PlayerExperienceController.burstEnabled, true)
     }
 
     function test_lyrics_switch_drives_service_and_below_list_panel() {

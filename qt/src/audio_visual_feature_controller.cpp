@@ -113,7 +113,7 @@ void AudioVisualFeatureController::ingestVisualPcm(const ag_visual_pcm_snapshot&
 agplayer::VisualAudioFrameAnalyzer::Snapshot
 AudioVisualFeatureController::visualPcmSnapshot() const noexcept
 {
-    constexpr qint64 VisualReleaseMilliseconds = 1'600;
+    constexpr qint64 VisualReleaseMilliseconds = 500;
     const bool releasing = visualPaused_ && visualReleaseTimer_.isValid()
         && visualReleaseTimer_.elapsed() < VisualReleaseMilliseconds;
     return {visualPcm_, visualSampleRate_, visualPcmEpoch_,
@@ -128,7 +128,7 @@ void AudioVisualFeatureController::updateVisualPlaybackState()
     if (active_ && playback_ && playback_->playerHandle()) {
         ag_playback_snapshot snapshot{};
         paused = ag_player_snapshot(playback_->playerHandle(), &snapshot) == AG_OK
-            && snapshot.state == AG_PAUSED;
+            && (snapshot.state != AG_PLAYING || snapshot.muted != 0);
     }
     if (paused == visualPaused_) return;
     visualPaused_ = paused;

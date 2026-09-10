@@ -291,7 +291,7 @@ void TerrainReactorStateTest::rendererEnvelopeKeepsShortNotesVisible()
     const float attacked = smoothReactorFeature(0.0F, 1.0F, 0.05F);
     QVERIFY(attacked > 0.60F && attacked < 1.0F);
     const float released = smoothReactorFeature(attacked, 0.0F, 0.2F);
-    QVERIFY(released > 0.0F && released < attacked * 0.45F);
+    QVERIFY(released > 0.0F && released < attacked * 0.18F);
     QCOMPARE(smoothReactorFeature(0.0F, 0.0F, 0.2F), 0.0F);
 }
 

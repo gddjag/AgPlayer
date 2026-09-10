@@ -857,6 +857,51 @@ bool PlayerExperienceController::applyTheme(const QString& id)
     return true;
 }
 
+void PlayerExperienceController::restoreDynamicDefaults()
+{
+    setRippleStrength(39);
+    setRippleWidth(82);
+    setRippleDecay(81);
+    setColumnSize(100);
+    setColumnDensity(50);
+    setTopographyDensity(46);
+    setColumnOpacity(100);
+    setReactorBrightness(100);
+    setColumnInnerLight(155);
+    setColumnLightSpill(176);
+    setColumnLightRadius(86);
+    setTerrainAmplitude(50);
+    setMotionResponse(50);
+    setGradientLayers(74);
+    setGlowIntensity(100);
+    setCinemaShake(0.81);
+    setAutoRotate(54);
+    setPeakBoost(55);
+    setInputCompression(99);
+    setAudioResponse(121);
+    setResponseRange(129);
+    setCenterHighlight(40);
+    setRhythmStrength(30);
+    setDepthOfField(83);
+    setSubjectClarity(114);
+    setAutoRotateSpeed(78);
+    setRhythmSensitivity(80);
+    setRipplesEnabled(true);
+    setBurstEnabled(true);
+    setFloatingCubesEnabled(true);
+    setMeteorsEnabled(true);
+    setIdleBreathingEnabled(true);
+    setStreamHighlightEnabled(true);
+    setSongAdaptiveColorEnabled(false);
+    setFloatingBlockMinSize(9);
+    setFloatingBlockMaxSize(26);
+    setFloatingBlockSpeed(77);
+    setFloatingBlockIntensity(55);
+    setVisualEqEnabled(QVariantList({true, true, true, true,
+                                     true, true, true, true}));
+    setVisualEqGains(defaultVisualEqGains());
+}
+
 void PlayerExperienceController::toggleImmersiveMode()
 {
     setImmersiveMode(immersiveMode_ == Off ? TerrainReactor : Off);

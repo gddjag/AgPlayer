@@ -49,10 +49,9 @@ Window {
     function editingControl() {
         var item = activeFocusItem
         while (item) {
-            // Preserve Space for sliders, text editors, buttons and
-            // other focused controls, including their internal focus items.
-            if (item instanceof T.Control || item instanceof TextInput
-                    || item instanceof TextEdit)
+            // Text editing owns Space. Other panel controls must not disable
+            // the immersive window's explicit play/pause command.
+            if (item instanceof TextInput || item instanceof TextEdit)
                 return true
             item = item.parent
         }
