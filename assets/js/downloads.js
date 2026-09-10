@@ -21,7 +21,7 @@
     const githubUrl = `https://github.com/gddjag/AgPlayer/releases/download/${tag}/${encodedName}`;
     const r2Url = `https://download.agplayer.com/releases/${tag}/${encodedName}`;
     if (file.githubUrl !== githubUrl || file.r2Url !== r2Url) return null;
-    return { version: manifest.version, githubUrl, r2Url };
+    return { version: manifest.version, githubUrl, r2Url, sha256: file.sha256.toUpperCase() };
   }
 
   function enable(button, url) {
@@ -66,7 +66,10 @@
     const primary = document.querySelector('.download-primary');
     const github = document.querySelector('.download-github');
     const status = document.querySelector('#windows-download-status');
-    if (!primary || !github || !status) return;
+    const checksum = document.querySelector('#windows-checksum');
+    const checksumValue = document.querySelector('#windows-sha256');
+    const checksumCopy = document.querySelector('#windows-sha256-copy');
+    if (!primary || !github || !status || !checksum || !checksumValue || !checksumCopy) return;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
     try {
@@ -83,6 +86,13 @@
       if (!release) return;
       enable(primary, release.r2Url);
       enable(github, release.githubUrl);
+      checksumValue.textContent = release.sha256;
+      checksum.removeAttribute('hidden');
+      checksumCopy.disabled = false;
+      checksumCopy.removeAttribute('aria-disabled');
+      checksumCopy.addEventListener('click', () => {
+        void navigator.clipboard?.writeText(release.sha256).catch(() => {});
+      });
       status.removeAttribute('data-i18n');
       const renderStatus = () => { status.textContent = AG.t('downloadPage.windows.available', { version: release.version }); };
       renderStatus();
