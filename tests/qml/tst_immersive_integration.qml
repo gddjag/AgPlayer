@@ -474,11 +474,14 @@ TestCase {
         miniWindow = null
     }
 
-    function test_immersive_icon_animates_and_follows_theme_visibility() {
+    function test_immersive_icon_uses_uploaded_static_svg_and_follows_theme() {
         var action = findChild(mainWindow, "immersiveActionButton")
         verify(action)
         var icon = findChild(action, "animatedImmersiveIcon")
-        verify(icon, "The shared immersive action must use the animated icon")
+        verify(icon, "The three player themes must reuse the uploaded immersive icon")
+        verify(findChild(icon, "uploadedImmersivePath1"))
+        verify(findChild(icon, "uploadedImmersivePath2"))
+        verify(findChild(icon, "uploadedImmersivePath3"))
         var previousTheme = SettingsController.themeMode
         try {
             for (var mode = 0; mode < 2; ++mode) {
@@ -487,17 +490,17 @@ TestCase {
                 compare(icon.color.toString(), action.checked
                         ? Theme.iconAccent.toString() : Theme.iconPrimary.toString())
             }
-            tryCompare(icon, "animating", true)
+            compare(icon.animating, false)
             var before = icon.phase
             wait(100)
-            verify(icon.phase !== before)
+            compare(icon.phase, before)
             action.visible = false
-            tryCompare(icon, "animating", false)
+            compare(icon.animating, false)
             var stopped = icon.phase
             wait(100)
             compare(icon.phase, stopped)
             action.visible = true
-            tryCompare(icon, "animating", true)
+            compare(icon.animating, false)
         } finally {
             action.visible = true
             SettingsController.themeMode = previousTheme
