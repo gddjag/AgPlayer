@@ -211,6 +211,7 @@ Window {
         if (!urls || urls.length === 0)
             return false
         var seenPaths = ({})
+        var audioUrls = []
         var directoryPaths = []
         for (var index = 0; index < urls.length; ++index) {
             var classified = ResourceFolderController.classifyDropUrl(urls[index])
@@ -222,9 +223,14 @@ Window {
             if (seenPaths[identity])
                 continue
             seenPaths[identity] = true
-            if (classified.kind === ResourceFolderController.Directory)
+            if (classified.kind === ResourceFolderController.Directory) {
                 directoryPaths.push(path)
+            } else if (classified.kind === ResourceFolderController.AudioFile) {
+                audioUrls.push(classified.url)
+            }
         }
+        var audioImportStarted = audioUrls.length > 0
+                && beginImport(audioUrls)
         var registeredCount = 0
         for (var pathIndex = 0; pathIndex < directoryPaths.length;
              ++pathIndex) {
@@ -233,7 +239,7 @@ Window {
                 ++registeredCount
         }
         if (registeredCount <= 0)
-            return false
+            return audioImportStarted
         // A synchronous true means accepted/pending only.  Completion is
         // reported after the shared scanner and importer signals finish.
         resourceDropStatus = "pending"

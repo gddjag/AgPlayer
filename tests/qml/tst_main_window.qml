@@ -2147,17 +2147,20 @@ TestCase {
         verify(firstImportedId)
 
         compare(nativeDropHelper.sendUrls(
-                    dropTarget, [rejectedAudio, mixedAudio]), false,
-                "resource audio must remain rejected after imports finish")
-        wait(0)
-        compare(importFinished.count, 1)
-        compare(LibraryModel.count, initialLibraryCount + 1)
+                    dropTarget, [rejectedAudio, mixedAudio]), true,
+                "resource audio must be accepted after imports finish")
+        tryCompare(importFinished, "count", 2, 5000)
+        compare(LibraryModel.count, initialLibraryCount + 3)
+        var laterImportedIds = ImportController.importedTrackIds.slice(0)
+        compare(laterImportedIds.length, 2)
 
         var folderPath = decodeURIComponent(busyFolder.toString()
                                            .replace(/^file:\/\/\//, ""))
         folderPath = folderPath.replace(/\\/g, "/")
         verify(ResourceFolderController.removeMonitoredFolder(folderPath))
         LibraryModel.removeTrack(firstImportedId)
+        for (var laterId of laterImportedIds)
+            LibraryModel.removeTrack(laterId)
         importFinished.destroy()
         window.close()
         window.destroy()
@@ -4808,19 +4811,26 @@ TestCase {
             "signalName": "monitoredFoldersChanged"
         })
         verify(importFinished && rootsChanged)
-
+        compare(ImportController.busy, false,
+                "resource audio precondition requires an idle importer")
+        compare(window.importBatchActive, false,
+                "an earlier completed list drop must release its batch state")
+        compare(ResourceFolderController.classifyDropUrl(copiedAudio).kind,
+                ResourceFolderController.AudioFile,
+                "the local file must classify as supported audio")
         var audioAccepted = nativeDropHelper.sendUrls(dropTarget,
                                                        [copiedAudio])
+        compare(audioAccepted, true,
+                "the resource area must accept a local audio file")
+        tryCompare(importFinished, "count", 1, 5000)
         tryVerify(function() { return !ImportController.busy }, 5000)
         var audioOnlyLibraryCount = LibraryModel.count
-        if (audioOnlyLibraryCount > initialLibraryCount) {
-            for (var importedId of ImportController.importedTrackIds)
-                LibraryModel.removeTrack(importedId)
-        }
-        compare(audioOnlyLibraryCount, initialLibraryCount,
-                "resource audio drops must not enter the music library")
-        compare(audioAccepted, false,
-                "the resource area must reject audio-only drops")
+        verify(audioOnlyLibraryCount > initialLibraryCount,
+               "a resource-area audio drop must enter the music library")
+        for (var importedId of ImportController.importedTrackIds)
+            LibraryModel.removeTrack(importedId)
+        tryCompare(LibraryModel, "count", initialLibraryCount, 1000)
+        importFinished.clear()
 
         verify(nativeDropHelper.sendUrls(dropTarget,
                                          [folderUrl, folderUrl,
@@ -4830,15 +4840,16 @@ TestCase {
             return ResourceFolderController.monitoredFolders.length
                     === initialFolderCount + 1
         }, 1000)
-        compare(ImportController.busy, false,
-                "resource drops must not start an audio import")
+        tryCompare(importFinished, "count", 1, 5000)
+        tryVerify(function() { return !ImportController.busy }, 5000)
         compare(rootsChanged.count, 1,
                 "duplicate directory URLs must add one monitored root")
-        compare(importFinished.count, 0,
-                "resource drops must ignore audio files in mixed batches")
         verify(ImportController.errors.length === 0)
-        compare(LibraryModel.count, initialLibraryCount,
-                "a mixed resource drop must leave the music library unchanged")
+        verify(LibraryModel.count > initialLibraryCount,
+               "a mixed resource drop must import its audio files")
+        for (importedId of ImportController.importedTrackIds)
+            LibraryModel.removeTrack(importedId)
+        tryCompare(LibraryModel, "count", initialLibraryCount, 1000)
         var folderPath = decodeURIComponent(folderUrl.toString()
                                            .replace(/^file:\/\/\//, ""))
         folderPath = folderPath.replace(/\\/g, "/")

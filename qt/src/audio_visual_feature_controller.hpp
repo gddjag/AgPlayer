@@ -160,6 +160,7 @@ private:
     bool beatReliable_ = false;
     qint64 lastPositionMs_ = -1;
     qint64 lastBeatIndex_ = -1;
+    qint64 lastBeatEventPositionMs_ = -1;
     qint64 lastImpactGroup_ = -1;
     std::array<double, 24> lowFluxHistory_{};
     std::array<double, 24> highFluxHistory_{};

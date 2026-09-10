@@ -22,6 +22,7 @@ Item {
         Shape {
             objectName: "uploadedImmersivePath1"
             anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
             ShapePath {
                 strokeWidth: -1
                 fillColor: root.color
@@ -32,6 +33,7 @@ Item {
         Shape {
             objectName: "uploadedImmersivePath2"
             anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
             ShapePath {
                 strokeWidth: -1
                 fillColor: root.color
@@ -42,6 +44,7 @@ Item {
         Shape {
             objectName: "uploadedImmersivePath3"
             anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
             ShapePath {
                 strokeWidth: -1
                 fillColor: root.color
@@ -52,6 +55,7 @@ Item {
         Shape {
             objectName: "uploadedImmersivePath4"
             anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
             ShapePath {
                 strokeWidth: -1
                 fillColor: root.color

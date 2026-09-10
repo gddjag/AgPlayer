@@ -26,7 +26,7 @@ private slots:
     void preservesTheResourceFolderTargetForApplicationDispatch();
     void receivesQtUrlDropEvents();
     void leavesQtDirectoryDropsForQmlHitTesting();
-    void rejectsQtAudioDropsOverResourceHitTarget();
+    void routesQtAudioDropsToResourceHitTarget();
 #ifdef Q_OS_WIN
     void receivesARealWindowsDropFilesMessage();
 #endif
@@ -119,7 +119,7 @@ void NativeDropRouterTest::leavesQtDirectoryDropsForQmlHitTesting()
     QCOMPARE(dropped.count(), 0);
 }
 
-void NativeDropRouterTest::rejectsQtAudioDropsOverResourceHitTarget()
+void NativeDropRouterTest::routesQtAudioDropsToResourceHitTarget()
 {
     NativeDropRouter router;
     QWindow window;
@@ -137,13 +137,17 @@ void NativeDropRouterTest::rejectsQtAudioDropsOverResourceHitTarget()
     QDragEnterEvent enter(QPoint(40, 40), Qt::CopyAction, &mime,
                           Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(&window, &enter);
-    QVERIFY(!enter.isAccepted());
+    QVERIFY(enter.isAccepted());
     QDropEvent drop(QPointF(40, 40), Qt::CopyAction, &mime,
                     Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(&window, &drop);
 
-    QVERIFY(!drop.isAccepted());
-    QCOMPARE(dropped.count(), 0);
+    QVERIFY(drop.isAccepted());
+    QCOMPARE(dropped.count(), 1);
+    QCOMPARE(dropped.front().at(0).value<NativeDropRouter::Target>(),
+             NativeDropRouter::Target::ResourceFolder);
+    QCOMPARE(dropped.front().at(1).toStringList(),
+             QStringList({QStringLiteral("C:/音乐/资源区音频.flac")}));
 }
 
 #ifdef Q_OS_WIN

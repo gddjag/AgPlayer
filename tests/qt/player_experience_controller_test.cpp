@@ -132,7 +132,7 @@ void PlayerExperienceControllerTest::columnControlsNormalizeNotifyAndPersist()
     const Control controls[] = {
         {"columnDensity", 50, 200, 50},
         {"columnSize", 50, 200, 100}, {"columnOpacity", 0, 100, 100},
-        {"reactorBrightness", 0, 200, 100},
+        {"reactorBrightness", 0, 200, 68},
     };
     QSettings().clear();
     for (const auto& control : controls) {
@@ -152,7 +152,7 @@ void PlayerExperienceControllerTest::columnControlsNormalizeNotifyAndPersist()
         QVERIFY(property.write(&experience, 999));
         QCOMPARE(property.read(&experience).toInt(), control.maximum);
         QCOMPARE(changed.count(), lowChangeCount + 1);
-        QCOMPARE(experience.terrainAmplitude(), 50);
+        QCOMPARE(experience.terrainAmplitude(), 38);
         QCOMPARE(experience.subjectClarity(), 114);
         QCOMPARE(experience.rhythmStrength(), 30);
         PlayerExperienceController reloaded;
@@ -177,7 +177,7 @@ void PlayerExperienceControllerTest::materialControlsNormalizeNotifyAndPersist()
     const Control controls[] = {
         {"materialMode", 0, 2, 0}, {"materialSoftness", 0, 100, 45},
         {"jellyElasticity", 0, 100, 35}, {"inkDensity", 0, 100, 60},
-        {"rippleStrength", 0, 200, 39}, {"rippleWidth", 20, 200, 82},
+        {"rippleStrength", 0, 200, 100}, {"rippleWidth", 20, 200, 120},
         {"rippleDecay", 20, 200, 81},
         {"floatingBlockMinSize", 0, 100, 9}, {"floatingBlockMaxSize", 0, 100, 26},
         {"floatingBlockSpeed", 0, 100, 77}, {"floatingBlockIntensity", 0, 100, 55},
@@ -232,15 +232,15 @@ void PlayerExperienceControllerTest::freshInstallUsesMinimalMonochromeTheme()
     QCOMPARE(experience.columnDensity(), 50);
     QCOMPARE(experience.columnSize(), 100);
     QCOMPARE(experience.columnOpacity(), 100);
-    QCOMPARE(experience.reactorBrightness(), 100);
+    QCOMPARE(experience.reactorBrightness(), 68);
     QCOMPARE(experience.materialMode(), 0);
     QCOMPARE(experience.materialSoftness(), 45);
     QCOMPARE(experience.jellyElasticity(), 35);
     QCOMPARE(experience.inkDensity(), 60);
-    QCOMPARE(experience.rippleStrength(), 39);
-    QCOMPARE(experience.rippleWidth(), 82);
+    QCOMPARE(experience.rippleStrength(), 100);
+    QCOMPARE(experience.rippleWidth(), 120);
     QCOMPARE(experience.rippleDecay(), 81);
-    QCOMPARE(experience.terrainAmplitude(), 50);
+    QCOMPARE(experience.terrainAmplitude(), 38);
     QCOMPARE(experience.motionResponse(), 50);
     QCOMPARE(experience.gradientLayers(), 74);
     QCOMPARE(experience.glowIntensity(), 100);
@@ -319,7 +319,7 @@ void PlayerExperienceControllerTest::invalidStoredVisualValuesUseSafeDefaults()
     QCOMPARE(experience.columnSize(), 100);
     QCOMPARE(experience.columnDensity(), 50);
     QCOMPARE(experience.columnOpacity(), 100);
-    QCOMPARE(experience.terrainAmplitude(), 50);
+    QCOMPARE(experience.terrainAmplitude(), 38);
     QCOMPARE(experience.motionResponse(), 50);
     QCOMPARE(experience.cinemaShake(), 0.81);
     QCOMPARE(experience.audioResponse(), 121);
@@ -637,12 +637,12 @@ void PlayerExperienceControllerTest::strictlyParsesPersistedScalarTypes()
     settings.setValue(QStringLiteral("immersiveVisual/panelVisible"), 0);
 
     PlayerExperienceController malformed;
-    QCOMPARE(malformed.terrainAmplitude(), 50);
+    QCOMPARE(malformed.terrainAmplitude(), 38);
     QCOMPARE(malformed.qualityPreset(), 0);
     QCOMPARE(malformed.cinemaShake(), 0.81);
     QVERIFY(malformed.panelVisible());
     QCOMPARE(settings.value(QStringLiteral("immersiveVisual/terrainAmplitude")),
-             QVariant(50));
+             QVariant(38));
     QCOMPARE(settings.value(QStringLiteral("immersiveVisual/qualityPreset")),
              QVariant(0));
     QCOMPARE(settings.value(QStringLiteral("immersiveVisual/cinemaShake")).toDouble(),
@@ -892,10 +892,10 @@ void PlayerExperienceControllerTest::restoresDynamicDefaultsWithoutChangingTheme
 
     QCOMPARE(experience.themeId(), themeId);
     QCOMPARE(experience.coolColor(), coolColor);
-    QCOMPARE(experience.rippleStrength(), 39);
-    QCOMPARE(experience.rippleWidth(), 82);
+    QCOMPARE(experience.rippleStrength(), 100);
+    QCOMPARE(experience.rippleWidth(), 120);
     QCOMPARE(experience.rippleDecay(), 81);
-    QCOMPARE(experience.terrainAmplitude(), 50);
+    QCOMPARE(experience.terrainAmplitude(), 38);
     QCOMPARE(experience.glowIntensity(), 100);
     QCOMPARE(experience.rhythmSensitivity(), 80);
     QVERIFY(experience.ripplesEnabled());

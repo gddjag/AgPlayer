@@ -299,14 +299,19 @@ void AudioVisualFeatureController::processPlaybackPosition(qint64 positionMs)
     if (delta < 0 || delta > SeekThresholdMs) {
         lastPositionMs_ = positionMs;
         lastBeatIndex_ = beat;
+        lastBeatEventPositionMs_ = -1;
         lastImpactGroup_ = group;
         return;
     }
 
     const bool majorImpact = group > 0 && group > lastImpactGroup_;
-    if (beat > lastBeatIndex_) {
+    constexpr qint64 BeatDeduplicationMs = 160;
+    if (beat > lastBeatIndex_
+        && (lastBeatEventPositionMs_ < 0
+            || positionMs - lastBeatEventPositionMs_ >= BeatDeduplicationMs)) {
         triggerBeat(audibleSpectrum_ ? std::clamp(0.42 + energy_ * 0.34, 0.0, 0.76) : 0.0,
                     !majorImpact);
+        lastBeatEventPositionMs_ = positionMs;
     }
     if (majorImpact) {
         triggerImpact(audibleSpectrum_ ? std::clamp(0.68 + energy_ * 0.32, 0.0, 1.0) : 0.0);
@@ -399,20 +404,31 @@ void AudioVisualFeatureController::processSpectrum(const QVariantList& spectrum)
     highFluxHistory_[std::size_t(highWriteIndex)] = normalizedHighFlux;
     previousSpectrum_ = spectrum;
     ++derivedUpdateCount_;
+    constexpr qint64 BeatDeduplicationMs = 160;
     constexpr qint64 FallbackDebounceMs = 180;
-    if (!beatReliable_ && (kickPulse_ || snarePulse_)
+    const bool transient = kickPulse_ || snarePulse_;
+    const bool reliableTransient = beatReliable_ && transient
+        && lastPositionMs_ >= 0
+        && (lastBeatEventPositionMs_ < 0
+            || lastPositionMs_ - lastBeatEventPositionMs_ >= BeatDeduplicationMs);
+    const bool fallbackTransient = !beatReliable_ && transient
         && (!fallbackDebounce_.isValid()
-            || fallbackDebounce_.elapsed() >= FallbackDebounceMs)) {
+            || fallbackDebounce_.elapsed() >= FallbackDebounceMs);
+    if (reliableTransient || fallbackTransient) {
         const double strength = std::clamp(0.42 + energy_ * 0.38
                                                + (kickPulse_ ? 0.10 : 0.0),
                                            0.0, 0.82);
         triggerBeat(strength, false);
-        ++fallbackBeatCount_;
-        if (fallbackBeatCount_ % 8 == 0) {
-            triggerImpact(std::clamp(0.68 + energy_ * 0.32, 0.0, 1.0),
-                          false);
+        if (reliableTransient) {
+            lastBeatEventPositionMs_ = lastPositionMs_;
+        } else {
+            ++fallbackBeatCount_;
+            if (fallbackBeatCount_ % 8 == 0) {
+                triggerImpact(std::clamp(0.68 + energy_ * 0.32, 0.0, 1.0),
+                              false);
+            }
+            fallbackDebounce_.restart();
         }
-        fallbackDebounce_.restart();
     }
     emit featuresChanged();
     emit derivedUpdateCountChanged();
@@ -568,6 +584,7 @@ void AudioVisualFeatureController::resetBeatPosition() noexcept
     audibleSpectrum_ = false;
     lastPositionMs_ = -1;
     lastBeatIndex_ = -1;
+    lastBeatEventPositionMs_ = -1;
     lastImpactGroup_ = -1;
     fallbackBeatCount_ = 0;
 }

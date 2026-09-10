@@ -342,6 +342,16 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
                              * max(0.0, ubuf.sceneLighting.x);
             result += boundedSource(targetGlow * eventLight
                 * mix(0.35, 1.0, relativeY) * distanceFade, 0.22);
+            // Canonical themes also run through this reference material path.
+            // Keep every user-facing lighting control live in the real player
+            // while leaving captured reference replay (timbre.w == 0) exact.
+            result += boundedSource(receivedColumnLight(normal), 0.18);
+            float centerControl = clamp(ubuf.styleAudio.w, 0.0, 1.5);
+            float centerField = 1.0 - smoothstep(5.0, 38.0, centerDistance);
+            float centerPulse = 0.10 + clamp(ubuf.audioEnvelope.z, 0.0, 1.0) * 0.90;
+            result += boundedSource(targetGlow * centerField
+                * normalizedElevation * centerControl * centerPulse, 0.16);
+            result *= clamp(focus, 0.72, 1.0);
             float clarityDelta = ubuf.stylePresentation.z > 0.0
                 ? clamp(ubuf.stylePresentation.z, 0.2, 1.4) - 1.14 : 0.0;
             // Clarity separates the cap border and upper wall shoulder.  It

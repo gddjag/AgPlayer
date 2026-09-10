@@ -522,6 +522,11 @@ void TerrainReactorGpuSmokeTest::materialControlsChangeRenderedSurface_data()
     QTest::newRow("column-density") << QByteArray("columnDensity") << 0 << 50 << 200;
     QTest::newRow("column-opacity") << QByteArray("columnOpacity") << 0 << 0 << 100;
     QTest::newRow("reactor-brightness") << QByteArray("reactorBrightness") << 0 << 20 << 180;
+    QTest::newRow("column-inner-light") << QByteArray("columnInnerLight") << 0 << 0 << 200;
+    QTest::newRow("column-light-spill") << QByteArray("columnLightSpill") << 0 << 0 << 200;
+    QTest::newRow("column-light-radius") << QByteArray("columnLightRadius") << 0 << 20 << 200;
+    QTest::newRow("center-highlight") << QByteArray("centerHighlight") << 0 << 0 << 100;
+    QTest::newRow("depth-of-field") << QByteArray("depthOfField") << 0 << 0 << 150;
     QTest::newRow("theme-surface-sheen") << QByteArray("glowIntensity") << 0 << 0 << 100;
     QTest::newRow("column-clarity") << QByteArray("subjectClarity") << 0 << 20 << 140;
     QTest::newRow("ink-clarity") << QByteArray("subjectClarity") << 2 << 20 << 140;
@@ -537,6 +542,7 @@ void TerrainReactorGpuSmokeTest::materialControlsChangeRenderedSurface()
     const QVariant previousDensity = style.property("columnDensity");
     const auto restoreDensity = qScopeGuard([&] { style.setProperty("columnDensity", previousDensity); });
     style.applyTheme(QStringLiteral("nocturnal"));
+    if (control != "reactorBrightness") style.setReactorBrightness(100);
     QVERIFY2(style.setProperty("materialMode", mode), "Native material control is missing");
     QVERIFY(style.setProperty(control.constData(), low));
     style.setAutoRotate(0);
@@ -610,6 +616,7 @@ void TerrainReactorGpuSmokeTest::beatMaterialControlsChangeRenderedSurface_data(
     QTest::newRow("wave-width") << QByteArray("rippleWidth") << 20 << 200 << 200;
     QTest::newRow("wave-decay") << QByteArray("rippleDecay") << 20 << 200 << 1000;
     QTest::newRow("impact-decay") << QByteArray("rippleDecay") << 20 << 200 << 500;
+    QTest::newRow("rhythm-sensitivity") << QByteArray("rhythmSensitivity") << 0 << 100 << 200;
 }
 
 void TerrainReactorGpuSmokeTest::beatMaterialControlsChangeRenderedSurface()

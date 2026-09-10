@@ -109,20 +109,16 @@ Item {
 
     function stopCinematicSettle() {
         currentLineSettle.stop()
-        currentLine.settleOpacity = 1
-        currentLine.settleScale = 1
-        currentLine.settleOffsetY = 0
+        lyricStack.exchangeOffsetY = 0
     }
 
     function startCinematicSettle() {
         stopCinematicSettle()
-        if (!spatialMode || !enabled || !visible || !service
+        if (!enabled || !visible || !service
                 || !service.enabled || service.status !== LyricsService.Ready
                 || service.currentLine.length === 0)
             return
-        currentLine.settleOpacity = 0.62
-        currentLine.settleScale = 0.94
-        currentLine.settleOffsetY = 7
+        lyricStack.exchangeOffsetY = currentLine.height + lyricStack.spacing
         currentLineSettle.start()
     }
 
@@ -232,6 +228,7 @@ Item {
     Column {
         id: lyricStack
         objectName: "cinematicLyricsStage"
+        property real exchangeOffsetY: 0
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.verticalCenter: parent.verticalCenter
         width: parent.width - (root.spatialMode ? 0 : 36)
@@ -261,7 +258,7 @@ Item {
             elide: root.spatialMode ? Text.ElideRight : Text.ElideNone
             opacity: root.spatialMode
                      ? 0.32 + root.clarityScale * 0.18 : 1
-            visible: !root.spatialMode || text.length > 0
+            visible: true
             scale: root.spatialMode
                    ? 0.94 - root.depthScale * 0.02
                    : 1.0 - root.depthScale * 0.08
@@ -271,7 +268,8 @@ Item {
             transform: [
                 Translate {
                     objectName: "previousLyricDepthTransform"
-                    y: root.spatialMode ? -root.depthScale * 6 : 0
+                    y: (root.spatialMode ? -root.depthScale * 6 : 0)
+                       + lyricStack.exchangeOffsetY
                 },
                 Matrix4x4 {
                     matrix: root.lyricPlaneProjection(previousLine, 0.12)
@@ -282,17 +280,10 @@ Item {
         Text {
             id: currentLine
             objectName: "currentLyricLine"
-            property real settleOpacity: 1
-            property real settleScale: 1
-            property real settleOffsetY: 0
             width: parent.width
             text: root.service && root.service.currentLine.length > 0
                   ? root.service.currentLine : root.statusText()
-            color: root.lightBackground ? "#182D30" : root.spatialMode // theme-color-allow: immersive ink material foreground
-                   ? (root.sidePlacement
-                      ? root.spatialForegroundColor
-                      : Theme.onBrandGradientText)
-                   : Theme.primaryText
+            color: Theme.accent
             font.family: Theme.fontPrimary
             font.pixelSize: Math.max(Theme.fontSizeSection,
                                      Math.round(Theme.fontSizePageTitle * root.sizeScale))
@@ -302,21 +293,21 @@ Item {
             lineHeightMode: Text.ProportionalHeight
             height: root.spatialMode ? Math.ceil(font.pixelSize * 2.35)
                                      : implicitHeight
-            font.weight: root.clarity >= 64 ? Font.DemiBold : Font.Medium
+            font.weight: Font.Bold
             horizontalAlignment: root.lineAlignment
             wrapMode: Text.Wrap
             maximumLineCount: root.spatialMode ? 2 : 3
             elide: root.spatialMode ? Text.ElideRight : Text.ElideNone
-            opacity: root.spatialMode ? settleOpacity : 1
+            opacity: 1
             scale: root.spatialMode
-                   ? (1.04 + root.depthScale * 0.05) * settleScale : 1
+                   ? 1.04 + root.depthScale * 0.05 : 1
             transformOrigin: root.placement === PlayerExperienceController.Right
                              ? Item.Right : root.placement === PlayerExperienceController.Left
                                             ? Item.Left : Item.Center
             transform: [
                 Translate {
                     objectName: "currentLyricEntranceTransform"
-                    y: currentLine.settleOffsetY
+                    y: lyricStack.exchangeOffsetY
                 },
                 Matrix4x4 {
                     objectName: "cinematicLyricsPerspective"
@@ -348,7 +339,7 @@ Item {
             elide: root.spatialMode ? Text.ElideRight : Text.ElideNone
             opacity: root.spatialMode
                      ? 0.26 + root.clarityScale * 0.15 : 1
-            visible: !root.spatialMode || text.length > 0
+            visible: true
             scale: root.spatialMode
                    ? 0.90 - root.depthScale * 0.02
                    : 1.0 - root.depthScale * 0.14
@@ -358,7 +349,8 @@ Item {
             transform: [
                 Translate {
                     objectName: "nextLyricDepthTransform"
-                    y: root.spatialMode ? root.depthScale * 6 : 0
+                    y: (root.spatialMode ? root.depthScale * 6 : 0)
+                       + lyricStack.exchangeOffsetY
                 },
                 Matrix4x4 {
                     matrix: root.lyricPlaneProjection(nextLine, 0.22)
@@ -382,14 +374,13 @@ Item {
         preferredHighlightBegin: height / 2 - 22
         preferredHighlightEnd: height / 2 + 22
         highlightRangeMode: ListView.StrictlyEnforceRange
+        highlight: Item { }
+        highlightMoveDuration: 320
+        highlightResizeDuration: 220
         boundsBehavior: Flickable.StopAtBounds
         header: Item { width: 1; height: Math.max(0, timelineList.height / 2 - 22) }
         footer: Item { width: 1; height: Math.max(0, timelineList.height / 2 - 22) }
         onMovementStarted: root.noteManualScroll()
-        onCurrentIndexChanged: {
-            if (currentIndex >= 0 && !moving && !flicking)
-                positionViewAtIndex(currentIndex, ListView.Center)
-        }
 
         delegate: Item {
             required property int index
@@ -403,7 +394,7 @@ Item {
                 anchors.rightMargin: 4
                 text: parent.text
                 color: parent.index === timelineList.currentIndex
-                       ? Theme.primaryText : Theme.textSecondary
+                       ? Theme.accent : Theme.textSecondary
                 opacity: parent.index === timelineList.currentIndex ? 1 : 0.64
                 font.family: Theme.fontPrimary
                 font.pixelSize: Math.max(
@@ -412,7 +403,7 @@ Item {
                                 ? Theme.fontSizeSection : Theme.fontSizeBody)
                                * root.sizeScale))
                 font.weight: parent.index === timelineList.currentIndex
-                             ? Font.DemiBold : Font.Normal
+                             ? Font.Bold : Font.Normal
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
                 wrapMode: Text.Wrap
@@ -422,30 +413,14 @@ Item {
         }
     }
 
-    ParallelAnimation {
+    NumberAnimation {
         id: currentLineSettle
         objectName: "cinematicLyricsSettleAnimation"
-        NumberAnimation {
-            target: currentLine
-            property: "settleOpacity"
-            to: 1
-            duration: 180
-            easing.type: Easing.OutCubic
-        }
-        NumberAnimation {
-            target: currentLine
-            property: "settleScale"
-            to: 1
-            duration: 220
-            easing.type: Easing.OutCubic
-        }
-        NumberAnimation {
-            target: currentLine
-            property: "settleOffsetY"
-            to: 0
-            duration: 220
-            easing.type: Easing.OutCubic
-        }
+        target: lyricStack
+        property: "exchangeOffsetY"
+        to: 0
+        duration: 320
+        easing.type: Easing.OutCubic
     }
 
     Connections {
@@ -470,7 +445,7 @@ Item {
             chromeVisible = true
         }
     }
-    onServiceChanged: if (currentLine && currentLineSettle) startCinematicSettle()
+    onServiceChanged: if (currentLine && currentLineSettle) stopCinematicSettle()
     onEnabledChanged: if (!enabled) stopCinematicSettle()
     onVisibleChanged: {
         if (!visible) {
@@ -490,7 +465,7 @@ Item {
             String(root.service && root.service.sourceProvider || "")
         readonly property string attribution:
             String(root.service && root.service.sourceAttribution || "")
-        visible: (root.spatialMode || root.chromeVisible)
+        visible: !root.spatialMode && root.chromeVisible
                  && providerName.length > 0
         anchors.left: parent.left
         anchors.top: parent.top

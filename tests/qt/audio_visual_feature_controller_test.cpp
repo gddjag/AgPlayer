@@ -87,6 +87,7 @@ private slots:
     void visualPcmBatchingPreservesAnalysisAndEpochReset();
     void reliableBpmEmitsOnceEveryEightBeats();
     void reliableBpmEmitsRegularBeatPulseAndEightBeatImpact();
+    void reliableBpmUsesTransientPhaseAndDeduplicatesGridBeat();
     void seeksAndTrackChangesDoNotEmitDuplicateImpacts();
     void unreliableTimingUsesDebouncedTransientFallbackOnly();
     void outputLevelsHaveFastAttackAndVisibleDecay();
@@ -905,6 +906,33 @@ void AudioVisualFeatureControllerTest::reliableBpmEmitsRegularBeatPulseAndEightB
     }
     QCOMPARE(features.beatRevision(), 8);
     QCOMPARE(features.impactRevision(), 1);
+}
+
+void AudioVisualFeatureControllerTest::reliableBpmUsesTransientPhaseAndDeduplicatesGridBeat()
+{
+    AudioVisualFeatureController features;
+    features.setActive(true);
+    features.setWaveformTiming(QStringLiteral("track-phase"), 120.0, 120000,
+                               QVariantList{0.2, 0.6, 0.4});
+    features.processPlaybackPosition(0);
+    features.processSpectrum(spectrum(0.0));
+
+    features.processPlaybackPosition(450);
+    features.processSpectrum(spectrum(0.30, true));
+    QCOMPARE(features.beatRevision(), 1);
+    features.processPlaybackPosition(500);
+    QCOMPARE(features.beatRevision(), 1);
+
+    features.processSpectrum(spectrum(0.0));
+    features.processPlaybackPosition(950);
+    features.processSpectrum(spectrum(0.30, true));
+    QCOMPARE(features.beatRevision(), 2);
+    features.processPlaybackPosition(1000);
+    QCOMPARE(features.beatRevision(), 2);
+
+    features.processSpectrum(spectrum(0.0));
+    features.processPlaybackPosition(1500);
+    QCOMPARE(features.beatRevision(), 3);
 }
 
 void AudioVisualFeatureControllerTest::seeksAndTrackChangesDoNotEmitDuplicateImpacts()

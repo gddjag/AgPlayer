@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Shapes
 import QtQuick.Window
 import QtTest
 import AgPlayer
@@ -479,10 +480,18 @@ TestCase {
         verify(action)
         var icon = findChild(action, "animatedImmersiveIcon")
         verify(icon, "The three player themes must reuse the uploaded immersive icon")
-        verify(findChild(icon, "uploadedImmersivePath1"))
-        verify(findChild(icon, "uploadedImmersivePath2"))
-        verify(findChild(icon, "uploadedImmersivePath3"))
-        verify(findChild(icon, "uploadedImmersivePath4"))
+        var uploadedPaths = [
+            findChild(icon, "uploadedImmersivePath1"),
+            findChild(icon, "uploadedImmersivePath2"),
+            findChild(icon, "uploadedImmersivePath3"),
+            findChild(icon, "uploadedImmersivePath4")
+        ]
+        for (var pathIndex = 0; pathIndex < uploadedPaths.length; ++pathIndex) {
+            verify(uploadedPaths[pathIndex])
+            compare(uploadedPaths[pathIndex].preferredRendererType,
+                    Shape.CurveRenderer,
+                    "Small immersive paths must use analytic curve antialiasing")
+        }
         var previousTheme = SettingsController.themeMode
         try {
             for (var mode = 0; mode < 2; ++mode) {
@@ -600,7 +609,7 @@ TestCase {
         verify(findChild(panel, "untimedLyricsFlickable").visible)
         verify(findChild(panel, "untimedLyricsText").text.indexOf(
                    "spatial plain lyric two") >= 0)
-        verify(findChild(panel, "lyricsSourceText").visible)
+        compare(findChild(panel, "lyricsSourceText").visible, false)
         var routeNotice = findChild(panel, "lyricsRouteNotice")
         verify(routeNotice.visible)
         compare(findChild(routeNotice, "lyricsRouteNoticeText").text,
@@ -709,20 +718,26 @@ TestCase {
         var surface = findChild(panel, "lyricsPanelSurface")
         var currentLine = findChild(panel, "currentLyricLine")
         var source = findChild(panel, "lyricsSourceText")
-        verify(surface && currentLine && source)
+        var timeline = findChild(panel, "lyricsTimelineList")
+        verify(surface && currentLine && source && timeline)
+        compare(timeline.highlightMoveDuration, 320)
+        verify(currentLine.font.pixelSize
+               > findChild(panel, "previousLyricLine").font.pixelSize)
         try {
             SettingsController.themeMode = 0
             tryCompare(Theme, "isLight", false)
             compare(surface.color.toString(), Theme.glassSurface.toString())
             compare(surface.border.color.toString(), Theme.glassBorder.toString())
-            compare(currentLine.color.toString(), Theme.primaryText.toString())
+            compare(currentLine.color.toString(), Theme.accent.toString())
+            compare(currentLine.font.weight, Font.Bold)
             compare(source.color.toString(), Theme.textSecondary.toString())
 
             SettingsController.themeMode = 1
             tryCompare(Theme, "isLight", true)
             compare(surface.color.toString(), Theme.glassSurface.toString())
             compare(surface.border.color.toString(), Theme.glassBorder.toString())
-            compare(currentLine.color.toString(), Theme.primaryText.toString())
+            compare(currentLine.color.toString(), Theme.accent.toString())
+            compare(currentLine.font.weight, Font.Bold)
             compare(source.color.toString(), Theme.textSecondary.toString())
         } finally {
             panel.destroy()
@@ -1893,9 +1908,6 @@ TestCase {
         compare(nextLine.font.pixelSize, Theme.fontSizeBody)
         PlayerExperienceController.warmColor = "#6f3516"
         panel.placement = PlayerExperienceController.Left
-        var currentLuma = 0.2126 * currentLine.color.r
-                + 0.7152 * currentLine.color.g
-                + 0.0722 * currentLine.color.b
         var previousEffectiveLuma = previousLine.opacity
                 * (0.2126 * previousLine.color.r
                    + 0.7152 * previousLine.color.g
@@ -1907,7 +1919,8 @@ TestCase {
         verify(currentLine.color.a > 0.99)
         verify(previousLine.color.a > 0.99)
         verify(nextLine.color.a > 0.99)
-        verify(currentLuma >= 0.58)
+        compare(currentLine.color.toString(), Theme.accent.toString())
+        compare(currentLine.font.weight, Font.Bold)
         verify(previousEffectiveLuma >= 0.25)
         verify(nextEffectiveLuma >= 0.22)
         verify(panel.implicitHeight >= stage.implicitHeight)
@@ -2060,8 +2073,8 @@ TestCase {
         lyricsFake.currentLine = "进入的新歌词"
         compare(currentLine.text, "进入的新歌词")
         tryCompare(settle, "running", true, 50)
-        verify(currentLine.opacity < 1)
-        verify(currentLine.scale < stableScale)
+        compare(currentLine.opacity, 1)
+        verify(Math.abs(currentLine.scale - stableScale) < 0.001)
         verify(entrance.y > 0)
         tryCompare(settle, "running", false, 400)
         verify(Math.abs(currentLine.opacity - 1) < 0.001)
@@ -2081,8 +2094,8 @@ TestCase {
 
         lyricsFake.previousLine = ""
         lyricsFake.nextLine = ""
-        compare(previousLine.visible, false)
-        compare(nextLine.visible, false)
+        compare(previousLine.visible, true)
+        compare(nextLine.visible, true)
 
         lyricsFake.currentLine = ""
         var fallbackStatuses = [LyricsService.Loading,
@@ -2100,7 +2113,8 @@ TestCase {
         lyricsFake.status = LyricsService.Ready
         panel.spatialMode = false
         lyricsFake.currentLine = "普通窗口歌词"
-        compare(settle.running, false)
+        tryCompare(settle, "running", true, 50)
+        tryCompare(settle, "running", false, 400)
         compare(currentLine.opacity, 1)
         compare(currentLine.scale, 1)
 
@@ -2153,10 +2167,11 @@ TestCase {
         transientLyricsPanel.service = loadingLyricsFake
         transientLyricsPanel.service = readyLyricsFake
         compare(currentLine.text, "B 新服务歌词")
-        tryCompare(settle, "running", true, 50)
-        verify(currentLine.opacity < 1)
+        compare(settle.running, false)
+        compare(currentLine.opacity, 1)
         readyLyricsFake.currentLine = "B 最终歌词"
         compare(currentLine.text, "B 最终歌词")
+        tryCompare(settle, "running", true, 50)
         tryCompare(settle, "running", false, 400)
         compare(currentLine.text, "B 最终歌词")
         compare(currentLine.opacity, 1)
@@ -2406,7 +2421,9 @@ TestCase {
 
         var terrainKeys = ["terrainAmplitude", "inputCompression", "audioResponse",
                            "responseRange", "subjectClarity"]
-        var lightKeys = ["centerHighlight", "depthOfField"]
+        var lightKeys = ["columnInnerLight", "columnLightSpill",
+                         "columnLightRadius", "centerHighlight",
+                         "depthOfField"]
         var motionKeys = ["autoRotateSpeed", "rhythmSensitivity"]
         for (var terrainIndex = 0; terrainIndex < terrainKeys.length;
              ++terrainIndex)
@@ -2454,6 +2471,26 @@ TestCase {
         lightSlider.moved()
         compare(PlayerExperienceController.centerHighlight, 41)
 
+        var liveControlCases = [
+            { key: "columnInnerLight", value: 77 },
+            { key: "columnLightSpill", value: 88 },
+            { key: "columnLightRadius", value: 99 },
+            { key: "centerHighlight", value: 52 },
+            { key: "depthOfField", value: 61 },
+            { key: "rhythmSensitivity", value: 72 }
+        ]
+        for (var liveIndex = 0; liveIndex < liveControlCases.length;
+             ++liveIndex) {
+            var liveCase = liveControlCases[liveIndex]
+            var liveSlider = findChild(panel,
+                    "dynamicSlider_" + liveCase.key)
+            verify(liveSlider, "missing interactive control " + liveCase.key)
+            liveSlider.value = liveCase.value
+            liveSlider.moved()
+            compare(Number(PlayerExperienceController[liveCase.key]),
+                    liveCase.value)
+        }
+
         var motionSlider = findChild(motionGroup,
                                      "dynamicSlider_autoRotateSpeed")
         compare(motionSlider.from, 0)
@@ -2499,7 +2536,10 @@ TestCase {
         verify(restoreDefaults.text.length > 0)
         restoreDefaults.clicked()
         compare(PlayerExperienceController.inputCompression, 99)
-        compare(PlayerExperienceController.terrainAmplitude, 50)
+        compare(PlayerExperienceController.rippleStrength, 100)
+        compare(PlayerExperienceController.rippleWidth, 120)
+        compare(PlayerExperienceController.reactorBrightness, 68)
+        compare(PlayerExperienceController.terrainAmplitude, 38)
         compare(PlayerExperienceController.centerHighlight, 40)
         compare(PlayerExperienceController.autoRotateSpeed, 78)
         compare(PlayerExperienceController.rhythmStrength, 30)

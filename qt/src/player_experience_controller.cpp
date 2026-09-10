@@ -859,18 +859,18 @@ bool PlayerExperienceController::applyTheme(const QString& id)
 
 void PlayerExperienceController::restoreDynamicDefaults()
 {
-    setRippleStrength(39);
-    setRippleWidth(82);
+    setRippleStrength(100);
+    setRippleWidth(120);
     setRippleDecay(81);
     setColumnSize(100);
     setColumnDensity(50);
     setTopographyDensity(46);
     setColumnOpacity(100);
-    setReactorBrightness(100);
+    setReactorBrightness(68);
     setColumnInnerLight(155);
     setColumnLightSpill(176);
     setColumnLightRadius(86);
-    setTerrainAmplitude(50);
+    setTerrainAmplitude(38);
     setMotionResponse(50);
     setGradientLayers(74);
     setGlowIntensity(100);
@@ -986,19 +986,19 @@ void PlayerExperienceController::load()
                                              QStringLiteral("#040A1C")),
                                  QStringLiteral("#040A1C"));
     themeBackground_ = QColor(baseColor_);
-    terrainAmplitude_ = clampPercent(integer(QStringLiteral("terrainAmplitude"), 50));
+    terrainAmplitude_ = clampPercent(integer(QStringLiteral("terrainAmplitude"), 38));
     materialMode_ = enumOrDefault(integer(QStringLiteral("materialMode"), 0), 0, 2, 0);
     materialSoftness_ = clampRange(integer(QStringLiteral("materialSoftness"), 45), 0, 100);
     jellyElasticity_ = clampRange(integer(QStringLiteral("jellyElasticity"), 35), 0, 100);
     inkDensity_ = clampRange(integer(QStringLiteral("inkDensity"), 60), 0, 100);
-    rippleStrength_ = clampRange(integer(QStringLiteral("rippleStrength"), 39), 0, 200);
-    rippleWidth_ = clampRange(integer(QStringLiteral("rippleWidth"), 82), 20, 200);
+    rippleStrength_ = clampRange(integer(QStringLiteral("rippleStrength"), 100), 0, 200);
+    rippleWidth_ = clampRange(integer(QStringLiteral("rippleWidth"), 120), 20, 200);
     rippleDecay_ = clampRange(integer(QStringLiteral("rippleDecay"), 81), 20, 200);
     columnSize_ = clampRange(integer(QStringLiteral("columnSize"), 100), 50, 200);
     columnDensity_ = clampRange(integer(QStringLiteral("columnDensity"), 50), 50, 200);
     topographyDensity_ = clampPercent(integer(QStringLiteral("topographyDensity"), 46));
     columnOpacity_ = clampRange(integer(QStringLiteral("columnOpacity"), 100), 0, 100);
-    reactorBrightness_ = clampRange(integer(QStringLiteral("reactorBrightness"), 100), 0, 200);
+    reactorBrightness_ = clampRange(integer(QStringLiteral("reactorBrightness"), 68), 0, 200);
     columnInnerLight_ = clampRange(integer(QStringLiteral("columnInnerLight"), 155), 0, 200);
     columnLightSpill_ = clampRange(integer(QStringLiteral("columnLightSpill"), 176), 0, 200);
     columnLightRadius_ = clampRange(integer(QStringLiteral("columnLightRadius"), 86), 20, 200);
