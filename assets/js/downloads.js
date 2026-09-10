@@ -41,6 +41,23 @@
     button.removeAttribute('aria-disabled');
   }
 
+  function ensureDownloadDetails() {
+    const windows = document.querySelector('#windows');
+    const macos = document.querySelector('#macos');
+    if (!windows || !macos) return;
+    const details = (systemKey, systemText, filename, size) => {
+      const list = document.createElement('dl');
+      list.className = 'platform-meta';
+      list.innerHTML = `<div><dt data-i18n="downloadPage.meta.system">${AG.t('downloadPage.meta.system')}</dt><dd data-i18n="${systemKey}">${systemText}</dd></div><div><dt data-i18n="downloadPage.meta.filename">${AG.t('downloadPage.meta.filename')}</dt><dd>${filename}</dd></div><div><dt data-i18n="downloadPage.meta.size">${AG.t('downloadPage.meta.size')}</dt><dd>${size}</dd></div>`;
+      return list;
+    };
+    if (!windows.querySelector('.platform-meta')) windows.querySelector('h2')?.after(details('downloadPage.windows.system', AG.t('downloadPage.windows.system'), 'AgPlayer-Setup-1.0.0-x64.exe', '34.5 MB'));
+    if (!macos.querySelector('.platform-meta')) macos.querySelector('h2')?.after(details('downloadPage.macos.system', AG.t('downloadPage.macos.system'), AG.t('downloadPage.meta.pending'), '—'));
+    if (!windows.querySelector('.release-checksum')) {
+      windows.insertAdjacentHTML('beforeend', `<div id="windows-checksum" class="release-checksum" hidden><span data-i18n="downloadPage.checksum.label">${AG.t('downloadPage.checksum.label')}</span><code id="windows-sha256"></code><button type="button" id="windows-sha256-copy" disabled aria-disabled="true" data-i18n="downloadPage.checksum.copy">${AG.t('downloadPage.checksum.copy')}</button></div>`);
+    }
+  }
+
   async function readManifest(response) {
     const declaredLength = response.headers.get('content-length');
     if (declaredLength !== null && (!/^\d+$/.test(declaredLength) || Number(declaredLength) > maxManifestBytes)) return null;
@@ -73,6 +90,7 @@
   }
 
   async function hydrateDownloads() {
+    ensureDownloadDetails();
     const primary = document.querySelector('.download-primary');
     const github = document.querySelector('.download-github');
     const status = document.querySelector('#windows-download-status');
@@ -81,9 +99,7 @@
     const checksumCopy = document.querySelector('#windows-sha256-copy');
     if (!primary || !github || !status || !checksum || !checksumValue || !checksumCopy) return;
     let activeRelease = publishedWindowsRelease;
-    const renderStatus = () => {
-      status.textContent = AG.t('downloadPage.windows.available', { version: activeRelease.version });
-    };
+    const renderStatus = () => { status.textContent = AG.t('downloadPage.windows.available', { version: activeRelease.version }); };
     const renderRelease = release => {
       activeRelease = release;
       enable(primary, release.r2Url);
@@ -116,7 +132,7 @@
       if (!release) return;
       renderRelease(release);
     } catch (_) {
-      // Keep the last verified published release available when metadata is unreachable.
+      // Keep the honest pre-release state for unavailable or malformed metadata.
     } finally {
       clearTimeout(timeout);
     }
@@ -124,3 +140,4 @@
 
   if (document.body?.dataset.page === 'download') void hydrateDownloads();
 })();
+

@@ -229,12 +229,19 @@ window.AG_COPY = {
     "downloadPage": {
       "title": "把音乐，留在身边。",
       "description": "选择适合你的桌面版本，开始本地音乐体验。",
+      "meta": {
+        "system": "适用于",
+        "filename": "文件名",
+        "size": "文件大小",
+        "pending": "待发布"
+      },
       "windows": {
         "name": "Windows",
         "status": "暂未提供下载",
         "github": "GitHub下载",
         "r2": "下载",
         "description": "正式版本准备中，GitHub 与 R2 下载即将开放。",
+        "system": "Windows 10 / 11 64 位系统",
         "available": "Windows {version} 已发布，可从 R2 或 GitHub 下载。"
       },
       "checksum": {
@@ -244,6 +251,7 @@ window.AG_COPY = {
       "macos": {
         "name": "macOS",
         "status": "暂未提供下载",
+        "system": "macOS 13 及以上（Apple / Intel）",
         "description": "下载地址与系统要求将在发布时更新。"
       },
       "faqTitle": "下载前，了解这些",
@@ -571,12 +579,19 @@ window.AG_COPY = {
     "downloadPage": {
       "title": "Keep your music close.",
       "description": "Choose your desktop version. Enjoy local music.",
+      "meta": {
+        "system": "System",
+        "filename": "File name",
+        "size": "File size",
+        "pending": "To be announced"
+      },
       "windows": {
         "name": "Windows",
         "status": "Not yet available",
         "github": "GitHub download",
         "r2": "Download",
         "description": "The official release is being prepared. GitHub and R2 downloads are coming soon.",
+        "system": "Windows 10 / 11, 64-bit",
         "available": "Windows {version} is available from R2 or GitHub."
       },
       "checksum": {
@@ -586,6 +601,7 @@ window.AG_COPY = {
       "macos": {
         "name": "macOS",
         "status": "Not yet available",
+        "system": "macOS 13 or later (Apple / Intel)",
         "description": "Links and system requirements at release."
       },
       "faqTitle": "Before you download",
@@ -684,3 +700,6 @@ window.AG_COPY = {
     }
   }
 };
+
+
+
