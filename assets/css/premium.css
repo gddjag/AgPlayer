@@ -133,3 +133,23 @@ body[data-page="download"] .platform+.platform{
   body[data-page="download"] .platform+.platform{border:1px solid #c9a9e52b}
 }
 
+/* Keep the two Windows download actions aligned on one row. */
+body[data-page="download"] .download-sources{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+  width:min(520px,100%);
+  max-width:none;
+}
+body[data-page="download"] .platform .download-sources .button{
+  width:100%;
+  max-width:none;
+  margin:0!important;
+  padding-inline:16px;
+  white-space:nowrap;
+}
+@media(max-width:420px){
+  body[data-page="download"] .download-sources{gap:8px}
+  body[data-page="download"] .platform .download-sources .button{padding-inline:8px;font-size:12px}
+}
+
