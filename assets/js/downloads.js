@@ -5,6 +5,12 @@
   const maxManifestBytes = 65536;
   const requestTimeoutMs = 10000;
   const stableVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+  const publishedWindowsRelease = Object.freeze({
+    version: '1.0.0',
+    githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.0.0/AgPlayer-Setup-1.0.0-x64.exe',
+    r2Url: 'https://download.agplayer.com/releases/v1.0.0/AgPlayer-Setup-1.0.0-x64.exe',
+    sha256: 'B379A969A3F61C31C6C0864F7D7EB9A2435BC268F47FDD5A52D5C70B0EE63F78'
+  });
 
   function selectWindowsRelease(manifest) {
     if (!manifest || manifest.schemaVersion !== 1 || typeof manifest.version !== 'string' || !stableVersion.test(manifest.version)) return null;
@@ -25,10 +31,14 @@
   }
 
   function enable(button, url) {
+    button.dataset.downloadUrl = url;
+    if (button.dataset.downloadBound !== 'true') {
+      button.addEventListener('click', () => location.assign(button.dataset.downloadUrl));
+      button.dataset.downloadBound = 'true';
+    }
     button.disabled = false;
     button.classList.remove('disabled');
     button.removeAttribute('aria-disabled');
-    button.addEventListener('click', () => location.assign(url));
   }
 
   async function readManifest(response) {
@@ -70,6 +80,26 @@
     const checksumValue = document.querySelector('#windows-sha256');
     const checksumCopy = document.querySelector('#windows-sha256-copy');
     if (!primary || !github || !status || !checksum || !checksumValue || !checksumCopy) return;
+    let activeRelease = publishedWindowsRelease;
+    const renderStatus = () => {
+      status.textContent = AG.t('downloadPage.windows.available', { version: activeRelease.version });
+    };
+    const renderRelease = release => {
+      activeRelease = release;
+      enable(primary, release.r2Url);
+      enable(github, release.githubUrl);
+      checksumValue.textContent = release.sha256;
+      checksum.removeAttribute('hidden');
+      checksumCopy.disabled = false;
+      checksumCopy.removeAttribute('aria-disabled');
+      status.removeAttribute('data-i18n');
+      renderStatus();
+    };
+    checksumCopy.addEventListener('click', () => {
+      void navigator.clipboard?.writeText(activeRelease.sha256).catch(() => {});
+    });
+    document.addEventListener('ag:languagechange', renderStatus);
+    renderRelease(publishedWindowsRelease);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
     try {
@@ -84,21 +114,9 @@
       if (text === null) return;
       const release = selectWindowsRelease(JSON.parse(text));
       if (!release) return;
-      enable(primary, release.r2Url);
-      enable(github, release.githubUrl);
-      checksumValue.textContent = release.sha256;
-      checksum.removeAttribute('hidden');
-      checksumCopy.disabled = false;
-      checksumCopy.removeAttribute('aria-disabled');
-      checksumCopy.addEventListener('click', () => {
-        void navigator.clipboard?.writeText(release.sha256).catch(() => {});
-      });
-      status.removeAttribute('data-i18n');
-      const renderStatus = () => { status.textContent = AG.t('downloadPage.windows.available', { version: release.version }); };
-      renderStatus();
-      document.addEventListener('ag:languagechange', renderStatus);
+      renderRelease(release);
     } catch (_) {
-      // Keep the honest pre-release state for unavailable or malformed metadata.
+      // Keep the last verified published release available when metadata is unreachable.
     } finally {
       clearTimeout(timeout);
     }

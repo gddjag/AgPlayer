@@ -6,14 +6,17 @@ import { join } from 'node:path';
 import { runInNewContext } from 'node:vm';
 
 const scriptPath = join(import.meta.dirname, '..', 'assets', 'js', 'downloads.js');
+const downloadPagePath = join(import.meta.dirname, '..', 'download.html');
+const siteCssPath = join(import.meta.dirname, '..', 'assets', 'css', 'site.css');
 
 function fakeElement() {
   const attributes = new Map([['aria-disabled', 'true']]);
   const classes = new Set(['disabled']);
   const listeners = new Map();
-  return {
+  const element = {
     disabled: true,
     textContent: '',
+    dataset: {},
     classList: {
       contains: name => classes.has(name),
       remove: name => classes.delete(name)
@@ -24,6 +27,7 @@ function fakeElement() {
     hasAttribute: name => attributes.has(name),
     click: () => listeners.get('click')?.()
   };
+  return element;
 }
 
 function streamedResponse(body, { ok = true, contentLength = true, chunkSize = body.length } = {}) {
@@ -145,7 +149,7 @@ test('published Windows release exposes the real uppercase SHA-256 and copies it
   assert.deepEqual(result.clipboardWrites, [expected]);
 });
 
-test('missing, oversized, or untrusted manifests keep downloads disabled', async () => {
+test('published 1.0.0 remains available when the live manifest cannot be read', async () => {
   const cases = [
     { ok: false },
     streamedResponse('x'.repeat(65537)),
@@ -154,12 +158,24 @@ test('missing, oversized, or untrusted manifests keep downloads disabled', async
   ];
   for (const response of cases) {
     const result = await runDownloadScript(response);
-    assert.equal(result.primary.disabled, true);
-    assert.equal(result.github.disabled, true);
-    assert.equal(result.checksum.hasAttribute('hidden'), true);
-    assert.equal(result.checksumValue.textContent, '');
-    assert.deepEqual(result.navigations, []);
+    assert.equal(result.primary.disabled, false);
+    assert.equal(result.github.disabled, false);
+    assert.equal(result.checksum.hasAttribute('hidden'), false);
+    assert.equal(result.checksumValue.textContent, 'B379A969A3F61C31C6C0864F7D7EB9A2435BC268F47FDD5A52D5C70B0EE63F78');
+    result.primary.click();
+    result.github.click();
+    assert.deepEqual(result.navigations, [
+      'https://download.agplayer.com/releases/v1.0.0/AgPlayer-Setup-1.0.0-x64.exe',
+      'https://github.com/gddjag/AgPlayer/releases/download/v1.0.0/AgPlayer-Setup-1.0.0-x64.exe'
+    ]);
   }
+});
+
+test('download page hides the removed pre-download FAQ section and divider', async () => {
+  const html = await readFile(downloadPagePath, 'utf8');
+  const css = await readFile(siteCssPath, 'utf8');
+  assert.match(css, /\.download-faq\s*\{\s*display:\s*none\s*\}/);
+  assert.match(html, /site\.css\?v=20260911-release-1/);
 });
 
 test('chunked manifest cancels the stream as soon as it exceeds 64 KiB', async () => {
@@ -179,7 +195,7 @@ test('chunked manifest cancels the stream as soon as it exceeds 64 KiB', async (
   };
   const result = await runDownloadScript(response);
   assert.equal(cancelled, true);
-  assert.equal(result.primary.disabled, true);
+  assert.equal(result.primary.disabled, false);
 });
 
 test('manifest request aborts after the ten second deadline', async () => {
@@ -192,6 +208,6 @@ test('manifest request aborts after the ten second deadline', async () => {
     clearTimeout: () => {}
   });
   assert.equal(signal.aborted, true);
-  assert.equal(result.primary.disabled, true);
-  assert.equal(result.github.disabled, true);
+  assert.equal(result.primary.disabled, false);
+  assert.equal(result.github.disabled, false);
 });
