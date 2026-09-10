@@ -49,6 +49,7 @@ void AudioVisualFeatureController::setVisualPcmEnabled(bool enabled)
 
 void AudioVisualFeatureController::resetVisualPcm()
 {
+    ++visualPcmEpoch_;
     const bool hadPcm = visualPcmSize_ != 0;
     visualAnalyzer_.reset();
     visualFeatureAnalyzer_.reset();
@@ -56,6 +57,7 @@ void AudioVisualFeatureController::resetVisualPcm()
     visualFeatures_ = {};
     visualKick_ = {};
     visualSamplesSinceUpdate_ = 0;
+    visualAnalysisTimer_.invalidate();
     visualPcm_.fill(0.0f);
     visualSpectrum_.fill(0);
     visualPcmSize_ = 0;
@@ -75,7 +77,8 @@ void AudioVisualFeatureController::setVisualKickSensitivity(int sensitivity)
     emit visualKickSensitivityChanged();
 }
 
-void AudioVisualFeatureController::ingestVisualPcm(const ag_visual_pcm_snapshot& pcm)
+void AudioVisualFeatureController::ingestVisualPcm(const ag_visual_pcm_snapshot& pcm,
+                                                bool deferAnalysis)
 {
     if (!active_) return;
     // Empty reads carry the epoch but no sample rate or sample index.
@@ -104,12 +107,65 @@ void AudioVisualFeatureController::ingestVisualPcm(const ag_visual_pcm_snapshot&
     std::copy_n(pcm.samples, pcm.sample_count, visualPcm_.begin() + retained);
     visualPcmSize_ = retained + pcm.sample_count;
     visualSamplesSinceUpdate_ += pcm.sample_count;
-    if (visualPcmSize_ == visualPcm_.size()) {
+    if (!deferAnalysis) analyzeVisualPcm();
+}
+
+agplayer::VisualAudioFrameAnalyzer::Snapshot
+AudioVisualFeatureController::visualPcmSnapshot() const noexcept
+{
+    constexpr qint64 VisualReleaseMilliseconds = 1'600;
+    const bool releasing = visualPaused_ && visualReleaseTimer_.isValid()
+        && visualReleaseTimer_.elapsed() < VisualReleaseMilliseconds;
+    return {visualPcm_, visualSampleRate_, visualPcmEpoch_,
+            active_ && !visualPaused_ && visualPcmSize_ == visualPcm_.size()
+                && visualSampleRate_ > 0,
+            visualPaused_, releasing};
+}
+
+void AudioVisualFeatureController::updateVisualPlaybackState()
+{
+    bool paused = false;
+    if (active_ && playback_ && playback_->playerHandle()) {
+        ag_playback_snapshot snapshot{};
+        paused = ag_player_snapshot(playback_->playerHandle(), &snapshot) == AG_OK
+            && snapshot.state == AG_PAUSED;
+    }
+    if (paused == visualPaused_) return;
+    visualPaused_ = paused;
+    if (visualPaused_) visualReleaseTimer_.start();
+    else visualReleaseTimer_.invalidate();
+}
+
+void AudioVisualFeatureController::acquireRenderFrameAnalysis()
+{
+    ++renderFrameConsumers_;
+}
+
+void AudioVisualFeatureController::releaseRenderFrameAnalysis()
+{
+    if (renderFrameConsumers_ == 0) return;
+    if (--renderFrameConsumers_ == 0) {
+        // The GUI fallback must not resume a stale pre-render analysis history.
+        visualAnalyzer_.reset();
+        visualFeatureAnalyzer_.reset();
+        visualKickResponse_.reset();
+        visualFeatures_ = {};
+        visualKick_ = {};
+        visualAnalysisTimer_.invalidate();
+    }
+}
+
+void AudioVisualFeatureController::analyzeVisualPcm()
+{
+    if (renderFrameConsumers_ == 0 && active_ && visualSamplesSinceUpdate_ != 0
+        && visualPcmSize_ == visualPcm_.size()) {
         visualSpectrum_ = visualAnalyzer_.process(visualPcm_);
-        // First complete window uses all samples accumulated since reset;
-        // subsequent updates use only newly received contiguous samples.
-        // Empty reads never advance descriptor history or detector time.
-        const double dt = double(visualSamplesSinceUpdate_) / double(visualSampleRate_);
+        // Analysis advances once per GUI poll, independently of PCM batching.
+        // This is a polling cadence, not the renderer's RAF-equivalent clock.
+        const double dt = visualAnalysisTimer_.isValid()
+            ? std::clamp(double(visualAnalysisTimer_.nsecsElapsed()) / 1e9, 0.0, .25)
+            : 1.0 / 60.0;
+        visualAnalysisTimer_.start();
         visualFeatures_ = visualFeatureAnalyzer_.update(visualSpectrum_, true, false);
         visualKick_ = visualKickResponse_.process(visualSpectrum_, dt, visualKickSensitivity_);
         visualSamplesSinceUpdate_ = 0;
@@ -158,6 +214,8 @@ void AudioVisualFeatureController::setPlaybackController(PlaybackController* pla
     resetVisualPcm();
     disconnectPlaybackSignals();
     resetOutputLevels();
+    visualPaused_ = false;
+    visualReleaseTimer_.invalidate();
     playback_ = playback;
     resetBeatPosition();
     if (active_) connectPlaybackSignals();
@@ -179,6 +237,8 @@ void AudioVisualFeatureController::setActive(bool active)
     } else {
         disconnectPlaybackSignals();
         resetOutputLevels();
+        visualPaused_ = false;
+        visualReleaseTimer_.invalidate();
     }
     updateOutputLevelPolling();
     emit activeChanged();
@@ -437,9 +497,23 @@ void AudioVisualFeatureController::updateOutputLevelPolling()
 void AudioVisualFeatureController::pollOutputLevels()
 {
     if (active_ && playback_ && playback_->playerHandle()) {
-        ag_visual_pcm_snapshot pcm{};
-        if (ag_player_read_visual_pcm(playback_->playerHandle(), &pcm) == AG_OK)
-            ingestVisualPcm(pcm);
+        updateVisualPlaybackState();
+        if (!visualPaused_) {
+            // Drain the finite tap backlog after GUI scheduling delays. Each
+            // contiguous chunk is retained in order; never stitch over
+            // a seek/overflow epoch or manufacture missing audio. The cap
+            // covers the tap's 32 x 512 samples without an unbounded catch-up.
+            constexpr int MaxVisualReadsPerPoll = 16;
+            for (int read = 0; read < MaxVisualReadsPerPoll; ++read) {
+                if (!active_ || !playback_ || !playback_->playerHandle()) break;
+                ag_visual_pcm_snapshot pcm{};
+                if (ag_player_read_visual_pcm(playback_->playerHandle(), &pcm)
+                    != AG_OK) break;
+                ingestVisualPcm(pcm, true);
+                if (pcm.sample_count == 0) break;
+            }
+            analyzeVisualPcm();
+        }
     }
     ag_output_levels levels{};
     if (active_ && playback_ != nullptr

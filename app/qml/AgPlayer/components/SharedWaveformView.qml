@@ -73,7 +73,9 @@ Item {
         amplitudeScale: SettingsController.waveformHeight
         density: SettingsController.waveformDensity
         lineWidth: SettingsController.waveformThickness
-        opacity: 0.58 * root.opacityScale
+        // Preserve the configured played/unplayed brightness ratio while
+        // keeping its contrast visible over the immersive scene.
+        opacity: 0.74 * root.opacityScale
         onSeekRequested: function(positionMs) {
             if (root.playback)
                 root.playback.seek(positionMs)

@@ -2,6 +2,9 @@
 
 #include "terrain_reactor_state.hpp"
 #include "visual_spectrum_features.hpp"
+#include "visual_audio_frame_analyzer.hpp"
+#include "visual_terrain_response.hpp"
+#include "visual_snare_trigger.hpp"
 
 #include <QElapsedTimer>
 #include <QMetaObject>
@@ -192,6 +195,8 @@ private:
         std::atomic<quint64> animations{0};
         std::atomic<quint64> uploads{0};
         std::atomic<int> terrainCount{0};
+        std::atomic<int> activeMeteorParticles{0};
+        std::atomic<int> meteorParticleSlots{0};
         std::atomic<quint64> resourceGeneration{0};
         std::atomic<quint64> renderedFeatureRevision{0};
         std::atomic<quint64> renderedStyleRevision{0};
@@ -200,8 +205,7 @@ private:
 
     struct RenderSnapshot {
         agplayer::terrain::AudioFeatures features;
-        agplayer::VisualSpectrumFeatures::Features descriptors;
-        double kickEnvelope = 0;
+        agplayer::VisualAudioFrameAnalyzer::Snapshot pcm;
         bool referenceAudio = false;
         quint64 visualResetRevision = 0;
         agplayer::terrain::RenderStyleSnapshot style;
@@ -224,6 +228,26 @@ private:
     };
 
     RenderSnapshot snapshotForRenderer() const;
+    struct ReferenceAudioFrame {
+        const agplayer::VisualAudioFrameAnalyzer::Frame& audio;
+        const agplayer::VisualSpectrumFeatures::Features& terrain;
+        agplayer::VisualSnareTrigger::Output snare;
+    };
+    static ReferenceAudioFrame advanceReferenceAudioFrame(
+        agplayer::VisualAudioFrameAnalyzer& analyzer,
+        agplayer::VisualTerrainResponse& response, const RenderSnapshot& snapshot,
+        double wallDelta, agplayer::VisualSnareTrigger& snare);
+    struct AudioFrameOrigin {
+        quint64 visualResetRevision = 0;
+        quint64 activityRevision = 0;
+        quint64 styleRevision = 0;
+    };
+    static void restoreRenderAudioEvents(agplayer::terrain::BeatEvent& beat,
+        agplayer::terrain::ImpactEvent& impact, const RenderSnapshot& snapshot,
+        const agplayer::terrain::RendererResourceState& resources);
+    void applyRenderAudioFrame(const agplayer::terrain::AudioFeatures& features,
+        const AudioFrameOrigin& origin, const agplayer::terrain::BeatEvent& beat,
+        const agplayer::terrain::ImpactEvent& impact);
     void copyStyleSource();
     void applyCurrentFeatures(const agplayer::terrain::AudioFeatures& features);
     void scheduleIfRunnable();
@@ -255,11 +279,7 @@ private:
     QMetaObject::Connection windowVisibilityConnection_;
     QPointer<QQuickWindow> trackedWindow_;
     agplayer::terrain::AudioFeatures liveFeatures_;
-    agplayer::VisualSpectrumFeatures::Features liveDescriptors_;
-    double liveKickEnvelope_ = 0;
     quint64 visualResetRevision_ = 0;
-    quint64 lastVisualUpdate_ = 0;
-    quint64 visualBeatCount_ = 0;
     agplayer::terrain::AudioFeatures syntheticFeatures_;
     quint64 featureRevision_ = 0;
     quint64 styleRevision_ = 0;
@@ -279,4 +299,6 @@ private:
     QString diagnostic_;
 
     friend class TerrainReactorRenderer;
+    friend class TerrainReactorItemTest;
+    friend class TerrainReactorGpuSmokeTest;
 };

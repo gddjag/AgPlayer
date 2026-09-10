@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import QtTest
 import AgPlayer
 
@@ -9,6 +10,167 @@ TestCase {
 
     property var mainPlayer: null
     property var miniPlayer: null
+
+    Component {
+        id: floatingControlsWindowComponent
+        Window {
+            width: 420
+            height: 880
+            visible: true
+            property alias panel: floatingPanel
+            ImmersiveControlPanel {
+                id: floatingPanel
+                x: 30
+                y: 20
+                width: 360
+            }
+        }
+    }
+
+    function test_visual_eq_enabled_real_click_preserves_gains() {
+        var savedEnabled = PlayerExperienceController.visualEqEnabled.slice()
+        var savedGains = PlayerExperienceController.visualEqGains.slice()
+        var host = createTemporaryObject(floatingControlsWindowComponent, testCase)
+        verify(host)
+        try {
+            PlayerExperienceController.visualEqEnabled = [true,true,true,true,true,true,true,true]
+            PlayerExperienceController.visualEqGains = [21,32,43,54,65,76,87,98]
+            var gains = PlayerExperienceController.visualEqGains.slice()
+            host.requestActivate()
+            var panel = host.panel
+            verify(waitForRendering(panel, 3000))
+            tryVerify(function() { return Math.abs(panel.height
+                - Math.min(panel.expandedHeight, panel.parent.height - 108)) < .5 })
+            var tab = findChild(panel, "immersiveDynamicsTab")
+            verify(tab)
+            mouseClick(tab, tab.width / 2, tab.height / 2, Qt.LeftButton)
+            tryCompare(panel, "currentTab", 2)
+            var scroll = findChild(panel, "immersivePanelScroll")
+            verify(scroll && scroll.contentItem)
+            tryVerify(function() { return scroll.contentItem.contentHeight > scroll.contentItem.height })
+            var bands = [0, 7]
+            for (var i = 0; i < bands.length; ++i) {
+                var band = bands[i]
+                var toggle = findChild(panel, "visualEqEnabled_" + band)
+                verify(toggle, "Missing visual EQ enable control " + band)
+                tryCompare(toggle, "checked", true)
+                var flick = scroll.contentItem
+                var rowY = toggle.mapToItem(flick.contentItem, 0, 0).y
+                flick.contentY = Math.max(0, Math.min(rowY - 70,
+                                                    flick.contentHeight - flick.height))
+                wait(50)
+                var point = toggle.mapToItem(scroll, toggle.width / 2, toggle.height / 2)
+                verify(point.y > 0 && point.y < scroll.height, "Toggle must be inside viewport")
+                mouseClick(toggle, toggle.width / 2, toggle.height / 2, Qt.LeftButton)
+                tryVerify(function() { return PlayerExperienceController.visualEqEnabled[band] === false })
+                tryCompare(toggle, "checked", false)
+                for (var other = 0; other < 8; ++other) {
+                    compare(PlayerExperienceController.visualEqGains[other], gains[other])
+                    compare(PlayerExperienceController.visualEqEnabled[other], other !== band)
+                }
+                // External list replacement must still update the binding
+                // after a real user toggle; then click again to verify routing.
+                PlayerExperienceController.visualEqEnabled = [true,true,true,true,true,true,true,true]
+                tryCompare(toggle, "checked", true)
+                mouseClick(toggle, toggle.width / 2, toggle.height / 2, Qt.LeftButton)
+                tryVerify(function() { return PlayerExperienceController.visualEqEnabled[band] === false })
+                PlayerExperienceController.visualEqEnabled = [true,true,true,true,true,true,true,true]
+            }
+            for (var gainIndex = 0; gainIndex < 8; ++gainIndex)
+                compare(PlayerExperienceController.visualEqGains[gainIndex], gains[gainIndex])
+        } finally {
+            PlayerExperienceController.visualEqEnabled = savedEnabled
+            PlayerExperienceController.visualEqGains = savedGains
+            host.close()
+        }
+    }
+
+    function test_floating_controls_display_and_real_input() {
+        var keys = ["floatingBlockMinSize", "floatingBlockMaxSize",
+                    "floatingBlockSpeed", "floatingBlockIntensity"]
+        var saved = {}
+        var initial = [20, 80, 35, 60]
+        for (var i = 0; i < keys.length; ++i)
+            saved[keys[i]] = PlayerExperienceController[keys[i]]
+        var host = createTemporaryObject(floatingControlsWindowComponent, testCase)
+        verify(host)
+        try {
+            host.requestActivate()
+            var panel = host.panel
+            var tab = findChild(panel, "immersiveDynamicsTab")
+            verify(tab)
+            // visible=true is asynchronous: the new native window and its
+            // RowLayout must be exposed/polished before pointer coordinates
+            // are meaningful (especially with the software/offscreen backend).
+            verify(waitForRendering(panel, 3000))
+            tryVerify(function() { return tab.visible && tab.width > 0 && tab.height > 0 })
+            tryVerify(function() { return Math.abs(panel.height
+                - Math.min(panel.expandedHeight, panel.parent.height - 108)) < .5 })
+            mouseClick(tab, tab.width / 2, tab.height / 2, Qt.LeftButton)
+            tryCompare(panel, "currentTab", 2)
+            var scroll = findChild(panel, "immersivePanelScroll")
+            verify(scroll && scroll.contentItem)
+            tryVerify(function() { return scroll.contentItem.contentHeight > scroll.contentItem.height })
+            for (var index = 0; index < keys.length; ++index) {
+                var key = keys[index]
+                PlayerExperienceController[key] = initial[index]
+                var slider = findChild(panel, "dynamicSlider_" + key)
+                var label = findChild(panel, "dynamicValue_" + key)
+                verify(slider && label, "Missing floating control " + key)
+                tryCompare(slider, "value", initial[index])
+                tryCompare(label, "text", initial[index].toString())
+                var flick = scroll.contentItem
+                var rowY = slider.parent.mapToItem(flick.contentItem, 0, 0).y
+                flick.contentY = Math.max(0, Math.min(rowY - 70,
+                                                    flick.contentHeight - flick.height))
+                wait(30)
+                var point = slider.mapToItem(scroll, slider.width / 2, slider.height / 2)
+                verify(point.y > 0 && point.y < scroll.height,
+                       "Floating slider must be inside the clipped viewport: " + key)
+                // Click the actual handle to establish focus, then send real
+                // keys. Do not assign slider.value or invoke moved().
+                var handle = slider.handle
+                mouseClick(slider, handle.x + handle.width / 2,
+                           handle.y + handle.height / 2)
+                tryCompare(slider, "activeFocus", true)
+                var beforeKey = PlayerExperienceController[key]
+                keyClick(Qt.Key_Right)
+                tryVerify(function() { return PlayerExperienceController[key] > beforeKey })
+                tryCompare(label, "text", Math.round(PlayerExperienceController[key]).toString())
+                var beforeDrag = PlayerExperienceController[key]
+                mouseDrag(slider, slider.handle.x + slider.handle.width / 2,
+                          slider.height / 2, -slider.availableWidth * .12, 0,
+                          Qt.LeftButton)
+                tryVerify(function() { return PlayerExperienceController[key] < beforeDrag }, 1000,
+                          "Real drag must update controller: " + key)
+                tryCompare(label, "text", Math.round(PlayerExperienceController[key]).toString())
+                // A subsequent external update must still reach the control;
+                // interaction must not replace its controller binding.
+                PlayerExperienceController[key] = initial[index] + 2
+                tryCompare(slider, "value", initial[index] + 2)
+                tryCompare(label, "text", (initial[index] + 2).toString())
+            }
+            // Optional test-harness context property, never a production CLI.
+            if (typeof testFloatingControlsScreenshotPath !== "undefined"
+                    && testFloatingControlsScreenshotPath.length > 0) {
+                var group = findChild(panel, "dynamicsFloatingGroup")
+                verify(group)
+                var view = scroll.contentItem
+                var groupY = group.mapToItem(view.contentItem, 0, 0).y
+                view.contentY = Math.max(0, Math.min(groupY - 20,
+                                                   view.contentHeight - view.height))
+                wait(50)
+                var capture = grabImage(panel)
+                verify(capture.width > 0 && capture.height > 0)
+                capture.save(testFloatingControlsScreenshotPath)
+                console.log("Floating controls screenshot:", testFloatingControlsScreenshotPath)
+            }
+        } finally {
+            for (var restore = 0; restore < keys.length; ++restore)
+                PlayerExperienceController[keys[restore]] = saved[keys[restore]]
+            host.close()
+        }
+    }
 
     // Fake playback controller that mirrors the production PlaybackController API
     // surface (properties + Q_INVOKABLE functions) so MiniPlayerControls bindings
@@ -89,6 +251,53 @@ TestCase {
     function cleanupTestCase() {
         mainPlayer = null
         miniPlayer = null
+    }
+
+    function test_immersive_exit_preserves_rolling_audio_analysis_data() {
+        return [{tag: "rolling", shell: 2}, {tag: "classic", shell: 0},
+                {tag: "integrated", shell: 1}]
+    }
+
+    function test_immersive_exit_preserves_rolling_audio_analysis(data) {
+        var savedShell = SettingsController.playerShellMode
+        var savedRendering = mainPlayer.immersiveRenderingEnabled
+        var coordinator = findChild(mainPlayer, "immersiveCoordinator")
+        try {
+            SettingsController.playerShellMode = data.shell
+            var ids = transportTestSetup.prepareTransportQueue(30)
+            compare(ids.length, 3)
+            PlaybackController.play()
+            tryCompare(PlaybackController, "state", PlaybackController.Playing)
+            mainPlayer.immersiveRenderingEnabled = true
+            PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
+            PlayerExperienceController.immersiveMode = PlayerExperienceController.TerrainReactor
+            tryVerify(function() { return coordinator.surface && coordinator.surface.terrainItem }, 3000)
+            var terrain = coordinator.surface.terrainItem
+            tryVerify(function() { return terrain.renderStatus === TerrainReactorItem.Ready
+                         || terrain.renderStatus === TerrainReactorItem.SoftwareBackend }, 10000)
+            if (terrain.renderStatus === TerrainReactorItem.SoftwareBackend) {
+                skip("Requires native GPU for real immersive lifecycle")
+                return
+            }
+            tryVerify(function() { return terrain.frameCount > 0 }, 3000)
+            PlayerExperienceController.immersiveMode = PlayerExperienceController.Off
+            tryCompare(coordinator, "handoffPhase", 0, 3000)
+            wait(100)
+            compare(AudioVisualFeatureController.active, data.shell === 2,
+                    "Immersive teardown must preserve only the rolling consumer")
+            if (data.shell === 2) {
+                var before = AudioVisualFeatureController.visualSpectrumUpdateCount
+                tryVerify(function() { return AudioVisualFeatureController.visualSpectrumUpdateCount > before }, 1500,
+                          "Real PCM analysis must continue after immersive renderer detaches")
+            }
+            SettingsController.playerShellMode = 0
+            tryCompare(AudioVisualFeatureController, "active", false)
+        } finally {
+            PlayerExperienceController.immersiveMode = PlayerExperienceController.Off
+            PlaybackController.stop()
+            mainPlayer.immersiveRenderingEnabled = savedRendering
+            SettingsController.playerShellMode = savedShell
+        }
     }
 
     function verifyAscendingX(parent, names) {

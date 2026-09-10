@@ -30,6 +30,10 @@ class PlayerExperienceController final : public QObject {
     Q_PROPERTY(int rippleStrength READ rippleStrength WRITE setRippleStrength NOTIFY rippleStrengthChanged)
     Q_PROPERTY(int rippleWidth READ rippleWidth WRITE setRippleWidth NOTIFY rippleWidthChanged)
     Q_PROPERTY(int rippleDecay READ rippleDecay WRITE setRippleDecay NOTIFY rippleDecayChanged)
+    Q_PROPERTY(int floatingBlockMinSize READ floatingBlockMinSize WRITE setFloatingBlockMinSize NOTIFY floatingBlockMinSizeChanged)
+    Q_PROPERTY(int floatingBlockMaxSize READ floatingBlockMaxSize WRITE setFloatingBlockMaxSize NOTIFY floatingBlockMaxSizeChanged)
+    Q_PROPERTY(int floatingBlockSpeed READ floatingBlockSpeed WRITE setFloatingBlockSpeed NOTIFY floatingBlockSpeedChanged)
+    Q_PROPERTY(int floatingBlockIntensity READ floatingBlockIntensity WRITE setFloatingBlockIntensity NOTIFY floatingBlockIntensityChanged)
     Q_PROPERTY(int columnSize READ columnSize WRITE setColumnSize NOTIFY columnSizeChanged)
     Q_PROPERTY(int columnDensity READ columnDensity WRITE setColumnDensity NOTIFY columnDensityChanged)
     Q_PROPERTY(int topographyDensity READ topographyDensity WRITE setTopographyDensity
@@ -79,12 +83,18 @@ class PlayerExperienceController final : public QObject {
                    WRITE setIdleBreathingEnabled NOTIFY idleBreathingEnabledChanged)
     Q_PROPERTY(bool themeCycleEnabled READ themeCycleEnabled
                    WRITE setThemeCycleEnabled NOTIFY themeCycleEnabledChanged)
+    Q_PROPERTY(bool themeSongCycleEnabled READ themeSongCycleEnabled
+                   WRITE setThemeSongCycleEnabled NOTIFY themeSongCycleEnabledChanged)
+    Q_PROPERTY(int themeCycleIntervalSeconds READ themeCycleIntervalSeconds
+                   WRITE setThemeCycleIntervalSeconds
+                   NOTIFY themeCycleIntervalSecondsChanged)
     Q_PROPERTY(bool streamHighlightEnabled READ streamHighlightEnabled
                    WRITE setStreamHighlightEnabled
                    NOTIFY streamHighlightEnabledChanged)
     Q_PROPERTY(bool songAdaptiveColorEnabled READ songAdaptiveColorEnabled
                    WRITE setSongAdaptiveColorEnabled
                    NOTIFY songAdaptiveColorEnabledChanged)
+    Q_PROPERTY(QVariantList visualEqEnabled READ visualEqEnabled WRITE setVisualEqEnabled NOTIFY visualEqEnabledChanged)
     Q_PROPERTY(QVariantList visualEqGains READ visualEqGains WRITE setVisualEqGains
                    NOTIFY visualEqGainsChanged)
     Q_PROPERTY(int lyricClarity READ lyricClarity WRITE setLyricClarity
@@ -149,6 +159,10 @@ public:
     int rippleStrength() const noexcept;
     int rippleWidth() const noexcept;
     int rippleDecay() const noexcept;
+    int floatingBlockMinSize() const noexcept { return floatingBlockMinSize_; }
+    int floatingBlockMaxSize() const noexcept { return floatingBlockMaxSize_; }
+    int floatingBlockSpeed() const noexcept { return floatingBlockSpeed_; }
+    int floatingBlockIntensity() const noexcept { return floatingBlockIntensity_; }
     int columnSize() const noexcept;
     int columnDensity() const noexcept;
     int topographyDensity() const noexcept;
@@ -179,9 +193,12 @@ public:
     bool meteorsEnabled() const noexcept;
     bool idleBreathingEnabled() const noexcept;
     bool themeCycleEnabled() const noexcept;
+    bool themeSongCycleEnabled() const noexcept;
+    int themeCycleIntervalSeconds() const noexcept;
     bool streamHighlightEnabled() const noexcept;
     bool songAdaptiveColorEnabled() const noexcept;
     QVariantList visualEqGains() const;
+    QVariantList visualEqEnabled() const { return visualEqEnabled_; }
     int lyricClarity() const noexcept;
     int lyricDepth() const noexcept;
     int lyricSize() const noexcept;
@@ -236,12 +253,19 @@ public:
     void setRipplesEnabled(bool value);
     void setBurstEnabled(bool value);
     void setFloatingCubesEnabled(bool value);
+    void setFloatingBlockMinSize(int value);
+    void setFloatingBlockMaxSize(int value);
+    void setFloatingBlockSpeed(int value);
+    void setFloatingBlockIntensity(int value);
     void setMeteorsEnabled(bool value);
     void setIdleBreathingEnabled(bool value);
     void setThemeCycleEnabled(bool value);
+    void setThemeSongCycleEnabled(bool value);
+    void setThemeCycleIntervalSeconds(int value);
     void setStreamHighlightEnabled(bool value);
     void setSongAdaptiveColorEnabled(bool value);
     void setVisualEqGains(const QVariantList& values);
+    void setVisualEqEnabled(const QVariantList& values);
     void setLyricClarity(int value);
     void setLyricDepth(int value);
     void setLyricSize(int value);
@@ -281,6 +305,10 @@ signals:
     void rippleStrengthChanged();
     void rippleWidthChanged();
     void rippleDecayChanged();
+    void floatingBlockMinSizeChanged();
+    void floatingBlockMaxSizeChanged();
+    void floatingBlockSpeedChanged();
+    void floatingBlockIntensityChanged();
     void columnSizeChanged();
     void columnDensityChanged();
     void topographyDensityChanged();
@@ -307,9 +335,12 @@ signals:
     void meteorsEnabledChanged();
     void idleBreathingEnabledChanged();
     void themeCycleEnabledChanged();
+    void themeSongCycleEnabledChanged();
+    void themeCycleIntervalSecondsChanged();
     void streamHighlightEnabledChanged();
     void songAdaptiveColorEnabledChanged();
     void visualEqGainsChanged();
+    void visualEqEnabledChanged();
     void lyricClarityChanged();
     void lyricDepthChanged();
     void lyricSizeChanged();
@@ -335,6 +366,7 @@ private:
     static int clampRange(int value, int minimum, int maximum) noexcept;
     static QString normalizedColor(const QString& value, const QString& fallback);
     static QVariantList defaultVisualEqGains();
+    static QVariantList normalizedVisualEqEnabled(const QVariantList& values);
     static QVariantList normalizedVisualEqGains(const QVariantList& values);
     void setThemeId(const QString& id);
     void clearThemeForManualColor();
@@ -355,7 +387,11 @@ private:
     int rippleStrength_ = 100;
     int rippleWidth_ = 100;
     int rippleDecay_ = 100;
-    int columnSize_ = 95;
+    int floatingBlockMinSize_ = 9;
+    int floatingBlockMaxSize_ = 26;
+    int floatingBlockSpeed_ = 77;
+    int floatingBlockIntensity_ = 55;
+    int columnSize_ = 100;
     int columnDensity_ = 130;
     int topographyDensity_ = 46;
     int columnOpacity_ = 100;
@@ -372,8 +408,8 @@ private:
     float themeGlow_ = 1.0F;
     QColor themeBackground_ = QColor(QStringLiteral("#030817"));
     bool applyingTheme_ = false;
-    int terrainAmplitude_ = 62;
-    int motionResponse_ = 56;
+    int terrainAmplitude_ = 50;
+    int motionResponse_ = 50;
     int gradientLayers_ = 74;
     int glowIntensity_ = 38;
     double cinemaShake_ = 0.30;
@@ -384,10 +420,13 @@ private:
     bool floatingCubesEnabled_ = true;
     bool meteorsEnabled_ = true;
     bool idleBreathingEnabled_ = true;
-    bool themeCycleEnabled_ = false;
+    bool themeCycleEnabled_ = true;
+    bool themeSongCycleEnabled_ = false;
+    int themeCycleIntervalSeconds_ = 10;
     bool streamHighlightEnabled_ = true;
     bool songAdaptiveColorEnabled_ = false;
     QVariantList visualEqGains_ = defaultVisualEqGains();
+    QVariantList visualEqEnabled_{true,true,true,true,true,true,true,true};
     int lyricClarity_ = 78;
     int lyricDepth_ = 62;
     int lyricSize_ = 100;

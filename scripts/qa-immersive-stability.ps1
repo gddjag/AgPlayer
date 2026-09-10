@@ -49,7 +49,11 @@ if ($ValidateLog) {
     Assert-StabilityLog $ValidateLog $DurationSeconds
     return
 }
-$buildRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot $BuildDirectory))
+$buildRoot = if ([IO.Path]::IsPathRooted($BuildDirectory)) {
+    [IO.Path]::GetFullPath($BuildDirectory)
+} else {
+    [IO.Path]::GetFullPath((Join-Path $repoRoot $BuildDirectory))
+}
 $cachePath = Join-Path $buildRoot 'CMakeCache.txt'
 $appPath = Join-Path $buildRoot 'app/AgPlayer.exe'
 if (!(Test-Path -LiteralPath $appPath)) { throw "Missing application: $appPath" }
@@ -72,6 +76,7 @@ if ($vcpkgLine) {
 }
 $arguments = @('--qa-test-mode', '--qa-instance-key', ('stability-' + [guid]::NewGuid().ToString('N')),
     '--qa-log', ('"' + $logPath + '"'), '--qa-immersive',
+    '--qa-width', '1920', '--qa-height', '1080',
     '--qa-immersive-stability', '--qa-exit-after-ms', ($DurationSeconds * 1000).ToString())
 if ($ThemeId -notmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$') { throw 'ThemeId must be a built-in theme id.' }
 $arguments += @('--qa-immersive-theme', $ThemeId)

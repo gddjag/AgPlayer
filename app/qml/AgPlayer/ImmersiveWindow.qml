@@ -5,6 +5,9 @@ import AgPlayer
 Window {
     id: root
     objectName: "immersiveVisualWindow"
+    // Main is hidden during presentation. Do not let its native ownership
+    // remove this window's independent taskbar/minimize restore entry.
+    transientParent: null
 
     property var waveformSession: null
     property bool renderingEnabled: true
@@ -12,6 +15,7 @@ Window {
     property int qaViewportWidth: 0
     property int qaViewportHeight: 0
     property alias surfaceItem: surface
+    property rect windowedGeometry: Qt.rect(0, 0, 0, 0)
 
     readonly property bool hasKeyboardFocus:
         visible && active && visibility !== Window.Minimized
@@ -84,14 +88,18 @@ Window {
         if (PlayerExperienceController.immersiveMode
                 === PlayerExperienceController.Off) {
             visible = false
+            releaseResources()
             WindowController.leaveImmersivePresentation()
             return
         }
         var wasVisible = visible
         if (PlayerExperienceController.hostMode
                 === PlayerExperienceController.Fullscreen) {
+            if (visibility === Window.Windowed)
+                windowedGeometry = Qt.rect(x, y, width, height)
             showFullScreen()
             WindowController.enterImmersivePresentation()
+            requestActivate()
             return
         }
         if (PlayerExperienceController.hostMode
@@ -104,7 +112,16 @@ Window {
             x = Screen.virtualX + Math.max(0, (Screen.width - width) / 2)
             y = Screen.virtualY + Math.max(0, (Screen.height - height) / 2)
         }
+        var restoreGeometry = visibility === Window.FullScreen
+                && PlayerExperienceController.hostMode === PlayerExperienceController.Windowed
+                && windowedGeometry.width > 0
         showNormal()
+        if (restoreGeometry) {
+            x = windowedGeometry.x
+            y = windowedGeometry.y
+            width = windowedGeometry.width
+            height = windowedGeometry.height
+        }
         WindowController.enterImmersivePresentation()
         requestActivate()
     }

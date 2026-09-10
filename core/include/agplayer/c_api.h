@@ -12,7 +12,8 @@ typedef struct ag_player ag_player;
  * ReplayGain (also after EQ for scratch playback). Disabled by default. Enable and read
  * from one GUI thread only; do not race these calls with player destruction.
  * Reads consume this independent tap, never the legacy spectrum queue.
- * Returns newest <=1024 available samples, or sample_count=0 when none are fresh.
+ * Returns oldest <=1024 queued samples, or sample_count=0 when none are fresh.
+ * Consumers may drain multiple bounded reads per poll to preserve continuity.
  * Continuity requires equal generation AND first_sample_index equal to the
  * previous first_sample_index + sample_count. Reset/seek/disable/overflow
  * invalidate generation. Samples use the actual processing sample rate. */

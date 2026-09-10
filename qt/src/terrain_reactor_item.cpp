@@ -15,6 +15,7 @@
 #include <QMetaMethod>
 #include <QMetaObject>
 #include <QQuickWindow>
+#include <QStringList>
 #include <QSGRendererInterface>
 #include <QVector3D>
 #include <QWindow>
@@ -35,8 +36,6 @@ namespace {
 
 using namespace agplayer::terrain::gpu;
 
-constexpr quint32 maximumInstances = 192U * 192U + 120U
-    + 28U * (1U + 3U + 16U + 12U) + 1600U;
 QShader loadShader(const QString& path)
 {
     QFile file(path);
@@ -121,6 +120,9 @@ public:
         if (claimed_) {
             releaseResources();
             resourceState_->releaseRenderer(rendererId_);
+            if (performanceProbe_)
+                qInfo("Reactor released: renderer=%llu",
+                    static_cast<unsigned long long>(rendererId_));
         }
     }
 
@@ -141,7 +143,8 @@ protected:
             return;
         }
 
-        const bool targetChanged = renderTarget() != lastRenderTarget_;
+        const bool targetChanged = renderTarget() != lastRenderTarget_
+            || (pipeline_ && pipeline_->sampleCount() != renderTarget()->sampleCount());
         if (targetChanged && pipeline_) {
             pipeline_.reset();
             lastRenderTarget_ = nullptr;
@@ -166,6 +169,8 @@ protected:
         const bool resuming = next.running && (!snapshot_.running
             || next.activityRevision != snapshot_.activityRevision);
         if (resuming) {
+            if (performanceProbe_) qInfo("Reactor resume: activity=%llu",
+                static_cast<unsigned long long>(next.activityRevision));
             frameTimer_.restart();
             renderTimeEpochSeconds_ = next.timeSeconds;
             renderTimeTimer_.restart();
@@ -180,9 +185,26 @@ protected:
             smoothedFeatures_ = AudioFeatures{};
             referenceResponse_.reset();
         }
+        const bool pcmDiscontinuity = next.pcm.epoch != snapshot_.pcm.epoch
+            || next.pcm.sampleRate != snapshot_.pcm.sampleRate
+            || next.pcm.valid != snapshot_.pcm.valid;
         const bool visualReset = next.referenceAudio != snapshot_.referenceAudio
-            || next.visualResetRevision != snapshot_.visualResetRevision;
+            || next.visualResetRevision != snapshot_.visualResetRevision
+            // A pause deliberately makes the retained window non-current.
+            // Preserve the analyzer/terrain history so the original 1.6 s
+            // release can run; seek, track and device epochs still reset.
+            || (pcmDiscontinuity && !next.pcm.paused);
+        if (resuming || visualReset) {
+            frameAnalyzer_.reset();
+            floatingParameters_ = {};
+            meteorParticles_.reset();
+            snareTrigger_.reset();
+            renderBeatCount_ = 0;
+            TerrainReactorItem::restoreRenderAudioEvents(renderBeat_, renderImpact_, next, *resourceState_);
+        }
         if (visualReset) {
+            if (performanceProbe_) qInfo("Reactor audio reset: revision=%llu",
+                static_cast<unsigned long long>(next.visualResetRevision));
             referenceResponse_.reset();
             smoothedFeatures_ = {};
             bassEnvelope_ = {};
@@ -220,6 +242,21 @@ protected:
             targetPalette_ = nextPalette;
             paletteProgress_ = 0.0F;
         }
+        const bool canonicalPalette = next.style.bodyColor.w() > 0.5F;
+        if (!canonicalPalette && themePaletteInitialized_) {
+            fromPalette_ = currentPalette_;
+            targetPalette_ = nextPalette;
+            paletteProgress_ = 0.0F;
+        }
+        if (canonicalPalette) {
+            std::copy(nextPalette.begin(), nextPalette.end(), targetThemePalette_.colors.begin());
+            targetThemePalette_.colors[5] = next.style.bodyColor;
+            targetThemePalette_.colors[6] = next.style.atmosphereColor;
+            targetThemePalette_.colors[7] = next.style.rippleColor;
+            targetThemePalette_.glow = next.style.glowIntensity;
+            if (!themePaletteInitialized_) currentThemePalette_ = targetThemePalette_;
+        }
+        themePaletteInitialized_ = canonicalPalette;
         if (!cameraSynchronized_) {
             camera_.synchronize(next.camera, next.cameraManualUntilSeconds);
             previousGuiCamera_ = next.camera;
@@ -253,9 +290,6 @@ protected:
                 static_cast<double>(renderTimeTimer_.nsecsElapsed())
                     / 1'000'000'000.0)
             : snapshot_.timeSeconds;
-        if (!framePacer_.shouldRender(renderTimeSeconds, targetFps)) {
-            return;
-        }
 
         const qint64 elapsedNanoseconds = frameTimer_.nsecsElapsed();
         frameTimer_.restart();
@@ -263,7 +297,17 @@ protected:
             static_cast<double>(elapsedNanoseconds) / 1'000'000'000.0);
         const double animationElapsedSeconds = std::clamp(
             wallElapsedSeconds, 0.001, 0.25);
-        if (paletteProgress_ < 1.0F) {
+        if (themePaletteInitialized_) {
+            const auto& warm = targetThemePalette_.colors[2];
+            meteorMaterialColor_.advance({
+                agplayer::immersive::srgbChannelToLinear(warm.x()),
+                agplayer::immersive::srgbChannelToLinear(warm.y()),
+                agplayer::immersive::srgbChannelToLinear(warm.z())}, float(wallElapsedSeconds));
+            currentThemePalette_ = advanceThemePalette(currentThemePalette_,
+                targetThemePalette_, float(wallElapsedSeconds));
+            std::copy_n(currentThemePalette_.colors.begin(), currentPalette_.size(),
+                        currentPalette_.begin());
+        } else if (paletteProgress_ < 1.0F) {
             paletteProgress_ = std::min(1.0F, paletteProgress_
                 + float(animationElapsedSeconds) / 1.15F);
             const float eased = paletteProgress_ * paletteProgress_
@@ -280,51 +324,101 @@ protected:
                                                    float(animationElapsedSeconds));
         VisualParameters visual = mapVisualParameters(smoothedFeatures_,
             renderTimeSeconds, snapshot_.style);
+        double snareStrength = 0;
         if (snapshot_.referenceAudio) {
-            agplayer::VisualTerrainResponse::EqBands eq;
-            for (std::size_t i = 0; i < eq.size(); ++i) eq[i] = snapshot_.style.visualEqGains[i];
-            const auto& response = referenceResponse_.update(snapshot_.descriptors,
-                snapshot_.kickEnvelope, eq, {true,true,true,true,true,true,true,true},
-                animationElapsedSeconds, snapshot_.style.motionResponse * 100.0);
+            const auto processed = TerrainReactorItem::advanceReferenceAudioFrame(
+                frameAnalyzer_, referenceResponse_, snapshot_, wallElapsedSeconds, snareTrigger_);
+            const auto& frame = processed.audio;
+            floatingParameters_ = advanceFloatingBlocks(floatingParameters_.x(), float(frame.kick.envelope),
+                float(wallElapsedSeconds), snapshot_.style.floatingBlockMinSize, snapshot_.style.floatingBlockMaxSize,
+                snapshot_.style.floatingBlockSpeed, snapshot_.style.floatingBlockIntensity);
+            if (performanceProbe_) ++analysisFrames_;
+            const auto& response = processed.terrain;
+            if (processed.snare.triggered) snareStrength = processed.snare.strength;
             for (std::size_t i = 0; i < visual.bands.size(); ++i)
                 visual.bands[i] = float(response.bands[i]);
             visual.energy = float(response.energy);
-            visual.spectralFlux = snapshot_.features.spectralFlux;
+            visual.spectralFlux = float(frame.kick.flux);
             referenceDescriptors_ = response;
+            if (frame.valid && frame.kick.onset > 0) {
+                renderBeat_.strength = float(frame.kick.confidence);
+                ++renderBeat_.revision;
+                if (++renderBeatCount_ % 8 == 0) {
+                    renderImpact_.strength = renderBeat_.strength;
+                    ++renderImpact_.revision;
+                }
+            }
+            // Render owns the analysis; GUI properties receive a value copy.
+            // Reset/activity versions reject queued reports from an old source,
+            // seek, pause, hidden window, or previous renderer activity.
+            AudioFeatures exposed;
+            for (std::size_t i=0; i<exposed.bands.size(); ++i)
+                exposed.bands[i] = float(frame.descriptors.bands[i]);
+            exposed.energy = float(frame.descriptors.energy);
+            exposed.spectralFlux = float(frame.kick.flux);
+            exposed.kick = float(frame.kick.onset);
+            exposed.snare = processed.snare.triggered ? 1.0F : 0.0F;
+            TerrainReactorItem* const target = item_;
+            // Keep only version stamps; do not queue a second PCM window copy.
+            TerrainReactorItem::AudioFrameOrigin origin;
+            origin.visualResetRevision = snapshot_.visualResetRevision;
+            origin.activityRevision = snapshot_.activityRevision;
+            origin.styleRevision = snapshot_.styleRevision;
+            const auto beat = renderBeat_;
+            const auto impact = renderImpact_;
+            QMetaObject::invokeMethod(target, [target, exposed, origin, beat, impact] {
+                target->applyRenderAudioFrame(exposed, origin, beat, impact);
+            }, Qt::QueuedConnection);
         }
+        if (!snapshot_.referenceAudio)
+            floatingParameters_ = advanceFloatingBlocks(floatingParameters_.x(), snapshot_.features.kick,
+                float(wallElapsedSeconds), snapshot_.style.floatingBlockMinSize, snapshot_.style.floatingBlockMaxSize,
+                snapshot_.style.floatingBlockSpeed, snapshot_.style.floatingBlockIntensity);
         bassEnvelope_.advance(visual.bands[0] * 0.72F
                                   + visual.bands[1] * 0.28F,
                               float(animationElapsedSeconds));
         punchEvents_.consume(snapshot_.punchEvent, camera_);
-        const bool newBeat = beatEvents_.consume(snapshot_.beatEvent,
+        const auto& frameBeat = snapshot_.referenceAudio ? renderBeat_ : snapshot_.beatEvent;
+        const auto& frameImpact = snapshot_.referenceAudio ? renderImpact_ : snapshot_.impactEvent;
+        const bool newBeat = beatEvents_.consume(frameBeat,
                                                 renderTimeSeconds);
-        const bool newImpact = impactEvents_.consume(snapshot_.impactEvent, renderTimeSeconds);
-        const float waveStrength = newImpact ? snapshot_.impactEvent.strength
-                                            : snapshot_.beatEvent.strength;
+        const bool newImpact = impactEvents_.consume(frameImpact, renderTimeSeconds);
+        const float waveStrength = newImpact ? frameImpact.strength : frameBeat.strength;
         if (!snapshot_.style.meteorsEnabled) meteorFlight_.cancel();
         if (newImpact && snapshot_.style.meteorsEnabled && !meteorOrigins_.isEmpty()
             && waveStrength > 0.0F && waveGate_.consume(renderTimeSeconds, waveStrength)) {
-            // The reserved wave gate belongs to this flight until touchdown.
-            // No beat emits a competing ring while meteors are enabled.
+            // A launch reserves this event's gate until touchdown; ordinary
+            // beats remain eligible after the shared spacing gate reopens.
             meteorFlight_.launch(renderTimeSeconds, int(meteorOrigins_.size()), waveStrength);
         }
         const bool meteorLanded = meteorFlight_.landed(renderTimeSeconds);
+        if (!snapshot_.style.meteorsEnabled) meteorParticles_.reset();
+        else meteorParticles_.frame(float(wallElapsedSeconds), meteorFlight_.trajectory(),
+            meteorFlight_.age(renderTimeSeconds), meteorFlight_.group() >= 0
+                && meteorFlight_.age(renderTimeSeconds) < meteorFlight_.duration(), meteorLanded);
+        // The product's shared 3--6s wave interval starts at actual display,
+        // not the earlier meteor launch. A touchdown wins over a same-frame Snare.
+        if (meteorLanded && snapshot_.style.ripplesEnabled)
+            waveGate_.anchor(renderTimeSeconds, meteorFlight_.strength());
+        const auto snareWave = consumeSnareWave(waveGate_, renderTimeSeconds,
+            snareStrength, snapshot_.seed ^ ((waveSequence_ + 1U) * 0x9e3779b9U),
+            snapshot_.referenceAudio && snapshot_.style.ripplesEnabled, meteorLanded);
         if (!snapshot_.style.ripplesEnabled) {
             travelingWaves_.fill(QVector4D());
-        } else if (meteorLanded || (!snapshot_.style.meteorsEnabled
-                   && (newImpact || newBeat) && waveStrength > 0.0F
+        } else if (meteorLanded || snareWave.w() < 0 || ((newBeat || (newImpact && !snapshot_.style.meteorsEnabled))
+                   && waveStrength > 0.0F
                    && waveGate_.consume(renderTimeSeconds, waveStrength))) {
             const int slot = nextWave_ % std::max(1, currentRippleCount_);
             nextWave_ = (slot + 1) % std::max(1, currentRippleCount_);
             waveTints_[std::size_t(slot)] = waveSequence_++ % 4U;
-            const QVector4D origin = meteorLanded && meteorFlight_.group() >= 0
-                && meteorFlight_.group() < meteorOrigins_.size()
-                ? QVector4D(meteorOrigins_[meteorFlight_.group()].x(),
-                            meteorOrigins_[meteorFlight_.group()].z(), 0, 0)
+            const QVector4D origin = meteorLanded
+                ? QVector4D(meteorFlight_.trajectory().x(), meteorFlight_.trajectory().y(), 0, 0)
                 : waveSources_[std::size_t(slot)];
-            travelingWaves_[std::size_t(slot)] = QVector4D(
+            travelingWaves_[std::size_t(slot)] = snareWave.w() < 0 ? snareWave : QVector4D(
                 origin.x(), origin.y(), renderTimeSeconds,
-                meteorLanded ? meteorFlight_.strength() : finiteUnit(waveStrength));
+                meteorLanded ? std::min(meteorFlight_.strength(), 1.2F)
+                    * (snapshot_.style.rippleColor.w() > 0.5F ? -1.0F : 1.0F)
+                    : finiteUnit(waveStrength));
         }
         const BeatPulseSnapshot beat = beatEvents_.snapshot(
             renderTimeSeconds);
@@ -352,6 +446,23 @@ protected:
                 instances_.constData());
             instancesDirtyUpload_ = false;
         }
+        // Fixed-capacity tail shares the existing instance buffer; terrain and
+        // static extras are not re-uploaded just because particles move.
+        int activeMeteorParticles = 0;
+        if (meteorParticleOffset_ >= 0) {
+            for (std::size_t i=0;i<meteorParticles_.particles().size();++i) {
+                const auto& p = meteorParticles_.particles()[i];
+                activeMeteorParticles += p.active ? 1 : 0;
+                auto& gpu = instances_[meteorParticleOffset_+qsizetype(i)];
+                gpu = {{p.position.x(),p.position.y(),p.position.z()},
+                    {.8F*p.scale(),.8F*p.scale(),.8F*p.scale()},
+                    {7,0,p.active ? .6F : 0,0}};
+            }
+            updates->updateDynamicBuffer(instanceBuffer_.get(),  quint32(meteorParticleOffset_*sizeof(GpuInstance)),
+                quint32(200*sizeof(GpuInstance)), instances_.constData()+meteorParticleOffset_);
+        }
+        telemetry_->activeMeteorParticles.store(activeMeteorParticles, std::memory_order_release);
+        telemetry_->meteorParticleSlots.store(meteorParticleOffset_ >= 0 ? 200 : 0, std::memory_order_release);
 
         if (pendingStaticUploads_) {
             commandBuffer->resourceUpdate(
@@ -392,6 +503,30 @@ protected:
 
         const double workMilliseconds = static_cast<double>(workTimer.nsecsElapsed())
             / 1'000'000.0;
+        if (performanceProbe_) {
+            frameIntervals_[probeFrames_++] = wallElapsedSeconds * 1000.0;
+            probeWorkMs_ += workMilliseconds;
+            if (probeFrames_ == frameIntervals_.size()) {
+                auto sorted = frameIntervals_;
+                std::sort(sorted.begin(), sorted.end());
+                const double gpuSeconds = commandBuffer->lastCompletedGpuTime();
+                qInfo("Reactor performance: frames=%u medianMs=%.3f p95Ms=%.3f maxMs=%.3f cpuMs=%.3f gpuMs=%.3f width=%d height=%d columns=%d resources=%llu analysisFrames=%llu pcmEpoch=%llu",
+                    unsigned(probeFrames_), sorted[probeFrames_ / 2],
+                    sorted[(probeFrames_ * 95) / 100], sorted.back(),
+                    probeWorkMs_ / probeFrames_, gpuSeconds > 0 ? gpuSeconds * 1000.0 : -1.0,
+                    size.width(), size.height(), currentTerrainCount_,
+                    static_cast<unsigned long long>(resourceState_->generation()),
+                    static_cast<unsigned long long>(analysisFrames_),
+                    static_cast<unsigned long long>(snapshot_.pcm.epoch));
+                QStringList intervals;
+                intervals.reserve(int(probeFrames_));
+                for (double interval : frameIntervals_)
+                    intervals.append(QString::number(interval, 'f', 3));
+                qInfo().noquote() << "Reactor frame intervalsMs:" << intervals.join(',');
+                probeFrames_ = 0;
+                probeWorkMs_ = 0;
+            }
+        }
         const double targetFrameMilliseconds = 1000.0 / targetFps;
         quality_.observeFrameSample(workMilliseconds,
                                     wallElapsedSeconds * 1000.0,
@@ -488,6 +623,8 @@ private:
         pendingStaticUploads_ = uploads;
         lastRenderTarget_ = renderTarget();
         instancesDirty_ = true;
+        layoutBuildTimer_.invalidate();
+        instancesDirtyUpload_ = true;
         failed_ = false;
         return true;
     }
@@ -495,6 +632,10 @@ private:
     void buildInstancesIfNeeded()
     {
         if (!instancesDirty_) return;
+        // Keep drawing the previous complete layout while slider changes merge.
+        if (!instances_.isEmpty() && layoutBuildTimer_.isValid()
+            && layoutBuildTimer_.elapsed() < 100) return;
+        layoutBuildTimer_.restart();
         QualityConfiguration config = quality_.configuration(
             snapshot_.quality == TerrainReactorItem::Quality::Eco);
         int gridCeiling = config.gridSize;
@@ -538,10 +679,7 @@ private:
         instances_.clear();
         currentTerrainCount_ = int(layout.terrain.size());
         instances_.reserve(layout.terrain.size() + layout.floating.size()
-                           + layout.meteors.size() + layout.meteorTrails.size()
-                           + layout.collisionRipples.size()
-                           + layout.collisionParticles.size()
-                           + layout.particles.size());
+                           + layout.meteors.size() + layout.particles.size() + 200);
         for (const auto& instance : layout.terrain) {
             instances_.append(toGpuInstance(instance, 0.0F));
         }
@@ -551,22 +689,18 @@ private:
         for (const auto& instance : layout.meteors) {
             instances_.append(toGpuInstance(instance, 2.0F));
         }
-        for (const auto& instance : layout.meteorTrails) {
-            instances_.append(toGpuInstance(instance, 4.0F));
-        }
-        for (const auto& instance : layout.collisionRipples) {
-            instances_.append(toGpuInstance(instance, 5.0F));
-        }
-        for (const auto& instance : layout.collisionParticles) {
-            instances_.append(toGpuInstance(instance, 6.0F));
-        }
         for (const auto& instance : layout.particles) {
             instances_.append(toGpuInstance(instance, 3.0F));
         }
+        meteorParticles_.reset();
+        meteorParticleOffset_ = config.meteorCount > 0 ? instances_.size() : -1;
+        if (meteorParticleOffset_ >= 0)
+            for (int i=0;i<200;++i) instances_.append(GpuInstance{{0,0,0},{0,0,0},{7,0,0,0}});
         if (quint32(instances_.size()) > maximumInstances) {
             qWarning("TerrainReactorItem instance capacity exceeded");
             instances_.resize(qsizetype(maximumInstances));
         }
+        currentTerrainCount_ = std::min(currentTerrainCount_, int(instances_.size()));
         instancesDirty_ = false;
         instancesDirtyUpload_ = true;
         currentRippleCount_ = config.rippleCount;
@@ -628,15 +762,18 @@ private:
         // Independent theme roles stay precise through the snapshot.
         for (int channel = 0; channel < 3; ++channel) {
             result.bodyColor[channel] = snapshot_.style.bodyColor.w() > 0.5F
-                ? snapshot_.style.bodyColor[channel]
+                ? currentThemePalette_.colors[5][channel]
                 : result.colors[0][channel] * 0.92F + result.colors[1][channel] * 0.08F;
             result.atmosphereColor[channel] = snapshot_.style.atmosphereColor.w() > 0.5F
-                ? snapshot_.style.atmosphereColor[channel] : result.colors[0][channel];
+                ? (themePaletteInitialized_ ? currentThemePalette_.colors[6][channel]
+                                           : snapshot_.style.atmosphereColor[channel])
+                : result.colors[0][channel];
         }
         result.bodyColor[3] = 1.0F;
         result.atmosphereColor[3] = 1.0F;
         for (int channel = 0; channel < 4; ++channel)
-            result.rippleColor[channel] = snapshot_.style.rippleColor[channel];
+            result.rippleColor[channel] = themePaletteInitialized_
+                ? currentThemePalette_.colors[7][channel] : snapshot_.style.rippleColor[channel];
         std::copy_n(snapshot_.style.visualEqGains.begin(), 4,
                     result.equalizerLow);
         std::copy_n(snapshot_.style.visualEqGains.begin() + 4, 4,
@@ -656,7 +793,8 @@ private:
         result.effects[3] = float(currentRippleCount_);
         result.styleParameters[0] = snapshot_.style.terrainAmplitude;
         result.styleParameters[1] = snapshot_.style.motionResponse;
-        result.styleParameters[2] = snapshot_.style.glowIntensity;
+        result.styleParameters[2] = themePaletteInitialized_
+            ? currentThemePalette_.glow : snapshot_.style.glowIntensity;
         result.styleParameters[3] = snapshot_.style.cinemaShake;
         result.styleDynamics[0] = snapshot_.style.autoRotate;
         result.styleDynamics[1] = snapshot_.style.peakBoost;
@@ -682,6 +820,15 @@ private:
         result.impact[1] = visual.impactAge;
         result.impact[2] = float(meteorFlight_.group() + 1);
         result.impact[3] = dynamics.rhythmSensitivity;
+        for (int channel=0; channel<4; ++channel)
+            result.floatingParameters[channel] = floatingParameters_[channel];
+        const auto trajectory = meteorFlight_.trajectory();
+        const auto meteorColor = meteorMaterialColor_.color();
+        for (int channel=0; channel<3; ++channel)
+            result.meteorMaterialColor[channel] = meteorColor[channel];
+        result.meteorMaterialColor[3] = themePaletteInitialized_ ? 1.0F : 0.0F;
+        for (int channel=0; channel<4; ++channel)
+            result.meteorTrajectory[channel] = trajectory[channel];
         for (std::size_t index = 0; index < waveSources_.size(); ++index) {
             const QVector4D& source = travelingWaves_[index];
             result.waveSources[index][0] = source.x();
@@ -689,8 +836,8 @@ private:
             const float age = std::max(0.0F, visual.timeSeconds - source.z());
             if (snapshot_.style.rippleColor.w() > 0.5F) {
                 // Reference events carry plain elapsed seconds and signed
-                // strength. Existing production events are normal (positive);
-                // white/snare event generation belongs to the later S layer.
+                // strength: meteor touchdown is white (negative); ordinary
+                // beat waves remain colored (positive).
                 result.waveSources[index][2] = age;
                 result.waveSources[index][3] = source.w();
             } else {
@@ -730,10 +877,9 @@ private:
             result.timbre[1] = float(referenceDescriptors_.brightness);
             result.timbre[2] = float(referenceDescriptors_.sharpness);
         }
-        // Explicitly distinguish the interactive AgPlayer material from the
-        // zero-flag fixed reference fixtures. Runtime keeps the reference U/S
-        // inputs, then applies user-controlled clarity and gel light response.
-        result.timbre[3] = 1.0F;
+        // 0: reference replay clock; 1: canonical theme with fixed idle terrain;
+        // 2: user-custom material. Both runtime modes keep idle terrain fixed.
+        result.timbre[3] = snapshot_.style.bodyColor.w() > 0.5F ? 1.0F : 2.0F;
         return result;
     }
 
@@ -792,6 +938,10 @@ private:
 
     void publishRenderedRevisions()
     {
+        if (instancesDirty_) {
+            telemetry_->stableRenderedFrames.store(0, std::memory_order_release);
+            return;
+        }
         const quint64 featureRevision = snapshot_.featureRevision;
         const quint64 styleRevision = snapshot_.styleRevision;
         const bool samePair = telemetry_->renderedFeatureRevision.load(
@@ -823,6 +973,12 @@ private:
     TerrainReactorItem::RenderSnapshot snapshot_;
     AudioFeatures smoothedFeatures_;
     agplayer::VisualTerrainResponse referenceResponse_;
+    agplayer::VisualAudioFrameAnalyzer frameAnalyzer_;
+    agplayer::VisualSnareTrigger snareTrigger_;
+    BeatEvent renderBeat_;
+    ImpactEvent renderImpact_;
+    quint64 renderBeatCount_ = 0;
+    quint64 analysisFrames_ = 0;
     agplayer::VisualSpectrumFeatures::Features referenceDescriptors_;
     CameraMotion camera_;
     PunchEventConsumer punchEvents_;
@@ -834,12 +990,20 @@ private:
     std::array<unsigned, 8> waveTints_{};
     unsigned waveSequence_ = 0;
     MeteorFlight meteorFlight_;
+    QVector4D floatingParameters_;
+    MeteorParticlePool meteorParticles_;
+    // MeshBasicMaterial survives audio resets, layout changes and enable toggles.
+    MeteorMaterialColor meteorMaterialColor_;
+    qsizetype meteorParticleOffset_ = -1;
     QVector<QVector3D> meteorOrigins_;
     TravelingWaveGate waveGate_;
     int nextWave_ = 0;
     int currentSampleCount_ = 4;
     bool waveSourcesInitialized_ = false;
     TrackPalette currentPalette_{};
+    ThemePalette currentThemePalette_{};
+    ThemePalette targetThemePalette_{};
+    bool themePaletteInitialized_ = false;
     TrackPalette fromPalette_{};
     TrackPalette targetPalette_{};
     float paletteProgress_ = 1.0F;
@@ -853,7 +1017,11 @@ private:
     double renderTimeEpochSeconds_ = 0.0;
     bool renderTimeAnchored_ = false;
     QElapsedTimer counterTimer_;
-    FramePacer framePacer_;
+    QElapsedTimer layoutBuildTimer_;
+    const bool performanceProbe_ = qEnvironmentVariableIsSet("AGPLAYER_REACTOR_PERF");
+    std::array<double, 120> frameIntervals_{};
+    std::size_t probeFrames_ = 0;
+    double probeWorkMs_ = 0;
     QVector<GpuInstance> instances_;
     bool instancesDirty_ = true;
     bool instancesDirtyUpload_ = false;
@@ -888,9 +1056,8 @@ TerrainReactorItem::TerrainReactorItem(QQuickItem* parent)
     setAlphaBlending(true);
     setMirrorVertically(true);
     clock_.start();
-    // A bounded GUI-thread heartbeat avoids a renderer self-update busy loop
-    // when the native backend does not block on presentation. The existing
-    // FramePacer still chooses 60 / 45 / 30 FPS from these opportunities.
+    // One GUI-thread scheduler owns the cadence. Never drop a requested RHI
+    // render: its target may have just been recreated or resolved by Qt.
     renderTick_.setTimerType(Qt::PreciseTimer);
     renderTick_.setInterval(16);
     connect(&renderTick_, &QTimer::timeout, this, [this] {
@@ -912,6 +1079,8 @@ TerrainReactorItem::TerrainReactorItem(QQuickItem* parent)
 
 TerrainReactorItem::~TerrainReactorItem()
 {
+    if (auto* visual = qobject_cast<AudioVisualFeatureController*>(featureSource_))
+        visual->releaseRenderFrameAnalysis();
     if (trackedWindow_ != nullptr) trackedWindow_->removeEventFilter(this);
     disconnect(windowVisibilityConnection_);
     disconnect(featureConnection_);
@@ -979,6 +1148,10 @@ void TerrainReactorItem::setStyleSource(QObject* source)
             &PlayerExperienceController::burstEnabledChanged, this, capture));
         styleConnections_.append(connect(styleSource_,
             &PlayerExperienceController::floatingCubesEnabledChanged, this, capture));
+    styleConnections_.append(connect(styleSource_, &PlayerExperienceController::floatingBlockMinSizeChanged, this, capture));
+    styleConnections_.append(connect(styleSource_, &PlayerExperienceController::floatingBlockMaxSizeChanged, this, capture));
+    styleConnections_.append(connect(styleSource_, &PlayerExperienceController::floatingBlockSpeedChanged, this, capture));
+    styleConnections_.append(connect(styleSource_, &PlayerExperienceController::floatingBlockIntensityChanged, this, capture));
         styleConnections_.append(connect(styleSource_,
             &PlayerExperienceController::meteorsEnabledChanged, this, capture));
         styleConnections_.append(connect(styleSource_,
@@ -989,6 +1162,8 @@ void TerrainReactorItem::setStyleSource(QObject* source)
             &PlayerExperienceController::streamHighlightEnabledChanged, this, capture));
         styleConnections_.append(connect(styleSource_,
             &PlayerExperienceController::visualEqGainsChanged, this, capture));
+        styleConnections_.push_back(connect(styleSource_,
+            &PlayerExperienceController::visualEqEnabledChanged, this, capture));
         styleConnections_.append(connect(styleSource_,
             &PlayerExperienceController::inputCompressionChanged, this, capture));
         styleConnections_.append(connect(styleSource_,
@@ -1067,18 +1242,18 @@ void TerrainReactorItem::setFeatureSource(QObject* source)
     if (visualResetConnection_) disconnect(visualResetConnection_);
     if (impactConnection_) disconnect(impactConnection_);
     if (sourceDestroyedConnection_) disconnect(sourceDestroyedConnection_);
+    if (auto* visual = qobject_cast<AudioVisualFeatureController*>(featureSource_))
+        visual->releaseRenderFrameAnalysis();
     featureSource_ = accepted;
     ++visualResetRevision_;
-    lastVisualUpdate_ = 0;
-    visualBeatCount_ = 0;
-    liveDescriptors_ = {};
-    liveKickEnvelope_ = 0;
+    liveFeatures_ = {};
     featureSourceProvidesBeat_ = featureSource_ != nullptr
         && featureSource_->metaObject()->indexOfProperty("beatRevision") >= 0;
     featureSourceProvidesImpact_ = featureSource_ != nullptr
         && featureSource_->metaObject()->indexOfProperty("impactRevision") >= 0;
     if (featureSource_ != nullptr) {
         if (auto* visual = qobject_cast<AudioVisualFeatureController*>(featureSource_)) {
+            visual->acquireRenderFrameAnalysis();
             if (styleSource_)
                 visual->setVisualKickSensitivity(styleSource_->rhythmSensitivity());
             visualConnection_ = connect(visual, &AudioVisualFeatureController::visualSpectrumReady,
@@ -1086,7 +1261,9 @@ void TerrainReactorItem::setFeatureSource(QObject* source)
             visualResetConnection_ = connect(visual, &AudioVisualFeatureController::visualStateReset,
                 this, [this] {
                     ++visualResetRevision_;
-                    visualBeatCount_ = 0;
+                    liveFeatures_ = {};
+                    ++featureRevision_;
+                    emit featureRevisionChanged();
                     copyVisualSource();
                 });
         }
@@ -1106,8 +1283,6 @@ void TerrainReactorItem::setFeatureSource(QObject* source)
             this, [this] {
                 featureSource_.clear();
                 ++visualResetRevision_;
-                liveDescriptors_ = {};
-                liveKickEnvelope_ = 0;
                 liveFeatures_ = {};
                 applyCurrentFeatures(liveFeatures_);
                 emit featureSourceChanged();
@@ -1351,8 +1526,8 @@ TerrainReactorItem::RenderSnapshot TerrainReactorItem::snapshotForRenderer() con
     result.referenceAudio = !useSyntheticFeatures_ && !styleSource_.isNull()
         && !styleSource_->themeId().isEmpty()
         && qobject_cast<AudioVisualFeatureController*>(featureSource_) != nullptr;
-    result.descriptors = liveDescriptors_;
-    result.kickEnvelope = liveKickEnvelope_;
+    if (auto* visual = qobject_cast<AudioVisualFeatureController*>(featureSource_))
+        result.pcm = visual->visualPcmSnapshot();
     result.visualResetRevision = visualResetRevision_;
     result.style = renderStyle_;
     result.camera = camera_.snapshot();
@@ -1404,6 +1579,9 @@ void TerrainReactorItem::copyStyleSource()
     next.colors[4] = colorVector(styleSource_->peakColor());
     next.colorMode = static_cast<RenderColorMode>(styleSource_->colorMode());
     const QVariantList gains = styleSource_->visualEqGains();
+    const QVariantList enabled = styleSource_->visualEqEnabled();
+    for (int index = 0; index < 8; ++index)
+        next.visualEqEnabled[std::size_t(index)] = enabled.at(index).toBool();
     for (int index = 0; index < 8; ++index) {
         next.visualEqGains[std::size_t(index)] = index < gains.size()
             ? finiteUnit(float(gains.at(index).toDouble()) / 100.0F, 0.5F)
@@ -1429,14 +1607,26 @@ void TerrainReactorItem::copyStyleSource()
     next.ripplesEnabled = styleSource_->ripplesEnabled();
     next.burstEnabled = styleSource_->burstEnabled();
     next.floatingCubesEnabled = styleSource_->floatingCubesEnabled();
+    next.floatingBlockMinSize = styleSource_->floatingBlockMinSize();
+    next.floatingBlockMaxSize = styleSource_->floatingBlockMaxSize();
+    next.floatingBlockSpeed = styleSource_->floatingBlockSpeed();
+    next.floatingBlockIntensity = styleSource_->floatingBlockIntensity();
     next.meteorsEnabled = styleSource_->meteorsEnabled();
     next.idleBreathingEnabled = styleSource_->idleBreathingEnabled();
-    next.themeCycleEnabled = styleSource_->themeCycleEnabled();
+    // Theme rotation is presentation orchestration in QML. It must not also
+    // enable the legacy per-frame shader hue cycle.
+    next.themeCycleEnabled = false;
     next.streamHighlightEnabled = styleSource_->streamHighlightEnabled();
     using namespace agplayer::immersive;
     const QByteArray themeId = styleSource_->themeId().toUtf8();
     if (const auto* theme = findBuiltInTheme(std::string_view(themeId.constData(),
                                                             std::size_t(themeId.size())))) {
+        // Canonical shader consumes half of the original amplitude multiplier.
+        // Preserve the stored UI percentage and the custom-material contract.
+        if (next.terrainAmplitude > 0.5F) {
+            const float upper = (next.terrainAmplitude - 0.5F) * 2.0F;
+            next.terrainAmplitude = (1.0F + upper * upper * 14.0F) * 0.5F;
+        }
         const auto encodedRole = [theme](ThemeColorRole role) {
             const auto value = workingLinearToSrgb(toWorkingLinear(theme->colors[themeColorIndex(role)]));
             return QVector4D(value.red, value.green, value.blue, 1.0F);
@@ -1506,37 +1696,61 @@ void TerrainReactorItem::copyFeatureSource()
     if (!useSyntheticFeatures_) applyCurrentFeatures(liveFeatures_);
 }
 
+TerrainReactorItem::ReferenceAudioFrame TerrainReactorItem::advanceReferenceAudioFrame(
+    agplayer::VisualAudioFrameAnalyzer& analyzer, agplayer::VisualTerrainResponse& response,
+    const RenderSnapshot& snapshot, double wallDelta, agplayer::VisualSnareTrigger& snare)
+{
+    // MapScene uses actual frame delta for terrain, including the first frame.
+    // The audio analyzer independently owns Kick's first-frame and .25s limits.
+    const auto& audio = analyzer.process(snapshot.pcm, wallDelta,
+        qRound(snapshot.style.rhythmSensitivity * 100.0F));
+    if (!audio.valid) response.reset();
+    agplayer::VisualTerrainResponse::EqBands eq;
+    for (std::size_t i = 0; i < eq.size(); ++i) eq[i] = snapshot.style.visualEqGains[i];
+    const auto& terrain = response.update(audio.descriptors, audio.kick.envelope, eq,
+        snapshot.style.visualEqEnabled, wallDelta, snapshot.style.motionResponse * 100.0);
+    return {audio, terrain, snare.process(audio.spectrum, audio.valid)};
+}
+
+void TerrainReactorItem::restoreRenderAudioEvents(BeatEvent& beat, ImpactEvent& impact,
+    const RenderSnapshot& snapshot, const RendererResourceState& resources)
+{
+    // A consumed render event may never have reached the GUI before a reset.
+    // Retain the persistent floor across both resume and renderer recreation.
+    beat.revision = std::max({beat.revision, snapshot.beatEvent.revision,
+                             resources.consumedBeatRevision()});
+    impact.revision = std::max({impact.revision, snapshot.impactEvent.revision,
+                               resources.consumedImpactRevision()});
+    beat.strength = 0;
+    impact.strength = 0;
+}
+
+void TerrainReactorItem::applyRenderAudioFrame(const AudioFeatures& features,
+    const AudioFrameOrigin& origin, const BeatEvent& beat, const ImpactEvent& impact)
+{
+    if (visualResetRevision_ != origin.visualResetRevision
+        || activityRevision_ != origin.activityRevision
+        || styleRevision_ != origin.styleRevision
+        || !styleSource_ || styleSource_->themeId().isEmpty()
+        || useSyntheticFeatures_ || !renderingRequested()) return;
+    liveFeatures_ = features;
+    if (pendingBeat_.revision != beat.revision) {
+        pendingBeat_ = beat;
+        emit beatChanged();
+    }
+    if (pendingImpact_.revision != impact.revision) {
+        pendingImpact_ = impact;
+        emit impactChanged();
+    }
+    ++featureRevision_;
+    emit featureRevisionChanged();
+}
+
 void TerrainReactorItem::copyVisualSource()
 {
-    const auto* source = qobject_cast<AudioVisualFeatureController*>(featureSource_);
-    if (!source || !styleSource_ || styleSource_->themeId().isEmpty()) return;
-    liveDescriptors_ = source->visualFeatures();
-    liveKickEnvelope_ = source->visualKick().envelope;
-    AudioFeatures next;
-    for (std::size_t i = 0; i < next.bands.size(); ++i)
-        next.bands[i] = float(liveDescriptors_.bands[i]);
-    next.energy = float(liveDescriptors_.energy);
-    next.spectralFlux = float(source->visualKick().flux);
-    next.kick = float(source->visualKick().onset);
-    const auto revision = source->visualSpectrumUpdateCount();
-    if (revision != lastVisualUpdate_ && next.kick > 0) {
-        pendingBeat_.strength = float(source->visualKick().confidence);
-        ++pendingBeat_.revision;
-        emit beatChanged();
-        if (++visualBeatCount_ % 8 == 0) {
-            pendingImpact_.strength = pendingBeat_.strength;
-            ++pendingImpact_.revision;
-            emit impactChanged();
-        }
-    }
-    lastVisualUpdate_ = revision;
-    liveFeatures_ = next;
-    if (!useSyntheticFeatures_) {
-        // Reference onsets only move the terrain: never raise camera punch events.
-        ++featureRevision_;
-        emit featureRevisionChanged();
-        scheduleIfRunnable();
-    }
+    // PCM collection and GUI feature notifications only request a frame. The
+    // blocked-GUI synchronize phase copies PCM; render owns every analysis step.
+    if (!useSyntheticFeatures_) scheduleIfRunnable();
 }
 
 void TerrainReactorItem::applyCurrentFeatures(const AudioFeatures& features)
@@ -1568,13 +1782,14 @@ void TerrainReactorItem::applyCurrentFeatures(const AudioFeatures& features)
 void TerrainReactorItem::scheduleIfRunnable()
 {
     const bool running = renderingRequested();
+    const int interval = quality_ == Quality::Eco ? 33
+        : quality_ == Quality::Balanced ? 22 : 16;
+    if (renderTick_.interval() != interval) renderTick_.setInterval(interval);
     if (running && !renderTick_.isActive()) renderTick_.start();
     else if (!running) renderTick_.stop();
     if (running != lastScheduledRunning_) {
         lastScheduledRunning_ = running;
         ++activityRevision_;
-        update();
-    } else if (running) {
         update();
     }
 }
@@ -1613,6 +1828,12 @@ void TerrainReactorItem::updateWindowState(QQuickWindow* window)
     if (window == nullptr) {
         windowExposed_ = true;
     } else {
+        // Only the dedicated immersive host opts out of hidden-window GPU
+        // caching. Never change the normal player's scene-graph policy.
+        if (window->objectName() == QStringLiteral("immersiveVisualWindow")) {
+            window->setPersistentSceneGraph(false);
+            window->setPersistentGraphics(false);
+        }
         window->installEventFilter(this);
         const auto refresh = [this] { refreshWindowExposure(); };
         windowVisibilityConnection_ = connect(window, &QWindow::visibilityChanged,

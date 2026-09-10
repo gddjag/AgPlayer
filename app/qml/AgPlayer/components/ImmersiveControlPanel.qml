@@ -91,6 +91,16 @@ Rectangle {
             ]
         },
         {
+            "key": "Floating", "title": qsTr("漂浮晶体"),
+            "sliders": [
+                { "label": qsTr("最小尺寸"), "key": "floatingBlockMinSize", "from": 0, "to": 100, "step": 1 },
+                { "label": qsTr("最大尺寸"), "key": "floatingBlockMaxSize", "from": 0, "to": 100, "step": 1 },
+                { "label": qsTr("跟随速度"), "key": "floatingBlockSpeed", "from": 0, "to": 100, "step": 1 },
+                { "label": qsTr("响应强度"), "key": "floatingBlockIntensity", "from": 0, "to": 100, "step": 1 }
+            ],
+            "effects": []
+        },
+        {
             "key": "Impact", "title": qsTr("节奏与冲击"),
             "sliders": [
                 { "label": qsTr("节奏强度"), "key": "rhythmStrength", "from": 0, "to": 140, "scale": 100, "decimals": 2 }
@@ -330,6 +340,12 @@ Rectangle {
                             id: presetCard
                             required property int index
                             required property var modelData
+                            readonly property color gradientFrom: modelData.from
+                            readonly property color gradientTo: modelData.to
+                            readonly property color labelColor: Theme.tagCapsuleFilledText(
+                                Qt.rgba((gradientFrom.r + gradientTo.r) / 2,
+                                        (gradientFrom.g + gradientTo.g) / 2,
+                                        (gradientFrom.b + gradientTo.b) / 2, 1))
                             objectName: "immersivePresetCard" + index
                             Layout.row: Math.floor(index / 3)
                             Layout.column: index % 3
@@ -360,7 +376,7 @@ Rectangle {
                             contentItem: Text {
                                 objectName: "immersivePresetTitle" + presetCard.index
                                 text: presetCard.modelData.title
-                                color: Theme.onBrandGradientText
+                                color: presetCard.labelColor
                                 font.family: Theme.fontPrimary
                                 font.pixelSize: Theme.fontSizeCaption
                                 font.weight: Font.DemiBold
@@ -370,6 +386,58 @@ Rectangle {
                                 elide: Text.ElideRight
                             }
                         }
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingSm
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("预设自动轮换")
+                        color: Theme.textSecondary
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: Theme.fontSizeCaption
+                    }
+                    ThemedCheckBox {
+                        objectName: "themeTimedCycleToggle"
+                        text: qsTr("定时")
+                        checked: PlayerExperienceController.themeCycleEnabled
+                        onToggled: PlayerExperienceController.themeCycleEnabled = checked
+                    }
+                    ThemedCheckBox {
+                        objectName: "themeSongCycleToggle"
+                        text: qsTr("换歌")
+                        checked: PlayerExperienceController.themeSongCycleEnabled
+                        onToggled: PlayerExperienceController.themeSongCycleEnabled = checked
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingSm
+                    enabled: PlayerExperienceController.themeCycleEnabled
+                    opacity: enabled ? 1 : 0.45
+                    Text {
+                        text: qsTr("间隔")
+                        color: Theme.textTertiary
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: Theme.fontSizeCaption
+                    }
+                    ThemedSlider {
+                        objectName: "themeCycleIntervalSlider"
+                        Layout.fillWidth: true
+                        from: 3
+                        to: 120
+                        stepSize: 1
+                        value: PlayerExperienceController.themeCycleIntervalSeconds
+                        onMoved: PlayerExperienceController.themeCycleIntervalSeconds =
+                                 Math.round(value)
+                    }
+                    Text {
+                        text: PlayerExperienceController.themeCycleIntervalSeconds
+                              + qsTr(" 秒")
+                        color: Theme.textSecondary
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: Theme.fontSizeCaption
                     }
                 }
                 RowLayout {
@@ -440,9 +508,9 @@ Rectangle {
                     objectName: "immersiveQualityCombo"
                     Layout.fillWidth: true
                     implicitHeight: 30
-                    model: ["Auto · 自适应", "Eco · 96² / 30 FPS",
-                            "Balanced · 128² / 45 FPS", "High · 160² / 60 FPS",
-                            "Ultra · 160² / 60 FPS"]
+                    model: ["Auto · 自适应", "Eco · 30 FPS",
+                            "Balanced · 45 FPS", "High · 60 FPS",
+                            "Ultra · 60 FPS"]
                     currentIndex: PlayerExperienceController.qualityPreset
                     onActivated: PlayerExperienceController.qualityPreset = currentIndex
                 }
@@ -653,6 +721,16 @@ Rectangle {
                                 text: modelData
                                 color: Theme.textSecondary
                                 font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption
+                            }
+                            ThemedCheckBox {
+                                objectName: "visualEqEnabled_" + bandIndex
+                                checked: !!PlayerExperienceController.visualEqEnabled[bandIndex]
+                                Accessible.name: modelData + qsTr("启用")
+                                onToggled: {
+                                    var values = PlayerExperienceController.visualEqEnabled.slice()
+                                    values[bandIndex] = checked
+                                    PlayerExperienceController.visualEqEnabled = values
+                                }
                             }
                             Text {
                                 objectName: "visualEqValue_" + bandIndex

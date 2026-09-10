@@ -12,6 +12,7 @@
 #include "visual_spectrum_analyzer.hpp"
 #include "visual_spectrum_features.hpp"
 #include "visual_kick_response.hpp"
+#include "visual_audio_frame_analyzer.hpp"
 
 struct ag_visual_pcm_snapshot;
 
@@ -51,6 +52,9 @@ public:
     const agplayer::visual::KickResponse::Output& visualKick() const noexcept { return visualKick_; }
     int visualKickSensitivity() const noexcept { return visualKickSensitivity_; }
     void setVisualKickSensitivity(int sensitivity);
+    agplayer::VisualAudioFrameAnalyzer::Snapshot visualPcmSnapshot() const noexcept;
+    void acquireRenderFrameAnalysis();
+    void releaseRenderFrameAnalysis();
 
     bool active() const noexcept;
     QVariantList bands() const;
@@ -91,7 +95,9 @@ private:
     friend class AudioVisualFeatureControllerTest;
     void setVisualPcmEnabled(bool enabled);
     void resetVisualPcm();
-    void ingestVisualPcm(const ag_visual_pcm_snapshot& snapshot);
+    void ingestVisualPcm(const ag_visual_pcm_snapshot& snapshot, bool deferAnalysis = false);
+    void analyzeVisualPcm();
+    void updateVisualPlaybackState();
     agplayer::VisualSpectrumAnalyzer visualAnalyzer_;
     agplayer::VisualSpectrumFeatures visualFeatureAnalyzer_;
     agplayer::visual::KickResponse visualKickResponse_;
@@ -99,12 +105,17 @@ private:
     agplayer::visual::KickResponse::Output visualKick_{};
     int visualKickSensitivity_ = 100;
     std::size_t visualSamplesSinceUpdate_ = 0;
+    QElapsedTimer visualAnalysisTimer_;
+    unsigned int renderFrameConsumers_ = 0;
+    quint64 visualPcmEpoch_ = 0;
     agplayer::VisualSpectrumAnalyzer::Window visualPcm_{};
     agplayer::VisualSpectrumAnalyzer::Spectrum visualSpectrum_{};
     std::size_t visualPcmSize_ = 0;
     quint64 visualGeneration_ = 0;
     quint64 visualNextIndex_ = 0;
     int visualSampleRate_ = 0;
+    bool visualPaused_ = false;
+    QElapsedTimer visualReleaseTimer_;
     quint64 visualSpectrumUpdateCount_ = 0;
     void connectPlaybackSignals();
     void disconnectPlaybackSignals();

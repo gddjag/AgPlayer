@@ -11,6 +11,10 @@
 #include <QQuickRenderTarget>
 #include <QQuickWindow>
 #include <QTest>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QJsonObject>
 
 #include <array>
 #include <cmath>
@@ -74,7 +78,54 @@ class TerrainReactorItemTest final : public QObject {
     Q_OBJECT
 
 private slots:
-    void referenceSceneConsumesSharedPcmAndClearsOnPause();
+    void visualEqSwitchesReachRealAudioResponse()
+    {
+        PlayerExperienceController style;
+        style.setVisualEqEnabled({true,true,true,true,true,true,true,true});
+        TerrainReactorItem item;
+        item.setStyleSource(&style);
+        TerrainReactorItem::RenderSnapshot snapshot;
+        snapshot.pcm.valid = true; snapshot.pcm.sampleRate = 48000; snapshot.pcm.epoch = 1;
+        for (std::size_t i = 0; i < snapshot.pcm.pcm.size(); ++i)
+            snapshot.pcm.pcm[i] = float(.6 * std::sin(2 * 3.141592653589793 * 80 * i / 48000));
+        agplayer::VisualAudioFrameAnalyzer analyzer;
+        agplayer::VisualTerrainResponse response;
+        agplayer::VisualSnareTrigger snare;
+        snapshot.style = item.renderStyleSnapshot();
+        const auto active = TerrainReactorItem::advanceReferenceAudioFrame(analyzer, response, snapshot, .016, snare).terrain;
+        QVERIFY(active.bands[0] > 0);
+        style.setVisualEqEnabled({false,false,false,false,false,false,false,false});
+        snapshot.style = item.renderStyleSnapshot();
+        analyzer.reset(); response.reset(); snare.reset();
+        const auto inactive = TerrainReactorItem::advanceReferenceAudioFrame(analyzer, response, snapshot, .016, snare).terrain;
+        for (double band : inactive.bands) QCOMPARE(band, 0.0);
+    }
+    void canonicalAmplitudeUsesOriginalCurve()
+    {
+        PlayerExperienceController style;
+        QVERIFY(style.applyTheme(QStringLiteral("nocturnal")));
+        TerrainReactorItem item;
+        item.setStyleSource(&style);
+        const int percentages[] = {0, 50, 75, 100};
+        const float halfMultipliers[] = {0, .5F, 2.25F, 7.5F};
+        for (int i = 0; i < 4; ++i) {
+            style.setTerrainAmplitude(percentages[i]);
+            QCOMPARE(item.renderStyleSnapshot().terrainAmplitude, halfMultipliers[i]);
+            QCOMPARE(style.terrainAmplitude(), percentages[i]);
+        }
+        style.setCoolColor(QStringLiteral("#123456"));
+        QVERIFY(style.themeId().isEmpty());
+        for (const int percentage : percentages) {
+            style.setTerrainAmplitude(percentage);
+            QCOMPARE(item.renderStyleSnapshot().terrainAmplitude, percentage / 100.0F);
+        }
+    }
+    void snareWhiteWaveUsesSharedPresentationGate();
+    void referenceFrameRoutesOriginalSnareEvents();
+    void firstTerrainFrameUsesActualDelta();
+    void renderEventsSurviveDiscardedGuiReportsAndRendererRecreation();
+    void queuedRenderReportCannotOverwriteManualMode();
+    void referenceSceneRetainsSharedPcmForPauseRelease();
     void defaultsDoNotScheduleRendering();
     void compensatesRasterDirectionAtPresentation()
     {
@@ -98,7 +149,157 @@ private slots:
     void referenceThemesReachRendererWithoutHexQuantization();
 };
 
-void TerrainReactorItemTest::referenceSceneConsumesSharedPcmAndClearsOnPause()
+void TerrainReactorItemTest::referenceFrameRoutesOriginalSnareEvents()
+{
+    const auto path = qEnvironmentVariable("AGPLAYER_REFERENCE_AUDIO_TRACE");
+    if (path.isEmpty()) QSKIP("Optional original real PCM trace not provided");
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const auto root = QJsonDocument::fromJson(file.readAll()).object();
+    const auto frames = root["frames"].toArray();
+    QCOMPARE(frames.size(), 126);
+    TerrainReactorItem::RenderSnapshot snapshot;
+    snapshot.pcm.sampleRate = root["sampleRate"].toInt();
+    snapshot.pcm.valid = true;
+    snapshot.pcm.epoch = 1;
+    agplayer::VisualAudioFrameAnalyzer analyzer;
+    agplayer::VisualTerrainResponse response;
+    agplayer::VisualSnareTrigger snare;
+    for (int i = 0; i < frames.size(); ++i) {
+        const auto samples = frames[i].toObject()["timeDomain"].toArray();
+        QCOMPARE(samples.size(), 1024);
+        for (int sample = 0; sample < 1024; ++sample)
+            snapshot.pcm.pcm[sample] = float(samples[sample].toDouble());
+        const auto actual = TerrainReactorItem::advanceReferenceAudioFrame(
+            analyzer, response, snapshot, .016, snare);
+        const bool expected = i == 12 || i == 123;
+        QVERIFY2(actual.snare.triggered == expected, qPrintable(QString("PCM frame %1").arg(i)));
+        if (expected) {
+            const double strength = i == 12 ? .14751430206677263 : .192378863459133;
+            QVERIFY(std::abs(actual.snare.strength - strength) < 1e-12);
+        }
+    }
+    snapshot.pcm.valid = false;
+    const auto invalid = TerrainReactorItem::advanceReferenceAudioFrame(
+        analyzer, response, snapshot, .016, snare);
+    QVERIFY(!invalid.snare.triggered);
+    QCOMPARE(invalid.snare.strength, 0.0);
+}
+
+void TerrainReactorItemTest::snareWhiteWaveUsesSharedPresentationGate()
+{
+    TravelingWaveGate gate;
+    // Actual original Snare callback strength from real trace frame 12.
+    const double strength = .14751430206677263;
+    const auto wave = consumeSnareWave(gate, 0, strength, 42, true, false);
+    QVERIFY(wave.w() < 0); // Reference shader's white-wave encoding.
+    QVERIFY(std::abs(wave.w() + strength * 3) < 1e-7);
+    const double radius = std::hypot(wave.x(), wave.y());
+    QVERIFY(radius >= 10 && radius <= 45);
+    QCOMPARE(consumeSnareWave(gate, .05F, 1, 43, true, false), QVector4D());
+    QVERIFY(!gate.consume(3, 1)); // Snare blocks subsequent ordinary beat/meteor.
+    QVERIFY(gate.consume(6, 1));
+    // Landing must anchor to display time, not an earlier launch reservation.
+    gate.anchor(6.5F, 1);
+    QCOMPARE(consumeSnareWave(gate, 9.49F, 1, 44, true, false), QVector4D());
+    const auto afterLanding = consumeSnareWave(gate, 9.5F, 2, 44, true, false);
+    QCOMPARE(afterLanding.w(), -3.0F);
+    for (quint32 seed = 1; seed <= 64; ++seed) {
+        TravelingWaveGate fresh;
+        QCOMPARE(consumeSnareWave(fresh, 0, 1, seed, true, true), QVector4D());
+        QCOMPARE(consumeSnareWave(fresh, 0, 1, seed, false, false), QVector4D());
+        QCOMPARE(consumeSnareWave(fresh, 0, 0, seed, true, false), QVector4D());
+        const auto allowed = consumeSnareWave(fresh, 0, 1, seed, true, false);
+        const double distance = std::hypot(allowed.x(), allowed.y());
+        QVERIFY(distance >= 10 && distance <= 45);
+        QCOMPARE(allowed.w(), -3.0F);
+    }
+}
+
+void TerrainReactorItemTest::firstTerrainFrameUsesActualDelta()
+{
+    TerrainReactorItem::RenderSnapshot snapshot;
+    snapshot.pcm.valid = true;
+    snapshot.pcm.sampleRate = 48000;
+    snapshot.pcm.epoch = 1;
+    for (std::size_t i = 0; i < snapshot.pcm.pcm.size(); ++i)
+        snapshot.pcm.pcm[i] = float(.6 * std::sin(2 * 3.141592653589793 * 80 * i / 48000));
+    snapshot.style.visualEqGains.fill(.5F);
+    snapshot.style.motionResponse = .5F;
+    snapshot.style.rhythmSensitivity = 1;
+    agplayer::VisualAudioFrameAnalyzer analyzer;
+    agplayer::VisualSnareTrigger snare;
+    agplayer::VisualTerrainResponse response, oracle;
+    agplayer::VisualTerrainResponse::EqBands eq;
+    eq.fill(.5);
+    for (const double dt : {.016, .008, .5}) {
+        const auto frame = TerrainReactorItem::advanceReferenceAudioFrame(
+            analyzer, response, snapshot, dt, snare);
+        QVERIFY(frame.audio.valid);
+        QVERIFY(frame.audio.descriptors.bands[0] > 0);
+        const auto expected = oracle.update(frame.audio.descriptors, frame.audio.kick.envelope,
+            eq, {true,true,true,true,true,true,true,true}, dt, 50);
+        for (std::size_t i = 0; i < expected.bands.size(); ++i)
+            QCOMPARE(frame.terrain.bands[i], expected.bands[i]);
+    }
+    analyzer.reset(); response.reset(); oracle.reset();
+    ++snapshot.pcm.epoch;
+    const auto resumed = TerrainReactorItem::advanceReferenceAudioFrame(
+        analyzer, response, snapshot, .008, snare);
+    const auto expected = oracle.update(resumed.audio.descriptors, resumed.audio.kick.envelope,
+        eq, {true,true,true,true,true,true,true,true}, .008, 50);
+    QCOMPARE(resumed.terrain.bands[0], expected.bands[0]);
+    agplayer::visual::KickResponse kick;
+    const auto expectedKick = kick.process(resumed.audio.spectrum, 1.0 / 60.0, 100);
+    QCOMPARE(resumed.audio.kick.envelope, expectedKick.envelope);
+    QCOMPARE(resumed.audio.kick.level, expectedKick.level);
+}
+
+void TerrainReactorItemTest::renderEventsSurviveDiscardedGuiReportsAndRendererRecreation()
+{
+    RendererResourceState resources;
+    BeatEventConsumer consumer(resources);
+    ImpactEventConsumer impacts(resources);
+    QVERIFY(consumer.consume({.8F,12},0));
+    QVERIFY(impacts.consume({.9F,8},0));
+    TerrainReactorItem::RenderSnapshot staleGui;
+    staleGui.beatEvent = {.1F,2};
+    staleGui.impactEvent = {.1F,1};
+    BeatEvent beat{.8F,12}; ImpactEvent impact{.9F,8};
+    TerrainReactorItem::restoreRenderAudioEvents(beat,impact,staleGui,resources);
+    ++beat.revision; ++impact.revision;
+    QVERIFY2(consumer.consume(beat,1),"Resume must not lose onset when GUI report was discarded");
+    QVERIFY(impacts.consume(impact,1));
+    BeatEvent recreatedBeat; ImpactEvent recreatedImpact;
+    BeatEventConsumer recreatedConsumer(resources);
+    ImpactEventConsumer recreatedImpacts(resources);
+    TerrainReactorItem::restoreRenderAudioEvents(recreatedBeat,recreatedImpact,staleGui,resources);
+    ++recreatedBeat.revision; ++recreatedImpact.revision;
+    QVERIFY2(recreatedConsumer.consume(recreatedBeat,2),"New renderer must exceed persistent consumed revision");
+    QVERIFY(recreatedImpacts.consume(recreatedImpact,2));
+}
+
+void TerrainReactorItemTest::queuedRenderReportCannotOverwriteManualMode()
+{
+    AudioVisualFeatureController source;
+    PlayerExperienceController style;
+    QVERIFY(style.applyTheme(QStringLiteral("nocturnal")));
+    TerrainReactorItem item;
+    item.setStyleSource(&style); item.setFeatureSource(&source); item.setActive(true);
+    const auto snapshot=item.snapshotForRenderer();
+    const TerrainReactorItem::AudioFrameOrigin origin{snapshot.visualResetRevision,
+        snapshot.activityRevision,snapshot.styleRevision};
+    AudioFeatures oldFrame; oldFrame.energy=.9F;
+    QMetaObject::invokeMethod(&item,[&item,oldFrame,origin] {
+        item.applyRenderAudioFrame(oldFrame,origin,{.8F,4},{.8F,1});
+    },Qt::QueuedConnection);
+    style.setBaseColor(QStringLiteral("#102030"));
+    QVERIFY(style.themeId().isEmpty());
+    QCoreApplication::sendPostedEvents(&item,QEvent::MetaCall);
+    QCOMPARE(item.featureEnergy(),0.0);
+}
+
+void TerrainReactorItemTest::referenceSceneRetainsSharedPcmForPauseRelease()
 {
     ag_player* raw = nullptr;
     const ag_player_config config{AG_AUDIO_BACKEND_NULL, 4096U};
@@ -116,14 +317,19 @@ void TerrainReactorItemTest::referenceSceneConsumesSharedPcmAndClearsOnPause()
     QCOMPARE(ag_player_set_muted(raw, 1), AG_OK);
     QCOMPARE(ag_player_load(raw, AGPLAYER_TEST_WAV), AG_OK);
     QCOMPARE(ag_player_play(raw), AG_OK);
-    QTRY_VERIFY_WITH_TIMEOUT(features.visualSpectrumUpdateCount() > 0, 3000);
-    QTRY_VERIFY_WITH_TIMEOUT(item.featureEnergy() > 0, 3000);
-    QVERIFY(std::abs(item.featureEnergy() - features.visualFeatures().energy) < 1e-6);
+    QTest::qWait(200);
+    // Attached terrain owns analysis cadence. Without an actual render frame,
+    // the GUI FIFO drain must not run FFT/features/kick on its own timer.
+    QCOMPARE(features.visualSpectrumUpdateCount(), quint64{0});
+    QCOMPARE(item.featureEnergy(), 0.0);
     const auto before = item.featureRevision();
     QCOMPARE(ag_player_pause(raw), AG_OK);
-    QTRY_COMPARE_WITH_TIMEOUT(item.featureEnergy(), 0.0, 1000);
-    QVERIFY(item.featureRevision() > before);
-    for (const auto& band : item.featureBands()) QCOMPARE(band.toDouble(), 0.0);
+    QTRY_VERIFY_WITH_TIMEOUT(item.snapshotForRenderer().pcm.paused, 1000);
+    const auto paused = item.snapshotForRenderer();
+    QVERIFY(paused.pcm.paused);
+    QVERIFY(paused.pcm.releasing);
+    QVERIFY(!paused.pcm.valid);
+    QCOMPARE(item.featureRevision(), before);
     item.setFeatureSource(nullptr);
     QCOMPARE(item.featureEnergy(), 0.0);
     for (const auto& band : item.featureBands()) QCOMPARE(band.toDouble(), 0.0);

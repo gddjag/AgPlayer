@@ -48,6 +48,7 @@ ApplicationWindow {
     property int rollingSidePanelPage: 0
     property bool rollingSidePanelExpanded: true
     property bool immersiveRenderingEnabled: true
+    property string themeRotationTrackId: ""
     property int previousShellMode: SettingsController.playerShellMode
     property int videoVisibilityBeforeFullscreen: Window.Windowed
     property alias waveformSession: sharedWaveformSession
@@ -56,7 +57,11 @@ ApplicationWindow {
     readonly property bool rollingShell:
         SettingsController.playerShellMode === 2
     readonly property bool immersiveActuallyRendering:
-        immersiveRenderingEnabled && PlayerExperienceController.panelVisible
+        immersiveRenderingEnabled && immersiveCoordinator.surface !== null
+        && immersiveCoordinator.surface.terrainItem !== null
+        && immersiveCoordinator.surface.terrainItem.renderingRequested
+    onImmersiveActuallyRenderingChanged: synchronizeAudioVisualConsumer()
+    onPlaybackChanged: resetThemeRotationTrackBaseline()
     readonly property bool integratedLyricsRequested:
         integratedShell && integratedSidePanelExpanded
         && integratedSidePanelPage === 1
@@ -146,11 +151,52 @@ ApplicationWindow {
         id: sharedWaveformSession
     }
 
-    // `active` is intentionally invokable-only. Keep one writer here so the
-    // rolling shell and immersive surface cannot race each other's teardown.
+    // `active` is intentionally invokable-only. The independent immersive
+    // surface preserves the same rolling demand during host teardown.
     function synchronizeAudioVisualConsumer() {
         AudioVisualFeatureController.setActive(
                     rollingShell || immersiveActuallyRendering)
+    }
+
+    function currentPlaybackTrackId() {
+        return playback && playback.currentTrackId !== undefined
+                ? String(playback.currentTrackId || "") : ""
+    }
+
+    function resetThemeRotationTrackBaseline() {
+        themeRotationTrackId = currentPlaybackTrackId()
+    }
+
+    function advanceImmersivePreset() {
+        var themes = PlayerExperienceController.builtInThemeChoices
+        if (!themes || themes.length < 2)
+            return false
+        var currentId = String(PlayerExperienceController.themeId || "")
+        var currentIndex = -1
+        for (var index = 0; index < themes.length; ++index) {
+            if (String(themes[index].id) === currentId) {
+                currentIndex = index
+                break
+            }
+        }
+        var nextIndex = currentIndex >= 0
+                ? (currentIndex + 1) % themes.length : 0
+        return PlayerExperienceController.applyTheme(
+                    String(themes[nextIndex].id))
+    }
+
+    function handleThemeRotationTrackChanged() {
+        var currentId = currentPlaybackTrackId()
+        if (currentId.length === 0)
+            return
+        var previousId = themeRotationTrackId
+        themeRotationTrackId = currentId
+        if (previousId.length === 0 || previousId === currentId)
+            return
+        if (PlayerExperienceController.immersiveMode
+                !== PlayerExperienceController.Off
+                && PlayerExperienceController.themeSongCycleEnabled)
+            advanceImmersivePreset()
     }
 
     function showRollingLyricsPanel() {
@@ -214,9 +260,37 @@ ApplicationWindow {
                 WindowController.showListWindow()
             }
         }
+        function onImmersiveModeChanged() {
+            mainWindow.resetThemeRotationTrackBaseline()
+        }
+        function onThemeChanged() {
+            if (themeRotationTimer.running)
+                themeRotationTimer.restart()
+        }
+    }
+
+    Connections {
+        target: mainWindow.playback
+        ignoreUnknownSignals: true
+        function onCurrentTrackIdChanged() {
+            mainWindow.handleThemeRotationTrackChanged()
+        }
+    }
+
+    Timer {
+        id: themeRotationTimer
+        objectName: "themeRotationTimer"
+        interval: Math.max(3, Math.min(120,
+                    PlayerExperienceController.themeCycleIntervalSeconds)) * 1000
+        repeat: true
+        running: PlayerExperienceController.immersiveMode
+                 !== PlayerExperienceController.Off
+                 && PlayerExperienceController.themeCycleEnabled
+        onTriggered: mainWindow.advanceImmersivePreset()
     }
 
     Component.onCompleted: {
+        resetThemeRotationTrackBaseline()
         synchronizeAudioVisualConsumer()
         if (qaImmersive) {
             PlayerExperienceController.hostMode =

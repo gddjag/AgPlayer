@@ -43,28 +43,31 @@ class QmlMiniPlayerSetup final : public QObject {
     Q_OBJECT
 
 public:
-    Q_INVOKABLE QStringList prepareTransportQueue()
+    Q_INVOKABLE QStringList prepareTransportQueue(int durationSeconds = 1)
     {
         if (!transportDirectory_.isValid() || !playback_ || !library_) return {};
+        durationSeconds = qBound(1, durationSeconds, 60);
+        const quint32 dataBytes = 192000U * quint32(durationSeconds);
         QStringList ids;
         for (int index = 0; index < 3; ++index) {
-            const QString id = QStringLiteral("shortcut-track-%1").arg(index);
+            const QString id = QStringLiteral("shortcut-track-%1").arg(index)
+                + (durationSeconds == 1 ? QString{} : QStringLiteral("-%1s").arg(durationSeconds));
             const QString path = transportDirectory_.filePath(id + QStringLiteral(".wav"));
             if (library_->indexForTrackId(id) < 0) {
                 QFile file(path);
                 if (!file.open(QIODevice::WriteOnly)) return {};
-                // One second of real PCM silence; only the output device is
+                // Bounded real PCM silence; only the output device is
                 // null. Decoder, queue, transport and snapshots remain real.
                 QDataStream wav(&file);
                 wav.setByteOrder(QDataStream::LittleEndian);
                 wav.writeRawData("RIFF", 4);
-                wav << quint32(36 + 192000);
+                wav << quint32(36 + dataBytes);
                 wav.writeRawData("WAVEfmt ", 8);
                 wav << quint32(16) << quint16(1) << quint16(2) << quint32(48000)
                     << quint32(192000) << quint16(4) << quint16(16);
                 wav.writeRawData("data", 4);
-                wav << quint32(192000);
-                const QByteArray pcm(192000, '\0');
+                wav << dataBytes;
+                const QByteArray pcm(dataBytes, '\0');
                 wav.writeRawData(pcm.constData(), pcm.size());
                 if (wav.status() != QDataStream::Ok) return {};
                 file.close();
@@ -186,6 +189,9 @@ public slots:
         engine->rootContext()->setContextProperty("miniMetadataTrackId",
                                                   miniMetadataTrackId_);
         engine->rootContext()->setContextProperty("transportTestSetup", this);
+        engine->rootContext()->setContextProperty(
+            "testFloatingControlsScreenshotPath",
+            qEnvironmentVariable("AGPLAYER_FLOATING_CONTROLS_SCREENSHOT"));
 
         // Main window — same as qml_main_window_test harness.
         mainComponent_ = std::make_unique<QQmlComponent>(engine);

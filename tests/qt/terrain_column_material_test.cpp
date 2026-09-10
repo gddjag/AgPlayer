@@ -48,6 +48,14 @@ struct NativeReplay {
     std::vector<GpuInstance> instances;
     QJsonObject manifest;
 };
+bool saveNativeReadbackPng(QImage image, const QString& path, bool premultiplied = true)
+{
+    // The transparent render target contains associated RGB after blending.
+    // PNG stores straight RGB: label the bytes correctly so Qt converts once.
+    if (premultiplied)
+        image.reinterpretAsFormat(QImage::Format_RGBA8888_Premultiplied);
+    return image.save(path);
+}
 std::shared_ptr<const NativeReplay> loadNativeReplay(const QString& path)
 {
     const auto require = [](bool ok, const char* message) {
@@ -379,6 +387,12 @@ void ColumnRenderer::initialize(QRhiCommandBuffer*)
     };
     const QShader vertexShader = shader(QStringLiteral(":/terrain/shaders/terrain_reactor.vert.qsb"));
     const bool hashDiagnostic = qEnvironmentVariable("AGPLAYER_PARITY_HASH_DIAGNOSTIC") == "1";
+    const bool diagnosticBlendOff = hashDiagnostic
+        && qEnvironmentVariable("AGPLAYER_PARITY_HASH_BLEND_OFF") == "1";
+    const bool diagnosticDepthOff = replay_ && hashDiagnostic
+        && qEnvironmentVariable("AGPLAYER_PARITY_HASH_DEPTH_OFF") == "1";
+    const bool diagnosticDepthWriteOff = replay_ && hashDiagnostic
+        && qEnvironmentVariable("AGPLAYER_PARITY_HASH_DEPTH_WRITE_OFF") == "1";
     const QString diagnosticPath = qEnvironmentVariable("AGPLAYER_PARITY_HASH_DIAGNOSTIC_QSB");
     const QString fragmentPath = hashDiagnostic ? diagnosticPath
         : QStringLiteral(":/terrain/shaders/terrain_reactor.frag.qsb");
@@ -393,6 +407,9 @@ void ColumnRenderer::initialize(QRhiCommandBuffer*)
         QMutexLocker lock(&counters_->replayMutex);
         counters_->replayManifest["hashDiagnostic"] = QJsonObject{
             {"nonAppearanceOnly", true},
+            {"blendEnabled", !diagnosticBlendOff},
+            {"depthTestEnabled", !diagnosticDepthOff},
+            {"depthWriteEnabled", !diagnosticDepthWriteOff},
             {"fragmentShaderPath", fragmentPath},
             {"fragmentShaderSha256", counters_->replayManifest.value(fragmentPath)},
             {"contract", "R=flat columnRandom; G=clamp(flat reliefHeight/16); B=0; A=opacity"}};
@@ -401,7 +418,9 @@ void ColumnRenderer::initialize(QRhiCommandBuffer*)
                                      sizeof(columnVertices)));
     indices_.reset(rhi()->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::IndexBuffer,
                                     sizeof(columnIndices)));
-    instances_.reset(rhi()->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer,
+    const bool immutableInstancesDiagnostic = replay_
+        && qEnvironmentVariable("AGPLAYER_PARITY_IMMUTABLE_INSTANCES") == "1";
+    instances_.reset(rhi()->newBuffer(immutableInstancesDiagnostic ? QRhiBuffer::Immutable : QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer,
                                       (replay_ ? int(replay_->instances.size()) : 25) * sizeof(GpuInstance)));
     uniform_.reset(rhi()->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(UniformBlock)));
     if (!vertices_->create() || !indices_->create() || !instances_->create() || !uniform_->create()) {
@@ -432,9 +451,10 @@ void ColumnRenderer::initialize(QRhiCommandBuffer*)
         pipeline_->setCullMode(QRhiGraphicsPipeline::Back);
         if (replay_ && qEnvironmentVariable("AGPLAYER_PARITY_RASTER_MIRROR") == "1")
             pipeline_->setFrontFace(QRhiGraphicsPipeline::CW);
-        pipeline_->setDepthTest(true); pipeline_->setDepthWrite(true);
+        pipeline_->setDepthTest(!diagnosticDepthOff);
+        pipeline_->setDepthWrite(!diagnosticDepthWriteOff);
         QRhiGraphicsPipeline::TargetBlend blend;
-        blend.enable = true; blend.srcColor = QRhiGraphicsPipeline::SrcAlpha;
+        blend.enable = !diagnosticBlendOff; blend.srcColor = QRhiGraphicsPipeline::SrcAlpha;
         blend.dstColor = QRhiGraphicsPipeline::OneMinusSrcAlpha;
         pipeline_->setTargetBlends({blend});
         return !(shadow_.available() && counters_->rejectDepthStage == 2)
@@ -562,8 +582,13 @@ void ColumnRenderer::render(QRhiCommandBuffer* cb)
     }
     auto* updates = rhi()->nextResourceUpdateBatch();
     updates->updateDynamicBuffer(uniform_.get(), 0, sizeof(u), &u);
-    updates->updateDynamicBuffer(instances_.get(), 0,
-                                 instanceCount * sizeof(GpuInstance), replay_ ? replay_->instances.data() : columns.data());
+    if (instances_->type() == QRhiBuffer::Dynamic) {
+        updates->updateDynamicBuffer(instances_.get(), 0,
+                                     instanceCount * sizeof(GpuInstance), replay_ ? replay_->instances.data() : columns.data());
+    } else if (upload_) {
+        updates->uploadStaticBuffer(instances_.get(), replay_->instances.data());
+    }
+    const bool uploadedStaticGeometry = upload_;
     if (upload_) {
         updates->uploadStaticBuffer(vertices_.get(), columnVertices.data());
         updates->uploadStaticBuffer(indices_.get(), columnIndices.data());
@@ -591,14 +616,34 @@ void ColumnRenderer::render(QRhiCommandBuffer* cb)
         cb->resourceUpdate(readback);
         rhi()->finish();
     }
-    cb->beginPass(renderTarget(), QColor(0, 0, 0, 0), {1, 0});
-    cb->setGraphicsPipeline(pipeline_.get()); cb->setShaderResources(bindings_.get());
-    const auto size = renderTarget()->pixelSize();
-    cb->setViewport(QRhiViewport(0, 0, float(size.width()), float(size.height())));
-    const QRhiCommandBuffer::VertexInput inputs[] = {{vertices_.get(), 0}, {instances_.get(), 0}};
-    cb->setVertexInput(0, 2, inputs, indices_.get(), 0, QRhiCommandBuffer::IndexUInt16);
-    cb->drawIndexed(quint32(columnIndices.size()), instanceCount);
-    cb->endPass();
+    // Isolate repeated readback from repeated rasterization/MSAA resolve.
+    // Only the opt-in hash diagnostic may retain its first resolved texture.
+    const bool retainResolvedDiagnostic = replay_
+        && qEnvironmentVariable("AGPLAYER_PARITY_HASH_DIAGNOSTIC") == "1"
+        && qEnvironmentVariable("AGPLAYER_PARITY_HASH_RETAIN_RESOLVE") == "1";
+    const bool repeatResolveDiagnostic = replay_
+        && qEnvironmentVariable("AGPLAYER_PARITY_HASH_DIAGNOSTIC") == "1"
+        && qEnvironmentVariable("AGPLAYER_PARITY_HASH_REPEAT_RESOLVE") == "1";
+    if (repeatResolveDiagnostic && !replayReadbacks_.empty()) {
+        // QRhi D3D11 endPass resolves the attachment even without draws.
+        // Preserve both attachments so this changes only repeated resolve.
+        auto* target = static_cast<QRhiTextureRenderTarget*>(renderTarget());
+        const auto flags = target->flags();
+        target->setFlags(flags | QRhiTextureRenderTarget::PreserveColorContents
+            | QRhiTextureRenderTarget::PreserveDepthStencilContents);
+        cb->beginPass(target, QColor(0, 0, 0, 0), {1, 0});
+        cb->endPass();
+        target->setFlags(flags);
+    } else if (!retainResolvedDiagnostic || replayReadbacks_.empty()) {
+        cb->beginPass(renderTarget(), QColor(0, 0, 0, 0), {1, 0});
+        cb->setGraphicsPipeline(pipeline_.get()); cb->setShaderResources(bindings_.get());
+        const auto size = renderTarget()->pixelSize();
+        cb->setViewport(QRhiViewport(0, 0, float(size.width()), float(size.height())));
+        const QRhiCommandBuffer::VertexInput inputs[] = {{vertices_.get(), 0}, {instances_.get(), 0}};
+        cb->setVertexInput(0, 2, inputs, indices_.get(), 0, QRhiCommandBuffer::IndexUInt16);
+        cb->drawIndexed(quint32(columnIndices.size()), instanceCount);
+        cb->endPass();
+    }
     if (replay_ && int(replayReadbacks_.size()) < counters_->replayFrameLimit) {
         auto result = std::make_unique<QRhiReadbackResult>();
         auto* frameResult = result.get();
@@ -628,11 +673,35 @@ void ColumnRenderer::render(QRhiCommandBuffer* cb)
         auto finishes = counters_->replayManifest.value("finishResults").toArray();
         finishes.append(int(finishResult)); counters_->replayManifest["finishResults"] = finishes;
         counters_->replayManifest["backend"] = int(rhi()->backend());
+        counters_->replayManifest["immutableInstancesDiagnostic"] = instances_->type() == QRhiBuffer::Immutable;
+        counters_->replayManifest["retainFirstResolvedTextureDiagnostic"] = retainResolvedDiagnostic;
+        counters_->replayManifest["repeatResolveWithoutDrawDiagnostic"] = repeatResolveDiagnostic;
         counters_->replayManifest["sampleCount"] = renderTarget()->sampleCount();
         counters_->replayManifest["framebufferYUp"] = rhi()->isYUpInFramebuffer();
         counters_->replayManifest["actualUniformBytesHex"] = QString(QByteArray(reinterpret_cast<const char*>(&u), sizeof(u)).toHex());
         counters_->replayManifest["actualInstanceSha256"] = QString(QCryptographicHash::hash(
             QByteArray(reinterpret_cast<const char*>(replay_->instances.data()), instanceCount * sizeof(GpuInstance)), QCryptographicHash::Sha256).toHex());
+        // Capture each submission, not just the final target state. These are
+        // CPU upload-source hashes, not a claim to have read GPU buffers back.
+        const auto sourceHash = [](const void* data, qsizetype bytes) {
+            return QString(QCryptographicHash::hash(
+                QByteArray(reinterpret_cast<const char*>(data), bytes),
+                QCryptographicHash::Sha256).toHex());
+        };
+        auto geometryFrames = counters_->replayManifest.value("geometryFrames").toArray();
+        geometryFrames.append(QJsonObject{
+            {"submission", submission},
+            {"resourceGeneration", counters_->generations.load()},
+            {"targetId", QString::number(quintptr(renderTarget()), 16)},
+            {"readbackTextureId", QString::number(quintptr(texture), 16)},
+            {"width", renderTarget()->pixelSize().width()},
+            {"height", renderTarget()->pixelSize().height()},
+            {"sampleCount", renderTarget()->sampleCount()},
+            {"uploadedStaticGeometry", uploadedStaticGeometry},
+            {"vertexSourceSha256", sourceHash(columnVertices.data(), sizeof(columnVertices))},
+            {"indexSourceSha256", sourceHash(columnIndices.data(), sizeof(columnIndices))},
+            {"instanceSourceSha256", counters_->replayManifest.value("actualInstanceSha256")}});
+        counters_->replayManifest["geometryFrames"] = geometryFrames;
     }
     ++counters_->frames;
 }
@@ -771,6 +840,21 @@ FrontFace locateFrontFace(const QImage& frame)
 class TerrainColumnMaterialTest : public QObject {
     Q_OBJECT
 private slots:
+    void nativeReadbackPngPreservesStraightColorAndAlpha()
+    {
+        // SrcAlpha/OneMinusSrcAlpha into transparent stores premultiplied RGB.
+        // Export must unpremultiply exactly once without changing alpha.
+        const uchar rgba[]{64,32,16,85, 255,128,32,255, 0,0,0,0};
+        const QImage raw(rgba,3,1,QImage::Format_RGBA8888);
+        QTemporaryFile output(QDir::tempPath()+"/native-alpha-XXXXXX.png");
+        QVERIFY(output.open()); output.close();
+        QVERIFY(saveNativeReadbackPng(raw,output.fileName()));
+        const QImage saved(output.fileName());
+        QCOMPARE(saved.pixelColor(0,0),QColor(192,96,48,85));
+        QCOMPARE(saved.pixelColor(1,0),QColor(255,128,32,255));
+        QCOMPARE(saved.pixelColor(2,0),QColor(0,0,0,0));
+        QCOMPARE(raw.pixelColor(0,0),QColor(64,32,16,85));
+    }
     void terrainExposureUsesDirectLinearOutput()
     {
         double measured[2]{};
@@ -808,10 +892,12 @@ private slots:
         QTest::addColumn<float>("clarity");
         QTest::addColumn<bool>("raised");
         QTest::addColumn<float>("capWidth");
-        QTest::newRow("one-unit-rest-low-clarity") << 1.0F << 0.0F << false << 6.0F;
-        QTest::newRow("three-unit-rest-high-clarity") << 3.0F << 1.4F << false << 6.0F;
-        QTest::newRow("raised-cap-follows-glow-palette") << 1.0F << 1.4F << true << 6.0F;
-        QTest::newRow("two-pixel-cap-keeps-base-interior") << 1.0F << 1.0F << false << .03125F;
+        QTest::addColumn<float>("runtime");
+        QTest::newRow("one-unit-rest-low-clarity") << 1.0F << 0.0F << false << 6.0F << 0.0F;
+        QTest::newRow("three-unit-rest-high-clarity") << 3.0F << 1.4F << false << 6.0F << 0.0F;
+        QTest::newRow("raised-cap-follows-glow-palette") << 1.0F << 1.4F << true << 6.0F << 0.0F;
+        QTest::newRow("two-pixel-cap-keeps-base-interior") << 1.0F << 1.0F << false << .03125F << 0.0F;
+        QTest::newRow("runtime-cap-keeps-reference-base") << 1.0F << 1.14F << false << 6.0F << 1.0F;
     }
     void silentCapPreservesIndependentThemeBase()
     {
@@ -819,8 +905,10 @@ private slots:
         QFETCH(float, clarity);
         QFETCH(bool, raised);
         QFETCH(float, capWidth);
+        QFETCH(float, runtime);
         auto replay = std::make_shared<NativeReplay>();
         auto& u = replay->uniform;
+        u.timbre[3] = runtime;
         u.sceneControls[0]=u.sceneControls[1]=u.sceneControls[3]=1;
         u.sceneControls[2]=84; u.styleAudio[2]=56;
         u.materialParameters[0]=1; u.materialParameters[1]=.45F;
@@ -1032,18 +1120,27 @@ private slots:
     void referenceHeightSamples_data()
     {
         QTest::addColumn<QJsonObject>("sample");
+        QTest::addColumn<bool>("runtime");
         QFile file(QFINDTESTDATA("../fixtures/terrain_reference_heights.json"));
         QVERIFY(file.open(QIODevice::ReadOnly));
         const auto samples = QJsonDocument::fromJson(file.readAll()).object().value("samples").toArray();
         QCOMPARE(samples.size(), 72);
-        for (int i = 0; i < samples.size(); ++i)
-            QTest::newRow(qPrintable(QString::number(i))) << samples[i].toObject();
+        for (int i = 0; i < samples.size(); ++i) {
+            const auto sample = samples[i].toObject();
+            QTest::newRow(qPrintable(QString::number(i))) << sample << false;
+            // At t=0 frozen idle and original idle coincide. Replay real
+            // runtime flags against the independently captured GPU oracle.
+            if (sample.value("time").toDouble() == 0.0)
+                QTest::newRow(qPrintable(QString("runtime-%1").arg(i))) << sample << true;
+        }
     }
     void referenceHeightSamples()
     {
         QFETCH(QJsonObject, sample);
+        QFETCH(bool, runtime);
         auto replay = std::make_shared<NativeReplay>();
         auto& u = replay->uniform;
+        u.timbre[3] = runtime ? 1.0F : 0.0F;
         const auto position = sample.value("position").toArray();
         const float x = float(position[0].toDouble()), z = float(position[1].toDouble());
         u.parameters[3] = float(sample.value("time").toDouble());
@@ -1085,6 +1182,9 @@ private slots:
         QVERIFY2(std::abs(bounds.height()-expectedPixels)<=1.0,
                  "Column height must agree with the reference GPU within one raster pixel");
         QCOMPARE(bounds.bottom(),511); // baseY remains zero for every band/time.
+        if (runtime)
+            QVERIFY2(std::abs(bounds.width() - 256) <= 1,
+                     "Runtime must preserve the original four-unit column width");
     }
     void referenceRippleLiteralSamples_data()
     {
@@ -1298,11 +1398,49 @@ private slots:
     }
     void nativeZeroInputReplay()
     {
+        QVERIFY2(!(qEnvironmentVariable("AGPLAYER_PARITY_HASH_RETAIN_RESOLVE") == "1"
+                   && qEnvironmentVariable("AGPLAYER_PARITY_HASH_REPEAT_RESOLVE") == "1"),
+                 "HASH_RETAIN_RESOLVE and HASH_REPEAT_RESOLVE are mutually exclusive");
         const auto path = qEnvironmentVariable("AGPLAYER_PARITY_REFERENCE");
         if (path.isEmpty()) QSKIP("Opt-in reference-engine-silence diagnostic");
         std::shared_ptr<const NativeReplay> replay;
         try { replay = loadNativeReplay(path); }
         catch (const std::exception& error) { QFAIL(error.what()); }
+        const QString geometryDiagnostic = qEnvironmentVariable("AGPLAYER_PARITY_HASH_GEOMETRY");
+        QVERIFY(geometryDiagnostic.isEmpty() || geometryDiagnostic == "single"
+                || geometryDiagnostic == "sparse-nine");
+        if (!geometryDiagnostic.isEmpty()) {
+            QVERIFY(qEnvironmentVariable("AGPLAYER_PARITY_HASH_DIAGNOSTIC") == "1");
+            auto diagnostic = std::make_shared<NativeReplay>(*replay);
+            diagnostic->instances.clear();
+            const int extent = geometryDiagnostic == "single" ? 0 : 1;
+            for (int z = -extent; z <= extent; ++z) for (int x = -extent; x <= extent; ++x) {
+                const float tx = float(x * 8), tz = float(z * 8);
+                const auto nearest = std::min_element(replay->instances.begin(), replay->instances.end(),
+                    [=](const auto& a, const auto& b) {
+                        const auto distance = [=](const auto& p) {
+                            return std::pow(p.position[0]-tx,2)+std::pow(p.position[2]-tz,2);
+                        };
+                        return distance(a) < distance(b);
+                    });
+                diagnostic->instances.push_back(*nearest);
+            }
+            diagnostic->manifest["hashGeometryDiagnostic"] = geometryDiagnostic;
+            diagnostic->manifest["hashGeometryInstanceCount"] = int(diagnostic->instances.size());
+            replay = diagnostic;
+        }
+        const QString runtimeMaterial = qEnvironmentVariable("AGPLAYER_PARITY_RUNTIME_MATERIAL");
+        QVERIFY(runtimeMaterial.isEmpty() || runtimeMaterial == "defaults"
+                || runtimeMaterial == "clarity-high");
+        if (!runtimeMaterial.isEmpty()) {
+            auto diagnostic = std::make_shared<NativeReplay>(*replay);
+            diagnostic->uniform.timbre[3] = 1;
+            diagnostic->uniform.sceneLighting[0] = 1.55F;
+            diagnostic->uniform.stylePresentation[2] = runtimeMaterial == "defaults" ? 1.14F : 1.4F;
+            diagnostic->manifest.insert("runtimeMaterialDiagnostic", runtimeMaterial);
+            diagnostic->manifest.insert("nativeEventEnvelopes", "zero: not a live event replay");
+            replay = diagnostic;
+        }
         // The fixed reference uses centerY=.5 and box height=1. Its base is zero.
         // Assert actual loader output before creating any rendering resources.
         QCOMPARE(replay->manifest.value("referenceGeometryParameters").toObject().value("height").toDouble(), 1.0);
@@ -1346,11 +1484,54 @@ private slots:
         auto manifest = replay->manifest;
         for (auto it = counters->replayManifest.begin(); it != counters->replayManifest.end(); ++it) manifest[it.key()] = it.value();
         manifest["nativeRepeatabilityOnly"] = true;
+        const bool blendOffDiagnostic = manifest.value("hashDiagnostic").toObject()
+            .value("blendEnabled").isBool()
+            && !manifest.value("hashDiagnostic").toObject().value("blendEnabled").toBool();
+        manifest["readbackAlphaMode"] = blendOffDiagnostic
+            ? "nonappearance hash RGBA8; RGB is not associated with output alpha"
+            : "premultiplied RGBA8";
+        manifest["pngAlphaMode"] = blendOffDiagnostic
+            ? "raw diagnostic channels; no unpremultiplication; not valid for appearance comparison"
+            : "straight RGBA8, unpremultiplied once by QImage PNG writer";
         manifest["rasterMirrorDiagnostic"] = rasterMirror;
         bool repeatable = true;
         for (int frame=1; frame<frameCount; ++frame)
             repeatable &= counters->replayFrames[0] == counters->replayFrames[frame];
         manifest["repeatabilityPassed"] = repeatable;
+        QJsonArray rawDifferences;
+        for (int frame = 1; frame < frameCount; ++frame) {
+            const auto& first = counters->replayFrames[0];
+            const auto& next = counters->replayFrames[frame];
+            QCOMPARE(first.size(), next.size());
+            int changed = 0, opaque = 0, alphaChanged = 0, aboveOne = 0, maximum = 0;
+            QJsonArray examples;
+            for (qsizetype offset = 0; offset < first.size(); offset += 4) {
+                int delta = 0;
+                QJsonArray before, after;
+                for (int channel = 0; channel < 4; ++channel) {
+                    const int a = uchar(first[offset + channel]), b = uchar(next[offset + channel]);
+                    delta = std::max(delta, std::abs(a - b));
+                }
+                if (!delta) continue;
+                ++changed;
+                opaque += uchar(first[offset + 3]) == 255 && uchar(next[offset + 3]) == 255;
+                alphaChanged += first[offset + 3] != next[offset + 3];
+                aboveOne += delta > 1;
+                if (examples.size() < 8 || delta > maximum) {
+                    for (int channel = 0; channel < 4; ++channel) {
+                        before.append(int(uchar(first[offset + channel])));
+                        after.append(int(uchar(next[offset + channel])));
+                    }
+                    examples.append(QJsonObject{{"x", int(offset / 4 % 1920)},
+                        {"y", int(offset / 4 / 1920)}, {"before", before}, {"after", after}});
+                }
+                maximum = std::max(maximum, delta);
+            }
+            rawDifferences.append(QJsonObject{{"frame", frame}, {"changedPixels", changed},
+                {"opaqueChangedPixels", opaque}, {"alphaChangedPixels", alphaChanged},
+                {"aboveOneLsbPixels", aboveOne}, {"maxLsbDelta", maximum}, {"examples", examples}});
+        }
+        manifest["rawRgbaDifferencesFromFirst"] = rawDifferences;
         manifest["uniformHashes"] = QJsonArray::fromStringList(counters->replayUniformHashes);
         manifest["rawSha256"] = QString(QCryptographicHash::hash(counters->replayFrames[0], QCryptographicHash::Sha256).toHex());
         QImage image(reinterpret_cast<const uchar*>(counters->replayFrames[0].constData()), 1920, 1080, QImage::Format_RGBA8888);
@@ -1389,15 +1570,18 @@ private slots:
             QVERIFY(hasGeometry);
             QVERIFY2(randomBytes.size() > 1,
                      "Hash diagnostic must preserve distinct flat per-column random values");
-            QVERIFY2(opaqueRandomBytes.size() > 1,
-                     "Hash diagnostic must preserve distinct random values before alpha coverage blending");
+            if (geometryDiagnostic == "single")
+                QCOMPARE(opaqueRandomBytes.size(), 1); // One instance has exactly one flat ID.
+            else
+                QVERIFY2(opaqueRandomBytes.size() > 1,
+                         "Hash diagnostic must preserve distinct random values before alpha coverage blending");
         }
-        QVERIFY(image.save(output + "/native-u.png"));
+        QVERIFY(saveNativeReadbackPng(image, output + "/native-u.png", !blendOffDiagnostic));
         for (int frame=1; frame<frameCount; ++frame) {
             QImage next(reinterpret_cast<const uchar*>(counters->replayFrames[frame].constData()), 1920, 1080, QImage::Format_RGBA8888);
             if (manifest.value("framebufferYUp").toBool()) next = next.mirrored();
             if (rasterMirror) next = next.mirrored();
-            QVERIFY(next.save(output + QString("/native-u-frame%1.png").arg(frame+1)));
+            QVERIFY(saveNativeReadbackPng(next, output + QString("/native-u-frame%1.png").arg(frame+1), !blendOffDiagnostic));
         }
         QFile report(output + "/native-u-manifest.json");
         QVERIFY(report.open(QIODevice::WriteOnly));

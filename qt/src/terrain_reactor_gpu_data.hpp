@@ -2,8 +2,12 @@
 
 #include <QtGlobal>
 #include <array>
+#include <cstddef>
 
 namespace agplayer::terrain::gpu {
+
+constexpr quint32 maximumInstances = 224U * 224U + 120U
+    + 28U * (1U + 3U + 16U + 12U) + 1600U;
 
 constexpr int cubeVertexCount = 24;
 constexpr int cubeIndexCount = 36;
@@ -54,11 +58,17 @@ struct alignas(16) UniformBlock {
     // Display-encoded reference ripple tint. A > .5 selects reference ripple
     // semantics; A == 0 preserves the native travelling-wave interpretation.
     float rippleColor[4]{};
+    float meteorTrajectory[4]{}; // x,z,start height,fall speed; appended internal ABI
+    float floatingParameters[4]{}; // pulse,sizeMix,scale,intensity
+    float meteorMaterialColor[4]{}; // working-linear RGB; A selects live shared material
 };
 
 static_assert(alignof(UniformBlock) == 16);
 static_assert(sizeof(UniformBlock) % 16 == 0);
-static_assert(sizeof(UniformBlock) == 752, "Terrain UBO layout must match the 10-slot GLSL contract");
+static_assert(sizeof(UniformBlock) == 800, "Terrain UBO layout must match GLSL including shared meteor material");
+static_assert(offsetof(UniformBlock, meteorMaterialColor) == 784, "Append material without shifting existing uniforms");
+static_assert(offsetof(UniformBlock, meteorTrajectory) == 752, "Append trajectory without shifting existing uniforms");
+static_assert(offsetof(UniformBlock, floatingParameters) == 768, "Append floating state without shifting existing uniforms");
 
 constexpr std::array<Vertex, cubeVertexCount> cubeVertices{{
     {{-0.5F, -0.5F,  0.5F}, { 0.0F,  0.0F,  1.0F}},

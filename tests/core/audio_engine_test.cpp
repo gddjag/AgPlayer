@@ -421,12 +421,16 @@ bool outputMeterInvalidatesAcrossPlaybackBoundaries()
     assert(waitForBufferedFrames(engine, 64U,
                                  std::chrono::milliseconds(1'000)));
     assert(engine.play() == AG_OK);
+    engine.set_visual_pcm_enabled(true);
     std::vector<float> output(64U * 2U);
     engine.render(output.data(), 64U);
     if (engine.equalizer_status().output_peak_db <= kMeterFloorDb) {
         std::fprintf(stderr, "boundary regression setup did not publish a peak\n");
         return false;
     }
+    ag_visual_pcm_snapshot beforePause{};
+    engine.read_visual_pcm(beforePause);
+    assert(beforePause.sample_count == 64U);
 
     assert(engine.pause() == AG_OK);
     assert(engine.play() == AG_OK);
@@ -435,9 +439,27 @@ bool outputMeterInvalidatesAcrossPlaybackBoundaries()
     assert(waitForBufferedFrames(engine, 64U,
                                  std::chrono::milliseconds(1'000)));
     engine.render(output.data(), 64U);
+    ag_visual_pcm_snapshot afterPause{};
+    engine.read_visual_pcm(afterPause);
+    ok = ok && afterPause.generation == beforePause.generation
+        && afterPause.sample_count == 64U
+        && afterPause.first_sample_index
+            == beforePause.first_sample_index + beforePause.sample_count;
+    const ag_visual_pcm_snapshot beforeMute = afterPause;
+    assert(beforeMute.sample_count == 64U);
     engine.set_muted(true);
     engine.set_muted(false);
     ok = ok && engine.equalizer_status().output_peak_db == kMeterFloorDb;
+
+    assert(waitForBufferedFrames(engine, 64U,
+                                 std::chrono::milliseconds(1'000)));
+    engine.render(output.data(), 64U);
+    ag_visual_pcm_snapshot afterMute{};
+    engine.read_visual_pcm(afterMute);
+    ok = ok && afterMute.generation == beforeMute.generation
+        && afterMute.sample_count == 64U
+        && afterMute.first_sample_index
+            == beforeMute.first_sample_index + beforeMute.sample_count;
 
     assert(waitForBufferedFrames(engine, 64U,
                                  std::chrono::milliseconds(1'000)));

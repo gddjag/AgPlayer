@@ -809,6 +809,11 @@ int main(int argc, char* argv[])
         if (qaTestMode) {
             if (qaImmersiveThemeRequested) {
                 playerExperience.applyTheme(qaImmersiveTheme);
+                if (!qaScreenshotMain.isEmpty()) {
+                    playerExperience.setAutoRotate(0);
+                    playerExperience.setAutoRotateSpeed(0);
+                    playerExperience.setSongAdaptiveColorEnabled(false);
+                }
                 qInfo().noquote() << "QA immersive theme:" << playerExperience.themeId();
             }
             if (qaLyricPlacement >= 0) {
@@ -1347,10 +1352,23 @@ int main(int argc, char* argv[])
             QTimer::singleShot(0, &app, enterQaVideoFullscreen);
 
             if (qaTestMode && qaImmersiveStability) {
+                playback.setMode(PlaybackController::RepeatOne);
+                playerExperience.setQualityPreset(PlayerExperienceController::High);
                 const QPointer<QObject> qaRoot(mainWindow);
                 auto elapsed = std::make_shared<QElapsedTimer>();
                 elapsed->start();
-                const auto sampleRenderer = [qaRoot, elapsed](const QString& phase) {
+                auto* responsiveness = new QTimer(&app);
+                responsiveness->setTimerType(Qt::PreciseTimer);
+                auto previousProbe = std::make_shared<qint64>(elapsed->elapsed());
+                QObject::connect(responsiveness, &QTimer::timeout, &app,
+                    [elapsed, previousProbe] {
+                        const qint64 now = elapsed->elapsed();
+                        qInfo() << "QA immersive GUI delayMs="
+                                << std::max<qint64>(0, now - *previousProbe - 1000);
+                        *previousProbe = now;
+                    });
+                responsiveness->start(1000);
+                const auto sampleRenderer = [qaRoot, elapsed, &playback](const QString& phase) {
                     QSet<TerrainReactorItem*> items;
                     const auto collectItems = [&items](QObject* root) {
                         if (!root) return;
@@ -1373,6 +1391,9 @@ int main(int argc, char* argv[])
                         .arg(counter("active")).arg(counter("hostExposed"))
                         .arg(counter("frameCount")).arg(counter("liveRendererCount"))
                         .arg(counter("resourceGeneration")).arg(items.size());
+                    qInfo() << "QA immersive audio: state=" << playback.state()
+                            << "positionMs=" << playback.positionMs()
+                            << "durationMs=" << playback.durationMs();
                 };
                 auto* sampler = new QTimer(&app);
                 sampler->setTimerType(Qt::PreciseTimer);

@@ -19,6 +19,23 @@ class PlayerExperienceControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void visualEqEnabledPreservesGainsAndPersists()
+    {
+        QSettings().clear();
+        PlayerExperienceController controller;
+        const int index = controller.metaObject()->indexOfProperty("visualEqEnabled");
+        QVERIFY(index >= 0);
+        const auto property = controller.metaObject()->property(index);
+        const QVariantList all{true,true,true,true,true,true,true,true};
+        QCOMPARE(property.read(&controller).toList(), all);
+        const auto gains = controller.visualEqGains();
+        QVERIFY(property.write(&controller, QVariantList{false,true,false,true,true,true,true,false}));
+        QCOMPARE(controller.visualEqGains(), gains);
+        PlayerExperienceController reloaded;
+        QCOMPARE(property.read(&reloaded).toList(), QVariantList({false,true,false,true,true,true,true,false}));
+        QVERIFY(property.write(&controller, QVariantList{false, QStringLiteral("invalid")}));
+        QCOMPARE(property.read(&controller).toList(), QVariantList({false,true,true,true,true,true,true,true}));
+    }
     void columnLightingPersistsClampsAndSurvivesPresets();
     void colorModePersistsAndClamps();
     void columnControlsNormalizeNotifyAndPersist();
@@ -27,9 +44,11 @@ private slots:
     void invalidStoredVisualValuesUseSafeDefaults();
     void storedColumnDensityOverridesTheFreshInstallDefault();
     void topographyDensityIsIndependentPersistentAndThemeStable();
+    void themeRotationSettingsDefaultPersistAndClamp();
     void initTestCase();
     void defaultsAreIndependent();
     void persistsAndNormalizesValues();
+    void legacyActivePresentationNeverReopensOnStartup();
     void defaultsExposeV46ExperienceControls();
     void clampsPersistsAndNotifiesV46ExperienceControls();
     void persistsAndClampsLyricPlacement();
@@ -111,7 +130,7 @@ void PlayerExperienceControllerTest::columnControlsNormalizeNotifyAndPersist()
     struct Control { const char* name; int minimum; int maximum; int fallback; };
     const Control controls[] = {
         {"columnDensity", 50, 200, 50},
-        {"columnSize", 50, 200, 95}, {"columnOpacity", 0, 100, 100},
+        {"columnSize", 50, 200, 100}, {"columnOpacity", 0, 100, 100},
         {"reactorBrightness", 0, 200, 100},
     };
     QSettings().clear();
@@ -132,7 +151,7 @@ void PlayerExperienceControllerTest::columnControlsNormalizeNotifyAndPersist()
         QVERIFY(property.write(&experience, 999));
         QCOMPARE(property.read(&experience).toInt(), control.maximum);
         QCOMPARE(changed.count(), lowChangeCount + 1);
-        QCOMPARE(experience.terrainAmplitude(), 34);
+        QCOMPARE(experience.terrainAmplitude(), 50);
         QCOMPARE(experience.subjectClarity(), 114);
         QCOMPARE(experience.rhythmStrength(), 30);
         PlayerExperienceController reloaded;
@@ -159,6 +178,8 @@ void PlayerExperienceControllerTest::materialControlsNormalizeNotifyAndPersist()
         {"jellyElasticity", 0, 100, 35}, {"inkDensity", 0, 100, 60},
         {"rippleStrength", 0, 200, 39}, {"rippleWidth", 20, 200, 82},
         {"rippleDecay", 20, 200, 81},
+        {"floatingBlockMinSize", 0, 100, 9}, {"floatingBlockMaxSize", 0, 100, 26},
+        {"floatingBlockSpeed", 0, 100, 77}, {"floatingBlockIntensity", 0, 100, 55},
     };
     QSettings().clear();
     for (const auto& control : controls) {
@@ -208,7 +229,7 @@ void PlayerExperienceControllerTest::freshInstallUsesMinimalMonochromeTheme()
     PlayerExperienceController experience;
 
     QCOMPARE(experience.columnDensity(), 50);
-    QCOMPARE(experience.columnSize(), 95);
+    QCOMPARE(experience.columnSize(), 100);
     QCOMPARE(experience.columnOpacity(), 100);
     QCOMPARE(experience.reactorBrightness(), 100);
     QCOMPARE(experience.materialMode(), 0);
@@ -218,8 +239,8 @@ void PlayerExperienceControllerTest::freshInstallUsesMinimalMonochromeTheme()
     QCOMPARE(experience.rippleStrength(), 39);
     QCOMPARE(experience.rippleWidth(), 82);
     QCOMPARE(experience.rippleDecay(), 81);
-    QCOMPARE(experience.terrainAmplitude(), 34);
-    QCOMPARE(experience.motionResponse(), 56);
+    QCOMPARE(experience.terrainAmplitude(), 50);
+    QCOMPARE(experience.motionResponse(), 50);
     QCOMPARE(experience.gradientLayers(), 74);
     QCOMPARE(experience.glowIntensity(), 100);
     QCOMPARE(experience.cinemaShake(), 0.81);
@@ -249,8 +270,35 @@ void PlayerExperienceControllerTest::freshInstallUsesMinimalMonochromeTheme()
     QVERIFY(experience.burstEnabled());
     QVERIFY(experience.idleBreathingEnabled());
     QVERIFY(experience.streamHighlightEnabled());
-    QVERIFY(!experience.themeCycleEnabled());
+    QVERIFY(experience.themeCycleEnabled());
+    QVERIFY(!experience.themeSongCycleEnabled());
+    QCOMPARE(experience.themeCycleIntervalSeconds(), 10);
     QVERIFY(!experience.songAdaptiveColorEnabled());
+}
+
+void PlayerExperienceControllerTest::themeRotationSettingsDefaultPersistAndClamp()
+{
+    QSettings settings;
+    settings.clear();
+    {
+        PlayerExperienceController experience;
+        QVERIFY(experience.themeCycleEnabled());
+        QVERIFY(!experience.themeSongCycleEnabled());
+        QCOMPARE(experience.themeCycleIntervalSeconds(), 10);
+
+        experience.setThemeCycleEnabled(false);
+        experience.setThemeSongCycleEnabled(true);
+        experience.setThemeCycleIntervalSeconds(1);
+        QCOMPARE(experience.themeCycleIntervalSeconds(), 3);
+        experience.setThemeCycleIntervalSeconds(999);
+        QCOMPARE(experience.themeCycleIntervalSeconds(), 120);
+        experience.setThemeCycleIntervalSeconds(27);
+    }
+
+    PlayerExperienceController reloaded;
+    QVERIFY(!reloaded.themeCycleEnabled());
+    QVERIFY(reloaded.themeSongCycleEnabled());
+    QCOMPARE(reloaded.themeCycleIntervalSeconds(), 27);
 }
 
 void PlayerExperienceControllerTest::invalidStoredVisualValuesUseSafeDefaults()
@@ -267,17 +315,17 @@ void PlayerExperienceControllerTest::invalidStoredVisualValuesUseSafeDefaults()
     }
 
     PlayerExperienceController experience;
-    QCOMPARE(experience.columnSize(), 95);
+    QCOMPARE(experience.columnSize(), 100);
     QCOMPARE(experience.columnDensity(), 50);
     QCOMPARE(experience.columnOpacity(), 100);
-    QCOMPARE(experience.terrainAmplitude(), 34);
-    QCOMPARE(experience.motionResponse(), 56);
+    QCOMPARE(experience.terrainAmplitude(), 50);
+    QCOMPARE(experience.motionResponse(), 50);
     QCOMPARE(experience.cinemaShake(), 0.81);
     QCOMPARE(experience.audioResponse(), 121);
     QCOMPARE(experience.centerHighlight(), 40);
     QCOMPARE(experience.subjectClarity(), 114);
     QCOMPARE(experience.rhythmSensitivity(), 80);
-    QVERIFY(experience.songAdaptiveColorEnabled());
+    QVERIFY(!experience.songAdaptiveColorEnabled());
 }
 
 void PlayerExperienceControllerTest::storedColumnDensityOverridesTheFreshInstallDefault()
@@ -285,9 +333,17 @@ void PlayerExperienceControllerTest::storedColumnDensityOverridesTheFreshInstall
     QSettings settings;
     settings.clear();
     settings.setValue(QStringLiteral("immersiveVisual/columnDensity"), 87);
+    settings.setValue(QStringLiteral("immersiveVisual/columnSize"), 95);
+    settings.setValue(QStringLiteral("immersiveVisual/terrainAmplitude"), 34);
+    settings.setValue(QStringLiteral("immersiveVisual/motionResponse"), 56);
+    settings.setValue(QStringLiteral("immersiveVisual/songAdaptiveColorEnabled"), true);
 
     PlayerExperienceController experience;
     QCOMPARE(experience.columnDensity(), 87);
+    QCOMPARE(experience.columnSize(), 95);
+    QCOMPARE(experience.terrainAmplitude(), 34);
+    QCOMPARE(experience.motionResponse(), 56);
+    QVERIFY(experience.songAdaptiveColorEnabled());
 }
 
 void PlayerExperienceControllerTest::topographyDensityIsIndependentPersistentAndThemeStable()
@@ -315,6 +371,23 @@ void PlayerExperienceControllerTest::topographyDensityIsIndependentPersistentAnd
     settings.setValue(QStringLiteral("immersiveVisual/topographyDensity"), 101);
     PlayerExperienceController high;
     QCOMPARE(high.topographyDensity(), 100);
+}
+
+void PlayerExperienceControllerTest::legacyActivePresentationNeverReopensOnStartup()
+{
+    QSettings settings;
+    settings.clear();
+    settings.setValue(QStringLiteral("immersiveVisual/mode"), 1);
+    settings.setValue(QStringLiteral("immersiveVisual/terrainAmplitude"), 67);
+    settings.sync();
+    PlayerExperienceController restored;
+    QCOMPARE(restored.immersiveMode(), PlayerExperienceController::Off);
+    QCOMPARE(restored.terrainAmplitude(), 67);
+    restored.setImmersiveMode(PlayerExperienceController::TerrainReactor);
+    QCOMPARE(restored.immersiveMode(), PlayerExperienceController::TerrainReactor);
+    QVERIFY(!settings.contains(QStringLiteral("immersiveVisual/mode")));
+    PlayerExperienceController restarted;
+    QCOMPARE(restarted.immersiveMode(), PlayerExperienceController::Off);
 }
 
 void PlayerExperienceControllerTest::defaultsAreIndependent()
@@ -359,7 +432,7 @@ void PlayerExperienceControllerTest::persistsAndNormalizesValues()
     }
 
     PlayerExperienceController reloaded;
-    QCOMPARE(reloaded.immersiveMode(), 1);
+    QCOMPARE(reloaded.immersiveMode(), PlayerExperienceController::Off);
     QCOMPARE(reloaded.hostMode(), 2);
     QVERIFY(reloaded.lyricsVisible());
     QVERIFY(!reloaded.panelVisible());
@@ -563,12 +636,12 @@ void PlayerExperienceControllerTest::strictlyParsesPersistedScalarTypes()
     settings.setValue(QStringLiteral("immersiveVisual/panelVisible"), 0);
 
     PlayerExperienceController malformed;
-    QCOMPARE(malformed.terrainAmplitude(), 34);
+    QCOMPARE(malformed.terrainAmplitude(), 50);
     QCOMPARE(malformed.qualityPreset(), 0);
     QCOMPARE(malformed.cinemaShake(), 0.81);
     QVERIFY(malformed.panelVisible());
     QCOMPARE(settings.value(QStringLiteral("immersiveVisual/terrainAmplitude")),
-             QVariant(34));
+             QVariant(50));
     QCOMPARE(settings.value(QStringLiteral("immersiveVisual/qualityPreset")),
              QVariant(0));
     QCOMPARE(settings.value(QStringLiteral("immersiveVisual/cinemaShake")).toDouble(),

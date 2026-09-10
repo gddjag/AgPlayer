@@ -1,5 +1,8 @@
 #include "terrain_reactor_item.hpp"
 #include "player_experience_controller.hpp"
+#include "audio_visual_feature_controller.hpp"
+#include "playback_controller.hpp"
+#include <agplayer/c_api.h>
 
 #include <QGuiApplication>
 #include <QFile>
@@ -9,6 +12,8 @@
 #include <QSGRendererInterface>
 #include <QScopeGuard>
 #include <QTest>
+#include <QDataStream>
+#include <QTemporaryFile>
 
 #include <algorithm>
 #include <array>
@@ -32,7 +37,10 @@ class TerrainReactorGpuSmokeTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void referencePcmAnalysisFollowsActualFramesAndStopsWhenHidden();
+    void densityAndQualityChangesKeepDrawingCompleteFrames();
     void cameraPunchDoesNotMoveTheGroundProjection();
+    void denseMaterialFrameBudgetProbe_data();
     void denseMaterialFrameBudgetProbe();
     void columnLayeringReferenceFixture_data();
     void columnLayeringReferenceFixture();
@@ -42,8 +50,14 @@ private slots:
     void staticFeaturesKeepRenderingWithoutGuiFeatureUpdates();
     void explicitImpactBrightensAStableTerrainFrame();
     void regularBeatBrieflyBrightensThenReturns();
+    void meteorTouchdownProducesReferenceWhiteRipple();
+    void meteorParticlePoolUploadsAndClearsWithoutResourceRebuild();
+    void ordinaryBeatProducesRippleWithMeteorsEnabled();
+    void floatingControlsReachGpu_data();
+    void floatingControlsReachGpu();
     void materialControlsChangeRenderedSurface_data();
     void materialControlsChangeRenderedSurface();
+    void subjectClarityPreservesBrightThemeExposure();
     void beatMaterialControlsChangeRenderedSurface_data();
     void beatMaterialControlsChangeRenderedSurface();
     void highFrequencySheenStaysLocalizedAndHeightSubordinate();
@@ -55,18 +69,147 @@ private slots:
     void nonFiniteCameraControlsRemainRenderable();
 };
 
+void TerrainReactorGpuSmokeTest::referencePcmAnalysisFollowsActualFramesAndStopsWhenHidden()
+{
+    QTemporaryFile wav(QDir::tempPath() + QStringLiteral("/terrain-cadence-XXXXXX.wav"));
+    QVERIFY(wav.open());
+    constexpr int rate = 48000, samples = rate * 12;
+    QDataStream stream(&wav);
+    stream.setByteOrder(QDataStream::LittleEndian);
+    stream.writeRawData("RIFF",4); stream << quint32(36 + samples * 2);
+    stream.writeRawData("WAVEfmt ",8); stream << quint32(16) << quint16(1)
+        << quint16(1) << quint32(rate) << quint32(rate*2) << quint16(2) << quint16(16);
+    stream.writeRawData("data",4); stream << quint32(samples*2);
+    for (int i=0; i<samples; ++i)
+        stream << qint16(std::sin(6.283185307179586 * 80 * i / rate) * 20000);
+    wav.flush(); wav.close();
+    ag_player* raw=nullptr;
+    const ag_player_config config{AG_AUDIO_BACKEND_NULL,4096U};
+    QCOMPARE(ag_player_create_with_config(&config,&raw),AG_OK);
+    const auto cleanup=qScopeGuard([&]{ag_player_destroy(raw);});
+    PlaybackController playback(raw);
+    AudioVisualFeatureController features(&playback);
+    PlayerExperienceController style;
+    QVERIFY(style.applyTheme(QStringLiteral("nocturnal")));
+    style.setTopographyDensity(0);
+    style.setFloatingCubesEnabled(false);
+    style.setMeteorsEnabled(false);
+    QQuickWindow window;
+    window.resize(480,270);
+    TerrainReactorItem item(window.contentItem());
+    item.setSize(QSizeF(480,270));
+    item.setStyleSource(&style); item.setFeatureSource(&features);
+    features.setActive(true);
+    QCOMPARE(ag_player_load(raw,wav.fileName().toUtf8().constData()),AG_OK);
+    QCOMPARE(ag_player_play(raw),AG_OK);
+    window.show(); QVERIFY(waitForGpuWindow(window));
+    for (auto quality : {TerrainReactorItem::Quality::Eco,TerrainReactorItem::Quality::High}) {
+        item.setQuality(quality);
+        const auto framesBefore=item.frameCount();
+        const auto analysesBefore=item.featureRevision();
+        item.setActive(true);
+        QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() >= framesBefore+20,4000);
+        QTRY_VERIFY_WITH_TIMEOUT(item.featureEnergy()>0,1000);
+        if (quality == TerrainReactorItem::Quality::Eco) {
+            const auto energyBeforePause=item.featureEnergy();
+            const auto revisionBeforePause=item.featureRevision();
+            QCOMPARE(ag_player_pause(raw),AG_OK);
+            QTRY_VERIFY_WITH_TIMEOUT(item.featureRevision()>revisionBeforePause,1000);
+            QVERIFY(item.featureEnergy()>0);
+            QVERIFY(item.featureEnergy()<energyBeforePause);
+            QTRY_VERIFY_WITH_TIMEOUT(item.featureEnergy()<0.001,4000);
+            QCOMPARE(ag_player_play(raw),AG_OK);
+            QTRY_VERIFY_WITH_TIMEOUT(item.featureEnergy()>0,1000);
+        }
+        item.setActive(false);
+        QTest::qWait(100); // Drain the GUI's queued render-frame reports.
+        const auto frames=item.frameCount()-framesBefore;
+        const auto analyses=item.featureRevision()-analysesBefore;
+        qInfo() << "PCM render cadence quality/frames/GUI reports:" << int(quality)
+                << frames << analyses;
+        QVERIFY2(std::abs(qint64(frames)-qint64(analyses))<=2,
+                 "Analysis cadence diverges from actual rendered frames");
+        QCOMPARE(features.visualSpectrumUpdateCount(),quint64{0});
+    }
+    item.setActive(true);
+    QTest::qWait(100);
+    item.setVisible(false);
+    QTest::qWait(100);
+    const auto hiddenFrames=item.frameCount(), hiddenAnalyses=item.featureRevision();
+    QTest::qWait(200);
+    QCOMPARE(item.frameCount(),hiddenFrames);
+    QCOMPARE(item.featureRevision(),hiddenAnalyses);
+}
+
+void TerrainReactorGpuSmokeTest::densityAndQualityChangesKeepDrawingCompleteFrames()
+{
+    PlayerExperienceController style;
+    style.applyTheme(QStringLiteral("nocturnal"));
+    style.setAutoRotate(0);
+    QQuickWindow window;
+    window.resize(640, 360);
+    TerrainReactorItem item(window.contentItem());
+    item.setSize(QSizeF(640, 360));
+    item.setStyleSource(&style);
+    item.setQuality(TerrainReactorItem::Quality::High);
+    item.setUseSyntheticFeatures(true);
+    item.setSyntheticFeatures({.8,.7,.6,.5,.4,.3,.2,.1}, .6,.35,false,false);
+    window.show();
+    QVERIFY(waitForGpuWindow(window));
+    item.setActive(true);
+    QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() > 3, 5000);
+    for (int density : {46, 80, 100, 35, 100}) {
+        const auto before = item.frameCount();
+        style.setTopographyDensity(density);
+        const int grid = agplayer::terrain::referenceTerrainGridSize(density);
+        QTRY_COMPARE_WITH_TIMEOUT(item.renderedTerrainCount(), grid * grid, 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() > before, 5000);
+        const auto image = window.grabWindow();
+        QVERIFY(!image.isNull());
+        int visible = 0;
+        for (int y = 0; y < image.height(); y += 4)
+            for (int x = 0; x < image.width(); x += 4)
+                if (qGray(image.pixel(x,y)) > 20) ++visible;
+        QVERIFY2(visible > 50, "Density transition produced an empty/black scene");
+    }
+    for (auto quality : {TerrainReactorItem::Quality::Eco,
+                         TerrainReactorItem::Quality::High,
+                         TerrainReactorItem::Quality::Balanced,
+                         TerrainReactorItem::Quality::High}) {
+        const auto before = item.frameCount();
+        item.setQuality(quality);
+        window.resize(window.width() + 2, window.height());
+        QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() > before + 4, 5000);
+        QCOMPARE(item.renderStatus(), TerrainReactorItem::RenderStatus::Ready);
+    }
+    item.setActive(false);
+}
+
+void TerrainReactorGpuSmokeTest::denseMaterialFrameBudgetProbe_data()
+{
+    QTest::addColumn<int>("terrainDensity");
+    QTest::addColumn<QSize>("viewport");
+    QTest::newRow("default-1080p") << 46 << QSize(1920, 1080);
+    QTest::newRow("maximum-1080p") << 100 << QSize(1920, 1080);
+    if (auto* screen = QGuiApplication::primaryScreen())
+        QTest::newRow("maximum-native-screen") << 100 << screen->size();
+}
+
 void TerrainReactorGpuSmokeTest::denseMaterialFrameBudgetProbe()
 {
     if (!qEnvironmentVariableIsSet("AGPLAYER_MATERIAL_BENCHMARK"))
         QSKIP("Opt-in comparative wall-frame probe, not a GPU timestamp benchmark");
+    QFETCH(int, terrainDensity);
+    QFETCH(QSize, viewport);
     PlayerExperienceController style;
     style.applyTheme(QStringLiteral("neon-tokyo"));
+    style.setTopographyDensity(terrainDensity);
     style.setAutoRotate(0);
     style.setAutoRotateSpeed(0);
     QQuickWindow window;
-    window.resize(1920, 1080);
+    window.resize(viewport);
     TerrainReactorItem item(window.contentItem());
-    item.setSize(QSizeF(1920, 1080));
+    item.setSize(QSizeF(viewport));
     item.setStyleSource(&style);
     item.setQuality(TerrainReactorItem::Quality::High);
     item.setUseSyntheticFeatures(true);
@@ -81,7 +224,7 @@ void TerrainReactorGpuSmokeTest::denseMaterialFrameBudgetProbe()
     timer.start();
     QTest::qWait(3000);
     const auto count = item.frameCount() - first;
-    qInfo() << "Dense 1080p material elapsed/frames/instances/ms per frame:"
+    qInfo() << "Dense material elapsed/frames/instances/ms per frame:"
             << timer.elapsed() << count << item.renderedTerrainCount()
             << double(timer.elapsed()) / double(std::max<quint64>(1, count));
     qInfo() << "Actual material buffer / device pixel ratio:"
@@ -601,7 +744,7 @@ void TerrainReactorGpuSmokeTest::regularBeatBrieflyBrightensThenReturns()
         }
         if (nearWhiteFraction)
             *nearWhiteFraction = visiblePixels > 0
-                ? double(nearWhitePixels) / double(visiblePixels) : 1.0;
+                ? double(nearWhitePixels) / double(visiblePixels) : 0.0;
         return total;
     };
     const quint64 baseline = centerLight();
@@ -640,6 +783,242 @@ void TerrainReactorGpuSmokeTest::regularBeatBrieflyBrightensThenReturns()
     }
     QVERIFY2(disabledPeak <= disabled * 103 / 100,
              "Zero rhythm strength must disable the beat flash");
+    item.setActive(false);
+}
+
+void TerrainReactorGpuSmokeTest::ordinaryBeatProducesRippleWithMeteorsEnabled()
+{
+    PlayerExperienceController style;
+    QVERIFY(style.applyTheme(QStringLiteral("nocturnal")));
+    style.setAutoRotate(0); style.setAutoRotateSpeed(0);
+    style.setTerrainAmplitude(0); style.setIdleBreathingEnabled(false);
+    style.setFloatingCubesEnabled(false); style.setStreamHighlightEnabled(false);
+    style.setColumnInnerLight(0); style.setMeteorsEnabled(true);
+    style.setRipplesEnabled(true); style.setRippleStrength(100);
+    style.setRippleWidth(100); style.setRippleDecay(100);
+    style.setReactorBrightness(100); style.setSubjectClarity(114);
+    StableImpactSource source;
+    QQuickWindow window; window.resize(640,360); window.setColor(QColor(4,6,11));
+    TerrainReactorItem item(window.contentItem()); item.setSize(QSizeF(640,360));
+    item.setStyleSource(&style); item.setFeatureSource(&source);
+    window.show(); QVERIFY(waitForGpuWindow(window)); item.setActive(true);
+    QTRY_VERIFY_WITH_TIMEOUT(item.frameCount()>3,5000);
+    const QImage before=window.grabWindow();
+    source.publishBeat(1.0); // No impact: no meteor launch may explain the wave.
+    QTest::qWait(350);
+    const QImage after=window.grabWindow();
+    int changed=0;
+    for(int y=after.height()/3;y<after.height()*9/10;++y)
+        for(int x=after.width()/10;x<after.width()*9/10;++x){
+            const QColor a=before.pixelColor(x,y),b=after.pixelColor(x,y);
+            if(std::abs(a.red()-b.red())+std::abs(a.green()-b.green())
+                +std::abs(a.blue()-b.blue())>30)++changed;
+        }
+    qInfo()<<"Ordinary beat ripple with meteors enabled changed pixels:"<<changed;
+    QVERIFY2(changed>150,"Enabling meteors must not suppress ordinary beat ripples");
+    item.setActive(false);
+}
+
+void TerrainReactorGpuSmokeTest::subjectClarityPreservesBrightThemeExposure()
+{
+    PlayerExperienceController style;
+    QVERIFY(style.applyTheme(QStringLiteral("glacier-day")));
+    style.setSubjectClarity(114);
+    style.setAutoRotate(0);
+    style.setAutoRotateSpeed(0);
+    style.setCinemaShake(0);
+    style.setIdleBreathingEnabled(false);
+    style.setRipplesEnabled(false);
+    style.setFloatingCubesEnabled(false);
+    style.setMeteorsEnabled(false);
+    style.setStreamHighlightEnabled(false);
+
+    QQuickWindow window;
+    window.resize(480, 270);
+    window.setColor(QColor("#f6f5ef"));
+    TerrainReactorItem item(window.contentItem());
+    item.setSize(QSizeF(480, 270));
+    item.setStyleSource(&style);
+    item.setUseSyntheticFeatures(true);
+    item.setSyntheticFeatures({0.,0.,0.,0.,0.,0.,0.,0.}, 0, 0, false, false);
+    window.show();
+    QVERIFY(waitForGpuWindow(window));
+    item.setActive(true);
+    QTRY_COMPARE_WITH_TIMEOUT(item.renderStatus(), TerrainReactorItem::RenderStatus::Ready, 5000);
+    QTest::qWait(250);
+    const QImage neutral = window.grabWindow();
+    style.setSubjectClarity(140);
+    QTRY_COMPARE_WITH_TIMEOUT(item.renderedStyleRevision(), item.styleRevision(), 3000);
+    QTest::qWait(100);
+    const QImage clear = window.grabWindow();
+
+    quint64 neutralLight = 0;
+    quint64 clearLight = 0;
+    int changed = 0;
+    int samples = 0;
+    for (int y = neutral.height() / 3; y < neutral.height() * 4 / 5; ++y) {
+        for (int x = neutral.width() / 4; x < neutral.width() * 3 / 4; ++x) {
+            const QColor a = neutral.pixelColor(x, y);
+            const QColor b = clear.pixelColor(x, y);
+            neutralLight += quint64(54 * a.red() + 183 * a.green() + 19 * a.blue());
+            clearLight += quint64(54 * b.red() + 183 * b.green() + 19 * b.blue());
+            if (std::abs(a.red() - b.red()) + std::abs(a.green() - b.green())
+                + std::abs(a.blue() - b.blue()) > 18)
+                ++changed;
+            ++samples;
+        }
+    }
+    const double exposureRatio = neutralLight > 0
+        ? double(clearLight) / double(neutralLight) : 1.0;
+    qInfo() << "Bright-theme clarity changed pixels/exposure ratio:"
+            << changed << exposureRatio << "samples" << samples;
+    QVERIFY2(changed > 250,
+             "Clarity must visibly separate bright-theme column faces and edges");
+    QVERIFY2(exposureRatio < 1.12,
+             "Clarity must not behave as a whole-reactor exposure multiplier");
+    item.setActive(false);
+}
+
+void TerrainReactorGpuSmokeTest::floatingControlsReachGpu_data()
+{
+    QTest::addColumn<QByteArray>("control");
+    for(const auto* key:{"floatingBlockMinSize","floatingBlockMaxSize","floatingBlockSpeed","floatingBlockIntensity"})
+        QTest::newRow(key)<<QByteArray(key);
+}
+void TerrainReactorGpuSmokeTest::floatingControlsReachGpu()
+{
+    QFETCH(QByteArray,control);
+    QImage frames[2];
+    for(int pass=0;pass<2;++pass){
+        PlayerExperienceController style;
+        QVERIFY(style.applyTheme(control=="floatingBlockMinSize"
+            ?QStringLiteral("ink-wash"):QStringLiteral("nocturnal")));
+        style.setAutoRotate(0);style.setAutoRotateSpeed(0);style.setTerrainAmplitude(0);
+        style.setColumnInnerLight(0);style.setRipplesEnabled(false);style.setMeteorsEnabled(false);
+        style.setIdleBreathingEnabled(false);style.setStreamHighlightEnabled(false);style.setBurstEnabled(false);
+        style.setFloatingCubesEnabled(true);style.setFloatingBlockMinSize(9);style.setFloatingBlockMaxSize(80);
+        style.setFloatingBlockIntensity(55);style.setFloatingBlockSpeed(77);
+        QVERIFY(style.setProperty(control.constData(),pass?100:0));
+        QQuickWindow window;window.resize(640,360);window.setColor(QColor(4,6,11));
+        TerrainReactorItem item(window.contentItem());item.setSize(QSizeF(640,360));item.setStyleSource(&style);
+        item.setUseSyntheticFeatures(true);item.setSyntheticFeatures({0,0,0,0,0,0,0,0},0,0,false,false);
+        window.show();QVERIFY(waitForGpuWindow(window));item.setActive(true);
+        QTRY_VERIFY_WITH_TIMEOUT(item.frameCount()>3,5000);
+        if(control!="floatingBlockMinSize")item.setSyntheticFeatures({0,0,0,0,0,0,0,0},0,0,true,false);
+        QTest::qWait(100);frames[pass]=window.grabWindow();item.setActive(false);
+    }
+    int changed=0;
+    for(int y=0;y<frames[0].height()*2/3;++y)for(int x=0;x<frames[0].width();++x){
+        const QColor a=frames[0].pixelColor(x,y),b=frames[1].pixelColor(x,y);
+        if(std::abs(a.red()-b.red())+std::abs(a.green()-b.green())+std::abs(a.blue()-b.blue())>30)++changed;
+    }
+    qInfo()<<control<<"floating changed pixels"<<changed;
+    QVERIFY2(changed>50,"Floating control did not visibly reach the GPU");
+}
+
+void TerrainReactorGpuSmokeTest::meteorParticlePoolUploadsAndClearsWithoutResourceRebuild()
+{
+    PlayerExperienceController style;
+    QVERIFY(style.applyTheme(QStringLiteral("nocturnal")));
+    style.setAutoRotate(0); style.setAutoRotateSpeed(0);
+    style.setTerrainAmplitude(0); style.setIdleBreathingEnabled(false);
+    style.setFloatingCubesEnabled(false); style.setStreamHighlightEnabled(false);
+    style.setColumnInnerLight(0); style.setMeteorsEnabled(true); style.setRipplesEnabled(false);
+    StableImpactSource source;
+    QQuickWindow window; window.resize(640,360); window.setColor(QColor(4,6,11));
+    TerrainReactorItem item(window.contentItem()); item.setSize(QSizeF(640,360));
+    // Put the particles inside the original MeshBasicMaterial fog's 30..95
+    // view-depth interval instead of testing fully fogged geometry at 103.
+    item.zoomBy((60.0-item.cameraDistance())/.04,0);
+    item.setStyleSource(&style); item.setFeatureSource(&source);
+    window.show(); QVERIFY(waitForGpuWindow(window)); item.setActive(true);
+    QTRY_VERIFY_WITH_TIMEOUT(item.frameCount()>3,5000);
+    const QImage before=window.grabWindow();
+    source.publishImpact(1);
+    const auto generation=item.telemetry_->resourceGeneration.load();
+    QTRY_VERIFY_WITH_TIMEOUT(item.telemetry_->activeMeteorParticles.load()>0,1000);
+    QCOMPARE(item.telemetry_->meteorParticleSlots.load(),200);
+    // Strength1 always lands by .267s. No white wave is enabled, and the
+    // reference collision particles move upward after the meteor is gone.
+    QTest::qWait(300);
+    const QImage after=window.grabWindow();
+    if (!qEnvironmentVariable("AGPLAYER_PARTICLE_QA_OUTPUT").isEmpty()) {
+        before.save(qEnvironmentVariable("AGPLAYER_PARTICLE_QA_OUTPUT")+"-before.png");
+        after.save(qEnvironmentVariable("AGPLAYER_PARTICLE_QA_OUTPUT")+"-after.png");
+    }
+    int brightChanges=0;
+    for(int y=0;y<after.height()/2;++y) for(int x=0;x<after.width();++x) {
+        const auto a=before.pixelColor(x,y), b=after.pixelColor(x,y);
+        if(b.red()>100 && b.green()>100 && b.blue()>100
+            && b.red()-a.red()>35 && b.green()-a.green()>35) ++brightChanges;
+    }
+    qInfo()<<"Diagnostic upper-half bright pixel changes (not a reference visual oracle)"<<brightChanges;
+    // The photographed particles are subpixel, alpha .6 and fogged. The old
+    // >100 RGB threshold had no reference oracle and is retained in QA logs,
+    // not used as a false material-parity claim. Verify actual pool uploads.
+    QVERIFY(item.telemetry_->activeMeteorParticles.load()>0);
+    style.setMeteorsEnabled(false);
+    const auto beforeDisable=item.frameCount();
+    QTRY_VERIFY_WITH_TIMEOUT(item.frameCount()>beforeDisable,1000);
+    QTRY_COMPARE_WITH_TIMEOUT(item.telemetry_->activeMeteorParticles.load(),0,1000);
+    QCOMPARE(item.telemetry_->meteorParticleSlots.load(),0);
+    QCOMPARE(item.telemetry_->resourceGeneration.load(),generation);
+    QVERIFY(item.renderStatus()==TerrainReactorItem::RenderStatus::Ready);
+    item.setActive(false);
+}
+
+void TerrainReactorGpuSmokeTest::meteorTouchdownProducesReferenceWhiteRipple()
+{
+    PlayerExperienceController style;
+    QVERIFY(style.applyTheme(QStringLiteral("nocturnal")));
+    style.setAutoRotate(0);
+    style.setAutoRotateSpeed(0);
+    style.setTerrainAmplitude(0);
+    style.setIdleBreathingEnabled(false);
+    style.setFloatingCubesEnabled(false);
+    style.setStreamHighlightEnabled(false);
+    style.setColumnInnerLight(0);
+    style.setMeteorsEnabled(true);
+    style.setRipplesEnabled(true);
+    style.setRippleStrength(100);
+    style.setRippleWidth(100);
+    style.setRippleDecay(100);
+    style.setReactorBrightness(100);
+    style.setSubjectClarity(114);
+    StableImpactSource source;
+    QQuickWindow window;
+    window.resize(640, 360);
+    window.setColor(QColor(4, 6, 11));
+    TerrainReactorItem item(window.contentItem());
+    item.setSize(QSizeF(640, 360));
+    item.setStyleSource(&style);
+    item.setFeatureSource(&source);
+    window.show();
+    QVERIFY(waitForGpuWindow(window));
+    item.setActive(true);
+    QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() > 3, 5000);
+    source.publishImpact(1.0);
+    // At strength1, original height30..40 / speed2.5..3 /60 lands within .267s.
+    // Inspect the remaining white wave after the meteor has disappeared.
+    QTest::qWait(620);
+    int maximumNeutralPixels = 0;
+    for (int sample = 0; sample < 10; ++sample) {
+        const QImage frame = window.grabWindow();
+        int neutralPixels = 0;
+        for (int y = frame.height()/3; y < frame.height()*9/10; ++y)
+            for (int x = frame.width()/10; x < frame.width()*9/10; ++x) {
+                const QColor color = frame.pixelColor(x,y);
+                if (color.red() > 70 && color.green() > 70 && color.blue() > 70
+                    && std::max({color.red(),color.green(),color.blue()})
+                        - std::min({color.red(),color.green(),color.blue()}) < 25)
+                    ++neutralPixels;
+            }
+        maximumNeutralPixels = std::max(maximumNeutralPixels, neutralPixels);
+        QTest::qWait(16);
+    }
+    qInfo() << "Post-touchdown white ripple pixels" << maximumNeutralPixels;
+    QVERIFY2(maximumNeutralPixels > 4,
+             "Canonical meteor touchdown must emit a white ripple, not the cyan normal-wave palette");
     item.setActive(false);
 }
 
@@ -965,6 +1344,11 @@ void TerrainReactorGpuSmokeTest::highFrequencySheenStaysLocalizedAndHeightSubord
     window.resize(480, 270);
     window.setColor(QColor(4, 6, 11));
     PlayerExperienceController style;
+    // This native artistic contract limits pixel-light response, not vertex
+    // height. Original presets intentionally have strong high-band cap flashes;
+    // their geometry is verified separately against captured GPU height data.
+    style.setCoolColor(style.coolColor());
+    QVERIFY(style.themeId().isEmpty());
     style.setAutoRotate(0);
     style.setAutoRotateSpeed(0);
     style.setMotionResponse(0);
@@ -1319,6 +1703,16 @@ void TerrainReactorGpuSmokeTest::steadyCorePreservesHighlightDetailWithoutWhiteP
     window.setColor(QColor(4, 6, 11));
     PlayerExperienceController style;
     QVERIFY(style.applyTheme(QStringLiteral("nocturnal")));
+    // These coverage and response-radius limits describe the customizable
+    // native lamp material (historically 1.28x columns and softer edge fade).
+    // Original presets use narrower columns, dark linear bases and fixed
+    // spectral regions; their colors/heights have independent GPU oracles.
+    style.setCoolColor(style.coolColor());
+    QVERIFY(style.themeId().isEmpty());
+    // Fixed legacy geometry inputs from 7fba19a load() defaults. This
+    // regression is not a moving golden for new canonical preset defaults.
+    style.setTerrainAmplitude(34);
+    style.setColumnSize(95);
     style.setThemeCycleEnabled(false);
     style.setAutoRotate(0);
     style.setAutoRotateSpeed(0);

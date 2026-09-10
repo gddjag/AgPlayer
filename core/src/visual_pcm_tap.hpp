@@ -4,6 +4,7 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <iterator>
 
 namespace agplayer {
 // One audio callback producer, one GUI consumer. Control/reset only changes
@@ -51,19 +52,19 @@ public:
         for (; r != end; ++r) {
             const auto& block = blocks_[r % blocks_.size()];
             if (block.epoch != epoch || !(epoch & 1U)) continue;
-            if (out.sample_rate != block.rate
-                || out.first_sample_index + out.sample_count != block.first) {
-                out.sample_count = 0;
-            }
-            const auto keep = (std::min)(out.sample_count, std::size_t{1024} - block.count);
-            std::move(out.samples + out.sample_count - keep,
-                      out.samples + out.sample_count, out.samples);
-            std::copy_n(block.samples.data(), block.count, out.samples + keep);
-            out.sample_count = keep + block.count;
-            out.first_sample_index = block.first + block.count - out.sample_count;
+            // Preserve FIFO continuity across bounded reads. Taking only the
+            // newest 1024 samples caused a visual reset whenever a GUI poll
+            // was late (and on every normal poll at high sample rates).
+            if (out.sample_count != 0
+                && (out.sample_rate != block.rate
+                    || out.first_sample_index + out.sample_count != block.first)) break;
+            if (out.sample_count + block.count > std::size(out.samples)) break;
+            if (out.sample_count == 0) out.first_sample_index = block.first;
+            std::copy_n(block.samples.data(), block.count, out.samples + out.sample_count);
+            out.sample_count += block.count;
             out.sample_rate = block.rate;
         }
-        read_.store(end, std::memory_order_release);
+        read_.store(r, std::memory_order_release);
         const auto current = epoch_.load(std::memory_order_acquire);
         if (current != epoch) { out = {}; out.generation = current; }
     }

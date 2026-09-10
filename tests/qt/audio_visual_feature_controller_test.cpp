@@ -2,21 +2,79 @@
 #include "playback_controller.hpp"
 #include "visual_spectrum_features.hpp"
 #include "visual_kick_response.hpp"
+#include "visual_audio_frame_analyzer.hpp"
+#include "visual_terrain_response.hpp"
+#include "visual_snare_trigger.hpp"
 
 #include <agplayer/c_api.h>
 
 #include <QSignalSpy>
 #include <QTest>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QJsonObject>
 
 #include <cmath>
 #include <limits>
 #include <memory>
 
+namespace {
+const QStringList traceFields{
+    "subBass", "bass", "lowMid", "mid", "highMid", "presence", "brilliance", "air",
+    "energy", "warmth", "brightness", "sharpness", "smoothness", "density", "spectralCentroid",
+    "kickLevel", "kickFlux", "kickThreshold", "kickOnset", "kickEnvelope", "kickConfidence"};
+
+QString validateAudioTrace(const QJsonObject& root)
+{
+    if (root.value("sampleRate").toInt() <= 0) return "sampleRate must be positive";
+    const auto frames = root.value("frames").toArray();
+    if (frames.isEmpty()) return "frames must be nonempty";
+    double previousTime = -1;
+    double previousReads = 0;
+    for (int i = 0; i < frames.size(); ++i) {
+        const auto frame = frames[i].toObject();
+        const auto fail = [i](const QString& detail) { return QString("frame %1: %2").arg(i).arg(detail); };
+        for (const auto& key : {"time", "sampleIndex", "frequencyReads"})
+            if (!frame[key].isDouble() || !std::isfinite(frame[key].toDouble()) || frame[key].toDouble() < 0)
+                return fail(QString("invalid %1").arg(key));
+        const double time = frame["time"].toDouble();
+        const double reads = frame["frequencyReads"].toDouble();
+        if (time < previousTime || reads < previousReads || reads < 1 || reads != std::floor(reads))
+            return fail("nonmonotonic time/frequencyReads");
+        previousTime = time;
+        previousReads = reads;
+        for (const auto& key : {"timeDomain", "spectrum"}) {
+            const auto values = frame[key].toArray();
+            if (values.size() != (QString(key) == "timeDomain" ? 1024 : 512))
+                return fail(QString("invalid %1 length").arg(key));
+            for (const auto& value : values) {
+                if (!value.isDouble() || !std::isfinite(value.toDouble())) return fail("nonfinite array value");
+                if (QString(key) == "spectrum" && (value.toDouble() < 0 || value.toDouble() > 255
+                    || value.toDouble() != std::floor(value.toDouble()))) return fail("invalid spectrum byte");
+            }
+        }
+        const auto descriptors = frame["descriptors"].toObject();
+        for (const auto& key : traceFields)
+            if (!descriptors[key].isDouble() || !std::isfinite(descriptors[key].toDouble()))
+                return fail(QString("missing/nonfinite descriptor %1").arg(key));
+    }
+    return {};
+}
+}
 
 class AudioVisualFeatureControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void snareMatchesOriginalBoundaryEvents();
+    void snareMatchesOriginalRealTrace();
+    void referenceAudioTraceSchemaRejectsMalformedInput();
+    void referenceAudioTraceMatchesOriginal();
+    void referenceTerrainTraceMatchesOriginal();
+    void renderFrameAnalysisOwnsCadenceAndResets();
+    void pausedRenderFrameUsesOriginalVisualRelease();
+    void renderFrameConsumersSharePcmWithoutGuiAnalysis();
     void visualResetNotifiesOnceAfterClearing();
     void visualKickSensitivityControlsDetector();
     void visualPcmUpdatesDescriptorsBeforeReadyAndSkipsEmptyReads();
@@ -24,6 +82,9 @@ private slots:
     void visualPcmDescriptorHistoryResets();
     void visualPcmAssemblesAndResets();
     void visualPcmLifecycle();
+    void visualPcmPauseRetainsWindowForRelease();
+    void visualPcmDelayedPollDrainsContiguousAudioWithoutReset();
+    void visualPcmBatchingPreservesAnalysisAndEpochReset();
     void reliableBpmEmitsOnceEveryEightBeats();
     void reliableBpmEmitsRegularBeatPulseAndEightBeatImpact();
     void seeksAndTrackChangesDoNotEmitDuplicateImpacts();
@@ -41,6 +102,413 @@ private slots:
     void fadeOutPublicationResidueDoesNotLightBeatGrid_data();
     void fadeOutPublicationResidueDoesNotLightBeatGrid();
 };
+
+void AudioVisualFeatureControllerTest::snareMatchesOriginalBoundaryEvents()
+{
+    // Actual fixed ec8 AudioEngine.getAudioData/onFreqTrigger output, exported
+    // with snare-oracle.cjs (external study). These are not native-computed expectations.
+    const std::array<int,4> eventFrames{6,38,81,113};
+    const std::array<double,4> strengths{3.6091482352941178,3.6000476710532605,
+        3.6000000010394704,3.6000002865118};
+    agplayer::VisualSnareTrigger trigger;
+    // Repeat after invalidation to catch retained flux/hold/history state.
+    for (int pass = 0; pass < 2; ++pass) {
+        int event = 0;
+        for (int frame = 0; frame < 160; ++frame) {
+            agplayer::VisualSpectrumAnalyzer::Spectrum spectrum{};
+            const int amplitude = frame == 0 ? 2 : frame == 2 ? 3
+                : (frame == 5 || frame == 15 || frame == 37 || frame == 80 || frame == 112) ? 255 : 0;
+            for (int bin = 47; bin <= 120; ++bin) spectrum[bin] = amplitude;
+            spectrum[46] = spectrum[121] = frame % 2 ? 255 : 0;
+            const auto actual = trigger.process(spectrum);
+            const bool expected = event < 4 && eventFrames[event] == frame;
+            QVERIFY2(actual.triggered == expected, qPrintable(QString("Snare frame %1").arg(frame)));
+            if (expected) {
+                QVERIFY(std::abs(actual.strength - strengths[event]) < 1e-12);
+                ++event;
+            } else QCOMPARE(actual.strength, 0.0);
+        }
+        QCOMPARE(event, 4);
+        agplayer::VisualSpectrumAnalyzer::Spectrum loud;
+        loud.fill(255);
+        QVERIFY(!trigger.process(loud, false).triggered);
+    }
+}
+
+void AudioVisualFeatureControllerTest::snareMatchesOriginalRealTrace()
+{
+    const auto path = qEnvironmentVariable("AGPLAYER_REFERENCE_SNARE_ORACLE");
+    if (path.isEmpty()) QSKIP("Optional fixed-original Snare oracle not provided");
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QJsonParseError error;
+    const auto document = QJsonDocument::fromJson(file.readAll(), &error);
+    QCOMPARE(error.error, QJsonParseError::NoError);
+    const auto root = document.object();
+    QCOMPARE(root["sourceSha256"].toString(),
+        QString("0d96a161a4da5559189cd0d35f5774b9717867522d6e544c534ab68362fe60ea"));
+    const auto frames = root["real"].toArray();
+    QVERIFY(!frames.isEmpty());
+    agplayer::VisualSnareTrigger trigger;
+    int events = 0;
+    for (int i = 0; i < frames.size(); ++i) {
+        const auto frame = frames[i].toObject();
+        const auto values = frame["spectrum"].toArray();
+        QCOMPARE(values.size(), 512);
+        agplayer::VisualSpectrumAnalyzer::Spectrum spectrum{};
+        for (int bin = 0; bin < 512; ++bin) {
+            QVERIFY(values[bin].isDouble());
+            const double value = values[bin].toDouble();
+            QVERIFY(value >= 0 && value <= 255 && value == std::floor(value));
+            spectrum[bin] = std::uint8_t(value);
+        }
+        const auto expected = frame["events"].toArray();
+        QVERIFY(expected.size() <= 1);
+        const auto actual = trigger.process(spectrum);
+        QVERIFY2(actual.triggered == !expected.isEmpty(), qPrintable(QString("Original Snare frame %1").arg(i)));
+        if (!expected.isEmpty()) {
+            const auto event = expected[0].toObject();
+            QCOMPARE(event["action"].toString(), QString("Snare"));
+            QVERIFY(event["strength"].isDouble());
+            QVERIFY2(std::abs(actual.strength - event["strength"].toDouble()) < 1e-12,
+                qPrintable(QString("Original Snare strength frame %1").arg(i)));
+            ++events;
+        } else QCOMPARE(actual.strength, 0.0);
+    }
+    QVERIFY(events > 0);
+}
+
+void AudioVisualFeatureControllerTest::referenceAudioTraceSchemaRejectsMalformedInput()
+{
+    // Parser-only shape fixture: deliberately never fed to the analyzer as an oracle.
+    QJsonObject root{{"sampleRate", 48000}};
+    QVERIFY(!validateAudioTrace(root).isEmpty());
+    QJsonArray pcm, spectrum;
+    for (int i = 0; i < 1024; ++i) pcm.append(0);
+    for (int i = 0; i < 512; ++i) spectrum.append(0);
+    QJsonObject descriptors;
+    for (const auto& field : traceFields) descriptors[field] = 0;
+    QJsonObject frame{{"time", .016}, {"sampleIndex", 768}, {"frequencyReads", 1},
+                      {"timeDomain", pcm}, {"spectrum", spectrum}, {"descriptors", descriptors}};
+    root["frames"] = QJsonArray{frame};
+    QVERIFY(validateAudioTrace(root).isEmpty());
+    spectrum.removeLast();
+    frame["spectrum"] = spectrum;
+    root["frames"] = QJsonArray{frame};
+    QCOMPARE(validateAudioTrace(root), QString("frame 0: invalid spectrum length"));
+    spectrum.append(256);
+    frame["spectrum"] = spectrum;
+    root["frames"] = QJsonArray{frame};
+    QCOMPARE(validateAudioTrace(root), QString("frame 0: invalid spectrum byte"));
+}
+
+void AudioVisualFeatureControllerTest::referenceAudioTraceMatchesOriginal()
+{
+    const auto path = qEnvironmentVariable("AGPLAYER_REFERENCE_AUDIO_TRACE");
+    if (path.isEmpty()) QSKIP("Original audio trace not supplied; no parity claim");
+    QFile file(path);
+    QVERIFY2(file.open(QIODevice::ReadOnly), qPrintable(file.errorString()));
+    QJsonParseError parseError;
+    const auto document = QJsonDocument::fromJson(file.readAll(), &parseError);
+    QVERIFY2(parseError.error == QJsonParseError::NoError, qPrintable(parseError.errorString()));
+    QVERIFY(document.isObject());
+    const auto root = document.object();
+    const auto error = validateAudioTrace(root);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    agplayer::VisualAudioFrameAnalyzer analyzer;
+    agplayer::VisualAudioFrameAnalyzer::Snapshot snapshot;
+    snapshot.sampleRate = root["sampleRate"].toInt();
+    snapshot.epoch = 1;
+    snapshot.valid = true;
+    agplayer::VisualAudioFrameAnalyzer::Frame actual;
+    double lastAnalysisTime = 0;
+    double lastReads = 0;
+    const auto frames = root["frames"].toArray();
+    for (int i = 0; i < frames.size(); ++i) {
+        const auto frame = frames[i].toObject();
+        const auto reads = frame["frequencyReads"].toDouble();
+        const auto time = frame["time"].toDouble();
+        if (reads != lastReads) {
+            QVERIFY2(reads == lastReads + 1, "Trace omitted frequency-analysis frames");
+            const auto pcm = frame["timeDomain"].toArray();
+            for (int sample = 0; sample < 1024; ++sample) snapshot.pcm[sample] = float(pcm[sample].toDouble());
+            actual = analyzer.process(snapshot, time - lastAnalysisTime);
+            lastAnalysisTime = time;
+            lastReads = reads;
+        }
+        const auto bytes = frame["spectrum"].toArray();
+        for (int bin = 0; bin < 512; ++bin) {
+            const auto detail = QString("frame %1 sampleIndex %2 bin %3: native %4 original %5")
+                .arg(i).arg(frame["sampleIndex"].toDouble(), 0, 'f', 0).arg(bin)
+                .arg(actual.spectrum[bin]).arg(bytes[bin].toInt());
+            QVERIFY2(actual.spectrum[bin] == bytes[bin].toInt(), qPrintable(detail));
+        }
+        const auto& d = actual.descriptors;
+        const auto& k = actual.kick;
+        const std::array<double, 21> values{d.bands[0],d.bands[1],d.bands[2],d.bands[3],
+            d.bands[4],d.bands[5],d.bands[6],d.bands[7],d.energy,d.warmth,d.brightness,
+            d.sharpness,d.smoothness,d.density,d.spectralCentroid,k.level,k.flux,k.threshold,k.onset,k.envelope,k.confidence};
+        const auto expected = frame["descriptors"].toObject();
+        for (int field = 0; field < traceFields.size(); ++field) {
+            const auto goal = expected[traceFields[field]].toDouble();
+            const auto detail = QString("frame %1 sampleIndex %2 %3: native %4 original %5")
+                .arg(i).arg(frame["sampleIndex"].toDouble(), 0, 'f', 0).arg(traceFields[field])
+                .arg(values[field], 0, 'g', 17).arg(goal, 0, 'g', 17);
+            QVERIFY2(std::abs(values[field] - goal) <= 1e-6, qPrintable(detail));
+        }
+    }
+}
+
+void AudioVisualFeatureControllerTest::referenceTerrainTraceMatchesOriginal()
+{
+    const auto path = qEnvironmentVariable("AGPLAYER_REFERENCE_TERRAIN_TRACE");
+    if (path.isEmpty()) QSKIP("Original per-frame terrain response trace not supplied");
+    QFile file(path);
+    QVERIFY2(file.open(QIODevice::ReadOnly), qPrintable(file.errorString()));
+    QJsonParseError parseError;
+    const auto document = QJsonDocument::fromJson(file.readAll(), &parseError);
+    QVERIFY2(parseError.error == QJsonParseError::NoError, qPrintable(parseError.errorString()));
+    QVERIFY(document.isObject());
+    const auto root = document.object();
+    const auto error = validateAudioTrace(root);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    const auto settings = root["terrainSettings"].toObject();
+    const auto bands = settings["bands"].toArray();
+    const auto enabled = settings["enabledBands"].toArray();
+    QCOMPARE(bands.size(), 8);
+    QCOMPARE(enabled.size(), 8);
+    QVERIFY(settings["motionSpeed"].isDouble());
+    agplayer::VisualTerrainResponse response;
+    agplayer::VisualTerrainResponse::EqBands eq;
+    agplayer::VisualTerrainResponse::EnabledBands on;
+    for (int i = 0; i < 8; ++i) {
+        QVERIFY(bands[i].isDouble());
+        QVERIFY(enabled[i].isBool());
+        eq[i] = bands[i].toDouble() / 100.0;
+        on[i] = enabled[i].toBool();
+    }
+    const QStringList fields{"uSubBass", "uBass", "uLowMid", "uMid", "uHighMid", "uPresence",
+        "uBrilliance", "uAir", "uEnergy", "uWarmth", "uBrightness", "uSharpness", "uSmoothness",
+        "uDensity", "uSpectralCentroid"};
+    const auto frames = root["frames"].toArray();
+    for (int frameIndex = 0; frameIndex < frames.size(); ++frameIndex) {
+        const auto frame = frames[frameIndex].toObject();
+        const auto original = frame["descriptors"].toObject();
+        // Isolate the response layer using upstream's captured input; do not
+        // regenerate its expected output with native FFT/features helpers.
+        agplayer::VisualSpectrumFeatures::Features input;
+        for (int i = 0; i < 8; ++i) input.bands[i] = original[traceFields[i]].toDouble();
+        input.energy = original["energy"].toDouble();
+        input.sharpness = original["sharpness"].toDouble();
+        input.smoothness = original["smoothness"].toDouble();
+        input.density = original["density"].toDouble();
+        input.spectralCentroid = original["spectralCentroid"].toDouble();
+        const auto terrain = frame["terrainResponse"].toObject();
+        QVERIFY2(terrain["deltaSeconds"].isDouble(), qPrintable(QString("frame %1: missing render delta").arg(frameIndex)));
+        const auto& out = response.update(input, original["kickEnvelope"].toDouble(), eq, on,
+            terrain["deltaSeconds"].toDouble(), settings["motionSpeed"].toDouble());
+        const std::array<double, 15> actual{out.bands[0],out.bands[1],out.bands[2],out.bands[3],
+            out.bands[4],out.bands[5],out.bands[6],out.bands[7],out.energy,out.warmth,out.brightness,
+            out.sharpness,out.smoothness,out.density,out.spectralCentroid};
+        const auto expected = terrain["uniforms"].toObject();
+        for (int field = 0; field < fields.size(); ++field) {
+            const auto goal = expected[fields[field]];
+            const auto detail = QString("terrain frame %1 sampleIndex %2 %3: native %4 original %5")
+                .arg(frameIndex).arg(frame["sampleIndex"].toDouble(), 0, 'f', 0).arg(fields[field])
+                .arg(actual[field], 0, 'g', 17).arg(goal.toDouble(), 0, 'g', 17);
+            QVERIFY2(goal.isDouble() && std::isfinite(goal.toDouble()), qPrintable("Missing/nonfinite " + detail));
+            QVERIFY2(std::abs(actual[field] - goal.toDouble()) <= 1e-6, qPrintable(detail));
+        }
+    }
+}
+
+void AudioVisualFeatureControllerTest::renderFrameAnalysisOwnsCadenceAndResets()
+{
+    using Analyzer = agplayer::VisualAudioFrameAnalyzer;
+    Analyzer analyzer;
+    Analyzer::Snapshot pcm;
+    pcm.sampleRate = 48000;
+    pcm.epoch = 1;
+    pcm.valid = true;
+    pcm.pcm.fill(.1f);
+    const auto first = analyzer.process(pcm, .2);
+    QVERIFY(first.valid);
+    QVERIFY(first.descriptors.energy > 0);
+    agplayer::visual::KickResponse kick;
+    const auto expected = kick.process(first.spectrum, 1.0 / 60.0);
+    QCOMPARE(first.kick.envelope, expected.envelope);
+    // No new audio callback is needed for the next actual display frame.
+    const auto second = analyzer.process(pcm, 1.0 / 60.0);
+    QVERIFY(second.descriptors.energy > first.descriptors.energy);
+    ++pcm.epoch;
+    const auto afterSeek = analyzer.process(pcm, .2);
+    QCOMPARE(afterSeek.descriptors.energy, first.descriptors.energy);
+    QCOMPARE(afterSeek.kick.envelope, first.kick.envelope);
+    pcm.valid = false;
+    const auto cleared = analyzer.process(pcm, .016);
+    QVERIFY(!cleared.valid);
+    QCOMPARE(cleared.descriptors.energy, 0.0);
+    QCOMPARE(cleared.kick.envelope, 0.0);
+    pcm.valid = true;
+    QCOMPARE(analyzer.process(pcm, .016).descriptors.energy, first.descriptors.energy);
+}
+
+void AudioVisualFeatureControllerTest::pausedRenderFrameUsesOriginalVisualRelease()
+{
+    using Analyzer = agplayer::VisualAudioFrameAnalyzer;
+    Analyzer analyzer;
+    Analyzer::Snapshot pcm;
+    pcm.sampleRate = 48000;
+    pcm.epoch = 1;
+    pcm.valid = true;
+    pcm.pcm.fill(.18f);
+
+    const double playingEnergy = analyzer.process(pcm, 1.0 / 60.0)
+                                     .descriptors.energy;
+    QVERIFY(playingEnergy > 0.0);
+
+    pcm.valid = false;
+    pcm.paused = true;
+    pcm.releasing = true;
+    const auto released = analyzer.process(pcm, 1.0 / 60.0);
+    QVERIFY(released.valid);
+    QVERIFY(released.descriptors.energy > 0.0);
+    QVERIFY(released.descriptors.energy < playingEnergy);
+    QCOMPARE(released.kick.onset, 0.0);
+
+    pcm.paused = false;
+    pcm.releasing = false;
+    const auto hardReset = analyzer.process(pcm, 1.0 / 60.0);
+    QVERIFY(!hardReset.valid);
+    QCOMPARE(hardReset.descriptors.energy, 0.0);
+}
+
+void AudioVisualFeatureControllerTest::renderFrameConsumersSharePcmWithoutGuiAnalysis()
+{
+    AudioVisualFeatureController controller;
+    controller.setActive(true);
+    controller.acquireRenderFrameAnalysis();
+    controller.acquireRenderFrameAnalysis();
+    ag_visual_pcm_snapshot pcm{};
+    pcm.generation = 1;
+    pcm.sample_rate = 48000;
+    pcm.sample_count = 1024;
+    std::fill(std::begin(pcm.samples), std::end(pcm.samples), .1f);
+    controller.ingestVisualPcm(pcm);
+    const auto first = controller.visualPcmSnapshot();
+    QVERIFY(first.valid);
+    QCOMPARE(first.sampleRate, 48000);
+    QCOMPARE(first.pcm[400], .1f);
+    QCOMPARE(controller.visualSpectrumUpdateCount(), 0);
+    controller.releaseRenderFrameAnalysis();
+    pcm.first_sample_index = 1024;
+    controller.ingestVisualPcm(pcm);
+    QCOMPARE(controller.visualSpectrumUpdateCount(), 0);
+    controller.setActive(false);
+    const auto cleared = controller.visualPcmSnapshot();
+    QVERIFY(!cleared.valid);
+    QVERIFY(cleared.epoch != first.epoch);
+    controller.releaseRenderFrameAnalysis();
+    controller.setActive(true);
+    controller.ingestVisualPcm(pcm);
+    QCOMPARE(controller.visualSpectrumUpdateCount(), 1);
+}
+
+void AudioVisualFeatureControllerTest::visualPcmBatchingPreservesAnalysisAndEpochReset()
+{
+    AudioVisualFeatureController whole, split;
+    whole.setActive(true);
+    split.setActive(true);
+    ag_visual_pcm_snapshot pcm{};
+    pcm.generation = 1;
+    pcm.sample_rate = 48000;
+    pcm.sample_count = 1024;
+    const auto fillSignal = [](ag_visual_pcm_snapshot& block) {
+        constexpr double tau = 6.2831853071795864769;
+        for (std::size_t i = 0; i < block.sample_count; ++i) {
+            const double index = double(block.first_sample_index + i);
+            const double seconds = index / 48000.0;
+            const double envelope = .12 + .24 * index / 2304.0;
+            block.samples[i] = float(envelope * (
+                .55 * std::sin(tau * 93.0 * seconds)
+                + .30 * std::sin(tau * 713.0 * seconds + .4)
+                + .15 * std::sin(tau * 3101.0 * seconds + .9)));
+        }
+    };
+    fillSignal(pcm);
+    whole.ingestVisualPcm(pcm, true);
+    pcm.first_sample_index = 1024;
+    fillSignal(pcm);
+    whole.ingestVisualPcm(pcm, true);
+    pcm.sample_count = 256;
+    for (int i = 0; i < 8; ++i) {
+        pcm.first_sample_index = i * 256;
+        fillSignal(pcm);
+        split.ingestVisualPcm(pcm, true);
+    }
+    whole.analyzeVisualPcm();
+    split.analyzeVisualPcm();
+    QVERIFY(std::any_of(whole.visualSpectrum().begin(), whole.visualSpectrum().end(),
+                        [](auto value) { return value != 0; }));
+    QCOMPARE(whole.visualSpectrum(), split.visualSpectrum());
+    QCOMPARE(whole.visualFeatures().bands, split.visualFeatures().bands);
+    QCOMPARE(whole.visualFeatures().energy, split.visualFeatures().energy);
+    QCOMPARE(whole.visualKick().level, split.visualKick().level);
+    QCOMPARE(whole.visualKick().envelope, split.visualKick().envelope);
+    QCOMPARE(whole.visualKick().onset, split.visualKick().onset);
+    QSignalSpy ready(&split, &AudioVisualFeatureController::visualSpectrumReady);
+    pcm.first_sample_index = 2048;
+    fillSignal(pcm);
+    split.ingestVisualPcm(pcm, true);
+    ag_visual_pcm_snapshot empty{};
+    empty.generation = 2;
+    split.ingestVisualPcm(empty, true);
+    split.analyzeVisualPcm();
+    QCOMPARE(ready.count(), 0);
+    QCOMPARE(split.visualFeatures().energy, 0.0);
+    QCOMPARE(split.visualKick().envelope, 0.0);
+}
+
+void AudioVisualFeatureControllerTest::visualPcmDelayedPollDrainsContiguousAudioWithoutReset()
+{
+    const auto fixture = qgetenv("AGPLAYER_TEST_AUDIO");
+    QVERIFY(!fixture.isEmpty());
+    ag_player* player = nullptr;
+    const ag_player_config config{AG_AUDIO_BACKEND_NULL, 4096U};
+    QCOMPARE(ag_player_create_with_config(&config, &player), AG_OK);
+    {
+        PlaybackController playback(player);
+        AudioVisualFeatureController features(&playback);
+        features.setActive(true);
+        QCOMPARE(ag_player_load(player, fixture.constData()), AG_OK);
+        QCOMPARE(ag_player_play(player), AG_OK);
+        QTRY_VERIFY_WITH_TIMEOUT(features.visualSpectrumUpdateCount() > 0, 1000);
+        QSignalSpy resets(&features, &AudioVisualFeatureController::visualStateReset);
+        QSignalSpy ready(&features, &AudioVisualFeatureController::visualSpectrumReady);
+        const auto before = features.visualSpectrumUpdateCount();
+        const auto beforeIndex = features.visualNextIndex_;
+        // A GUI scheduling delay is not an audio discontinuity. The NULL
+        // output continues producing real PCM while no GUI timer can consume it.
+        QTest::qSleep(60);
+        features.pollOutputLevels();
+        QCOMPARE(resets.count(), 0);
+        QVERIFY2(features.visualNextIndex_ > beforeIndex + 1024,
+                 "One GUI poll must drain more than one queued PCM window");
+        QCOMPARE(features.visualSpectrumUpdateCount(), before + 1);
+        QCOMPARE(ready.count(), 1);
+        QCOMPARE(ag_player_pause(player), AG_OK);
+        features.pollOutputLevels();
+        // Pause is a visual release, not a seek/track discontinuity. Keep the
+        // last complete PCM window so the renderer can decay it smoothly.
+        QCOMPARE(resets.count(), 0);
+        const auto paused = features.visualPcmSnapshot();
+        QVERIFY(paused.paused);
+        QVERIFY(paused.releasing);
+        QVERIFY(!paused.valid);
+        QCOMPARE(paused.epoch, features.visualPcmEpoch_);
+    }
+    ag_player_destroy(player);
+}
 
 void AudioVisualFeatureControllerTest::visualResetNotifiesOnceAfterClearing()
 {
@@ -120,7 +588,7 @@ void AudioVisualFeatureControllerTest::visualPcmUpdatesDescriptorsBeforeReadyAnd
     QVERIFY(first.energy > 0);
     // The independently tested detector is an oracle for the controller's dt wiring.
     agplayer::visual::KickResponse detector;
-    const auto firstExpected = detector.process(controller.visualSpectrum(), 1024.0 / 48000.0);
+    const auto firstExpected = detector.process(controller.visualSpectrum(), 1.0 / 60.0);
     QCOMPARE(kick.level, firstExpected.level);
     QCOMPARE(kick.envelope, firstExpected.envelope);
     ag_visual_pcm_snapshot empty{};
@@ -133,11 +601,22 @@ void AudioVisualFeatureControllerTest::visualPcmUpdatesDescriptorsBeforeReadyAnd
     QCOMPARE(controller.visualKick().flux, kick.flux);
     pcm.first_sample_index = 1024;
     pcm.sample_count = 128;
+    QTest::qSleep(30);
+    const double lowerDt = std::min(.25, controller.visualAnalysisTimer_.nsecsElapsed() / 1e9);
+    QElapsedTimer callTimer;
+    callTimer.start();
     controller.ingestVisualPcm(pcm);
+    const double upperDt = std::min(.25, lowerDt + callTimer.nsecsElapsed() / 1e9 + .001);
     QCOMPARE(readyCount, 2);
-    const auto nextExpected = detector.process(controller.visualSpectrum(), 128.0 / 48000.0);
-    QCOMPARE(controller.visualKick().level, nextExpected.level);
-    QCOMPARE(controller.visualKick().envelope, nextExpected.envelope);
+    // Elapsed analysis time, not 128/sample_rate, drives the envelope.
+    auto upperDetector = detector;
+    const auto lower = detector.process(controller.visualSpectrum(), lowerDt);
+    const auto upper = upperDetector.process(controller.visualSpectrum(), upperDt);
+    const auto within = [](double value, double a, double b) {
+        return value >= std::min(a, b) - 1e-9 && value <= std::max(a, b) + 1e-9;
+    };
+    QVERIFY(within(controller.visualKick().level, lower.level, upper.level));
+    QVERIFY(within(controller.visualKick().envelope, lower.envelope, upper.envelope));
     QVERIFY(controller.visualFeatures().energy > first.energy);
     QCOMPARE(controller.energy(), 0.0);
     QCOMPARE(controller.beatRevision(), 0);
@@ -248,6 +727,34 @@ void AudioVisualFeatureControllerTest::visualPcmLifecycle()
         expectDisabled();
     }
     ag_player_destroy(player);
+}
+
+void AudioVisualFeatureControllerTest::visualPcmPauseRetainsWindowForRelease()
+{
+    ag_player* player = nullptr;
+    const ag_player_config config{AG_AUDIO_BACKEND_NULL, 4096U};
+    QCOMPARE(ag_player_create_with_config(&config, &player), AG_OK);
+    const auto cleanup = qScopeGuard([&] { ag_player_destroy(player); });
+    const auto fixture = qgetenv("AGPLAYER_TEST_AUDIO");
+    QCOMPARE(ag_player_load(player, fixture.constData()), AG_OK);
+    QCOMPARE(ag_player_play(player), AG_OK);
+
+    PlaybackController playback(player);
+    AudioVisualFeatureController features(&playback);
+    features.setActive(true);
+    features.acquireRenderFrameAnalysis();
+    QTRY_VERIFY_WITH_TIMEOUT(features.visualPcmSnapshot().valid, 1000);
+    const auto playing = features.visualPcmSnapshot();
+
+    QCOMPARE(ag_player_pause(player), AG_OK);
+    features.pollOutputLevels();
+    const auto paused = features.visualPcmSnapshot();
+    QVERIFY(!paused.valid);
+    QVERIFY(paused.paused);
+    QVERIFY(paused.releasing);
+    QCOMPARE(paused.epoch, playing.epoch);
+    QVERIFY(std::equal(paused.pcm.cbegin(), paused.pcm.cend(),
+                       playing.pcm.cbegin()));
 }
 
 void AudioVisualFeatureControllerTest::visualPcmAssemblesAndResets()
