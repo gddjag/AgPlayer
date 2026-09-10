@@ -187,6 +187,14 @@ bool PlayerExperienceController::themeCycleEnabled() const noexcept
 {
     return themeCycleEnabled_;
 }
+bool PlayerExperienceController::themeSongCycleEnabled() const noexcept
+{
+    return themeSongCycleEnabled_;
+}
+int PlayerExperienceController::themeCycleIntervalSeconds() const noexcept
+{
+    return themeCycleIntervalSeconds_;
+}
 bool PlayerExperienceController::streamHighlightEnabled() const noexcept
 {
     return streamHighlightEnabled_;
@@ -543,6 +551,42 @@ void PlayerExperienceController::setBurstEnabled(bool value)
     emit burstEnabledChanged();
 }
 
+void PlayerExperienceController::setFloatingBlockMinSize(int value)
+{
+    value = std::clamp(value, 0, 100);
+    if (floatingBlockMinSize_ == value) return;
+    floatingBlockMinSize_ = value;
+    persist(QStringLiteral("floatingBlockMinSize"), value);
+    emit floatingBlockMinSizeChanged();
+}
+
+void PlayerExperienceController::setFloatingBlockMaxSize(int value)
+{
+    value = std::clamp(value, 0, 100);
+    if (floatingBlockMaxSize_ == value) return;
+    floatingBlockMaxSize_ = value;
+    persist(QStringLiteral("floatingBlockMaxSize"), value);
+    emit floatingBlockMaxSizeChanged();
+}
+
+void PlayerExperienceController::setFloatingBlockSpeed(int value)
+{
+    value = std::clamp(value, 0, 100);
+    if (floatingBlockSpeed_ == value) return;
+    floatingBlockSpeed_ = value;
+    persist(QStringLiteral("floatingBlockSpeed"), value);
+    emit floatingBlockSpeedChanged();
+}
+
+void PlayerExperienceController::setFloatingBlockIntensity(int value)
+{
+    value = std::clamp(value, 0, 100);
+    if (floatingBlockIntensity_ == value) return;
+    floatingBlockIntensity_ = value;
+    persist(QStringLiteral("floatingBlockIntensity"), value);
+    emit floatingBlockIntensityChanged();
+}
+
 void PlayerExperienceController::setFloatingCubesEnabled(bool value)
 {
     if (floatingCubesEnabled_ == value) return;
@@ -575,6 +619,23 @@ void PlayerExperienceController::setThemeCycleEnabled(bool value)
     emit themeCycleEnabledChanged();
 }
 
+void PlayerExperienceController::setThemeSongCycleEnabled(bool value)
+{
+    if (themeSongCycleEnabled_ == value) return;
+    themeSongCycleEnabled_ = value;
+    persist(QStringLiteral("themeSongCycleEnabled"), value);
+    emit themeSongCycleEnabledChanged();
+}
+
+void PlayerExperienceController::setThemeCycleIntervalSeconds(int value)
+{
+    value = clampRange(value, 3, 120);
+    if (themeCycleIntervalSeconds_ == value) return;
+    themeCycleIntervalSeconds_ = value;
+    persist(QStringLiteral("themeCycleIntervalSeconds"), value);
+    emit themeCycleIntervalSecondsChanged();
+}
+
 void PlayerExperienceController::setStreamHighlightEnabled(bool value)
 {
     if (streamHighlightEnabled_ == value) return;
@@ -599,6 +660,24 @@ void PlayerExperienceController::setVisualEqGains(const QVariantList& values)
     visualEqGains_ = normalized;
     persist(QStringLiteral("visualEqGains"), normalized);
     emit visualEqGainsChanged();
+}
+
+QVariantList PlayerExperienceController::normalizedVisualEqEnabled(const QVariantList& values)
+{
+    QVariantList result;
+    for (int i = 0; i < 8; ++i)
+        result.append(i < values.size() && values[i].metaType().id() == QMetaType::Bool
+                          ? values[i].toBool() : true);
+    return result;
+}
+
+void PlayerExperienceController::setVisualEqEnabled(const QVariantList& values)
+{
+    const auto normalized = normalizedVisualEqEnabled(values);
+    if (visualEqEnabled_ == normalized) return;
+    visualEqEnabled_ = normalized;
+    persist(QStringLiteral("visualEqEnabled"), normalized);
+    emit visualEqEnabledChanged();
 }
 
 void PlayerExperienceController::setLyricClarity(int value)
@@ -887,14 +966,35 @@ void PlayerExperienceController::load()
     ripplesEnabled_ = boolean(QStringLiteral("ripplesEnabled"), true);
     burstEnabled_ = boolean(QStringLiteral("burstEnabled"), true);
     floatingCubesEnabled_ = boolean(QStringLiteral("floatingCubesEnabled"), true);
+    floatingBlockMinSize_ = std::clamp(integer(QStringLiteral("floatingBlockMinSize"), 9), 0, 100);
+    floatingBlockMaxSize_ = std::clamp(integer(QStringLiteral("floatingBlockMaxSize"), 26), 0, 100);
+    floatingBlockSpeed_ = std::clamp(integer(QStringLiteral("floatingBlockSpeed"), 77), 0, 100);
+    floatingBlockIntensity_ = std::clamp(integer(QStringLiteral("floatingBlockIntensity"), 55), 0, 100);
     meteorsEnabled_ = boolean(QStringLiteral("meteorsEnabled"), true);
     idleBreathingEnabled_ = boolean(QStringLiteral("idleBreathingEnabled"), true);
-    themeCycleEnabled_ = boolean(QStringLiteral("themeCycleEnabled"), false);
+    // Version 1 introduces user-visible rotation controls. The old hidden
+    // setting was never actionable, so migrate it to the reference default.
+    const bool hasThemeRotationSettings =
+        settings_.value(QStringLiteral("themeRotationSettingsVersion"), 0).toInt() >= 1;
+    themeCycleEnabled_ = hasThemeRotationSettings
+        ? boolean(QStringLiteral("themeCycleEnabled"), true) : true;
+    themeSongCycleEnabled_ = boolean(QStringLiteral("themeSongCycleEnabled"), false);
+    themeCycleIntervalSeconds_ = clampRange(
+        integer(QStringLiteral("themeCycleIntervalSeconds"), 10), 3, 120);
     streamHighlightEnabled_ = boolean(
         QStringLiteral("streamHighlightEnabled"), true);
     songAdaptiveColorEnabled_ = boolean(
         QStringLiteral("songAdaptiveColorEnabled"), false);
     const QVariant persistedGains = settings_.value(QStringLiteral("visualEqGains"));
+    QVariantList storedEnabled = settings_.value(QStringLiteral("visualEqEnabled")).toList();
+    // QSettings INI lists round-trip booleans as "true"/"false" strings.
+    for (auto& value : storedEnabled) {
+        if (value.metaType().id() == QMetaType::QString) {
+            if (value.toString() == QStringLiteral("true")) value = true;
+            else if (value.toString() == QStringLiteral("false")) value = false;
+        }
+    }
+    visualEqEnabled_ = normalizedVisualEqEnabled(storedEnabled);
     const int persistedGainsType = persistedGains.metaType().id();
     visualEqGains_ = (persistedGainsType == QMetaType::QVariantList
                        || persistedGainsType == QMetaType::QStringList)
@@ -954,9 +1054,17 @@ void PlayerExperienceController::load()
     settings_.setValue(QStringLiteral("ripplesEnabled"), ripplesEnabled_);
     settings_.setValue(QStringLiteral("burstEnabled"), burstEnabled_);
     settings_.setValue(QStringLiteral("floatingCubesEnabled"), floatingCubesEnabled_);
+    settings_.setValue(QStringLiteral("floatingBlockMinSize"), floatingBlockMinSize_);
+    settings_.setValue(QStringLiteral("floatingBlockMaxSize"), floatingBlockMaxSize_);
+    settings_.setValue(QStringLiteral("floatingBlockSpeed"), floatingBlockSpeed_);
+    settings_.setValue(QStringLiteral("floatingBlockIntensity"), floatingBlockIntensity_);
     settings_.setValue(QStringLiteral("meteorsEnabled"), meteorsEnabled_);
     settings_.setValue(QStringLiteral("idleBreathingEnabled"), idleBreathingEnabled_);
     settings_.setValue(QStringLiteral("themeCycleEnabled"), themeCycleEnabled_);
+    settings_.setValue(QStringLiteral("themeSongCycleEnabled"), themeSongCycleEnabled_);
+    settings_.setValue(QStringLiteral("themeCycleIntervalSeconds"),
+                       themeCycleIntervalSeconds_);
+    settings_.setValue(QStringLiteral("themeRotationSettingsVersion"), 1);
     settings_.setValue(QStringLiteral("streamHighlightEnabled"),
                        streamHighlightEnabled_);
     settings_.setValue(QStringLiteral("songAdaptiveColorEnabled"),

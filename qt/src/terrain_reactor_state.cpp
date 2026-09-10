@@ -1,4 +1,5 @@
 #include "terrain_reactor_state.hpp"
+#include "immersive_theme_catalog.hpp"
 
 #include <QtMath>
 
@@ -6,6 +7,74 @@
 #include <cmath>
 
 namespace agplayer::terrain {
+QVector3D MeteorMaterialColor::advance(QVector3D targetWarmLinear, float dt) noexcept
+{
+    const float blend = std::isfinite(dt) ? std::clamp(3.0F * dt, 0.0F, 1.0F) : 0;
+    const QVector3D target = targetWarmLinear * .3F + QVector3D(.7F,.7F,.7F);
+    color_ += (target - color_) * blend;
+    return color_;
+}
+
+void MeteorParticlePool::spawn(QVector3D origin, float multiplier, const std::array<float,8>& samples) noexcept
+{
+    Particle& p = particles_[next_];
+    p = {};
+    p.active = true;
+    p.position = origin + QVector3D((samples[0]-.5F)*1.5F,
+        (samples[1]-.5F)*1.5F, (samples[2]-.5F)*1.5F);
+    p.velocity = {(samples[3]-.5F)*2, samples[4]*2+multiplier*10, (samples[5]-.5F)*2};
+    p.maxLife = .5F+samples[6]*.5F;
+    p.baseScale = .2F+samples[7]*.6F;
+    next_ = (next_+1)%particles_.size();
+}
+void MeteorParticlePool::advance(float dt) noexcept
+{
+    if (!std::isfinite(dt) || dt < 0) return;
+    for (auto& p:particles_) if(p.active) {
+        p.life += dt;
+        if (p.life >= p.maxLife) p.active = false;
+        else p.position += p.velocity * (dt*10);
+    }
+}
+QVector4D advanceFloatingBlocks(float previousPulse, float kick, float dt,
+                               float minSize, float maxSize, float speed, float intensity) noexcept
+{
+    const float seconds = std::isfinite(dt) ? std::max(0.0F, dt) : 0.0F;
+    const float amount = std::clamp(intensity / 100.0F, 0.0F, 1.0F);
+    const float blend = 1.0F - std::exp(-(3.0F + 33.0F * std::clamp(speed / 100.0F, 0.0F, 1.0F)) * seconds);
+    const float pulse = previousPulse + (std::clamp(kick, 0.0F, 1.0F) - previousPulse) * blend;
+    const float low = 0.12F + 0.63F * std::clamp(minSize / 100.0F, 0.0F, 1.0F);
+    const float high = std::max(low + 0.05F, 0.45F + 2.75F * std::clamp(maxSize / 100.0F, 0.0F, 1.0F));
+    const float mix = std::clamp(pulse * (0.5F + amount * 1.7F), 0.0F, 1.0F);
+    return {pulse, mix, low + (high - low) * mix, amount};
+}
+ThemePalette advanceThemePalette(const ThemePalette& current,
+                                 const ThemePalette& target,
+                                 float deltaSeconds) noexcept
+{
+    if (current.colors == target.colors && current.glow == target.glow)
+        return target;
+    const float blend = std::isfinite(deltaSeconds)
+        ? std::clamp(deltaSeconds * 3.0F, 0.0F, 1.0F) : 0.0F;
+    if (blend <= 0.0F) return current;
+    if (blend >= 1.0F) return target;
+    ThemePalette result = target;
+    for (std::size_t index = 0; index < result.colors.size(); ++index) {
+        for (int channel = 0; channel < 3; ++channel) {
+            if (current.colors[index][channel] == target.colors[index][channel])
+                continue;
+            const float from = immersive::srgbChannelToLinear(current.colors[index][channel]);
+            const float to = immersive::srgbChannelToLinear(target.colors[index][channel]);
+            result.colors[index][channel] = immersive::workingLinearChannelToSrgb(
+                from + (to - from) * blend);
+        }
+        // Alpha stores semantic flags, not visual opacity.
+        result.colors[index].setW(target.colors[index].w());
+    }
+    result.glow = current.glow + (target.glow - current.glow) * blend;
+    return result;
+}
+
 float smoothReactorFeature(float current, float target, float elapsedSeconds) noexcept
 {
     const float safeCurrent = std::isfinite(current) ? std::clamp(current, 0.0F, 1.0F) : 0.0F;
@@ -18,9 +87,15 @@ float smoothReactorFeature(float current, float target, float elapsedSeconds) no
 bool TravelingWaveGate::consume(float nowSeconds, float strength) noexcept
 {
     if (!std::isfinite(nowSeconds) || nowSeconds < nextSeconds_) return false;
+    anchor(nowSeconds, strength);
+    return true;
+}
+
+void TravelingWaveGate::anchor(float nowSeconds, float strength) noexcept
+{
+    if (!std::isfinite(nowSeconds)) return;
     const float energy = std::isfinite(strength) ? std::clamp(strength, 0.0F, 1.0F) : 0.0F;
     nextSeconds_ = nowSeconds + 6.0F - energy * 3.0F;
-    return true;
 }
 
 namespace {
@@ -133,6 +208,37 @@ float mapAudioValue(float value, const RenderDynamics& dynamics) noexcept
 
 } // namespace
 
+void MeteorParticlePool::frame(float dt, QVector4D trajectory, float age, bool airborne, bool landed) noexcept
+{
+    if (!std::isfinite(dt) || dt < 0) return;
+    seed_ = seed_*1664525U+1013904223U;
+    DeterministicRandom random(seed_);
+    const float y = trajectory.z()-trajectory.w()*60*age;
+    const int count = landed ? 10 : (airborne && y > 0 && random.unit() > .3F ? 1 : 0);
+    for (int i=0;i<count;++i) {
+        std::array<float,8> samples;
+        for (auto& sample:samples) sample = random.unit();
+        spawn({trajectory.x(), landed ? .5F : y, trajectory.y()},
+            trajectory.w()*(landed ? 1.5F : .2F), samples);
+    }
+    // MapScene updates newly spawned particles in this same frame.
+    advance(dt);
+}
+
+QVector4D consumeSnareWave(TravelingWaveGate& gate, float now, double strength,
+    quint32 seed, bool enabled, bool meteorLanded) noexcept
+{
+    if (!enabled || meteorLanded || !std::isfinite(strength) || strength <= 0
+        || !gate.consume(now, float(strength))) return {};
+    DeterministicRandom random(seed);
+    const float angle = random.unit() * float(2.0 * M_PI);
+    const float radius = 10.0F + random.unit() * 35.0F;
+    // Same distribution/strength as the original Snare callback. The shared
+    // 3--6s presentation gate above is the explicit native product exception.
+    return QVector4D(std::cos(angle) * radius, std::sin(angle) * radius, now,
+        -float((std::min)(strength * 3.0, 3.0)));
+}
+
 quint32 stableTrackPaletteSeed(QStringView trackIdentity) noexcept
 {
     if (trackIdentity.isEmpty()) return 0U;
@@ -208,15 +314,20 @@ bool MeteorFlight::launch(float now, int count, float strength) noexcept
         return false;
     group_ = int(sequence_++ % unsigned(count));
     start_ = now;
-    strength_ = clampUnit(strength) * (0.66F + 0.34F
-        * std::fmod(float(sequence_) * 0.61803399F, 1.0F));
+    strength_ = strength;
+    DeterministicRandom random(sequence_ * 0x9e3779b9U);
+    const float angle = random.unit() * float(2.0 * M_PI);
+    const float radius = random.unit() * 25.0F;
+    const float height = 30.0F + random.unit() * 10.0F;
+    const float speed = 1.0F + random.unit() * 0.5F + strength * 1.5F;
+    trajectory_ = QVector4D(std::cos(angle) * radius, std::sin(angle) * radius, height, speed);
     pending_ = true;
     return true;
 }
 
 bool MeteorFlight::landed(float now) noexcept
 {
-    if (!pending_ || !std::isfinite(now) || now - start_ < 0.56F)
+    if (!pending_ || !std::isfinite(now) || now - start_ < duration())
         return false;
     pending_ = false;
     return true;
@@ -276,9 +387,6 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
     result.terrain.reserve(terrainCount);
     result.floating.reserve(std::max(0, floatingCount));
     result.meteors.reserve(std::max(0, meteorCount));
-    result.meteorTrails.reserve(std::max(0, meteorCount) * 3);
-    result.collisionRipples.reserve(std::max(0, meteorCount) * 16);
-    result.collisionParticles.reserve(std::max(0, meteorCount) * 12);
     result.particles.reserve(boundedParticleCount);
 
     DeterministicRandom random(seed);
@@ -306,9 +414,14 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
     for (int index = 0; index < floatingCount; ++index) {
         const ColorZone zone = index % 3 == 0 ? ColorZone::Cool
             : index % 3 == 1 ? ColorZone::Warm : ColorZone::Accent;
-        SceneInstance floating = makeExtra(random, 12.0F, 78.0F,
-                                           6.0F, 25.0F, zone);
-        floating.scale *= 0.72F;
+        const float angle = float(index) / float(floatingCount) * float(M_PI * 10.0)
+                            + std::sin(float(index) * 12.9898F) * 0.7F;
+        const float radius = 14.0F + float((index * 37) % 62);
+        SceneInstance floating;
+        floating.position = {std::cos(angle)*radius, 6.0F+float((index*17)%19), std::sin(angle)*radius};
+        floating.scale = QVector3D(1,1,1) * (0.75F + float((index*11)%9)*0.05F);
+        floating.aux = float(index);
+        floating.zone = zone;
         result.floating.append(floating);
     }
     for (int index = 0; index < meteorCount; ++index) {
@@ -317,28 +430,6 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
         meteor.scale = QVector3D(0.36F, 1.20F, 0.36F);
         meteor.aux = float(index);
         result.meteors.append(meteor);
-        for (int segment = 0; segment < 3; ++segment) {
-            SceneInstance trail = meteor;
-            trail.aux = float(index) + float(segment + 1) / 4.0F;
-            const float thickness = 0.22F - float(segment) * 0.035F;
-            const float length = 1.10F - float(segment) * 0.24F;
-            trail.scale = QVector3D(thickness, length, thickness);
-            result.meteorTrails.append(trail);
-        }
-        for (int segment = 0; segment < 16; ++segment) {
-            SceneInstance ripple = meteor;
-            ripple.position.setY(0.08F);
-            ripple.scale = QVector3D(0.8F, 0.08F, 0.22F);
-            ripple.aux = float(index) + float(segment) / 16.0F;
-            result.collisionRipples.append(ripple);
-        }
-        for (int segment = 0; segment < 12; ++segment) {
-            SceneInstance burst = meteor;
-            burst.position.setY(0.08F);
-            burst.scale = QVector3D(0.15F, 0.15F, 0.15F);
-            burst.aux = float(index) + float(segment) / 12.0F;
-            result.collisionParticles.append(burst);
-        }
     }
     constexpr float goldenRatioConjugate = 0.61803398875F;
     constexpr float plasticRatioConjugate = 0.75487766625F;

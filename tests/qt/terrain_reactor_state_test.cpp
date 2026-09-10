@@ -14,12 +14,100 @@ class TerrainReactorStateTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void meteorMaterialStartsWhiteAndTracksTargetWithoutThemeReset()
+    {
+        MeteorMaterialColor material;
+        QCOMPARE(material.color(), QVector3D(1,1,1));
+        auto value = material.advance({0,.5F,1}, 1.0F/6.0F);
+        QVERIFY((value-QVector3D(.85F,.925F,1)).length()<.000001F);
+        value = material.advance({0,.5F,1}, 1.0F/6.0F);
+        QVERIFY((value-QVector3D(.775F,.8875F,1)).length()<.000001F);
+        // A theme change continues the shared live material, not white/init.
+        value = material.advance({1,0,0}, 1.0F/6.0F);
+        QVERIFY((value-QVector3D(.8875F,.79375F,.85F)).length()<.000001F);
+        QCOMPARE(material.advance({0,0,0}, 0), value);
+        QCOMPARE(material.advance({0,0,0}, -1), value);
+        QCOMPARE(material.advance({0,0,0}, std::numeric_limits<float>::quiet_NaN()), value);
+        QVERIFY((material.advance({0,0,0}, 1)-QVector3D(.7F,.7F,.7F)).length()<.000001F);
+        // Only recreating the material (scene/renderer lifetime) starts white.
+        material = MeteorMaterialColor{};
+        QCOMPARE(material.color(), QVector3D(1,1,1));
+    }
+    void meteorParticlesFollowReferenceIntegrationAndRingOverwrite()
+    {
+        MeteorParticlePool pool;
+        std::array<float, 8> samples; samples.fill(.5F);
+        pool.spawn({2,.5F,3}, 3, samples);
+        const auto first = pool.particles()[0];
+        QVERIFY(first.active);
+        QCOMPARE(first.position, QVector3D(2,.5F,3));
+        QCOMPARE(first.velocity, QVector3D(0,31,0));
+        QCOMPARE(first.maxLife, .75F);
+        QCOMPARE(first.baseScale, .5F);
+        pool.advance(.1F);
+        QVERIFY(std::abs(pool.particles()[0].position.y()-31.5F)<.0001F);
+        QVERIFY(std::abs(pool.particles()[0].scale()-(.5F*(1-.1F/.75F)))<.0001F);
+        pool.advance(.65F);
+        QVERIFY(!pool.particles()[0].active);
+        for (int i=0;i<201;++i) pool.spawn({float(i),0,0}, 0, samples);
+        QCOMPARE(pool.particles()[1].position.x(), 200.0F);
+        pool.reset();
+        for (const auto& p:pool.particles()) QVERIFY(!p.active);
+    }
+    void meteorParticleLandingEmitsTenAndAdvancesBirthFrame()
+    {
+        MeteorParticlePool pool;
+        pool.frame(.016F, {2,3,35,2}, .4F, false, true);
+        int active=0;
+        for(const auto& p:pool.particles()) if(p.active) {
+            ++active;
+            QCOMPARE(p.life,.016F);
+            QVERIFY(p.velocity.y()>=30 && p.velocity.y()<32);
+            QVERIFY(p.position.y()>4);
+        }
+        QCOMPARE(active,10);
+        pool.frame(1.0F, {2,3,35,2}, 1.4F, false, false);
+        for(const auto& p:pool.particles()) QVERIFY(!p.active);
+    }
+    void themePaletteTransitionsAllRolesInLinearSpace()
+    {
+        ThemePalette current, target;
+        current.colors.fill(QVector4D(0,0,0,1));
+        target.colors.fill(QVector4D(1,1,1,1));
+        current.glow = 0.8F; target.glow = 1.6F;
+        const auto halfway = advanceThemePalette(current, target, 1.0F / 6.0F);
+        for (const auto& color : halfway.colors) {
+            // Reference lerp(3*dt) is .5 linear, encoded sRGB .735357.
+            QVERIFY(std::abs(color.x() - .735357F) < .00001F);
+            QCOMPARE(color.x(), color.y());
+            QCOMPARE(color.y(), color.z());
+            QCOMPARE(color.w(), 1.0F);
+        }
+        QVERIFY(std::abs(halfway.glow - 1.2F) < .00001F);
+        const auto unchanged = advanceThemePalette(current, target, 0);
+        QCOMPARE(unchanged.colors, current.colors);
+        QCOMPARE(unchanged.glow, current.glow);
+        const auto endpoint = advanceThemePalette(current, target, 1);
+        QCOMPARE(endpoint.colors, target.colors);
+        QCOMPARE(endpoint.glow, target.glow);
+        for (float dt : {-1.0F, std::numeric_limits<float>::quiet_NaN()}) {
+            const auto invalid = advanceThemePalette(current, target, dt);
+            QCOMPARE(invalid.colors, current.colors);
+            QCOMPARE(invalid.glow, current.glow);
+        }
+        target.colors[7].setW(0);
+        const auto flags = advanceThemePalette(current, target, .1F);
+        QCOMPARE(flags.colors[7].w(), 0.0F);
+        target.colors[1] = QVector4D(.12345F,.23456F,.34567F,1);
+        const auto fixed = advanceThemePalette(target, target, .016F);
+        QCOMPARE(fixed.colors, target.colors);
+        QCOMPARE(fixed.glow, target.glow);
+    }
     void maximumDensityFitsGpuInstanceAllocation()
     {
         const auto layout = makeSceneLayout(46, referenceTerrainGridSize(100), 120, 28, 1600);
         const auto count = layout.terrain.size() + layout.floating.size()
-            + layout.meteors.size() + layout.meteorTrails.size()
-            + layout.collisionRipples.size() + layout.collisionParticles.size()
+            + layout.meteors.size() + 200
             + layout.particles.size();
         QVERIFY2(count <= gpu::maximumInstances,
                  "Maximum density and effects exceed the actual GPU buffer allocation");
@@ -78,7 +166,7 @@ private slots:
     void starfieldCapsParticleBudget();
     void meteorsHaveFiniteTrailsAndCollisionEffects();
     void meteorGroupsKeepOneDeterministicPrimaryImpact();
-    void meteorTrailsAreTapered();
+    void meteorParticlesReplaceStaticTrails();
     void audioFeaturesDriveBoundedVisualParameters();
     void bassEnvelopeUsesFastAttackAndSlowRelease();
     void multiWaveSourcesAreStableDistributedAndBounded();
@@ -164,14 +252,21 @@ void TerrainReactorStateTest::meteorFlightIsSingleSpacedAndLandsOnce()
     QVERIFY(flight.launch(0.0F, 8, 0.9F));
     QCOMPARE(flight.group(), 0);
     const float firstStrength = flight.strength();
-    QVERIFY(!flight.landed(0.55F));
-    QVERIFY(!flight.launch(0.2F, 8, 1.0F));
-    QVERIFY(flight.landed(0.57F));
+    QCOMPARE(firstStrength, 0.9F); // Original retains input; no random attenuation.
+    const QVector4D firstTrajectory=flight.trajectory();
+    QVERIFY(std::hypot(firstTrajectory.x(),firstTrajectory.y())<=25.0F);
+    QVERIFY(firstTrajectory.z()>=30.0F && firstTrajectory.z()<40.0F);
+    QVERIFY(firstTrajectory.w()>=2.35F && firstTrajectory.w()<2.85F);
+    QCOMPARE(flight.duration(), firstTrajectory.z()/(firstTrajectory.w()*60.0F));
+    QVERIFY(!flight.landed(flight.duration()-0.001F));
+    QVERIFY(!flight.launch(0.01F, 8, 1.0F));
+    QVERIFY(flight.landed(flight.duration()+0.001F));
     QVERIFY(!flight.landed(0.8F));
     QVERIFY(!flight.launch(2.9F, 8, 1.0F));
     QVERIFY(flight.launch(4.0F, 8, 0.9F));
     QCOMPARE(flight.group(), 1);
-    QVERIFY(flight.strength() != firstStrength);
+    QCOMPARE(flight.strength(),firstStrength);
+    QVERIFY(flight.trajectory()!=firstTrajectory);
     flight.cancel();
     QVERIFY(!flight.landed(5.0F));
     QCOMPARE(flight.group(), -1);
@@ -229,7 +324,8 @@ void TerrainReactorStateTest::fixedSeedProducesStableLayoutAndColorZones()
     QCOMPARE(first.floating.size(), 12);
     QCOMPARE(first.meteors.size(), 4);
     QCOMPARE(first.particles.size(), 16);
-    QVERIFY(first.floating != different.floating);
+    // Original floating layout depends on index/count, not the terrain seed.
+    QCOMPARE(first.floating, different.floating);
 
     const auto hasZone = [&first](ColorZone zone) {
         return std::any_of(first.terrain.cbegin(), first.terrain.cend(),
@@ -449,9 +545,7 @@ void TerrainReactorStateTest::trackPaletteKeepsCoordinatedSemanticColorRoles()
 void TerrainReactorStateTest::meteorsHaveFiniteTrailsAndCollisionEffects()
 {
     const SceneLayout layout = makeSceneLayout(0x5eedU, 9, 3, 4, 8);
-    QCOMPARE(layout.meteorTrails.size(), 12);
-    QCOMPARE(layout.collisionRipples.size(), 64);
-    QCOMPARE(layout.collisionParticles.size(), 48);
+    QCOMPARE(layout.meteors.size(), 4);
 
     const MeteorPhase flight = meteorPhase(0.25F, 0.5F);
     const MeteorPhase repeated = meteorPhase(0.25F, 0.5F);
@@ -474,24 +568,19 @@ void TerrainReactorStateTest::meteorGroupsKeepOneDeterministicPrimaryImpact()
     const SceneLayout layout = makeSceneLayout(0x5eedU, 9, 0, 4, 0);
     QCOMPARE(layout.meteors.at(0).aux, 0.0F);
     QCOMPARE(layout.meteors.at(1).aux, 1.0F);
-    QCOMPARE(int(std::floor(layout.meteorTrails.at(6).aux)), 2);
-    QCOMPARE(int(std::floor(layout.collisionRipples.at(16).aux)), 1);
-    QCOMPARE(int(std::floor(layout.collisionParticles.at(24).aux)), 2);
+    QCOMPARE(layout.meteors.at(2).aux,2.0F);
+    QCOMPARE(layout.meteors.at(3).aux,3.0F);
 }
 
-void TerrainReactorStateTest::meteorTrailsAreTapered()
+void TerrainReactorStateTest::meteorParticlesReplaceStaticTrails()
 {
     const SceneLayout layout = makeSceneLayout(0x71b9U, 9, 0, 3, 0);
-    QCOMPARE(layout.meteorTrails.size(), 9);
+    QCOMPARE(layout.meteors.size(), 3);
+    MeteorParticlePool pool;
+    QCOMPARE(pool.particles().size(), std::size_t(200));
     for (int meteor = 0; meteor < 3; ++meteor) {
         const SceneInstance& head = layout.meteors.at(meteor);
-        const SceneInstance& first = layout.meteorTrails.at(meteor * 3);
-        const SceneInstance& second = layout.meteorTrails.at(meteor * 3 + 1);
-        const SceneInstance& third = layout.meteorTrails.at(meteor * 3 + 2);
         QVERIFY(head.scale.y() > head.scale.x() * 2.5F);
-        QVERIFY(first.scale.y() > first.scale.x() * 4.0F);
-        QVERIFY(first.scale.y() > second.scale.y());
-        QVERIFY(second.scale.y() > third.scale.y());
     }
 }
 
@@ -1014,10 +1103,17 @@ void TerrainReactorStateTest::floatingCubesAreDeterministicAndVisuallySubordinat
     QCOMPARE(first.floating.size(), 64);
 
     QVector<float> sizes;
+    const auto idle = advanceFloatingBlocks(0,0,.016F,9,26,77,55);
+    QCOMPARE(idle.z(),0.12F+0.63F*.09F);
+    const auto pulse = advanceFloatingBlocks(0,.75F,.016F,9,26,77,55);
+    const float expectedPulse=.75F*(1.0F-std::exp(-(3.0F+33.0F*.77F)*.016F));
+    QCOMPARE(pulse.x(),expectedPulse);
+    QCOMPARE(pulse.y(),std::min(1.0F,expectedPulse*(.5F+.55F*1.7F)));
+    QCOMPARE(pulse.z(),idle.z()+(0.45F+2.75F*.26F-idle.z())*pulse.y());
     for (const SceneInstance& cube : first.floating) {
         QCOMPARE(cube.scale.x(), cube.scale.y());
         QCOMPARE(cube.scale.x(), cube.scale.z());
-        sizes.append(cube.scale.x());
+        sizes.append(cube.scale.x()*idle.z()); // GPU applies the shared pulse scale.
     }
     std::sort(sizes.begin(), sizes.end());
     const float median = sizes.at(sizes.size() / 2);

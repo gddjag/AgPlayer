@@ -85,9 +85,12 @@ int main(const int argc, char** argv)
     } while (!receivedPcm && std::chrono::steady_clock::now() < pcmDeadline);
     assert(receivedPcm);
     // Muting the speakers must not silence the independent visual analysis.
+    const auto generationBeforeMute = pcm.generation;
     assert(ag_player_set_muted(player, 1) == AG_OK);
     assert(ag_player_output_levels(player, &levels) == AG_OK);
     assert(isZero(levels));
+    assert(ag_player_read_visual_pcm(player, &pcm) == AG_OK);
+    assert(pcm.generation == generationBeforeMute);
     assert(ag_player_set_visual_pcm_enabled(player, 0) == AG_OK);
     assert(ag_player_read_visual_pcm(player, &pcm) == AG_OK);
     assert(pcm.sample_count == 0);
@@ -106,11 +109,14 @@ int main(const int argc, char** argv)
     assert(receivedPcm && "muted output must retain visual PCM");
     assert(ag_player_output_levels(player, &levels) == AG_OK);
     assert(isZero(levels));
+    const auto generationBeforeUnmute = pcm.generation;
     assert(ag_player_set_muted(player, 0) == AG_OK);
+    assert(ag_player_read_visual_pcm(player, &pcm) == AG_OK);
+    assert(pcm.generation == generationBeforeUnmute);
     const auto generation = pcm.generation;
     assert(ag_player_pause(player) == AG_OK);
     assert(ag_player_read_visual_pcm(player, &pcm) == AG_OK);
-    assert(pcm.sample_count == 0 && pcm.generation != generation);
+    assert(pcm.generation == generation);
     assert(ag_player_play(player) == AG_OK);
     assert(ag_player_seek(player, 0) == AG_OK);
     assert(ag_player_read_visual_pcm(player, &pcm) == AG_OK);

@@ -832,6 +832,12 @@ TestCase {
         }
     }
 
+    QtObject {
+        id: presetCyclePlayback
+        property string currentTrackId: "cycle-track-a"
+        property int positionMs: 0
+    }
+
     function test_one_terrain_item_stays_in_independent_window_for_all_hosts() {
         var coordinator = findChild(mainWindow, "immersiveCoordinator")
         verify(coordinator)
@@ -1085,8 +1091,10 @@ TestCase {
         compare(findChild(drawer, "queueHideTimer").interval, 2000)
         compare(findChild(drawer, "queueTriggerZone").width, 20)
         drawer.requestOpen()
-        wait(170)
-        compare(drawer.opened, true)
+        // The configured delay is asserted above.  A full software-rendered
+        // suite can defer an animation-timer delivery beyond one exact wait;
+        // wait for the real signal instead of sampling it once at 170 ms.
+        tryCompare(drawer, "opened", true, 1000)
         drawer.dragSuppressed = true
         drawer.requestClose()
         wait(2050)
@@ -1168,7 +1176,7 @@ TestCase {
 
     function test_readable_preset_page_keeps_quality_control_visible() {
         var panel = windowedPresetPanel()
-        verify(panel.expandedHeight < 550,
+        verify(panel.expandedHeight < 600,
                "preset page must fit its content: " + panel.expandedHeight)
         var panelScroll = findChild(panel, "immersivePanelScroll")
         var qualityCombo = findChild(panel, "immersiveQualityCombo")
@@ -1489,7 +1497,7 @@ TestCase {
         panel.currentTab = 0
         compare(panel.currentTab, 0)
         tryVerify(function() {
-            return panel.expandedHeight < 550
+            return panel.expandedHeight < 600
                     && Math.abs(panel.height - Math.min(panel.expandedHeight,
                                                        panel.parent.height - 108)) < 0.5
         }, 1000)
@@ -1507,6 +1515,9 @@ TestCase {
         verify(presetCards[2].x > presetCards[1].x)
         verify(presetCards[3].y > presetCards[0].y)
         verify(presetCards[6].y > presetCards[3].y)
+        verify(findChild(panel, "themeTimedCycleToggle"))
+        verify(findChild(panel, "themeSongCycleToggle"))
+        verify(findChild(panel, "themeCycleIntervalSlider"))
         var panelScroll = findChild(panel, "immersivePanelScroll")
         verify(panelScroll)
         verify(panelScroll.contentWidth <= panelScroll.width)
@@ -1587,6 +1598,61 @@ TestCase {
         autoRotateToggle.checked = true
         autoRotateToggle.toggled()
         verify(PlayerExperienceController.autoRotate > 1)
+    }
+
+    function test_optional_preset_cycle_advances_once_per_distinct_immersive_track() {
+        var priorPlayback = mainWindow.playback
+        var priorTimedEnabled = PlayerExperienceController.themeCycleEnabled
+        var priorSongEnabled = PlayerExperienceController.themeSongCycleEnabled
+        var priorInterval = PlayerExperienceController.themeCycleIntervalSeconds
+        var priorTheme = PlayerExperienceController.themeId
+        try {
+            mainWindow.playback = presetCyclePlayback
+            presetCyclePlayback.currentTrackId = "cycle-track-a"
+            PlayerExperienceController.applyTheme("ink-wash")
+            PlayerExperienceController.themeCycleEnabled = false
+            PlayerExperienceController.themeSongCycleEnabled = false
+            PlayerExperienceController.immersiveMode =
+                    PlayerExperienceController.TerrainReactor
+            wait(0)
+
+            presetCyclePlayback.currentTrackId = "cycle-track-b"
+            wait(0)
+            compare(PlayerExperienceController.themeId, "ink-wash")
+
+            PlayerExperienceController.themeSongCycleEnabled = true
+            presetCyclePlayback.currentTrackId = "cycle-track-c"
+            tryCompare(PlayerExperienceController, "themeId", "nocturnal")
+
+            // Property reassignment to the same identity is not a new song.
+            presetCyclePlayback.currentTrackId = "cycle-track-c"
+            wait(0)
+            compare(PlayerExperienceController.themeId, "nocturnal")
+
+            PlayerExperienceController.immersiveMode =
+                    PlayerExperienceController.Off
+            presetCyclePlayback.currentTrackId = "cycle-track-d"
+            wait(0)
+            compare(PlayerExperienceController.themeId, "nocturnal")
+
+            PlayerExperienceController.themeSongCycleEnabled = false
+            PlayerExperienceController.themeCycleIntervalSeconds = 3
+            PlayerExperienceController.themeCycleEnabled = true
+            PlayerExperienceController.applyTheme("ink-wash")
+            PlayerExperienceController.immersiveMode =
+                    PlayerExperienceController.TerrainReactor
+            var timer = findChild(mainWindow, "themeRotationTimer")
+            verify(timer)
+            compare(timer.interval, 3000)
+            tryCompare(PlayerExperienceController, "themeId", "nocturnal", 4000)
+        } finally {
+            mainWindow.playback = priorPlayback
+            PlayerExperienceController.themeCycleEnabled = priorTimedEnabled
+            PlayerExperienceController.themeSongCycleEnabled = priorSongEnabled
+            PlayerExperienceController.themeCycleIntervalSeconds = priorInterval
+            if (priorTheme.length > 0)
+                PlayerExperienceController.applyTheme(priorTheme)
+        }
     }
 
     function test_shared_waveform_session_is_injected_into_mini_and_immersive() {
@@ -2251,7 +2317,7 @@ TestCase {
         var panel = windowedPresetPanel()
         verify(panel)
         compare(panel.width, 320)
-        tryVerify(function() { return panel.expandedHeight < 550 }, 1000)
+        tryVerify(function() { return panel.expandedHeight < 600 }, 1000)
         var terrainGroup = findChild(panel, "dynamicsTerrainGroup")
         var lightGroup = findChild(panel, "dynamicsLightGroup")
         var motionGroup = findChild(panel, "dynamicsMotionGroup")

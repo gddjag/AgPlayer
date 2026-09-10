@@ -91,6 +91,16 @@ Rectangle {
             ]
         },
         {
+            "key": "Floating", "title": qsTr("漂浮晶体"),
+            "sliders": [
+                { "label": qsTr("最小尺寸"), "key": "floatingBlockMinSize", "from": 0, "to": 100, "step": 1 },
+                { "label": qsTr("最大尺寸"), "key": "floatingBlockMaxSize", "from": 0, "to": 100, "step": 1 },
+                { "label": qsTr("跟随速度"), "key": "floatingBlockSpeed", "from": 0, "to": 100, "step": 1 },
+                { "label": qsTr("响应强度"), "key": "floatingBlockIntensity", "from": 0, "to": 100, "step": 1 }
+            ],
+            "effects": []
+        },
+        {
             "key": "Impact", "title": qsTr("节奏与冲击"),
             "sliders": [
                 { "label": qsTr("节奏强度"), "key": "rhythmStrength", "from": 0, "to": 140, "scale": 100, "decimals": 2 }
@@ -380,6 +390,58 @@ Rectangle {
                 }
                 RowLayout {
                     Layout.fillWidth: true
+                    spacing: Theme.spacingSm
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("预设自动轮换")
+                        color: Theme.textSecondary
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: Theme.fontSizeCaption
+                    }
+                    ThemedCheckBox {
+                        objectName: "themeTimedCycleToggle"
+                        text: qsTr("定时")
+                        checked: PlayerExperienceController.themeCycleEnabled
+                        onToggled: PlayerExperienceController.themeCycleEnabled = checked
+                    }
+                    ThemedCheckBox {
+                        objectName: "themeSongCycleToggle"
+                        text: qsTr("换歌")
+                        checked: PlayerExperienceController.themeSongCycleEnabled
+                        onToggled: PlayerExperienceController.themeSongCycleEnabled = checked
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingSm
+                    enabled: PlayerExperienceController.themeCycleEnabled
+                    opacity: enabled ? 1 : 0.45
+                    Text {
+                        text: qsTr("间隔")
+                        color: Theme.textTertiary
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: Theme.fontSizeCaption
+                    }
+                    ThemedSlider {
+                        objectName: "themeCycleIntervalSlider"
+                        Layout.fillWidth: true
+                        from: 3
+                        to: 120
+                        stepSize: 1
+                        value: PlayerExperienceController.themeCycleIntervalSeconds
+                        onMoved: PlayerExperienceController.themeCycleIntervalSeconds =
+                                 Math.round(value)
+                    }
+                    Text {
+                        text: PlayerExperienceController.themeCycleIntervalSeconds
+                              + qsTr(" 秒")
+                        color: Theme.textSecondary
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: Theme.fontSizeCaption
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
                     Text { Layout.fillWidth: true; text: qsTr("歌曲自适应配色"); color: Theme.textSecondary; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption }
                     ThemedCheckBox {
                         objectName: "songColorToggle"
@@ -659,6 +721,16 @@ Rectangle {
                                 text: modelData
                                 color: Theme.textSecondary
                                 font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption
+                            }
+                            ThemedCheckBox {
+                                objectName: "visualEqEnabled_" + bandIndex
+                                checked: !!PlayerExperienceController.visualEqEnabled[bandIndex]
+                                Accessible.name: modelData + qsTr("启用")
+                                onToggled: {
+                                    var values = PlayerExperienceController.visualEqEnabled.slice()
+                                    values[bandIndex] = checked
+                                    PlayerExperienceController.visualEqEnabled = values
+                                }
                             }
                             Text {
                                 objectName: "visualEqValue_" + bandIndex

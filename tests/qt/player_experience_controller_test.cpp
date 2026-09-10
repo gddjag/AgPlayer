@@ -19,6 +19,23 @@ class PlayerExperienceControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void visualEqEnabledPreservesGainsAndPersists()
+    {
+        QSettings().clear();
+        PlayerExperienceController controller;
+        const int index = controller.metaObject()->indexOfProperty("visualEqEnabled");
+        QVERIFY(index >= 0);
+        const auto property = controller.metaObject()->property(index);
+        const QVariantList all{true,true,true,true,true,true,true,true};
+        QCOMPARE(property.read(&controller).toList(), all);
+        const auto gains = controller.visualEqGains();
+        QVERIFY(property.write(&controller, QVariantList{false,true,false,true,true,true,true,false}));
+        QCOMPARE(controller.visualEqGains(), gains);
+        PlayerExperienceController reloaded;
+        QCOMPARE(property.read(&reloaded).toList(), QVariantList({false,true,false,true,true,true,true,false}));
+        QVERIFY(property.write(&controller, QVariantList{false, QStringLiteral("invalid")}));
+        QCOMPARE(property.read(&controller).toList(), QVariantList({false,true,true,true,true,true,true,true}));
+    }
     void columnLightingPersistsClampsAndSurvivesPresets();
     void colorModePersistsAndClamps();
     void columnControlsNormalizeNotifyAndPersist();
@@ -27,6 +44,7 @@ private slots:
     void invalidStoredVisualValuesUseSafeDefaults();
     void storedColumnDensityOverridesTheFreshInstallDefault();
     void topographyDensityIsIndependentPersistentAndThemeStable();
+    void themeRotationSettingsDefaultPersistAndClamp();
     void initTestCase();
     void defaultsAreIndependent();
     void persistsAndNormalizesValues();
@@ -160,6 +178,8 @@ void PlayerExperienceControllerTest::materialControlsNormalizeNotifyAndPersist()
         {"jellyElasticity", 0, 100, 35}, {"inkDensity", 0, 100, 60},
         {"rippleStrength", 0, 200, 39}, {"rippleWidth", 20, 200, 82},
         {"rippleDecay", 20, 200, 81},
+        {"floatingBlockMinSize", 0, 100, 9}, {"floatingBlockMaxSize", 0, 100, 26},
+        {"floatingBlockSpeed", 0, 100, 77}, {"floatingBlockIntensity", 0, 100, 55},
     };
     QSettings().clear();
     for (const auto& control : controls) {
@@ -250,8 +270,35 @@ void PlayerExperienceControllerTest::freshInstallUsesMinimalMonochromeTheme()
     QVERIFY(experience.burstEnabled());
     QVERIFY(experience.idleBreathingEnabled());
     QVERIFY(experience.streamHighlightEnabled());
-    QVERIFY(!experience.themeCycleEnabled());
+    QVERIFY(experience.themeCycleEnabled());
+    QVERIFY(!experience.themeSongCycleEnabled());
+    QCOMPARE(experience.themeCycleIntervalSeconds(), 10);
     QVERIFY(!experience.songAdaptiveColorEnabled());
+}
+
+void PlayerExperienceControllerTest::themeRotationSettingsDefaultPersistAndClamp()
+{
+    QSettings settings;
+    settings.clear();
+    {
+        PlayerExperienceController experience;
+        QVERIFY(experience.themeCycleEnabled());
+        QVERIFY(!experience.themeSongCycleEnabled());
+        QCOMPARE(experience.themeCycleIntervalSeconds(), 10);
+
+        experience.setThemeCycleEnabled(false);
+        experience.setThemeSongCycleEnabled(true);
+        experience.setThemeCycleIntervalSeconds(1);
+        QCOMPARE(experience.themeCycleIntervalSeconds(), 3);
+        experience.setThemeCycleIntervalSeconds(999);
+        QCOMPARE(experience.themeCycleIntervalSeconds(), 120);
+        experience.setThemeCycleIntervalSeconds(27);
+    }
+
+    PlayerExperienceController reloaded;
+    QVERIFY(!reloaded.themeCycleEnabled());
+    QVERIFY(reloaded.themeSongCycleEnabled());
+    QCOMPARE(reloaded.themeCycleIntervalSeconds(), 27);
 }
 
 void PlayerExperienceControllerTest::invalidStoredVisualValuesUseSafeDefaults()

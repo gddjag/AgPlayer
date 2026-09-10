@@ -55,6 +55,9 @@ layout(std140, binding = 0) uniform buf {
     vec4 atmosphereColor;
     vec4 timbre;
     vec4 rippleColor;
+    vec4 meteorTrajectory;
+    vec4 floatingParameters;
+    vec4 meteorMaterialColor;
 } ubuf;
 
 vec3 srgbToLinear(vec3 value)
@@ -332,9 +335,22 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
                 * mix(0.35, 1.0, relativeY) * distanceFade, 0.22);
             float clarityDelta = ubuf.stylePresentation.z > 0.0
                 ? clamp(ubuf.stylePresentation.z, 0.2, 1.4) - 1.14 : 0.0;
-            // Contrast remains adjustable on a silent platform too. Neutral
-            // clarity preserves the original linear palette exactly.
-            result *= max(0.25, 1.0 + clarityDelta * 1.5);
+            // Clarity separates the cap border and upper wall shoulder.  It
+            // must not multiply the complete bright-theme field like an
+            // exposure control.  Neutral 1.14 remains bit-exact with the
+            // original palette; higher values exchange broad face energy for
+            // local edge contrast, preserving the reactor's overall light.
+            vec2 clarityUv = surfacePosition.xz + vec2(0.5);
+            float clarityEdgeX = smoothstep(0.12, 0.02, clarityUv.x)
+                               + smoothstep(0.88, 0.98, clarityUv.x);
+            float clarityEdgeY = smoothstep(0.12, 0.02, clarityUv.y)
+                               + smoothstep(0.88, 0.98, clarityUv.y);
+            float clarityEdge = min(clarityEdgeX + clarityEdgeY, 1.0);
+            float clarityStructure = isTop
+                ? clarityEdge : smoothstep(0.70, 1.0, relativeY);
+            float clarityScale = 1.0 + clarityDelta * 1.1
+                * mix(-0.18, 0.82, clarityStructure);
+            result *= max(0.65, clarityScale);
         }
         result += srgbToLinear(ubuf.rippleColor.rgb)
                 * referenceRippleAnim.x * 0.6;
@@ -638,6 +654,54 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
 
 void main()
 {
+    if ((objectKind > 1.5 && objectKind < 2.5) || objectKind > 6.5) {
+        if (opacity < .012) discard;
+        // MeshBasicMaterial: no scene lighting or tone-map shoulder. Three's
+        // basic material performs display encoding before its fog chunk.
+        vec3 linearColor = ubuf.meteorMaterialColor.a > .5
+            ? ubuf.meteorMaterialColor.rgb
+            : mix(srgbToLinear(ubuf.colors[2].rgb), vec3(1), .7);
+        vec3 encoded = mix(linearColor*12.92,
+            1.055*pow(max(linearColor,vec3(0)),vec3(1.0/2.4))-.055,
+            step(vec3(.0031308),linearColor));
+        float viewDepth = 1.0/max(gl_FragCoord.w,.00001);
+        vec3 result = mix(encoded,srgbToLinear(ubuf.colors[0].rgb),smoothstep(30.0,95.0,viewDepth));
+        fragColor = vec4(result,opacity);
+        return;
+    }
+    if (objectKind > 0.5 && objectKind < 1.5) {
+        float distance = length(columnExtent.xz), pulse = ubuf.floatingParameters.y;
+        float height = clamp(pulse * 2.5, 0.0, 1.0);
+        float warm = smoothstep(0.0,1.0,ubuf.timbre.x*1.5+.5-distance/80.0);
+        vec3 base = srgbToLinear(ubuf.bodyColor.rgb), fogColor = srgbToLinear(ubuf.atmosphereColor.rgb);
+        vec3 cool = srgbToLinear(ubuf.colors[1].rgb);
+        vec3 core = mix(cool,srgbToLinear(ubuf.colors[2].rgb),warm);
+        vec3 rim = mix(srgbToLinear(ubuf.colors[3].rgb),srgbToLinear(ubuf.colors[4].rgb),warm);
+        vec3 tint = mix(core,rim,fract(columnRandom*11.0));
+        tint = mix(tint,mix(cool,vec3(1),.24),ubuf.timbre.y*.6);
+        vec3 emission = mix(base,tint,height)*ubuf.styleParameters.z*(1.0-smoothstep(40.0,75.0,distance));
+        vec3 ripple = srgbToLinear(ubuf.rippleColor.rgb);
+        emission = mix(mix(emission,ripple,pulse*.8),vec3(1),pulse*.3);
+        float excitation = smoothstep(0.0,.4,height);
+        vec3 localNormal=abs(normalize(cross(dFdx(surfacePosition),dFdy(surfacePosition))));
+        vec2 uv = localNormal.y>.5 ? surfacePosition.xz+.5
+                : (localNormal.x>.5 ? surfacePosition.zy+.5 : surfacePosition.xy+.5);
+        vec2 edge = smoothstep(vec2(.05),vec2(.01),uv)+smoothstep(vec2(.95),vec2(.99),uv);
+        float edgeMask=min(edge.x+edge.y,1.0);
+        vec3 result=mix(base,emission,excitation)+emission*edgeMask*.8*(excitation+.3);
+        float sparkleRange=mix(smoothstep(60.0,30.0,distance),1.0,smoothstep(.01,.1,height));
+        float presence=ubuf.bandsHigh.y;
+        if(fract(columnRandom*53.0)>.98-smoothstep(.3,1.0,presence)*.1)
+            result+=mix(vec3(1),vec3(.5,1,1),columnRandom)*(.5+.5*sin(ubuf.parameters.w*40.0+columnRandom*100.0))*presence*(1.0+ubuf.timbre.z*2.0)*sparkleRange;
+        if(edgeMask>.5&&fract(columnRandom*89.0+ubuf.parameters.w*2.0)>.98)
+            result+=vec3(ubuf.bandsHigh.z*3.0*sparkleRange);
+        result+=ripple*pulse*.48+vec3(pulse*.36);
+        result=mix(result,mix(srgbToLinear(ubuf.colors[0].rgb),base,.4),smoothstep(30.0,65.0,distance)*.35);
+        float alpha=1.0-smoothstep(55.0,78.0,distance);
+        result=mix(result,fogColor,(1.0-alpha)*.45);
+        fragColor=vec4(clamp(result,vec3(0),vec3(1)),alpha);
+        return;
+    }
     if (opacity < 0.012) {
         discard;
     }

@@ -209,8 +209,8 @@ Item {
 
     function synchronizeAudioFeatures() {
         AudioVisualFeatureController.setActive(
-                    root.terrainItem
-                    ? root.terrainItem.renderingRequested : false)
+                    SettingsController.playerShellMode === 2
+                    || (root.terrainItem ? root.terrainItem.renderingRequested : false))
     }
 
     Connections {
@@ -524,5 +524,7 @@ Item {
     onActiveChanged: synchronizePresentationTimers()
     onHostExposedChanged: synchronizePresentationTimers()
     Component.onCompleted: synchronizeAudioFeatures()
-    Component.onDestruction: AudioVisualFeatureController.setActive(false)
+    // A single immersive host may detach while the rolling shell still owns meters.
+    Component.onDestruction: AudioVisualFeatureController.setActive(
+                                 SettingsController.playerShellMode === 2)
 }

@@ -35,6 +35,9 @@ layout(std140, binding = 0) uniform buf {
     vec4 atmosphereColor;
     vec4 timbre;
     vec4 rippleColor;
+    vec4 meteorTrajectory;
+    vec4 floatingParameters;
+    vec4 meteorMaterialColor;
 } ubuf;
 
 #ifdef TERRAIN_SHADOW_PASS
@@ -361,23 +364,20 @@ void main()
         // Stable sparse quarter of columns; no frame-to-frame reshuffle.
         streamSheen *= 1.0 - step(0.25, randomValue);
     } else if (type < 1.5) {
-        position.y += sin(t * 0.74 * motion + randomValue * 18.0) * 1.95
-                    + bandsLow.x * 2.2;
-        scale *= 1.0 + ubuf.parameters.z * 0.28;
-        scale *= mix(0.62, 1.58, randomValue * randomValue)
-               * mix(0.90, 1.15, material.y);
-        scale.y *= mix(0.78, 1.45, randomValue);
+        float index = instanceData.w;
+        float rotationRate = 0.18 + mod(index * 7.0, 10.0) * 0.035;
+        position.y += sin(t * (0.55 + rotationRate) + index * 0.73) * 0.45
+                    + ubuf.floatingParameters.x * ubuf.floatingParameters.w * 1.4;
+        scale *= ubuf.floatingParameters.z;
+        opacity = 1.0;
     } else if (type < 2.5) {
         float group = floor(instanceData.w + 0.001);
-        float fall = clamp(flightAge / 0.56, 0.0, 1.0);
+        float duration = ubuf.meteorTrajectory.z / max(0.001, ubuf.meteorTrajectory.w * 60.0);
         float visibleFactor = (1.0 - step(0.5, abs(group + 1.0 - ubuf.impact.z)))
-            * (1.0 - step(0.56, flightAge));
-        vec2 offset = vec2(18.0 + randomValue * 14.0, -16.0);
-        position.xz += offset * (1.0 - fall);
-        position.y = mix(instancePosition.y, 0.15, fall);
-        scale.y *= (1.0 + ubuf.effects.y * 1.7 + impactStrength * 3.0)
-                 * visibleFactor;
-        scale.xz *= visibleFactor;
+            * (1.0 - step(duration, flightAge));
+        position.xz = ubuf.meteorTrajectory.xy;
+        position.y = max(0.0, ubuf.meteorTrajectory.z - ubuf.meteorTrajectory.w * 60.0 * flightAge);
+        scale = vec3(0.4, 1.2, 0.4) * 1.5 * visibleFactor;
         opacity = visibleFactor;
     } else if (type < 3.5) {
         float starDepth = clamp((length(instancePosition) - 240.0) / 320.0, 0.0, 1.0);
@@ -398,36 +398,13 @@ void main()
         float angularFloor = 0.00085 * mix(1.65, 0.85, starDepth);
         scale = max(scale, vec3(starDistance * angularFloor));
         opacity = 0.42 + starPulse * 0.30 + burst * 0.08;
+    } else if (type > 6.5) {
+        // Reference particle pool supplies already-integrated world positions.
+        opacity = instanceData.z;
     } else {
-        float group = floor(instanceData.w + 0.001);
-        float localValue = fract(instanceData.w);
-        float age = clamp(flightAge / 0.78, 0.0, 1.0);
-        float selected = 1.0 - step(0.5, abs(group + 1.0 - ubuf.impact.z));
-        float collision = step(0.72, age);
-        float collisionProgress = clamp((age - 0.72) / 0.28, 0.0, 1.0);
-        float angle = localValue * 6.2831853;
-        if (type < 4.5) {
-            float delayedFall = clamp(age / 0.72 - localValue * 0.12,
-                                      0.0, 1.0);
-            float visibleFactor = selected * (1.0 - step(0.56, flightAge));
-            position.y = mix(instancePosition.y, 0.15, delayedFall);
-            position.xz += vec2(18.0 + randomValue * 14.0, -16.0) * (1.0 - delayedFall);
-            scale.y *= 4.0 * visibleFactor * (1.0 - localValue * 0.42);
-            scale.xz *= visibleFactor;
-            opacity = visibleFactor * (1.0 - localValue * 0.62);
-        } else if (type < 5.5) {
-            vec2 direction = vec2(cos(angle), sin(angle));
-            position.xz += direction * collisionProgress * 12.0;
-            scale.x *= 1.0 + collisionProgress * 2.0;
-            scale *= selected * collision * sin(collisionProgress * 3.1415926);
-            opacity = selected * collision * (1.0 - collisionProgress);
-        } else {
-            vec2 direction = vec2(cos(angle), sin(angle));
-            position.xz += direction * collisionProgress * 8.0;
-            position.y += sin(collisionProgress * 3.1415926) * 7.0;
-            scale *= selected * collision * (1.0 - collisionProgress);
-            opacity = selected * collision * (1.0 - collisionProgress);
-        }
+        // Retired legacy tail/ring/burst kinds are never emitted.
+        opacity = 0.0;
+        scale = vec3(0.0);
     }
 
     vec3 base = ubuf.colors[0].rgb;
@@ -505,7 +482,6 @@ void main()
     } else if (type > 1.5) {
         color = mix(color, vec3(1.0), 0.62);
     }
-    if (type > 4.5 && type < 5.5) color = mix(cool, accent, randomValue);
     if (type > 0.5 && type < 1.5) {
         // Stable per-crystal variety inside the active preset, not one
         // washed-out peak color shared by every floating instance.
@@ -518,26 +494,14 @@ void main()
     vec3 localVertex = vertexPosition * scale;
     vec3 normal = vertexNormal;
     if (type > 0.5 && type < 1.5) {
-        // Slow rigid-body rotation of the existing cube and its normals.
-        vec3 axis = normalize(vec3(0.45, 1.0, 0.25 + randomValue));
-        float angle = t * motion * 0.30 + randomValue * 6.2831853;
-        float c = cos(angle);
-        float s = sin(angle);
-        localVertex = localVertex * c + cross(axis, localVertex) * s
-                    + axis * dot(axis, localVertex) * (1.0 - c);
-        normal = normal * c + cross(axis, normal) * s
-               + axis * dot(axis, normal) * (1.0 - c);
-    }
-    if ((type > 1.5 && type < 2.5) || (type > 3.5 && type < 4.5)) {
-        // Orient both the mesh and normal along its actual trajectory; a
-        // sheared vertical bar gave the old streak an unrelated direction.
-        vec3 direction = normalize(vec3(-(18.0 + randomValue * 14.0),
-                                        -max(1.0, instancePosition.y), 16.0));
-        vec3 across = normalize(cross(direction, vec3(0.0, 0.0, 1.0)));
-        vec3 third = normalize(cross(across, direction));
-        mat3 flightFrame = mat3(across, direction, third);
-        localVertex = flightFrame * localVertex;
-        normal = flightFrame * normal;
+        float index=instanceData.w, rate=0.18+mod(index*7.0,10.0)*0.035;
+        vec3 angles=vec3(t*rate+index*.73,t*rate*.7+index*.73,t*rate*.45);
+        vec3 c=cos(angles),s=sin(angles);
+        mat3 rx=mat3(1,0,0,0,c.x,s.x,0,-s.x,c.x);
+        mat3 ry=mat3(c.y,0,-s.y,0,1,0,s.y,0,c.y);
+        mat3 rz=mat3(c.z,s.z,0,-s.z,c.z,0,0,0,1);
+        mat3 rotation=rx*ry*rz;
+        localVertex=rotation*localVertex;normal=rotation*normal;
     }
     worldPosition = position + localVertex;
     gl_Position = ubuf.mvp * vec4(worldPosition, 1.0);
@@ -547,6 +511,10 @@ void main()
     viewDirection = ubuf.cameraPosition.xyz - worldPosition;
     objectKind = type;
     columnExtent = scale;
+    if (type > 0.5 && type < 1.5) {
+        columnExtent = instancePosition;
+        columnRandom = fract(sin(dot(instancePosition.xz, vec2(12.9898,78.233))) * 43758.5453123);
+    }
     // Material activation follows added relief, not the physical rest slab.
     reliefHeight = type < 0.5 ? max(0.0, scale.y - instanceScale.y) : 0.0;
     surfacePosition = type < 0.5 ? localVertex / scale : vertexPosition;

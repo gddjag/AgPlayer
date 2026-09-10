@@ -189,6 +189,9 @@ public slots:
         engine->rootContext()->setContextProperty("miniMetadataTrackId",
                                                   miniMetadataTrackId_);
         engine->rootContext()->setContextProperty("transportTestSetup", this);
+        engine->rootContext()->setContextProperty(
+            "testFloatingControlsScreenshotPath",
+            qEnvironmentVariable("AGPLAYER_FLOATING_CONTROLS_SCREENSHOT"));
 
         // Main window — same as qml_main_window_test harness.
         mainComponent_ = std::make_unique<QQmlComponent>(engine);

@@ -975,7 +975,8 @@ public:
         if (state != EngineState::Stopped && state != EngineState::Paused) {
             return AG_INVALID_ARGUMENT;
         }
-        invalidate_output_meter();
+        if (state == EngineState::Paused) invalidate_output_level_meter();
+        else invalidate_output_meter();
         if (!state_.compare_exchange_strong(state,
                                             EngineState::Playing,
                                             std::memory_order_acq_rel,
@@ -1020,7 +1021,11 @@ public:
         if (state != EngineState::Playing) {
             return AG_INVALID_ARGUMENT;
         }
-        invalidate_output_meter();
+        // Pause keeps the visual PCM timeline continuous so the immersive
+        // renderer can perform the original slow visual release and resume
+        // without a black reset. Only the audible level meter is stale here;
+        // seek, track and device boundaries still invalidate the visual tap.
+        invalidate_output_level_meter();
         if (stop_output() != AG_OK) {
             device_lock.unlock();
             return enter_error(AG_DEVICE_ERROR);
@@ -1030,7 +1035,6 @@ public:
                                            EngineState::Paused,
                                            std::memory_order_acq_rel,
                                            std::memory_order_acquire)) {
-            visual_pcm_tap_.invalidate();
             return AG_OK;
         }
         return expected == EngineState::Error ? current_error()
@@ -1783,7 +1787,7 @@ public:
         if (muted_.load(std::memory_order_acquire) == muted) {
             return;
         }
-        invalidate_output_meter();
+        invalidate_output_level_meter();
         muted_.store(muted, std::memory_order_release);
     }
 
@@ -4098,6 +4102,11 @@ private:
     void invalidate_output_meter() noexcept
     {
         visual_pcm_tap_.invalidate();
+        invalidate_output_level_meter();
+    }
+
+    void invalidate_output_level_meter() noexcept
+    {
         output_meter_generation_.fetch_add(1U, std::memory_order_acq_rel);
     }
 

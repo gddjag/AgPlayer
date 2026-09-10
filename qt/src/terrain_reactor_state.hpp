@@ -40,9 +40,6 @@ struct SceneLayout {
     QVector<SceneInstance> terrain;
     QVector<SceneInstance> floating;
     QVector<SceneInstance> meteors;
-    QVector<SceneInstance> meteorTrails;
-    QVector<SceneInstance> collisionRipples;
-    QVector<SceneInstance> collisionParticles;
     QVector<SceneInstance> particles;
 };
 
@@ -76,6 +73,45 @@ enum class RenderColorMode : quint8 { MultiRegion, Custom, RgbSweep, RainbowColu
 
 using TrackPalette = std::array<QVector4D, 5>;
 
+struct ThemePalette {
+    // First five match TrackPalette, then body, fog, ripple; encoded sRGB.
+    std::array<QVector4D, 8> colors{};
+    float glow = 1.0F;
+};
+
+class MeteorMaterialColor final {
+public:
+    QVector3D advance(QVector3D targetWarmLinear, float deltaSeconds) noexcept;
+    QVector3D color() const noexcept { return color_; }
+private:
+    QVector3D color_{1,1,1};
+};
+
+class MeteorParticlePool final {
+public:
+    struct Particle {
+        QVector3D position, velocity;
+        float life = 0, maxLife = 1, baseScale = 0;
+        bool active = false;
+        float scale() const noexcept { return active ? baseScale * (1-life/maxLife) : 0; }
+    };
+    void reset() noexcept { particles_ = {}; next_ = 0; seed_ = 1; }
+    void spawn(QVector3D position, float speedMultiplier, const std::array<float,8>& samples) noexcept;
+    void advance(float dt) noexcept;
+    void frame(float dt, QVector4D trajectory, float flightAge, bool airborne, bool landed) noexcept;
+    const std::array<Particle,200>& particles() const noexcept { return particles_; }
+private:
+    std::array<Particle,200> particles_{};
+    std::size_t next_ = 0;
+    quint32 seed_ = 1;
+};
+// pulse, sizeMix, uniform scale, normalized intensity.
+QVector4D advanceFloatingBlocks(float previousPulse, float kick, float dt,
+                               float minSize, float maxSize, float speed, float intensity) noexcept;
+ThemePalette advanceThemePalette(const ThemePalette& current,
+                                 const ThemePalette& target,
+                                 float deltaSeconds) noexcept;
+
 quint32 stableTrackPaletteSeed(QStringView trackIdentity) noexcept;
 TrackPalette trackPalette(quint32 seed) noexcept;
 TrackPalette blendTrackPalettes(const TrackPalette& from,
@@ -96,6 +132,7 @@ struct RenderStyleSnapshot {
         QVector4D(0.467F, 0.918F, 1.0F, 1.0F),
         QVector4D(0.843F, 1.0F, 0.345F, 1.0F),
     };
+    std::array<bool, 8> visualEqEnabled{true,true,true,true,true,true,true,true};
     std::array<float, 8> visualEqGains{0.9F, 0.92F, 0.5F, 0.5F,
                                        0.5F, 0.5F, 0.5F, 0.48F};
     RenderColorMode colorMode = RenderColorMode::MultiRegion;
@@ -133,6 +170,10 @@ struct RenderStyleSnapshot {
     bool ripplesEnabled = true;
     bool burstEnabled = true;
     bool floatingCubesEnabled = true;
+    float floatingBlockMinSize = 9;
+    float floatingBlockMaxSize = 26;
+    float floatingBlockSpeed = 77;
+    float floatingBlockIntensity = 55;
     bool meteorsEnabled = true;
     bool idleBreathingEnabled = true;
     bool themeCycleEnabled = false;
@@ -184,9 +225,13 @@ float smoothReactorFeature(float current, float target, float elapsedSeconds) no
 class TravelingWaveGate final {
 public:
     bool consume(float nowSeconds, float strength) noexcept;
+    void anchor(float nowSeconds, float strength) noexcept;
 private:
     float nextSeconds_ = 0.0F;
 };
+
+QVector4D consumeSnareWave(TravelingWaveGate& gate, float now, double strength,
+    quint32 seed, bool enabled, bool meteorLanded) noexcept;
 
 class MeteorFlight final {
 public:
@@ -195,12 +240,15 @@ public:
     int group() const noexcept { return group_; }
     float age(float now) const noexcept { return now - start_; }
     float strength() const noexcept { return strength_; }
+    QVector4D trajectory() const noexcept { return trajectory_; } // x,z,height,speed
+    float duration() const noexcept { return trajectory_.z() / (trajectory_.w() * 60.0F); }
     void cancel() noexcept { group_ = -1; pending_ = false; }
 private:
     int group_ = -1;
     unsigned sequence_ = 0;
     float start_ = -100.0F;
     float strength_ = 0.0F;
+    QVector4D trajectory_{0, 0, 30, 1};
     bool pending_ = false;
 };
 
@@ -314,6 +362,12 @@ public:
     bool claimPunchRevision(quint64 revision) noexcept;
     bool claimBeatRevision(quint64 revision) noexcept;
     bool claimImpactRevision(quint64 revision) noexcept;
+    quint64 consumedBeatRevision() const noexcept {
+        return consumedBeatRevision_.load(std::memory_order_acquire);
+    }
+    quint64 consumedImpactRevision() const noexcept {
+        return consumedImpactRevision_.load(std::memory_order_acquire);
+    }
 
 private:
     static std::atomic<quint64> globalGeneration_;
