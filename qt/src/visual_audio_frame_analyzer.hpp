@@ -7,17 +7,26 @@
 namespace agplayer {
 
 // Value-only handoff from the GUI's PCM collector to one render owner.
-// Call process exactly once per actual visual frame, even when its PCM window
-// is unchanged. No QObject, callback, allocation or playback-core ownership.
+// Process each monotonic PCM window once. The render owner may reuse frame()
+// while collection is briefly late; no QObject, allocation or playback-core
+// ownership crosses this boundary.
 class VisualAudioFrameAnalyzer {
 public:
+    static constexpr std::size_t BatchCapacity = 16;
+
     struct Snapshot {
         VisualSpectrumAnalyzer::Window pcm{};
         int sampleRate = 0;
         std::uint64_t epoch = 0;
+        std::uint64_t firstSampleIndex = 0;
+        std::uint64_t sequence = 0;
         bool valid = false;
         bool paused = false;
         bool releasing = false;
+    };
+    struct Batch {
+        std::array<Snapshot, BatchCapacity> frames{};
+        std::size_t count = 0;
     };
     struct Frame {
         VisualSpectrumAnalyzer::Spectrum spectrum{};
@@ -66,6 +75,8 @@ public:
         frame_.valid = true;
         return frame_;
     }
+
+    const Frame& frame() const noexcept { return frame_; }
 
 private:
     VisualSpectrumAnalyzer spectrum_;

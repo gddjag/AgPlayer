@@ -204,12 +204,7 @@ void main()
         vec4 regionWeights = vec4(subRegion * 5.0,
             bassRegion * smoothstep(0.0, 1.0, terrainRandom + density * 0.5) * 4.0,
             lowMidShape * 2.5, midShape * 3.0);
-        vec4 responsiveLow = runtimeTheme
-            ? vec4(bandsLow.x, bandsLow.y,
-                pow(max(0.0, bandsLow.z), 0.82),
-                pow(max(0.0, bandsLow.w), 0.78))
-            : bandsLow;
-        float bandRelief = dot(responsiveLow, regionWeights)
+        float bandRelief = dot(bandsLow, regionWeights)
             + bandsHigh.x * highMidShape * 2.5;
         if (!referenceGeometry) {
             float highTexture = smoothstep(0.48, 0.96,
@@ -226,11 +221,8 @@ void main()
         float amplitudeControl = referenceGeometry
             ? rawAmplitude * 2.0
             : rawAmplitude * (0.35 + rawAmplitude * 3.65);
-        float motionGain = runtimeTheme
-            ? mix(1.0, 1.65, clamp(ubuf.styleParameters.y, 0.0, 1.0))
-            : 1.0;
         bandRelief = max(0.0, bandRelief * reliefDisk - 0.2)
-                   * amplitudeControl * motionGain;
+                   * amplitudeControl;
         float highEnergy = clamp(dot(bandsHigh, vec4(0.38, 0.28, 0.20, 0.14)), 0.0, 1.0);
         float coherentDetail = lowMidShape;
         terrainSpike = clamp(bandsHigh.x * highMidShape, 0.0, 1.0);
@@ -338,24 +330,6 @@ void main()
                        * (0.012 + ubuf.parameters.x * 0.035
                           + slowBass * 0.045 + beatPulse * 0.12)
                        * ubuf.styleAudio.w;
-        // Retain the existing optional sparse beat accent independently of
-        // the continuous frequency field; it is absent from direct U replay.
-        float centerBlend = 1.0 - smoothstep(25.0, 35.0, distanceFromCore);
-        float jellyElasticity = step(0.5, material.x)
-            * (1.0 - step(1.5, material.x)) * clamp(material.z, 0.0, 1.0);
-        float beatSelection = mix(0.45, 0.72, jellyElasticity);
-        float beatDrive = sqrt(clamp(beatPulse, 0.0, 1.0));
-        float localBeatLift = (1.0 - step(beatSelection, randomValue)) * centerBlend * subRegion
-            * beatDrive
-            * (0.65 + randomValue * 2.0) * max(0.0, ubuf.styleParameters.x * 2.0)
-            * 4.8 * (0.65 + motion * 0.55)
-            * (0.65 + ubuf.styleAudio.w * 0.65)
-            * (1.0 + jellyElasticity * 1.15);
-        localBeatLift = min(localBeatLift, 0.48 * max(1.0, instanceScale.y + idle + bandRelief));
-        // Captured reference-U replay has no native beat event. Canonical
-        // runtime themes (timbre.w == 1) do, even though they share the same
-        // 84-unit reference geometry and palette.
-        if (!runtimeTheme) localBeatLift = 0.0;
         // No extra whole-field gain, shoulders or soft-cap compression.
         // Emitted ripples remain separate from the finite musical relief disk.
         // Keep the legacy42-unit safety budget on native wave overlap only;
@@ -363,7 +337,7 @@ void main()
         float nativeWaveLift = referenceRippleMode ? 0.0
             : 42.0 * (1.0 - exp(-max(0.0, ripple * amplitude * 0.55) / 42.0));
         float height = max(0.0, instanceScale.y)
-            + max(0.0, idle + bandRelief + localBeatLift + nativeWaveLift
+            + max(0.0, idle + bandRelief + nativeWaveLift
                       + referenceRippleElevation);
         scale.y = height;
         // Instance width is physical geometry, not layout spacing.

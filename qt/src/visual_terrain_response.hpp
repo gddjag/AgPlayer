@@ -51,6 +51,8 @@ public:
         return state_;
     }
 
+    const Features& features() const noexcept { return state_; }
+
 private:
     static double bounded(double value, double maximum, double fallback = 0) noexcept {
         return std::isfinite(value) ? std::clamp(value, 0.0, maximum) : fallback;

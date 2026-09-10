@@ -1,0 +1,48 @@
+# 沉浸反应堆混合音乐漏拍专项对齐
+
+## 范围与基准
+
+- 工作基线：干净 `main`，HEAD `daa4a4f0`；本批修改保持未提交。
+- 唯一原版基准：Sonic Topography `ec8ecbaec0c9c5094b6b1480df0d6b2d32d6349b`。
+- 只处理“纯鼓点正常，旋律、人声和其他乐器加入后逐渐漏拍”。未改预设颜色、UI、窗口、播放器核心、公开接口或运行时依赖。
+- canonical 高度恢复为连续频段路径：`kickEnvelope + subBass + bass + 其余频段地形`。BPM 网格仍只编组八拍冲击波和流星。
+
+## 根因与首个差异
+
+共享 PCM tap 本身保持连续，但 GUI 延迟后一次轮询会有界补读多个 1024 样本窗口。旧控制器只向 renderer 暴露最后一个窗口，前面的瞬态上升沿被覆盖；混合编曲增加渲染/GUI 调度压力后，这一问题更容易出现。检测器随后只看到尾部窗口，无法形成与原版一致的 flux 峰值。
+
+确定性复现的三个连续窗口为静音、80Hz kick、1.2kHz 混合尾部。旧 latest-only 路径在第二个窗口（sequence 2，sample index 1024）首次丢失输入，第三个窗口（sequence 3，sample index 2048）首次表现为漏拍：旧路径 0 次 onset，新路径 1 次 onset。
+
+着色器还叠加了仅依赖离散 onset 的 `localBeatLift`、低中频幂次增强和第二层 `motionGain`。它们令纯鼓点被额外顶高，但 onset 在混合段减弱时形成明显落差，与原版连续频段高度来源不一致。
+
+## 修改
+
+1. 控制器使用固定 16 槽 PCM 窗口环形队列；每帧携带 generation/epoch、首样本位置和单调 sequence。无堆分配、无新线程，不改变播放核心或 C ABI。
+2. renderer 按 sequence 顺序消费所有未分析窗口，以样本位置/采样率计算相邻分析 delta；同一窗口不重复分析。同一绘制周期聚合 onset 数和峰值强度，不丢失也不重复触发。
+3. seek、换歌、设备/采样率或样本连续性变化继续重置分析历史；普通编曲变化不重置。暂停/静音继续走已有释放路径，短暂 GUI 落后只保持最后连续地形，等待下一个新窗口。
+4. canonical shader 移除 `localBeatLift`、`responsiveLow` 幂次和重复 `motionGain`。动态设置的 motion response 仍在 terrain response 层生效一次。
+5. 原版轨迹暴露出有效静音帧的平滑系数偏差，恢复为原版 0.08；现有暂停快速回落系数保持不变，避免扩大本专项范围。
+6. 批处理分析直接传递单个 PCM snapshot，不复制含 16 个窗口的完整 render snapshot。
+
+## 自动验证
+
+- 64 拍确定性混合编曲：前 8 拍纯鼓，随后加入持续低频底床及密集旋律/人声/高频层。结果为 64/64 onset，漏拍 0、重复 0。
+- 延迟批处理：旧实现先以缺失批接口/中间瞬态失败；修复后中间 kick 保留。30/45/60 FPS 均为 1 次 onset，重复消费为 0 次且地形状态不再被重复推进。
+- 44.1/48/96kHz：三个连续 PCM 窗口的 sample rate、sample index、sequence 和数据均按序保存。
+- 原版 48kHz 126 帧轨迹：64,512 个频谱字节逐项相等；descriptor、kick 和 terrain uniform 均在 `1e-6` 内通过。
+- D3D11：真实 PCM render cadence、暂停释放/恢复、隐藏停算、密度/画质切换和 canonical shader 契约 5/5 通过；Eco 为 37 帧/37 个 GUI 回报，High 为 22 帧/21 个 GUI 回报，差值在既定 2 帧容差内。
+- 用户参考视频提取的 48kHz/双声道/60秒临时 WAV 能通过真实播放器 PCM 延迟补读与暂停释放专项 4/4；临时音频已删除，不进入仓库或安装包。
+- Qt 专项 CTest：`visual_kick_response_test`、`audio_visual_feature_controller_test`、`terrain_reactor_item_test` 3/3 通过。
+- Qt 6.7 Release `AgPlayer` 构建通过，着色器 `.qsb` 已重新生成并链接。
+
+开发侧日志位于 `build/release/evidence/2026-09-11-mixed-music-rhythm/`，该目录不加入安装包。
+
+## 尚未实测
+
+- 本批没有生成原版浏览器与 AgPlayer 同一完整 DJ 段落的双路视频和人工鼓点时间表；参考视频只用于真实播放器 PCM 连续性短测，不能冒充完整动态视觉对照。
+- 没有重新执行修改后的 30 分钟 RTX 4070 固定场景长测。既有长测早于本批修改，不能用于宣称本批长期稳定性。
+- 本批没有打包、合并或创建提交；等待下次主线集成与安装版实机观感验收。
+
+## 建议提交说明
+
+`fix(immersive): preserve mixed-music PCM transients`

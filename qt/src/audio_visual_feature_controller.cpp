@@ -59,6 +59,9 @@ void AudioVisualFeatureController::resetVisualPcm()
     visualSamplesSinceUpdate_ = 0;
     visualAnalysisTimer_.invalidate();
     visualPcm_.fill(0.0f);
+    visualPcmFrames_ = {};
+    visualPcmFrameCount_ = 0;
+    visualPcmFrameWriteIndex_ = 0;
     visualSpectrum_.fill(0);
     visualPcmSize_ = 0;
     visualSampleRate_ = 0;
@@ -107,6 +110,20 @@ void AudioVisualFeatureController::ingestVisualPcm(const ag_visual_pcm_snapshot&
     std::copy_n(pcm.samples, pcm.sample_count, visualPcm_.begin() + retained);
     visualPcmSize_ = retained + pcm.sample_count;
     visualSamplesSinceUpdate_ += pcm.sample_count;
+    if (visualPcmSize_ == visualPcm_.size()) {
+        agplayer::VisualAudioFrameAnalyzer::Snapshot frame;
+        frame.pcm = visualPcm_;
+        frame.sampleRate = visualSampleRate_;
+        frame.epoch = visualPcmEpoch_;
+        frame.firstSampleIndex = visualNextIndex_ - visualPcm_.size();
+        frame.sequence = ++visualPcmFrameSequence_;
+        frame.valid = true;
+        visualPcmFrames_[visualPcmFrameWriteIndex_] = frame;
+        visualPcmFrameWriteIndex_ = (visualPcmFrameWriteIndex_ + 1)
+            % visualPcmFrames_.size();
+        visualPcmFrameCount_ = std::min(visualPcmFrameCount_ + 1,
+                                        visualPcmFrames_.size());
+    }
     if (!deferAnalysis) analyzeVisualPcm();
 }
 
@@ -116,10 +133,32 @@ AudioVisualFeatureController::visualPcmSnapshot() const noexcept
     constexpr qint64 VisualReleaseMilliseconds = 500;
     const bool releasing = visualPaused_ && visualReleaseTimer_.isValid()
         && visualReleaseTimer_.elapsed() < VisualReleaseMilliseconds;
-    return {visualPcm_, visualSampleRate_, visualPcmEpoch_,
-            active_ && !visualPaused_ && visualPcmSize_ == visualPcm_.size()
-                && visualSampleRate_ > 0,
-            visualPaused_, releasing};
+    agplayer::VisualAudioFrameAnalyzer::Snapshot result;
+    result.pcm = visualPcm_;
+    result.sampleRate = visualSampleRate_;
+    result.epoch = visualPcmEpoch_;
+    result.firstSampleIndex = visualPcmSize_ == visualPcm_.size()
+        ? visualNextIndex_ - visualPcm_.size() : 0;
+    result.sequence = visualPcmFrameSequence_;
+    result.valid = active_ && !visualPaused_
+        && visualPcmSize_ == visualPcm_.size() && visualSampleRate_ > 0;
+    result.paused = visualPaused_;
+    result.releasing = releasing;
+    return result;
+}
+
+agplayer::VisualAudioFrameAnalyzer::Batch
+AudioVisualFeatureController::visualPcmBatch() const noexcept
+{
+    agplayer::VisualAudioFrameAnalyzer::Batch result;
+    result.count = visualPcmFrameCount_;
+    const std::size_t oldest = (visualPcmFrameWriteIndex_
+        + visualPcmFrames_.size() - visualPcmFrameCount_)
+        % visualPcmFrames_.size();
+    for (std::size_t index = 0; index < result.count; ++index)
+        result.frames[index] = visualPcmFrames_[
+            (oldest + index) % visualPcmFrames_.size()];
+    return result;
 }
 
 void AudioVisualFeatureController::updateVisualPlaybackState()

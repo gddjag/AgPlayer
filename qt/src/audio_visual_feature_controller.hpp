@@ -53,6 +53,7 @@ public:
     int visualKickSensitivity() const noexcept { return visualKickSensitivity_; }
     void setVisualKickSensitivity(int sensitivity);
     agplayer::VisualAudioFrameAnalyzer::Snapshot visualPcmSnapshot() const noexcept;
+    agplayer::VisualAudioFrameAnalyzer::Batch visualPcmBatch() const noexcept;
     void acquireRenderFrameAnalysis();
     void releaseRenderFrameAnalysis();
 
@@ -109,6 +110,11 @@ private:
     unsigned int renderFrameConsumers_ = 0;
     quint64 visualPcmEpoch_ = 0;
     agplayer::VisualSpectrumAnalyzer::Window visualPcm_{};
+    std::array<agplayer::VisualAudioFrameAnalyzer::Snapshot,
+               agplayer::VisualAudioFrameAnalyzer::BatchCapacity> visualPcmFrames_{};
+    std::size_t visualPcmFrameCount_ = 0;
+    std::size_t visualPcmFrameWriteIndex_ = 0;
+    quint64 visualPcmFrameSequence_ = 0;
     agplayer::VisualSpectrumAnalyzer::Spectrum visualSpectrum_{};
     std::size_t visualPcmSize_ = 0;
     quint64 visualGeneration_ = 0;

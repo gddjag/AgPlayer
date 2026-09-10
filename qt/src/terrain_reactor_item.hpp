@@ -206,6 +206,7 @@ private:
     struct RenderSnapshot {
         agplayer::terrain::AudioFeatures features;
         agplayer::VisualAudioFrameAnalyzer::Snapshot pcm;
+        agplayer::VisualAudioFrameAnalyzer::Batch pcmBatch;
         bool referenceAudio = false;
         quint64 visualResetRevision = 0;
         agplayer::terrain::RenderStyleSnapshot style;
@@ -232,11 +233,18 @@ private:
         const agplayer::VisualAudioFrameAnalyzer::Frame& audio;
         const agplayer::VisualSpectrumFeatures::Features& terrain;
         agplayer::VisualSnareTrigger::Output snare;
+        int beatCount = 0;
+        double beatStrength = 0.0;
     };
     static ReferenceAudioFrame advanceReferenceAudioFrame(
         agplayer::VisualAudioFrameAnalyzer& analyzer,
         agplayer::VisualTerrainResponse& response, const RenderSnapshot& snapshot,
         double wallDelta, agplayer::VisualSnareTrigger& snare);
+    static ReferenceAudioFrame advanceReferenceAudioFrames(
+        agplayer::VisualAudioFrameAnalyzer& analyzer,
+        agplayer::VisualTerrainResponse& response, const RenderSnapshot& snapshot,
+        double wallDelta, agplayer::VisualSnareTrigger& snare,
+        std::uint64_t& consumedSequence);
     static bool hasVisualPcmDiscontinuity(
         const agplayer::VisualAudioFrameAnalyzer::Snapshot& previous,
         const agplayer::VisualAudioFrameAnalyzer::Snapshot& next);

@@ -36,5 +36,40 @@ int main() {
     require(near(invalid.level,timed.level) && near(invalid.threshold,.016), "nonfinite inputs use safe time and default sensitivity");
     detector.reset();
     require(near(detector.process(silence,-1,150).threshold,.016), "negative time and excess sensitivity remain bounded");
+
+    // A 64-beat arrangement starts with eight isolated kicks, then adds dense
+    // melody, vocal and high-frequency content outside the four kick windows.
+    // Those layers must neither mask a low-frequency onset nor create a second
+    // onset for the same beat.
+    detector.reset();
+    int mixedOnsets = 0;
+    for (int beat = 0; beat < 64; ++beat) {
+        int beatOnsets = 0;
+        for (int frame = 0; frame < 30; ++frame) {
+            KickResponse::Spectrum arrangement{};
+            if (beat >= 8) {
+                for (std::size_t bin = 0; bin < 7; ++bin)
+                    arrangement[bin] = static_cast<unsigned char>(
+                        38 + ((beat * 3 + frame / 6 + int(bin) * 5) % 26));
+            }
+            if (frame < 2)
+                for (std::size_t bin = 0; bin < 7; ++bin)
+                    arrangement[bin] = 255;
+            if (beat >= 8) {
+                for (std::size_t bin = 8; bin < arrangement.size(); ++bin)
+                    arrangement[bin] = static_cast<unsigned char>(
+                        48 + ((beat * 19 + frame * 11 + int(bin) * 7) % 176));
+            }
+            const auto result = detector.process(arrangement, 1.0 / 60.0);
+            if (result.onset > 0) {
+                ++beatOnsets;
+                ++mixedOnsets;
+            }
+        }
+        require(beatOnsets == 1,
+                "every pure or mixed-arrangement beat must produce exactly one kick onset");
+    }
+    require(mixedOnsets == 64,
+            "64-beat mixed arrangement must have zero missed or duplicate kick onsets");
     std::cout << "kick response tests passed\n";
 }

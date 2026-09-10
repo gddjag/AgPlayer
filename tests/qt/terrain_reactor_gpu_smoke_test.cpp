@@ -115,8 +115,8 @@ void TerrainReactorGpuSmokeTest::referencePcmAnalysisFollowsActualFramesAndStops
             const auto revisionBeforePause=item.featureRevision();
             QCOMPARE(ag_player_pause(raw),AG_OK);
             QTRY_VERIFY_WITH_TIMEOUT(item.featureRevision()>revisionBeforePause,1000);
+            QTRY_VERIFY_WITH_TIMEOUT(item.featureEnergy()<energyBeforePause,1000);
             QVERIFY(item.featureEnergy()>0);
-            QVERIFY(item.featureEnergy()<energyBeforePause);
             QTRY_VERIFY_WITH_TIMEOUT(item.featureEnergy()<0.001,4000);
             QCOMPARE(ag_player_play(raw),AG_OK);
             QTRY_VERIFY_WITH_TIMEOUT(item.featureEnergy()>0,1000);
@@ -359,6 +359,12 @@ void TerrainReactorGpuSmokeTest::shaderFalloffsKeepSmoothstepEdgesAscending()
              "Disabled ripples must bypass the multi-wave shader work");
     QVERIFY2(source.contains(QStringLiteral("waveIndex >= waveCount")),
              "Reduced ripple quality must reduce active wave-source work");
+    QVERIFY2(!source.contains(QStringLiteral("localBeatLift")),
+             "Canonical terrain height must come from the original continuous band response, not a discrete onset lift");
+    QVERIFY2(!source.contains(QStringLiteral("responsiveLow")),
+             "Canonical terrain response must preserve the original linear low-band mapping");
+    QVERIFY2(!source.contains(QStringLiteral("motionGain")),
+             "Motion response is already applied by terrainResponse and must not be multiplied again in the shader");
 }
 
 class MutableFeatureSource final : public QObject {

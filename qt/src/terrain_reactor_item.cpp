@@ -184,6 +184,7 @@ protected:
             meteorFlight_.cancel();
             smoothedFeatures_ = AudioFeatures{};
             referenceResponse_.reset();
+            lastPcmFrameSequence_ = next.pcm.sequence;
         }
         const bool pcmDiscontinuity =
             TerrainReactorItem::hasVisualPcmDiscontinuity(snapshot_.pcm, next.pcm);
@@ -193,6 +194,8 @@ protected:
             // Preserve the analyzer/terrain history so the original 1.6 s
             // release can run; seek, track and device epochs still reset.
             || (pcmDiscontinuity && !next.pcm.paused);
+        if (!snapshot_.referenceAudio && next.referenceAudio)
+            lastPcmFrameSequence_ = next.pcm.sequence;
         if (resuming || visualReset) {
             frameAnalyzer_.reset();
             floatingParameters_ = {};
@@ -325,8 +328,9 @@ protected:
             renderTimeSeconds, snapshot_.style);
         double snareStrength = 0;
         if (snapshot_.referenceAudio) {
-            const auto processed = TerrainReactorItem::advanceReferenceAudioFrame(
-                frameAnalyzer_, referenceResponse_, snapshot_, wallElapsedSeconds, snareTrigger_);
+            const auto processed = TerrainReactorItem::advanceReferenceAudioFrames(
+                frameAnalyzer_, referenceResponse_, snapshot_, wallElapsedSeconds,
+                snareTrigger_, lastPcmFrameSequence_);
             const auto& frame = processed.audio;
             floatingParameters_ = advanceFloatingBlocks(floatingParameters_.x(), float(frame.kick.envelope),
                 float(wallElapsedSeconds), snapshot_.style.floatingBlockMinSize, snapshot_.style.floatingBlockMaxSize,
@@ -339,10 +343,12 @@ protected:
             visual.energy = float(response.energy);
             visual.spectralFlux = float(frame.kick.flux);
             referenceDescriptors_ = response;
-            if (frame.valid && frame.kick.onset > 0) {
-                renderBeat_.strength = float(frame.kick.confidence);
-                ++renderBeat_.revision;
-                if (++renderBeatCount_ % 8 == 0) {
+            if (frame.valid && processed.beatCount > 0) {
+                renderBeat_.strength = float(processed.beatStrength);
+                renderBeat_.revision += quint64(processed.beatCount);
+                const quint64 previousGroup = renderBeatCount_ / 8;
+                renderBeatCount_ += quint64(processed.beatCount);
+                if (renderBeatCount_ / 8 > previousGroup) {
                     renderImpact_.strength = renderBeat_.strength;
                     ++renderImpact_.revision;
                 }
@@ -355,7 +361,7 @@ protected:
                 exposed.bands[i] = float(frame.descriptors.bands[i]);
             exposed.energy = float(frame.descriptors.energy);
             exposed.spectralFlux = float(frame.kick.flux);
-            exposed.kick = float(frame.kick.onset);
+            exposed.kick = processed.beatCount > 0 ? 1.0F : float(frame.kick.onset);
             exposed.snare = processed.snare.triggered ? 1.0F : 0.0F;
             TerrainReactorItem* const target = item_;
             // Keep only version stamps; do not queue a second PCM window copy.
@@ -977,6 +983,7 @@ private:
     BeatEvent renderBeat_;
     ImpactEvent renderImpact_;
     quint64 renderBeatCount_ = 0;
+    std::uint64_t lastPcmFrameSequence_ = 0;
     quint64 analysisFrames_ = 0;
     agplayer::VisualSpectrumFeatures::Features referenceDescriptors_;
     CameraMotion camera_;
@@ -1536,8 +1543,10 @@ TerrainReactorItem::RenderSnapshot TerrainReactorItem::snapshotForRenderer() con
     result.referenceAudio = !useSyntheticFeatures_ && !styleSource_.isNull()
         && !styleSource_->themeId().isEmpty()
         && qobject_cast<AudioVisualFeatureController*>(featureSource_) != nullptr;
-    if (auto* visual = qobject_cast<AudioVisualFeatureController*>(featureSource_))
+    if (auto* visual = qobject_cast<AudioVisualFeatureController*>(featureSource_)) {
         result.pcm = visual->visualPcmSnapshot();
+        result.pcmBatch = visual->visualPcmBatch();
+    }
     result.visualResetRevision = visualResetRevision_;
     result.style = renderStyle_;
     result.camera = camera_.snapshot();
@@ -1722,7 +1731,84 @@ TerrainReactorItem::ReferenceAudioFrame TerrainReactorItem::advanceReferenceAudi
     for (std::size_t i = 0; i < eq.size(); ++i) eq[i] = snapshot.style.visualEqGains[i];
     const auto& terrain = response.update(audio.descriptors, audio.kick.envelope, eq,
         snapshot.style.visualEqEnabled, wallDelta, snapshot.style.motionResponse * 100.0);
-    return {audio, terrain, snare.process(audio.spectrum, audio.valid)};
+    const auto snareOutput = snare.process(audio.spectrum, audio.valid);
+    return {audio, terrain, snareOutput, audio.kick.onset > 0 ? 1 : 0,
+            audio.kick.onset > 0 ? audio.kick.confidence : 0.0};
+}
+
+TerrainReactorItem::ReferenceAudioFrame TerrainReactorItem::advanceReferenceAudioFrames(
+    agplayer::VisualAudioFrameAnalyzer& analyzer, agplayer::VisualTerrainResponse& response,
+    const RenderSnapshot& snapshot, double wallDelta, agplayer::VisualSnareTrigger& snare,
+    std::uint64_t& consumedSequence)
+{
+    int beatCount = 0;
+    double beatStrength = 0.0;
+    agplayer::VisualSnareTrigger::Output strongestSnare;
+    const agplayer::VisualAudioFrameAnalyzer::Frame* finalAudio = nullptr;
+    const agplayer::VisualSpectrumFeatures::Features* finalTerrain = nullptr;
+    const auto analyzePcm = [&](const agplayer::VisualAudioFrameAnalyzer::Snapshot& pcm,
+                                double delta) {
+        const auto& audio = analyzer.process(pcm, delta,
+            qRound(snapshot.style.rhythmSensitivity * 100.0F));
+        if (!audio.valid) response.reset();
+        agplayer::VisualTerrainResponse::EqBands eq;
+        for (std::size_t i = 0; i < eq.size(); ++i)
+            eq[i] = snapshot.style.visualEqGains[i];
+        const auto& terrain = response.update(audio.descriptors, audio.kick.envelope, eq,
+            snapshot.style.visualEqEnabled, delta, snapshot.style.motionResponse * 100.0);
+        const auto snareOutput = snare.process(audio.spectrum, audio.valid);
+        return ReferenceAudioFrame{audio, terrain, snareOutput,
+            audio.kick.onset > 0 ? 1 : 0,
+            audio.kick.onset > 0 ? audio.kick.confidence : 0.0};
+    };
+
+    for (std::size_t index = 0; index < snapshot.pcmBatch.count; ++index) {
+        const auto& pcm = snapshot.pcmBatch.frames[index];
+        if (pcm.sequence <= consumedSequence) continue;
+        double dt = wallDelta;
+        if (index > 0) {
+            const auto& previous = snapshot.pcmBatch.frames[index - 1];
+            if (previous.epoch == pcm.epoch && previous.sampleRate == pcm.sampleRate
+                && pcm.firstSampleIndex > previous.firstSampleIndex) {
+                dt = double(pcm.firstSampleIndex - previous.firstSampleIndex)
+                    / double(pcm.sampleRate);
+            }
+        }
+        const auto analyzed = analyzePcm(pcm, dt);
+        finalAudio = &analyzed.audio;
+        finalTerrain = &analyzed.terrain;
+        beatCount += analyzed.beatCount;
+        beatStrength = std::max(beatStrength, analyzed.beatStrength);
+        if (analyzed.snare.triggered
+            && analyzed.snare.strength >= strongestSnare.strength) {
+            strongestSnare = analyzed.snare;
+        }
+        consumedSequence = pcm.sequence;
+    }
+
+    if (finalAudio == nullptr) {
+        const bool needsAnalysis = !snapshot.pcm.valid || snapshot.pcm.paused
+            || snapshot.pcm.sequence == 0
+            || snapshot.pcm.sequence > consumedSequence;
+        if (needsAnalysis) {
+            const auto frame = advanceReferenceAudioFrame(analyzer, response, snapshot,
+                                                           wallDelta, snare);
+            finalAudio = &frame.audio;
+            finalTerrain = &frame.terrain;
+            beatCount = frame.beatCount;
+            beatStrength = frame.beatStrength;
+            strongestSnare = frame.snare;
+            if (snapshot.pcm.sequence > consumedSequence)
+                consumedSequence = snapshot.pcm.sequence;
+        } else {
+            // A late GUI handoff is not a new audio observation. Hold the last
+            // continuous terrain state until the next monotonic PCM window;
+            // reprocessing the same samples can synthesize a falling-flux peak.
+            finalAudio = &analyzer.frame();
+            finalTerrain = &response.features();
+        }
+    }
+    return {*finalAudio, *finalTerrain, strongestSnare, beatCount, beatStrength};
 }
 
 void TerrainReactorItem::restoreRenderAudioEvents(BeatEvent& beat, ImpactEvent& impact,

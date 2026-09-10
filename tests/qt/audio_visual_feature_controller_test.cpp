@@ -85,6 +85,7 @@ private slots:
     void visualPcmPauseRetainsWindowForRelease();
     void visualPcmDelayedPollDrainsContiguousAudioWithoutReset();
     void visualPcmBatchingPreservesAnalysisAndEpochReset();
+    void renderFrameBatchPreservesDelayedPcmWindows();
     void reliableBpmEmitsOnceEveryEightBeats();
     void reliableBpmEmitsRegularBeatPulseAndEightBeatImpact();
     void reliableBpmUsesTransientPhaseAndDeduplicatesGridBeat();
@@ -776,6 +777,37 @@ void AudioVisualFeatureControllerTest::visualPcmPauseRetainsWindowForRelease()
     QCOMPARE(ag_player_stop(player), AG_OK);
     features.pollOutputLevels();
     QVERIFY(features.visualPcmSnapshot().paused);
+}
+
+void AudioVisualFeatureControllerTest::renderFrameBatchPreservesDelayedPcmWindows()
+{
+    for (const int sampleRate : {44100, 48000, 96000}) {
+        AudioVisualFeatureController controller;
+        controller.setActive(true);
+        controller.acquireRenderFrameAnalysis();
+
+        ag_visual_pcm_snapshot pcm{};
+        pcm.generation = 1;
+        pcm.sample_rate = sampleRate;
+        pcm.sample_count = 1024;
+        for (int block = 0; block < 3; ++block) {
+            pcm.first_sample_index = std::uint64_t(block) * pcm.sample_count;
+            std::fill_n(pcm.samples, pcm.sample_count, 0.05F + 0.10F * float(block));
+            controller.ingestVisualPcm(pcm, true);
+        }
+
+        const auto batch = controller.visualPcmBatch();
+        QCOMPARE(batch.count, std::size_t(3));
+        for (std::size_t index = 0; index < batch.count; ++index) {
+            QVERIFY(batch.frames[index].valid);
+            QCOMPARE(batch.frames[index].sampleRate, sampleRate);
+            QCOMPARE(batch.frames[index].firstSampleIndex,
+                     std::uint64_t(index) * pcm.sample_count);
+            QCOMPARE(batch.frames[index].sequence, std::uint64_t(index + 1));
+            QCOMPARE(batch.frames[index].pcm.front(),
+                     0.05F + 0.10F * float(index));
+        }
+    }
 }
 
 void AudioVisualFeatureControllerTest::visualPcmAssemblesAndResets()
